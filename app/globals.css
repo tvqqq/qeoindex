@@ -1,0 +1,82 @@
+@import 'tailwindcss';
+
+@theme inline {
+  --font-sans: 'Geist', 'Geist Fallback', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback', ui-monospace, monospace;
+
+  --color-background: #05080a;
+  --color-foreground: #d6dee1;
+  --color-panel: #0a1012;
+  --color-panel-2: #0c1315;
+  --color-cell: #0a0f11;
+  --color-border: #182123;
+  --color-border-strong: #223032;
+  --color-muted: #5c6a6e;
+  --color-muted-2: #7d8b8f;
+
+  --color-up: #22c98a;
+  --color-up-dim: #0f3b2c;
+  --color-down: #f2495c;
+  --color-down-dim: #3d1620;
+  --color-ceiling: #b07cff;
+  --color-ceiling-dim: #2c1d47;
+  --color-ref: #e2b93b;
+  --color-brand: #22c98a;
+
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* thin scrollbars for the trading grid */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #223032 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #223032;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #2f4145;
+}
+
+@keyframes flash-up {
+  0% {
+    background-color: color-mix(in srgb, var(--color-up) 26%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+@keyframes flash-down {
+  0% {
+    background-color: color-mix(in srgb, var(--color-down) 26%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.flash-up {
+  animation: flash-up 0.6s ease-out;
+}
+.flash-down {
+  animation: flash-down 0.6s ease-out;
+}
