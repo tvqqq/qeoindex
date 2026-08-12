@@ -1,12 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { Bot, Gift, Hexagon } from "lucide-react"
+import { Bot, Gift, Hexagon, Radio } from "lucide-react"
+import { useWSStatus } from "@/lib/use-market"
 
 const NAV = ["Bảng điện", "Tin tức", "Phân tích", "Danh mục", "Sàng lọc", "Bảng giá"]
 
 export function TopNav() {
   const [active, setActive] = useState("Bảng điện")
+  const wsStatus = useWSStatus()
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-panel px-4">
@@ -47,6 +49,32 @@ export function TopNav() {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* DNSE WebSocket Realtime Status Indicator */}
+        <div className="flex items-center gap-1.5 rounded-full border border-border bg-panel-2 px-2.5 py-1 text-xs">
+          <span className="relative flex h-2 w-2">
+            {wsStatus === "connected" && (
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            )}
+            <span
+              className={[
+                "relative inline-flex h-2 w-2 rounded-full",
+                wsStatus === "connected"
+                  ? "bg-emerald-500"
+                  : wsStatus === "connecting"
+                  ? "bg-amber-500 animate-pulse"
+                  : "bg-rose-500",
+              ].join(" ")}
+            />
+          </span>
+          <span className="font-mono text-[11px] font-medium text-foreground">
+            {wsStatus === "connected"
+              ? "DNSE WS Live"
+              : wsStatus === "connecting"
+              ? "Connecting..."
+              : "WS Offline"}
+          </span>
+        </div>
+
         <button
           type="button"
           aria-label="Ưu đãi"

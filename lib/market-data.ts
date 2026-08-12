@@ -1,8 +1,8 @@
-// Realtime market data engine (client-simulated).
-// Deterministic seeded initial data so server and client render identically,
-// then a client-only ticker mutates prices and notifies per-symbol subscribers.
+// Realtime market data engine connected to DNSE OpenAPI WebSocket.
+// Renders initial layout with default data, then connects to DNSE WS for live updates.
 
 export type Trend = "up" | "down" | "ref" | "ceiling" | "floor"
+export type WSStatus = "disconnected" | "connecting" | "connected" | "error"
 
 export interface Stock {
   symbol: string
@@ -16,7 +16,7 @@ export interface Stock {
   volume: number
   history: number[]
   trend: Trend
-  tickDir: 1 | -1 | 0 // last tick direction, for flash
+  tickDir: 1 | -1 | 0 // last tick direction, for flash animation
   updatedAt: number
 }
 
@@ -31,10 +31,16 @@ export interface OrderRow {
   price: number
   volume: number
 }
+
 export interface OrderBook {
   bids: OrderRow[]
   asks: OrderRow[]
 }
+
+// DNSE Credentials
+const DNSE_API_KEY = process.env.NEXT_PUBLIC_DNSE_API_KEY || 'eyJvcmciOiJkbnNlIiwiaWQiOiI2NzMzNWM2MzhhOTQ0MTVmYmU1M2UxY2RiYjg2Y2ZkYSIsImgiOiJtdXJtdXIxMjgifQ=='
+const DNSE_API_SECRET = process.env.NEXT_PUBLIC_DNSE_API_SECRET || 'jICOG0y4FIx20XhQ4O47g5OZY6sBRUxqcvNMgoNaKU9KspTk4Vrnei8-xn1AQ0CMzd-CZRkojjlNZGtsm20AjA'
+const DNSE_WS_URL = 'wss://ws-openapi.dnse.com.vn/v1/stream?encoding=json'
 
 // ---------- seeded RNG (mulberry32) ----------
 function mulberry32(seed: number) {
@@ -47,6 +53,7 @@ function mulberry32(seed: number) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
 }
+
 function hashStr(s: string) {
   let h = 2166136261
   for (let i = 0; i < s.length; i++) {
@@ -150,21 +157,19 @@ export const GROUPS: { name: string; label: string; defs: Def }[] = [
   },
 ]
 
-// A few symbols shown at ceiling in the reference design.
 const CEILING_SYMBOLS = new Set(["POM", "CRV", "FRT"])
 
-// ---------- tick size (VN market style) ----------
 function tickSize(price: number) {
   if (price < 10) return 0.01
   if (price < 50) return 0.05
   return 0.1
 }
+
 function roundTick(price: number) {
   const t = tickSize(price)
   return Math.round(price / t) * t
 }
 
-// ---------- build initial stocks ----------
 function buildStock(symbol: string, group: string, base: number): Stock {
   const rnd = mulberry32(hashStr(group + ":" + symbol))
   const refPrice = roundTick(base)
@@ -175,13 +180,11 @@ function buildStock(symbol: string, group: string, base: number): Stock {
   if (CEILING_SYMBOLS.has(symbol)) {
     price = ceiling
   } else {
-    // initial change within roughly -2.5% .. +3%
     const pct = (rnd() - 0.45) * 0.06
     price = roundTick(refPrice * (1 + pct))
   }
   price = Math.min(ceiling, Math.max(floor, price))
 
-  // seed a small history walking toward the current price
   const history: number[] = []
   let p = refPrice
   for (let i = 0; i < 24; i++) {
@@ -221,16 +224,40 @@ function finalize(s: Stock): Stock {
   return { ...s, change, changePct, trend }
 }
 
-// ---------- store ----------
+// Web Crypto HMAC SHA256 helper for Browser & Node
+async function hmacSha256(secret: string, message: string): Promise<string> {
+  const enc = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  )
+  const signature = await crypto.subtle.sign("HMAC", key, enc.encode(message))
+  return Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+// ---------- Store with DNSE WebSocket integration ----------
 type Listener = () => void
 
 class MarketStore {
   private stocks: Record<string, Stock> = {}
   private stockKeys: string[] = []
+  private symbolToKeysMap = new Map<string, string[]>()
   private indices: MarketIndex[]
   private symSubs = new Map<string, Set<Listener>>()
   private indexSubs = new Set<Listener>()
-  private timer: ReturnType<typeof setInterval> | null = null
+  private statusSubs = new Set<Listener>()
+  
+  private status: WSStatus = "disconnected"
+  private ws: WebSocket | null = null
+  private pingTimer: any = null
+  private reconnectTimer: any = null
+  private reconnectAttempts = 0
+  private isConnecting = false
 
   constructor() {
     for (const g of GROUPS) {
@@ -238,8 +265,13 @@ class MarketStore {
         const key = `${g.name}:${symbol}`
         this.stocks[key] = buildStock(symbol, g.name, base)
         this.stockKeys.push(key)
+
+        const keys = this.symbolToKeysMap.get(symbol) || []
+        keys.push(key)
+        this.symbolToKeysMap.set(symbol, keys)
       }
     }
+
     this.indices = [
       { name: "VN-INDEX", value: 1779.58, change: 2.81, changePct: 0.2 },
       { name: "VN30", value: 1929.33, change: 4.15, changePct: 0.2 },
@@ -253,6 +285,7 @@ class MarketStore {
   }
   getStock = (key: string) => this.stocks[key]
   getIndices = () => this.indices
+  getStatus = () => this.status
 
   subscribeStock = (key: string, cb: Listener) => {
     let set = this.symSubs.get(key)
@@ -275,68 +308,213 @@ class MarketStore {
     }
   }
 
-  private ensureRunning() {
-    if (this.timer || typeof window === "undefined") return
-    this.timer = setInterval(() => this.tick(), 650)
-  }
-
-  private tick() {
-    const updates = 34
-    const touched = new Set<string>()
-    for (let i = 0; i < updates; i++) {
-      const key = this.stockKeys[Math.floor(Math.random() * this.stockKeys.length)]
-      this.mutate(key)
-      touched.add(key)
+  subscribeStatus = (cb: Listener) => {
+    this.statusSubs.add(cb)
+    this.ensureRunning()
+    return () => {
+      this.statusSubs.delete(cb)
     }
-    touched.forEach((key) => this.symSubs.get(key)?.forEach((cb) => cb()))
-    if (Math.random() < 0.6) this.updateIndices()
   }
 
-  private mutate(key: string) {
-    const s = this.stocks[key]
-    if (!s) return
-    if (CEILING_SYMBOLS.has(s.symbol) && Math.random() < 0.7) {
-      // keep pinned to ceiling most of the time, just bump volume
-      const next = { ...s, volume: s.volume + Math.floor(Math.random() * 20000), tickDir: 0 as const }
-      this.stocks[key] = next
+  private setStatus(status: WSStatus) {
+    this.status = status
+    this.statusSubs.forEach((cb) => cb())
+  }
+
+  private ensureRunning() {
+    if (typeof window === "undefined" || this.ws || this.isConnecting) return
+    this.connectDNSE()
+  }
+
+  private async connectDNSE() {
+    this.isConnecting = true
+    this.setStatus("connecting")
+    console.log("[DNSE WS] Client connecting to DNSE WebSocket endpoint...")
+
+    try {
+      this.ws = new WebSocket(DNSE_WS_URL)
+
+      this.ws.onopen = () => {
+        console.log("[DNSE WS] WebSocket socket opened. Waiting for welcome message...")
+        this.reconnectAttempts = 0
+      }
+
+      this.ws.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          await this.handleWSMessage(data)
+        } catch (err) {
+          console.error("[DNSE WS] Error parsing message:", err)
+        }
+      }
+
+      this.ws.onerror = (err) => {
+        console.error("[DNSE WS] Socket Error:", err)
+        this.setStatus("error")
+      }
+
+      this.ws.onclose = (event) => {
+        console.log(`[DNSE WS] Connection closed (code ${event.code})`)
+        this.isConnecting = false
+        this.ws = null
+        this.stopPingTimer()
+        this.setStatus("disconnected")
+        this.scheduleReconnect()
+      }
+    } catch (e) {
+      console.error("[DNSE WS] Exception connecting:", e)
+      this.isConnecting = false
+      this.setStatus("error")
+      this.scheduleReconnect()
+    }
+  }
+
+  private async handleWSMessage(data: any) {
+    const action = data.action
+
+    if (action === "welcome") {
+      console.log(`[DNSE WS] Welcome received (session: ${data.session_id}). Authenticating...`)
+      const authPayload = await this.makeAuthPayload()
+      this.send(authPayload)
       return
     }
-    const t = tickSize(s.price)
-    const steps = Math.random() < 0.55 ? 1 : Math.random() < 0.85 ? 0 : 2
-    const dir = Math.random() < 0.5 ? -1 : 1
-    let price = roundTick(s.price + dir * steps * t)
-    price = Math.min(s.ceiling, Math.max(s.floor, price))
-    const tickDir: 1 | -1 | 0 = price > s.price ? 1 : price < s.price ? -1 : 0
 
-    const history = s.history.slice(1)
-    history.push(price)
+    if (action === "auth_success") {
+      console.log("[DNSE WS] ✅ Authenticated successfully with DNSE! Subscribing to market feeds...")
+      this.setStatus("connected")
+      this.subscribeChannels()
+      this.startPingTimer()
+      return
+    }
 
-    this.stocks[key] = finalize({
-      ...s,
-      price,
-      history,
-      tickDir,
-      volume: s.volume + Math.floor(Math.random() * 60000),
-      updatedAt: Date.now(),
-    })
+    if (action === "ping") {
+      this.send({ action: "pong", timestamp: data.timestamp })
+      return
+    }
+
+    if (action === "subscribed") {
+      console.log(`[DNSE WS] Active subscription: ${data.channel}`)
+      return
+    }
+
+    // Realtime Tick Data (T === "t")
+    if (data.T === "t" && data.symbol) {
+      const symbol = data.symbol as string
+      const keys = this.symbolToKeysMap.get(symbol)
+      if (keys && keys.length > 0) {
+        const matchPrice = data.matchPrice ?? 0
+        const totalVol = data.totalVolumeTraded ?? 0
+        
+        for (const key of keys) {
+          const s = this.stocks[key]
+          if (!s) continue
+
+          const price = matchPrice > 0 ? matchPrice : s.price
+          const tickDir: 1 | -1 | 0 = price > s.price ? 1 : price < s.price ? -1 : 0
+          const history = s.history.slice(1)
+          history.push(price)
+
+          const nextStock = finalize({
+            ...s,
+            price,
+            history,
+            tickDir,
+            volume: totalVol > 0 ? totalVol : s.volume + (data.matchQtty || 0),
+            updatedAt: Date.now(),
+          })
+
+          this.stocks[key] = nextStock
+          this.symSubs.get(key)?.forEach((cb) => cb())
+        }
+      }
+      return
+    }
+
+    // Realtime Index Data (T === "mi")
+    if (data.T === "mi" && data.indexName) {
+      const idxName = data.indexName.toUpperCase()
+      this.indices = this.indices.map((idx) => {
+        if (idx.name.toUpperCase().replace("-", "") === idxName || (idxName === "VNINDEX" && idx.name === "VN-INDEX")) {
+          return {
+            ...idx,
+            value: data.valueIndexes ?? idx.value,
+            change: data.changedValue ?? idx.change,
+            changePct: data.changedRatio ?? idx.changePct,
+          }
+        }
+        return idx
+      })
+      this.indexSubs.forEach((cb) => cb())
+    }
   }
 
-  private updateIndices() {
-    this.indices = this.indices.map((idx) => {
-      const delta = (Math.random() - 0.48) * 0.6
-      const value = Math.round((idx.value + delta) * 100) / 100
-      const change = Math.round((idx.change + delta) * 100) / 100
-      const changePct = Math.round((change / (value - change)) * 10000) / 100
-      return { ...idx, value, change, changePct }
-    })
-    this.indexSubs.forEach((cb) => cb())
+  private async makeAuthPayload() {
+    const timestamp = Math.floor(Date.now() / 1000)
+    const nonce = (Date.now() * 1000).toString()
+    const rawMessage = `${DNSE_API_KEY}:${timestamp}:${nonce}`
+    const signature = await hmacSha256(DNSE_API_SECRET, rawMessage)
+
+    return {
+      action: "auth",
+      api_key: DNSE_API_KEY,
+      signature: signature,
+      timestamp: timestamp,
+      nonce: nonce,
+    }
+  }
+
+  private subscribeChannels() {
+    const allSymbols = Array.from(this.symbolToKeysMap.keys())
+    const subMsg = {
+      action: "subscribe",
+      channels: [
+        {
+          name: "tick.G1.json",
+          symbols: allSymbols,
+        },
+        { name: "market_index.VNINDEX.json" },
+        { name: "market_index.VN30.json" },
+        { name: "order.STOCK.json" },
+        { name: "position.STOCK.json" }
+      ],
+    }
+    this.send(subMsg)
+  }
+
+  private send(payload: any) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(payload))
+    }
+  }
+
+  private startPingTimer() {
+    this.stopPingTimer()
+    this.pingTimer = setInterval(() => {
+      this.send({ action: "ping", timestamp: Date.now() })
+    }, 25000)
+  }
+
+  private stopPingTimer() {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer)
+      this.pingTimer = null
+    }
+  }
+
+  private scheduleReconnect() {
+    if (this.reconnectTimer) return
+    this.reconnectAttempts += 1
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000)
+    console.log(`[DNSE WS] Reconnecting in ${delay}ms...`)
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      this.connectDNSE()
+    }, delay)
   }
 }
 
-// module singleton (one per runtime; deterministic initial state)
 export const marketStore = new MarketStore()
 
-// ---------- orderbook generation ----------
 export function generateOrderBook(stock: Stock, seed = Math.random() * 1e9): OrderBook {
   const rnd = mulberry32((seed | 0) ^ hashStr(stock.symbol))
   const t = tickSize(stock.price)
@@ -353,7 +531,6 @@ export function generateOrderBook(stock: Stock, seed = Math.random() * 1e9): Ord
   return { asks: asks.reverse(), bids }
 }
 
-// ---------- formatting ----------
 export function formatVolume(v: number): string {
   if (v >= 1_000_000) return (v / 1_000_000).toFixed(2) + "M"
   if (v >= 1_000) return (v / 1_000).toFixed(1) + "K"
