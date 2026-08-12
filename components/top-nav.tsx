@@ -3,15 +3,15 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bot, Gift, Hexagon, Radio } from "lucide-react"
+import { Bot, Gift, Hexagon } from "lucide-react"
 import { useWSStatus } from "@/lib/use-market"
 
 const NAV = [
   { label: "Bảng điện", href: "/" },
-  { label: "Research", href: "/research" },
-  { label: "Thesis Changes", href: "/research/changes" },
-  { label: "Analysis Log", href: "/research/log" },
-  { label: "Review", href: "/research/review" },
+  { label: "Nghiên cứu", href: "/research" },
+  { label: "Thay đổi luận điểm", href: "/research/changes" },
+  { label: "Nhật ký phân tích", href: "/research/log" },
+  { label: "Hậu kiểm", href: "/research/review" },
 ]
 
 function isActive(pathname: string, href: string) {
@@ -23,7 +23,7 @@ function isActive(pathname: string, href: string) {
 }
 
 export function TopNav() {
-const pathname = usePathname()
+  const pathname = usePathname()
   const [active, setActive] = useState("Bảng điện")
   const wsStatus = useWSStatus()
 
@@ -49,6 +49,7 @@ const pathname = usePathname()
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setActive(item.label)}
                 className={[
                   "relative whitespace-nowrap px-2.5 py-2 text-sm transition-colors xl:px-3",
                   on ? "font-semibold text-brand" : "text-muted-2 hover:text-foreground",
@@ -64,8 +65,7 @@ const pathname = usePathname()
         </nav>
       </div>
 
-<div className="flex shrink-0 items-center gap-2 xl:gap-3">
-        {/* DNSE WebSocket Realtime Status Indicator */}
+      <div className="flex shrink-0 items-center gap-2 xl:gap-3">
         <div className="flex items-center gap-1.5 rounded-full border border-border bg-panel-2 px-2.5 py-1 text-xs">
           <span className="relative flex h-2 w-2">
             {wsStatus === "connected" && (
@@ -86,7 +86,7 @@ const pathname = usePathname()
             {wsStatus === "connected"
               ? "DNSE WS Live"
               : wsStatus === "connecting"
-              ? "Connecting..."
+              ? "Đang kết nối..."
               : "WS Offline"}
           </span>
         </div>
