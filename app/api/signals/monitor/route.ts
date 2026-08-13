@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       }
       const scan = scanner.latestScans[row.ticker]
       const decision = evaluateExit(row, scan, quote)
-      if (!decision.signal) {
+      if (!decision.signal || !decision.type) {
         await updateRecommendationMonitor(row, quote, decision)
         monitored.push({ ticker: row.ticker, price: quote.price, returnPct: decision.returnPct, volumePace: decision.volumePace })
         continue

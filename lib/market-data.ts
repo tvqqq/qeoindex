@@ -37,11 +37,6 @@ export interface OrderBook {
   asks: OrderRow[]
 }
 
-// DNSE Credentials
-const DNSE_API_KEY = process.env.NEXT_PUBLIC_DNSE_API_KEY || 'eyJvcmciOiJkbnNlIiwiaWQiOiI2NzMzNWM2MzhhOTQ0MTVmYmU1M2UxY2RiYjg2Y2ZkYSIsImgiOiJtdXJtdXIxMjgifQ=='
-const DNSE_API_SECRET = process.env.NEXT_PUBLIC_DNSE_API_SECRET || 'jICOG0y4FIx20XhQ4O47g5OZY6sBRUxqcvNMgoNaKU9KspTk4Vrnei8-xn1AQ0CMzd-CZRkojjlNZGtsm20AjA'
-const DNSE_WS_URL = 'wss://ws-openapi.dnse.com.vn/v1/stream?encoding=json'
-
 // ---------- seeded RNG (mulberry32) ----------
 function mulberry32(seed: number) {
   let a = seed
@@ -224,24 +219,19 @@ function finalize(s: Stock): Stock {
   return { ...s, change, changePct, trend }
 }
 
-// Web Crypto HMAC SHA256 helper for Browser & Node
-async function hmacSha256(secret: string, message: string): Promise<string> {
-  const enc = new TextEncoder()
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  )
-  const signature = await crypto.subtle.sign("HMAC", key, enc.encode(message))
-  return Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
-}
-
 // ---------- Store with DNSE WebSocket integration ----------
 type Listener = () => void
+
+interface StreamAuthPayload {
+  url: string
+  auth: {
+    action: "auth"
+    api_key: string
+    signature: string
+    timestamp: number
+    nonce: string
+  }
+}
 
 class MarketStore {
   private stocks: Record<string, Stock> = {}
@@ -258,6 +248,7 @@ class MarketStore {
   private reconnectTimer: any = null
   private reconnectAttempts = 0
   private isConnecting = false
+  private streamAuth: StreamAuthPayload | null = null
 
   constructor() {
     for (const g of GROUPS) {
@@ -332,7 +323,17 @@ class MarketStore {
     console.log("[DNSE WS] Client connecting to DNSE WebSocket endpoint...")
 
     try {
-      this.ws = new WebSocket(DNSE_WS_URL)
+      const response = await fetch("/api/market/stream-auth", {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message ?? `DNSE stream auth failed (${response.status})`)
+      }
+
+      this.streamAuth = { url: payload.url, auth: payload.auth }
+      this.ws = new WebSocket(this.streamAuth.url)
 
       this.ws.onopen = () => {
         console.log("[DNSE WS] WebSocket socket opened. Waiting for welcome message...")
@@ -374,8 +375,8 @@ class MarketStore {
 
     if (action === "welcome") {
       console.log(`[DNSE WS] Welcome received (session: ${data.session_id}). Authenticating...`)
-      const authPayload = await this.makeAuthPayload()
-      this.send(authPayload)
+      if (!this.streamAuth) throw new Error("DNSE stream auth payload is unavailable")
+      this.send(this.streamAuth.auth)
       return
     }
 
@@ -445,21 +446,6 @@ class MarketStore {
         return idx
       })
       this.indexSubs.forEach((cb) => cb())
-    }
-  }
-
-  private async makeAuthPayload() {
-    const timestamp = Math.floor(Date.now() / 1000)
-    const nonce = (Date.now() * 1000).toString()
-    const rawMessage = `${DNSE_API_KEY}:${timestamp}:${nonce}`
-    const signature = await hmacSha256(DNSE_API_SECRET, rawMessage)
-
-    return {
-      action: "auth",
-      api_key: DNSE_API_KEY,
-      signature: signature,
-      timestamp: timestamp,
-      nonce: nonce,
     }
   }
 

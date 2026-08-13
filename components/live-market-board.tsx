@@ -175,8 +175,8 @@ export function LiveMarketBoard({ universe, universeSource }: { universe: BoardU
   }, [universe, query, selectedSector])
 
   const liveCount = universe.filter((stock) => quotes[stock.ticker]).length
-  const advances = universe.filter((stock) => (quotes[stock.ticker] as StockQuote | undefined)?.changePercent > 0).length
-  const declines = universe.filter((stock) => (quotes[stock.ticker] as StockQuote | undefined)?.changePercent < 0).length
+  const advances = universe.filter((stock) => ((quotes[stock.ticker] as StockQuote | undefined)?.changePercent ?? 0) > 0).length
+  const declines = universe.filter((stock) => ((quotes[stock.ticker] as StockQuote | undefined)?.changePercent ?? 0) < 0).length
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">

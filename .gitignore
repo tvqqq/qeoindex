@@ -7,9 +7,19 @@ __v0_jsx-dev-runtime.ts
 .vercel/
 
 # Environment variables
-.env*.local
+.env
+.env.*
+!.env.example
+
+# Supabase local state and secrets
+supabase/.env
+supabase/.env.*
+!supabase/.env.example
+supabase/.branches/
+supabase/.temp/
 
 # Common ignores
 node_modules
 .next/
+*.tsbuildinfo
 .DS_Store
