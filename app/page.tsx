@@ -1,4 +1,6 @@
-import { LiveMarketBoard, type BoardUniverseStock } from "@/components/live-market-board"
+import { LiveMarketBoardV2, type BoardUniverseStock } from "@/components/live-market-board-v2"
+import { OrderBookProvider } from "@/components/orderbook/orderbook-context"
+import { OrderBookManager } from "@/components/orderbook/orderbook-manager"
 import { TopNav } from "@/components/top-nav"
 import { getScannerData } from "@/lib/scanner-data"
 import { sectorForTicker } from "@/lib/market-sectors"
@@ -17,11 +19,14 @@ export default async function Page() {
   }))
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
-      <TopNav />
-      <main className="min-h-0 flex-1">
-        <LiveMarketBoard universe={universe} universeSource={data.source} />
-      </main>
-    </div>
+    <OrderBookProvider>
+      <div className="flex h-screen flex-col overflow-hidden bg-background">
+        <TopNav />
+        <main className="min-h-0 flex-1">
+          <LiveMarketBoardV2 universe={universe} universeSource={data.source} />
+        </main>
+        <OrderBookManager />
+      </div>
+    </OrderBookProvider>
   )
 }
