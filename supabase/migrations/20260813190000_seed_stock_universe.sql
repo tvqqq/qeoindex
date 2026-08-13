@@ -1,3 +1,5 @@
+-- Keep the initial production universe reproducible through `supabase db push`.
+-- The local seed remains idempotent so `supabase db reset` can still run it.
 insert into public.stock_universe (ticker, exchange, rank, market_cap_t, universe_version, effective_from)
 values
   ('VIC','HOSE',1,1624.3,'2026-08-13','2026-08-13'), ('VHM','HOSE',2,599.68,'2026-08-13','2026-08-13'),
