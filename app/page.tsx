@@ -1,24 +1,27 @@
-import { Board } from "@/components/board"
-import { IndexBar } from "@/components/index-bar"
-import { OrderBookManager } from "@/components/orderbook/orderbook-manager"
-import { OrderBookProvider } from "@/components/orderbook/orderbook-context"
-import { Sidebar } from "@/components/sidebar"
+import { LiveMarketBoard, type BoardUniverseStock } from "@/components/live-market-board"
 import { TopNav } from "@/components/top-nav"
+import { getScannerData } from "@/lib/scanner-data"
+import { sectorForTicker } from "@/lib/market-sectors"
 
-export default function Page() {
+export const dynamic = "force-dynamic"
+
+export default async function Page() {
+  const data = await getScannerData()
+  const universe: BoardUniverseStock[] = data.universe.map((stock) => ({
+    ticker: stock.ticker,
+    rank: stock.rank,
+    sector: stock.sector || sectorForTicker(stock.ticker),
+    marketCapT: stock.marketCapT,
+    lastClose: data.latestScans[stock.ticker]?.price ?? null,
+    lastCloseDate: data.latestScans[stock.ticker]?.date ?? "",
+  }))
+
   return (
-    <OrderBookProvider>
-      <div className="flex h-screen flex-col overflow-hidden bg-background">
-        <TopNav />
-        <IndexBar />
-        <div className="flex min-h-0 flex-1">
-          <Sidebar />
-          <main className="min-w-0 flex-1 pt-2.5">
-            <Board />
-          </main>
-        </div>
-        <OrderBookManager />
-      </div>
-    </OrderBookProvider>
+    <div className="flex h-screen flex-col overflow-hidden bg-background">
+      <TopNav />
+      <main className="min-h-0 flex-1">
+        <LiveMarketBoard universe={universe} />
+      </main>
+    </div>
   )
 }
