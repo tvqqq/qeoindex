@@ -1,0 +1,2 @@
+-- PR 2 intentionally has no seed data. Add deterministic local fixtures with
+-- the operational schemas that own them in later migrations.
