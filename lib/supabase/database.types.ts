@@ -81,6 +81,7 @@ export type Database = {
           payload: Json
           sent_at: string | null
           status: string
+          telegram_message_id: string | null
           updated_at: string
         }
         Insert: {
@@ -94,6 +95,7 @@ export type Database = {
           payload: Json
           sent_at?: string | null
           status?: string
+          telegram_message_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -107,6 +109,7 @@ export type Database = {
           payload?: Json
           sent_at?: string | null
           status?: string
+          telegram_message_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -175,6 +178,7 @@ export type Database = {
           event_type: string
           id: string
           idempotency_key: string
+          notion_page_id: string | null
           price: number
           provider: string
           recommendation_id: string | null
@@ -194,6 +198,7 @@ export type Database = {
           event_type: string
           id?: string
           idempotency_key: string
+          notion_page_id?: string | null
           price: number
           provider: string
           recommendation_id?: string | null
@@ -213,6 +218,7 @@ export type Database = {
           event_type?: string
           id?: string
           idempotency_key?: string
+          notion_page_id?: string | null
           price?: number
           provider?: string
           recommendation_id?: string | null
@@ -252,6 +258,7 @@ export type Database = {
           last_rel_volume: number | null
           max_adverse_pct: number | null
           max_favorable_pct: number | null
+          notion_page_id: string | null
           outcome: string
           provider: string
           return_pct: number | null
@@ -284,6 +291,7 @@ export type Database = {
           last_rel_volume?: number | null
           max_adverse_pct?: number | null
           max_favorable_pct?: number | null
+          notion_page_id?: string | null
           outcome?: string
           provider: string
           return_pct?: number | null
@@ -316,6 +324,7 @@ export type Database = {
           last_rel_volume?: number | null
           max_adverse_pct?: number | null
           max_favorable_pct?: number | null
+          notion_page_id?: string | null
           outcome?: string
           provider?: string
           return_pct?: number | null
@@ -339,6 +348,53 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_notification_outbox: {
+        Args: { p_limit?: number }
+        Returns: {
+          attempt_count: number
+          channel: string
+          created_at: string
+          event_id: string
+          id: string
+          last_error: string | null
+          next_attempt_at: string
+          payload: Json
+          sent_at: string | null
+          status: string
+          telegram_message_id: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "notification_outbox"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      claim_notion_sync_outbox: {
+        Args: { p_limit?: number }
+        Returns: {
+          attempt_count: number
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          idempotency_key: string
+          last_error: string | null
+          next_attempt_at: string
+          operation: string
+          payload: Json
+          status: string
+          synced_at: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "notion_sync_outbox"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       close_recommendation: {
         Args: {
           p_engine_version: string

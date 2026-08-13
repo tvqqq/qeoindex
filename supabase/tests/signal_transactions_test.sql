@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(32);
+SELECT plan(46);
 
 SELECT has_table('public', 'trade_recommendations', 'recommendation ledger exists');
 SELECT has_table('public', 'signal_events', 'signal event ledger exists');
@@ -84,8 +84,8 @@ SELECT is(
 
 SELECT is((SELECT count(*) FROM public.trade_recommendations WHERE ticker = 'HPG'), 1::bigint, 'one recommendation persisted');
 SELECT is((SELECT count(*) FROM public.signal_events WHERE ticker = 'HPG' AND event_type = 'BUY'), 1::bigint, 'one BUY event persisted');
-SELECT is((SELECT count(*) FROM public.notification_outbox), 1::bigint, 'one Telegram outbox item persisted');
-SELECT is((SELECT count(*) FROM public.notion_sync_outbox), 2::bigint, 'recommendation and event Notion work persisted');
+SELECT is((SELECT count(*) FROM public.notification_outbox no JOIN public.signal_events se ON se.id = no.event_id WHERE se.ticker = 'HPG'), 1::bigint, 'one Telegram outbox item persisted');
+SELECT is((SELECT count(*) FROM public.notion_sync_outbox WHERE payload ->> 'ticker' = 'HPG'), 2::bigint, 'recommendation and event Notion work persisted');
 
 SELECT is(
   (SELECT result FROM public.close_recommendation(
@@ -131,8 +131,8 @@ SELECT is(
 
 SELECT is((SELECT status FROM public.trade_recommendations WHERE ticker = 'HPG'), 'stopped', 'EXIT_FAIL records stopped status');
 SELECT is((SELECT count(*) FROM public.signal_events WHERE event_type = 'EXIT_FAIL'), 1::bigint, 'one terminal event persisted');
-SELECT is((SELECT count(*) FROM public.notification_outbox), 2::bigint, 'BUY and EXIT notifications are durable');
-SELECT is((SELECT count(*) FROM public.notion_sync_outbox), 4::bigint, 'BUY and EXIT Notion work is durable');
+SELECT is((SELECT count(*) FROM public.notification_outbox no JOIN public.signal_events se ON se.id = no.event_id WHERE se.ticker = 'HPG'), 2::bigint, 'BUY and EXIT notifications are durable');
+SELECT is((SELECT count(*) FROM public.notion_sync_outbox WHERE payload ->> 'ticker' = 'HPG'), 4::bigint, 'BUY and EXIT Notion work is durable');
 SELECT ok((SELECT alpha_pct is not null FROM public.trade_recommendations WHERE ticker = 'HPG'), 'benchmark alpha is calculated');
 
 SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.trade_recommendations'::regclass), 'recommendations RLS enabled');
@@ -150,6 +150,28 @@ SELECT ok(has_table_privilege('service_role', 'public.trade_recommendations', 's
 SELECT ok(has_table_privilege('service_role', 'public.trade_recommendations', 'update'), 'signal monitor can update recommendation metrics');
 SELECT ok(has_table_privilege('service_role', 'public.monitor_runs', 'insert'), 'signal monitor can create run logs');
 SELECT ok(not has_table_privilege('authenticated', 'public.monitor_runs', 'select'), 'authenticated browser cannot read monitor internals');
+SELECT is((SELECT count(*) FROM public.claim_notification_outbox(1)), 1::bigint, 'one Telegram item can be claimed');
+SELECT is((SELECT count(*) FROM public.notification_outbox WHERE status = 'processing'), 1::bigint, 'claimed Telegram item is processing');
+SELECT is((SELECT max(attempt_count) FROM public.notification_outbox), 1, 'Telegram claim increments attempt count');
+SELECT is((SELECT count(*) FROM public.notification_outbox WHERE status = 'pending'), 1::bigint, 'unclaimed Telegram item remains pending');
+SELECT is((SELECT count(*) FROM public.claim_notion_sync_outbox(2)), 2::bigint, 'bounded Notion batch can be claimed');
+SELECT is((SELECT count(*) FROM public.notion_sync_outbox WHERE status = 'processing'), 2::bigint, 'claimed Notion work is processing');
+SELECT is((SELECT count(*) FROM public.notion_sync_outbox WHERE status = 'pending'), 2::bigint, 'unclaimed Notion work remains pending');
+SELECT ok(has_function_privilege('service_role', 'public.claim_notification_outbox(integer)', 'execute'), 'service role can claim Telegram work');
+SELECT ok(not has_function_privilege('anon', 'public.claim_notification_outbox(integer)', 'execute'), 'anon cannot claim Telegram work');
+SELECT ok(not has_function_privilege('authenticated', 'public.claim_notion_sync_outbox(integer)', 'execute'), 'authenticated browser cannot claim Notion work');
+UPDATE public.notification_outbox SET status = 'dead';
+ALTER TABLE public.notification_outbox DISABLE TRIGGER notification_outbox_set_updated_at;
+UPDATE public.notification_outbox SET status = 'processing', attempt_count = 4, updated_at = now() - interval '6 minutes'
+WHERE id = (SELECT id FROM public.notification_outbox ORDER BY created_at LIMIT 1);
+ALTER TABLE public.notification_outbox ENABLE TRIGGER notification_outbox_set_updated_at;
+SELECT is((SELECT count(*) FROM public.claim_notification_outbox(1)), 1::bigint, 'expired worker lease is reclaimed');
+SELECT is((SELECT max(attempt_count) FROM public.notification_outbox WHERE status = 'processing'), 5, 'lease reclaim consumes the final attempt');
+ALTER TABLE public.notification_outbox DISABLE TRIGGER notification_outbox_set_updated_at;
+UPDATE public.notification_outbox SET updated_at = now() - interval '6 minutes' WHERE status = 'processing';
+ALTER TABLE public.notification_outbox ENABLE TRIGGER notification_outbox_set_updated_at;
+SELECT is((SELECT count(*) FROM public.claim_notification_outbox(1)), 0::bigint, 'expired final lease is not claimed again');
+SELECT ok(not exists (SELECT 1 FROM public.notification_outbox WHERE status <> 'dead'), 'expired final lease is dead-lettered');
 
 SELECT * FROM finish();
 ROLLBACK;
