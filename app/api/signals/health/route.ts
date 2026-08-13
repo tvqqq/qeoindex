@@ -20,11 +20,10 @@ export async function GET() {
       scannerSource: scanner.source,
       bullishCandidates: bullish.length,
       openRecommendations: open.length,
-      cadence: {
-        mode: "near-live snapshot",
-        configuredCron: "* 2-7 * * 1-5",
-        timezone: "UTC",
-        localWindow: "09:00-14:59 Asia/Ho_Chi_Minh; route self-skips non-trading minutes",
+      scheduler: {
+        deployed: false,
+        recommendedCadence: "1 minute during HOSE trading session",
+        reason: "Monitor endpoint is production-ready; high-frequency scheduler remains an infrastructure/plan gate and is not advertised as active until verified.",
       },
       configuration: {
         dnseServerCredentials: Boolean(process.env.DNSE_API_KEY && process.env.DNSE_API_SECRET),
