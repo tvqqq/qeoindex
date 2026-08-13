@@ -2,6 +2,7 @@ import { dnseProviderHealth } from "@/lib/dnse-history"
 import { TOP50_HOSE, UNIVERSE_DATE, type UniverseStock } from "@/lib/wyckoff-universe"
 import type { HistoricalProvider } from "@/lib/market-history"
 import type { ScannerBias, ScannerConfidence, WyckoffScanResult } from "@/lib/wyckoff-engine"
+import { getSupabaseScannerData } from "@/lib/scanner-supabase"
 
 const NOTION_VERSION = "2026-03-11"
 const UNIVERSE_DATA_SOURCE_ID = process.env.NOTION_WYCKOFF_UNIVERSE_DATA_SOURCE_ID ?? "210c502d-0c32-4fdd-9d69-7ef18e2be7d5"
@@ -44,16 +45,28 @@ export interface DailyScanRow {
   whatChanged: string
   confidence: ScannerConfidence | ""
   provider: string
+  providerDetail: string
   status: string
 }
 
+export interface ScannerProviderHealth {
+  configured: boolean
+  provider: "DNSE"
+  status: string
+  currentProvider: string
+  message: string
+  lastSuccessAt: string
+  lastFailureAt: string
+}
+
 export interface ScannerData {
-  source: "notion" | "fallback"
+  source: "notion" | "supabase" | "fallback"
+  operationalBackend: "notion" | "supabase"
   universeDate: string
   generatedAt: string
   universe: UniverseRow[]
   latestScans: Record<string, DailyScanRow>
-  providerHealth: ReturnType<typeof dnseProviderHealth>
+  providerHealth: ScannerProviderHealth
 }
 
 export type DailyScanStatus = "Complete" | "Incomplete"
@@ -162,11 +175,15 @@ function parseScanPage(page: any): DailyScanRow | null {
     whatChanged: text(props["What Changed"]),
     confidence: select(props.Confidence) as ScannerConfidence | "",
     provider: select(props.Provider),
+    providerDetail: "Notion mirror",
     status: select(props.Status),
   }
 }
 
 export async function getScannerData(): Promise<ScannerData> {
+  const backend = (process.env.STOCKOS_SCANNER_BACKEND ?? "notion").trim().toLowerCase()
+  if (backend === "supabase") return getSupabaseScannerData()
+  if (backend !== "notion") throw new Error(`Unsupported STOCKOS_SCANNER_BACKEND: ${backend}`)
   let universe = fallbackUniverse()
   const latestScans: Record<string, DailyScanRow> = {}
   let source: ScannerData["source"] = "fallback"
@@ -193,11 +210,21 @@ export async function getScannerData(): Promise<ScannerData> {
   }
   return {
     source,
+    operationalBackend: "notion",
     universeDate: UNIVERSE_DATE,
     generatedAt: new Date().toISOString(),
     universe,
     latestScans,
-    providerHealth: dnseProviderHealth(),
+    providerHealth: {
+      ...dnseProviderHealth(),
+      status: source === "notion" ? "mirror" : "pending",
+      currentProvider: (() => {
+        const providers = [...new Set(Object.values(latestScans).map((scan) => scan.provider).filter(Boolean))]
+        return providers.length > 1 ? "Mixed providers" : providers[0] === "Fallback" ? "Yahoo fallback" : providers[0] || "Chưa có dữ liệu"
+      })(),
+      lastSuccessAt: "",
+      lastFailureAt: "",
+    },
   }
 }
 

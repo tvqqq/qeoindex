@@ -102,7 +102,7 @@ Then run `select * from public.install_stockos_cron();` as an administrator and 
 
 `stock_universe` is versioned and seeded with the current Top 50 HOSE snapshot. `scanner_runs` and `scanner_jobs` make orchestration, bounded claims, retries, and dead work observable. `daily_scans` is idempotent on ticker, scan date, and engine version. The worker preserves the required history policy: fewer than 60 completed bars fail and retry, 60–199 persist as `Incomplete` with `LOW` confidence, and at least 200 persist as `Complete`. Every row records the actual provider and provider detail. A Notion mirror item is queued only after the Supabase write succeeds; mirror failure cannot roll back the scan.
 
-PR 8 does not switch the web scanner read-path. That remains an explicit PR 9 change after remote scanner jobs and row counts are verified.
+The web scanner selects its repository explicitly with `STOCKOS_SCANNER_BACKEND=notion|supabase`. The default remains `notion` until the remote universe and Daily scan counts are verified. In `supabase` mode, Server Components read the versioned active universe, latest scans, and provider health with the server-only service-role key. Configuration or query failures are surfaced; the adapter never silently falls back to Notion. The UI reports total latest rows, Complete and Incomplete counts, per-row status, and the provider recorded on real scan rows rather than inferring provider availability from credentials.
 
 ## Secrets
 

@@ -54,6 +54,7 @@ export function ScannerApp({ data }: { data: ScannerData }) {
     const q = query.trim().toUpperCase()
     if (q && !stock.ticker.includes(q) && !(scan?.wyckoffState ?? "").toUpperCase().includes(q)) return false
     if (filter === "pending") return !scan
+    if (filter === "incomplete") return scan?.status === "Incomplete"
     if (filter === "bullish") return scan?.taBias === "Bullish"
     if (filter === "bearish") return scan?.taBias === "Bearish"
     if (filter === "events") return Boolean(scan && /(Spring|SOS|UT\/UTAD|SOW)/i.test(scan.wyckoffState))
@@ -62,9 +63,9 @@ export function ScannerApp({ data }: { data: ScannerData }) {
 
   const scans = Object.values(data.latestScans)
   const complete = scans.filter((scan) => scan.status === "Complete").length
+  const incomplete = scans.filter((scan) => scan.status === "Incomplete").length
   const events = scans.filter((scan) => /(Spring|SOS|UT\/UTAD|SOW)/i.test(scan.wyckoffState)).length
   const bullish = scans.filter((scan) => scan.taBias === "Bullish").length
-  const bearish = scans.filter((scan) => scan.taBias === "Bearish").length
 
   return (
     <div className="min-h-screen bg-background text-[15px]">
@@ -75,9 +76,10 @@ export function ScannerApp({ data }: { data: ScannerData }) {
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
                 <h1 className="text-2xl font-semibold text-foreground">Wyckoff Scanner — Top 50 HOSE</h1>
-                <span className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${data.providerHealth.configured ? "border-up/30 bg-up/10 text-up" : "border-ref/30 bg-ref/10 text-ref"}`}>
-                  {data.providerHealth.configured ? "DNSE sẵn sàng" : "Provider chờ cấu hình"}
+                <span className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${data.providerHealth.currentProvider === "DNSE" ? "border-up/30 bg-up/10 text-up" : "border-ref/30 bg-ref/10 text-ref"}`}>
+                  Provider thực tế: {data.providerHealth.currentProvider}
                 </span>
+                <span className="rounded-md border border-border-strong bg-panel-2 px-2.5 py-1 text-xs font-semibold text-foreground/65">Nguồn: {data.source === "supabase" ? "Supabase" : data.source === "notion" ? "Notion" : "Fallback"}</span>
               </div>
               <p className="mt-2 max-w-4xl text-sm leading-6 text-foreground/65">
                 Universe chốt ngày {data.universeDate}. Daily scanner ưu tiên cấu trúc → Price Action → Volume → Wyckoff event → Confirmation/Invalidation; không coi một breakout đơn lẻ là xác nhận.
@@ -88,22 +90,23 @@ export function ScannerApp({ data }: { data: ScannerData }) {
               <Link href="/research/log" className="rounded-md border border-border-strong bg-panel-2 px-4 py-2.5 text-sm font-medium text-foreground/75 hover:text-foreground">Nhật ký phân tích</Link>
             </div>
           </div>
-          {!data.providerHealth.configured && (
+          {(data.providerHealth.status === "degraded" || data.providerHealth.status === "unavailable" || !scans.length) && (
             <div className="mt-4 flex items-start gap-3 rounded-lg border border-ref/25 bg-ref/5 p-4 text-sm leading-6 text-foreground/70">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ref" />
-              <span>{data.providerHealth.message} Universe/Notion vẫn hoạt động; job sẽ không tạo scan giả khi chưa có OHLC.</span>
+              <span>{data.providerHealth.message} Scanner không nâng dữ liệu thiếu thành Complete và không tạo scan giả khi OHLC không hợp lệ.</span>
             </div>
           )}
         </div>
       </div>
 
       <main className="mx-auto max-w-[1600px] space-y-5 p-4 lg:p-6">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
           <Metric label="Universe" value={String(data.universe.length)} detail="Top 50 vốn hóa HOSE, có rank cố định theo snapshot." icon={<Database className="h-5 w-5" />} />
-          <Metric label="Đã quét" value={`${complete}/50`} detail="Scan Complete gần nhất có đủ dữ liệu kỹ thuật." icon={<ShieldCheck className="h-5 w-5" />} />
+          <Metric label="Dòng dữ liệu" value={String(scans.length)} detail="Số ticker có Daily scan gần nhất trong nguồn operational." icon={<Database className="h-5 w-5" />} />
+          <Metric label="Complete" value={String(complete)} detail="Có ít nhất 200 completed Daily bars." icon={<ShieldCheck className="h-5 w-5" />} />
+          <Metric label="Incomplete" value={String(incomplete)} detail="Có 60–199 bars; confidence luôn LOW." icon={<AlertTriangle className="h-5 w-5" />} />
           <Metric label="Wyckoff events" value={String(events)} detail="Spring / SOS / UT-UTAD / SOW candidate đang được gắn cờ." icon={<Activity className="h-5 w-5" />} />
           <Metric label="Bullish" value={String(bullish)} detail="Bias kỹ thuật Bullish theo bộ rule chuẩn hóa." icon={<BarChart3 className="h-5 w-5" />} />
-          <Metric label="Bearish" value={String(bearish)} detail="Bias kỹ thuật Bearish theo bộ rule chuẩn hóa." icon={<BarChart3 className="h-5 w-5" />} />
         </div>
 
         <section className="overflow-hidden rounded-xl border border-border bg-panel">
@@ -115,25 +118,26 @@ export function ScannerApp({ data }: { data: ScannerData }) {
             <div className="flex flex-col gap-2 sm:flex-row">
               <label className="flex min-w-[260px] items-center gap-2 rounded-md border border-border-strong bg-background px-3 py-2.5">
                 <Search className="h-4 w-4 text-foreground/45" />
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã hoặc Wyckoff state..." className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-foreground/35" />
+                <input aria-label="Tìm mã hoặc Wyckoff state" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã hoặc Wyckoff state..." className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-foreground/35" />
               </label>
-              <select value={filter} onChange={(event) => setFilter(event.target.value)} className="rounded-md border border-border-strong bg-background px-3 py-2.5 text-sm text-foreground outline-none">
+              <select aria-label="Lọc kết quả scanner" value={filter} onChange={(event) => setFilter(event.target.value)} className="rounded-md border border-border-strong bg-background px-3 py-2.5 text-sm text-foreground outline-none">
                 <option value="all">Tất cả</option>
                 <option value="events">Có Wyckoff event</option>
                 <option value="bullish">Bullish</option>
                 <option value="bearish">Bearish</option>
+                <option value="incomplete">Incomplete</option>
                 <option value="pending">Chưa quét</option>
               </select>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1450px] text-left text-sm">
+            <table className="w-full min-w-[1570px] text-left text-sm">
               <thead className="bg-panel-2 text-xs font-semibold text-foreground/65">
                 <tr>
                   <th className="px-4 py-3"># / Mã</th><th className="px-4 py-3">Vốn hóa</th><th className="px-4 py-3">Giá</th><th className="px-4 py-3">Bias</th>
                   <th className="px-4 py-3">Wyckoff / Phase</th><th className="px-4 py-3">Kịch bản</th><th className="px-4 py-3">RSI / RVOL</th>
-                  <th className="px-4 py-3">MA20 / 50 / 200</th><th className="px-4 py-3">Hỗ trợ / Kháng cự</th><th className="px-4 py-3">Ngày scan</th>
+                  <th className="px-4 py-3">MA20 / 50 / 200</th><th className="px-4 py-3">Hỗ trợ / Kháng cự</th><th className="px-4 py-3">Provider / Status</th><th className="px-4 py-3">Ngày scan</th>
                 </tr>
               </thead>
               <tbody>
@@ -150,6 +154,7 @@ export function ScannerApp({ data }: { data: ScannerData }) {
                       <td className="px-4 py-4 font-mono text-foreground/70"><div>RSI {number(scan?.rsi14)}</div><div className="mt-1">RVOL {number(scan?.relVolume, 2)}x</div></td>
                       <td className="px-4 py-4 font-mono text-xs leading-6 text-foreground/65"><div>{number(scan?.ma20, 2)}</div><div>{number(scan?.ma50, 2)}</div><div>{number(scan?.ma200, 2)}</div></td>
                       <td className="max-w-[250px] px-4 py-4 text-xs leading-5 text-foreground/65"><div><span className="font-semibold text-up">H:</span> {scan?.support || "—"}</div><div className="mt-1"><span className="font-semibold text-down">KC:</span> {scan?.resistance || "—"}</div></td>
+                      <td className="whitespace-nowrap px-4 py-4"><div className="font-medium text-foreground/70">{scan?.provider === "Fallback" ? "Yahoo fallback" : scan?.provider || "—"}</div>{scan && <span className={`mt-1.5 inline-block rounded border px-2 py-0.5 text-xs font-semibold ${scan.status === "Complete" ? "border-up/25 bg-up/10 text-up" : "border-ref/25 bg-ref/10 text-ref"}`}>{scan.status}</span>}</td>
                       <td className="whitespace-nowrap px-4 py-4 text-foreground/55">{scan?.date || "—"}</td>
                     </tr>
                   )
