@@ -1,5 +1,6 @@
 import { dnseProviderHealth } from "@/lib/dnse-history"
 import { TOP50_HOSE, UNIVERSE_DATE, type UniverseStock } from "@/lib/wyckoff-universe"
+import type { HistoricalProvider } from "@/lib/market-history"
 import type { ScannerBias, ScannerConfidence, WyckoffScanResult } from "@/lib/wyckoff-engine"
 
 const NOTION_VERSION = "2026-03-11"
@@ -205,7 +206,13 @@ function numberValue(value: number | null | undefined) {
   return { number: typeof value === "number" && Number.isFinite(value) ? value : null }
 }
 
-export async function writeDailyScan(ticker: string, rank: number, scanDate: string, result: WyckoffScanResult) {
+export async function writeDailyScan(
+  ticker: string,
+  rank: number,
+  scanDate: string,
+  result: WyckoffScanResult,
+  provider: HistoricalProvider = "DNSE",
+) {
   const apiKey = token()
   if (!apiKey) throw new Error("NOTION_API_KEY is not configured")
   const t = result.technical
@@ -237,7 +244,7 @@ export async function writeDailyScan(ticker: string, rank: number, scanDate: str
     Invalidation: richTextValue(result.invalidation),
     "What Changed": richTextValue(result.whatChanged),
     Confidence: { select: { name: result.confidence } },
-    Provider: { select: { name: "DNSE" } },
+    Provider: { select: { name: provider } },
     Status: { select: { name: "Complete" } },
   }
   const response = await fetch("https://api.notion.com/v1/pages", {
