@@ -2,6 +2,8 @@ import type { OhlcvBar } from "../../../lib/technical-indicators.ts"
 
 export const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
 export const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+const DATABASE_TIMEOUT_MS = 10_000
+const PROVIDER_TIMEOUT_MS = 8_000
 
 export function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } })
@@ -16,6 +18,7 @@ export async function db(path: string, init: RequestInit = {}) {
   if (!supabaseUrl || !serviceKey) throw new Error("Supabase service environment is unavailable")
   const response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
     ...init,
+    signal: init.signal ?? AbortSignal.timeout(DATABASE_TIMEOUT_MS),
     headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, "content-type": "application/json", prefer: "return=representation", ...init.headers },
   })
   const body = await response.text()
@@ -77,7 +80,7 @@ async function dnseHistory(ticker: string, now: Date) {
     const date = dateHeader(new Date()); const nonce = crypto.randomUUID().replaceAll("-", "")
     const signature = encodeURIComponent(await hmacBase64(apiSecret, `(request-target): get ${path}\ndate: ${date}\nnonce: ${nonce}`))
     try {
-      const response = await fetch(url, { headers: { Date: date, "X-Signature": `Signature keyId="${apiKey}",algorithm="hmac-sha256",headers="(request-target) date",signature="${signature}",nonce="${nonce}"`, "x-api-key": apiKey } })
+      const response = await fetch(url, { signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS), headers: { Date: date, "X-Signature": `Signature keyId="${apiKey}",algorithm="hmac-sha256",headers="(request-target) date",signature="${signature}",nonce="${nonce}"`, "x-api-key": apiKey } })
       const body = await response.text()
       if (!response.ok) throw new Error(`DNSE ${resolution} failed (${response.status}): ${body.slice(0, 160)}`)
       const bars = normalize(JSON.parse(body))
@@ -92,7 +95,7 @@ async function yahooHistory(ticker: string, now: Date) {
   const period2 = Math.floor(now.getTime() / 1000) + 86400
   const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(`${ticker}.VN`)}`)
   url.searchParams.set("period1", String(period2 - 620 * 86400)); url.searchParams.set("period2", String(period2)); url.searchParams.set("interval", "1d"); url.searchParams.set("events", "history")
-  const response = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "StockOS/1.0 supabase-scanner" } })
+  const response = await fetch(url, { signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS), headers: { Accept: "application/json", "User-Agent": "StockOS/1.0 supabase-scanner" } })
   const body = await response.text()
   if (!response.ok) throw new Error(`Yahoo failed (${response.status}): ${body.slice(0, 160)}`)
   const result = JSON.parse(body)?.chart?.result?.[0]
