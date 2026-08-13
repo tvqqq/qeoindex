@@ -45,16 +45,22 @@ function emaSeries(values: number[], period: number): Array<number | null> {
 
 export function rsi(values: number[], period = 14): number | null {
   if (values.length <= period) return null
-  let gains = 0
-  let losses = 0
-  const start = values.length - period
-  for (let i = start; i < values.length; i += 1) {
+  let averageGain = 0
+  let averageLoss = 0
+  for (let i = 1; i <= period; i += 1) {
     const diff = values[i] - values[i - 1]
-    if (diff > 0) gains += diff
-    else losses -= diff
+    if (diff > 0) averageGain += diff
+    else averageLoss -= diff
   }
-  const averageGain = gains / period
-  const averageLoss = losses / period
+  averageGain /= period
+  averageLoss /= period
+  for (let i = period + 1; i < values.length; i += 1) {
+    const diff = values[i] - values[i - 1]
+    const gain = Math.max(diff, 0)
+    const loss = Math.max(-diff, 0)
+    averageGain = (averageGain * (period - 1) + gain) / period
+    averageLoss = (averageLoss * (period - 1) + loss) / period
+  }
   if (averageLoss === 0) return 100
   const rs = averageGain / averageLoss
   return 100 - 100 / (1 + rs)
