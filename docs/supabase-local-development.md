@@ -81,6 +81,12 @@ Telegram delivery records `sent_at` and the returned message ID. Notion create o
 
 Optional `TELEGRAM_API_BASE_URL` and `NOTION_API_BASE_URL` overrides exist only for offline local tests such as `scripts/mock-outbox-apis.mjs`. Leave both unset in production.
 
+## Next.js signal read-path
+
+The signal dashboard selects its operational repository explicitly with `STOCKOS_OPERATIONAL_BACKEND=notion|supabase`. The default remains `notion` until a remote Supabase project is provisioned and backfilled. Set `SUPABASE_URL` and server-only `SUPABASE_SERVICE_ROLE_KEY`, then switch the flag to `supabase` to read recommendations and events directly in the Server Component without a browser API round trip.
+
+The selected backend and configuration state are visible in the dashboard. A Supabase read failure is shown and logged; it does not silently fall back to Notion. Never prefix the service-role key with `NEXT_PUBLIC_`.
+
 ## Secrets
 
 Copy `supabase/.env.example` to `supabase/.env.local` for local Edge Functions. Real values are ignored by Git. Browser code may eventually receive only the Supabase URL and publishable key; service-role, DNSE, Telegram, and Notion credentials remain server-only.
