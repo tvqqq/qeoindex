@@ -1,6 +1,25 @@
-import type { DailyScanRow } from "@/lib/scanner-data"
-
 export const SIGNAL_ENGINE_VERSION = "intraday-v1.0"
+
+// Keep this contract infrastructure-free so the same deterministic engine can
+// be bundled by Next.js and the Supabase Edge runtime.
+export interface SignalDailyScan {
+  ticker: string
+  date: string
+  price: number | null
+  volume: number | null
+  ma20: number | null
+  ma50: number | null
+  atr14: number | null
+  relVolume: number | null
+  taBias: string
+  bullProbability: number | null
+  baseProbability: number | null
+  bearProbability: number | null
+  support: string
+  resistance: string
+  status: string
+  confidence?: string
+}
 
 export interface LiveQuote {
   ticker: string
@@ -77,7 +96,7 @@ export function marketSessionProgress(timestampMs = Date.now()) {
   return { active: true, progress: clamp(elapsed / totalMinutes, 0.04, 1), label: clock <= morningEnd ? "Morning" : "Afternoon" }
 }
 
-export function estimateVolumePace(scan: DailyScanRow, currentVolume: number, timestampMs = Date.now()) {
+export function estimateVolumePace(scan: SignalDailyScan, currentVolume: number, timestampMs = Date.now()) {
   const session = marketSessionProgress(timestampMs)
   if (!session.active || !scan.volume || scan.volume <= 0) return null
   const baseline = scan.relVolume && scan.relVolume > 0.05 ? scan.volume / scan.relVolume : scan.volume
@@ -93,7 +112,7 @@ function nearestAbove(levels: number[], price: number) {
   return levels.filter((level) => level > price).sort((a, b) => a - b)[0] ?? null
 }
 
-export function evaluateBuy(scan: DailyScanRow, quote: LiveQuote, timestampMs = Date.now()): BuyDecision {
+export function evaluateBuy(scan: SignalDailyScan, quote: LiveQuote, timestampMs = Date.now()): BuyDecision {
   if (scan.taBias !== "Bullish") return { signal: false, reason: "Daily Bias không Bullish", stopPrice: null, targetPrice: null, riskPct: null, volumePace: null }
   if (scan.status !== "Complete") return { signal: false, reason: "Daily scan chưa Complete", stopPrice: null, targetPrice: null, riskPct: null, volumePace: null }
   if (!scan.price || scan.price <= 0) return { signal: false, reason: "Thiếu previous Daily close", stopPrice: null, targetPrice: null, riskPct: null, volumePace: null }
@@ -149,7 +168,7 @@ export function evaluateBuy(scan: DailyScanRow, quote: LiveQuote, timestampMs = 
   }
 }
 
-export function evaluateExit(open: OpenRecommendationState, scan: DailyScanRow | undefined, quote: LiveQuote, timestampMs = Date.now()): ExitDecision {
+export function evaluateExit(open: OpenRecommendationState, scan: SignalDailyScan | undefined, quote: LiveQuote, timestampMs = Date.now()): ExitDecision {
   const returnPct = ((quote.price - open.buyPrice) / open.buyPrice) * 100
   const maxFavorablePct = Math.max(open.maxFavorablePct ?? returnPct, returnPct)
   const maxAdversePct = Math.min(open.maxAdversePct ?? returnPct, returnPct)

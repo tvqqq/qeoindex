@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(28);
+SELECT plan(32);
 
 SELECT has_table('public', 'trade_recommendations', 'recommendation ledger exists');
 SELECT has_table('public', 'signal_events', 'signal event ledger exists');
@@ -146,6 +146,10 @@ SELECT ok(
   not has_function_privilege('anon', 'public.create_buy_signal(text,timestamptz,numeric,text,numeric,numeric,numeric,numeric,text,date,text,text,text,numeric,numeric,text,jsonb,jsonb)', 'execute'),
   'anon cannot execute BUY transaction'
 );
+SELECT ok(has_table_privilege('service_role', 'public.trade_recommendations', 'select'), 'signal monitor can read recommendations');
+SELECT ok(has_table_privilege('service_role', 'public.trade_recommendations', 'update'), 'signal monitor can update recommendation metrics');
+SELECT ok(has_table_privilege('service_role', 'public.monitor_runs', 'insert'), 'signal monitor can create run logs');
+SELECT ok(not has_table_privilege('authenticated', 'public.monitor_runs', 'select'), 'authenticated browser cannot read monitor internals');
 
 SELECT * FROM finish();
 ROLLBACK;
