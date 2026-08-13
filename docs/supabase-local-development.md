@@ -56,6 +56,23 @@ All operational tables have RLS enabled with no browser-facing policies. The RPC
 
 The pgTAP suite covers transaction behavior, replay idempotency, calculations, RLS, and privileges. The separate concurrency script uses two database connections to prove the one-open-position invariant under a real race.
 
+## Signal monitor Edge Function
+
+`supabase/functions/signal-monitor` is the operational intraday monitor. It temporarily reads the latest Daily scans from Notion until the scanner migration, reads open recommendations from Supabase, collects a DNSE WebSocket snapshot, evaluates EXIT before BUY, and commits signals through the transaction RPCs. Telegram and Notion delivery remain asynchronous outbox work for PR5.
+
+The function accepts only `POST` with `Authorization: Bearer <SIGNAL_MONITOR_SECRET>`. JWT verification is disabled at the gateway because scheduler calls use this dedicated secret; the handler fails closed when the secret is absent, too short, or incorrect. Each UTC minute has one durable `monitor_runs` claim, so repeated scheduler delivery is a no-op.
+
+For local runtime testing, populate the ignored `supabase/.env.local` and run:
+
+```bash
+pnpm exec supabase functions serve --env-file supabase/.env.local --no-verify-jwt
+curl -X POST \
+  -H "Authorization: Bearer $SIGNAL_MONITOR_SECRET" \
+  http://127.0.0.1:54321/functions/v1/signal-monitor
+```
+
+Do not use `force` to bypass market-session checks in production. The initial session guard handles weekdays and the HOSE morning/afternoon windows; exchange-holiday support remains deferred to the future `market_calendar` phase.
+
 ## Secrets
 
 Copy `supabase/.env.example` to `supabase/.env.local` for local Edge Functions. Real values are ignored by Git. Browser code may eventually receive only the Supabase URL and publishable key; service-role, DNSE, Telegram, and Notion credentials remain server-only.
