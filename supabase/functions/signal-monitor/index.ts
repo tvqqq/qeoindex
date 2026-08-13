@@ -32,54 +32,30 @@ async function db(path: string, init: RequestInit = {}) {
   return text ? JSON.parse(text) : null
 }
 
-function notionText(prop: unknown, kind: "rich_text" | "title" = "rich_text") {
-  const value = prop as Record<string, Array<{ plain_text?: string }>> | undefined
-  return (value?.[kind] ?? []).map((item) => item.plain_text ?? "").join("")
+function scanNumber(value: unknown) {
+  const number = Number(value)
+  return value == null || !Number.isFinite(number) ? null : number
 }
 
-function notionNumber(prop: unknown) {
-  const value = (prop as { number?: unknown } | undefined)?.number
-  return typeof value === "number" ? value : null
-}
-
-function parseScan(page: Record<string, unknown>): SignalDailyScan | null {
-  const props = (page.properties ?? {}) as Record<string, unknown>
-  const ticker = notionText(props.Ticker).trim().toUpperCase()
+function parseScan(row: Record<string, unknown>): SignalDailyScan | null {
+  const ticker = String(row.ticker ?? "").trim().toUpperCase()
   if (!ticker) return null
   return {
     ticker,
-    date: ((props.Date as { date?: { start?: string } })?.date?.start ?? ""),
-    price: notionNumber(props.Price), volume: notionNumber(props.Volume),
-    ma20: notionNumber(props.MA20), ma50: notionNumber(props.MA50), atr14: notionNumber(props.ATR14),
-    relVolume: notionNumber(props["Rel Volume"]),
-    taBias: (props["TA Bias"] as { select?: { name?: string } })?.select?.name ?? "Neutral",
-    bullProbability: notionNumber(props["Bull Probability"]), baseProbability: notionNumber(props["Base Probability"]), bearProbability: notionNumber(props["Bear Probability"]),
-    support: notionText(props.Support), resistance: notionText(props.Resistance),
-    status: (props.Status as { select?: { name?: string } })?.select?.name ?? "",
-    confidence: (props.Confidence as { select?: { name?: string } })?.select?.name ?? "",
+    date: String(row.scan_date ?? ""), price: scanNumber(row.price), volume: scanNumber(row.volume),
+    ma20: scanNumber(row.ma20), ma50: scanNumber(row.ma50), atr14: scanNumber(row.atr14), relVolume: scanNumber(row.rel_volume),
+    taBias: String(row.ta_bias ?? "Neutral"), bullProbability: scanNumber(row.bull_probability), baseProbability: scanNumber(row.base_probability), bearProbability: scanNumber(row.bear_probability),
+    support: String(row.support ?? ""), resistance: String(row.resistance ?? ""), status: String(row.status ?? ""), confidence: String(row.confidence ?? ""),
   }
 }
 
 async function latestScans() {
-  const token = Deno.env.get("NOTION_API_KEY") ?? ""
-  const source = Deno.env.get("NOTION_DAILY_WYCKOFF_SCAN_DATA_SOURCE_ID") ?? ""
-  if (!token || !source) throw new Error("Notion Daily scan source is not configured")
+  const rows = await db("daily_scans?order=scan_date.desc,created_at.desc&select=ticker,scan_date,price,volume,ma20,ma50,atr14,rel_volume,ta_bias,bull_probability,base_probability,bear_probability,support,resistance,status,confidence")
   const scans = new Map<string, SignalDailyScan>()
-  let cursor: string | undefined
-  do {
-    const result = await fetch(`https://api.notion.com/v1/data_sources/${source}/query`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "notion-version": "2026-03-11", "content-type": "application/json" },
-      body: JSON.stringify({ page_size: 100, sorts: [{ property: "Date", direction: "descending" }], ...(cursor ? { start_cursor: cursor } : {}) }),
-    })
-    const payload = await result.json()
-    if (!result.ok) throw new Error(`Notion scan query failed (${result.status})`)
-    for (const page of payload.results ?? []) {
-      const scan = parseScan(page)
-      if (scan && !scans.has(scan.ticker)) scans.set(scan.ticker, scan)
-    }
-    cursor = payload.has_more ? payload.next_cursor : undefined
-  } while (cursor)
+  for (const row of rows ?? []) {
+    const scan = parseScan(row)
+    if (scan && !scans.has(scan.ticker)) scans.set(scan.ticker, scan)
+  }
   return scans
 }
 

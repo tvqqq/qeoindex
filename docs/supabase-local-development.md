@@ -58,7 +58,7 @@ The pgTAP suite covers transaction behavior, replay idempotency, calculations, R
 
 ## Signal monitor Edge Function
 
-`supabase/functions/signal-monitor` is the operational intraday monitor. It temporarily reads the latest Daily scans from Notion until the scanner migration, reads open recommendations from Supabase, collects a DNSE WebSocket snapshot, evaluates EXIT before BUY, and commits signals through the transaction RPCs. Telegram and Notion delivery remain asynchronous outbox work for PR5.
+`supabase/functions/signal-monitor` is the operational intraday monitor. It reads the latest Daily scans and open recommendations from Supabase, collects a DNSE WebSocket snapshot, evaluates EXIT before BUY, and commits signals through the transaction RPCs. Telegram and Notion delivery remain asynchronous outbox work.
 
 The function accepts only `POST` with `Authorization: Bearer <SIGNAL_MONITOR_SECRET>`. JWT verification is disabled at the gateway because scheduler calls use this dedicated secret; the handler fails closed when the secret is absent, too short, or incorrect. Each UTC minute has one durable `monitor_runs` claim, so repeated scheduler delivery is a no-op.
 
@@ -94,8 +94,15 @@ The Cron migration installs `pg_cron`, `pg_net`, and guarded installer functions
 - `project_url`: the project URL without a trailing slash;
 - `signal_monitor_secret`: the same value configured as the Edge Function `SIGNAL_MONITOR_SECRET`;
 - `outbox_dispatch_secret`: the same value configured as `OUTBOX_DISPATCH_SECRET`.
+- `scanner_run_secret`: the same value configured as `SCANNER_RUN_SECRET`.
 
-Then run `select * from public.install_stockos_cron();` as an administrator and verify exactly three jobs plus their first entries in `cron.job_run_details`. The signal monitor runs every minute Monday-Friday and still fails closed outside HOSE sessions; both outbox consumers run every minute. Use `select public.uninstall_stockos_cron();` for a recoverable rollback.
+Then run `select * from public.install_stockos_cron();` as an administrator and verify exactly five jobs plus their first entries in `cron.job_run_details`. The signal monitor runs every minute Monday-Friday and still fails closed outside HOSE sessions; both outbox consumers run every minute. At 09:00 UTC (16:00 ICT) Monday-Friday the Daily scanner orchestrator idempotently queues the active 50-ticker universe. Its worker claims at most five jobs per invocation during the bounded 09:00–11:59 UTC window. Use `select public.uninstall_stockos_cron();` for a recoverable rollback.
+
+## Supabase Daily scanner
+
+`stock_universe` is versioned and seeded with the current Top 50 HOSE snapshot. `scanner_runs` and `scanner_jobs` make orchestration, bounded claims, retries, and dead work observable. `daily_scans` is idempotent on ticker, scan date, and engine version. The worker preserves the required history policy: fewer than 60 completed bars fail and retry, 60–199 persist as `Incomplete` with `LOW` confidence, and at least 200 persist as `Complete`. Every row records the actual provider and provider detail. A Notion mirror item is queued only after the Supabase write succeeds; mirror failure cannot roll back the scan.
+
+PR 8 does not switch the web scanner read-path. That remains an explicit PR 9 change after remote scanner jobs and row counts are verified.
 
 ## Secrets
 

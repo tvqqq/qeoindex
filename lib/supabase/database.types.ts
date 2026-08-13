@@ -9,6 +9,131 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      daily_scans: {
+        Row: {
+          atr14: number | null
+          bar_count: number
+          base_probability: number
+          bear_probability: number
+          bull_probability: number
+          change_pct: number | null
+          confidence: string
+          confirmation: string
+          created_at: string
+          engine_version: string
+          id: string
+          invalidation: string
+          job_id: string | null
+          ma20: number | null
+          ma200: number | null
+          ma50: number | null
+          macd: number | null
+          macd_signal: number | null
+          notion_page_id: string | null
+          phase: string
+          price: number
+          provider: string
+          provider_detail: string
+          rank: number
+          rel_volume: number | null
+          resistance: string
+          rsi14: number | null
+          scan_date: string
+          status: string
+          support: string
+          ta_bias: string
+          ticker: string
+          updated_at: string
+          volume: number | null
+          what_changed: string
+          wyckoff_state: string
+        }
+        Insert: {
+          atr14?: number | null
+          bar_count: number
+          base_probability: number
+          bear_probability: number
+          bull_probability: number
+          change_pct?: number | null
+          confidence: string
+          confirmation: string
+          created_at?: string
+          engine_version: string
+          id?: string
+          invalidation: string
+          job_id?: string | null
+          ma20?: number | null
+          ma200?: number | null
+          ma50?: number | null
+          macd?: number | null
+          macd_signal?: number | null
+          notion_page_id?: string | null
+          phase: string
+          price: number
+          provider: string
+          provider_detail: string
+          rank: number
+          rel_volume?: number | null
+          resistance: string
+          rsi14?: number | null
+          scan_date: string
+          status: string
+          support: string
+          ta_bias: string
+          ticker: string
+          updated_at?: string
+          volume?: number | null
+          what_changed: string
+          wyckoff_state: string
+        }
+        Update: {
+          atr14?: number | null
+          bar_count?: number
+          base_probability?: number
+          bear_probability?: number
+          bull_probability?: number
+          change_pct?: number | null
+          confidence?: string
+          confirmation?: string
+          created_at?: string
+          engine_version?: string
+          id?: string
+          invalidation?: string
+          job_id?: string | null
+          ma20?: number | null
+          ma200?: number | null
+          ma50?: number | null
+          macd?: number | null
+          macd_signal?: number | null
+          notion_page_id?: string | null
+          phase?: string
+          price?: number
+          provider?: string
+          provider_detail?: string
+          rank?: number
+          rel_volume?: number | null
+          resistance?: string
+          rsi14?: number | null
+          scan_date?: string
+          status?: string
+          support?: string
+          ta_bias?: string
+          ticker?: string
+          updated_at?: string
+          volume?: number | null
+          what_changed?: string
+          wyckoff_state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_scans_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "scanner_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       monitor_runs: {
         Row: {
           buy_count: number
@@ -170,6 +295,143 @@ export type Database = {
         }
         Relationships: []
       }
+      provider_health: {
+        Row: {
+          last_detail: string | null
+          last_error: string | null
+          last_failure_at: string | null
+          last_success_at: string | null
+          provider: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          last_detail?: string | null
+          last_error?: string | null
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          provider: string
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          last_detail?: string | null
+          last_error?: string | null
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          provider?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      scanner_jobs: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          finished_at: string | null
+          id: string
+          last_error: string | null
+          next_attempt_at: string
+          rank: number
+          run_id: string
+          scan_date: string
+          started_at: string | null
+          status: string
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          rank: number
+          run_id: string
+          scan_date: string
+          started_at?: string | null
+          status?: string
+          ticker: string
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          rank?: number
+          run_id?: string
+          scan_date?: string
+          started_at?: string | null
+          status?: string
+          ticker?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scanner_jobs_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "scanner_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scanner_runs: {
+        Row: {
+          completed_count: number
+          created_at: string
+          error: string | null
+          failed_count: number
+          finished_at: string | null
+          id: string
+          incomplete_count: number
+          run_key: string
+          scan_date: string
+          started_at: string | null
+          status: string
+          total_count: number
+          universe_version: string
+          updated_at: string
+        }
+        Insert: {
+          completed_count?: number
+          created_at?: string
+          error?: string | null
+          failed_count?: number
+          finished_at?: string | null
+          id?: string
+          incomplete_count?: number
+          run_key: string
+          scan_date: string
+          started_at?: string | null
+          status?: string
+          total_count?: number
+          universe_version: string
+          updated_at?: string
+        }
+        Update: {
+          completed_count?: number
+          created_at?: string
+          error?: string | null
+          failed_count?: number
+          finished_at?: string | null
+          id?: string
+          incomplete_count?: number
+          run_key?: string
+          scan_date?: string
+          started_at?: string | null
+          status?: string
+          total_count?: number
+          universe_version?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       signal_events: {
         Row: {
           created_at: string
@@ -240,6 +502,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      stock_universe: {
+        Row: {
+          active: boolean
+          created_at: string
+          effective_from: string
+          effective_to: string | null
+          exchange: string
+          id: string
+          market_cap_t: number
+          rank: number
+          sector: string | null
+          ticker: string
+          universe_version: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          effective_from: string
+          effective_to?: string | null
+          exchange?: string
+          id?: string
+          market_cap_t: number
+          rank: number
+          sector?: string | null
+          ticker: string
+          universe_version: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          exchange?: string
+          id?: string
+          market_cap_t?: number
+          rank?: number
+          sector?: string | null
+          ticker?: string
+          universe_version?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       trade_recommendations: {
         Row: {
@@ -395,6 +702,30 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      claim_scanner_jobs: {
+        Args: { p_limit?: number }
+        Returns: {
+          attempt_count: number
+          created_at: string
+          finished_at: string | null
+          id: string
+          last_error: string | null
+          next_attempt_at: string
+          rank: number
+          run_id: string
+          scan_date: string
+          started_at: string | null
+          status: string
+          ticker: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "scanner_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       close_recommendation: {
         Args: {
           p_engine_version: string
@@ -444,6 +775,13 @@ export type Database = {
           event_id: string
           recommendation_id: string
           result: string
+        }[]
+      }
+      enqueue_daily_scanner: {
+        Args: { p_scan_date: string }
+        Returns: {
+          queued_count: number
+          run_id: string
         }[]
       }
       install_stockos_cron: {

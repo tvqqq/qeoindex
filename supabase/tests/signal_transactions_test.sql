@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(52);
+SELECT plan(73);
 
 SELECT has_table('public', 'trade_recommendations', 'recommendation ledger exists');
 SELECT has_table('public', 'signal_events', 'signal event ledger exists');
@@ -178,6 +178,44 @@ SELECT ok(has_function_privilege('service_role', 'public.install_stockos_cron()'
 SELECT ok(not has_function_privilege('anon', 'public.install_stockos_cron()', 'execute'), 'anon cannot install Cron');
 SELECT ok(not has_function_privilege('authenticated', 'public.uninstall_stockos_cron()', 'execute'), 'authenticated browser cannot remove Cron');
 SELECT is((SELECT count(*) FROM cron.job WHERE jobname LIKE 'stockos-%'), 0::bigint, 'migration does not activate remote jobs implicitly');
+SELECT has_table('public', 'stock_universe', 'versioned scanner universe exists');
+SELECT has_table('public', 'scanner_runs', 'scanner run ledger exists');
+SELECT has_table('public', 'scanner_jobs', 'scanner job queue exists');
+SELECT has_table('public', 'daily_scans', 'Daily scan ledger exists');
+SELECT has_table('public', 'provider_health', 'provider health ledger exists');
+SELECT is((SELECT count(*) FROM public.stock_universe WHERE active), 50::bigint, 'Top 50 active universe is seeded');
+SELECT is((SELECT count(DISTINCT universe_version) FROM public.stock_universe), 1::bigint, 'seed belongs to one universe version');
+SELECT is((SELECT queued_count FROM public.enqueue_daily_scanner('2026-08-13')), 50, 'orchestrator queues all 50 tickers');
+SELECT is((SELECT count(*) FROM public.scanner_jobs), 50::bigint, '50 durable scanner jobs exist');
+SELECT is((SELECT queued_count FROM public.enqueue_daily_scanner('2026-08-13')), 50, 'orchestrator retry returns existing run');
+SELECT is((SELECT count(*) FROM public.claim_scanner_jobs(5)), 5::bigint, 'worker claims a bounded batch');
+SELECT is((SELECT count(*) FROM public.scanner_jobs WHERE status = 'processing'), 5::bigint, 'claimed scanner jobs are processing');
+SELECT is((SELECT max(attempt_count) FROM public.scanner_jobs), 1, 'scanner claim increments attempt count');
+SELECT ok(has_function_privilege('service_role', 'public.enqueue_daily_scanner(date)', 'execute'), 'service role can enqueue scanner run');
+SELECT ok(has_function_privilege('service_role', 'public.claim_scanner_jobs(integer)', 'execute'), 'service role can claim scanner work');
+SELECT ok(not has_function_privilege('anon', 'public.enqueue_daily_scanner(date)', 'execute'), 'anon cannot enqueue scanner run');
+SELECT ok(not has_function_privilege('authenticated', 'public.claim_scanner_jobs(integer)', 'execute'), 'authenticated browser cannot claim scanner work');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.daily_scans'::regclass), 'Daily scans RLS enabled');
+SELECT ok(not has_table_privilege('anon', 'public.daily_scans', 'select'), 'anon cannot read Daily scans directly');
+SELECT lives_ok(
+  $$insert into public.daily_scans (
+    ticker, scan_date, rank, bar_count, price, wyckoff_state, phase, ta_bias,
+    bull_probability, base_probability, bear_probability, support, resistance,
+    confirmation, invalidation, what_changed, confidence, provider, provider_detail,
+    status, engine_version
+  ) values (
+    'MCH', '2026-08-13', 11, 120, 100, 'Short history', 'Unclassified', 'Neutral',
+    25, 50, 25, '90', '110', 'Wait', 'Below 90', 'Baseline', 'LOW', 'Fallback',
+    'Yahoo Finance .VN fallback', 'Incomplete', 'wyckoff-v1.0'
+  )$$,
+  '60-199 bars persists as Incomplete LOW'
+);
+SELECT throws_ok(
+  $$update public.daily_scans set status = 'Complete' where ticker = 'MCH'$$,
+  '23514',
+  null,
+  'short history cannot be marked Complete'
+);
 
 SELECT * FROM finish();
 ROLLBACK;
