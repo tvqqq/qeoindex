@@ -56,6 +56,8 @@ export interface ScannerData {
   providerHealth: ReturnType<typeof dnseProviderHealth>
 }
 
+export type DailyScanStatus = "Complete" | "Incomplete"
+
 function token() {
   return process.env.NOTION_API_KEY ?? process.env.NOTION_TOKEN ?? ""
 }
@@ -212,6 +214,7 @@ export async function writeDailyScan(
   scanDate: string,
   result: WyckoffScanResult,
   provider: HistoricalProvider = "DNSE",
+  status: DailyScanStatus = "Complete",
 ) {
   const apiKey = token()
   if (!apiKey) throw new Error("NOTION_API_KEY is not configured")
@@ -245,7 +248,7 @@ export async function writeDailyScan(
     "What Changed": richTextValue(result.whatChanged),
     Confidence: { select: { name: result.confidence } },
     Provider: { select: { name: provider } },
-    Status: { select: { name: "Complete" } },
+    Status: { select: { name: status } },
   }
   const response = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
