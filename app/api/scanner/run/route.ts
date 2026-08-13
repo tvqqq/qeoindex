@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { fetchDailyOhlcv, dnseProviderHealth } from "@/lib/dnse-history"
+import { fetchDailyOhlcv, dnseProviderHealth, vietnamDateKey } from "@/lib/dnse-history"
 import { getScannerData, rowToPreviousResult, writeDailyScan } from "@/lib/scanner-data"
 import { scanWyckoff } from "@/lib/wyckoff-engine"
 
@@ -11,15 +11,6 @@ function authorized(request: NextRequest) {
   if (!configured.length) return process.env.NODE_ENV !== "production"
   const header = request.headers.get("authorization") ?? ""
   return configured.some((secret) => header === `Bearer ${secret}`)
-}
-
-function dateKey(timestampSeconds: number) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(timestampSeconds * 1000))
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -49,7 +40,7 @@ async function run(request: NextRequest) {
     const fetched = await Promise.allSettled(batch.map(async (stock) => {
       const bars = await fetchDailyOhlcv(stock.ticker)
       if (bars.length < 200) throw new Error(`Only ${bars.length} completed Daily bars; need >=200 for MA200 baseline`)
-      const scanDate = dateKey(bars.at(-1)!.time)
+      const scanDate = vietnamDateKey(bars.at(-1)!.time * 1000)
       const previousRow = data.latestScans[stock.ticker]
       if (previousRow?.date === scanDate && previousRow.status === "Complete") {
         return { stock, scanDate, skip: true as const, result: null }
