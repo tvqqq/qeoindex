@@ -20,7 +20,7 @@ export default async function Page() {
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <TopNav />
       <main className="min-h-0 flex-1">
-        <LiveMarketBoard universe={universe} />
+        <LiveMarketBoard universe={universe} universeSource={data.source} />
       </main>
     </div>
   )
