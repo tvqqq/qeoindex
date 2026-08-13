@@ -73,6 +73,14 @@ curl -X POST \
 
 Do not use `force` to bypass market-session checks in production. The initial session guard handles weekdays and the HOSE morning/afternoon windows; exchange-holiday support remains deferred to the future `market_calendar` phase.
 
+## Outbox workers
+
+`telegram-dispatch` and `notion-sync` consume bounded batches through transactional claim RPCs using `FOR UPDATE SKIP LOCKED`. Both require `POST` with `Authorization: Bearer <OUTBOX_DISPATCH_SECRET>`. They increment attempts on claim, retry failures with exponential backoff, and mark the fifth failed attempt `dead` for operator review.
+
+Telegram delivery records `sent_at` and the returned message ID. Notion create operations store the resulting page ID on the Supabase recommendation/event so later updates address the same page. Within a claimed batch, recommendation creates are processed before dependent signal-event pages. A downstream failure changes only its outbox item; the committed signal and recommendation remain canonical and untouched.
+
+Optional `TELEGRAM_API_BASE_URL` and `NOTION_API_BASE_URL` overrides exist only for offline local tests such as `scripts/mock-outbox-apis.mjs`. Leave both unset in production.
+
 ## Secrets
 
 Copy `supabase/.env.example` to `supabase/.env.local` for local Edge Functions. Real values are ignored by Git. Browser code may eventually receive only the Supabase URL and publishable key; service-role, DNSE, Telegram, and Notion credentials remain server-only.
