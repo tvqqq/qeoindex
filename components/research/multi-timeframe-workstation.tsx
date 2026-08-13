@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useMemo, useState, useTransition, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { Activity, ArrowUpRight, BarChart3, CheckCircle2, GitCompareArrows, ShieldCheck } from "lucide-react"
 
@@ -23,6 +23,19 @@ function rollingAverage(bars: OhlcvBar[], period: number) {
     if (i >= period - 1) out[i] = sum / period
   }
   return out
+}
+
+function barTimestamp(bar?: OhlcvBar) {
+  if (!bar) return "—"
+  return new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(bar.time * 1000))
 }
 
 function StudyChart({ bars, label }: { bars: OhlcvBar[]; label: string }) {
@@ -79,7 +92,7 @@ function Scenario({ study }: { study: TimeframeStudy }) {
   return <div className="space-y-2.5">{rows.map(([label, value, cls]) => <div key={label}><div className="mb-1 flex items-center justify-between text-sm"><span className="text-foreground/65">{label}</span><span className="font-mono font-semibold text-foreground">{value}%</span></div><div className="h-2 rounded-full bg-panel-2"><div className={`h-full rounded-full ${cls}`} style={{ width: `${value}%` }} /></div></div>)}</div>
 }
 
-function EvidenceCard({ title, children }: { title: string; children: React.ReactNode }) {
+function EvidenceCard({ title, children }: { title: string; children: ReactNode }) {
   return <section className="rounded-xl border border-border bg-panel p-5"><h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground/45">{title}</h3><div className="mt-3 text-sm leading-6 text-foreground/72">{children}</div></section>
 }
 
@@ -120,7 +133,7 @@ export function MultiTimeframeWorkstation({ ticker, studies, canPromote }: { tic
       <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
         <div>
           <div className="flex flex-wrap items-center gap-2"><GitCompareArrows className="h-5 w-5 text-brand" /><h2 className="text-xl font-semibold text-foreground">Multi-Timeframe Workstation</h2><span className="rounded-md border border-brand/25 bg-brand/10 px-2 py-1 text-xs font-semibold text-brand">Weekly · Daily · 4H · 1H</span></div>
-          <p className="mt-2 max-w-4xl text-sm leading-6 text-foreground/55">Cùng một pipeline: Structure → Price Action → Volume → Wyckoff → Confirmation → Scenario. Mỗi tab giữ provenance riêng; 4H được đánh dấu derived từ 1H.</p>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-foreground/55">Cùng một pipeline: Structure → Price Action → Volume → Wyckoff → Confirmation → Scenario. Mỗi timeframe dùng bar hoàn tất mới nhất của chính nó; 4H được đánh dấu derived từ 1H.</p>
         </div>
         {canPromote && <button type="button" disabled={isPending} onClick={promote} className="inline-flex shrink-0 items-center gap-2 rounded-md border border-brand/35 bg-brand/10 px-4 py-2.5 text-sm font-semibold text-brand transition-colors hover:bg-brand/15 disabled:opacity-50"><CheckCircle2 className="h-4 w-4" />{isPending ? "Đang promote…" : "Promote to Canonical Thesis"}</button>}
       </div>
@@ -133,7 +146,7 @@ export function MultiTimeframeWorkstation({ ticker, studies, canPromote }: { tic
         })}
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-xs text-foreground/50"><div>{current.detail}</div><div>{current.bars.length} bars · {current.scan?.confidence || "insufficient"}</div></div>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-xs text-foreground/50"><div>{current.detail}</div><div>Latest completed: {barTimestamp(current.bars.at(-1))} · {current.bars.length} bars · {current.scan?.confidence || "insufficient"}</div></div>
       <div className="mt-4"><StudyChart bars={current.bars} label={`${ticker} ${current.key}`} /></div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
