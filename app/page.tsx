@@ -1,4 +1,4 @@
-import { LiveMarketBoard, type BoardUniverseStock } from "@/components/live-market-board"
+import { LiveMarketBoardV2, type BoardUniverseStock } from "@/components/live-market-board-v2"
 import { OrderBookProvider } from "@/components/orderbook/orderbook-context"
 import { OrderBookManager } from "@/components/orderbook/orderbook-manager"
 import { TopNav } from "@/components/top-nav"
@@ -23,7 +23,7 @@ export default async function Page() {
       <div className="flex h-screen flex-col overflow-hidden bg-background">
         <TopNav />
         <main className="min-h-0 flex-1">
-          <LiveMarketBoard universe={universe} universeSource={data.source} />
+          <LiveMarketBoardV2 universe={universe} universeSource={data.source} />
         </main>
         <OrderBookManager />
       </div>
