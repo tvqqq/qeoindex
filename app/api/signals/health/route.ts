@@ -20,6 +20,12 @@ export async function GET() {
       scannerSource: scanner.source,
       bullishCandidates: bullish.length,
       openRecommendations: open.length,
+      cadence: {
+        mode: "near-live snapshot",
+        configuredCron: "* 2-7 * * 1-5",
+        timezone: "UTC",
+        localWindow: "09:00-14:59 Asia/Ho_Chi_Minh; route self-skips non-trading minutes",
+      },
       configuration: {
         dnseServerCredentials: Boolean(process.env.DNSE_API_KEY && process.env.DNSE_API_SECRET),
         telegram: telegramConfigured(),
