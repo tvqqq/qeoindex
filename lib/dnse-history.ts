@@ -84,13 +84,15 @@ function normalizePayload(raw: unknown): OhlcvBar[] {
   })).filter((bar) => [bar.time, bar.open, bar.high, bar.low, bar.close, bar.volume].every(Number.isFinite))
 }
 
-function localDateKey(timestampMs: number) {
-  return new Intl.DateTimeFormat("en-CA", {
+export function vietnamDateKey(timestampMs: number) {
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Ho_Chi_Minh",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date(timestampMs))
+  }).formatToParts(new Date(timestampMs))
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ""
+  return `${value("year")}-${value("month")}-${value("day")}`
 }
 
 function marketClosedForToday(now = new Date()) {
@@ -107,8 +109,8 @@ function marketClosedForToday(now = new Date()) {
 
 function removeIncompleteCurrentDailyBar(bars: OhlcvBar[], now = new Date()) {
   if (marketClosedForToday(now)) return bars
-  const today = localDateKey(now.getTime())
-  return bars.filter((bar) => localDateKey(bar.time * 1000) !== today)
+  const today = vietnamDateKey(now.getTime())
+  return bars.filter((bar) => vietnamDateKey(bar.time * 1000) !== today)
 }
 
 async function requestOhlc(symbol: string, resolution: string, from: number, to: number) {
