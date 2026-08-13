@@ -1,0 +1,76 @@
+import { NextResponse } from "next/server"
+
+import { fetchDailyMarketHistory, fetchHourlyMarketHistory } from "@/lib/market-history"
+import { buildMultiTimeframeStudies, buildPromotionDraft } from "@/lib/multi-timeframe"
+import { promoteDraftToNotion } from "@/lib/notion-promote"
+import { getResearchData } from "@/lib/research-data"
+import { getScannerData } from "@/lib/scanner-data"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json().catch(() => ({}))
+    const ticker = String(body?.ticker ?? "").trim().toUpperCase()
+    if (!/^[A-Z0-9]{2,10}$/.test(ticker) || ticker === "VNINDEX") {
+      return NextResponse.json({ ok: false, error: "Ticker không hợp lệ cho promotion." }, { status: 400 })
+    }
+
+    const [research, scanner] = await Promise.all([getResearchData(), getScannerData()])
+    if (!research.connection.notionLive) {
+      return NextResponse.json({ ok: false, error: "Notion canonical source hiện không live; dừng promotion để tránh tạo duplicate." }, { status: 503 })
+    }
+    if (research.theses.some((row) => row.ticker === ticker)) {
+      return NextResponse.json({ ok: false, error: `${ticker} đã có canonical thesis.` }, { status: 409 })
+    }
+    if (!scanner.universe.some((row) => row.ticker === ticker)) {
+      return NextResponse.json({ ok: false, error: `${ticker} không nằm trong scanner universe hiện tại.` }, { status: 404 })
+    }
+
+    const now = new Date()
+    const daily = await fetchDailyMarketHistory(ticker, now)
+    let hourlyBars = [] as Awaited<ReturnType<typeof fetchHourlyMarketHistory>>["bars"]
+    let hourlyProvider = "Unavailable"
+    let hourlyDetail = "Không lấy được 1H; promotion sẽ hạ confidence."
+    try {
+      const hourly = await fetchHourlyMarketHistory(ticker, now)
+      hourlyBars = hourly.bars
+      hourlyProvider = hourly.provider
+      hourlyDetail = hourly.detail
+    } catch (error) {
+      hourlyDetail = error instanceof Error ? error.message.slice(0, 220) : String(error).slice(0, 220)
+    }
+
+    const studies = buildMultiTimeframeStudies({
+      dailyBars: daily.bars,
+      hourlyBars,
+      dailyProvider: daily.provider,
+      dailyDetail: daily.detail,
+      hourlyProvider,
+      hourlyDetail,
+    })
+    const draft = buildPromotionDraft(ticker, studies)
+    if (draft.timeframes.length < 2) {
+      return NextResponse.json({ ok: false, error: "Chưa đủ ít nhất 2 timeframe để promote canonical thesis." }, { status: 422 })
+    }
+
+    const vnindex = research.theses.find((row) => row.ticker === "VNINDEX")
+    const result = await promoteDraftToNotion(draft, vnindex?.marketRegime || "Neutral")
+    return NextResponse.json({
+      ok: true,
+      ticker,
+      thesisId: result.thesis.id,
+      thesisUrl: result.thesis.url,
+      logId: result.log.id,
+      probabilities: {
+        bull: draft.bullProbability,
+        base: draft.baseProbability,
+        bear: draft.bearProbability,
+      },
+    })
+  } catch (error) {
+    console.error("[StockOS promote]", error)
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Promotion failed" }, { status: 500 })
+  }
+}

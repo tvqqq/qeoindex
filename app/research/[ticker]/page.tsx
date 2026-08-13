@@ -1,7 +1,8 @@
 import { FinhayLiveControl } from "@/components/research/finhay-live-control"
 import { ResearchApp } from "@/components/research/research-app"
 import { StockDetailApp } from "@/components/research/stock-detail-app"
-import { fetchDailyMarketHistory } from "@/lib/market-history"
+import { fetchDailyMarketHistory, fetchHourlyMarketHistory } from "@/lib/market-history"
+import { buildMultiTimeframeStudies } from "@/lib/multi-timeframe"
 import { getResearchData } from "@/lib/research-data"
 import { getScannerData } from "@/lib/scanner-data"
 import type { OhlcvBar } from "@/lib/technical-indicators"
@@ -12,11 +13,7 @@ function barDate(bar: OhlcvBar) {
   return new Date(bar.time * 1000).toISOString().slice(0, 10)
 }
 
-export default async function ResearchTickerPage({
-  params,
-}: {
-  params: Promise<{ ticker: string }>
-}) {
+export default async function ResearchTickerPage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = await params
   const decoded = decodeURIComponent(ticker).toUpperCase()
   const isIndex = decoded === "VNINDEX"
@@ -44,6 +41,8 @@ export default async function ResearchTickerPage({
 
   let bars: OhlcvBar[] = []
   let historyMeta: { provider: string; detail: string } | undefined
+  let hourlyBars: OhlcvBar[] = []
+  let hourlyMeta: { provider: string; detail: string } = { provider: "Unavailable", detail: "1H provider unavailable" }
   try {
     const cutoff = scan?.date ? new Date(`${scan.date}T23:59:59+07:00`) : new Date()
     const history = await fetchDailyMarketHistory(decoded, cutoff)
@@ -53,6 +52,24 @@ export default async function ResearchTickerPage({
   } catch (error) {
     console.error(`[StockOS detail] historical data failed for ${decoded}`, error)
   }
+
+  try {
+    const hourly = await fetchHourlyMarketHistory(decoded, new Date())
+    hourlyBars = hourly.bars
+    hourlyMeta = { provider: hourly.provider, detail: hourly.detail }
+  } catch (error) {
+    hourlyMeta = { provider: "Unavailable", detail: error instanceof Error ? error.message.slice(0, 220) : String(error).slice(0, 220) }
+    console.error(`[StockOS detail] intraday data failed for ${decoded}`, error)
+  }
+
+  const studies = buildMultiTimeframeStudies({
+    dailyBars: bars,
+    hourlyBars,
+    dailyProvider: historyMeta?.provider ?? "Unavailable",
+    dailyDetail: historyMeta?.detail ?? "Daily provider unavailable",
+    hourlyProvider: hourlyMeta.provider,
+    hourlyDetail: hourlyMeta.detail,
+  })
 
   const previousTicker = universeIndex > 0 ? scanner.universe[universeIndex - 1]?.ticker : undefined
   const nextTicker = universeIndex >= 0 && universeIndex < scanner.universe.length - 1 ? scanner.universe[universeIndex + 1]?.ticker : undefined
@@ -73,6 +90,7 @@ export default async function ResearchTickerPage({
         vnindex={vnindex}
         previousTicker={previousTicker}
         nextTicker={nextTicker}
+        studies={studies}
       />
     </>
   )
