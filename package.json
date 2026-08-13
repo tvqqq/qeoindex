@@ -8,6 +8,11 @@
     "start": "next start",
     "lint": "eslint .",
     "scan:secrets": "bash scripts/scan-secrets.sh",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:reset": "supabase db reset --local",
+    "supabase:lint": "supabase db lint --local --level error",
+    "supabase:types": "supabase gen types --lang typescript --local --schema public > lib/supabase/database.types.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -31,6 +36,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "16.3.0",
     "postcss": "^8.5",
+    "supabase": "^2.114.0",
     "tailwindcss": "^4.3.3",
     "typescript": "5.7.3"
   },
