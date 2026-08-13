@@ -1,6 +1,6 @@
 # Supabase local development
 
-StockOS uses a project-scoped Supabase CLI. Supabase will become the canonical store for operational scanner and signal state in later PRs; this bootstrap does not switch production reads or writes.
+StockOS uses a project-scoped Supabase CLI. Supabase migrations now define the canonical operational schema for scanner runs, recommendations, signal events, and delivery outboxes. Production reads and writes are not switched on yet; Edge Functions and schedulers remain deferred to later PRs.
 
 ## Prerequisites
 
@@ -17,6 +17,8 @@ pnpm install
 pnpm supabase:start
 pnpm supabase:reset
 pnpm supabase:lint
+pnpm supabase:test
+pnpm supabase:test:concurrency
 pnpm supabase:types
 ```
 
@@ -40,6 +42,19 @@ pnpm supabase:types
 ```
 
 Commit migrations and the regenerated `lib/supabase/database.types.ts` together. Use explicit `--local` or `--linked` flags because Supabase CLI defaults differ by command.
+
+## Operational signal contract
+
+- `trade_recommendations` stores durable BUY positions and their terminal result. A partial unique index permits only one open recommendation per ticker.
+- `signal_events` stores immutable BUY/SELL/EXIT_FAIL/WATCH events. Its idempotency key prevents replayed scanner work from producing duplicate events.
+- `monitor_runs` records scheduler execution and coverage metrics.
+- `notification_outbox` and `notion_sync_outbox` make downstream delivery retryable without coupling external APIs to the signal transaction.
+- `create_buy_signal(...)` atomically creates the recommendation, event, and both outbox records. A concurrent second BUY for the same ticker returns `duplicate`.
+- `close_recommendation(...)` locks the open recommendation, records the terminal event and calculated return/alpha, and creates the delivery work atomically.
+
+All operational tables have RLS enabled with no browser-facing policies. The RPCs are executable only by `service_role`; never call them from client components or expose that key to the browser.
+
+The pgTAP suite covers transaction behavior, replay idempotency, calculations, RLS, and privileges. The separate concurrency script uses two database connections to prove the one-open-position invariant under a real race.
 
 ## Secrets
 
