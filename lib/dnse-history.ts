@@ -1,3 +1,4 @@
+import "server-only"
 import { createHmac, randomUUID } from "node:crypto"
 import type { OhlcvBar } from "@/lib/technical-indicators"
 
@@ -12,8 +13,8 @@ export interface ProviderHealth {
 }
 
 function credentials() {
-  const apiKey = process.env.DNSE_API_KEY ?? process.env.NEXT_PUBLIC_DNSE_API_KEY ?? ""
-  const apiSecret = process.env.DNSE_API_SECRET ?? process.env.NEXT_PUBLIC_DNSE_API_SECRET ?? ""
+  const apiKey = process.env.DNSE_API_KEY ?? ""
+  const apiSecret = process.env.DNSE_API_SECRET ?? ""
   return { apiKey, apiSecret }
 }
 

@@ -104,8 +104,8 @@ export function LiveMarketBoardV2({ universe, universeSource }: { universe: Boar
   const grouped = useMemo(() => SECTOR_ORDER.map((sector) => ({ sector, stocks: filtered.filter((stock) => stock.sector === sector).sort((a, b) => compareByPerformance(a, b, quotes)) })).filter((group) => group.stocks.length), [filtered, quotes])
 
   const liveCount = universe.filter((stock) => quotes[stock.ticker]).length
-  const advances = universe.filter((stock) => (quotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent > 0).length
-  const declines = universe.filter((stock) => (quotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent < 0).length
+  const advances = universe.filter((stock) => ((quotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) > 0).length
+  const declines = universe.filter((stock) => ((quotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) < 0).length
   const openBook = useCallback((ticker: string) => openOrderBook(`board:${ticker}`, ticker), [openOrderBook])
 
   return <div className="flex h-full min-h-0 flex-col bg-background">

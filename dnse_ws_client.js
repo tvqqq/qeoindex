@@ -7,9 +7,9 @@ import crypto from 'node:crypto';
  */
 
 const CONFIG = {
-  apiKey: process.env.DNSE_API_KEY || 'eyJvcmciOiJkbnNlIiwiaWQiOiI2NzMzNWM2MzhhOTQ0MTVmYmU1M2UxY2RiYjg2Y2ZkYSIsImgiOiJtdXJtdXIxMjgifQ==',
-  apiSecret: process.env.DNSE_API_SECRET || 'jICOG0y4FIx20XhQ4O47g5OZY6sBRUxqcvNMgoNaKU9KspTk4Vrnei8-xn1AQ0CMzd-CZRkojjlNZGtsm20AjA',
-  wsUrl: 'wss://ws-openapi.dnse.com.vn/v1/stream?encoding=json',
+  apiKey: process.env.DNSE_API_KEY || '',
+  apiSecret: process.env.DNSE_API_SECRET || '',
+  wsUrl: process.env.DNSE_WS_URL || 'wss://ws-openapi.dnse.com.vn/v1/stream?encoding=json',
   pingIntervalMs: 25000,
   reconnectBaseDelayMs: 1000,
   maxReconnectDelayMs: 60000,
@@ -72,6 +72,9 @@ export class DNSEWebSocketClient {
   }
 
   connect() {
+    if (!this.apiKey || !this.apiSecret) {
+      throw new Error('DNSE_API_KEY and DNSE_API_SECRET must be configured in the server environment.');
+    }
     this.isClosedManually = false;
     console.log(`[DNSE WS] Connecting to ${this.wsUrl}...`);
     this.ws = new WebSocket(this.wsUrl);

@@ -4,6 +4,7 @@ import hashlib
 import time
 import json
 import logging
+import os
 import sys
 
 # Configure Logging
@@ -14,9 +15,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("DNSE_WS")
 
-API_KEY = "eyJvcmciOiJkbnNlIiwiaWQiOiI2NzMzNWM2MzhhOTQ0MTVmYmU1M2UxY2RiYjg2Y2ZkYSIsImgiOiJtdXJtdXIxMjgifQ=="
-API_SECRET = "jICOG0y4FIx20XhQ4O47g5OZY6sBRUxqcvNMgoNaKU9KspTk4Vrnei8-xn1AQ0CMzd-CZRkojjlNZGtsm20AjA"
-URL = "wss://ws-openapi.dnse.com.vn/v1/stream?encoding=json"
+API_KEY = os.environ.get("DNSE_API_KEY", "")
+API_SECRET = os.environ.get("DNSE_API_SECRET", "")
+URL = os.environ.get("DNSE_WS_URL", "wss://ws-openapi.dnse.com.vn/v1/stream?encoding=json")
 
 CONTROL_ACTIONS = {
     "welcome",
@@ -62,6 +63,9 @@ async def keep_alive(ws, interval=25):
 
 async def run_dnse_client():
     import websockets
+
+    if not API_KEY or not API_SECRET:
+        raise RuntimeError("DNSE_API_KEY and DNSE_API_SECRET must be configured in the server environment")
 
     backoff = 1
     subscriptions = [
