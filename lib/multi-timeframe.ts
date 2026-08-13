@@ -179,7 +179,9 @@ export function buildPromotionDraft(ticker: string, studies: TimeframeStudy[]): 
 
   const directional = bull - bear
   const taBias: ScannerBias = directional >= 18 ? "Bullish" : directional <= -18 ? "Bearish" : Math.abs(directional) <= 6 ? "Neutral" : "Mixed"
-  const confidence: ScannerConfidence = usable.length === 4 && usable.filter((row) => row.scan?.confidence === "LOW").length === 0 ? "HIGH" : usable.length >= 3 ? "MEDIUM" : "LOW"
+  // A machine-derived promotion is never HIGH confidence on creation. HIGH is reserved
+  // for later human/methodology review of the canonical thesis.
+  const confidence: ScannerConfidence = usable.length >= 3 ? "MEDIUM" : "LOW"
   const daily = studies.find((row) => row.key === "Daily")?.scan
   const weekly = studies.find((row) => row.key === "Weekly")?.scan
   const primary = daily ?? weekly ?? usable[0]?.scan
