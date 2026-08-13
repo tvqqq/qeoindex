@@ -1,7 +1,7 @@
 "use client"
 
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
-import { OrderBookPanel } from "@/components/orderbook/orderbook-panel"
+import { LiveOrderBookPanel } from "@/components/orderbook/live-orderbook-panel"
 
 export function OrderBookManager() {
   const { books, order, close, focus } = useOrderBooks()
@@ -9,7 +9,7 @@ export function OrderBookManager() {
   return (
     <div className="pointer-events-none fixed inset-0 z-50">
       {books.map((book, index) => (
-        <OrderBookPanel
+        <LiveOrderBookPanel
           key={book.key}
           stockKey={book.key}
           symbol={book.symbol}
