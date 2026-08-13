@@ -446,6 +446,14 @@ export type Database = {
           result: string
         }[]
       }
+      install_stockos_cron: {
+        Args: never
+        Returns: {
+          job_name: string
+          schedule: string
+        }[]
+      }
+      uninstall_stockos_cron: { Args: never; Returns: number }
     }
     Enums: {
       [_ in never]: never

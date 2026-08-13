@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(46);
+SELECT plan(52);
 
 SELECT has_table('public', 'trade_recommendations', 'recommendation ledger exists');
 SELECT has_table('public', 'signal_events', 'signal event ledger exists');
@@ -172,6 +172,12 @@ UPDATE public.notification_outbox SET updated_at = now() - interval '6 minutes' 
 ALTER TABLE public.notification_outbox ENABLE TRIGGER notification_outbox_set_updated_at;
 SELECT is((SELECT count(*) FROM public.claim_notification_outbox(1)), 0::bigint, 'expired final lease is not claimed again');
 SELECT ok(not exists (SELECT 1 FROM public.notification_outbox WHERE status <> 'dead'), 'expired final lease is dead-lettered');
+SELECT has_function('public', 'install_stockos_cron', ARRAY[]::text[], 'Cron installer exists');
+SELECT has_function('public', 'uninstall_stockos_cron', ARRAY[]::text[], 'Cron uninstaller exists');
+SELECT ok(has_function_privilege('service_role', 'public.install_stockos_cron()', 'execute'), 'service role can install Cron');
+SELECT ok(not has_function_privilege('anon', 'public.install_stockos_cron()', 'execute'), 'anon cannot install Cron');
+SELECT ok(not has_function_privilege('authenticated', 'public.uninstall_stockos_cron()', 'execute'), 'authenticated browser cannot remove Cron');
+SELECT is((SELECT count(*) FROM cron.job WHERE jobname LIKE 'stockos-%'), 0::bigint, 'migration does not activate remote jobs implicitly');
 
 SELECT * FROM finish();
 ROLLBACK;
