@@ -7,6 +7,29 @@ function finite(value: unknown) {
   return Number.isFinite(number) ? number : null
 }
 
+function vietnamDateKey(timestampMs: number) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(timestampMs))
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ""
+  return `${value("year")}-${value("month")}-${value("day")}`
+}
+
+function marketClosed(now: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(now)
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0)
+  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? 0)
+  return hour > 15 || (hour === 15 && minute >= 30)
+}
+
 export async function fetchYahooDailyOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
   const period2 = Math.floor(now.getTime() / 1000) + 86400
   const period1 = period2 - DEFAULT_LOOKBACK_DAYS * 86400
@@ -37,7 +60,7 @@ export async function fetchYahooDailyOhlcv(symbol: string, now = new Date()): Pr
 
   const timestamps: unknown[] = result.timestamp ?? []
   const quote = result?.indicators?.quote?.[0] ?? {}
-  const bars: OhlcvBar[] = []
+  let bars: OhlcvBar[] = []
   for (let i = 0; i < timestamps.length; i += 1) {
     const time = finite(timestamps[i])
     const open = finite(quote.open?.[i])
@@ -56,6 +79,11 @@ export async function fetchYahooDailyOhlcv(symbol: string, now = new Date()): Pr
     })
   }
 
-  if (!bars.length) throw new Error(`Yahoo OHLC ${ticker} returned no usable daily bars`)
+  if (!marketClosed(now)) {
+    const today = vietnamDateKey(now.getTime())
+    bars = bars.filter((bar) => vietnamDateKey(bar.time * 1000) !== today)
+  }
+
+  if (!bars.length) throw new Error(`Yahoo OHLC ${ticker} returned no usable completed daily bars`)
   return bars.sort((a, b) => a.time - b.time)
 }
