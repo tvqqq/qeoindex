@@ -8,12 +8,13 @@ const NAV = [
   { label: "Bảng điện", href: "/" },
   { label: "Nghiên cứu", href: "/research" },
   { label: "Quét Wyckoff", href: "/research/scanner" },
+  { label: "Tín hiệu", href: "/research/signals" },
   { label: "Thay đổi luận điểm", href: "/research/changes" },
   { label: "Nhật ký phân tích", href: "/research/log" },
   { label: "Hậu kiểm", href: "/research/review" },
 ]
 
-const RESEARCH_RESERVED = new Set(["scanner", "changes", "log", "review"])
+const RESEARCH_RESERVED = new Set(["scanner", "signals", "changes", "log", "review"])
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/"
