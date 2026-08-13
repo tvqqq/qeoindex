@@ -44,7 +44,7 @@ function IndexStrip({ quotes }: { quotes: Record<string, LiveStockQuote | IndexQ
   </div>
 }
 
-export function LiveMarketBoardV2({ universe, universeSource }: { universe: BoardUniverseStock[]; universeSource: "notion" | "fallback" }) {
+export function LiveMarketBoardV2({ universe, universeSource }: { universe: BoardUniverseStock[]; universeSource: "notion" | "supabase" | "fallback" }) {
   const { open: openOrderBook } = useOrderBooks()
   const [payload, setPayload] = useState<QuotePayload>({ ok: false, state: "AUTH_REQUIRED" })
   const [loading, setLoading] = useState(true)
@@ -131,7 +131,7 @@ export function LiveMarketBoardV2({ universe, universeSource }: { universe: Boar
     {payload.state !== "LIVE" ? <div className="flex items-start gap-2 border-b border-warning/30 bg-warning/5 px-4 py-2.5 text-xs text-foreground"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" /><span>Bảng điện không hiển thị giá giả. Hãy kết nối Finhay để nhận giá realtime; giá Close gần nhất chỉ dùng làm tham chiếu.</span></div> : null}
 
     <div className="flex items-center gap-4 border-b border-border px-4 py-2 text-[11px] text-muted-2">
-      <span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" /> {universeSource === "notion" ? "Top 50 HOSE từ Notion" : "Top 50 fallback snapshot"}</span>
+      <span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" /> {universeSource === "supabase" ? "Top 50 HOSE từ Supabase" : universeSource === "notion" ? "Top 50 HOSE từ Notion" : "Top 50 fallback snapshot"}</span>
       <span>Tăng <b className="text-up">{advances}</b></span><span>Giảm <b className="text-down">{declines}</b></span><span>Đang có giá <b className="text-foreground">{liveCount}</b>/50</span><span className="hidden sm:inline">Tự xếp hạng theo % thay đổi</span>
       {lastFetch ? <span className="ml-auto">Cập nhật {new Date(lastFetch).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span> : null}
     </div>

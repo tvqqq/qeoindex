@@ -134,7 +134,7 @@ function IndexStrip({ quotes }: { quotes: Record<string, StockQuote | IndexQuote
   )
 }
 
-export function LiveMarketBoard({ universe, universeSource }: { universe: BoardUniverseStock[]; universeSource: "notion" | "fallback" }) {
+export function LiveMarketBoard({ universe, universeSource }: { universe: BoardUniverseStock[]; universeSource: "notion" | "supabase" | "fallback" }) {
   const [payload, setPayload] = useState<QuotePayload>({ ok: false, state: "AUTH_REQUIRED" })
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState("")
@@ -223,7 +223,7 @@ export function LiveMarketBoard({ universe, universeSource }: { universe: BoardU
       ) : null}
 
       <div className="flex items-center gap-4 border-b border-border px-4 py-2 text-[11px] text-muted-2">
-        <span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" /> {universeSource === "notion" ? "Top 50 HOSE từ Notion" : "Top 50 fallback snapshot"}</span>
+        <span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" /> {universeSource === "supabase" ? "Top 50 HOSE từ Supabase" : universeSource === "notion" ? "Top 50 HOSE từ Notion" : "Top 50 fallback snapshot"}</span>
         <span>Tăng <b className="text-up">{advances}</b></span>
         <span>Giảm <b className="text-down">{declines}</b></span>
         <span>Đang có giá <b className="text-foreground">{liveCount}</b>/50</span>
