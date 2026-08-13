@@ -9,13 +9,387 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      monitor_runs: {
+        Row: {
+          buy_count: number
+          candidate_count: number
+          created_at: string
+          error: string | null
+          exit_count: number
+          finished_at: string | null
+          function_version: string
+          id: string
+          missing_quote_count: number
+          open_count: number
+          provider: string | null
+          quote_count: number
+          run_key: string
+          scheduled_for: string
+          session_state: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          buy_count?: number
+          candidate_count?: number
+          created_at?: string
+          error?: string | null
+          exit_count?: number
+          finished_at?: string | null
+          function_version: string
+          id?: string
+          missing_quote_count?: number
+          open_count?: number
+          provider?: string | null
+          quote_count?: number
+          run_key: string
+          scheduled_for: string
+          session_state: string
+          started_at?: string
+          status: string
+        }
+        Update: {
+          buy_count?: number
+          candidate_count?: number
+          created_at?: string
+          error?: string | null
+          exit_count?: number
+          finished_at?: string | null
+          function_version?: string
+          id?: string
+          missing_quote_count?: number
+          open_count?: number
+          provider?: string | null
+          quote_count?: number
+          run_key?: string
+          scheduled_for?: string
+          session_state?: string
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      notification_outbox: {
+        Row: {
+          attempt_count: number
+          channel: string
+          created_at: string
+          event_id: string
+          id: string
+          last_error: string | null
+          next_attempt_at: string
+          payload: Json
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          channel: string
+          created_at?: string
+          event_id: string
+          id?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          payload: Json
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          channel?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          payload?: Json
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_outbox_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "signal_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notion_sync_outbox: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          idempotency_key: string
+          last_error: string | null
+          next_attempt_at: string
+          operation: string
+          payload: Json
+          status: string
+          synced_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          idempotency_key: string
+          last_error?: string | null
+          next_attempt_at?: string
+          operation: string
+          payload: Json
+          status?: string
+          synced_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          idempotency_key?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          operation?: string
+          payload?: Json
+          status?: string
+          synced_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      signal_events: {
+        Row: {
+          created_at: string
+          daily_bias: string | null
+          engine_version: string
+          event_type: string
+          id: string
+          idempotency_key: string
+          price: number
+          provider: string
+          recommendation_id: string | null
+          rel_volume: number | null
+          rule: string
+          scan_date: string | null
+          signal_at: string
+          stop_price: number | null
+          ticker: string
+          vnindex: number | null
+          volume: number | null
+        }
+        Insert: {
+          created_at?: string
+          daily_bias?: string | null
+          engine_version: string
+          event_type: string
+          id?: string
+          idempotency_key: string
+          price: number
+          provider: string
+          recommendation_id?: string | null
+          rel_volume?: number | null
+          rule: string
+          scan_date?: string | null
+          signal_at: string
+          stop_price?: number | null
+          ticker: string
+          vnindex?: number | null
+          volume?: number | null
+        }
+        Update: {
+          created_at?: string
+          daily_bias?: string | null
+          engine_version?: string
+          event_type?: string
+          id?: string
+          idempotency_key?: string
+          price?: number
+          provider?: string
+          recommendation_id?: string | null
+          rel_volume?: number | null
+          rule?: string
+          scan_date?: string | null
+          signal_at?: string
+          stop_price?: number | null
+          ticker?: string
+          vnindex?: number | null
+          volume?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_events_recommendation_id_fkey"
+            columns: ["recommendation_id"]
+            isOneToOne: false
+            referencedRelation: "trade_recommendations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trade_recommendations: {
+        Row: {
+          alpha_pct: number | null
+          buy_price: number
+          buy_reason: string
+          buy_signal_at: string
+          confidence: string
+          created_at: string
+          daily_bias: string
+          engine_version: string
+          id: string
+          initial_target: number | null
+          last_monitor_at: string | null
+          last_price: number | null
+          last_rel_volume: number | null
+          max_adverse_pct: number | null
+          max_favorable_pct: number | null
+          outcome: string
+          provider: string
+          return_pct: number | null
+          risk_pct: number
+          scan_date: string
+          sell_price: number | null
+          sell_reason: string | null
+          sell_signal_at: string | null
+          status: string
+          stop_price: number
+          ticker: string
+          updated_at: string
+          vnindex_entry: number | null
+          vnindex_exit: number | null
+          vnindex_return_pct: number | null
+        }
+        Insert: {
+          alpha_pct?: number | null
+          buy_price: number
+          buy_reason: string
+          buy_signal_at: string
+          confidence: string
+          created_at?: string
+          daily_bias: string
+          engine_version: string
+          id?: string
+          initial_target?: number | null
+          last_monitor_at?: string | null
+          last_price?: number | null
+          last_rel_volume?: number | null
+          max_adverse_pct?: number | null
+          max_favorable_pct?: number | null
+          outcome?: string
+          provider: string
+          return_pct?: number | null
+          risk_pct: number
+          scan_date: string
+          sell_price?: number | null
+          sell_reason?: string | null
+          sell_signal_at?: string | null
+          status?: string
+          stop_price: number
+          ticker: string
+          updated_at?: string
+          vnindex_entry?: number | null
+          vnindex_exit?: number | null
+          vnindex_return_pct?: number | null
+        }
+        Update: {
+          alpha_pct?: number | null
+          buy_price?: number
+          buy_reason?: string
+          buy_signal_at?: string
+          confidence?: string
+          created_at?: string
+          daily_bias?: string
+          engine_version?: string
+          id?: string
+          initial_target?: number | null
+          last_monitor_at?: string | null
+          last_price?: number | null
+          last_rel_volume?: number | null
+          max_adverse_pct?: number | null
+          max_favorable_pct?: number | null
+          outcome?: string
+          provider?: string
+          return_pct?: number | null
+          risk_pct?: number
+          scan_date?: string
+          sell_price?: number | null
+          sell_reason?: string | null
+          sell_signal_at?: string | null
+          status?: string
+          stop_price?: number
+          ticker?: string
+          updated_at?: string
+          vnindex_entry?: number | null
+          vnindex_exit?: number | null
+          vnindex_return_pct?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      close_recommendation: {
+        Args: {
+          p_engine_version: string
+          p_event_type: string
+          p_idempotency_key: string
+          p_max_adverse_pct: number
+          p_max_favorable_pct: number
+          p_notification_payload?: Json
+          p_notion_payload?: Json
+          p_provider: string
+          p_recommendation_id: string
+          p_rel_volume: number
+          p_sell_price: number
+          p_sell_reason: string
+          p_signal_at: string
+          p_vnindex_exit: number
+          p_volume: number
+        }
+        Returns: {
+          event_id: string
+          recommendation_id: string
+          result: string
+        }[]
+      }
+      create_buy_signal: {
+        Args: {
+          p_buy_price: number
+          p_buy_reason: string
+          p_confidence: string
+          p_daily_bias: string
+          p_engine_version: string
+          p_idempotency_key: string
+          p_initial_target: number
+          p_notification_payload?: Json
+          p_notion_payload?: Json
+          p_provider: string
+          p_rel_volume: number
+          p_risk_pct: number
+          p_scan_date: string
+          p_signal_at: string
+          p_stop_price: number
+          p_ticker: string
+          p_vnindex_entry: number
+          p_volume: number
+        }
+        Returns: {
+          event_id: string
+          recommendation_id: string
+          result: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

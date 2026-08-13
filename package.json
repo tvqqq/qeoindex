@@ -12,6 +12,8 @@
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset --local",
     "supabase:lint": "supabase db lint --local --level error",
+    "supabase:test": "supabase test db",
+    "supabase:test:concurrency": "bash scripts/test-signal-concurrency.sh",
     "supabase:types": "supabase gen types --lang typescript --local --schema public > lib/supabase/database.types.ts",
     "typecheck": "tsc --noEmit"
   },
