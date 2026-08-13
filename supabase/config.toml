@@ -391,6 +391,12 @@ verify_jwt = false
 [functions.notion-sync]
 verify_jwt = false
 
+[functions.daily-scanner-orchestrator]
+verify_jwt = false
+
+[functions.daily-scanner-worker]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 

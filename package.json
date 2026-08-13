@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "scan:secrets": "bash scripts/scan-secrets.sh",
     "test:signal-core": "node --test tests/signal-engine.test.ts",
+    "test:scanner-core": "node --test tests/scanner-policy.test.ts",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset --local",

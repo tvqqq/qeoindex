@@ -1,6 +1,6 @@
 import { authorize, db, json, retryPatch } from "../_shared/outbox.ts"
 
-type Work = { id: string; entity_type: "trade_recommendation" | "signal_event"; entity_id: string; operation: "create" | "update"; attempt_count: number }
+type Work = { id: string; entity_type: "trade_recommendation" | "signal_event" | "daily_scan"; entity_id: string; operation: "create" | "update"; attempt_count: number }
 
 const notionVersion = "2026-03-11"
 const token = Deno.env.get("NOTION_API_KEY") ?? ""
@@ -41,13 +41,26 @@ function eventProperties(row: Record<string, unknown>, recommendationPageId: str
   }
 }
 
-async function sync(item: Work, recommendationSource: string, eventSource: string) {
-  const table = item.entity_type === "trade_recommendation" ? "trade_recommendations" : "signal_events"
+function dailyScanProperties(row: Record<string, unknown>) {
+  return {
+    Scan: title(`${row.ticker} — Daily Scan — ${row.scan_date}`), Ticker: rich(row.ticker), Date: date(row.scan_date), Rank: num(row.rank),
+    Price: num(row.price), "Change Pct": num(row.change_pct), Volume: num(row.volume), RSI14: num(row.rsi14), MACD: num(row.macd),
+    "MACD Signal": num(row.macd_signal), MA20: num(row.ma20), MA50: num(row.ma50), MA200: num(row.ma200), ATR14: num(row.atr14),
+    "Rel Volume": num(row.rel_volume), "Wyckoff State": rich(row.wyckoff_state), Phase: rich(row.phase), "TA Bias": select(row.ta_bias),
+    "Bull Probability": num(row.bull_probability), "Base Probability": num(row.base_probability), "Bear Probability": num(row.bear_probability),
+    Support: rich(row.support), Resistance: rich(row.resistance), Confirmation: rich(row.confirmation), Invalidation: rich(row.invalidation),
+    "What Changed": rich(row.what_changed), Confidence: select(row.confidence), Provider: select(row.provider), Status: select(row.status),
+  }
+}
+
+async function sync(item: Work, recommendationSource: string, eventSource: string, scanSource: string) {
+  const table = item.entity_type === "trade_recommendation" ? "trade_recommendations" : item.entity_type === "signal_event" ? "signal_events" : "daily_scans"
   const rows = await db(`${table}?id=eq.${item.entity_id}&select=*`)
   const row = rows?.[0] as Record<string, unknown> | undefined
   if (!row) throw new Error(`${item.entity_type} not found`)
   let properties: Record<string, unknown>
   if (item.entity_type === "trade_recommendation") properties = recommendationProperties(row)
+  else if (item.entity_type === "daily_scan") properties = dailyScanProperties(row)
   else {
     const recs = await db(`trade_recommendations?id=eq.${row.recommendation_id}&select=notion_page_id`)
     const recommendationPageId = recs?.[0]?.notion_page_id
@@ -58,7 +71,7 @@ async function sync(item: Work, recommendationSource: string, eventSource: strin
   if (item.operation === "update" && !existingPageId) throw new Error("Notion page mapping is missing")
   const page = existingPageId
     ? await notion(`pages/${existingPageId}`, { method: "PATCH", body: JSON.stringify({ properties }) })
-    : await notion("pages", { method: "POST", body: JSON.stringify({ parent: { data_source_id: item.entity_type === "trade_recommendation" ? recommendationSource : eventSource }, properties }) })
+    : await notion("pages", { method: "POST", body: JSON.stringify({ parent: { data_source_id: item.entity_type === "trade_recommendation" ? recommendationSource : item.entity_type === "signal_event" ? eventSource : scanSource }, properties }) })
   if (!existingPageId) await db(`${table}?id=eq.${item.entity_id}`, { method: "PATCH", body: JSON.stringify({ notion_page_id: page.id }) })
 }
 
@@ -67,7 +80,8 @@ Deno.serve(async (request) => {
   if (!authorize(request)) return json({ ok: false, error: "Unauthorized" }, 401)
   const recommendationSource = Deno.env.get("NOTION_TRADE_RECOMMENDATIONS_DATA_SOURCE_ID") ?? ""
   const eventSource = Deno.env.get("NOTION_SIGNAL_EVENTS_DATA_SOURCE_ID") ?? ""
-  if (!token || !recommendationSource || !eventSource) return json({ ok: false, error: "Notion sync is not configured" }, 503)
+  const scanSource = Deno.env.get("NOTION_DAILY_WYCKOFF_SCAN_DATA_SOURCE_ID") ?? ""
+  if (!token || !recommendationSource || !eventSource || !scanSource) return json({ ok: false, error: "Notion sync is not configured" }, 503)
   try {
     const body = await request.json().catch(() => ({})) as { limit?: number }
     const limit = Math.max(1, Math.min(Number(body.limit) || 10, 25))
@@ -79,7 +93,7 @@ Deno.serve(async (request) => {
     let synced = 0; const failures: Array<{ id: string; error: string }> = []
     for (const item of claimed) {
       try {
-        await sync(item, recommendationSource, eventSource)
+        await sync(item, recommendationSource, eventSource, scanSource)
         await db(`notion_sync_outbox?id=eq.${item.id}`, { method: "PATCH", body: JSON.stringify({ status: "synced", synced_at: new Date().toISOString(), last_error: null }) })
         synced++
       } catch (error) {
