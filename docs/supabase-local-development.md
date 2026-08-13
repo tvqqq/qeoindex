@@ -87,6 +87,16 @@ The signal dashboard selects its operational repository explicitly with `STOCKOS
 
 The selected backend and configuration state are visible in the dashboard. A Supabase read failure is shown and logged; it does not silently fall back to Notion. Never prefix the service-role key with `NEXT_PUBLIC_`.
 
+## Cron activation
+
+The Cron migration installs `pg_cron`, `pg_net`, and guarded installer functions, but deliberately creates no active jobs. Before activation, create these Vault secrets in the reviewed remote project:
+
+- `project_url`: the project URL without a trailing slash;
+- `signal_monitor_secret`: the same value configured as the Edge Function `SIGNAL_MONITOR_SECRET`;
+- `outbox_dispatch_secret`: the same value configured as `OUTBOX_DISPATCH_SECRET`.
+
+Then run `select * from public.install_stockos_cron();` as an administrator and verify exactly three jobs plus their first entries in `cron.job_run_details`. The signal monitor runs every minute Monday-Friday and still fails closed outside HOSE sessions; both outbox consumers run every minute. Use `select public.uninstall_stockos_cron();` for a recoverable rollback.
+
 ## Secrets
 
 Copy `supabase/.env.example` to `supabase/.env.local` for local Edge Functions. Real values are ignored by Git. Browser code may eventually receive only the Supabase URL and publishable key; service-role, DNSE, Telegram, and Notion credentials remain server-only.
