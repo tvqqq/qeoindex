@@ -71,6 +71,7 @@ export function OrderBookPanel({
     drag.current = null
   }, [])
 
+  // orderbook regenerates on price change and on its own jitter timer
   const [book, setBook] = useState<OrderBook>(() => generateOrderBook(s, 1))
   useEffect(() => {
     setBook(generateOrderBook(s))
@@ -78,6 +79,7 @@ export function OrderBookPanel({
   useEffect(() => {
     const id = setInterval(() => setBook(generateOrderBook(s)), 900)
     return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.symbol, s.price])
 
   const maxVol = Math.max(1, ...book.asks.map((r) => r.volume), ...book.bids.map((r) => r.volume))
@@ -88,6 +90,7 @@ export function OrderBookPanel({
       style={{ left: pos.x, top: pos.y, zIndex: z }}
       onPointerDown={onFocus}
     >
+      {/* header (drag handle) */}
       <div
         className="flex cursor-grab items-center gap-2 border-b border-border bg-panel-2 px-3 py-2 active:cursor-grabbing"
         onPointerDown={onPointerDown}
@@ -108,6 +111,7 @@ export function OrderBookPanel({
         </button>
       </div>
 
+      {/* live price chart */}
       <div className="border-b border-border px-2 pt-2">
         <Sparkline data={s.history} refValue={s.refPrice} color={color} width={276} height={56} fill strokeWidth={1.6} />
         <div className="flex justify-between pb-1.5 pt-1 font-mono text-[10px] text-muted">
@@ -123,6 +127,7 @@ export function OrderBookPanel({
         </div>
       </div>
 
+      {/* orderbook ladder */}
       <div className="px-2 py-2">
         <div className="mb-1 grid grid-cols-3 px-1 text-[10px] font-medium uppercase tracking-wide text-muted">
           <span>Giá mua</span>
@@ -130,6 +135,7 @@ export function OrderBookPanel({
           <span className="text-right">Giá bán</span>
         </div>
 
+        {/* asks */}
         <div className="flex flex-col gap-px">
           {book.asks.map((row) => (
             <LadderRow key={"a" + row.price} price={row.price} volume={row.volume} max={maxVol} side="ask" />
@@ -141,6 +147,7 @@ export function OrderBookPanel({
           <span className="font-mono text-[10px] text-muted">KL {formatVolume(s.volume)}</span>
         </div>
 
+        {/* bids */}
         <div className="flex flex-col gap-px">
           {book.bids.map((row) => (
             <LadderRow key={"b" + row.price} price={row.price} volume={row.volume} max={maxVol} side="bid" />
