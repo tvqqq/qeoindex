@@ -10,13 +10,31 @@ export interface HistoricalBarsResult {
   detail: string
 }
 
+let dnseUnavailableUntil = 0
+
+function shouldTryDnse() {
+  return Date.now() >= dnseUnavailableUntil
+}
+
+function markDnseUnavailable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|network/i.test(message)) {
+    dnseUnavailableUntil = Date.now() + 5 * 60_000
+  }
+  return message
+}
+
 export async function fetchDailyMarketHistory(symbol: string, now = new Date()): Promise<HistoricalBarsResult> {
   const errors: string[] = []
-  try {
-    const bars = await fetchDnseDailyOhlcv(symbol, now)
-    return { bars, provider: "DNSE", detail: "DNSE OpenAPI" }
-  } catch (error) {
-    errors.push(`DNSE: ${error instanceof Error ? error.message : String(error)}`)
+  if (shouldTryDnse()) {
+    try {
+      const bars = await fetchDnseDailyOhlcv(symbol, now)
+      return { bars, provider: "DNSE", detail: "DNSE OpenAPI" }
+    } catch (error) {
+      errors.push(`DNSE: ${markDnseUnavailable(error)}`)
+    }
+  } else {
+    errors.push("DNSE: temporarily bypassed after network failure")
   }
 
   try {
