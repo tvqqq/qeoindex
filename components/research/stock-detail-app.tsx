@@ -1,9 +1,10 @@
 import Link from "next/link"
-import { Activity, ArrowLeft, ArrowRight, BarChart3, ExternalLink, Gauge, ShieldCheck, Target, TrendingDown, TrendingUp } from "lucide-react"
+import type { ReactNode } from "react"
+import { Activity, ArrowLeft, ArrowRight, BarChart3, ExternalLink, Gauge, ShieldCheck, Target } from "lucide-react"
 
 import { TopNav } from "@/components/top-nav"
 import type { DailyScanRow, UniverseRow } from "@/lib/scanner-data"
-import type { AnalysisLog, Bias, MarketRegime, ProbabilitySet, Thesis } from "@/lib/research-types"
+import type { AnalysisLog, MarketRegime, ProbabilitySet, Thesis } from "@/lib/research-types"
 import type { OhlcvBar } from "@/lib/technical-indicators"
 
 type HistoryMeta = {
@@ -97,7 +98,7 @@ function ScenarioBars({ probabilities }: { probabilities: ProbabilitySet }) {
   )
 }
 
-function MetricCard({ label, value, detail, icon }: { label: string; value: string; detail: string; icon: React.ReactNode }) {
+function MetricCard({ label, value, detail, icon }: { label: string; value: string; detail: string; icon: ReactNode }) {
   return (
     <div className="rounded-xl border border-border bg-panel p-5">
       <div className="flex items-center justify-between gap-3 text-sm font-semibold text-foreground/65">
@@ -110,7 +111,7 @@ function MetricCard({ label, value, detail, icon }: { label: string; value: stri
   )
 }
 
-function Section({ title, children, tone = "default" }: { title: string; children: React.ReactNode; tone?: "default" | "positive" | "warning" | "danger" }) {
+function Section({ title, children, tone = "default" }: { title: string; children: ReactNode; tone?: "default" | "positive" | "warning" | "danger" }) {
   const border = tone === "positive" ? "border-up/30" : tone === "warning" ? "border-ref/30" : tone === "danger" ? "border-down/30" : "border-border"
   return (
     <section className={`rounded-xl border ${border} bg-panel p-5`}>
@@ -137,9 +138,9 @@ function PriceHistoryChart({ ticker, bars }: { ticker: string; bars: OhlcvBar[] 
     return <div className="rounded-lg border border-border bg-panel-2 p-6 text-sm text-foreground/60">Chưa đủ OHLCV để vẽ biểu đồ.</div>
   }
 
-  const ma20 = rollingAverage(shown, 20)
-  const ma50 = rollingAverage(shown, 50)
-  const ma200Full = rollingAverage(bars, 200).slice(-shown.length)
+  const ma20 = rollingAverage(bars, 20).slice(-shown.length)
+  const ma50 = rollingAverage(bars, 50).slice(-shown.length)
+  const ma200 = rollingAverage(bars, 200).slice(-shown.length)
   const width = 960
   const height = 380
   const left = 54
@@ -155,7 +156,7 @@ function PriceHistoryChart({ ticker, bars }: { ticker: string; bars: OhlcvBar[] 
     values.push(bar.low, bar.high)
     if (ma20[i] != null) values.push(ma20[i] as number)
     if (ma50[i] != null) values.push(ma50[i] as number)
-    if (ma200Full[i] != null) values.push(ma200Full[i] as number)
+    if (ma200[i] != null) values.push(ma200[i] as number)
   })
   const rawMin = Math.min(...values)
   const rawMax = Math.max(...values)
@@ -188,7 +189,7 @@ function PriceHistoryChart({ ticker, bars }: { ticker: string; bars: OhlcvBar[] 
         <path d={closePath} fill="none" stroke="var(--color-foreground)" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
         <path d={path(ma20)} fill="none" stroke="var(--color-brand)" strokeWidth="1.8" strokeLinecap="round" opacity="0.95" />
         <path d={path(ma50)} fill="none" stroke="var(--color-ref)" strokeWidth="1.8" strokeLinecap="round" opacity="0.95" />
-        <path d={path(ma200Full)} fill="none" stroke="var(--color-down)" strokeWidth="1.5" strokeLinecap="round" opacity="0.75" />
+        <path d={path(ma200)} fill="none" stroke="var(--color-down)" strokeWidth="1.5" strokeLinecap="round" opacity="0.75" />
         <text x={left} y={height - 10} fill="currentColor" className="text-[11px] text-foreground/45">{firstDate.toISOString().slice(0, 10)}</text>
         <text x={width - right} y={height - 10} textAnchor="end" fill="currentColor" className="text-[11px] text-foreground/45">{lastDate.toISOString().slice(0, 10)}</text>
       </svg>
@@ -264,6 +265,9 @@ export function StockDetailApp({
   const scenario = thesis?.probabilities ?? probabilitiesFromScan(scan)
   const dailyPrice = scan?.price
   const displayName = thesis?.company || (universe?.sector ? universe.sector : "HOSE")
+  const chartAlignment = scan?.date
+    ? "Tối đa 120 phiên, khóa tới ngày scan để không trộn nến intraday hiện tại với indicator Daily đã chốt."
+    : "Tối đa 120 phiên lịch sử khả dụng; chưa có Daily scan canonical để khóa cùng một timestamp."
 
   return (
     <div className="min-h-screen bg-background text-[15px]">
@@ -326,7 +330,7 @@ export function StockDetailApp({
 
         <section className="rounded-xl border border-border bg-panel p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div><h2 className="text-lg font-semibold text-foreground">Price structure — Daily</h2><p className="mt-1 text-sm leading-6 text-foreground/55">Tối đa 120 phiên và được khóa tới ngày scan để không trộn nến intraday hiện tại với indicator Daily đã chốt.</p></div>
+            <div><h2 className="text-lg font-semibold text-foreground">Price structure — Daily</h2><p className="mt-1 text-sm leading-6 text-foreground/55">{chartAlignment}</p></div>
             <div className="text-right text-xs leading-5 text-foreground/45"><div>{historyMeta?.detail || "Historical provider chưa khả dụng"}</div>{scan?.date && <div>Aligned to {scan.date}</div>}</div>
           </div>
           <div className="mt-4"><PriceHistoryChart ticker={ticker} bars={bars} /></div>
@@ -373,7 +377,7 @@ export function StockDetailApp({
               <div className="mt-4 space-y-3 text-sm leading-6 text-foreground/65">
                 <div><strong className="text-foreground/80">Live:</strong> Finhay MCP ở panel nổi, timestamp độc lập.</div>
                 <div><strong className="text-foreground/80">Daily scan:</strong> {scan?.provider || "—"} · {scan?.date || "—"}.</div>
-                <div><strong className="text-foreground/80">Chart:</strong> {historyMeta?.detail || "—"}; khóa tới ngày scan.</div>
+                <div><strong className="text-foreground/80">Chart:</strong> {historyMeta?.detail || "—"}; {scan?.date ? `khóa tới ${scan.date}` : "dùng lịch sử khả dụng mới nhất"}.</div>
                 <div><strong className="text-foreground/80">Research state:</strong> {canonical ? "Canonical Notion Stock Thesis" : "Chưa có canonical thesis"}.</div>
               </div>
               {thesis?.driveFolder && <a href={thesis.driveFolder} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-brand">Drive evidence <ExternalLink className="h-3.5 w-3.5" /></a>}
