@@ -3,6 +3,7 @@ import type { OhlcvBar } from "@/lib/technical-indicators"
 
 const DEFAULT_BASE_URL = "https://openapi.dnse.com.vn"
 const DEFAULT_LOOKBACK_DAYS = 520
+const DEFAULT_INTRADAY_LOOKBACK_DAYS = 180
 
 export interface ProviderHealth {
   configured: boolean
@@ -11,8 +12,6 @@ export interface ProviderHealth {
 }
 
 function credentials() {
-  // Server-only names are preferred. NEXT_PUBLIC fallbacks are accepted only to ease
-  // migration from the pre-existing StockOS setup; new deployments should use DNSE_*.
   const apiKey = process.env.DNSE_API_KEY ?? process.env.NEXT_PUBLIC_DNSE_API_KEY ?? ""
   const apiSecret = process.env.DNSE_API_SECRET ?? process.env.NEXT_PUBLIC_DNSE_API_SECRET ?? ""
   return { apiKey, apiSecret }
@@ -113,6 +112,14 @@ function removeIncompleteCurrentDailyBar(bars: OhlcvBar[], now = new Date()) {
   return bars.filter((bar) => vietnamDateKey(bar.time * 1000) !== today)
 }
 
+function removeIncompleteCurrentHourlyBar(bars: OhlcvBar[], now = new Date()) {
+  const nowSeconds = Math.floor(now.getTime() / 1000)
+  return bars.filter((bar, index) => {
+    if (index !== bars.length - 1) return true
+    return bar.time + 3600 <= nowSeconds
+  })
+}
+
 async function requestOhlc(symbol: string, resolution: string, from: number, to: number) {
   const { apiKey, apiSecret } = credentials()
   if (!apiKey || !apiSecret) throw new Error("DNSE server credentials are not configured")
@@ -132,7 +139,7 @@ async function requestOhlc(symbol: string, resolution: string, from: number, to:
   const body = await response.text()
   if (!response.ok) throw new Error(`DNSE OHLC ${symbol} ${resolution} failed (${response.status}): ${body.slice(0, 180)}`)
   const bars = normalizePayload(body)
-  if (!bars.length) throw new Error(`DNSE OHLC ${symbol} returned no usable bars`)
+  if (!bars.length) throw new Error(`DNSE OHLC ${symbol} ${resolution} returned no usable bars`)
   return bars
 }
 
@@ -140,10 +147,27 @@ export async function fetchDailyOhlcv(symbol: string, now = new Date()): Promise
   const to = Math.floor(now.getTime() / 1000)
   const from = to - DEFAULT_LOOKBACK_DAYS * 86400
   const errors: string[] = []
-  for (const resolution of ["D", "1D"]) {
+  for (const resolution of ["1D", "D"]) {
     try {
       const bars = await requestOhlc(symbol, resolution, from, to)
       return removeIncompleteCurrentDailyBar(bars, now)
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  throw new Error(errors.join(" | "))
+}
+
+export async function fetchHourlyOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
+  const to = Math.floor(now.getTime() / 1000)
+  const from = to - DEFAULT_INTRADAY_LOOKBACK_DAYS * 86400
+  const errors: string[] = []
+  for (const resolution of ["1H", "60"]) {
+    try {
+      const bars = await requestOhlc(symbol, resolution, from, to)
+      const completed = removeIncompleteCurrentHourlyBar(bars, now)
+      if (completed.length < 2) throw new Error(`DNSE OHLC ${symbol} ${resolution} returned insufficient completed bars`)
+      return completed
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error))
     }
