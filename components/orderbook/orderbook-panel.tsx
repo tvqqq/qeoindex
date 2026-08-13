@@ -1,191 +1,288 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
-import { GripVertical, X } from "lucide-react"
-import {
-  formatPct,
-  formatPrice,
-  formatVolume,
-  generateOrderBook,
-  type OrderBook,
-  type Trend,
-} from "@/lib/market-data"
-import { useStock } from "@/lib/use-market"
-import { Sparkline } from "@/components/sparkline"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ExternalLink, GripVertical, Minus, RefreshCw, X } from "lucide-react"
 
-const HEX: Record<Trend, string> = {
-  up: "#22c98a",
-  down: "#f2495c",
-  ceiling: "#b07cff",
-  floor: "#22b8cf",
-  ref: "#e2b93b",
-}
-const TEXT: Record<Trend, string> = {
-  up: "text-up",
-  down: "text-down",
-  ceiling: "text-ceiling",
-  floor: "text-[#22b8cf]",
-  ref: "text-ref",
+interface StockQuote {
+  symbol: string
+  price: number
+  reference?: number
+  ceiling?: number
+  floor?: number
+  change?: number
+  changePercent: number
+  volume?: number
+  updatedAt: string
 }
 
-const WIDTH = 300
+interface DepthLevel {
+  price: number
+  volume: number
+}
+
+interface MarketTrade {
+  id: string
+  time: string
+  price: number
+  volume: number
+  side: "BUY" | "SELL" | "UNKNOWN"
+}
+
+interface MarketSnapshot {
+  symbol: string
+  bids: DepthLevel[]
+  asks: DepthLevel[]
+  trades: MarketTrade[]
+  provider: string
+  updatedAt: string
+  partial: boolean
+  warnings: string[]
+}
+
+const WIDTH = 720
+
+function formatPrice(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
+  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value)
+}
+
+function formatVolume(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "—"
+  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
+}
+
+function pctClass(value?: number) {
+  if (typeof value !== "number") return "text-muted-2"
+  if (value > 0) return "text-up"
+  if (value < 0) return "text-down"
+  return "text-ref"
+}
+
+function tradeSideLabel(side: MarketTrade["side"]) {
+  if (side === "BUY") return { label: "Mua", className: "text-up" }
+  if (side === "SELL") return { label: "Bán", className: "text-down" }
+  return { label: "—", className: "text-muted-2" }
+}
+
+function timeLabel(value: string) {
+  const parsed = Date.parse(value)
+  if (!Number.isFinite(parsed)) return value || "—"
+  return new Date(parsed).toLocaleTimeString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
+}
 
 export function OrderBookPanel({
   stockKey,
+  symbol,
   index,
   z,
   onClose,
   onFocus,
 }: {
   stockKey: string
+  symbol: string
   index: number
   z: number
   onClose: () => void
   onFocus: () => void
 }) {
-  const s = useStock(stockKey)
-  const color = HEX[s.trend]
-  const text = TEXT[s.trend]
-
+  const [quote, setQuote] = useState<StockQuote | null>(null)
+  const [snapshot, setSnapshot] = useState<MarketSnapshot | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [minimized, setMinimized] = useState(false)
+  const [error, setError] = useState("")
   const [pos, setPos] = useState(() => ({
-    x: 120 + index * 34,
-    y: 96 + index * 34,
+    x: 36 + (index % 4) * 42,
+    y: 84 + (index % 5) * 34,
   }))
   const drag = useRef<{ dx: number; dy: number } | null>(null)
 
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      onFocus()
-      drag.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y }
-      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-    },
-    [pos.x, pos.y, onFocus],
-  )
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
+  const refresh = useCallback(async () => {
+    const [quoteResult, bookResult] = await Promise.allSettled([
+      fetch(`/api/finhay/quote?symbols=${encodeURIComponent(symbol)}`, { cache: "no-store" }).then(async (res) => {
+        if (!res.ok) throw new Error(`Finhay quote ${res.status}`)
+        return res.json()
+      }),
+      fetch(`/api/market/orderbook?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }).then(async (res) => {
+        const json = await res.json()
+        if (!res.ok || !json.ok) throw new Error(json.message ?? `Orderbook ${res.status}`)
+        return json
+      }),
+    ])
+
+    if (quoteResult.status === "fulfilled") {
+      const next = quoteResult.value?.quotes?.[symbol] as StockQuote | undefined
+      if (next) setQuote(next)
+    }
+
+    if (bookResult.status === "fulfilled") {
+      setSnapshot(bookResult.value.snapshot)
+      setError("")
+    } else {
+      setError(bookResult.reason instanceof Error ? bookResult.reason.message : String(bookResult.reason))
+    }
+    setLoading(false)
+  }, [symbol])
+
+  useEffect(() => {
+    refresh()
+    const timer = window.setInterval(refresh, 3_000)
+    return () => window.clearInterval(timer)
+  }, [refresh])
+
+  const onPointerDown = useCallback((event: React.PointerEvent) => {
+    onFocus()
+    drag.current = { dx: event.clientX - pos.x, dy: event.clientY - pos.y }
+    ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+  }, [onFocus, pos.x, pos.y])
+
+  const onPointerMove = useCallback((event: React.PointerEvent) => {
     if (!drag.current) return
-    const x = Math.max(0, Math.min(window.innerWidth - WIDTH, e.clientX - drag.current.dx))
-    const y = Math.max(0, Math.min(window.innerHeight - 120, e.clientY - drag.current.dy))
-    setPos({ x, y })
+    const maxX = Math.max(0, window.innerWidth - Math.min(WIDTH, window.innerWidth))
+    const maxY = Math.max(0, window.innerHeight - 60)
+    setPos({
+      x: Math.max(0, Math.min(maxX, event.clientX - drag.current.dx)),
+      y: Math.max(0, Math.min(maxY, event.clientY - drag.current.dy)),
+    })
   }, [])
+
   const onPointerUp = useCallback(() => {
     drag.current = null
   }, [])
 
-  // orderbook regenerates on price change and on its own jitter timer
-  const [book, setBook] = useState<OrderBook>(() => generateOrderBook(s, 1))
-  useEffect(() => {
-    setBook(generateOrderBook(s))
-  }, [s.price])
-  useEffect(() => {
-    const id = setInterval(() => setBook(generateOrderBook(s)), 900)
-    return () => clearInterval(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s.symbol, s.price])
+  const topBids = snapshot?.bids.slice(0, 3) ?? []
+  const topAsks = snapshot?.asks.slice(0, 3) ?? []
+  const bidTotal = topBids.reduce((sum, row) => sum + row.volume, 0)
+  const askTotal = topAsks.reduce((sum, row) => sum + row.volume, 0)
+  const depthTotal = bidTotal + askTotal
+  const buyPct = depthTotal > 0 ? (bidTotal / depthTotal) * 100 : 50
+  const sellPct = 100 - buyPct
+  const color = pctClass(quote?.changePercent)
+  const lastUpdated = snapshot?.updatedAt || quote?.updatedAt
 
-  const maxVol = Math.max(1, ...book.asks.map((r) => r.volume), ...book.bids.map((r) => r.volume))
+  const rows = useMemo(() => Array.from({ length: 3 }, (_, i) => ({
+    bid: topBids[i],
+    ask: topAsks[i],
+  })), [topBids, topAsks])
 
   return (
-    <div
-      className="absolute flex w-[300px] flex-col overflow-hidden rounded-lg border border-border-strong bg-panel shadow-2xl shadow-black/60"
-      style={{ left: pos.x, top: pos.y, zIndex: z }}
+    <section
+      className="pointer-events-auto absolute flex max-h-[calc(100vh-24px)] w-[min(720px,calc(100vw-16px))] flex-col overflow-hidden rounded-xl border border-border-strong bg-[#171918] shadow-2xl shadow-black/70"
+      style={{ left: pos.x, top: pos.y, zIndex: z, minHeight: minimized ? undefined : 340 }}
       onPointerDown={onFocus}
+      data-orderbook={stockKey}
     >
-      {/* header (drag handle) */}
-      <div
-        className="flex cursor-grab items-center gap-2 border-b border-border bg-panel-2 px-3 py-2 active:cursor-grabbing"
+      <header
+        className="flex cursor-grab select-none items-center gap-2 border-b border-border bg-[#1d1f1e] px-3 py-2 active:cursor-grabbing"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       >
-        <GripVertical className="h-3.5 w-3.5 text-muted" />
-        <span className="text-sm font-bold text-foreground">{s.symbol}</span>
-        <span className={`font-mono text-sm font-semibold ${text}`}>{formatPrice(s.price)}</span>
-        <span className={`font-mono text-xs ${text}`}>{formatPct(s.changePct)}</span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={`Đóng sổ lệnh ${s.symbol}`}
-          className="ml-auto rounded p-1 text-muted-2 transition-colors hover:bg-panel hover:text-down"
-        >
-          <X className="h-3.5 w-3.5" />
+        <GripVertical className="h-4 w-4 text-muted" />
+        <span className="text-[11px] text-muted-2">Sổ lệnh</span>
+        <span className="ml-2 text-base font-bold text-foreground">{symbol}</span>
+        <span className={`ml-auto font-mono text-base font-bold ${color}`}>{formatPrice(quote?.price)}</span>
+        {quote ? (
+          <span className={`font-mono text-sm font-semibold ${color}`}>
+            {quote.change && quote.change > 0 ? "+" : ""}{formatPrice(quote.change)} · {quote.changePercent > 0 ? "+" : ""}{quote.changePercent.toFixed(2)}%
+          </span>
+        ) : null}
+        <button type="button" onClick={(event) => { event.stopPropagation(); refresh() }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground" aria-label={`Làm mới ${symbol}`}>
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </button>
-      </div>
+        <a href={`/research/${symbol.toLowerCase()}`} onClick={(event) => event.stopPropagation()} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground" aria-label={`Mở phân tích ${symbol}`}>
+          <ExternalLink className="h-4 w-4" />
+        </a>
+        <button type="button" onClick={(event) => { event.stopPropagation(); setMinimized((value) => !value) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground" aria-label={minimized ? "Mở rộng" : "Thu nhỏ"}>
+          <Minus className="h-4 w-4" />
+        </button>
+        <button type="button" onClick={(event) => { event.stopPropagation(); onClose() }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-down" aria-label={`Đóng sổ lệnh ${symbol}`}>
+          <X className="h-4 w-4" />
+        </button>
+      </header>
 
-      {/* live price chart */}
-      <div className="border-b border-border px-2 pt-2">
-        <Sparkline data={s.history} refValue={s.refPrice} color={color} width={276} height={56} fill strokeWidth={1.6} />
-        <div className="flex justify-between pb-1.5 pt-1 font-mono text-[10px] text-muted">
-          <span>
-            Sàn <span className="text-[#22b8cf]">{formatPrice(s.floor)}</span>
-          </span>
-          <span>
-            TC <span className="text-ref">{formatPrice(s.refPrice)}</span>
-          </span>
-          <span>
-            Trần <span className="text-ceiling">{formatPrice(s.ceiling)}</span>
-          </span>
+      {!minimized ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <div className="border-b border-border px-4 py-3">
+            <div className="grid grid-cols-[1fr_120px_120px_1fr] gap-x-4 text-xs text-muted-2">
+              <span>KL mua</span>
+              <span className="text-right">Giá mua</span>
+              <span>Giá bán</span>
+              <span className="text-right">KL bán</span>
+            </div>
+            <div className="mt-2 space-y-1.5 font-mono text-sm">
+              {rows.map(({ bid, ask }, index) => (
+                <div key={index} className="grid grid-cols-[1fr_120px_120px_1fr] gap-x-4">
+                  <span className="text-foreground">{formatVolume(bid?.volume)}</span>
+                  <span className="text-right text-up">{formatPrice(bid?.price)}</span>
+                  <span className="text-down">{formatPrice(ask?.price)}</span>
+                  <span className="text-right text-foreground">{formatVolume(ask?.volume)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between text-sm font-semibold">
+              <span className="text-up">{depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "—"}</span>
+              <span className="text-down">{depthTotal > 0 ? `${sellPct.toFixed(0)}%` : "—"}</span>
+            </div>
+            <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-panel-2">
+              <div className="bg-up" style={{ width: `${depthTotal > 0 ? buyPct : 0}%` }} />
+              <div className="bg-down" style={{ width: `${depthTotal > 0 ? sellPct : 0}%` }} />
+            </div>
+            <div className="mt-1 flex justify-between text-xs text-muted-2"><span>Mua</span><span>Bán</span></div>
+          </div>
+
+          <div className="px-4 py-3">
+            <div className="mb-2 flex items-center gap-3">
+              <span className="rounded-full bg-blue-500/15 px-3 py-1 text-xs font-semibold text-blue-400">Khớp lệnh</span>
+              <span className="text-[11px] text-muted-2">Nguồn: {snapshot?.provider ?? "DNSE OpenAPI"}</span>
+              {lastUpdated ? <span className="ml-auto text-[11px] text-muted-2">Cập nhật {timeLabel(lastUpdated)}</span> : null}
+            </div>
+
+            {error ? (
+              <div className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-3 text-xs text-warning">
+                Không lấy được dữ liệu sổ lệnh thực tế: {error}
+              </div>
+            ) : snapshot?.trades.length ? (
+              <div>
+                <div className="grid grid-cols-[120px_1fr_150px_80px] border-b border-border pb-2 text-xs text-muted-2">
+                  <span>Thời gian</span><span className="text-right">Khối lượng</span><span className="text-right">Giá</span><span className="text-right">M/B</span>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto">
+                  {snapshot.trades.map((trade) => {
+                    const side = tradeSideLabel(trade.side)
+                    return (
+                      <div key={trade.id} className="grid grid-cols-[120px_1fr_150px_80px] border-b border-border/40 py-1.5 font-mono text-sm last:border-0">
+                        <span className="text-muted-2">{timeLabel(trade.time)}</span>
+                        <span className="text-right font-semibold text-foreground">{formatVolume(trade.volume)}</span>
+                        <span className={`text-right font-semibold ${trade.side === "SELL" ? "text-down" : trade.side === "BUY" ? "text-up" : "text-foreground"}`}>{formatPrice(trade.price)}</span>
+                        <span className={`text-right font-semibold ${side.className}`}>{side.label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-border bg-panel-2/40 px-3 py-6 text-center text-xs text-muted-2">
+                {loading ? "Đang tải dữ liệu sổ lệnh..." : "Chưa có dữ liệu khớp lệnh từ provider."}
+              </div>
+            )}
+
+            {snapshot?.partial && snapshot.warnings.length ? (
+              <details className="mt-3 text-[10px] text-muted-2">
+                <summary className="cursor-pointer">Chi tiết giới hạn dữ liệu</summary>
+                <ul className="mt-1 list-disc space-y-1 pl-4">
+                  {snapshot.warnings.slice(0, 3).map((warning, index) => <li key={index}>{warning}</li>)}
+                </ul>
+              </details>
+            ) : null}
+          </div>
         </div>
-      </div>
-
-      {/* orderbook ladder */}
-      <div className="px-2 py-2">
-        <div className="mb-1 grid grid-cols-3 px-1 text-[10px] font-medium uppercase tracking-wide text-muted">
-          <span>Giá mua</span>
-          <span className="text-center">KL</span>
-          <span className="text-right">Giá bán</span>
-        </div>
-
-        {/* asks */}
-        <div className="flex flex-col gap-px">
-          {book.asks.map((row) => (
-            <LadderRow key={"a" + row.price} price={row.price} volume={row.volume} max={maxVol} side="ask" />
-          ))}
-        </div>
-
-        <div className="my-1 flex items-center justify-center gap-2 rounded bg-panel-2 py-1">
-          <span className={`font-mono text-xs font-semibold ${text}`}>{formatPrice(s.price)}</span>
-          <span className="font-mono text-[10px] text-muted">KL {formatVolume(s.volume)}</span>
-        </div>
-
-        {/* bids */}
-        <div className="flex flex-col gap-px">
-          {book.bids.map((row) => (
-            <LadderRow key={"b" + row.price} price={row.price} volume={row.volume} max={maxVol} side="bid" />
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function LadderRow({
-  price,
-  volume,
-  max,
-  side,
-}: {
-  price: number
-  volume: number
-  max: number
-  side: "bid" | "ask"
-}) {
-  const pctW = (volume / max) * 100
-  const isBid = side === "bid"
-  const color = isBid ? "var(--color-up)" : "var(--color-down)"
-  const text = isBid ? "text-up" : "text-down"
-
-  return (
-    <div className="relative grid grid-cols-3 items-center overflow-hidden rounded-sm px-1 py-[3px] font-mono text-[11px]">
-      <span
-        className="absolute inset-y-0 right-0"
-        style={{ width: `${pctW}%`, background: `color-mix(in srgb, ${color} 16%, transparent)` }}
-        aria-hidden="true"
-      />
-      <span className={`relative ${isBid ? text : "text-muted-2"}`}>{isBid ? formatPrice(price) : ""}</span>
-      <span className="relative text-center text-foreground">{formatVolume(volume)}</span>
-      <span className={`relative text-right ${!isBid ? text : "text-muted-2"}`}>
-        {!isBid ? formatPrice(price) : ""}
-      </span>
-    </div>
+      ) : null}
+    </section>
   )
 }
