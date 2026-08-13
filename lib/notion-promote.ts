@@ -67,20 +67,24 @@ export async function promoteDraftToNotion(draft: PromotionDraft, marketRegime: 
   })
 
   const summary = `${draft.baseCase} Support ${draft.support}. Resistance ${draft.resistance}. Confirmation: ${draft.confirmation}`
-  const log = await createPage(ANALYSIS_LOG_DATA_SOURCE_ID, {
-    Analysis: title(`${draft.ticker} — MTF Promotion — ${date}`),
-    Ticker: { relation: [{ id: thesis.id }] },
-    Date: { date: { start: date } },
-    Timeframes: { multi_select: draft.timeframes.map((name) => ({ name })) },
-    Type: { multi_select: [{ name: "TA" }] },
-    Summary: richText(summary),
-    "Bull Probability": { number: draft.bullProbability },
-    "Base Probability": { number: draft.baseProbability },
-    "Bear Probability": { number: draft.bearProbability },
-    Outcome: { select: { name: "Pending" } },
-    "Actual Scenario": { select: { name: "Unresolved" } },
-    "TA Bias": { select: { name: draft.taBias } },
-  })
-
-  return { thesis, log }
+  try {
+    const log = await createPage(ANALYSIS_LOG_DATA_SOURCE_ID, {
+      Analysis: title(`${draft.ticker} — MTF Promotion — ${date}`),
+      Ticker: { relation: [{ id: thesis.id }] },
+      Date: { date: { start: date } },
+      Timeframes: { multi_select: draft.timeframes.map((name) => ({ name })) },
+      Type: { multi_select: [{ name: "TA" }] },
+      Summary: richText(summary),
+      "Bull Probability": { number: draft.bullProbability },
+      "Base Probability": { number: draft.baseProbability },
+      "Bear Probability": { number: draft.bearProbability },
+      Outcome: { select: { name: "Pending" } },
+      "Actual Scenario": { select: { name: "Unresolved" } },
+      "TA Bias": { select: { name: draft.taBias } },
+    })
+    return { thesis, log }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    throw new Error(`PARTIAL_PROMOTION: Stock Thesis ${thesis.id} đã được tạo nhưng Analysis Log thất bại. Không tự rollback canonical record. ${reason}`)
+  }
 }
