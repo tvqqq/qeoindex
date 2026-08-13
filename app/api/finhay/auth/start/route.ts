@@ -30,7 +30,9 @@ export async function GET(request: Request) {
     authorize.searchParams.set("resource", metadata.resource)
 
     const configuredScope = process.env.FINHAY_OAUTH_SCOPE?.trim()
-    if (configuredScope) authorize.searchParams.set("scope", configuredScope)
+    const defaultScope = metadata.scopesSupported.includes("read:market") ? "read:market" : ""
+    const scope = configuredScope || defaultScope
+    if (scope) authorize.searchParams.set("scope", scope)
 
     return NextResponse.redirect(authorize)
   } catch (error) {
