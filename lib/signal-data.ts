@@ -26,7 +26,6 @@ export interface TradeRecommendation extends OpenRecommendationState {
   scanDate: string
   confidence: string
   provider: string
-  telegramSent: boolean
   engineVersion: string
   lastMonitor: string
   lastPrice: number | null
@@ -43,7 +42,6 @@ export interface SignalEventRow {
   volume: number | null
   relVolume: number | null
   rule: string
-  telegramSent: boolean
   provider: string
   scanDate: string
   dailyBias: string
@@ -64,9 +62,6 @@ function headers() {
 function text(prop: any) {
   return (prop?.rich_text ?? []).map((item: any) => item?.plain_text ?? "").join("")
 }
-function title(prop: any) {
-  return (prop?.title ?? []).map((item: any) => item?.plain_text ?? "").join("")
-}
 function number(prop: any): number | null {
   return typeof prop?.number === "number" ? prop.number : null
 }
@@ -75,9 +70,6 @@ function select(prop: any) {
 }
 function date(prop: any) {
   return prop?.date?.start ?? ""
-}
-function checkbox(prop: any) {
-  return Boolean(prop?.checkbox)
 }
 function rich(value: string) {
   return { rich_text: value ? [{ type: "text", text: { content: value.slice(0, 1900) } }] : [] }
@@ -126,7 +118,6 @@ function parseRecommendation(page: any): TradeRecommendation | null {
     scanDate: date(props["Scan Date"]),
     confidence: select(props.Confidence),
     provider: select(props.Provider),
-    telegramSent: checkbox(props["Telegram Sent"]),
     engineVersion: text(props["Engine Version"]),
     lastMonitor: date(props["Last Monitor"]),
     lastPrice: number(props["Last Price"]),
@@ -150,7 +141,6 @@ function parseEvent(page: any): SignalEventRow | null {
     volume: number(props.Volume),
     relVolume: number(props["Rel Volume"]),
     rule: text(props.Rule),
-    telegramSent: checkbox(props["Telegram Sent"]),
     provider: select(props.Provider),
     scanDate: date(props["Scan Date"]),
     dailyBias: select(props["Daily Bias"]),
@@ -195,7 +185,6 @@ export async function createBuyRecommendation(args: { scan: DailyScanRow; quote:
     "Scan Date": args.scan.date ? { date: { start: args.scan.date } } : { date: null },
     Confidence: args.scan.confidence ? { select: { name: args.scan.confidence } } : { select: null },
     Provider: { select: { name: "DNSE" } },
-    "Telegram Sent": { checkbox: false },
     "Engine Version": rich(SIGNAL_ENGINE_VERSION),
     "Last Monitor": { date: { start: now } },
     "Last Price": num(args.quote.price),
@@ -250,10 +239,6 @@ export async function closeRecommendation(row: TradeRecommendation, quote: LiveQ
   return { returnPct: exit.returnPct, vnindexReturnPct, alphaPct, outcome }
 }
 
-export async function setRecommendationTelegramSent(pageId: string, sent: boolean) {
-  return patchPage(pageId, { "Telegram Sent": { checkbox: sent } })
-}
-
 async function patchPage(pageId: string, properties: Record<string, any>) {
   const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
     method: "PATCH",
@@ -266,7 +251,7 @@ async function patchPage(pageId: string, properties: Record<string, any>) {
   return payload
 }
 
-export async function createSignalEvent(args: { type: "BUY" | "SELL" | "EXIT_FAIL" | "WATCH"; recommendationId: string; scan: DailyScanRow | undefined; quote: LiveQuote; rule: string; relVolume: number | null; stopPrice: number | null; vnindex: number | null; telegramSent: boolean }) {
+export async function createSignalEvent(args: { type: "BUY" | "SELL" | "EXIT_FAIL" | "WATCH"; recommendationId: string; scan: DailyScanRow | undefined; quote: LiveQuote; rule: string; relVolume: number | null; stopPrice: number | null; vnindex: number | null }) {
   const now = new Date(args.quote.timestamp).toISOString()
   const ticker = args.quote.ticker
   const properties: Record<string, any> = {
@@ -279,7 +264,6 @@ export async function createSignalEvent(args: { type: "BUY" | "SELL" | "EXIT_FAI
     "Rel Volume": num(args.relVolume),
     Rule: rich(args.rule),
     Recommendation: { relation: [{ id: args.recommendationId }] },
-    "Telegram Sent": { checkbox: args.telegramSent },
     "Engine Version": rich(SIGNAL_ENGINE_VERSION),
     Provider: { select: { name: "DNSE" } },
     "Scan Date": args.scan?.date ? { date: { start: args.scan.date } } : { date: null },
