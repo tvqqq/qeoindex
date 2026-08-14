@@ -65,11 +65,18 @@ export async function dailySignalWorkflow(startedAtIso: string) {
   openCount = await monitorWindow(dateKey, 9 * 60 + 20, 11 * 60 + 30, openCount)
   openCount = await monitorWindow(dateKey, 13 * 60, 14 * 60 + 30, openCount)
 
+  // Capture the ATC closing print so end-of-day alpha and exits are not based
+  // on the last continuous-auction tick.
+  await sleep(atVietnamTime(dateKey, 14, 45, 5))
+  const closing = await monitorSignalStep()
+  openCount = closing.openAfter ?? openCount
+
   return {
     dateKey,
     scanner,
     opening,
-    openAtCloseWindow: openCount,
+    closing,
+    openAtClose: openCount,
     completedAt: new Date().toISOString(),
   }
 }
