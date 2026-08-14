@@ -31,12 +31,16 @@ function atIct(clock: string, day = "2026-08-13") {
   return Date.parse(`${day}T${clock}:00+07:00`)
 }
 
-test("market session boundaries fail closed outside HOSE windows", () => {
+test("market session boundaries include ATO and fail closed outside HOSE windows", () => {
   assert.equal(marketSessionProgress(atIct("09:00")).active, true)
+  assert.equal(marketSessionProgress(atIct("09:00")).label, "ATO")
+  assert.equal(marketSessionProgress(atIct("09:15")).label, "ATO")
+  assert.equal(marketSessionProgress(atIct("09:16")).label, "Morning")
   assert.equal(marketSessionProgress(atIct("11:30")).active, true)
   assert.equal(marketSessionProgress(atIct("11:31")).active, false)
   assert.equal(marketSessionProgress(atIct("12:59")).active, false)
   assert.equal(marketSessionProgress(atIct("13:00")).active, true)
+  assert.equal(marketSessionProgress(atIct("14:31")).label, "ATC")
   assert.equal(marketSessionProgress(atIct("14:45")).active, true)
   assert.equal(marketSessionProgress(atIct("14:46")).active, false)
   assert.equal(marketSessionProgress(atIct("10:00", "2026-08-15")).active, false)
@@ -79,4 +83,25 @@ test("EXIT covers thesis, MA20, and structural support failures", () => {
   assert.match(evaluateExit(open, { ...scan, taBias: "Neutral" }, quote(25), timestamp).reason, /Daily thesis fail/)
   assert.match(evaluateExit(open, { ...scan, ma20: 25.5 }, quote(25), timestamp).reason, /Structural fail/)
   assert.match(evaluateExit(open, { ...scan, support: "24.8" }, quote(24.5), timestamp).reason, /support/)
+})
+
+test("EXIT protects profits after a meaningful give-back", () => {
+  const timestamp = atIct("10:30")
+  const quote: LiveQuote = { ticker: "HPG", price: 25.5, totalVolume: 2_000_000, timestamp }
+  const result = evaluateExit({ id: "rec", ticker: "HPG", buyPrice: 25, stopPrice: 22, maxFavorablePct: 6, maxAdversePct: -0.5 }, scan, quote, timestamp, 1800)
+  assert.equal(result.signal, true)
+  assert.equal(result.type, "SELL")
+  assert.match(result.reason, /Profit protection/)
+})
+
+test("EXIT rotates out of sustained VNINDEX underperformance", () => {
+  const buySignal = new Date(atIct("09:15")).toISOString()
+  const timestamp = atIct("10:30")
+  const quote: LiveQuote = { ticker: "HPG", price: 24.9, totalVolume: 2_000_000, timestamp }
+  const open = { id: "rec", ticker: "HPG", buyPrice: 25, stopPrice: 22, maxFavorablePct: 0.5, maxAdversePct: -0.4, buySignal, vnindexEntry: 1800 }
+  const result = evaluateExit(open, scan, quote, timestamp, 1840)
+  assert.equal(result.signal, true)
+  assert.equal(result.type, "EXIT_FAIL")
+  assert.ok((result.alphaPct ?? 0) <= -2.5)
+  assert.match(result.reason, /Relative-strength fail/)
 })
