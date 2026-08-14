@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="silver" x1="8" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f3f4f5"/><stop offset=".38" stop-color="#777b80"/><stop offset=".72" stop-color="#26292e"/><stop offset="1" stop-color="#aeb1b5"/></linearGradient>
+    <linearGradient id="amber" x1="10" y1="48" x2="53" y2="16" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ff7500"/><stop offset=".58" stop-color="#ffad00"/><stop offset="1" stop-color="#ffe000"/></linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#07090b"/>
+  <path d="M9 31V21.5L28.8 9.6a5.7 5.7 0 0 1 6 0L49 18.2v9l-4.8-2.8v-3.5L31.8 13.4 14 24.2v8.2h12.4l-5.3 4.4H9z" fill="url(#silver)"/>
+  <path d="M55 34v9.5L35.2 55.4a5.8 5.8 0 0 1-6 0L14.5 46.5h8.2l9.2 5.6L50 41.2v-4.1h-8.5l5.2-4.3H55z" fill="url(#silver)"/>
+  <path d="M8 44 18.5 41l9.7-7.4 8 6.8L56 27.5 37 45.8l-9-7.2-7.3 6.5L8 46.2z" fill="url(#amber)"/>
+  <g fill="url(#amber)"><path d="M24 29.4h3.8v6.9H24z" opacity=".68"/><path d="M25.4 26.6h1v2.8h-1z" opacity=".68"/><path d="M31.2 23.8h4.1v12h-4.1z"/><path d="M32.7 20.4h1v3.4h-1z"/><path d="M38.5 19h4.2v12.7h-4.2z"/><path d="M40 15.4h1v3.6h-1z"/><path d="M46 14.5h4.4v12.1H46z"/><path d="M47.7 10.8h1v3.7h-1z"/></g>
+</svg>
