@@ -6,8 +6,7 @@ import { ExternalLink, GripVertical, Minus, RefreshCw, X } from "lucide-react"
 type DepthLevel = { price: number; volume: number }
 type TradeSide = "BUY" | "SELL" | "UNKNOWN"
 type StreamTrade = { id: string; time: string; price: number; volume: number; side: TradeSide }
-type StockQuote = { symbol: string; price: number; change?: number; changePercent: number; updatedAt: string }
-
+type StockQuote = { symbol: string; price: number; reference?: number; change?: number; changePercent: number; updatedAt: string }
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 
 const WIDTH = 720
@@ -36,7 +35,9 @@ function pctClass(value?: number) {
 
 function normalizeDepth(rows: unknown): DepthLevel[] {
   if (!Array.isArray(rows)) return []
-  return rows.map((row: any) => ({ price: number(row?.price), volume: number(row?.qtty ?? row?.quantity ?? row?.volume) })).filter((row) => row.price > 0 && row.volume >= 0)
+  return rows
+    .map((row: any) => ({ price: number(row?.price), volume: number(row?.qtty ?? row?.quantity ?? row?.volume) }))
+    .filter((row) => row.price > 0 && row.volume >= 0)
 }
 
 function normalizeTime(value: unknown) {
@@ -57,7 +58,12 @@ function normalizeTime(value: unknown) {
 function timeLabel(value: string) {
   const parsed = Date.parse(value)
   if (!Number.isFinite(parsed)) return value || "—"
-  return new Date(parsed).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+  return new Date(parsed).toLocaleTimeString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
 }
 
 function inferSide(rawSide: unknown, price: number, bids: DepthLevel[], asks: DepthLevel[]): TradeSide {
@@ -77,11 +83,28 @@ function sideMeta(side: TradeSide) {
   return { label: "—", className: "text-muted-2" }
 }
 
+function nextQuote(symbol: string, data: any, current: StockQuote | null): StockQuote | null {
+  const price = number(data?.matchPrice ?? data?.price ?? data?.lastPrice) || current?.price || 0
+  const reference = number(data?.referencePrice ?? data?.refPrice ?? data?.basicPrice ?? data?.reference) || current?.reference || 0
+  if (price <= 0) return current
+  const change = reference > 0 ? price - reference : current?.change
+  const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : current?.changePercent ?? 0
+  return {
+    symbol,
+    price,
+    reference: reference || undefined,
+    change,
+    changePercent,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
   const [state, setState] = useState<StreamState>("CONNECTING")
   const [bids, setBids] = useState<DepthLevel[]>([])
   const [asks, setAsks] = useState<DepthLevel[]>([])
   const [trades, setTrades] = useState<StreamTrade[]>([])
+  const [quote, setQuote] = useState<StockQuote | null>(null)
   const [updatedAt, setUpdatedAt] = useState("")
   const [error, setError] = useState("")
   const depthRef = useRef<{ bids: DepthLevel[]; asks: DepthLevel[] }>({ bids: [], asks: [] })
@@ -110,16 +133,20 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
 
           const action = data?.action ?? data?.a
           if (action === "ping") {
-            if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "pong" }))
+            if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "pong", timestamp: data?.timestamp }))
             return
           }
           if (action === "auth_success") {
             setState("LIVE")
             attempts = 0
-            socket?.send(JSON.stringify({ action: "subscribe", channels: [
-              { name: "top_price.G1.json", symbols: [symbol] },
-              { name: "tick_extra.G1.json", symbols: [symbol] },
-            ] }))
+            socket?.send(JSON.stringify({
+              action: "subscribe",
+              channels: [
+                { name: "tick.G1.json", symbols: [symbol] },
+                { name: "top_price.G1.json", symbols: [symbol] },
+                { name: "tick_extra.G1.json", symbols: [symbol] },
+              ],
+            }))
             return
           }
           if (action === "auth_error" || action === "error") {
@@ -127,24 +154,36 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
             setError(data?.message ?? data?.msg ?? "DNSE stream authentication failed")
             return
           }
-          if (data?.session_id || data?.sid) {
+          if (data?.session_id || data?.sid || action === "welcome") {
             socket?.send(JSON.stringify(authJson.auth))
             return
           }
 
-          if (data?.T === "q" && String(data?.symbol ?? "").toUpperCase() === symbol) {
+          const ticker = String(data?.symbol ?? "").toUpperCase()
+          if (ticker !== symbol) return
+
+          if (data?.T === "q") {
             const nextBids = normalizeDepth(data?.bid).sort((a, b) => b.price - a.price)
             const nextAsks = normalizeDepth(data?.offer).sort((a, b) => a.price - b.price)
             depthRef.current = { bids: nextBids, asks: nextAsks }
             setBids(nextBids)
             setAsks(nextAsks)
+            setQuote((current) => nextQuote(symbol, data, current))
             setUpdatedAt(new Date().toISOString())
             return
           }
 
-          if (data?.T === "te" && String(data?.symbol ?? "").toUpperCase() === symbol) {
+          if (data?.T === "t") {
+            setQuote((current) => nextQuote(symbol, data, current))
+            setUpdatedAt(new Date().toISOString())
+            return
+          }
+
+          if (data?.T === "te") {
             const price = number(data?.matchPrice)
             const volume = number(data?.matchQtty)
+            setQuote((current) => nextQuote(symbol, data, current))
+            setUpdatedAt(new Date().toISOString())
             if (price <= 0 || volume <= 0) return
             const time = normalizeTime(data?.time)
             const trade: StreamTrade = {
@@ -155,7 +194,6 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
               side: inferSide(data?.side, price, depthRef.current.bids, depthRef.current.asks),
             }
             setTrades((current) => [trade, ...current].slice(0, 60))
-            setUpdatedAt(new Date().toISOString())
           }
         }
 
@@ -189,32 +227,16 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
     }
   }, [symbol, reconnectKey])
 
-  return { state, bids, asks, trades, updatedAt, error }
+  return { state, bids, asks, trades, quote, updatedAt, error }
 }
 
 export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocus }: { stockKey: string; symbol: string; index: number; z: number; onClose: () => void; onFocus: () => void }) {
-  const [quote, setQuote] = useState<StockQuote | null>(null)
   const [minimized, setMinimized] = useState(false)
   const [reconnectKey, setReconnectKey] = useState(0)
   const [pos, setPos] = useState(() => ({ x: 28 + (index % 4) * 48, y: 78 + (index % 5) * 38 }))
   const drag = useRef<{ dx: number; dy: number } | null>(null)
   const stream = useDnseOrderBookStream(symbol, reconnectKey)
-
-  useEffect(() => {
-    let disposed = false
-    const refreshQuote = async () => {
-      try {
-        const response = await fetch(`/api/finhay/quote?symbols=${encodeURIComponent(symbol)}`, { cache: "no-store" })
-        if (!response.ok) return
-        const json = await response.json()
-        const next = json?.quotes?.[symbol] as StockQuote | undefined
-        if (!disposed && next) setQuote(next)
-      } catch {}
-    }
-    refreshQuote()
-    const timer = window.setInterval(refreshQuote, 5_000)
-    return () => { disposed = true; window.clearInterval(timer) }
-  }, [symbol])
+  const quote = stream.quote
 
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
     onFocus()
@@ -223,12 +245,16 @@ export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocu
     drag.current = { dx: event.clientX - pos.x, dy: event.clientY - pos.y }
     event.currentTarget.setPointerCapture(event.pointerId)
   }, [onFocus, pos.x, pos.y])
+
   const onPointerMove = useCallback((event: React.PointerEvent) => {
     if (!drag.current) return
-    setPos({ x: Math.max(0, Math.min(Math.max(0, window.innerWidth - Math.min(WIDTH, window.innerWidth)), event.clientX - drag.current.dx)), y: Math.max(0, Math.min(Math.max(0, window.innerHeight - 60), event.clientY - drag.current.dy)) })
+    setPos({
+      x: Math.max(0, Math.min(Math.max(0, window.innerWidth - Math.min(WIDTH, window.innerWidth)), event.clientX - drag.current.dx)),
+      y: Math.max(0, Math.min(Math.max(0, window.innerHeight - 60), event.clientY - drag.current.dy)),
+    })
   }, [])
-  const onPointerUp = useCallback(() => { drag.current = null }, [])
 
+  const onPointerUp = useCallback(() => { drag.current = null }, [])
   const topBids = stream.bids.slice(0, 3)
   const topAsks = stream.asks.slice(0, 3)
   const bidTotal = stream.bids.reduce((sum, row) => sum + row.volume, 0)
