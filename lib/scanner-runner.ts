@@ -1,5 +1,6 @@
 import { vietnamDateKey } from "@/lib/dnse-history"
 import { fetchDailyMarketHistory } from "@/lib/market-history"
+import { notifyOpsError } from "@/lib/ops-alerts"
 import { getScannerData, rowToPreviousResult, writeDailyScan } from "@/lib/scanner-data"
 import { scanWyckoff } from "@/lib/wyckoff-engine"
 
@@ -61,7 +62,7 @@ export async function runScannerUniverse({ limit = 50, offset = 0 }: { limit?: n
     }
   }
 
-  return {
+  const summary: ScannerRunSummary = {
     ok: errors.length === 0,
     universeDate: data.universeDate,
     requested: targets.length,
@@ -70,4 +71,21 @@ export async function runScannerUniverse({ limit = 50, offset = 0 }: { limit?: n
     errors,
     generatedAt: new Date().toISOString(),
   }
+
+  const materialFailure = errors.length > 0 && (errors.length >= 5 || errors.length === targets.length)
+  if (materialFailure) {
+    await notifyOpsError({
+      source: "scanner-universe",
+      message: `${errors.length}/${targets.length} scanner targets failed`,
+      metadata: {
+        requested: targets.length,
+        completed: completed.length,
+        skipped: skipped.length,
+        errors: errors.length,
+        sample: errors.slice(0, 3).map((item) => `${item.ticker}:${item.error}`).join(" | ").slice(0, 500),
+      },
+    })
+  }
+
+  return summary
 }

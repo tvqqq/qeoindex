@@ -216,10 +216,12 @@ export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocu
     return () => { disposed = true; window.clearInterval(timer) }
   }, [symbol])
 
-  const onPointerDown = useCallback((event: React.PointerEvent) => {
+  const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
     onFocus()
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (target?.closest("button, a, [data-no-drag]")) return
     drag.current = { dx: event.clientX - pos.x, dy: event.clientY - pos.y }
-    ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+    event.currentTarget.setPointerCapture(event.pointerId)
   }, [onFocus, pos.x, pos.y])
   const onPointerMove = useCallback((event: React.PointerEvent) => {
     if (!drag.current) return
@@ -242,10 +244,10 @@ export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocu
       <GripVertical className="h-4 w-4 text-muted" /><span className="text-[11px] text-muted-2">Sổ lệnh</span><span className="ml-2 text-base font-bold text-foreground">{symbol}</span>
       <span className={`ml-auto font-mono text-base font-bold ${color}`}>{formatPrice(quote?.price)}</span>
       {quote ? <span className={`font-mono text-sm font-semibold ${color}`}>{typeof quote.change === "number" ? `${quote.change > 0 ? "+" : ""}${formatPrice(quote.change, true)} ` : ""}{quote.changePercent > 0 ? "+" : ""}{quote.changePercent.toFixed(2)}%</span> : null}
-      <button type="button" onClick={(event) => { event.stopPropagation(); setReconnectKey((key) => key + 1) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><RefreshCw className={`h-4 w-4 ${stream.state === "CONNECTING" ? "animate-spin" : ""}`} /></button>
-      <a href={`/research/${symbol.toLowerCase()}`} onClick={(event) => event.stopPropagation()} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><ExternalLink className="h-4 w-4" /></a>
-      <button type="button" onClick={(event) => { event.stopPropagation(); setMinimized((value) => !value) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><Minus className="h-4 w-4" /></button>
-      <button type="button" onClick={(event) => { event.stopPropagation(); onClose() }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-down"><X className="h-4 w-4" /></button>
+      <button type="button" aria-label="Kết nối lại sổ lệnh" title="Kết nối lại" onClick={(event) => { event.stopPropagation(); setReconnectKey((key) => key + 1) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><RefreshCw className={`h-4 w-4 ${stream.state === "CONNECTING" ? "animate-spin" : ""}`} /></button>
+      <a href={`/research/${symbol.toLowerCase()}`} aria-label={`Mở phân tích ${symbol}`} title="Mở phân tích" onClick={(event) => event.stopPropagation()} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><ExternalLink className="h-4 w-4" /></a>
+      <button type="button" aria-label={minimized ? "Mở rộng sổ lệnh" : "Thu gọn sổ lệnh"} title={minimized ? "Mở rộng" : "Thu gọn"} onClick={(event) => { event.stopPropagation(); setMinimized((value) => !value) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><Minus className="h-4 w-4" /></button>
+      <button type="button" aria-label="Đóng sổ lệnh" title="Đóng" onClick={(event) => { event.stopPropagation(); onClose() }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-down"><X className="h-4 w-4" /></button>
     </header>
 
     {!minimized ? <div className="min-h-0 flex-1 overflow-auto">
