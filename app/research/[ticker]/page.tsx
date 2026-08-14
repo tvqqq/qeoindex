@@ -1,4 +1,5 @@
 import { FinhayLiveControl } from "@/components/research/finhay-live-control"
+import { NotionUnavailable } from "@/components/notion-unavailable"
 import { ResearchApp } from "@/components/research/research-app"
 import { StockDetailApp } from "@/components/research/stock-detail-app"
 import { fetchDailyMarketHistory, fetchHourlyMarketHistory } from "@/lib/market-history"
@@ -17,7 +18,8 @@ export default async function ResearchTickerPage({ params }: { params: Promise<{
   const { ticker } = await params
   const decoded = decodeURIComponent(ticker).toUpperCase()
   const isIndex = decoded === "VNINDEX"
-  const [research, scanner] = await Promise.all([getResearchData(), getScannerData()])
+  const research = await getResearchData()
+  if (!research.connection.notionLive) return <NotionUnavailable section={`Nghiên cứu ${decoded}`} detail={research.connection.message} />
 
   if (isIndex) {
     return (
@@ -30,6 +32,13 @@ export default async function ResearchTickerPage({ params }: { params: Promise<{
     )
   }
 
+  let scanner: Awaited<ReturnType<typeof getScannerData>>
+  try {
+    scanner = await getScannerData()
+  } catch (error) {
+    console.error(`[StockOS detail] Notion scanner data failed for ${decoded}`, error)
+    return <NotionUnavailable section={`Nghiên cứu ${decoded}`} detail="Không đọc được scanner state từ Notion." />
+  }
   const thesis = research.theses.find((row) => row.ticker === decoded)
   const universeIndex = scanner.universe.findIndex((row) => row.ticker === decoded)
   const universe = universeIndex >= 0 ? scanner.universe[universeIndex] : undefined
@@ -52,7 +61,6 @@ export default async function ResearchTickerPage({ params }: { params: Promise<{
   } catch (error) {
     console.error(`[StockOS detail] historical data failed for ${decoded}`, error)
   }
-
   try {
     const hourly = await fetchHourlyMarketHistory(decoded, new Date())
     hourlyBars = hourly.bars
@@ -70,7 +78,6 @@ export default async function ResearchTickerPage({ params }: { params: Promise<{
     hourlyProvider: hourlyMeta.provider,
     hourlyDetail: hourlyMeta.detail,
   })
-
   const previousTicker = universeIndex > 0 ? scanner.universe[universeIndex - 1]?.ticker : undefined
   const nextTicker = universeIndex >= 0 && universeIndex < scanner.universe.length - 1 ? scanner.universe[universeIndex + 1]?.ticker : undefined
 
@@ -79,19 +86,7 @@ export default async function ResearchTickerPage({ params }: { params: Promise<{
       <div className="fixed bottom-4 right-4 z-50 max-w-[min(92vw,720px)] rounded-xl border border-border bg-panel/95 p-3 shadow-2xl backdrop-blur">
         <FinhayLiveControl symbols={[decoded]} />
       </div>
-      <StockDetailApp
-        ticker={decoded}
-        thesis={thesis}
-        scan={scan}
-        universe={universe}
-        bars={bars}
-        historyMeta={historyMeta}
-        logs={logs}
-        vnindex={vnindex}
-        previousTicker={previousTicker}
-        nextTicker={nextTicker}
-        studies={studies}
-      />
+      <StockDetailApp ticker={decoded} thesis={thesis} scan={scan} universe={universe} bars={bars} historyMeta={historyMeta} logs={logs} vnindex={vnindex} previousTicker={previousTicker} nextTicker={nextTicker} studies={studies} />
     </>
   )
 }

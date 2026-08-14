@@ -10,11 +10,16 @@ export default async function SignalsPage() {
   let recommendations = [] as Awaited<ReturnType<typeof getRecommendations>>
   let events = [] as Awaited<ReturnType<typeof getSignalEvents>>
   let readError = ""
-  try {
-    ;[recommendations, events] = await Promise.all([getRecommendations(), getSignalEvents()])
-  } catch (error) {
-    readError = error instanceof Error ? error.message : String(error)
-    console.error("Signals page Notion read failed", error)
+  const notionConfigured = Boolean(process.env.NOTION_API_KEY || process.env.NOTION_TOKEN)
+  if (!notionConfigured) {
+    readError = "Notion chưa được cấu hình cho environment này; không dùng backend dự phòng."
+  } else {
+    try {
+      ;[recommendations, events] = await Promise.all([getRecommendations(), getSignalEvents()])
+    } catch (error) {
+      readError = error instanceof Error ? error.message : String(error)
+      console.error("Signals page Notion read failed", error)
+    }
   }
   return <SignalsApp
     recommendations={recommendations}
