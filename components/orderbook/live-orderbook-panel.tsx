@@ -10,10 +10,20 @@ type StockQuote = { symbol: string; price: number; reference?: number; change?: 
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 
 const WIDTH = 720
+const ROUND_LOT_MULTIPLIER = 100
+const OPEN_PRICE_KEYS = ["openPrice", "openingPrice", "open", "openValue", "firstPrice"]
 
 function number(value: unknown) {
   const result = typeof value === "number" ? value : Number(value)
   return Number.isFinite(result) ? result : 0
+}
+
+function firstPositive(data: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = number(data[key])
+    if (value > 0) return value
+  }
+  return 0
 }
 
 function formatPrice(value?: number | null, allowNegative = false) {
@@ -36,7 +46,10 @@ function pctClass(value?: number) {
 function normalizeDepth(rows: unknown): DepthLevel[] {
   if (!Array.isArray(rows)) return []
   return rows
-    .map((row: any) => ({ price: number(row?.price), volume: number(row?.qtty ?? row?.quantity ?? row?.volume) }))
+    .map((row: any) => ({
+      price: number(row?.price),
+      volume: number(row?.qtty ?? row?.quantity ?? row?.volume) * ROUND_LOT_MULTIPLIER,
+    }))
     .filter((row) => row.price > 0 && row.volume >= 0)
 }
 
@@ -83,10 +96,11 @@ function sideMeta(side: TradeSide) {
   return { label: "—", className: "text-muted-2" }
 }
 
-function nextQuote(symbol: string, data: any, current: StockQuote | null): StockQuote | null {
-  const price = number(data?.matchPrice ?? data?.price ?? data?.lastPrice) || current?.price || 0
-  const reference = number(data?.referencePrice ?? data?.refPrice ?? data?.basicPrice ?? data?.reference) || current?.reference || 0
+function nextQuote(symbol: string, data: Record<string, unknown>, current: StockQuote | null): StockQuote | null {
+  const price = firstPositive(data, ["matchPrice", "price", "lastPrice"]) || current?.price || 0
   if (price <= 0) return current
+  const explicitOpen = firstPositive(data, OPEN_PRICE_KEYS)
+  const reference = explicitOpen || current?.reference || price
   const change = reference > 0 ? price - reference : current?.change
   const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : current?.changePercent ?? 0
   return {
@@ -181,7 +195,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
 
           if (data?.T === "te") {
             const price = number(data?.matchPrice)
-            const volume = number(data?.matchQtty)
+            const volume = number(data?.matchQtty) * ROUND_LOT_MULTIPLIER
             setQuote((current) => nextQuote(symbol, data, current))
             setUpdatedAt(new Date().toISOString())
             if (price <= 0 || volume <= 0) return
@@ -284,6 +298,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocu
         <div className="mt-4 flex items-center justify-between text-sm font-semibold"><span className="text-up">{depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "—"}</span><span className="text-down">{depthTotal > 0 ? `${sellPct.toFixed(0)}%` : "—"}</span></div>
         <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-panel-2"><div className="bg-up" style={{ width: `${depthTotal > 0 ? buyPct : 0}%` }} /><div className="bg-down" style={{ width: `${depthTotal > 0 ? sellPct : 0}%` }} /></div>
         <div className="mt-1 flex justify-between text-xs text-muted-2"><span>Mua</span><span>Bán</span></div>
+        <div className="mt-2 text-[10px] text-muted">Khối lượng DNSE round-lot được quy đổi ×100 sang số cổ phiếu.</div>
       </div>
 
       <div className="px-4 py-3">
