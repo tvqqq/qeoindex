@@ -1,6 +1,5 @@
-export const SIGNAL_ENGINE_VERSION = "intraday-v1.0"
+export const SIGNAL_ENGINE_VERSION = "workflow-v2.0"
 
-// Infrastructure-free deterministic contract shared by the Next.js UI and server jobs.
 export interface SignalDailyScan {
   ticker: string
   date: string
@@ -20,9 +19,27 @@ export interface SignalDailyScan {
   confidence?: string
 }
 export interface LiveQuote { ticker: string; price: number; totalVolume: number; timestamp: number }
-export interface OpenRecommendationState { id: string; ticker: string; buyPrice: number; stopPrice: number; maxFavorablePct: number | null; maxAdversePct: number | null }
+export interface OpenRecommendationState {
+  id: string
+  ticker: string
+  buyPrice: number
+  stopPrice: number
+  maxFavorablePct: number | null
+  maxAdversePct: number | null
+  buySignal?: string
+  vnindexEntry?: number | null
+}
 export interface BuyDecision { signal: boolean; reason: string; stopPrice: number | null; targetPrice: number | null; riskPct: number | null; volumePace: number | null }
-export interface ExitDecision { signal: boolean; type: "SELL" | "EXIT_FAIL" | null; reason: string; volumePace: number | null; returnPct: number; maxFavorablePct: number; maxAdversePct: number }
+export interface ExitDecision {
+  signal: boolean
+  type: "SELL" | "EXIT_FAIL" | null
+  reason: string
+  volumePace: number | null
+  returnPct: number
+  alphaPct: number | null
+  maxFavorablePct: number
+  maxAdversePct: number
+}
 function clamp(value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)) }
 export function parsePriceLevels(text: string) { return (text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((token) => Number(token.replace(/,/g, ""))).filter((value) => Number.isFinite(value) && value > 0) }
 function localClock(timestampMs: number) {
@@ -33,11 +50,16 @@ function localClock(timestampMs: number) {
 export function marketSessionProgress(timestampMs = Date.now()) {
   const { weekday, hour, minute } = localClock(timestampMs)
   if (["Sat", "Sun"].includes(weekday)) return { active: false, progress: 0, label: "Closed" }
-  const clock = hour * 60 + minute, morningStart = 9 * 60, morningEnd = 11 * 60 + 30, afternoonStart = 13 * 60, afternoonEnd = 14 * 60 + 45
+  const clock = hour * 60 + minute
+  const morningStart = 9 * 60, atoEnd = 9 * 60 + 15, morningEnd = 11 * 60 + 30
+  const afternoonStart = 13 * 60, continuousEnd = 14 * 60 + 30, afternoonEnd = 14 * 60 + 45
   const totalMinutes = (morningEnd - morningStart) + (afternoonEnd - afternoonStart)
-  if (clock < morningStart || clock > afternoonEnd || (clock > morningEnd && clock < afternoonStart)) return { active: false, progress: clock >= morningEnd && clock < afternoonStart ? (morningEnd - morningStart) / totalMinutes : 0, label: "Closed" }
+  if (clock < morningStart || clock > afternoonEnd || (clock > morningEnd && clock < afternoonStart)) {
+    return { active: false, progress: clock >= morningEnd && clock < afternoonStart ? (morningEnd - morningStart) / totalMinutes : 0, label: "Closed" }
+  }
   const elapsed = clock <= morningEnd ? clock - morningStart : (morningEnd - morningStart) + (clock - afternoonStart)
-  return { active: true, progress: clamp(elapsed / totalMinutes, 0.04, 1), label: clock <= morningEnd ? "Morning" : "Afternoon" }
+  const label = clock <= atoEnd ? "ATO" : clock <= morningEnd ? "Morning" : clock <= continuousEnd ? "Afternoon" : "ATC"
+  return { active: true, progress: clamp(elapsed / totalMinutes, 0.04, 1), label }
 }
 export function estimateVolumePace(scan: SignalDailyScan, currentVolume: number, timestampMs = Date.now()) {
   const session = marketSessionProgress(timestampMs)
@@ -65,14 +87,30 @@ export function evaluateBuy(scan: SignalDailyScan, quote: LiveQuote, timestampMs
   const support = nearestBelow(parsePriceLevels(scan.support), price), atrStop = scan.atr14 && scan.atr14 > 0 ? price - 1.5 * scan.atr14 : price * 0.96, structuralStop = support ? support - (scan.atr14 ?? price * 0.01) * 0.25 : price * 0.96
   let stopPrice = Math.max(atrStop, structuralStop, price * 0.93); stopPrice = Math.min(stopPrice, price * 0.98)
   const riskPct = ((price - stopPrice) / price) * 100, targetPrice = price + (price - stopPrice) * 2, trigger = breakout && resistance ? `breakout ${resistance.toFixed(2)}` : `momentum +${changePct.toFixed(2)}%`
-  return { signal: true, reason: `BUY v1: Daily Bullish ${scan.bullProbability ?? "—"}/${scan.baseProbability ?? "—"}/${scan.bearProbability ?? "—"}; ${trigger}; volume pace ${pace?.toFixed(2)}x; giữ trên MA20/MA50; stop ${stopPrice.toFixed(2)} (${riskPct.toFixed(2)}%).`, stopPrice, targetPrice, riskPct, volumePace: pace }
+  return { signal: true, reason: `BUY v2: Daily Bullish ${scan.bullProbability ?? "—"}/${scan.baseProbability ?? "—"}/${scan.bearProbability ?? "—"}; ${trigger}; volume pace ${pace?.toFixed(2)}x; giữ trên MA20/MA50; stop ${stopPrice.toFixed(2)} (${riskPct.toFixed(2)}%).`, stopPrice, targetPrice, riskPct, volumePace: pace }
 }
-export function evaluateExit(open: OpenRecommendationState, scan: SignalDailyScan | undefined, quote: LiveQuote, timestampMs = Date.now()): ExitDecision {
-  const returnPct = ((quote.price - open.buyPrice) / open.buyPrice) * 100, maxFavorablePct = Math.max(open.maxFavorablePct ?? returnPct, returnPct), maxAdversePct = Math.min(open.maxAdversePct ?? returnPct, returnPct), pace = scan ? estimateVolumePace(scan, quote.totalVolume, timestampMs) : null
-  if (quote.price <= open.stopPrice) return { signal: true, type: "EXIT_FAIL", reason: `Hard stop: giá ${quote.price.toFixed(2)} <= stop ${open.stopPrice.toFixed(2)}.`, volumePace: pace, returnPct, maxFavorablePct, maxAdversePct }
-  if (scan && scan.taBias !== "Bullish") return { signal: true, type: "EXIT_FAIL", reason: `Daily thesis fail: Bias chuyển ${scan.taBias}; không còn điều kiện Bullish ban đầu.`, volumePace: pace, returnPct, maxFavorablePct, maxAdversePct }
-  if (scan?.ma20 && quote.price < scan.ma20 && pace != null && pace >= 1.25) return { signal: true, type: "EXIT_FAIL", reason: `Structural fail: giá mất MA20 ${scan.ma20.toFixed(2)} với volume pace ${pace.toFixed(2)}x.`, volumePace: pace, returnPct, maxFavorablePct, maxAdversePct }
+export function evaluateExit(open: OpenRecommendationState, scan: SignalDailyScan | undefined, quote: LiveQuote, timestampMs = Date.now(), vnindexNow: number | null = null): ExitDecision {
+  const returnPct = ((quote.price - open.buyPrice) / open.buyPrice) * 100
+  const maxFavorablePct = Math.max(open.maxFavorablePct ?? returnPct, returnPct)
+  const maxAdversePct = Math.min(open.maxAdversePct ?? returnPct, returnPct)
+  const pace = scan ? estimateVolumePace(scan, quote.totalVolume, timestampMs) : null
+  const vnindexReturnPct = open.vnindexEntry && vnindexNow ? ((vnindexNow - open.vnindexEntry) / open.vnindexEntry) * 100 : null
+  const alphaPct = vnindexReturnPct == null ? null : returnPct - vnindexReturnPct
+  const holdMinutes = open.buySignal ? Math.max(0, (timestampMs - Date.parse(open.buySignal)) / 60_000) : 0
+  const result = (signal: boolean, type: ExitDecision["type"], reason: string): ExitDecision => ({ signal, type, reason, volumePace: pace, returnPct, alphaPct, maxFavorablePct, maxAdversePct })
+
+  if (quote.price <= open.stopPrice) return result(true, "EXIT_FAIL", `Hard stop: giá ${quote.price.toFixed(2)} <= stop ${open.stopPrice.toFixed(2)}.`)
+  if (scan && scan.taBias !== "Bullish") return result(true, "EXIT_FAIL", `Daily thesis fail: Bias chuyển ${scan.taBias}; không còn điều kiện Bullish ban đầu.`)
+  if (scan?.ma20 && quote.price < scan.ma20 && pace != null && pace >= 1.25) return result(true, "EXIT_FAIL", `Structural fail: giá mất MA20 ${scan.ma20.toFixed(2)} với volume pace ${pace.toFixed(2)}x.`)
   const support = scan ? nearestBelow(parsePriceLevels(scan.support), open.buyPrice) : null
-  if (support && quote.price < support && pace != null && pace >= 1.2) return { signal: true, type: "EXIT_FAIL", reason: `Acceptance risk dưới support ${support.toFixed(2)} với volume pace ${pace.toFixed(2)}x.`, volumePace: pace, returnPct, maxFavorablePct, maxAdversePct }
-  return { signal: false, type: null, reason: "Open thesis vẫn hợp lệ", volumePace: pace, returnPct, maxFavorablePct, maxAdversePct }
+  if (support && quote.price < support && pace != null && pace >= 1.2) return result(true, "EXIT_FAIL", `Acceptance risk dưới support ${support.toFixed(2)} với volume pace ${pace.toFixed(2)}x.`)
+
+  const givebackPct = maxFavorablePct - returnPct
+  if (maxFavorablePct >= 5 && returnPct > 0.5 && givebackPct >= 2.2) {
+    return result(true, "SELL", `Profit protection: MFE +${maxFavorablePct.toFixed(2)}%, đã give-back ${givebackPct.toFixed(2)}%; khóa lợi nhuận thay vì trả lại alpha.`)
+  }
+  if (holdMinutes >= 60 && alphaPct != null && alphaPct <= -2.5 && returnPct < 1) {
+    return result(true, "EXIT_FAIL", `Relative-strength fail: alpha ${alphaPct.toFixed(2)}% so với VNINDEX sau ${Math.round(holdMinutes)} phút; vốn đang nằm ở mã underperform.`)
+  }
+  return result(false, null, `Open thesis vẫn hợp lệ${alphaPct == null ? "" : `; alpha ${alphaPct >= 0 ? "+" : ""}${alphaPct.toFixed(2)}% vs VNINDEX`}`)
 }
