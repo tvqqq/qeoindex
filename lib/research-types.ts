@@ -70,7 +70,7 @@ export interface ResearchConnection {
 }
 
 export interface ResearchData {
-  source: "notion" | "snapshot"
+  source: "notion"
   generatedAt: string
   connection: ResearchConnection
   theses: Thesis[]

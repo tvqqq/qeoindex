@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-
 import { fetchDailyMarketHistory, fetchHourlyMarketHistory } from "@/lib/market-history"
 import { buildMultiTimeframeStudies, buildPromotionDraft } from "@/lib/multi-timeframe"
 import { promoteDraftToNotion } from "@/lib/notion-promote"
@@ -13,20 +12,14 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}))
     const ticker = String(body?.ticker ?? "").trim().toUpperCase()
-    if (!/^[A-Z0-9]{2,10}$/.test(ticker) || ticker === "VNINDEX") {
-      return NextResponse.json({ ok: false, error: "Ticker không hợp lệ cho promotion." }, { status: 400 })
-    }
+    if (!/^[A-Z0-9]{2,10}$/.test(ticker) || ticker === "VNINDEX") return NextResponse.json({ ok: false, error: "Ticker không hợp lệ cho promotion." }, { status: 400 })
 
-    const [research, scanner] = await Promise.all([getResearchData(), getScannerData()])
-    if (!research.connection.notionLive) {
-      return NextResponse.json({ ok: false, error: "Notion canonical source hiện không live; dừng promotion để tránh tạo duplicate." }, { status: 503 })
-    }
-    if (research.theses.some((row) => row.ticker === ticker)) {
-      return NextResponse.json({ ok: false, error: `${ticker} đã có canonical thesis.` }, { status: 409 })
-    }
-    if (!scanner.universe.some((row) => row.ticker === ticker)) {
-      return NextResponse.json({ ok: false, error: `${ticker} không nằm trong scanner universe hiện tại.` }, { status: 404 })
-    }
+    const research = await getResearchData()
+    if (!research.connection.notionLive) return NextResponse.json({ ok: false, error: "Notion canonical source hiện không live; dừng promotion." }, { status: 503 })
+    if (research.theses.some((row) => row.ticker === ticker)) return NextResponse.json({ ok: false, error: `${ticker} đã có canonical thesis.` }, { status: 409 })
+
+    const scanner = await getScannerData()
+    if (!scanner.universe.some((row) => row.ticker === ticker)) return NextResponse.json({ ok: false, error: `${ticker} không nằm trong scanner universe hiện tại.` }, { status: 404 })
 
     const now = new Date()
     const daily = await fetchDailyMarketHistory(ticker, now)
@@ -42,33 +35,13 @@ export async function POST(request: Request) {
       hourlyDetail = error instanceof Error ? error.message.slice(0, 220) : String(error).slice(0, 220)
     }
 
-    const studies = buildMultiTimeframeStudies({
-      dailyBars: daily.bars,
-      hourlyBars,
-      dailyProvider: daily.provider,
-      dailyDetail: daily.detail,
-      hourlyProvider,
-      hourlyDetail,
-    })
+    const studies = buildMultiTimeframeStudies({ dailyBars: daily.bars, hourlyBars, dailyProvider: daily.provider, dailyDetail: daily.detail, hourlyProvider, hourlyDetail })
     const draft = buildPromotionDraft(ticker, studies)
-    if (draft.timeframes.length < 2) {
-      return NextResponse.json({ ok: false, error: "Chưa đủ ít nhất 2 timeframe để promote canonical thesis." }, { status: 422 })
-    }
+    if (draft.timeframes.length < 2) return NextResponse.json({ ok: false, error: "Chưa đủ ít nhất 2 timeframe để promote canonical thesis." }, { status: 422 })
 
     const vnindex = research.theses.find((row) => row.ticker === "VNINDEX")
     const result = await promoteDraftToNotion(draft, vnindex?.marketRegime || "Neutral")
-    return NextResponse.json({
-      ok: true,
-      ticker,
-      thesisId: result.thesis.id,
-      thesisUrl: result.thesis.url,
-      logId: result.log.id,
-      probabilities: {
-        bull: draft.bullProbability,
-        base: draft.baseProbability,
-        bear: draft.bearProbability,
-      },
-    })
+    return NextResponse.json({ ok: true, ticker, thesisId: result.thesis.id, thesisUrl: result.thesis.url, logId: result.log.id, probabilities: { bull: draft.bullProbability, base: draft.baseProbability, bear: draft.bearProbability } })
   } catch (error) {
     console.error("[StockOS promote]", error)
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Promotion failed" }, { status: 500 })

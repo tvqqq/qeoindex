@@ -1,11 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  images: {
-    unoptimized: true,
-  },
+  // Keep production builds type-safe. Do not hide TypeScript failures on Vercel.
 }
 
 export default nextConfig
