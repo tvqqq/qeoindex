@@ -224,7 +224,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
               channels: [
                 { name: "tick.G1.json", symbols: symbolList },
                 { name: "top_price.G1.json", symbols: symbolList },
-                { name: "ohlc.1m.json", symbols: symbolList },
+                { name: "ohlc.1.json", symbols: symbolList },
                 ...INDEX_CHANNELS.map((name) => ({ name: `market_index.${name}.json` })),
               ],
             }))
