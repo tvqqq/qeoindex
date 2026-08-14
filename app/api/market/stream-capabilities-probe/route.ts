@@ -4,6 +4,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
 
+const PROBE_VERSION = 2
 const SYMBOLS = ["VPB", "TCB"]
 const CHANNEL_NAMES = [
   "tick.G1.json",
@@ -69,6 +70,7 @@ export async function GET() {
       }))
       resolve(NextResponse.json({
         ok: status === 200,
+        probeVersion: PROBE_VERSION,
         channels: CHANNEL_NAMES,
         typeCounts,
         uniqueMessages: summary,
