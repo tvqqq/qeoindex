@@ -10,18 +10,6 @@ export interface DnseIntradayPoint {
   close: number
 }
 
-export interface DnseForeignTradingSnapshot {
-  symbol: string
-  buyVolume: number | null
-  sellVolume: number | null
-  buyValue: number | null
-  sellValue: number | null
-  currentRoom: number | null
-  totalRoom: number | null
-  updatedAt: string
-  sourceKeys: string[]
-}
-
 function credentials() {
   const apiKey = process.env.DNSE_API_KEY ?? ""
   const apiSecret = process.env.DNSE_API_SECRET ?? ""
@@ -123,78 +111,4 @@ export async function fetchDnseMinuteHistory(symbol: string, now = new Date(), m
   return normalizeIntraday(raw)
     .filter((point) => vietnamDateKey(point.time * 1000) === today)
     .slice(-Math.max(20, Math.min(maxPoints, 180)))
-}
-
-function unwrapObject(raw: unknown): Record<string, unknown> {
-  const payload: any = raw
-  const source = payload?.data ?? payload?.result ?? payload
-  if (Array.isArray(source)) return (source.find((item) => item && typeof item === "object") ?? {}) as Record<string, unknown>
-  return source && typeof source === "object" ? source as Record<string, unknown> : {}
-}
-
-function normalizedKey(key: string) {
-  return key.toLowerCase().replace(/[^a-z0-9]/g, "")
-}
-
-function finiteNumber(value: unknown): number | null {
-  const parsed = typeof value === "number" ? value : Number(value)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-function findField(source: Record<string, unknown>, aliases: string[], pattern?: RegExp) {
-  const entries = Object.entries(source)
-  const aliasSet = new Set(aliases.map(normalizedKey))
-  for (const [key, value] of entries) {
-    if (aliasSet.has(normalizedKey(key))) {
-      const parsed = finiteNumber(value)
-      if (parsed !== null) return parsed
-    }
-  }
-  if (pattern) {
-    for (const [key, value] of entries) {
-      if (pattern.test(normalizedKey(key))) {
-        const parsed = finiteNumber(value)
-        if (parsed !== null) return parsed
-      }
-    }
-  }
-  return null
-}
-
-export async function fetchDnseForeignTrading(symbol: string): Promise<DnseForeignTradingSnapshot> {
-  const ticker = symbol.trim().toUpperCase()
-  if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new Error("Invalid DNSE symbol")
-  const raw = await signedGet(`/price/${encodeURIComponent(ticker)}/foreign-trading`)
-  const source = unwrapObject(raw)
-
-  const buyVolume = findField(source,
-    ["buyVolume", "buyQty", "buyQuantity", "foreignBuyVolume", "foreignBuyQty", "foreignBuyQuantity", "foreignBuyVolumeTotal", "buyForeignQuantity"],
-    /foreign.*buy.*(volume|qty|quantity)|(buy.*foreign.*(volume|qty|quantity))/)
-  const sellVolume = findField(source,
-    ["sellVolume", "sellQty", "sellQuantity", "foreignSellVolume", "foreignSellQty", "foreignSellQuantity", "foreignSellVolumeTotal", "sellForeignQuantity"],
-    /foreign.*sell.*(volume|qty|quantity)|(sell.*foreign.*(volume|qty|quantity))/)
-  const buyValue = findField(source,
-    ["buyValue", "buyAmount", "foreignBuyValue", "foreignBuyAmount", "foreignBuyValueTotal", "buyForeignValue"],
-    /foreign.*buy.*(value|amount)|(buy.*foreign.*(value|amount))/)
-  const sellValue = findField(source,
-    ["sellValue", "sellAmount", "foreignSellValue", "foreignSellAmount", "foreignSellValueTotal", "sellForeignValue"],
-    /foreign.*sell.*(value|amount)|(sell.*foreign.*(value|amount))/)
-  const currentRoom = findField(source,
-    ["currentRoom", "remainingRoom", "remainRoom", "foreignCurrentRoom", "foreignRemainingRoom", "availableRoom"],
-    /(foreign.*(current|remain|remaining|available).*room)|((current|remain|remaining|available).*foreign.*room)/)
-  const totalRoom = findField(source,
-    ["totalRoom", "foreignTotalRoom", "maxRoom", "foreignMaxRoom"],
-    /(foreign.*(total|max).*room)|((total|max).*foreign.*room)/)
-
-  return {
-    symbol: ticker,
-    buyVolume,
-    sellVolume,
-    buyValue,
-    sellValue,
-    currentRoom,
-    totalRoom,
-    updatedAt: new Date().toISOString(),
-    sourceKeys: Object.keys(source).sort(),
-  }
 }
