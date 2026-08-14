@@ -56,8 +56,17 @@ function formatChangePercent(value?: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`
 }
 
+function sparkData(history: number[], quote?: LiveStockQuote) {
+  const clean = history.filter((value) => Number.isFinite(value) && value > 0).slice(-89)
+  if (!quote?.price || !Number.isFinite(quote.price) || quote.price <= 0) return clean
+  if (!clean.length) return [quote.price]
+  if (clean.at(-1) === quote.price) return clean
+  return [...clean, quote.price]
+}
+
 export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoardStock; quote?: LiveStockQuote; history: number[]; onOpen: () => void }) {
   const color = boardPctClass(quote?.changePercent)
+  const chart = sparkData(history, quote)
   return (
     <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={(event) => {
       if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen() }
@@ -67,7 +76,7 @@ export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoa
         <div className="text-[9px] text-muted-2">#{stock.rank}</div>
       </div>
       <div className="flex justify-center">
-        <Sparkline data={history} refValue={quote?.reference ?? undefined} color={sparkColor(quote?.changePercent)} width={56} height={28} strokeWidth={1.6} showDot />
+        <Sparkline data={chart} refValue={quote?.reference ?? undefined} color={sparkColor(quote?.changePercent)} width={56} height={28} strokeWidth={1.6} showDot />
       </div>
       <div className="min-w-0 text-right">
         <div className={`truncate font-mono text-[12px] font-semibold ${quote ? color : "text-muted-2"}`}>{formatBoardPrice(quote?.price)}</div>
@@ -83,6 +92,7 @@ export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoa
 
 export function LiveMoverCard({ stock, quote, history, onOpen }: { stock: LiveBoardStock; quote?: LiveStockQuote; history: number[]; onOpen: () => void }) {
   const color = boardPctClass(quote?.changePercent)
+  const chart = sparkData(history, quote)
   return (
     <button type="button" onClick={onOpen} className="grid min-h-[92px] grid-cols-[90px_1fr_92px] items-center gap-3 rounded-2xl border border-border bg-panel px-4 py-3 text-left transition-all hover:border-brand/60 hover:bg-panel-2/70">
       <div>
@@ -91,12 +101,12 @@ export function LiveMoverCard({ stock, quote, history, onOpen }: { stock: LiveBo
         <div className="mt-1 text-[10px] text-muted">#{stock.rank} · {stock.sector}</div>
       </div>
       <div className="flex justify-center">
-        <Sparkline data={history} refValue={quote?.reference ?? undefined} color={sparkColor(quote?.changePercent)} width={150} height={48} strokeWidth={2.1} showDot />
+        <Sparkline data={chart} refValue={quote?.reference ?? undefined} color={sparkColor(quote?.changePercent)} width={150} height={48} strokeWidth={2.1} showDot />
       </div>
       <div className="text-right">
         <div className={`font-mono text-lg font-bold ${quote ? color : "text-muted-2"}`}>{quote ? formatChangePercent(quote.changePercent) : "—"}</div>
         <div className={`mt-1 font-mono text-sm ${quote ? color : "text-muted-2"}`}>{formatBoardPrice(quote?.price)}</div>
-        <div className="mt-1 text-[10px] text-muted">So với giá mở cửa · bấm mở sổ lệnh</div>
+        <div className="mt-1 text-[10px] text-muted">1m DNSE + giá live · bấm mở sổ lệnh</div>
       </div>
     </button>
   )

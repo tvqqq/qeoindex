@@ -12,12 +12,17 @@ type BoardMode = "sector" | "movers"
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 type DnseAuthPayload = { action: string; api_key: string; signature: string; timestamp: number; nonce: string }
 type DnseAuthResponse = { ok: boolean; url?: string; auth?: DnseAuthPayload; message?: string }
+type IntradayHistoryResponse = {
+  ok: boolean
+  histories?: Record<string, { symbol: string; prices: number[]; lastBarAt: number | null; error: string | null }>
+}
 
 const INDEXES = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"]
 const INDEX_LABELS: Record<string, string> = { VNINDEX: "VN-INDEX", VN30: "VN30", HNXINDEX: "HNX-INDEX", UPCOMINDEX: "UPCOM-INDEX" }
 const INDEX_CHANNELS = ["VNINDEX", "VN30", "HNX", "UPCOM"]
 const OPEN_PRICE_KEYS = ["openPrice", "openingPrice", "open", "openValue", "firstPrice"]
 const INDEX_OPEN_KEYS = ["openIndex", "openingIndex", "openIndexValue", "openValue", "open"]
+const STREAM_STALE_MS = 60_000
 
 function numeric(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value)
@@ -78,6 +83,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   const [streamError, setStreamError] = useState("")
   const [lastMessageAt, setLastMessageAt] = useState("")
   const [reconnectKey, setReconnectKey] = useState(0)
+  const [historyReloadKey, setHistoryReloadKey] = useState(0)
   const [query, setQuery] = useState("")
   const [selectedSector, setSelectedSector] = useState("Tất cả")
   const [mode, setMode] = useState<BoardMode>("sector")
@@ -85,16 +91,53 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   const openingReferences = useRef<Record<string, number>>({})
   const indexOpeningReferences = useRef<Record<string, number>>({})
   const sessionDay = useRef(vietnamSessionDay())
+  const lastFrameAt = useRef(Date.now())
 
   const symbolList = useMemo(() => universe.map((stock) => stock.ticker), [universe])
   const symbolKey = symbolList.join(",")
   const trackedSymbols = useMemo(() => new Set(symbolList), [symbolKey])
 
-  const pushSparkPrice = useCallback((ticker: string, price: number, reference?: number) => {
+  useEffect(() => {
+    if (!symbolList.length) return
+    const controller = new AbortController()
+    let disposed = false
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/market/intraday?symbols=${encodeURIComponent(symbolKey)}`, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        })
+        const payload = await response.json() as IntradayHistoryResponse
+        if (disposed || !payload.histories) return
+        setPriceHistory((current) => {
+          const next = { ...current }
+          for (const symbol of symbolList) {
+            const prices = payload.histories?.[symbol]?.prices?.filter((value) => Number.isFinite(value) && value > 0) ?? []
+            if (prices.length) next[symbol] = prices.slice(-90)
+          }
+          return next
+        })
+      } catch (error) {
+        if (!disposed && !(error instanceof DOMException && error.name === "AbortError")) {
+          console.warn("DNSE intraday backfill unavailable", error)
+        }
+      }
+    })()
+
+    return () => {
+      disposed = true
+      controller.abort()
+    }
+  }, [symbolKey, historyReloadKey, symbolList])
+
+  const pushMinuteClose = useCallback((ticker: string, close: number) => {
+    if (!Number.isFinite(close) || close <= 0) return
     setPriceHistory((previous) => {
-      const current = previous[ticker] ?? (reference && reference > 0 ? [reference] : [])
-      if (current.at(-1) === price && current.length >= 2) return previous
-      return { ...previous, [ticker]: [...current, price].slice(-48) }
+      const current = previous[ticker] ?? []
+      if (current.at(-1) === close) return previous
+      return { ...previous, [ticker]: [...current, close].slice(-90) }
     })
   }, [])
 
@@ -103,27 +146,48 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
     let socket: WebSocket | null = null
     let reconnectTimer: number | null = null
     let pingTimer: number | null = null
+    let watchdogTimer: number | null = null
     let attempts = 0
 
-    const closeTimers = () => {
-      if (reconnectTimer) window.clearTimeout(reconnectTimer)
+    const closeConnectionTimers = () => {
       if (pingTimer) window.clearInterval(pingTimer)
-      reconnectTimer = null
+      if (watchdogTimer) window.clearInterval(watchdogTimer)
       pingTimer = null
+      watchdogTimer = null
+    }
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimer) window.clearTimeout(reconnectTimer)
+      reconnectTimer = null
     }
 
     const scheduleReconnect = () => {
-      if (disposed) return
+      if (disposed || reconnectTimer) return
       attempts += 1
-      const delay = Math.min(1000 * 2 ** Math.min(attempts - 1, 4), 15_000)
-      reconnectTimer = window.setTimeout(connect, delay)
+      const base = Math.min(750 * 2 ** Math.min(attempts - 1, 4), 10_000)
+      const delay = base + Math.floor(Math.random() * 500)
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null
+        void connect()
+      }, delay)
+    }
+
+    const forceReconnect = (reason: string) => {
+      if (disposed) return
+      closeConnectionTimers()
+      if (socket && socket.readyState < WebSocket.CLOSING) {
+        try { socket.close(4000, reason.slice(0, 120)) } catch { scheduleReconnect() }
+      } else {
+        scheduleReconnect()
+      }
     }
 
     const connect = async () => {
-      closeTimers()
+      clearReconnectTimer()
+      closeConnectionTimers()
       if (disposed) return
       setStreamState("CONNECTING")
-      setStreamError("")
+      lastFrameAt.current = Date.now()
 
       try {
         const response = await fetch("/api/market/stream-auth", { cache: "no-store", headers: { Accept: "application/json" } })
@@ -132,9 +196,13 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
         if (disposed) return
 
         socket = new WebSocket(authJson.url)
-        socket.onopen = () => setStreamState("CONNECTING")
+        socket.onopen = () => {
+          lastFrameAt.current = Date.now()
+          setStreamState("CONNECTING")
+        }
         socket.onmessage = (event) => {
           if (disposed || typeof event.data !== "string") return
+          lastFrameAt.current = Date.now()
           let data: Record<string, unknown>
           try { data = JSON.parse(event.data) as Record<string, unknown> } catch { return }
 
@@ -150,23 +218,32 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
           if (action === "auth_success") {
             attempts = 0
             setStreamState("LIVE")
+            setStreamError("")
             socket?.send(JSON.stringify({
               action: "subscribe",
               channels: [
                 { name: "tick.G1.json", symbols: symbolList },
                 { name: "top_price.G1.json", symbols: symbolList },
+                { name: "ohlc.1m.json", symbols: symbolList },
                 ...INDEX_CHANNELS.map((name) => ({ name: `market_index.${name}.json` })),
               ],
             }))
             pingTimer = window.setInterval(() => {
               if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "ping", timestamp: Date.now() }))
-            }, 20_000)
+            }, 15_000)
+            watchdogTimer = window.setInterval(() => {
+              if (socket?.readyState === WebSocket.OPEN && Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
+                setStreamError("Luồng DNSE im lặng quá 60 giây; đang tự kết nối lại.")
+                forceReconnect("stale DNSE stream")
+              }
+            }, 10_000)
             return
           }
           if (action === "auth_error" || action === "error") {
             const message = String(data.message ?? data.msg ?? "DNSE WebSocket error")
             setStreamState("ERROR")
             setStreamError(message)
+            forceReconnect("DNSE auth/subscription error")
             return
           }
 
@@ -179,9 +256,20 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
             indexOpeningReferences.current = {}
             setQuotes({})
             setPriceHistory({})
+            setHistoryReloadKey((key) => key + 1)
           }
 
           const type = String(data.T ?? "")
+          if (type === "b" && data.symbol) {
+            const ticker = String(data.symbol).toUpperCase()
+            if (!trackedSymbols.has(ticker)) return
+            const close = firstPositive(data, ["close", "c", "closePrice"])
+            if (close > 0) pushMinuteClose(ticker, close)
+            setLastMessageAt(receivedAt)
+            setStreamError("")
+            return
+          }
+
           if (type === "t" && data.symbol) {
             const ticker = String(data.symbol).toUpperCase()
             if (!trackedSymbols.has(ticker)) return
@@ -210,8 +298,8 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
                 updatedAt: receivedAt,
               },
             }))
-            pushSparkPrice(ticker, price, reference)
             setLastMessageAt(receivedAt)
+            setStreamError("")
             return
           }
 
@@ -245,6 +333,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
               }
             })
             setLastMessageAt(receivedAt)
+            setStreamError("")
             return
           }
 
@@ -260,17 +349,19 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
             const changePercent = reference > 0 ? ((value - reference) / reference) * 100 : 0
             setQuotes((current) => ({ ...current, [symbol]: { symbol, value, change, changePercent, updatedAt: receivedAt } }))
             setLastMessageAt(receivedAt)
+            setStreamError("")
           }
         }
 
         socket.onerror = () => {
           if (!disposed) {
             setStreamState("ERROR")
-            setStreamError("Không kết nối được DNSE WebSocket từ trình duyệt.")
+            setStreamError("Kết nối DNSE WebSocket gặp lỗi; đang tự khôi phục.")
+            forceReconnect("DNSE websocket error")
           }
         }
         socket.onclose = () => {
-          closeTimers()
+          closeConnectionTimers()
           if (disposed) return
           setStreamState("CLOSED")
           scheduleReconnect()
@@ -283,19 +374,34 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
       }
     }
 
-    connect()
+    const recoverIfNeeded = () => {
+      if (document.visibilityState !== "visible") return
+      if (!socket || socket.readyState !== WebSocket.OPEN || Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
+        forceReconnect("browser resumed")
+      }
+    }
+    const onVisibilityChange = () => recoverIfNeeded()
+    const onOnline = () => recoverIfNeeded()
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    window.addEventListener("online", onOnline)
+
+    void connect()
     return () => {
       disposed = true
-      closeTimers()
+      clearReconnectTimer()
+      closeConnectionTimers()
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+      window.removeEventListener("online", onOnline)
       if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "board closed")
     }
-  }, [symbolKey, reconnectKey, pushSparkPrice, symbolList, trackedSymbols])
+  }, [symbolKey, reconnectKey, pushMinuteClose, symbolList, trackedSymbols])
 
   const normalizedQuery = query.trim().toUpperCase()
   const filtered = useMemo(() => universe.filter((stock) => (!normalizedQuery || stock.ticker.includes(normalizedQuery)) && (selectedSector === "Tất cả" || stock.sector === selectedSector)), [universe, normalizedQuery, selectedSector])
   const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, quotes)), [filtered, quotes])
   const grouped = useMemo(() => SECTOR_ORDER.map((sector) => ({ sector, stocks: filtered.filter((stock) => stock.sector === sector).sort((a, b) => compareByPerformance(a, b, quotes)) })).filter((group) => group.stocks.length), [filtered, quotes])
   const liveCount = universe.filter((stock) => quotes[stock.ticker]).length
+  const historyCount = universe.filter((stock) => (priceHistory[stock.ticker]?.length ?? 0) > 1).length
   const advances = universe.filter((stock) => ((quotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) > 0).length
   const declines = universe.filter((stock) => ((quotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) < 0).length
   const openBook = useCallback((ticker: string) => openOrderBook(`board:${ticker}`, ticker), [openOrderBook])
@@ -307,10 +413,10 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
       <div className="relative min-w-[210px] flex-1 md:max-w-[320px]"><Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã trong Top 50..." className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-xs outline-none" /></div>
       <select value={selectedSector} onChange={(event) => setSelectedSector(event.target.value)} className="h-8 rounded-md border border-border bg-background px-2 text-xs"><option>Tất cả</option>{SECTOR_ORDER.map((sector) => <option key={sector}>{sector}</option>)}</select>
       <div className="flex items-center rounded-md border border-border bg-background p-0.5"><button onClick={() => setMode("sector")} className={`flex h-7 items-center gap-1.5 rounded px-2 text-[11px] ${mode === "sector" ? "bg-panel-2" : "text-muted-2"}`}><LayoutGrid className="h-3.5 w-3.5" />Theo ngành</button><button onClick={() => setMode("movers")} className={`flex h-7 items-center gap-1.5 rounded px-2 text-[11px] ${mode === "movers" ? "bg-panel-2" : "text-muted-2"}`}><ChartNoAxesCombined className="h-3.5 w-3.5" />Top movers</button></div>
-      <div className="ml-auto flex items-center gap-3 text-[11px]">{streamState === "LIVE" ? <span className="flex items-center gap-1.5 text-up"><Wifi className="h-3.5 w-3.5" />DNSE WebSocket · LIVE · {liveCount}/50</span> : <span className="flex items-center gap-1.5 text-warning"><WifiOff className="h-3.5 w-3.5" />DNSE · {streamState === "CONNECTING" ? "đang kết nối" : "mất kết nối"}</span>}<button onClick={reconnect} className="rounded-md border border-border p-1.5" aria-label="Kết nối lại DNSE" title="Kết nối lại DNSE"><RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin" : ""}`} /></button></div>
+      <div className="ml-auto flex items-center gap-3 text-[11px]">{streamState === "LIVE" ? <span className="flex items-center gap-1.5 text-up"><Wifi className="h-3.5 w-3.5" />DNSE WebSocket · LIVE · {liveCount}/50</span> : <span className="flex items-center gap-1.5 text-warning"><WifiOff className="h-3.5 w-3.5" />DNSE · {streamState === "CONNECTING" ? "đang kết nối" : "đang tự khôi phục"}</span>}<button onClick={reconnect} className="rounded-md border border-border p-1.5" aria-label="Kết nối lại DNSE" title="Kết nối lại DNSE"><RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin" : ""}`} /></button></div>
     </div>
-    {streamState !== "LIVE" ? <div className="flex items-start gap-2 border-b border-warning/30 bg-warning/5 px-4 py-2.5 text-xs"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" /><span>Bảng điện chỉ dùng DNSE WebSocket cho dữ liệu realtime. {streamError ? `Lỗi: ${streamError}` : "Đang chờ stream DNSE."}</span></div> : null}
-    <div className="flex items-center gap-4 border-b border-border px-4 py-2 text-[11px] text-muted-2"><span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" />Top 50 · % so với giá mở cửa</span><span>Tăng <b className="text-up">{advances}</b></span><span>Giảm <b className="text-down">{declines}</b></span><span>Có giá <b className="text-foreground">{liveCount}</b>/50</span>{lastMessageAt ? <span className="ml-auto">DNSE {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span> : null}</div>
+    {streamState !== "LIVE" ? <div className="flex items-start gap-2 border-b border-warning/30 bg-warning/5 px-4 py-2.5 text-xs"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" /><span>Bảng điện tự giữ kết nối DNSE và tự reconnect khi stale/mất mạng. {streamError ? `Lỗi gần nhất: ${streamError}` : "Đang chờ stream DNSE."}</span></div> : null}
+    <div className="flex items-center gap-4 border-b border-border px-4 py-2 text-[11px] text-muted-2"><span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" />Top 50 · mini chart DNSE 1m + giá live</span><span>Tăng <b className="text-up">{advances}</b></span><span>Giảm <b className="text-down">{declines}</b></span><span>Có giá <b className="text-foreground">{liveCount}</b>/50</span><span>History <b className="text-foreground">{historyCount}</b>/50</span>{lastMessageAt ? <span className="ml-auto">DNSE {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span> : null}</div>
     <div className="min-h-0 flex-1 overflow-auto p-1.5">{mode === "sector" ? <div className="grid auto-cols-[270px] grid-flow-col gap-1.5">{grouped.map(({ sector, stocks }) => {
       const sectorQuotes = stocks.map((stock) => quotes[stock.ticker] as LiveStockQuote | undefined).filter(Boolean) as LiveStockQuote[]
       const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
