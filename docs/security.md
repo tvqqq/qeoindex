@@ -4,8 +4,8 @@
 
 - Keep DNSE, Notion, Telegram, Finhay OAuth, scheduler, and infrastructure credentials in server-side environment variables.
 - Never add a `NEXT_PUBLIC_` prefix to a credential. Next.js inlines those values into browser bundles.
-- Commit only empty examples such as `.env.example` and `supabase/.env.example`.
-- Run `pnpm scan:secrets` before committing. CI runs the same check for every pull request and push to `main`.
+- Commit only empty examples such as `.env.example`.
+- Run `npm run scan:secrets` before committing. CI runs the same scanner for every pull request and push to `main`.
 - The scanner reports filenames only so an accidental credential is not copied into CI logs.
 
 ## DNSE credential rotation
