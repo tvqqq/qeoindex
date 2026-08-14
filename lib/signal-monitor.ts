@@ -69,7 +69,6 @@ export async function runSignalMonitor({ force = false }: { force?: boolean } = 
       relVolume: decision.volumePace,
       stopPrice: row.stopPrice,
       vnindex: live.vnindex,
-      telegramSent: false,
     })
     exits.push({ ticker: row.ticker, price: quote.price, returnPct: decision.returnPct, alphaPct: decision.alphaPct, outcome: close.outcome, reason: decision.reason })
     exitedTickers.add(row.ticker)
@@ -95,7 +94,6 @@ export async function runSignalMonitor({ force = false }: { force?: boolean } = 
       relVolume: decision.volumePace,
       stopPrice: decision.stopPrice,
       vnindex: live.vnindex,
-      telegramSent: false,
     })
     buys.push({ ticker: scan.ticker, price: quote.price, stopPrice: decision.stopPrice, targetPrice: decision.targetPrice, volumePace: decision.volumePace })
   }
