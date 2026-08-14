@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bot, Gift, Hexagon } from "lucide-react"
+import { Bot, Gift } from "lucide-react"
 
 const NAV = [
   { label: "Bảng điện", href: "/" },
@@ -32,12 +32,10 @@ export function TopNav() {
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-panel px-4">
       <div className="flex min-w-0 items-center gap-5 xl:gap-8">
-        <Link href="/" className="flex shrink-0 items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-brand/15">
-            <Hexagon className="h-5 w-5 text-brand" strokeWidth={2.2} />
-          </div>
+        <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="StockOS">
+          <img src="/brand/stockos-mark.svg" alt="" className="h-9 w-9 shrink-0" />
           <div className="flex flex-col leading-none">
-            <span className="text-base font-bold text-foreground">
+            <span className="text-base font-bold tracking-[-0.02em] text-foreground">
               Stock<span className="text-brand">OS</span>
             </span>
             <span className="text-[10px] text-muted">Bộ công cụ đầu tư</span>
@@ -81,8 +79,8 @@ export function TopNav() {
         </button>
         <div className="flex items-center gap-2 pl-1">
           <span className="hidden text-sm text-foreground xl:inline">quyenjino96</span>
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-brand/20 text-sm font-semibold text-brand">
-            Q
+          <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-md border border-brand/20 bg-[#07090b]">
+            <img src="/brand/stockos-mark.svg" alt="" className="h-7 w-7" />
           </div>
         </div>
       </div>
