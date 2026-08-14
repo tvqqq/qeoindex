@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">StockOS</title>
+  <desc id="desc">StockOS market chart mark</desc>
+  <defs>
+    <linearGradient id="silver" x1="8" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f2f3f4"/>
+      <stop offset="0.38" stop-color="#74787e"/>
+      <stop offset="0.7" stop-color="#25282d"/>
+      <stop offset="1" stop-color="#a6a9ae"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="10" y1="47" x2="53" y2="17" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff7a00"/>
+      <stop offset="0.55" stop-color="#ffad00"/>
+      <stop offset="1" stop-color="#ffe100"/>
+    </linearGradient>
+  </defs>
+  <path d="M10 31V22.5L29.3 10.7a5 5 0 0 1 5.2 0L48 19v8.1l-4.3-2.5v-3.2l-11.8-7.2-17.6 10.7V33h12.2l-5.2 4.3H10z" fill="url(#silver)"/>
+  <path d="M54 34.5v9L34.8 55.2a5.3 5.3 0 0 1-5.6 0L15 46.5h8l8.9 5.4 17.8-10.8v-3.8h-8.3l5.1-4.2H54z" fill="url(#silver)"/>
+  <path d="M9 43.7 18.8 41l9.4-7.2 7.7 6.5L55 27.8 37 45.2l-8.9-7.1-7.1 6.4-12 1.1z" fill="url(#amber)"/>
+  <g fill="url(#amber)">
+    <path d="M24 29.5h3.7v6.7H24z" opacity=".68"/>
+    <path d="M25.35 26.7h1v2.8h-1z" opacity=".68"/>
+    <path d="M31 24h4v11.7h-4z"/>
+    <path d="M32.5 20.6h1v3.4h-1z"/>
+    <path d="M38.2 19.2h4.1v12.4h-4.1z"/>
+    <path d="M39.7 15.7h1v3.5h-1z"/>
+    <path d="M45.6 14.8h4.3v11.8h-4.3z"/>
+    <path d="M47.25 11h1v3.8h-1z"/>
+  </g>
+</svg>
