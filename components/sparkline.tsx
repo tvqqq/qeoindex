@@ -7,6 +7,7 @@ interface SparklineProps {
   strokeWidth?: number
   showDot?: boolean
   fill?: boolean
+  className?: string
 }
 
 /**
@@ -22,8 +23,9 @@ export function Sparkline({
   strokeWidth = 1.5,
   showDot = true,
   fill = false,
+  className = "",
 }: SparklineProps) {
-  if (data.length < 2) return <svg width={width} height={height} aria-hidden="true" />
+  if (data.length < 2) return <svg width={width} height={height} aria-hidden="true" className={className} />
 
   const values = refValue != null ? [...data, refValue] : data
   const min = Math.min(...values)
@@ -48,7 +50,7 @@ export function Sparkline({
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       aria-hidden="true"
-      className="overflow-visible"
+      className={`overflow-visible ${className}`.trim()}
     >
       {refValue != null && (
         <line
