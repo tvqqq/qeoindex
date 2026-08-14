@@ -47,7 +47,7 @@ function formatPrice(value?: number | null, allowNegative = false) {
 }
 
 function formatVolume(value?: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "—"
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
 }
 
