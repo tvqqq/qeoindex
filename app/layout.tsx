@@ -9,13 +9,17 @@ const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono'
 export const metadata: Metadata = {
   title: 'StockOS — Bảng điện realtime',
   description:
-    'Bảng điện giá cổ phiếu realtime: theo dõi nhiều mã theo nhóm ngành, biểu đồ cập nhật trực tiếp và mở orderbook cho từng mã.',
-  generator: 'v0.app',
+    'StockOS theo dõi thị trường chứng khoán Việt Nam realtime qua DNSE WebSocket, kết hợp nghiên cứu, Wyckoff scanner và signal monitor.',
+  applicationName: 'StockOS',
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+  },
 }
 
 export const viewport: Viewport = {
   colorScheme: 'dark',
-  themeColor: '#05080a',
+  themeColor: '#07090b',
 }
 
 export default function RootLayout({

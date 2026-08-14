@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { createDnseStreamAuth } from "@/lib/dnse-stream-auth"
-import { getActiveFinhayAccessToken } from "@/lib/finhay-session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -17,14 +16,6 @@ export async function GET(request: Request) {
   if (origin && origin !== expectedOrigin) {
     return NextResponse.json({ ok: false, message: "Origin not allowed." }, {
       status: 403,
-      headers: NO_STORE_HEADERS,
-    })
-  }
-
-  const finhayAccessToken = await getActiveFinhayAccessToken()
-  if (!finhayAccessToken) {
-    return NextResponse.json({ ok: false, message: "Finhay authentication required." }, {
-      status: 401,
       headers: NO_STORE_HEADERS,
     })
   }
