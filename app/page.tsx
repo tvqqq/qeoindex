@@ -22,9 +22,7 @@ export default async function Page() {
     <OrderBookProvider>
       <div className="flex h-screen flex-col overflow-hidden bg-background">
         <TopNav />
-        <main className="min-h-0 flex-1">
-          <LiveMarketBoardV2 universe={universe} universeSource={data.source} />
-        </main>
+        <main className="min-h-0 flex-1"><LiveMarketBoardV2 universe={universe} /></main>
         <OrderBookManager />
       </div>
     </OrderBookProvider>
