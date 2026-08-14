@@ -4,35 +4,12 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
 
-const PROBE_VERSION = 2
-const SYMBOLS = ["VPB", "TCB"]
-const CHANNEL_NAMES = [
-  "tick.G1.json",
-  "top_price.G1.json",
-  "tick_extra.G1.json",
-  "stock_info.G1.json",
-  "stockinfo.G1.json",
-  "stockInfo.G1.json",
-  "stock.G1.json",
-  "si.G1.json",
-  "ohlc.G1.json",
-  "ohlc.1.G1.json",
-  "ohlc.stock.1.G1.json",
-  "ohlc.G1.1.json",
-  "ohlc.1.json",
-  "ohlc.1m.G1.json",
-  "ohlc_1m.G1.json",
-  "candle.1.G1.json",
-  "bar.1.G1.json",
-  "foreign.G1.json",
-  "foreign_trade.G1.json",
-  "foreign_room.G1.json",
-  "foreign_info.G1.json",
-  "foreigntrading.G1.json",
-  "foreign_trading.G1.json",
-  "foreign_room_info.G1.json",
+const PROBE_VERSION = 3
+const SYMBOLS = ["VPB", "TCB", "MBB", "SSI", "VIX", "SHB"]
+const CHANNELS = [
+  { name: "tick_extra.G1.json", symbols: SYMBOLS },
+  { name: "tick.G1.json", symbols: SYMBOLS },
 ]
-const CHANNELS = CHANNEL_NAMES.map((name) => ({ name, symbols: SYMBOLS }))
 
 export async function GET() {
   const authResponse = await fetch("https://stockos-beryl.vercel.app/api/market/stream-auth", {
@@ -54,30 +31,26 @@ export async function GET() {
       if (settled) return
       settled = true
       try { socket.close(1000, "probe complete") } catch {}
-      const unique = new Map<string, Record<string, unknown>>()
+      const byShape = new Map<string, Record<string, unknown>>()
       for (const message of messages) {
         const type = String(message.T ?? message.action ?? message.a ?? "unknown")
-        const keys = Object.keys(message).sort().join(",")
-        const key = `${type}:${String(message.symbol ?? "")}:${keys}`
-        if (!unique.has(key)) unique.set(key, message)
+        const key = `${type}:${Object.keys(message).sort().join(",")}`
+        if (!byShape.has(key)) byShape.set(key, message)
       }
-      const summary = [...unique.values()].map((message) => ({
-        T: message.T,
-        action: message.action ?? message.a,
-        symbol: message.symbol,
-        keys: Object.keys(message).sort(),
-        sample: message,
-      }))
       resolve(NextResponse.json({
         ok: status === 200,
         probeVersion: PROBE_VERSION,
-        channels: CHANNEL_NAMES,
         typeCounts,
-        uniqueMessages: summary,
+        uniqueShapes: [...byShape.values()].map((message) => ({
+          T: message.T,
+          symbol: message.symbol,
+          keys: Object.keys(message).sort(),
+          sample: message,
+        })),
       }, { status, headers: { "Cache-Control": "no-store" } }))
     }
 
-    const timer = setTimeout(() => finish(messages.length ? 200 : 504), 22_000)
+    const timer = setTimeout(() => finish(messages.length ? 200 : 504), 20_000)
     socket.onmessage = (event) => {
       if (typeof event.data !== "string") return
       let data: Record<string, unknown>
@@ -101,10 +74,13 @@ export async function GET() {
         return
       }
       const symbol = String(data.symbol ?? "").toUpperCase()
-      if (SYMBOLS.includes(symbol)) {
-        messages.push(data)
-        const type = String(data.T ?? "unknown")
-        typeCounts[type] = (typeCounts[type] ?? 0) + 1
+      if (!SYMBOLS.includes(symbol)) return
+      const type = String(data.T ?? "unknown")
+      typeCounts[type] = (typeCounts[type] ?? 0) + 1
+      messages.push(data)
+      if ((typeCounts.te ?? 0) >= 10 && (typeCounts.t ?? 0) >= 3) {
+        clearTimeout(timer)
+        finish(200)
       }
     }
     socket.onerror = () => { clearTimeout(timer); finish(messages.length ? 200 : 502) }
