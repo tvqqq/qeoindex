@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ExternalLink, GripVertical, ListFilter, Minus, RefreshCw, X } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
-import { marketToneFromPrice, marketToneText } from "@/lib/market-tone"
+import { Sparkline } from "@/components/sparkline"
+import { marketToneFromPrice, marketToneHex, marketToneText } from "@/lib/market-tone"
 
 type DepthLevel = { price: number; volume: number }
 type TradeSide = "BUY" | "SELL" | "UNKNOWN"
@@ -11,6 +12,7 @@ type StreamTrade = { id: string; time: string; price: number; volume: number; si
 type StockQuote = { symbol: string; price: number; reference?: number; ceiling?: number; floor?: number; change?: number; changePercent: number; updatedAt: string }
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 type ActivityTab = "trades" | "foreign"
+type HistoryState = "LOADING" | "READY" | "PARTIAL" | "ERROR"
 type ForeignSnapshot = {
   symbol: string
   totalBuyVolume: number
@@ -23,12 +25,28 @@ type ForeignSnapshot = {
   updatedAt: string
 }
 type ForeignFlowEvent = { id: string; time: string; side: "BUY" | "SELL"; volume: number; value: number | null }
+type SessionHistoryResponse = {
+  ok: boolean
+  message?: string
+  sessionStart?: number
+  prices?: Array<{ time: number; close: number }>
+  trades?: Array<{ id: string; time: number; price: number; volume: number; side: string }>
+  tradesTruncated?: boolean
+  latestQuote?: {
+    time: number | null
+    bid: unknown[]
+    offer: unknown[]
+    matchPrice: number | null
+    openPrice: number | null
+  } | null
+}
 
 const WIDTH = 720
 const ORDERBOOK_VOLUME_MULTIPLIER = 10
 const LARGE_TRADE_MIN_VOLUME = 10_000
 const OPEN_PRICE_KEYS = ["openPrice", "openingPrice", "open", "openValue", "firstPrice"]
 const STREAM_STALE_MS = 45_000
+const MAX_SESSION_TRADES = 6_000
 
 function number(value: unknown) {
   const result = typeof value === "number" ? value : Number(value)
@@ -103,10 +121,16 @@ function timeLabel(value: string) {
   })
 }
 
-function inferSide(rawSide: unknown, price: number, bids: DepthLevel[], asks: DepthLevel[]): TradeSide {
+function explicitSide(rawSide: unknown): TradeSide {
   const side = String(rawSide ?? "").toUpperCase()
-  if (["BUY", "B", "MUA", "BU"].includes(side)) return "BUY"
-  if (["SELL", "S", "BÁN", "BAN", "SD"].includes(side)) return "SELL"
+  if (["BUY", "B", "MUA", "BU", "NB"].includes(side)) return "BUY"
+  if (["SELL", "S", "BÁN", "BAN", "SD", "NS"].includes(side)) return "SELL"
+  return "UNKNOWN"
+}
+
+function inferSide(rawSide: unknown, price: number, bids: DepthLevel[], asks: DepthLevel[]): TradeSide {
+  const direct = explicitSide(rawSide)
+  if (direct !== "UNKNOWN") return direct
   const bestBid = bids[0]?.price
   const bestAsk = asks[0]?.price
   if (bestAsk && price >= bestAsk) return "BUY"
@@ -141,6 +165,14 @@ function nextQuote(symbol: string, data: Record<string, unknown>, current: Stock
   }
 }
 
+function mergeTrades(incoming: StreamTrade[], current: StreamTrade[]) {
+  const deduped = new Map<string, StreamTrade>()
+  for (const trade of [...incoming, ...current]) deduped.set(trade.id, trade)
+  return [...deduped.values()]
+    .sort((a, b) => Date.parse(b.time) - Date.parse(a.time))
+    .slice(0, MAX_SESSION_TRADES)
+}
+
 function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
   const [state, setState] = useState<StreamState>("CONNECTING")
   const [bids, setBids] = useState<DepthLevel[]>([])
@@ -149,6 +181,9 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
   const [foreign, setForeign] = useState<ForeignSnapshot | null>(null)
   const [foreignEvents, setForeignEvents] = useState<ForeignFlowEvent[]>([])
   const [quote, setQuote] = useState<StockQuote | null>(null)
+  const [priceHistory, setPriceHistory] = useState<number[]>([])
+  const [historyState, setHistoryState] = useState<HistoryState>("LOADING")
+  const [historyMessage, setHistoryMessage] = useState("")
   const [updatedAt, setUpdatedAt] = useState("")
   const [error, setError] = useState("")
   const depthRef = useRef<{ bids: DepthLevel[]; asks: DepthLevel[] }>({ bids: [], asks: [] })
@@ -157,6 +192,75 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
   useEffect(() => {
     setForeign(null)
     setForeignEvents([])
+  }, [symbol])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let disposed = false
+    setHistoryState("LOADING")
+    setHistoryMessage("")
+    setPriceHistory([])
+    setTrades([])
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/market/session?symbol=${encodeURIComponent(symbol)}`, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        })
+        const payload = await response.json() as SessionHistoryResponse
+        if (!response.ok || !payload.ok) throw new Error(payload.message ?? `DNSE session history ${response.status}`)
+        if (disposed) return
+
+        const prices = (payload.prices ?? []).map((point) => number(point.close)).filter((value) => value > 0)
+        setPriceHistory(prices)
+
+        const latest = payload.latestQuote
+        if (latest) {
+          const nextBids = normalizeDepth(latest.bid).sort((a, b) => b.price - a.price)
+          const nextAsks = normalizeDepth(latest.offer).sort((a, b) => a.price - b.price)
+          if (nextBids.length || nextAsks.length) {
+            depthRef.current = { bids: nextBids, asks: nextAsks }
+            setBids(nextBids)
+            setAsks(nextAsks)
+          }
+          const restQuote: Record<string, unknown> = {
+            matchPrice: latest.matchPrice,
+            openPrice: latest.openPrice,
+          }
+          setQuote((current) => nextQuote(symbol, restQuote, current))
+        }
+
+        const historicalTrades: StreamTrade[] = (payload.trades ?? [])
+          .map((trade) => ({
+            id: `history-${trade.id}`,
+            time: normalizeTime(trade.time),
+            price: number(trade.price),
+            volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
+            side: explicitSide(trade.side),
+          }))
+          .filter((trade) => trade.price > 0 && trade.volume > 0)
+        setTrades((current) => mergeTrades(historicalTrades, current))
+
+        if (payload.tradesTruncated) {
+          setHistoryState("PARTIAL")
+          setHistoryMessage(`DNSE đã backfill ${historicalTrades.length.toLocaleString("vi-VN")} giao dịch; mã quá thanh khoản nên tape lịch sử bị giới hạn.`)
+        } else {
+          setHistoryState("READY")
+          setHistoryMessage(`Đã backfill từ 09:00 · ${prices.length} nến 1 phút · ${historicalTrades.length.toLocaleString("vi-VN")} giao dịch.`)
+        }
+      } catch (nextError) {
+        if (disposed || (nextError instanceof DOMException && nextError.name === "AbortError")) return
+        setHistoryState("ERROR")
+        setHistoryMessage(nextError instanceof Error ? nextError.message : String(nextError))
+      }
+    })()
+
+    return () => {
+      disposed = true
+      controller.abort()
+    }
   }, [symbol])
 
   useEffect(() => {
@@ -244,6 +348,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
                 { name: "tick.G1.json", symbols: [symbol] },
                 { name: "top_price.G1.json", symbols: [symbol] },
                 { name: "tick_extra.G1.json", symbols: [symbol] },
+                { name: "ohlc.1.json", symbols: [symbol] },
                 { name: "foreign.G1.json", symbols: [symbol] },
               ],
             }))
@@ -267,6 +372,17 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
 
           const ticker = String(data?.symbol ?? "").toUpperCase()
           if (ticker !== symbol) return
+
+          if (data?.T === "b") {
+            const close = firstPositive(data, ["close", "c", "closePrice"])
+            if (close > 0) {
+              setPriceHistory((current) => {
+                if (current.at(-1) === close) return current
+                return [...current, close].slice(-360)
+              })
+            }
+            return
+          }
 
           if (data?.T === "q") {
             const nextBids = normalizeDepth(data?.bid).sort((a, b) => b.price - a.price)
@@ -296,13 +412,13 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
             if (price <= 0 || volume <= 0) return
             const time = normalizeTime(data?.time)
             const trade: StreamTrade = {
-              id: `${time}-${price}-${volume}-${String(data?.side ?? "")}-${Math.random().toString(36).slice(2, 7)}`,
+              id: `live-${time}-${price}-${volume}-${String(data?.side ?? "")}-${Math.random().toString(36).slice(2, 7)}`,
               time,
               price,
               volume,
               side: inferSide(data?.side, price, depthRef.current.bids, depthRef.current.asks),
             }
-            setTrades((current) => [trade, ...current].slice(0, 100))
+            setTrades((current) => mergeTrades([trade], current))
             return
           }
 
@@ -376,7 +492,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
     }
   }, [symbol, reconnectKey])
 
-  return { state, bids, asks, trades, foreign, foreignEvents, quote, updatedAt, error }
+  return { state, bids, asks, trades, foreign, foreignEvents, quote, priceHistory, historyState, historyMessage, updatedAt, error }
 }
 
 export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocus }: { stockKey: string; symbol: string; index: number; z: number; onClose: () => void; onFocus: () => void }) {
@@ -386,16 +502,41 @@ export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocu
   const [reconnectKey, setReconnectKey] = useState(0)
   const [pos, setPos] = useState(() => ({ x: 28 + (index % 4) * 48, y: 78 + (index % 5) * 38 }))
   const drag = useRef<{ dx: number; dy: number } | null>(null)
+  const closeRequested = useRef(false)
   const stream = useDnseOrderBookStream(symbol, reconnectKey)
   const quote = stream.quote
 
-  const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    onFocus()
+  const onHeaderPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
     const target = event.target instanceof HTMLElement ? event.target : null
-    if (target?.closest("button, a, [data-no-drag]")) return
+    if (target?.closest("button, a, [data-orderbook-action], [data-no-drag]")) return
+    onFocus()
     drag.current = { dx: event.clientX - pos.x, dy: event.clientY - pos.y }
     event.currentTarget.setPointerCapture(event.pointerId)
   }, [onFocus, pos.x, pos.y])
+
+  const onPanelPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (target?.closest("[data-orderbook-action]")) return
+    onFocus()
+  }, [onFocus])
+
+  const closeOnPointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (closeRequested.current) return
+    closeRequested.current = true
+    drag.current = null
+    onClose()
+  }, [onClose])
+
+  const closeOnClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (closeRequested.current) return
+    closeRequested.current = true
+    drag.current = null
+    onClose()
+  }, [onClose])
 
   const onPointerMove = useCallback((event: React.PointerEvent) => {
     if (!drag.current) return
@@ -418,18 +559,24 @@ export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocu
   const largeTradeCount = useMemo(() => stream.trades.filter((trade) => trade.volume >= LARGE_TRADE_MIN_VOLUME).length, [stream.trades])
   const tone = marketToneFromPrice({ price: quote?.price, reference: quote?.reference, ceiling: quote?.ceiling, floor: quote?.floor })
   const color = quote ? marketToneText(tone) : "text-muted-2"
+  const chartColor = marketToneHex(tone)
+  const chartData = useMemo(() => {
+    const values = stream.priceHistory.filter((value) => Number.isFinite(value) && value > 0)
+    if (!quote?.price || values.at(-1) === quote.price) return values
+    return [...values, quote.price]
+  }, [quote?.price, stream.priceHistory])
   const foreignNetVolume = stream.foreign ? stream.foreign.totalBuyVolume - stream.foreign.totalSellVolume : null
   const foreignNetValue = stream.foreign ? stream.foreign.totalBuyValue - stream.foreign.totalSellValue : null
 
-  return <section className="pointer-events-auto absolute flex max-h-[calc(100vh-24px)] w-[min(720px,calc(100vw-16px))] flex-col overflow-hidden rounded-xl border border-border-strong bg-[#171918] shadow-2xl shadow-black/70" style={{ left: pos.x, top: pos.y, zIndex: z }} onPointerDown={onFocus} data-orderbook={stockKey}>
-    <header className="flex cursor-grab select-none items-center gap-2 border-b border-border bg-[#1d1f1e] px-3 py-2 active:cursor-grabbing" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+  return <section className="pointer-events-auto absolute flex max-h-[calc(100vh-24px)] w-[min(720px,calc(100vw-16px))] flex-col overflow-hidden rounded-xl border border-border-strong bg-[#171918] shadow-2xl shadow-black/70" style={{ left: pos.x, top: pos.y, zIndex: z }} onPointerDown={onPanelPointerDown} data-orderbook={stockKey}>
+    <header className="flex cursor-grab select-none items-center gap-2 border-b border-border bg-[#1d1f1e] px-3 py-2 active:cursor-grabbing" onPointerDown={onHeaderPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
       <GripVertical className="h-4 w-4 text-muted" /><span className="text-[11px] text-muted-2">Sổ lệnh</span><span className="ml-2 text-base font-bold text-foreground">{symbol}</span>
       <span className={`ml-auto font-mono text-base font-bold ${color}`}>{formatPrice(quote?.price)}</span>
       {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact /> : null}
-      <button type="button" aria-label="Kết nối lại sổ lệnh" title="Kết nối lại" onClick={(event) => { event.stopPropagation(); setReconnectKey((key) => key + 1) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><RefreshCw className={`h-4 w-4 ${stream.state === "CONNECTING" ? "animate-spin" : ""}`} /></button>
-      <a href={`/research/${symbol.toLowerCase()}`} aria-label={`Mở phân tích ${symbol}`} title="Mở phân tích" onClick={(event) => event.stopPropagation()} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><ExternalLink className="h-4 w-4" /></a>
-      <button type="button" aria-label={minimized ? "Mở rộng sổ lệnh" : "Thu gọn sổ lệnh"} title={minimized ? "Mở rộng" : "Thu gọn"} onClick={(event) => { event.stopPropagation(); setMinimized((value) => !value) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><Minus className="h-4 w-4" /></button>
-      <button type="button" aria-label="Đóng sổ lệnh" title="Đóng" onClick={(event) => { event.stopPropagation(); onClose() }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-down"><X className="h-4 w-4" /></button>
+      <button data-orderbook-action type="button" aria-label="Kết nối lại sổ lệnh" title="Kết nối lại" onClick={(event) => { event.stopPropagation(); setReconnectKey((key) => key + 1) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><RefreshCw className={`h-4 w-4 ${stream.state === "CONNECTING" ? "animate-spin" : ""}`} /></button>
+      <a data-orderbook-action href={`/research/${symbol.toLowerCase()}`} aria-label={`Mở phân tích ${symbol}`} title="Mở phân tích" onClick={(event) => event.stopPropagation()} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><ExternalLink className="h-4 w-4" /></a>
+      <button data-orderbook-action type="button" aria-label={minimized ? "Mở rộng sổ lệnh" : "Thu gọn sổ lệnh"} title={minimized ? "Mở rộng" : "Thu gọn"} onClick={(event) => { event.stopPropagation(); setMinimized((value) => !value) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><Minus className="h-4 w-4" /></button>
+      <button data-orderbook-action type="button" aria-label="Đóng sổ lệnh" title="Đóng" onPointerDown={closeOnPointerDown} onClick={closeOnClick} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-down"><X className="h-4 w-4" /></button>
     </header>
 
     {!minimized ? <div className="min-h-0 flex-1 overflow-auto">
@@ -440,7 +587,17 @@ export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocu
         <div className="mt-4 flex items-center justify-between text-sm font-semibold"><span className="text-up">{depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "—"}</span><span className="text-down">{depthTotal > 0 ? `${sellPct.toFixed(0)}%` : "—"}</span></div>
         <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-panel-2"><div className="bg-up" style={{ width: `${depthTotal > 0 ? buyPct : 0}%` }} /><div className="bg-down" style={{ width: `${depthTotal > 0 ? sellPct : 0}%` }} /></div>
         <div className="mt-1 flex justify-between text-xs text-muted-2"><span>Mua</span><span>Bán</span></div>
-        <div className="mt-2 text-[10px] text-muted">Khối lượng qtty DNSE trong popup được quy đổi ×10; thấp hơn 10 lần so với UI cũ.</div>
+        <div className="mt-2 text-[10px] text-muted">Snapshot orderbook được hydrate từ DNSE REST khi mở popup, sau đó top_price.G1 tiếp tục cập nhật realtime. Khối lượng qtty dùng hệ số ×10.</div>
+      </div>
+
+      <div className="border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div><div className="text-xs font-semibold text-foreground">Giá từ đầu phiên</div><div className="mt-0.5 text-[10px] text-muted-2">DNSE OHLC 1 phút · 09:00 → live</div></div>
+          <div className={`text-right text-[10px] ${stream.historyState === "ERROR" ? "text-down" : stream.historyState === "PARTIAL" ? "text-ref" : "text-muted-2"}`}>{stream.historyState === "LOADING" ? "Đang backfill..." : stream.historyMessage}</div>
+        </div>
+        <div className="mt-2 h-[76px] w-full overflow-hidden rounded-lg border border-border bg-panel-2/35 px-2 py-1">
+          <Sparkline data={chartData} refValue={quote?.reference} color={chartColor} width={640} height={66} strokeWidth={2} showDot fill className="h-[66px] w-full" />
+        </div>
       </div>
 
       <div className="px-4 py-3">
@@ -448,13 +605,14 @@ export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocu
           <button type="button" onClick={() => setActivityTab("trades")} className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${activityTab === "trades" ? "bg-blue-500/15 text-blue-400" : "text-muted-2 hover:bg-panel-2"}`}>Khớp lệnh</button>
           <button type="button" onClick={() => setActivityTab("foreign")} className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${activityTab === "foreign" ? "bg-blue-500/15 text-blue-400" : "text-muted-2 hover:bg-panel-2"}`}>Nước ngoài</button>
           {activityTab === "trades" ? <button type="button" aria-pressed={largeOnly} aria-label="Chỉ xem giao dịch từ 10 nghìn cổ phiếu" title="Lọc giao dịch ≥10k" onClick={() => setLargeOnly((value) => !value)} className={`ml-1 inline-flex h-7 items-center gap-1 rounded-md border px-2 transition-colors ${largeOnly ? "border-ref/50 bg-ref/12 text-ref" : "border-border text-muted-2 hover:border-border-strong hover:text-foreground"}`}><ListFilter className="h-3.5 w-3.5" /><span className="text-[10px] font-bold">10K+</span>{largeTradeCount > 0 ? <span className="font-mono text-[9px] opacity-80">{largeTradeCount}</span> : null}</button> : null}
-          <span className="ml-auto text-[11px] text-muted-2">{activityTab === "trades" ? "tick_extra.G1 · WS" : "foreign.G1 · WS"}</span>
+          <span className="ml-auto text-[11px] text-muted-2">{activityTab === "trades" ? "REST 09:00 + tick_extra.G1 · WS" : "foreign.G1 · WS"}</span>
         </div>
 
         {activityTab === "trades" ? <>
           {stream.error && stream.state !== "LIVE" ? <div className="mb-3 rounded-lg border border-ref/30 bg-ref/5 px-3 py-2 text-xs text-ref">{stream.error}</div> : null}
-          {visibleTrades.length ? <div><div className="grid grid-cols-[120px_1fr_150px_80px] border-b border-border pb-2 text-xs text-muted-2"><span>Thời gian</span><span className="text-right">Khối lượng</span><span className="text-right">Giá</span><span className="text-right">M/B</span></div><div className="max-h-[300px] overflow-y-auto">{visibleTrades.map((trade) => { const meta = sideMeta(trade.side); const large = trade.volume >= LARGE_TRADE_MIN_VOLUME; return <div key={trade.id} className={`grid grid-cols-[120px_1fr_150px_80px] border-b py-1.5 font-mono text-sm last:border-0 ${large ? "border-ref/20 border-l-2 border-l-ref/80 bg-ref/10 pl-2" : "border-border/40"}`}><span className="text-muted-2">{timeLabel(trade.time)}</span><span className={`text-right font-bold ${large ? "text-ref" : "text-foreground"}`}>{formatVolume(trade.volume)}{large ? <span className="ml-1 rounded bg-ref/15 px-1 py-0.5 text-[9px] text-ref">10K+</span> : null}</span><span className={`text-right font-semibold ${trade.side === "BUY" ? "text-up" : trade.side === "SELL" ? "text-down" : "text-foreground"}`}>{formatPrice(trade.price)}</span><span className={`text-right font-semibold ${meta.className}`} title="Mua/Bán có dấu * khi suy ra từ vị trí giá so với best bid/ask.">{meta.label}</span></div> })}</div></div> : <div className="rounded-lg border border-border bg-panel-2/40 px-3 py-6 text-center text-xs text-muted-2">{stream.state === "CONNECTING" ? "Đang kết nối luồng khớp lệnh..." : largeOnly ? "Chưa có giao dịch ≥10k trong buffer realtime." : "Chờ giao dịch mới từ DNSE stream."}</div>}
-          <p className="mt-3 text-[10px] leading-4 text-muted">Giao dịch ≥10k được highlight vàng và có thể lọc riêng bằng nút 10K+. * Nếu provider không cung cấp nhãn aggressor dạng chữ, Mua/Bán được suy ra từ giá khớp so với best bid/ask tại thời điểm nhận tick.</p>
+          {stream.historyState === "PARTIAL" ? <div className="mb-3 rounded-lg border border-ref/30 bg-ref/5 px-3 py-2 text-[10px] text-ref">{stream.historyMessage}</div> : null}
+          {visibleTrades.length ? <div><div className="grid grid-cols-[120px_1fr_150px_80px] border-b border-border pb-2 text-xs text-muted-2"><span>Thời gian</span><span className="text-right">Khối lượng</span><span className="text-right">Giá</span><span className="text-right">M/B</span></div><div className="max-h-[300px] overflow-y-auto">{visibleTrades.map((trade) => { const meta = sideMeta(trade.side); const large = trade.volume >= LARGE_TRADE_MIN_VOLUME; return <div key={trade.id} className={`grid grid-cols-[120px_1fr_150px_80px] border-b py-1.5 font-mono text-sm last:border-0 ${large ? "border-ref/20 border-l-2 border-l-ref/80 bg-ref/10 pl-2" : "border-border/40"}`}><span className="text-muted-2">{timeLabel(trade.time)}</span><span className={`text-right font-bold ${large ? "text-ref" : "text-foreground"}`}>{formatVolume(trade.volume)}{large ? <span className="ml-1 rounded bg-ref/15 px-1 py-0.5 text-[9px] text-ref">10K+</span> : null}</span><span className={`text-right font-semibold ${trade.side === "BUY" ? "text-up" : trade.side === "SELL" ? "text-down" : "text-foreground"}`}>{formatPrice(trade.price)}</span><span className={`text-right font-semibold ${meta.className}`} title="Mua/Bán có dấu * khi suy ra từ vị trí giá so với best bid/ask.">{meta.label}</span></div> })}</div></div> : <div className="rounded-lg border border-border bg-panel-2/40 px-3 py-6 text-center text-xs text-muted-2">{stream.historyState === "LOADING" ? "Đang tải giao dịch từ đầu phiên..." : stream.state === "CONNECTING" ? "Đang kết nối luồng khớp lệnh..." : largeOnly ? "Chưa có giao dịch ≥10k trong phiên." : "Chờ giao dịch mới từ DNSE stream."}</div>}
+          <p className="mt-3 text-[10px] leading-4 text-muted">Tape khớp lệnh được backfill bằng DNSE REST từ 09:00 rồi nối tiếp bằng WebSocket. Giao dịch ≥10k được highlight vàng. * Nếu provider không có aggressor side, Mua/Bán realtime mới được suy ra từ best bid/ask; lịch sử REST không bị suy diễn bằng orderbook hiện tại.</p>
         </> : <>
           {stream.error && stream.state !== "LIVE" ? <div className="mb-3 rounded-lg border border-ref/30 bg-ref/5 px-3 py-2 text-xs text-ref">NĐTNN: {stream.error}</div> : null}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
