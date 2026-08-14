@@ -27,7 +27,7 @@ export const BOARD_SECTOR_GROUPS = [
 export type BoardSectorGroup = (typeof BOARD_SECTOR_GROUPS)[number]
 
 export function boardSectorGroupForSector(sector: string) {
-  return BOARD_SECTOR_GROUPS.find((group) => group.sectors.includes(sector as MarketSector)) ?? BOARD_SECTOR_GROUPS.at(-1)!
+  return BOARD_SECTOR_GROUPS.find((group) => (group.sectors as readonly string[]).includes(sector)) ?? BOARD_SECTOR_GROUPS.at(-1)!
 }
 
 const SECTOR_BY_TICKER: Record<string, MarketSector> = {
