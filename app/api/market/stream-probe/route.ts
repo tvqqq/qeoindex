@@ -1,14 +1,26 @@
 import { NextResponse } from "next/server"
-import { createDnseStreamAuth } from "@/lib/dnse-stream-auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const { url, auth } = createDnseStreamAuth()
+  const authResponse = await fetch("https://stockos-beryl.vercel.app/api/market/stream-auth", {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  })
+  const authJson = await authResponse.json() as {
+    ok?: boolean
+    url?: string
+    auth?: Record<string, unknown>
+    message?: string
+  }
+
+  if (!authResponse.ok || !authJson.ok || !authJson.url || !authJson.auth) {
+    return NextResponse.json({ ok: false, message: authJson.message ?? `auth ${authResponse.status}` }, { status: 502 })
+  }
 
   return new Promise<Response>((resolve) => {
-    const socket = new WebSocket(url)
+    const socket = new WebSocket(authJson.url!)
     const messages: Record<string, unknown>[] = []
     let settled = false
 
@@ -31,7 +43,7 @@ export async function GET() {
         return
       }
       if (action === "welcome" || data.session_id || data.sid) {
-        socket.send(JSON.stringify(auth))
+        socket.send(JSON.stringify(authJson.auth))
         return
       }
       if (action === "auth_success") {
