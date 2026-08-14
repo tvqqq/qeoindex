@@ -1,26 +1,12 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { formatPct, formatPrice, formatVolume, type Trend } from "@/lib/market-data"
+import { MarketChangePill } from "@/components/market-change-pill"
+import { formatPrice, formatVolume } from "@/lib/market-data"
+import { marketToneHex, marketToneText, type MarketTone } from "@/lib/market-tone"
 import { useStock } from "@/lib/use-market"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { Sparkline } from "@/components/sparkline"
-
-const HEX: Record<Trend, string> = {
-  up: "#22c98a",
-  down: "#f2495c",
-  ceiling: "#b07cff",
-  floor: "#22b8cf",
-  ref: "#e2b93b",
-}
-
-const TEXT: Record<Trend, string> = {
-  up: "text-up",
-  down: "text-down",
-  ceiling: "text-ceiling",
-  floor: "text-[#22b8cf]",
-  ref: "text-ref",
-}
 
 export function StockCell({ stockKey }: { stockKey: string }) {
   const s = useStock(stockKey)
@@ -39,8 +25,9 @@ export function StockCell({ stockKey }: { stockKey: string }) {
     }
   }, [s.price, s.updatedAt])
 
-  const color = HEX[s.trend]
-  const text = TEXT[s.trend]
+  const tone = s.trend as MarketTone
+  const color = marketToneHex(tone)
+  const text = marketToneText(tone)
 
   return (
     <button
@@ -48,7 +35,7 @@ export function StockCell({ stockKey }: { stockKey: string }) {
       onClick={() => open(stockKey, s.symbol)}
       aria-pressed={selected}
       className={[
-        "group relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
+        "group relative flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors",
         selected
           ? "bg-panel-2 ring-1 ring-inset"
           : "hover:bg-panel-2/70 ring-1 ring-inset ring-transparent",
@@ -56,21 +43,18 @@ export function StockCell({ stockKey }: { stockKey: string }) {
       ].join(" ")}
       style={selected ? { boxShadow: `inset 0 0 0 1px ${color}`, ["--tw-ring-color" as string]: color } : undefined}
     >
-      {/* left: symbol + volume */}
-      <div className="flex w-[52px] shrink-0 flex-col">
-        <span className="text-[13px] font-semibold leading-tight text-foreground">{s.symbol}</span>
-        <span className="font-mono text-[10px] leading-tight text-muted">{formatVolume(s.volume)}</span>
+      <div className="flex w-[54px] shrink-0 flex-col">
+        <span className="text-[14px] font-bold leading-tight text-foreground">{s.symbol}</span>
+        <span className="mt-1 font-mono text-[10px] leading-tight text-muted-2">{formatVolume(s.volume)}</span>
       </div>
 
-      {/* middle: sparkline */}
       <div className="flex flex-1 items-center justify-center">
-        <Sparkline data={s.history} refValue={s.refPrice} color={color} width={72} height={30} />
+        <Sparkline data={s.history} refValue={s.refPrice} color={color} width={76} height={32} strokeWidth={1.8} showDot />
       </div>
 
-      {/* right: pct + price */}
-      <div className="flex w-[54px] shrink-0 flex-col items-end">
-        <span className={`text-[13px] font-semibold leading-tight ${text}`}>{formatPct(s.changePct)}</span>
-        <span className={`font-mono text-[10px] leading-tight ${text}`}>{formatPrice(s.price)}</span>
+      <div className="flex w-[68px] shrink-0 flex-col items-end gap-1.5">
+        <span className={`font-mono text-[11px] font-bold leading-tight ${text}`}>{formatPrice(s.price)}</span>
+        <MarketChangePill value={s.changePct} tone={tone} compact />
       </div>
     </button>
   )

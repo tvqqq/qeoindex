@@ -20,7 +20,10 @@
   --color-down-dim: #3d1620;
   --color-ceiling: #b07cff;
   --color-ceiling-dim: #2c1d47;
+  --color-floor: #22b8cf;
+  --color-floor-dim: #0b3540;
   --color-ref: #e2b93b;
+  --color-ref-dim: #3f3414;
   --color-brand: #22c98a;
 
   --radius-md: 0.5rem;
