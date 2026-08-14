@@ -1,12 +1,14 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ExternalLink, GripVertical, Minus, RefreshCw, X } from "lucide-react"
+import { ExternalLink, GripVertical, ListFilter, Minus, RefreshCw, X } from "lucide-react"
+import { MarketChangePill } from "@/components/market-change-pill"
+import { marketToneFromPrice, marketToneText } from "@/lib/market-tone"
 
 type DepthLevel = { price: number; volume: number }
 type TradeSide = "BUY" | "SELL" | "UNKNOWN"
 type StreamTrade = { id: string; time: string; price: number; volume: number; side: TradeSide }
-type StockQuote = { symbol: string; price: number; reference?: number; change?: number; changePercent: number; updatedAt: string }
+type StockQuote = { symbol: string; price: number; reference?: number; ceiling?: number; floor?: number; change?: number; changePercent: number; updatedAt: string }
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 type ActivityTab = "trades" | "foreign"
 type ForeignSnapshot = {
@@ -23,7 +25,8 @@ type ForeignSnapshot = {
 type ForeignFlowEvent = { id: string; time: string; side: "BUY" | "SELL"; volume: number; value: number | null }
 
 const WIDTH = 720
-const ROUND_LOT_MULTIPLIER = 100
+const ORDERBOOK_VOLUME_MULTIPLIER = 10
+const LARGE_TRADE_MIN_VOLUME = 10_000
 const OPEN_PRICE_KEYS = ["openPrice", "openingPrice", "open", "openValue", "firstPrice"]
 const STREAM_STALE_MS = 45_000
 
@@ -64,19 +67,12 @@ function formatMarketValue(value?: number | null) {
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
 }
 
-function pctClass(value?: number) {
-  if (typeof value !== "number") return "text-muted-2"
-  if (value > 0) return "text-up"
-  if (value < 0) return "text-down"
-  return "text-ref"
-}
-
 function normalizeDepth(rows: unknown): DepthLevel[] {
   if (!Array.isArray(rows)) return []
   return rows
     .map((row: any) => ({
       price: number(row?.price),
-      volume: number(row?.qtty ?? row?.quantity ?? row?.volume) * ROUND_LOT_MULTIPLIER,
+      volume: number(row?.qtty ?? row?.quantity ?? row?.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
     }))
     .filter((row) => row.price > 0 && row.volume >= 0)
 }
@@ -129,12 +125,16 @@ function nextQuote(symbol: string, data: Record<string, unknown>, current: Stock
   if (price <= 0) return current
   const explicitOpen = firstPositive(data, OPEN_PRICE_KEYS)
   const reference = explicitOpen || current?.reference || price
+  const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"]) || current?.ceiling
+  const floor = firstPositive(data, ["floorPrice", "floor"]) || current?.floor
   const change = reference > 0 ? price - reference : current?.change
   const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : current?.changePercent ?? 0
   return {
     symbol,
     price,
     reference: reference || undefined,
+    ceiling: ceiling || undefined,
+    floor: floor || undefined,
     change,
     changePercent,
     updatedAt: new Date().toISOString(),
@@ -289,7 +289,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
 
           if (data?.T === "te") {
             const price = number(data?.matchPrice)
-            const volume = number(data?.matchQtty) * ROUND_LOT_MULTIPLIER
+            const volume = number(data?.matchQtty) * ORDERBOOK_VOLUME_MULTIPLIER
             setQuote((current) => nextQuote(symbol, data, current))
             setUpdatedAt(new Date().toISOString())
             setError("")
@@ -302,7 +302,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
               volume,
               side: inferSide(data?.side, price, depthRef.current.bids, depthRef.current.asks),
             }
-            setTrades((current) => [trade, ...current].slice(0, 80))
+            setTrades((current) => [trade, ...current].slice(0, 100))
             return
           }
 
@@ -382,6 +382,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
 export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocus }: { stockKey: string; symbol: string; index: number; z: number; onClose: () => void; onFocus: () => void }) {
   const [minimized, setMinimized] = useState(false)
   const [activityTab, setActivityTab] = useState<ActivityTab>("trades")
+  const [largeOnly, setLargeOnly] = useState(false)
   const [reconnectKey, setReconnectKey] = useState(0)
   const [pos, setPos] = useState(() => ({ x: 28 + (index % 4) * 48, y: 78 + (index % 5) * 38 }))
   const drag = useRef<{ dx: number; dy: number } | null>(null)
@@ -413,7 +414,10 @@ export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocu
   const buyPct = depthTotal > 0 ? (bidTotal / depthTotal) * 100 : 50
   const sellPct = 100 - buyPct
   const rows = useMemo(() => Array.from({ length: 3 }, (_, i) => ({ bid: topBids[i], ask: topAsks[i] })), [topBids, topAsks])
-  const color = pctClass(quote?.changePercent)
+  const visibleTrades = useMemo(() => largeOnly ? stream.trades.filter((trade) => trade.volume >= LARGE_TRADE_MIN_VOLUME) : stream.trades, [largeOnly, stream.trades])
+  const largeTradeCount = useMemo(() => stream.trades.filter((trade) => trade.volume >= LARGE_TRADE_MIN_VOLUME).length, [stream.trades])
+  const tone = marketToneFromPrice({ price: quote?.price, reference: quote?.reference, ceiling: quote?.ceiling, floor: quote?.floor })
+  const color = quote ? marketToneText(tone) : "text-muted-2"
   const foreignNetVolume = stream.foreign ? stream.foreign.totalBuyVolume - stream.foreign.totalSellVolume : null
   const foreignNetValue = stream.foreign ? stream.foreign.totalBuyValue - stream.foreign.totalSellValue : null
 
@@ -421,7 +425,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocu
     <header className="flex cursor-grab select-none items-center gap-2 border-b border-border bg-[#1d1f1e] px-3 py-2 active:cursor-grabbing" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
       <GripVertical className="h-4 w-4 text-muted" /><span className="text-[11px] text-muted-2">Sổ lệnh</span><span className="ml-2 text-base font-bold text-foreground">{symbol}</span>
       <span className={`ml-auto font-mono text-base font-bold ${color}`}>{formatPrice(quote?.price)}</span>
-      {quote ? <span className={`font-mono text-sm font-semibold ${color}`}>{typeof quote.change === "number" ? `${quote.change > 0 ? "+" : ""}${formatPrice(quote.change, true)} ` : ""}{quote.changePercent > 0 ? "+" : ""}{quote.changePercent.toFixed(2)}%</span> : null}
+      {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact /> : null}
       <button type="button" aria-label="Kết nối lại sổ lệnh" title="Kết nối lại" onClick={(event) => { event.stopPropagation(); setReconnectKey((key) => key + 1) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><RefreshCw className={`h-4 w-4 ${stream.state === "CONNECTING" ? "animate-spin" : ""}`} /></button>
       <a href={`/research/${symbol.toLowerCase()}`} aria-label={`Mở phân tích ${symbol}`} title="Mở phân tích" onClick={(event) => event.stopPropagation()} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><ExternalLink className="h-4 w-4" /></a>
       <button type="button" aria-label={minimized ? "Mở rộng sổ lệnh" : "Thu gọn sổ lệnh"} title={minimized ? "Mở rộng" : "Thu gọn"} onClick={(event) => { event.stopPropagation(); setMinimized((value) => !value) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><Minus className="h-4 w-4" /></button>
@@ -430,28 +434,29 @@ export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocu
 
     {!minimized ? <div className="min-h-0 flex-1 overflow-auto">
       <div className="border-b border-border px-4 py-3">
-        <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-2"><span className={`h-2 w-2 rounded-full ${stream.state === "LIVE" ? "bg-up" : stream.state === "CONNECTING" ? "bg-warning" : "bg-down"}`} /><span>DNSE WebSocket · {stream.state === "LIVE" ? "Live · keep-alive" : stream.state === "CONNECTING" ? "Đang kết nối" : "Đang tự khôi phục"}</span>{stream.updatedAt ? <span className="ml-auto">{timeLabel(stream.updatedAt)}</span> : null}</div>
+        <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-2"><span className={`h-2 w-2 rounded-full ${stream.state === "LIVE" ? "bg-up" : stream.state === "CONNECTING" ? "bg-ref" : "bg-down"}`} /><span>DNSE WebSocket · {stream.state === "LIVE" ? "Live · keep-alive" : stream.state === "CONNECTING" ? "Đang kết nối" : "Đang tự khôi phục"}</span>{stream.updatedAt ? <span className="ml-auto">{timeLabel(stream.updatedAt)}</span> : null}</div>
         <div className="grid grid-cols-[1fr_120px_120px_1fr] gap-x-4 text-xs text-muted-2"><span>KL mua</span><span className="text-right">Giá mua</span><span>Giá bán</span><span className="text-right">KL bán</span></div>
         <div className="mt-2 space-y-1.5 font-mono text-sm">{rows.map(({ bid, ask }, rowIndex) => <div key={rowIndex} className="grid grid-cols-[1fr_120px_120px_1fr] gap-x-4"><span className="text-foreground">{formatVolume(bid?.volume)}</span><span className="text-right text-up">{formatPrice(bid?.price)}</span><span className="text-down">{formatPrice(ask?.price)}</span><span className="text-right text-foreground">{formatVolume(ask?.volume)}</span></div>)}</div>
         <div className="mt-4 flex items-center justify-between text-sm font-semibold"><span className="text-up">{depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "—"}</span><span className="text-down">{depthTotal > 0 ? `${sellPct.toFixed(0)}%` : "—"}</span></div>
         <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-panel-2"><div className="bg-up" style={{ width: `${depthTotal > 0 ? buyPct : 0}%` }} /><div className="bg-down" style={{ width: `${depthTotal > 0 ? sellPct : 0}%` }} /></div>
         <div className="mt-1 flex justify-between text-xs text-muted-2"><span>Mua</span><span>Bán</span></div>
-        <div className="mt-2 text-[10px] text-muted">Khối lượng DNSE round-lot được quy đổi ×100 sang số cổ phiếu.</div>
+        <div className="mt-2 text-[10px] text-muted">Khối lượng qtty DNSE trong popup được quy đổi ×10; thấp hơn 10 lần so với UI cũ.</div>
       </div>
 
       <div className="px-4 py-3">
         <div className="mb-3 flex items-center gap-2">
           <button type="button" onClick={() => setActivityTab("trades")} className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${activityTab === "trades" ? "bg-blue-500/15 text-blue-400" : "text-muted-2 hover:bg-panel-2"}`}>Khớp lệnh</button>
           <button type="button" onClick={() => setActivityTab("foreign")} className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${activityTab === "foreign" ? "bg-blue-500/15 text-blue-400" : "text-muted-2 hover:bg-panel-2"}`}>Nước ngoài</button>
+          {activityTab === "trades" ? <button type="button" aria-pressed={largeOnly} aria-label="Chỉ xem giao dịch từ 10 nghìn cổ phiếu" title="Lọc giao dịch ≥10k" onClick={() => setLargeOnly((value) => !value)} className={`ml-1 inline-flex h-7 items-center gap-1 rounded-md border px-2 transition-colors ${largeOnly ? "border-ref/50 bg-ref/12 text-ref" : "border-border text-muted-2 hover:border-border-strong hover:text-foreground"}`}><ListFilter className="h-3.5 w-3.5" /><span className="text-[10px] font-bold">10K+</span>{largeTradeCount > 0 ? <span className="font-mono text-[9px] opacity-80">{largeTradeCount}</span> : null}</button> : null}
           <span className="ml-auto text-[11px] text-muted-2">{activityTab === "trades" ? "tick_extra.G1 · WS" : "foreign.G1 · WS"}</span>
         </div>
 
         {activityTab === "trades" ? <>
-          {stream.error && stream.state !== "LIVE" ? <div className="mb-3 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">{stream.error}</div> : null}
-          {stream.trades.length ? <div><div className="grid grid-cols-[120px_1fr_150px_80px] border-b border-border pb-2 text-xs text-muted-2"><span>Thời gian</span><span className="text-right">Khối lượng</span><span className="text-right">Giá</span><span className="text-right">M/B</span></div><div className="max-h-[300px] overflow-y-auto">{stream.trades.map((trade) => { const meta = sideMeta(trade.side); return <div key={trade.id} className="grid grid-cols-[120px_1fr_150px_80px] border-b border-border/40 py-1.5 font-mono text-sm last:border-0"><span className="text-muted-2">{timeLabel(trade.time)}</span><span className="text-right font-semibold text-foreground">{formatVolume(trade.volume)}</span><span className={`text-right font-semibold ${trade.side === "BUY" ? "text-up" : trade.side === "SELL" ? "text-down" : "text-foreground"}`}>{formatPrice(trade.price)}</span><span className={`text-right font-semibold ${meta.className}`} title="Mua/Bán có dấu * khi suy ra từ vị trí giá so với best bid/ask.">{meta.label}</span></div> })}</div></div> : <div className="rounded-lg border border-border bg-panel-2/40 px-3 py-6 text-center text-xs text-muted-2">{stream.state === "CONNECTING" ? "Đang kết nối luồng khớp lệnh..." : "Chờ giao dịch mới từ DNSE stream."}</div>}
-          <p className="mt-3 text-[10px] leading-4 text-muted">* Nếu provider không cung cấp nhãn aggressor dạng chữ, Mua/Bán được suy ra từ giá khớp so với best bid/ask tại thời điểm nhận tick; đây là suy luận microstructure, không phải trường dữ liệu xác nhận.</p>
+          {stream.error && stream.state !== "LIVE" ? <div className="mb-3 rounded-lg border border-ref/30 bg-ref/5 px-3 py-2 text-xs text-ref">{stream.error}</div> : null}
+          {visibleTrades.length ? <div><div className="grid grid-cols-[120px_1fr_150px_80px] border-b border-border pb-2 text-xs text-muted-2"><span>Thời gian</span><span className="text-right">Khối lượng</span><span className="text-right">Giá</span><span className="text-right">M/B</span></div><div className="max-h-[300px] overflow-y-auto">{visibleTrades.map((trade) => { const meta = sideMeta(trade.side); const large = trade.volume >= LARGE_TRADE_MIN_VOLUME; return <div key={trade.id} className={`grid grid-cols-[120px_1fr_150px_80px] border-b py-1.5 font-mono text-sm last:border-0 ${large ? "border-ref/20 border-l-2 border-l-ref/80 bg-ref/10 pl-2" : "border-border/40"}`}><span className="text-muted-2">{timeLabel(trade.time)}</span><span className={`text-right font-bold ${large ? "text-ref" : "text-foreground"}`}>{formatVolume(trade.volume)}{large ? <span className="ml-1 rounded bg-ref/15 px-1 py-0.5 text-[9px] text-ref">10K+</span> : null}</span><span className={`text-right font-semibold ${trade.side === "BUY" ? "text-up" : trade.side === "SELL" ? "text-down" : "text-foreground"}`}>{formatPrice(trade.price)}</span><span className={`text-right font-semibold ${meta.className}`} title="Mua/Bán có dấu * khi suy ra từ vị trí giá so với best bid/ask.">{meta.label}</span></div> })}</div></div> : <div className="rounded-lg border border-border bg-panel-2/40 px-3 py-6 text-center text-xs text-muted-2">{stream.state === "CONNECTING" ? "Đang kết nối luồng khớp lệnh..." : largeOnly ? "Chưa có giao dịch ≥10k trong buffer realtime." : "Chờ giao dịch mới từ DNSE stream."}</div>}
+          <p className="mt-3 text-[10px] leading-4 text-muted">Giao dịch ≥10k được highlight vàng và có thể lọc riêng bằng nút 10K+. * Nếu provider không cung cấp nhãn aggressor dạng chữ, Mua/Bán được suy ra từ giá khớp so với best bid/ask tại thời điểm nhận tick.</p>
         </> : <>
-          {stream.error && stream.state !== "LIVE" ? <div className="mb-3 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">NĐTNN: {stream.error}</div> : null}
+          {stream.error && stream.state !== "LIVE" ? <div className="mb-3 rounded-lg border border-ref/30 bg-ref/5 px-3 py-2 text-xs text-ref">NĐTNN: {stream.error}</div> : null}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-lg border border-border bg-panel-2/35 px-3 py-2"><div className="text-[10px] text-muted-2">NN mua lũy kế</div><div className="mt-1 font-mono text-sm font-bold text-up">{formatVolume(stream.foreign?.totalBuyVolume)}</div>{stream.foreign ? <div className="mt-0.5 text-[10px] text-muted-2">{formatMarketValue(stream.foreign.totalBuyValue)}</div> : null}</div>
             <div className="rounded-lg border border-border bg-panel-2/35 px-3 py-2"><div className="text-[10px] text-muted-2">NN bán lũy kế</div><div className="mt-1 font-mono text-sm font-bold text-down">{formatVolume(stream.foreign?.totalSellVolume)}</div>{stream.foreign ? <div className="mt-0.5 text-[10px] text-muted-2">{formatMarketValue(stream.foreign.totalSellValue)}</div> : null}</div>
