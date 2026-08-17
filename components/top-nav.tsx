@@ -7,6 +7,7 @@ import { Bot, Gift } from "lucide-react"
 const NAV = [
   { label: "Bảng điện", href: "/" },
   { label: "Nghiên cứu", href: "/research" },
+  { label: "FA", href: "/research/fa" },
   { label: "Quét Wyckoff", href: "/research/scanner" },
   { label: "Tín hiệu", href: "/research/signals" },
   { label: "Thay đổi luận điểm", href: "/research/changes" },
@@ -14,7 +15,7 @@ const NAV = [
   { label: "Hậu kiểm", href: "/research/review" },
 ]
 
-const RESEARCH_RESERVED = new Set(["scanner", "signals", "changes", "log", "review"])
+const RESEARCH_RESERVED = new Set(["fa", "scanner", "signals", "changes", "log", "review"])
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/"
