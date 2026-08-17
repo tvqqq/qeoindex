@@ -1,5 +1,6 @@
 import { dnseProviderHealth } from "@/lib/dnse-history"
 import type { HistoricalProvider } from "@/lib/market-history"
+import type { ScannerHistoryStatus } from "@/lib/scanner-policy"
 import { UNIVERSE_DATE, type UniverseStock } from "@/lib/wyckoff-universe"
 import type { ScannerBias, ScannerConfidence, WyckoffScanResult } from "@/lib/wyckoff-engine"
 
@@ -68,7 +69,7 @@ export interface ScannerData {
   providerHealth: ScannerProviderHealth
 }
 
-export type DailyScanStatus = "Complete" | "Incomplete"
+export type DailyScanStatus = ScannerHistoryStatus
 
 function token() {
   return process.env.NOTION_API_KEY ?? process.env.NOTION_TOKEN ?? ""

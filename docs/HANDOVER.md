@@ -41,6 +41,7 @@ The local `lib/wyckoff-universe.ts` constant defines the safety cap (`UNIVERSE_S
 | `components/orderbook/`, `lib/dnse-market-runtime.ts` | Order-book panel and DNSE session history/runtime. |
 | `components/research/`, `app/research/` | Research, scanner, recommendation, signal, and review interfaces. |
 | `lib/scanner-data.ts`, `lib/scanner-runner.ts` | Notion persistence reads and scanner orchestration. |
+| `tests/market-board-visual-contract.test.ts` | Deterministic source-contract regression guards for board layout/EOD/highlight invariants; not screenshot QA. |
 | `docs/market-board.md` | Detailed board data flow and regression expectations. |
 
 ## Market-board lifecycle
@@ -69,6 +70,8 @@ The board has six visual groups:
 
 Responsive grid: one column by default, two at `sm`, three at `lg`, and all six on one row at `xl`. Group headers use a fixed `72px` height. Stock rows have strong separators, a larger ticker than price, no visible rank, and a restrained green pulse at `changePercent >= 3`. Preserve the `prefers-reduced-motion` fallback in `app/globals.css`.
 
+`tests/market-board-visual-contract.test.ts` enforces the source-level contract for these invariants and the after-close price/chart fallback. It does not replace real browser screenshot/pixel visual QA.
+
 ## EOD and provider correctness
 
 - After the close, both price and mini chart must remain visible.
@@ -84,7 +87,9 @@ Responsive grid: one column by default, two at `sm`, three at `lg`, and all six 
 - Limit and offset are bounded by `UNIVERSE_SIZE`.
 - `/api/scanner/health` checks one symbol by default; `?coverage=1` checks the full Notion universe in batches of ten.
 - Market-history providers use bounded timeouts. Do not reintroduce unbounded `pg_net` or provider fan-out.
-- `scannerHistoryPolicy` classifies 60–199 completed Daily bars as `Incomplete`/LOW, but the current `runScannerUniverse` path is stricter and rejects fewer than 200 bars before writing. Preserve this distinction unless the runner is deliberately migrated to the shared policy.
+- `scannerHistoryPolicy` is the canonical runner/persistence/health policy: fewer than 60 completed Daily bars are rejected; 60–199 bars are persisted as `Incomplete` with forced `LOW` confidence; 200 or more bars are persisted as `Complete` and can use the engine confidence normally.
+- Same-date persistence is monotonic: an existing `Complete` row is skipped even if a provider later returns only `Incomplete` history; an `Incomplete` row is skipped while history remains incomplete, but is rerun when history reaches `Complete` so it can upgrade. Provider-history regression must not downgrade already-complete persisted research.
+- Scanner health treats both `Incomplete` and `Complete` histories as scannable, reports them separately, and preserves provider provenance. Fewer than 60 bars remain insufficient.
 - Never claim a batch completed from progress logs alone. Query final run/job/scan/outbox counts.
 
 ## Environment and security
@@ -102,13 +107,16 @@ Use `.env.example` as the inventory. Main categories are Notion data-source IDs/
 | --- | --- |
 | Universe/sectors/groups | `pnpm test:universe` |
 | EOD/mini chart/DNSE merge | `pnpm test:intraday` |
+| Board layout/highlight/source contract | `pnpm test:board-contract` plus browser visual QA when tooling is available |
 | VNINDEX/VN30/HNXINDEX | `pnpm test:indexes` plus production `/api/market/indexes` smoke |
 | Scanner policy | `pnpm test:scanner-core` |
 | Signal rules | `pnpm test:signal-core` |
+| Core regression suite | `pnpm test:core` |
+| Scanner/UI files touched by current improvement | `pnpm lint:touched` |
 | Any TypeScript/UI change | targeted ESLint, `pnpm typecheck`, `pnpm build --webpack` |
 | Security/env change | `pnpm scan:secrets` |
 
-Full `pnpm lint` has pre-existing errors outside the market-board scope, including generated/unrelated code. Report full lint failure honestly and still require targeted lint to pass for touched files.
+`pnpm build` runs `test:core`, `lint:touched`, `typecheck`, and `scan:secrets` through `prebuild` before Next.js compilation. Full `pnpm lint` still has pre-existing errors outside the market-board scope; broad lint cleanup remains a separate change.
 
 ## Release checklist
 
@@ -133,6 +141,6 @@ Full `pnpm lint` has pre-existing errors outside the market-board scope, includi
 
 ## Deferred/known constraints
 
-- UPCOM-INDEX currently relies on DNSE because the server snapshot covers VNINDEX, VN30, and HNXINDEX only.
-- Automated browser screenshot tooling is not guaranteed in every Codex runtime; when unavailable, record that limitation and perform API/HTTP smoke tests without claiming visual QA.
+- UPCOM-INDEX currently relies on DNSE because the server snapshot covers VNINDEX, VN30, and HNXINDEX only. A temporary TradingView candidate-symbol probe was removed after Vercel preview protection prevented reliable provider verification; do not add an unverified fallback.
+- Automated browser screenshot tooling is not guaranteed in every Codex runtime; source-contract tests do not count as screenshot/pixel visual QA.
 - The current working tree may contain a larger unreleased feature set. Never reset or overwrite unrelated changes to isolate a documentation task.

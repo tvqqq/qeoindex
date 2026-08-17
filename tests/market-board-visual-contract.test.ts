@@ -1,0 +1,63 @@
+import test from "node:test"
+import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import { BOARD_SECTOR_GROUPS } from "../lib/market-sectors.ts"
+
+const boardSource = readFileSync(new URL("../components/live-market-board-v2.tsx", import.meta.url), "utf8")
+const stockSource = readFileSync(new URL("../components/live-market-stock.tsx", import.meta.url), "utf8")
+const cssSource = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")
+
+function boardColumnsAt(width: number) {
+  if (width >= 1280) return 6
+  if (width >= 1024) return 3
+  if (width >= 640) return 2
+  return 1
+}
+
+test("sector board keeps the documented 1/2/3/6 responsive grid", () => {
+  assert.match(boardSource, /grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6/)
+  assert.deepEqual([
+    [390, boardColumnsAt(390)],
+    [768, boardColumnsAt(768)],
+    [1100, boardColumnsAt(1100)],
+    [1279, boardColumnsAt(1279)],
+    [1280, boardColumnsAt(1280)],
+    [1440, boardColumnsAt(1440)],
+    [1920, boardColumnsAt(1920)],
+  ], [
+    [390, 1],
+    [768, 2],
+    [1100, 3],
+    [1279, 3],
+    [1280, 6],
+    [1440, 6],
+    [1920, 6],
+  ])
+  assert.equal(BOARD_SECTOR_GROUPS.length, 6)
+})
+
+test("all six sector headers keep equal fixed height", () => {
+  assert.match(boardSource, /<header className="[^"]*h-\[72px\][^"]*"/)
+})
+
+test("stock row keeps clipping guards and hides rank", () => {
+  assert.match(stockSource, /grid min-h-\[58px\].*grid-cols-\[46px_minmax\(42px,1fr\)_64px\]/)
+  assert.match(stockSource, /flex min-w-0 items-center justify-center overflow-hidden/)
+  assert.match(stockSource, /max-w-full truncate font-mono text-\[11px\]/)
+  assert.doesNotMatch(stockSource, /stock\.rank/)
+})
+
+test("strong gainer highlight remains reduced-motion safe", () => {
+  assert.match(stockSource, /changePercent \?\? 0\) >= 3/)
+  assert.match(stockSource, /strong-gainer border-up\/60/)
+  assert.match(cssSource, /\.strong-gainer\s*\{\s*animation: strong-gainer-pulse/)
+  assert.match(cssSource, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.strong-gainer\s*\{\s*animation: none;/)
+})
+
+test("after-close fallback still feeds both visible price and mini chart", () => {
+  assert.match(boardSource, /history\.at\(-1\)\?\.close \?\? stock\.lastClose/)
+  assert.match(boardSource, /<LiveStockRow[^>]*quote=\{displayQuotes\[stock\.ticker\]/)
+  assert.match(boardSource, /history=\{\(priceHistory\[stock\.ticker\] \?\? \[\]\)\.map/)
+  assert.match(stockSource, /<Sparkline data=\{chart\}/)
+  assert.match(stockSource, /formatBoardPrice\(quote\?\.price\)/)
+})

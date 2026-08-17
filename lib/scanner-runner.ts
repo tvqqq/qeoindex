@@ -2,6 +2,7 @@ import { vietnamDateKey } from "@/lib/dnse-history"
 import { fetchDailyMarketHistory } from "@/lib/market-history"
 import { notifyOpsError } from "@/lib/ops-alerts"
 import { getScannerData, rowToPreviousResult, writeDailyScan } from "@/lib/scanner-data"
+import { scannerHistoryPolicy, shouldSkipSameDateScan, type ScannerHistoryStatus } from "@/lib/scanner-policy"
 import { scanWyckoff } from "@/lib/wyckoff-engine"
 import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
 
@@ -11,7 +12,7 @@ export interface ScannerRunSummary {
   ok: boolean
   universeDate: string
   requested: number
-  completed: Array<{ ticker: string; provider: string; date: string }>
+  completed: Array<{ ticker: string; provider: string; date: string; status: ScannerHistoryStatus; completedDailyBars: number }>
   skipped: string[]
   errors: Array<{ ticker: string; error: string }>
   generatedAt: string
@@ -32,14 +33,15 @@ export async function runScannerUniverse({ limit = UNIVERSE_SIZE, offset = 0 }: 
     const fetched = await Promise.allSettled(batch.map(async (stock) => {
       const historical = await fetchDailyMarketHistory(stock.ticker)
       const bars = historical.bars
-      if (bars.length < 200) throw new Error(`Only ${bars.length} completed Daily bars; need >=200 for MA200 baseline`)
+      const historyPolicy = scannerHistoryPolicy(bars.length)
       const scanDate = vietnamDateKey(bars.at(-1)!.time * 1000)
       const previousRow = data.latestScans[stock.ticker]
-      if (previousRow?.date === scanDate && previousRow.status === "Complete") {
-        return { stock, scanDate, provider: historical.provider, skip: true as const, result: null }
+      if (previousRow?.date === scanDate && shouldSkipSameDateScan(previousRow.status, historyPolicy.status)) {
+        return { stock, scanDate, provider: historical.provider, historyPolicy, completedDailyBars: bars.length, skip: true as const, result: null }
       }
       const result = scanWyckoff(bars, rowToPreviousResult(previousRow))
-      return { stock, scanDate, provider: historical.provider, skip: false as const, result }
+      if (historyPolicy.forceLowConfidence) result.confidence = "LOW"
+      return { stock, scanDate, provider: historical.provider, historyPolicy, completedDailyBars: bars.length, skip: false as const, result }
     }))
 
     for (let i = 0; i < fetched.length; i += 1) {
@@ -54,8 +56,21 @@ export async function runScannerUniverse({ limit = UNIVERSE_SIZE, offset = 0 }: 
         continue
       }
       try {
-        await writeDailyScan(ticker, outcome.value.stock.rank, outcome.value.scanDate, outcome.value.result, outcome.value.provider)
-        completed.push({ ticker, provider: outcome.value.provider, date: outcome.value.scanDate })
+        await writeDailyScan(
+          ticker,
+          outcome.value.stock.rank,
+          outcome.value.scanDate,
+          outcome.value.result,
+          outcome.value.provider,
+          outcome.value.historyPolicy.status,
+        )
+        completed.push({
+          ticker,
+          provider: outcome.value.provider,
+          date: outcome.value.scanDate,
+          status: outcome.value.historyPolicy.status,
+          completedDailyBars: outcome.value.completedDailyBars,
+        })
       } catch (error) {
         errors.push({ ticker, error: error instanceof Error ? error.message : String(error) })
       }

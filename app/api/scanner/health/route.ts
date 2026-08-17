@@ -2,20 +2,35 @@ import { NextRequest, NextResponse } from "next/server"
 import { vietnamDateKey } from "@/lib/dnse-history"
 import { fetchDailyMarketHistory } from "@/lib/market-history"
 import { getScannerData } from "@/lib/scanner-data"
+import { scannerHistoryPolicy, type ScannerHistoryStatus } from "@/lib/scanner-policy"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
+type ScannerHealthStatus = ScannerHistoryStatus | "Rejected"
+
 async function sampleHealth(symbol: string) {
   const result = await fetchDailyMarketHistory(symbol)
   const latest = result.bars.at(-1)
+  let historyStatus: ScannerHealthStatus = "Rejected"
+  let forceLowConfidence = false
+  try {
+    const policy = scannerHistoryPolicy(result.bars.length)
+    historyStatus = policy.status
+    forceLowConfidence = policy.forceLowConfidence
+  } catch {
+    // Provider history exists, but the canonical scanner policy rejects fewer than 60 completed Daily bars.
+  }
   return {
     ticker: symbol,
     provider: result.provider,
     providerDetail: result.detail,
     completedDailyBars: result.bars.length,
     latestCompletedDate: latest ? vietnamDateKey(latest.time * 1000) : null,
-    sufficientForMA200: result.bars.length >= 200,
+    historyStatus,
+    eligibleForScan: historyStatus !== "Rejected",
+    forceLowConfidence,
+    sufficientForMA200: historyStatus === "Complete",
   }
 }
 
@@ -24,7 +39,7 @@ export async function GET(request: NextRequest) {
   if (!coverage) {
     try {
       const sample = await sampleHealth("HPG")
-      return NextResponse.json({ ok: sample.sufficientForMA200, sample }, { status: sample.sufficientForMA200 ? 200 : 503 })
+      return NextResponse.json({ ok: sample.eligibleForScan, sample }, { status: sample.eligibleForScan ? 200 : 503 })
     } catch (error) {
       return NextResponse.json({
         ok: false,
@@ -34,7 +49,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const ready: Array<Awaited<ReturnType<typeof sampleHealth>>> = []
+  const complete: Array<Awaited<ReturnType<typeof sampleHealth>>> = []
+  const incomplete: Array<Awaited<ReturnType<typeof sampleHealth>>> = []
   const insufficient: Array<Awaited<ReturnType<typeof sampleHealth>>> = []
   const errors: Array<{ ticker: string; error: string }> = []
   const universe = (await getScannerData()).universe
@@ -46,24 +62,30 @@ export async function GET(request: NextRequest) {
       const ticker = batch[index].ticker
       if (outcome.status === "rejected") {
         errors.push({ ticker, error: outcome.reason instanceof Error ? outcome.reason.message.slice(0, 240) : String(outcome.reason).slice(0, 240) })
-      } else if (outcome.value.sufficientForMA200) {
-        ready.push(outcome.value)
+      } else if (outcome.value.historyStatus === "Complete") {
+        complete.push(outcome.value)
+      } else if (outcome.value.historyStatus === "Incomplete") {
+        incomplete.push(outcome.value)
       } else {
         insufficient.push(outcome.value)
       }
     })
   }
 
+  const scannable = [...complete, ...incomplete]
   return NextResponse.json({
-    ok: ready.length === universe.length,
+    ok: errors.length === 0 && insufficient.length === 0,
     universe: universe.length,
-    readyCount: ready.length,
+    readyCount: scannable.length,
+    completeCount: complete.length,
+    incompleteCount: incomplete.length,
     insufficientCount: insufficient.length,
     errorCount: errors.length,
-    providerCounts: ready.reduce<Record<string, number>>((acc, row) => {
+    providerCounts: scannable.reduce<Record<string, number>>((acc, row) => {
       acc[row.provider] = (acc[row.provider] ?? 0) + 1
       return acc
     }, {}),
+    incomplete,
     insufficient,
     errors,
   }, { status: errors.length || insufficient.length ? 207 : 200 })
