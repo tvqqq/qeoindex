@@ -8,9 +8,10 @@ Agents and new maintainers should read these files in order:
 
 1. [`AGENTS.md`](./AGENTS.md) — repository rules and Next.js version warning.
 2. [`docs/HANDOVER.md`](./docs/HANDOVER.md) — architecture, source-of-truth boundaries, operating procedures, and known failure modes.
-3. [`docs/market-board.md`](./docs/market-board.md) — detailed market-board data flow and UI invariants.
-4. [`docs/security.md`](./docs/security.md) — credential and secret-handling requirements.
-5. [`docs/finhay-live-adapter.md`](./docs/finhay-live-adapter.md) — optional Finhay OAuth/live integration.
+3. [`docs/NEXT_AGENT_HANDOFF.md`](./docs/NEXT_AGENT_HANDOFF.md) — copy-ready task brief for the next agent.
+4. [`docs/market-board.md`](./docs/market-board.md) — detailed market-board data flow and UI invariants.
+5. [`docs/security.md`](./docs/security.md) — credential and secret-handling requirements.
+6. [`docs/finhay-live-adapter.md`](./docs/finhay-live-adapter.md) — optional Finhay OAuth/live integration.
 
 ## Local setup
 
