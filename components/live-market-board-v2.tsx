@@ -26,8 +26,6 @@ const INDEX_CHANNELS = ["VNINDEX", "VN30", "HNX", "UPCOM"]
 const OPEN_PRICE_KEYS = ["openPrice", "openingPrice", "open", "openValue", "firstPrice"]
 const INDEX_OPEN_KEYS = ["openIndex", "openingIndex", "openIndexValue", "openValue", "open"]
 const STREAM_STALE_MS = 60_000
-const HISTORY_BATCH_SIZE = 10
-const HISTORY_BATCH_CONCURRENCY = 2
 
 function numeric(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value)
@@ -109,59 +107,51 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
     const controller = new AbortController()
     let disposed = false
 
-    const batches = Array.from({ length: Math.ceil(symbolList.length / HISTORY_BATCH_SIZE) }, (_, index) => symbolList.slice(index * HISTORY_BATCH_SIZE, (index + 1) * HISTORY_BATCH_SIZE))
-
-    let nextBatch = 0
-    const loadBatches = async () => {
-      while (nextBatch < batches.length) {
-        const batch = batches[nextBatch++]
-        try {
-          const response = await fetch(`/api/market/intraday?symbols=${encodeURIComponent(batch.join(","))}`, {
-            cache: "no-store",
-            headers: { Accept: "application/json" },
-            signal: controller.signal,
-          })
-          const payload = await response.json() as IntradayHistoryResponse
-          if (disposed) return
-          if (!payload.histories) continue
-          const receivedAt = new Date().toISOString()
-          setPriceHistory((current) => {
-            const next = { ...current }
-            for (const symbol of batch) {
-              const prices = payload.histories?.[symbol]?.prices?.filter((value) => Number.isFinite(value) && value > 0) ?? []
-              if (prices.length) {
-                next[symbol] = prices.slice(-90)
-                const lastBarAt = payload.histories?.[symbol]?.lastBarAt
-                if (lastBarAt) lastHistoryBucket.current[symbol] = fiveMinuteBucket(lastBarAt)
-              }
+    void (async () => {
+      try {
+        const response = await fetch(`/api/market/intraday?symbols=${encodeURIComponent(symbolKey)}`, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        })
+        const payload = await response.json() as IntradayHistoryResponse
+        if (disposed || !payload.histories) return
+        const receivedAt = new Date().toISOString()
+        setPriceHistory((current) => {
+          const next = { ...current }
+          for (const symbol of symbolList) {
+            const prices = payload.histories?.[symbol]?.prices?.filter((value) => Number.isFinite(value) && value > 0) ?? []
+            if (prices.length) {
+              next[symbol] = prices.slice(-90)
+              const lastBarAt = payload.histories?.[symbol]?.lastBarAt
+              if (lastBarAt) lastHistoryBucket.current[symbol] = fiveMinuteBucket(lastBarAt)
             }
-            return next
-          })
-          setQuotes((current) => {
-            const next = { ...current }
-            for (const symbol of batch) {
-              const history = payload.histories?.[symbol]
-              if (!history?.price || !history.reference || current[symbol]) continue
-              openingReferences.current[symbol] = history.reference
-              next[symbol] = {
-                symbol,
-                price: history.price,
-                reference: history.reference,
-                change: history.change ?? undefined,
-                changePercent: history.changePercent ?? 0,
-                updatedAt: history.lastBarAt ? new Date(history.lastBarAt * 1000).toISOString() : receivedAt,
-              }
-            }
-            return next
-          })
-        } catch (error) {
-          if (!disposed && !(error instanceof DOMException && error.name === "AbortError")) {
-            console.warn(`DNSE 5m backfill unavailable for ${batch.join(",")}`, error)
           }
+          return next
+        })
+        setQuotes((current) => {
+          const next = { ...current }
+          for (const symbol of symbolList) {
+            const history = payload.histories?.[symbol]
+            if (!history?.price || !history.reference || current[symbol]) continue
+            openingReferences.current[symbol] = history.reference
+            next[symbol] = {
+              symbol,
+              price: history.price,
+              reference: history.reference,
+              change: history.change ?? undefined,
+              changePercent: history.changePercent ?? 0,
+              updatedAt: history.lastBarAt ? new Date(history.lastBarAt * 1000).toISOString() : receivedAt,
+            }
+          }
+          return next
+        })
+      } catch (error) {
+        if (!disposed && !(error instanceof DOMException && error.name === "AbortError")) {
+          console.warn("Market board 5m bootstrap unavailable", error)
         }
       }
-    }
-    void Promise.all(Array.from({ length: Math.min(HISTORY_BATCH_CONCURRENCY, batches.length) }, loadBatches))
+    })()
 
     return () => {
       disposed = true
@@ -462,7 +452,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
       <div className="ml-auto flex items-center gap-3 text-[11px]">{streamState === "LIVE" ? <span className="flex items-center gap-1.5 text-up"><Wifi className="h-3.5 w-3.5" />DNSE WebSocket · LIVE · {liveCount}/50</span> : <span className="flex items-center gap-1.5 text-ref"><WifiOff className="h-3.5 w-3.5" />DNSE · {streamState === "CONNECTING" ? "đang kết nối" : "đang tự khôi phục"}</span>}<button onClick={reconnect} className="rounded-md border border-border p-1.5" aria-label="Kết nối lại DNSE" title="Kết nối lại DNSE"><RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin" : ""}`} /></button></div>
     </div>
     {streamState !== "LIVE" ? <div className="flex items-start gap-2 border-b border-ref/30 bg-ref/5 px-4 py-2.5 text-xs"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-ref" /><span>Bảng điện tự giữ kết nối DNSE và tự reconnect khi stale/mất mạng. {streamError ? `Lỗi gần nhất: ${streamError}` : "Đang chờ stream DNSE."}</span></div> : null}
-    <div className="flex items-center gap-4 border-b border-border px-4 py-2 text-[11px] text-muted-2"><span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" />Top 50 · mini chart DNSE 5m + giá live</span><span>Tăng <b className="text-up">{advances}</b></span><span>Giảm <b className="text-down">{declines}</b></span><span>Có giá <b className="text-foreground">{liveCount}</b>/50</span><span>History <b className="text-foreground">{historyCount}</b>/50</span>{lastMessageAt ? <span className="ml-auto">DNSE {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span> : null}</div>
+    <div className="flex items-center gap-4 border-b border-border px-4 py-2 text-[11px] text-muted-2"><span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" />Top 50 · Yahoo 5m + DNSE live</span><span>Tăng <b className="text-up">{advances}</b></span><span>Giảm <b className="text-down">{declines}</b></span><span>Có giá <b className="text-foreground">{liveCount}</b>/50</span><span>History <b className="text-foreground">{historyCount}</b>/50</span>{lastMessageAt ? <span className="ml-auto">DNSE {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span> : null}</div>
     <div className="min-h-0 flex-1 overflow-auto p-2">{mode === "sector" ? <div className="grid min-w-[1260px] grid-cols-7 gap-2" style={{ gridTemplateColumns: "repeat(7, minmax(176px, 1fr))" }}>{grouped.map(({ key, label, stocks }) => {
       const sectorQuotes = stocks.map((stock) => quotes[stock.ticker] as LiveStockQuote | undefined).filter(Boolean) as LiveStockQuote[]
       const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined

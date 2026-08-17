@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
+import { getCache } from "@vercel/functions"
 
-import { fetchDnseOhlcHistory } from "@/lib/dnse-market-runtime"
 import { intradaySnapshot } from "@/lib/intraday-5m"
 import { fetchYahooFiveMinuteOhlcv } from "@/lib/yahoo-history"
 
@@ -12,6 +12,28 @@ const NO_STORE_HEADERS = {
   "Cache-Control": "private, no-store, max-age=0",
   "Pragma": "no-cache",
   "X-Content-Type-Options": "nosniff",
+}
+const SNAPSHOT_CACHE_TTL_SECONDS = 15
+const FETCH_CONCURRENCY = 12
+
+type IntradayRow = {
+  symbol: string
+  provider: "Yahoo" | null
+  prices: number[]
+  reference: number | null
+  price: number | null
+  change: number | null
+  changePercent: number | null
+  lastBarAt: number | null
+  fallbackReason: null
+  error: string | null
+  cacheHit: boolean
+}
+
+function isIntradayRow(value: unknown): value is Omit<IntradayRow, "cacheHit"> {
+  if (!value || typeof value !== "object") return false
+  const row = value as Partial<IntradayRow>
+  return typeof row.symbol === "string" && Array.isArray(row.prices) && row.prices.length > 0 && typeof row.price === "number"
 }
 
 function parseSymbols(request: Request) {
@@ -33,36 +55,38 @@ async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker:
 }
 
 export async function GET(request: Request) {
+  const startedAt = performance.now()
   const symbols = parseSymbols(request)
   if (!symbols.length) {
     return NextResponse.json({ ok: false, message: "Missing valid symbols." }, { status: 400, headers: NO_STORE_HEADERS })
   }
 
-  const rows = await mapWithConcurrency(symbols, 6, async (symbol) => {
+  const cache = getCache({ namespace: "market-board-v1" })
+  const rows = await mapWithConcurrency(symbols, FETCH_CONCURRENCY, async (symbol): Promise<IntradayRow> => {
     try {
       const now = new Date()
-      let provider: "DNSE" | "Yahoo" = "DNSE"
-      let dnseError: string | null = null
-      let points: Array<{ time: number; open: number; close: number }>
       try {
-        points = await fetchDnseOhlcHistory(symbol, 5, now, 90)
-      } catch (error) {
-        dnseError = error instanceof Error ? error.message : String(error)
-        provider = "Yahoo"
-        points = await fetchYahooFiveMinuteOhlcv(symbol, now)
-      }
+        const cached = await cache.get(symbol)
+        if (isIntradayRow(cached)) return { ...cached, cacheHit: true }
+      } catch { /* Runtime Cache is an optimization; provider fetch remains canonical. */ }
+
+      const points = await fetchYahooFiveMinuteOhlcv(symbol, now)
       const snapshot = intradaySnapshot(points)
-      return {
+      const row = {
         symbol,
-        provider,
+        provider: "Yahoo" as const,
         prices: points.map((point) => point.close),
         ...snapshot,
         lastBarAt: points.at(-1)?.time ?? null,
-        fallbackReason: dnseError,
+        fallbackReason: null,
         error: null,
       }
+      try {
+        await cache.set(symbol, row, { ttl: SNAPSHOT_CACHE_TTL_SECONDS, tags: ["market-board", `market-board:${symbol}`], name: `5m ${symbol}` })
+      } catch { /* Do not fail the board when Runtime Cache is unavailable. */ }
+      return { ...row, cacheHit: false }
     } catch (error) {
-      return { symbol, provider: null, prices: [] as number[], reference: null, price: null, change: null, changePercent: null, lastBarAt: null, fallbackReason: null, error: error instanceof Error ? error.message : String(error) }
+      return { symbol, provider: null, prices: [], reference: null, price: null, change: null, changePercent: null, lastBarAt: null, fallbackReason: null, error: error instanceof Error ? error.message : String(error), cacheHit: false }
     }
   })
 
@@ -70,9 +94,11 @@ export async function GET(request: Request) {
   const successCount = rows.filter((row) => row.prices.length > 0).length
   return NextResponse.json({
     ok: successCount > 0,
-    provider: "DNSE with Yahoo fallback",
+    provider: "Yahoo bootstrap + DNSE live",
     resolution: "5m",
     generatedAt: new Date().toISOString(),
+    durationMs: Math.round(performance.now() - startedAt),
+    cacheHits: rows.filter((row) => row.cacheHit).length,
     successCount,
     requestedCount: symbols.length,
     histories,
