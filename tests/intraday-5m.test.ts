@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { fiveMinuteBucket, intradaySnapshot, mergeFiveMinuteClose, normalizeEpochSeconds, normalizeFiveMinuteBars, normalizeMarketPrice, selectLatestSession } from "../lib/intraday-5m.ts"
+import { fiveMinuteBucket, intradaySnapshot, mergeFiveMinuteClose, normalizeEpochSeconds, normalizeFiveMinuteBars, normalizeMarketPrice, previousSessionClose, selectLatestSession } from "../lib/intraday-5m.ts"
 
 test("five-minute buckets keep minute bars in the same candle", () => {
   const start = Date.UTC(2026, 7, 17, 2, 0, 0) / 1000
@@ -15,14 +15,27 @@ test("epoch timestamps accept seconds, milliseconds, and a fallback", () => {
   assert.equal(normalizeEpochSeconds("invalid", 123), 123)
 })
 
-test("intraday snapshot uses session open and latest five-minute close", () => {
-  assert.deepEqual(intradaySnapshot([{ open: 10, close: 10.2 }, { open: 10.2, close: 11 }]), {
-    reference: 10,
-    price: 11,
-    change: 1,
-    changePercent: 10,
-  })
-  assert.deepEqual(intradaySnapshot([]), { reference: null, price: null, change: null, changePercent: null })
+test("intraday snapshot uses prior-session reference, not session open", () => {
+  const snapshot = intradaySnapshot([{ open: 24_900, close: 25_200 }, { open: 25_200, close: 24_750 }], 25_100)
+  assert.equal(snapshot.reference, 25_100)
+  assert.equal(snapshot.price, 24_750)
+  assert.equal(snapshot.change, -350)
+  assert.ok(snapshot.changePercent !== null)
+  assert.ok(Math.abs(snapshot.changePercent - (-350 / 25_100) * 100) < 1e-9)
+  assert.deepEqual(intradaySnapshot([], null), { reference: null, price: null, change: null, changePercent: null })
+})
+
+test("previous session close is the daily reference for the selected session", () => {
+  const friday = Date.UTC(2026, 7, 14, 7, 0, 0) / 1000
+  const monday = Date.UTC(2026, 7, 17, 2, 15, 0) / 1000
+  const bars = [
+    { time: friday, close: 25_100 },
+    { time: monday, close: 25_200 },
+    { time: monday + 300, close: 24_750 },
+  ]
+  const dateOf = (bar: { time: number }) => new Date(bar.time * 1000).toISOString().slice(0, 10)
+  assert.equal(previousSessionClose(bars, "2026-08-17", dateOf, (bar) => bar.close), 25_100)
+  assert.equal(previousSessionClose(bars, "2026-08-14", dateOf, (bar) => bar.close), null)
 })
 
 test("five-minute normalization collapses partial updates and fills quiet intervals", () => {
