@@ -47,6 +47,14 @@ test("stock row keeps clipping guards and hides rank", () => {
   assert.doesNotMatch(stockSource, /stock\.rank/)
 })
 
+test("daily performance stays anchored to reference price, never session open", () => {
+  assert.match(boardSource, /STOCK_REFERENCE_KEYS/)
+  assert.match(boardSource, /INDEX_REFERENCE_KEYS/)
+  assert.match(boardSource, /dailyReferences\.current\[symbol\] = history\.reference/)
+  assert.doesNotMatch(boardSource, /OPEN_PRICE_KEYS|INDEX_OPEN_KEYS|openingReferences|indexOpeningReferences/)
+  assert.match(stockSource, /giá tham chiếu \(đóng cửa phiên trước\)/)
+})
+
 test("strong gainer highlight remains reduced-motion safe", () => {
   assert.match(stockSource, /changePercent \?\? 0\) >= 3/)
   assert.match(stockSource, /strong-gainer border-up\/60/)
