@@ -24,8 +24,8 @@ type IndexHistoryResponse = { ok: boolean; quotes?: Record<string, IndexQuote> }
 const INDEXES = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"]
 const INDEX_LABELS: Record<string, string> = { VNINDEX: "VN-INDEX", VN30: "VN30", HNXINDEX: "HNX-INDEX", UPCOMINDEX: "UPCOM-INDEX" }
 const INDEX_CHANNELS = ["VNINDEX", "VN30", "HNX", "UPCOM"]
-const OPEN_PRICE_KEYS = ["openPrice", "openingPrice", "open", "openValue", "firstPrice"]
-const INDEX_OPEN_KEYS = ["openIndex", "openingIndex", "openIndexValue", "openValue", "open"]
+const STOCK_REFERENCE_KEYS = ["referencePrice", "refPrice", "reference", "basicPrice", "previousClose", "prevClose", "priorClose"]
+const INDEX_REFERENCE_KEYS = ["referenceIndex", "referenceValue", "reference", "previousClose", "prevClose", "priorClose"]
 const STREAM_STALE_MS = 60_000
 
 function numeric(value: unknown) {
@@ -93,8 +93,8 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   const [selectedSector, setSelectedSector] = useState("Tất cả")
   const [mode, setMode] = useState<BoardMode>("sector")
   const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>({})
-  const openingReferences = useRef<Record<string, number>>({})
-  const indexOpeningReferences = useRef<Record<string, number>>({})
+  const dailyReferences = useRef<Record<string, number>>({})
+  const indexReferences = useRef<Record<string, number>>({})
   const sessionDay = useRef(vietnamSessionDay())
   const lastFrameAt = useRef(0)
 
@@ -135,8 +135,18 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
           const next = { ...current }
           for (const symbol of symbolList) {
             const history = payload.histories?.[symbol]
-            if (!history?.price || !history.reference || current[symbol]) continue
-            openingReferences.current[symbol] = history.reference
+            if (!history?.price || !history.reference) continue
+            dailyReferences.current[symbol] = history.reference
+            const existing = current[symbol] as LiveStockQuote | undefined
+            if (existing?.price) {
+              next[symbol] = {
+                ...existing,
+                reference: history.reference,
+                change: existing.price - history.reference,
+                changePercent: ((existing.price - history.reference) / history.reference) * 100,
+              }
+              continue
+            }
             next[symbol] = {
               symbol,
               price: history.price,
@@ -171,7 +181,20 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
         setQuotes((current) => {
           const next = { ...current }
           for (const [symbol, quote] of Object.entries(payload.quotes ?? {})) {
-            if (!current[symbol]) next[symbol] = quote
+            const derivedReference = typeof quote.change === "number"
+              ? quote.value - quote.change
+              : quote.changePercent !== -100 ? quote.value / (1 + quote.changePercent / 100) : 0
+            if (derivedReference > 0) indexReferences.current[symbol] = derivedReference
+            const existing = current[symbol] as IndexQuote | undefined
+            if (existing?.value && derivedReference > 0) {
+              next[symbol] = {
+                ...existing,
+                change: existing.value - derivedReference,
+                changePercent: ((existing.value - derivedReference) / derivedReference) * 100,
+              }
+            } else if (!existing) {
+              next[symbol] = quote
+            }
           }
           return next
         })
@@ -304,8 +327,8 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
           const currentSessionDay = vietnamSessionDay(now)
           if (sessionDay.current !== currentSessionDay) {
             sessionDay.current = currentSessionDay
-            openingReferences.current = {}
-            indexOpeningReferences.current = {}
+            dailyReferences.current = {}
+            indexReferences.current = {}
             setQuotes({})
             setPriceHistory({})
             setHistoryReloadKey((key) => key + 1)
@@ -329,28 +352,31 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
             const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
             if (price <= 0) return
             const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "volume"])
-            const explicitOpen = firstPositive(data, OPEN_PRICE_KEYS)
-            if (explicitOpen > 0) openingReferences.current[ticker] = explicitOpen
-            else if (!openingReferences.current[ticker]) openingReferences.current[ticker] = price
-            const reference = openingReferences.current[ticker]
+            const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
             const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
             const floor = firstPositive(data, ["floorPrice", "floor"])
-            const change = reference > 0 ? price - reference : undefined
-            const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : 0
-            setQuotes((current) => ({
-              ...current,
-              [ticker]: {
-                symbol: ticker,
-                price,
-                reference: reference || undefined,
-                ceiling: ceiling || undefined,
-                floor: floor || undefined,
-                change,
-                changePercent,
-                volume: totalVolume || (current[ticker] as LiveStockQuote | undefined)?.volume,
-                updatedAt: receivedAt,
-              },
-            }))
+            setQuotes((current) => {
+              const previous = current[ticker] as LiveStockQuote | undefined
+              const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
+              const reference = normalizeMarketPrice(rawReference, price) ?? rawReference
+              if (reference > 0) dailyReferences.current[ticker] = reference
+              const change = reference > 0 ? price - reference : previous?.change
+              const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : previous?.changePercent ?? 0
+              return {
+                ...current,
+                [ticker]: {
+                  symbol: ticker,
+                  price,
+                  reference: reference || undefined,
+                  ceiling: ceiling || previous?.ceiling,
+                  floor: floor || previous?.floor,
+                  change,
+                  changePercent,
+                  volume: totalVolume || previous?.volume,
+                  updatedAt: receivedAt,
+                },
+              }
+            })
             setLastMessageAt(receivedAt)
             setStreamError("")
             return
@@ -359,8 +385,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
           if (type === "q" && data.symbol) {
             const ticker = String(data.symbol).toUpperCase()
             if (!trackedSymbols.has(ticker)) return
-            const explicitOpen = firstPositive(data, OPEN_PRICE_KEYS)
-            if (explicitOpen > 0) openingReferences.current[ticker] = explicitOpen
+            const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
             const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
             const floor = firstPositive(data, ["floorPrice", "floor"])
             const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
@@ -368,14 +393,15 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
               const previous = current[ticker] as LiveStockQuote | undefined
               const livePrice = price || previous?.price
               if (!livePrice) return current
-              if (!openingReferences.current[ticker]) openingReferences.current[ticker] = previous?.reference || livePrice
-              const reference = openingReferences.current[ticker]
+              const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
+              const reference = normalizeMarketPrice(rawReference, livePrice) ?? rawReference
+              if (reference > 0) dailyReferences.current[ticker] = reference
               return {
                 ...current,
                 [ticker]: {
                   symbol: ticker,
                   price: livePrice,
-                  reference,
+                  reference: reference || undefined,
                   ceiling: ceiling || previous?.ceiling,
                   floor: floor || previous?.floor,
                   change: reference > 0 ? livePrice - reference : previous?.change,
@@ -394,13 +420,17 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
             const symbol = normalizeIndexName(data.indexName ?? data.symbol)
             const value = firstPositive(data, ["valueIndexes", "value", "indexValue"])
             if (!symbol || value <= 0) return
-            const explicitOpen = firstPositive(data, INDEX_OPEN_KEYS)
-            if (explicitOpen > 0) indexOpeningReferences.current[symbol] = explicitOpen
-            else if (!indexOpeningReferences.current[symbol]) indexOpeningReferences.current[symbol] = value
-            const reference = indexOpeningReferences.current[symbol]
-            const change = reference > 0 ? value - reference : undefined
-            const changePercent = reference > 0 ? ((value - reference) / reference) * 100 : 0
-            setQuotes((current) => ({ ...current, [symbol]: { symbol, value, change, changePercent, updatedAt: receivedAt } }))
+            const explicitReference = firstPositive(data, INDEX_REFERENCE_KEYS)
+            if (explicitReference > 0) indexReferences.current[symbol] = explicitReference
+            setQuotes((current) => {
+              const previous = current[symbol] as IndexQuote | undefined
+              const previousDerivedReference = previous && typeof previous.change === "number" ? previous.value - previous.change : 0
+              const reference = indexReferences.current[symbol] || previousDerivedReference
+              if (reference > 0) indexReferences.current[symbol] = reference
+              const change = reference > 0 ? value - reference : previous?.change
+              const changePercent = reference > 0 ? ((value - reference) / reference) * 100 : previous?.changePercent ?? 0
+              return { ...current, [symbol]: { symbol, value, change, changePercent, updatedAt: receivedAt } }
+            })
             setLastMessageAt(receivedAt)
             setStreamError("")
           }
@@ -450,6 +480,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols])
 
   const normalizedQuery = query.trim().toUpperCase()
+  const currentSessionDay = vietnamSessionDay()
   const displayQuotes = useMemo(() => {
     const next = { ...quotes }
     for (const stock of universe) {
@@ -457,7 +488,8 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
       const history = priceHistory[stock.ticker] ?? []
       const price = history.at(-1)?.close ?? stock.lastClose
       if (!price || price <= 0) continue
-      const reference = history.at(0)?.close ?? price
+      const priorNotionClose = stock.lastCloseDate && stock.lastCloseDate < currentSessionDay ? stock.lastClose : null
+      const reference = priorNotionClose ?? price
       next[stock.ticker] = {
         symbol: stock.ticker,
         price,
@@ -468,7 +500,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
       }
     }
     return next
-  }, [priceHistory, quotes, universe])
+  }, [currentSessionDay, priceHistory, quotes, universe])
   const filtered = useMemo(() => universe.filter((stock) => (!normalizedQuery || stock.ticker.includes(normalizedQuery)) && (selectedSector === "Tất cả" || stock.sector === selectedSector)), [universe, normalizedQuery, selectedSector])
   const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, displayQuotes)), [displayQuotes, filtered])
   const grouped = useMemo(() => BOARD_SECTOR_GROUPS.map((group) => ({

@@ -1,5 +1,5 @@
 import type { OhlcvBar } from "@/lib/technical-indicators"
-import { normalizeFiveMinuteBars, selectLatestSession } from "@/lib/intraday-5m"
+import { normalizeFiveMinuteBars, previousSessionClose, selectLatestSession } from "@/lib/intraday-5m"
 
 const DEFAULT_LOOKBACK_DAYS = 620
 const DEFAULT_HOURLY_LOOKBACK_DAYS = 180
@@ -37,7 +37,12 @@ function vietnamSessionEndSeconds(dateKey: string) {
   return Date.UTC(year, month - 1, day, 8, 0, 0) / 1000
 }
 
-async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m" | "5m", lookbackDays: number, now = new Date()) {
+type YahooOhlcvResult = {
+  bars: OhlcvBar[]
+  previousClose: number | null
+}
+
+async function fetchYahooOhlcvResult(symbol: string, interval: "1d" | "60m" | "5m", lookbackDays: number, now = new Date()): Promise<YahooOhlcvResult> {
   const period2 = Math.floor(now.getTime() / 1000) + (interval === "1d" ? 86400 : interval === "60m" ? 3600 : 300)
   const period1 = period2 - lookbackDays * 86400
   const ticker = `${symbol.toUpperCase()}.VN`
@@ -86,12 +91,29 @@ async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m" | "5m", lo
       volume: volume as number,
     })
   }
-  return bars.sort((a, b) => a.time - b.time)
+
+  const metaPreviousClose = finite(result?.meta?.previousClose) ?? finite(result?.meta?.chartPreviousClose)
+  return {
+    bars: bars.sort((a, b) => a.time - b.time),
+    previousClose: metaPreviousClose && metaPreviousClose > 0 ? metaPreviousClose : null,
+  }
 }
 
-export async function fetchYahooFiveMinuteOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
+async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m" | "5m", lookbackDays: number, now = new Date()) {
+  return (await fetchYahooOhlcvResult(symbol, interval, lookbackDays, now)).bars
+}
+
+export type YahooFiveMinuteSnapshot = {
+  bars: OhlcvBar[]
+  reference: number
+  sessionDate: string
+}
+
+export async function fetchYahooFiveMinuteSnapshot(symbol: string, now = new Date()): Promise<YahooFiveMinuteSnapshot> {
   const today = vietnamDateKey(now.getTime())
-  const session = selectLatestSession(await fetchYahooOhlcv(symbol, "5m", 7, now), today, (bar) => vietnamDateKey(bar.time * 1000))
+  const raw = await fetchYahooOhlcvResult(symbol, "5m", 7, now)
+  const dateOf = (bar: OhlcvBar) => vietnamDateKey(bar.time * 1000)
+  const session = selectLatestSession(raw.bars, today, dateOf)
   if (!session?.items.length) throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned no usable recent 5m session`)
   const sessionEnd = vietnamSessionEndSeconds(session.date)
   const endTime = session.date === today && !marketClosed(now)
@@ -99,7 +121,15 @@ export async function fetchYahooFiveMinuteOhlcv(symbol: string, now = new Date()
     : sessionEnd
   const bars = normalizeFiveMinuteBars(session.items, endTime)
   if (!bars.length) throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned no usable 5m bars for ${session.date}`)
-  return bars
+
+  const priorClose = previousSessionClose(raw.bars, session.date, dateOf, (bar) => bar.close)
+  const reference = priorClose ?? raw.previousClose
+  if (!reference || reference <= 0) throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned no prior-session reference for ${session.date}`)
+  return { bars, reference, sessionDate: session.date }
+}
+
+export async function fetchYahooFiveMinuteOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
+  return (await fetchYahooFiveMinuteSnapshot(symbol, now)).bars
 }
 
 export async function fetchYahooDailyOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {

@@ -27,6 +27,15 @@ export function selectLatestSession<T>(items: T[], preferredDate: string, dateOf
   return { date: latestDate, items: sessions.get(latestDate) ?? [] }
 }
 
+export function previousSessionClose<T>(items: T[], selectedDate: string, dateOf: (item: T) => string, closeOf: (item: T) => number) {
+  const previousDate = [...new Set(items.map(dateOf))].filter((date) => date < selectedDate).sort().at(-1)
+  if (!previousDate) return null
+  const close = items.filter((item) => dateOf(item) === previousDate).at(-1)
+  if (!close) return null
+  const value = closeOf(close)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
 export function fiveMinuteBucket(timestampSeconds: number) {
   return Math.floor(timestampSeconds / FIVE_MINUTE_SECONDS)
 }
@@ -68,8 +77,8 @@ export function mergeFiveMinuteClose(
     .map(([pointTime, pointClose]) => ({ time: pointTime, close: pointClose }))
 }
 
-export function intradaySnapshot(points: Array<{ open: number; close: number }>) {
-  const reference = points.at(0)?.open ?? null
+export function intradaySnapshot(points: Array<{ open: number; close: number }>, dailyReference?: number | null) {
+  const reference = typeof dailyReference === "number" && Number.isFinite(dailyReference) && dailyReference > 0 ? dailyReference : null
   const price = points.at(-1)?.close ?? null
   return {
     reference,
