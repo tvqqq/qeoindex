@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { fetchDnseMinuteHistory } from "@/lib/dnse-market-runtime"
+import { fetchDnseOhlcHistory } from "@/lib/dnse-market-runtime"
+import { intradaySnapshot } from "@/lib/intraday-5m"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -38,10 +39,17 @@ export async function GET(request: Request) {
 
   const rows = await mapWithConcurrency(symbols, 6, async (symbol) => {
     try {
-      const points = await fetchDnseMinuteHistory(symbol, new Date(), 90)
-      return { symbol, prices: points.map((point) => point.close), lastBarAt: points.at(-1)?.time ?? null, error: null }
+      const points = await fetchDnseOhlcHistory(symbol, 5, new Date(), 90)
+      const snapshot = intradaySnapshot(points)
+      return {
+        symbol,
+        prices: points.map((point) => point.close),
+        ...snapshot,
+        lastBarAt: points.at(-1)?.time ?? null,
+        error: null,
+      }
     } catch (error) {
-      return { symbol, prices: [] as number[], lastBarAt: null, error: error instanceof Error ? error.message : String(error) }
+      return { symbol, prices: [] as number[], reference: null, price: null, change: null, changePercent: null, lastBarAt: null, error: error instanceof Error ? error.message : String(error) }
     }
   })
 
@@ -50,7 +58,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     ok: successCount > 0,
     provider: "DNSE",
-    resolution: "1m",
+    resolution: "5m",
     generatedAt: new Date().toISOString(),
     successCount,
     requestedCount: symbols.length,

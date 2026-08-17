@@ -10,6 +10,7 @@
     "scan:secrets": "bash scripts/scan-secrets.sh",
     "test:signal-core": "node --test tests/signal-engine.test.ts",
     "test:scanner-core": "node --test tests/scanner-policy.test.ts",
+    "test:intraday": "node --test tests/intraday-5m.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -7,6 +7,7 @@ const VIETNAM_TZ = "Asia/Ho_Chi_Minh"
 
 export interface DnseIntradayPoint {
   time: number
+  open: number
   close: number
 }
 
@@ -138,17 +139,19 @@ function normalizeIntraday(raw: unknown): DnseIntradayPoint[] {
   if (Array.isArray(source)) {
     points = source.map((row: any) => ({
       time: Number(row?.time ?? row?.t ?? row?.timestamp ?? row?.ts),
+      open: Number(row?.open ?? row?.o ?? row?.close ?? row?.c),
       close: Number(row?.close ?? row?.c),
     }))
   } else {
     const times = numberArray(source?.t ?? source?.time ?? source?.timestamps)
+    const opens = numberArray(source?.o ?? source?.open)
     const closes = numberArray(source?.c ?? source?.close)
     const length = Math.min(times.length, closes.length)
-    points = Array.from({ length }, (_, index) => ({ time: times[index], close: closes[index] }))
+    points = Array.from({ length }, (_, index) => ({ time: times[index], open: opens[index] || closes[index], close: closes[index] }))
   }
 
   return points
-    .filter((point) => Number.isFinite(point.time) && point.time > 0 && Number.isFinite(point.close) && point.close > 0)
+    .filter((point) => Number.isFinite(point.time) && point.time > 0 && Number.isFinite(point.open) && point.open > 0 && Number.isFinite(point.close) && point.close > 0)
     .sort((a, b) => a.time - b.time)
 }
 
@@ -193,14 +196,14 @@ function normalizeLatestQuote(raw: unknown): DnseSessionQuote | null {
   }
 }
 
-export async function fetchDnseMinuteHistory(symbol: string, now = new Date(), maxPoints = 90) {
+export async function fetchDnseOhlcHistory(symbol: string, resolution: 1 | 5, now = new Date(), maxPoints = 90) {
   const ticker = symbol.trim().toUpperCase()
   if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new Error("Invalid DNSE symbol")
   const to = Math.floor(now.getTime() / 1000)
   const from = vietnamSessionStart(now)
   const raw = await signedGet("/price/ohlc", {
     symbol: ticker,
-    resolution: "1",
+    resolution: String(resolution),
     from,
     to,
     type: "STOCK",
@@ -209,6 +212,10 @@ export async function fetchDnseMinuteHistory(symbol: string, now = new Date(), m
   return normalizeIntraday(raw)
     .filter((point) => vietnamDateKey(point.time * 1000) === today)
     .slice(-Math.max(20, Math.min(maxPoints, 360)))
+}
+
+export async function fetchDnseMinuteHistory(symbol: string, now = new Date(), maxPoints = 90) {
+  return fetchDnseOhlcHistory(symbol, 1, now, maxPoints)
 }
 
 async function fetchDnseSessionTrades(symbol: string, now: Date, maxRows = 6_000) {

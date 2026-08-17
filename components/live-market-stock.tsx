@@ -131,7 +131,7 @@ export function LiveMoverCard({ stock, quote, history, onOpen }: { stock: LiveBo
       <div className="flex flex-col items-end gap-2 text-right">
         {quote ? <MarketChangePill value={quote.changePercent} tone={tone} title="% thay đổi so với giá mở cửa phiên" /> : <span className="text-muted-2">—</span>}
         <div className={`font-mono text-sm font-bold ${text}`}>{formatBoardPrice(quote?.price)}</div>
-        <div className="text-[10px] text-muted">1m DNSE + live</div>
+        <div className="text-[10px] text-muted">5m DNSE + live</div>
       </div>
     </button>
   )
