@@ -3,7 +3,7 @@ import { getCache } from "@vercel/functions"
 import { NextResponse } from "next/server"
 
 import { FIVE_MINUTE_SECONDS, intradaySnapshot, type IntradayPoint } from "@/lib/intraday-5m"
-import { fetchYahooFiveMinuteOhlcv } from "@/lib/yahoo-history"
+import { fetchYahooFiveMinuteSnapshot } from "@/lib/yahoo-history"
 import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
 
 export const runtime = "nodejs"
@@ -81,7 +81,7 @@ function vietnamDateKey(now: Date) {
 
 function snapshotCacheKey(symbols: string[], now: Date) {
   const timestamp = Math.floor(now.getTime() / 1000)
-  return `top100:v6:${vietnamDateKey(now)}:${Math.floor(timestamp / FIVE_MINUTE_SECONDS)}:${symbols.join("-")}`
+  return `top100:v7:${vietnamDateKey(now)}:${Math.floor(timestamp / FIVE_MINUTE_SECONDS)}:${symbols.join("-")}`
 }
 
 function secondsToNextBucket(now: Date) {
@@ -105,8 +105,9 @@ async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker:
 async function fetchSnapshot(symbols: string[], now: Date): Promise<IntradaySnapshot> {
   const rows = await mapWithConcurrency(symbols, FETCH_CONCURRENCY, async (symbol): Promise<IntradayRow> => {
     try {
-      const bars = await fetchYahooFiveMinuteOhlcv(symbol, now)
-      const snapshot = intradaySnapshot(bars)
+      const yahoo = await fetchYahooFiveMinuteSnapshot(symbol, now)
+      const bars = yahoo.bars
+      const snapshot = intradaySnapshot(bars, yahoo.reference)
       return {
         symbol,
         provider: "Yahoo",
@@ -144,7 +145,7 @@ export async function GET(request: Request) {
   const now = new Date()
   const key = snapshotCacheKey(symbols, now)
   const ttl = secondsToNextBucket(now)
-  const cache = getCache({ namespace: "market-board-v6" })
+  const cache = getCache({ namespace: "market-board-v7" })
   let snapshot: IntradaySnapshot | null = null
   let cacheLayer: "runtime" | "redis" | "provider" = "provider"
 

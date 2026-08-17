@@ -100,7 +100,7 @@ export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoa
 
       <div className="flex min-w-0 flex-col items-end gap-1.5">
         <div className={`max-w-full truncate font-mono text-[11px] font-semibold leading-none ${text}`}>{formatBoardPrice(quote?.price)}</div>
-        {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact title="% thay đổi so với giá mở cửa phiên" /> : <span className="text-[10px] text-muted">Chờ giá</span>}
+        {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact title="% thay đổi so với giá tham chiếu (đóng cửa phiên trước)" /> : <span className="text-[10px] text-muted">Chờ giá</span>}
       </div>
 
       <Link
@@ -133,7 +133,7 @@ export function LiveMoverCard({ stock, quote, history, onOpen }: { stock: LiveBo
         <Sparkline data={chart} refValue={chartReference} color={marketToneHex(tone)} width={160} height={52} strokeWidth={2.2} showDot />
       </div>
       <div className="flex flex-col items-end gap-2 text-right">
-        {quote ? <MarketChangePill value={quote.changePercent} tone={tone} title="% thay đổi so với giá mở cửa phiên" /> : <span className="text-muted-2">—</span>}
+        {quote ? <MarketChangePill value={quote.changePercent} tone={tone} title="% thay đổi so với giá tham chiếu (đóng cửa phiên trước)" /> : <span className="text-muted-2">—</span>}
         <div className={`font-mono text-xs font-semibold ${text}`}>{formatBoardPrice(quote?.price)}</div>
         <div className="text-[10px] text-muted">Yahoo 5m + DNSE live</div>
       </div>
