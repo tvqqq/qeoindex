@@ -61,7 +61,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, message: "Missing valid symbols." }, { status: 400, headers: NO_STORE_HEADERS })
   }
 
-  const cache = getCache({ namespace: "market-board-v1" })
+  const cache = getCache({ namespace: "market-board-v2" })
   const rows = await mapWithConcurrency(symbols, FETCH_CONCURRENCY, async (symbol): Promise<IntradayRow> => {
     try {
       const now = new Date()

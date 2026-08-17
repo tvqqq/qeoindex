@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { fiveMinuteBucket, intradaySnapshot, normalizeEpochSeconds } from "../lib/intraday-5m.ts"
+import { fiveMinuteBucket, intradaySnapshot, normalizeEpochSeconds, normalizeFiveMinuteBars } from "../lib/intraday-5m.ts"
 
 test("five-minute buckets keep minute bars in the same candle", () => {
   const start = Date.UTC(2026, 7, 17, 2, 0, 0) / 1000
@@ -23,4 +23,18 @@ test("intraday snapshot uses session open and latest five-minute close", () => {
     changePercent: 10,
   })
   assert.deepEqual(intradaySnapshot([]), { reference: null, price: null, change: null, changePercent: null })
+})
+
+test("five-minute normalization collapses partial updates and fills quiet intervals", () => {
+  const start = Date.UTC(2026, 7, 17, 2, 15, 0) / 1000
+  const bars = normalizeFiveMinuteBars([
+    { time: start, open: 10, high: 10, low: 10, close: 10, volume: 100 },
+    { time: start + 24, open: 10, high: 10.2, low: 10, close: 10.2, volume: 120 },
+    { time: start + 600, open: 10.2, high: 10.4, low: 10.2, close: 10.4, volume: 80 },
+  ])
+  assert.deepEqual(bars.map((bar) => ({ time: bar.time, open: bar.open, close: bar.close, volume: bar.volume })), [
+    { time: start, open: 10, close: 10.2, volume: 120 },
+    { time: start + 300, open: 10.2, close: 10.2, volume: 0 },
+    { time: start + 600, open: 10.2, close: 10.4, volume: 80 },
+  ])
 })

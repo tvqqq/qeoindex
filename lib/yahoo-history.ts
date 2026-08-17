@@ -1,4 +1,5 @@
 import type { OhlcvBar } from "@/lib/technical-indicators"
+import { normalizeFiveMinuteBars } from "@/lib/intraday-5m"
 
 const DEFAULT_LOOKBACK_DAYS = 620
 const DEFAULT_HOURLY_LOOKBACK_DAYS = 180
@@ -85,8 +86,9 @@ async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m" | "5m", lo
 
 export async function fetchYahooFiveMinuteOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
   const today = vietnamDateKey(now.getTime())
-  const bars = (await fetchYahooOhlcv(symbol, "5m", 2, now))
+  const bars = normalizeFiveMinuteBars((await fetchYahooOhlcv(symbol, "5m", 2, now))
     .filter((bar) => vietnamDateKey(bar.time * 1000) === today)
+  )
   if (!bars.length) throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned no usable 5m bars for ${today}`)
   return bars
 }
