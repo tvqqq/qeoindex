@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 
 import { FIVE_MINUTE_SECONDS, intradaySnapshot, type IntradayPoint } from "@/lib/intraday-5m"
 import { fetchYahooFiveMinuteOhlcv } from "@/lib/yahoo-history"
+import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -50,8 +51,11 @@ function isIntradayRow(value: unknown): value is IntradayRow {
   return typeof row.symbol === "string"
     && Array.isArray(row.points)
     && row.points.length > 0
-    && row.points.every((point) => typeof point?.time === "number" && typeof point?.close === "number")
+    && row.points.every((point) => typeof point?.time === "number" && point.time > 0 && typeof point?.close === "number" && point.close > 0)
+    && typeof row.reference === "number"
+    && row.reference > 0
     && typeof row.price === "number"
+    && row.price > 0
 }
 
 function isIntradaySnapshot(value: unknown, symbols: string[]): value is IntradaySnapshot {
@@ -63,7 +67,7 @@ function isIntradaySnapshot(value: unknown, symbols: string[]): value is Intrada
 
 function parseSymbols(request: Request) {
   const values = new URL(request.url).searchParams.get("symbols") ?? ""
-  return [...new Set(values.split(",").map((symbol) => symbol.trim().toUpperCase()).filter((symbol) => /^[A-Z0-9]{2,12}$/.test(symbol)))].slice(0, 50)
+  return [...new Set(values.split(",").map((symbol) => symbol.trim().toUpperCase()).filter((symbol) => /^[A-Z0-9]{2,12}$/.test(symbol)))].slice(0, UNIVERSE_SIZE)
 }
 
 function vietnamDateKey(now: Date) {
@@ -77,7 +81,7 @@ function vietnamDateKey(now: Date) {
 
 function snapshotCacheKey(symbols: string[], now: Date) {
   const timestamp = Math.floor(now.getTime() / 1000)
-  return `top50:v4:${vietnamDateKey(now)}:${Math.floor(timestamp / FIVE_MINUTE_SECONDS)}:${symbols.join("-")}`
+  return `top100:v6:${vietnamDateKey(now)}:${Math.floor(timestamp / FIVE_MINUTE_SECONDS)}:${symbols.join("-")}`
 }
 
 function secondsToNextBucket(now: Date) {
@@ -140,7 +144,7 @@ export async function GET(request: Request) {
   const now = new Date()
   const key = snapshotCacheKey(symbols, now)
   const ttl = secondsToNextBucket(now)
-  const cache = getCache({ namespace: "market-board-v4" })
+  const cache = getCache({ namespace: "market-board-v6" })
   let snapshot: IntradaySnapshot | null = null
   let cacheLayer: "runtime" | "redis" | "provider" = "provider"
 
@@ -160,7 +164,7 @@ export async function GET(request: Request) {
         snapshot = cached
         cacheLayer = "redis"
         try {
-          await cache.set(key, snapshot, { ttl, tags: ["market-board"], name: "Top 50 5m snapshot" })
+          await cache.set(key, snapshot, { ttl, tags: ["market-board"], name: "Top 100 5m snapshot" })
         } catch { /* Redis hit remains usable if the regional cache write fails. */ }
       }
     } catch { /* Redis is an optional shared L2; provider fetching remains canonical. */ }
@@ -170,7 +174,7 @@ export async function GET(request: Request) {
     snapshot = await fetchSnapshot(symbols, now)
     const writeTtl = secondsToNextBucket(new Date())
     await Promise.allSettled([
-      cache.set(key, snapshot, { ttl: writeTtl, tags: ["market-board"], name: "Top 50 5m snapshot" }),
+      cache.set(key, snapshot, { ttl: writeTtl, tags: ["market-board"], name: "Top 100 5m snapshot" }),
       redisClient ? redisClient.set(key, snapshot, { ex: writeTtl }) : Promise.resolve(),
     ])
   }

@@ -11,6 +11,8 @@
     "test:signal-core": "node --test tests/signal-engine.test.ts",
     "test:scanner-core": "node --test tests/scanner-policy.test.ts",
     "test:intraday": "node --test tests/intraday-5m.test.ts",
+    "test:indexes": "node --test tests/tradingview-index.test.ts",
+    "test:universe": "node --test tests/wyckoff-universe.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

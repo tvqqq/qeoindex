@@ -19,6 +19,7 @@ type IntradayHistoryResponse = {
   ok: boolean
   histories?: Record<string, { symbol: string; provider: "Yahoo" | null; points: IntradayPoint[]; reference: number | null; price: number | null; change: number | null; changePercent: number | null; lastBarAt: number | null; error: string | null }>
 }
+type IndexHistoryResponse = { ok: boolean; quotes?: Record<string, IndexQuote> }
 
 const INDEXES = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"]
 const INDEX_LABELS: Record<string, string> = { VNINDEX: "VN-INDEX", VN30: "VN30", HNXINDEX: "HNX-INDEX", UPCOMINDEX: "UPCOM-INDEX" }
@@ -159,6 +160,27 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
       controller.abort()
     }
   }, [symbolKey, historyReloadKey, symbolList])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void (async () => {
+      try {
+        const response = await fetch("/api/market/indexes", { cache: "no-store", signal: controller.signal })
+        const payload = await response.json() as IndexHistoryResponse
+        if (!payload.quotes) return
+        setQuotes((current) => {
+          const next = { ...current }
+          for (const [symbol, quote] of Object.entries(payload.quotes ?? {})) {
+            if (!current[symbol]) next[symbol] = quote
+          }
+          return next
+        })
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) console.warn("Index EOD bootstrap unavailable", error)
+      }
+    })()
+    return () => controller.abort()
+  }, [historyReloadKey])
 
   const pushFiveMinuteClose = useCallback((ticker: string, close: number, timestampSeconds: number) => {
     setPriceHistory((previous) => {
@@ -428,34 +450,54 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols])
 
   const normalizedQuery = query.trim().toUpperCase()
+  const displayQuotes = useMemo(() => {
+    const next = { ...quotes }
+    for (const stock of universe) {
+      if (next[stock.ticker]) continue
+      const history = priceHistory[stock.ticker] ?? []
+      const price = history.at(-1)?.close ?? stock.lastClose
+      if (!price || price <= 0) continue
+      const reference = history.at(0)?.close ?? price
+      next[stock.ticker] = {
+        symbol: stock.ticker,
+        price,
+        reference,
+        change: price - reference,
+        changePercent: reference > 0 ? ((price - reference) / reference) * 100 : 0,
+        updatedAt: stock.lastCloseDate ?? new Date().toISOString(),
+      }
+    }
+    return next
+  }, [priceHistory, quotes, universe])
   const filtered = useMemo(() => universe.filter((stock) => (!normalizedQuery || stock.ticker.includes(normalizedQuery)) && (selectedSector === "Tất cả" || stock.sector === selectedSector)), [universe, normalizedQuery, selectedSector])
-  const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, quotes)), [filtered, quotes])
+  const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, displayQuotes)), [displayQuotes, filtered])
   const grouped = useMemo(() => BOARD_SECTOR_GROUPS.map((group) => ({
     ...group,
-    stocks: filtered.filter((stock) => group.sectors.some((sector) => sector === stock.sector)).sort((a, b) => compareByPerformance(a, b, quotes)),
-  })), [filtered, quotes])
+    stocks: filtered.filter((stock) => group.sectors.some((sector) => sector === stock.sector)).sort((a, b) => compareByPerformance(a, b, displayQuotes)),
+  })), [displayQuotes, filtered])
   const liveCount = universe.filter((stock) => quotes[stock.ticker]).length
+  const pricedCount = universe.filter((stock) => displayQuotes[stock.ticker]).length
   const historyCount = universe.filter((stock) => (priceHistory[stock.ticker]?.length ?? 0) > 1).length
-  const advances = universe.filter((stock) => ((quotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) > 0).length
-  const declines = universe.filter((stock) => ((quotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) < 0).length
+  const advances = universe.filter((stock) => ((displayQuotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) > 0).length
+  const declines = universe.filter((stock) => ((displayQuotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) < 0).length
   const openBook = useCallback((ticker: string) => openOrderBook(`board:${ticker}`, ticker), [openOrderBook])
   const reconnect = useCallback(() => setReconnectKey((key) => key + 1), [])
 
   return <div className="flex h-full min-h-0 flex-col bg-background">
     <IndexStrip quotes={quotes} />
     <div className="flex flex-wrap items-center gap-2 border-b border-border bg-panel px-3 py-2.5">
-      <div className="relative min-w-[210px] flex-1 md:max-w-[320px]"><Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã trong Top 50..." className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-xs outline-none" /></div>
+      <div className="relative min-w-[210px] flex-1 md:max-w-[320px]"><Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã trong Top 100..." className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-xs outline-none" /></div>
       <select value={selectedSector} onChange={(event) => setSelectedSector(event.target.value)} className="h-8 rounded-md border border-border bg-background px-2 text-xs"><option>Tất cả</option>{SECTOR_ORDER.map((sector) => <option key={sector}>{sector}</option>)}</select>
-      <div className="flex items-center rounded-md border border-border bg-background p-0.5"><button onClick={() => setMode("sector")} className={`flex h-7 items-center gap-1.5 rounded px-2 text-[11px] ${mode === "sector" ? "bg-panel-2" : "text-muted-2"}`}><LayoutGrid className="h-3.5 w-3.5" />7 nhóm ngành</button><button onClick={() => setMode("movers")} className={`flex h-7 items-center gap-1.5 rounded px-2 text-[11px] ${mode === "movers" ? "bg-panel-2" : "text-muted-2"}`}><ChartNoAxesCombined className="h-3.5 w-3.5" />Top movers</button></div>
-      <div className="ml-auto flex items-center gap-3 text-[11px]">{streamState === "LIVE" ? <span className="flex items-center gap-1.5 text-up"><Wifi className="h-3.5 w-3.5" />DNSE WebSocket · LIVE · {liveCount}/50</span> : <span className="flex items-center gap-1.5 text-ref"><WifiOff className="h-3.5 w-3.5" />DNSE · {streamState === "CONNECTING" ? "đang kết nối" : "đang tự khôi phục"}</span>}<button onClick={reconnect} className="rounded-md border border-border p-1.5" aria-label="Kết nối lại DNSE" title="Kết nối lại DNSE"><RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin" : ""}`} /></button></div>
+      <div className="flex items-center rounded-md border border-border bg-background p-0.5"><button onClick={() => setMode("sector")} className={`flex h-7 items-center gap-1.5 rounded px-2 text-[11px] ${mode === "sector" ? "bg-panel-2" : "text-muted-2"}`}><LayoutGrid className="h-3.5 w-3.5" />{BOARD_SECTOR_GROUPS.length} nhóm ngành</button><button onClick={() => setMode("movers")} className={`flex h-7 items-center gap-1.5 rounded px-2 text-[11px] ${mode === "movers" ? "bg-panel-2" : "text-muted-2"}`}><ChartNoAxesCombined className="h-3.5 w-3.5" />Top movers</button></div>
+      <div className="ml-auto flex items-center gap-3 text-[11px]">{streamState === "LIVE" ? <span className="flex items-center gap-1.5 text-up"><Wifi className="h-3.5 w-3.5" />DNSE WebSocket · LIVE · {liveCount}/{universe.length}</span> : <span className="flex items-center gap-1.5 text-ref"><WifiOff className="h-3.5 w-3.5" />DNSE · {streamState === "CONNECTING" ? "đang kết nối" : "đang tự khôi phục"}</span>}<button onClick={reconnect} className="rounded-md border border-border p-1.5" aria-label="Kết nối lại DNSE" title="Kết nối lại DNSE"><RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin" : ""}`} /></button></div>
     </div>
     {streamState !== "LIVE" ? <div className="flex items-start gap-2 border-b border-ref/30 bg-ref/5 px-4 py-2.5 text-xs"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-ref" /><span>Bảng điện tự giữ kết nối DNSE và tự reconnect khi stale/mất mạng. {streamError ? `Lỗi gần nhất: ${streamError}` : "Đang chờ stream DNSE."}</span></div> : null}
-    <div className="flex items-center gap-4 border-b border-border px-4 py-2 text-[11px] text-muted-2"><span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" />Top 50 · Yahoo 5m + DNSE live</span><span>Tăng <b className="text-up">{advances}</b></span><span>Giảm <b className="text-down">{declines}</b></span><span>Có giá <b className="text-foreground">{liveCount}</b>/50</span><span>History <b className="text-foreground">{historyCount}</b>/50</span>{lastMessageAt ? <span className="ml-auto">DNSE {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span> : null}</div>
-    <div className="min-h-0 flex-1 overflow-auto p-2">{mode === "sector" ? <div className="grid min-w-[1260px] grid-cols-7 gap-2" style={{ gridTemplateColumns: "repeat(7, minmax(176px, 1fr))" }}>{grouped.map(({ key, label, stocks }) => {
-      const sectorQuotes = stocks.map((stock) => quotes[stock.ticker] as LiveStockQuote | undefined).filter(Boolean) as LiveStockQuote[]
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-4 py-2 text-[11px] text-muted-2"><span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" />Top 100 HOSE · Yahoo 5m + DNSE live</span><span>Tăng <b className="text-up">{advances}</b></span><span>Giảm <b className="text-down">{declines}</b></span><span>Có giá <b className="text-foreground">{pricedCount}</b>/{universe.length}</span><span>History <b className="text-foreground">{historyCount}</b>/{universe.length}</span>{lastMessageAt ? <span className="ml-auto">DNSE {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span> : null}</div>
+    <div className="min-h-0 flex-1 overflow-auto p-2">{mode === "sector" ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{grouped.map(({ key, label, stocks }) => {
+      const sectorQuotes = stocks.map((stock) => displayQuotes[stock.ticker] as LiveStockQuote | undefined).filter(Boolean) as LiveStockQuote[]
       const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
       const avgTone = marketToneFromChange(avg)
-      return <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-panel"><header className="flex min-h-[58px] items-center justify-between gap-2 border-b border-border px-2.5 py-2"><div className="min-w-0"><h2 className="text-[12px] font-bold leading-[1.15] text-foreground">{label}</h2><p className="mt-1 text-[10px] text-muted-2">{stocks.length} mã</p></div>{typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}</header><div className="flex-1 space-y-1.5 overflow-y-auto p-1.5">{stocks.length ? stocks.map((stock) => <LiveStockRow key={stock.ticker} stock={stock} quote={quotes[stock.ticker] as LiveStockQuote | undefined} history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)} onOpen={() => openBook(stock.ticker)} />) : <div className="px-2 py-5 text-center text-[10px] text-muted">Không có mã phù hợp bộ lọc</div>}</div></section>
-    })}</div> : <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">{movers.map((stock) => <LiveMoverCard key={stock.ticker} stock={stock} quote={quotes[stock.ticker] as LiveStockQuote | undefined} history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)} onOpen={() => openBook(stock.ticker)} />)}</div>}</div>
+      return <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-brand/20 bg-panel"><header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-brand/25 bg-gradient-to-r from-brand/15 via-brand/5 to-transparent px-3 py-2.5 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-brand"><div className="min-w-0"><h2 className="line-clamp-2 text-[13px] font-extrabold leading-[1.15] text-foreground">{label}</h2><p className="mt-1.5 inline-flex rounded-full border border-brand/20 bg-background/60 px-2 py-0.5 text-[10px] font-semibold text-muted-2">{stocks.length} mã</p></div>{typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}</header><div className="flex-1 space-y-2 overflow-y-auto p-2">{stocks.length ? stocks.map((stock) => <LiveStockRow key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined} history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)} onOpen={() => openBook(stock.ticker)} />) : <div className="px-2 py-5 text-center text-[10px] text-muted">Không có mã phù hợp bộ lọc</div>}</div></section>
+    })}</div> : <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">{movers.map((stock) => <LiveMoverCard key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined} history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)} onOpen={() => openBook(stock.ticker)} />)}</div>}</div>
   </div>
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { vietnamDateKey } from "@/lib/dnse-history"
 import { fetchDailyMarketHistory } from "@/lib/market-history"
-import { TOP50_HOSE } from "@/lib/wyckoff-universe"
+import { getScannerData } from "@/lib/scanner-data"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -37,9 +37,10 @@ export async function GET(request: NextRequest) {
   const ready: Array<Awaited<ReturnType<typeof sampleHealth>>> = []
   const insufficient: Array<Awaited<ReturnType<typeof sampleHealth>>> = []
   const errors: Array<{ ticker: string; error: string }> = []
+  const universe = (await getScannerData()).universe
 
-  for (let start = 0; start < TOP50_HOSE.length; start += 10) {
-    const batch = TOP50_HOSE.slice(start, start + 10)
+  for (let start = 0; start < universe.length; start += 10) {
+    const batch = universe.slice(start, start + 10)
     const outcomes = await Promise.allSettled(batch.map((stock) => sampleHealth(stock.ticker)))
     outcomes.forEach((outcome, index) => {
       const ticker = batch[index].ticker
@@ -54,8 +55,8 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    ok: ready.length === TOP50_HOSE.length,
-    universe: TOP50_HOSE.length,
+    ok: ready.length === universe.length,
+    universe: universe.length,
     readyCount: ready.length,
     insufficientCount: insufficient.length,
     errorCount: errors.length,

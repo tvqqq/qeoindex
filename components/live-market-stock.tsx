@@ -76,6 +76,7 @@ export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoa
   const text = quote ? marketToneText(tone) : "text-muted-2"
   const chart = sparkData(history)
   const chartReference = sparkReference(chart, quote?.reference)
+  const strongGainer = (quote?.changePercent ?? 0) >= 3
 
   return (
     <div
@@ -85,21 +86,20 @@ export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoa
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen() }
       }}
-      className="group relative grid min-h-[62px] cursor-pointer grid-cols-[46px_minmax(54px,1fr)_70px] items-center gap-2 rounded-lg border border-border/70 bg-cell/75 px-2 py-2 transition-all hover:border-border-strong hover:bg-panel-2 focus:outline-none focus:ring-1 focus:ring-brand"
+      className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(42px,1fr)_64px] items-center gap-1 rounded-lg border bg-cell/75 px-2 py-2 transition-all hover:border-border-strong hover:bg-panel-2 focus:outline-none focus:ring-1 focus:ring-brand ${strongGainer ? "strong-gainer border-up/60 bg-up/5" : "border-border-strong/80"}`}
       title={`Mở sổ lệnh ${stock.ticker}`}
     >
       <div className="min-w-0">
-        <div className="font-mono text-[14px] font-black leading-none tracking-[0.02em] text-foreground">{stock.ticker}</div>
-        <div className="mt-1.5 font-mono text-[10px] leading-none text-muted-2">{formatBoardVolume(quote?.volume)}</div>
-        <div className="mt-1 text-[9px] leading-none text-muted">#{stock.rank}</div>
+        <div className={`font-mono text-[16px] font-black leading-none tracking-[0.02em] ${strongGainer ? "text-up" : "text-foreground"}`}>{stock.ticker}</div>
+        <div className="mt-1.5 font-mono text-[9px] leading-none text-muted-2">{formatBoardVolume(quote?.volume)}</div>
       </div>
 
       <div className="flex min-w-0 items-center justify-center overflow-hidden">
-        <Sparkline data={chart} refValue={chartReference} color={marketToneHex(tone)} width={66} height={32} strokeWidth={1.9} showDot />
+        <Sparkline data={chart} refValue={chartReference} color={marketToneHex(tone)} width={52} height={26} strokeWidth={1.8} showDot />
       </div>
 
       <div className="flex min-w-0 flex-col items-end gap-1.5">
-        <div className={`max-w-full truncate font-mono text-[13px] font-bold leading-none ${text}`}>{formatBoardPrice(quote?.price)}</div>
+        <div className={`max-w-full truncate font-mono text-[11px] font-semibold leading-none ${text}`}>{formatBoardPrice(quote?.price)}</div>
         {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact title="% thay đổi so với giá mở cửa phiên" /> : <span className="text-[10px] text-muted">Chờ giá</span>}
       </div>
 
@@ -120,20 +120,21 @@ export function LiveMoverCard({ stock, quote, history, onOpen }: { stock: LiveBo
   const text = quote ? marketToneText(tone) : "text-muted-2"
   const chart = sparkData(history)
   const chartReference = sparkReference(chart, quote?.reference)
+  const strongGainer = (quote?.changePercent ?? 0) >= 3
 
   return (
-    <button type="button" onClick={onOpen} className="grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border border-border bg-panel px-4 py-3 text-left transition-all hover:border-brand/60 hover:bg-panel-2/70">
+    <button type="button" onClick={onOpen} className={`grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-panel px-4 py-3 text-left transition-all hover:border-brand/60 hover:bg-panel-2/70 ${strongGainer ? "strong-gainer border-up/60" : "border-border"}`}>
       <div>
-        <div className="font-mono text-xl font-black text-foreground">{stock.ticker}</div>
+        <div className={`font-mono text-2xl font-black ${strongGainer ? "text-up" : "text-foreground"}`}>{stock.ticker}</div>
         <div className="mt-1 font-mono text-xs text-muted-2">{formatBoardVolume(quote?.volume)}</div>
-        <div className="mt-1 text-[10px] text-muted">#{stock.rank} · {stock.sector}</div>
+        <div className="mt-1 text-[10px] text-muted">{stock.sector}</div>
       </div>
       <div className="flex justify-center">
         <Sparkline data={chart} refValue={chartReference} color={marketToneHex(tone)} width={160} height={52} strokeWidth={2.2} showDot />
       </div>
       <div className="flex flex-col items-end gap-2 text-right">
         {quote ? <MarketChangePill value={quote.changePercent} tone={tone} title="% thay đổi so với giá mở cửa phiên" /> : <span className="text-muted-2">—</span>}
-        <div className={`font-mono text-sm font-bold ${text}`}>{formatBoardPrice(quote?.price)}</div>
+        <div className={`font-mono text-xs font-semibold ${text}`}>{formatBoardPrice(quote?.price)}</div>
         <div className="text-[10px] text-muted">Yahoo 5m + DNSE live</div>
       </div>
     </button>

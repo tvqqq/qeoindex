@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { fiveMinuteBucket, intradaySnapshot, mergeFiveMinuteClose, normalizeEpochSeconds, normalizeFiveMinuteBars, normalizeMarketPrice } from "../lib/intraday-5m.ts"
+import { fiveMinuteBucket, intradaySnapshot, mergeFiveMinuteClose, normalizeEpochSeconds, normalizeFiveMinuteBars, normalizeMarketPrice, selectLatestSession } from "../lib/intraday-5m.ts"
 
 test("five-minute buckets keep minute bars in the same candle", () => {
   const start = Date.UTC(2026, 7, 17, 2, 0, 0) / 1000
@@ -48,6 +48,15 @@ test("five-minute normalization extends an inactive stock to the requested sessi
   assert.deepEqual(bars.map((bar) => bar.close), [20, 20, 20, 20])
 })
 
+test("five-minute normalization drops Yahoo zero-price candles after the close", () => {
+  const start = Date.UTC(2026, 7, 17, 2, 15, 0) / 1000
+  const bars = normalizeFiveMinuteBars([
+    { time: start, open: 58_000, high: 58_500, low: 58_000, close: 58_500, volume: 100 },
+    { time: start + 300, open: 0, high: 0, low: 0, close: 0, volume: 0 },
+  ], start + 300)
+  assert.deepEqual(bars.map((bar) => bar.close), [58_500, 58_500])
+})
+
 test("live closes update the matching bucket without resetting history", () => {
   const start = Date.UTC(2026, 7, 17, 2, 15, 0) / 1000
   const history = Array.from({ length: 54 }, (_, index) => ({ time: start + index * 300, close: 50_000 + index * 10 }))
@@ -84,4 +93,16 @@ test("DNSE prices are normalized to the Yahoo VND scale", () => {
   assert.equal(normalizeMarketPrice(58_500, 58_400), 58_500)
   assert.equal(normalizeMarketPrice(72.5, 74_200), 72_500)
   assert.equal(normalizeMarketPrice(0.0585, 58_400), null)
+})
+
+test("EOD history falls back to the latest available trading session", () => {
+  const friday = Date.UTC(2026, 7, 14, 3, 0, 0) / 1000
+  const monday = Date.UTC(2026, 7, 17, 3, 0, 0) / 1000
+  const bars = [
+    { time: friday, open: 10, high: 11, low: 10, close: 11, volume: 100 },
+    { time: monday, open: 12, high: 13, low: 12, close: 13, volume: 200 },
+  ]
+  const dateOf = (bar: { time: number }) => new Date(bar.time * 1000).toISOString().slice(0, 10)
+  assert.equal(selectLatestSession(bars, "2026-08-16", dateOf)?.date, "2026-08-14")
+  assert.equal(selectLatestSession(bars, "2026-08-17", dateOf)?.date, "2026-08-17")
 })

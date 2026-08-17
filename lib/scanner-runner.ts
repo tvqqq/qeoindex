@@ -3,6 +3,7 @@ import { fetchDailyMarketHistory } from "@/lib/market-history"
 import { notifyOpsError } from "@/lib/ops-alerts"
 import { getScannerData, rowToPreviousResult, writeDailyScan } from "@/lib/scanner-data"
 import { scanWyckoff } from "@/lib/wyckoff-engine"
+import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -16,9 +17,9 @@ export interface ScannerRunSummary {
   generatedAt: string
 }
 
-export async function runScannerUniverse({ limit = 50, offset = 0 }: { limit?: number; offset?: number } = {}): Promise<ScannerRunSummary> {
+export async function runScannerUniverse({ limit = UNIVERSE_SIZE, offset = 0 }: { limit?: number; offset?: number } = {}): Promise<ScannerRunSummary> {
   const data = await getScannerData()
-  const safeLimit = Math.max(1, Math.min(50, limit))
+  const safeLimit = Math.max(1, Math.min(UNIVERSE_SIZE, limit))
   const safeOffset = Math.max(0, offset)
   const targets = data.universe.slice(safeOffset, safeOffset + safeLimit)
 

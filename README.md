@@ -1,33 +1,51 @@
-# qeoindex
+# StockOS / qeoindex
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
+StockOS is a Vietnamese market board and Wyckoff research workspace built with Next.js 16, React 19, Notion, DNSE, Yahoo Finance, TradingView, and optional Upstash Redis. Production: <https://stockos-beryl.vercel.app>.
 
-## Built with v0
+## Start here
 
-This repository is linked to a [v0](https://v0.app) project. You can continue developing by visiting the link below -- start new chats to make changes, and v0 will push commits directly to this repo. Every merge to `main` will automatically deploy.
+Agents and new maintainers should read these files in order:
 
-[Continue working on v0 →](https://v0.app/chat/projects/prj_BHpz5TFT3eUTn268f8lAmBffNdla)
+1. [`AGENTS.md`](./AGENTS.md) — repository rules and Next.js version warning.
+2. [`docs/HANDOVER.md`](./docs/HANDOVER.md) — architecture, source-of-truth boundaries, operating procedures, and known failure modes.
+3. [`docs/market-board.md`](./docs/market-board.md) — detailed market-board data flow and UI invariants.
+4. [`docs/security.md`](./docs/security.md) — credential and secret-handling requirements.
+5. [`docs/finhay-live-adapter.md`](./docs/finhay-live-adapter.md) — optional Finhay OAuth/live integration.
 
-## Getting Started
-
-First, run the development server:
+## Local setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env.local
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The home page requires Notion configuration. Missing Notion credentials intentionally render an unavailable state instead of replacing persistent data with fixtures.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Required validation
 
-## Learn More
+Run the checks relevant to the changed area, then typecheck and build:
 
-To learn more, take a look at the following resources:
+```bash
+pnpm test:universe
+pnpm test:intraday
+pnpm test:indexes
+pnpm test:signal-core
+pnpm test:scanner-core
+pnpm exec eslint <changed-files>
+pnpm typecheck
+pnpm build --webpack
+pnpm scan:secrets
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [v0 Documentation](https://v0.app/docs) - learn about v0 and how to use it.
+Full-repository lint currently includes pre-existing failures in unrelated/generated code. Do not hide this: report targeted lint separately from the full lint baseline.
+
+## Production deployment
+
+The Vercel project is `tvqqq/stockos`; the stable production alias is <https://stockos-beryl.vercel.app>.
+
+```bash
+pnpm exec vercel --prod --yes
+```
+
+After deployment, verify the page and the APIs touched by the change. Deployment success alone is not a production smoke test.

@@ -33,7 +33,7 @@ export function ScannerApp({ data }: { data: ScannerData }) {
   return <div className="min-h-screen bg-background text-[15px]"><TopNav />
     <main className="mx-auto max-w-[1600px] space-y-5 p-4 lg:p-6">
       <header className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
-        <div><div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-semibold">Wyckoff Scanner — Top 50 HOSE</h1><span className="rounded border border-border bg-panel-2 px-2 py-1 text-xs">Data · Notion</span></div><p className="mt-2 text-sm text-foreground/60">Universe và kết quả scan được đọc trực tiếp từ Notion. Market history vẫn lấy từ provider chuyên dụng.</p></div>
+        <div><div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-semibold">Wyckoff Scanner — Top 100 HOSE</h1><span className="rounded border border-border bg-panel-2 px-2 py-1 text-xs">Data · Notion</span></div><p className="mt-2 text-sm text-foreground/60">Metadata và kết quả scan được đọc trực tiếp từ Notion. Market history vẫn lấy từ provider chuyên dụng.</p></div>
         <Link href="/research" className="rounded border border-border px-3 py-2 text-sm">Trung tâm Nghiên cứu</Link>
       </header>
 

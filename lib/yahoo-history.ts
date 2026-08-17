@@ -1,5 +1,5 @@
 import type { OhlcvBar } from "@/lib/technical-indicators"
-import { normalizeFiveMinuteBars } from "@/lib/intraday-5m"
+import { normalizeFiveMinuteBars, selectLatestSession } from "@/lib/intraday-5m"
 
 const DEFAULT_LOOKBACK_DAYS = 620
 const DEFAULT_HOURLY_LOOKBACK_DAYS = 180
@@ -32,15 +32,9 @@ function marketClosed(now: Date) {
   return hour > 15 || (hour === 15 && minute >= 30)
 }
 
-function vietnamSessionEndSeconds(now: Date) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now)
-  const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0)
-  return Date.UTC(value("year"), value("month") - 1, value("day"), 8, 0, 0) / 1000
+function vietnamSessionEndSeconds(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number)
+  return Date.UTC(year, month - 1, day, 8, 0, 0) / 1000
 }
 
 async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m" | "5m", lookbackDays: number, now = new Date()) {
@@ -82,7 +76,7 @@ async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m" | "5m", lo
     const low = finite(quote.low?.[i])
     const close = finite(quote.close?.[i])
     const volume = finite(quote.volume?.[i])
-    if ([time, open, high, low, close, volume].some((value) => value == null)) continue
+    if ([time, open, high, low, close].some((value) => value == null || value <= 0) || volume == null || volume < 0) continue
     bars.push({
       time: time as number,
       open: open as number,
@@ -97,12 +91,14 @@ async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m" | "5m", lo
 
 export async function fetchYahooFiveMinuteOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
   const today = vietnamDateKey(now.getTime())
-  const endTime = Math.min(now.getTime() / 1000, vietnamSessionEndSeconds(now))
-  const bars = normalizeFiveMinuteBars(
-    (await fetchYahooOhlcv(symbol, "5m", 2, now)).filter((bar) => vietnamDateKey(bar.time * 1000) === today),
-    endTime,
-  )
-  if (!bars.length) throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned no usable 5m bars for ${today}`)
+  const session = selectLatestSession(await fetchYahooOhlcv(symbol, "5m", 7, now), today, (bar) => vietnamDateKey(bar.time * 1000))
+  if (!session?.items.length) throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned no usable recent 5m session`)
+  const sessionEnd = vietnamSessionEndSeconds(session.date)
+  const endTime = session.date === today && !marketClosed(now)
+    ? Math.min(now.getTime() / 1000, sessionEnd)
+    : sessionEnd
+  const bars = normalizeFiveMinuteBars(session.items, endTime)
+  if (!bars.length) throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned no usable 5m bars for ${session.date}`)
   return bars
 }
 

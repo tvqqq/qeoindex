@@ -14,6 +14,19 @@ export type IntradayPoint = {
   close: number
 }
 
+export function selectLatestSession<T>(items: T[], preferredDate: string, dateOf: (item: T) => string) {
+  const sessions = new Map<string, T[]>()
+  for (const item of items) {
+    const date = dateOf(item)
+    const session = sessions.get(date) ?? []
+    session.push(item)
+    sessions.set(date, session)
+  }
+  const latestDate = [...sessions.keys()].filter((date) => date <= preferredDate).sort().at(-1)
+  if (!latestDate) return null
+  return { date: latestDate, items: sessions.get(latestDate) ?? [] }
+}
+
 export function fiveMinuteBucket(timestampSeconds: number) {
   return Math.floor(timestampSeconds / FIVE_MINUTE_SECONDS)
 }
@@ -67,9 +80,10 @@ export function intradaySnapshot(points: Array<{ open: number; close: number }>)
 }
 
 export function normalizeFiveMinuteBars(input: FiveMinuteBar[], endTimeSeconds?: number): FiveMinuteBar[] {
-  if (!input.length) return []
+  const validInput = input.filter((bar) => [bar.time, bar.open, bar.high, bar.low, bar.close].every((value) => Number.isFinite(value) && value > 0) && Number.isFinite(bar.volume) && bar.volume >= 0)
+  if (!validInput.length) return []
   const byBucket = new Map<number, FiveMinuteBar>()
-  for (const bar of [...input].sort((a, b) => a.time - b.time)) {
+  for (const bar of [...validInput].sort((a, b) => a.time - b.time)) {
     const time = fiveMinuteBucket(bar.time) * FIVE_MINUTE_SECONDS
     const current = byBucket.get(time)
     byBucket.set(time, current ? {
