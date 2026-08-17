@@ -7,7 +7,7 @@ import { BOARD_SECTOR_GROUPS, SECTOR_ORDER } from "@/lib/market-sectors"
 import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
-import { fiveMinuteBucket, normalizeEpochSeconds } from "@/lib/intraday-5m"
+import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/lib/intraday-5m"
 
 export type BoardUniverseStock = LiveBoardStock
 type IndexQuote = { symbol: string; value: number; change?: number; changePercent: number; updatedAt: string }
@@ -17,7 +17,7 @@ type DnseAuthPayload = { action: string; api_key: string; signature: string; tim
 type DnseAuthResponse = { ok: boolean; url?: string; auth?: DnseAuthPayload; message?: string }
 type IntradayHistoryResponse = {
   ok: boolean
-  histories?: Record<string, { symbol: string; provider: "DNSE" | "Yahoo" | null; prices: number[]; reference: number | null; price: number | null; change: number | null; changePercent: number | null; lastBarAt: number | null; error: string | null }>
+  histories?: Record<string, { symbol: string; provider: "Yahoo" | null; points: IntradayPoint[]; reference: number | null; price: number | null; change: number | null; changePercent: number | null; lastBarAt: number | null; error: string | null }>
 }
 
 const INDEXES = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"]
@@ -91,10 +91,9 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   const [query, setQuery] = useState("")
   const [selectedSector, setSelectedSector] = useState("Tất cả")
   const [mode, setMode] = useState<BoardMode>("sector")
-  const [priceHistory, setPriceHistory] = useState<Record<string, number[]>>({})
+  const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>({})
   const openingReferences = useRef<Record<string, number>>({})
   const indexOpeningReferences = useRef<Record<string, number>>({})
-  const lastHistoryBucket = useRef<Record<string, number>>({})
   const sessionDay = useRef(vietnamSessionDay())
   const lastFrameAt = useRef(0)
 
@@ -120,11 +119,13 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
         setPriceHistory((current) => {
           const next = { ...current }
           for (const symbol of symbolList) {
-            const prices = payload.histories?.[symbol]?.prices?.filter((value) => Number.isFinite(value) && value > 0) ?? []
-            if (prices.length) {
-              next[symbol] = prices.slice(-90)
-              const lastBarAt = payload.histories?.[symbol]?.lastBarAt
-              if (lastBarAt) lastHistoryBucket.current[symbol] = fiveMinuteBucket(lastBarAt)
+            const points = payload.histories?.[symbol]?.points?.filter((point) => Number.isFinite(point.time) && point.time > 0 && Number.isFinite(point.close) && point.close > 0) ?? []
+            if (points.length) {
+              let merged = points.slice(-90)
+              for (const point of current[symbol] ?? []) {
+                merged = mergeFiveMinuteClose(merged, point.close, point.time)
+              }
+              next[symbol] = merged
             }
           }
           return next
@@ -160,16 +161,13 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   }, [symbolKey, historyReloadKey, symbolList])
 
   const pushFiveMinuteClose = useCallback((ticker: string, close: number, timestampSeconds: number) => {
-    if (!Number.isFinite(close) || close <= 0) return
-    const bucket = fiveMinuteBucket(timestampSeconds)
     setPriceHistory((previous) => {
       const current = previous[ticker] ?? []
-      if (lastHistoryBucket.current[ticker] === bucket && current.length) {
-        if (current.at(-1) === close) return previous
-        return { ...previous, [ticker]: [...current.slice(0, -1), close] }
-      }
-      lastHistoryBucket.current[ticker] = bucket
-      return { ...previous, [ticker]: [...current, close].slice(-90) }
+      const normalizedClose = normalizeMarketPrice(close, current.at(-1)?.close)
+      if (!normalizedClose) return previous
+      const merged = mergeFiveMinuteClose(current, normalizedClose, timestampSeconds)
+      if (merged === current) return previous
+      return { ...previous, [ticker]: merged }
     })
   }, [])
 
@@ -457,7 +455,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
       const sectorQuotes = stocks.map((stock) => quotes[stock.ticker] as LiveStockQuote | undefined).filter(Boolean) as LiveStockQuote[]
       const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
       const avgTone = marketToneFromChange(avg)
-      return <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-panel"><header className="flex min-h-[58px] items-center justify-between gap-2 border-b border-border px-2.5 py-2"><div className="min-w-0"><h2 className="text-[12px] font-bold leading-[1.15] text-foreground">{label}</h2><p className="mt-1 text-[10px] text-muted-2">{stocks.length} mã</p></div>{typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}</header><div className="flex-1 space-y-1.5 overflow-y-auto p-1.5">{stocks.length ? stocks.map((stock) => <LiveStockRow key={stock.ticker} stock={stock} quote={quotes[stock.ticker] as LiveStockQuote | undefined} history={priceHistory[stock.ticker] ?? []} onOpen={() => openBook(stock.ticker)} />) : <div className="px-2 py-5 text-center text-[10px] text-muted">Không có mã phù hợp bộ lọc</div>}</div></section>
-    })}</div> : <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">{movers.map((stock) => <LiveMoverCard key={stock.ticker} stock={stock} quote={quotes[stock.ticker] as LiveStockQuote | undefined} history={priceHistory[stock.ticker] ?? []} onOpen={() => openBook(stock.ticker)} />)}</div>}</div>
+      return <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-panel"><header className="flex min-h-[58px] items-center justify-between gap-2 border-b border-border px-2.5 py-2"><div className="min-w-0"><h2 className="text-[12px] font-bold leading-[1.15] text-foreground">{label}</h2><p className="mt-1 text-[10px] text-muted-2">{stocks.length} mã</p></div>{typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}</header><div className="flex-1 space-y-1.5 overflow-y-auto p-1.5">{stocks.length ? stocks.map((stock) => <LiveStockRow key={stock.ticker} stock={stock} quote={quotes[stock.ticker] as LiveStockQuote | undefined} history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)} onOpen={() => openBook(stock.ticker)} />) : <div className="px-2 py-5 text-center text-[10px] text-muted">Không có mã phù hợp bộ lọc</div>}</div></section>
+    })}</div> : <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">{movers.map((stock) => <LiveMoverCard key={stock.ticker} stock={stock} quote={quotes[stock.ticker] as LiveStockQuote | undefined} history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)} onOpen={() => openBook(stock.ticker)} />)}</div>}</div>
   </div>
 }

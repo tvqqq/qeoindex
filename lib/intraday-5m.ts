@@ -9,6 +9,11 @@ export type FiveMinuteBar = {
   volume: number
 }
 
+export type IntradayPoint = {
+  time: number
+  close: number
+}
+
 export function fiveMinuteBucket(timestampSeconds: number) {
   return Math.floor(timestampSeconds / FIVE_MINUTE_SECONDS)
 }
@@ -17,6 +22,37 @@ export function normalizeEpochSeconds(value: unknown, fallbackSeconds: number) {
   const parsed = typeof value === "number" ? value : Number(value)
   if (!Number.isFinite(parsed) || parsed <= 0) return fallbackSeconds
   return parsed > 10_000_000_000 ? parsed / 1000 : parsed
+}
+
+export function normalizeMarketPrice(value: unknown, anchor?: number | null) {
+  const raw = typeof value === "number" ? value : Number(value)
+  if (!Number.isFinite(raw) || raw <= 0) return null
+  if (!anchor || !Number.isFinite(anchor) || anchor <= 0) return raw
+
+  const candidates = [raw, raw * 1000, raw / 1000]
+  const closest = candidates.reduce((best, candidate) => (
+    Math.abs(candidate - anchor) < Math.abs(best - anchor) ? candidate : best
+  ))
+  return Math.abs(closest - anchor) / anchor <= 0.5 ? closest : null
+}
+
+export function mergeFiveMinuteClose(
+  history: IntradayPoint[],
+  close: number,
+  timestampSeconds: number,
+  limit = 90,
+) {
+  if (!Number.isFinite(close) || close <= 0 || !Number.isFinite(timestampSeconds) || timestampSeconds <= 0) return history
+  const time = fiveMinuteBucket(timestampSeconds) * FIVE_MINUTE_SECONDS
+  const byTime = new Map(history
+    .filter((point) => Number.isFinite(point.time) && point.time > 0 && Number.isFinite(point.close) && point.close > 0)
+    .map((point) => [fiveMinuteBucket(point.time) * FIVE_MINUTE_SECONDS, point.close]))
+  if (byTime.get(time) === close) return history
+  byTime.set(time, close)
+  return [...byTime]
+    .sort(([a], [b]) => a - b)
+    .slice(-limit)
+    .map(([pointTime, pointClose]) => ({ time: pointTime, close: pointClose }))
 }
 
 export function intradaySnapshot(points: Array<{ open: number; close: number }>) {

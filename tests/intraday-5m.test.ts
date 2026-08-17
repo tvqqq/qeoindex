@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { fiveMinuteBucket, intradaySnapshot, normalizeEpochSeconds, normalizeFiveMinuteBars } from "../lib/intraday-5m.ts"
+import { fiveMinuteBucket, intradaySnapshot, mergeFiveMinuteClose, normalizeEpochSeconds, normalizeFiveMinuteBars, normalizeMarketPrice } from "../lib/intraday-5m.ts"
 
 test("five-minute buckets keep minute bars in the same candle", () => {
   const start = Date.UTC(2026, 7, 17, 2, 0, 0) / 1000
@@ -46,4 +46,41 @@ test("five-minute normalization extends an inactive stock to the requested sessi
   ], start + 900)
   assert.equal(bars.length, 4)
   assert.deepEqual(bars.map((bar) => bar.close), [20, 20, 20, 20])
+})
+
+test("live closes update the matching bucket without resetting history", () => {
+  const start = Date.UTC(2026, 7, 17, 2, 15, 0) / 1000
+  const history = Array.from({ length: 54 }, (_, index) => ({ time: start + index * 300, close: 50_000 + index * 10 }))
+  const updated = mergeFiveMinuteClose(history, 51_000, history.at(-1)!.time + 120)
+  assert.equal(updated.length, 54)
+  assert.equal(updated.at(-1)?.close, 51_000)
+
+  const appended = mergeFiveMinuteClose(updated, 51_100, history.at(-1)!.time + 300)
+  assert.equal(appended.length, 55)
+  assert.equal(appended.at(-1)?.close, 51_100)
+})
+
+test("replayed and out-of-order closes replace their bucket and remain sorted", () => {
+  const start = Date.UTC(2026, 7, 17, 2, 15, 0) / 1000
+  const history = [
+    { time: start, close: 10_000 },
+    { time: start + 600, close: 10_200 },
+  ]
+  const merged = mergeFiveMinuteClose(history, 10_100, start + 320)
+  assert.deepEqual(merged, [
+    { time: start, close: 10_000 },
+    { time: start + 300, close: 10_100 },
+    { time: start + 600, close: 10_200 },
+  ])
+  assert.deepEqual(mergeFiveMinuteClose(merged, 10_150, start + 340), [
+    { time: start, close: 10_000 },
+    { time: start + 300, close: 10_150 },
+    { time: start + 600, close: 10_200 },
+  ])
+})
+
+test("DNSE prices are normalized to the Yahoo VND scale", () => {
+  assert.equal(normalizeMarketPrice(58.5, 58_400), 58_500)
+  assert.equal(normalizeMarketPrice(58_500, 58_400), 58_500)
+  assert.equal(normalizeMarketPrice(0.0585, 58_400), null)
 })

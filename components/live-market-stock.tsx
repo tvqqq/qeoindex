@@ -62,18 +62,14 @@ function formatChangePercent(value?: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`
 }
 
-function sparkData(history: number[], quote?: LiveStockQuote) {
-  const clean = history.filter((value) => Number.isFinite(value) && value > 0).slice(-89)
-  if (!quote?.price || !Number.isFinite(quote.price) || quote.price <= 0) return clean
-  if (!clean.length) return [quote.price]
-  if (clean.at(-1) === quote.price) return clean
-  return [...clean, quote.price]
+function sparkData(history: number[]) {
+  return history.filter((value) => Number.isFinite(value) && value > 0).slice(-90)
 }
 
 export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoardStock; quote?: LiveStockQuote; history: number[]; onOpen: () => void }) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
-  const chart = sparkData(history, quote)
+  const chart = sparkData(history)
 
   return (
     <div
@@ -116,7 +112,7 @@ export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoa
 export function LiveMoverCard({ stock, quote, history, onOpen }: { stock: LiveBoardStock; quote?: LiveStockQuote; history: number[]; onOpen: () => void }) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
-  const chart = sparkData(history, quote)
+  const chart = sparkData(history)
 
   return (
     <button type="button" onClick={onOpen} className="grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border border-border bg-panel px-4 py-3 text-left transition-all hover:border-brand/60 hover:bg-panel-2/70">
