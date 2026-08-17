@@ -30,7 +30,7 @@ export function intradaySnapshot(points: Array<{ open: number; close: number }>)
   }
 }
 
-export function normalizeFiveMinuteBars(input: FiveMinuteBar[]): FiveMinuteBar[] {
+export function normalizeFiveMinuteBars(input: FiveMinuteBar[], endTimeSeconds?: number): FiveMinuteBar[] {
   if (!input.length) return []
   const byBucket = new Map<number, FiveMinuteBar>()
   for (const bar of [...input].sort((a, b) => a.time - b.time)) {
@@ -49,7 +49,8 @@ export function normalizeFiveMinuteBars(input: FiveMinuteBar[]): FiveMinuteBar[]
   const times = [...byBucket.keys()].sort((a, b) => a - b)
   const result: FiveMinuteBar[] = []
   let previous = byBucket.get(times[0])!
-  for (let time = times[0]; time <= times.at(-1)!; time += FIVE_MINUTE_SECONDS) {
+  const finalBucket = endTimeSeconds ? Math.max(times.at(-1)!, fiveMinuteBucket(endTimeSeconds) * FIVE_MINUTE_SECONDS) : times.at(-1)!
+  for (let time = times[0]; time <= finalBucket; time += FIVE_MINUTE_SECONDS) {
     const observed = byBucket.get(time)
     if (observed) previous = observed
     else previous = { time, open: previous.close, high: previous.close, low: previous.close, close: previous.close, volume: 0 }

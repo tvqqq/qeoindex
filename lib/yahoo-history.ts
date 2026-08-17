@@ -32,6 +32,17 @@ function marketClosed(now: Date) {
   return hour > 15 || (hour === 15 && minute >= 30)
 }
 
+function vietnamSessionEndSeconds(now: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now)
+  const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0)
+  return Date.UTC(value("year"), value("month") - 1, value("day"), 8, 0, 0) / 1000
+}
+
 async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m" | "5m", lookbackDays: number, now = new Date()) {
   const period2 = Math.floor(now.getTime() / 1000) + (interval === "1d" ? 86400 : interval === "60m" ? 3600 : 300)
   const period1 = period2 - lookbackDays * 86400
@@ -86,8 +97,10 @@ async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m" | "5m", lo
 
 export async function fetchYahooFiveMinuteOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
   const today = vietnamDateKey(now.getTime())
-  const bars = normalizeFiveMinuteBars((await fetchYahooOhlcv(symbol, "5m", 2, now))
-    .filter((bar) => vietnamDateKey(bar.time * 1000) === today)
+  const endTime = Math.min(now.getTime() / 1000, vietnamSessionEndSeconds(now))
+  const bars = normalizeFiveMinuteBars(
+    (await fetchYahooOhlcv(symbol, "5m", 2, now)).filter((bar) => vietnamDateKey(bar.time * 1000) === today),
+    endTime,
   )
   if (!bars.length) throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned no usable 5m bars for ${today}`)
   return bars

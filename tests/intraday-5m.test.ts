@@ -31,10 +31,19 @@ test("five-minute normalization collapses partial updates and fills quiet interv
     { time: start, open: 10, high: 10, low: 10, close: 10, volume: 100 },
     { time: start + 24, open: 10, high: 10.2, low: 10, close: 10.2, volume: 120 },
     { time: start + 600, open: 10.2, high: 10.4, low: 10.2, close: 10.4, volume: 80 },
-  ])
+  ], start + 600)
   assert.deepEqual(bars.map((bar) => ({ time: bar.time, open: bar.open, close: bar.close, volume: bar.volume })), [
     { time: start, open: 10, close: 10.2, volume: 120 },
     { time: start + 300, open: 10.2, close: 10.2, volume: 0 },
     { time: start + 600, open: 10.2, close: 10.4, volume: 80 },
   ])
+})
+
+test("five-minute normalization extends an inactive stock to the requested session time", () => {
+  const start = Date.UTC(2026, 7, 17, 2, 15, 0) / 1000
+  const bars = normalizeFiveMinuteBars([
+    { time: start, open: 20, high: 20, low: 20, close: 20, volume: 10 },
+  ], start + 900)
+  assert.equal(bars.length, 4)
+  assert.deepEqual(bars.map((bar) => bar.close), [20, 20, 20, 20])
 })
