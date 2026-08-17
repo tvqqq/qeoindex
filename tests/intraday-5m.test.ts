@@ -82,5 +82,6 @@ test("replayed and out-of-order closes replace their bucket and remain sorted", 
 test("DNSE prices are normalized to the Yahoo VND scale", () => {
   assert.equal(normalizeMarketPrice(58.5, 58_400), 58_500)
   assert.equal(normalizeMarketPrice(58_500, 58_400), 58_500)
+  assert.equal(normalizeMarketPrice(72.5, 74_200), 72_500)
   assert.equal(normalizeMarketPrice(0.0585, 58_400), null)
 })

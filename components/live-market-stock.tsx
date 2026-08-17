@@ -4,6 +4,7 @@ import Link from "next/link"
 import { ExternalLink } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { Sparkline } from "@/components/sparkline"
+import { normalizeMarketPrice } from "@/lib/intraday-5m"
 import {
   marketToneFromChange,
   marketToneFromPrice,
@@ -66,10 +67,15 @@ function sparkData(history: number[]) {
   return history.filter((value) => Number.isFinite(value) && value > 0).slice(-90)
 }
 
+function sparkReference(history: number[], reference?: number) {
+  return normalizeMarketPrice(reference, history.at(-1)) ?? undefined
+}
+
 export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoardStock; quote?: LiveStockQuote; history: number[]; onOpen: () => void }) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
   const chart = sparkData(history)
+  const chartReference = sparkReference(chart, quote?.reference)
 
   return (
     <div
@@ -89,7 +95,7 @@ export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoa
       </div>
 
       <div className="flex min-w-0 items-center justify-center overflow-hidden">
-        <Sparkline data={chart} refValue={quote?.reference ?? undefined} color={marketToneHex(tone)} width={66} height={32} strokeWidth={1.9} showDot />
+        <Sparkline data={chart} refValue={chartReference} color={marketToneHex(tone)} width={66} height={32} strokeWidth={1.9} showDot />
       </div>
 
       <div className="flex min-w-0 flex-col items-end gap-1.5">
@@ -113,6 +119,7 @@ export function LiveMoverCard({ stock, quote, history, onOpen }: { stock: LiveBo
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
   const chart = sparkData(history)
+  const chartReference = sparkReference(chart, quote?.reference)
 
   return (
     <button type="button" onClick={onOpen} className="grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border border-border bg-panel px-4 py-3 text-left transition-all hover:border-brand/60 hover:bg-panel-2/70">
@@ -122,7 +129,7 @@ export function LiveMoverCard({ stock, quote, history, onOpen }: { stock: LiveBo
         <div className="mt-1 text-[10px] text-muted">#{stock.rank} · {stock.sector}</div>
       </div>
       <div className="flex justify-center">
-        <Sparkline data={chart} refValue={quote?.reference ?? undefined} color={marketToneHex(tone)} width={160} height={52} strokeWidth={2.2} showDot />
+        <Sparkline data={chart} refValue={chartReference} color={marketToneHex(tone)} width={160} height={52} strokeWidth={2.2} showDot />
       </div>
       <div className="flex flex-col items-end gap-2 text-right">
         {quote ? <MarketChangePill value={quote.changePercent} tone={tone} title="% thay đổi so với giá mở cửa phiên" /> : <span className="text-muted-2">—</span>}
