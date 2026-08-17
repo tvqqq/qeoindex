@@ -17,7 +17,7 @@ type DnseAuthPayload = { action: string; api_key: string; signature: string; tim
 type DnseAuthResponse = { ok: boolean; url?: string; auth?: DnseAuthPayload; message?: string }
 type IntradayHistoryResponse = {
   ok: boolean
-  histories?: Record<string, { symbol: string; prices: number[]; reference: number | null; price: number | null; change: number | null; changePercent: number | null; lastBarAt: number | null; error: string | null }>
+  histories?: Record<string, { symbol: string; provider: "DNSE" | "Yahoo" | null; prices: number[]; reference: number | null; price: number | null; change: number | null; changePercent: number | null; lastBarAt: number | null; error: string | null }>
 }
 
 const INDEXES = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"]

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { fetchDnseOhlcHistory } from "@/lib/dnse-market-runtime"
 import { intradaySnapshot } from "@/lib/intraday-5m"
+import { fetchYahooFiveMinuteOhlcv } from "@/lib/yahoo-history"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -39,17 +40,29 @@ export async function GET(request: Request) {
 
   const rows = await mapWithConcurrency(symbols, 6, async (symbol) => {
     try {
-      const points = await fetchDnseOhlcHistory(symbol, 5, new Date(), 90)
+      const now = new Date()
+      let provider: "DNSE" | "Yahoo" = "DNSE"
+      let dnseError: string | null = null
+      let points: Array<{ time: number; open: number; close: number }>
+      try {
+        points = await fetchDnseOhlcHistory(symbol, 5, now, 90)
+      } catch (error) {
+        dnseError = error instanceof Error ? error.message : String(error)
+        provider = "Yahoo"
+        points = await fetchYahooFiveMinuteOhlcv(symbol, now)
+      }
       const snapshot = intradaySnapshot(points)
       return {
         symbol,
+        provider,
         prices: points.map((point) => point.close),
         ...snapshot,
         lastBarAt: points.at(-1)?.time ?? null,
+        fallbackReason: dnseError,
         error: null,
       }
     } catch (error) {
-      return { symbol, prices: [] as number[], reference: null, price: null, change: null, changePercent: null, lastBarAt: null, error: error instanceof Error ? error.message : String(error) }
+      return { symbol, provider: null, prices: [] as number[], reference: null, price: null, change: null, changePercent: null, lastBarAt: null, fallbackReason: null, error: error instanceof Error ? error.message : String(error) }
     }
   })
 
@@ -57,7 +70,7 @@ export async function GET(request: Request) {
   const successCount = rows.filter((row) => row.prices.length > 0).length
   return NextResponse.json({
     ok: successCount > 0,
-    provider: "DNSE",
+    provider: "DNSE with Yahoo fallback",
     resolution: "5m",
     generatedAt: new Date().toISOString(),
     successCount,

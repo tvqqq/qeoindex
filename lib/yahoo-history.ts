@@ -31,8 +31,8 @@ function marketClosed(now: Date) {
   return hour > 15 || (hour === 15 && minute >= 30)
 }
 
-async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m", lookbackDays: number, now = new Date()) {
-  const period2 = Math.floor(now.getTime() / 1000) + (interval === "1d" ? 86400 : 3600)
+async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m" | "5m", lookbackDays: number, now = new Date()) {
+  const period2 = Math.floor(now.getTime() / 1000) + (interval === "1d" ? 86400 : interval === "60m" ? 3600 : 300)
   const period1 = period2 - lookbackDays * 86400
   const ticker = `${symbol.toUpperCase()}.VN`
   const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}`)
@@ -48,6 +48,7 @@ async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m", lookbackD
       "User-Agent": "StockOS/1.0 research-scanner",
     },
     cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
   })
   const body = await response.text()
   if (!response.ok) throw new Error(`Yahoo OHLC ${ticker} ${interval} failed (${response.status}): ${body.slice(0, 160)}`)
@@ -80,6 +81,14 @@ async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m", lookbackD
     })
   }
   return bars.sort((a, b) => a.time - b.time)
+}
+
+export async function fetchYahooFiveMinuteOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
+  const today = vietnamDateKey(now.getTime())
+  const bars = (await fetchYahooOhlcv(symbol, "5m", 2, now))
+    .filter((bar) => vietnamDateKey(bar.time * 1000) === today)
+  if (!bars.length) throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned no usable 5m bars for ${today}`)
+  return bars
 }
 
 export async function fetchYahooDailyOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
