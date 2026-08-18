@@ -1,7 +1,7 @@
 import { fetchDnseLiveSnapshot } from "@/lib/dnse-live"
 import { fetchDailyMarketHistory } from "@/lib/market-history"
-import { getScannerData, type DailyScanRow } from "@/lib/scanner-data"
-import { createBuyRecommendation, createSignalEvent, getOpenRecommendations, closeRecommendation, updateRecommendationMonitor } from "@/lib/signal-data"
+import { getScannerDataFresh, type DailyScanRow } from "@/lib/scanner-data"
+import { createBuyRecommendation, createSignalEvent, getOpenRecommendationsFresh, closeRecommendation, updateRecommendationMonitor } from "@/lib/signal-data"
 import { evaluateBuy, evaluateExit, marketSessionProgress, SIGNAL_ENGINE_VERSION } from "@/lib/signal-engine"
 
 export interface SignalMonitorSummary {
@@ -55,7 +55,8 @@ export async function runSignalMonitor({ force = false }: { force?: boolean } = 
     return { ok: true, skipped: true, reason: "Outside HOSE monitoring window", session, engineVersion: SIGNAL_ENGINE_VERSION }
   }
 
-  const [scanner, openRows] = await Promise.all([getScannerData(), getOpenRecommendations()])
+  // Operational decisions intentionally bypass all UI read-model caches.
+  const [scanner, openRows] = await Promise.all([getScannerDataFresh(), getOpenRecommendationsFresh()])
   if (scanner.source !== "notion") throw new Error("Scanner is not reading live Notion data; fail-closed")
 
   const bullish = Object.values(scanner.latestScans).filter((scan) => scan.taBias === "Bullish" && scan.status === "Complete")
