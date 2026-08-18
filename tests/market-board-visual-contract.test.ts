@@ -69,3 +69,12 @@ test("after-close fallback still feeds both visible price and mini chart", () =>
   assert.match(stockSource, /<Sparkline data=\{chart\}/)
   assert.match(stockSource, /formatBoardPrice\(quote\?\.price\)/)
 })
+
+test("DNSE websocket messages are coalesced into animation-frame batches", () => {
+  assert.match(boardSource, /let messageQueue: Array<\(\) => void> = \[\]/)
+  assert.match(boardSource, /window\.requestAnimationFrame\(flushMessageQueue\)/)
+  assert.match(boardSource, /window\.cancelAnimationFrame\(messageFrame\)/)
+  assert.match(boardSource, /const raw = event\.data[\s\S]*?scheduleMessage\(\(\) => \{/)
+  assert.match(boardSource, /for \(const process of queued\) process\(\)/)
+  assert.match(boardSource, /clearMessageQueue\(\)[\s\S]*?socket\.close\(1000, "board closed"\)/)
+})
