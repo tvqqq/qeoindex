@@ -94,14 +94,30 @@ function formatChangePercent(value?: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`
 }
 
-function sparkData(history: number[]) {
-  return history.filter((value) => Number.isFinite(value) && value > 0).slice(-90)
+function sparkData(history: number[], livePrice?: number | null) {
+  const valid = history.filter((value) => Number.isFinite(value) && value > 0)
+  if (!valid.length && (!livePrice || !Number.isFinite(livePrice) || livePrice <= 0)) return []
+  if (!valid.length && livePrice) return [livePrice, livePrice]
+
+  const anchor = valid.at(-1)!
+  const normalized = valid.slice(-90).map((price) => normalizeMarketPrice(price, anchor) ?? price)
+
+  if (livePrice && Number.isFinite(livePrice) && livePrice > 0) {
+    const liveNormalized = normalizeMarketPrice(livePrice, anchor)
+    if (liveNormalized && liveNormalized > 0 && Math.abs(liveNormalized - normalized.at(-1)!) > 1e-4) {
+      return [...normalized, liveNormalized]
+    }
+  }
+  return normalized
 }
 
 function sparkReference(history: number[], reference?: number, lastClose?: number | null) {
-  const explicit = normalizeMarketPrice(reference, history.at(-1))
+  const valid = history.filter((value) => Number.isFinite(value) && value > 0)
+  const anchor = valid.at(-1) ?? valid[0]
+  if (!anchor) return undefined
+  const explicit = normalizeMarketPrice(reference, anchor)
   if (explicit && explicit > 0) return explicit
-  const fallback = normalizeMarketPrice(lastClose, history.at(-1))
+  const fallback = normalizeMarketPrice(lastClose, anchor)
   if (fallback && fallback > 0) return fallback
   return undefined
 }
@@ -160,7 +176,7 @@ export function LiveStockRow({
 }) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
-  const chart = sparkData(history)
+  const chart = sparkData(history, quote?.price)
   const chartReference = sparkReference(chart, quote?.reference, stock.lastClose)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
   const { rowClass, tickerClass } = getGainerStyles(quote, tone)
@@ -244,7 +260,7 @@ export function LiveMoverCard({
 }) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
-  const chart = sparkData(history)
+  const chart = sparkData(history, quote?.price)
   const chartReference = sparkReference(chart, quote?.reference, stock.lastClose)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
   const { cardClass, tickerClass } = getGainerStyles(quote, tone)

@@ -30,11 +30,19 @@ export function Sparkline({
   if (data.length < 2) return <svg width={width} height={height} aria-hidden="true" className={className} />
 
   const hasRef = typeof refValue === "number" && Number.isFinite(refValue) && refValue > 0
-  const values = hasRef ? [...data, refValue as number] : data
-  const min = Math.min(...values)
-  const max = Math.max(...values)
+  const ref = hasRef ? (refValue as number) : undefined
+
+  // Include reference value and all data points
+  const rawMin = Math.min(...data, ...(ref != null ? [ref] : []))
+  const rawMax = Math.max(...data, ...(ref != null ? [ref] : []))
+
+  // Ensure breathing room around reference so the line and price extremes never clip or touch inappropriately
+  const delta = rawMax - rawMin || (ref ? ref * 0.02 : 1)
+  const padding = delta * 0.08
+  const min = rawMin - padding
+  const max = rawMax + padding
   const range = max - min || 1
-  const pad = strokeWidth + 1
+  const pad = strokeWidth + 0.5
 
   const x = (i: number) => (i / (data.length - 1)) * (width - pad * 2) + pad
   const y = (v: number) => height - pad - ((v - min) / range) * (height - pad * 2)
@@ -60,8 +68,8 @@ export function Sparkline({
         <line
           x1={0}
           x2={width}
-          y1={y(refValue as number)}
-          y2={y(refValue as number)}
+          y1={y(ref as number)}
+          y2={y(ref as number)}
           stroke={refColor}
           strokeOpacity={0.65}
           strokeDasharray="2.5 2"
