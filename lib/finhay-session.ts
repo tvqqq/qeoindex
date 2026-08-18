@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { discoverFinhayOAuth, refreshFinhayToken, type FinhayTokenSet } from "@/lib/finhay-live"
 
+// Keep legacy cookie names so existing authenticated sessions survive the product rebrand.
 const ACCESS = "stockos_finhay_access"
 const REFRESH = "stockos_finhay_refresh"
 const EXPIRES = "stockos_finhay_expires"
@@ -78,7 +79,7 @@ export async function getActiveFinhayAccessToken() {
     await setFinhayTokens(refreshed)
     return refreshed.accessToken
   } catch (error) {
-    console.error("[StockOS Finhay] token refresh failed", error)
+    console.error("[QeoIndex Finhay] token refresh failed", error)
     return ""
   }
 }
