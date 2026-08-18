@@ -1445,6 +1445,103 @@ function ForeignRealtimeCard({
   )
 }
 
+function TradeInitiativeAndMarketStatsCard({
+  tradeStats,
+  quote,
+  spread,
+}: {
+  tradeStats: {
+    buyVol: number
+    sellVol: number
+    unkVol: number
+    totalTraded: number
+    buyTradedPct: number
+    sellTradedPct: number
+  }
+  quote?: StockQuote | null
+  spread?: number | null
+}) {
+  return (
+    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-2.5 font-mono text-xs space-y-2.5">
+      {/* 1. Lực Mua / Bán Chủ Động */}
+      <div>
+        <div className="flex items-center justify-between text-[11px] text-muted-2 mb-1.5">
+          <span className="flex items-center gap-1 font-semibold">
+            <span className="h-1.5 w-1.5 rounded-full bg-up" /> Mua CĐ:{" "}
+            <b className="text-up font-bold">{formatCompactVolume(tradeStats.buyVol)}</b>{" "}
+            <span className="text-[10px] text-muted">({tradeStats.buyTradedPct.toFixed(0)}%)</span>
+          </span>
+          <span className="flex items-center gap-1 font-semibold">
+            <span className="h-1.5 w-1.5 rounded-full bg-down" /> Bán CĐ:{" "}
+            <b className="text-down font-bold">{formatCompactVolume(tradeStats.sellVol)}</b>{" "}
+            <span className="text-[10px] text-muted">({tradeStats.sellTradedPct.toFixed(0)}%)</span>
+          </span>
+        </div>
+        <div className="flex h-1.5 overflow-hidden rounded-full bg-[#1e2021]">
+          <div className="bg-up transition-all duration-300" style={{ width: `${tradeStats.buyTradedPct}%` }} />
+          <div className="bg-down transition-all duration-300" style={{ width: `${tradeStats.sellTradedPct}%` }} />
+        </div>
+      </div>
+
+      {/* 2. Thông số phiên */}
+      <div className="border-t border-border/50 pt-2">
+        <div className="text-[10px] uppercase tracking-wider text-muted font-bold mb-1.5">
+          Thông số phiên
+        </div>
+        <div className="grid grid-cols-3 gap-1.5 text-center text-[11px]">
+          {/* Row 1: Sàn - TC - Trần */}
+          <div className="rounded border border-border/60 bg-[#161718] p-1">
+            <div className="text-[9px] text-muted uppercase">Sàn</div>
+            <div className="font-bold text-[#22b8cf]">{formatPrice(quote?.floor)}</div>
+          </div>
+          <div className="rounded border border-border/60 bg-[#161718] p-1">
+            <div className="text-[9px] text-muted uppercase">TC</div>
+            <div className="font-bold text-ref">{formatPrice(quote?.reference)}</div>
+          </div>
+          <div className="rounded border border-border/60 bg-[#161718] p-1">
+            <div className="text-[9px] text-muted uppercase">Trần</div>
+            <div className="font-bold text-ceiling">{formatPrice(quote?.ceiling)}</div>
+          </div>
+
+          {/* Row 2: Thấp - TB - Cao */}
+          <div className="rounded border border-border/60 bg-[#161718] p-1">
+            <div className="text-[9px] text-muted uppercase">Thấp</div>
+            <div className="font-bold text-foreground">{formatPrice(quote?.low)}</div>
+          </div>
+          <div className="rounded border border-border/60 bg-[#161718] p-1">
+            <div className="text-[9px] text-muted uppercase">TB</div>
+            <div className="font-bold text-foreground">{formatPrice(quote?.avgPrice)}</div>
+          </div>
+          <div className="rounded border border-border/60 bg-[#161718] p-1">
+            <div className="text-[9px] text-muted uppercase">Cao</div>
+            <div className="font-bold text-foreground">{formatPrice(quote?.high)}</div>
+          </div>
+
+          {/* Row 3: Spread - Tổng KL - Tổng GT */}
+          <div className="rounded border border-border/60 bg-[#161718] p-1">
+            <div className="text-[9px] text-muted uppercase">Spread</div>
+            <div className="font-bold text-foreground">{spread !== null && spread !== undefined && spread > 0 ? formatPrice(spread) : "—"}</div>
+          </div>
+          <div className="rounded border border-border/60 bg-[#161718] p-1">
+            <div className="text-[9px] text-muted uppercase">Tổng KL</div>
+            <div className="font-bold text-foreground">{formatCompactVolume(quote?.totalVolume)}</div>
+          </div>
+          <div className="rounded border border-border/60 bg-[#161718] p-1">
+            <div className="text-[9px] text-muted uppercase">Tổng GT</div>
+            <div className="font-bold text-foreground">
+              {quote?.totalValue
+                ? formatMarketValue(quote.totalValue)
+                : quote?.totalVolume && quote?.price
+                  ? formatMarketValue(quote.totalVolume * quote.price)
+                  : "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function OrderBookDepthRow({
   bid,
   ask,
@@ -1465,7 +1562,7 @@ function OrderBookDepthRow({
   const askVolFlash = useFlashAnimation(ask?.volume, 1)
 
   return (
-    <div className="relative grid grid-cols-[1fr_85px_85px_1fr] gap-x-3 items-center py-1 rounded hover:bg-panel-2/40">
+    <div className="relative grid grid-cols-[1fr_80px_80px_1fr] gap-x-2 items-center py-1 rounded hover:bg-panel-2/40">
       {/* Left Bid Volume bar */}
       {bid?.volume ? (
         <div
@@ -1486,7 +1583,7 @@ function OrderBookDepthRow({
 
       {/* KL Mua */}
       <span
-        className={`relative font-bold text-foreground pl-1.5 rounded px-1 transition-colors ${
+        className={`relative font-bold text-foreground text-left px-2 rounded transition-colors ${
           bidVolFlash === "up"
             ? "flash-up text-up font-black"
             : bidVolFlash === "down"
@@ -1499,7 +1596,7 @@ function OrderBookDepthRow({
 
       {/* Giá Mua */}
       <span
-        className={`relative text-right font-bold rounded px-1 transition-colors ${getPriceColorClass(
+        className={`relative text-right font-bold px-2 rounded transition-colors ${getPriceColorClass(
           bid?.price,
           quote?.reference,
           quote?.ceiling,
@@ -1519,7 +1616,7 @@ function OrderBookDepthRow({
 
       {/* Giá Bán */}
       <span
-        className={`relative font-bold rounded px-1 transition-colors ${getPriceColorClass(
+        className={`relative text-left font-bold px-2 rounded transition-colors ${getPriceColorClass(
           ask?.price,
           quote?.reference,
           quote?.ceiling,
@@ -1539,7 +1636,7 @@ function OrderBookDepthRow({
 
       {/* KL Bán */}
       <span
-        className={`relative text-right font-bold text-foreground pr-1.5 rounded px-1 transition-colors ${
+        className={`relative text-right font-bold text-foreground px-2 rounded transition-colors ${
           askVolFlash === "up"
             ? "flash-up text-up font-black"
             : askVolFlash === "down"
@@ -1988,69 +2085,18 @@ export function LiveOrderBookPanel({
 
       {!minimized ? (
         <div className="min-h-0 flex-1 overflow-y-auto flex flex-col bg-[#121313]">
-          {/* TOP PRICE METRICS STRIP */}
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 border-b border-border/80 bg-[#161718] p-2.5 font-mono">
-            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
-              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">Sàn</div>
-              <div className="text-sm font-bold text-[#22b8cf]">{formatPrice(quote?.floor)}</div>
-            </div>
-            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
-              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">TC</div>
-              <div className="text-sm font-bold text-ref">{formatPrice(quote?.reference)}</div>
-            </div>
-            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
-              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">Trần</div>
-              <div className="text-sm font-bold text-ceiling">{formatPrice(quote?.ceiling)}</div>
-            </div>
-            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
-              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">Thấp</div>
-              <div className="text-sm font-bold text-foreground">{formatPrice(quote?.low)}</div>
-            </div>
-            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
-              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">Cao</div>
-              <div className="text-sm font-bold text-foreground">{formatPrice(quote?.high)}</div>
-            </div>
-            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
-              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">TB</div>
-              <div className="text-sm font-bold text-foreground">{formatPrice(quote?.avgPrice)}</div>
-            </div>
-            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
-              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">Tổng KL</div>
-              <div className="text-sm font-bold text-foreground">{formatCompactVolume(quote?.totalVolume)}</div>
-            </div>
-            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
-              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">Tổng GT</div>
-              <div className="text-sm font-bold text-foreground">
-                {quote?.totalValue ? formatMarketValue(quote.totalValue) : quote?.totalVolume && quote?.price ? formatMarketValue(quote.totalVolume * quote.price) : "—"}
-              </div>
-            </div>
-          </div>
-
           {/* SECTION 1: ORDERBOOK DEPTH LADDER (3 Levels) */}
-          <div className="border-b border-border/80 px-4 py-3 bg-[#151616]">
-            <div className="mb-2.5 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <span className={`h-2.5 w-2.5 rounded-full ${stream.state === "LIVE" ? "bg-up animate-pulse" : stream.state === "CONNECTING" ? "bg-ref" : "bg-down"}`} />
-                <span className="font-bold text-foreground">Sổ lệnh 3 cấp độ</span>
-                <span className="text-[11px] text-muted">· {stream.state === "LIVE" ? "Realtime WS" : "Đang đồng bộ"}</span>
-              </div>
-              {spread !== null && spread > 0 ? (
-                <div className="text-xs text-muted-2 font-mono">
-                  Spread: <span className="text-foreground font-bold">{formatPrice(spread)}</span>
-                </div>
-              ) : null}
-            </div>
-
+          <div className="border-b border-border/80 px-4 py-2.5 bg-[#151616]">
             {/* Depth Ladder Table */}
             <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5 shadow-inner">
-              <div className="grid grid-cols-[1fr_85px_85px_1fr] gap-x-3 text-xs font-bold text-muted-2 border-b border-border/60 pb-2">
-                <span>KL Mua</span>
-                <span className="text-right">Giá Mua</span>
-                <span>Giá Bán</span>
-                <span className="text-right">KL Bán</span>
+              <div className="grid grid-cols-[1fr_80px_80px_1fr] gap-x-2 text-xs font-bold text-muted-2 border-b border-border/60 pb-1.5">
+                <span className="text-left px-2">KL Mua</span>
+                <span className="text-right px-2">Giá Mua</span>
+                <span className="text-left px-2">Giá Bán</span>
+                <span className="text-right px-2">KL Bán</span>
               </div>
 
-              <div className="mt-1.5 space-y-1 font-mono text-[13px]">
+              <div className="mt-1 space-y-0.5 font-mono text-[13px]">
                 {rows.map(({ bid, ask }, rowIndex) => (
                   <OrderBookDepthRow
                     key={rowIndex}
@@ -2063,7 +2109,7 @@ export function LiveOrderBookPanel({
               </div>
 
               {/* Total Ratio Bar */}
-              <div className="mt-3 pt-2 border-t border-border/50">
+              <div className="mt-2 pt-1.5 border-t border-border/50">
                 <div className="flex items-center justify-between text-xs font-bold">
                   <span className="text-up flex items-center gap-1">
                     <TrendingUp className="h-3.5 w-3.5" /> Mua {depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "50%"} ({formatCompactVolume(bidTotal)})
@@ -2072,7 +2118,7 @@ export function LiveOrderBookPanel({
                     Bán {depthTotal > 0 ? `${sellPct.toFixed(0)}%` : "50%"} ({formatCompactVolume(askTotal)}) <TrendingDown className="h-3.5 w-3.5" />
                   </span>
                 </div>
-                <div className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-[#1e2021]">
+                <div className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-[#1e2021]">
                   <div className="bg-up transition-all duration-300" style={{ width: `${depthTotal > 0 ? buyPct : 50}%` }} />
                   <div className="bg-down transition-all duration-300" style={{ width: `${depthTotal > 0 ? sellPct : 50}%` }} />
                 </div>
@@ -2206,35 +2252,17 @@ export function LiveOrderBookPanel({
                 {/* TAB CONTENT: KHỚP LỆNH (TAPE) */}
                 {activityTab === "trades" && (
                   <div className="flex flex-col flex-1 space-y-2.5">
-                    {/* Trade Initiative Bar */}
-                    <div className="rounded-lg border border-border/80 bg-[#121313] p-2 font-mono text-xs">
-                      <div className="flex items-center justify-between text-[11px] text-muted-2 mb-1.5">
-                        <span>
-                          Chủ động Mua: <b className="text-up font-bold">{formatCompactVolume(tradeStats.buyVol)}</b> (
-                          {tradeStats.buyTradedPct.toFixed(0)}%)
-                        </span>
-                        <span>
-                          Chủ động Bán: <b className="text-down font-bold">{formatCompactVolume(tradeStats.sellVol)}</b> (
-                          {tradeStats.sellTradedPct.toFixed(0)}%)
-                        </span>
-                      </div>
-                      <div className="flex h-1.5 overflow-hidden rounded-full bg-panel-2">
-                        <div className="bg-up transition-all duration-300" style={{ width: `${tradeStats.buyTradedPct}%` }} />
-                        <div className="bg-down transition-all duration-300" style={{ width: `${tradeStats.sellTradedPct}%` }} />
-                      </div>
-                    </div>
-
-                    {/* Split 2-Panel Layout: Left = Tape (Khớp lệnh), Right = Khối ngoại NN (Realtime) */}
+                    {/* Split 2-Panel Layout: Left = Tape (Khớp lệnh), Right = Khối ngoại NN + Lực mua/bán & Thông số */}
                     <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-2.5 flex-1 min-h-0">
-                      {/* Left: Tape Table */}
+                      {/* Left: Tape Table with increased font size */}
                       {visibleTrades.length ? (
                         <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col min-h-0">
-                          <div className="grid grid-cols-[1.2fr_1.1fr_0.75fr] items-center gap-x-2 border-b border-border/60 bg-[#171819] px-2.5 py-1.5 text-xs font-bold text-muted-2">
+                          <div className="grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 border-b border-border/60 bg-[#171819] px-3 py-2 text-xs font-bold text-muted-2">
                             <span>Thời gian</span>
                             <span className="text-right">Khối lượng</span>
                             <span className="text-right">Giá</span>
                           </div>
-                          <div className="flex-1 overflow-y-auto max-h-[340px] px-2.5 divide-y divide-border/15">
+                          <div className="flex-1 overflow-y-auto max-h-[480px] px-3 divide-y divide-border/15">
                             {visibleTrades.map((trade) => {
                               const isLarge = trade.volume >= LARGE_TRADE_MIN_VOLUME
                               const isWhale = trade.volume >= whaleThreshold
@@ -2243,44 +2271,44 @@ export function LiveOrderBookPanel({
                               return (
                                 <div
                                   key={trade.id}
-                                  className={`grid grid-cols-[1.2fr_1.1fr_0.75fr] items-center gap-x-2 py-1 font-mono text-xs hover:bg-panel-2/50 ${
+                                  className={`grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 py-1.5 font-mono text-xs hover:bg-panel-2/50 ${
                                     isWhale
-                                      ? "bg-up/10 text-up font-bold -mx-2.5 px-2.5"
+                                      ? "bg-up/10 text-up font-bold -mx-3 px-3"
                                       : isLarge
-                                        ? "bg-ref/10 text-ref font-bold -mx-2.5 px-2.5"
+                                        ? "bg-ref/10 text-ref font-bold -mx-3 px-3"
                                         : "text-foreground"
                                   }`}
                                 >
-                                  <div className="flex items-center gap-1 min-w-0">
-                                    <span className="text-muted-2 text-[11px]">{timeLabel(trade.time)}</span>
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="text-muted-2 text-xs font-medium">{timeLabel(trade.time)}</span>
                                     {trade.count > 1 && (
                                       <span
-                                        className="rounded bg-[#202223] border border-border/80 px-1 py-0.2 text-[9px] text-muted-2 font-mono font-bold shrink-0"
+                                        className="rounded bg-[#202223] border border-border/80 px-1 py-0.2 text-[10px] text-muted-2 font-mono font-bold shrink-0"
                                         title={`Gộp ${trade.count} lệnh khớp liên tiếp cùng chiều trong ≤1s`}
                                       >
                                         x{trade.count}
                                       </span>
                                     )}
                                     {isWhale ? (
-                                      <span className="rounded bg-up/25 px-1 py-0.2 text-[9px] text-up font-bold shrink-0">
+                                      <span className="rounded bg-up/25 px-1.5 py-0.5 text-[10px] text-up font-bold shrink-0">
                                         {whaleThreshold >= 50_000 ? "50K+" : "30K+"}
                                       </span>
                                     ) : isLarge ? (
-                                      <span className="rounded bg-ref/25 px-1 py-0.2 text-[9px] text-ref font-bold shrink-0">
+                                      <span className="rounded bg-ref/25 px-1.5 py-0.5 text-[10px] text-ref font-bold shrink-0">
                                         10K+
                                       </span>
                                     ) : null}
                                   </div>
-                                  <span className="text-right font-bold text-[12px] flex items-center justify-end gap-1">
+                                  <span className="text-right font-bold text-sm sm:text-[14px] flex items-center justify-end gap-1.5">
                                     {formatVolume(trade.volume)}
                                     <span
-                                      className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${pill.className} leading-tight shrink-0`}
+                                      className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${pill.className} leading-none shrink-0`}
                                     >
                                       {pill.label}
                                     </span>
                                   </span>
                                   <span
-                                    className={`text-right font-bold text-[12px] ${getPriceColorClass(
+                                    className={`text-right font-bold text-sm sm:text-[14px] ${getPriceColorClass(
                                       trade.price,
                                       quote?.reference,
                                       quote?.ceiling,
@@ -2304,14 +2332,24 @@ export function LiveOrderBookPanel({
                         </div>
                       )}
 
-                      {/* Right: Realtime Foreign Widget */}
-                      <ForeignRealtimeCard
-                        foreign={stream.foreign}
-                        quotePrice={quote?.price}
-                        foreignNetVolume={foreignNetVolume}
-                        foreignNetValue={foreignNetValue}
-                        roomPercentage={roomPercentage}
-                      />
+                      {/* Right: Stack of 2 Widgets */}
+                      <div className="flex flex-col gap-2.5">
+                        {/* Widget 1: Realtime Khối Ngoại NN */}
+                        <ForeignRealtimeCard
+                          foreign={stream.foreign}
+                          quotePrice={quote?.price}
+                          foreignNetVolume={foreignNetVolume}
+                          foreignNetValue={foreignNetValue}
+                          roomPercentage={roomPercentage}
+                        />
+
+                        {/* Widget 2: Lực Mua/Bán Chủ Động & Thông số phiên (Sàn, TC, Trần, Thấp, Cao, TB, Spread, Tổng KL, Tổng GT) */}
+                        <TradeInitiativeAndMarketStatsCard
+                          tradeStats={tradeStats}
+                          quote={quote}
+                          spread={spread}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
