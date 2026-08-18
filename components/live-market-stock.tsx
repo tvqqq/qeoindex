@@ -165,12 +165,14 @@ export interface LiveStockRowProps {
   history: number[]
   onOpen: () => void
   isWatched?: boolean
+  isWhaleActive?: boolean
   onToggleWatch?: (event: React.MouseEvent) => void
 }
 
 function areStockPropsEqual(prev: LiveStockRowProps, next: LiveStockRowProps) {
   if (prev.stock.ticker !== next.stock.ticker) return false
   if (prev.isWatched !== next.isWatched) return false
+  if (prev.isWhaleActive !== next.isWhaleActive) return false
   if (prev.quote?.price !== next.quote?.price) return false
   if (prev.quote?.changePercent !== next.quote?.changePercent) return false
   if (prev.quote?.foreignNetValue !== next.quote?.foreignNetValue) return false
@@ -188,6 +190,7 @@ export const LiveStockRow = memo(function LiveStockRow({
   history,
   onOpen,
   isWatched,
+  isWhaleActive,
   onToggleWatch,
 }: LiveStockRowProps) {
   const tone = quoteTone(quote)
@@ -208,21 +211,26 @@ export const LiveStockRow = memo(function LiveStockRow({
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen() }
       }}
       className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(42px,1fr)_64px] items-center gap-1 rounded-xl border bg-[#0d1217] px-2 py-2 transition-colors hover:bg-[#141a21] hover:border-white/[0.16] focus:outline-none focus:ring-1 focus:ring-brand ${
-        priceFlash === "up"
-          ? "flash-up border-up/80"
-          : priceFlash === "down"
-            ? "flash-down border-down/80"
-            : priceFlash === "ref"
-              ? "flash-ref border-ref/80"
-              : strongGainer
-                ? rowClass
-                : "border-white/[0.07]"
+        isWhaleActive
+          ? "whale-golden-pulse"
+          : priceFlash === "up"
+            ? "flash-up border-up/80"
+            : priceFlash === "down"
+              ? "flash-down border-down/80"
+              : priceFlash === "ref"
+                ? "flash-ref border-ref/80"
+                : strongGainer
+                  ? rowClass
+                  : "border-white/[0.07]"
       }`}
-      title={`Mở sổ lệnh ${stock.ticker}`}
+      title={isWhaleActive ? `[LỆNH CÁ MẬP] Mở sổ lệnh ${stock.ticker}` : `Mở sổ lệnh ${stock.ticker}`}
     >
       <div className="min-w-0">
         <div className="flex items-center gap-0.5">
           <span className={`font-mono text-[16px] leading-none tracking-[0.02em] ${tickerClass}`}>{stock.ticker}</span>
+          {isWhaleActive && (
+            <span className="text-[10px] leading-none animate-bounce" title="Lệnh lớn vừa khớp!">🐋</span>
+          )}
           {onToggleWatch && (
             <button
               type="button"
@@ -288,6 +296,7 @@ export const LiveMoverCard = memo(function LiveMoverCard({
   history,
   onOpen,
   isWatched,
+  isWhaleActive,
   onToggleWatch,
 }: LiveStockRowProps) {
   const tone = quoteTone(quote)
@@ -302,15 +311,17 @@ export const LiveMoverCard = memo(function LiveMoverCard({
   return (
     <div
       className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-[#0c1015] px-4 py-3 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-colors hover:border-white/[0.18] hover:bg-[#141a21] ${
-        priceFlash === "up"
-          ? "flash-up border-up/80"
-          : priceFlash === "down"
-            ? "flash-down border-down/80"
-            : priceFlash === "ref"
-              ? "flash-ref border-ref/80"
-              : strongGainer
-                ? cardClass
-                : "border-white/[0.08]"
+        isWhaleActive
+          ? "whale-golden-pulse"
+          : priceFlash === "up"
+            ? "flash-up border-up/80"
+            : priceFlash === "down"
+              ? "flash-down border-down/80"
+              : priceFlash === "ref"
+                ? "flash-ref border-ref/80"
+                : strongGainer
+                  ? cardClass
+                  : "border-white/[0.08]"
       }`}
     >
       <button type="button" onClick={onOpen} className="absolute inset-0 rounded-2xl focus:outline-none focus:ring-1 focus:ring-brand" aria-label={`Mở sổ lệnh ${stock.ticker}`} />

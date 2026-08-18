@@ -220,6 +220,28 @@ body::after {
   animation: ceiling-gainer-pulse 1.8s ease-in-out infinite;
 }
 
+@keyframes golden-whale-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.85), inset 0 0 12px rgba(251, 191, 36, 0.4);
+    border-color: rgba(251, 191, 36, 1);
+    background-color: rgba(251, 191, 36, 0.14);
+  }
+  35% {
+    box-shadow: 0 0 18px 4px rgba(251, 191, 36, 0.7), inset 0 0 20px rgba(251, 191, 36, 0.5);
+    border-color: rgba(251, 191, 36, 1);
+    background-color: rgba(251, 191, 36, 0.18);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0), inset 0 0 0 rgba(251, 191, 36, 0);
+    border-color: rgba(255, 255, 255, 0.08);
+    background-color: transparent;
+  }
+}
+.whale-golden-pulse {
+  animation: golden-whale-pulse 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  z-index: 20;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .strong-gainer {
     animation: none;
@@ -229,5 +251,9 @@ body::after {
   }
   .ceiling-gainer {
     animation: none;
+  }
+  .whale-golden-pulse {
+    animation: none;
+    border-color: rgba(251, 191, 36, 0.9);
   }
 }

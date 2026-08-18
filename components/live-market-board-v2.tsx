@@ -15,6 +15,8 @@ import {
   Star,
   TrendingDown,
   TrendingUp,
+  Volume2,
+  VolumeX,
 } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { BOARD_SECTOR_GROUPS, SECTOR_ORDER } from "@/lib/market-sectors"
@@ -25,6 +27,7 @@ import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type
 import { isTradingSessionOpen } from "@/lib/session-countdown"
 import { isSupabaseConfigured } from "@/lib/supabase/client"
 import { subscribeMarketRealtime } from "@/lib/supabase/realtime"
+import { isSoundEnabled, setSoundEnabled, playWhaleSound } from "@/lib/sound-engine"
 
 export type BoardUniverseStock = LiveBoardStock
 export type IndexQuote = {
@@ -163,6 +166,7 @@ function WatchlistSection({
   quotes,
   priceHistory,
   watchlist,
+  whaleAlerts,
   onToggleWatch,
   onOpen,
 }: {
@@ -170,6 +174,7 @@ function WatchlistSection({
   quotes: Record<string, LiveStockQuote | IndexQuote>
   priceHistory: Record<string, IntradayPoint[]>
   watchlist: Set<string>
+  whaleAlerts: Record<string, number>
   onToggleWatch: (ticker: string) => void
   onOpen: (ticker: string) => void
 }) {
@@ -194,6 +199,7 @@ function WatchlistSection({
               history={(priceHistory[stock.ticker] ?? []).map((p) => p.close)}
               onOpen={() => onOpen(stock.ticker)}
               isWatched
+              isWhaleActive={Boolean(whaleAlerts[stock.ticker] && Date.now() - whaleAlerts[stock.ticker] < 1500)}
               onToggleWatch={(e) => { e.stopPropagation(); onToggleWatch(stock.ticker) }}
             />
           </div>
@@ -474,10 +480,30 @@ export function LiveMarketBoardV2({
   const [selectedSector, setSelectedSector] = useState("Tất cả")
   const [mode, setMode] = useState<BoardMode>("sector")
   const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>(() => initialHistories ? { ...initialHistories } : {})
+  const [whaleAlerts, setWhaleAlerts] = useState<Record<string, number>>({})
+  const [soundEnabled, setSoundEnabledState] = useState<boolean>(false)
   const dailyReferences = useRef<Record<string, number>>({})
   const indexReferences = useRef<Record<string, number>>({})
   const sessionIdentifier = useRef(currentSessionIdentifier())
   const lastFrameAt = useRef(0)
+
+  useEffect(() => {
+    setSoundEnabledState(isSoundEnabled())
+  }, [])
+
+  const handleToggleSound = useCallback(() => {
+    const next = !soundEnabled
+    setSoundEnabled(next)
+    setSoundEnabledState(next)
+    if (next) {
+      playWhaleSound("BUY")
+    }
+  }, [soundEnabled])
+
+  const triggerWhaleAlert = useCallback((ticker: string, side: "BUY" | "SELL" | "REF" = "BUY") => {
+    setWhaleAlerts((prev) => ({ ...prev, [ticker]: Date.now() }))
+    playWhaleSound(side)
+  }, [])
 
   const [watchlist, setWatchlist] = useState<Set<string>>(() => {
     try {
@@ -832,6 +858,14 @@ export function LiveMarketBoardV2({
               const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
               if (price <= 0) return
               const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "volume"])
+              const matchVol = firstPositive(data, ["matchQtty", "matchVolume", "matchQuantity", "qtty", "q", "vol"])
+              const side = String(data.matchSide || data.side || "").toUpperCase() === "S" ? "SELL" : "BUY"
+
+              // Check Whale Trade (Volume >= 30,000 shares OR Trade Value >= 1B VND)
+              if (matchVol >= 30_000 || (price * matchVol * 1000 >= 1_000_000_000)) {
+                triggerWhaleAlert(ticker, side)
+              }
+
               const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
               const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
               const floor = firstPositive(data, ["floorPrice", "floor"])
@@ -1257,6 +1291,21 @@ export function LiveMarketBoardV2({
               <span>Top movers</span>
             </button>
           </div>
+
+          {/* Sound FX Whale Alert Toggle Button */}
+          <button
+            type="button"
+            onClick={handleToggleSound}
+            className={`flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-all shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] border ${
+              soundEnabled
+                ? "border-amber-500/40 bg-amber-500/15 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.25)]"
+                : "border-white/[0.08] bg-white/[0.03] text-muted-2 hover:text-foreground hover:bg-white/[0.06]"
+            }`}
+            title={soundEnabled ? "Âm thanh Lệnh Cá Mập: Đang BẬT (Click để tắt)" : "Âm thanh Lệnh Cá Mập: Đang TẮT (Click để bật)"}
+          >
+            {soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-amber-400 animate-pulse" /> : <VolumeX className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline">{soundEnabled ? "Âm thanh: Bật" : "Âm thanh: Tắt"}</span>
+          </button>
         </div>
       </div>
 
@@ -1273,6 +1322,7 @@ export function LiveMarketBoardV2({
           quotes={displayQuotes}
           priceHistory={priceHistory}
           watchlist={watchlist}
+          whaleAlerts={whaleAlerts}
           onToggleWatch={handleToggleWatch}
           onOpen={openBook}
         />
@@ -1347,6 +1397,7 @@ export function LiveMarketBoardV2({
                           history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)}
                           onOpen={() => openBook(stock.ticker)}
                           isWatched={watchlist.has(stock.ticker)}
+                          isWhaleActive={Boolean(whaleAlerts[stock.ticker] && Date.now() - whaleAlerts[stock.ticker] < 1500)}
                           onToggleWatch={(e) => {
                             e.stopPropagation()
                             handleToggleWatch(stock.ticker)
@@ -1371,6 +1422,7 @@ export function LiveMarketBoardV2({
                 history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)}
                 onOpen={() => openBook(stock.ticker)}
                 isWatched={watchlist.has(stock.ticker)}
+                isWhaleActive={Boolean(whaleAlerts[stock.ticker] && Date.now() - whaleAlerts[stock.ticker] < 1500)}
                 onToggleWatch={(e) => {
                   e.stopPropagation()
                   handleToggleWatch(stock.ticker)

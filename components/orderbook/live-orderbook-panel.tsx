@@ -2645,8 +2645,9 @@ export function LiveOrderBookPanel({
                                       </span>
                                     )}
                                     {isWhale ? (
-                                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}>
-                                        {trade.volume >= 50_000 ? "50K+" : "30K+"}
+                                      <span className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}>
+                                        <span>🐋</span>
+                                        <span>{trade.volume >= 50_000 ? "50K+" : "30K+"}</span>
                                       </span>
                                     ) : isLarge ? (
                                       <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}>
