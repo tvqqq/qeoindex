@@ -24,7 +24,7 @@ test("supabase pg_cron migration schedules market sync every 5 minutes and 14:50
   assert.match(cronMigrationSql, /create extension if not exists pg_net/)
   assert.match(cronMigrationSql, /create extension if not exists pg_cron/)
   assert.match(cronMigrationSql, /'sync-universe-5m'/)
-  assert.match(cronMigrationSql, /'\*\/5 2-8 \* \* 1-5'/)
+  assert.match(cronMigrationSql, /'\*\/5 2-7 \* \* 1-5'/)
   assert.match(cronMigrationSql, /'sync-universe-eod-1450'/)
   assert.match(cronMigrationSql, /'50 7 \* \* 1-5'/)
   assert.match(cronMigrationSql, /orderbook-sync/)

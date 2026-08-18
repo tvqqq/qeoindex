@@ -12,7 +12,7 @@ end $$;
 
 select cron.schedule(
   'sync-universe-5m',
-  '*/5 2-8 * * 1-5',
+  '*/5 2-7 * * 1-5',
   $$
   select net.http_post(
     url := 'https://glwhhrmejlonhyorvtzm.supabase.co/functions/v1/orderbook-sync',
