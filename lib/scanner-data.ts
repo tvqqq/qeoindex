@@ -9,10 +9,10 @@ const NOTION_VERSION = "2026-03-11"
 const UNIVERSE_DATA_SOURCE_ID = process.env.NOTION_WYCKOFF_UNIVERSE_DATA_SOURCE_ID ?? "210c502d-0c32-4fdd-9d69-7ef18e2be7d5"
 const SCAN_DATA_SOURCE_ID = process.env.NOTION_DAILY_WYCKOFF_SCAN_DATA_SOURCE_ID ?? "b76e378a-3f0c-4315-82cd-52c844101b73"
 const SCANNER_CACHE = {
-  namespace: "scanner-read-model-v1",
-  key: "canonical",
-  tag: "qeoindex-scanner-read-model-v1",
-  name: "QeoIndex Scanner canonical read model",
+  namespace: "scanner-read-model-v2",
+  key: "latest",
+  tag: "qeoindex-scanner-read-model-v2",
+  name: "QeoIndex Scanner latest-date read model",
   ttlSeconds: 60,
 } as const
 
@@ -149,18 +149,28 @@ function isScannerData(value: unknown): value is ScannerData {
     && typeof data.latestScans === "object"
 }
 
-async function loadScannerDataCanonical(): Promise<ScannerData> {
-  const [universePages, scanPages] = await Promise.all([
-    notionQuery(UNIVERSE_DATA_SOURCE_ID, { sorts: [{ property: "Rank", direction: "ascending" }] }),
-    notionQuery(SCAN_DATA_SOURCE_ID, { sorts: [{ property: "Date", direction: "descending" }] }, 5),
-  ])
-  const universe = universePages.map(parseUniversePage).filter(Boolean).filter((row) => row!.active).sort((a, b) => a!.rank - b!.rank) as UniverseRow[]
+async function loadUniverse() {
+  const pages = await notionQuery(UNIVERSE_DATA_SOURCE_ID, { sorts: [{ property: "Rank", direction: "ascending" }] }, 2)
+  const universe = pages.map(parseUniversePage).filter(Boolean).filter((row) => row!.active).sort((a, b) => a!.rank - b!.rank) as UniverseRow[]
   if (!universe.length) throw new Error("Notion Wyckoff Universe returned no active stocks")
+  return universe
+}
+
+async function loadLatestScanPages() {
+  const newest = await notionQuery(SCAN_DATA_SOURCE_ID, { page_size: 1, sorts: [{ property: "Date", direction: "descending" }] })
+  const latestDate = newest.map(parseScanPage).find(Boolean)?.date ?? ""
+  if (!latestDate) return []
+  return notionQuery(SCAN_DATA_SOURCE_ID, {
+    filter: { property: "Date", date: { equals: latestDate } },
+    sorts: [{ property: "Rank", direction: "ascending" }],
+  }, 2)
+}
+
+function buildScannerData(universe: UniverseRow[], scanPages: any[]): ScannerData {
   const latestScans: Record<string, DailyScanRow> = {}
   for (const page of scanPages) {
     const row = parseScanPage(page)
-    if (row && !latestScans[row.ticker]) latestScans[row.ticker] = row
-    if (Object.keys(latestScans).length >= universe.length) break
+    if (row) latestScans[row.ticker] = row
   }
   const providers = [...new Set(Object.values(latestScans).map((scan) => scan.provider).filter(Boolean))]
   return {
@@ -180,6 +190,24 @@ async function loadScannerDataCanonical(): Promise<ScannerData> {
   }
 }
 
+async function loadScannerDataCanonical(): Promise<ScannerData> {
+  const [universe, scanPages] = await Promise.all([loadUniverse(), loadLatestScanPages()])
+  return buildScannerData(universe, scanPages)
+}
+
+async function loadScannerTickerDataCanonical(ticker: string): Promise<ScannerData> {
+  const normalized = ticker.trim().toUpperCase()
+  const [universe, scanPages] = await Promise.all([
+    loadUniverse(),
+    notionQuery(SCAN_DATA_SOURCE_ID, {
+      page_size: 1,
+      filter: { property: "Ticker", rich_text: { equals: normalized } },
+      sorts: [{ property: "Date", direction: "descending" }],
+    }),
+  ])
+  return buildScannerData(universe, scanPages)
+}
+
 /** Operational scanner/promotion paths bypass the UI cache for canonical decisions. */
 export async function getScannerDataFresh(): Promise<ScannerData> {
   return loadScannerDataCanonical()
@@ -188,10 +216,22 @@ export async function getScannerDataFresh(): Promise<ScannerData> {
 /** UI-facing read path: regional Runtime Cache -> shared Redis -> canonical Notion. */
 export async function getScannerData(): Promise<ScannerData> {
   if (!token()) return loadScannerDataCanonical()
+  return readThroughUiCache({ ...SCANNER_CACHE, validate: isScannerData, load: loadScannerDataCanonical })
+}
+
+/** Ticker detail needs the universe for prev/next navigation, but only one scan row. */
+export async function getScannerTickerData(ticker: string): Promise<ScannerData> {
+  const normalized = ticker.trim().toUpperCase()
+  if (!token()) return loadScannerTickerDataCanonical(normalized)
   return readThroughUiCache({
-    ...SCANNER_CACHE,
+    namespace: SCANNER_CACHE.namespace,
+    key: `ticker:${normalized}`,
+    tag: SCANNER_CACHE.tag,
+    name: `QeoIndex Scanner ${normalized}`,
+    ttlSeconds: SCANNER_CACHE.ttlSeconds,
     validate: isScannerData,
-    load: loadScannerDataCanonical,
+    useSharedRedis: false,
+    load: () => loadScannerTickerDataCanonical(normalized),
   })
 }
 
