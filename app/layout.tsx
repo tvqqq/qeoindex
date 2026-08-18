@@ -1,16 +1,27 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
+import { BRAND } from '@/lib/brand'
 import './globals.css'
 
 const geistSans = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
 export const metadata: Metadata = {
-  title: 'StockOS — Bảng điện realtime',
-  description:
-    'StockOS theo dõi thị trường chứng khoán Việt Nam realtime qua DNSE WebSocket, kết hợp nghiên cứu, Wyckoff scanner và signal monitor.',
-  applicationName: 'StockOS',
+  metadataBase: new URL(BRAND.url),
+  title: `${BRAND.name} — ${BRAND.slogan}`,
+  description: BRAND.description,
+  applicationName: BRAND.name,
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    type: 'website',
+    url: '/',
+    title: `${BRAND.name} — ${BRAND.slogan}`,
+    description: BRAND.description,
+    siteName: BRAND.name,
+  },
   icons: {
     icon: '/icon.svg',
     shortcut: '/icon.svg',
