@@ -23,7 +23,7 @@ export async function GET() {
         deployed: true,
         trigger: "07:00 Asia/Ho_Chi_Minh, Monday-Friday",
         cronUtc: "0 0 * * 1-5",
-        execution: "Vercel Workflow sleeps durably until opening print, then monitors 5m while positions are open / 15m while idle and captures the ATC closing print around 14:45.",
+        execution: "Vercel Workflow sleeps durably until opening print, then monitors every 5m while bullish candidates or positions exist / 15m only when fully idle, and captures the ATC closing print around 14:45.",
       },
       configuration: {
         dnseServerCredentials: Boolean(process.env.DNSE_API_KEY && process.env.DNSE_API_SECRET),
