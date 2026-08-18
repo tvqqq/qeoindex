@@ -22,3 +22,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Never redeploy merely to verify a release. Verify the Git-triggered deployment and smoke-test the live domain instead.
 - If Vercel reports a deployment quota/rate limit, stop retrying and report the blocked release. Repeated retries can consume additional deployment attempts.
 - Target invariant: one approved release merged to `main` → one Vercel production deployment.
+
+## Supabase production deployment invariants
+
+- Whenever changes are made to Supabase resources:
+  - Database schema / migrations in `supabase/migrations/`: immediately run `npx supabase db push` to apply migrations to Supabase production database.
+  - Edge Functions in `supabase/functions/<name>/`: immediately run `npx supabase functions deploy <name> --no-verify-jwt` to deploy Edge Functions to Supabase production.
+
