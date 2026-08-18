@@ -898,17 +898,17 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
               const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
               const avgTone = marketToneFromChange(avg)
               return (
-                <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-cyan-500/20 bg-panel hover:border-cyan-500/35 transition-colors">
-                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-cyan-500/25 bg-gradient-to-r from-cyan-500/15 via-cyan-500/5 to-transparent px-2.5 py-2 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-cyan-400 before:shadow-[0_0_8px_rgba(34,211,238,0.8)]">
+                <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-white/[0.1] bg-panel hover:border-white/[0.22] transition-colors shadow-sm">
+                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-white/[0.12] bg-gradient-to-r from-white/[0.08] via-zinc-400/[0.03] to-transparent px-2.5 py-2 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-white before:shadow-[0_0_10px_rgba(255,255,255,0.85),0_0_4px_rgba(226,232,240,0.95)]">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-sm shrink-0 leading-none">{SECTOR_EMOJIS[key] ?? "📊"}</span>
-                        <h2 className="truncate text-[12.5px] font-black tracking-tight text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.35)]" title={label}>
+                        <h2 className="truncate text-[12.5px] font-black tracking-tight text-zinc-100 drop-shadow-[0_0_10px_rgba(255,255,255,0.45)]" title={label}>
                           {label}
                         </h2>
                       </div>
                       <div className="mt-1.5 flex items-center gap-1.5">
-                        <span className="inline-flex rounded-full border border-cyan-500/30 bg-cyan-950/50 px-2 py-0.5 font-mono text-[9.5px] font-bold text-cyan-300/90">
+                        <span className="inline-flex rounded-full border border-white/20 bg-zinc-800/80 px-2 py-0.5 font-mono text-[9.5px] font-bold text-zinc-300 shadow-[0_0_6px_rgba(255,255,255,0.1)]">
                           {stocks.length} mã
                         </span>
                       </div>
