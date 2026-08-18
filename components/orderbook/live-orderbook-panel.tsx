@@ -122,16 +122,25 @@ const OPEN_PRICE_KEYS = ["openPrice", "openingPrice", "open", "openValue", "firs
 const STREAM_STALE_MS = 45_000
 const MAX_SESSION_TRADES = 30_000
 
-/** HOSE tick size: ≥50 → 0.1, ≥10 → 0.05, <10 → 0.01. Whale threshold adapts accordingly. */
-function getWhaleThreshold(price?: number | null): number {
+/** 
+ * Quy tắc phân loại lệnh cá mập:
+ * - Nếu spread giá là 0.05 (hoặc giá < 50k) → Filter & Tag Cá mập ≥50K ("50K+")
+ * - Nếu spread giá là 0.1 (hoặc giá ≥ 50k) → Filter & Tag Cá mập ≥30K ("30K+")
+ */
+function getWhaleThreshold(price?: number | null, spread?: number | null): number {
+  if (spread !== null && spread !== undefined && spread > 0) {
+    if (spread <= 0.06) return 50_000
+    if (spread >= 0.09) return 30_000
+  }
+
   if (!price || price <= 0) return 50_000
-  // price is in thousands (e.g. 66.8 = 66,800 VND)
-  if (price >= 50) return 30_000   // tick = 0.1 → ≥30K
-  return 50_000                     // tick = 0.05 → ≥50K
+  const normalizedPrice = price > 1000 ? price / 1000 : price
+  if (normalizedPrice >= 50) return 30_000   // spread = 0.1 → ≥30K
+  return 50_000                              // spread = 0.05 → ≥50K
 }
 
-function getWhaleLabel(price?: number | null): string {
-  const threshold = getWhaleThreshold(price)
+function getWhaleLabel(price?: number | null, spread?: number | null): string {
+  const threshold = getWhaleThreshold(price, spread)
   return threshold >= 50_000 ? "≥50K" : "≥30K"
 }
 
@@ -1878,9 +1887,13 @@ export function LiveOrderBookPanel({
     return clusterTrades(stream.trades)
   }, [stream.trades])
 
-  // Dynamic whale threshold based on price tick size
-  const whaleThreshold = useMemo(() => getWhaleThreshold(quote?.price), [quote?.price])
-  const whaleLabel = useMemo(() => getWhaleLabel(quote?.price), [quote?.price])
+  const bestBidPrice = stream.bids[0]?.price
+  const bestAskPrice = stream.asks[0]?.price
+  const spread = bestBidPrice && bestAskPrice ? Number((bestAskPrice - bestBidPrice).toFixed(2)) : null
+
+  // Dynamic whale threshold based on price tick size & spread (spread 0.05 -> >=50k, spread 0.1 -> >=30k)
+  const whaleThreshold = useMemo(() => getWhaleThreshold(quote?.price, spread), [quote?.price, spread])
+  const whaleLabel = useMemo(() => getWhaleLabel(quote?.price, spread), [quote?.price, spread])
 
   // Reliable Realtime Whale Confetti Trigger
   const seenWhaleIdsRef = useRef<Set<string>>(new Set())
@@ -2045,11 +2058,6 @@ export function LiveOrderBookPanel({
   const foreignSellVolFlash = useFlashAnimation(stream.foreign?.totalSellVolume, 1)
   const foreignNetVolFlash = useFlashAnimation(foreignNetVolume, 1)
   const foreignRoomFlash = useFlashAnimation(foreignRoom, 1)
-
-  // Spread calculation
-  const bestBidPrice = topBids[0]?.price
-  const bestAskPrice = topAsks[0]?.price
-  const spread = bestBidPrice && bestAskPrice ? bestAskPrice - bestBidPrice : null
 
   // Clean CSS styles with zero transition lag while interacting
   const panelStyle = isMaximized
@@ -2395,7 +2403,7 @@ export function LiveOrderBookPanel({
                                     )}
                                     {isWhale ? (
                                       <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}>
-                                        {whaleThreshold >= 50_000 ? "50K+" : "30K+"}
+                                        {trade.volume >= 50_000 ? "50K+" : "30K+"}
                                       </span>
                                     ) : isLarge ? (
                                       <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}>
