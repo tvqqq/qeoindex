@@ -3,6 +3,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Activity,
+  AlertCircle,
   BarChart3,
   ExternalLink,
   GripVertical,
@@ -1205,6 +1206,46 @@ function SharkIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   )
 }
 
+function TapeLoadingSkeleton() {
+  return (
+    <div className="flex flex-col flex-1 space-y-2.5">
+      {/* Connecting banner with spinner */}
+      <div className="flex items-center justify-between rounded-lg border border-border/80 bg-[#121313] px-3.5 py-2.5 font-mono text-xs text-muted-2">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand" />
+          </span>
+          <span className="text-foreground font-semibold">Đang kết nối Realtime WebSocket DNSE...</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted">
+          <RefreshCw className="h-3.5 w-3.5 animate-spin text-brand" />
+          <span>Đồng bộ khớp lệnh</span>
+        </div>
+      </div>
+
+      {/* Shimmer Tape Table Skeleton */}
+      <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col p-3.5 space-y-3">
+        <div className="grid grid-cols-[1.2fr_1fr_1fr_0.8fr] gap-x-2 border-b border-border/60 pb-2.5">
+          <div className="h-3 w-16 bg-[#1f2122] rounded animate-pulse" />
+          <div className="h-3 w-16 bg-[#1f2122] rounded animate-pulse ml-auto" />
+          <div className="h-3 w-12 bg-[#1f2122] rounded animate-pulse ml-auto" />
+          <div className="h-3 w-10 bg-[#1f2122] rounded animate-pulse ml-auto" />
+        </div>
+
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="grid grid-cols-[1.2fr_1fr_1fr_0.8fr] gap-x-2 items-center py-1.5 border-b border-border/20 last:border-0">
+            <div className="h-3.5 w-20 bg-[#181a1b] rounded animate-pulse" style={{ animationDelay: `${i * 80}ms` }} />
+            <div className="h-3.5 w-14 bg-[#181a1b] rounded animate-pulse ml-auto" style={{ animationDelay: `${i * 80}ms` }} />
+            <div className="h-3.5 w-12 bg-[#181a1b] rounded animate-pulse ml-auto" style={{ animationDelay: `${i * 80}ms` }} />
+            <div className="h-4 w-10 bg-[#181a1b] rounded animate-pulse ml-auto" style={{ animationDelay: `${i * 80}ms` }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /**
  * Main LiveOrderBookPanel Component
  */
@@ -1245,6 +1286,7 @@ export function LiveOrderBookPanel({
 
   const stream = useDnseOrderBookStream(symbol, reconnectKey, initialMeta)
   const quote = stream.quote
+  const isWsReady = stream.state === "LIVE"
 
   // High-performance Drag-to-Move with window listener + requestAnimationFrame (0ms latency, zero re-renders while moving)
   const onHeaderPointerDown = useCallback(
@@ -1758,10 +1800,11 @@ export function LiveOrderBookPanel({
               <div className="flex items-center gap-1 bg-[#181919] p-1 rounded-lg border border-border/80">
                 <button
                   type="button"
+                  disabled={!isWsReady}
                   onClick={() => setActivityTab("trades")}
                   className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors ${
                     activityTab === "trades" ? "bg-brand/20 text-brand shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
-                  }`}
+                  } ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
                 >
                   <BarChart3 className="h-3.5 w-3.5" />
                   <span>Khớp lệnh</span>
@@ -1769,10 +1812,11 @@ export function LiveOrderBookPanel({
 
                 <button
                   type="button"
+                  disabled={!isWsReady}
                   onClick={() => setActivityTab("foreign")}
                   className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors ${
                     activityTab === "foreign" ? "bg-blue-500/20 text-blue-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
-                  }`}
+                  } ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
                 >
                   <PieChart className="h-3.5 w-3.5" />
                   <span>Khối ngoại</span>
@@ -1780,10 +1824,11 @@ export function LiveOrderBookPanel({
 
                 <button
                   type="button"
+                  disabled={!isWsReady}
                   onClick={() => setActivityTab("profile")}
                   className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors ${
                     activityTab === "profile" ? "bg-purple-500/20 text-purple-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
-                  }`}
+                  } ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
                 >
                   <Layers className="h-3.5 w-3.5" />
                   <span>Bước giá</span>
@@ -1791,10 +1836,11 @@ export function LiveOrderBookPanel({
 
                 <button
                   type="button"
+                  disabled={!isWsReady}
                   onClick={() => setActivityTab("putthrough")}
                   className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors ${
                     activityTab === "putthrough" ? "bg-amber-500/20 text-amber-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
-                  }`}
+                  } ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
                 >
                   <Handshake className="h-3.5 w-3.5" />
                   <span>Thỏa thuận</span>
@@ -1808,9 +1854,10 @@ export function LiveOrderBookPanel({
 
               {/* Tape Sub-filters */}
               {activityTab === "trades" && (
-                <div className="flex items-center gap-1.5 text-xs">
+                <div className={`flex items-center gap-1.5 text-xs ${!isWsReady ? "opacity-50 pointer-events-none" : ""}`}>
                   <button
                     type="button"
+                    disabled={!isWsReady}
                     onClick={() => setTradeFilter("all")}
                     className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-semibold transition-colors ${
                       tradeFilter === "all" ? "bg-panel-2 text-foreground font-bold border border-border shadow-sm" : "text-muted hover:text-muted-2"
@@ -1818,10 +1865,11 @@ export function LiveOrderBookPanel({
                     title={stream.trades.length > clusteredTrades.length ? `Gốc: ${stream.trades.length.toLocaleString("vi-VN")} lệnh` : undefined}
                   >
                     <AllTradesIcon className="h-3.5 w-3.5" />
-                    <span>Tất cả ({clusteredTrades.length})</span>
+                    <span>Tất cả ({isWsReady ? clusteredTrades.length : "..."})</span>
                   </button>
                   <button
                     type="button"
+                    disabled={!isWsReady}
                     onClick={() => setTradeFilter("large")}
                     className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-semibold transition-colors ${
                       tradeFilter === "large" ? "border-ref/50 bg-ref/15 text-ref font-bold shadow-sm" : "border-border text-muted-2 hover:text-foreground"
@@ -1829,10 +1877,11 @@ export function LiveOrderBookPanel({
                   >
                     <SmallFishIcon className="h-3.5 w-3.5" />
                     <span>Cá con ≥10K</span>
-                    {largeTradeCount > 0 && <span className="rounded bg-ref/25 px-1 text-[10px] font-bold">{largeTradeCount}</span>}
+                    {isWsReady && largeTradeCount > 0 && <span className="rounded bg-ref/25 px-1 text-[10px] font-bold">{largeTradeCount}</span>}
                   </button>
                   <button
                     type="button"
+                    disabled={!isWsReady}
                     onClick={() => setTradeFilter("whale")}
                     className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-semibold transition-colors ${
                       tradeFilter === "whale" ? "border-up/50 bg-up/15 text-up font-bold shadow-sm" : "border-border text-muted-2 hover:text-foreground"
@@ -1840,14 +1889,35 @@ export function LiveOrderBookPanel({
                   >
                     <SharkIcon className="h-3.5 w-3.5" />
                     <span>Cá mập ≥50K</span>
-                    {whaleTradeCount > 0 && <span className="rounded bg-up/25 px-1 text-[10px] font-bold">{whaleTradeCount}</span>}
+                    {isWsReady && whaleTradeCount > 0 && <span className="rounded bg-up/25 px-1 text-[10px] font-bold">{whaleTradeCount}</span>}
                   </button>
                 </div>
               )}
             </div>
 
-            {/* TAB CONTENT: KHỚP LỆNH (TAPE) */}
-            {activityTab === "trades" && (
+            {/* TAB CONTENT: SHOW SKELETON LOADING UNTIL DNSE WS IS LIVE */}
+            {!isWsReady ? (
+              stream.state === "ERROR" ? (
+                <div className="flex flex-col items-center justify-center flex-1 rounded-lg border border-down/40 bg-down/5 p-6 text-center text-xs">
+                  <AlertCircle className="h-7 w-7 text-down mb-2" />
+                  <span className="font-bold text-foreground">Không thể kết nối DNSE WebSocket</span>
+                  <span className="text-muted text-[11px] mt-1 mb-3">{stream.error || "Lỗi kết nối tới máy chủ dữ liệu"}</span>
+                  <button
+                    type="button"
+                    onClick={() => setReconnectKey((k) => k + 1)}
+                    className="flex items-center gap-1.5 rounded-md bg-panel-2 border border-border px-3 py-1.5 font-bold text-foreground hover:bg-border transition-colors"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Thử lại kết nối
+                  </button>
+                </div>
+              ) : (
+                <TapeLoadingSkeleton />
+              )
+            ) : (
+              <>
+                {/* TAB CONTENT: KHỚP LỆNH (TAPE) */}
+                {activityTab === "trades" && (
               <div className="flex flex-col flex-1">
                 {/* Trade Initiative Bar */}
                 <div className="mb-2 rounded-lg border border-border/80 bg-[#121313] p-2.5 font-mono text-xs">
@@ -2178,9 +2248,11 @@ export function LiveOrderBookPanel({
                 )}
               </div>
             )}
-          </div>
-        </div>
-      ) : null}
+          </>
+        )}
+      </div>
+    </div>
+  ) : null}
 
       {/* RESIZE HANDLES (Interactive everywhere via window listeners with 0ms drag latency) */}
       {!minimized && !isMaximized && (
