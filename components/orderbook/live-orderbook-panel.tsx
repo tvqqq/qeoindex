@@ -1304,143 +1304,122 @@ function ForeignRealtimeCard({
 
   const buyVol = foreign?.totalBuyVolume ?? 0
   const sellVol = foreign?.totalSellVolume ?? 0
-  const totalVol = buyVol + sellVol
-  const buyPct = totalVol > 0 ? (buyVol / totalVol) * 100 : 50
-  const sellPct = totalVol > 0 ? (sellVol / totalVol) * 100 : 50
 
-  const isNetPos = (foreignNetVolume ?? 0) > 0
-  const isNetNeg = (foreignNetVolume ?? 0) < 0
+  const buyVal = foreign?.totalBuyValue ?? (buyVol && quotePrice ? buyVol * quotePrice : 0)
+  const sellVal = foreign?.totalSellValue ?? (sellVol && quotePrice ? sellVol * quotePrice : 0)
+
+  const netVol = foreignNetVolume ?? (buyVol - sellVol)
+  const netVal = foreignNetValue ?? (buyVal - sellVal)
+
+  const isNetVolPos = netVol > 0
+  const isNetVolNeg = netVol < 0
+  const isNetValPos = netVal > 0
+  const isNetValNeg = netVal < 0
 
   return (
-    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-2.5 font-mono text-xs space-y-2 h-full justify-between">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/50 pb-1.5">
-        <div className="flex items-center gap-1.5 font-bold text-foreground">
+    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-3 font-mono text-xs space-y-2.5">
+      {/* Title Header matching Image 1 */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
           </span>
-          <span className="text-[11px] uppercase tracking-wider text-muted-2 font-bold">Khối ngoại (NN)</span>
+          <span className="font-sans text-[13px] font-extrabold uppercase tracking-wide text-foreground">
+            GIAO DỊCH NĐTNN
+          </span>
         </div>
         <span className="text-[10px] text-muted font-mono">
           {foreign?.updatedAt ? timeLabel(foreign.updatedAt) : "Realtime"}
         </span>
       </div>
 
-      {/* Net Mua / Bán Card */}
-      <div
-        className={`rounded-lg border p-2 transition-all ${
-          isNetPos
-            ? "border-up/30 bg-up/10"
-            : isNetNeg
-              ? "border-down/30 bg-down/10"
-              : "border-border/60 bg-[#161718]"
-        }`}
-      >
-        <div className="flex items-center justify-between text-[10px] text-muted-2">
-          <span>MUA / BÁN RÒNG</span>
+      {/* Grid Table matching Image 1 */}
+      <div className="rounded-lg border border-border/60 bg-[#161718] overflow-hidden">
+        {/* Row 1: Khối Lượng Header */}
+        <div className="grid grid-cols-3 items-center bg-[#1c1e1f] px-3 py-1.5 text-[11px] font-bold text-muted-2 border-b border-border/40">
+          <span>KL Mua</span>
+          <span className="text-center">KL Bán</span>
+          <span className="text-right">KL Mua-Bán</span>
+        </div>
+
+        {/* Row 1: Khối Lượng Values */}
+        <div className="grid grid-cols-3 items-center px-3 py-2 text-xs sm:text-[13px] font-bold border-b border-border/40">
           <span
-            className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
-              isNetPos
-                ? "bg-up/20 text-up border-up/30"
-                : isNetNeg
-                  ? "bg-down/20 text-down border-down/30"
-                  : "bg-panel-2 text-ref border-border"
+            className={`text-up transition-colors ${
+              buyVolFlash === "up" ? "flash-up font-black" : buyVolFlash === "down" ? "flash-down font-black" : ""
             }`}
           >
-            {isNetPos ? "MUA RÒNG" : isNetNeg ? "BÁN RÒNG" : "CÂN BẰNG"}
+            {formatVolume(foreign?.totalBuyVolume)}
           </span>
-        </div>
-        <div className="mt-1 flex items-baseline justify-between gap-1">
           <span
-            className={`text-sm font-bold transition-colors ${
-              isNetPos ? "text-up" : isNetNeg ? "text-down" : "text-ref"
+            className={`text-center text-down transition-colors ${
+              sellVolFlash === "up" ? "flash-up font-black" : sellVolFlash === "down" ? "flash-down font-black" : ""
+            }`}
+          >
+            {formatVolume(foreign?.totalSellVolume)}
+          </span>
+          <span
+            className={`text-right transition-colors ${
+              isNetVolPos ? "text-up" : isNetVolNeg ? "text-down" : "text-ref"
             } ${
               netVolFlash === "up" ? "flash-up font-black" : netVolFlash === "down" ? "flash-down font-black" : ""
             }`}
           >
-            {foreignNetVolume !== null
-              ? `${foreignNetVolume > 0 ? "+" : ""}${formatCompactVolume(foreignNetVolume)}`
+            {netVol !== null && netVol !== undefined
+              ? `${netVol > 0 ? "+" : ""}${formatVolume(netVol)}`
               : "—"}
           </span>
-          <span className="text-[11px] font-bold text-foreground font-mono">
-            {foreignNetValue !== null
-              ? `${foreignNetValue > 0 ? "+" : ""}${formatMarketValue(foreignNetValue)}`
-              : foreignNetVolume && quotePrice
-                ? `${foreignNetVolume > 0 ? "+" : ""}${formatMarketValue(foreignNetVolume * quotePrice)}`
-                : "—"}
+        </div>
+
+        {/* Row 2: Giá Trị Header */}
+        <div className="grid grid-cols-3 items-center bg-[#1c1e1f] px-3 py-1.5 text-[11px] font-bold text-muted-2 border-b border-border/40">
+          <span>GT Mua</span>
+          <span className="text-center">GT Bán</span>
+          <span className="text-right">GT Mua-Bán</span>
+        </div>
+
+        {/* Row 2: Giá Trị Values with highlighted GT Mua-Bán */}
+        <div className="grid grid-cols-3 items-center px-3 py-2 text-xs sm:text-[13px] font-bold">
+          <span className="text-up">
+            {buyVal ? formatMarketValue(buyVal) : "—"}
           </span>
-        </div>
-      </div>
-
-      {/* Mua vs Bán Breakdown */}
-      <div className="space-y-1 text-[11px] bg-[#161718] p-2 rounded-lg border border-border/60">
-        {/* Mua */}
-        <div className="flex items-center justify-between">
-          <span className="text-muted-2 flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-up" /> Mua:
+          <span className="text-center text-down">
+            {sellVal ? formatMarketValue(sellVal) : "—"}
           </span>
-          <div className="flex items-center gap-1 font-mono">
-            <span
-              className={`font-bold text-up transition-colors ${
-                buyVolFlash === "up" ? "flash-up font-black" : buyVolFlash === "down" ? "flash-down font-black" : ""
-              }`}
-            >
-              {formatCompactVolume(foreign?.totalBuyVolume)}
-            </span>
-            <span className="text-[10px] text-muted">
-              ({foreign?.totalBuyValue ? formatMarketValue(foreign.totalBuyValue) : "—"})
-            </span>
-          </div>
-        </div>
-
-        {/* Bán */}
-        <div className="flex items-center justify-between">
-          <span className="text-muted-2 flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-down" /> Bán:
-          </span>
-          <div className="flex items-center gap-1 font-mono">
-            <span
-              className={`font-bold text-down transition-colors ${
-                sellVolFlash === "up" ? "flash-up font-black" : sellVolFlash === "down" ? "flash-down font-black" : ""
-              }`}
-            >
-              {formatCompactVolume(foreign?.totalSellVolume)}
-            </span>
-            <span className="text-[10px] text-muted">
-              ({foreign?.totalSellValue ? formatMarketValue(foreign.totalSellValue) : "—"})
-            </span>
-          </div>
-        </div>
-
-        {/* Ratio bar */}
-        <div className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-[#202223]">
-          <div className="bg-up transition-all duration-300" style={{ width: `${buyPct}%` }} />
-          <div className="bg-down transition-all duration-300" style={{ width: `${sellPct}%` }} />
-        </div>
-      </div>
-
-      {/* Room Ngoại */}
-      <div className="rounded-lg border border-border/60 bg-[#161718] p-2 text-[11px]">
-        <div className="flex items-center justify-between">
-          <span className="text-muted-2">Room còn lại:</span>
+          {/* Highlighted prominent GT Mua-Bán */}
           <span
-            className={`font-bold text-foreground transition-colors font-mono ${
+            className={`text-right font-black text-sm sm:text-base transition-all ${
+              isNetValPos ? "text-up" : isNetValNeg ? "text-down" : "text-ref"
+            } ${
+              netVolFlash === "up" ? "flash-up font-black" : netVolFlash === "down" ? "flash-down font-black" : ""
+            }`}
+          >
+            {netVal !== null && netVal !== undefined
+              ? `${netVal > 0 ? "+" : ""}${formatMarketValue(netVal)}`
+              : "—"}
+          </span>
+        </div>
+      </div>
+
+      {/* Room Ngoại Footer */}
+      {foreign?.availableRoom !== null && foreign?.availableRoom !== undefined && (
+        <div className="flex items-center justify-between text-[11px] px-1 text-muted">
+          <span>Room khả dụng:</span>
+          <span
+            className={`font-bold text-foreground font-mono transition-colors ${
               roomFlash === "up" ? "flash-up font-black" : roomFlash === "down" ? "flash-down font-black" : ""
             }`}
           >
-            {foreign?.availableRoom !== null && foreign?.availableRoom !== undefined
-              ? `${formatCompactVolume(foreign.availableRoom)}`
-              : "—"}
+            {foreign.availableRoom === 0 ? "Hết room (0 cp)" : `${formatCompactVolume(foreign.availableRoom)} cp`}
+            {roomPercentage !== null && (
+              <span className="ml-1 text-[10px] text-muted-2 font-normal">
+                ({roomPercentage.toFixed(1)}% VĐL)
+              </span>
+            )}
           </span>
         </div>
-        {roomPercentage !== null && (
-          <div className="mt-0.5 flex items-center justify-between text-[10px] text-muted">
-            <span>Tỷ lệ sở hữu còn:</span>
-            <span className="font-bold text-muted-2">{roomPercentage.toFixed(1)}% VĐL</span>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }
@@ -1462,22 +1441,24 @@ function TradeInitiativeAndMarketStatsCard({
   spread?: number | null
 }) {
   return (
-    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-2.5 font-mono text-xs space-y-2.5">
-      {/* 1. Lực Mua / Bán Chủ Động */}
+    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-3 font-mono text-xs space-y-2.5">
+      {/* 1. Lực Mua / Bán Chủ Động matching Image 3 style */}
       <div>
-        <div className="flex items-center justify-between text-[11px] text-muted-2 mb-1.5">
-          <span className="flex items-center gap-1 font-semibold">
-            <span className="h-1.5 w-1.5 rounded-full bg-up" /> Mua CĐ:{" "}
-            <b className="text-up font-bold">{formatCompactVolume(tradeStats.buyVol)}</b>{" "}
-            <span className="text-[10px] text-muted">({tradeStats.buyTradedPct.toFixed(0)}%)</span>
+        <div className="flex items-center justify-between text-xs font-mono mb-1.5">
+          <span className="flex items-center gap-1.5 font-medium">
+            <span className="h-2 w-2 rounded-full bg-up shrink-0" />
+            <span className="text-muted-2">Mua CĐ:</span>
+            <b className="text-up font-bold">{formatCompactVolume(tradeStats.buyVol)}</b>
+            <span className="text-muted text-[11px]">({tradeStats.buyTradedPct.toFixed(0)}%)</span>
           </span>
-          <span className="flex items-center gap-1 font-semibold">
-            <span className="h-1.5 w-1.5 rounded-full bg-down" /> Bán CĐ:{" "}
-            <b className="text-down font-bold">{formatCompactVolume(tradeStats.sellVol)}</b>{" "}
-            <span className="text-[10px] text-muted">({tradeStats.sellTradedPct.toFixed(0)}%)</span>
+          <span className="flex items-center gap-1.5 font-medium">
+            <span className="h-2 w-2 rounded-full bg-down shrink-0" />
+            <span className="text-muted-2">Bán CĐ:</span>
+            <b className="text-down font-bold">{formatCompactVolume(tradeStats.sellVol)}</b>
+            <span className="text-muted text-[11px]">({tradeStats.sellTradedPct.toFixed(0)}%)</span>
           </span>
         </div>
-        <div className="flex h-1.5 overflow-hidden rounded-full bg-[#1e2021]">
+        <div className="flex h-2 overflow-hidden rounded-full bg-[#1e2021]">
           <div className="bg-up transition-all duration-300" style={{ width: `${tradeStats.buyTradedPct}%` }} />
           <div className="bg-down transition-all duration-300" style={{ width: `${tradeStats.sellTradedPct}%` }} />
         </div>
@@ -1695,32 +1676,6 @@ export function LiveOrderBookPanel({
 
   // Confetti for whale trades
   const confetti = useWhaleConfetti()
-  const prevTradeCountRef = useRef(stream.trades.length)
-  const isInitialLoadRef = useRef(true)
-
-  useEffect(() => {
-    const currentCount = stream.trades.length
-    const prevCount = prevTradeCountRef.current
-    prevTradeCountRef.current = currentCount
-
-    // Skip initial load (historical data) — only fire on new live trades
-    if (isInitialLoadRef.current) {
-      if (stream.historyState === "READY" || stream.historyState === "PARTIAL") {
-        isInitialLoadRef.current = false
-      }
-      return
-    }
-
-    // Detect new trades added since last render
-    if (currentCount > prevCount) {
-      const newTrades = stream.trades.slice(0, currentCount - prevCount)
-      const threshold = getWhaleThreshold(quote?.price)
-      const hasNewWhale = newTrades.some((t) => t.volume >= threshold)
-      if (hasNewWhale) {
-        confetti.fire()
-      }
-    }
-  }, [stream.trades, stream.historyState, quote?.price, confetti])
 
   // High-performance Drag-to-Move with window listener + requestAnimationFrame (0ms latency, zero re-renders while moving)
   const onHeaderPointerDown = useCallback(
@@ -1878,7 +1833,7 @@ export function LiveOrderBookPanel({
     [stream.bids, stream.asks],
   )
 
-  // Clustered & filtered trades (Gộp lệnh cùng chiều nếu cùng giây hoặc cách nhau <= 1s)
+  // Clustered & filtered trades (Gộp lệnh cùng mức giá, cùng chiều nếu cùng giây hoặc cách nhau <= 1s)
   const clusteredTrades = useMemo(() => {
     return clusterTrades(stream.trades)
   }, [stream.trades])
@@ -1886,6 +1841,42 @@ export function LiveOrderBookPanel({
   // Dynamic whale threshold based on price tick size
   const whaleThreshold = useMemo(() => getWhaleThreshold(quote?.price), [quote?.price])
   const whaleLabel = useMemo(() => getWhaleLabel(quote?.price), [quote?.price])
+
+  // Reliable Realtime Whale Confetti Trigger
+  const seenWhaleIdsRef = useRef<Set<string>>(new Set())
+  const isInitialTradesLoadedRef = useRef(false)
+
+  useEffect(() => {
+    if (!clusteredTrades.length) return
+
+    // On initial data arrival, record historical whale trade IDs to avoid firing on page open
+    if (!isInitialTradesLoadedRef.current) {
+      if (stream.historyState === "READY" || stream.historyState === "PARTIAL" || clusteredTrades.length > 0) {
+        for (const t of clusteredTrades) {
+          if (t.volume >= whaleThreshold) {
+            seenWhaleIdsRef.current.add(t.id)
+          }
+        }
+        isInitialTradesLoadedRef.current = true
+      }
+      return
+    }
+
+    // On subsequent realtime updates, check for any newly arrived whale trades
+    let hasNewWhale = false
+    for (const t of clusteredTrades) {
+      if (t.volume >= whaleThreshold) {
+        if (!seenWhaleIdsRef.current.has(t.id)) {
+          seenWhaleIdsRef.current.add(t.id)
+          hasNewWhale = true
+        }
+      }
+    }
+
+    if (hasNewWhale) {
+      confetti.fire()
+    }
+  }, [clusteredTrades, whaleThreshold, stream.historyState, confetti])
 
   // Tape filtering
   const visibleTrades = useMemo(() => {
@@ -2108,17 +2099,23 @@ export function LiveOrderBookPanel({
                 ))}
               </div>
 
-              {/* Total Ratio Bar */}
-              <div className="mt-2 pt-1.5 border-t border-border/50">
-                <div className="flex items-center justify-between text-xs font-bold">
-                  <span className="text-up flex items-center gap-1">
-                    <TrendingUp className="h-3.5 w-3.5" /> Mua {depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "50%"} ({formatCompactVolume(bidTotal)})
+              {/* Total Ratio Bar matching Image 3 style */}
+              <div className="mt-2 pt-2 border-t border-border/50">
+                <div className="flex items-center justify-between text-xs font-mono mb-1.5">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span className="h-2 w-2 rounded-full bg-up shrink-0" />
+                    <span className="text-muted-2">Mua:</span>
+                    <b className="text-up font-bold">{formatCompactVolume(bidTotal)}</b>
+                    <span className="text-muted text-[11px]">({depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "50%"})</span>
                   </span>
-                  <span className="text-down flex items-center gap-1">
-                    Bán {depthTotal > 0 ? `${sellPct.toFixed(0)}%` : "50%"} ({formatCompactVolume(askTotal)}) <TrendingDown className="h-3.5 w-3.5" />
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span className="h-2 w-2 rounded-full bg-down shrink-0" />
+                    <span className="text-muted-2">Bán:</span>
+                    <b className="text-down font-bold">{formatCompactVolume(askTotal)}</b>
+                    <span className="text-muted text-[11px]">({depthTotal > 0 ? `${sellPct.toFixed(0)}%` : "50%"})</span>
                   </span>
                 </div>
-                <div className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-[#1e2021]">
+                <div className="flex h-2 overflow-hidden rounded-full bg-[#1e2021]">
                   <div className="bg-up transition-all duration-300" style={{ width: `${depthTotal > 0 ? buyPct : 50}%` }} />
                   <div className="bg-down transition-all duration-300" style={{ width: `${depthTotal > 0 ? sellPct : 50}%` }} />
                 </div>

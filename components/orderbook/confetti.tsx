@@ -26,8 +26,8 @@ const COLORS = [
   "#e599f7", // pink
 ]
 
-const PARTICLE_COUNT = 60
-const DURATION_MS = 2200
+const PARTICLE_COUNT = 80
+const DURATION_MS = 2500
 
 export function useWhaleConfetti() {
   const [active, setActive] = useState(false)
@@ -69,27 +69,24 @@ export function ConfettiOverlay({ active }: { active: boolean }) {
     if (!ctx) return
 
     const rect = canvas.parentElement?.getBoundingClientRect()
-    canvas.width = rect?.width ?? 460
-    canvas.height = rect?.height ?? 440
+    const w = (canvas.width = rect?.width || canvas.parentElement?.clientWidth || 500)
+    const h = (canvas.height = rect?.height || canvas.parentElement?.clientHeight || 600)
 
-    const w = canvas.width
-    const h = canvas.height
-
-    // Create particles from the top center, fanning outward
+    // Create particles fanning outward from top of popup
     particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () => {
-      const angle = (Math.random() - 0.5) * Math.PI * 0.8 - Math.PI / 2
-      const speed = 3 + Math.random() * 6
+      const angle = (Math.random() - 0.5) * Math.PI * 0.9 - Math.PI / 2
+      const speed = 4 + Math.random() * 8
       return {
-        x: w / 2 + (Math.random() - 0.5) * w * 0.3,
-        y: -10 - Math.random() * 20,
-        vx: Math.cos(angle) * speed * (0.6 + Math.random()),
-        vy: Math.abs(Math.sin(angle)) * speed * 0.5 + 1 + Math.random() * 2,
-        size: 3 + Math.random() * 5,
+        x: w / 2 + (Math.random() - 0.5) * w * 0.6,
+        y: -15 - Math.random() * 20,
+        vx: Math.cos(angle) * speed * (0.8 + Math.random() * 0.4),
+        vy: Math.abs(Math.sin(angle)) * speed * 0.6 + 2 + Math.random() * 3,
+        size: 5 + Math.random() * 6,
         color: COLORS[Math.floor(Math.random() * COLORS.length)],
         rotation: Math.random() * Math.PI * 2,
-        rotationSpeed: (Math.random() - 0.5) * 0.2,
+        rotationSpeed: (Math.random() - 0.5) * 0.25,
         opacity: 1,
-        shape: Math.random() > 0.5 ? "rect" : "circle",
+        shape: Math.random() > 0.4 ? "rect" : "circle",
       }
     })
 
@@ -103,11 +100,11 @@ export function ConfettiOverlay({ active }: { active: boolean }) {
 
       for (const p of particlesRef.current) {
         p.x += p.vx
-        p.vy += 0.12 // gravity
+        p.vy += 0.16 // gravity
         p.y += p.vy
-        p.vx *= 0.99 // air drag
+        p.vx *= 0.985 // air drag
         p.rotation += p.rotationSpeed
-        p.opacity = Math.max(0, 1 - progress * 1.2)
+        p.opacity = Math.max(0, 1 - progress * 1.1)
 
         ctx.save()
         ctx.globalAlpha = p.opacity
@@ -116,7 +113,7 @@ export function ConfettiOverlay({ active }: { active: boolean }) {
         ctx.fillStyle = p.color
 
         if (p.shape === "rect") {
-          ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2)
+          ctx.fillRect(-p.size / 2, -p.size / 3, p.size, p.size / 1.5)
         } else {
           ctx.beginPath()
           ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2)
@@ -143,7 +140,7 @@ export function ConfettiOverlay({ active }: { active: boolean }) {
   return (
     <canvas
       ref={canvasRef}
-      className="pointer-events-none absolute inset-0 z-50"
+      className="pointer-events-none absolute inset-0 z-50 rounded-xl"
       aria-hidden="true"
     />
   )

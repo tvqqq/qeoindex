@@ -44,15 +44,14 @@ test("clusterTrades groups trades with same action occurring in the same second 
   assert.equal(clustered[2].count, 2)
 })
 
-test("clusterTrades computes weighted average price when sub-orders execute across different price ticks", () => {
+test("clusterTrades keeps different price ticks separate and does not distort price with averages", () => {
   const trades = [
     { id: "t1", time: "09:30:10", price: 30.0, volume: 1000, side: "BUY" as const },
     { id: "t2", time: "09:30:09", price: 30.2, volume: 1000, side: "BUY" as const },
   ]
 
   const clustered = clusterTrades(trades)
-  assert.equal(clustered.length, 1)
-  assert.equal(clustered[0].volume, 2000)
-  assert.equal(clustered[0].count, 2)
-  assert.equal(clustered[0].price, 30.1)
+  assert.equal(clustered.length, 2, "Different prices within 1s should not merge into invalid average ticks")
+  assert.equal(clustered[0].price, 30.0)
+  assert.equal(clustered[1].price, 30.2)
 })
