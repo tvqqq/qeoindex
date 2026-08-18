@@ -8,18 +8,16 @@ const corsHeaders = {
 }
 
 const CANONICAL_UNIVERSE_TICKERS = [
-  "VCB", "BID", "CTG", "TCB", "VPB", "MBB", "LPB", "STB", "HDB", "ACB",
-  "SHB", "SSB", "MSB", "VIB", "TPB", "EIB", "OCB", "NAB", "KLB", "VBB",
-  "VAB", "BVB", "EVF",
-  "TCX", "VCK", "VPX", "SSI", "HCM", "VIX", "VCI", "VND", "DSE", "ORS", "FTS",
-  "VIC", "VHM", "VRE", "BCM", "NVL", "KBC", "KDH", "VPI", "CRV", "SJS",
-  "DXG", "TAL", "SIP", "PDR", "NLG", "TCH", "DIG",
-  "MCH", "VNM", "MWG", "MSN", "SAB", "FRT", "SBT", "PNJ", "KDC", "DHG",
-  "BAF", "VHC", "HPA", "DGW",
-  "GAS", "BSR", "PLX", "PVD", "POW", "REE", "PGV", "VSH", "BWE",
-  "HPG", "GVR", "GEE", "GEX", "GEL", "HAG", "VGC", "DCM", "DGC", "DPM",
-  "LGC", "BMP", "VCG", "CII", "HSG", "PC1",
-  "VJC", "HVN", "VPL", "FPT", "BVH", "GMD", "CTR", "PVT", "VTP", "HAH"
+  "VIC", "VHM", "VCB", "BID", "CTG", "TCB", "VPB", "MBB", "HPG", "GAS",
+  "MCH", "LPB", "VPL", "STB", "HDB", "BSR", "ACB", "VNM", "FPT", "GVR",
+  "DMX", "TCX", "MWG", "MSN", "VJC", "HVN", "VCK", "SHB", "SSI", "SAB",
+  "VRE", "SSB", "MSB", "VIB", "BVH", "VPX", "PLX", "GEE", "POW", "TPB",
+  "BCM", "HCM", "EIB", "NVL", "VIX", "GMD", "GEX", "OCB", "REE", "GEL",
+  "PGV", "KBC", "VCI", "VND", "NAB", "FRT", "KDH", "VPI", "SBT", "PNJ",
+  "HAG", "VGC", "PVD", "DCM", "DGC", "CRV", "DPM", "KDC", "VBB", "SJS",
+  "DXG", "LGC", "TAL", "DHG", "SIP", "BMP", "PDR", "BAF", "NLG", "VCG",
+  "VHC", "TCH", "VSH", "CTR", "KLB", "BWE", "DSE", "CII", "EVF", "PVT",
+  "VTP", "HPA", "ORS", "DGW", "HAH", "HSG", "PC1", "DIG", "FTS", "PHR"
 ]
 
 function parseGroupLevel(raw: string | undefined): { price: number; volume: number } | null {

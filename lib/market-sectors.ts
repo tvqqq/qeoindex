@@ -51,6 +51,7 @@ const SECTOR_BY_TICKER: Record<string, MarketSector> = {
   FRT: "Tiêu dùng & Bán lẻ", SBT: "Tiêu dùng & Bán lẻ", PNJ: "Tiêu dùng & Bán lẻ",
   KDC: "Tiêu dùng & Bán lẻ", DHG: "Tiêu dùng & Bán lẻ", BAF: "Tiêu dùng & Bán lẻ",
   VHC: "Tiêu dùng & Bán lẻ", HPA: "Tiêu dùng & Bán lẻ", DGW: "Tiêu dùng & Bán lẻ",
+  DMX: "Tiêu dùng & Bán lẻ",
 
   GAS: "Năng lượng", BSR: "Năng lượng", PLX: "Năng lượng",
   PVD: "Năng lượng",
@@ -65,6 +66,7 @@ const SECTOR_BY_TICKER: Record<string, MarketSector> = {
   VAB: "Ngân hàng", BVB: "Ngân hàng",
   LGC: "Công nghiệp & Vật liệu", BMP: "Công nghiệp & Vật liệu", VCG: "Công nghiệp & Vật liệu",
   CII: "Công nghiệp & Vật liệu", HSG: "Công nghiệp & Vật liệu", PC1: "Công nghiệp & Vật liệu",
+  PHR: "Công nghiệp & Vật liệu",
 
   VJC: "Hàng không & Du lịch", HVN: "Hàng không & Du lịch", VPL: "Hàng không & Du lịch",
   FPT: "Công nghệ", BVH: "Bảo hiểm", GMD: "Logistics",
