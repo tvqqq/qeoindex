@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { fetchDnseSessionHistory } from "@/lib/dnse-market-runtime"
+import { getOrderbookSnapshotFromSupabase, upsertOrderbookSnapshotToSupabase } from "@/lib/supabase/orderbook"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -30,16 +31,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, message: "Missing valid symbol." }, { status: 400, headers: NO_STORE_HEADERS })
   }
 
+  // 1. In-memory hot cache
   const cached = serverCache.get(symbol)
   if (cached && Date.now() < cached.expiresAt) {
     return NextResponse.json(cached.data, { headers: NO_STORE_HEADERS })
   }
 
+  // 2. Fetch canonical DNSE session history & asynchronously persist snapshot to Supabase
   try {
     const history = await fetchDnseSessionHistory(symbol, new Date())
     const payload = {
       ok: true,
       provider: "DNSE",
+      storage: "Supabase + In-Memory",
       boardId: "G1",
       resolution: "1m",
       ...history,
@@ -50,8 +54,28 @@ export async function GET(request: Request) {
       },
     }
     serverCache.set(symbol, { data: payload, expiresAt: Date.now() + SERVER_TTL_MS })
+    void upsertOrderbookSnapshotToSupabase(history)
     return NextResponse.json(payload, { headers: NO_STORE_HEADERS })
   } catch (error) {
+    // 3. Fallback to Supabase snapshot if DNSE API is unavailable / rate-limited
+    const fallback = await getOrderbookSnapshotFromSupabase(symbol)
+    if (fallback) {
+      const payload = {
+        ok: true,
+        provider: "Supabase-Snapshot",
+        storage: "Supabase",
+        boardId: "G1",
+        resolution: "1m",
+        ...fallback,
+        completeness: {
+          price: "full-session-1m",
+          orderbook: "current-snapshot-plus-live",
+          trades: fallback.tradesTruncated ? "session-backfill-truncated" : "full-session-backfill",
+        },
+      }
+      return NextResponse.json(payload, { headers: NO_STORE_HEADERS })
+    }
+
     return NextResponse.json({
       ok: false,
       provider: "DNSE",
