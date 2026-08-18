@@ -13,7 +13,7 @@ export default async function Page() {
   try {
     data = await getScannerData()
   } catch (error) {
-    console.error("[StockOS board] Notion read failed", error)
+    console.error("[QeoIndex board] Notion read failed", error)
     return <NotionUnavailable section="Bảng điện" detail="Không đọc được Wyckoff Universe / Daily Scan từ Notion. Market data không được dùng để thay thế persistent state." />
   }
   const universe: BoardUniverseStock[] = data.universe.map((stock) => ({
