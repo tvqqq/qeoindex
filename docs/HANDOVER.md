@@ -121,15 +121,41 @@ Use `.env.example` as the inventory. Main categories are Notion data-source IDs/
 
 `pnpm build` runs `test:core`, `lint:touched`, `typecheck`, and `scan:secrets` through `prebuild` before Next.js compilation. Full `pnpm lint` still has pre-existing errors outside the market-board scope; broad lint cleanup remains a separate change.
 
+## Git and deployment workflow
+
+Production deployment has exactly one normal trigger: **Vercel Git Integration on `main`**.
+
+```text
+feature/work branch
+  -> local validation
+  -> commit + push branch
+  -> PR / squash or merge once into main
+  -> Vercel Git Integration creates one production deployment
+  -> inspect deployment status/logs
+  -> smoke qeoindex.qeoqeo.com and changed APIs
+```
+
+Rules:
+
+- `vercel.json` intentionally disables Git deployments for every branch except `main`.
+- Work branches are for development and validation; they must not create Vercel deployments.
+- Merging/pushing an approved release to `main` is the deployment action. Do not also run `vercel --prod`, `vercel deploy --prod`, a Deploy Hook, or a second API deployment for the same release.
+- Vercel CLI/MCP/API may be used to inspect deployments and logs. Inspection is not a reason to create another deployment.
+- Manual production deployment is an exceptional recovery path only. It requires explicit user authorization and confirmation that Git auto-deploy will not also run for that release.
+- If the deployment API returns a quota/rate-limit error, stop retrying. Do not create repeated deployment attempts while waiting for the quota window to recover.
+- Target invariant: **one approved release merged to `main` → one Vercel production deployment**.
+
 ## Release checklist
 
 1. Review `git status` and preserve unrelated user changes.
 2. Run area-specific tests and targeted ESLint.
 3. Run `pnpm typecheck` and `pnpm build --webpack`.
 4. Run `pnpm scan:secrets` for release/security-sensitive changes.
-5. Deploy with `pnpm exec vercel --prod --yes` only when deployment is authorized or explicitly part of the task.
-6. Confirm the deployment reaches `READY`; the official domain is `qeoindex.qeoqeo.com`. The legacy `stockos-beryl.vercel.app` alias may remain as an infrastructure fallback.
-7. Smoke the official page and any changed API. For market data, inspect actual values/errors, not only HTTP status.
+5. Commit and push the work branch. Do not create a manual Vercel production deployment.
+6. When the release is approved, merge/squash once into `main`. The `main` update triggers Vercel Git Integration automatically.
+7. Observe the Git-triggered deployment until it reaches `READY`. Do not redeploy merely to verify it.
+8. Smoke the official page `qeoindex.qeoqeo.com` and any changed API. For market data, inspect actual values/errors, not only HTTP status.
+9. If Vercel is quota/rate limited, report the release as blocked and stop deployment retries until the limit resets.
 
 ## Fast debugging guide
 
