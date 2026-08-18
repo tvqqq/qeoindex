@@ -27,7 +27,7 @@ import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type
 import { isTradingSessionOpen } from "@/lib/session-countdown"
 import { isSupabaseConfigured } from "@/lib/supabase/client"
 import { subscribeMarketRealtime } from "@/lib/supabase/realtime"
-import { isSoundEnabled, setSoundEnabled, playWhaleSound } from "@/lib/sound-engine"
+import { setSoundEnabled, playWhaleSound } from "@/lib/sound-engine"
 
 export type BoardUniverseStock = LiveBoardStock
 export type IndexQuote = {
@@ -174,7 +174,7 @@ function WatchlistSection({
   quotes: Record<string, LiveStockQuote | IndexQuote>
   priceHistory: Record<string, IntradayPoint[]>
   watchlist: Set<string>
-  whaleAlerts: Record<string, number>
+  whaleAlerts: Record<string, boolean>
   onToggleWatch: (ticker: string) => void
   onOpen: (ticker: string) => void
 }) {
@@ -199,7 +199,7 @@ function WatchlistSection({
               history={(priceHistory[stock.ticker] ?? []).map((p) => p.close)}
               onOpen={() => onOpen(stock.ticker)}
               isWatched
-              isWhaleActive={Boolean(whaleAlerts[stock.ticker] && Date.now() - whaleAlerts[stock.ticker] < 1500)}
+              isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
               onToggleWatch={(e) => { e.stopPropagation(); onToggleWatch(stock.ticker) }}
             />
           </div>
@@ -480,16 +480,19 @@ export function LiveMarketBoardV2({
   const [selectedSector, setSelectedSector] = useState("Tất cả")
   const [mode, setMode] = useState<BoardMode>("sector")
   const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>(() => initialHistories ? { ...initialHistories } : {})
-  const [whaleAlerts, setWhaleAlerts] = useState<Record<string, number>>({})
-  const [soundEnabled, setSoundEnabledState] = useState<boolean>(false)
+  const [whaleAlerts, setWhaleAlerts] = useState<Record<string, boolean>>({})
+  const [soundEnabled, setSoundEnabledState] = useState<boolean>(() => {
+    try {
+      return typeof window !== "undefined" && localStorage.getItem("qeoindex_sound_fx_enabled") === "true"
+    } catch {
+      return false
+    }
+  })
+  const whaleTimeouts = useRef<Record<string, NodeJS.Timeout>>({})
   const dailyReferences = useRef<Record<string, number>>({})
   const indexReferences = useRef<Record<string, number>>({})
   const sessionIdentifier = useRef(currentSessionIdentifier())
   const lastFrameAt = useRef(0)
-
-  useEffect(() => {
-    setSoundEnabledState(isSoundEnabled())
-  }, [])
 
   const handleToggleSound = useCallback(() => {
     const next = !soundEnabled
@@ -501,8 +504,19 @@ export function LiveMarketBoardV2({
   }, [soundEnabled])
 
   const triggerWhaleAlert = useCallback((ticker: string, side: "BUY" | "SELL" | "REF" = "BUY") => {
-    setWhaleAlerts((prev) => ({ ...prev, [ticker]: Date.now() }))
+    setWhaleAlerts((prev) => ({ ...prev, [ticker]: true }))
     playWhaleSound(side)
+    if (whaleTimeouts.current[ticker]) {
+      clearTimeout(whaleTimeouts.current[ticker])
+    }
+    whaleTimeouts.current[ticker] = setTimeout(() => {
+      setWhaleAlerts((prev) => {
+        if (!prev[ticker]) return prev
+        const next = { ...prev }
+        delete next[ticker]
+        return next
+      })
+    }, 1500)
   }, [])
 
   const [watchlist, setWatchlist] = useState<Set<string>>(() => {
@@ -1397,7 +1411,7 @@ export function LiveMarketBoardV2({
                           history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)}
                           onOpen={() => openBook(stock.ticker)}
                           isWatched={watchlist.has(stock.ticker)}
-                          isWhaleActive={Boolean(whaleAlerts[stock.ticker] && Date.now() - whaleAlerts[stock.ticker] < 1500)}
+                          isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
                           onToggleWatch={(e) => {
                             e.stopPropagation()
                             handleToggleWatch(stock.ticker)
@@ -1422,7 +1436,7 @@ export function LiveMarketBoardV2({
                 history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)}
                 onOpen={() => openBook(stock.ticker)}
                 isWatched={watchlist.has(stock.ticker)}
-                isWhaleActive={Boolean(whaleAlerts[stock.ticker] && Date.now() - whaleAlerts[stock.ticker] < 1500)}
+                isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
                 onToggleWatch={(e) => {
                   e.stopPropagation()
                   handleToggleWatch(stock.ticker)
