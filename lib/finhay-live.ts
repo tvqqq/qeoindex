@@ -90,7 +90,7 @@ export async function discoverFinhayOAuth(): Promise<FinhayOAuthMetadata> {
         params: {
           protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: {},
-          clientInfo: { name: "StockOS", version: "1.0.0" },
+          clientInfo: { name: "QeoIndex", version: "1.0.0" },
         },
       }),
       cache: "no-store",
@@ -140,7 +140,7 @@ export async function registerFinhayClient(metadata: FinhayOAuthMetadata, redire
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({
-      client_name: "StockOS",
+      client_name: "QeoIndex",
       redirect_uris: [redirectUri],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
@@ -290,7 +290,7 @@ export async function callFinhayTool(accessToken: string, name: string, args: Re
     params: {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {},
-      clientInfo: { name: "StockOS", version: "1.0.0" },
+      clientInfo: { name: "QeoIndex", version: "1.0.0" },
     },
   })
 
