@@ -22,6 +22,7 @@ import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/lib/intraday-5m"
+import { isTradingSessionOpen } from "@/lib/session-countdown"
 
 export type BoardUniverseStock = LiveBoardStock
 export type IndexQuote = {
@@ -405,11 +406,23 @@ function FloatingMarketStatus({
       >
         <span
           className={`h-2 w-2 rounded-full ${
-            streamState === "LIVE" ? "bg-up animate-pulse" : streamState === "CONNECTING" ? "bg-ref" : "bg-down"
+            streamState === "LIVE"
+              ? "bg-up animate-pulse"
+              : streamState === "CONNECTING"
+                ? "bg-ref"
+                : streamState === "CLOSED"
+                  ? "bg-white/40"
+                  : "bg-down"
           }`}
         />
         <span className="font-semibold text-foreground">
-          {streamState === "LIVE" ? "DNSE LIVE" : streamState === "CONNECTING" ? "Đang kết nối" : "Mất kết nối"}
+          {streamState === "LIVE"
+            ? "DNSE LIVE"
+            : streamState === "CONNECTING"
+              ? "Đang kết nối"
+              : streamState === "CLOSED"
+                ? "PHIÊN ĐÓNG CỬA (EOD)"
+                : "Mất kết nối"}
         </span>
         <span className="text-muted-2">·</span>
         <span className="font-mono text-up font-bold">▲{advances}</span>
@@ -424,11 +437,14 @@ export function LiveMarketBoardV2({
   universe,
   initialQuotes,
   initialHistories,
+  isSessionOpen,
 }: {
   universe: BoardUniverseStock[]
   initialQuotes?: Record<string, LiveStockQuote | IndexQuote>
   initialHistories?: Record<string, IntradayPoint[]>
+  isSessionOpen?: boolean
 }) {
+  const sessionOpen = isSessionOpen ?? isTradingSessionOpen()
   const { open: openOrderBook } = useOrderBooks()
   const [quotes, setQuotes] = useState<Record<string, LiveStockQuote | IndexQuote>>(() => {
     const initial: Record<string, LiveStockQuote | IndexQuote> = initialQuotes ? { ...initialQuotes } : {}
@@ -447,7 +463,7 @@ export function LiveMarketBoardV2({
     }
     return initial
   })
-  const [streamState, setStreamState] = useState<StreamState>("CONNECTING")
+  const [streamState, setStreamState] = useState<StreamState>(() => sessionOpen ? "CONNECTING" : "CLOSED")
   const [streamError, setStreamError] = useState("")
   const [lastMessageAt, setLastMessageAt] = useState("")
   const [reconnectKey, setReconnectKey] = useState(0)
@@ -486,6 +502,9 @@ export function LiveMarketBoardV2({
 
   useEffect(() => {
     if (!symbolList.length) return
+    const hasInitialHistory = initialHistories && Object.keys(initialHistories).length > 0
+    if (!sessionOpen && hasInitialHistory) return
+
     const controller = new AbortController()
     let disposed = false
 
@@ -956,7 +975,11 @@ export function LiveMarketBoardV2({
     document.addEventListener("visibilitychange", onVisibilityChange)
     window.addEventListener("online", onOnline)
 
-    void connect()
+    if (sessionOpen) {
+      void connect()
+    } else {
+      setStreamState("CLOSED")
+    }
     return () => {
       disposed = true
       clearReconnectTimer()
@@ -966,7 +989,7 @@ export function LiveMarketBoardV2({
       window.removeEventListener("online", onOnline)
       if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "board closed")
     }
-  }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols])
+  }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols, sessionOpen])
 
   const normalizedQuery = query.trim().toUpperCase()
   const currentSessionDay = vietnamSessionDay()

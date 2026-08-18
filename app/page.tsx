@@ -1,37 +1,32 @@
 import { LiveMarketBoardV2, type BoardUniverseStock, type IndexQuote } from "@/components/live-market-board-v2"
-import { NotionUnavailable } from "@/components/notion-unavailable"
 import { OrderBookProvider } from "@/components/orderbook/orderbook-context"
 import { OrderBookManager } from "@/components/orderbook/orderbook-manager"
 import { TopNav } from "@/components/top-nav"
-import { getScannerData } from "@/lib/scanner-data"
 import { sectorForTicker } from "@/lib/market-sectors"
+import { CANONICAL_UNIVERSE_STOCKS } from "@/lib/wyckoff-universe"
 import { getAllOrderbookSnapshotsFromSupabase } from "@/lib/supabase/orderbook"
+import { isTradingSessionOpen } from "@/lib/session-countdown"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/lib/intraday-5m"
 
 export const dynamic = "force-dynamic"
 
 export default async function Page() {
-  let data: Awaited<ReturnType<typeof getScannerData>>
-  try {
-    data = await getScannerData()
-  } catch (error) {
-    console.error("[QeoIndex board] Notion read failed", error)
-    return <NotionUnavailable section="Bảng điện" detail="Không đọc được Wyckoff Universe / Daily Scan từ Notion. Market data không được dùng để thay thế persistent state." />
-  }
+  const isSessionOpen = isTradingSessionOpen(new Date())
 
+  // Read EOD snapshots directly from Supabase database without calling Notion
   const snapshots = await getAllOrderbookSnapshotsFromSupabase()
 
-  const universe: BoardUniverseStock[] = data.universe.map((stock) => {
+  const universe: BoardUniverseStock[] = CANONICAL_UNIVERSE_STOCKS.map((stock) => {
     const snap = snapshots[stock.ticker]
-    const lastClosePrice = snap?.latest_price || snap?.reference_price || data.latestScans[stock.ticker]?.price || null
+    const lastClosePrice = snap?.latest_price || snap?.reference_price || null
     return {
       ticker: stock.ticker,
       rank: stock.rank,
-      sector: stock.sector || sectorForTicker(stock.ticker),
+      sector: sectorForTicker(stock.ticker),
       marketCapT: stock.marketCapT,
       lastClose: lastClosePrice,
-      lastCloseDate: snap?.session_date || data.latestScans[stock.ticker]?.date || "",
+      lastCloseDate: snap?.session_date || "",
     }
   })
 
@@ -40,7 +35,6 @@ export default async function Page() {
 
   for (const stock of universe) {
     const snap = snapshots[stock.ticker]
-    const scan = data.latestScans[stock.ticker]
 
     if (snap && snap.latest_price && snap.latest_price > 0) {
       const ref = snap.reference_price || (snap.latest_quote as any)?.reference || snap.latest_price
@@ -50,8 +44,8 @@ export default async function Page() {
         symbol: stock.ticker,
         price: snap.latest_price,
         reference: ref,
-        ceiling: snap.ceiling_price ?? Math.round(ref * 1.07),
-        floor: snap.floor_price ?? Math.round(ref * 0.93),
+        ceiling: snap.ceiling_price ?? Math.round(ref * 1.07 * 100) / 100,
+        floor: snap.floor_price ?? Math.round(ref * 0.93 * 100) / 100,
         change,
         changePercent,
         volume: snap.total_volume || 0,
@@ -59,21 +53,6 @@ export default async function Page() {
       }
       if (Array.isArray(snap.intraday_1m) && snap.intraday_1m.length > 0) {
         initialHistories[stock.ticker] = snap.intraday_1m as unknown as IntradayPoint[]
-      }
-    } else if (scan && scan.price && scan.price > 0) {
-      const changePct = scan.changePct ?? 0
-      const ref = changePct !== 0 ? scan.price / (1 + changePct / 100) : scan.price
-      const change = scan.price - ref
-      initialQuotes[stock.ticker] = {
-        symbol: stock.ticker,
-        price: scan.price,
-        reference: ref,
-        ceiling: Math.round(ref * 1.07),
-        floor: Math.round(ref * 0.93),
-        change,
-        changePercent: changePct,
-        volume: scan.volume || 0,
-        updatedAt: scan.date || new Date().toISOString(),
       }
     }
   }
@@ -83,7 +62,12 @@ export default async function Page() {
       <div className="flex h-screen flex-col overflow-hidden bg-background">
         <TopNav />
         <main className="min-h-0 flex-1">
-          <LiveMarketBoardV2 universe={universe} initialQuotes={initialQuotes} initialHistories={initialHistories} />
+          <LiveMarketBoardV2
+            universe={universe}
+            initialQuotes={initialQuotes}
+            initialHistories={initialHistories}
+            isSessionOpen={isSessionOpen}
+          />
         </main>
         <OrderBookManager />
       </div>

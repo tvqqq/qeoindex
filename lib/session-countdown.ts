@@ -45,3 +45,11 @@ export function calculateSessionCountdown(date: Date = new Date()): {
 
   return null
 }
+
+export function isTradingSessionOpen(date: Date = new Date()): boolean {
+  const { dayOfWeek, totalSeconds } = getVnTimeSeconds(date)
+  // Trading days only (Mon-Fri)
+  if (dayOfWeek < 1 || dayOfWeek > 5) return false
+  // HOSE Trading session: 09:00:00 (32,400s) -> 15:00:00 (54,000s)
+  return totalSeconds >= 32400 && totalSeconds <= 54000
+}
