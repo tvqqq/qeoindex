@@ -628,9 +628,12 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
         if (!authResponse.ok || !authJson.ok || !authJson.url || !authJson.auth) throw new Error(authJson.message ?? `Stream auth ${authResponse.status}`)
         if (disposed) return
 
+        let lastPongAt = Date.now()
+
         socket = new WebSocket(authJson.url)
         socket.onopen = () => {
           lastFrameAt.current = Date.now()
+          lastPongAt = Date.now()
           setState("CONNECTING")
         }
         socket.onmessage = (event) => {
@@ -644,7 +647,12 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           }
 
           const action = data?.action ?? data?.a
+          if (action === "pong") {
+            lastPongAt = Date.now()
+            return
+          }
           if (action === "ping") {
+            lastPongAt = Date.now()
             if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "pong", timestamp: data?.timestamp }))
             return
           }
@@ -656,6 +664,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
             setState("LIVE")
             setError("")
             attempts = 0
+            lastPongAt = Date.now()
             socket?.send(
               JSON.stringify({
                 action: "subscribe",
@@ -672,11 +681,10 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
               if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "ping", timestamp: Date.now() }))
             }, 15_000)
             watchdogTimer = window.setInterval(() => {
-              if (socket?.readyState === WebSocket.OPEN && Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
-                setError("DNSE WS im lặng; đang tự động reconnect.")
-                forceReconnect("stale orderbook stream")
+              if (socket?.readyState === WebSocket.OPEN && Date.now() - lastPongAt > 40_000) {
+                forceReconnect("websocket keepalive pong timeout")
               }
-            }, 7_500)
+            }, 10_000)
             return
           }
           if (action === "auth_error" || action === "error") {
@@ -1395,7 +1403,7 @@ export function LiveOrderBookPanel({
 
   const stream = useDnseOrderBookStream(symbol, reconnectKey, initialMeta)
   const quote = stream.quote
-  const isWsReady = stream.state === "LIVE"
+  const isWsReady = stream.state === "LIVE" || stream.historyState === "READY" || stream.trades.length > 0 || stream.bids.length > 0 || stream.quote !== null
   const headerPriceFlash = usePriceFlashAnimation(quote?.price, quote?.reference)
 
   // High-performance Drag-to-Move with window listener + requestAnimationFrame (0ms latency, zero re-renders while moving)
@@ -1670,128 +1678,79 @@ export function LiveOrderBookPanel({
     >
       {/* HEADER / DRAG HANDLE */}
       <header
-        className="flex cursor-grab select-none items-center gap-2 border-b border-border/80 bg-[#191b1a] px-4 py-3 active:cursor-grabbing touch-none"
+        className="flex cursor-grab select-none items-center justify-between gap-2 border-b border-border/80 bg-[#191b1a] px-3.5 py-2.5 active:cursor-grabbing touch-none"
         onPointerDown={onHeaderPointerDown}
       >
-        <GripVertical className="h-4 w-4 text-muted shrink-0" />
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="font-mono text-xl font-black tracking-tight text-foreground">{symbol}</span>
+        {/* Left Ticker & Exchange */}
+        <div className="flex items-center gap-1.5 min-w-0 shrink">
+          <GripVertical className="h-4 w-4 text-muted shrink-0" />
+          <span className="font-mono text-lg sm:text-xl font-black tracking-tight text-foreground shrink-0">{symbol}</span>
           {stream.company?.exchange ? (
-            <span className="rounded bg-[#222424] border border-border/80 px-1.5 py-0.5 text-[11px] font-bold text-muted-2 uppercase tracking-wide">
+            <span className="hidden sm:inline-flex rounded bg-[#222424] border border-border/80 px-1.5 py-0.5 text-[10px] font-bold text-muted-2 uppercase tracking-wide shrink-0">
               {stream.company.exchange}
             </span>
           ) : null}
-          {stream.company?.nameVi ? (
-            <span className="hidden sm:inline truncate text-xs text-muted font-medium max-w-[220px]" title={stream.company.nameVi}>
-              {stream.company.nameVi}
+        </div>
+
+        {/* Center / Right Price & Action Controls */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Live Price & Change Pill */}
+          <div className="flex items-center gap-2">
+            <span
+              className={`font-mono text-lg sm:text-xl font-black tracking-tight rounded px-1 transition-colors ${color} ${
+                headerPriceFlash === "up"
+                  ? "flash-text-up font-black"
+                  : headerPriceFlash === "down"
+                    ? "flash-text-down font-black"
+                    : headerPriceFlash === "ref"
+                      ? "flash-text-ref font-black"
+                      : ""
+              }`}
+            >
+              {formatPrice(quote?.price)}
             </span>
-          ) : null}
-        </div>
+            {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact /> : null}
+          </div>
 
-        {/* Live Price & Change Pill */}
-        <div className="ml-auto flex items-center gap-2.5 shrink-0">
-          <span
-            className={`font-mono text-xl font-black sm:text-2xl tracking-tight rounded px-1.5 transition-colors ${color} ${
-              headerPriceFlash === "up"
-                ? "flash-text-up font-black"
-                : headerPriceFlash === "down"
-                  ? "flash-text-down font-black"
-                  : headerPriceFlash === "ref"
-                    ? "flash-text-ref font-black"
-                    : ""
-            }`}
-          >
-            {formatPrice(quote?.price)}
-          </span>
-          {quote ? <MarketChangePill value={quote.changePercent} tone={tone} /> : null}
-        </div>
+          {/* Action Controls (3 clean icons) */}
+          <div className="flex items-center gap-0.5 border-l border-border/60 pl-1.5 ml-0.5">
+            <a
+              data-orderbook-action
+              href={`/research/${symbol.toLowerCase()}`}
+              aria-label={`Mở phân tích chuyên sâu ${symbol}`}
+              title="Mở phân tích chuyên sâu"
+              onClick={(event) => event.stopPropagation()}
+              className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-1 shrink-0 ml-1.5">
-          <button
-            data-orderbook-action
-            type="button"
-            aria-label="Kết nối lại sổ lệnh"
-            title="Kết nối lại DNSE Stream"
-            onClick={(event) => {
-              event.stopPropagation()
-              setReconnectKey((key) => key + 1)
-            }}
-            className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
-          >
-            <RefreshCw className={`h-4 w-4 ${stream.state === "CONNECTING" ? "animate-spin text-ref" : ""}`} />
-          </button>
+            <button
+              data-orderbook-action
+              type="button"
+              aria-label={isMaximized ? "Khôi phục cửa sổ" : "Phóng to toàn màn hình"}
+              title={isMaximized ? "Khôi phục kích thước" : "Phóng to"}
+              onClick={(event) => {
+                event.stopPropagation()
+                setIsMaximized((v) => !v)
+              }}
+              className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
+            >
+              {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
 
-          <a
-            data-orderbook-action
-            href={`/research/${symbol.toLowerCase()}`}
-            aria-label={`Mở phân tích chuyên sâu ${symbol}`}
-            title="Mở phân tích chuyên sâu"
-            onClick={(event) => event.stopPropagation()}
-            className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </a>
-
-          <button
-            data-orderbook-action
-            type="button"
-            aria-label="Thu về kích thước ban đầu (nhỏ nhất)"
-            title="Thu về kích thước ban đầu (nhỏ nhất)"
-            onClick={(event) => {
-              event.stopPropagation()
-              setIsMaximized(false)
-              setMinimized(false)
-              setSize({ width: MIN_WIDTH, height: MIN_HEIGHT })
-              if (panelRef.current) {
-                panelRef.current.style.width = `${MIN_WIDTH}px`
-                panelRef.current.style.height = `${MIN_HEIGHT}px`
-              }
-            }}
-            className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </button>
-
-          <button
-            data-orderbook-action
-            type="button"
-            aria-label={isMaximized ? "Khôi phục cửa sổ" : "Phóng to toàn màn hình"}
-            title={isMaximized ? "Khôi phục kích thước" : "Phóng to"}
-            onClick={(event) => {
-              event.stopPropagation()
-              setIsMaximized((v) => !v)
-            }}
-            className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
-          >
-            {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </button>
-
-          <button
-            data-orderbook-action
-            type="button"
-            aria-label={minimized ? "Mở rộng sổ lệnh" : "Thu gọn sổ lệnh"}
-            title={minimized ? "Mở rộng" : "Thu gọn"}
-            onClick={(event) => {
-              event.stopPropagation()
-              setMinimized((value) => !value)
-            }}
-            className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
-          >
-            <Minus className="h-4 w-4" />
-          </button>
-
-          <button
-            data-orderbook-action
-            type="button"
-            aria-label="Đóng sổ lệnh"
-            title="Đóng"
-            onPointerDown={closeOnPointerDown}
-            onClick={closeOnClick}
-            className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-down transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
+            <button
+              data-orderbook-action
+              type="button"
+              aria-label="Đóng sổ lệnh"
+              title="Đóng"
+              onPointerDown={closeOnPointerDown}
+              onClick={closeOnClick}
+              className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-down transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </header>
 

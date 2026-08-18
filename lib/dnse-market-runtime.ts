@@ -344,6 +344,29 @@ async function fetchDnseLatestQuote(symbol: string) {
   }
 }
 
+function parseDepthLevel(price: number | null | undefined, volume: number | null | undefined): { price: number; volume: number } | null {
+  if (!price || !Number.isFinite(price) || price <= 0 || !volume || !Number.isFinite(volume) || volume <= 0) return null
+  return {
+    price: price > 1000 ? price / 1000 : price,
+    volume,
+  }
+}
+
+function parseVpsPipeDepth(val: unknown): { price: number; volume: number } | null {
+  if (typeof val !== "string" || !val) return null
+  const parts = val.split("|")
+  if (parts.length < 2) return null
+  const rawPrice = parseFloat(parts[0])
+  const rawVolLot = parseFloat(parts[1])
+  if (Number.isFinite(rawPrice) && rawPrice > 0 && Number.isFinite(rawVolLot) && rawVolLot > 0) {
+    return {
+      price: rawPrice > 1000 ? rawPrice / 1000 : rawPrice,
+      volume: rawVolLot * 10,
+    }
+  }
+  return null
+}
+
 async function fetchFastMarketOverview(symbol: string) {
   try {
     const [ssiRes, vpsRes] = await Promise.allSettled([
@@ -369,18 +392,46 @@ async function fetchFastMarketOverview(symbol: string) {
     const ceiling = finiteNumber(ssiData?.ceiling ?? (vpsData?.c ? Number(vpsData.c) * 1000 : null))
     const floor = finiteNumber(ssiData?.floor ?? (vpsData?.f ? Number(vpsData.f) * 1000 : null))
     const refPrice = finiteNumber(ssiData?.refPrice ?? (vpsData?.r ? Number(vpsData.r) * 1000 : null))
-    const highPrice = finiteNumber(vpsData?.highPrice ? Number(vpsData.highPrice) * 1000 : null)
-    const lowPrice = finiteNumber(vpsData?.lowPrice ? Number(vpsData.lowPrice) * 1000 : null)
-    const avgPrice = finiteNumber(vpsData?.avePrice ? Number(vpsData.avePrice) * 1000 : null)
-    const totalVolume = finiteNumber(vpsData?.lot ? Number(vpsData.lot) * 10 : null)
-    const matchPrice = finiteNumber(vpsData?.lastPrice ? Number(vpsData.lastPrice) * 1000 : null)
+    const highPrice = finiteNumber(ssiData?.highest ?? (vpsData?.highPrice ? Number(vpsData.highPrice) * 1000 : null))
+    const lowPrice = finiteNumber(ssiData?.lowest ?? (vpsData?.lowPrice ? Number(vpsData.lowPrice) * 1000 : null))
+    const avgPrice = finiteNumber(ssiData?.avgPrice ?? (vpsData?.avePrice ? Number(vpsData.avePrice) * 1000 : null))
+    const totalVolume = finiteNumber(ssiData?.nmTotalTradedQty ?? (vpsData?.lot ? Number(vpsData.lot) * 10 : null))
+    const matchPrice = finiteNumber(ssiData?.matchedPrice ?? (vpsData?.lastPrice ? Number(vpsData.lastPrice) * 1000 : null))
 
-    const foreignBuyVol = finiteNumber(vpsData?.fBVol) ?? 0
-    const foreignSellVol = finiteNumber(vpsData?.fSVolume) ?? 0
-    const foreignBuyVal = finiteNumber(vpsData?.fBValue) ?? 0
-    const foreignSellVal = finiteNumber(vpsData?.fSValue) ?? 0
+    const foreignBuyVol = finiteNumber(ssiData?.buyForeignQtty ?? (vpsData?.fBVol ? Number(vpsData.fBVol) * 10 : 0)) ?? 0
+    const foreignSellVol = finiteNumber(ssiData?.sellForeignQtty ?? (vpsData?.fSVolume ? Number(vpsData.fSVolume) * 10 : 0)) ?? 0
+    const foreignBuyVal = finiteNumber(ssiData?.buyForeignValue ?? (vpsData?.fBValue ? Number(vpsData.fBValue) * 1000 : 0)) ?? 0
+    const foreignSellVal = finiteNumber(ssiData?.sellForeignValue ?? (vpsData?.fSValue ? Number(vpsData.fSValue) * 1000 : 0)) ?? 0
     const availableRoom = finiteNumber(ssiData?.remainForeignQtty ?? (vpsData?.fRoom ? Number(vpsData.fRoom) : null))
     const listedShare = finiteNumber(ssiData?.listedShare)
+
+    // Extract 3-level orderbook depth
+    const ssiBids = [
+      parseDepthLevel(ssiData?.best1Bid, ssiData?.best1BidVol),
+      parseDepthLevel(ssiData?.best2Bid, ssiData?.best2BidVol),
+      parseDepthLevel(ssiData?.best3Bid, ssiData?.best3BidVol),
+    ].filter(Boolean) as { price: number; volume: number }[]
+
+    const ssiAsks = [
+      parseDepthLevel(ssiData?.best1Offer, ssiData?.best1OfferVol),
+      parseDepthLevel(ssiData?.best2Offer, ssiData?.best2OfferVol),
+      parseDepthLevel(ssiData?.best3Offer, ssiData?.best3OfferVol),
+    ].filter(Boolean) as { price: number; volume: number }[]
+
+    const vpsBids = [
+      parseVpsPipeDepth(vpsData?.g1),
+      parseVpsPipeDepth(vpsData?.g2),
+      parseVpsPipeDepth(vpsData?.g3),
+    ].filter(Boolean) as { price: number; volume: number }[]
+
+    const vpsAsks = [
+      parseVpsPipeDepth(vpsData?.g4),
+      parseVpsPipeDepth(vpsData?.g5),
+      parseVpsPipeDepth(vpsData?.g6),
+    ].filter(Boolean) as { price: number; volume: number }[]
+
+    const bids = ssiBids.length ? ssiBids : vpsBids
+    const asks = ssiAsks.length ? ssiAsks : vpsAsks
 
     const foreign: DnseForeignSnapshot = {
       symbol,
@@ -394,7 +445,7 @@ async function fetchFastMarketOverview(symbol: string) {
       updatedAt: new Date().toISOString(),
     }
 
-    return { company, ceiling, floor, refPrice, highPrice, lowPrice, avgPrice, totalVolume, matchPrice, foreign }
+    return { company, ceiling, floor, refPrice, highPrice, lowPrice, avgPrice, totalVolume, matchPrice, foreign, bids, asks }
   } catch {
     return null
   }
@@ -465,13 +516,13 @@ export async function fetchDnseSessionHistory(symbol: string, now = new Date()):
     }
   }
 
-  // Merge latest quote
+  // Merge latest quote & depth
   if (fastOverview) {
     if (!latestQuote) {
       latestQuote = {
         time: Math.floor(now.getTime() / 1000),
-        bid: [],
-        offer: [],
+        bid: fastOverview.bids ?? [],
+        offer: fastOverview.asks ?? [],
         matchPrice: fastOverview.matchPrice || prices.at(-1)?.close || null,
         openPrice: prices[0]?.open || null,
         reference: fastOverview.refPrice,
@@ -483,6 +534,12 @@ export async function fetchDnseSessionHistory(symbol: string, now = new Date()):
         totalVolume: fastOverview.totalVolume,
       }
     } else {
+      if (!latestQuote.bid?.length && fastOverview.bids?.length) {
+        latestQuote.bid = fastOverview.bids
+      }
+      if (!latestQuote.offer?.length && fastOverview.asks?.length) {
+        latestQuote.offer = fastOverview.asks
+      }
       latestQuote.reference = latestQuote.reference ?? fastOverview.refPrice
       latestQuote.ceiling = latestQuote.ceiling ?? fastOverview.ceiling
       latestQuote.floor = latestQuote.floor ?? fastOverview.floor
