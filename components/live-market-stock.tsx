@@ -10,6 +10,7 @@ import {
   marketToneFromPrice,
   marketToneHex,
   marketToneText,
+  type MarketTone,
 } from "@/lib/market-tone"
 
 export interface LiveBoardStock {
@@ -71,6 +72,43 @@ function sparkReference(history: number[], reference?: number) {
   return normalizeMarketPrice(reference, history.at(-1)) ?? undefined
 }
 
+function getGainerStyles(quote?: LiveStockQuote, tone?: MarketTone) {
+  const change = quote?.changePercent ?? 0
+  const isCeiling =
+    tone === "ceiling" ||
+    (typeof quote?.ceiling === "number" && typeof quote?.price === "number" && quote.price >= quote.ceiling - 0.05) ||
+    change >= 6.85
+  const isSuper = !isCeiling && change >= 5
+  const isStrong = !isCeiling && !isSuper && change >= 3
+
+  if (isCeiling) {
+    return {
+      rowClass: "ceiling-gainer border-purple-500/90 bg-purple-950/25",
+      cardClass: "ceiling-gainer border-purple-500/90 bg-purple-950/25",
+      tickerClass: "text-purple-300 drop-shadow-[0_0_8px_rgba(176,124,255,0.7)] font-black",
+    }
+  }
+  if (isSuper) {
+    return {
+      rowClass: "super-gainer border-emerald-400/90 bg-emerald-950/30",
+      cardClass: "super-gainer border-emerald-400/90 bg-emerald-950/30",
+      tickerClass: "text-emerald-300 drop-shadow-[0_0_6px_rgba(52,211,153,0.6)] font-black",
+    }
+  }
+  if (isStrong) {
+    return {
+      rowClass: "strong-gainer border-up/60 bg-up/5",
+      cardClass: "strong-gainer border-up/60 bg-up/5",
+      tickerClass: "text-up font-black",
+    }
+  }
+  return {
+    rowClass: "border-border-strong/80",
+    cardClass: "border-border",
+    tickerClass: "text-foreground",
+  }
+}
+
 export function LiveStockRow({
   stock,
   quote,
@@ -91,6 +129,7 @@ export function LiveStockRow({
   const chart = sparkData(history)
   const chartReference = sparkReference(chart, quote?.reference)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
+  const { rowClass, tickerClass } = getGainerStyles(quote, tone)
 
   return (
     <div
@@ -100,12 +139,12 @@ export function LiveStockRow({
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen() }
       }}
-      className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(42px,1fr)_64px] items-center gap-1 rounded-lg border bg-cell/75 px-2 py-2 transition-all hover:border-border-strong hover:bg-panel-2 focus:outline-none focus:ring-1 focus:ring-brand ${strongGainer ? "strong-gainer border-up/60 bg-up/5" : "border-border-strong/80"}`}
+      className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(42px,1fr)_64px] items-center gap-1 rounded-lg border bg-cell/75 px-2 py-2 transition-all hover:border-border-strong hover:bg-panel-2 focus:outline-none focus:ring-1 focus:ring-brand ${strongGainer ? rowClass : "border-border-strong/80"}`}
       title={`Mở sổ lệnh ${stock.ticker}`}
     >
       <div className="min-w-0">
         <div className="flex items-center gap-0.5">
-          <span className={`font-mono text-[16px] font-black leading-none tracking-[0.02em] ${strongGainer ? "text-up" : "text-foreground"}`}>{stock.ticker}</span>
+          <span className={`font-mono text-[16px] leading-none tracking-[0.02em] ${tickerClass}`}>{stock.ticker}</span>
           {onToggleWatch && (
             <button
               type="button"
@@ -165,13 +204,14 @@ export function LiveMoverCard({
   const chart = sparkData(history)
   const chartReference = sparkReference(chart, quote?.reference)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
+  const { cardClass, tickerClass } = getGainerStyles(quote, tone)
 
   return (
-    <div className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-panel px-4 py-3 transition-all hover:border-brand/60 hover:bg-panel-2/70 ${strongGainer ? "strong-gainer border-up/60" : "border-border"}`}>
+    <div className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-panel px-4 py-3 transition-all hover:border-brand/60 hover:bg-panel-2/70 ${strongGainer ? cardClass : "border-border"}`}>
       <button type="button" onClick={onOpen} className="absolute inset-0 rounded-2xl focus:outline-none focus:ring-1 focus:ring-brand" aria-label={`Mở sổ lệnh ${stock.ticker}`} />
       <div>
         <div className="flex items-center gap-1.5">
-          <span className={`font-mono text-2xl font-black ${strongGainer ? "text-up" : "text-foreground"}`}>{stock.ticker}</span>
+          <span className={`font-mono text-2xl ${tickerClass}`}>{stock.ticker}</span>
           {onToggleWatch && (
             <button
               type="button"
