@@ -213,7 +213,18 @@ function normalizeTrade(row: any, index: number): DnseSessionTrade | null {
   const volume = finiteNumber(row?.matchQtty ?? row?.quantity ?? row?.qtty ?? row?.volume ?? row?.lastVol)
   const time = timestampSeconds(row?.transactTime ?? row?.time ?? row?.timestamp ?? row?.ts ?? row?.sID ?? row?.timeServer)
   if (!price || price <= 0 || !volume || volume <= 0 || !time || time <= 0) return null
-  const side = String(row?.side ?? row?.matchSide ?? row?.aggressorSide ?? "")
+  
+  const rawSide = String(row?.side ?? row?.matchSide ?? row?.aggressorSide ?? "").trim().toUpperCase()
+  let side = "REF"
+  if (rawSide === "B" || rawSide === "BUY" || rawSide === "MUA") side = "BUY"
+  else if (rawSide === "S" || rawSide === "SELL" || rawSide === "BAN" || rawSide === "BÁN") side = "SELL"
+  else {
+    const cl = String(row?.cl ?? "").trim().toLowerCase()
+    if (cl === "i" || cl === "u") side = "BUY"
+    else if (cl === "d") side = "SELL"
+    else side = "REF"
+  }
+
   const sourceId = String(
     row?.transId ||
     row?.tradeId ||

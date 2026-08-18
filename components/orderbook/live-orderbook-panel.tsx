@@ -223,16 +223,51 @@ function normalizeTime(value: unknown) {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date().toISOString()
 }
 
-function timeLabel(value: string) {
-  if (!value) return "—"
-  if (/^\d{2}:\d{2}:\d{2}$/.test(value)) return value
-  const parsed = Date.parse(value)
-  if (!Number.isFinite(parsed)) return value || "—"
+function timeLabel(value: string | number) {
+  if (value == null || value === "") return "—"
+  const str = String(value).trim()
+  if (/^\d{2}:\d{2}:\d{2}$/.test(str)) return str
+  if (/^\d{2}:\d{2}$/.test(str)) return `${str}:00`
+
+  const num = Number(str)
+  // If value is seconds of day (e.g. 53100 = 14:45:00, 33300 = 09:15:00)
+  if (Number.isFinite(num) && num >= 0 && num < 86400) {
+    const hrs = Math.floor(num / 3600) % 24
+    const mins = Math.floor((num % 3600) / 60)
+    const secs = Math.floor(num % 60)
+    return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+  }
+
+  // If value is epoch seconds
+  if (Number.isFinite(num) && num >= 86400 && num < 1e11) {
+    return new Date(num * 1000).toLocaleTimeString("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+  }
+
+  // If value is epoch ms
+  if (Number.isFinite(num) && num >= 1e11) {
+    return new Date(num).toLocaleTimeString("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+  }
+
+  const parsed = Date.parse(str)
+  if (!Number.isFinite(parsed)) return str || "—"
   return new Date(parsed).toLocaleTimeString("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    hour12: false,
   })
 }
 

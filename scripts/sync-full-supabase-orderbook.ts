@@ -11,19 +11,43 @@ if (!SUPABASE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
+function normalizePrice(price: number | null | undefined): number | null {
+  if (price == null || !Number.isFinite(price) || price <= 0) return null
+  const normalized = price >= 500 ? price / 1000 : price
+  return Math.round(normalized * 100) / 100
+}
+
 function parseGroupLevel(raw: string | undefined): { price: number; volume: number } | null {
   if (!raw || typeof raw !== "string") return null
   const parts = raw.split("|")
-  const price = Number(parts[0] ?? 0)
+  const rawP = Number(parts[0] ?? 0)
+  const price = normalizePrice(rawP) ?? 0
   const volume = Number(parts[1] ?? 0)
   return price > 0 ? { price, volume } : null
 }
 
-function parseSeconds(timeStr: string): number {
-  const parts = timeStr.split(":").map(Number)
-  if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0)
-  if (parts.length === 2) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60
-  return 0
+function formatTimeString(t: any): string {
+  const raw = String(t.timeServer || t.time || "").trim()
+  if (/^\d{2}:\d{2}:\d{2}$/.test(raw)) return raw
+  if (/^\d{2}:\d{2}$/.test(raw)) return `${raw}:00`
+  const num = Number(raw)
+  if (Number.isFinite(num) && num >= 0 && num < 86400) {
+    const hrs = Math.floor(num / 3600) % 24
+    const mins = Math.floor((num % 3600) / 60)
+    const secs = Math.floor(num % 60)
+    return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+  }
+  return "09:15:00"
+}
+
+function parseTradeSide(t: any): "BUY" | "SELL" | "REF" {
+  const rawSide = String(t.side || "").trim().toUpperCase()
+  if (rawSide === "B" || rawSide === "BUY" || rawSide === "MUA") return "BUY"
+  if (rawSide === "S" || rawSide === "SELL" || rawSide === "BAN" || rawSide === "BÁN") return "SELL"
+  const cl = String(t.cl || "").trim().toLowerCase()
+  if (cl === "i" || cl === "u") return "BUY"
+  if (cl === "d") return "SELL"
+  return "REF"
 }
 
 async function syncAll() {
@@ -52,10 +76,12 @@ async function syncAll() {
           const sym = String(item.sym || "").toUpperCase().trim()
           if (!sym) continue
           if (!ptMap[sym]) ptMap[sym] = []
+          const rawP = Number(item.price || 0)
+          const p = normalizePrice(rawP) ?? 0
           ptMap[sym].push({
             id: String(item.transId || item.id || `pt-${ptMap[sym].length}`),
             time: String(item.time || "—"),
-            price: Number(item.price || 0),
+            price: p,
             volume: Number(item.volume || 0),
             value: Number(item.value || 0),
             type: String(item.type || "PTM"),
@@ -100,18 +126,16 @@ async function syncAll() {
             const rawTrades = await res.json()
             if (Array.isArray(rawTrades) && rawTrades.length > 0) {
               tradesMap[ticker] = rawTrades.map((t: any, idx: number) => {
-                const sideRaw = String(t.cl || t.side || "").toLowerCase()
-                const side = sideRaw === "u" || sideRaw === "b" || sideRaw === "buy" ? "BUY"
-                  : sideRaw === "d" || sideRaw === "s" || sideRaw === "sell" ? "SELL"
-                  : "REF"
+                const side = parseTradeSide(t)
+                const price = normalizePrice(Number(t.lastPrice || t.price || 0)) ?? 0
                 return {
                   id: String(t.transId || t.sID || `${ticker}-${idx}`),
-                  time: parseSeconds(String(t.time || t.timeServer || "09:15:00")),
-                  price: Number(t.lastPrice || t.price || 0),
+                  time: formatTimeString(t),
+                  price,
                   volume: Number(t.lastVol || t.volume || t.totalVol || 0),
                   side,
                 }
-              })
+              }).filter((t: any) => t.price > 0)
             }
           }
         } catch {
@@ -130,11 +154,15 @@ async function syncAll() {
     const trades = tradesMap[ticker] || []
     const putThrough = ptMap[ticker] || []
 
-    const ref = Number(q.r || q.closePrice ? Number(q.r || q.closePrice) : (trades[0]?.price || 0))
-    const lastPrice = Number(q.lastPrice ?? (trades.length > 0 ? trades[trades.length - 1].price : ref))
-    const ceiling = Number(q.c ?? (ref ? Math.round(ref * 1.07 * 100) / 100 : 0))
-    const floor = Number(q.f ?? (ref ? Math.round(ref * 0.93 * 100) / 100 : 0))
-    const totalVolume = Number(q.lot || (trades.reduce((acc: number, t: any) => acc + (t.volume || 0), 0) / 10) || 0) * 10
+    const rawRef = Number(q.r || q.closePrice ? Number(q.r || q.closePrice) : (trades[0]?.price || 0))
+    const ref = normalizePrice(rawRef)
+    const rawLast = Number(q.lastPrice ?? (trades.length > 0 ? trades[trades.length - 1].price : ref))
+    const lastPrice = normalizePrice(rawLast)
+    const rawCeil = Number(q.c ?? (ref ? Math.round(ref * 1.07 * 100) / 100 : 0))
+    const ceiling = normalizePrice(rawCeil)
+    const rawFloor = Number(q.f ?? (ref ? Math.round(ref * 0.93 * 100) / 100 : 0))
+    const floor = normalizePrice(rawFloor)
+    const totalVolume = Number(q.lot || 0) * 10
 
     const bids = [parseGroupLevel(q.g1), parseGroupLevel(q.g2), parseGroupLevel(q.g3)].filter(Boolean)
     const asks = [parseGroupLevel(q.g4), parseGroupLevel(q.g5), parseGroupLevel(q.g6)].filter(Boolean)
@@ -142,25 +170,17 @@ async function syncAll() {
     // Build 1m intraday bars from trades
     const intraday1m: any[] = []
     if (trades.length > 0) {
-      // Group trades into 1m buckets (60s)
-      const minuteMap = new Map<number, { open: number; close: number; time: number }>()
       for (const t of trades) {
-        if (!t.time || !t.price) continue
-        const bucket = Math.floor(t.time / 60) * 60
-        if (!minuteMap.has(bucket)) {
-          minuteMap.set(bucket, { time: bucket, open: t.price, close: t.price })
-        } else {
-          minuteMap.get(bucket)!.close = t.price
-        }
+        intraday1m.push({
+          time: t.time,
+          open: t.price,
+          close: t.price,
+        })
       }
-      for (const bar of minuteMap.values()) {
-        intraday1m.push(bar)
-      }
-      intraday1m.sort((a, b) => a.time - b.time)
     } else {
       intraday1m.push(
-        { time: 33300, open: Number(q.openPrice || ref), close: lastPrice },
-        { time: 53100, open: lastPrice, close: lastPrice }
+        { time: "09:15:00", open: ref, close: lastPrice },
+        { time: "14:45:00", open: lastPrice, close: lastPrice }
       )
     }
 
@@ -172,12 +192,12 @@ async function syncAll() {
     records.push({
       symbol: ticker,
       session_date: today,
-      reference_price: ref > 0 ? ref : null,
-      ceiling_price: ceiling > 0 ? ceiling : null,
-      floor_price: floor > 0 ? floor : null,
-      latest_price: lastPrice > 0 ? lastPrice : null,
+      reference_price: ref,
+      ceiling_price: ceiling,
+      floor_price: floor,
+      latest_price: lastPrice,
       total_volume: totalVolume,
-      intraday_1m: intraday1m,
+      intraday_1m: intraday1m.slice(-90),
       trades: trades.slice(-500), // Keep top 500 granular matched trades in snapshot
       trades_truncated: trades.length > 500,
       latest_quote: {
@@ -185,9 +205,9 @@ async function syncAll() {
         ceiling,
         floor,
         matchPrice: lastPrice,
-        openPrice: Number(q.openPrice || ref),
-        highPrice: Number(q.highPrice || lastPrice),
-        lowPrice: Number(q.lowPrice || lastPrice),
+        openPrice: normalizePrice(Number(q.openPrice || ref)),
+        highPrice: normalizePrice(Number(q.highPrice || lastPrice)),
+        lowPrice: normalizePrice(Number(q.lowPrice || lastPrice)),
         totalVolume,
         bids,
         asks,
