@@ -7,27 +7,27 @@ export const MARKET_TONE_STYLES: Record<MarketTone, {
 }> = {
   up: {
     text: "text-up",
-    pill: "border-up/30 bg-up/12 text-up",
+    pill: "border-emerald-500/30 bg-emerald-500/12 text-up shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12)]",
     hex: "#22c98a",
   },
   down: {
     text: "text-down",
-    pill: "border-down/30 bg-down/12 text-down",
+    pill: "border-rose-500/30 bg-rose-500/12 text-down shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12)]",
     hex: "#ff4757",
   },
   ref: {
     text: "text-ref",
-    pill: "border-ref/35 bg-ref/12 text-ref",
+    pill: "border-amber-500/30 bg-amber-500/12 text-ref shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12)]",
     hex: "#e2b93b",
   },
   ceiling: {
     text: "text-ceiling",
-    pill: "border-ceiling/35 bg-ceiling/12 text-ceiling",
+    pill: "border-purple-500/40 bg-purple-500/20 text-[#c084fc] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),0_0_12px_rgba(176,124,255,0.2)] font-black",
     hex: "#b07cff",
   },
   floor: {
     text: "text-floor",
-    pill: "border-floor/35 bg-floor/12 text-floor",
+    pill: "border-cyan-500/40 bg-cyan-500/20 text-[#22b8cf] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),0_0_12px_rgba(34,184,207,0.2)] font-black",
     hex: "#22b8cf",
   },
 }

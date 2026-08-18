@@ -157,12 +157,12 @@ function WatchlistSection({
   const watched = stocks.filter((s) => watchlist.has(s.ticker))
   if (watched.length === 0) return null
   return (
-    <div className="mb-2 rounded-lg border border-amber-500/20 bg-panel/85 p-2 shadow-sm">
-      <div className="mb-1.5 flex items-center justify-between px-0.5">
+    <div className="mb-3 rounded-2xl border border-amber-500/25 bg-[#141008]/50 backdrop-blur-xl p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+      <div className="mb-2 flex items-center justify-between px-1">
         <div className="flex items-center gap-1.5">
           <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
           <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">Danh sách theo dõi</span>
-          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.2 text-[10px] font-semibold text-amber-400">{watched.length}</span>
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">{watched.length}</span>
         </div>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-thin">
@@ -185,16 +185,16 @@ function WatchlistSection({
 
 function IndexStrip({ quotes }: { quotes: Record<string, LiveStockQuote | IndexQuote> }) {
   return (
-    <div className="grid grid-cols-2 divide-x divide-border border-b border-border bg-[#141515] text-xs sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-1.5 p-2 border-b border-white/[0.07] bg-[#080c10]/75 backdrop-blur-2xl sm:grid-cols-4">
       {INDEXES.map((symbol) => {
         const quote = quotes[symbol] as IndexQuote | undefined
         const tone = marketToneFromChange(quote?.changePercent)
         const text = quote ? marketToneText(tone) : "text-muted-2"
         return (
-          <div key={symbol} className="flex items-center justify-between px-3 py-1.5 font-mono">
-            <span className="text-[10px] font-bold tracking-wider text-muted uppercase font-sans">{INDEX_LABELS[symbol]}</span>
+          <div key={symbol} className="flex items-center justify-between px-3.5 py-1.5 rounded-xl border border-white/[0.07] bg-white/[0.025] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.07)] hover:bg-white/[0.045] hover:border-white/[0.12] transition-all font-mono">
+            <span className="text-[10.5px] font-bold tracking-wider text-muted-2 uppercase font-sans">{INDEX_LABELS[symbol]}</span>
             <div className="flex items-center gap-1.5">
-              <span className={`text-xs font-extrabold ${text}`}>{formatBoardPrice(quote?.value)}</span>
+              <span className={`text-xs font-extrabold tracking-tight ${text}`}>{formatBoardPrice(quote?.value)}</span>
               {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact /> : null}
             </div>
           </div>
@@ -232,8 +232,8 @@ function FloatingMarketStatus({
   return (
     <div className="fixed bottom-3 right-3 z-30 flex flex-col items-end select-none">
       {expanded ? (
-        <div className="mb-2 w-72 rounded-xl border border-border-strong bg-[#141515]/95 p-3 shadow-2xl backdrop-blur-md text-xs space-y-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
-          <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+        <div className="mb-2 w-72 rounded-2xl border border-white/[0.12] bg-[#0b0f14]/95 p-3.5 shadow-[0_20px_60px_rgba(0,0,0,0.9),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-xs space-y-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="flex items-center justify-between border-b border-white/[0.08] pb-2">
             <span className="font-bold text-foreground flex items-center gap-1.5">
               <Activity className="h-3.5 w-3.5 text-brand" />
               <span>Trạng thái Hệ thống</span>
@@ -241,7 +241,7 @@ function FloatingMarketStatus({
             <button
               type="button"
               onClick={() => setExpanded(false)}
-              className="text-muted-2 hover:text-foreground text-[10px]"
+              className="text-muted-2 hover:text-foreground text-[10px] px-1.5 py-0.5 rounded-full hover:bg-white/[0.06] transition-colors"
             >
               Đóng ✕
             </button>
@@ -281,7 +281,7 @@ function FloatingMarketStatus({
           </div>
 
           {streamError ? (
-            <div className="rounded bg-ref/10 border border-ref/30 p-1.5 text-[10px] text-ref leading-tight">
+            <div className="rounded-xl bg-ref/10 border border-ref/30 p-2 text-[10px] text-ref leading-tight">
               {streamError}
             </div>
           ) : null}
@@ -289,7 +289,7 @@ function FloatingMarketStatus({
           <button
             type="button"
             onClick={onReconnect}
-            className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-border bg-panel-2 py-1.5 text-[11px] font-semibold text-foreground hover:bg-panel transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] py-1.5 text-[11px] font-semibold text-foreground hover:bg-white/[0.08] transition-colors shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin text-ref" : ""}`} />
             <span>Kết nối lại DNSE Feed</span>
@@ -301,7 +301,7 @@ function FloatingMarketStatus({
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex items-center gap-2 rounded-full border border-border-strong bg-[#141515]/90 px-3 py-1.5 shadow-xl backdrop-blur-md text-[11px] hover:bg-[#1a1c1b] transition-all"
+        className="flex items-center gap-2 rounded-full border border-white/[0.12] bg-[#0c1015]/90 px-3.5 py-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.75),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-[11px] hover:bg-white/[0.06] hover:border-white/[0.2] transition-all"
         title="Bấm để xem chi tiết trạng thái hệ thống"
       >
         <span
@@ -927,18 +927,18 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
       <IndexStrip quotes={quotes} />
 
       {/* COMPACT TOP TOOLBAR */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-panel px-3 py-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-white/[0.07] bg-[#090d12]/80 backdrop-blur-2xl px-3.5 py-2 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.35)]">
         {/* VNINDEX Market Stats on the left (under VNINDEX and VN30 columns) */}
-        <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
+        <div className="flex flex-wrap items-center gap-3 font-mono text-xs px-3.5 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-muted font-sans font-medium">Tổng KL</span>
+            <span className="text-[11px] text-muted-2 font-sans font-medium">Tổng KL</span>
             <span className="font-bold text-foreground">
               {vnindexVolume !== undefined ? formatExactVolume(vnindexVolume) : "—"}
             </span>
           </div>
-          <div className="h-3 w-px bg-border/80 hidden sm:block" />
+          <div className="h-3 w-px bg-white/[0.1] hidden sm:block" />
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-muted font-sans font-medium">Tổng giá trị</span>
+            <span className="text-[11px] text-muted-2 font-sans font-medium">Tổng giá trị</span>
             <span className="font-bold text-foreground">
               {vnindexValue !== undefined ? formatExactTradedValue(vnindexValue) : "—"}
             </span>
@@ -962,19 +962,19 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
         {/* Search & Filters on the right */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[140px] sm:w-[180px]">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-2" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Tìm mã CP..."
-              className="h-7 w-full rounded-md border border-border bg-background pl-8 pr-2.5 text-xs outline-none focus:border-brand"
+              className="h-8 w-full rounded-full border border-white/[0.08] bg-white/[0.03] pl-9 pr-3 text-xs text-foreground placeholder:text-muted outline-none focus:border-brand/60 focus:bg-white/[0.06] transition-all shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
             />
           </div>
 
           <select
             value={selectedSector}
             onChange={(event) => setSelectedSector(event.target.value)}
-            className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none"
+            className="h-8 rounded-full border border-white/[0.08] bg-[#0d1217] px-3.5 text-xs text-foreground outline-none focus:border-brand/60 transition-all shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] cursor-pointer"
           >
             <option>Tất cả</option>
             {SECTOR_ORDER.map((sector) => (
@@ -982,11 +982,13 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
             ))}
           </select>
 
-          <div className="flex items-center rounded-md border border-border bg-background p-0.5">
+          <div className="flex items-center rounded-full border border-white/[0.08] bg-white/[0.03] p-0.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
             <button
               onClick={() => setMode("sector")}
-              className={`flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors ${
-                mode === "sector" ? "bg-panel-2 text-foreground font-semibold" : "text-muted-2 hover:text-foreground"
+              className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-all ${
+                mode === "sector"
+                  ? "bg-white/[0.1] text-white font-semibold shadow-[0_2px_8px_rgba(0,0,0,0.25),inset_0_1px_0_0_rgba(255,255,255,0.15)] border border-white/[0.12]"
+                  : "text-muted-2 hover:text-foreground hover:bg-white/[0.04]"
               }`}
             >
               <LayoutGrid className="h-3 w-3" />
@@ -994,8 +996,10 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
             </button>
             <button
               onClick={() => setMode("movers")}
-              className={`flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors ${
-                mode === "movers" ? "bg-panel-2 text-foreground font-semibold" : "text-muted-2 hover:text-foreground"
+              className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-all ${
+                mode === "movers"
+                  ? "bg-white/[0.1] text-white font-semibold shadow-[0_2px_8px_rgba(0,0,0,0.25),inset_0_1px_0_0_rgba(255,255,255,0.15)] border border-white/[0.12]"
+                  : "text-muted-2 hover:text-foreground hover:bg-white/[0.04]"
               }`}
             >
               <ChartNoAxesCombined className="h-3 w-3" />
@@ -1006,13 +1010,13 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
       </div>
 
       {streamState !== "LIVE" && streamError ? (
-        <div className="flex items-center gap-2 border-b border-ref/30 bg-ref/5 px-3 py-1.5 text-xs text-ref">
+        <div className="flex items-center gap-2 border-b border-ref/30 bg-ref/5 px-3.5 py-1.5 text-xs text-ref backdrop-blur-md">
           <CircleAlert className="h-3.5 w-3.5 shrink-0 text-ref" />
           <span>{streamError}</span>
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto p-2">
+      <div className="min-h-0 flex-1 overflow-auto p-2.5">
         <WatchlistSection
           stocks={universe}
           quotes={displayQuotes}
@@ -1028,17 +1032,17 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
               const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
               const avgTone = marketToneFromChange(avg)
               return (
-                <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-panel hover:border-border-strong transition-colors">
-                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-border/70 bg-panel-2/50 px-2.5 py-2 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-muted-2/40">
+                <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b0f14]/65 backdrop-blur-xl shadow-[0_8px_32px_-8px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.08)] hover:border-white/[0.14] transition-all">
+                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3 py-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-sm shrink-0 leading-none opacity-80">{SECTOR_EMOJIS[key] ?? "📊"}</span>
-                        <h2 className="truncate text-[12.5px] font-bold tracking-tight text-foreground/90" title={label}>
+                        <span className="text-sm shrink-0 leading-none opacity-90">{SECTOR_EMOJIS[key] ?? "📊"}</span>
+                        <h2 className="truncate text-[13px] font-bold tracking-tight text-foreground/95" title={label}>
                           {label}
                         </h2>
                       </div>
                       <div className="mt-1.5 flex items-center gap-1.5">
-                        <span className="inline-flex rounded-full border border-border/70 bg-background/60 px-2 py-0.5 font-mono text-[9.5px] font-medium text-muted-2">
+                        <span className="inline-flex rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-0.5 font-mono text-[9.5px] font-medium text-muted-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
                           {stocks.length} mã
                         </span>
                       </div>
@@ -1070,7 +1074,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
             })}
           </div>
         ) : (
-          <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {movers.map((stock) => (
               <LiveMoverCard
                 key={stock.ticker}

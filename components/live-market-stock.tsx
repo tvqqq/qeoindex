@@ -138,28 +138,28 @@ function getGainerStyles(quote?: LiveStockQuote, tone?: MarketTone) {
 
   if (isCeiling) {
     return {
-      rowClass: "ceiling-gainer border-purple-500/90 bg-purple-950/25",
-      cardClass: "ceiling-gainer border-purple-500/90 bg-purple-950/25",
+      rowClass: "ceiling-gainer border-purple-500/80 bg-purple-950/30 shadow-[0_0_16px_rgba(176,124,255,0.25),inset_0_1px_0_0_rgba(255,255,255,0.2)]",
+      cardClass: "ceiling-gainer border-purple-500/80 bg-purple-950/30 shadow-[0_0_20px_rgba(176,124,255,0.3),inset_0_1px_0_0_rgba(255,255,255,0.2)]",
       tickerClass: "text-purple-300 drop-shadow-[0_0_8px_rgba(176,124,255,0.7)] font-black",
     }
   }
   if (isSuper) {
     return {
-      rowClass: "super-gainer border-emerald-400/90 bg-emerald-950/30",
-      cardClass: "super-gainer border-emerald-400/90 bg-emerald-950/30",
+      rowClass: "super-gainer border-emerald-400/80 bg-emerald-950/30 shadow-[0_0_14px_rgba(52,211,153,0.2),inset_0_1px_0_0_rgba(255,255,255,0.15)]",
+      cardClass: "super-gainer border-emerald-400/80 bg-emerald-950/30 shadow-[0_0_16px_rgba(52,211,153,0.25),inset_0_1px_0_0_rgba(255,255,255,0.15)]",
       tickerClass: "text-emerald-300 drop-shadow-[0_0_6px_rgba(52,211,153,0.6)] font-black",
     }
   }
   if (isStrong) {
     return {
-      rowClass: "strong-gainer border-up/60 bg-up/5",
-      cardClass: "strong-gainer border-up/60 bg-up/5",
+      rowClass: "strong-gainer border-up/60 bg-up/5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]",
+      cardClass: "strong-gainer border-up/60 bg-up/5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]",
       tickerClass: "text-up font-black",
     }
   }
   return {
-    rowClass: "border-border-strong/80",
-    cardClass: "border-border",
+    rowClass: "border-white/[0.07]",
+    cardClass: "border-white/[0.08]",
     tickerClass: "text-foreground",
   }
 }
@@ -196,16 +196,16 @@ export function LiveStockRow({
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen() }
       }}
-      className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(42px,1fr)_64px] items-center gap-1 rounded-lg border bg-cell/75 px-2 py-2 transition-all hover:border-border-strong hover:bg-panel-2 focus:outline-none focus:ring-1 focus:ring-brand ${
+      className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(42px,1fr)_64px] items-center gap-1 rounded-xl border bg-[#0e1318]/50 backdrop-blur-md px-2 py-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-all duration-150 hover:bg-white/[0.05] hover:border-white/[0.14] hover:shadow-[0_4px_16px_rgba(0,0,0,0.35),inset_0_1px_0_0_rgba(255,255,255,0.12)] hover:scale-[1.01] active:scale-[0.99] focus:outline-none focus:ring-1 focus:ring-brand ${
         priceFlash === "up"
-          ? "flash-up border-up/80 shadow-[0_0_10px_rgba(34,201,138,0.25)]"
+          ? "flash-up border-up/80 shadow-[0_0_12px_rgba(34,201,138,0.3)]"
           : priceFlash === "down"
-            ? "flash-down border-down/80 shadow-[0_0_10px_rgba(255,71,87,0.25)]"
+            ? "flash-down border-down/80 shadow-[0_0_12px_rgba(255,71,87,0.3)]"
             : priceFlash === "ref"
               ? "flash-ref border-ref/80"
               : strongGainer
                 ? rowClass
-                : "border-border-strong/80"
+                : "border-white/[0.07]"
       }`}
       title={`Mở sổ lệnh ${stock.ticker}`}
     >
@@ -297,16 +297,16 @@ export function LiveMoverCard({
 
   return (
     <div
-      className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-panel px-4 py-3 transition-all hover:border-brand/60 hover:bg-panel-2/70 ${
+      className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-[#0c1015]/65 backdrop-blur-xl px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.08)] transition-all hover:border-white/[0.18] hover:bg-white/[0.04] ${
         priceFlash === "up"
-          ? "flash-up border-up/80"
+          ? "flash-up border-up/80 shadow-[0_0_16px_rgba(34,201,138,0.3)]"
           : priceFlash === "down"
-            ? "flash-down border-down/80"
+            ? "flash-down border-down/80 shadow-[0_0_16px_rgba(255,71,87,0.3)]"
             : priceFlash === "ref"
               ? "flash-ref border-ref/80"
               : strongGainer
                 ? cardClass
-                : "border-border"
+                : "border-white/[0.08]"
       }`}
     >
       <button type="button" onClick={onOpen} className="absolute inset-0 rounded-2xl focus:outline-none focus:ring-1 focus:ring-brand" aria-label={`Mở sổ lệnh ${stock.ticker}`} />

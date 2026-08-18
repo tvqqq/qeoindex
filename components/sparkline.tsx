@@ -22,9 +22,9 @@ export function Sparkline({
   refColor = "#94a3b8",
   width = 78,
   height = 34,
-  strokeWidth = 1.5,
+  strokeWidth = 1.6,
   showDot = true,
-  fill = false,
+  fill = true,
   className = "",
 }: SparklineProps) {
   if (data.length < 2) return <svg width={width} height={height} aria-hidden="true" className={className} />

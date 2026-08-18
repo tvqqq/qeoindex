@@ -2090,7 +2090,7 @@ export function LiveOrderBookPanel({
   return (
     <section
       ref={panelRef}
-      className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-xl border border-[#383c3e] bg-[#131415]/92 backdrop-blur-xl shadow-[0_16px_50px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] will-change-[width,height,left,top] ${
+      className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0b0f14]/94 backdrop-blur-2xl shadow-[0_25px_70px_rgba(0,0,0,0.95),inset_0_1px_0_0_rgba(255,255,255,0.12)] will-change-[width,height,left,top] ${
         isMaximized ? "fixed" : ""
       } ${!isInteracting ? "transition-[width,height,left,top] duration-150 ease-out" : "select-none"}`}
       style={panelStyle}
@@ -2102,15 +2102,15 @@ export function LiveOrderBookPanel({
 
       {/* HEADER / DRAG HANDLE */}
       <header
-        className="flex cursor-grab select-none items-center justify-between gap-2 border-b border-border/80 bg-[#191b1a] px-3.5 py-2.5 active:cursor-grabbing touch-none"
+        className="flex cursor-grab select-none items-center justify-between gap-2 border-b border-white/[0.08] bg-white/[0.03] backdrop-blur-xl px-4 py-2.5 active:cursor-grabbing touch-none"
         onPointerDown={onHeaderPointerDown}
       >
         {/* Left Ticker & Exchange */}
-        <div className="flex items-center gap-1.5 min-w-0 shrink">
+        <div className="flex items-center gap-2 min-w-0 shrink">
           <GripVertical className="h-4 w-4 text-muted shrink-0" />
           <span className="font-mono text-lg sm:text-xl font-black tracking-tight text-foreground shrink-0">{symbol}</span>
           {stream.company?.exchange ? (
-            <span className="hidden sm:inline-flex rounded bg-[#222424] border border-border/80 px-1.5 py-0.5 text-[10px] font-bold text-muted-2 uppercase tracking-wide shrink-0">
+            <span className="hidden sm:inline-flex rounded-full bg-white/[0.06] border border-white/[0.08] px-2 py-0.5 text-[9.5px] font-bold text-muted-2 uppercase tracking-wider shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
               {stream.company.exchange}
             </span>
           ) : null}

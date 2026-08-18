@@ -4,15 +4,15 @@
   --font-sans: 'Geist', 'Geist Fallback', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono', 'Geist Mono Fallback', ui-monospace, monospace;
 
-  --color-background: #05080a;
-  --color-foreground: #d6dee1;
-  --color-panel: #0a1012;
-  --color-panel-2: #0c1315;
-  --color-cell: #0a0f11;
-  --color-border: #182123;
-  --color-border-strong: #223032;
-  --color-muted: #5c6a6e;
-  --color-muted-2: #7d8b8f;
+  --color-background: #06080a;
+  --color-foreground: #e1e7ec;
+  --color-panel: #0b0f13;
+  --color-panel-2: #0f1418;
+  --color-cell: #080c0f;
+  --color-border: #161e23;
+  --color-border-strong: #243038;
+  --color-muted: #62727d;
+  --color-muted-2: #8a9ba7;
 
   --color-up: #22c98a;
   --color-up-dim: #0f3b2c;
@@ -26,8 +26,10 @@
   --color-ref-dim: #3f3414;
   --color-brand: #22c98a;
 
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
+  --radius-2xl: 1.375rem;
 }
 
 html,
@@ -39,31 +41,100 @@ body {
   background-color: var(--color-background);
   color: var(--color-foreground);
   -webkit-font-smoothing: antialiased;
+  position: relative;
+  overflow-x: hidden;
 }
 
-/* thin scrollbars for the trading grid */
+/* Apple Liquid Glass ambient background lighting */
+body::before {
+  content: "";
+  position: fixed;
+  top: -15%;
+  left: 20%;
+  width: 60vw;
+  height: 40vh;
+  background: radial-gradient(circle, rgba(34, 201, 138, 0.035) 0%, rgba(34, 184, 207, 0.015) 50%, transparent 80%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  bottom: -10%;
+  right: 15%;
+  width: 50vw;
+  height: 40vh;
+  background: radial-gradient(circle, rgba(176, 124, 255, 0.02) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Thin scrollbars for trading grid */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #223032 transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background-color: #223032;
+  background-color: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background-color: #2f4145;
+  background-color: rgba(255, 255, 255, 0.22);
+}
+
+/* Liquid Glass Utilities */
+.liquid-glass-surface {
+  background: rgba(12, 17, 22, 0.72);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1), 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+}
+
+.liquid-glass-card {
+  background: rgba(14, 19, 25, 0.65);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.09), 0 8px 24px -4px rgba(0, 0, 0, 0.45);
+}
+
+.liquid-glass-pill {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.liquid-glass-pill:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.liquid-glass-row {
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.liquid-glass-row:hover {
+  background: rgba(255, 255, 255, 0.045);
+  transform: translateY(-0.5px);
+}
+.liquid-glass-row:active {
+  transform: scale(0.995);
 }
 
 @keyframes flash-up {
   0% {
-    background-color: color-mix(in srgb, var(--color-up) 36%, transparent);
+    background-color: color-mix(in srgb, var(--color-up) 40%, transparent);
     color: #ffffff;
   }
   100% {
@@ -72,7 +143,7 @@ body {
 }
 @keyframes flash-down {
   0% {
-    background-color: color-mix(in srgb, var(--color-down) 36%, transparent);
+    background-color: color-mix(in srgb, var(--color-down) 40%, transparent);
     color: #ffffff;
   }
   100% {
@@ -81,7 +152,7 @@ body {
 }
 @keyframes flash-ref {
   0% {
-    background-color: color-mix(in srgb, var(--color-ref) 36%, transparent);
+    background-color: color-mix(in srgb, var(--color-ref) 40%, transparent);
     color: #ffffff;
   }
   100% {
@@ -109,10 +180,10 @@ body {
 
 @keyframes strong-gainer-pulse {
   0%, 100% {
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-up) 16%, transparent), 0 0 0 transparent;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-up) 20%, transparent), 0 0 0 transparent;
   }
   50% {
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-up) 48%, transparent), 0 0 12px color-mix(in srgb, var(--color-up) 18%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-up) 60%, transparent), 0 0 16px color-mix(in srgb, var(--color-up) 25%, transparent);
   }
 }
 .strong-gainer {
@@ -124,7 +195,7 @@ body {
     box-shadow: inset 0 0 0 1.5px rgba(52, 211, 153, 0.4), 0 0 4px rgba(52, 211, 153, 0.15);
   }
   50% {
-    box-shadow: inset 0 0 0 1.5px rgba(52, 211, 153, 0.85), 0 0 16px rgba(52, 211, 153, 0.35);
+    box-shadow: inset 0 0 0 1.5px rgba(52, 211, 153, 0.9), 0 0 18px rgba(52, 211, 153, 0.4);
   }
 }
 .super-gainer {
@@ -136,7 +207,7 @@ body {
     box-shadow: inset 0 0 0 1.5px rgba(176, 124, 255, 0.5), 0 0 6px rgba(176, 124, 255, 0.25);
   }
   50% {
-    box-shadow: inset 0 0 0 2px rgba(176, 124, 255, 0.95), 0 0 22px rgba(176, 124, 255, 0.45);
+    box-shadow: inset 0 0 0 2px rgba(176, 124, 255, 0.95), 0 0 24px rgba(176, 124, 255, 0.5);
   }
 }
 .ceiling-gainer {
