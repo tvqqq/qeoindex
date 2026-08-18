@@ -1450,10 +1450,12 @@ function ForeignRealtimeCard({
 }
 
 function TradeInitiativeAndMarketStatsCard({
+  symbol,
   tradeStats,
   quote,
   spread,
 }: {
+  symbol: string
   tradeStats: {
     buyVol: number
     sellVol: number
@@ -1465,81 +1467,112 @@ function TradeInitiativeAndMarketStatsCard({
   quote?: StockQuote | null
   spread?: number | null
 }) {
+  const totalVolume = quote?.totalVolume ?? tradeStats.totalTraded
+
   return (
-    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-3 font-mono text-xs space-y-2.5">
-      {/* 1. Lực Mua / Bán Chủ Động matching Image 3 style */}
-      <div>
-        <div className="flex items-center justify-between text-xs font-mono mb-1.5">
-          <span className="flex items-center gap-1.5 font-medium">
-            <span className="h-2 w-2 rounded-full bg-up shrink-0" />
-            <span className="text-muted-2">Mua CĐ:</span>
-            <b className="text-up font-bold">{formatCompactVolume(tradeStats.buyVol)}</b>
-            <span className="text-muted text-[11px]">({tradeStats.buyTradedPct.toFixed(0)}%)</span>
+    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-3 font-mono text-xs space-y-3">
+      {/* 1. 4 Records replacing the bar (Matching Image 2) */}
+      <div className="rounded-lg border border-border/60 bg-[#161718] divide-y divide-border/40 overflow-hidden text-xs sm:text-[13px]">
+        {/* Row 1: Tổng KL khớp */}
+        <div className="flex items-center justify-between px-3 py-2 bg-[#1c1e1f]/60">
+          <span className="text-foreground/90 font-medium font-sans">
+            Tổng KL khớp {symbol}
           </span>
-          <span className="flex items-center gap-1.5 font-medium">
-            <span className="h-2 w-2 rounded-full bg-down shrink-0" />
-            <span className="text-muted-2">Bán CĐ:</span>
-            <b className="text-down font-bold">{formatCompactVolume(tradeStats.sellVol)}</b>
-            <span className="text-muted text-[11px]">({tradeStats.sellTradedPct.toFixed(0)}%)</span>
+          <span className="font-bold text-foreground sm:text-sm">
+            {formatVolume(totalVolume)}
           </span>
         </div>
-        <div className="flex h-2 overflow-hidden rounded-full bg-[#1e2021]">
-          <div className="bg-up transition-all duration-300" style={{ width: `${tradeStats.buyTradedPct}%` }} />
-          <div className="bg-down transition-all duration-300" style={{ width: `${tradeStats.sellTradedPct}%` }} />
+
+        {/* Row 2: KL MUA chủ động */}
+        <div className="flex items-center justify-between px-3 py-2">
+          <span className="text-muted-2 flex items-center gap-1 font-sans">
+            KL MUA chủ động
+          </span>
+          <span className="flex items-center gap-1.5 font-bold text-up sm:text-sm">
+            <span>{formatVolume(tradeStats.buyVol)}</span>
+            <span className="rounded px-1.5 py-0.2 text-[9px] font-bold border border-up/40 bg-up/15 text-up leading-none">
+              M
+            </span>
+          </span>
+        </div>
+
+        {/* Row 3: KL BÁN chủ động */}
+        <div className="flex items-center justify-between px-3 py-2">
+          <span className="text-muted-2 flex items-center gap-1 font-sans">
+            KL BÁN chủ động
+          </span>
+          <span className="flex items-center gap-1.5 font-bold text-down sm:text-sm">
+            <span>{formatVolume(tradeStats.sellVol)}</span>
+            <span className="rounded px-1.5 py-0.2 text-[9px] font-bold border border-down/40 bg-down/15 text-down leading-none">
+              B
+            </span>
+          </span>
+        </div>
+
+        {/* Row 4: KL KHÔNG XÁC ĐỊNH */}
+        <div className="flex items-center justify-between px-3 py-2 bg-[#1c1e1f]/40">
+          <span className="text-muted-2 font-sans">
+            KL KHÔNG XÁC ĐỊNH
+          </span>
+          <span className="font-bold text-foreground sm:text-sm">
+            {formatVolume(tradeStats.unkVol)}
+          </span>
         </div>
       </div>
 
-      {/* 2. Thông số phiên */}
-      <div className="border-t border-border/50 pt-2">
-        <div className="text-[10px] uppercase tracking-wider text-muted font-bold mb-1.5">
-          Thông số phiên
+      {/* 2. Thông số phiên (Larger font size) */}
+      <div className="border-t border-border/50 pt-2.5">
+        <div className="text-[11px] uppercase tracking-wider text-muted-2 font-bold mb-2 flex items-center justify-between">
+          <span>THÔNG SỐ PHIÊN</span>
         </div>
-        <div className="grid grid-cols-3 gap-1.5 text-center text-[11px]">
+        <div className="grid grid-cols-3 gap-1.5 text-center">
           {/* Row 1: Sàn - TC - Trần */}
-          <div className="rounded border border-border/60 bg-[#161718] p-1">
-            <div className="text-[9px] text-muted uppercase">Sàn</div>
-            <div className="font-bold text-[#22b8cf]">{formatPrice(quote?.floor)}</div>
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
+            <div className="text-[10px] text-muted-2 uppercase font-semibold">Sàn</div>
+            <div className="text-sm sm:text-base font-black text-[#22b8cf]">{formatPrice(quote?.floor)}</div>
           </div>
-          <div className="rounded border border-border/60 bg-[#161718] p-1">
-            <div className="text-[9px] text-muted uppercase">TC</div>
-            <div className="font-bold text-ref">{formatPrice(quote?.reference)}</div>
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
+            <div className="text-[10px] text-muted-2 uppercase font-semibold">TC</div>
+            <div className="text-sm sm:text-base font-black text-ref">{formatPrice(quote?.reference)}</div>
           </div>
-          <div className="rounded border border-border/60 bg-[#161718] p-1">
-            <div className="text-[9px] text-muted uppercase">Trần</div>
-            <div className="font-bold text-ceiling">{formatPrice(quote?.ceiling)}</div>
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
+            <div className="text-[10px] text-muted-2 uppercase font-semibold">Trần</div>
+            <div className="text-sm sm:text-base font-black text-ceiling">{formatPrice(quote?.ceiling)}</div>
           </div>
 
           {/* Row 2: Thấp - TB - Cao */}
-          <div className="rounded border border-border/60 bg-[#161718] p-1">
-            <div className="text-[9px] text-muted uppercase">Thấp</div>
-            <div className="font-bold text-foreground">{formatPrice(quote?.low)}</div>
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
+            <div className="text-[10px] text-muted-2 uppercase font-semibold">Thấp</div>
+            <div className="text-sm sm:text-base font-black text-foreground">{formatPrice(quote?.low)}</div>
           </div>
-          <div className="rounded border border-border/60 bg-[#161718] p-1">
-            <div className="text-[9px] text-muted uppercase">TB</div>
-            <div className="font-bold text-foreground">{formatPrice(quote?.avgPrice)}</div>
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
+            <div className="text-[10px] text-muted-2 uppercase font-semibold">TB</div>
+            <div className="text-sm sm:text-base font-black text-foreground">{formatPrice(quote?.avgPrice)}</div>
           </div>
-          <div className="rounded border border-border/60 bg-[#161718] p-1">
-            <div className="text-[9px] text-muted uppercase">Cao</div>
-            <div className="font-bold text-foreground">{formatPrice(quote?.high)}</div>
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
+            <div className="text-[10px] text-muted-2 uppercase font-semibold">Cao</div>
+            <div className="text-sm sm:text-base font-black text-foreground">{formatPrice(quote?.high)}</div>
           </div>
 
           {/* Row 3: Spread - Tổng KL - Tổng GT */}
-          <div className="rounded border border-border/60 bg-[#161718] p-1">
-            <div className="text-[9px] text-muted uppercase">Spread</div>
-            <div className="font-bold text-foreground">{spread !== null && spread !== undefined && spread > 0 ? formatPrice(spread) : "—"}</div>
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
+            <div className="text-[10px] text-muted-2 uppercase font-semibold">Spread</div>
+            <div className="text-sm sm:text-base font-black text-foreground">{spread !== null && spread !== undefined && spread > 0 ? formatPrice(spread) : "—"}</div>
           </div>
-          <div className="rounded border border-border/60 bg-[#161718] p-1">
-            <div className="text-[9px] text-muted uppercase">Tổng KL</div>
-            <div className="font-bold text-foreground">{formatCompactVolume(quote?.totalVolume)}</div>
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
+            <div className="text-[10px] text-muted-2 uppercase font-semibold">Tổng KL</div>
+            <div className="text-sm sm:text-base font-black text-foreground">{formatCompactVolume(quote?.totalVolume ?? totalVolume)}</div>
           </div>
-          <div className="rounded border border-border/60 bg-[#161718] p-1">
-            <div className="text-[9px] text-muted uppercase">Tổng GT</div>
-            <div className="font-bold text-foreground">
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
+            <div className="text-[10px] text-muted-2 uppercase font-semibold">Tổng GT</div>
+            <div className="text-sm sm:text-base font-black text-foreground">
               {quote?.totalValue
                 ? formatMarketValue(quote.totalValue)
                 : quote?.totalVolume && quote?.price
                   ? formatMarketValue(quote.totalVolume * quote.price)
-                  : "—"}
+                  : totalVolume && quote?.price
+                    ? formatMarketValue(totalVolume * quote.price)
+                    : "—"}
             </div>
           </div>
         </div>
@@ -1937,20 +1970,59 @@ export function LiveOrderBookPanel({
     return buildForeignTimeline(stream.trades, stream.foreign, quotePrice)
   }, [stream.trades, stream.foreign, quotePrice])
 
-  // Volume Profile (Volume distribution by price level across all session trades)
+  // Volume Profile (Volume distribution by price level across all session trades matching Image 3)
   const volumeProfile = useMemo(() => {
-    const profileMap = new Map<number, { price: number; buyVol: number; sellVol: number; totalVol: number }>()
+    const profileMap = new Map<
+      number,
+      { price: number; buyVol: number; sellVol: number; atoVol: number; atcVol: number; totalVol: number }
+    >()
+    let totalSessionVol = 0
+    let sessionBuyVol = 0
+    let sessionSellVol = 0
+    let sessionAtoVol = 0
+    let sessionAtcVol = 0
+
     for (const t of stream.trades) {
       const price = quotePrice ? normalizeMarketPrice(t.price, quotePrice) ?? t.price : t.price
-      const cur = profileMap.get(price) || { price, buyVol: 0, sellVol: 0, totalVol: 0 }
-      if (t.side === "BUY") cur.buyVol += t.volume
-      else if (t.side === "SELL") cur.sellVol += t.volume
+      const cur = profileMap.get(price) || { price, buyVol: 0, sellVol: 0, atoVol: 0, atcVol: 0, totalVol: 0 }
+
+      const timeStr = String(t.time ?? "").trim()
+      const isAto = timeStr.startsWith("09:15") || timeStr.toUpperCase().includes("ATO")
+      const isAtc = timeStr.startsWith("14:45") || timeStr.toUpperCase().includes("ATC")
+
+      if (isAto) {
+        cur.atoVol += t.volume
+        sessionAtoVol += t.volume
+      } else if (isAtc) {
+        cur.atcVol += t.volume
+        sessionAtcVol += t.volume
+      } else if (t.side === "BUY") {
+        cur.buyVol += t.volume
+        sessionBuyVol += t.volume
+      } else if (t.side === "SELL") {
+        cur.sellVol += t.volume
+        sessionSellVol += t.volume
+      } else {
+        cur.buyVol += t.volume
+        sessionBuyVol += t.volume
+      }
+
       cur.totalVol += t.volume
+      totalSessionVol += t.volume
       profileMap.set(price, cur)
     }
+
     const profileRows = [...profileMap.values()].sort((a, b) => b.price - a.price)
     const maxVol = Math.max(1, ...profileRows.map((r) => r.totalVol))
-    return { rows: profileRows, maxVol }
+    return {
+      rows: profileRows,
+      maxVol,
+      totalSessionVol: totalSessionVol || 1,
+      sessionBuyVol,
+      sessionSellVol,
+      sessionAtoVol,
+      sessionAtcVol,
+    }
   }, [stream.trades, quotePrice])
 
   const tone = useMemo(() => {
@@ -2400,6 +2472,7 @@ export function LiveOrderBookPanel({
 
                         {/* Widget 2: Lực Mua/Bán Chủ Động & Thông số phiên (Sàn, TC, Trần, Thấp, Cao, TB, Spread, Tổng KL, Tổng GT) */}
                         <TradeInitiativeAndMarketStatsCard
+                          symbol={symbol}
                           tradeStats={tradeStats}
                           quote={quote}
                           spread={spread}
@@ -2515,84 +2588,176 @@ export function LiveOrderBookPanel({
 
                 {/* TAB CONTENT: PHÂN TÍCH BƯỚC GIÁ (VOLUME PROFILE) */}
                 {activityTab === "profile" && (
-                  <div className="flex flex-col flex-1">
-                    <div className="mb-2.5 text-xs text-muted-2 flex items-center justify-between">
-                      <span className="font-medium">Phân bổ khối lượng khớp lệnh theo từng bước giá trong phiên:</span>
-                      <span className="font-mono text-xs text-muted font-bold">{volumeProfile.rows.length} bước giá</span>
+                  <div className="flex flex-col flex-1 bg-[#121313] rounded-lg border border-border/80 p-3 sm:p-4 font-mono text-xs">
+                    {/* Table Header matching Image 3 */}
+                    <div className="grid grid-cols-[60px_1fr_60px] items-center gap-2 border-b border-border/60 pb-2 mb-2 font-sans font-bold text-xs">
+                      <div className="flex items-center gap-1">
+                        <span className="text-foreground font-bold">Mức giá</span>
+                        <span className="text-muted text-[10px] font-normal sm:inline hidden">(nghìn đồng)</span>
+                      </div>
+                      <div className="text-muted-2 text-center text-[11px] font-normal">
+                        Phân bổ khối lượng ({volumeProfile.rows.length} bước giá)
+                      </div>
+                      <span className="text-foreground font-bold text-right">%</span>
                     </div>
 
+                    {/* Horizontal Stacked Bar Chart Rows */}
                     {volumeProfile.rows.length ? (
-                      <div className="rounded-lg border border-border/80 bg-[#121313] p-2 max-h-[360px] overflow-y-auto space-y-1">
+                      <div className="flex-1 overflow-y-auto max-h-[440px] space-y-1.5 pr-1">
                         {volumeProfile.rows.map((row) => {
-                          const totalPct = (row.totalVol / volumeProfile.maxVol) * 100
-                          const buyVolPct = row.totalVol > 0 ? (row.buyVol / row.totalVol) * 100 : 50
-                          const normalizedRef = quote?.reference ? (quote.price ? normalizeMarketPrice(quote.reference, quote.price) ?? quote.reference : quote.reference) : undefined
-                          const normalizedCeil = quote?.ceiling ? (quote.price ? normalizeMarketPrice(quote.ceiling, quote.price) ?? quote.ceiling : quote.ceiling) : undefined
-                          const normalizedFlr = quote?.floor ? (quote.price ? normalizeMarketPrice(quote.floor, quote.price) ?? quote.floor : quote.floor) : undefined
+                          const totalBarWidthPct = (row.totalVol / volumeProfile.maxVol) * 82
+                          const rowVolPct = (row.totalVol / volumeProfile.totalSessionVol) * 100
+
+                          const atoSegmentPct = row.totalVol > 0 ? (row.atoVol / row.totalVol) * 100 : 0
+                          const buySegmentPct = row.totalVol > 0 ? (row.buyVol / row.totalVol) * 100 : 0
+                          const sellSegmentPct = row.totalVol > 0 ? (row.sellVol / row.totalVol) * 100 : 0
+                          const atcSegmentPct = row.totalVol > 0 ? (row.atcVol / row.totalVol) * 100 : 0
+
+                          const normalizedRef = quote?.reference
+                            ? quote.price
+                              ? normalizeMarketPrice(quote.reference, quote.price) ?? quote.reference
+                              : quote.reference
+                            : undefined
+                          const normalizedCeil = quote?.ceiling
+                            ? quote.price
+                              ? normalizeMarketPrice(quote.ceiling, quote.price) ?? quote.ceiling
+                              : quote.ceiling
+                            : undefined
+                          const normalizedFlr = quote?.floor
+                            ? quote.price
+                              ? normalizeMarketPrice(quote.floor, quote.price) ?? quote.floor
+                              : quote.floor
+                            : undefined
 
                           const isRef = normalizedRef ? Math.abs(row.price - normalizedRef) < 0.01 : false
                           const isCeil = normalizedCeil ? row.price >= normalizedCeil - 0.01 : false
                           const isFlr = normalizedFlr ? row.price <= normalizedFlr + 0.01 : false
-                          const isCurrent = quote?.price ? Math.abs(row.price - quote.price) < 0.01 : false
 
-                          const priceColor = isCeil
-                            ? "text-ceiling font-bold"
+                          const priceColorClass = isCeil
+                            ? "text-ceiling"
                             : isFlr
-                              ? "text-floor font-bold"
-                              : normalizedRef && row.price > normalizedRef
-                                ? "text-up font-bold"
-                                : normalizedRef && row.price < normalizedRef
-                                  ? "text-down font-bold"
-                                  : "text-ref font-bold"
+                              ? "text-floor"
+                              : isRef
+                                ? "text-ref"
+                                : normalizedRef && row.price > normalizedRef
+                                  ? "text-up"
+                                  : normalizedRef && row.price < normalizedRef
+                                    ? "text-down"
+                                    : "text-foreground"
 
                           return (
-                            <div key={row.price} className="relative flex items-center gap-3 font-mono text-[13px] py-1 px-2.5 rounded hover:bg-panel-2/50">
-                              {/* Profile histogram bar */}
-                              <div
-                                className="absolute inset-y-0 left-0 bg-brand/15 rounded"
-                                style={{ width: `${totalPct.toFixed(1)}%` }}
-                                aria-hidden="true"
-                              />
-
-                              {/* Price */}
-                              <div className="relative w-20 font-bold flex items-center gap-1">
-                                <span className={priceColor}>{formatPrice(row.price)}</span>
-                                {isCurrent && <span className="h-2 w-2 rounded-full bg-brand animate-pulse shrink-0" title="Giá khớp hiện tại" />}
-                                {isCeil ? (
-                                  <span className="text-[10px] text-ceiling font-bold shrink-0">(Trần)</span>
-                                ) : isFlr ? (
-                                  <span className="text-[10px] text-floor font-bold shrink-0">(Sàn)</span>
-                                ) : isRef ? (
-                                  <span className="text-[10px] text-ref font-bold shrink-0">(TC)</span>
-                                ) : null}
+                            <div
+                              key={row.price}
+                              className="grid grid-cols-[60px_1fr_60px] items-center gap-2 py-0.5 group hover:bg-panel-2/40 rounded px-1"
+                            >
+                              {/* Left: Price Label */}
+                              <div className={`font-bold text-xs sm:text-[13px] ${priceColorClass} shrink-0`}>
+                                {formatPrice(row.price)}
                               </div>
 
-                              {/* Volume */}
-                              <div className="relative w-24 text-right font-bold text-foreground">
-                                {formatVolume(row.totalVol)}
-                              </div>
-
-                              {/* Dual Buy/Sell Mini Bar */}
-                              <div className="relative flex-1 flex items-center gap-2">
-                                <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-[#1e2021]">
-                                  <div className="bg-up" style={{ width: `${buyVolPct}%` }} />
-                                  <div className="bg-down" style={{ width: `${100 - buyVolPct}%` }} />
+                              {/* Middle: Horizontal Stacked Bar + Volume Label */}
+                              <div className="relative flex items-center min-w-0 h-6">
+                                {/* Subtle vertical background grid lines */}
+                                <div className="absolute inset-0 flex justify-between pointer-events-none opacity-10">
+                                  <div className="border-r border-border/60 h-full w-1/4" />
+                                  <div className="border-r border-border/60 h-full w-1/4" />
+                                  <div className="border-r border-border/60 h-full w-1/4" />
+                                  <div className="h-full w-1/4" />
                                 </div>
-                                <span className="text-[11px] font-semibold text-muted-2 w-12 text-right">
-                                  {((row.totalVol / (tradeStats.totalTraded || 1)) * 100).toFixed(1)}%
+
+                                {/* Stacked Bar */}
+                                <div
+                                  className="flex h-5 rounded-sm overflow-hidden transition-all duration-300 relative z-10 shrink-0"
+                                  style={{ width: `${Math.max(totalBarWidthPct, 3)}%` }}
+                                >
+                                  {atoSegmentPct > 0 && (
+                                    <div
+                                      className="bg-[#3b4252] h-full"
+                                      style={{ width: `${atoSegmentPct}%` }}
+                                      title={`ATO: ${formatVolume(row.atoVol)}`}
+                                    />
+                                  )}
+                                  {buySegmentPct > 0 && (
+                                    <div
+                                      className="bg-up h-full"
+                                      style={{ width: `${buySegmentPct}%` }}
+                                      title={`Mua CĐ: ${formatVolume(row.buyVol)}`}
+                                    />
+                                  )}
+                                  {sellSegmentPct > 0 && (
+                                    <div
+                                      className="bg-down h-full"
+                                      style={{ width: `${sellSegmentPct}%` }}
+                                      title={`Bán CĐ: ${formatVolume(row.sellVol)}`}
+                                    />
+                                  )}
+                                  {atcSegmentPct > 0 && (
+                                    <div
+                                      className="bg-amber-400 h-full"
+                                      style={{ width: `${atcSegmentPct}%` }}
+                                      title={`ATC: ${formatVolume(row.atcVol)}`}
+                                    />
+                                  )}
+                                </div>
+
+                                {/* Volume Label adjacent to stacked bar */}
+                                <span className="ml-2 font-bold text-xs sm:text-[13px] text-foreground whitespace-nowrap z-10">
+                                  {formatVolume(row.totalVol)}
                                 </span>
+                              </div>
+
+                              {/* Right: % of Total Volume */}
+                              <div className="text-right text-xs sm:text-[13px] font-bold text-muted-2">
+                                {rowVolPct < 0.01 ? "<0.01%" : `${rowVolPct.toFixed(rowVolPct >= 10 ? 1 : 2)}%`}
                               </div>
                             </div>
                           )
                         })}
                       </div>
                     ) : (
-                      <div className="rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2">
+                      <div className="flex-1 flex items-center justify-center p-8 text-center text-xs text-muted-2">
                         {stream.historyState === "LOADING"
-                          ? "Đang tải toàn bộ dữ liệu bước giá trong phiên..."
+                          ? "Đang tải dữ liệu bước giá trong phiên..."
                           : "Chưa có đủ dữ liệu khớp lệnh để vẽ phân bổ bước giá."}
                       </div>
                     )}
+
+                    {/* Footer Legend matching Image 3 */}
+                    <div className="mt-3 pt-2.5 border-t border-border/60 flex flex-wrap items-center justify-between gap-2 text-[11px] font-sans">
+                      <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="h-3 w-3 rounded-sm bg-[#3b4252] inline-block shrink-0" />
+                          <span className="font-bold text-foreground">ATO</span>
+                          <span className="text-muted">
+                            ({((volumeProfile.sessionAtoVol / volumeProfile.totalSessionVol) * 100).toFixed(1)}%)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="h-3 w-3 rounded-sm bg-up inline-block shrink-0" />
+                          <span className="font-bold text-foreground">Mua chủ động</span>
+                          <span className="text-muted">
+                            ({((volumeProfile.sessionBuyVol / volumeProfile.totalSessionVol) * 100).toFixed(1)}%)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="h-3 w-3 rounded-sm bg-down inline-block shrink-0" />
+                          <span className="font-bold text-foreground">Bán chủ động</span>
+                          <span className="text-muted">
+                            ({((volumeProfile.sessionSellVol / volumeProfile.totalSessionVol) * 100).toFixed(1)}%)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="h-3 w-3 rounded-sm bg-amber-400 inline-block shrink-0" />
+                          <span className="font-bold text-foreground">ATC</span>
+                          <span className="text-muted">
+                            ({((volumeProfile.sessionAtcVol / volumeProfile.totalSessionVol) * 100).toFixed(1)}%)
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-muted text-[11px] font-medium">
+                        KL <span className="text-muted-2 font-bold">(CP)</span>
+                      </div>
+                    </div>
                   </div>
                 )}
 
