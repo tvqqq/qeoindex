@@ -38,8 +38,11 @@ function finite(value: number | null | undefined) {
 
 export function marketToneFromChange(value?: number | null): MarketTone {
   if (!finite(value)) return "ref"
-  if ((value as number) > 0) return "up"
-  if ((value as number) < 0) return "down"
+  const val = value as number
+  if (val >= 6.85) return "ceiling"
+  if (val <= -6.85) return "floor"
+  if (val > 0) return "up"
+  if (val < 0) return "down"
   return "ref"
 }
 
