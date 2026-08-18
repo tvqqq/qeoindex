@@ -458,6 +458,68 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     setForeignEvents([])
   }, [symbol, initialMeta])
 
+  // Parse raw trade objects to StreamTrade model
+  const parseRawTrades = (rawTrades?: any[]): StreamTrade[] => {
+    return (rawTrades ?? [])
+      .map((trade: any, index: number) => {
+        const rawPrice = number(trade.price)
+        const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
+        const tradeId = trade.id && trade.id !== "3220" ? trade.id : `${trade.time}-${index}`
+        return {
+          id: `history-${tradeId}`,
+          time: normalizeTime(trade.time),
+          price,
+          volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
+          side: explicitSide(trade.side),
+        }
+      })
+      .filter((trade) => trade.price > 0 && trade.volume > 0)
+  }
+
+  // Fast-path instant hydration from Supabase (sub-20ms)
+  useEffect(() => {
+    let disposed = false
+    void (async () => {
+      try {
+        const direct = await fetchOrderbookFromSupabaseDirect(symbol)
+        if (direct && !disposed) {
+          const directPrices = (direct.prices ?? []).map((point: any) => number(point.close)).filter((v: number) => v > 0)
+          if (directPrices.length > 0) setPriceHistory(directPrices)
+          if (direct.trades?.length) {
+            const parsedTrades = parseRawTrades(direct.trades)
+            if (parsedTrades.length > 0) {
+              setTrades((current) => mergeTrades(parsedTrades, current))
+            }
+          }
+          if (direct.latestQuote) {
+            const b = normalizeDepth(direct.latestQuote.bid).sort((x, y) => y.price - x.price)
+            const a = normalizeDepth(direct.latestQuote.offer).sort((x, y) => x.price - y.price)
+            if (b.length || a.length) depthRef.current = { bids: b, asks: a }
+            setQuote((current) => nextQuote(symbol, direct.latestQuote as unknown as Record<string, unknown>, current))
+          }
+          if (direct.foreign) {
+            setForeign({
+              symbol,
+              totalBuyVolume: number(direct.foreign.totalBuyVolume) || 0,
+              totalSellVolume: number(direct.foreign.totalSellVolume) || 0,
+              totalBuyValue: number(direct.foreign.totalBuyValue) || 0,
+              totalSellValue: number(direct.foreign.totalSellValue) || 0,
+              availableRoom: nullableNumber(direct.foreign.availableRoom) ?? null,
+              orderLimitQuantity: nullableNumber(direct.foreign.orderLimitQuantity) ?? null,
+              listedShare: nullableNumber(direct.foreign.listedShare) ?? null,
+              updatedAt: direct.foreign.updatedAt || direct.generatedAt || new Date().toISOString(),
+            })
+          }
+          setHistoryState("READY")
+          setHistoryMessage("Đã nạp snapshot từ Supabase.")
+        }
+      } catch {
+        // ignore fast path error
+      }
+    })()
+    return () => { disposed = true }
+  }, [symbol, reconnectKey])
+
   // Fetch REST session history + initial hydration with smart cache (SWR)
   useEffect(() => {
     const controller = new AbortController()
@@ -557,23 +619,6 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
             nextQuoteVal = nextQuote(symbol, restQuote, current)
             return nextQuoteVal
           })
-        }
-
-        const parseRawTrades = (rawTrades?: any[]): StreamTrade[] => {
-          return (rawTrades ?? [])
-            .map((trade: any, index: number) => {
-              const rawPrice = number(trade.price)
-              const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
-              const tradeId = trade.id && trade.id !== "3220" ? trade.id : `${trade.time}-${index}`
-              return {
-                id: `history-${tradeId}`,
-                time: normalizeTime(trade.time),
-                price,
-                volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
-                side: explicitSide(trade.side),
-              }
-            })
-            .filter((trade) => trade.price > 0 && trade.volume > 0)
         }
 
         const historicalTrades: StreamTrade[] = parseRawTrades(payload.trades)

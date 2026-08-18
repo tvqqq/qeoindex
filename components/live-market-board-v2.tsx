@@ -24,7 +24,7 @@ import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, typ
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/lib/intraday-5m"
 
 export type BoardUniverseStock = LiveBoardStock
-type IndexQuote = {
+export type IndexQuote = {
   symbol: string
   value: number
   change?: number
@@ -420,9 +420,33 @@ function FloatingMarketStatus({
   )
 }
 
-export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[] }) {
+export function LiveMarketBoardV2({
+  universe,
+  initialQuotes,
+  initialHistories,
+}: {
+  universe: BoardUniverseStock[]
+  initialQuotes?: Record<string, LiveStockQuote | IndexQuote>
+  initialHistories?: Record<string, IntradayPoint[]>
+}) {
   const { open: openOrderBook } = useOrderBooks()
-  const [quotes, setQuotes] = useState<Record<string, LiveStockQuote | IndexQuote>>({})
+  const [quotes, setQuotes] = useState<Record<string, LiveStockQuote | IndexQuote>>(() => {
+    const initial: Record<string, LiveStockQuote | IndexQuote> = initialQuotes ? { ...initialQuotes } : {}
+    for (const stock of universe) {
+      if (!initial[stock.ticker] && stock.lastClose && stock.lastClose > 0) {
+        initial[stock.ticker] = {
+          symbol: stock.ticker,
+          price: stock.lastClose,
+          reference: stock.lastClose,
+          change: 0,
+          changePercent: 0,
+          volume: 0,
+          updatedAt: stock.lastCloseDate || new Date().toISOString(),
+        }
+      }
+    }
+    return initial
+  })
   const [streamState, setStreamState] = useState<StreamState>("CONNECTING")
   const [streamError, setStreamError] = useState("")
   const [lastMessageAt, setLastMessageAt] = useState("")
@@ -431,7 +455,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   const [query, setQuery] = useState("")
   const [selectedSector, setSelectedSector] = useState("Tất cả")
   const [mode, setMode] = useState<BoardMode>("sector")
-  const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>({})
+  const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>(() => initialHistories ? { ...initialHistories } : {})
   const dailyReferences = useRef<Record<string, number>>({})
   const indexReferences = useRef<Record<string, number>>({})
   const sessionIdentifier = useRef(currentSessionIdentifier())

@@ -51,6 +51,30 @@ export async function getOrderbookSnapshotFromSupabase(symbol: string): Promise<
   }
 }
 
+export async function getAllOrderbookSnapshotsFromSupabase(): Promise<Record<string, StoredOrderbookRow>> {
+  const client = getSupabaseServerClient()
+  if (!client) return {}
+
+  try {
+    const { data, error } = await client
+      .from("stock_orderbook_snapshots")
+      .select("*")
+
+    if (error || !data) return {}
+
+    const result: Record<string, StoredOrderbookRow> = {}
+    for (const row of data as StoredOrderbookRow[]) {
+      if (row.symbol) {
+        result[row.symbol.toUpperCase()] = row
+      }
+    }
+    return result
+  } catch (error) {
+    console.warn("[Supabase Orderbook] Failed to read all snapshots:", error)
+    return {}
+  }
+}
+
 export async function upsertOrderbookSnapshotToSupabase(history: DnseSessionHistory): Promise<boolean> {
   const client = getSupabaseServerClient()
   if (!client) return false
@@ -92,5 +116,49 @@ export async function upsertOrderbookSnapshotToSupabase(history: DnseSessionHist
   } catch (error) {
     console.warn(`[Supabase Orderbook] Failed to write ${history.symbol}:`, error)
     return false
+  }
+}
+
+export async function batchUpsertOrderbookSnapshotsToSupabase(histories: DnseSessionHistory[]): Promise<number> {
+  const client = getSupabaseServerClient()
+  if (!client || histories.length === 0) return 0
+
+  try {
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date())
+
+    const records = histories.map((history) => ({
+      symbol: history.symbol.toUpperCase(),
+      session_date: today,
+      reference_price: history.latestQuote?.reference ?? null,
+      ceiling_price: history.latestQuote?.ceiling ?? null,
+      floor_price: history.latestQuote?.floor ?? null,
+      latest_price: history.latestQuote?.matchPrice ?? null,
+      total_volume: history.latestQuote?.totalVolume ?? 0,
+      intraday_1m: history.prices ?? [],
+      trades: history.trades ?? [],
+      trades_truncated: history.tradesTruncated ?? false,
+      latest_quote: history.latestQuote ?? {},
+      foreign_flow: history.foreign ?? {},
+      put_through: history.putThrough ?? [],
+      updated_at: new Date().toISOString(),
+    }))
+
+    const { error } = await client
+      .from("stock_orderbook_snapshots")
+      .upsert(records, { onConflict: "symbol" })
+
+    if (error) {
+      console.warn("[Supabase Orderbook] Batch upsert error:", error.message)
+      return 0
+    }
+    return records.length
+  } catch (error) {
+    console.warn("[Supabase Orderbook] Failed batch write:", error)
+    return 0
   }
 }

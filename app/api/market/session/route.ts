@@ -31,13 +31,52 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, message: "Missing valid symbol." }, { status: 400, headers: NO_STORE_HEADERS })
   }
 
+  const url = new URL(request.url)
+  const forceRefresh = url.searchParams.get("refresh") === "1"
+
   // 1. In-memory hot cache
-  const cached = serverCache.get(symbol)
-  if (cached && Date.now() < cached.expiresAt) {
-    return NextResponse.json(cached.data, { headers: NO_STORE_HEADERS })
+  if (!forceRefresh) {
+    const cached = serverCache.get(symbol)
+    if (cached && Date.now() < cached.expiresAt) {
+      return NextResponse.json(cached.data, { headers: NO_STORE_HEADERS })
+    }
   }
 
-  // 2. Fetch canonical DNSE session history & asynchronously persist snapshot to Supabase
+  // 2. Fast-path: Check Supabase Snapshot first for instant sub-20ms response
+  if (!forceRefresh) {
+    try {
+      const snapshot = await getOrderbookSnapshotFromSupabase(symbol)
+      if (snapshot && (snapshot.prices.length > 0 || snapshot.latestQuote)) {
+        const payload = {
+          ok: true,
+          provider: "Supabase-Snapshot",
+          storage: "Supabase Postgres",
+          boardId: "G1",
+          resolution: "1m",
+          ...snapshot,
+          completeness: {
+            price: "full-session-1m",
+            orderbook: "current-snapshot-plus-live",
+            trades: snapshot.tradesTruncated ? "session-backfill-truncated" : "full-session-backfill",
+          },
+        }
+        serverCache.set(symbol, { data: payload, expiresAt: Date.now() + SERVER_TTL_MS })
+
+        // Asynchronously refresh in background from DNSE to keep snapshot fresh
+        void fetchDnseSessionHistory(symbol, new Date())
+          .then((freshHistory) => {
+            void upsertOrderbookSnapshotToSupabase(freshHistory)
+          })
+          .catch(() => { /* silent background error */ })
+
+        return NextResponse.json(payload, { headers: NO_STORE_HEADERS })
+      }
+    } catch {
+      // ignore and continue to direct DNSE fetch
+    }
+  }
+
+  // 3. Fetch canonical DNSE session history & persist snapshot to Supabase
   try {
     const history = await fetchDnseSessionHistory(symbol, new Date())
     const payload = {
@@ -57,7 +96,7 @@ export async function GET(request: Request) {
     void upsertOrderbookSnapshotToSupabase(history)
     return NextResponse.json(payload, { headers: NO_STORE_HEADERS })
   } catch (error) {
-    // 3. Fallback to Supabase snapshot if DNSE API is unavailable / rate-limited
+    // 4. Final fallback to Supabase snapshot if DNSE API is unavailable / rate-limited
     const fallback = await getOrderbookSnapshotFromSupabase(symbol)
     if (fallback) {
       const payload = {
