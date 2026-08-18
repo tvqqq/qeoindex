@@ -13,10 +13,6 @@
     {
       "path": "/api/signals/daily",
       "schedule": "0 0 * * 1-5"
-    },
-    {
-      "path": "/api/market/sync-universe",
-      "schedule": "*/5 2-7 * * 1-5"
     }
   ]
 }
