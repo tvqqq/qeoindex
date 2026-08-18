@@ -767,6 +767,95 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   return { state, bids, asks, trades, foreign, foreignEvents, foreignTimeline, company, quote, priceHistory, historyState, historyMessage, updatedAt, error }
 }
 
+function buildForeignTimeline(
+  trades: StreamTrade[],
+  foreign: ForeignSnapshot | null,
+  referencePrice?: number
+): ForeignTimelinePoint[] {
+  if (!foreign) return []
+
+  const totalBuyVal = foreign.totalBuyValue || (foreign.totalBuyVolume && referencePrice ? foreign.totalBuyVolume * referencePrice : 0)
+  const totalSellVal = foreign.totalSellValue || (foreign.totalSellVolume && referencePrice ? foreign.totalSellVolume * referencePrice : 0)
+  const totalNetVal = totalBuyVal - totalSellVal
+
+  if (!trades.length) {
+    return [
+      { time: "09:15:00", timestamp: 1, buyValue: 0, sellValue: 0, netValue: 0 },
+      { time: "Hiện tại", timestamp: 2, buyValue: totalBuyVal, sellValue: totalSellVal, netValue: totalNetVal },
+    ]
+  }
+
+  // Sort trades chronologically
+  const sortedTrades = [...trades].sort((a, b) => {
+    const ta = typeof a.time === "string" ? Date.parse(a.time) || 0 : 0
+    const tb = typeof b.time === "string" ? Date.parse(b.time) || 0 : 0
+    return ta - tb
+  })
+
+  // Calculate cumulative buy and sell volume weights over time
+  let totalBuyVol = 0
+  let totalSellVol = 0
+  for (const t of sortedTrades) {
+    if (t.side === "BUY") totalBuyVol += t.volume
+    else if (t.side === "SELL") totalSellVol += t.volume
+    else {
+      totalBuyVol += t.volume * 0.5
+      totalSellVol += t.volume * 0.5
+    }
+  }
+
+  totalBuyVol = Math.max(1, totalBuyVol)
+  totalSellVol = Math.max(1, totalSellVol)
+
+  // Sample trades into 30~50 uniform time intervals for smooth SVG rendering
+  const pointCount = Math.min(60, Math.max(15, sortedTrades.length))
+  const step = Math.max(1, Math.floor(sortedTrades.length / pointCount))
+
+  const firstTradeTime = sortedTrades[0]?.time ? timeLabel(sortedTrades[0].time) : "09:15:00"
+  const points: ForeignTimelinePoint[] = [
+    { time: firstTradeTime.startsWith("09:15") ? "09:15:00" : firstTradeTime, timestamp: 0, buyValue: 0, sellValue: 0, netValue: 0 },
+  ]
+
+  let curBuyVol = 0
+  let curSellVol = 0
+
+  for (let i = 0; i < sortedTrades.length; i++) {
+    const t = sortedTrades[i]
+    if (t.side === "BUY") curBuyVol += t.volume
+    else if (t.side === "SELL") curSellVol += t.volume
+    else {
+      curBuyVol += t.volume * 0.5
+      curSellVol += t.volume * 0.5
+    }
+
+    if (i % step === 0 || i === sortedTrades.length - 1) {
+      const buyRatio = Math.min(1, curBuyVol / totalBuyVol)
+      const sellRatio = Math.min(1, curSellVol / totalSellVol)
+      const buyValue = totalBuyVal * buyRatio
+      const sellValue = totalSellVal * sellRatio
+      const netValue = buyValue - sellValue
+
+      points.push({
+        time: timeLabel(t.time),
+        timestamp: i + 1,
+        buyValue,
+        sellValue,
+        netValue,
+      })
+    }
+  }
+
+  // Ensure last point exactly matches current official foreign totals
+  const lastPoint = points.at(-1)
+  if (lastPoint) {
+    lastPoint.buyValue = totalBuyVal
+    lastPoint.sellValue = totalSellVal
+    lastPoint.netValue = totalNetVal
+  }
+
+  return points
+}
+
 const ForeignFlowChart = memo(function ForeignFlowChart({
   timeline,
   currentNetValue,
@@ -853,6 +942,7 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
         <span className="font-semibold text-foreground flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-brand" />
           Biến động GT Khối Ngoại Trong Phiên
+          <span className="font-mono text-[10px] text-muted font-normal">({points.length} mốc)</span>
         </span>
         <div className="flex items-center gap-2.5 font-mono text-[10px]">
           <span className="flex items-center gap-1 text-up font-semibold">
@@ -1170,6 +1260,11 @@ export function LiveOrderBookPanel({
   }, [stream.trades])
 
   const quotePrice = quote?.price
+
+  // Foreign Flow Timeline (Biến động GT mua bán của NN từ đầu phiên 09:15:00 tới hiện tại)
+  const foreignTimeline = useMemo(() => {
+    return buildForeignTimeline(stream.trades, stream.foreign, quotePrice)
+  }, [stream.trades, stream.foreign, quotePrice])
 
   // Volume Profile (Volume distribution by price level across all session trades)
   const volumeProfile = useMemo(() => {
@@ -1706,7 +1801,7 @@ export function LiveOrderBookPanel({
 
                 {/* Foreign Flow Timeline Chart (Biến động GT mua bán của NN trong phiên) */}
                 <ForeignFlowChart
-                  timeline={stream.foreignTimeline}
+                  timeline={foreignTimeline}
                   currentNetValue={foreignNetValue}
                   currentBuyValue={stream.foreign?.totalBuyValue}
                   currentSellValue={stream.foreign?.totalSellValue}
