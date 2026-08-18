@@ -25,6 +25,10 @@ interface SessionCacheItem {
 const serverCache = new Map<string, SessionCacheItem>()
 const SERVER_TTL_MS = 15_000
 
+export function clearServerSessionCache() {
+  serverCache.clear()
+}
+
 export async function GET(request: Request) {
   const symbol = parseSymbol(request)
   if (!symbol) {
