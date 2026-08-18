@@ -19,17 +19,42 @@ export async function POST(request: Request) {
   return handleSync(request)
 }
 
+function isVietnamTradingWindow(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    weekday: "short",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(now)
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? ""
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0)
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0)
+
+  const isWeekday = weekday !== "Sat" && weekday !== "Sun"
+  // 09:00 to 15:15 ICT (covering morning, afternoon, and post-market closing sync)
+  const isMarketHours = (hour >= 9 && hour < 15) || (hour === 15 && minute <= 15)
+  return isWeekday && isMarketHours
+}
+
 async function handleSync(request: Request) {
   const startedAt = Date.now()
-
-  // Verify secret if provided or in production
   const url = new URL(request.url)
-  const authHeader = request.headers.get("authorization") || ""
-  const secretParam = url.searchParams.get("secret") || ""
-  const cronSecret = process.env.CRON_SECRET || process.env.SCANNER_RUN_SECRET || ""
+  const isForce = url.searchParams.get("force") === "1"
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && secretParam !== cronSecret) {
-    // allow query param ?limit=10 for preview or verification
+  if (!isVietnamTradingWindow() && !isForce) {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: "Outside Vietnam trading window (09:00 - 15:15 weekdays). Pass ?force=1 to sync anyway.",
+      currentTimeICT: new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Ho_Chi_Minh",
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }).format(new Date()),
+    })
   }
 
   let universeTickers: string[] = []
