@@ -342,95 +342,99 @@ function FloatingMarketStatus({
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="fixed bottom-3 right-3 z-30 flex items-center gap-2 select-none">
-      {/* Sound FX Toggle Button */}
-      <button
-        type="button"
-        onClick={onToggleSound}
-        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.75),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-[11px] font-medium transition-all ${
-          soundEnabled
-            ? "border-amber-500/40 bg-amber-500/15 text-amber-300 shadow-[0_0_16px_rgba(251,191,36,0.3)] hover:bg-amber-500/25"
-            : "border-white/[0.12] bg-[#0c1015]/90 text-muted-2 hover:text-foreground hover:bg-white/[0.06] hover:border-white/[0.2]"
-        }`}
-        title={soundEnabled ? "Âm thanh Lệnh Cá Mập: Đang BẬT (Click để tắt)" : "Âm thanh Lệnh Cá Mập: Đang TẮT (Click để bật)"}
-      >
-        {soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-amber-400 animate-pulse" /> : <VolumeX className="h-3.5 w-3.5" />}
-        <span>{soundEnabled ? "Âm thanh: Bật" : "Âm thanh: Tắt"}</span>
-      </button>
-
-      {/* Floating System Status Widget */}
-      <div className="relative flex flex-col items-end">
-        {expanded ? (
-          <div className="absolute bottom-10 right-0 mb-2 w-72 rounded-2xl border border-white/[0.12] bg-[#0b0f14]/95 p-3.5 shadow-[0_20px_60px_rgba(0,0,0,0.9),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-xs space-y-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
-            <div className="flex items-center justify-between border-b border-white/[0.08] pb-2">
-              <span className="font-bold text-foreground flex items-center gap-1.5">
-                <Activity className="h-3.5 w-3.5 text-brand" />
-                <span>Trạng thái Hệ thống</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setExpanded(false)}
-                className="text-muted-2 hover:text-foreground text-[10px] px-1.5 py-0.5 rounded-full hover:bg-white/[0.06] transition-colors"
-              >
-                Đóng ✕
-              </button>
-            </div>
-
-            <div className="space-y-1.5 font-mono text-[11px] text-muted-2">
-              <div className="flex justify-between">
-                <span>Nguồn dữ liệu:</span>
-                <span className="text-foreground font-sans">Yahoo 5m + DNSE</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Độ rộng TT:</span>
-                <span>
-                  <b className="text-up">▲ {advances}</b> · <b className="text-down">▼ {declines}</b>
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Có giá / Top 100:</span>
-                <span className="text-foreground font-bold">{pricedCount}/{universeLength}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Biểu đồ nến:</span>
-                <span className="text-foreground">{historyCount}/{universeLength}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>WS Feed live:</span>
-                <span className="text-foreground font-bold">{liveCount}/{universeLength}</span>
-              </div>
-              {lastMessageAt ? (
-                <div className="flex justify-between">
-                  <span>Cập nhật cuối:</span>
-                  <span className="text-foreground">
-                    {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-
-            {streamError ? (
-              <div className="rounded-xl bg-ref/10 border border-ref/30 p-2 text-[10px] text-ref leading-tight">
-                {streamError}
-              </div>
-            ) : null}
-
+    <div className="fixed bottom-3 right-3 z-30 flex flex-col items-end select-none">
+      {expanded ? (
+        <div className="mb-2 w-72 rounded-2xl border border-white/[0.12] bg-[#0b0f14]/95 p-3.5 shadow-[0_20px_60px_rgba(0,0,0,0.9),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-xs space-y-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="flex items-center justify-between border-b border-white/[0.08] pb-2">
+            <span className="font-bold text-foreground flex items-center gap-1.5">
+              <Activity className="h-3.5 w-3.5 text-brand" />
+              <span>Trạng thái Hệ thống</span>
+            </span>
             <button
               type="button"
-              onClick={onReconnect}
-              className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] py-1.5 text-[11px] font-semibold text-foreground hover:bg-white/[0.08] transition-colors shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
+              onClick={() => setExpanded(false)}
+              className="text-muted-2 hover:text-foreground text-[10px] px-1.5 py-0.5 rounded-full hover:bg-white/[0.06] transition-colors"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin text-ref" : ""}`} />
-              <span>Kết nối lại DNSE Feed</span>
+              Đóng ✕
             </button>
           </div>
-        ) : null}
 
-        {/* Floating Compact Pill Badge */}
+          <div className="space-y-1.5 font-mono text-[11px] text-muted-2">
+            <div className="flex justify-between">
+              <span>Nguồn dữ liệu:</span>
+              <span className="text-foreground font-sans">Yahoo 5m + DNSE</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Độ rộng TT:</span>
+              <span>
+                <b className="text-up">▲ {advances}</b> · <b className="text-down">▼ {declines}</b>
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Có giá / Top 100:</span>
+              <span className="text-foreground font-bold">{pricedCount}/{universeLength}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Biểu đồ nến:</span>
+              <span className="text-foreground">{historyCount}/{universeLength}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>WS Feed live:</span>
+              <span className="text-foreground font-bold">{liveCount}/{universeLength}</span>
+            </div>
+            {lastMessageAt ? (
+              <div className="flex justify-between">
+                <span>Cập nhật cuối:</span>
+                <span className="text-foreground">
+                  {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
+                </span>
+              </div>
+            ) : null}
+          </div>
+
+          {streamError ? (
+            <div className="rounded-xl bg-ref/10 border border-ref/30 p-2 text-[10px] text-ref leading-tight">
+              {streamError}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={onReconnect}
+            className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] py-1.5 text-[11px] font-semibold text-foreground hover:bg-white/[0.08] transition-colors shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin text-ref" : ""}`} />
+            <span>Kết nối lại DNSE Feed</span>
+          </button>
+        </div>
+      ) : null}
+
+      {/* Floating Compact Pill with Integrated Sound Toggle */}
+      <div className="flex items-center gap-1 rounded-full border border-white/[0.12] bg-[#0c1015]/90 pl-1.5 pr-3 py-1 shadow-[0_12px_36px_rgba(0,0,0,0.75),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-[11px]">
+        {/* Sound FX Icon Button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleSound()
+          }}
+          className={`flex h-6 w-6 items-center justify-center rounded-full transition-all ${
+            soundEnabled
+              ? "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
+              : "text-muted-2 hover:text-foreground hover:bg-white/[0.08]"
+          }`}
+          title={soundEnabled ? "Âm thanh Lệnh Cá Mập: Đang BẬT (Click để tắt)" : "Âm thanh Lệnh Cá Mập: Đang TẮT (Click để bật)"}
+        >
+          {soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-amber-400" /> : <VolumeX className="h-3.5 w-3.5" />}
+        </button>
+
+        <span className="h-3 w-[1px] bg-white/[0.12]" />
+
+        {/* Status expand button */}
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="flex items-center gap-2 rounded-full border border-white/[0.12] bg-[#0c1015]/90 px-3.5 py-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.75),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-[11px] hover:bg-white/[0.06] hover:border-white/[0.2] transition-all"
+          className="flex items-center gap-2 pl-1 hover:opacity-90 transition-opacity"
           title="Bấm để xem chi tiết trạng thái hệ thống"
         >
           <span

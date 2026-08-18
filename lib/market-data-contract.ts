@@ -241,14 +241,6 @@ export function normalizeForeignFlow(raw: any, fallbackPrice?: number | null): C
  */
 export function toCanonicalOrderbookSnapshot(symbol: string, raw: any): CanonicalOrderbookSnapshot {
   const ticker = symbol.toUpperCase().trim()
-  const ref = normalizeToKiloPrice(raw?.reference_price ?? raw?.reference ?? raw?.refPrice ?? raw?.r ?? raw?.closePrice)
-  const last = normalizeToKiloPrice(raw?.latest_price ?? raw?.matchPrice ?? raw?.lastPrice ?? raw?.price ?? ref)
-  const ceil = normalizeToKiloPrice(raw?.ceiling_price ?? raw?.ceiling ?? raw?.c ?? (ref ? Math.round(ref * 1.07 * 100) / 100 : null))
-  const floor = normalizeToKiloPrice(raw?.floor_price ?? raw?.floor ?? raw?.f ?? (ref ? Math.round(ref * 0.93 * 100) / 100 : null))
-  const totalVolume = normalizeVolume(raw?.total_volume ?? raw?.totalVolume ?? raw?.totalVolumeTraded ?? (raw?.lot ? Number(raw.lot) * 10 : 0))
-
-  const rawBids = raw?.latest_quote?.bids ?? raw?.bids ?? raw?.bid ?? []
-  const rawAsks = raw?.latest_quote?.asks ?? raw?.asks ?? raw?.offer ?? []
 
   const rawTrades = Array.isArray(raw?.trades) ? raw.trades : []
   const trades: CanonicalSessionTrade[] = rawTrades.map((t: any, idx: number) => ({
@@ -269,6 +261,28 @@ export function toCanonicalOrderbookSnapshot(symbol: string, raw: any): Canonica
       close: normalizeToKiloPrice(rawClose) ?? 0,
     }
   }).filter((b: CanonicalIntradayPoint) => b.close > 0)
+
+  const lastTradePrice = trades.length > 0 ? trades[trades.length - 1].price : null
+  const firstTradePrice = trades.length > 0 ? trades[0].price : null
+  const lastBarClose = intraday1m.length > 0 ? intraday1m[intraday1m.length - 1].close : null
+  const firstBarOpen = intraday1m.length > 0 ? intraday1m[0].open : null
+
+  const parsedRef = normalizeToKiloPrice(raw?.reference_price ?? raw?.reference ?? raw?.refPrice ?? raw?.r ?? raw?.closePrice)
+  const parsedLast = normalizeToKiloPrice(raw?.latest_price ?? raw?.matchPrice ?? raw?.lastPrice ?? raw?.price)
+
+  const last = parsedLast ?? lastTradePrice ?? lastBarClose ?? parsedRef
+  const ref = parsedRef ?? firstBarOpen ?? firstTradePrice ?? last
+
+  const ceil = normalizeToKiloPrice(raw?.ceiling_price ?? raw?.ceiling ?? raw?.c ?? (ref ? Math.round(ref * 1.07 * 100) / 100 : null))
+  const floor = normalizeToKiloPrice(raw?.floor_price ?? raw?.floor ?? raw?.f ?? (ref ? Math.round(ref * 0.93 * 100) / 100 : null))
+
+  let totalVolume = normalizeVolume(raw?.total_volume ?? raw?.totalVolume ?? raw?.totalVolumeTraded ?? (raw?.lot ? Number(raw.lot) * 10 : 0))
+  if (totalVolume === 0 && trades.length > 0) {
+    totalVolume = trades.reduce((sum, t) => sum + (t.volume || 0), 0)
+  }
+
+  const rawBids = raw?.latest_quote?.bids ?? raw?.bids ?? raw?.bid ?? []
+  const rawAsks = raw?.latest_quote?.asks ?? raw?.asks ?? raw?.offer ?? []
 
   const rawPt = Array.isArray(raw?.put_through) ? raw.put_through : Array.isArray(raw?.putThrough) ? raw.putThrough : []
   const putThrough: CanonicalPutThroughDeal[] = rawPt.map((pt: any, idx: number) => ({
@@ -305,7 +319,7 @@ export function toCanonicalOrderbookSnapshot(symbol: string, raw: any): Canonica
       ceiling: ceil,
       floor: floor,
       matchPrice: last,
-      openPrice: normalizeToKiloPrice(raw?.open_price ?? raw?.openPrice ?? raw?.open ?? ref),
+      openPrice: normalizeToKiloPrice(raw?.open_price ?? raw?.openPrice ?? raw?.open ?? firstBarOpen ?? ref),
       highPrice: normalizeToKiloPrice(raw?.high_price ?? raw?.highPrice ?? raw?.high ?? last),
       lowPrice: normalizeToKiloPrice(raw?.low_price ?? raw?.lowPrice ?? raw?.low ?? last),
       avgPrice: normalizeToKiloPrice(raw?.avg_price ?? raw?.avgPrice ?? raw?.avePrice),

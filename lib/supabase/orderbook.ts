@@ -212,7 +212,7 @@ export async function getAllOrderbookSnapshotsFromSupabase(): Promise<Record<str
 
 export async function upsertOrderbookSnapshotToSupabase(history: DnseSessionHistory): Promise<boolean> {
   const client = getSupabaseServerClient()
-  if (!client) return false
+  if (!client || !history?.symbol) return false
 
   try {
     const canonical = toCanonicalOrderbookSnapshot(history.symbol, {
@@ -221,6 +221,38 @@ export async function upsertOrderbookSnapshotToSupabase(history: DnseSessionHist
       foreign_flow: history.foreign,
       put_through: history.putThrough,
     })
+
+    // Non-destructive preservation: Never overwrite valid existing data with null or empty arrays
+    if (
+      !canonical.latestPrice ||
+      !canonical.referencePrice ||
+      canonical.totalVolume === 0 ||
+      canonical.trades.length === 0 ||
+      canonical.intraday1m.length === 0
+    ) {
+      const { data: existing } = await client
+        .from("stock_orderbook_snapshots")
+        .select("reference_price, ceiling_price, floor_price, latest_price, total_volume, intraday_1m, trades, trades_truncated, foreign_flow")
+        .eq("symbol", canonical.symbol)
+        .maybeSingle()
+
+      if (existing) {
+        canonical.referencePrice = canonical.referencePrice ?? existing.reference_price
+        canonical.latestPrice = canonical.latestPrice ?? existing.latest_price ?? canonical.referencePrice
+        canonical.ceilingPrice = canonical.ceilingPrice ?? existing.ceiling_price
+        canonical.floorPrice = canonical.floorPrice ?? existing.floor_price
+        if (canonical.totalVolume === 0 && existing.total_volume > 0) {
+          canonical.totalVolume = existing.total_volume
+        }
+        if (canonical.trades.length === 0 && Array.isArray(existing.trades) && existing.trades.length > 0) {
+          canonical.trades = existing.trades
+          canonical.tradesTruncated = existing.trades_truncated
+        }
+        if (canonical.intraday1m.length === 0 && Array.isArray(existing.intraday_1m) && existing.intraday_1m.length > 0) {
+          canonical.intraday1m = existing.intraday_1m
+        }
+      }
+    }
 
     const payload = {
       symbol: canonical.symbol,

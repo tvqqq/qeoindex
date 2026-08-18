@@ -77,7 +77,9 @@ export async function GET(request: Request) {
         // Asynchronously refresh in background from DNSE to keep snapshot fresh
         void fetchDnseSessionHistory(symbol, new Date())
           .then((freshHistory) => {
-            void upsertOrderbookSnapshotToSupabase(freshHistory)
+            if (freshHistory && (freshHistory.prices.length > 0 || freshHistory.trades.length > 0 || freshHistory.latestQuote?.matchPrice)) {
+              void upsertOrderbookSnapshotToSupabase(freshHistory)
+            }
           })
           .catch(() => { /* silent background error */ })
 

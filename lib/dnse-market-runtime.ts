@@ -528,37 +528,42 @@ export async function fetchDnseSessionHistory(symbol: string, now = new Date()):
     }
   }
 
-  // Merge latest quote & depth
-  if (fastOverview) {
-    if (!latestQuote) {
-      latestQuote = {
-        time: Math.floor(now.getTime() / 1000),
-        bid: fastOverview.bids ?? [],
-        offer: fastOverview.asks ?? [],
-        matchPrice: fastOverview.matchPrice || prices.at(-1)?.close || null,
-        openPrice: prices[0]?.open || null,
-        reference: fastOverview.refPrice,
-        ceiling: fastOverview.ceiling,
-        floor: fastOverview.floor,
-        highPrice: fastOverview.highPrice,
-        lowPrice: fastOverview.lowPrice,
-        avgPrice: fastOverview.avgPrice,
-        totalVolume: fastOverview.totalVolume,
-      }
-    } else {
-      if (!latestQuote.bid?.length && fastOverview.bids?.length) {
-        latestQuote.bid = fastOverview.bids
-      }
-      if (!latestQuote.offer?.length && fastOverview.asks?.length) {
-        latestQuote.offer = fastOverview.asks
-      }
-      latestQuote.reference = latestQuote.reference ?? fastOverview.refPrice
-      latestQuote.ceiling = latestQuote.ceiling ?? fastOverview.ceiling
-      latestQuote.floor = latestQuote.floor ?? fastOverview.floor
-      latestQuote.highPrice = latestQuote.highPrice ?? fastOverview.highPrice
-      latestQuote.lowPrice = latestQuote.lowPrice ?? fastOverview.lowPrice
-      latestQuote.avgPrice = latestQuote.avgPrice ?? fastOverview.avgPrice
-      latestQuote.totalVolume = latestQuote.totalVolume ?? fastOverview.totalVolume
+  // Synthesize latest quote from overview, trades, and intraday candles
+  const lastTradePrice = trades.length > 0 ? trades[trades.length - 1].price : null
+  const firstTradePrice = trades.length > 0 ? trades[0].price : null
+  const lastBarClose = prices.length > 0 ? prices[prices.length - 1].close : null
+  const firstBarOpen = prices.length > 0 ? prices[0].open : null
+  const tradeVolume = trades.reduce((sum, t) => sum + (t.volume || 0), 0)
+
+  const matchPrice = latestQuote?.matchPrice || fastOverview?.matchPrice || lastTradePrice || lastBarClose || null
+  const refPrice = latestQuote?.reference ?? fastOverview?.refPrice ?? firstBarOpen ?? firstTradePrice ?? matchPrice ?? null
+
+  if (!latestQuote) {
+    latestQuote = {
+      time: Math.floor(now.getTime() / 1000),
+      bid: fastOverview?.bids ?? [],
+      offer: fastOverview?.asks ?? [],
+      matchPrice,
+      openPrice: prices[0]?.open || firstTradePrice || refPrice,
+      reference: refPrice,
+      ceiling: fastOverview?.ceiling ?? (refPrice ? Math.round(refPrice * 1.07 * 100) / 100 : null),
+      floor: fastOverview?.floor ?? (refPrice ? Math.round(refPrice * 0.93 * 100) / 100 : null),
+      highPrice: fastOverview?.highPrice ?? matchPrice,
+      lowPrice: fastOverview?.lowPrice ?? matchPrice,
+      avgPrice: fastOverview?.avgPrice ?? matchPrice,
+      totalVolume: fastOverview?.totalVolume || tradeVolume,
+    }
+  } else {
+    latestQuote.matchPrice = latestQuote.matchPrice ?? matchPrice
+    latestQuote.reference = latestQuote.reference ?? refPrice
+    latestQuote.ceiling = latestQuote.ceiling ?? fastOverview?.ceiling ?? (refPrice ? Math.round(refPrice * 1.07 * 100) / 100 : null)
+    latestQuote.floor = latestQuote.floor ?? fastOverview?.floor ?? (refPrice ? Math.round(refPrice * 0.93 * 100) / 100 : null)
+    latestQuote.totalVolume = latestQuote.totalVolume || fastOverview?.totalVolume || tradeVolume
+    if (!latestQuote.bid?.length && fastOverview?.bids?.length) {
+      latestQuote.bid = fastOverview.bids
+    }
+    if (!latestQuote.offer?.length && fastOverview?.asks?.length) {
+      latestQuote.offer = fastOverview.asks
     }
   }
 

@@ -35,8 +35,12 @@ export default async function Page() {
 
   for (const stock of universe) {
     const snap = snapshots[stock.ticker]
-    const latestPrice = snap?.latest_price || snap?.reference_price
-    const ref = snap?.reference_price || latestPrice
+    const intraday = Array.isArray(snap?.intraday_1m) ? (snap.intraday_1m as unknown as IntradayPoint[]) : []
+    const lastBarClose = intraday.length > 0 ? (intraday[intraday.length - 1].close ?? (intraday[intraday.length - 1] as any)?.c) : null
+    const firstBarOpen = intraday.length > 0 ? ((intraday[0] as any)?.open ?? (intraday[0] as any)?.o ?? intraday[0]?.close) : null
+
+    const latestPrice = snap?.latest_price || snap?.reference_price || lastBarClose || firstBarOpen
+    const ref = snap?.reference_price || firstBarOpen || latestPrice
 
     if (latestPrice && latestPrice > 0 && ref && ref > 0) {
       const change = latestPrice - ref
@@ -57,8 +61,8 @@ export default async function Page() {
         foreignSellVolume: (snap?.foreign_flow as any)?.totalSellVolume,
         updatedAt: snap?.updated_at || new Date().toISOString(),
       }
-      if (Array.isArray(snap?.intraday_1m) && snap.intraday_1m.length > 0) {
-        initialHistories[stock.ticker] = snap.intraday_1m as unknown as IntradayPoint[]
+      if (intraday.length > 0) {
+        initialHistories[stock.ticker] = intraday
       }
     }
   }
