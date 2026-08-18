@@ -1,7 +1,21 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Activity, ChartNoAxesCombined, ChevronUp, CircleAlert, LayoutGrid, RefreshCw, Search, Star } from "lucide-react"
+import {
+  Activity,
+  BarChart3,
+  ChartNoAxesCombined,
+  ChevronUp,
+  CircleAlert,
+  Coins,
+  Globe2,
+  LayoutGrid,
+  RefreshCw,
+  Search,
+  Star,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { BOARD_SECTOR_GROUPS, SECTOR_ORDER } from "@/lib/market-sectors"
 import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
@@ -18,6 +32,9 @@ type IndexQuote = {
   volume?: number
   valueTraded?: number
   valueChangePercent?: number
+  advances?: number
+  declines?: number
+  unchanged?: number
   updatedAt: string
 }
 type BoardMode = "sector" | "movers"
@@ -185,17 +202,99 @@ function WatchlistSection({
 
 function IndexStrip({ quotes }: { quotes: Record<string, LiveStockQuote | IndexQuote> }) {
   return (
-    <div className="grid grid-cols-2 gap-1.5 p-2 border-b border-white/[0.07] bg-[#080c10]/75 backdrop-blur-2xl sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 p-2 border-b border-white/[0.07] bg-[#080c10]/80 backdrop-blur-2xl sm:grid-cols-4">
       {INDEXES.map((symbol) => {
         const quote = quotes[symbol] as IndexQuote | undefined
         const tone = marketToneFromChange(quote?.changePercent)
         const text = quote ? marketToneText(tone) : "text-muted-2"
+        const isUp = (quote?.changePercent ?? 0) >= 0
+
         return (
-          <div key={symbol} className="flex items-center justify-between px-3.5 py-1.5 rounded-xl border border-white/[0.07] bg-white/[0.025] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.07)] hover:bg-white/[0.045] hover:border-white/[0.12] transition-all font-mono">
-            <span className="text-[10.5px] font-bold tracking-wider text-muted-2 uppercase font-sans">{INDEX_LABELS[symbol]}</span>
-            <div className="flex items-center gap-1.5">
-              <span className={`text-xs font-extrabold tracking-tight ${text}`}>{formatBoardPrice(quote?.value)}</span>
-              {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact /> : null}
+          <div
+            key={symbol}
+            className={`group relative flex items-center justify-between overflow-hidden rounded-2xl border px-3.5 py-2.5 backdrop-blur-xl transition-all duration-300 ${
+              tone === "up"
+                ? "border-emerald-500/25 bg-[#081510]/60 shadow-[0_8px_24px_-6px_rgba(34,201,138,0.15),inset_0_1px_0_0_rgba(255,255,255,0.08)] hover:border-emerald-500/40 hover:bg-[#0b1d16]/75"
+                : tone === "down"
+                  ? "border-rose-500/25 bg-[#160a0c]/60 shadow-[0_8px_24px_-6px_rgba(255,71,87,0.15),inset_0_1px_0_0_rgba(255,255,255,0.08)] hover:border-rose-500/40 hover:bg-[#200e11]/75"
+                  : "border-white/[0.08] bg-white/[0.025] shadow-[0_8px_24px_-6px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.07)] hover:border-white/[0.14] hover:bg-white/[0.045]"
+            }`}
+          >
+            {/* Ambient Stock / Financial Wave Vector in Background */}
+            <svg
+              className={`absolute -right-2 -bottom-2 h-16 w-32 pointer-events-none transition-opacity duration-500 ${
+                isUp ? "text-emerald-500/15 group-hover:text-emerald-500/25" : "text-rose-500/15 group-hover:text-rose-500/25"
+              }`}
+              viewBox="0 0 120 50"
+              fill="none"
+              aria-hidden="true"
+            >
+              <defs>
+                <linearGradient id={`idx-grad-${symbol}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="currentColor" stopOpacity="0.7" />
+                  <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {isUp ? (
+                <>
+                  <path d="M0,45 C20,42 40,48 60,30 C80,12 100,20 120,5 L120,50 L0,50 Z" fill={`url(#idx-grad-${symbol})`} />
+                  <path d="M0,45 C20,42 40,48 60,30 C80,12 100,20 120,5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                </>
+              ) : (
+                <>
+                  <path d="M0,8 C20,12 40,5 60,25 C80,45 100,35 120,48 L120,50 L0,50 Z" fill={`url(#idx-grad-${symbol})`} />
+                  <path d="M0,8 C20,12 40,5 60,25 C80,45 100,35 120,48" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                </>
+              )}
+            </svg>
+
+            {/* Left: Dynamic Vector Icon & Index Label */}
+            <div className="relative z-10 flex items-center gap-2.5 min-w-0">
+              <div
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)] transition-transform duration-300 group-hover:scale-105 ${
+                  tone === "up"
+                    ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-400"
+                    : tone === "down"
+                      ? "border-rose-500/35 bg-rose-500/15 text-rose-400"
+                      : "border-amber-500/35 bg-amber-500/15 text-amber-400"
+                }`}
+              >
+                {tone === "up" ? (
+                  <TrendingUp className="h-4 w-4 drop-shadow-[0_0_6px_rgba(34,201,138,0.5)]" />
+                ) : tone === "down" ? (
+                  <TrendingDown className="h-4 w-4 drop-shadow-[0_0_6px_rgba(255,71,87,0.5)]" />
+                ) : (
+                  <Activity className="h-4 w-4 drop-shadow-[0_0_6px_rgba(226,185,59,0.5)]" />
+                )}
+              </div>
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold tracking-wider text-foreground/90 uppercase font-sans">
+                    {INDEX_LABELS[symbol]}
+                  </span>
+                  {quote?.volume && (
+                    <span className="hidden xl:inline-block font-mono text-[9.5px] font-medium text-muted-2">
+                      · {formatCompactVolume(quote.volume)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`text-[15px] font-extrabold font-mono tracking-tight ${text}`}>
+                    {formatBoardPrice(quote?.value)}
+                  </span>
+                  {quote?.change !== undefined && (
+                    <span className={`text-[11px] font-mono font-bold ${text}`}>
+                      {quote.change > 0 ? "+" : ""}{quote.change.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Liquid Glass Change Pill */}
+            <div className="relative z-10 shrink-0">
+              {quote ? <MarketChangePill value={quote.changePercent} tone={tone} /> : null}
             </div>
           </div>
         )
@@ -918,44 +1017,113 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
     return { totalUniverseVolume: vol, totalUniverseValue: val }
   }, [universe, displayQuotes])
 
+  const totalForeignNet = useMemo(() => {
+    let net = 0
+    for (const stock of universe) {
+      const q = displayQuotes[stock.ticker] as LiveStockQuote | undefined
+      if (q && typeof q.foreignNetValue === "number" && Number.isFinite(q.foreignNetValue)) {
+        net += q.foreignNetValue
+      }
+    }
+    return net
+  }, [universe, displayQuotes])
+
   const vnindexQuote = quotes.VNINDEX as IndexQuote | undefined
   const vnindexVolume = vnindexQuote?.volume ?? (totalUniverseVolume > 0 ? totalUniverseVolume : undefined)
   const vnindexValue = vnindexQuote?.valueTraded ?? (totalUniverseValue > 0 ? totalUniverseValue : undefined)
+
+  const vnindexAdv = vnindexQuote?.advances ?? advances
+  const vnindexDec = vnindexQuote?.declines ?? declines
+  const vnindexUnc = vnindexQuote?.unchanged ?? Math.max(0, universe.length - advances - declines)
+  const breadthTotal = vnindexAdv + vnindexDec + vnindexUnc
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background">
       <IndexStrip quotes={quotes} />
 
       {/* COMPACT TOP TOOLBAR */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-white/[0.07] bg-[#090d12]/80 backdrop-blur-2xl px-3.5 py-2 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.35)]">
-        {/* VNINDEX Market Stats on the left (under VNINDEX and VN30 columns) */}
-        <div className="flex flex-wrap items-center gap-3 font-mono text-xs px-3.5 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-muted-2 font-sans font-medium">Tổng KL</span>
-            <span className="font-bold text-foreground">
-              {vnindexVolume !== undefined ? formatExactVolume(vnindexVolume) : "—"}
-            </span>
-          </div>
-          <div className="h-3 w-px bg-white/[0.1] hidden sm:block" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-muted-2 font-sans font-medium">Tổng giá trị</span>
-            <span className="font-bold text-foreground">
-              {vnindexValue !== undefined ? formatExactTradedValue(vnindexValue) : "—"}
-            </span>
-            {vnindexQuote?.valueChangePercent !== undefined && vnindexQuote.valueChangePercent !== null && (
-              <span
-                className={`font-bold font-mono text-xs ${
-                  vnindexQuote.valueChangePercent > 0
-                    ? "text-up"
-                    : vnindexQuote.valueChangePercent < 0
-                      ? "text-down"
-                      : "text-ref"
-                }`}
-                title="So sánh Tổng GT với phiên hôm qua"
-              >
-                ({vnindexQuote.valueChangePercent > 0 ? "+" : ""}{vnindexQuote.valueChangePercent.toFixed(1)}%)
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-white/[0.07] bg-[#090d12]/85 backdrop-blur-2xl px-3.5 py-2 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.35)]">
+        {/* VNINDEX Market Telemetry on the left */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Capsule 1: Thanh khoản & Giá trị */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
+              <Coins className="h-3 w-3" />
+            </div>
+            <div className="flex items-center gap-1.5 font-mono text-xs">
+              <span className="text-[11px] text-muted-2 font-sans font-medium">Tổng KL</span>
+              <span className="font-bold text-foreground">
+                {vnindexVolume !== undefined ? formatExactVolume(vnindexVolume) : "—"}
               </span>
+            </div>
+            <div className="h-3 w-px bg-white/[0.1] hidden sm:block" />
+            <div className="flex items-center gap-1.5 font-mono text-xs">
+              <span className="text-[11px] text-muted-2 font-sans font-medium">Tổng GT</span>
+              <span className="font-bold text-foreground">
+                {vnindexValue !== undefined ? formatExactTradedValue(vnindexValue) : "—"}
+              </span>
+              {vnindexQuote?.valueChangePercent !== undefined && vnindexQuote.valueChangePercent !== null && (
+                <span
+                  className={`font-bold font-mono text-xs ${
+                    vnindexQuote.valueChangePercent > 0
+                      ? "text-up"
+                      : vnindexQuote.valueChangePercent < 0
+                        ? "text-down"
+                        : "text-ref"
+                  }`}
+                  title="So sánh Tổng GT với phiên hôm qua"
+                >
+                  ({vnindexQuote.valueChangePercent > 0 ? "+" : ""}{vnindexQuote.valueChangePercent.toFixed(1)}%)
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Capsule 2: Độ rộng Thị trường (Market Breadth) */}
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
+              <BarChart3 className="h-3 w-3" />
+            </div>
+            <div className="flex items-center gap-2 font-mono text-xs">
+              <span className="text-[11px] text-muted-2 font-sans font-medium">Độ rộng</span>
+              <span className="font-bold text-up flex items-center gap-0.5" title="Mã tăng">
+                ▲ {vnindexAdv}
+              </span>
+              <span className="font-bold text-ref flex items-center gap-0.5" title="Mã tham chiếu">
+                ■ {vnindexUnc}
+              </span>
+              <span className="font-bold text-down flex items-center gap-0.5" title="Mã giảm">
+                ▼ {vnindexDec}
+              </span>
+            </div>
+            {breadthTotal > 0 && (
+              <div className="hidden xl:flex h-1.5 w-14 overflow-hidden rounded-full bg-white/[0.06] border border-white/[0.08] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">
+                <div style={{ width: `${(vnindexAdv / breadthTotal) * 100}%` }} className="bg-emerald-400" />
+                <div style={{ width: `${(vnindexUnc / breadthTotal) * 100}%` }} className="bg-amber-400" />
+                <div style={{ width: `${(vnindexDec / breadthTotal) * 100}%` }} className="bg-rose-500" />
+              </div>
             )}
+          </div>
+
+          {/* Capsule 3: Khối Ngoại Toàn Thị Trường (Foreign Net Flow) */}
+          <div className="hidden 2xl:flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
+              <Globe2 className="h-3 w-3" />
+            </div>
+            <div className="flex items-center gap-1.5 font-mono text-xs">
+              <span className="text-[11px] text-muted-2 font-sans font-medium">Khối ngoại</span>
+              <span
+                className={`font-bold ${
+                  totalForeignNet > 0
+                    ? "text-up"
+                    : totalForeignNet < 0
+                      ? "text-down"
+                      : "text-muted-2"
+                }`}
+              >
+                {totalForeignNet !== 0 ? `${totalForeignNet > 0 ? "+" : ""}${formatMarketValue(totalForeignNet)}` : "—"}
+              </span>
+            </div>
           </div>
         </div>
 

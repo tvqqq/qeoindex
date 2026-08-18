@@ -6,6 +6,9 @@ export type MarketIndexQuote = {
   volume?: number
   valueTraded?: number
   valueChangePercent?: number
+  advances?: number
+  declines?: number
+  unchanged?: number
   updatedAt: string
 }
 
@@ -94,7 +97,7 @@ export async function fetchTradingViewIndexes() {
     }
   }
 
-  // Enrich with official VPS index volume & value (in million VND)
+  // Enrich with official VPS index volume & value & breadth (in million VND)
   if (vpsResult.status === "fulfilled" && Array.isArray(vpsResult.value)) {
     for (const item of vpsResult.value) {
       if (!item || typeof item !== "object") continue
@@ -105,10 +108,25 @@ export async function fetchTradingViewIndexes() {
       const val = Number((item as any).value) // in million VND
       const cIndex = Number((item as any).cIndex)
       const oIndex = Number((item as any).oIndex)
+      const ot = String((item as any).ot ?? "")
+      let advances: number | undefined
+      let declines: number | undefined
+      let unchanged: number | undefined
+      if (ot) {
+        const parts = ot.split("|")
+        if (parts.length >= 6) {
+          advances = Number(parts[3]) || undefined
+          declines = Number(parts[4]) || undefined
+          unchanged = Number(parts[5]) || undefined
+        }
+      }
 
       if (quotes[symbol]) {
         if (Number.isFinite(vol) && vol > 0) quotes[symbol].volume = vol
         if (Number.isFinite(val) && val > 0) quotes[symbol].valueTraded = val * 1_000_000
+        if (advances !== undefined) quotes[symbol].advances = advances
+        if (declines !== undefined) quotes[symbol].declines = declines
+        if (unchanged !== undefined) quotes[symbol].unchanged = unchanged
         if (symbol === "VNINDEX" && vnindexValueChangePercent !== undefined) {
           quotes[symbol].valueChangePercent = vnindexValueChangePercent
         }
@@ -123,6 +141,9 @@ export async function fetchTradingViewIndexes() {
           volume: Number.isFinite(vol) && vol > 0 ? vol : undefined,
           valueTraded: Number.isFinite(val) && val > 0 ? val * 1_000_000 : undefined,
           valueChangePercent: symbol === "VNINDEX" ? vnindexValueChangePercent : undefined,
+          advances,
+          declines,
+          unchanged,
           updatedAt: new Date().toISOString(),
         }
       }
