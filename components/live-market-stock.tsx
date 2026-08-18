@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ExternalLink } from "lucide-react"
+import { ExternalLink, Star } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { Sparkline } from "@/components/sparkline"
 import { normalizeMarketPrice } from "@/lib/intraday-5m"
@@ -71,7 +71,21 @@ function sparkReference(history: number[], reference?: number) {
   return normalizeMarketPrice(reference, history.at(-1)) ?? undefined
 }
 
-export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoardStock; quote?: LiveStockQuote; history: number[]; onOpen: () => void }) {
+export function LiveStockRow({
+  stock,
+  quote,
+  history,
+  onOpen,
+  isWatched,
+  onToggleWatch,
+}: {
+  stock: LiveBoardStock
+  quote?: LiveStockQuote
+  history: number[]
+  onOpen: () => void
+  isWatched?: boolean
+  onToggleWatch?: (event: React.MouseEvent) => void
+}) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
   const chart = sparkData(history)
@@ -103,6 +117,22 @@ export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoa
         {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact title="% thay đổi so với giá tham chiếu (đóng cửa phiên trước)" /> : <span className="text-[10px] text-muted">Chờ giá</span>}
       </div>
 
+      {/* Star / watchlist toggle */}
+      {onToggleWatch && (
+        <button
+          type="button"
+          onClick={onToggleWatch}
+          aria-label={isWatched ? `Bỏ theo dõi ${stock.ticker}` : `Theo dõi ${stock.ticker}`}
+          className={`absolute left-1 top-1 rounded p-0.5 transition-all focus:outline-none focus:ring-1 focus:ring-brand ${
+            isWatched
+              ? "text-amber-400 opacity-100"
+              : "text-muted opacity-0 group-hover:opacity-100"
+          }`}
+        >
+          <Star className={`h-3 w-3 ${isWatched ? "fill-amber-400" : ""}`} />
+        </button>
+      )}
+
       <Link
         href={`/research/${stock.ticker.toLowerCase()}`}
         onClick={(event) => event.stopPropagation()}
@@ -115,7 +145,21 @@ export function LiveStockRow({ stock, quote, history, onOpen }: { stock: LiveBoa
   )
 }
 
-export function LiveMoverCard({ stock, quote, history, onOpen }: { stock: LiveBoardStock; quote?: LiveStockQuote; history: number[]; onOpen: () => void }) {
+export function LiveMoverCard({
+  stock,
+  quote,
+  history,
+  onOpen,
+  isWatched,
+  onToggleWatch,
+}: {
+  stock: LiveBoardStock
+  quote?: LiveStockQuote
+  history: number[]
+  onOpen: () => void
+  isWatched?: boolean
+  onToggleWatch?: (event: React.MouseEvent) => void
+}) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
   const chart = sparkData(history)
@@ -123,7 +167,8 @@ export function LiveMoverCard({ stock, quote, history, onOpen }: { stock: LiveBo
   const strongGainer = (quote?.changePercent ?? 0) >= 3
 
   return (
-    <button type="button" onClick={onOpen} className={`grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-panel px-4 py-3 text-left transition-all hover:border-brand/60 hover:bg-panel-2/70 ${strongGainer ? "strong-gainer border-up/60" : "border-border"}`}>
+    <div className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-panel px-4 py-3 transition-all hover:border-brand/60 hover:bg-panel-2/70 ${strongGainer ? "strong-gainer border-up/60" : "border-border"}`}>
+      <button type="button" onClick={onOpen} className="absolute inset-0 rounded-2xl focus:outline-none focus:ring-1 focus:ring-brand" aria-label={`Mở sổ lệnh ${stock.ticker}`} />
       <div>
         <div className={`font-mono text-2xl font-black ${strongGainer ? "text-up" : "text-foreground"}`}>{stock.ticker}</div>
         <div className="mt-1 font-mono text-xs text-muted-2">{formatBoardVolume(quote?.volume)}</div>
@@ -137,7 +182,23 @@ export function LiveMoverCard({ stock, quote, history, onOpen }: { stock: LiveBo
         <div className={`font-mono text-xs font-semibold ${text}`}>{formatBoardPrice(quote?.price)}</div>
         <div className="text-[10px] text-muted">Yahoo 5m + DNSE live</div>
       </div>
-    </button>
+
+      {/* Star / watchlist toggle */}
+      {onToggleWatch && (
+        <button
+          type="button"
+          onClick={onToggleWatch}
+          aria-label={isWatched ? `Bỏ theo dõi ${stock.ticker}` : `Theo dõi ${stock.ticker}`}
+          className={`absolute right-2 top-2 z-10 rounded p-1 transition-all focus:outline-none focus:ring-1 focus:ring-brand ${
+            isWatched
+              ? "text-amber-400 opacity-100"
+              : "text-muted opacity-0 group-hover:opacity-100"
+          }`}
+        >
+          <Star className={`h-4 w-4 ${isWatched ? "fill-amber-400" : ""}`} />
+        </button>
+      )}
+    </div>
   )
 }
 

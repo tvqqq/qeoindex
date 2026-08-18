@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Activity, ChartNoAxesCombined, CircleAlert, LayoutGrid, RefreshCw, Search, Wifi, WifiOff } from "lucide-react"
+import { Activity, ChartNoAxesCombined, CircleAlert, LayoutGrid, RefreshCw, Search, Star, Wifi, WifiOff } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { BOARD_SECTOR_GROUPS, SECTOR_ORDER } from "@/lib/market-sectors"
 import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
@@ -27,6 +27,7 @@ const INDEX_CHANNELS = ["VNINDEX", "VN30", "HNX", "UPCOM"]
 const STOCK_REFERENCE_KEYS = ["referencePrice", "refPrice", "reference", "basicPrice", "previousClose", "prevClose", "priorClose"]
 const INDEX_REFERENCE_KEYS = ["referenceIndex", "referenceValue", "reference", "previousClose", "prevClose", "priorClose"]
 const STREAM_STALE_MS = 60_000
+const WATCHLIST_KEY = "stockos:watchlist:v1"
 
 function numeric(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value)
@@ -72,6 +73,49 @@ function compareByPerformance(a: BoardUniverseStock, b: BoardUniverseStock, quot
   return a.rank - b.rank
 }
 
+function WatchlistSection({
+  stocks,
+  quotes,
+  priceHistory,
+  watchlist,
+  onToggleWatch,
+  onOpen,
+}: {
+  stocks: BoardUniverseStock[]
+  quotes: Record<string, LiveStockQuote | IndexQuote>
+  priceHistory: Record<string, IntradayPoint[]>
+  watchlist: Set<string>
+  onToggleWatch: (ticker: string) => void
+  onOpen: (ticker: string) => void
+}) {
+  if (watchlist.size === 0) return null
+  const watched = stocks.filter((s) => watchlist.has(s.ticker))
+  if (watched.length === 0) return null
+  return (
+    <div className="border-b border-border bg-panel/60">
+      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
+        <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+        <span className="text-[11px] font-semibold tracking-wide text-muted-2 uppercase">Theo dõi</span>
+        <span className="ml-1 rounded-full border border-border bg-background/60 px-2 py-0.5 text-[10px] font-semibold text-muted">{watched.length} mã</span>
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-2 px-3 scrollbar-hide">
+        {watched.map((stock) => (
+          <div key={stock.ticker} className="min-w-[160px] max-w-[160px] shrink-0">
+            <LiveStockRow
+              stock={stock}
+              quote={quotes[stock.ticker] as LiveStockQuote | undefined}
+              history={(priceHistory[stock.ticker] ?? []).map((p) => p.close)}
+              onOpen={() => onOpen(stock.ticker)}
+              isWatched
+              onToggleWatch={(e) => { e.stopPropagation(); onToggleWatch(stock.ticker) }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function IndexStrip({ quotes }: { quotes: Record<string, LiveStockQuote | IndexQuote> }) {
   return <div className="grid grid-cols-2 gap-px border-b border-border bg-border md:grid-cols-4">{INDEXES.map((symbol) => {
     const quote = quotes[symbol] as IndexQuote | undefined
@@ -97,6 +141,25 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   const indexReferences = useRef<Record<string, number>>({})
   const sessionDay = useRef(vietnamSessionDay())
   const lastFrameAt = useRef(0)
+
+  const [watchlist, setWatchlist] = useState<Set<string>>(() => {
+    try {
+      const stored = typeof window !== "undefined" ? localStorage.getItem(WATCHLIST_KEY) : null
+      return stored ? new Set<string>(JSON.parse(stored) as string[]) : new Set<string>()
+    } catch {
+      return new Set<string>()
+    }
+  })
+
+  const toggleWatch = useCallback((ticker: string) => {
+    setWatchlist((prev) => {
+      const next = new Set(prev)
+      if (next.has(ticker)) next.delete(ticker)
+      else next.add(ticker)
+      try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...next])) } catch { /* ignore */ }
+      return next
+    })
+  }, [])
 
   const symbolList = useMemo(() => universe.map((stock) => stock.ticker), [universe])
   const symbolKey = symbolList.join(",")
@@ -514,8 +577,17 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   const declines = universe.filter((stock) => ((displayQuotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) < 0).length
   const openBook = useCallback((ticker: string) => openOrderBook(`board:${ticker}`, ticker), [openOrderBook])
   const reconnect = useCallback(() => setReconnectKey((key) => key + 1), [])
+  const handleToggleWatch = useCallback((ticker: string) => toggleWatch(ticker), [toggleWatch])
 
   return <div className="flex h-full min-h-0 flex-col bg-background">
+    <WatchlistSection
+      stocks={universe}
+      quotes={displayQuotes}
+      priceHistory={priceHistory}
+      watchlist={watchlist}
+      onToggleWatch={handleToggleWatch}
+      onOpen={openBook}
+    />
     <IndexStrip quotes={quotes} />
     <div className="flex flex-wrap items-center gap-2 border-b border-border bg-panel px-3 py-2.5">
       <div className="relative min-w-[210px] flex-1 md:max-w-[320px]"><Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã trong Top 100..." className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-xs outline-none" /></div>
@@ -529,7 +601,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
       const sectorQuotes = stocks.map((stock) => displayQuotes[stock.ticker] as LiveStockQuote | undefined).filter(Boolean) as LiveStockQuote[]
       const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
       const avgTone = marketToneFromChange(avg)
-      return <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-brand/20 bg-panel"><header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-brand/25 bg-gradient-to-r from-brand/15 via-brand/5 to-transparent px-3 py-2.5 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-brand"><div className="min-w-0"><h2 className="line-clamp-2 text-[13px] font-extrabold leading-[1.15] text-foreground">{label}</h2><p className="mt-1.5 inline-flex rounded-full border border-brand/20 bg-background/60 px-2 py-0.5 text-[10px] font-semibold text-muted-2">{stocks.length} mã</p></div>{typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}</header><div className="flex-1 space-y-2 overflow-y-auto p-2">{stocks.length ? stocks.map((stock) => <LiveStockRow key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined} history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)} onOpen={() => openBook(stock.ticker)} />) : <div className="px-2 py-5 text-center text-[10px] text-muted">Không có mã phù hợp bộ lọc</div>}</div></section>
-    })}</div> : <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">{movers.map((stock) => <LiveMoverCard key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined} history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)} onOpen={() => openBook(stock.ticker)} />)}</div>}</div>
+      return <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-brand/20 bg-panel"><header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-brand/25 bg-gradient-to-r from-brand/15 via-brand/5 to-transparent px-3 py-2.5 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-brand"><div className="min-w-0"><h2 className="line-clamp-2 text-[13px] font-extrabold leading-[1.15] text-foreground">{label}</h2><p className="mt-1.5 inline-flex rounded-full border border-brand/20 bg-background/60 px-2 py-0.5 text-[10px] font-semibold text-muted-2">{stocks.length} mã</p></div>{typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}</header><div className="flex-1 space-y-2 overflow-y-auto p-2">{stocks.length ? stocks.map((stock) => <LiveStockRow key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined} history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)} onOpen={() => openBook(stock.ticker)} isWatched={watchlist.has(stock.ticker)} onToggleWatch={(e) => { e.stopPropagation(); handleToggleWatch(stock.ticker) }} />) : <div className="px-2 py-5 text-center text-[10px] text-muted">Không có mã phù hợp bộ lọc</div>}</div></section>
+    })}</div> : <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">{movers.map((stock) => <LiveMoverCard key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined} history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)} onOpen={() => openBook(stock.ticker)} isWatched={watchlist.has(stock.ticker)} onToggleWatch={(e) => { e.stopPropagation(); handleToggleWatch(stock.ticker) }} />)}</div>}</div>
   </div>
 }
