@@ -192,14 +192,14 @@ Deno.serve(async (req: Request) => {
         const trades = tradesMap[ticker] || []
         const putThrough = ptMap[ticker] || []
 
-        const rawRef = Number(q.r || q.closePrice ? Number(q.r || q.closePrice) : (trades[0]?.price || 0))
+        const rawRef = Number(q.r ?? q.closePrice ?? (trades.length > 0 ? trades[0].price : 0))
         const ref = normalizePrice(rawRef)
-        const rawLast = Number(q.lastPrice ?? (trades.length > 0 ? trades[trades.length - 1].price : ref))
-        const lastPrice = normalizePrice(rawLast)
+        const rawLast = Number(q.lastPrice ?? q.openPrice ?? (trades.length > 0 ? trades[trades.length - 1].price : (ref ?? 0)))
+        const lastPrice = normalizePrice(rawLast) || ref
         const rawCeil = Number(q.c ?? (ref ? Math.round(ref * 1.07 * 100) / 100 : 0))
-        const ceiling = normalizePrice(rawCeil)
+        const ceiling = normalizePrice(rawCeil) || (ref ? Math.round(ref * 1.07 * 100) / 100 : null)
         const rawFloor = Number(q.f ?? (ref ? Math.round(ref * 0.93 * 100) / 100 : 0))
-        const floor = normalizePrice(rawFloor)
+        const floor = normalizePrice(rawFloor) || (ref ? Math.round(ref * 0.93 * 100) / 100 : null)
         const totalVolume = Number(q.lot || 0) * 10
 
         const bids = [parseGroupLevel(q.g1), parseGroupLevel(q.g2), parseGroupLevel(q.g3)].filter(Boolean)

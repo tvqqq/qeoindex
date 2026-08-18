@@ -14,12 +14,12 @@ export const dynamic = "force-dynamic"
 export default async function Page() {
   const isSessionOpen = isTradingSessionOpen(new Date())
 
-  // Read EOD snapshots directly from Supabase database without calling Notion
+  // Read EOD snapshots directly from Supabase database
   const snapshots = await getAllOrderbookSnapshotsFromSupabase()
 
   const universe: BoardUniverseStock[] = CANONICAL_UNIVERSE_STOCKS.map((stock) => {
     const snap = snapshots[stock.ticker]
-    const lastClosePrice = snap?.latest_price || snap?.reference_price || null
+    const lastClosePrice = snap?.latest_price || snap?.reference_price || (snap?.latest_quote as any)?.matchPrice || (snap?.latest_quote as any)?.reference || null
     return {
       ticker: stock.ticker,
       rank: stock.rank,
@@ -35,23 +35,29 @@ export default async function Page() {
 
   for (const stock of universe) {
     const snap = snapshots[stock.ticker]
+    const latestPrice = snap?.latest_price || (snap?.latest_quote as any)?.matchPrice || snap?.reference_price || (Array.isArray(snap?.trades) && snap.trades.length > 0 ? (snap.trades[snap.trades.length - 1] as any)?.price : null)
+    const ref = snap?.reference_price || (snap?.latest_quote as any)?.reference || latestPrice
 
-    if (snap && snap.latest_price && snap.latest_price > 0) {
-      const ref = snap.reference_price || (snap.latest_quote as any)?.reference || snap.latest_price
-      const change = snap.latest_price - ref
-      const changePercent = ref > 0 ? (change / ref) * 100 : 0
+    if (latestPrice && latestPrice > 0 && ref && ref > 0) {
+      const change = latestPrice - ref
+      const changePercent = (change / ref) * 100
       initialQuotes[stock.ticker] = {
         symbol: stock.ticker,
-        price: snap.latest_price,
+        price: latestPrice,
         reference: ref,
-        ceiling: snap.ceiling_price ?? Math.round(ref * 1.07 * 100) / 100,
-        floor: snap.floor_price ?? Math.round(ref * 0.93 * 100) / 100,
+        ceiling: snap?.ceiling_price ?? Math.round(ref * 1.07 * 100) / 100,
+        floor: snap?.floor_price ?? Math.round(ref * 0.93 * 100) / 100,
         change,
         changePercent,
-        volume: snap.total_volume || 0,
-        updatedAt: snap.updated_at,
+        volume: snap?.total_volume || (snap?.latest_quote as any)?.totalVolume || 0,
+        foreignNetValue: (snap?.foreign_flow as any)?.foreignNetValue,
+        foreignBuyValue: (snap?.foreign_flow as any)?.totalBuyValue,
+        foreignSellValue: (snap?.foreign_flow as any)?.totalSellValue,
+        foreignBuyVolume: (snap?.foreign_flow as any)?.totalBuyVolume,
+        foreignSellVolume: (snap?.foreign_flow as any)?.totalSellVolume,
+        updatedAt: snap?.updated_at || new Date().toISOString(),
       }
-      if (Array.isArray(snap.intraday_1m) && snap.intraday_1m.length > 0) {
+      if (Array.isArray(snap?.intraday_1m) && snap.intraday_1m.length > 0) {
         initialHistories[stock.ticker] = snap.intraday_1m as unknown as IntradayPoint[]
       }
     }
