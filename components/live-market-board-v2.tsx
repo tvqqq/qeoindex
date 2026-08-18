@@ -977,8 +977,6 @@ export function LiveMarketBoardV2({
 
     if (sessionOpen) {
       void connect()
-    } else {
-      setStreamState("CLOSED")
     }
     return () => {
       disposed = true
