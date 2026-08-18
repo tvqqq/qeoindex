@@ -322,6 +322,8 @@ function FloatingMarketStatus({
   advances,
   declines,
   lastMessageAt,
+  soundEnabled,
+  onToggleSound,
   onReconnect,
 }: {
   streamState: StreamState
@@ -333,110 +335,130 @@ function FloatingMarketStatus({
   advances: number
   declines: number
   lastMessageAt: string
+  soundEnabled: boolean
+  onToggleSound: () => void
   onReconnect: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="fixed bottom-3 right-3 z-30 flex flex-col items-end select-none">
-      {expanded ? (
-        <div className="mb-2 w-72 rounded-2xl border border-white/[0.12] bg-[#0b0f14]/95 p-3.5 shadow-[0_20px_60px_rgba(0,0,0,0.9),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-xs space-y-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
-          <div className="flex items-center justify-between border-b border-white/[0.08] pb-2">
-            <span className="font-bold text-foreground flex items-center gap-1.5">
-              <Activity className="h-3.5 w-3.5 text-brand" />
-              <span>Trạng thái Hệ thống</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => setExpanded(false)}
-              className="text-muted-2 hover:text-foreground text-[10px] px-1.5 py-0.5 rounded-full hover:bg-white/[0.06] transition-colors"
-            >
-              Đóng ✕
-            </button>
-          </div>
-
-          <div className="space-y-1.5 font-mono text-[11px] text-muted-2">
-            <div className="flex justify-between">
-              <span>Nguồn dữ liệu:</span>
-              <span className="text-foreground font-sans">Yahoo 5m + DNSE</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Độ rộng TT:</span>
-              <span>
-                <b className="text-up">▲ {advances}</b> · <b className="text-down">▼ {declines}</b>
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Có giá / Top 100:</span>
-              <span className="text-foreground font-bold">{pricedCount}/{universeLength}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Biểu đồ nến:</span>
-              <span className="text-foreground">{historyCount}/{universeLength}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>WS Feed live:</span>
-              <span className="text-foreground font-bold">{liveCount}/{universeLength}</span>
-            </div>
-            {lastMessageAt ? (
-              <div className="flex justify-between">
-                <span>Cập nhật cuối:</span>
-                <span className="text-foreground">
-                  {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
-                </span>
-              </div>
-            ) : null}
-          </div>
-
-          {streamError ? (
-            <div className="rounded-xl bg-ref/10 border border-ref/30 p-2 text-[10px] text-ref leading-tight">
-              {streamError}
-            </div>
-          ) : null}
-
-          <button
-            type="button"
-            onClick={onReconnect}
-            className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] py-1.5 text-[11px] font-semibold text-foreground hover:bg-white/[0.08] transition-colors shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin text-ref" : ""}`} />
-            <span>Kết nối lại DNSE Feed</span>
-          </button>
-        </div>
-      ) : null}
-
-      {/* Floating Compact Pill Badge */}
+    <div className="fixed bottom-3 right-3 z-30 flex items-center gap-2 select-none">
+      {/* Sound FX Toggle Button */}
       <button
         type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="flex items-center gap-2 rounded-full border border-white/[0.12] bg-[#0c1015]/90 px-3.5 py-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.75),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-[11px] hover:bg-white/[0.06] hover:border-white/[0.2] transition-all"
-        title="Bấm để xem chi tiết trạng thái hệ thống"
+        onClick={onToggleSound}
+        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.75),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-[11px] font-medium transition-all ${
+          soundEnabled
+            ? "border-amber-500/40 bg-amber-500/15 text-amber-300 shadow-[0_0_16px_rgba(251,191,36,0.3)] hover:bg-amber-500/25"
+            : "border-white/[0.12] bg-[#0c1015]/90 text-muted-2 hover:text-foreground hover:bg-white/[0.06] hover:border-white/[0.2]"
+        }`}
+        title={soundEnabled ? "Âm thanh Lệnh Cá Mập: Đang BẬT (Click để tắt)" : "Âm thanh Lệnh Cá Mập: Đang TẮT (Click để bật)"}
       >
-        <span
-          className={`h-2 w-2 rounded-full ${
-            streamState === "LIVE"
-              ? "bg-up animate-pulse"
-              : streamState === "CONNECTING"
-                ? "bg-ref"
-                : streamState === "CLOSED"
-                  ? "bg-white/40"
-                  : "bg-down"
-          }`}
-        />
-        <span className="font-semibold text-foreground">
-          {streamState === "LIVE"
-            ? "DNSE LIVE"
-            : streamState === "CONNECTING"
-              ? "Đang kết nối"
-              : streamState === "CLOSED"
-                ? "PHIÊN ĐÓNG CỬA (EOD)"
-                : "Mất kết nối"}
-        </span>
-        <span className="text-muted-2">·</span>
-        <span className="font-mono text-up font-bold">▲{advances}</span>
-        <span className="font-mono text-down font-bold">▼{declines}</span>
-        <ChevronUp className={`h-3 w-3 text-muted-2 transition-transform duration-150 ${expanded ? "rotate-180" : ""}`} />
+        {soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-amber-400 animate-pulse" /> : <VolumeX className="h-3.5 w-3.5" />}
+        <span>{soundEnabled ? "Âm thanh: Bật" : "Âm thanh: Tắt"}</span>
       </button>
+
+      {/* Floating System Status Widget */}
+      <div className="relative flex flex-col items-end">
+        {expanded ? (
+          <div className="absolute bottom-10 right-0 mb-2 w-72 rounded-2xl border border-white/[0.12] bg-[#0b0f14]/95 p-3.5 shadow-[0_20px_60px_rgba(0,0,0,0.9),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-xs space-y-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-2">
+              <span className="font-bold text-foreground flex items-center gap-1.5">
+                <Activity className="h-3.5 w-3.5 text-brand" />
+                <span>Trạng thái Hệ thống</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                className="text-muted-2 hover:text-foreground text-[10px] px-1.5 py-0.5 rounded-full hover:bg-white/[0.06] transition-colors"
+              >
+                Đóng ✕
+              </button>
+            </div>
+
+            <div className="space-y-1.5 font-mono text-[11px] text-muted-2">
+              <div className="flex justify-between">
+                <span>Nguồn dữ liệu:</span>
+                <span className="text-foreground font-sans">Yahoo 5m + DNSE</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Độ rộng TT:</span>
+                <span>
+                  <b className="text-up">▲ {advances}</b> · <b className="text-down">▼ {declines}</b>
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Có giá / Top 100:</span>
+                <span className="text-foreground font-bold">{pricedCount}/{universeLength}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Biểu đồ nến:</span>
+                <span className="text-foreground">{historyCount}/{universeLength}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>WS Feed live:</span>
+                <span className="text-foreground font-bold">{liveCount}/{universeLength}</span>
+              </div>
+              {lastMessageAt ? (
+                <div className="flex justify-between">
+                  <span>Cập nhật cuối:</span>
+                  <span className="text-foreground">
+                    {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            {streamError ? (
+              <div className="rounded-xl bg-ref/10 border border-ref/30 p-2 text-[10px] text-ref leading-tight">
+                {streamError}
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={onReconnect}
+              className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] py-1.5 text-[11px] font-semibold text-foreground hover:bg-white/[0.08] transition-colors shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin text-ref" : ""}`} />
+              <span>Kết nối lại DNSE Feed</span>
+            </button>
+          </div>
+        ) : null}
+
+        {/* Floating Compact Pill Badge */}
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-2 rounded-full border border-white/[0.12] bg-[#0c1015]/90 px-3.5 py-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.75),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-[11px] hover:bg-white/[0.06] hover:border-white/[0.2] transition-all"
+          title="Bấm để xem chi tiết trạng thái hệ thống"
+        >
+          <span
+            className={`h-2 w-2 rounded-full ${
+              streamState === "LIVE"
+                ? "bg-up animate-pulse"
+                : streamState === "CONNECTING"
+                  ? "bg-ref"
+                  : streamState === "CLOSED"
+                    ? "bg-white/40"
+                    : "bg-down"
+            }`}
+          />
+          <span className="font-semibold text-foreground">
+            {streamState === "LIVE"
+              ? "DNSE LIVE"
+              : streamState === "CONNECTING"
+                ? "Đang kết nối"
+                : streamState === "CLOSED"
+                  ? "Ngoài giờ giao dịch"
+                  : "Mất kết nối"}
+          </span>
+          <span className="text-muted-2">·</span>
+          <span className="font-mono text-up font-bold">▲{advances}</span>
+          <span className="font-mono text-down font-bold">▼{declines}</span>
+          <ChevronUp className={`h-3 w-3 text-muted-2 transition-transform duration-150 ${expanded ? "rotate-180" : ""}`} />
+        </button>
+      </div>
     </div>
   )
 }
@@ -1305,21 +1327,6 @@ export function LiveMarketBoardV2({
               <span>Top movers</span>
             </button>
           </div>
-
-          {/* Sound FX Whale Alert Toggle Button */}
-          <button
-            type="button"
-            onClick={handleToggleSound}
-            className={`flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-all shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] border ${
-              soundEnabled
-                ? "border-amber-500/40 bg-amber-500/15 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.25)]"
-                : "border-white/[0.08] bg-white/[0.03] text-muted-2 hover:text-foreground hover:bg-white/[0.06]"
-            }`}
-            title={soundEnabled ? "Âm thanh Lệnh Cá Mập: Đang BẬT (Click để tắt)" : "Âm thanh Lệnh Cá Mập: Đang TẮT (Click để bật)"}
-          >
-            {soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-amber-400 animate-pulse" /> : <VolumeX className="h-3.5 w-3.5" />}
-            <span className="hidden sm:inline">{soundEnabled ? "Âm thanh: Bật" : "Âm thanh: Tắt"}</span>
-          </button>
         </div>
       </div>
 
@@ -1346,60 +1353,24 @@ export function LiveMarketBoardV2({
               const sectorQuotes = stocks.map((stock) => displayQuotes[stock.ticker] as LiveStockQuote | undefined).filter(Boolean) as LiveStockQuote[]
               const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
               const avgTone = marketToneFromChange(avg)
-              const gainers = sectorQuotes.filter((q) => q.changePercent > 0.05).length
-              const refCount = sectorQuotes.filter((q) => Math.abs(q.changePercent) <= 0.05).length
-              const losers = sectorQuotes.filter((q) => q.changePercent < -0.05).length
-              const totalCount = stocks.length || 1
-              const gainerPct = (gainers / totalCount) * 100
-              const refPct = (refCount / totalCount) * 100
-              const loserPct = (losers / totalCount) * 100
 
               return (
                 <section key={key} className="flex min-w-0 flex-col rounded-2xl border border-white/[0.08] bg-[#0b0f14] shadow-[0_4px_20px_rgba(0,0,0,0.35)] transition-colors hover:border-white/[0.14]">
-                  <header className="relative flex h-[72px] shrink-0 flex-col justify-between overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3 py-2">
-                    <div className="flex items-center justify-between gap-1.5 min-w-0">
-                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-sm shrink-0 leading-none opacity-90">{SECTOR_EMOJIS[key] ?? "📊"}</span>
                         <h2 className="truncate text-[13px] font-bold tracking-tight text-foreground/95" title={label}>
                           {label}
                         </h2>
                       </div>
-                      {typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}
-                    </div>
-                    {/* Sector Market Breadth Bar */}
-                    <div className="flex flex-col gap-1 w-full">
-                      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
-                        {gainerPct > 0 && (
-                          <div
-                            className="h-full bg-emerald-500 transition-all duration-500"
-                            style={{ width: `${gainerPct}%` }}
-                            title={`${gainers} mã tăng`}
-                          />
-                        )}
-                        {refPct > 0 && (
-                          <div
-                            className="h-full bg-amber-400/80 transition-all duration-500"
-                            style={{ width: `${refPct}%` }}
-                            title={`${refCount} mã tham chiếu`}
-                          />
-                        )}
-                        {loserPct > 0 && (
-                          <div
-                            className="h-full bg-rose-500 transition-all duration-500"
-                            style={{ width: `${loserPct}%` }}
-                            title={`${losers} mã giảm`}
-                          />
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between text-[9.5px] font-mono leading-none">
-                        <div className="flex items-center gap-1 font-semibold">
-                          <span className="text-emerald-400">{gainers}🟢</span>
-                          <span className="text-amber-400/90">{refCount}🟡</span>
-                          <span className="text-rose-400">{losers}🔴</span>
-                        </div>
-                        <span className="text-muted-2 text-[9px] font-medium">{stocks.length} mã</span>
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <span className="inline-flex rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-0.5 font-mono text-[9.5px] font-medium text-muted-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
+                          {stocks.length} mã
+                        </span>
                       </div>
                     </div>
+                    {typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}
                   </header>
                   <div className="space-y-1.5 p-1.5">
                     {stocks.length ? (
@@ -1458,6 +1429,8 @@ export function LiveMarketBoardV2({
         advances={advances}
         declines={declines}
         lastMessageAt={lastMessageAt}
+        soundEnabled={soundEnabled}
+        onToggleSound={handleToggleSound}
         onReconnect={reconnect}
       />
     </div>
