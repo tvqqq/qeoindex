@@ -523,6 +523,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
                 { name: "tick.G1.json", symbols: symbolList },
                 { name: "top_price.G1.json", symbols: symbolList },
                 { name: "ohlc.1.json", symbols: symbolList },
+                { name: "foreign.G1.json", symbols: symbolList },
                 ...INDEX_CHANNELS.map((name) => ({ name: `market_index.${name}.json` })),
               ],
             }))
@@ -656,6 +657,58 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
             })
             setLastMessageAt(receivedAt)
             setStreamError("")
+            return
+          }
+
+          if (type === "f" && data.symbol) {
+            const symbol = String(data.symbol).toUpperCase()
+            if (!trackedSymbols.has(symbol)) return
+            const totalBuyVal = numeric(data.totalBuyTradedAmount ?? data.totalBuyValue ?? data.foreignBuyValue)
+            const totalSellVal = numeric(data.totalSellTradedAmount ?? data.totalSellValue ?? data.foreignSellValue)
+            const totalBuyVol = numeric(data.totalBuyVolume ?? data.totalBuyQtty ?? data.foreignBuyVolume)
+            const totalSellVol = numeric(data.totalSellVolume ?? data.totalSellQtty ?? data.foreignSellVolume)
+            const buyVal = numeric(data.buyTradedAmount)
+            const sellVal = numeric(data.sellTradedAmount)
+            const buyVol = numeric(data.buyVolume)
+            const sellVol = numeric(data.sellVolume)
+
+            setQuotes((current) => {
+              const previous = current[symbol] as LiveStockQuote | undefined
+              if (!previous) return current
+
+              const prevBuyVal = previous.foreignBuyValue ?? 0
+              const prevSellVal = previous.foreignSellValue ?? 0
+              const nextBuyVal = totalBuyVal || (buyVal > 0 ? prevBuyVal + buyVal : prevBuyVal)
+              const nextSellVal = totalSellVal || (sellVal > 0 ? prevSellVal + sellVal : prevSellVal)
+
+              const prevBuyVol = previous.foreignBuyVolume ?? 0
+              const prevSellVol = previous.foreignSellVolume ?? 0
+              const nextBuyVol = totalBuyVol || (buyVol > 0 ? prevBuyVol + buyVol : prevBuyVol)
+              const nextSellVol = totalSellVol || (sellVol > 0 ? prevSellVol + sellVol : prevSellVol)
+
+              let foreignNetValue: number | undefined
+              if (nextBuyVal > 0 || nextSellVal > 0) {
+                foreignNetValue = nextBuyVal - nextSellVal
+              } else if (nextBuyVol > 0 || nextSellVol > 0) {
+                foreignNetValue = (nextBuyVol - nextSellVol) * (previous.price || 0)
+              }
+
+              return {
+                ...current,
+                [symbol]: {
+                  ...previous,
+                  foreignBuyValue: nextBuyVal || undefined,
+                  foreignSellValue: nextSellVal || undefined,
+                  foreignBuyVolume: nextBuyVol || undefined,
+                  foreignSellVolume: nextSellVol || undefined,
+                  foreignNetValue,
+                  updatedAt: receivedAt,
+                },
+              }
+            })
+            setLastMessageAt(receivedAt)
+            setStreamError("")
+            return
           }
         }
 

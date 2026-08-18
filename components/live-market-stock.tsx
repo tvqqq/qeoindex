@@ -31,6 +31,11 @@ export interface LiveStockQuote {
   change?: number
   changePercent: number
   volume?: number
+  foreignBuyValue?: number
+  foreignSellValue?: number
+  foreignBuyVolume?: number
+  foreignSellVolume?: number
+  foreignNetValue?: number
   updatedAt: string
 }
 
@@ -44,6 +49,26 @@ export function formatBoardVolume(value?: number) {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)}tr`
   if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`
   return value.toLocaleString("vi-VN")
+}
+
+export function formatForeignNetValue(value?: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return { text: "—", tone: "neutral" as const }
+  if (Math.abs(value) < 100_000) return { text: "0 tỷ", tone: "neutral" as const }
+  const abs = Math.abs(value)
+  const isBuy = value > 0
+  const sign = isBuy ? "+" : "-"
+  let formatted = ""
+  if (abs >= 1_000_000_000) {
+    formatted = `${sign}${(abs / 1_000_000_000).toFixed(abs >= 10_000_000_000 ? 1 : 2)} tỷ`
+  } else if (abs >= 1_000_000) {
+    formatted = `${sign}${(abs / 1_000_000).toFixed(1)} tr`
+  } else {
+    formatted = `${sign}${new Intl.NumberFormat("vi-VN").format(abs)}`
+  }
+  return {
+    text: formatted,
+    tone: isBuy ? ("buy" as const) : ("sell" as const),
+  }
 }
 
 export function boardPctClass(value?: number) {
@@ -130,6 +155,7 @@ export function LiveStockRow({
   const chartReference = sparkReference(chart, quote?.reference)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
   const { rowClass, tickerClass } = getGainerStyles(quote, tone)
+  const foreign = formatForeignNetValue(quote?.foreignNetValue)
 
   return (
     <div
@@ -160,7 +186,15 @@ export function LiveStockRow({
             </button>
           )}
         </div>
-        <div className="mt-1.5 font-mono text-[9px] leading-none text-muted-2">{formatBoardVolume(quote?.volume)}</div>
+        {/* GT Mua - Bán Khối ngoại realtime (Đỏ nhẹ khi bán ròng, Xanh nhẹ khi mua ròng) */}
+        <div
+          className={`mt-1.5 font-mono text-[9px] font-medium leading-none truncate ${
+            foreign.tone === "buy" ? "text-emerald-400/90" : foreign.tone === "sell" ? "text-rose-400/90" : "text-muted-2"
+          }`}
+          title={`Khối ngoại ${foreign.tone === "buy" ? "Mua ròng" : foreign.tone === "sell" ? "Bán ròng" : "Ròng"}: ${foreign.text}`}
+        >
+          {foreign.text !== "—" ? foreign.text : formatBoardVolume(quote?.volume)}
+        </div>
       </div>
 
       <div className="flex min-w-0 items-center justify-center overflow-hidden">
@@ -205,6 +239,7 @@ export function LiveMoverCard({
   const chartReference = sparkReference(chart, quote?.reference)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
   const { cardClass, tickerClass } = getGainerStyles(quote, tone)
+  const foreign = formatForeignNetValue(quote?.foreignNetValue)
 
   return (
     <div className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-panel px-4 py-3 transition-all hover:border-brand/60 hover:bg-panel-2/70 ${strongGainer ? cardClass : "border-border"}`}>
@@ -227,7 +262,13 @@ export function LiveMoverCard({
             </button>
           )}
         </div>
-        <div className="mt-1 font-mono text-xs text-muted-2">{formatBoardVolume(quote?.volume)}</div>
+        <div
+          className={`mt-1 font-mono text-xs font-semibold ${
+            foreign.tone === "buy" ? "text-emerald-400/90" : foreign.tone === "sell" ? "text-rose-400/90" : "text-muted-2"
+          }`}
+        >
+          Khối ngoại: {foreign.text !== "—" ? foreign.text : formatBoardVolume(quote?.volume)}
+        </div>
         <div className="mt-1 text-[10px] text-muted">{stock.sector}</div>
       </div>
       <div className="flex justify-center">

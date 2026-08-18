@@ -13,6 +13,7 @@ import {
   Minus,
   PieChart,
   RefreshCw,
+  RotateCcw,
   TrendingDown,
   TrendingUp,
   X,
@@ -112,10 +113,10 @@ const OPEN_PRICE_KEYS = ["openPrice", "openingPrice", "open", "openValue", "firs
 const STREAM_STALE_MS = 45_000
 const MAX_SESSION_TRADES = 6_000
 
-const DEFAULT_WIDTH = 760
+const DEFAULT_WIDTH = 460
 const MIN_WIDTH = 460
-const MIN_HEIGHT = 420
-const DEFAULT_HEIGHT = 680
+const MIN_HEIGHT = 440
+const DEFAULT_HEIGHT = 440
 
 function number(value: unknown) {
   const result = typeof value === "number" ? value : Number(value)
@@ -1174,6 +1175,26 @@ export function LiveOrderBookPanel({
           >
             <ExternalLink className="h-4 w-4" />
           </a>
+
+          <button
+            data-orderbook-action
+            type="button"
+            aria-label="Thu về kích thước ban đầu (nhỏ nhất)"
+            title="Thu về kích thước ban đầu (nhỏ nhất)"
+            onClick={(event) => {
+              event.stopPropagation()
+              setIsMaximized(false)
+              setMinimized(false)
+              setSize({ width: MIN_WIDTH, height: MIN_HEIGHT })
+              if (panelRef.current) {
+                panelRef.current.style.width = `${MIN_WIDTH}px`
+                panelRef.current.style.height = `${MIN_HEIGHT}px`
+              }
+            }}
+            className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </button>
 
           <button
             data-orderbook-action

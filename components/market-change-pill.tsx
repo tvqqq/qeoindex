@@ -18,7 +18,7 @@ export function MarketChangePill({
   return (
     <span
       title={title}
-      className={`inline-flex shrink-0 items-center justify-center rounded-full border font-mono font-bold leading-none ${marketTonePill(tone)} ${compact ? "min-w-[48px] px-1.5 py-1 text-[10px]" : "min-w-[58px] px-2 py-1.5 text-[11px]"}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-full border font-mono font-bold leading-none ${marketTonePill(tone)} ${compact ? "min-w-[50px] px-1.5 py-0.5 text-[11.5px]" : "min-w-[62px] px-2 py-1 text-[12.5px]"}`}
     >
       {label}
     </span>
