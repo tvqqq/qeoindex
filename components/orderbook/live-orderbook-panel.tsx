@@ -1912,9 +1912,7 @@ export function LiveOrderBookPanel({
                               ) : null}
                             </span>
                             <span
-                              className={`text-right font-bold text-[13px] ${
-                                trade.side === "BUY" ? "text-up" : trade.side === "SELL" ? "text-down" : "text-foreground"
-                              }`}
+                              className={`text-right font-bold text-[13px] ${getPriceColorClass(trade.price, quote?.reference, quote?.ceiling, quote?.floor)}`}
                             >
                               {formatPrice(trade.price)}
                             </span>
