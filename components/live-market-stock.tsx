@@ -98,8 +98,12 @@ function sparkData(history: number[]) {
   return history.filter((value) => Number.isFinite(value) && value > 0).slice(-90)
 }
 
-function sparkReference(history: number[], reference?: number) {
-  return normalizeMarketPrice(reference, history.at(-1)) ?? undefined
+function sparkReference(history: number[], reference?: number, lastClose?: number | null) {
+  const explicit = normalizeMarketPrice(reference, history.at(-1))
+  if (explicit && explicit > 0) return explicit
+  const fallback = normalizeMarketPrice(lastClose, history.at(-1))
+  if (fallback && fallback > 0) return fallback
+  return undefined
 }
 
 function getGainerStyles(quote?: LiveStockQuote, tone?: MarketTone) {
@@ -157,7 +161,7 @@ export function LiveStockRow({
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
   const chart = sparkData(history)
-  const chartReference = sparkReference(chart, quote?.reference)
+  const chartReference = sparkReference(chart, quote?.reference, stock.lastClose)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
   const { rowClass, tickerClass } = getGainerStyles(quote, tone)
   const foreign = formatForeignNetValue(quote?.foreignNetValue)
@@ -241,7 +245,7 @@ export function LiveMoverCard({
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
   const chart = sparkData(history)
-  const chartReference = sparkReference(chart, quote?.reference)
+  const chartReference = sparkReference(chart, quote?.reference, stock.lastClose)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
   const { cardClass, tickerClass } = getGainerStyles(quote, tone)
   const foreign = formatForeignNetValue(quote?.foreignNetValue)

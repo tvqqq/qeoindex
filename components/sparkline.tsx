@@ -2,6 +2,7 @@ interface SparklineProps {
   data: number[]
   refValue?: number
   color: string
+  refColor?: string
   width?: number
   height?: number
   strokeWidth?: number
@@ -18,6 +19,7 @@ export function Sparkline({
   data,
   refValue,
   color,
+  refColor = "#94a3b8",
   width = 78,
   height = 34,
   strokeWidth = 1.5,
@@ -27,7 +29,8 @@ export function Sparkline({
 }: SparklineProps) {
   if (data.length < 2) return <svg width={width} height={height} aria-hidden="true" className={className} />
 
-  const values = refValue != null ? [...data, refValue] : data
+  const hasRef = typeof refValue === "number" && Number.isFinite(refValue) && refValue > 0
+  const values = hasRef ? [...data, refValue as number] : data
   const min = Math.min(...values)
   const max = Math.max(...values)
   const range = max - min || 1
@@ -52,15 +55,16 @@ export function Sparkline({
       aria-hidden="true"
       className={`overflow-visible ${className}`.trim()}
     >
-      {refValue != null && (
+      {/* Đường line đứt nét là giá tham chiếu (màu xám nhạt) */}
+      {hasRef && (
         <line
           x1={0}
           x2={width}
-          y1={y(refValue)}
-          y2={y(refValue)}
-          stroke={color}
-          strokeOpacity={0.18}
-          strokeDasharray="2 2"
+          y1={y(refValue as number)}
+          y2={y(refValue as number)}
+          stroke={refColor}
+          strokeOpacity={0.65}
+          strokeDasharray="2.5 2"
           strokeWidth={1}
         />
       )}
