@@ -17,9 +17,21 @@ type IndexQuote = {
   changePercent: number
   volume?: number
   valueTraded?: number
+  valueChangePercent?: number
   updatedAt: string
 }
 type BoardMode = "sector" | "movers"
+
+function formatExactVolume(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
+  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
+}
+
+function formatExactTradedValue(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
+  const billions = value / 1_000_000_000
+  return `${new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(billions)} tỷ`
+}
 
 function formatCompactVolume(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
@@ -917,19 +929,33 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
       {/* COMPACT TOP TOOLBAR */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-panel px-3 py-1.5">
         {/* VNINDEX Market Stats on the left (under VNINDEX and VN30 columns) */}
-        <div className="flex items-center gap-3 font-mono text-xs">
+        <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-muted font-sans font-medium">Tổng KL:</span>
+            <span className="text-[11px] text-muted font-sans font-medium">Tổng KL</span>
             <span className="font-bold text-foreground">
-              {vnindexVolume ? `${formatCompactVolume(vnindexVolume)} cp` : "—"}
+              {vnindexVolume !== undefined ? formatExactVolume(vnindexVolume) : "—"}
             </span>
           </div>
-          <div className="h-3 w-px bg-border/80" />
+          <div className="h-3 w-px bg-border/80 hidden sm:block" />
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-muted font-sans font-medium">Tổng GT:</span>
+            <span className="text-[11px] text-muted font-sans font-medium">Tổng giá trị</span>
             <span className="font-bold text-foreground">
-              {vnindexValue ? formatMarketValue(vnindexValue) : "—"}
+              {vnindexValue !== undefined ? formatExactTradedValue(vnindexValue) : "—"}
             </span>
+            {vnindexQuote?.valueChangePercent !== undefined && vnindexQuote.valueChangePercent !== null && (
+              <span
+                className={`font-bold font-mono text-xs ${
+                  vnindexQuote.valueChangePercent > 0
+                    ? "text-up"
+                    : vnindexQuote.valueChangePercent < 0
+                      ? "text-down"
+                      : "text-ref"
+                }`}
+                title="So sánh Tổng GT với phiên hôm qua"
+              >
+                ({vnindexQuote.valueChangePercent > 0 ? "+" : ""}{vnindexQuote.valueChangePercent.toFixed(1)}%)
+              </span>
+            )}
           </div>
         </div>
 
