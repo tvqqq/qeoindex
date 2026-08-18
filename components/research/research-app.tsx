@@ -17,6 +17,7 @@ import {
   TrendingUp,
 } from "lucide-react"
 
+import { TickerResearchLink } from "@/components/ticker-research-link"
 import { TopNav } from "@/components/top-nav"
 import type {
   AnalysisLog,
@@ -251,7 +252,7 @@ function ScenarioComparisonChart({ theses }: { theses: Thesis[] }) {
       <div className="mt-5 space-y-4">
         {theses.map((thesis) => (
           <div key={thesis.id} className="grid items-center gap-3 md:grid-cols-[110px_1fr_190px]">
-            <Link href={`/research/${thesis.ticker.toLowerCase()}`} className="font-mono text-base font-bold text-foreground hover:text-brand">{thesis.ticker}</Link>
+            <TickerResearchLink ticker={thesis.ticker} className="font-mono text-base font-bold text-foreground hover:text-brand">{thesis.ticker}</TickerResearchLink>
             <div className="flex h-7 overflow-hidden rounded-md bg-panel-2">
               {SCENARIOS.map((scenario) => {
                 const value = thesis.probabilities[scenario.key] ?? 0
@@ -361,7 +362,7 @@ function Overview({ data }: { data: ResearchData }) {
             <tbody>
               {data.theses.map((thesis) => (
                 <tr key={thesis.id} className="border-t border-border/70 align-top transition-colors hover:bg-panel-2/60">
-                  <td className="px-5 py-4"><Link href={`/research/${thesis.ticker.toLowerCase()}`} className="group inline-flex items-center gap-2"><span className="font-mono text-base font-bold text-foreground group-hover:text-brand">{thesis.ticker}</span>{thesis.price && <span className="font-mono text-sm text-foreground/65">{thesis.price.value.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span>}</Link><div className="mt-1 max-w-[190px] truncate text-sm text-foreground/50">{thesis.company}</div></td>
+                  <td className="px-5 py-4"><TickerResearchLink ticker={thesis.ticker} className="group inline-flex items-center gap-2"><span className="font-mono text-base font-bold text-foreground group-hover:text-brand">{thesis.ticker}</span>{thesis.price && <span className="font-mono text-sm text-foreground/65">{thesis.price.value.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span>}</TickerResearchLink><div className="mt-1 max-w-[190px] truncate text-sm text-foreground/50">{thesis.company}</div></td>
                   <td className="px-4 py-4"><div className="flex flex-col items-start gap-2"><BiasPill label="Kỹ thuật" bias={thesis.taBias} />{thesis.faBias && <BiasPill label="Cơ bản" bias={thesis.faBias} />}</div></td>
                   <td className="max-w-[330px] px-4 py-4"><p className="line-clamp-4 leading-6 text-foreground/75">{thesis.wyckoffState || "—"}</p></td>
                   <td className="px-4 py-4"><ScenarioBars probabilities={thesis.probabilities} compact /></td>
@@ -377,10 +378,10 @@ function Overview({ data }: { data: ResearchData }) {
       </section>
       <section className="grid gap-4 lg:grid-cols-2">
         {data.theses.filter((row) => row.whatChanged).slice(0, 4).map((thesis) => (
-          <Link href={`/research/${thesis.ticker.toLowerCase()}`} key={thesis.id} className="rounded-xl border border-border bg-panel p-5 transition-colors hover:border-border-strong hover:bg-panel-2/40">
+          <TickerResearchLink ticker={thesis.ticker} key={thesis.id} className="rounded-xl border border-border bg-panel p-5 transition-colors hover:border-border-strong hover:bg-panel-2/40">
             <div className="flex items-center justify-between gap-4"><div className="font-mono text-base font-bold text-foreground">{thesis.ticker}</div><span className="text-xs font-semibold text-foreground/55">Điều gì đã thay đổi</span></div>
             <p className="mt-3 text-base leading-7 text-foreground/75">{thesis.whatChanged}</p>
-          </Link>
+          </TickerResearchLink>
         ))}
       </section>
     </div>
@@ -406,7 +407,7 @@ function ThesisChanges({ data }: { data: ResearchData }) {
       {changes.map(({ thesis, latest, previous, deltas }) => (
         <article key={thesis.id} className="rounded-xl border border-border bg-panel p-5">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-            <div><div className="flex flex-wrap items-center gap-2.5"><Link href={`/research/${thesis.ticker.toLowerCase()}`} className="font-mono text-lg font-bold text-foreground hover:text-brand">{thesis.ticker}</Link><BiasPill label="Kỹ thuật" bias={thesis.taBias} /><RegimePill regime={thesis.marketRegime} /></div><p className="mt-3 max-w-4xl text-base leading-7 text-foreground/75">{thesis.whatChanged || latest?.summary || "Chưa có ghi chú thay đổi."}</p></div>
+            <div><div className="flex flex-wrap items-center gap-2.5"><TickerResearchLink ticker={thesis.ticker} className="font-mono text-lg font-bold text-foreground hover:text-brand">{thesis.ticker}</TickerResearchLink><BiasPill label="Kỹ thuật" bias={thesis.taBias} /><RegimePill regime={thesis.marketRegime} /></div><p className="mt-3 max-w-4xl text-base leading-7 text-foreground/75">{thesis.whatChanged || latest?.summary || "Chưa có ghi chú thay đổi."}</p></div>
             <div className="flex shrink-0 flex-wrap gap-2"><ProbabilityDelta label="Tăng" value={deltas.bull} /><ProbabilityDelta label="Cơ sở" value={deltas.base} /><ProbabilityDelta label="Giảm" value={deltas.bear} /></div>
           </div>
           <div className="mt-5 grid gap-4 border-t border-border/70 pt-5 lg:grid-cols-3">

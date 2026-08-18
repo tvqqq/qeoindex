@@ -19,6 +19,8 @@ test("dense ticker lists do not auto-prefetch every dynamic research route", () 
     "components/live-market-stock.tsx",
     "components/research/scanner-app.tsx",
     "components/research/fa-screen-app.tsx",
+    "components/research/research-app.tsx",
+    "components/research/signals-app.tsx",
   ]) {
     const file = source(path)
     assert.match(file, /TickerResearchLink/, `${path} should use intent-prefetch ticker links`)
