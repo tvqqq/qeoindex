@@ -104,7 +104,23 @@ export function LiveStockRow({
       title={`Mở sổ lệnh ${stock.ticker}`}
     >
       <div className="min-w-0">
-        <div className={`font-mono text-[16px] font-black leading-none tracking-[0.02em] ${strongGainer ? "text-up" : "text-foreground"}`}>{stock.ticker}</div>
+        <div className="flex items-center gap-0.5">
+          <span className={`font-mono text-[16px] font-black leading-none tracking-[0.02em] ${strongGainer ? "text-up" : "text-foreground"}`}>{stock.ticker}</span>
+          {onToggleWatch && (
+            <button
+              type="button"
+              onClick={onToggleWatch}
+              aria-label={isWatched ? `Bỏ theo dõi ${stock.ticker}` : `Theo dõi ${stock.ticker}`}
+              className={`shrink-0 rounded p-0.5 transition-all hover:scale-110 focus:outline-none focus:ring-1 focus:ring-brand ${
+                isWatched
+                  ? "text-amber-400 opacity-100"
+                  : "text-muted opacity-0 group-hover:opacity-100 hover:text-amber-300"
+              }`}
+            >
+              <Star className={`h-3 w-3 ${isWatched ? "fill-amber-400" : ""}`} />
+            </button>
+          )}
+        </div>
         <div className="mt-1.5 font-mono text-[9px] leading-none text-muted-2">{formatBoardVolume(quote?.volume)}</div>
       </div>
 
@@ -116,22 +132,6 @@ export function LiveStockRow({
         <div className={`max-w-full truncate font-mono text-[11px] font-semibold leading-none ${text}`}>{formatBoardPrice(quote?.price)}</div>
         {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact title="% thay đổi so với giá tham chiếu (đóng cửa phiên trước)" /> : <span className="text-[10px] text-muted">Chờ giá</span>}
       </div>
-
-      {/* Star / watchlist toggle */}
-      {onToggleWatch && (
-        <button
-          type="button"
-          onClick={onToggleWatch}
-          aria-label={isWatched ? `Bỏ theo dõi ${stock.ticker}` : `Theo dõi ${stock.ticker}`}
-          className={`absolute top-1 left-1/2 -translate-x-1/2 z-10 rounded p-0.5 transition-all hover:scale-110 focus:outline-none focus:ring-1 focus:ring-brand ${
-            isWatched
-              ? "text-amber-400 opacity-100"
-              : "text-muted opacity-0 group-hover:opacity-100 hover:text-amber-300"
-          }`}
-        >
-          <Star className={`h-3 w-3 ${isWatched ? "fill-amber-400" : ""}`} />
-        </button>
-      )}
 
       <Link
         href={`/research/${stock.ticker.toLowerCase()}`}
@@ -170,7 +170,23 @@ export function LiveMoverCard({
     <div className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-panel px-4 py-3 transition-all hover:border-brand/60 hover:bg-panel-2/70 ${strongGainer ? "strong-gainer border-up/60" : "border-border"}`}>
       <button type="button" onClick={onOpen} className="absolute inset-0 rounded-2xl focus:outline-none focus:ring-1 focus:ring-brand" aria-label={`Mở sổ lệnh ${stock.ticker}`} />
       <div>
-        <div className={`font-mono text-2xl font-black ${strongGainer ? "text-up" : "text-foreground"}`}>{stock.ticker}</div>
+        <div className="flex items-center gap-1.5">
+          <span className={`font-mono text-2xl font-black ${strongGainer ? "text-up" : "text-foreground"}`}>{stock.ticker}</span>
+          {onToggleWatch && (
+            <button
+              type="button"
+              onClick={onToggleWatch}
+              aria-label={isWatched ? `Bỏ theo dõi ${stock.ticker}` : `Theo dõi ${stock.ticker}`}
+              className={`z-10 rounded p-1 transition-all hover:scale-110 focus:outline-none focus:ring-1 focus:ring-brand ${
+                isWatched
+                  ? "text-amber-400 opacity-100"
+                  : "text-muted opacity-0 group-hover:opacity-100 hover:text-amber-300"
+              }`}
+            >
+              <Star className={`h-4 w-4 ${isWatched ? "fill-amber-400" : ""}`} />
+            </button>
+          )}
+        </div>
         <div className="mt-1 font-mono text-xs text-muted-2">{formatBoardVolume(quote?.volume)}</div>
         <div className="mt-1 text-[10px] text-muted">{stock.sector}</div>
       </div>
@@ -182,22 +198,6 @@ export function LiveMoverCard({
         <div className={`font-mono text-xs font-semibold ${text}`}>{formatBoardPrice(quote?.price)}</div>
         <div className="text-[10px] text-muted">Yahoo 5m + DNSE live</div>
       </div>
-
-      {/* Star / watchlist toggle */}
-      {onToggleWatch && (
-        <button
-          type="button"
-          onClick={onToggleWatch}
-          aria-label={isWatched ? `Bỏ theo dõi ${stock.ticker}` : `Theo dõi ${stock.ticker}`}
-          className={`absolute right-2 top-2 z-10 rounded p-1 transition-all focus:outline-none focus:ring-1 focus:ring-brand ${
-            isWatched
-              ? "text-amber-400 opacity-100"
-              : "text-muted opacity-0 group-hover:opacity-100"
-          }`}
-        >
-          <Star className={`h-4 w-4 ${isWatched ? "fill-amber-400" : ""}`} />
-        </button>
-      )}
     </div>
   )
 }
