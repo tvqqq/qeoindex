@@ -37,13 +37,16 @@ CREATE INDEX IF NOT EXISTS idx_stock_orderbook_updated ON public.stock_orderbook
 ALTER TABLE public.stock_orderbook_snapshots ENABLE ROW LEVEL SECURITY;
 
 -- Allow public read access to orderbook snapshots
+DROP POLICY IF EXISTS "Allow public read access to orderbook snapshots" ON public.stock_orderbook_snapshots;
 CREATE POLICY "Allow public read access to orderbook snapshots"
   ON public.stock_orderbook_snapshots
   FOR SELECT
   USING (true);
 
 -- Allow service role full access for background worker ingestion
+DROP POLICY IF EXISTS "Allow service role full access to orderbook snapshots" ON public.stock_orderbook_snapshots;
 CREATE POLICY "Allow service role full access to orderbook snapshots"
   ON public.stock_orderbook_snapshots
   FOR ALL
   USING (auth.role() = 'service_role');
+

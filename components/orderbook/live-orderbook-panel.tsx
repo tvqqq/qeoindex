@@ -28,6 +28,7 @@ import { useFlashAnimation, usePriceFlashAnimation } from "@/lib/use-flash-anima
 import { useWhaleConfetti, ConfettiOverlay } from "@/components/orderbook/confetti"
 import { calculateSessionCountdown } from "@/lib/session-countdown"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
+import { fetchOrderbookFromSupabaseDirect, subscribeToOrderbookRealtime } from "@/lib/supabase/browser-orderbook"
 
 export type DepthLevel = { price: number; volume: number }
 export type TradeSide = "BUY" | "SELL" | "UNKNOWN"
@@ -558,20 +559,24 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           })
         }
 
-        const historicalTrades: StreamTrade[] = (payload.trades ?? [])
-          .map((trade, index) => {
-            const rawPrice = number(trade.price)
-            const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
-            const tradeId = trade.id && trade.id !== "3220" ? trade.id : `${trade.time}-${index}`
-            return {
-              id: `history-${tradeId}`,
-              time: normalizeTime(trade.time),
-              price,
-              volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
-              side: explicitSide(trade.side),
-            }
-          })
-          .filter((trade) => trade.price > 0 && trade.volume > 0)
+        const parseRawTrades = (rawTrades?: any[]): StreamTrade[] => {
+          return (rawTrades ?? [])
+            .map((trade: any, index: number) => {
+              const rawPrice = number(trade.price)
+              const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
+              const tradeId = trade.id && trade.id !== "3220" ? trade.id : `${trade.time}-${index}`
+              return {
+                id: `history-${tradeId}`,
+                time: normalizeTime(trade.time),
+                price,
+                volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
+                side: explicitSide(trade.side),
+              }
+            })
+            .filter((trade) => trade.price > 0 && trade.volume > 0)
+        }
+
+        const historicalTrades: StreamTrade[] = parseRawTrades(payload.trades)
 
         let mergedTradesList = historicalTrades
         if (historicalTrades.length > 0) {
@@ -609,6 +614,41 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
         })
       } catch (nextError) {
         if (disposed || (nextError instanceof DOMException && nextError.name === "AbortError")) return
+
+        // Fallback directly to Supabase client from browser
+        try {
+          const direct = await fetchOrderbookFromSupabaseDirect(symbol)
+          if (direct && !disposed) {
+            const directPrices = (direct.prices ?? []).map((point: any) => number(point.close)).filter((v: number) => v > 0)
+            if (directPrices.length > 0) setPriceHistory(directPrices)
+            if (direct.trades?.length) {
+              const parsedTrades = (direct.trades as any[]).map((trade: any, index: number) => {
+                const rawPrice = number(trade.price)
+                const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
+                const tradeId = trade.id && trade.id !== "3220" ? trade.id : `${trade.time}-${index}`
+                return {
+                  id: `history-${tradeId}`,
+                  time: normalizeTime(trade.time),
+                  price,
+                  volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
+                  side: explicitSide(trade.side),
+                }
+              }).filter((t) => t.price > 0 && t.volume > 0)
+              setTrades(parsedTrades)
+            }
+            if (direct.latestQuote) {
+              const b = normalizeDepth(direct.latestQuote.bid).sort((x, y) => y.price - x.price)
+              const a = normalizeDepth(direct.latestQuote.offer).sort((x, y) => x.price - y.price)
+              if (b.length || a.length) depthRef.current = { bids: b, asks: a }
+            }
+            setHistoryState("READY")
+            setHistoryMessage("Đã nạp dữ liệu từ Supabase.")
+            return
+          }
+        } catch {
+          // ignore fallback error and use live fallback
+        }
+
         setHistoryState("READY")
         setHistoryMessage("Sử dụng dữ liệu trực tiếp từ bảng điện.")
       }
@@ -619,6 +659,39 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       controller.abort()
     }
   }, [symbol, reconnectKey])
+
+  // Supabase Realtime Subscription for active orderbook
+  useEffect(() => {
+    const unsubscribe = subscribeToOrderbookRealtime(symbol, (snapshot) => {
+      if (!snapshot) return
+      const snapshotPrices = (snapshot.prices ?? []).map((point: any) => number(point.close)).filter((v: number) => v > 0)
+      if (snapshotPrices.length > 0) setPriceHistory(snapshotPrices)
+      if (snapshot.trades?.length) {
+        const incomingTrades = (snapshot.trades as any[]).map((trade: any, index: number) => {
+          const rawPrice = number(trade.price)
+          const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
+          const tradeId = trade.id && trade.id !== "3220" ? trade.id : `${trade.time}-${index}`
+          return {
+            id: `history-${tradeId}`,
+            time: normalizeTime(trade.time),
+            price,
+            volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
+            side: explicitSide(trade.side),
+          }
+        }).filter((t) => t.price > 0 && t.volume > 0)
+        setTrades((curr) => mergeTrades(curr, incomingTrades))
+      }
+      if (snapshot.latestQuote) {
+        const b = normalizeDepth(snapshot.latestQuote.bid).sort((x, y) => y.price - x.price)
+        const a = normalizeDepth(snapshot.latestQuote.offer).sort((x, y) => x.price - y.price)
+        if (b.length || a.length) depthRef.current = { bids: b, asks: a }
+      }
+    })
+
+    return () => {
+      unsubscribe()
+    }
+  }, [symbol])
 
   // WebSocket Live Stream
   useEffect(() => {
