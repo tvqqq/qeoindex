@@ -7,7 +7,6 @@ import type { ReactNode } from "react"
 import {
   Activity,
   ArrowLeft,
-  ArrowRight,
   BarChart3,
   ExternalLink,
   Gauge,
@@ -26,7 +25,7 @@ import {
   getCachedHourlyHistory,
 } from "@/lib/request-cache"
 import { buildMultiTimeframeStudies } from "@/lib/multi-timeframe"
-import type { AnalysisLog, MarketRegime, ProbabilitySet, Thesis } from "@/lib/research-types"
+import type { AnalysisLog, MarketRegime, ProbabilitySet } from "@/lib/research-types"
 import type { DailyScanRow } from "@/lib/scanner-data"
 import type { OhlcvBar } from "@/lib/technical-indicators"
 
@@ -487,15 +486,13 @@ export async function PriceSnapshotSection({ ticker }: { ticker: string }) {
 }
 
 export async function MultiTimeframeSection({ ticker }: { ticker: string }) {
-  const [researchResult, scannerResult, dailyResult, hourlyResult] = await Promise.allSettled([
+  const [researchResult, dailyResult, hourlyResult] = await Promise.allSettled([
     getCachedResearchData(),
-    getCachedScannerData(),
     getCachedDailyHistory(ticker),
     getCachedHourlyHistory(ticker),
   ])
 
   const research = researchResult.status === "fulfilled" ? researchResult.value : null
-  const scanner = scannerResult.status === "fulfilled" ? scannerResult.value : null
   const daily = dailyResult.status === "fulfilled" ? dailyResult.value : null
   const hourly = hourlyResult.status === "fulfilled" ? hourlyResult.value : null
 
