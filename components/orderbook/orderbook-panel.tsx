@@ -15,7 +15,7 @@ import { Sparkline } from "@/components/sparkline"
 
 const HEX: Record<Trend, string> = {
   up: "#22c98a",
-  down: "#f2495c",
+  down: "#ff4757",
   ceiling: "#b07cff",
   floor: "#22b8cf",
   ref: "#e2b93b",

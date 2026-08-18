@@ -1001,8 +1001,8 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
               <stop offset="100%" stopColor="#22c98a" stopOpacity="0.0" />
             </linearGradient>
             <linearGradient id="foreignNetGradNeg" x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0%" stopColor="#f2495c" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#f2495c" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="#ff4757" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="#ff4757" stopOpacity="0.0" />
             </linearGradient>
           </defs>
 
@@ -1016,16 +1016,16 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
           <path d={buyPathD} fill="none" stroke="#22c98a" strokeWidth="1.2" strokeDasharray="3 2" strokeOpacity="0.7" />
 
           {/* Sell Cumulative Line */}
-          <path d={sellPathD} fill="none" stroke="#f2495c" strokeWidth="1.2" strokeDasharray="3 2" strokeOpacity="0.7" />
+          <path d={sellPathD} fill="none" stroke="#ff4757" strokeWidth="1.2" strokeDasharray="3 2" strokeOpacity="0.7" />
 
           {/* Net Value Main Line */}
-          <path d={netPathD} fill="none" stroke={isNetPositive ? "#22c98a" : "#f2495c"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={netPathD} fill="none" stroke={isNetPositive ? "#22c98a" : "#ff4757"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
 
           {/* Current / Hovered point */}
           {hovered ? (
             <>
               <line x1={hovered.x} y1="0" x2={hovered.x} y2="140" stroke="#ffffff" strokeOpacity="0.3" strokeDasharray="2 2" strokeWidth="1" />
-              <circle cx={hovered.x} cy={hovered.netY} r="4.5" fill={hovered.netValue >= 0 ? "#22c98a" : "#f2495c"} stroke="#ffffff" strokeWidth="1.5" />
+              <circle cx={hovered.x} cy={hovered.netY} r="4.5" fill={hovered.netValue >= 0 ? "#22c98a" : "#ff4757"} stroke="#ffffff" strokeWidth="1.5" />
             </>
           ) : (
             coordinates.at(-1) && (
@@ -1033,7 +1033,7 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
                 cx={coordinates.at(-1)?.x}
                 cy={coordinates.at(-1)?.netY}
                 r="4"
-                fill={isNetPositive ? "#22c98a" : "#f2495c"}
+                fill={isNetPositive ? "#22c98a" : "#ff4757"}
                 className="animate-pulse"
               />
             )
@@ -1374,32 +1374,32 @@ export function LiveOrderBookPanel({
     >
       {/* HEADER / DRAG HANDLE */}
       <header
-        className="flex cursor-grab select-none items-center gap-2 border-b border-border bg-[#1b1d1c] px-3.5 py-2.5 active:cursor-grabbing touch-none"
+        className="flex cursor-grab select-none items-center gap-2 border-b border-border/80 bg-[#191b1a] px-4 py-3 active:cursor-grabbing touch-none"
         onPointerDown={onHeaderPointerDown}
       >
         <GripVertical className="h-4 w-4 text-muted shrink-0" />
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="font-mono text-lg font-black tracking-tight text-foreground">{symbol}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-mono text-xl font-black tracking-tight text-foreground">{symbol}</span>
           {stream.company?.exchange ? (
-            <span className="rounded bg-panel-2 px-1.5 py-0.5 text-[10px] font-semibold text-muted-2 uppercase tracking-wide">
+            <span className="rounded bg-[#222424] border border-border/80 px-1.5 py-0.5 text-[11px] font-bold text-muted-2 uppercase tracking-wide">
               {stream.company.exchange}
             </span>
           ) : null}
           {stream.company?.nameVi ? (
-            <span className="hidden sm:inline truncate text-xs text-muted max-w-[200px]" title={stream.company.nameVi}>
+            <span className="hidden sm:inline truncate text-xs text-muted font-medium max-w-[220px]" title={stream.company.nameVi}>
               {stream.company.nameVi}
             </span>
           ) : null}
         </div>
 
         {/* Live Price & Change Pill */}
-        <div className="ml-auto flex items-center gap-2 shrink-0">
-          <span className={`font-mono text-base font-bold sm:text-lg ${color}`}>{formatPrice(quote?.price)}</span>
-          {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact /> : null}
+        <div className="ml-auto flex items-center gap-2.5 shrink-0">
+          <span className={`font-mono text-xl font-black sm:text-2xl tracking-tight ${color}`}>{formatPrice(quote?.price)}</span>
+          {quote ? <MarketChangePill value={quote.changePercent} tone={tone} /> : null}
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-1 shrink-0 ml-1">
+        <div className="flex items-center gap-1 shrink-0 ml-1.5">
           <button
             data-orderbook-action
             type="button"
@@ -1488,80 +1488,80 @@ export function LiveOrderBookPanel({
       </header>
 
       {!minimized ? (
-        <div className="min-h-0 flex-1 overflow-y-auto flex flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto flex flex-col bg-[#121313]">
           {/* TOP PRICE METRICS STRIP */}
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 border-b border-border bg-[#181919] px-3.5 py-2 font-mono text-[11px]">
-            <div>
-              <div className="text-[10px] text-muted-2">Sàn</div>
-              <div className="text-[#22b8cf] font-bold">{formatPrice(quote?.floor)}</div>
+          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 border-b border-border/80 bg-[#161718] p-2.5 font-mono">
+            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
+              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">Sàn</div>
+              <div className="text-sm font-bold text-[#22b8cf]">{formatPrice(quote?.floor)}</div>
             </div>
-            <div>
-              <div className="text-[10px] text-muted-2">TC</div>
-              <div className="text-ref font-bold">{formatPrice(quote?.reference)}</div>
+            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
+              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">TC</div>
+              <div className="text-sm font-bold text-ref">{formatPrice(quote?.reference)}</div>
             </div>
-            <div>
-              <div className="text-[10px] text-muted-2">Trần</div>
-              <div className="text-ceiling font-bold">{formatPrice(quote?.ceiling)}</div>
+            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
+              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">Trần</div>
+              <div className="text-sm font-bold text-ceiling">{formatPrice(quote?.ceiling)}</div>
             </div>
-            <div>
-              <div className="text-[10px] text-muted-2">Thấp</div>
-              <div className="text-foreground">{formatPrice(quote?.low)}</div>
+            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
+              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">Thấp</div>
+              <div className="text-sm font-bold text-foreground">{formatPrice(quote?.low)}</div>
             </div>
-            <div>
-              <div className="text-[10px] text-muted-2">Cao</div>
-              <div className="text-foreground">{formatPrice(quote?.high)}</div>
+            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
+              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">Cao</div>
+              <div className="text-sm font-bold text-foreground">{formatPrice(quote?.high)}</div>
             </div>
-            <div>
-              <div className="text-[10px] text-muted-2">TB</div>
-              <div className="text-foreground">{formatPrice(quote?.avgPrice)}</div>
+            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
+              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">TB</div>
+              <div className="text-sm font-bold text-foreground">{formatPrice(quote?.avgPrice)}</div>
             </div>
-            <div>
-              <div className="text-[10px] text-muted-2">Tổng KL</div>
-              <div className="text-foreground font-semibold">{formatCompactVolume(quote?.totalVolume)}</div>
+            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
+              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">Tổng KL</div>
+              <div className="text-sm font-bold text-foreground">{formatCompactVolume(quote?.totalVolume)}</div>
             </div>
-            <div>
-              <div className="text-[10px] text-muted-2">Tổng GT</div>
-              <div className="text-foreground font-semibold">
+            <div className="rounded-md border border-border/60 bg-[#1a1c1d] px-2 py-1.5 text-center flex flex-col justify-center">
+              <div className="text-[11px] font-semibold text-muted-2 uppercase tracking-wider">Tổng GT</div>
+              <div className="text-sm font-bold text-foreground">
                 {quote?.totalValue ? formatMarketValue(quote.totalValue) : quote?.totalVolume && quote?.price ? formatMarketValue(quote.totalVolume * quote.price) : "—"}
               </div>
             </div>
           </div>
 
           {/* SECTION 1: ORDERBOOK DEPTH LADDER (3 Levels) */}
-          <div className="border-b border-border px-4 py-3 bg-panel/30">
-            <div className="mb-2 flex items-center justify-between text-[11px]">
-              <div className="flex items-center gap-1.5 text-muted-2">
-                <span className={`h-2 w-2 rounded-full ${stream.state === "LIVE" ? "bg-up animate-pulse" : stream.state === "CONNECTING" ? "bg-ref" : "bg-down"}`} />
-                <span className="font-medium text-foreground">Sổ lệnh 3 cấp độ</span>
-                <span className="text-[10px] text-muted">· {stream.state === "LIVE" ? "Realtime WS" : "Đang đồng bộ"}</span>
+          <div className="border-b border-border/80 px-4 py-3 bg-[#151616]">
+            <div className="mb-2.5 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <span className={`h-2.5 w-2.5 rounded-full ${stream.state === "LIVE" ? "bg-up animate-pulse" : stream.state === "CONNECTING" ? "bg-ref" : "bg-down"}`} />
+                <span className="font-bold text-foreground">Sổ lệnh 3 cấp độ</span>
+                <span className="text-[11px] text-muted">· {stream.state === "LIVE" ? "Realtime WS" : "Đang đồng bộ"}</span>
               </div>
               {spread !== null && spread > 0 ? (
-                <div className="text-[10px] text-muted-2 font-mono">
-                  Spread: <span className="text-foreground font-medium">{formatPrice(spread)}</span>
+                <div className="text-xs text-muted-2 font-mono">
+                  Spread: <span className="text-foreground font-bold">{formatPrice(spread)}</span>
                 </div>
               ) : null}
             </div>
 
             {/* Depth Ladder Table */}
-            <div className="rounded-lg border border-border/80 bg-[#121313] p-2">
-              <div className="grid grid-cols-[1fr_80px_80px_1fr] gap-x-3 text-[11px] font-semibold text-muted-2 border-b border-border/50 pb-1.5">
+            <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5 shadow-inner">
+              <div className="grid grid-cols-[1fr_85px_85px_1fr] gap-x-3 text-xs font-bold text-muted-2 border-b border-border/60 pb-2">
                 <span>KL Mua</span>
                 <span className="text-right">Giá Mua</span>
                 <span>Giá Bán</span>
                 <span className="text-right">KL Bán</span>
               </div>
 
-              <div className="mt-1.5 space-y-1 font-mono text-xs">
+              <div className="mt-1.5 space-y-1 font-mono text-[13px]">
                 {rows.map(({ bid, ask }, rowIndex) => {
                   const bidWidthPct = bid?.volume ? (bid.volume / maxDepthVolume) * 100 : 0
                   const askWidthPct = ask?.volume ? (ask.volume / maxDepthVolume) * 100 : 0
 
                   return (
-                    <div key={rowIndex} className="relative grid grid-cols-[1fr_80px_80px_1fr] gap-x-3 items-center py-1 rounded">
+                    <div key={rowIndex} className="relative grid grid-cols-[1fr_85px_85px_1fr] gap-x-3 items-center py-1 rounded hover:bg-panel-2/40">
                       {/* Left Bid Volume bar */}
                       {bid?.volume ? (
                         <div
-                          className="absolute inset-y-0 left-0 bg-up/12 rounded-l"
+                          className="absolute inset-y-0 left-0 bg-up/15 rounded-l border-r border-up/25"
                           style={{ width: `${(bidWidthPct / 2).toFixed(1)}%` }}
                           aria-hidden="true"
                         />
@@ -1570,36 +1570,36 @@ export function LiveOrderBookPanel({
                       {/* Right Ask Volume bar */}
                       {ask?.volume ? (
                         <div
-                          className="absolute inset-y-0 right-0 bg-down/12 rounded-r"
+                          className="absolute inset-y-0 right-0 bg-down/15 rounded-r border-l border-down/25"
                           style={{ width: `${(askWidthPct / 2).toFixed(1)}%` }}
                           aria-hidden="true"
                         />
                       ) : null}
 
-                      <span className="relative font-bold text-foreground pl-1">{formatVolume(bid?.volume)}</span>
-                      <span className={`relative text-right ${getPriceColorClass(bid?.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>
+                      <span className="relative font-bold text-foreground pl-1.5">{formatVolume(bid?.volume)}</span>
+                      <span className={`relative text-right font-bold ${getPriceColorClass(bid?.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>
                         {formatPrice(bid?.price)}
                       </span>
-                      <span className={`relative ${getPriceColorClass(ask?.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>
+                      <span className={`relative font-bold ${getPriceColorClass(ask?.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>
                         {formatPrice(ask?.price)}
                       </span>
-                      <span className="relative text-right font-bold text-foreground pr-1">{formatVolume(ask?.volume)}</span>
+                      <span className="relative text-right font-bold text-foreground pr-1.5">{formatVolume(ask?.volume)}</span>
                     </div>
                   )
                 })}
               </div>
 
               {/* Total Ratio Bar */}
-              <div className="mt-2.5 pt-2 border-t border-border/40">
-                <div className="flex items-center justify-between text-[11px] font-semibold">
+              <div className="mt-3 pt-2 border-t border-border/50">
+                <div className="flex items-center justify-between text-xs font-bold">
                   <span className="text-up flex items-center gap-1">
-                    <TrendingUp className="h-3 w-3" /> Mua {depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "50%"} ({formatCompactVolume(bidTotal)})
+                    <TrendingUp className="h-3.5 w-3.5" /> Mua {depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "50%"} ({formatCompactVolume(bidTotal)})
                   </span>
                   <span className="text-down flex items-center gap-1">
-                    Bán {depthTotal > 0 ? `${sellPct.toFixed(0)}%` : "50%"} ({formatCompactVolume(askTotal)}) <TrendingDown className="h-3 w-3" />
+                    Bán {depthTotal > 0 ? `${sellPct.toFixed(0)}%` : "50%"} ({formatCompactVolume(askTotal)}) <TrendingDown className="h-3.5 w-3.5" />
                   </span>
                 </div>
-                <div className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-panel-2">
+                <div className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-[#1e2021]">
                   <div className="bg-up transition-all duration-300" style={{ width: `${depthTotal > 0 ? buyPct : 50}%` }} />
                   <div className="bg-down transition-all duration-300" style={{ width: `${depthTotal > 0 ? sellPct : 50}%` }} />
                 </div>
@@ -1610,13 +1610,13 @@ export function LiveOrderBookPanel({
           {/* SECTION 2: TABBED ACTIVITY VIEWS */}
           <div className="px-4 py-3 flex-1 flex flex-col">
             {/* Tabs Header */}
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
-              <div className="flex items-center gap-1 bg-[#181919] p-1 rounded-lg border border-border">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2.5">
+              <div className="flex items-center gap-1 bg-[#181919] p-1 rounded-lg border border-border/80">
                 <button
                   type="button"
                   onClick={() => setActivityTab("trades")}
-                  className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-                    activityTab === "trades" ? "bg-brand/15 text-brand shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
+                  className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors ${
+                    activityTab === "trades" ? "bg-brand/20 text-brand shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
                   }`}
                 >
                   <BarChart3 className="h-3.5 w-3.5" />
@@ -1626,8 +1626,8 @@ export function LiveOrderBookPanel({
                 <button
                   type="button"
                   onClick={() => setActivityTab("foreign")}
-                  className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-                    activityTab === "foreign" ? "bg-blue-500/15 text-blue-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
+                  className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors ${
+                    activityTab === "foreign" ? "bg-blue-500/20 text-blue-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
                   }`}
                 >
                   <PieChart className="h-3.5 w-3.5" />
@@ -1637,8 +1637,8 @@ export function LiveOrderBookPanel({
                 <button
                   type="button"
                   onClick={() => setActivityTab("profile")}
-                  className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-                    activityTab === "profile" ? "bg-purple-500/15 text-purple-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
+                  className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors ${
+                    activityTab === "profile" ? "bg-purple-500/20 text-purple-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
                   }`}
                 >
                   <Layers className="h-3.5 w-3.5" />
@@ -1648,14 +1648,14 @@ export function LiveOrderBookPanel({
                 <button
                   type="button"
                   onClick={() => setActivityTab("putthrough")}
-                  className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-                    activityTab === "putthrough" ? "bg-amber-500/15 text-amber-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
+                  className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors ${
+                    activityTab === "putthrough" ? "bg-amber-500/20 text-amber-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
                   }`}
                 >
                   <Handshake className="h-3.5 w-3.5" />
                   <span>Thỏa thuận</span>
                   {stream.putThroughDeals.length > 0 && (
-                    <span className="rounded-full bg-amber-500/25 px-1.5 py-0.2 text-[9px] text-amber-300 font-mono">
+                    <span className="rounded-full bg-amber-500/30 px-1.5 py-0.2 text-[10px] text-amber-300 font-mono font-bold">
                       {stream.putThroughDeals.length}
                     </span>
                   )}
@@ -1664,12 +1664,12 @@ export function LiveOrderBookPanel({
 
               {/* Tape Sub-filters */}
               {activityTab === "trades" && (
-                <div className="flex items-center gap-1 text-[10px]">
+                <div className="flex items-center gap-1 text-xs">
                   <button
                     type="button"
                     onClick={() => setTradeFilter("all")}
-                    className={`rounded px-2 py-1 font-medium transition-colors ${
-                      tradeFilter === "all" ? "bg-panel-2 text-foreground font-bold" : "text-muted hover:text-muted-2"
+                    className={`rounded px-2.5 py-1 font-semibold transition-colors ${
+                      tradeFilter === "all" ? "bg-panel-2 text-foreground font-bold border border-border" : "text-muted hover:text-muted-2"
                     }`}
                   >
                     Tất cả ({stream.trades.length})
@@ -1677,23 +1677,23 @@ export function LiveOrderBookPanel({
                   <button
                     type="button"
                     onClick={() => setTradeFilter("large")}
-                    className={`flex items-center gap-1 rounded border px-2 py-0.5 font-medium transition-colors ${
+                    className={`flex items-center gap-1 rounded border px-2.5 py-1 font-semibold transition-colors ${
                       tradeFilter === "large" ? "border-ref/50 bg-ref/15 text-ref font-bold" : "border-border text-muted-2 hover:text-foreground"
                     }`}
                   >
                     <ListFilter className="h-3 w-3" />
                     <span>≥10K</span>
-                    {largeTradeCount > 0 && <span className="rounded bg-ref/20 px-1 text-[9px]">{largeTradeCount}</span>}
+                    {largeTradeCount > 0 && <span className="rounded bg-ref/25 px-1 text-[10px]">{largeTradeCount}</span>}
                   </button>
                   <button
                     type="button"
                     onClick={() => setTradeFilter("whale")}
-                    className={`flex items-center gap-1 rounded border px-2 py-0.5 font-medium transition-colors ${
+                    className={`flex items-center gap-1 rounded border px-2.5 py-1 font-semibold transition-colors ${
                       tradeFilter === "whale" ? "border-up/50 bg-up/15 text-up font-bold" : "border-border text-muted-2 hover:text-foreground"
                     }`}
                   >
                     <span>Cá mập ≥50K</span>
-                    {whaleTradeCount > 0 && <span className="rounded bg-up/20 px-1 text-[9px]">{whaleTradeCount}</span>}
+                    {whaleTradeCount > 0 && <span className="rounded bg-up/25 px-1 text-[10px]">{whaleTradeCount}</span>}
                   </button>
                 </div>
               )}
@@ -1703,26 +1703,26 @@ export function LiveOrderBookPanel({
             {activityTab === "trades" && (
               <div className="flex flex-col flex-1">
                 {/* Trade Initiative Bar */}
-                <div className="mb-2.5 rounded-lg border border-border/80 bg-[#121313] p-2 font-mono text-[11px]">
-                  <div className="flex items-center justify-between text-[10px] text-muted-2 mb-1">
+                <div className="mb-2 rounded-lg border border-border/80 bg-[#121313] p-2.5 font-mono text-xs">
+                  <div className="flex items-center justify-between text-[11px] text-muted-2 mb-1.5">
                     <span>
-                      Chủ động Mua: <b className="text-up">{formatCompactVolume(tradeStats.buyVol)}</b> (
+                      Chủ động Mua: <b className="text-up font-bold">{formatCompactVolume(tradeStats.buyVol)}</b> (
                       {tradeStats.buyTradedPct.toFixed(0)}%)
                     </span>
                     <span>
-                      Chủ động Bán: <b className="text-down">{formatCompactVolume(tradeStats.sellVol)}</b> (
+                      Chủ động Bán: <b className="text-down font-bold">{formatCompactVolume(tradeStats.sellVol)}</b> (
                       {tradeStats.sellTradedPct.toFixed(0)}%)
                     </span>
                   </div>
                   <div className="flex h-1.5 overflow-hidden rounded-full bg-panel-2">
-                    <div className="bg-up" style={{ width: `${tradeStats.buyTradedPct}%` }} />
-                    <div className="bg-down" style={{ width: `${tradeStats.sellTradedPct}%` }} />
+                    <div className="bg-up transition-all duration-300" style={{ width: `${tradeStats.buyTradedPct}%` }} />
+                    <div className="bg-down transition-all duration-300" style={{ width: `${tradeStats.sellTradedPct}%` }} />
                   </div>
                 </div>
 
                 {visibleTrades.length ? (
                   <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col">
-                    <div className="grid grid-cols-[100px_1fr_120px_80px] border-b border-border/60 bg-[#181919] px-3 py-1.5 text-[11px] font-semibold text-muted-2">
+                    <div className="grid grid-cols-[75px_1fr_90px_65px] border-b border-border/60 bg-[#171819] px-3 py-1.5 text-xs font-bold text-muted-2">
                       <span>Thời gian</span>
                       <span className="text-right">Khối lượng</span>
                       <span className="text-right">Giá</span>
@@ -1737,7 +1737,7 @@ export function LiveOrderBookPanel({
                         return (
                           <div
                             key={trade.id}
-                            className={`grid grid-cols-[100px_1fr_120px_80px] items-center border-b py-1.5 font-mono text-xs last:border-0 ${
+                            className={`grid grid-cols-[75px_1fr_90px_65px] items-center border-b py-1 font-mono text-xs last:border-0 hover:bg-panel-2/50 ${
                               isWhale
                                 ? "border-up/30 bg-up/10 text-up font-bold -mx-3 px-3"
                                 : isLarge
@@ -1745,24 +1745,24 @@ export function LiveOrderBookPanel({
                                   : "border-border/30 text-foreground"
                             }`}
                           >
-                            <span className="text-muted-2">{timeLabel(trade.time)}</span>
-                            <span className="text-right font-bold flex items-center justify-end gap-1.5">
+                            <span className="text-muted-2 text-xs">{timeLabel(trade.time)}</span>
+                            <span className="text-right font-bold text-[13px] flex items-center justify-end gap-1.5">
                               {formatVolume(trade.volume)}
                               {isWhale ? (
-                                <span className="rounded bg-up/25 px-1 py-0.2 text-[9px] text-up">50K+</span>
+                                <span className="rounded bg-up/25 px-1 py-0.2 text-[9px] text-up font-bold">50K+</span>
                               ) : isLarge ? (
-                                <span className="rounded bg-ref/25 px-1 py-0.2 text-[9px] text-ref">10K+</span>
+                                <span className="rounded bg-ref/25 px-1 py-0.2 text-[9px] text-ref font-bold">10K+</span>
                               ) : null}
                             </span>
                             <span
-                              className={`text-right font-bold ${
+                              className={`text-right font-bold text-[13px] ${
                                 trade.side === "BUY" ? "text-up" : trade.side === "SELL" ? "text-down" : "text-foreground"
                               }`}
                             >
                               {formatPrice(trade.price)}
                             </span>
                             <div className="flex justify-end">
-                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold border ${meta.className}`}>
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${meta.className}`}>
                                 {meta.label}
                               </span>
                             </div>
@@ -1789,11 +1789,11 @@ export function LiveOrderBookPanel({
                 {/* 4 Summary Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
-                    <div className="text-[10px] text-muted-2 font-medium">NN Mua lũy kế</div>
-                    <div className="mt-1 font-mono text-sm font-bold text-up">
+                    <div className="text-xs text-muted-2 font-semibold">NN Mua lũy kế</div>
+                    <div className="mt-1 font-mono text-sm sm:text-base font-bold text-up">
                       {formatVolume(stream.foreign?.totalBuyVolume)}
                     </div>
-                    <div className="mt-0.5 text-[10px] text-muted font-mono">
+                    <div className="mt-0.5 text-[11px] text-muted font-mono">
                       {stream.foreign?.totalBuyValue
                         ? formatMarketValue(stream.foreign.totalBuyValue)
                         : stream.foreign?.totalBuyVolume && quote?.price
@@ -1803,11 +1803,11 @@ export function LiveOrderBookPanel({
                   </div>
 
                   <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
-                    <div className="text-[10px] text-muted-2 font-medium">NN Bán lũy kế</div>
-                    <div className="mt-1 font-mono text-sm font-bold text-down">
+                    <div className="text-xs text-muted-2 font-semibold">NN Bán lũy kế</div>
+                    <div className="mt-1 font-mono text-sm sm:text-base font-bold text-down">
                       {formatVolume(stream.foreign?.totalSellVolume)}
                     </div>
-                    <div className="mt-0.5 text-[10px] text-muted font-mono">
+                    <div className="mt-0.5 text-[11px] text-muted font-mono">
                       {stream.foreign?.totalSellValue
                         ? formatMarketValue(stream.foreign.totalSellValue)
                         : stream.foreign?.totalSellVolume && quote?.price
@@ -1817,9 +1817,9 @@ export function LiveOrderBookPanel({
                   </div>
 
                   <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
-                    <div className="text-[10px] text-muted-2 font-medium">Mua / Bán Ròng</div>
+                    <div className="text-xs text-muted-2 font-semibold">Mua / Bán Ròng</div>
                     <div
-                      className={`mt-1 font-mono text-sm font-bold ${
+                      className={`mt-1 font-mono text-sm sm:text-base font-bold ${
                         foreignNetVolume === null
                           ? "text-muted-2"
                           : foreignNetVolume > 0
@@ -1833,21 +1833,21 @@ export function LiveOrderBookPanel({
                         ? "—"
                         : `${foreignNetVolume > 0 ? "+" : ""}${formatVolume(foreignNetVolume)}`}
                     </div>
-                    <div className="mt-0.5 text-[10px] text-muted font-mono">
+                    <div className="mt-0.5 text-[11px] text-muted font-mono">
                       {foreignNetValue !== null ? `${foreignNetValue > 0 ? "+" : ""}${formatMarketValue(foreignNetValue)}` : "—"}
                     </div>
                   </div>
 
                   <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
-                    <div className="text-[10px] text-muted-2 font-medium">Room Ngoại còn lại</div>
-                    <div className="mt-1 font-mono text-sm font-bold text-foreground">
+                    <div className="text-xs text-muted-2 font-semibold">Room Ngoại còn lại</div>
+                    <div className="mt-1 font-mono text-sm sm:text-base font-bold text-foreground">
                       {foreignRoom !== null && foreignRoom !== undefined
                         ? foreignRoom === 0
                           ? "Hết room (0 cp)"
                           : `${formatCompactVolume(foreignRoom)} cp`
                         : "—"}
                     </div>
-                    <div className="mt-0.5 text-[10px] text-muted font-mono">
+                    <div className="mt-0.5 text-[11px] text-muted font-mono">
                       {roomPercentage !== null
                         ? `Còn ${roomPercentage.toFixed(1)}% VĐL (${formatCompactVolume(foreignRoom)} cp)`
                         : foreignRoom !== null && foreignRoom !== undefined && foreignRoom > 0
@@ -1867,7 +1867,7 @@ export function LiveOrderBookPanel({
                   currentSellValue={stream.foreign?.totalSellValue}
                 />
 
-                <div className="text-[10px] text-muted leading-relaxed">
+                <div className="text-[11px] text-muted leading-relaxed">
                   * Dữ liệu NĐTNN được tổng hợp trực tiếp từ sở giao dịch & feed DNSE T=f. Khối lượng và giá trị không bị suy diễn từ bảng khớp lệnh thông thường.
                 </div>
               </div>
@@ -1876,13 +1876,13 @@ export function LiveOrderBookPanel({
             {/* TAB CONTENT: PHÂN TÍCH BƯỚC GIÁ (VOLUME PROFILE) */}
             {activityTab === "profile" && (
               <div className="flex flex-col flex-1">
-                <div className="mb-2 text-xs text-muted-2 flex items-center justify-between">
-                  <span>Phân bổ khối lượng khớp lệnh theo từng bước giá trong phiên:</span>
-                  <span className="font-mono text-[10px] text-muted">{volumeProfile.rows.length} bước giá</span>
+                <div className="mb-2.5 text-xs text-muted-2 flex items-center justify-between">
+                  <span className="font-medium">Phân bổ khối lượng khớp lệnh theo từng bước giá trong phiên:</span>
+                  <span className="font-mono text-xs text-muted font-bold">{volumeProfile.rows.length} bước giá</span>
                 </div>
 
                 {volumeProfile.rows.length ? (
-                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5 max-h-[360px] overflow-y-auto space-y-1.5">
+                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2 max-h-[360px] overflow-y-auto space-y-1">
                     {volumeProfile.rows.map((row) => {
                       const totalPct = (row.totalVol / volumeProfile.maxVol) * 100
                       const buyVolPct = row.totalVol > 0 ? (row.buyVol / row.totalVol) * 100 : 50
@@ -1906,10 +1906,10 @@ export function LiveOrderBookPanel({
                               : "text-ref font-bold"
 
                       return (
-                        <div key={row.price} className="relative flex items-center gap-3 font-mono text-xs py-1 px-2 rounded hover:bg-panel-2/50">
+                        <div key={row.price} className="relative flex items-center gap-3 font-mono text-[13px] py-1 px-2.5 rounded hover:bg-panel-2/50">
                           {/* Profile histogram bar */}
                           <div
-                            className="absolute inset-y-0 left-0 bg-brand/10 rounded"
+                            className="absolute inset-y-0 left-0 bg-brand/15 rounded"
                             style={{ width: `${totalPct.toFixed(1)}%` }}
                             aria-hidden="true"
                           />
@@ -1917,28 +1917,28 @@ export function LiveOrderBookPanel({
                           {/* Price */}
                           <div className="relative w-20 font-bold flex items-center gap-1">
                             <span className={priceColor}>{formatPrice(row.price)}</span>
-                            {isCurrent && <span className="h-1.5 w-1.5 rounded-full bg-brand animate-pulse shrink-0" title="Giá khớp hiện tại" />}
+                            {isCurrent && <span className="h-2 w-2 rounded-full bg-brand animate-pulse shrink-0" title="Giá khớp hiện tại" />}
                             {isCeil ? (
-                              <span className="text-[9px] text-ceiling font-semibold shrink-0">(Trần)</span>
+                              <span className="text-[10px] text-ceiling font-bold shrink-0">(Trần)</span>
                             ) : isFlr ? (
-                              <span className="text-[9px] text-floor font-semibold shrink-0">(Sàn)</span>
+                              <span className="text-[10px] text-floor font-bold shrink-0">(Sàn)</span>
                             ) : isRef ? (
-                              <span className="text-[9px] text-ref font-semibold shrink-0">(TC)</span>
+                              <span className="text-[10px] text-ref font-bold shrink-0">(TC)</span>
                             ) : null}
                           </div>
 
                           {/* Volume */}
-                          <div className="relative w-24 text-right font-semibold text-foreground">
+                          <div className="relative w-24 text-right font-bold text-foreground">
                             {formatVolume(row.totalVol)}
                           </div>
 
                           {/* Dual Buy/Sell Mini Bar */}
                           <div className="relative flex-1 flex items-center gap-2">
-                            <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-panel-2">
+                            <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-[#1e2021]">
                               <div className="bg-up" style={{ width: `${buyVolPct}%` }} />
                               <div className="bg-down" style={{ width: `${100 - buyVolPct}%` }} />
                             </div>
-                            <span className="text-[10px] text-muted-2 w-12 text-right">
+                            <span className="text-[11px] font-semibold text-muted-2 w-12 text-right">
                               {((row.totalVol / (tradeStats.totalTraded || 1)) * 100).toFixed(1)}%
                             </span>
                           </div>
@@ -1961,8 +1961,8 @@ export function LiveOrderBookPanel({
               <div className="flex flex-col flex-1">
                 {/* Summary Header */}
                 <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className="text-muted-2">Giao dịch thỏa thuận trong ngày:</span>
-                  <div className="flex items-center gap-3 font-mono text-[11px]">
+                  <span className="text-muted-2 font-medium">Giao dịch thỏa thuận trong ngày:</span>
+                  <div className="flex items-center gap-3 font-mono text-xs">
                     <span className="text-muted-2">
                       Số lệnh: <b className="text-foreground">{stream.putThroughDeals.length}</b>
                     </span>
@@ -1974,7 +1974,7 @@ export function LiveOrderBookPanel({
                     </span>
                     <span className="text-muted-2">
                       Tổng GT:{" "}
-                      <b className="text-up font-semibold">
+                      <b className="text-up font-bold">
                         {formatMarketValue(stream.putThroughDeals.reduce((sum, d) => sum + d.value, 0))}
                       </b>
                     </span>
@@ -1983,7 +1983,7 @@ export function LiveOrderBookPanel({
 
                 {stream.putThroughDeals.length > 0 ? (
                   <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col">
-                    <div className="grid grid-cols-[80px_1fr_90px_110px_70px] border-b border-border/60 bg-[#181919] px-3 py-1.5 text-[11px] font-semibold text-muted-2">
+                    <div className="grid grid-cols-[80px_1fr_90px_110px_70px] border-b border-border/60 bg-[#171819] px-3 py-1.5 text-xs font-bold text-muted-2">
                       <span>Thời gian</span>
                       <span className="text-right">Khối lượng</span>
                       <span className="text-right">Giá TT</span>
@@ -1998,14 +1998,14 @@ export function LiveOrderBookPanel({
                         return (
                           <div
                             key={deal.id}
-                            className="grid grid-cols-[80px_1fr_90px_110px_70px] items-center border-b border-border/30 py-1.5 font-mono text-xs last:border-0 hover:bg-panel-2/40"
+                            className="grid grid-cols-[80px_1fr_90px_110px_70px] items-center border-b border-border/30 py-1 font-mono text-xs last:border-0 hover:bg-panel-2/40"
                           >
                             <span className="text-muted-2">{timeLabel(deal.time)}</span>
-                            <span className="text-right font-bold text-foreground">{formatVolume(deal.volume)}</span>
-                            <span className={`text-right font-bold ${priceColor}`}>{formatPrice(deal.price)}</span>
-                            <span className="text-right font-bold text-foreground">{formatMarketValue(deal.value)}</span>
+                            <span className="text-right font-bold text-[13px] text-foreground">{formatVolume(deal.volume)}</span>
+                            <span className={`text-right font-bold text-[13px] ${priceColor}`}>{formatPrice(deal.price)}</span>
+                            <span className="text-right font-bold text-[13px] text-foreground">{formatMarketValue(deal.value)}</span>
                             <div className="flex justify-end">
-                              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold border bg-panel-2 text-muted-2 border-border">
+                              <span className="rounded px-1.5 py-0.5 text-[10px] font-bold border bg-panel-2 text-muted-2 border-border">
                                 {deal.type || "PTM"}
                               </span>
                             </div>

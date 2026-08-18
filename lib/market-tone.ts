@@ -13,7 +13,7 @@ export const MARKET_TONE_STYLES: Record<MarketTone, {
   down: {
     text: "text-down",
     pill: "border-down/30 bg-down/12 text-down",
-    hex: "#f2495c",
+    hex: "#ff4757",
   },
   ref: {
     text: "text-ref",
