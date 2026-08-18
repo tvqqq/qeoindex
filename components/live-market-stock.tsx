@@ -52,26 +52,25 @@ export function formatBoardVolume(value?: number) {
 }
 
 export function formatForeignNetValue(value?: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return { text: "0m", tone: "neutral" as const }
-  if (Math.abs(value) < 1_000) return { text: "0m", tone: "neutral" as const }
-  const abs = Math.abs(value)
+  if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) < 100_000) {
+    return { text: "0b", tone: "neutral" as const }
+  }
   const isBuy = value > 0
   const sign = isBuy ? "+" : "-"
-  let formatted = ""
-  if (abs >= 1_000_000_000) {
-    const num = abs / 1_000_000_000
-    formatted = `${sign}${num.toFixed(2).replace(/\.00$/, "").replace(/(\.[1-9])0$/, "$1")}b`
-  } else if (abs >= 1_000_000) {
-    const num = abs / 1_000_000
-    formatted = `${sign}${num.toFixed(2).replace(/\.00$/, "").replace(/(\.[1-9])0$/, "$1")}m`
-  } else if (abs >= 1_000) {
-    const num = abs / 1_000
-    formatted = `${sign}${num.toFixed(2).replace(/\.00$/, "").replace(/(\.[1-9])0$/, "$1")}k`
+  const abs = Math.abs(value)
+  const inBillions = abs / 1_000_000_000
+
+  let formattedNum = ""
+  if (inBillions >= 100) {
+    formattedNum = inBillions.toFixed(0)
+  } else if (inBillions >= 10) {
+    formattedNum = inBillions.toFixed(1)
   } else {
-    formatted = `${sign}${abs.toFixed(0)}`
+    formattedNum = inBillions.toFixed(2)
   }
+
   return {
-    text: formatted,
+    text: `${sign}${formattedNum}b`,
     tone: isBuy ? ("buy" as const) : ("sell" as const),
   }
 }
