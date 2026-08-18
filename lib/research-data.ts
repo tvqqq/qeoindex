@@ -9,10 +9,18 @@ import type {
   ResearchData,
   Thesis,
 } from "@/lib/research-types"
+import { invalidateUiCache, readThroughUiCache } from "@/lib/ui-data-cache"
 
 const STOCK_THESIS_DATA_SOURCE_ID = process.env.NOTION_STOCK_THESIS_DATA_SOURCE_ID ?? "fa161c1b-3f37-4ee2-8d75-0ca64a05ee90"
 const ANALYSIS_LOG_DATA_SOURCE_ID = process.env.NOTION_ANALYSIS_LOG_DATA_SOURCE_ID ?? "3642cc21-8280-44e2-bad6-93f9472ce793"
 const NOTION_VERSION = "2026-03-11"
+const RESEARCH_CACHE = {
+  namespace: "research-read-model-v1",
+  key: "canonical",
+  tag: "qeoindex-research-read-model-v1",
+  name: "QeoIndex Research canonical read model",
+  ttlSeconds: 60,
+} as const
 
 function token() {
   return process.env.NOTION_API_KEY ?? process.env.NOTION_TOKEN ?? ""
@@ -171,7 +179,17 @@ function unavailable(configured: boolean, message: string): ResearchData {
   }
 }
 
-export async function getResearchData(): Promise<ResearchData> {
+function isLiveResearchData(value: unknown): value is ResearchData {
+  if (!value || typeof value !== "object") return false
+  const data = value as Partial<ResearchData>
+  return data.source === "notion"
+    && typeof data.generatedAt === "string"
+    && Array.isArray(data.theses)
+    && Array.isArray(data.logs)
+    && data.connection?.notionLive === true
+}
+
+async function loadResearchDataCanonical(): Promise<ResearchData> {
   if (!token()) {
     return unavailable(false, "Notion chưa được cấu hình cho environment này. QeoIndex không dùng snapshot/backend dự phòng.")
   }
@@ -189,7 +207,7 @@ export async function getResearchData(): Promise<ResearchData> {
       connection: {
         notionConfigured: true,
         notionLive: true,
-        message: "Đang đọc trực tiếp từ canonical Notion Stock Thesis + Analysis Log.",
+        message: "Canonical Notion Stock Thesis + Analysis Log; UI read model được cache tối đa 60 giây.",
       },
       theses,
       logs,
@@ -198,4 +216,24 @@ export async function getResearchData(): Promise<ResearchData> {
     console.error("[QeoIndex Research] Notion query failed", error)
     return unavailable(true, "Notion đã cấu hình nhưng truy vấn hiện lỗi. QeoIndex không hiển thị dữ liệu stale/fallback.")
   }
+}
+
+/** Operational/write paths use this to make canonical decisions without UI-cache staleness. */
+export async function getResearchDataFresh(): Promise<ResearchData> {
+  return loadResearchDataCanonical()
+}
+
+/** UI-facing read path: regional Runtime Cache -> shared Redis -> canonical Notion. */
+export async function getResearchData(): Promise<ResearchData> {
+  if (!token()) return loadResearchDataCanonical()
+  return readThroughUiCache({
+    ...RESEARCH_CACHE,
+    validate: isLiveResearchData,
+    shouldCache: (value) => value.connection.notionLive,
+    load: loadResearchDataCanonical,
+  })
+}
+
+export async function invalidateResearchDataCache() {
+  await invalidateUiCache(RESEARCH_CACHE)
 }

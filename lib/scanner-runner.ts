@@ -1,7 +1,7 @@
 import { vietnamDateKey } from "@/lib/dnse-history"
 import { fetchDailyMarketHistory } from "@/lib/market-history"
 import { notifyOpsError } from "@/lib/ops-alerts"
-import { getScannerData, rowToPreviousResult, writeDailyScan } from "@/lib/scanner-data"
+import { getScannerDataFresh, invalidateScannerDataCache, rowToPreviousResult, writeDailyScan } from "@/lib/scanner-data"
 import { scannerHistoryPolicy, shouldSkipSameDateScan, type ScannerHistoryStatus } from "@/lib/scanner-policy"
 import { scanWyckoff } from "@/lib/wyckoff-engine"
 import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
@@ -19,7 +19,8 @@ export interface ScannerRunSummary {
 }
 
 export async function runScannerUniverse({ limit = UNIVERSE_SIZE, offset = 0 }: { limit?: number; offset?: number } = {}): Promise<ScannerRunSummary> {
-  const data = await getScannerData()
+  // Operational scan decisions must always see canonical Notion state, not a UI read cache.
+  const data = await getScannerDataFresh()
   const safeLimit = Math.max(1, Math.min(UNIVERSE_SIZE, limit))
   const safeOffset = Math.max(0, offset)
   const targets = data.universe.slice(safeOffset, safeOffset + safeLimit)
@@ -77,6 +78,9 @@ export async function runScannerUniverse({ limit = UNIVERSE_SIZE, offset = 0 }: 
       await sleep(380)
     }
   }
+
+  // One invalidation per run prevents 100 cache invalidations during a full-universe scan.
+  if (completed.length > 0) await invalidateScannerDataCache()
 
   const summary: ScannerRunSummary = {
     ok: errors.length === 0,

@@ -1,12 +1,20 @@
 import { dnseProviderHealth } from "@/lib/dnse-history"
 import type { HistoricalProvider } from "@/lib/market-history"
 import type { ScannerHistoryStatus } from "@/lib/scanner-policy"
+import { invalidateUiCache, readThroughUiCache } from "@/lib/ui-data-cache"
 import { UNIVERSE_DATE, type UniverseStock } from "@/lib/wyckoff-universe"
 import type { ScannerBias, ScannerConfidence, WyckoffScanResult } from "@/lib/wyckoff-engine"
 
 const NOTION_VERSION = "2026-03-11"
 const UNIVERSE_DATA_SOURCE_ID = process.env.NOTION_WYCKOFF_UNIVERSE_DATA_SOURCE_ID ?? "210c502d-0c32-4fdd-9d69-7ef18e2be7d5"
 const SCAN_DATA_SOURCE_ID = process.env.NOTION_DAILY_WYCKOFF_SCAN_DATA_SOURCE_ID ?? "b76e378a-3f0c-4315-82cd-52c844101b73"
+const SCANNER_CACHE = {
+  namespace: "scanner-read-model-v1",
+  key: "canonical",
+  tag: "qeoindex-scanner-read-model-v1",
+  name: "QeoIndex Scanner canonical read model",
+  ttlSeconds: 60,
+} as const
 
 export interface UniverseRow extends UniverseStock {
   id: string
@@ -129,7 +137,19 @@ function parseScanPage(page: any): DailyScanRow | null {
   }
 }
 
-export async function getScannerData(): Promise<ScannerData> {
+function isScannerData(value: unknown): value is ScannerData {
+  if (!value || typeof value !== "object") return false
+  const data = value as Partial<ScannerData>
+  return data.source === "notion"
+    && data.operationalBackend === "notion"
+    && typeof data.generatedAt === "string"
+    && Array.isArray(data.universe)
+    && data.universe.length > 0
+    && Boolean(data.latestScans)
+    && typeof data.latestScans === "object"
+}
+
+async function loadScannerDataCanonical(): Promise<ScannerData> {
   const [universePages, scanPages] = await Promise.all([
     notionQuery(UNIVERSE_DATA_SOURCE_ID, { sorts: [{ property: "Rank", direction: "ascending" }] }),
     notionQuery(SCAN_DATA_SOURCE_ID, { sorts: [{ property: "Date", direction: "descending" }] }, 5),
@@ -158,6 +178,25 @@ export async function getScannerData(): Promise<ScannerData> {
       lastFailureAt: "",
     },
   }
+}
+
+/** Operational scanner/promotion paths bypass the UI cache for canonical decisions. */
+export async function getScannerDataFresh(): Promise<ScannerData> {
+  return loadScannerDataCanonical()
+}
+
+/** UI-facing read path: regional Runtime Cache -> shared Redis -> canonical Notion. */
+export async function getScannerData(): Promise<ScannerData> {
+  if (!token()) return loadScannerDataCanonical()
+  return readThroughUiCache({
+    ...SCANNER_CACHE,
+    validate: isScannerData,
+    load: loadScannerDataCanonical,
+  })
+}
+
+export async function invalidateScannerDataCache() {
+  await invalidateUiCache(SCANNER_CACHE)
 }
 
 function richTextValue(value: string) { return { rich_text: value ? [{ type: "text", text: { content: value.slice(0, 1900) } }] : [] } }

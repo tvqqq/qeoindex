@@ -2,8 +2,8 @@ import { NextResponse } from "next/server"
 import { fetchDailyMarketHistory, fetchHourlyMarketHistory } from "@/lib/market-history"
 import { buildMultiTimeframeStudies, buildPromotionDraft } from "@/lib/multi-timeframe"
 import { promoteDraftToNotion } from "@/lib/notion-promote"
-import { getResearchData } from "@/lib/research-data"
-import { getScannerData } from "@/lib/scanner-data"
+import { getResearchDataFresh, invalidateResearchDataCache } from "@/lib/research-data"
+import { getScannerDataFresh } from "@/lib/scanner-data"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -14,11 +14,12 @@ export async function POST(request: Request) {
     const ticker = String(body?.ticker ?? "").trim().toUpperCase()
     if (!/^[A-Z0-9]{2,10}$/.test(ticker) || ticker === "VNINDEX") return NextResponse.json({ ok: false, error: "Ticker không hợp lệ cho promotion." }, { status: 400 })
 
-    const research = await getResearchData()
+    // Write paths bypass the UI cache so canonical existence/universe checks cannot be stale.
+    const research = await getResearchDataFresh()
     if (!research.connection.notionLive) return NextResponse.json({ ok: false, error: "Notion canonical source hiện không live; dừng promotion." }, { status: 503 })
     if (research.theses.some((row) => row.ticker === ticker)) return NextResponse.json({ ok: false, error: `${ticker} đã có canonical thesis.` }, { status: 409 })
 
-    const scanner = await getScannerData()
+    const scanner = await getScannerDataFresh()
     if (!scanner.universe.some((row) => row.ticker === ticker)) return NextResponse.json({ ok: false, error: `${ticker} không nằm trong scanner universe hiện tại.` }, { status: 404 })
 
     const now = new Date()
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
 
     const vnindex = research.theses.find((row) => row.ticker === "VNINDEX")
     const result = await promoteDraftToNotion(draft, vnindex?.marketRegime || "Neutral")
+    await invalidateResearchDataCache()
     return NextResponse.json({ ok: true, ticker, thesisId: result.thesis.id, thesisUrl: result.thesis.url, logId: result.log.id, probabilities: { bull: draft.bullProbability, base: draft.baseProbability, bear: draft.bearProbability } })
   } catch (error) {
     console.error("[QeoIndex promote]", error)

@@ -8,9 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "lint:touched": "eslint lib/scanner-policy.ts lib/scanner-runner.ts lib/scanner-data.ts lib/intraday-5m.ts lib/yahoo-history.ts lib/fa-screen-data.ts app/api/scanner/health/route.ts app/api/market/intraday/route.ts app/research/fa/page.tsx app/research/loading.tsx components/research/scanner-app.tsx components/research/fa-screen-app.tsx components/live-market-board-v2.tsx components/live-market-stock.tsx components/ticker-research-link.tsx components/top-nav.tsx tests/intraday-5m.test.ts tests/market-board-visual-contract.test.ts tests/fa-screen-data.test.ts tests/navigation-prefetch.test.ts",
+    "lint:touched": "eslint lib/scanner-policy.ts lib/scanner-runner.ts lib/scanner-data.ts lib/research-data.ts lib/ui-data-cache.ts lib/intraday-5m.ts lib/yahoo-history.ts lib/fa-screen-data.ts app/api/scanner/health/route.ts app/api/market/intraday/route.ts app/api/research/promote/route.ts app/research/fa/page.tsx app/research/loading.tsx components/research/scanner-app.tsx components/research/fa-screen-app.tsx components/live-market-board-v2.tsx components/live-market-stock.tsx components/ticker-research-link.tsx components/top-nav.tsx tests/intraday-5m.test.ts tests/market-board-visual-contract.test.ts tests/fa-screen-data.test.ts tests/navigation-prefetch.test.ts tests/ui-read-cache.test.ts",
     "scan:secrets": "bash scripts/scan-secrets.sh",
-    "test:core": "pnpm test:universe && pnpm test:intraday && pnpm test:indexes && pnpm test:scanner-core && pnpm test:signal-core && pnpm test:board-contract && pnpm test:fa && pnpm test:navigation",
+    "test:core": "pnpm test:universe && pnpm test:intraday && pnpm test:indexes && pnpm test:scanner-core && pnpm test:signal-core && pnpm test:board-contract && pnpm test:fa && pnpm test:navigation && pnpm test:ui-cache",
     "test:signal-core": "node --test tests/signal-engine.test.ts",
     "test:scanner-core": "node --test tests/scanner-policy.test.ts",
     "test:intraday": "node --test tests/intraday-5m.test.ts",
@@ -19,6 +19,7 @@
     "test:board-contract": "node --test tests/market-board-visual-contract.test.ts",
     "test:fa": "node --test tests/fa-screen-data.test.ts",
     "test:navigation": "node --test tests/navigation-prefetch.test.ts",
+    "test:ui-cache": "node --test tests/ui-read-cache.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
