@@ -144,10 +144,10 @@ function getWhaleLabel(price?: number | null, spread?: number | null): string {
   return threshold >= 50_000 ? "≥50K" : "≥30K"
 }
 
-const DEFAULT_WIDTH = 460
-const MIN_WIDTH = 460
-const MIN_HEIGHT = 440
-const DEFAULT_HEIGHT = 440
+const DEFAULT_WIDTH = 740
+const MIN_WIDTH = 660
+const MIN_HEIGHT = 600
+const DEFAULT_HEIGHT = 740
 
 function number(value: unknown) {
   const result = typeof value === "number" ? value : Number(value)
@@ -1711,11 +1711,21 @@ export function LiveOrderBookPanel({
   const [reconnectKey, setReconnectKey] = useState(0)
 
   // Window sizing & positioning
-  const [size, setSize] = useState<{ width: number; height: number }>({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
-  const [pos, setPos] = useState(() => ({
-    x: Math.max(16, 32 + (index % 4) * 44),
-    y: Math.max(50, 72 + (index % 5) * 36),
-  }))
+  const [size, setSize] = useState<{ width: number; height: number }>(() => {
+    if (typeof window === "undefined") return { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT }
+    return {
+      width: Math.min(DEFAULT_WIDTH, Math.max(340, window.innerWidth - 32)),
+      height: Math.min(DEFAULT_HEIGHT, Math.max(400, window.innerHeight - 64)),
+    }
+  })
+  const [pos, setPos] = useState(() => {
+    if (typeof window === "undefined") return { x: 32, y: 50 }
+    const initialW = Math.min(DEFAULT_WIDTH, window.innerWidth - 32)
+    const initialH = Math.min(DEFAULT_HEIGHT, window.innerHeight - 64)
+    const centerX = Math.max(16, Math.floor((window.innerWidth - initialW) / 2) + (index % 4) * 24)
+    const centerY = Math.max(40, Math.floor((window.innerHeight - initialH) / 2) + (index % 4) * 20)
+    return { x: centerX, y: centerY }
+  })
 
   const panelRef = useRef<HTMLElement>(null)
   const isInteractingRef = useRef(false)
@@ -2080,7 +2090,7 @@ export function LiveOrderBookPanel({
   return (
     <section
       ref={panelRef}
-      className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-xl border border-border-strong bg-[#141515] shadow-2xl shadow-black/80 will-change-[width,height,left,top] ${
+      className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-xl border border-[#2e3133] bg-[#141515]/95 backdrop-blur-2xl shadow-[0_25px_70px_rgba(0,0,0,0.95),0_0_0_1px_rgba(255,255,255,0.08)] will-change-[width,height,left,top] ${
         isMaximized ? "fixed" : ""
       } ${!isInteracting ? "transition-[width,height,left,top] duration-150 ease-out" : "select-none"}`}
       style={panelStyle}
@@ -2353,7 +2363,7 @@ export function LiveOrderBookPanel({
                 {activityTab === "trades" && (
                   <div className="flex flex-col flex-1 space-y-2.5">
                     {/* Split 2-Panel Layout: Left = Tape (Khớp lệnh), Right = Khối ngoại NN + Lực mua/bán & Thông số */}
-                    <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-2.5 flex-1 min-h-0">
+                    <div className="grid grid-cols-[1.25fr_1fr] gap-2.5 flex-1 min-h-0">
                       {/* Left: Tape Table with increased font size */}
                       {visibleTrades.length ? (
                         <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col min-h-0">
