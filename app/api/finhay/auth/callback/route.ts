@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     await clearFinhayOAuthAttempt()
     destination.searchParams.set("finhay", "connected")
   } catch (error) {
-    console.error("[StockOS Finhay] auth callback failed", error)
+    console.error("[QeoIndex Finhay] auth callback failed", error)
     await clearFinhayOAuthAttempt()
     destination.searchParams.set("finhay", "auth-error")
   }

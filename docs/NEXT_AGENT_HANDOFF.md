@@ -4,7 +4,7 @@ Copy the block below into the next agent's task. Detailed architecture and opera
 
 ---
 
-You are continuing work on StockOS in `/Users/quyentat/_www/qeoindex`.
+You are continuing work on QeoIndex in `/Users/quyentat/_www/qeoindex`.
 
 ## Read first
 
@@ -17,7 +17,10 @@ Do not discard, reset, or overwrite unrelated work. The Top 100/EOD/index-fallba
 
 ## Current production state
 
-- Stable URL: <https://stockos-beryl.vercel.app>
+- Product: QeoIndex — `Đọc thị trường. Giữ kỷ luật.`
+- Official domain: <https://qeoindex.qeoqeo.com>
+- Legacy Vercel fallback alias: <https://stockos-beryl.vercel.app>
+- The existing Vercel project slug `tvqqq/stockos` is an infrastructure identifier, not the public product brand.
 - Main release includes the consolidated Top 100 HOSE board and handoff documentation.
 - Notion is the source of truth for Top 100 membership, rank, market cap, and canonical sector.
 - Board layout has six visual groups. Energy and Utilities render inside `Các ngành còn lại` without changing canonical sector values.
@@ -103,10 +106,10 @@ If runtime behavior changes and deployment is authorized:
 
 ```bash
 pnpm exec vercel --prod --yes
-curl -sS https://stockos-beryl.vercel.app/api/market/indexes
+curl -sS https://qeoindex.qeoqeo.com/api/market/indexes
 ```
 
-Confirm the deployment is `READY`, the stable alias is updated, the home page returns successfully, and changed APIs contain valid data.
+Confirm the deployment is `READY`, the official domain serves the release, the legacy fallback alias still works if retained, the home page returns successfully, and changed APIs contain valid data.
 
 ## Guardrails
 
@@ -118,6 +121,7 @@ Confirm the deployment is `READY`, the stable alias is updated, the home page re
 - Do not claim a scanner batch is complete from progress output; query final persisted state.
 - Do not report deployment success as a smoke test without checking the live page/API values.
 - Do not claim screenshot/pixel visual QA from source-contract tests alone.
+- Preserve legacy technical identifiers when changing them would invalidate sessions or integrations; public branding remains QeoIndex.
 
 ## Final report format
 

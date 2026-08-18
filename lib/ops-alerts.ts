@@ -2,6 +2,7 @@ import "server-only"
 
 import { getToken } from "@vercel/connect"
 
+// Keep the existing connector id for compatibility with the configured Vercel integration.
 const DEFAULT_CONNECTOR = "slack/stockos"
 const DEDUPE_MS = 5 * 60 * 1000
 const recentAlerts = new Map<string, number>()
@@ -38,7 +39,7 @@ function connectorId() {
 
 function channelCandidates() {
   const configured = process.env.SLACK_ALERT_CHANNEL?.trim()
-  const names = [configured, "stockos-alerts", "stockos", "alerts", "general"]
+  const names = [configured, "qeoindex-alerts", "qeoindex", "stockos-alerts", "stockos", "alerts", "general"]
   return [...new Set(names.filter(Boolean).map((name) => String(name).replace(/^#/, "").toLowerCase()))]
 }
 
@@ -113,7 +114,7 @@ export async function getSlackOpsHealth() {
     bot: auth.user ?? auth.user_id ?? "connected",
     channel,
     message: channel
-      ? `Slack connector sẵn sàng gửi StockOS ops alerts vào #${channel.name}.`
+      ? `Slack connector sẵn sàng gửi QeoIndex ops alerts vào #${channel.name}.`
       : `Slack connector hoạt động nhưng chưa tìm thấy channel: ${channelCandidates().map((name) => `#${name}`).join(", ")}.`,
   }
 }
@@ -126,7 +127,7 @@ export async function notifyOpsError(input: OpsErrorInput) {
     const token = await slackToken()
     const channel = await resolveChannel(token)
     if (!channel) {
-      console.warn("[ops-alert] Slack connected but no StockOS alert channel could be resolved")
+      console.warn("[ops-alert] Slack connected but no QeoIndex alert channel could be resolved")
       return { sent: false, reason: "channel-not-found" }
     }
 
@@ -136,7 +137,7 @@ export async function notifyOpsError(input: OpsErrorInput) {
     const details = [location, input.status ? `HTTP ${input.status}` : "", metadata].filter(Boolean).join(" · ")
     const stack = input.stack?.trim().slice(0, 1600)
     const text = [
-      `:rotating_light: *StockOS production error*`,
+      `:rotating_light: *QeoIndex production error*`,
       `*Source:* ${input.source}`,
       details ? `*Context:* ${details}` : "",
       `*Error:* ${input.message.slice(0, 1800)}`,

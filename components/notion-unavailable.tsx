@@ -1,7 +1,7 @@
 import { AlertTriangle, Database } from "lucide-react"
 import { TopNav } from "@/components/top-nav"
 
-export function NotionUnavailable({ section = "StockOS", detail }: { section?: string; detail?: string }) {
+export function NotionUnavailable({ section = "QeoIndex", detail }: { section?: string; detail?: string }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <TopNav />

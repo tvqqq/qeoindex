@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { GitCommit } from "lucide-react"
+import { BRAND } from "@/lib/brand"
 
 const NAV = [
   { label: "Bảng điện", href: "/" },
@@ -35,13 +36,13 @@ export function TopNav() {
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-panel px-4">
       <div className="flex min-w-0 items-center gap-5 xl:gap-8">
-        <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="StockOS">
+        <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label={BRAND.name}>
           <img src="/brand/stockos-mark.svg" alt="" className="h-9 w-9 shrink-0" />
           <div className="flex flex-col leading-none">
             <span className="text-base font-bold tracking-[-0.02em] text-foreground">
-              Stock<span className="text-brand">OS</span>
+              Qeo<span className="text-brand">Index</span>
             </span>
-            <span className="text-[10px] text-muted">Bộ công cụ đầu tư</span>
+            <span className="text-[10px] text-muted">{BRAND.slogan}</span>
           </div>
         </Link>
 

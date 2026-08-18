@@ -1,13 +1,15 @@
-# StockOS engineering handover
+# QeoIndex engineering handover
 
-Last updated: 2026-08-17. This is the canonical fast-start document for agents and maintainers.
+Last updated: 2026-08-18. This is the canonical fast-start document for agents and maintainers.
 
 ## Product and production
 
-- Product: StockOS, a realtime/EOD Vietnamese stock board plus research, scanner, recommendation, and signal workflows.
+- Product: QeoIndex — a realtime/EOD Vietnamese stock board plus research, scanner, recommendation, and signal workflows.
+- Brand slogan: `Đọc thị trường. Giữ kỷ luật.`
+- Official domain: <https://qeoindex.qeoqeo.com>.
 - Framework: Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4, pnpm.
-- Production: <https://stockos-beryl.vercel.app>.
-- Vercel project: `tvqqq/stockos`.
+- Vercel project: `tvqqq/stockos` remains the legacy infrastructure slug; it is not the product brand.
+- Infrastructure fallback alias: <https://stockos-beryl.vercel.app>.
 - Primary page: `app/page.tsx` renders `components/live-market-board-v2.tsx` inside the order-book provider.
 
 Read `AGENTS.md` before editing. This repository uses a Next.js version with local, version-specific documentation under `node_modules/next/dist/docs/`; do not assume older Next.js behavior.
@@ -100,6 +102,7 @@ Use `.env.example` as the inventory. Main categories are Notion data-source IDs/
 - Never print tokens in logs or handover documents.
 - Run `pnpm scan:secrets` before release.
 - DNSE credentials exposed before the P0 cleanup must remain rotated; see `docs/security.md`.
+- Legacy identifiers such as existing `stockos_*` cookie names or connector IDs may be retained deliberately to preserve sessions/integrations; do not treat them as public branding.
 
 ## Validation matrix
 
@@ -125,8 +128,8 @@ Use `.env.example` as the inventory. Main categories are Notion data-source IDs/
 3. Run `pnpm typecheck` and `pnpm build --webpack`.
 4. Run `pnpm scan:secrets` for release/security-sensitive changes.
 5. Deploy with `pnpm exec vercel --prod --yes` only when deployment is authorized or explicitly part of the task.
-6. Confirm the deployment reaches `READY` and aliases to `stockos-beryl.vercel.app`.
-7. Smoke the page and any changed API. For market data, inspect actual values/errors, not only HTTP status.
+6. Confirm the deployment reaches `READY`; the official domain is `qeoindex.qeoqeo.com`. The legacy `stockos-beryl.vercel.app` alias may remain as an infrastructure fallback.
+7. Smoke the official page and any changed API. For market data, inspect actual values/errors, not only HTTP status.
 
 ## Fast debugging guide
 

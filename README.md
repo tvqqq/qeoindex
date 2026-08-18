@@ -1,6 +1,10 @@
-# StockOS / qeoindex
+# QeoIndex
 
-StockOS is a Vietnamese market board and Wyckoff research workspace built with Next.js 16, React 19, Notion, DNSE, Yahoo Finance, TradingView, and optional Upstash Redis. Production: <https://stockos-beryl.vercel.app>.
+**Đọc thị trường. Giữ kỷ luật.**
+
+QeoIndex is a Vietnamese market board and Wyckoff research workspace built with Next.js 16, React 19, Notion, DNSE, Yahoo Finance, TradingView, and optional Upstash Redis.
+
+Official domain: <https://qeoindex.qeoqeo.com>.
 
 ## Start here
 
@@ -43,10 +47,10 @@ Full-repository lint currently includes pre-existing failures in unrelated/gener
 
 ## Production deployment
 
-The Vercel project is `tvqqq/stockos`; the stable production alias is <https://stockos-beryl.vercel.app>.
+The product is **QeoIndex**. The existing Vercel infrastructure project remains `tvqqq/stockos` as a legacy deployment identifier; do not treat that slug as the product brand. The official public domain is <https://qeoindex.qeoqeo.com>. The `stockos-beryl.vercel.app` alias is retained only as an infrastructure fallback until it is explicitly retired.
 
 ```bash
 pnpm exec vercel --prod --yes
 ```
 
-After deployment, verify the page and the APIs touched by the change. Deployment success alone is not a production smoke test.
+After deployment, verify the official domain, the fallback Vercel alias, and the APIs touched by the change. Deployment success alone is not a production smoke test.

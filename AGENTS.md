@@ -8,7 +8,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-## StockOS project orientation
+## QeoIndex project orientation
 
 - Read `docs/HANDOVER.md` after this file. It is the canonical architecture, source-of-truth, validation, deployment, and troubleshooting guide.
 - Use `docs/market-board.md` for the detailed realtime/EOD market-board data flow.

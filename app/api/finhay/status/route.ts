@@ -11,7 +11,7 @@ export async function GET() {
     return NextResponse.json({
       connected: false,
       state: "AUTH_REQUIRED",
-      message: "StockOS chưa có phiên OAuth Finhay riêng.",
+      message: "QeoIndex chưa có phiên OAuth Finhay riêng.",
       connectUrl: "/api/finhay/auth/start",
     })
   }
@@ -21,14 +21,14 @@ export async function GET() {
     return NextResponse.json({
       connected: true,
       state: "LIVE",
-      message: "Finhay MCP đã xác thực cho StockOS.",
+      message: "Finhay MCP đã xác thực cho QeoIndex.",
       exchange: "HOSE",
       session: session.exchange_session ?? session.session ?? "UNKNOWN",
       availableOrderTypes: session.available_order_types ?? [],
       checkedAt: new Date().toISOString(),
     })
   } catch (error) {
-    console.error("[StockOS Finhay] status probe failed", error)
+    console.error("[QeoIndex Finhay] status probe failed", error)
     return NextResponse.json({
       connected: false,
       state: "ERROR",

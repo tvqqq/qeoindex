@@ -36,7 +36,7 @@ export async function GET(request: Request) {
 
     return NextResponse.redirect(authorize)
   } catch (error) {
-    console.error("[StockOS Finhay] auth start failed", error)
+    console.error("[QeoIndex Finhay] auth start failed", error)
     const url = new URL("/research", request.url)
     url.searchParams.set("finhay", "auth-start-error")
     return NextResponse.redirect(url)
