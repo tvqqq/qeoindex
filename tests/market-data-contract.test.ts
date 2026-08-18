@@ -100,9 +100,9 @@ test("foreign flow normalizer guarantees consistent numeric metrics and net calc
   assert.equal(flow.totalBuyVolume, 100000)
   assert.equal(flow.totalSellVolume, 40000)
   assert.equal(flow.foreignNetVolume, 60000)
-  assert.equal(flow.totalBuyValue, 2185000)
-  assert.equal(flow.totalSellValue, 874000)
-  assert.equal(flow.foreignNetValue, 1311000)
+  assert.equal(flow.totalBuyValue, 218500000)
+  assert.equal(flow.totalSellValue, 87400000)
+  assert.equal(flow.foreignNetValue, 131100000)
   assert.equal(flow.foreignRoom, 50000000)
 })
 

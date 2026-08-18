@@ -208,19 +208,63 @@ function normalizeDepth(rows: unknown): DepthLevel[] {
     .filter((row) => row.price > 0 && row.volume >= 0)
 }
 
-function normalizeTime(value: unknown) {
+function normalizeTime(value: unknown): string {
+  if (value == null || value === "") return "09:15:00"
+  const str = String(value).trim()
+  if (/^\d{2}:\d{2}:\d{2}$/.test(str)) return str
+  if (/^\d{2}:\d{2}$/.test(str)) return `${str}:00`
+
   if (typeof value === "number") {
+    if (value >= 0 && value < 86400) {
+      const hrs = Math.floor(value / 3600) % 24
+      const mins = Math.floor((value % 3600) / 60)
+      const secs = Math.floor(value % 60)
+      return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+    }
     const millis = value > 10_000_000_000 ? value : value * 1000
-    return new Date(millis).toISOString()
+    return new Date(millis).toLocaleTimeString("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
   }
+
   if (value && typeof value === "object") {
     const seconds = number((value as any).Seconds ?? (value as any).seconds)
     const nanos = number((value as any).Nanos ?? (value as any).nanos)
-    if (seconds > 0) return new Date((seconds + nanos / 1e9) * 1000).toISOString()
+    if (seconds > 0) {
+      return new Date((seconds + nanos / 1e9) * 1000).toLocaleTimeString("vi-VN", {
+        timeZone: "Asia/Ho_Chi_Minh",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      })
+    }
   }
-  const text = String(value ?? "")
-  const parsed = Date.parse(text)
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date().toISOString()
+
+  const num = Number(str)
+  if (Number.isFinite(num) && num >= 0 && num < 86400) {
+    const hrs = Math.floor(num / 3600) % 24
+    const mins = Math.floor((num % 3600) / 60)
+    const secs = Math.floor(num % 60)
+    return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+  }
+
+  const parsed = Date.parse(str)
+  if (Number.isFinite(parsed)) {
+    return new Date(parsed).toLocaleTimeString("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+  }
+
+  return "09:15:00"
 }
 
 function timeLabel(value: string | number) {

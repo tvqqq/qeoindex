@@ -184,10 +184,14 @@ async function syncAll() {
       )
     }
 
-    const buyVal = Number(q.fBValue || 0)
-    const sellVal = Number(q.fSValue || 0)
+    let buyVal = Number(q.fBValue || 0)
+    let sellVal = Number(q.fSValue || 0)
     const buyVol = Number(q.fBVol || 0)
     const sellVol = Number(q.fSVolume || 0)
+    if (buyVol > 0 && buyVal > 0 && buyVal < buyVol * 1000) buyVal = buyVal * 100
+    if (sellVol > 0 && sellVal > 0 && sellVal < sellVol * 1000) sellVal = sellVal * 100
+    if (buyVal <= 0 && buyVol > 0 && lastPrice) buyVal = buyVol * lastPrice * 1000
+    if (sellVal <= 0 && sellVol > 0 && lastPrice) sellVal = sellVol * lastPrice * 1000
 
     records.push({
       symbol: ticker,
@@ -215,10 +219,10 @@ async function syncAll() {
       foreign_flow: {
         totalBuyVolume: buyVol,
         totalSellVolume: sellVol,
-        totalBuyValue: buyVal,
-        totalSellValue: sellVal,
+        totalBuyValue: Math.round(buyVal),
+        totalSellValue: Math.round(sellVal),
         foreignNetVolume: buyVol - sellVol,
-        foreignNetValue: buyVal - sellVal,
+        foreignNetValue: Math.round(buyVal - sellVal),
         foreignRoom: Number(q.fRoom || 0),
         updatedAt: new Date().toISOString(),
       },
