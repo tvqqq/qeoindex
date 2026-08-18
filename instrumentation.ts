@@ -3,7 +3,7 @@ import type { Instrumentation } from "next"
 export const onRequestError: Instrumentation.onRequestError = async (error, request, context) => {
   const message = error instanceof Error ? error.message : String(error)
 
-  console.error("[StockOS server error]", {
+  console.error("[QeoIndex server error]", {
     message,
     path: request.path,
     method: request.method,
@@ -28,7 +28,7 @@ export const onRequestError: Instrumentation.onRequestError = async (error, requ
     })
   } catch (reportError) {
     console.error(
-      "[StockOS server error] Slack reporting failed",
+      "[QeoIndex server error] Slack reporting failed",
       reportError instanceof Error ? reportError.message : String(reportError),
     )
   }
