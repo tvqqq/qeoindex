@@ -25,14 +25,19 @@ type UiCacheOptions<T> = {
   ttlSeconds: number
   validate: (value: unknown) => value is T
   shouldCache?: (value: T) => boolean
+  useSharedRedis?: boolean
   load: () => Promise<T>
 }
 
-type UiCacheInvalidation = Pick<UiCacheOptions<unknown>, "namespace" | "key" | "tag">
+type UiCacheInvalidation = Pick<UiCacheOptions<unknown>, "namespace" | "key" | "tag"> & {
+  useSharedRedis?: boolean
+}
 
 /**
  * Short-lived read-through cache for UI-facing canonical data.
  * Vercel Runtime Cache is the regional L1; Upstash Redis is an optional shared L2.
+ * Dynamic route projections may opt out of Redis when their key space cannot be
+ * enumerated safely for immediate write invalidation.
  * The canonical loader remains authoritative and cache failures always fail open.
  */
 export async function readThroughUiCache<T>({
@@ -43,6 +48,7 @@ export async function readThroughUiCache<T>({
   ttlSeconds,
   validate,
   shouldCache = () => true,
+  useSharedRedis = true,
   load,
 }: UiCacheOptions<T>): Promise<T> {
   const cache = getCache({ namespace })
@@ -54,7 +60,7 @@ export async function readThroughUiCache<T>({
     // Runtime Cache is an optimization; continue to Redis/canonical source.
   }
 
-  const redisClient = getRedis()
+  const redisClient = useSharedRedis ? getRedis() : null
   const redisKey = sharedRedisKey(namespace, key)
   if (redisClient) {
     try {
@@ -83,9 +89,9 @@ export async function readThroughUiCache<T>({
 }
 
 /** Globally expires the Runtime Cache tag and removes the shared Redis copy. */
-export async function invalidateUiCache({ namespace, key, tag }: UiCacheInvalidation) {
+export async function invalidateUiCache({ namespace, key, tag, useSharedRedis = true }: UiCacheInvalidation) {
   const cache = getCache({ namespace })
-  const redisClient = getRedis()
+  const redisClient = useSharedRedis ? getRedis() : null
   const redisKey = sharedRedisKey(namespace, key)
 
   await Promise.allSettled([

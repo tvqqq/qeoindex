@@ -1,10 +1,18 @@
 import type { DailyScanRow } from "@/lib/scanner-data"
 import type { BuyDecision, ExitDecision, LiveQuote, OpenRecommendationState } from "@/lib/signal-engine"
 import { SIGNAL_ENGINE_VERSION } from "@/lib/signal-engine"
+import { invalidateUiCache, readThroughUiCache } from "@/lib/ui-data-cache"
 
 const NOTION_VERSION = "2026-03-11"
 export const RECOMMENDATIONS_DATA_SOURCE_ID = process.env.NOTION_TRADE_RECOMMENDATIONS_DATA_SOURCE_ID ?? "22e1f263-7d3b-41e3-b73e-91df40cf2a2b"
 export const SIGNAL_EVENTS_DATA_SOURCE_ID = process.env.NOTION_SIGNAL_EVENTS_DATA_SOURCE_ID ?? "c8771442-368d-4f6a-9549-4859ce869780"
+const SIGNAL_UI_CACHE = {
+  namespace: "signal-ui-read-model-v1",
+  key: "latest",
+  tag: "qeoindex-signal-ui-read-model-v1",
+  name: "QeoIndex Signals UI projection",
+  ttlSeconds: 20,
+} as const
 
 export interface TradeRecommendation extends OpenRecommendationState {
   notionUrl: string
@@ -49,6 +57,12 @@ export interface SignalEventRow {
   vnindex: number | null
 }
 
+export interface SignalUiData {
+  generatedAt: string
+  recommendations: TradeRecommendation[]
+  events: SignalEventRow[]
+}
+
 function token() {
   return process.env.NOTION_API_KEY ?? process.env.NOTION_TOKEN ?? ""
 }
@@ -64,11 +78,24 @@ function date(prop: any) { return prop?.date?.start ?? "" }
 function rich(value: string) { return { rich_text: value ? [{ type: "text", text: { content: value.slice(0, 1900) } }] : [] } }
 function num(value: number | null | undefined) { return { number: typeof value === "number" && Number.isFinite(value) ? value : null } }
 
-async function query(dataSourceId: string, body: Record<string, unknown> = {}) {
-  const response = await fetch(`https://api.notion.com/v1/data_sources/${dataSourceId}/query`, { method: "POST", headers: headers(), body: JSON.stringify({ page_size: 100, ...body }), cache: "no-store" })
-  const payload = await response.json()
-  if (!response.ok) throw new Error(`Notion signal query failed (${response.status}): ${JSON.stringify(payload).slice(0, 280)}`)
-  return payload.results ?? []
+async function query(dataSourceId: string, body: Record<string, unknown> = {}, maxPages = 1) {
+  const results: any[] = []
+  let startCursor: string | undefined
+  for (let page = 0; page < maxPages; page += 1) {
+    const response = await fetch(`https://api.notion.com/v1/data_sources/${dataSourceId}/query`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ page_size: 100, ...body, ...(startCursor ? { start_cursor: startCursor } : {}) }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    })
+    const payload = await response.json()
+    if (!response.ok) throw new Error(`Notion signal query failed (${response.status}): ${JSON.stringify(payload).slice(0, 280)}`)
+    results.push(...(payload.results ?? []))
+    if (!payload.has_more || !payload.next_cursor) break
+    startCursor = payload.next_cursor
+  }
+  return results
 }
 
 function parseRecommendation(page: any): TradeRecommendation | null {
@@ -91,6 +118,12 @@ function parseEvent(page: any): SignalEventRow | null {
   return { id: page.id, notionUrl: page.url ?? "", ticker, type: select(props.Type), signalTime: date(props["Signal Time"]), price: number(props.Price), volume: number(props.Volume), relVolume: number(props["Rel Volume"]), rule: text(props.Rule), provider: select(props.Provider), scanDate: date(props["Scan Date"]), dailyBias: select(props["Daily Bias"]), stopPrice: number(props["Stop Price"]), vnindex: number(props.VNINDEX) }
 }
 
+function isSignalUiData(value: unknown): value is SignalUiData {
+  if (!value || typeof value !== "object") return false
+  const data = value as Partial<SignalUiData>
+  return typeof data.generatedAt === "string" && Array.isArray(data.recommendations) && Array.isArray(data.events)
+}
+
 export async function getRecommendations() {
   if (!token()) return [] as TradeRecommendation[]
   const pages = await query(RECOMMENDATIONS_DATA_SOURCE_ID, { sorts: [{ property: "Buy Signal", direction: "descending" }] })
@@ -101,7 +134,35 @@ export async function getSignalEvents() {
   const pages = await query(SIGNAL_EVENTS_DATA_SOURCE_ID, { sorts: [{ property: "Signal Time", direction: "descending" }] })
   return pages.map(parseEvent).filter(Boolean) as SignalEventRow[]
 }
-export async function getOpenRecommendations() { return (await getRecommendations()).filter((row) => row.status === "Open") }
+
+/** Operational monitor path: query all currently Open recommendations directly from Notion. */
+export async function getOpenRecommendationsFresh() {
+  if (!token()) return [] as TradeRecommendation[]
+  const pages = await query(RECOMMENDATIONS_DATA_SOURCE_ID, {
+    filter: { property: "Status", select: { equals: "Open" } },
+    sorts: [{ property: "Buy Signal", direction: "descending" }],
+  }, 5)
+  return pages.map(parseRecommendation).filter(Boolean) as TradeRecommendation[]
+}
+
+/** Backward-compatible operational alias; intentionally not UI-cached. */
+export async function getOpenRecommendations() {
+  return getOpenRecommendationsFresh()
+}
+
+async function loadSignalUiData(): Promise<SignalUiData> {
+  const [recommendations, events] = await Promise.all([getRecommendations(), getSignalEvents()])
+  return { generatedAt: new Date().toISOString(), recommendations, events }
+}
+
+export async function getSignalUiData(): Promise<SignalUiData> {
+  if (!token()) return { generatedAt: new Date().toISOString(), recommendations: [], events: [] }
+  return readThroughUiCache({ ...SIGNAL_UI_CACHE, validate: isSignalUiData, load: loadSignalUiData })
+}
+
+export async function invalidateSignalDataCache() {
+  await invalidateUiCache(SIGNAL_UI_CACHE)
+}
 
 export async function createBuyRecommendation(args: { scan: DailyScanRow; quote: LiveQuote; decision: BuyDecision; vnindex: number | null }) {
   if (!args.decision.signal || args.decision.stopPrice == null) throw new Error("Cannot persist non-BUY decision")
@@ -115,6 +176,7 @@ export async function createBuyRecommendation(args: { scan: DailyScanRow; quote:
   const response = await fetch("https://api.notion.com/v1/pages", { method: "POST", headers: headers(), body: JSON.stringify({ parent: { data_source_id: RECOMMENDATIONS_DATA_SOURCE_ID }, properties }), cache: "no-store" })
   const payload = await response.json()
   if (!response.ok) throw new Error(`Notion BUY recommendation write failed (${response.status}): ${JSON.stringify(payload).slice(0, 300)}`)
+  await invalidateSignalDataCache()
   return parseRecommendation(payload)!
 }
 
@@ -134,6 +196,7 @@ async function patchPage(pageId: string, properties: Record<string, any>) {
   const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, { method: "PATCH", headers: headers(), body: JSON.stringify({ properties }), cache: "no-store" })
   const payload = await response.json()
   if (!response.ok) throw new Error(`Notion recommendation update failed (${response.status}): ${JSON.stringify(payload).slice(0, 300)}`)
+  await invalidateSignalDataCache()
   return payload
 }
 
@@ -147,5 +210,6 @@ export async function createSignalEvent(args: { type: "BUY" | "SELL" | "EXIT_FAI
   const response = await fetch("https://api.notion.com/v1/pages", { method: "POST", headers: headers(), body: JSON.stringify({ parent: { data_source_id: SIGNAL_EVENTS_DATA_SOURCE_ID }, properties }), cache: "no-store" })
   const payload = await response.json()
   if (!response.ok) throw new Error(`Notion signal event write failed (${response.status}): ${JSON.stringify(payload).slice(0, 300)}`)
+  await invalidateSignalDataCache()
   return parseEvent(payload)
 }

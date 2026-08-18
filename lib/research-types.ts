@@ -69,10 +69,21 @@ export interface ResearchConnection {
   message: string
 }
 
+export interface ResearchStats {
+  pendingReviews?: number
+}
+
+export interface ResearchPagination {
+  hasMore: boolean
+  nextCursor: string | null
+}
+
 export interface ResearchData {
   source: "notion"
   generatedAt: string
   connection: ResearchConnection
   theses: Thesis[]
   logs: AnalysisLog[]
+  stats?: ResearchStats
+  pagination?: ResearchPagination
 }

@@ -15,12 +15,32 @@ const STOCK_THESIS_DATA_SOURCE_ID = process.env.NOTION_STOCK_THESIS_DATA_SOURCE_
 const ANALYSIS_LOG_DATA_SOURCE_ID = process.env.NOTION_ANALYSIS_LOG_DATA_SOURCE_ID ?? "3642cc21-8280-44e2-bad6-93f9472ce793"
 const NOTION_VERSION = "2026-03-11"
 const RESEARCH_CACHE = {
-  namespace: "research-read-model-v1",
-  key: "canonical",
-  tag: "qeoindex-research-read-model-v1",
-  name: "QeoIndex Research canonical read model",
+  namespace: "research-read-model-v2",
+  tag: "qeoindex-research-read-model-v2",
   ttlSeconds: 60,
 } as const
+const LOG_SORTS = [{ property: "Date", direction: "descending" }] as const
+const PENDING_FILTER = {
+  or: [
+    { property: "Actual Scenario", select: { equals: "Unresolved" } },
+    { property: "Actual Scenario", select: { is_empty: true } },
+  ],
+} as const
+
+type QueryOptions = {
+  filter?: Record<string, unknown>
+  sorts?: ReadonlyArray<Record<string, unknown>>
+  pageSize?: number
+  startCursor?: string
+  maxPages?: number
+  filterProperties?: string[]
+}
+
+type QueryResult = {
+  results: any[]
+  hasMore: boolean
+  nextCursor: string | null
+}
 
 function token() {
   return process.env.NOTION_API_KEY ?? process.env.NOTION_TOKEN ?? ""
@@ -64,15 +84,25 @@ function relationIds(property: any): string[] {
   return (property?.relation ?? []).map((item: any) => item?.id).filter(Boolean)
 }
 
-async function queryDataSource(dataSourceId: string) {
+async function queryDataSource(dataSourceId: string, options: QueryOptions = {}): Promise<QueryResult> {
   const results: any[] = []
-  let startCursor: string | undefined
-  do {
-    const response = await fetch(`https://api.notion.com/v1/data_sources/${dataSourceId}/query`, {
+  let startCursor = options.startCursor
+  let hasMore = false
+  let nextCursor: string | null = null
+  const maxPages = Math.max(1, options.maxPages ?? 1)
+  const pageSize = Math.max(1, Math.min(100, options.pageSize ?? 100))
+  const query = new URLSearchParams()
+  for (const property of options.filterProperties ?? []) query.append("filter_properties[]", property)
+  const suffix = query.size ? `?${query.toString()}` : ""
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const response = await fetch(`https://api.notion.com/v1/data_sources/${dataSourceId}/query${suffix}`, {
       method: "POST",
       headers: headers(),
       body: JSON.stringify({
-        page_size: 100,
+        page_size: pageSize,
+        ...(options.filter ? { filter: options.filter } : {}),
+        ...(options.sorts ? { sorts: options.sorts } : {}),
         ...(startCursor ? { start_cursor: startCursor } : {}),
       }),
       cache: "no-store",
@@ -83,9 +113,13 @@ async function queryDataSource(dataSourceId: string) {
       throw new Error(`Notion query failed (${response.status}): ${JSON.stringify(payload).slice(0, 280)}`)
     }
     results.push(...(payload.results ?? []))
-    startCursor = payload.has_more ? payload.next_cursor : undefined
-  } while (startCursor)
-  return results
+    hasMore = Boolean(payload.has_more && payload.next_cursor)
+    nextCursor = hasMore ? payload.next_cursor : null
+    if (!hasMore) break
+    startCursor = payload.next_cursor
+  }
+
+  return { results, hasMore, nextCursor }
 }
 
 function asBias(value: string): Bias {
@@ -189,32 +223,170 @@ function isLiveResearchData(value: unknown): value is ResearchData {
     && data.connection?.notionLive === true
 }
 
-async function loadResearchDataCanonical(): Promise<ResearchData> {
-  if (!token()) {
-    return unavailable(false, "Notion chưa được cấu hình cho environment này. QeoIndex không dùng snapshot/backend dự phòng.")
+function connectionMessage(detail: string) {
+  return `Canonical Notion Stock Thesis + Analysis Log; ${detail}; UI read model cache tối đa 60 giây.`
+}
+
+async function loadTheses() {
+  const { results } = await queryDataSource(STOCK_THESIS_DATA_SOURCE_ID, { maxPages: 2 })
+  return sortByUpdated(results.map(parseThesis).filter((row) => row.ticker))
+}
+
+function buildData(theses: Thesis[], logPages: any[], detail: string, extra: Partial<ResearchData> = {}): ResearchData {
+  const tickerByPageId = new Map(theses.map((thesis) => [normalizeId(thesis.id), thesis.ticker] as const))
+  const logs = sortByUpdated(logPages.map((page) => parseLog(page, tickerByPageId)))
+  return {
+    source: "notion",
+    generatedAt: new Date().toISOString(),
+    connection: { notionConfigured: true, notionLive: true, message: connectionMessage(detail) },
+    theses,
+    logs,
+    ...extra,
   }
+}
+
+async function countPendingReviews() {
+  let count = 0
+  let cursor: string | undefined
+  for (let page = 0; page < 100; page += 1) {
+    const result = await queryDataSource(ANALYSIS_LOG_DATA_SOURCE_ID, {
+      filter: PENDING_FILTER as unknown as Record<string, unknown>,
+      pageSize: 100,
+      startCursor: cursor,
+      maxPages: 1,
+      filterProperties: ["Actual Scenario"],
+    })
+    count += result.results.length
+    if (!result.hasMore || !result.nextCursor) break
+    cursor = result.nextCursor
+  }
+  return count
+}
+
+async function loadBoundedResearchData(): Promise<ResearchData> {
+  if (!token()) return unavailable(false, "Notion chưa được cấu hình cho environment này. QeoIndex không dùng snapshot/backend dự phòng.")
   try {
-    const [thesisPages, logPages] = await Promise.all([
-      queryDataSource(STOCK_THESIS_DATA_SOURCE_ID),
-      queryDataSource(ANALYSIS_LOG_DATA_SOURCE_ID),
+    const [theses, logResult] = await Promise.all([
+      loadTheses(),
+      queryDataSource(ANALYSIS_LOG_DATA_SOURCE_ID, { sorts: LOG_SORTS, pageSize: 100, maxPages: 1 }),
     ])
-    const theses = sortByUpdated(thesisPages.map(parseThesis).filter((row) => row.ticker))
-    const tickerByPageId = new Map(theses.map((thesis) => [normalizeId(thesis.id), thesis.ticker] as const))
-    const logs = sortByUpdated(logPages.map((page) => parseLog(page, tickerByPageId)))
-    return {
-      source: "notion",
-      generatedAt: new Date().toISOString(),
-      connection: {
-        notionConfigured: true,
-        notionLive: true,
-        message: "Canonical Notion Stock Thesis + Analysis Log; UI read model được cache tối đa 60 giây.",
-      },
-      theses,
-      logs,
-    }
+    return buildData(theses, logResult.results, "projection mặc định giới hạn 100 Analysis Log mới nhất")
   } catch (error) {
-    console.error("[QeoIndex Research] Notion query failed", error)
+    console.error("[QeoIndex Research] bounded Notion query failed", error)
     return unavailable(true, "Notion đã cấu hình nhưng truy vấn hiện lỗi. QeoIndex không hiển thị dữ liệu stale/fallback.")
+  }
+}
+
+async function loadResearchDataCanonical(): Promise<ResearchData> {
+  if (!token()) return unavailable(false, "Notion chưa được cấu hình cho environment này. QeoIndex không dùng snapshot/backend dự phòng.")
+  try {
+    const [thesisResult, logResult] = await Promise.all([
+      queryDataSource(STOCK_THESIS_DATA_SOURCE_ID, { maxPages: 100 }),
+      queryDataSource(ANALYSIS_LOG_DATA_SOURCE_ID, { sorts: LOG_SORTS, maxPages: 100 }),
+    ])
+    const theses = sortByUpdated(thesisResult.results.map(parseThesis).filter((row) => row.ticker))
+    return buildData(theses, logResult.results, "fresh canonical read cho operational/write path")
+  } catch (error) {
+    console.error("[QeoIndex Research] canonical Notion query failed", error)
+    return unavailable(true, "Notion đã cấu hình nhưng truy vấn hiện lỗi. QeoIndex không hiển thị dữ liệu stale/fallback.")
+  }
+}
+
+async function loadOverview(): Promise<ResearchData> {
+  if (!token()) return loadBoundedResearchData()
+  try {
+    const [theses, pendingReviews] = await Promise.all([loadTheses(), countPendingReviews()])
+    return buildData(theses, [], "overview chỉ đọc thesis + pending-review count", { stats: { pendingReviews } })
+  } catch (error) {
+    console.error("[QeoIndex Research] overview query failed", error)
+    return unavailable(true, "Notion đã cấu hình nhưng truy vấn overview hiện lỗi. QeoIndex không hiển thị dữ liệu stale/fallback.")
+  }
+}
+
+async function loadChanges(): Promise<ResearchData> {
+  if (!token()) return loadBoundedResearchData()
+  try {
+    const theses = await loadTheses()
+    const pages = (await Promise.all(theses.map(async (thesis) => {
+      const result = await queryDataSource(ANALYSIS_LOG_DATA_SOURCE_ID, {
+        filter: { property: "Ticker", relation: { contains: thesis.id } },
+        sorts: LOG_SORTS,
+        pageSize: 2,
+        maxPages: 1,
+      })
+      return result.results
+    }))).flat()
+    return buildData(theses, pages, "changes chỉ đọc hai log mới nhất cho mỗi thesis")
+  } catch (error) {
+    console.error("[QeoIndex Research] changes query failed", error)
+    return unavailable(true, "Notion đã cấu hình nhưng truy vấn changes hiện lỗi. QeoIndex không hiển thị dữ liệu stale/fallback.")
+  }
+}
+
+async function loadLogPage(startCursor?: string): Promise<ResearchData> {
+  if (!token()) return loadBoundedResearchData()
+  try {
+    const [theses, logResult] = await Promise.all([
+      loadTheses(),
+      queryDataSource(ANALYSIS_LOG_DATA_SOURCE_ID, { sorts: LOG_SORTS, pageSize: 50, startCursor, maxPages: 1 }),
+    ])
+    return buildData(theses, logResult.results, "Analysis Log phân trang 50 bản ghi", {
+      pagination: { hasMore: logResult.hasMore, nextCursor: logResult.nextCursor },
+    })
+  } catch (error) {
+    console.error("[QeoIndex Research] log query failed", error)
+    return unavailable(true, "Notion đã cấu hình nhưng truy vấn log hiện lỗi. QeoIndex không hiển thị dữ liệu stale/fallback.")
+  }
+}
+
+async function loadReview(): Promise<ResearchData> {
+  if (!token()) return loadBoundedResearchData()
+  try {
+    const resolvedFilter = {
+      and: [
+        { property: "Actual Scenario", select: { is_not_empty: true } },
+        { property: "Actual Scenario", select: { does_not_equal: "Unresolved" } },
+      ],
+    }
+    const [theses, resolved, pendingReviews] = await Promise.all([
+      loadTheses(),
+      queryDataSource(ANALYSIS_LOG_DATA_SOURCE_ID, { filter: resolvedFilter, sorts: LOG_SORTS, pageSize: 100, maxPages: 3 }),
+      countPendingReviews(),
+    ])
+    return buildData(theses, resolved.results, "review chỉ đọc case đã có Actual Scenario", { stats: { pendingReviews } })
+  } catch (error) {
+    console.error("[QeoIndex Research] review query failed", error)
+    return unavailable(true, "Notion đã cấu hình nhưng truy vấn review hiện lỗi. QeoIndex không hiển thị dữ liệu stale/fallback.")
+  }
+}
+
+async function loadTicker(ticker: string): Promise<ResearchData> {
+  if (!token()) return loadBoundedResearchData()
+  try {
+    const theses = await loadTheses()
+    const thesis = theses.find((row) => row.ticker === ticker.toUpperCase())
+    if (!thesis) return buildData(theses, [], `ticker ${ticker.toUpperCase()} chưa có canonical thesis`)
+    const logs = await queryDataSource(ANALYSIS_LOG_DATA_SOURCE_ID, {
+      filter: { property: "Ticker", relation: { contains: thesis.id } },
+      sorts: LOG_SORTS,
+      pageSize: 100,
+      maxPages: 1,
+    })
+    return buildData(theses, logs.results, `ticker ${ticker.toUpperCase()} chỉ đọc log của chính mã`)
+  } catch (error) {
+    console.error("[QeoIndex Research] ticker query failed", error)
+    return unavailable(true, "Notion đã cấu hình nhưng truy vấn ticker hiện lỗi. QeoIndex không hiển thị dữ liệu stale/fallback.")
+  }
+}
+
+function cacheConfig(key: string, name: string, useSharedRedis = true) {
+  return {
+    ...RESEARCH_CACHE,
+    key,
+    name,
+    useSharedRedis,
+    validate: isLiveResearchData,
+    shouldCache: (value: ResearchData) => value.connection.notionLive,
   }
 }
 
@@ -223,17 +395,51 @@ export async function getResearchDataFresh(): Promise<ResearchData> {
   return loadResearchDataCanonical()
 }
 
-/** UI-facing read path: regional Runtime Cache -> shared Redis -> canonical Notion. */
+/** Backward-compatible bounded UI projection; never scans an unbounded log history. */
 export async function getResearchData(): Promise<ResearchData> {
-  if (!token()) return loadResearchDataCanonical()
+  if (!token()) return loadBoundedResearchData()
+  return readThroughUiCache({ ...cacheConfig("bounded", "QeoIndex Research bounded projection"), load: loadBoundedResearchData })
+}
+
+export async function getResearchOverviewData() {
+  if (!token()) return loadOverview()
+  return readThroughUiCache({ ...cacheConfig("overview", "QeoIndex Research overview"), load: loadOverview })
+}
+
+export async function getResearchChangesData() {
+  if (!token()) return loadChanges()
+  return readThroughUiCache({ ...cacheConfig("changes", "QeoIndex Research changes"), load: loadChanges })
+}
+
+export async function getResearchReviewData() {
+  if (!token()) return loadReview()
+  return readThroughUiCache({ ...cacheConfig("review", "QeoIndex Research review"), load: loadReview })
+}
+
+export async function getResearchLogData(startCursor?: string) {
+  if (!token()) return loadLogPage(startCursor)
+  const cursorKey = startCursor ? startCursor.slice(0, 48) : "first"
   return readThroughUiCache({
-    ...RESEARCH_CACHE,
-    validate: isLiveResearchData,
-    shouldCache: (value) => value.connection.notionLive,
-    load: loadResearchDataCanonical,
+    ...cacheConfig(`log:${cursorKey}`, "QeoIndex Research log page", false),
+    load: () => loadLogPage(startCursor),
+  })
+}
+
+export async function getResearchTickerData(ticker: string) {
+  const normalized = ticker.trim().toUpperCase()
+  if (!token()) return loadTicker(normalized)
+  return readThroughUiCache({
+    ...cacheConfig(`ticker:${normalized}`, `QeoIndex Research ${normalized}`, false),
+    load: () => loadTicker(normalized),
   })
 }
 
 export async function invalidateResearchDataCache() {
-  await invalidateUiCache(RESEARCH_CACHE)
+  const fixed = [
+    cacheConfig("bounded", "QeoIndex Research bounded projection"),
+    cacheConfig("overview", "QeoIndex Research overview"),
+    cacheConfig("changes", "QeoIndex Research changes"),
+    cacheConfig("review", "QeoIndex Research review"),
+  ]
+  await Promise.all(fixed.map((entry) => invalidateUiCache(entry)))
 }

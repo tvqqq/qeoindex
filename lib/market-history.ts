@@ -1,6 +1,7 @@
 import type { OhlcvBar } from "@/lib/technical-indicators"
 import { fetchDailyOhlcv as fetchDnseDailyOhlcv, fetchHourlyOhlcv as fetchDnseHourlyOhlcv } from "@/lib/dnse-history"
 import { fetchYahooDailyOhlcv, fetchYahooHourlyOhlcv } from "@/lib/yahoo-history"
+import { readThroughUiCache } from "@/lib/ui-data-cache"
 
 export type HistoricalProvider = "DNSE" | "Fallback"
 
@@ -22,6 +23,15 @@ function markDnseUnavailable(error: unknown) {
     dnseUnavailableUntil = Date.now() + 5 * 60_000
   }
   return message
+}
+
+function isHistoricalBarsResult(value: unknown): value is HistoricalBarsResult {
+  if (!value || typeof value !== "object") return false
+  const result = value as Partial<HistoricalBarsResult>
+  return Array.isArray(result.bars)
+    && result.bars.length > 0
+    && (result.provider === "DNSE" || result.provider === "Fallback")
+    && typeof result.detail === "string"
 }
 
 export async function fetchDailyMarketHistory(symbol: string, now = new Date()): Promise<HistoricalBarsResult> {
@@ -68,4 +78,31 @@ export async function fetchHourlyMarketHistory(symbol: string, now = new Date())
   }
 
   throw new Error(errors.join(" | ").slice(0, 520))
+}
+
+/** UI-only cross-request history caches. Scanner/signal paths keep using fresh functions above. */
+export async function fetchDailyMarketHistoryUi(symbol: string): Promise<HistoricalBarsResult> {
+  const normalized = symbol.trim().toUpperCase()
+  return readThroughUiCache({
+    namespace: "market-history-ui-v1",
+    key: `daily:${normalized}`,
+    tag: "qeoindex-market-history-ui-v1",
+    name: `QeoIndex ${normalized} Daily history`,
+    ttlSeconds: 15 * 60,
+    validate: isHistoricalBarsResult,
+    load: () => fetchDailyMarketHistory(normalized),
+  })
+}
+
+export async function fetchHourlyMarketHistoryUi(symbol: string): Promise<HistoricalBarsResult> {
+  const normalized = symbol.trim().toUpperCase()
+  return readThroughUiCache({
+    namespace: "market-history-ui-v1",
+    key: `hourly:${normalized}`,
+    tag: "qeoindex-market-history-ui-v1",
+    name: `QeoIndex ${normalized} Hourly history`,
+    ttlSeconds: 5 * 60,
+    validate: isHistoricalBarsResult,
+    load: () => fetchHourlyMarketHistory(normalized),
+  })
 }
