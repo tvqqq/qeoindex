@@ -235,8 +235,8 @@ Deno.serve(async (req: Request) => {
           latest_price: lastPrice,
           total_volume: totalVolume,
           intraday_1m: intraday1m.slice(-90),
-          trades: trades.slice(-500),
-          trades_truncated: trades.length > 500,
+          trades: trades.slice(-3000),
+          trades_truncated: trades.length > 3000,
           latest_quote: {
             reference: ref,
             ceiling,

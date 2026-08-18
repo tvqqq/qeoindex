@@ -202,8 +202,8 @@ async function syncAll() {
       latest_price: lastPrice,
       total_volume: totalVolume,
       intraday_1m: intraday1m.slice(-90),
-      trades: trades.slice(-500), // Keep top 500 granular matched trades in snapshot
-      trades_truncated: trades.length > 500,
+      trades: trades.slice(-3000), // Keep up to 3000 granular session trades (covers full 09:15 to 14:45)
+      trades_truncated: trades.length > 3000,
       latest_quote: {
         reference: ref,
         ceiling,
