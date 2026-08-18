@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bot, Gift } from "lucide-react"
+import { GitCommit } from "lucide-react"
 
 const NAV = [
   { label: "Bảng điện", href: "/" },
@@ -16,6 +16,8 @@ const NAV = [
 ]
 
 const RESEARCH_RESERVED = new Set(["fa", "scanner", "signals", "changes", "log", "review"])
+const COMMIT_SHA = process.env.NEXT_PUBLIC_GIT_COMMIT_SHA || ""
+const COMMIT_DATE = process.env.NEXT_PUBLIC_GIT_COMMIT_DATE || ""
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/"
@@ -63,27 +65,18 @@ export function TopNav() {
         </nav>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 xl:gap-3">
-        <button
-          type="button"
-          aria-label="Ưu đãi"
-          className="rounded-md p-2 text-muted-2 transition-colors hover:bg-panel-2 hover:text-foreground"
-        >
-          <Gift className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          className="hidden items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-2 transition-colors hover:bg-panel-2 hover:text-foreground lg:flex"
-        >
-          <Bot className="h-4 w-4" />
-          <span>Cộng đồng</span>
-        </button>
-        <div className="flex items-center gap-2 pl-1">
-          <span className="hidden text-sm text-foreground xl:inline">quyenjino96</span>
-          <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-md border border-brand/20 bg-[#07090b]">
-            <img src="/brand/stockos-mark.svg" alt="" className="h-7 w-7" />
+      <div className="flex shrink-0 items-center gap-2 font-mono text-xs text-muted-2">
+        {COMMIT_SHA && (
+          <div className="flex items-center gap-1.5 rounded-md border border-border bg-panel-2 px-2.5 py-1 text-foreground/80">
+            <GitCommit className="h-3.5 w-3.5 text-brand" />
+            <span className="font-semibold text-foreground">{COMMIT_SHA}</span>
           </div>
-        </div>
+        )}
+        {COMMIT_DATE && (
+          <span className="hidden text-[11px] text-muted sm:inline">
+            {COMMIT_DATE}
+          </span>
+        )}
       </div>
     </header>
   )
