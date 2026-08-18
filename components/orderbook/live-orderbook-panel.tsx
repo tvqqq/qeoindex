@@ -2090,7 +2090,7 @@ export function LiveOrderBookPanel({
   return (
     <section
       ref={panelRef}
-      className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-xl border border-[#2e3133] bg-[#141515]/95 backdrop-blur-2xl shadow-[0_25px_70px_rgba(0,0,0,0.95),0_0_0_1px_rgba(255,255,255,0.08)] will-change-[width,height,left,top] ${
+      className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-xl border border-[#383c3e] bg-[#131415]/92 backdrop-blur-xl shadow-[0_16px_50px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] will-change-[width,height,left,top] ${
         isMaximized ? "fixed" : ""
       } ${!isInteracting ? "transition-[width,height,left,top] duration-150 ease-out" : "select-none"}`}
       style={panelStyle}
