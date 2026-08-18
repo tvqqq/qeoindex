@@ -23,6 +23,8 @@ import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/lib/intraday-5m"
 import { isTradingSessionOpen } from "@/lib/session-countdown"
+import { isSupabaseConfigured } from "@/lib/supabase/client"
+import { subscribeMarketRealtime } from "@/lib/supabase/realtime"
 
 export type BoardUniverseStock = LiveBoardStock
 export type IndexQuote = {
@@ -566,7 +568,47 @@ export function LiveMarketBoardV2({
       disposed = true
       controller.abort()
     }
-  }, [symbolKey, historyReloadKey, symbolList])
+  }, [symbolKey, historyReloadKey, symbolList, sessionOpen, initialHistories])
+
+  // Supabase Realtime Broadcast & Postgres Changes channel subscription
+  useEffect(() => {
+    if (!sessionOpen || !isSupabaseConfigured()) return
+
+    const unsubscribe = subscribeMarketRealtime("market:top100", (tick) => {
+      const ticker = tick.symbol.toUpperCase()
+      if (!trackedSymbols.has(ticker)) return
+
+      const receivedAt = tick.updatedAt || new Date().toISOString()
+      setQuotes((current) => {
+        const previous = current[ticker] as LiveStockQuote | undefined
+        const price = tick.price
+        const ref = tick.reference || previous?.reference || price
+        const change = tick.change ?? (price - ref)
+        const changePercent = tick.changePercent ?? (ref > 0 ? (change / ref) * 100 : 0)
+
+        return {
+          ...current,
+          [ticker]: {
+            ...(previous ?? {}),
+            symbol: ticker,
+            price,
+            reference: ref,
+            ceiling: tick.ceiling || previous?.ceiling,
+            floor: tick.floor || previous?.floor,
+            change,
+            changePercent,
+            volume: tick.volume || previous?.volume,
+            updatedAt: receivedAt,
+          },
+        }
+      })
+      setLastMessageAt(receivedAt)
+    })
+
+    return () => {
+      unsubscribe?.()
+    }
+  }, [sessionOpen, trackedSymbols])
 
   useEffect(() => {
     const controller = new AbortController()
