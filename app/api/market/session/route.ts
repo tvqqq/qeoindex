@@ -46,7 +46,15 @@ export async function GET(request: Request) {
   if (!forceRefresh) {
     try {
       const snapshot = await getOrderbookSnapshotFromSupabase(symbol)
-      if (snapshot && (snapshot.prices.length > 0 || snapshot.latestQuote)) {
+      const hasMeaningfulOrderbook = Boolean(
+        snapshot && (
+          (snapshot.trades && snapshot.trades.length > 0) ||
+          (snapshot.latestQuote?.bid && snapshot.latestQuote.bid.length > 0) ||
+          (snapshot.foreign && (snapshot.foreign.totalBuyVolume > 0 || snapshot.foreign.totalBuyValue > 0))
+        )
+      )
+
+      if (snapshot && hasMeaningfulOrderbook) {
         const payload = {
           ok: true,
           provider: "Supabase-Snapshot",

@@ -80,17 +80,13 @@ export function boardPctClass(value?: number) {
 }
 
 function quoteTone(quote?: LiveStockQuote) {
-  const baseTone = marketToneFromPrice({
+  return marketToneFromPrice({
     price: quote?.price,
     reference: quote?.reference,
     ceiling: quote?.ceiling,
     floor: quote?.floor,
+    changePercent: quote?.changePercent,
   })
-  if (baseTone === "ceiling" || baseTone === "floor") return baseTone
-  const change = quote?.changePercent ?? 0
-  if (change >= 6.85) return "ceiling"
-  if (change <= -6.85) return "floor"
-  return baseTone
 }
 
 function formatChangePercent(value?: number) {

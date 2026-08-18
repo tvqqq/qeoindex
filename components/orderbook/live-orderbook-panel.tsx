@@ -494,7 +494,11 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           if (direct.latestQuote) {
             const b = normalizeDepth(direct.latestQuote.bid).sort((x, y) => y.price - x.price)
             const a = normalizeDepth(direct.latestQuote.offer).sort((x, y) => x.price - y.price)
-            if (b.length || a.length) depthRef.current = { bids: b, asks: a }
+            if (b.length || a.length) {
+              depthRef.current = { bids: b, asks: a }
+              setBids(b)
+              setAsks(a)
+            }
             setQuote((current) => nextQuote(symbol, direct.latestQuote as unknown as Record<string, unknown>, current))
           }
           if (direct.foreign) {
@@ -510,8 +514,10 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
               updatedAt: direct.foreign.updatedAt || direct.generatedAt || new Date().toISOString(),
             })
           }
-          setHistoryState("READY")
-          setHistoryMessage("Đã nạp snapshot từ Supabase.")
+          if (direct.trades?.length || direct.latestQuote?.bid?.length) {
+            setHistoryState("READY")
+            setHistoryMessage("Đã nạp snapshot từ Supabase.")
+          }
         }
       } catch {
         // ignore fast path error
@@ -684,7 +690,12 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
             if (direct.latestQuote) {
               const b = normalizeDepth(direct.latestQuote.bid).sort((x, y) => y.price - x.price)
               const a = normalizeDepth(direct.latestQuote.offer).sort((x, y) => x.price - y.price)
-              if (b.length || a.length) depthRef.current = { bids: b, asks: a }
+              if (b.length || a.length) {
+                depthRef.current = { bids: b, asks: a }
+                setBids(b)
+                setAsks(a)
+              }
+              setQuote((current) => nextQuote(symbol, direct.latestQuote as unknown as Record<string, unknown>, current))
             }
             setHistoryState("READY")
             setHistoryMessage("Đã nạp dữ liệu từ Supabase.")
@@ -729,7 +740,25 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       if (snapshot.latestQuote) {
         const b = normalizeDepth(snapshot.latestQuote.bid).sort((x, y) => y.price - x.price)
         const a = normalizeDepth(snapshot.latestQuote.offer).sort((x, y) => x.price - y.price)
-        if (b.length || a.length) depthRef.current = { bids: b, asks: a }
+        if (b.length || a.length) {
+          depthRef.current = { bids: b, asks: a }
+          setBids(b)
+          setAsks(a)
+        }
+        setQuote((current) => nextQuote(symbol, snapshot.latestQuote as unknown as Record<string, unknown>, current))
+      }
+      if (snapshot.foreign) {
+        setForeign({
+          symbol,
+          totalBuyVolume: number(snapshot.foreign.totalBuyVolume) || 0,
+          totalSellVolume: number(snapshot.foreign.totalSellVolume) || 0,
+          totalBuyValue: number(snapshot.foreign.totalBuyValue) || 0,
+          totalSellValue: number(snapshot.foreign.totalSellValue) || 0,
+          availableRoom: nullableNumber(snapshot.foreign.availableRoom) ?? null,
+          orderLimitQuantity: nullableNumber(snapshot.foreign.orderLimitQuantity) ?? null,
+          listedShare: nullableNumber(snapshot.foreign.listedShare) ?? null,
+          updatedAt: snapshot.foreign.updatedAt || snapshot.generatedAt || new Date().toISOString(),
+        })
       }
     })
 

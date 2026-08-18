@@ -51,20 +51,48 @@ export function marketToneFromPrice({
   reference,
   ceiling,
   floor,
+  changePercent,
 }: {
   price?: number | null
   reference?: number | null
   ceiling?: number | null
   floor?: number | null
+  changePercent?: number | null
 }): MarketTone {
   if (!finite(price)) return "ref"
   const live = price as number
+  const ref = finite(reference) ? (reference as number) : null
+  const pct = finite(changePercent)
+    ? (changePercent as number)
+    : ref && ref > 0
+      ? ((live - ref) / ref) * 100
+      : null
+
   const epsilon = 1e-6
-  if (finite(ceiling) && live >= (ceiling as number) - epsilon) return "ceiling"
-  if (finite(floor) && live <= (floor as number) + epsilon) return "floor"
-  if (!finite(reference)) return "ref"
-  if (live > (reference as number) + epsilon) return "up"
-  if (live < (reference as number) - epsilon) return "down"
+
+  // Ceiling: Must have strong gain (>= 6.85% or live >= ceiling with valid ref)
+  if (pct !== null && pct >= 6.85) return "ceiling"
+  if (finite(ceiling) && live >= (ceiling as number) - epsilon) {
+    if (ref === null || live >= ref * 1.065) return "ceiling"
+  }
+
+  // Floor: Must have strong loss (<= -6.85% or live <= floor with valid ref)
+  if (pct !== null && pct <= -6.85) return "floor"
+  if (finite(floor) && live <= (floor as number) + epsilon) {
+    if (ref === null || live <= ref * 0.935) return "floor"
+  }
+
+  if (ref !== null) {
+    if (live > ref + epsilon) return "up"
+    if (live < ref - epsilon) return "down"
+    return "ref"
+  }
+
+  if (pct !== null) {
+    if (pct > epsilon) return "up"
+    if (pct < -epsilon) return "down"
+  }
+
   return "ref"
 }
 
