@@ -32,9 +32,14 @@ function formatCompactVolume(value?: number | null) {
 function formatMarketValue(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
   const abs = Math.abs(value)
-  if (abs >= 1_000_000_000_000) return `${(value / 1_000_000_000_000).toFixed(2)} nghìn tỷ`
-  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(abs >= 10_000_000_000 ? 1 : 2)} tỷ`
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)} tr`
+  if (abs >= 1_000_000_000) {
+    const billions = value / 1_000_000_000
+    return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: billions >= 1000 ? 0 : 1 }).format(billions)} tỷ`
+  }
+  if (abs >= 1_000_000) {
+    const millions = value / 1_000_000
+    return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 }).format(millions)} tr`
+  }
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
 }
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
@@ -708,7 +713,8 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
               const explicitReference = firstPositive(data, INDEX_REFERENCE_KEYS)
               if (explicitReference > 0) indexReferences.current[symbol] = explicitReference
               const vol = firstPositive(data, ["totalVolumeTraded", "totalVolume", "totalQtty", "allQtty", "vol", "v"])
-              const val = firstPositive(data, ["totalValueTraded", "totalValue", "totalAmount", "allValue", "val"])
+              const rawVal = firstPositive(data, ["totalValueTraded", "totalValue", "totalAmount", "allValue", "val"])
+              const val = rawVal > 0 ? (rawVal < 100_000 ? rawVal * 1_000_000_000 : rawVal < 100_000_000 ? rawVal * 1_000_000 : rawVal) : 0
               setQuotes((current) => {
                 const previous = current[symbol] as IndexQuote | undefined
                 const previousDerivedReference = previous && typeof previous.change === "number" ? previous.value - previous.change : 0

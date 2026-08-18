@@ -33,20 +33,74 @@ export function parseTradingViewIndexes(payload: TradingViewPayload, updatedAt =
   return quotes
 }
 
+const VPS_INDEX_MAP: Record<string, string> = {
+  "10": "VNINDEX",
+  "11": "VN30",
+  "02": "HNXINDEX",
+  "03": "UPCOMINDEX",
+}
+
 export async function fetchTradingViewIndexes() {
-  const response = await fetch("https://scanner.tradingview.com/vietnam/scan", {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json", "User-Agent": "StockOS/1.0 market-board" },
-    body: JSON.stringify({
-      symbols: { tickers: Object.keys(TICKERS), query: { types: [] } },
-      columns: ["close", "change", "change_abs", "volume"],
+  const [tvResult, vpsResult] = await Promise.allSettled([
+    fetch("https://scanner.tradingview.com/vietnam/scan", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json", "User-Agent": "StockOS/1.0 market-board" },
+      body: JSON.stringify({
+        symbols: { tickers: Object.keys(TICKERS), query: { types: [] } },
+        columns: ["close", "change", "change_abs", "volume"],
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    }).then(async (r) => {
+      if (!r.ok) {
+        const text = await r.text().catch(() => "")
+        throw new Error(`TradingView index scan failed (${r.status}): ${text.slice(0, 160)}`)
+      }
+      return r.json() as Promise<TradingViewPayload>
     }),
-    cache: "no-store",
-    signal: AbortSignal.timeout(8_000),
-  })
-  const text = await response.text()
-  if (!response.ok) throw new Error(`TradingView index scan failed (${response.status}): ${text.slice(0, 160)}`)
-  const quotes = parseTradingViewIndexes(JSON.parse(text) as TradingViewPayload)
+    fetch("https://bgapidatafeed.vps.com.vn/getlistindexdetail/10,11,02,03", {
+      headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+    }).then(async (r) => (r.ok ? r.json() : null)).catch(() => null),
+  ])
+
+  let quotes: Record<string, MarketIndexQuote> = {}
+  if (tvResult.status === "fulfilled" && tvResult.value) {
+    quotes = parseTradingViewIndexes(tvResult.value)
+  }
+
+  // Enrich with official VPS index volume & value (in million VND)
+  if (vpsResult.status === "fulfilled" && Array.isArray(vpsResult.value)) {
+    for (const item of vpsResult.value) {
+      if (!item || typeof item !== "object") continue
+      const mc = String((item as any).mc ?? "")
+      const symbol = VPS_INDEX_MAP[mc]
+      if (!symbol) continue
+      const vol = Number((item as any).vol)
+      const val = Number((item as any).value) // in million VND
+      const cIndex = Number((item as any).cIndex)
+      const oIndex = Number((item as any).oIndex)
+
+      if (quotes[symbol]) {
+        if (Number.isFinite(vol) && vol > 0) quotes[symbol].volume = vol
+        if (Number.isFinite(val) && val > 0) quotes[symbol].valueTraded = val * 1_000_000
+      } else if (Number.isFinite(cIndex) && cIndex > 0) {
+        const change = Number.isFinite(oIndex) && oIndex > 0 ? cIndex - oIndex : 0
+        const changePercent = Number.isFinite(oIndex) && oIndex > 0 ? (change / oIndex) * 100 : 0
+        quotes[symbol] = {
+          symbol,
+          value: cIndex,
+          change,
+          changePercent,
+          volume: Number.isFinite(vol) && vol > 0 ? vol : undefined,
+          valueTraded: Number.isFinite(val) && val > 0 ? val * 1_000_000 : undefined,
+          updatedAt: new Date().toISOString(),
+        }
+      }
+    }
+  }
+
   if (!quotes.VNINDEX || !quotes.VN30) throw new Error("TradingView index scan omitted VNINDEX or VN30")
   return quotes
 }
