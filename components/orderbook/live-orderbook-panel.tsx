@@ -245,8 +245,8 @@ function inferSide(rawSide: unknown, price: number, bids: DepthLevel[], asks: De
 }
 
 function sideMeta(side: TradeSide) {
-  if (side === "BUY") return { label: "Mua*", className: "text-up bg-up/10 border-up/30" }
-  if (side === "SELL") return { label: "Bán*", className: "text-down bg-down/10 border-down/30" }
+  if (side === "BUY") return { label: "Mua", className: "text-up bg-up/10 border-up/30" }
+  if (side === "SELL") return { label: "Bán", className: "text-down bg-down/10 border-down/30" }
   return { label: "Khớp", className: "text-muted-2 bg-panel-2 border-border" }
 }
 
@@ -1145,6 +1145,39 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
   )
 })
 
+function AllTradesIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M4 6h16" />
+      <path d="M4 12h16" />
+      <path d="M4 18h16" />
+    </svg>
+  )
+}
+
+function SmallFishIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.46-3.44 6-7 6s-7.56-2.54-8.5-6Z" />
+      <path d="M18 12v.5" />
+      <path d="M16 17.93a9.77 9.77 0 0 1 0-11.86" />
+      <path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33" />
+      <circle cx="17" cy="10" r="1" fill="currentColor" />
+    </svg>
+  )
+}
+
+function SharkIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M2 13c1.5-3.5 5.5-6 10-6 3 0 5 1.2 7 3L22 8l-2 5 2 5-3-2c-2 1.8-4 3-7 3-4.5 0-8.5-2.5-10-6Z" />
+      <path d="M11 7 14 2l1.5 5" />
+      <path d="M8 17l2.5 4" />
+      <circle cx="17" cy="11.5" r="1.2" fill="currentColor" />
+    </svg>
+  )
+}
+
 /**
  * Main LiveOrderBookPanel Component
  */
@@ -1748,37 +1781,39 @@ export function LiveOrderBookPanel({
 
               {/* Tape Sub-filters */}
               {activityTab === "trades" && (
-                <div className="flex items-center gap-1 text-xs">
+                <div className="flex items-center gap-1.5 text-xs">
                   <button
                     type="button"
                     onClick={() => setTradeFilter("all")}
-                    className={`rounded px-2.5 py-1 font-semibold transition-colors ${
-                      tradeFilter === "all" ? "bg-panel-2 text-foreground font-bold border border-border" : "text-muted hover:text-muted-2"
+                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-semibold transition-colors ${
+                      tradeFilter === "all" ? "bg-panel-2 text-foreground font-bold border border-border shadow-sm" : "text-muted hover:text-muted-2"
                     }`}
                     title={stream.trades.length > clusteredTrades.length ? `Gốc: ${stream.trades.length.toLocaleString("vi-VN")} lệnh` : undefined}
                   >
-                    Tất cả ({clusteredTrades.length})
+                    <AllTradesIcon className="h-3.5 w-3.5" />
+                    <span>Tất cả ({clusteredTrades.length})</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setTradeFilter("large")}
-                    className={`flex items-center gap-1 rounded border px-2.5 py-1 font-semibold transition-colors ${
-                      tradeFilter === "large" ? "border-ref/50 bg-ref/15 text-ref font-bold" : "border-border text-muted-2 hover:text-foreground"
+                    className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-semibold transition-colors ${
+                      tradeFilter === "large" ? "border-ref/50 bg-ref/15 text-ref font-bold shadow-sm" : "border-border text-muted-2 hover:text-foreground"
                     }`}
                   >
-                    <ListFilter className="h-3 w-3" />
-                    <span>≥10K</span>
-                    {largeTradeCount > 0 && <span className="rounded bg-ref/25 px-1 text-[10px]">{largeTradeCount}</span>}
+                    <SmallFishIcon className="h-3.5 w-3.5" />
+                    <span>Cá con ≥10K</span>
+                    {largeTradeCount > 0 && <span className="rounded bg-ref/25 px-1 text-[10px] font-bold">{largeTradeCount}</span>}
                   </button>
                   <button
                     type="button"
                     onClick={() => setTradeFilter("whale")}
-                    className={`flex items-center gap-1 rounded border px-2.5 py-1 font-semibold transition-colors ${
-                      tradeFilter === "whale" ? "border-up/50 bg-up/15 text-up font-bold" : "border-border text-muted-2 hover:text-foreground"
+                    className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-semibold transition-colors ${
+                      tradeFilter === "whale" ? "border-up/50 bg-up/15 text-up font-bold shadow-sm" : "border-border text-muted-2 hover:text-foreground"
                     }`}
                   >
+                    <SharkIcon className="h-3.5 w-3.5" />
                     <span>Cá mập ≥50K</span>
-                    {whaleTradeCount > 0 && <span className="rounded bg-up/25 px-1 text-[10px]">{whaleTradeCount}</span>}
+                    {whaleTradeCount > 0 && <span className="rounded bg-up/25 px-1 text-[10px] font-bold">{whaleTradeCount}</span>}
                   </button>
                 </div>
               )}
@@ -1807,13 +1842,13 @@ export function LiveOrderBookPanel({
 
                 {visibleTrades.length ? (
                   <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col">
-                    <div className="grid grid-cols-[75px_1fr_90px_65px] border-b border-border/60 bg-[#171819] px-3 py-1.5 text-xs font-bold text-muted-2">
+                    <div className="grid grid-cols-[1.2fr_1fr_1fr_0.8fr] items-center gap-x-2 border-b border-border/60 bg-[#171819] px-3.5 py-1.5 text-xs font-bold text-muted-2">
                       <span>Thời gian</span>
                       <span className="text-right">Khối lượng</span>
                       <span className="text-right">Giá</span>
-                      <span className="text-right">Loại</span>
+                      <span className="text-right pr-1">Loại</span>
                     </div>
-                    <div className="flex-1 overflow-y-auto max-h-[340px] px-3">
+                    <div className="flex-1 overflow-y-auto max-h-[340px] px-3.5">
                       {visibleTrades.map((trade) => {
                         const meta = sideMeta(trade.side)
                         const isLarge = trade.volume >= LARGE_TRADE_MIN_VOLUME
@@ -1822,25 +1857,27 @@ export function LiveOrderBookPanel({
                         return (
                           <div
                             key={trade.id}
-                            className={`grid grid-cols-[75px_1fr_90px_65px] items-center border-b py-1 font-mono text-xs last:border-0 hover:bg-panel-2/50 ${
+                            className={`grid grid-cols-[1.2fr_1fr_1fr_0.8fr] items-center gap-x-2 border-b py-1 font-mono text-xs last:border-0 hover:bg-panel-2/50 ${
                               isWhale
-                                ? "border-up/30 bg-up/10 text-up font-bold -mx-3 px-3"
+                                ? "border-up/30 bg-up/10 text-up font-bold -mx-3.5 px-3.5"
                                 : isLarge
-                                  ? "border-ref/30 bg-ref/10 text-ref font-bold -mx-3 px-3"
+                                  ? "border-ref/30 bg-ref/10 text-ref font-bold -mx-3.5 px-3.5"
                                   : "border-border/30 text-foreground"
                             }`}
                           >
-                            <span className="text-muted-2 text-xs">{timeLabel(trade.time)}</span>
-                            <span className="text-right font-bold text-[13px] flex items-center justify-end gap-1.5">
-                              {formatVolume(trade.volume)}
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-muted-2 text-xs">{timeLabel(trade.time)}</span>
                               {trade.count > 1 && (
                                 <span
-                                  className="rounded bg-[#202223] border border-border px-1 py-0.2 text-[9px] text-muted font-semibold"
+                                  className="rounded bg-[#202223] border border-border/80 px-1 py-0.2 text-[10px] text-muted-2 font-mono font-bold shrink-0"
                                   title={`Gộp ${trade.count} lệnh khớp liên tiếp cùng chiều trong ≤1s`}
                                 >
-                                  ×{trade.count}
+                                  x{trade.count}
                                 </span>
                               )}
+                            </div>
+                            <span className="text-right font-bold text-[13px] flex items-center justify-end gap-1.5">
+                              {formatVolume(trade.volume)}
                               {isWhale ? (
                                 <span className="rounded bg-up/25 px-1 py-0.2 text-[9px] text-up font-bold">50K+</span>
                               ) : isLarge ? (
@@ -1854,7 +1891,7 @@ export function LiveOrderBookPanel({
                             >
                               {formatPrice(trade.price)}
                             </span>
-                            <div className="flex justify-end">
+                            <div className="flex justify-end pr-1">
                               <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${meta.className}`}>
                                 {meta.label}
                               </span>
