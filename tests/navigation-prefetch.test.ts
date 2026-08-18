@@ -11,6 +11,10 @@ test("dense ticker lists do not auto-prefetch every dynamic research route", () 
   assert.match(helper, /prefetch=\{false\}/)
   assert.match(helper, /router\.prefetch\(href\)/)
 
+  // Keep this check compatible with the repository TypeScript target. Do not use
+  // the RegExp dotAll (`s`) flag here; it requires ES2018 and breaks Vercel typecheck.
+  const forbiddenDynamicResearchHref = "href={`/research/${"
+
   for (const path of [
     "components/live-market-stock.tsx",
     "components/research/scanner-app.tsx",
@@ -18,7 +22,11 @@ test("dense ticker lists do not auto-prefetch every dynamic research route", () 
   ]) {
     const file = source(path)
     assert.match(file, /TickerResearchLink/, `${path} should use intent-prefetch ticker links`)
-    assert.equal(file.includes("href={`/research/${"), false, `${path} must not auto-prefetch dynamic ticker routes`)
+    assert.equal(
+      file.includes(forbiddenDynamicResearchHref),
+      false,
+      `${path} must not auto-prefetch dynamic ticker routes`,
+    )
   }
 })
 
