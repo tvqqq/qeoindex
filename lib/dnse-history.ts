@@ -136,6 +136,7 @@ async function requestOhlc(symbol: string, resolution: string, from: number, to:
   const response = await fetch(url, {
     headers: signatureHeaders("GET", path, apiKey, apiSecret),
     cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
   })
   const body = await response.text()
   if (!response.ok) throw new Error(`DNSE OHLC ${symbol} ${resolution} failed (${response.status}): ${body.slice(0, 180)}`)

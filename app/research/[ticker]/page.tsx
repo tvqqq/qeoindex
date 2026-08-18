@@ -18,6 +18,11 @@ export default async function ResearchTickerPage({ params }: { params: Promise<{
   const { ticker } = await params
   const decoded = decodeURIComponent(ticker).toUpperCase()
   const isIndex = decoded === "VNINDEX"
+  // Kick off both Notion fetches concurrently — research and scanner are independent
+  const scannerPromise = getScannerData().catch((error: unknown) => {
+    console.error(`[StockOS detail] Notion scanner data failed for ${decoded}`, error)
+    return null
+  })
   const research = await getResearchData()
   if (!research.connection.notionLive) return <NotionUnavailable section={`Nghiên cứu ${decoded}`} detail={research.connection.message} />
 
@@ -32,13 +37,12 @@ export default async function ResearchTickerPage({ params }: { params: Promise<{
     )
   }
 
-  let scanner: Awaited<ReturnType<typeof getScannerData>>
-  try {
-    scanner = await getScannerData()
-  } catch (error) {
-    console.error(`[StockOS detail] Notion scanner data failed for ${decoded}`, error)
+  // Await scanner (already in-flight since above)
+  const scannerResult = await scannerPromise
+  if (!scannerResult) {
     return <NotionUnavailable section={`Nghiên cứu ${decoded}`} detail="Không đọc được scanner state từ Notion." />
   }
+  const scanner = scannerResult
   const thesis = research.theses.find((row) => row.ticker === decoded)
   const universeIndex = scanner.universe.findIndex((row) => row.ticker === decoded)
   const universe = universeIndex >= 0 ? scanner.universe[universeIndex] : undefined
@@ -52,22 +56,31 @@ export default async function ResearchTickerPage({ params }: { params: Promise<{
   let historyMeta: { provider: string; detail: string } | undefined
   let hourlyBars: OhlcvBar[] = []
   let hourlyMeta: { provider: string; detail: string } = { provider: "Unavailable", detail: "1H provider unavailable" }
-  try {
-    const cutoff = scan?.date ? new Date(`${scan.date}T23:59:59+07:00`) : new Date()
-    const history = await fetchDailyMarketHistory(decoded, cutoff)
+
+  // Fetch daily and hourly history concurrently — they are fully independent
+  const cutoff = scan?.date ? new Date(`${scan.date}T23:59:59+07:00`) : new Date()
+  const [dailyResult, hourlyResult] = await Promise.allSettled([
+    fetchDailyMarketHistory(decoded, cutoff),
+    fetchHourlyMarketHistory(decoded, new Date()),
+  ])
+
+  if (dailyResult.status === "fulfilled") {
+    const history = dailyResult.value
     bars = history.bars
     if (scan?.date) bars = bars.filter((bar) => barDate(bar) <= scan.date)
     historyMeta = { provider: history.provider, detail: history.detail }
-  } catch (error) {
-    console.error(`[StockOS detail] historical data failed for ${decoded}`, error)
+  } else {
+    console.error(`[StockOS detail] historical data failed for ${decoded}`, dailyResult.reason)
   }
-  try {
-    const hourly = await fetchHourlyMarketHistory(decoded, new Date())
+
+  if (hourlyResult.status === "fulfilled") {
+    const hourly = hourlyResult.value
     hourlyBars = hourly.bars
     hourlyMeta = { provider: hourly.provider, detail: hourly.detail }
-  } catch (error) {
-    hourlyMeta = { provider: "Unavailable", detail: error instanceof Error ? error.message.slice(0, 220) : String(error).slice(0, 220) }
-    console.error(`[StockOS detail] intraday data failed for ${decoded}`, error)
+  } else {
+    const err = hourlyResult.reason
+    hourlyMeta = { provider: "Unavailable", detail: err instanceof Error ? err.message.slice(0, 220) : String(err).slice(0, 220) }
+    console.error(`[StockOS detail] intraday data failed for ${decoded}`, err)
   }
 
   const studies = buildMultiTimeframeStudies({
