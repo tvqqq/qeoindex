@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { getScannerData } from "@/lib/scanner-data"
+import { CANONICAL_UNIVERSE_TICKERS } from "@/lib/wyckoff-universe"
 import { fetchDnseSessionHistory, type DnseSessionHistory } from "@/lib/dnse-market-runtime"
 import { fetchYahooFiveMinuteSnapshot } from "@/lib/yahoo-history"
 import { batchUpsertOrderbookSnapshotsToSupabase } from "@/lib/supabase/orderbook"
@@ -66,14 +66,7 @@ async function handleSync(request: Request) {
     })
   }
 
-  let universeTickers: string[] = []
-  try {
-    const data = await getScannerData()
-    universeTickers = data.universe.map((s) => s.ticker)
-  } catch {
-    // fallback to safety default universe if Notion fails
-    universeTickers = ["SSI", "HPG", "FPT", "VNM", "VIC", "VHM", "TCB", "MBB", "MWG", "STB"]
-  }
+  const universeTickers: readonly string[] = CANONICAL_UNIVERSE_TICKERS
 
   const limit = Math.min(Number(url.searchParams.get("limit") ?? universeTickers.length), universeTickers.length)
   const targetSymbols = universeTickers.slice(0, limit)
