@@ -49,8 +49,18 @@ Full-repository lint currently includes pre-existing failures in unrelated/gener
 
 The product is **QeoIndex**. The existing Vercel infrastructure project remains `tvqqq/stockos` as a legacy deployment identifier; do not treat that slug as the product brand. The official public domain is <https://qeoindex.qeoqeo.com>. The `stockos-beryl.vercel.app` alias is retained only as an infrastructure fallback until it is explicitly retired.
 
-```bash
-pnpm exec vercel --prod --yes
+Production uses a **single deployment path**:
+
+```text
+feature/work branch
+  -> validate + commit + push
+  -> merge/squash once to main
+  -> Vercel Git Integration auto-deploys main
+  -> verify READY + smoke production
 ```
 
-After deployment, verify the official domain, the fallback Vercel alias, and the APIs touched by the change. Deployment success alone is not a production smoke test.
+`main` is the only deployment-enabled Git branch. Do **not** run `vercel --prod`, `vercel deploy --prod`, or a Deploy Hook after pushing/merging the same release to `main`; doing so creates duplicate production deployments and consumes the Hobby deployment quota.
+
+Use Vercel tooling only to inspect deployment status/logs and production health. A manual production deployment is an exceptional recovery path and requires explicit user authorization plus confirmation that Git auto-deploy will not also run for that release.
+
+After the Git-triggered deployment, verify the official domain, the fallback Vercel alias, and the APIs touched by the change. Deployment success alone is not a production smoke test.
