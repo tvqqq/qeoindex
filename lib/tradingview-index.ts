@@ -3,6 +3,8 @@ export type MarketIndexQuote = {
   value: number
   change: number
   changePercent: number
+  volume?: number
+  valueTraded?: number
   updatedAt: string
 }
 
@@ -22,8 +24,11 @@ export function parseTradingViewIndexes(payload: TradingViewPayload, updatedAt =
     const value = Number(row.d?.[0])
     const changePercent = Number(row.d?.[1])
     const change = Number(row.d?.[2])
+    const volume = Number(row.d?.[3])
     if (!symbol || !Number.isFinite(value) || value <= 0 || !Number.isFinite(changePercent) || !Number.isFinite(change)) continue
-    quotes[symbol] = { symbol, value, change, changePercent, updatedAt }
+    const quote: MarketIndexQuote = { symbol, value, change, changePercent, updatedAt }
+    if (Number.isFinite(volume) && volume > 0) quote.volume = volume
+    quotes[symbol] = quote
   }
   return quotes
 }
@@ -34,7 +39,7 @@ export async function fetchTradingViewIndexes() {
     headers: { Accept: "application/json", "Content-Type": "application/json", "User-Agent": "StockOS/1.0 market-board" },
     body: JSON.stringify({
       symbols: { tickers: Object.keys(TICKERS), query: { types: [] } },
-      columns: ["close", "change", "change_abs"],
+      columns: ["close", "change", "change_abs", "volume"],
     }),
     cache: "no-store",
     signal: AbortSignal.timeout(8_000),

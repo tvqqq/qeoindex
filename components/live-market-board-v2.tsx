@@ -10,8 +10,33 @@ import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, typ
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/lib/intraday-5m"
 
 export type BoardUniverseStock = LiveBoardStock
-type IndexQuote = { symbol: string; value: number; change?: number; changePercent: number; updatedAt: string }
+type IndexQuote = {
+  symbol: string
+  value: number
+  change?: number
+  changePercent: number
+  volume?: number
+  valueTraded?: number
+  updatedAt: string
+}
 type BoardMode = "sector" | "movers"
+
+function formatCompactVolume(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)} tỷ`
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)} tr`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)} k`
+  return value.toLocaleString("vi-VN")
+}
+
+function formatMarketValue(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000_000_000) return `${(value / 1_000_000_000_000).toFixed(2)} nghìn tỷ`
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(abs >= 10_000_000_000 ? 1 : 2)} tỷ`
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)} tr`
+  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
+}
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 type DnseAuthPayload = { action: string; api_key: string; signature: string; timestamp: number; nonce: string }
 type DnseAuthResponse = { ok: boolean; url?: string; auth?: DnseAuthPayload; message?: string }
@@ -682,6 +707,8 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
               if (!symbol || value <= 0) return
               const explicitReference = firstPositive(data, INDEX_REFERENCE_KEYS)
               if (explicitReference > 0) indexReferences.current[symbol] = explicitReference
+              const vol = firstPositive(data, ["totalVolumeTraded", "totalVolume", "totalQtty", "allQtty", "vol", "v"])
+              const val = firstPositive(data, ["totalValueTraded", "totalValue", "totalAmount", "allValue", "val"])
               setQuotes((current) => {
                 const previous = current[symbol] as IndexQuote | undefined
                 const previousDerivedReference = previous && typeof previous.change === "number" ? previous.value - previous.change : 0
@@ -689,7 +716,18 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
                 if (reference > 0) indexReferences.current[symbol] = reference
                 const change = reference > 0 ? value - reference : previous?.change
                 const changePercent = reference > 0 ? ((value - reference) / reference) * 100 : previous?.changePercent ?? 0
-                return { ...current, [symbol]: { symbol, value, change, changePercent, updatedAt: receivedAt } }
+                return {
+                  ...current,
+                  [symbol]: {
+                    symbol,
+                    value,
+                    change,
+                    changePercent,
+                    volume: vol || previous?.volume,
+                    valueTraded: val || previous?.valueTraded,
+                    updatedAt: receivedAt,
+                  },
+                }
               })
               setLastMessageAt(receivedAt)
               setStreamError("")
@@ -847,58 +885,91 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   const reconnect = useCallback(() => setReconnectKey((key) => key + 1), [])
   const handleToggleWatch = useCallback((ticker: string) => toggleWatch(ticker), [toggleWatch])
 
+  const { totalUniverseVolume, totalUniverseValue } = useMemo(() => {
+    let vol = 0
+    let val = 0
+    for (const stock of universe) {
+      const q = displayQuotes[stock.ticker] as LiveStockQuote | undefined
+      if (q && q.volume && q.volume > 0) {
+        vol += q.volume
+        if (q.price && q.price > 0) {
+          val += q.volume * q.price * 1000
+        }
+      }
+    }
+    return { totalUniverseVolume: vol, totalUniverseValue: val }
+  }, [universe, displayQuotes])
+
+  const vnindexQuote = quotes.VNINDEX as IndexQuote | undefined
+  const vnindexVolume = vnindexQuote?.volume ?? (totalUniverseVolume > 0 ? totalUniverseVolume : undefined)
+  const vnindexValue = vnindexQuote?.valueTraded ?? (totalUniverseValue > 0 ? totalUniverseValue : undefined)
+
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background">
       <IndexStrip quotes={quotes} />
 
       {/* COMPACT TOP TOOLBAR */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-panel px-3 py-1.5">
-        <div className="relative min-w-[170px] flex-1 sm:max-w-[240px]">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Tìm mã CP..."
-            className="h-7 w-full rounded-md border border-border bg-background pl-8 pr-2.5 text-xs outline-none focus:border-brand"
-          />
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-panel px-3 py-1.5">
+        {/* VNINDEX Market Stats on the left (under VNINDEX and VN30 columns) */}
+        <div className="flex items-center gap-3 font-mono text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted font-sans font-medium">Tổng KL:</span>
+            <span className="font-bold text-foreground">
+              {vnindexVolume ? `${formatCompactVolume(vnindexVolume)} cp` : "—"}
+            </span>
+          </div>
+          <div className="h-3 w-px bg-border/80" />
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted font-sans font-medium">Tổng GT:</span>
+            <span className="font-bold text-foreground">
+              {vnindexValue ? formatMarketValue(vnindexValue) : "—"}
+            </span>
+          </div>
         </div>
 
-        <select
-          value={selectedSector}
-          onChange={(event) => setSelectedSector(event.target.value)}
-          className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none"
-        >
-          <option>Tất cả</option>
-          {SECTOR_ORDER.map((sector) => (
-            <option key={sector}>{sector}</option>
-          ))}
-        </select>
+        {/* Search & Filters on the right */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[140px] sm:w-[180px]">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Tìm mã CP..."
+              className="h-7 w-full rounded-md border border-border bg-background pl-8 pr-2.5 text-xs outline-none focus:border-brand"
+            />
+          </div>
 
-        <div className="flex items-center rounded-md border border-border bg-background p-0.5">
-          <button
-            onClick={() => setMode("sector")}
-            className={`flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors ${
-              mode === "sector" ? "bg-panel-2 text-foreground font-semibold" : "text-muted-2 hover:text-foreground"
-            }`}
+          <select
+            value={selectedSector}
+            onChange={(event) => setSelectedSector(event.target.value)}
+            className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none"
           >
-            <LayoutGrid className="h-3 w-3" />
-            <span>{BOARD_SECTOR_GROUPS.length} nhóm</span>
-          </button>
-          <button
-            onClick={() => setMode("movers")}
-            className={`flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors ${
-              mode === "movers" ? "bg-panel-2 text-foreground font-semibold" : "text-muted-2 hover:text-foreground"
-            }`}
-          >
-            <ChartNoAxesCombined className="h-3 w-3" />
-            <span>Top movers</span>
-          </button>
-        </div>
+            <option>Tất cả</option>
+            {SECTOR_ORDER.map((sector) => (
+              <option key={sector}>{sector}</option>
+            ))}
+          </select>
 
-        {/* Quick inline market breadth */}
-        <div className="ml-auto hidden sm:flex items-center gap-2 font-mono text-xs">
-          <span className="text-up font-bold">▲ {advances}</span>
-          <span className="text-down font-bold">▼ {declines}</span>
+          <div className="flex items-center rounded-md border border-border bg-background p-0.5">
+            <button
+              onClick={() => setMode("sector")}
+              className={`flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors ${
+                mode === "sector" ? "bg-panel-2 text-foreground font-semibold" : "text-muted-2 hover:text-foreground"
+              }`}
+            >
+              <LayoutGrid className="h-3 w-3" />
+              <span>{BOARD_SECTOR_GROUPS.length} nhóm</span>
+            </button>
+            <button
+              onClick={() => setMode("movers")}
+              className={`flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors ${
+                mode === "movers" ? "bg-panel-2 text-foreground font-semibold" : "text-muted-2 hover:text-foreground"
+              }`}
+            >
+              <ChartNoAxesCombined className="h-3 w-3" />
+              <span>Top movers</span>
+            </button>
+          </div>
         </div>
       </div>
 
