@@ -265,6 +265,12 @@ function sideMeta(side: TradeSide) {
   return { label: "Khớp", className: "text-muted-2 bg-panel-2 border-border" }
 }
 
+function sidePillMeta(side: TradeSide) {
+  if (side === "BUY") return { label: "M", className: "text-up bg-up/15 border-up/40" }
+  if (side === "SELL") return { label: "B", className: "text-down bg-down/15 border-down/40" }
+  return { label: "—", className: "text-muted-2 bg-panel-2 border-border/80" }
+}
+
 function nextQuote(symbol: string, data: Record<string, unknown>, current: StockQuote | null): StockQuote | null {
   const rawPrice = firstPositive(data, ["matchPrice", "price", "lastPrice"]) || current?.price || 0
   if (rawPrice <= 0) return current
@@ -1246,23 +1252,194 @@ function TapeLoadingSkeleton() {
         </div>
       </div>
 
-      {/* Shimmer Tape Table Skeleton */}
-      <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col p-3.5 space-y-3">
-        <div className="grid grid-cols-[1.2fr_1fr_1fr_0.8fr] gap-x-2 border-b border-border/60 pb-2.5">
-          <div className="h-3 w-16 bg-[#1f2122] rounded animate-pulse" />
-          <div className="h-3 w-16 bg-[#1f2122] rounded animate-pulse ml-auto" />
-          <div className="h-3 w-12 bg-[#1f2122] rounded animate-pulse ml-auto" />
-          <div className="h-3 w-10 bg-[#1f2122] rounded animate-pulse ml-auto" />
+      {/* Shimmer 2-column Layout Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-2.5 flex-1 min-h-0">
+        <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col p-3 space-y-2.5">
+          <div className="grid grid-cols-[1.2fr_1.1fr_0.75fr] gap-x-2 border-b border-border/60 pb-2">
+            <div className="h-3 w-14 bg-[#1f2122] rounded animate-pulse" />
+            <div className="h-3 w-16 bg-[#1f2122] rounded animate-pulse ml-auto" />
+            <div className="h-3 w-10 bg-[#1f2122] rounded animate-pulse ml-auto" />
+          </div>
+
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="grid grid-cols-[1.2fr_1.1fr_0.75fr] gap-x-2 items-center py-1 border-b border-border/20 last:border-0">
+              <div className="h-3.5 w-16 bg-[#181a1b] rounded animate-pulse" style={{ animationDelay: `${i * 80}ms` }} />
+              <div className="h-3.5 w-14 bg-[#181a1b] rounded animate-pulse ml-auto" style={{ animationDelay: `${i * 80}ms` }} />
+              <div className="h-3.5 w-10 bg-[#181a1b] rounded animate-pulse ml-auto" style={{ animationDelay: `${i * 80}ms` }} />
+            </div>
+          ))}
         </div>
 
-        {Array.from({ length: 7 }).map((_, i) => (
-          <div key={i} className="grid grid-cols-[1.2fr_1fr_1fr_0.8fr] gap-x-2 items-center py-1.5 border-b border-border/20 last:border-0">
-            <div className="h-3.5 w-20 bg-[#181a1b] rounded animate-pulse" style={{ animationDelay: `${i * 80}ms` }} />
-            <div className="h-3.5 w-14 bg-[#181a1b] rounded animate-pulse ml-auto" style={{ animationDelay: `${i * 80}ms` }} />
-            <div className="h-3.5 w-12 bg-[#181a1b] rounded animate-pulse ml-auto" style={{ animationDelay: `${i * 80}ms` }} />
-            <div className="h-4 w-10 bg-[#181a1b] rounded animate-pulse ml-auto" style={{ animationDelay: `${i * 80}ms` }} />
+        <div className="rounded-lg border border-border/80 bg-[#121313] p-3 space-y-2.5 flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-border/50 pb-1.5">
+            <div className="h-3.5 w-24 bg-[#1f2122] rounded animate-pulse" />
+            <div className="h-3 w-12 bg-[#1f2122] rounded animate-pulse" />
           </div>
-        ))}
+          <div className="h-14 bg-[#181a1b] rounded-lg animate-pulse" />
+          <div className="h-16 bg-[#181a1b] rounded-lg animate-pulse" />
+          <div className="h-10 bg-[#181a1b] rounded-lg animate-pulse" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ForeignRealtimeCard({
+  foreign,
+  quotePrice,
+  foreignNetVolume,
+  foreignNetValue,
+  roomPercentage,
+}: {
+  foreign: ForeignSnapshot | null
+  quotePrice?: number | null
+  foreignNetVolume: number | null
+  foreignNetValue: number | null
+  roomPercentage: number | null
+}) {
+  const buyVolFlash = useFlashAnimation(foreign?.totalBuyVolume, 1)
+  const sellVolFlash = useFlashAnimation(foreign?.totalSellVolume, 1)
+  const netVolFlash = useFlashAnimation(foreignNetVolume, 1)
+  const roomFlash = useFlashAnimation(foreign?.availableRoom, 1)
+
+  const buyVol = foreign?.totalBuyVolume ?? 0
+  const sellVol = foreign?.totalSellVolume ?? 0
+  const totalVol = buyVol + sellVol
+  const buyPct = totalVol > 0 ? (buyVol / totalVol) * 100 : 50
+  const sellPct = totalVol > 0 ? (sellVol / totalVol) * 100 : 50
+
+  const isNetPos = (foreignNetVolume ?? 0) > 0
+  const isNetNeg = (foreignNetVolume ?? 0) < 0
+
+  return (
+    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-2.5 font-mono text-xs space-y-2 h-full justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border/50 pb-1.5">
+        <div className="flex items-center gap-1.5 font-bold text-foreground">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+          </span>
+          <span className="text-[11px] uppercase tracking-wider text-muted-2 font-bold">Khối ngoại (NN)</span>
+        </div>
+        <span className="text-[10px] text-muted font-mono">
+          {foreign?.updatedAt ? timeLabel(foreign.updatedAt) : "Realtime"}
+        </span>
+      </div>
+
+      {/* Net Mua / Bán Card */}
+      <div
+        className={`rounded-lg border p-2 transition-all ${
+          isNetPos
+            ? "border-up/30 bg-up/10"
+            : isNetNeg
+              ? "border-down/30 bg-down/10"
+              : "border-border/60 bg-[#161718]"
+        }`}
+      >
+        <div className="flex items-center justify-between text-[10px] text-muted-2">
+          <span>MUA / BÁN RÒNG</span>
+          <span
+            className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+              isNetPos
+                ? "bg-up/20 text-up border-up/30"
+                : isNetNeg
+                  ? "bg-down/20 text-down border-down/30"
+                  : "bg-panel-2 text-ref border-border"
+            }`}
+          >
+            {isNetPos ? "MUA RÒNG" : isNetNeg ? "BÁN RÒNG" : "CÂN BẰNG"}
+          </span>
+        </div>
+        <div className="mt-1 flex items-baseline justify-between gap-1">
+          <span
+            className={`text-sm font-bold transition-colors ${
+              isNetPos ? "text-up" : isNetNeg ? "text-down" : "text-ref"
+            } ${
+              netVolFlash === "up" ? "flash-up font-black" : netVolFlash === "down" ? "flash-down font-black" : ""
+            }`}
+          >
+            {foreignNetVolume !== null
+              ? `${foreignNetVolume > 0 ? "+" : ""}${formatCompactVolume(foreignNetVolume)}`
+              : "—"}
+          </span>
+          <span className="text-[11px] font-bold text-foreground font-mono">
+            {foreignNetValue !== null
+              ? `${foreignNetValue > 0 ? "+" : ""}${formatMarketValue(foreignNetValue)}`
+              : foreignNetVolume && quotePrice
+                ? `${foreignNetVolume > 0 ? "+" : ""}${formatMarketValue(foreignNetVolume * quotePrice)}`
+                : "—"}
+          </span>
+        </div>
+      </div>
+
+      {/* Mua vs Bán Breakdown */}
+      <div className="space-y-1 text-[11px] bg-[#161718] p-2 rounded-lg border border-border/60">
+        {/* Mua */}
+        <div className="flex items-center justify-between">
+          <span className="text-muted-2 flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-up" /> Mua:
+          </span>
+          <div className="flex items-center gap-1 font-mono">
+            <span
+              className={`font-bold text-up transition-colors ${
+                buyVolFlash === "up" ? "flash-up font-black" : buyVolFlash === "down" ? "flash-down font-black" : ""
+              }`}
+            >
+              {formatCompactVolume(foreign?.totalBuyVolume)}
+            </span>
+            <span className="text-[10px] text-muted">
+              ({foreign?.totalBuyValue ? formatMarketValue(foreign.totalBuyValue) : "—"})
+            </span>
+          </div>
+        </div>
+
+        {/* Bán */}
+        <div className="flex items-center justify-between">
+          <span className="text-muted-2 flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-down" /> Bán:
+          </span>
+          <div className="flex items-center gap-1 font-mono">
+            <span
+              className={`font-bold text-down transition-colors ${
+                sellVolFlash === "up" ? "flash-up font-black" : sellVolFlash === "down" ? "flash-down font-black" : ""
+              }`}
+            >
+              {formatCompactVolume(foreign?.totalSellVolume)}
+            </span>
+            <span className="text-[10px] text-muted">
+              ({foreign?.totalSellValue ? formatMarketValue(foreign.totalSellValue) : "—"})
+            </span>
+          </div>
+        </div>
+
+        {/* Ratio bar */}
+        <div className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-[#202223]">
+          <div className="bg-up transition-all duration-300" style={{ width: `${buyPct}%` }} />
+          <div className="bg-down transition-all duration-300" style={{ width: `${sellPct}%` }} />
+        </div>
+      </div>
+
+      {/* Room Ngoại */}
+      <div className="rounded-lg border border-border/60 bg-[#161718] p-2 text-[11px]">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-2">Room còn lại:</span>
+          <span
+            className={`font-bold text-foreground transition-colors font-mono ${
+              roomFlash === "up" ? "flash-up font-black" : roomFlash === "down" ? "flash-down font-black" : ""
+            }`}
+          >
+            {foreign?.availableRoom !== null && foreign?.availableRoom !== undefined
+              ? `${formatCompactVolume(foreign.availableRoom)}`
+              : "—"}
+          </span>
+        </div>
+        {roomPercentage !== null && (
+          <div className="mt-0.5 flex items-center justify-between text-[10px] text-muted">
+            <span>Tỷ lệ sở hữu còn:</span>
+            <span className="font-bold text-muted-2">{roomPercentage.toFixed(1)}% VĐL</span>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1696,6 +1873,12 @@ export function LiveOrderBookPanel({
   const listedShare = stream.foreign?.listedShare
   const roomPercentage = foreignRoom && listedShare && listedShare > 0 ? (foreignRoom / listedShare) * 100 : null
 
+  // Foreign live flash animations
+  const foreignBuyVolFlash = useFlashAnimation(stream.foreign?.totalBuyVolume, 1)
+  const foreignSellVolFlash = useFlashAnimation(stream.foreign?.totalSellVolume, 1)
+  const foreignNetVolFlash = useFlashAnimation(foreignNetVolume, 1)
+  const foreignRoomFlash = useFlashAnimation(foreignRoom, 1)
+
   // Spread calculation
   const bestBidPrice = topBids[0]?.price
   const bestAskPrice = topAsks[0]?.price
@@ -2022,341 +2205,376 @@ export function LiveOrderBookPanel({
               <>
                 {/* TAB CONTENT: KHỚP LỆNH (TAPE) */}
                 {activityTab === "trades" && (
-              <div className="flex flex-col flex-1">
-                {/* Trade Initiative Bar */}
-                <div className="mb-2 rounded-lg border border-border/80 bg-[#121313] p-2.5 font-mono text-xs">
-                  <div className="flex items-center justify-between text-[11px] text-muted-2 mb-1.5">
-                    <span>
-                      Chủ động Mua: <b className="text-up font-bold">{formatCompactVolume(tradeStats.buyVol)}</b> (
-                      {tradeStats.buyTradedPct.toFixed(0)}%)
-                    </span>
-                    <span>
-                      Chủ động Bán: <b className="text-down font-bold">{formatCompactVolume(tradeStats.sellVol)}</b> (
-                      {tradeStats.sellTradedPct.toFixed(0)}%)
-                    </span>
-                  </div>
-                  <div className="flex h-1.5 overflow-hidden rounded-full bg-panel-2">
-                    <div className="bg-up transition-all duration-300" style={{ width: `${tradeStats.buyTradedPct}%` }} />
-                    <div className="bg-down transition-all duration-300" style={{ width: `${tradeStats.sellTradedPct}%` }} />
-                  </div>
-                </div>
-
-                {visibleTrades.length ? (
-                  <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col">
-                    <div className="grid grid-cols-[1.4fr_1fr_0.8fr] items-center gap-x-2 border-b border-border/60 bg-[#171819] px-3.5 py-1.5 text-xs font-bold text-muted-2">
-                      <span>Thời gian</span>
-                      <span className="text-right">Khối lượng</span>
-                      <span className="text-right">Giá</span>
+                  <div className="flex flex-col flex-1 space-y-2.5">
+                    {/* Trade Initiative Bar */}
+                    <div className="rounded-lg border border-border/80 bg-[#121313] p-2 font-mono text-xs">
+                      <div className="flex items-center justify-between text-[11px] text-muted-2 mb-1.5">
+                        <span>
+                          Chủ động Mua: <b className="text-up font-bold">{formatCompactVolume(tradeStats.buyVol)}</b> (
+                          {tradeStats.buyTradedPct.toFixed(0)}%)
+                        </span>
+                        <span>
+                          Chủ động Bán: <b className="text-down font-bold">{formatCompactVolume(tradeStats.sellVol)}</b> (
+                          {tradeStats.sellTradedPct.toFixed(0)}%)
+                        </span>
+                      </div>
+                      <div className="flex h-1.5 overflow-hidden rounded-full bg-panel-2">
+                        <div className="bg-up transition-all duration-300" style={{ width: `${tradeStats.buyTradedPct}%` }} />
+                        <div className="bg-down transition-all duration-300" style={{ width: `${tradeStats.sellTradedPct}%` }} />
+                      </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto max-h-[340px] px-3.5">
-                      {visibleTrades.map((trade) => {
-                        const isLarge = trade.volume >= LARGE_TRADE_MIN_VOLUME
-                        const isWhale = trade.volume >= whaleThreshold
 
-                        return (
-                          <div
-                            key={trade.id}
-                            className={`grid grid-cols-[1.4fr_1fr_0.8fr] items-center gap-x-2 border-b py-1 font-mono text-xs last:border-0 hover:bg-panel-2/50 ${
-                              isWhale
-                                ? "border-up/30 bg-up/10 text-up font-bold -mx-3.5 px-3.5"
-                                : isLarge
-                                  ? "border-ref/30 bg-ref/10 text-ref font-bold -mx-3.5 px-3.5"
-                                  : "border-border/30 text-foreground"
-                            }`}
-                          >
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="text-muted-2 text-xs">{timeLabel(trade.time)}</span>
-                              {trade.count > 1 && (
-                                <span
-                                  className="rounded bg-[#202223] border border-border/80 px-1 py-0.2 text-[10px] text-muted-2 font-mono font-bold shrink-0"
-                                  title={`Gộp ${trade.count} lệnh khớp liên tiếp cùng chiều trong ≤1s`}
+                    {/* Split 2-Panel Layout: Left = Tape (Khớp lệnh), Right = Khối ngoại NN (Realtime) */}
+                    <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-2.5 flex-1 min-h-0">
+                      {/* Left: Tape Table */}
+                      {visibleTrades.length ? (
+                        <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col min-h-0">
+                          <div className="grid grid-cols-[1.2fr_1.1fr_0.75fr] items-center gap-x-2 border-b border-border/60 bg-[#171819] px-2.5 py-1.5 text-xs font-bold text-muted-2">
+                            <span>Thời gian</span>
+                            <span className="text-right">Khối lượng</span>
+                            <span className="text-right">Giá</span>
+                          </div>
+                          <div className="flex-1 overflow-y-auto max-h-[340px] px-2.5 divide-y divide-border/15">
+                            {visibleTrades.map((trade) => {
+                              const isLarge = trade.volume >= LARGE_TRADE_MIN_VOLUME
+                              const isWhale = trade.volume >= whaleThreshold
+                              const pill = sidePillMeta(trade.side)
+
+                              return (
+                                <div
+                                  key={trade.id}
+                                  className={`grid grid-cols-[1.2fr_1.1fr_0.75fr] items-center gap-x-2 py-1 font-mono text-xs hover:bg-panel-2/50 ${
+                                    isWhale
+                                      ? "bg-up/10 text-up font-bold -mx-2.5 px-2.5"
+                                      : isLarge
+                                        ? "bg-ref/10 text-ref font-bold -mx-2.5 px-2.5"
+                                        : "text-foreground"
+                                  }`}
                                 >
-                                  x{trade.count}
-                                </span>
-                              )}
-                              {isWhale ? (
-                                <span className="rounded bg-up/25 px-1 py-0.2 text-[9px] text-up font-bold shrink-0">{whaleThreshold >= 50_000 ? "50K+" : "30K+"}</span>
-                              ) : isLarge ? (
-                                <span className="rounded bg-ref/25 px-1 py-0.2 text-[9px] text-ref font-bold shrink-0">10K+</span>
-                              ) : null}
-                            </div>
-                            <span className="text-right font-bold text-[13px] flex items-center justify-end gap-1">
-                              {formatVolume(trade.volume)}
-                              <span
-                                className={`text-[10px] font-bold ${
-                                  trade.side === "BUY" ? "text-up" : trade.side === "SELL" ? "text-down" : "text-muted-2"
-                                }`}
-                              >
-                                {trade.side === "BUY" ? "M" : trade.side === "SELL" ? "B" : ""}
-                              </span>
-                            </span>
-                            <span
-                              className={`text-right font-bold text-[13px] ${getPriceColorClass(trade.price, quote?.reference, quote?.ceiling, quote?.floor)}`}
-                            >
-                              {formatPrice(trade.price)}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2">
-                    {stream.historyState === "LOADING"
-                      ? "Đang tải dữ liệu khớp lệnh từ đầu phiên..."
-                      : tradeFilter !== "all"
-                        ? "Không có lệnh nào thỏa mãn bộ lọc."
-                        : "Chờ dữ liệu khớp lệnh mới..."}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* TAB CONTENT: NƯỚC NGOÀI (FOREIGN) */}
-            {activityTab === "foreign" && (
-              <div className="flex flex-col flex-1 space-y-3">
-                {/* 4 Summary Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
-                    <div className="text-xs text-muted-2 font-semibold">NN Mua lũy kế</div>
-                    <div className="mt-1 font-mono text-sm sm:text-base font-bold text-up">
-                      {formatVolume(stream.foreign?.totalBuyVolume)}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-muted font-mono">
-                      {stream.foreign?.totalBuyValue
-                        ? formatMarketValue(stream.foreign.totalBuyValue)
-                        : stream.foreign?.totalBuyVolume && quote?.price
-                          ? formatMarketValue(stream.foreign.totalBuyVolume * quote.price)
-                          : "—"}
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
-                    <div className="text-xs text-muted-2 font-semibold">NN Bán lũy kế</div>
-                    <div className="mt-1 font-mono text-sm sm:text-base font-bold text-down">
-                      {formatVolume(stream.foreign?.totalSellVolume)}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-muted font-mono">
-                      {stream.foreign?.totalSellValue
-                        ? formatMarketValue(stream.foreign.totalSellValue)
-                        : stream.foreign?.totalSellVolume && quote?.price
-                          ? formatMarketValue(stream.foreign.totalSellVolume * quote.price)
-                          : "—"}
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
-                    <div className="text-xs text-muted-2 font-semibold">Mua / Bán Ròng</div>
-                    <div
-                      className={`mt-1 font-mono text-sm sm:text-base font-bold ${
-                        foreignNetVolume === null
-                          ? "text-muted-2"
-                          : foreignNetVolume > 0
-                            ? "text-up"
-                            : foreignNetVolume < 0
-                              ? "text-down"
-                              : "text-ref"
-                      }`}
-                    >
-                      {foreignNetVolume === null
-                        ? "—"
-                        : `${foreignNetVolume > 0 ? "+" : ""}${formatVolume(foreignNetVolume)}`}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-muted font-mono">
-                      {foreignNetValue !== null ? `${foreignNetValue > 0 ? "+" : ""}${formatMarketValue(foreignNetValue)}` : "—"}
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
-                    <div className="text-xs text-muted-2 font-semibold">Room Ngoại còn lại</div>
-                    <div className="mt-1 font-mono text-sm sm:text-base font-bold text-foreground">
-                      {foreignRoom !== null && foreignRoom !== undefined
-                        ? foreignRoom === 0
-                          ? "Hết room (0 cp)"
-                          : `${formatCompactVolume(foreignRoom)} cp`
-                        : "—"}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-muted font-mono">
-                      {roomPercentage !== null
-                        ? `Còn ${roomPercentage.toFixed(1)}% VĐL (${formatCompactVolume(foreignRoom)} cp)`
-                        : foreignRoom !== null && foreignRoom !== undefined && foreignRoom > 0
-                          ? `${formatVolume(foreignRoom)} cp khả dụng`
-                          : foreignRoom === 0
-                            ? "Khối ngoại đã hết room"
-                            : "Theo quy định VSD"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Foreign Flow Timeline Chart (Biến động GT mua bán của NN trong phiên) */}
-                <ForeignFlowChart
-                  timeline={foreignTimeline}
-                  currentNetValue={foreignNetValue}
-                  currentBuyValue={stream.foreign?.totalBuyValue}
-                  currentSellValue={stream.foreign?.totalSellValue}
-                />
-
-                <div className="text-[11px] text-muted leading-relaxed">
-                  * Dữ liệu NĐTNN được tổng hợp trực tiếp từ sở giao dịch & feed DNSE T=f. Khối lượng và giá trị không bị suy diễn từ bảng khớp lệnh thông thường.
-                </div>
-              </div>
-            )}
-
-            {/* TAB CONTENT: PHÂN TÍCH BƯỚC GIÁ (VOLUME PROFILE) */}
-            {activityTab === "profile" && (
-              <div className="flex flex-col flex-1">
-                <div className="mb-2.5 text-xs text-muted-2 flex items-center justify-between">
-                  <span className="font-medium">Phân bổ khối lượng khớp lệnh theo từng bước giá trong phiên:</span>
-                  <span className="font-mono text-xs text-muted font-bold">{volumeProfile.rows.length} bước giá</span>
-                </div>
-
-                {volumeProfile.rows.length ? (
-                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2 max-h-[360px] overflow-y-auto space-y-1">
-                    {volumeProfile.rows.map((row) => {
-                      const totalPct = (row.totalVol / volumeProfile.maxVol) * 100
-                      const buyVolPct = row.totalVol > 0 ? (row.buyVol / row.totalVol) * 100 : 50
-                      const normalizedRef = quote?.reference ? (quote.price ? normalizeMarketPrice(quote.reference, quote.price) ?? quote.reference : quote.reference) : undefined
-                      const normalizedCeil = quote?.ceiling ? (quote.price ? normalizeMarketPrice(quote.ceiling, quote.price) ?? quote.ceiling : quote.ceiling) : undefined
-                      const normalizedFlr = quote?.floor ? (quote.price ? normalizeMarketPrice(quote.floor, quote.price) ?? quote.floor : quote.floor) : undefined
-
-                      const isRef = normalizedRef ? Math.abs(row.price - normalizedRef) < 0.01 : false
-                      const isCeil = normalizedCeil ? row.price >= normalizedCeil - 0.01 : false
-                      const isFlr = normalizedFlr ? row.price <= normalizedFlr + 0.01 : false
-                      const isCurrent = quote?.price ? Math.abs(row.price - quote.price) < 0.01 : false
-
-                      const priceColor = isCeil
-                        ? "text-ceiling font-bold"
-                        : isFlr
-                          ? "text-floor font-bold"
-                          : normalizedRef && row.price > normalizedRef
-                            ? "text-up font-bold"
-                            : normalizedRef && row.price < normalizedRef
-                              ? "text-down font-bold"
-                              : "text-ref font-bold"
-
-                      return (
-                        <div key={row.price} className="relative flex items-center gap-3 font-mono text-[13px] py-1 px-2.5 rounded hover:bg-panel-2/50">
-                          {/* Profile histogram bar */}
-                          <div
-                            className="absolute inset-y-0 left-0 bg-brand/15 rounded"
-                            style={{ width: `${totalPct.toFixed(1)}%` }}
-                            aria-hidden="true"
-                          />
-
-                          {/* Price */}
-                          <div className="relative w-20 font-bold flex items-center gap-1">
-                            <span className={priceColor}>{formatPrice(row.price)}</span>
-                            {isCurrent && <span className="h-2 w-2 rounded-full bg-brand animate-pulse shrink-0" title="Giá khớp hiện tại" />}
-                            {isCeil ? (
-                              <span className="text-[10px] text-ceiling font-bold shrink-0">(Trần)</span>
-                            ) : isFlr ? (
-                              <span className="text-[10px] text-floor font-bold shrink-0">(Sàn)</span>
-                            ) : isRef ? (
-                              <span className="text-[10px] text-ref font-bold shrink-0">(TC)</span>
-                            ) : null}
-                          </div>
-
-                          {/* Volume */}
-                          <div className="relative w-24 text-right font-bold text-foreground">
-                            {formatVolume(row.totalVol)}
-                          </div>
-
-                          {/* Dual Buy/Sell Mini Bar */}
-                          <div className="relative flex-1 flex items-center gap-2">
-                            <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-[#1e2021]">
-                              <div className="bg-up" style={{ width: `${buyVolPct}%` }} />
-                              <div className="bg-down" style={{ width: `${100 - buyVolPct}%` }} />
-                            </div>
-                            <span className="text-[11px] font-semibold text-muted-2 w-12 text-right">
-                              {((row.totalVol / (tradeStats.totalTraded || 1)) * 100).toFixed(1)}%
-                            </span>
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <span className="text-muted-2 text-[11px]">{timeLabel(trade.time)}</span>
+                                    {trade.count > 1 && (
+                                      <span
+                                        className="rounded bg-[#202223] border border-border/80 px-1 py-0.2 text-[9px] text-muted-2 font-mono font-bold shrink-0"
+                                        title={`Gộp ${trade.count} lệnh khớp liên tiếp cùng chiều trong ≤1s`}
+                                      >
+                                        x{trade.count}
+                                      </span>
+                                    )}
+                                    {isWhale ? (
+                                      <span className="rounded bg-up/25 px-1 py-0.2 text-[9px] text-up font-bold shrink-0">
+                                        {whaleThreshold >= 50_000 ? "50K+" : "30K+"}
+                                      </span>
+                                    ) : isLarge ? (
+                                      <span className="rounded bg-ref/25 px-1 py-0.2 text-[9px] text-ref font-bold shrink-0">
+                                        10K+
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <span className="text-right font-bold text-[12px] flex items-center justify-end gap-1">
+                                    {formatVolume(trade.volume)}
+                                    <span
+                                      className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${pill.className} leading-tight shrink-0`}
+                                    >
+                                      {pill.label}
+                                    </span>
+                                  </span>
+                                  <span
+                                    className={`text-right font-bold text-[12px] ${getPriceColorClass(
+                                      trade.price,
+                                      quote?.reference,
+                                      quote?.ceiling,
+                                      quote?.floor
+                                    )}`}
+                                  >
+                                    {formatPrice(trade.price)}
+                                  </span>
+                                </div>
+                              )
+                            })}
                           </div>
                         </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2">
-                    {stream.historyState === "LOADING"
-                      ? "Đang tải toàn bộ dữ liệu bước giá trong phiên..."
-                      : "Chưa có đủ dữ liệu khớp lệnh để vẽ phân bổ bước giá."}
+                      ) : (
+                        <div className="flex-1 rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2 flex items-center justify-center">
+                          {stream.historyState === "LOADING"
+                            ? "Đang tải dữ liệu khớp lệnh..."
+                            : tradeFilter !== "all"
+                              ? "Không có lệnh thỏa mãn bộ lọc."
+                              : "Chờ dữ liệu khớp lệnh mới..."}
+                        </div>
+                      )}
+
+                      {/* Right: Realtime Foreign Widget */}
+                      <ForeignRealtimeCard
+                        foreign={stream.foreign}
+                        quotePrice={quote?.price}
+                        foreignNetVolume={foreignNetVolume}
+                        foreignNetValue={foreignNetValue}
+                        roomPercentage={roomPercentage}
+                      />
+                    </div>
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* TAB CONTENT: GIAO DỊCH THỎA THUẬN (PUT-THROUGH) */}
-            {activityTab === "putthrough" && (
-              <div className="flex flex-col flex-1">
-                {/* Summary Header */}
-                <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className="text-muted-2 font-medium">Giao dịch thỏa thuận trong ngày:</span>
-                  <div className="flex items-center gap-3 font-mono text-xs">
-                    <span className="text-muted-2">
-                      Số lệnh: <b className="text-foreground">{stream.putThroughDeals.length}</b>
-                    </span>
-                    <span className="text-muted-2">
-                      Tổng KL:{" "}
-                      <b className="text-foreground">
-                        {formatCompactVolume(stream.putThroughDeals.reduce((sum, d) => sum + d.volume, 0))}
-                      </b>
-                    </span>
-                    <span className="text-muted-2">
-                      Tổng GT:{" "}
-                      <b className="text-up font-bold">
-                        {formatMarketValue(stream.putThroughDeals.reduce((sum, d) => sum + d.value, 0))}
-                      </b>
-                    </span>
-                  </div>
-                </div>
+                {/* TAB CONTENT: NƯỚC NGOÀI (FOREIGN) */}
+                {activityTab === "foreign" && (
+                  <div className="flex flex-col flex-1 space-y-3">
+                    {/* 4 Summary Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
+                        <div className="text-xs text-muted-2 font-semibold">NN Mua lũy kế</div>
+                        <div
+                          className={`mt-1 font-mono text-sm sm:text-base font-bold text-up transition-colors ${
+                            foreignBuyVolFlash === "up" ? "flash-up font-black" : foreignBuyVolFlash === "down" ? "flash-down font-black" : ""
+                          }`}
+                        >
+                          {formatVolume(stream.foreign?.totalBuyVolume)}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-muted font-mono">
+                          {stream.foreign?.totalBuyValue
+                            ? formatMarketValue(stream.foreign.totalBuyValue)
+                            : stream.foreign?.totalBuyVolume && quote?.price
+                              ? formatMarketValue(stream.foreign.totalBuyVolume * quote.price)
+                              : "—"}
+                        </div>
+                      </div>
 
-                {stream.putThroughDeals.length > 0 ? (
-                  <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col">
-                    <div className="grid grid-cols-[80px_1fr_90px_110px_70px] border-b border-border/60 bg-[#171819] px-3 py-1.5 text-xs font-bold text-muted-2">
-                      <span>Thời gian</span>
-                      <span className="text-right">Khối lượng</span>
-                      <span className="text-right">Giá TT</span>
-                      <span className="text-right">Tổng GT</span>
-                      <span className="text-right">Loại</span>
+                      <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
+                        <div className="text-xs text-muted-2 font-semibold">NN Bán lũy kế</div>
+                        <div
+                          className={`mt-1 font-mono text-sm sm:text-base font-bold text-down transition-colors ${
+                            foreignSellVolFlash === "up" ? "flash-up font-black" : foreignSellVolFlash === "down" ? "flash-down font-black" : ""
+                          }`}
+                        >
+                          {formatVolume(stream.foreign?.totalSellVolume)}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-muted font-mono">
+                          {stream.foreign?.totalSellValue
+                            ? formatMarketValue(stream.foreign.totalSellValue)
+                            : stream.foreign?.totalSellVolume && quote?.price
+                              ? formatMarketValue(stream.foreign.totalSellVolume * quote.price)
+                              : "—"}
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
+                        <div className="text-xs text-muted-2 font-semibold">Mua / Bán Ròng</div>
+                        <div
+                          className={`mt-1 font-mono text-sm sm:text-base font-bold transition-colors ${
+                            foreignNetVolume === null
+                              ? "text-muted-2"
+                              : foreignNetVolume > 0
+                                ? "text-up"
+                                : foreignNetVolume < 0
+                                  ? "text-down"
+                                  : "text-ref"
+                          } ${
+                            foreignNetVolFlash === "up" ? "flash-up font-black" : foreignNetVolFlash === "down" ? "flash-down font-black" : ""
+                          }`}
+                        >
+                          {foreignNetVolume === null
+                            ? "—"
+                            : `${foreignNetVolume > 0 ? "+" : ""}${formatVolume(foreignNetVolume)}`}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-muted font-mono">
+                          {foreignNetValue !== null ? `${foreignNetValue > 0 ? "+" : ""}${formatMarketValue(foreignNetValue)}` : "—"}
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
+                        <div className="text-xs text-muted-2 font-semibold">Room Ngoại còn lại</div>
+                        <div
+                          className={`mt-1 font-mono text-sm sm:text-base font-bold text-foreground transition-colors ${
+                            foreignRoomFlash === "up" ? "flash-up font-black" : foreignRoomFlash === "down" ? "flash-down font-black" : ""
+                          }`}
+                        >
+                          {foreignRoom !== null && foreignRoom !== undefined
+                            ? foreignRoom === 0
+                              ? "Hết room (0 cp)"
+                              : `${formatCompactVolume(foreignRoom)} cp`
+                            : "—"}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-muted font-mono">
+                          {roomPercentage !== null
+                            ? `Còn ${roomPercentage.toFixed(1)}% VĐL (${formatCompactVolume(foreignRoom)} cp)`
+                            : foreignRoom !== null && foreignRoom !== undefined && foreignRoom > 0
+                              ? `${formatVolume(foreignRoom)} cp khả dụng`
+                              : foreignRoom === 0
+                                ? "Khối ngoại đã hết room"
+                                : "Theo quy định VSD"}
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto max-h-[340px] px-3">
-                      {stream.putThroughDeals.map((deal) => {
-                        const priceColor = getPriceColorClass(deal.price, quote?.reference, quote?.ceiling, quote?.floor)
+                    {/* Foreign Flow Timeline Chart (Biến động GT mua bán của NN trong phiên) */}
+                    <ForeignFlowChart
+                      timeline={foreignTimeline}
+                      currentNetValue={foreignNetValue}
+                      currentBuyValue={stream.foreign?.totalBuyValue}
+                      currentSellValue={stream.foreign?.totalSellValue}
+                    />
 
-                        return (
-                          <div
-                            key={deal.id}
-                            className="grid grid-cols-[80px_1fr_90px_110px_70px] items-center border-b border-border/30 py-1 font-mono text-xs last:border-0 hover:bg-panel-2/40"
-                          >
-                            <span className="text-muted-2">{timeLabel(deal.time)}</span>
-                            <span className="text-right font-bold text-[13px] text-foreground">{formatVolume(deal.volume)}</span>
-                            <span className={`text-right font-bold text-[13px] ${priceColor}`}>{formatPrice(deal.price)}</span>
-                            <span className="text-right font-bold text-[13px] text-foreground">{formatMarketValue(deal.value)}</span>
-                            <div className="flex justify-end">
-                              <span className="rounded px-1.5 py-0.5 text-[10px] font-bold border bg-panel-2 text-muted-2 border-border">
-                                {deal.type || "PTM"}
-                              </span>
+                    <div className="text-[11px] text-muted leading-relaxed">
+                      * Dữ liệu NĐTNN được tổng hợp trực tiếp từ sở giao dịch & feed DNSE T=f. Khối lượng và giá trị không bị suy diễn từ bảng khớp lệnh thông thường.
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB CONTENT: PHÂN TÍCH BƯỚC GIÁ (VOLUME PROFILE) */}
+                {activityTab === "profile" && (
+                  <div className="flex flex-col flex-1">
+                    <div className="mb-2.5 text-xs text-muted-2 flex items-center justify-between">
+                      <span className="font-medium">Phân bổ khối lượng khớp lệnh theo từng bước giá trong phiên:</span>
+                      <span className="font-mono text-xs text-muted font-bold">{volumeProfile.rows.length} bước giá</span>
+                    </div>
+
+                    {volumeProfile.rows.length ? (
+                      <div className="rounded-lg border border-border/80 bg-[#121313] p-2 max-h-[360px] overflow-y-auto space-y-1">
+                        {volumeProfile.rows.map((row) => {
+                          const totalPct = (row.totalVol / volumeProfile.maxVol) * 100
+                          const buyVolPct = row.totalVol > 0 ? (row.buyVol / row.totalVol) * 100 : 50
+                          const normalizedRef = quote?.reference ? (quote.price ? normalizeMarketPrice(quote.reference, quote.price) ?? quote.reference : quote.reference) : undefined
+                          const normalizedCeil = quote?.ceiling ? (quote.price ? normalizeMarketPrice(quote.ceiling, quote.price) ?? quote.ceiling : quote.ceiling) : undefined
+                          const normalizedFlr = quote?.floor ? (quote.price ? normalizeMarketPrice(quote.floor, quote.price) ?? quote.floor : quote.floor) : undefined
+
+                          const isRef = normalizedRef ? Math.abs(row.price - normalizedRef) < 0.01 : false
+                          const isCeil = normalizedCeil ? row.price >= normalizedCeil - 0.01 : false
+                          const isFlr = normalizedFlr ? row.price <= normalizedFlr + 0.01 : false
+                          const isCurrent = quote?.price ? Math.abs(row.price - quote.price) < 0.01 : false
+
+                          const priceColor = isCeil
+                            ? "text-ceiling font-bold"
+                            : isFlr
+                              ? "text-floor font-bold"
+                              : normalizedRef && row.price > normalizedRef
+                                ? "text-up font-bold"
+                                : normalizedRef && row.price < normalizedRef
+                                  ? "text-down font-bold"
+                                  : "text-ref font-bold"
+
+                          return (
+                            <div key={row.price} className="relative flex items-center gap-3 font-mono text-[13px] py-1 px-2.5 rounded hover:bg-panel-2/50">
+                              {/* Profile histogram bar */}
+                              <div
+                                className="absolute inset-y-0 left-0 bg-brand/15 rounded"
+                                style={{ width: `${totalPct.toFixed(1)}%` }}
+                                aria-hidden="true"
+                              />
+
+                              {/* Price */}
+                              <div className="relative w-20 font-bold flex items-center gap-1">
+                                <span className={priceColor}>{formatPrice(row.price)}</span>
+                                {isCurrent && <span className="h-2 w-2 rounded-full bg-brand animate-pulse shrink-0" title="Giá khớp hiện tại" />}
+                                {isCeil ? (
+                                  <span className="text-[10px] text-ceiling font-bold shrink-0">(Trần)</span>
+                                ) : isFlr ? (
+                                  <span className="text-[10px] text-floor font-bold shrink-0">(Sàn)</span>
+                                ) : isRef ? (
+                                  <span className="text-[10px] text-ref font-bold shrink-0">(TC)</span>
+                                ) : null}
+                              </div>
+
+                              {/* Volume */}
+                              <div className="relative w-24 text-right font-bold text-foreground">
+                                {formatVolume(row.totalVol)}
+                              </div>
+
+                              {/* Dual Buy/Sell Mini Bar */}
+                              <div className="relative flex-1 flex items-center gap-2">
+                                <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-[#1e2021]">
+                                  <div className="bg-up" style={{ width: `${buyVolPct}%` }} />
+                                  <div className="bg-down" style={{ width: `${100 - buyVolPct}%` }} />
+                                </div>
+                                <span className="text-[11px] font-semibold text-muted-2 w-12 text-right">
+                                  {((row.totalVol / (tradeStats.totalTraded || 1)) * 100).toFixed(1)}%
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2">
-                    {stream.historyState === "LOADING"
-                      ? "Đang tải dữ liệu giao dịch thỏa thuận..."
-                      : `Chưa có giao dịch thỏa thuận nào cho mã ${symbol} trong phiên hôm nay.`}
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2">
+                        {stream.historyState === "LOADING"
+                          ? "Đang tải toàn bộ dữ liệu bước giá trong phiên..."
+                          : "Chưa có đủ dữ liệu khớp lệnh để vẽ phân bổ bước giá."}
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
+
+                {/* TAB CONTENT: GIAO DỊCH THỎA THUẬN (PUT-THROUGH) */}
+                {activityTab === "putthrough" && (
+                  <div className="flex flex-col flex-1">
+                    {/* Summary Header */}
+                    <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="text-muted-2 font-medium">Giao dịch thỏa thuận trong ngày:</span>
+                      <div className="flex items-center gap-3 font-mono text-xs">
+                        <span className="text-muted-2">
+                          Số lệnh: <b className="text-foreground">{stream.putThroughDeals.length}</b>
+                        </span>
+                        <span className="text-muted-2">
+                          Tổng KL:{" "}
+                          <b className="text-foreground">
+                            {formatCompactVolume(stream.putThroughDeals.reduce((sum, d) => sum + d.volume, 0))}
+                          </b>
+                        </span>
+                        <span className="text-muted-2">
+                          Tổng GT:{" "}
+                          <b className="text-up font-bold">
+                            {formatMarketValue(stream.putThroughDeals.reduce((sum, d) => sum + d.value, 0))}
+                          </b>
+                        </span>
+                      </div>
+                    </div>
+
+                    {stream.putThroughDeals.length > 0 ? (
+                      <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col">
+                        <div className="grid grid-cols-[80px_1fr_90px_110px_70px] border-b border-border/60 bg-[#171819] px-3 py-1.5 text-xs font-bold text-muted-2">
+                          <span>Thời gian</span>
+                          <span className="text-right">Khối lượng</span>
+                          <span className="text-right">Giá TT</span>
+                          <span className="text-right">Tổng GT</span>
+                          <span className="text-right">Loại</span>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto max-h-[340px] px-3">
+                          {stream.putThroughDeals.map((deal) => {
+                            const priceColor = getPriceColorClass(deal.price, quote?.reference, quote?.ceiling, quote?.floor)
+
+                            return (
+                              <div
+                                key={deal.id}
+                                className="grid grid-cols-[80px_1fr_90px_110px_70px] items-center border-b border-border/30 py-1 font-mono text-xs last:border-0 hover:bg-panel-2/40"
+                              >
+                                <span className="text-muted-2">{timeLabel(deal.time)}</span>
+                                <span className="text-right font-bold text-[13px] text-foreground">{formatVolume(deal.volume)}</span>
+                                <span className={`text-right font-bold text-[13px] ${priceColor}`}>{formatPrice(deal.price)}</span>
+                                <span className="text-right font-bold text-[13px] text-foreground">{formatMarketValue(deal.value)}</span>
+                                <div className="flex justify-end">
+                                  <span className="rounded px-1.5 py-0.5 text-[10px] font-bold border bg-panel-2 text-muted-2 border-border">
+                                    {deal.type || "PTM"}
+                                  </span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2">
+                        {stream.historyState === "LOADING"
+                          ? "Đang tải dữ liệu giao dịch thỏa thuận..."
+                          : `Chưa có giao dịch thỏa thuận nào cho mã ${symbol} trong phiên hôm nay.`}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
-          </>
-        )}
-      </div>
-    </div>
-  ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {/* RESIZE HANDLES (Interactive everywhere via window listeners with 0ms drag latency) */}
       {!minimized && !isMaximized && (
