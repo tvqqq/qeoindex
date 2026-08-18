@@ -9,7 +9,16 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-const CONCURRENCY = 10
+const CONCURRENCY = 20
+const MAX_TOTAL_DURATION_MS = 22_000
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timeout ${ms}ms for ${label}`)), ms)
+  })
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer))
+}
 
 export async function GET(request: Request) {
   return handleSync(request)
@@ -74,17 +83,22 @@ async function handleSync(request: Request) {
 
   // Process in chunks of CONCURRENCY
   for (let i = 0; i < targetSymbols.length; i += CONCURRENCY) {
+    // Guard against total serverless function timeout
+    if (Date.now() - startedAt > MAX_TOTAL_DURATION_MS) {
+      break
+    }
+
     const chunk = targetSymbols.slice(i, i + CONCURRENCY)
     await Promise.all(
       chunk.map(async (symbol) => {
         try {
-          // 1. Try DNSE OpenAPI session history
-          const history = await fetchDnseSessionHistory(symbol, new Date())
+          // 1. Try DNSE OpenAPI session history with 2.5s timeout
+          const history = await withTimeout(fetchDnseSessionHistory(symbol, new Date()), 2500, symbol)
           syncedHistories.push(history)
         } catch (dnseErr) {
           // 2. Fallback to Yahoo 5m intraday snapshot
           try {
-            const yahooSnap = await fetchYahooFiveMinuteSnapshot(symbol, new Date())
+            const yahooSnap = await withTimeout(fetchYahooFiveMinuteSnapshot(symbol, new Date()), 1500, `yahoo-${symbol}`)
             if (yahooSnap && yahooSnap.bars.length > 0) {
               const latestBar = yahooSnap.bars[yahooSnap.bars.length - 1]
               const matchPrice = latestBar ? latestBar.close : null
