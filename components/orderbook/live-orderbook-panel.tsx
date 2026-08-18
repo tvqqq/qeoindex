@@ -24,10 +24,10 @@ import { marketToneFromPrice, marketToneHex, marketToneText } from "@/lib/market
 import { normalizeMarketPrice } from "@/lib/intraday-5m"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
 
-type DepthLevel = { price: number; volume: number }
-type TradeSide = "BUY" | "SELL" | "UNKNOWN"
-type StreamTrade = { id: string; time: string; price: number; volume: number; side: TradeSide }
-type StockQuote = {
+export type DepthLevel = { price: number; volume: number }
+export type TradeSide = "BUY" | "SELL" | "UNKNOWN"
+export type StreamTrade = { id: string; time: string; price: number; volume: number; side: TradeSide }
+export type StockQuote = {
   symbol: string
   price: number
   reference?: number
@@ -293,6 +293,27 @@ function nextQuote(symbol: string, data: Record<string, unknown>, current: Stock
   }
 }
 
+import { clusterTrades, type ClusteredTrade } from "@/lib/trade-clustering"
+
+export type { ClusteredTrade }
+
+export interface CachedSessionData {
+  prices: number[]
+  company: CompanyInfo | null
+  foreign: ForeignSnapshot | null
+  foreignTimeline: ForeignTimelinePoint[]
+  quote: StockQuote | null
+  bids: DepthLevel[]
+  asks: DepthLevel[]
+  trades: StreamTrade[]
+  putThrough: PutThroughDeal[]
+  cachedAt: number
+}
+
+// In-memory client-side cache for session orderbook data
+export const sessionOrderBookCache = new Map<string, CachedSessionData>()
+const CLIENT_CACHE_TTL_MS = 60_000 // 60s cache TTL
+
 function mergeTrades(incoming: StreamTrade[], current: StreamTrade[]) {
   const deduped = new Map<string, StreamTrade>()
   for (const trade of [...incoming, ...current]) deduped.set(trade.id, trade)
@@ -302,16 +323,18 @@ function mergeTrades(incoming: StreamTrade[], current: StreamTrade[]) {
 }
 
 function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMeta?: StockInitialMeta) {
+  const cachedInitial = sessionOrderBookCache.get(symbol)
   const [state, setState] = useState<StreamState>("CONNECTING")
-  const [bids, setBids] = useState<DepthLevel[]>([])
-  const [asks, setAsks] = useState<DepthLevel[]>([])
-  const [trades, setTrades] = useState<StreamTrade[]>([])
-  const [foreign, setForeign] = useState<ForeignSnapshot | null>(null)
+  const [bids, setBids] = useState<DepthLevel[]>(() => cachedInitial?.bids ?? [])
+  const [asks, setAsks] = useState<DepthLevel[]>(() => cachedInitial?.asks ?? [])
+  const [trades, setTrades] = useState<StreamTrade[]>(() => cachedInitial?.trades ?? [])
+  const [foreign, setForeign] = useState<ForeignSnapshot | null>(() => cachedInitial?.foreign ?? null)
   const [foreignEvents, setForeignEvents] = useState<ForeignFlowEvent[]>([])
-  const [foreignTimeline, setForeignTimeline] = useState<ForeignTimelinePoint[]>([])
-  const [putThroughDeals, setPutThroughDeals] = useState<PutThroughDeal[]>([])
-  const [company, setCompany] = useState<CompanyInfo | null>(() => (initialMeta?.companyName ? { nameVi: initialMeta.companyName, sector: initialMeta.sector } : null))
+  const [foreignTimeline, setForeignTimeline] = useState<ForeignTimelinePoint[]>(() => cachedInitial?.foreignTimeline ?? [])
+  const [putThroughDeals, setPutThroughDeals] = useState<PutThroughDeal[]>(() => cachedInitial?.putThrough ?? [])
+  const [company, setCompany] = useState<CompanyInfo | null>(() => cachedInitial?.company ?? (initialMeta?.companyName ? { nameVi: initialMeta.companyName, sector: initialMeta.sector } : null))
   const [quote, setQuote] = useState<StockQuote | null>(() => {
+    if (cachedInitial?.quote) return cachedInitial.quote
     if (!initialMeta?.price) return null
     const price = initialMeta.price
     const reference = initialMeta.reference ? normalizeMarketPrice(initialMeta.reference, price) ?? initialMeta.reference : undefined
@@ -329,18 +352,31 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       updatedAt: new Date().toISOString(),
     }
   })
-  const [priceHistory, setPriceHistory] = useState<number[]>(() => initialMeta?.history ?? [])
-  const [historyState, setHistoryState] = useState<HistoryState>("LOADING")
-  const [historyMessage, setHistoryMessage] = useState("")
+  const [priceHistory, setPriceHistory] = useState<number[]>(() => cachedInitial?.prices ?? (initialMeta?.history ?? []))
+  const [historyState, setHistoryState] = useState<HistoryState>(() => cachedInitial ? "READY" : "LOADING")
+  const [historyMessage, setHistoryMessage] = useState(() => cachedInitial ? "Đã tải từ bộ nhớ đệm." : "")
   const [updatedAt, setUpdatedAt] = useState("")
   const [error, setError] = useState("")
-  const depthRef = useRef<{ bids: DepthLevel[]; asks: DepthLevel[] }>({ bids: [], asks: [] })
+  const depthRef = useRef<{ bids: DepthLevel[]; asks: DepthLevel[] }>({ bids: cachedInitial?.bids ?? [], asks: cachedInitial?.asks ?? [] })
   const lastFrameAt = useRef(0)
   const lastForeignEventKey = useRef<string>("")
 
   // Hydrate from initial metadata if symbol changes
   useEffect(() => {
-    if (initialMeta) {
+    const cached = sessionOrderBookCache.get(symbol)
+    if (cached) {
+      setBids(cached.bids)
+      setAsks(cached.asks)
+      setTrades(cached.trades)
+      setForeign(cached.foreign)
+      setForeignTimeline(cached.foreignTimeline)
+      setPutThroughDeals(cached.putThrough)
+      if (cached.company) setCompany(cached.company)
+      if (cached.quote) setQuote(cached.quote)
+      if (cached.prices.length) setPriceHistory(cached.prices)
+      setHistoryState("READY")
+      setHistoryMessage("Đã tải từ bộ nhớ đệm.")
+    } else if (initialMeta) {
       if (initialMeta.price) {
         const price = initialMeta.price
         const reference = initialMeta.reference ? normalizeMarketPrice(initialMeta.reference, price) ?? initialMeta.reference : undefined
@@ -368,12 +404,23 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     setForeignEvents([])
   }, [symbol, initialMeta])
 
-  // Fetch REST session history + initial hydration
+  // Fetch REST session history + initial hydration with smart cache
   useEffect(() => {
+    const cached = sessionOrderBookCache.get(symbol)
+    const isFresh = cached && Date.now() - cached.cachedAt < CLIENT_CACHE_TTL_MS
+
+    if (isFresh) {
+      setHistoryState("READY")
+      setHistoryMessage(`Bộ nhớ đệm (${cached.trades.length.toLocaleString("vi-VN")} lệnh) · Realtime WS sẵn sàng.`)
+      return
+    }
+
     const controller = new AbortController()
     let disposed = false
-    setHistoryState("LOADING")
-    setHistoryMessage("")
+    if (!cached) {
+      setHistoryState("LOADING")
+      setHistoryMessage("")
+    }
 
     void (async () => {
       try {
@@ -391,22 +438,26 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           setPriceHistory(prices)
         }
 
+        let nextCompany: CompanyInfo | null = null
         if (payload.company) {
-          setCompany({
+          nextCompany = {
             nameVi: payload.company.nameVi || "",
             nameEn: payload.company.nameEn,
             exchange: payload.company.exchange,
             sector: payload.company.sector,
-          })
+          }
+          setCompany(nextCompany)
         }
 
+        let nextForeign: ForeignSnapshot | null = null
+        let nextTimeline: ForeignTimelinePoint[] = []
         if (payload.foreign) {
           const buyVol = number(payload.foreign.totalBuyVolume)
           const sellVol = number(payload.foreign.totalSellVolume)
           const buyVal = number(payload.foreign.totalBuyValue)
           const sellVal = number(payload.foreign.totalSellValue)
           const nowMs = Date.now()
-          setForeignTimeline([
+          nextTimeline = [
             { time: "09:15", timestamp: nowMs - 3600000, buyValue: 0, sellValue: 0, netValue: 0 },
             {
               time: timeLabel(payload.foreign.updatedAt || new Date().toISOString()),
@@ -415,24 +466,30 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
               sellValue: sellVal,
               netValue: buyVal - sellVal,
             },
-          ])
-          setForeign((current) => ({
+          ]
+          setForeignTimeline(nextTimeline)
+
+          nextForeign = {
             symbol,
-            totalBuyVolume: buyVol || current?.totalBuyVolume || 0,
-            totalSellVolume: sellVol || current?.totalSellVolume || 0,
-            totalBuyValue: buyVal || current?.totalBuyValue || 0,
-            totalSellValue: sellVal || current?.totalSellValue || 0,
-            availableRoom: nullableNumber(payload.foreign?.availableRoom) ?? current?.availableRoom ?? null,
-            orderLimitQuantity: nullableNumber(payload.foreign?.orderLimitQuantity) ?? current?.orderLimitQuantity ?? null,
-            listedShare: nullableNumber(payload.foreign?.listedShare) ?? current?.listedShare ?? null,
+            totalBuyVolume: buyVol || 0,
+            totalSellVolume: sellVol || 0,
+            totalBuyValue: buyVal || 0,
+            totalSellValue: sellVal || 0,
+            availableRoom: nullableNumber(payload.foreign?.availableRoom) ?? null,
+            orderLimitQuantity: nullableNumber(payload.foreign?.orderLimitQuantity) ?? null,
+            listedShare: nullableNumber(payload.foreign?.listedShare) ?? null,
             updatedAt: payload.foreign?.updatedAt || new Date().toISOString(),
-          }))
+          }
+          setForeign(nextForeign)
         }
 
+        let nextBids: DepthLevel[] = []
+        let nextAsks: DepthLevel[] = []
+        let nextQuoteVal: StockQuote | null = null
         const latest = payload.latestQuote
         if (latest) {
-          const nextBids = normalizeDepth(latest.bid).sort((a, b) => b.price - a.price)
-          const nextAsks = normalizeDepth(latest.offer).sort((a, b) => a.price - b.price)
+          nextBids = normalizeDepth(latest.bid).sort((a, b) => b.price - a.price)
+          nextAsks = normalizeDepth(latest.offer).sort((a, b) => a.price - b.price)
           if (nextBids.length || nextAsks.length) {
             depthRef.current = { bids: nextBids, asks: nextAsks }
             setBids(nextBids)
@@ -449,7 +506,10 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
             avgPrice: latest.avgPrice,
             totalVolume: latest.totalVolume,
           }
-          setQuote((current) => nextQuote(symbol, restQuote, current))
+          setQuote((current) => {
+            nextQuoteVal = nextQuote(symbol, restQuote, current)
+            return nextQuoteVal
+          })
         }
 
         const historicalTrades: StreamTrade[] = (payload.trades ?? [])
@@ -467,8 +527,12 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           })
           .filter((trade) => trade.price > 0 && trade.volume > 0)
 
+        let mergedTradesList = historicalTrades
         if (historicalTrades.length > 0) {
-          setTrades((current) => mergeTrades(historicalTrades, current))
+          setTrades((current) => {
+            mergedTradesList = mergeTrades(historicalTrades, current)
+            return mergedTradesList
+          })
         }
 
         if (payload.tradesTruncated) {
@@ -479,9 +543,24 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           setHistoryMessage(`Đầu phiên 09:00 · ${prices.length} nến · ${historicalTrades.length.toLocaleString("vi-VN")} lệnh.`)
         }
 
-        if (payload.putThrough) {
-          setPutThroughDeals(payload.putThrough)
+        const putThroughList = payload.putThrough ?? []
+        if (putThroughList.length > 0) {
+          setPutThroughDeals(putThroughList)
         }
+
+        // Cache the session data for subsequent popup opens
+        sessionOrderBookCache.set(symbol, {
+          prices,
+          company: nextCompany || company,
+          foreign: nextForeign || foreign,
+          foreignTimeline: nextTimeline.length ? nextTimeline : foreignTimeline,
+          quote: nextQuoteVal || quote,
+          bids: nextBids.length ? nextBids : bids,
+          asks: nextAsks.length ? nextAsks : asks,
+          trades: mergedTradesList,
+          putThrough: putThroughList,
+          cachedAt: Date.now(),
+        })
       } catch (nextError) {
         if (disposed || (nextError instanceof DOMException && nextError.name === "AbortError")) return
         setHistoryState("READY")
@@ -493,7 +572,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       disposed = true
       controller.abort()
     }
-  }, [symbol])
+  }, [symbol, reconnectKey])
 
   // WebSocket Live Stream
   useEffect(() => {
@@ -1263,15 +1342,20 @@ export function LiveOrderBookPanel({
     [stream.bids, stream.asks],
   )
 
+  // Clustered & filtered trades (Gộp lệnh cùng chiều nếu cùng giây hoặc cách nhau <= 1s)
+  const clusteredTrades = useMemo(() => {
+    return clusterTrades(stream.trades)
+  }, [stream.trades])
+
   // Tape filtering
   const visibleTrades = useMemo(() => {
-    if (tradeFilter === "large") return stream.trades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME)
-    if (tradeFilter === "whale") return stream.trades.filter((t) => t.volume >= WHALE_TRADE_MIN_VOLUME)
-    return stream.trades
-  }, [tradeFilter, stream.trades])
+    if (tradeFilter === "large") return clusteredTrades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME)
+    if (tradeFilter === "whale") return clusteredTrades.filter((t) => t.volume >= WHALE_TRADE_MIN_VOLUME)
+    return clusteredTrades
+  }, [tradeFilter, clusteredTrades])
 
-  const largeTradeCount = useMemo(() => stream.trades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME).length, [stream.trades])
-  const whaleTradeCount = useMemo(() => stream.trades.filter((t) => t.volume >= WHALE_TRADE_MIN_VOLUME).length, [stream.trades])
+  const largeTradeCount = useMemo(() => clusteredTrades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME).length, [clusteredTrades])
+  const whaleTradeCount = useMemo(() => clusteredTrades.filter((t) => t.volume >= WHALE_TRADE_MIN_VOLUME).length, [clusteredTrades])
 
   // Active Buy vs Sell volume breakdown from trades
   const tradeStats = useMemo(() => {
@@ -1671,8 +1755,9 @@ export function LiveOrderBookPanel({
                     className={`rounded px-2.5 py-1 font-semibold transition-colors ${
                       tradeFilter === "all" ? "bg-panel-2 text-foreground font-bold border border-border" : "text-muted hover:text-muted-2"
                     }`}
+                    title={stream.trades.length > clusteredTrades.length ? `Gốc: ${stream.trades.length.toLocaleString("vi-VN")} lệnh` : undefined}
                   >
-                    Tất cả ({stream.trades.length})
+                    Tất cả ({clusteredTrades.length})
                   </button>
                   <button
                     type="button"
@@ -1748,6 +1833,14 @@ export function LiveOrderBookPanel({
                             <span className="text-muted-2 text-xs">{timeLabel(trade.time)}</span>
                             <span className="text-right font-bold text-[13px] flex items-center justify-end gap-1.5">
                               {formatVolume(trade.volume)}
+                              {trade.count > 1 && (
+                                <span
+                                  className="rounded bg-[#202223] border border-border px-1 py-0.2 text-[9px] text-muted font-semibold"
+                                  title={`Gộp ${trade.count} lệnh khớp liên tiếp cùng chiều trong ≤1s`}
+                                >
+                                  ×{trade.count}
+                                </span>
+                              )}
                               {isWhale ? (
                                 <span className="rounded bg-up/25 px-1 py-0.2 text-[9px] text-up font-bold">50K+</span>
                               ) : isLarge ? (
