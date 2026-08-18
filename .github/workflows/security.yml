@@ -32,5 +32,7 @@ jobs:
         run: npm run test:signal-core
       - name: Scanner policy tests
         run: npm run test:scanner-core
+      - name: Market board contract
+        run: npm run test:board-contract
       - name: TypeScript
         run: npm run typecheck

@@ -455,6 +455,26 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
     let pingTimer: number | null = null
     let watchdogTimer: number | null = null
     let attempts = 0
+    let messageQueue: Array<() => void> = []
+    let messageFrame: number | null = null
+
+    const flushMessageQueue = () => {
+      messageFrame = null
+      const queued = messageQueue
+      messageQueue = []
+      for (const process of queued) process()
+    }
+
+    const scheduleMessage = (process: () => void) => {
+      messageQueue.push(process)
+      if (messageFrame === null) messageFrame = window.requestAnimationFrame(flushMessageQueue)
+    }
+
+    const clearMessageQueue = () => {
+      if (messageFrame !== null) window.cancelAnimationFrame(messageFrame)
+      messageFrame = null
+      messageQueue = []
+    }
 
     const closeConnectionTimers = () => {
       if (pingTimer) window.clearInterval(pingTimer)
@@ -481,6 +501,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
 
     const forceReconnect = (reason: string) => {
       if (disposed) return
+      clearMessageQueue()
       closeConnectionTimers()
       if (socket && socket.readyState < WebSocket.CLOSING) {
         try { socket.close(4000, reason.slice(0, 120)) } catch { scheduleReconnect() }
@@ -491,6 +512,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
 
     const connect = async () => {
       clearReconnectTimer()
+      clearMessageQueue()
       closeConnectionTimers()
       if (disposed) return
       setStreamState("CONNECTING")
@@ -510,217 +532,221 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
         socket.onmessage = (event) => {
           if (disposed || typeof event.data !== "string") return
           lastFrameAt.current = Date.now()
-          let data: Record<string, unknown>
-          try { data = JSON.parse(event.data) as Record<string, unknown> } catch { return }
+          const raw = event.data
+          scheduleMessage(() => {
+            if (disposed) return
+            let data: Record<string, unknown>
+            try { data = JSON.parse(raw) as Record<string, unknown> } catch { return }
 
-          const action = String(data.action ?? data.a ?? "")
-          if (action === "ping") {
-            if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "pong", timestamp: data.timestamp }))
-            return
-          }
-          if (action === "welcome" || data.session_id || data.sid) {
-            if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(authJson.auth))
-            return
-          }
-          if (action === "auth_success") {
-            attempts = 0
-            setStreamState("LIVE")
-            setStreamError("")
-            socket?.send(JSON.stringify({
-              action: "subscribe",
-              channels: [
-                { name: "tick.G1.json", symbols: symbolList },
-                { name: "top_price.G1.json", symbols: symbolList },
-                { name: "ohlc.1.json", symbols: symbolList },
-                { name: "foreign.G1.json", symbols: symbolList },
-                ...INDEX_CHANNELS.map((name) => ({ name: `market_index.${name}.json` })),
-              ],
-            }))
-            pingTimer = window.setInterval(() => {
-              if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "ping", timestamp: Date.now() }))
-            }, 15_000)
-            watchdogTimer = window.setInterval(() => {
-              if (socket?.readyState === WebSocket.OPEN && Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
-                setStreamError("Luồng DNSE im lặng quá 60 giây; đang tự kết nối lại.")
-                forceReconnect("stale DNSE stream")
-              }
-            }, 10_000)
-            return
-          }
-          if (action === "auth_error" || action === "error") {
-            const message = String(data.message ?? data.msg ?? "DNSE WebSocket error")
-            setStreamState("ERROR")
-            setStreamError(message)
-            forceReconnect("DNSE auth/subscription error")
-            return
-          }
+            const action = String(data.action ?? data.a ?? "")
+            if (action === "ping") {
+              if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "pong", timestamp: data.timestamp }))
+              return
+            }
+            if (action === "welcome" || data.session_id || data.sid) {
+              if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(authJson.auth))
+              return
+            }
+            if (action === "auth_success") {
+              attempts = 0
+              setStreamState("LIVE")
+              setStreamError("")
+              socket?.send(JSON.stringify({
+                action: "subscribe",
+                channels: [
+                  { name: "tick.G1.json", symbols: symbolList },
+                  { name: "top_price.G1.json", symbols: symbolList },
+                  { name: "ohlc.1.json", symbols: symbolList },
+                  { name: "foreign.G1.json", symbols: symbolList },
+                  ...INDEX_CHANNELS.map((name) => ({ name: `market_index.${name}.json` })),
+                ],
+              }))
+              pingTimer = window.setInterval(() => {
+                if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "ping", timestamp: Date.now() }))
+              }, 15_000)
+              watchdogTimer = window.setInterval(() => {
+                if (socket?.readyState === WebSocket.OPEN && Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
+                  setStreamError("Luồng DNSE im lặng quá 60 giây; đang tự kết nối lại.")
+                  forceReconnect("stale DNSE stream")
+                }
+              }, 10_000)
+              return
+            }
+            if (action === "auth_error" || action === "error") {
+              const message = String(data.message ?? data.msg ?? "DNSE WebSocket error")
+              setStreamState("ERROR")
+              setStreamError(message)
+              forceReconnect("DNSE auth/subscription error")
+              return
+            }
 
-          const now = new Date()
-          const receivedAt = now.toISOString()
-          const currentSession = currentSessionIdentifier(now)
-          if (sessionIdentifier.current !== currentSession) {
-            sessionIdentifier.current = currentSession
-            dailyReferences.current = {}
-            indexReferences.current = {}
-            setQuotes({})
-            setPriceHistory({})
-            setHistoryReloadKey((key) => key + 1)
-          }
+            const now = new Date()
+            const receivedAt = now.toISOString()
+            const currentSession = currentSessionIdentifier(now)
+            if (sessionIdentifier.current !== currentSession) {
+              sessionIdentifier.current = currentSession
+              dailyReferences.current = {}
+              indexReferences.current = {}
+              setQuotes({})
+              setPriceHistory({})
+              setHistoryReloadKey((key) => key + 1)
+            }
 
-          const type = String(data.T ?? "")
-          if (type === "b" && data.symbol) {
-            const ticker = String(data.symbol).toUpperCase()
-            if (!trackedSymbols.has(ticker)) return
-            const close = firstPositive(data, ["close", "c", "closePrice"])
-            const timestamp = normalizeEpochSeconds(data.time ?? data.t ?? data.timestamp ?? data.ts, now.getTime() / 1000)
-            if (close > 0) pushFiveMinuteClose(ticker, close, timestamp)
-            setLastMessageAt(receivedAt)
-            setStreamError("")
-            return
-          }
+            const type = String(data.T ?? "")
+            if (type === "b" && data.symbol) {
+              const ticker = String(data.symbol).toUpperCase()
+              if (!trackedSymbols.has(ticker)) return
+              const close = firstPositive(data, ["close", "c", "closePrice"])
+              const timestamp = normalizeEpochSeconds(data.time ?? data.t ?? data.timestamp ?? data.ts, now.getTime() / 1000)
+              if (close > 0) pushFiveMinuteClose(ticker, close, timestamp)
+              setLastMessageAt(receivedAt)
+              setStreamError("")
+              return
+            }
 
-          if (type === "t" && data.symbol) {
-            const ticker = String(data.symbol).toUpperCase()
-            if (!trackedSymbols.has(ticker)) return
-            const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
-            if (price <= 0) return
-            const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "volume"])
-            const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
-            const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
-            const floor = firstPositive(data, ["floorPrice", "floor"])
-            setQuotes((current) => {
-              const previous = current[ticker] as LiveStockQuote | undefined
-              const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
-              const reference = normalizeMarketPrice(rawReference, price) ?? rawReference
-              if (reference > 0) dailyReferences.current[ticker] = reference
-              const change = reference > 0 ? price - reference : previous?.change
-              const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : previous?.changePercent ?? 0
-              return {
-                ...current,
-                [ticker]: {
-                  ...previous,
-                  symbol: ticker,
-                  price,
-                  reference: reference || undefined,
-                  ceiling: ceiling || previous?.ceiling,
-                  floor: floor || previous?.floor,
-                  change,
-                  changePercent,
-                  volume: totalVolume || previous?.volume,
-                  updatedAt: receivedAt,
-                },
-              }
-            })
-            setLastMessageAt(receivedAt)
-            setStreamError("")
-            return
-          }
+            if (type === "t" && data.symbol) {
+              const ticker = String(data.symbol).toUpperCase()
+              if (!trackedSymbols.has(ticker)) return
+              const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
+              if (price <= 0) return
+              const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "volume"])
+              const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
+              const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
+              const floor = firstPositive(data, ["floorPrice", "floor"])
+              setQuotes((current) => {
+                const previous = current[ticker] as LiveStockQuote | undefined
+                const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
+                const reference = normalizeMarketPrice(rawReference, price) ?? rawReference
+                if (reference > 0) dailyReferences.current[ticker] = reference
+                const change = reference > 0 ? price - reference : previous?.change
+                const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : previous?.changePercent ?? 0
+                return {
+                  ...current,
+                  [ticker]: {
+                    ...previous,
+                    symbol: ticker,
+                    price,
+                    reference: reference || undefined,
+                    ceiling: ceiling || previous?.ceiling,
+                    floor: floor || previous?.floor,
+                    change,
+                    changePercent,
+                    volume: totalVolume || previous?.volume,
+                    updatedAt: receivedAt,
+                  },
+                }
+              })
+              setLastMessageAt(receivedAt)
+              setStreamError("")
+              return
+            }
 
-          if (type === "q" && data.symbol) {
-            const ticker = String(data.symbol).toUpperCase()
-            if (!trackedSymbols.has(ticker)) return
-            const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
-            const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
-            const floor = firstPositive(data, ["floorPrice", "floor"])
-            const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
-            setQuotes((current) => {
-              const previous = current[ticker] as LiveStockQuote | undefined
-              const livePrice = price || previous?.price
-              if (!livePrice) return current
-              const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
-              const reference = normalizeMarketPrice(rawReference, livePrice) ?? rawReference
-              if (reference > 0) dailyReferences.current[ticker] = reference
-              return {
-                ...current,
-                [ticker]: {
-                  ...previous,
-                  symbol: ticker,
-                  price: livePrice,
-                  reference: reference || undefined,
-                  ceiling: ceiling || previous?.ceiling,
-                  floor: floor || previous?.floor,
-                  change: reference > 0 ? livePrice - reference : previous?.change,
-                  changePercent: reference > 0 ? ((livePrice - reference) / reference) * 100 : previous?.changePercent ?? 0,
-                  volume: previous?.volume,
-                  updatedAt: receivedAt,
-                },
-              }
-            })
-            setLastMessageAt(receivedAt)
-            setStreamError("")
-            return
-          }
+            if (type === "q" && data.symbol) {
+              const ticker = String(data.symbol).toUpperCase()
+              if (!trackedSymbols.has(ticker)) return
+              const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
+              const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
+              const floor = firstPositive(data, ["floorPrice", "floor"])
+              const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
+              setQuotes((current) => {
+                const previous = current[ticker] as LiveStockQuote | undefined
+                const livePrice = price || previous?.price
+                if (!livePrice) return current
+                const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
+                const reference = normalizeMarketPrice(rawReference, livePrice) ?? rawReference
+                if (reference > 0) dailyReferences.current[ticker] = reference
+                return {
+                  ...current,
+                  [ticker]: {
+                    ...previous,
+                    symbol: ticker,
+                    price: livePrice,
+                    reference: reference || undefined,
+                    ceiling: ceiling || previous?.ceiling,
+                    floor: floor || previous?.floor,
+                    change: reference > 0 ? livePrice - reference : previous?.change,
+                    changePercent: reference > 0 ? ((livePrice - reference) / reference) * 100 : previous?.changePercent ?? 0,
+                    volume: previous?.volume,
+                    updatedAt: receivedAt,
+                  },
+                }
+              })
+              setLastMessageAt(receivedAt)
+              setStreamError("")
+              return
+            }
 
-          if (type === "mi") {
-            const symbol = normalizeIndexName(data.indexName ?? data.symbol)
-            const value = firstPositive(data, ["valueIndexes", "value", "indexValue"])
-            if (!symbol || value <= 0) return
-            const explicitReference = firstPositive(data, INDEX_REFERENCE_KEYS)
-            if (explicitReference > 0) indexReferences.current[symbol] = explicitReference
-            setQuotes((current) => {
-              const previous = current[symbol] as IndexQuote | undefined
-              const previousDerivedReference = previous && typeof previous.change === "number" ? previous.value - previous.change : 0
-              const reference = indexReferences.current[symbol] || previousDerivedReference
-              if (reference > 0) indexReferences.current[symbol] = reference
-              const change = reference > 0 ? value - reference : previous?.change
-              const changePercent = reference > 0 ? ((value - reference) / reference) * 100 : previous?.changePercent ?? 0
-              return { ...current, [symbol]: { symbol, value, change, changePercent, updatedAt: receivedAt } }
-            })
-            setLastMessageAt(receivedAt)
-            setStreamError("")
-            return
-          }
+            if (type === "mi") {
+              const symbol = normalizeIndexName(data.indexName ?? data.symbol)
+              const value = firstPositive(data, ["valueIndexes", "value", "indexValue"])
+              if (!symbol || value <= 0) return
+              const explicitReference = firstPositive(data, INDEX_REFERENCE_KEYS)
+              if (explicitReference > 0) indexReferences.current[symbol] = explicitReference
+              setQuotes((current) => {
+                const previous = current[symbol] as IndexQuote | undefined
+                const previousDerivedReference = previous && typeof previous.change === "number" ? previous.value - previous.change : 0
+                const reference = indexReferences.current[symbol] || previousDerivedReference
+                if (reference > 0) indexReferences.current[symbol] = reference
+                const change = reference > 0 ? value - reference : previous?.change
+                const changePercent = reference > 0 ? ((value - reference) / reference) * 100 : previous?.changePercent ?? 0
+                return { ...current, [symbol]: { symbol, value, change, changePercent, updatedAt: receivedAt } }
+              })
+              setLastMessageAt(receivedAt)
+              setStreamError("")
+              return
+            }
 
-          if (type === "f" && data.symbol) {
-            const symbol = String(data.symbol).toUpperCase()
-            if (!trackedSymbols.has(symbol)) return
-            const totalBuyVal = numeric(data.totalBuyTradedAmount ?? data.totalBuyValue ?? data.foreignBuyValue)
-            const totalSellVal = numeric(data.totalSellTradedAmount ?? data.totalSellValue ?? data.foreignSellValue)
-            const totalBuyVol = numeric(data.totalBuyVolume ?? data.totalBuyQtty ?? data.foreignBuyVolume)
-            const totalSellVol = numeric(data.totalSellVolume ?? data.totalSellQtty ?? data.foreignSellVolume)
-            const buyVal = numeric(data.buyTradedAmount)
-            const sellVal = numeric(data.sellTradedAmount)
-            const buyVol = numeric(data.buyVolume)
-            const sellVol = numeric(data.sellVolume)
+            if (type === "f" && data.symbol) {
+              const symbol = String(data.symbol).toUpperCase()
+              if (!trackedSymbols.has(symbol)) return
+              const totalBuyVal = numeric(data.totalBuyTradedAmount ?? data.totalBuyValue ?? data.foreignBuyValue)
+              const totalSellVal = numeric(data.totalSellTradedAmount ?? data.totalSellValue ?? data.foreignSellValue)
+              const totalBuyVol = numeric(data.totalBuyVolume ?? data.totalBuyQtty ?? data.foreignBuyVolume)
+              const totalSellVol = numeric(data.totalSellVolume ?? data.totalSellQtty ?? data.foreignSellVolume)
+              const buyVal = numeric(data.buyTradedAmount)
+              const sellVal = numeric(data.sellTradedAmount)
+              const buyVol = numeric(data.buyVolume)
+              const sellVol = numeric(data.sellVolume)
 
-            setQuotes((current) => {
-              const previous = current[symbol] as LiveStockQuote | undefined
-              if (!previous) return current
+              setQuotes((current) => {
+                const previous = current[symbol] as LiveStockQuote | undefined
+                if (!previous) return current
 
-              const prevBuyVal = previous.foreignBuyValue ?? 0
-              const prevSellVal = previous.foreignSellValue ?? 0
-              const nextBuyVal = totalBuyVal || (buyVal > 0 ? prevBuyVal + buyVal : prevBuyVal)
-              const nextSellVal = totalSellVal || (sellVal > 0 ? prevSellVal + sellVal : prevSellVal)
+                const prevBuyVal = previous.foreignBuyValue ?? 0
+                const prevSellVal = previous.foreignSellValue ?? 0
+                const nextBuyVal = totalBuyVal || (buyVal > 0 ? prevBuyVal + buyVal : prevBuyVal)
+                const nextSellVal = totalSellVal || (sellVal > 0 ? prevSellVal + sellVal : prevSellVal)
 
-              const prevBuyVol = previous.foreignBuyVolume ?? 0
-              const prevSellVol = previous.foreignSellVolume ?? 0
-              const nextBuyVol = totalBuyVol || (buyVol > 0 ? prevBuyVol + buyVol : prevBuyVol)
-              const nextSellVol = totalSellVol || (sellVol > 0 ? prevSellVol + sellVol : prevSellVol)
+                const prevBuyVol = previous.foreignBuyVolume ?? 0
+                const prevSellVol = previous.foreignSellVolume ?? 0
+                const nextBuyVol = totalBuyVol || (buyVol > 0 ? prevBuyVol + buyVol : prevBuyVol)
+                const nextSellVol = totalSellVol || (sellVol > 0 ? prevSellVol + sellVol : prevSellVol)
 
-              let foreignNetValue: number | undefined
-              if (nextBuyVal > 0 || nextSellVal > 0) {
-                foreignNetValue = nextBuyVal - nextSellVal
-              } else if (nextBuyVol > 0 || nextSellVol > 0) {
-                foreignNetValue = (nextBuyVol - nextSellVol) * (previous.price || 0)
-              }
+                let foreignNetValue: number | undefined
+                if (nextBuyVal > 0 || nextSellVal > 0) {
+                  foreignNetValue = nextBuyVal - nextSellVal
+                } else if (nextBuyVol > 0 || nextSellVol > 0) {
+                  foreignNetValue = (nextBuyVol - nextSellVol) * (previous.price || 0)
+                }
 
-              return {
-                ...current,
-                [symbol]: {
-                  ...previous,
-                  foreignBuyValue: nextBuyVal || undefined,
-                  foreignSellValue: nextSellVal || undefined,
-                  foreignBuyVolume: nextBuyVol || undefined,
-                  foreignSellVolume: nextSellVol || undefined,
-                  foreignNetValue,
-                  updatedAt: receivedAt,
-                },
-              }
-            })
-            setLastMessageAt(receivedAt)
-            setStreamError("")
-            return
-          }
+                return {
+                  ...current,
+                  [symbol]: {
+                    ...previous,
+                    foreignBuyValue: nextBuyVal || undefined,
+                    foreignSellValue: nextSellVal || undefined,
+                    foreignBuyVolume: nextBuyVol || undefined,
+                    foreignSellVolume: nextSellVol || undefined,
+                    foreignNetValue,
+                    updatedAt: receivedAt,
+                  },
+                }
+              })
+              setLastMessageAt(receivedAt)
+              setStreamError("")
+              return
+            }
+          })
         }
 
         socket.onerror = () => {
@@ -759,6 +785,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
     return () => {
       disposed = true
       clearReconnectTimer()
+      clearMessageQueue()
       closeConnectionTimers()
       document.removeEventListener("visibilitychange", onVisibilityChange)
       window.removeEventListener("online", onOnline)
