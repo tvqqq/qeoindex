@@ -51,19 +51,24 @@ export function formatBoardVolume(value?: number) {
   return value.toLocaleString("vi-VN")
 }
 
-export function formatForeignNetValue(value?: number) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return { text: "—", tone: "neutral" as const }
-  if (Math.abs(value) < 100_000) return { text: "0 tỷ", tone: "neutral" as const }
+export function formatForeignNetValue(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return { text: "0m", tone: "neutral" as const }
+  if (Math.abs(value) < 1_000) return { text: "0m", tone: "neutral" as const }
   const abs = Math.abs(value)
   const isBuy = value > 0
   const sign = isBuy ? "+" : "-"
   let formatted = ""
   if (abs >= 1_000_000_000) {
-    formatted = `${sign}${(abs / 1_000_000_000).toFixed(abs >= 10_000_000_000 ? 1 : 2)} tỷ`
+    const num = abs / 1_000_000_000
+    formatted = `${sign}${num.toFixed(2).replace(/\.00$/, "").replace(/(\.[1-9])0$/, "$1")}b`
   } else if (abs >= 1_000_000) {
-    formatted = `${sign}${(abs / 1_000_000).toFixed(1)} tr`
+    const num = abs / 1_000_000
+    formatted = `${sign}${num.toFixed(2).replace(/\.00$/, "").replace(/(\.[1-9])0$/, "$1")}m`
+  } else if (abs >= 1_000) {
+    const num = abs / 1_000
+    formatted = `${sign}${num.toFixed(2).replace(/\.00$/, "").replace(/(\.[1-9])0$/, "$1")}k`
   } else {
-    formatted = `${sign}${new Intl.NumberFormat("vi-VN").format(abs)}`
+    formatted = `${sign}${abs.toFixed(0)}`
   }
   return {
     text: formatted,
@@ -186,14 +191,14 @@ export function LiveStockRow({
             </button>
           )}
         </div>
-        {/* GT Mua - Bán Khối ngoại realtime (Đỏ nhẹ khi bán ròng, Xanh nhẹ khi mua ròng) */}
+        {/* GT Mua - Bán Khối ngoại realtime (Đỏ nhẹ khi bán ròng, Xanh nhẹ khi mua ròng, font italic) */}
         <div
-          className={`mt-1.5 font-mono text-[9px] font-medium leading-none truncate ${
+          className={`mt-1 font-mono text-[9.5px] italic font-medium leading-none truncate ${
             foreign.tone === "buy" ? "text-emerald-400/90" : foreign.tone === "sell" ? "text-rose-400/90" : "text-muted-2"
           }`}
           title={`Khối ngoại ${foreign.tone === "buy" ? "Mua ròng" : foreign.tone === "sell" ? "Bán ròng" : "Ròng"}: ${foreign.text}`}
         >
-          {foreign.text !== "—" ? foreign.text : formatBoardVolume(quote?.volume)}
+          {foreign.text}
         </div>
       </div>
 
@@ -263,11 +268,11 @@ export function LiveMoverCard({
           )}
         </div>
         <div
-          className={`mt-1 font-mono text-xs font-semibold ${
+          className={`mt-1 font-mono text-xs italic font-semibold ${
             foreign.tone === "buy" ? "text-emerald-400/90" : foreign.tone === "sell" ? "text-rose-400/90" : "text-muted-2"
           }`}
         >
-          Khối ngoại: {foreign.text !== "—" ? foreign.text : formatBoardVolume(quote?.volume)}
+          Khối ngoại: {foreign.text}
         </div>
         <div className="mt-1 text-[10px] text-muted">{stock.sector}</div>
       </div>

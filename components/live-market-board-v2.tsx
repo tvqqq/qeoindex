@@ -29,6 +29,15 @@ const INDEX_REFERENCE_KEYS = ["referenceIndex", "referenceValue", "reference", "
 const STREAM_STALE_MS = 60_000
 const WATCHLIST_KEY = "stockos:watchlist:v1"
 
+const SECTOR_EMOJIS: Record<string, string> = {
+  bank: "🏦",
+  securities: "📈",
+  consumer: "🛍️",
+  "real-estate": "🏢",
+  "industrial-tech": "⚡",
+  other: "🌐",
+}
+
 function numeric(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value)
   return Number.isFinite(parsed) ? parsed : 0
@@ -589,6 +598,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
               return {
                 ...current,
                 [ticker]: {
+                  ...previous,
                   symbol: ticker,
                   price,
                   reference: reference || undefined,
@@ -623,6 +633,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
               return {
                 ...current,
                 [ticker]: {
+                  ...previous,
                   symbol: ticker,
                   price: livePrice,
                   reference: reference || undefined,
@@ -887,17 +898,24 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
               const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
               const avgTone = marketToneFromChange(avg)
               return (
-                <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-brand/20 bg-panel">
-                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-brand/25 bg-gradient-to-r from-brand/15 via-brand/5 to-transparent px-3 py-2.5 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-brand">
-                    <div className="min-w-0">
-                      <h2 className="line-clamp-2 text-[13px] font-extrabold leading-[1.15] text-foreground">{label}</h2>
-                      <p className="mt-1.5 inline-flex rounded-full border border-brand/20 bg-background/60 px-2 py-0.5 text-[10px] font-semibold text-muted-2">
-                        {stocks.length} mã
-                      </p>
+                <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-cyan-500/20 bg-panel hover:border-cyan-500/35 transition-colors">
+                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-cyan-500/25 bg-gradient-to-r from-cyan-500/15 via-cyan-500/5 to-transparent px-2.5 py-2 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-cyan-400 before:shadow-[0_0_8px_rgba(34,211,238,0.8)]">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-sm shrink-0 leading-none">{SECTOR_EMOJIS[key] ?? "📊"}</span>
+                        <h2 className="truncate text-[12.5px] font-black tracking-tight text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.35)]" title={label}>
+                          {label}
+                        </h2>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <span className="inline-flex rounded-full border border-cyan-500/30 bg-cyan-950/50 px-2 py-0.5 font-mono text-[9.5px] font-bold text-cyan-300/90">
+                          {stocks.length} mã
+                        </span>
+                      </div>
                     </div>
                     {typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}
                   </header>
-                  <div className="flex-1 space-y-2 overflow-y-auto p-2">
+                  <div className="flex-1 space-y-1.5 overflow-y-auto p-1.5">
                     {stocks.length ? (
                       stocks.map((stock) => (
                         <LiveStockRow
