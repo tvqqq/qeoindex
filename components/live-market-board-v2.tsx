@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Activity, ChartNoAxesCombined, CircleAlert, LayoutGrid, RefreshCw, Search, Star, Wifi, WifiOff } from "lucide-react"
+import { Activity, ChartNoAxesCombined, ChevronUp, CircleAlert, LayoutGrid, RefreshCw, Search, Star } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { BOARD_SECTOR_GROUPS, SECTOR_ORDER } from "@/lib/market-sectors"
 import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
@@ -106,17 +106,17 @@ function WatchlistSection({
   const watched = stocks.filter((s) => watchlist.has(s.ticker))
   if (watched.length === 0) return null
   return (
-    <div className="mb-2.5 rounded-xl border border-amber-500/25 bg-panel/90 p-2.5 shadow-sm">
-      <div className="mb-2 flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-          <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">Danh sách theo dõi</h2>
-          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">{watched.length} mã</span>
+    <div className="mb-2 rounded-lg border border-amber-500/20 bg-panel/85 p-2 shadow-sm">
+      <div className="mb-1.5 flex items-center justify-between px-0.5">
+        <div className="flex items-center gap-1.5">
+          <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+          <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">Danh sách theo dõi</span>
+          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.2 text-[10px] font-semibold text-amber-400">{watched.length}</span>
         </div>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+      <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-thin">
         {watched.map((stock) => (
-          <div key={stock.ticker} className="min-w-[200px] max-w-[240px] flex-1 shrink-0">
+          <div key={stock.ticker} className="min-w-[180px] max-w-[220px] flex-1 shrink-0">
             <LiveStockRow
               stock={stock}
               quote={quotes[stock.ticker] as LiveStockQuote | undefined}
@@ -133,12 +133,141 @@ function WatchlistSection({
 }
 
 function IndexStrip({ quotes }: { quotes: Record<string, LiveStockQuote | IndexQuote> }) {
-  return <div className="grid grid-cols-2 gap-px border-b border-border bg-border md:grid-cols-4">{INDEXES.map((symbol) => {
-    const quote = quotes[symbol] as IndexQuote | undefined
-    const tone = marketToneFromChange(quote?.changePercent)
-    const text = quote ? marketToneText(tone) : "text-muted-2"
-    return <div key={symbol} className="bg-panel px-4 py-2.5"><div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">{INDEX_LABELS[symbol]}</div><div className="mt-1 flex items-center gap-2"><span className={`font-mono text-sm font-bold ${text}`}>{formatBoardPrice(quote?.value)}</span>{quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact /> : null}</div></div>
-  })}</div>
+  return (
+    <div className="grid grid-cols-2 divide-x divide-border border-b border-border bg-[#141515] text-xs sm:grid-cols-4">
+      {INDEXES.map((symbol) => {
+        const quote = quotes[symbol] as IndexQuote | undefined
+        const tone = marketToneFromChange(quote?.changePercent)
+        const text = quote ? marketToneText(tone) : "text-muted-2"
+        return (
+          <div key={symbol} className="flex items-center justify-between px-3 py-1.5 font-mono">
+            <span className="text-[10px] font-bold tracking-wider text-muted uppercase font-sans">{INDEX_LABELS[symbol]}</span>
+            <div className="flex items-center gap-1.5">
+              <span className={`text-xs font-extrabold ${text}`}>{formatBoardPrice(quote?.value)}</span>
+              {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact /> : null}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function FloatingMarketStatus({
+  streamState,
+  streamError,
+  liveCount,
+  pricedCount,
+  historyCount,
+  universeLength,
+  advances,
+  declines,
+  lastMessageAt,
+  onReconnect,
+}: {
+  streamState: StreamState
+  streamError: string
+  liveCount: number
+  pricedCount: number
+  historyCount: number
+  universeLength: number
+  advances: number
+  declines: number
+  lastMessageAt: string
+  onReconnect: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="fixed bottom-3 right-3 z-30 flex flex-col items-end select-none">
+      {expanded ? (
+        <div className="mb-2 w-72 rounded-xl border border-border-strong bg-[#141515]/95 p-3 shadow-2xl backdrop-blur-md text-xs space-y-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+            <span className="font-bold text-foreground flex items-center gap-1.5">
+              <Activity className="h-3.5 w-3.5 text-brand" />
+              <span>Trạng thái Hệ thống</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="text-muted-2 hover:text-foreground text-[10px]"
+            >
+              Đóng ✕
+            </button>
+          </div>
+
+          <div className="space-y-1.5 font-mono text-[11px] text-muted-2">
+            <div className="flex justify-between">
+              <span>Nguồn dữ liệu:</span>
+              <span className="text-foreground font-sans">Yahoo 5m + DNSE</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Độ rộng TT:</span>
+              <span>
+                <b className="text-up">▲ {advances}</b> · <b className="text-down">▼ {declines}</b>
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Có giá / Top 100:</span>
+              <span className="text-foreground font-bold">{pricedCount}/{universeLength}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Biểu đồ nến:</span>
+              <span className="text-foreground">{historyCount}/{universeLength}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>WS Feed live:</span>
+              <span className="text-foreground font-bold">{liveCount}/{universeLength}</span>
+            </div>
+            {lastMessageAt ? (
+              <div className="flex justify-between">
+                <span>Cập nhật cuối:</span>
+                <span className="text-foreground">
+                  {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
+                </span>
+              </div>
+            ) : null}
+          </div>
+
+          {streamError ? (
+            <div className="rounded bg-ref/10 border border-ref/30 p-1.5 text-[10px] text-ref leading-tight">
+              {streamError}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={onReconnect}
+            className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-border bg-panel-2 py-1.5 text-[11px] font-semibold text-foreground hover:bg-panel transition-colors"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin text-ref" : ""}`} />
+            <span>Kết nối lại DNSE Feed</span>
+          </button>
+        </div>
+      ) : null}
+
+      {/* Floating Compact Pill Badge */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-2 rounded-full border border-border-strong bg-[#141515]/90 px-3 py-1.5 shadow-xl backdrop-blur-md text-[11px] hover:bg-[#1a1c1b] transition-all"
+        title="Bấm để xem chi tiết trạng thái hệ thống"
+      >
+        <span
+          className={`h-2 w-2 rounded-full ${
+            streamState === "LIVE" ? "bg-up animate-pulse" : streamState === "CONNECTING" ? "bg-ref" : "bg-down"
+          }`}
+        />
+        <span className="font-semibold text-foreground">
+          {streamState === "LIVE" ? "DNSE LIVE" : streamState === "CONNECTING" ? "Đang kết nối" : "Mất kết nối"}
+        </span>
+        <span className="text-muted-2">·</span>
+        <span className="font-mono text-up font-bold">▲{advances}</span>
+        <span className="font-mono text-down font-bold">▼{declines}</span>
+        <ChevronUp className={`h-3 w-3 text-muted-2 transition-transform duration-150 ${expanded ? "rotate-180" : ""}`} />
+      </button>
+    </div>
+  )
 }
 
 export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[] }) {
@@ -627,30 +756,151 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   const reconnect = useCallback(() => setReconnectKey((key) => key + 1), [])
   const handleToggleWatch = useCallback((ticker: string) => toggleWatch(ticker), [toggleWatch])
 
-  return <div className="flex h-full min-h-0 flex-col bg-background">
-    <IndexStrip quotes={quotes} />
-    <div className="flex flex-wrap items-center gap-2 border-b border-border bg-panel px-3 py-2.5">
-      <div className="relative min-w-[210px] flex-1 md:max-w-[320px]"><Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã trong Top 100..." className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-xs outline-none" /></div>
-      <select value={selectedSector} onChange={(event) => setSelectedSector(event.target.value)} className="h-8 rounded-md border border-border bg-background px-2 text-xs"><option>Tất cả</option>{SECTOR_ORDER.map((sector) => <option key={sector}>{sector}</option>)}</select>
-      <div className="flex items-center rounded-md border border-border bg-background p-0.5"><button onClick={() => setMode("sector")} className={`flex h-7 items-center gap-1.5 rounded px-2 text-[11px] ${mode === "sector" ? "bg-panel-2" : "text-muted-2"}`}><LayoutGrid className="h-3.5 w-3.5" />{BOARD_SECTOR_GROUPS.length} nhóm ngành</button><button onClick={() => setMode("movers")} className={`flex h-7 items-center gap-1.5 rounded px-2 text-[11px] ${mode === "movers" ? "bg-panel-2" : "text-muted-2"}`}><ChartNoAxesCombined className="h-3.5 w-3.5" />Top movers</button></div>
-      <div className="ml-auto flex items-center gap-3 text-[11px]">{streamState === "LIVE" ? <span className="flex items-center gap-1.5 text-up"><Wifi className="h-3.5 w-3.5" />DNSE WebSocket · LIVE · {liveCount}/{universe.length}</span> : <span className="flex items-center gap-1.5 text-ref"><WifiOff className="h-3.5 w-3.5" />DNSE · {streamState === "CONNECTING" ? "đang kết nối" : "đang tự khôi phục"}</span>}<button onClick={reconnect} className="rounded-md border border-border p-1.5" aria-label="Kết nối lại DNSE" title="Kết nối lại DNSE"><RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin" : ""}`} /></button></div>
-    </div>
-    {streamState !== "LIVE" ? <div className="flex items-start gap-2 border-b border-ref/30 bg-ref/5 px-4 py-2.5 text-xs"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-ref" /><span>Bảng điện tự giữ kết nối DNSE và tự reconnect khi stale/mất mạng. {streamError ? `Lỗi gần nhất: ${streamError}` : "Đang chờ stream DNSE."}</span></div> : null}
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-4 py-2 text-[11px] text-muted-2"><span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" />Top 100 HOSE · Yahoo 5m + DNSE live</span><span>Tăng <b className="text-up">{advances}</b></span><span>Giảm <b className="text-down">{declines}</b></span><span>Có giá <b className="text-foreground">{pricedCount}</b>/{universe.length}</span><span>History <b className="text-foreground">{historyCount}</b>/{universe.length}</span>{lastMessageAt ? <span className="ml-auto">DNSE {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span> : null}</div>
-    <div className="min-h-0 flex-1 overflow-auto p-2">
-      <WatchlistSection
-        stocks={universe}
-        quotes={displayQuotes}
-        priceHistory={priceHistory}
-        watchlist={watchlist}
-        onToggleWatch={handleToggleWatch}
-        onOpen={openBook}
+  return (
+    <div className="relative flex h-full min-h-0 flex-col bg-background">
+      <IndexStrip quotes={quotes} />
+
+      {/* COMPACT TOP TOOLBAR */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-panel px-3 py-1.5">
+        <div className="relative min-w-[170px] flex-1 sm:max-w-[240px]">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Tìm mã CP..."
+            className="h-7 w-full rounded-md border border-border bg-background pl-8 pr-2.5 text-xs outline-none focus:border-brand"
+          />
+        </div>
+
+        <select
+          value={selectedSector}
+          onChange={(event) => setSelectedSector(event.target.value)}
+          className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none"
+        >
+          <option>Tất cả</option>
+          {SECTOR_ORDER.map((sector) => (
+            <option key={sector}>{sector}</option>
+          ))}
+        </select>
+
+        <div className="flex items-center rounded-md border border-border bg-background p-0.5">
+          <button
+            onClick={() => setMode("sector")}
+            className={`flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors ${
+              mode === "sector" ? "bg-panel-2 text-foreground font-semibold" : "text-muted-2 hover:text-foreground"
+            }`}
+          >
+            <LayoutGrid className="h-3 w-3" />
+            <span>{BOARD_SECTOR_GROUPS.length} nhóm</span>
+          </button>
+          <button
+            onClick={() => setMode("movers")}
+            className={`flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors ${
+              mode === "movers" ? "bg-panel-2 text-foreground font-semibold" : "text-muted-2 hover:text-foreground"
+            }`}
+          >
+            <ChartNoAxesCombined className="h-3 w-3" />
+            <span>Top movers</span>
+          </button>
+        </div>
+
+        {/* Quick inline market breadth */}
+        <div className="ml-auto hidden sm:flex items-center gap-2 font-mono text-xs">
+          <span className="text-up font-bold">▲ {advances}</span>
+          <span className="text-down font-bold">▼ {declines}</span>
+        </div>
+      </div>
+
+      {streamState !== "LIVE" && streamError ? (
+        <div className="flex items-center gap-2 border-b border-ref/30 bg-ref/5 px-3 py-1.5 text-xs text-ref">
+          <CircleAlert className="h-3.5 w-3.5 shrink-0 text-ref" />
+          <span>{streamError}</span>
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 overflow-auto p-2">
+        <WatchlistSection
+          stocks={universe}
+          quotes={displayQuotes}
+          priceHistory={priceHistory}
+          watchlist={watchlist}
+          onToggleWatch={handleToggleWatch}
+          onOpen={openBook}
+        />
+        {mode === "sector" ? (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            {grouped.map(({ key, label, stocks }) => {
+              const sectorQuotes = stocks.map((stock) => displayQuotes[stock.ticker] as LiveStockQuote | undefined).filter(Boolean) as LiveStockQuote[]
+              const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
+              const avgTone = marketToneFromChange(avg)
+              return (
+                <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-brand/20 bg-panel">
+                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-brand/25 bg-gradient-to-r from-brand/15 via-brand/5 to-transparent px-3 py-2.5 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-brand">
+                    <div className="min-w-0">
+                      <h2 className="line-clamp-2 text-[13px] font-extrabold leading-[1.15] text-foreground">{label}</h2>
+                      <p className="mt-1.5 inline-flex rounded-full border border-brand/20 bg-background/60 px-2 py-0.5 text-[10px] font-semibold text-muted-2">
+                        {stocks.length} mã
+                      </p>
+                    </div>
+                    {typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}
+                  </header>
+                  <div className="flex-1 space-y-2 overflow-y-auto p-2">
+                    {stocks.length ? (
+                      stocks.map((stock) => (
+                        <LiveStockRow
+                          key={stock.ticker}
+                          stock={stock}
+                          quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined}
+                          history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)}
+                          onOpen={() => openBook(stock.ticker)}
+                          isWatched={watchlist.has(stock.ticker)}
+                          onToggleWatch={(e) => {
+                            e.stopPropagation()
+                            handleToggleWatch(stock.ticker)
+                          }}
+                        />
+                      ))
+                    ) : (
+                      <div className="px-2 py-5 text-center text-[10px] text-muted">Không có mã phù hợp bộ lọc</div>
+                    )}
+                  </div>
+                </section>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+            {movers.map((stock) => (
+              <LiveMoverCard
+                key={stock.ticker}
+                stock={stock}
+                quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined}
+                history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)}
+                onOpen={() => openBook(stock.ticker)}
+                isWatched={watchlist.has(stock.ticker)}
+                onToggleWatch={(e) => {
+                  e.stopPropagation()
+                  handleToggleWatch(stock.ticker)
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* FLOATING STATUS PILL AT BOTTOM RIGHT */}
+      <FloatingMarketStatus
+        streamState={streamState}
+        streamError={streamError}
+        liveCount={liveCount}
+        pricedCount={pricedCount}
+        historyCount={historyCount}
+        universeLength={universe.length}
+        advances={advances}
+        declines={declines}
+        lastMessageAt={lastMessageAt}
+        onReconnect={reconnect}
       />
-      {mode === "sector" ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{grouped.map(({ key, label, stocks }) => {
-      const sectorQuotes = stocks.map((stock) => displayQuotes[stock.ticker] as LiveStockQuote | undefined).filter(Boolean) as LiveStockQuote[]
-      const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
-      const avgTone = marketToneFromChange(avg)
-      return <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-xl border border-brand/20 bg-panel"><header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-brand/25 bg-gradient-to-r from-brand/15 via-brand/5 to-transparent px-3 py-2.5 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-brand"><div className="min-w-0"><h2 className="line-clamp-2 text-[13px] font-extrabold leading-[1.15] text-foreground">{label}</h2><p className="mt-1.5 inline-flex rounded-full border border-brand/20 bg-background/60 px-2 py-0.5 text-[10px] font-semibold text-muted-2">{stocks.length} mã</p></div>{typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}</header><div className="flex-1 space-y-2 overflow-y-auto p-2">{stocks.length ? stocks.map((stock) => <LiveStockRow key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined} history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)} onOpen={() => openBook(stock.ticker)} isWatched={watchlist.has(stock.ticker)} onToggleWatch={(e) => { e.stopPropagation(); handleToggleWatch(stock.ticker) }} />) : <div className="px-2 py-5 text-center text-[10px] text-muted">Không có mã phù hợp bộ lọc</div>}</div></section>
-    })}</div> : <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">{movers.map((stock) => <LiveMoverCard key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined} history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)} onOpen={() => openBook(stock.ticker)} isWatched={watchlist.has(stock.ticker)} onToggleWatch={(e) => { e.stopPropagation(); handleToggleWatch(stock.ticker) }} />)}</div>}</div>
-  </div>
+    </div>
+  )
 }
