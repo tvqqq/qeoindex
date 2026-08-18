@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Activity,
   BarChart3,
@@ -113,8 +113,8 @@ const STREAM_STALE_MS = 45_000
 const MAX_SESSION_TRADES = 6_000
 
 const DEFAULT_WIDTH = 760
-const MIN_WIDTH = 480
-const MIN_HEIGHT = 440
+const MIN_WIDTH = 460
+const MIN_HEIGHT = 420
 const DEFAULT_HEIGHT = 680
 
 function number(value: unknown) {
@@ -275,6 +275,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       ceiling: initialMeta.ceiling,
       floor: initialMeta.floor,
       changePercent: initialMeta.changePercent ?? 0,
+      totalVolume: initialMeta.volume,
       volume: initialMeta.volume,
       updatedAt: new Date().toISOString(),
     }
@@ -299,6 +300,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           ceiling: initialMeta.ceiling,
           floor: initialMeta.floor,
           changePercent: initialMeta.changePercent ?? 0,
+          totalVolume: initialMeta.volume,
           volume: initialMeta.volume,
           updatedAt: new Date().toISOString(),
         })
@@ -701,9 +703,9 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
 }
 
 /**
- * Interactive Intraday Area Sparkline Chart with Crosshair & Reference Line
+ * Interactive Intraday Area Sparkline Chart with Crosshair & Reference Line (Memoized for high FPS)
  */
-function IntradayAreaChart({
+const IntradayAreaChart = memo(function IntradayAreaChart({
   data,
   reference,
   toneColor,
@@ -826,7 +828,7 @@ function IntradayAreaChart({
       </div>
     </div>
   )
-}
+})
 
 /**
  * Main LiveOrderBookPanel Component
@@ -861,64 +863,122 @@ export function LiveOrderBookPanel({
     y: Math.max(50, 72 + (index % 5) * 36),
   }))
 
-  const drag = useRef<{ dx: number; dy: number } | null>(null)
-  const resizeRef = useRef<{ startX: number; startY: number; startW: number; startH: number; handle: "se" | "e" | "s" } | null>(null)
+  const panelRef = useRef<HTMLElement>(null)
+  const isInteractingRef = useRef(false)
+  const [isInteracting, setIsInteracting] = useState(false)
   const closeRequested = useRef(false)
 
   const stream = useDnseOrderBookStream(symbol, reconnectKey, initialMeta)
   const quote = stream.quote
 
-  // Window dragging
+  // High-performance Drag-to-Move with window listener + requestAnimationFrame (0ms latency, zero re-renders while moving)
   const onHeaderPointerDown = useCallback(
     (event: React.PointerEvent<HTMLElement>) => {
       const target = event.target instanceof HTMLElement ? event.target : null
       if (target?.closest("button, a, [data-orderbook-action], [data-no-drag]")) return
       if (isMaximized) return
       onFocus()
-      drag.current = { dx: event.clientX - pos.x, dy: event.clientY - pos.y }
-      event.currentTarget.setPointerCapture(event.pointerId)
+
+      const startX = event.clientX
+      const startY = event.clientY
+      const startPosX = pos.x
+      const startPosY = pos.y
+      let curX = startPosX
+      let curY = startPosY
+      let rafId: number | null = null
+
+      isInteractingRef.current = true
+      setIsInteracting(true)
+
+      const handlePointerMove = (ev: PointerEvent) => {
+        const dx = ev.clientX - startX
+        const dy = ev.clientY - startY
+        curX = Math.max(0, Math.min(window.innerWidth - 200, startPosX + dx))
+        curY = Math.max(0, Math.min(window.innerHeight - 50, startPosY + dy))
+
+        if (rafId) cancelAnimationFrame(rafId)
+        rafId = requestAnimationFrame(() => {
+          if (panelRef.current) {
+            panelRef.current.style.left = `${curX}px`
+            panelRef.current.style.top = `${curY}px`
+          }
+        })
+      }
+
+      const handlePointerUp = () => {
+        if (rafId) cancelAnimationFrame(rafId)
+        window.removeEventListener("pointermove", handlePointerMove)
+        window.removeEventListener("pointerup", handlePointerUp)
+        window.removeEventListener("pointercancel", handlePointerUp)
+        isInteractingRef.current = false
+        setIsInteracting(false)
+        setPos({ x: curX, y: curY })
+      }
+
+      window.addEventListener("pointermove", handlePointerMove, { passive: true })
+      window.addEventListener("pointerup", handlePointerUp)
+      window.addEventListener("pointercancel", handlePointerUp)
     },
     [onFocus, pos.x, pos.y, isMaximized],
   )
 
-  const onPointerMove = useCallback((event: React.PointerEvent) => {
-    if (drag.current) {
-      setPos({
-        x: Math.max(0, Math.min(Math.max(0, window.innerWidth - 320), event.clientX - drag.current.dx)),
-        y: Math.max(0, Math.min(Math.max(0, window.innerHeight - 60), event.clientY - drag.current.dy)),
-      })
-    } else if (resizeRef.current) {
-      const { startX, startY, startW, startH, handle } = resizeRef.current
-      const deltaX = event.clientX - startX
-      const deltaY = event.clientY - startY
-      setSize((prev) => ({
-        width: handle === "s" ? prev.width : Math.max(MIN_WIDTH, Math.min(window.innerWidth - 32, startW + deltaX)),
-        height: handle === "e" ? prev.height : Math.max(MIN_HEIGHT, Math.min(window.innerHeight - 64, startH + deltaY)),
-      }))
-    }
-  }, [])
-
-  const onPointerUp = useCallback(() => {
-    drag.current = null
-    resizeRef.current = null
-  }, [])
-
-  // Resize handle triggers
+  // High-performance Drag-to-Resize with window listener + requestAnimationFrame (0ms latency, zero re-renders while resizing)
   const startResize = useCallback(
     (e: React.PointerEvent, handle: "se" | "e" | "s") => {
       e.preventDefault()
       e.stopPropagation()
       onFocus()
-      resizeRef.current = {
-        startX: e.clientX,
-        startY: e.clientY,
-        startW: size.width,
-        startH: size.height,
-        handle,
+
+      const startX = e.clientX
+      const startY = e.clientY
+      const startW = size.width
+      const startH = size.height
+      let curW = startW
+      let curH = startH
+      let rafId: number | null = null
+
+      isInteractingRef.current = true
+      setIsInteracting(true)
+
+      const handlePointerMove = (ev: PointerEvent) => {
+        const dx = ev.clientX - startX
+        const dy = ev.clientY - startY
+
+        if (handle === "se" || handle === "e") {
+          curW = Math.max(MIN_WIDTH, Math.min(window.innerWidth - pos.x - 12, startW + dx))
+        }
+        if (handle === "se" || handle === "s") {
+          curH = Math.max(MIN_HEIGHT, Math.min(window.innerHeight - pos.y - 12, startH + dy))
+        }
+
+        if (rafId) cancelAnimationFrame(rafId)
+        rafId = requestAnimationFrame(() => {
+          if (panelRef.current) {
+            if (handle === "se" || handle === "e") {
+              panelRef.current.style.width = `${curW}px`
+            }
+            if (handle === "se" || handle === "s") {
+              panelRef.current.style.height = `${curH}px`
+            }
+          }
+        })
       }
-      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+
+      const handlePointerUp = () => {
+        if (rafId) cancelAnimationFrame(rafId)
+        window.removeEventListener("pointermove", handlePointerMove)
+        window.removeEventListener("pointerup", handlePointerUp)
+        window.removeEventListener("pointercancel", handlePointerUp)
+        isInteractingRef.current = false
+        setIsInteracting(false)
+        setSize({ width: curW, height: curH })
+      }
+
+      window.addEventListener("pointermove", handlePointerMove, { passive: true })
+      window.addEventListener("pointerup", handlePointerUp)
+      window.addEventListener("pointercancel", handlePointerUp)
     },
-    [onFocus, size.width, size.height],
+    [onFocus, size.width, size.height, pos.x, pos.y],
   )
 
   const onPanelPointerDown = useCallback(
@@ -936,7 +996,6 @@ export function LiveOrderBookPanel({
       event.stopPropagation()
       if (closeRequested.current) return
       closeRequested.current = true
-      drag.current = null
       onClose()
     },
     [onClose],
@@ -948,7 +1007,6 @@ export function LiveOrderBookPanel({
       event.stopPropagation()
       if (closeRequested.current) return
       closeRequested.current = true
-      drag.current = null
       onClose()
     },
     [onClose],
@@ -1005,9 +1063,9 @@ export function LiveOrderBookPanel({
       cur.totalVol += t.volume
       profileMap.set(t.price, cur)
     }
-    const rows = [...profileMap.values()].sort((a, b) => b.price - a.price)
-    const maxVol = Math.max(1, ...rows.map((r) => r.totalVol))
-    return { rows, maxVol }
+    const profileRows = [...profileMap.values()].sort((a, b) => b.price - a.price)
+    const maxVol = Math.max(1, ...profileRows.map((r) => r.totalVol))
+    return { rows: profileRows, maxVol }
   }, [stream.trades])
 
   const tone = marketToneFromPrice({
@@ -1043,26 +1101,31 @@ export function LiveOrderBookPanel({
   const bestAskPrice = topAsks[0]?.price
   const spread = bestBidPrice && bestAskPrice ? bestAskPrice - bestBidPrice : null
 
-  // Style positioning
+  // Clean CSS styles with zero transition lag while interacting
   const panelStyle = isMaximized
     ? { top: "12px", left: "12px", right: "12px", bottom: "12px", width: "calc(100vw - 24px)", height: "calc(100vh - 24px)", zIndex: z + 10 }
-    : { left: pos.x, top: pos.y, width: Math.min(size.width, window.innerWidth - 16), height: minimized ? "auto" : Math.min(size.height, window.innerHeight - 32), zIndex: z }
+    : {
+        left: `${pos.x}px`,
+        top: `${pos.y}px`,
+        width: `${Math.min(size.width, window.innerWidth - 16)}px`,
+        height: minimized ? "auto" : `${Math.min(size.height, window.innerHeight - 32)}px`,
+        zIndex: z,
+      }
 
   return (
     <section
-      className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-xl border border-border-strong bg-[#141515] shadow-2xl shadow-black/80 transition-[width,height] duration-75 ${
+      ref={panelRef}
+      className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-xl border border-border-strong bg-[#141515] shadow-2xl shadow-black/80 will-change-[width,height,left,top] ${
         isMaximized ? "fixed" : ""
-      }`}
+      } ${!isInteracting ? "transition-[width,height,left,top] duration-150 ease-out" : "select-none"}`}
       style={panelStyle}
       onPointerDown={onPanelPointerDown}
       data-orderbook={stockKey}
     >
       {/* HEADER / DRAG HANDLE */}
       <header
-        className="flex cursor-grab select-none items-center gap-2 border-b border-border bg-[#1b1d1c] px-3.5 py-2.5 active:cursor-grabbing"
+        className="flex cursor-grab select-none items-center gap-2 border-b border-border bg-[#1b1d1c] px-3.5 py-2.5 active:cursor-grabbing touch-none"
         onPointerDown={onHeaderPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
       >
         <GripVertical className="h-4 w-4 text-muted shrink-0" />
         <div className="flex items-center gap-1.5 min-w-0">
@@ -1627,28 +1690,30 @@ export function LiveOrderBookPanel({
         </div>
       ) : null}
 
-      {/* RESIZE HANDLES */}
+      {/* RESIZE HANDLES (Interactive everywhere via window listeners with 0ms drag latency) */}
       {!minimized && !isMaximized && (
         <>
           {/* Bottom-right corner resize handle */}
           <div
             onPointerDown={(e) => startResize(e, "se")}
-            className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize flex items-end justify-end p-0.5 z-20 group"
+            className="absolute bottom-0 right-0 h-5 w-5 cursor-se-resize flex items-end justify-end p-1 z-30 group touch-none select-none"
             title="Kéo để phóng to / thu nhỏ"
           >
-            <div className="h-2 w-2 border-r-2 border-b-2 border-muted-2 group-hover:border-brand transition-colors" />
+            <div className="h-2.5 w-2.5 border-r-2 border-b-2 border-muted-2/80 group-hover:border-brand group-active:border-brand transition-colors" />
           </div>
 
           {/* Right edge resize strip */}
           <div
             onPointerDown={(e) => startResize(e, "e")}
-            className="absolute top-0 right-0 bottom-4 w-1.5 cursor-e-resize z-10 hover:bg-brand/20 transition-colors"
+            className="absolute top-0 right-0 bottom-5 w-2 cursor-e-resize z-20 hover:bg-brand/25 active:bg-brand/40 transition-colors touch-none select-none"
+            title="Kéo ngang"
           />
 
           {/* Bottom edge resize strip */}
           <div
             onPointerDown={(e) => startResize(e, "s")}
-            className="absolute bottom-0 left-0 right-4 h-1.5 cursor-s-resize z-10 hover:bg-brand/20 transition-colors"
+            className="absolute bottom-0 left-0 right-5 h-2 cursor-s-resize z-20 hover:bg-brand/25 active:bg-brand/40 transition-colors touch-none select-none"
+            title="Kéo dọc"
           />
         </>
       )}
