@@ -520,22 +520,18 @@ export function LiveMarketBoardV2({
             if (!history?.price || !history.reference) continue
             dailyReferences.current[symbol] = history.reference
             const existing = current[symbol] as LiveStockQuote | undefined
-            if (existing?.price) {
-              next[symbol] = {
-                ...existing,
-                reference: history.reference,
-                change: existing.price - history.reference,
-                changePercent: ((existing.price - history.reference) / history.reference) * 100,
-              }
-              continue
-            }
+            const price = history.price
+            const ref = history.reference
+            const change = price - ref
+            const changePercent = ref > 0 ? (change / ref) * 100 : (history.changePercent ?? 0)
             next[symbol] = {
+              ...(existing ?? {}),
               symbol,
-              price: history.price,
-              reference: history.reference,
-              change: history.change ?? undefined,
-              changePercent: history.changePercent ?? 0,
-              updatedAt: history.lastBarAt ? new Date(history.lastBarAt * 1000).toISOString() : receivedAt,
+              price,
+              reference: ref,
+              change,
+              changePercent,
+              updatedAt: history.lastBarAt ? new Date(history.lastBarAt * 1000).toISOString() : (existing?.updatedAt || receivedAt),
             }
           }
           return next

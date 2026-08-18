@@ -40,16 +40,18 @@ export default async function Page() {
 
   for (const stock of universe) {
     const snap = snapshots[stock.ticker]
+    const scan = data.latestScans[stock.ticker]
+
     if (snap && snap.latest_price && snap.latest_price > 0) {
-      const ref = snap.reference_price || snap.latest_price
+      const ref = snap.reference_price || (snap.latest_quote as any)?.reference || snap.latest_price
       const change = snap.latest_price - ref
       const changePercent = ref > 0 ? (change / ref) * 100 : 0
       initialQuotes[stock.ticker] = {
         symbol: stock.ticker,
         price: snap.latest_price,
         reference: ref,
-        ceiling: snap.ceiling_price ?? undefined,
-        floor: snap.floor_price ?? undefined,
+        ceiling: snap.ceiling_price ?? Math.round(ref * 1.07),
+        floor: snap.floor_price ?? Math.round(ref * 0.93),
         change,
         changePercent,
         volume: snap.total_volume || 0,
@@ -57,6 +59,21 @@ export default async function Page() {
       }
       if (Array.isArray(snap.intraday_1m) && snap.intraday_1m.length > 0) {
         initialHistories[stock.ticker] = snap.intraday_1m as unknown as IntradayPoint[]
+      }
+    } else if (scan && scan.price && scan.price > 0) {
+      const changePct = scan.changePct ?? 0
+      const ref = changePct !== 0 ? scan.price / (1 + changePct / 100) : scan.price
+      const change = scan.price - ref
+      initialQuotes[stock.ticker] = {
+        symbol: stock.ticker,
+        price: scan.price,
+        reference: ref,
+        ceiling: Math.round(ref * 1.07),
+        floor: Math.round(ref * 0.93),
+        change,
+        changePercent: changePct,
+        volume: scan.volume || 0,
+        updatedAt: scan.date || new Date().toISOString(),
       }
     }
   }
