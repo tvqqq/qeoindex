@@ -1,5 +1,4 @@
-"use client"
-
+import { memo } from "react"
 import { ExternalLink, Star } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { Sparkline } from "@/components/sparkline"
@@ -164,21 +163,37 @@ function getGainerStyles(quote?: LiveStockQuote, tone?: MarketTone) {
   }
 }
 
-export function LiveStockRow({
-  stock,
-  quote,
-  history,
-  onOpen,
-  isWatched,
-  onToggleWatch,
-}: {
+export interface LiveStockRowProps {
   stock: LiveBoardStock
   quote?: LiveStockQuote
   history: number[]
   onOpen: () => void
   isWatched?: boolean
   onToggleWatch?: (event: React.MouseEvent) => void
-}) {
+}
+
+function areStockPropsEqual(prev: LiveStockRowProps, next: LiveStockRowProps) {
+  if (prev.stock.ticker !== next.stock.ticker) return false
+  if (prev.isWatched !== next.isWatched) return false
+  if (prev.quote?.price !== next.quote?.price) return false
+  if (prev.quote?.changePercent !== next.quote?.changePercent) return false
+  if (prev.quote?.foreignNetValue !== next.quote?.foreignNetValue) return false
+  if (prev.quote?.reference !== next.quote?.reference) return false
+  if (prev.quote?.ceiling !== next.quote?.ceiling) return false
+  if (prev.quote?.floor !== next.quote?.floor) return false
+  if (prev.history.length !== next.history.length) return false
+  if (prev.history.at(-1) !== next.history.at(-1)) return false
+  return true
+}
+
+export const LiveStockRow = memo(function LiveStockRow({
+  stock,
+  quote,
+  history,
+  onOpen,
+  isWatched,
+  onToggleWatch,
+}: LiveStockRowProps) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
   const chart = sparkData(history, quote?.price)
@@ -196,7 +211,7 @@ export function LiveStockRow({
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen() }
       }}
-      className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(42px,1fr)_64px] items-center gap-1 rounded-xl border bg-[#0e1318]/50 backdrop-blur-md px-2 py-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-all duration-150 hover:bg-white/[0.05] hover:border-white/[0.14] hover:shadow-[0_4px_16px_rgba(0,0,0,0.35),inset_0_1px_0_0_rgba(255,255,255,0.12)] hover:scale-[1.01] active:scale-[0.99] focus:outline-none focus:ring-1 focus:ring-brand ${
+      className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(42px,1fr)_64px] items-center gap-1 rounded-xl border bg-[#0d1217] px-2 py-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-all duration-150 hover:bg-white/[0.05] hover:border-white/[0.14] hover:shadow-[0_4px_16px_rgba(0,0,0,0.35),inset_0_1px_0_0_rgba(255,255,255,0.12)] hover:scale-[1.01] active:scale-[0.99] focus:outline-none focus:ring-1 focus:ring-brand ${
         priceFlash === "up"
           ? "flash-up border-up/80 shadow-[0_0_12px_rgba(34,201,138,0.3)]"
           : priceFlash === "down"
@@ -269,23 +284,16 @@ export function LiveStockRow({
       </TickerResearchLink>
     </div>
   )
-}
+}, areStockPropsEqual)
 
-export function LiveMoverCard({
+export const LiveMoverCard = memo(function LiveMoverCard({
   stock,
   quote,
   history,
   onOpen,
   isWatched,
   onToggleWatch,
-}: {
-  stock: LiveBoardStock
-  quote?: LiveStockQuote
-  history: number[]
-  onOpen: () => void
-  isWatched?: boolean
-  onToggleWatch?: (event: React.MouseEvent) => void
-}) {
+}: LiveStockRowProps) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
   const chart = sparkData(history, quote?.price)
@@ -297,7 +305,7 @@ export function LiveMoverCard({
 
   return (
     <div
-      className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-[#0c1015]/65 backdrop-blur-xl px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.08)] transition-all hover:border-white/[0.18] hover:bg-white/[0.04] ${
+      className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-[#0c1015]/90 px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.08)] transition-all hover:border-white/[0.18] hover:bg-white/[0.04] ${
         priceFlash === "up"
           ? "flash-up border-up/80 shadow-[0_0_16px_rgba(34,201,138,0.3)]"
           : priceFlash === "down"
@@ -359,6 +367,6 @@ export function LiveMoverCard({
       </div>
     </div>
   )
-}
+}, areStockPropsEqual)
 
 export { formatChangePercent }

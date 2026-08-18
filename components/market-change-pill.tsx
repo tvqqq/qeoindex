@@ -1,6 +1,7 @@
+import { memo } from "react"
 import { marketTonePill, type MarketTone } from "@/lib/market-tone"
 
-export function MarketChangePill({
+export const MarketChangePill = memo(function MarketChangePill({
   value,
   tone,
   compact = false,
@@ -23,4 +24,4 @@ export function MarketChangePill({
       {label}
     </span>
   )
-}
+})

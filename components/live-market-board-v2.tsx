@@ -174,7 +174,7 @@ function WatchlistSection({
   const watched = stocks.filter((s) => watchlist.has(s.ticker))
   if (watched.length === 0) return null
   return (
-    <div className="mb-3 rounded-2xl border border-amber-500/25 bg-[#141008]/50 backdrop-blur-xl p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+    <div className="mb-3 rounded-2xl border border-amber-500/25 bg-[#141008]/85 p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.08)]">
       <div className="mb-2 flex items-center justify-between px-1">
         <div className="flex items-center gap-1.5">
           <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
@@ -1200,7 +1200,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
               const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
               const avgTone = marketToneFromChange(avg)
               return (
-                <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b0f14]/65 backdrop-blur-xl shadow-[0_8px_32px_-8px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.08)] hover:border-white/[0.14] transition-all">
+                <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b0f14]/90 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.08)] hover:border-white/[0.14] transition-colors">
                   <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3 py-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -1217,7 +1217,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
                     </div>
                     {typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}
                   </header>
-                  <div className="flex-1 space-y-1.5 overflow-y-auto p-1.5">
+                  <div className="flex-1 space-y-1.5 overflow-y-auto p-1.5 overscroll-contain">
                     {stocks.length ? (
                       stocks.map((stock) => (
                         <LiveStockRow

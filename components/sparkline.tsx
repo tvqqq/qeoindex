@@ -1,3 +1,5 @@
+import { memo, useMemo } from "react"
+
 interface SparklineProps {
   data: number[]
   refValue?: number
@@ -12,10 +14,10 @@ interface SparklineProps {
 }
 
 /**
- * Lightweight SVG sparkline. `data` is a numeric series; it is normalized to the
- * viewport. A trailing dot marks the latest value.
+ * Lightweight, GPU-friendly SVG sparkline.
+ * Wrapped in React.memo with useMemo math to eliminate layout thrashing during scrolls.
  */
-export function Sparkline({
+export const Sparkline = memo(function Sparkline({
   data,
   refValue,
   color,
@@ -27,33 +29,43 @@ export function Sparkline({
   fill = true,
   className = "",
 }: SparklineProps) {
-  if (data.length < 2) return <svg width={width} height={height} aria-hidden="true" className={className} />
-
   const hasRef = typeof refValue === "number" && Number.isFinite(refValue) && refValue > 0
   const ref = hasRef ? (refValue as number) : undefined
 
-  // Include reference value and all data points
-  const rawMin = Math.min(...data, ...(ref != null ? [ref] : []))
-  const rawMax = Math.max(...data, ...(ref != null ? [ref] : []))
+  const dataKey = data.length > 0 ? `${data.length}-${data[0]}-${data[data.length - 1]}` : ""
 
-  // Ensure breathing room around reference so the line and price extremes never clip or touch inappropriately
-  const delta = rawMax - rawMin || (ref ? ref * 0.02 : 1)
-  const padding = delta * 0.08
-  const min = rawMin - padding
-  const max = rawMax + padding
-  const range = max - min || 1
-  const pad = strokeWidth + 0.5
+  const computed = useMemo(() => {
+    if (data.length < 2) return null
 
-  const x = (i: number) => (i / (data.length - 1)) * (width - pad * 2) + pad
-  const y = (v: number) => height - pad - ((v - min) / range) * (height - pad * 2)
+    const rawMin = Math.min(...data, ...(ref != null ? [ref] : []))
+    const rawMax = Math.max(...data, ...(ref != null ? [ref] : []))
 
-  const points = data.map((v, i) => `${x(i).toFixed(2)},${y(v).toFixed(2)}`)
-  const path = "M" + points.join(" L")
+    const delta = rawMax - rawMin || (ref ? ref * 0.02 : 1)
+    const padding = delta * 0.08
+    const min = rawMin - padding
+    const max = rawMax + padding
+    const range = max - min || 1
+    const pad = strokeWidth + 0.5
 
-  const lastX = x(data.length - 1)
-  const lastY = y(data[data.length - 1])
+    const getX = (i: number) => (i / (data.length - 1)) * (width - pad * 2) + pad
+    const getY = (v: number) => height - pad - ((v - min) / range) * (height - pad * 2)
 
-  const uid = Math.round(x(0) * 100) + "-" + color.replace(/[^a-z0-9]/gi, "")
+    const points = data.map((v, i) => `${getX(i).toFixed(2)},${getY(v).toFixed(2)}`)
+    const path = "M" + points.join(" L")
+
+    const lastX = getX(data.length - 1)
+    const lastY = getY(data[data.length - 1])
+    const refY = ref != null ? getY(ref) : null
+    const uid = Math.round(getX(0) * 100) + "-" + color.replace(/[^a-z0-9]/gi, "")
+
+    return { path, lastX, lastY, refY, pad, uid }
+  }, [dataKey, ref, width, height, strokeWidth, color])
+
+  if (!computed) {
+    return <svg width={width} height={height} aria-hidden="true" className={className} />
+  }
+
+  const { path, lastX, lastY, refY, pad, uid } = computed
 
   return (
     <svg
@@ -64,12 +76,12 @@ export function Sparkline({
       className={`overflow-visible ${className}`.trim()}
     >
       {/* Đường line đứt nét là giá tham chiếu (màu xám nhạt) */}
-      {hasRef && (
+      {hasRef && refY != null && (
         <line
           x1={0}
           x2={width}
-          y1={y(ref as number)}
-          y2={y(ref as number)}
+          y1={refY}
+          y2={refY}
           stroke={refColor}
           strokeOpacity={0.65}
           strokeDasharray="2.5 2"
@@ -102,4 +114,4 @@ export function Sparkline({
       {showDot && <circle cx={lastX} cy={lastY} r={strokeWidth + 0.5} fill={color} />}
     </svg>
   )
-}
+})
