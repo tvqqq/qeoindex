@@ -1426,25 +1426,6 @@ function ForeignRealtimeCard({
           </div>
         </div>
       </div>
-
-      {/* Room Ngoại Footer */}
-      {foreign?.availableRoom !== null && foreign?.availableRoom !== undefined && (
-        <div className="flex items-center justify-between text-[11px] px-1 text-muted">
-          <span>Room khả dụng:</span>
-          <span
-            className={`font-bold text-foreground font-mono transition-colors ${
-              roomFlash === "up" ? "flash-up font-black" : roomFlash === "down" ? "flash-down font-black" : ""
-            }`}
-          >
-            {foreign.availableRoom === 0 ? "Hết room (0 cp)" : `${formatCompactVolume(foreign.availableRoom)} cp`}
-            {roomPercentage !== null && (
-              <span className="ml-1 text-[10px] text-muted-2 font-normal">
-                ({roomPercentage.toFixed(1)}% VĐL)
-              </span>
-            )}
-          </span>
-        </div>
-      )}
     </div>
   )
 }
@@ -1470,102 +1451,102 @@ function TradeInitiativeAndMarketStatsCard({
   const totalVolume = quote?.totalVolume ?? tradeStats.totalTraded
 
   return (
-    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-3 font-mono text-xs space-y-3">
-      {/* 1. 4 Records replacing the bar (Matching Image 2) */}
-      <div className="rounded-lg border border-border/60 bg-[#161718] divide-y divide-border/40 overflow-hidden text-xs sm:text-[13px]">
+    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-2.5 font-mono text-xs space-y-2.5">
+      {/* 1. 4 Records replacing the bar (Matching Image 2 with balanced font size) */}
+      <div className="rounded-lg border border-border/60 bg-[#161718] divide-y divide-border/40 overflow-hidden text-[11px] sm:text-xs">
         {/* Row 1: Tổng KL khớp */}
-        <div className="flex items-center justify-between px-3 py-2 bg-[#1c1e1f]/60">
+        <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#1c1e1f]/60">
           <span className="text-foreground/90 font-medium font-sans">
             Tổng KL khớp {symbol}
           </span>
-          <span className="font-bold text-foreground sm:text-sm">
+          <span className="font-bold text-foreground sm:text-xs">
             {formatVolume(totalVolume)}
           </span>
         </div>
 
         {/* Row 2: KL MUA chủ động */}
-        <div className="flex items-center justify-between px-3 py-2">
+        <div className="flex items-center justify-between px-2.5 py-1.5">
           <span className="text-muted-2 flex items-center gap-1 font-sans">
             KL MUA chủ động
           </span>
-          <span className="flex items-center gap-1.5 font-bold text-up sm:text-sm">
+          <span className="flex items-center gap-1.5 font-bold text-up sm:text-xs">
             <span>{formatVolume(tradeStats.buyVol)}</span>
-            <span className="rounded px-1.5 py-0.2 text-[9px] font-bold border border-up/40 bg-up/15 text-up leading-none">
+            <span className="rounded px-1 py-0.2 text-[8px] font-bold border border-up/40 bg-up/15 text-up leading-none">
               M
             </span>
           </span>
         </div>
 
         {/* Row 3: KL BÁN chủ động */}
-        <div className="flex items-center justify-between px-3 py-2">
+        <div className="flex items-center justify-between px-2.5 py-1.5">
           <span className="text-muted-2 flex items-center gap-1 font-sans">
             KL BÁN chủ động
           </span>
-          <span className="flex items-center gap-1.5 font-bold text-down sm:text-sm">
+          <span className="flex items-center gap-1.5 font-bold text-down sm:text-xs">
             <span>{formatVolume(tradeStats.sellVol)}</span>
-            <span className="rounded px-1.5 py-0.2 text-[9px] font-bold border border-down/40 bg-down/15 text-down leading-none">
+            <span className="rounded px-1 py-0.2 text-[8px] font-bold border border-down/40 bg-down/15 text-down leading-none">
               B
             </span>
           </span>
         </div>
 
         {/* Row 4: KL KHÔNG XÁC ĐỊNH */}
-        <div className="flex items-center justify-between px-3 py-2 bg-[#1c1e1f]/40">
+        <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#1c1e1f]/40">
           <span className="text-muted-2 font-sans">
             KL KHÔNG XÁC ĐỊNH
           </span>
-          <span className="font-bold text-foreground sm:text-sm">
+          <span className="font-bold text-foreground sm:text-xs">
             {formatVolume(tradeStats.unkVol)}
           </span>
         </div>
       </div>
 
-      {/* 2. Thông số phiên (Larger font size) */}
-      <div className="border-t border-border/50 pt-2.5">
-        <div className="text-[11px] uppercase tracking-wider text-muted-2 font-bold mb-2 flex items-center justify-between">
+      {/* 2. Thông số phiên (Scaled down 1 font size for perfect balance) */}
+      <div className="border-t border-border/50 pt-2">
+        <div className="text-[10px] uppercase tracking-wider text-muted-2 font-bold mb-1.5 flex items-center justify-between">
           <span>THÔNG SỐ PHIÊN</span>
         </div>
         <div className="grid grid-cols-3 gap-1.5 text-center">
           {/* Row 1: Sàn - TC - Trần */}
           <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[10px] text-muted-2 uppercase font-semibold">Sàn</div>
-            <div className="text-sm sm:text-base font-black text-[#22b8cf]">{formatPrice(quote?.floor)}</div>
+            <div className="text-[9px] text-muted-2 uppercase font-semibold">Sàn</div>
+            <div className="text-xs sm:text-[13px] font-bold text-[#22b8cf]">{formatPrice(quote?.floor)}</div>
           </div>
           <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[10px] text-muted-2 uppercase font-semibold">TC</div>
-            <div className="text-sm sm:text-base font-black text-ref">{formatPrice(quote?.reference)}</div>
+            <div className="text-[9px] text-muted-2 uppercase font-semibold">TC</div>
+            <div className="text-xs sm:text-[13px] font-bold text-ref">{formatPrice(quote?.reference)}</div>
           </div>
           <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[10px] text-muted-2 uppercase font-semibold">Trần</div>
-            <div className="text-sm sm:text-base font-black text-ceiling">{formatPrice(quote?.ceiling)}</div>
+            <div className="text-[9px] text-muted-2 uppercase font-semibold">Trần</div>
+            <div className="text-xs sm:text-[13px] font-bold text-ceiling">{formatPrice(quote?.ceiling)}</div>
           </div>
 
           {/* Row 2: Thấp - TB - Cao */}
           <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[10px] text-muted-2 uppercase font-semibold">Thấp</div>
-            <div className="text-sm sm:text-base font-black text-foreground">{formatPrice(quote?.low)}</div>
+            <div className="text-[9px] text-muted-2 uppercase font-semibold">Thấp</div>
+            <div className="text-xs sm:text-[13px] font-bold text-foreground">{formatPrice(quote?.low)}</div>
           </div>
           <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[10px] text-muted-2 uppercase font-semibold">TB</div>
-            <div className="text-sm sm:text-base font-black text-foreground">{formatPrice(quote?.avgPrice)}</div>
+            <div className="text-[9px] text-muted-2 uppercase font-semibold">TB</div>
+            <div className="text-xs sm:text-[13px] font-bold text-foreground">{formatPrice(quote?.avgPrice)}</div>
           </div>
           <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[10px] text-muted-2 uppercase font-semibold">Cao</div>
-            <div className="text-sm sm:text-base font-black text-foreground">{formatPrice(quote?.high)}</div>
+            <div className="text-[9px] text-muted-2 uppercase font-semibold">Cao</div>
+            <div className="text-xs sm:text-[13px] font-bold text-foreground">{formatPrice(quote?.high)}</div>
           </div>
 
           {/* Row 3: Spread - Tổng KL - Tổng GT */}
           <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[10px] text-muted-2 uppercase font-semibold">Spread</div>
-            <div className="text-sm sm:text-base font-black text-foreground">{spread !== null && spread !== undefined && spread > 0 ? formatPrice(spread) : "—"}</div>
+            <div className="text-[9px] text-muted-2 uppercase font-semibold">Spread</div>
+            <div className="text-xs sm:text-[13px] font-bold text-foreground">{spread !== null && spread !== undefined && spread > 0 ? formatPrice(spread) : "—"}</div>
           </div>
           <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[10px] text-muted-2 uppercase font-semibold">Tổng KL</div>
-            <div className="text-sm sm:text-base font-black text-foreground">{formatCompactVolume(quote?.totalVolume ?? totalVolume)}</div>
+            <div className="text-[9px] text-muted-2 uppercase font-semibold">Tổng KL</div>
+            <div className="text-xs sm:text-[13px] font-bold text-foreground">{formatCompactVolume(quote?.totalVolume ?? totalVolume)}</div>
           </div>
           <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[10px] text-muted-2 uppercase font-semibold">Tổng GT</div>
-            <div className="text-sm sm:text-base font-black text-foreground">
+            <div className="text-[9px] text-muted-2 uppercase font-semibold">Tổng GT</div>
+            <div className="text-xs sm:text-[13px] font-bold text-foreground">
               {quote?.totalValue
                 ? formatMarketValue(quote.totalValue)
                 : quote?.totalVolume && quote?.price
@@ -2562,7 +2543,7 @@ export function LiveOrderBookPanel({
                         </div>
                         <div className="mt-0.5 text-[11px] text-muted font-mono">
                           {roomPercentage !== null
-                            ? `Còn ${roomPercentage.toFixed(1)}% VĐL (${formatCompactVolume(foreignRoom)} cp)`
+                            ? `Còn ${roomPercentage.toFixed(1)}% VĐL`
                             : foreignRoom !== null && foreignRoom !== undefined && foreignRoom > 0
                               ? `${formatVolume(foreignRoom)} cp khả dụng`
                               : foreignRoom === 0

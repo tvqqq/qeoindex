@@ -402,7 +402,8 @@ async function fetchFastMarketOverview(symbol: string) {
     const foreignSellVol = finiteNumber(ssiData?.sellForeignQtty ?? (vpsData?.fSVolume ? Number(vpsData.fSVolume) * 10 : 0)) ?? 0
     const foreignBuyVal = finiteNumber(ssiData?.buyForeignValue ?? (vpsData?.fBValue ? Number(vpsData.fBValue) * 1000 : 0)) ?? 0
     const foreignSellVal = finiteNumber(ssiData?.sellForeignValue ?? (vpsData?.fSValue ? Number(vpsData.fSValue) * 1000 : 0)) ?? 0
-    const availableRoom = finiteNumber(ssiData?.remainForeignQtty ?? (vpsData?.fRoom ? Number(vpsData.fRoom) : null))
+    // Canonical exchange foreign room from SSI (with VPS * 10 fallback)
+    const availableRoom = finiteNumber(ssiData?.remainForeignQtty ?? (vpsData?.fRoom ? Number(vpsData.fRoom) * 10 : null))
     const listedShare = finiteNumber(ssiData?.listedShare)
 
     // Extract 3-level orderbook depth
