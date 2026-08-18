@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { marketToneFromPrice, marketToneHex, marketToneText } from "@/lib/market-tone"
+import { normalizeMarketPrice } from "@/lib/intraday-5m"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
 
 type DepthLevel = { price: number; volume: number }
@@ -222,15 +223,28 @@ function sideMeta(side: TradeSide) {
 }
 
 function nextQuote(symbol: string, data: Record<string, unknown>, current: StockQuote | null): StockQuote | null {
-  const price = firstPositive(data, ["matchPrice", "price", "lastPrice"]) || current?.price || 0
-  if (price <= 0) return current
-  const explicitOpen = firstPositive(data, OPEN_PRICE_KEYS)
-  const reference = explicitOpen || firstPositive(data, ["referencePrice", "refPrice", "reference"]) || current?.reference || price
-  const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"]) || current?.ceiling
-  const floor = firstPositive(data, ["floorPrice", "floor"]) || current?.floor
-  const high = firstPositive(data, ["highPrice", "high"]) || (current?.high ? Math.max(current.high, price) : price)
-  const low = firstPositive(data, ["lowPrice", "low"]) || (current?.low ? Math.min(current.low, price) : price)
-  const avgPrice = firstPositive(data, ["avgPrice", "averagePrice", "avePrice"]) || current?.avgPrice
+  const rawPrice = firstPositive(data, ["matchPrice", "price", "lastPrice"]) || current?.price || 0
+  if (rawPrice <= 0) return current
+  const price = current?.price ? normalizeMarketPrice(rawPrice, current.price) ?? rawPrice : rawPrice
+
+  const rawReference = firstPositive(data, ["referencePrice", "refPrice", "reference"]) || current?.reference || price
+  const reference = normalizeMarketPrice(rawReference, price) ?? rawReference
+
+  const rawCeiling = firstPositive(data, ["ceilingPrice", "ceiling"]) || current?.ceiling
+  const ceiling = rawCeiling ? normalizeMarketPrice(rawCeiling, price) ?? rawCeiling : undefined
+
+  const rawFloor = firstPositive(data, ["floorPrice", "floor"]) || current?.floor
+  const floor = rawFloor ? normalizeMarketPrice(rawFloor, price) ?? rawFloor : undefined
+
+  const rawHigh = firstPositive(data, ["highPrice", "high"]) || (current?.high ? Math.max(current.high, price) : price)
+  const high = rawHigh ? normalizeMarketPrice(rawHigh, price) ?? rawHigh : price
+
+  const rawLow = firstPositive(data, ["lowPrice", "low"]) || (current?.low ? Math.min(current.low, price) : price)
+  const low = rawLow ? normalizeMarketPrice(rawLow, price) ?? rawLow : price
+
+  const rawAvg = firstPositive(data, ["avgPrice", "averagePrice", "avePrice"]) || current?.avgPrice
+  const avgPrice = rawAvg ? normalizeMarketPrice(rawAvg, price) ?? rawAvg : undefined
+  
   const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "volume", "lot"]) || current?.totalVolume
   const change = reference > 0 ? price - reference : current?.change
   const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : current?.changePercent ?? 0
@@ -269,12 +283,16 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   const [company, setCompany] = useState<CompanyInfo | null>(() => (initialMeta?.companyName ? { nameVi: initialMeta.companyName, sector: initialMeta.sector } : null))
   const [quote, setQuote] = useState<StockQuote | null>(() => {
     if (!initialMeta?.price) return null
+    const price = initialMeta.price
+    const reference = initialMeta.reference ? normalizeMarketPrice(initialMeta.reference, price) ?? initialMeta.reference : undefined
+    const ceiling = initialMeta.ceiling ? normalizeMarketPrice(initialMeta.ceiling, price) ?? initialMeta.ceiling : undefined
+    const floor = initialMeta.floor ? normalizeMarketPrice(initialMeta.floor, price) ?? initialMeta.floor : undefined
     return {
       symbol,
-      price: initialMeta.price,
-      reference: initialMeta.reference,
-      ceiling: initialMeta.ceiling,
-      floor: initialMeta.floor,
+      price,
+      reference,
+      ceiling,
+      floor,
       changePercent: initialMeta.changePercent ?? 0,
       totalVolume: initialMeta.volume,
       volume: initialMeta.volume,
@@ -294,12 +312,16 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   useEffect(() => {
     if (initialMeta) {
       if (initialMeta.price) {
+        const price = initialMeta.price
+        const reference = initialMeta.reference ? normalizeMarketPrice(initialMeta.reference, price) ?? initialMeta.reference : undefined
+        const ceiling = initialMeta.ceiling ? normalizeMarketPrice(initialMeta.ceiling, price) ?? initialMeta.ceiling : undefined
+        const floor = initialMeta.floor ? normalizeMarketPrice(initialMeta.floor, price) ?? initialMeta.floor : undefined
         setQuote({
           symbol,
-          price: initialMeta.price,
-          reference: initialMeta.reference,
-          ceiling: initialMeta.ceiling,
-          floor: initialMeta.floor,
+          price,
+          reference,
+          ceiling,
+          floor,
           changePercent: initialMeta.changePercent ?? 0,
           totalVolume: initialMeta.volume,
           volume: initialMeta.volume,
@@ -704,134 +726,6 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
 }
 
 /**
- * Interactive Intraday Area Sparkline Chart with Crosshair & Reference Line (Memoized for high FPS)
- */
-const IntradayAreaChart = memo(function IntradayAreaChart({
-  data,
-  reference,
-  toneColor,
-  height = 96,
-}: {
-  data: number[]
-  reference?: number
-  toneColor: string
-  height?: number
-}) {
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  const points = useMemo(() => data.filter((v) => Number.isFinite(v) && v > 0), [data])
-  const ref = reference && reference > 0 ? reference : points[0] || 0
-
-  const { min, max, pathD, areaD, coordinates, refY } = useMemo(() => {
-    if (points.length < 2) return { min: ref, max: ref, pathD: "", areaD: "", coordinates: [], refY: height / 2 }
-    const minVal = Math.min(...points, ref > 0 ? ref * 0.995 : Number.POSITIVE_INFINITY)
-    const maxVal = Math.max(...points, ref > 0 ? ref * 1.005 : Number.NEGATIVE_INFINITY)
-    const range = maxVal - minVal || 1
-    const padding = 10
-    const usableHeight = height - padding * 2
-    const width = 640
-
-    const coords = points.map((val, idx) => {
-      const x = (idx / (points.length - 1)) * width
-      const y = height - padding - ((val - minVal) / range) * usableHeight
-      return { x, y, val }
-    })
-
-    const d = coords.reduce((acc, pt, idx) => (idx === 0 ? `M ${pt.x},${pt.y}` : `${acc} L ${pt.x},${pt.y}`), "")
-    const area = coords.length ? `${d} L ${coords.at(-1)?.x},${height} L ${coords[0].x},${height} Z` : ""
-    const refYPos = ref > 0 ? height - padding - ((ref - minVal) / range) * usableHeight : height / 2
-
-    return { min: minVal, max: maxVal, pathD: d, areaD: area, coordinates: coords, refY: refYPos }
-  }, [points, ref, height])
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!containerRef.current || coordinates.length < 2) return
-    const rect = containerRef.current.getBoundingClientRect()
-    const xPct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    const index = Math.round(xPct * (coordinates.length - 1))
-    setHoverIndex(index)
-  }
-
-  const handlePointerLeave = () => setHoverIndex(null)
-
-  const hovered = hoverIndex !== null && coordinates[hoverIndex] ? coordinates[hoverIndex] : null
-  const hoveredPct = hovered && ref > 0 ? ((hovered.val - ref) / ref) * 100 : null
-
-  if (points.length < 2) {
-    return (
-      <div className="flex h-[96px] w-full items-center justify-center rounded-lg border border-border bg-panel-2/30 text-xs text-muted-2">
-        Đang tải biểu đồ nến trong phiên...
-      </div>
-    )
-  }
-
-  return (
-    <div
-      ref={containerRef}
-      onPointerMove={handlePointerMove}
-      onPointerLeave={handlePointerLeave}
-      className="group relative h-[96px] w-full cursor-crosshair select-none overflow-hidden rounded-lg border border-border/80 bg-[#121313] p-1.5"
-    >
-      <svg viewBox="0 0 640 96" preserveAspectRatio="none" className="h-full w-full overflow-visible">
-        <defs>
-          <linearGradient id={`gradient-${toneColor}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={toneColor} stopOpacity="0.28" />
-            <stop offset="100%" stopColor={toneColor} stopOpacity="0.0" />
-          </linearGradient>
-        </defs>
-
-        {/* Reference horizontal guideline */}
-        {ref > 0 && <line x1="0" y1={refY} x2="640" y2={refY} stroke="var(--color-ref)" strokeDasharray="3 3" strokeOpacity="0.4" strokeWidth="1" />}
-
-        {/* Area fill */}
-        <path d={areaD} fill={`url(#gradient-${toneColor})`} />
-
-        {/* Line stroke */}
-        <path d={pathD} fill="none" stroke={toneColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-
-        {/* Current / Hover point */}
-        {hovered ? (
-          <>
-            <line x1={hovered.x} y1="0" x2={hovered.x} y2="96" stroke="#ffffff" strokeOpacity="0.3" strokeDasharray="2 2" strokeWidth="1" />
-            <circle cx={hovered.x} cy={hovered.y} r="4" fill={toneColor} stroke="#ffffff" strokeWidth="1.5" />
-          </>
-        ) : (
-          coordinates.at(-1) && <circle cx={coordinates.at(-1)?.x} cy={coordinates.at(-1)?.y} r="3.5" fill={toneColor} />
-        )}
-      </svg>
-
-      {/* Floating Info Overlay */}
-      <div className="pointer-events-none absolute left-3 top-2 flex items-center gap-2 font-mono text-[11px]">
-        {hovered ? (
-          <div className="flex items-center gap-2 rounded bg-black/80 px-2 py-0.5 backdrop-blur-sm border border-border/60">
-            <span className="text-foreground font-bold">{formatPrice(hovered.val)}</span>
-            {hoveredPct !== null && (
-              <span className={hoveredPct > 0 ? "text-up font-semibold" : hoveredPct < 0 ? "text-down font-semibold" : "text-ref"}>
-                {hoveredPct > 0 ? "+" : ""}
-                {hoveredPct.toFixed(2)}%
-              </span>
-            )}
-          </div>
-        ) : (
-          <div className="text-[10px] text-muted-2">
-            Đầu phiên <span className="text-foreground font-medium">{formatPrice(points[0])}</span> · Hiện tại{" "}
-            <span className="text-foreground font-bold">{formatPrice(points.at(-1))}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Min / Max bounds */}
-      <div className="pointer-events-none absolute bottom-1 right-2 flex items-center gap-2 font-mono text-[9px] text-muted-2">
-        <span>Thấp: {formatPrice(min)}</span>
-        <span>·</span>
-        <span>Cao: {formatPrice(max)}</span>
-      </div>
-    </div>
-  )
-})
-
-/**
  * Main LiveOrderBookPanel Component
  */
 export function LiveOrderBookPanel({
@@ -1069,20 +963,26 @@ export function LiveOrderBookPanel({
     return { rows: profileRows, maxVol }
   }, [stream.trades])
 
-  const tone = marketToneFromPrice({
-    price: quote?.price,
-    reference: quote?.reference,
-    ceiling: quote?.ceiling,
-    floor: quote?.floor,
-  })
-  const color = quote ? marketToneText(tone) : "text-muted-2"
-  const chartColor = marketToneHex(tone)
+  const tone = useMemo(() => {
+    if (!quote?.price) return "ref"
+    const price = quote.price
+    const ref = quote.reference ? normalizeMarketPrice(quote.reference, price) ?? quote.reference : undefined
+    const ceil = quote.ceiling ? normalizeMarketPrice(quote.ceiling, price) ?? quote.ceiling : undefined
+    const flr = quote.floor ? normalizeMarketPrice(quote.floor, price) ?? quote.floor : undefined
 
-  const chartData = useMemo(() => {
-    const values = stream.priceHistory.filter((value) => Number.isFinite(value) && value > 0)
-    if (!quote?.price || values.at(-1) === quote.price) return values
-    return [...values, quote.price]
-  }, [quote, stream.priceHistory])
+    const baseTone = marketToneFromPrice({
+      price,
+      reference: ref,
+      ceiling: ceil,
+      floor: flr,
+    })
+    if (baseTone === "ceiling" || baseTone === "floor") return baseTone
+    const change = quote.changePercent ?? 0
+    if (change >= 6.85) return "ceiling"
+    if (change <= -6.85) return "floor"
+    return baseTone
+  }, [quote])
+  const color = quote ? marketToneText(tone) : "text-muted-2"
 
   // Foreign statistics calculations
   const foreignNetVolume = stream.foreign ? stream.foreign.totalBuyVolume - stream.foreign.totalSellVolume : null
@@ -1354,19 +1254,7 @@ export function LiveOrderBookPanel({
             </div>
           </div>
 
-          {/* SECTION 2: INTRADAY AREA CHART */}
-          <div className="border-b border-border px-4 py-3 bg-panel/10">
-            <div className="mb-1.5 flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                <Activity className="h-3.5 w-3.5 text-brand" />
-                <span>Biểu đồ giá trong phiên</span>
-              </div>
-              <span className="text-[10px] text-muted-2">{stream.historyMessage || "DNSE 1m · 09:00 → live"}</span>
-            </div>
-            <IntradayAreaChart data={chartData} reference={quote?.reference} toneColor={chartColor} height={96} />
-          </div>
-
-          {/* SECTION 3: TABBED ACTIVITY VIEWS */}
+          {/* SECTION 2: TABBED ACTIVITY VIEWS */}
           <div className="px-4 py-3 flex-1 flex flex-col">
             {/* Tabs Header */}
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
@@ -1590,50 +1478,6 @@ export function LiveOrderBookPanel({
                       {roomPercentage !== null ? `Còn ${roomPercentage.toFixed(1)}% room` : "Theo quy định VSD"}
                     </div>
                   </div>
-                </div>
-
-                {/* Foreign Transaction Event Log */}
-                <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col">
-                  <div className="flex items-center justify-between border-b border-border/60 bg-[#181919] px-3 py-1.5 text-[11px] font-semibold text-muted-2">
-                    <span>Nhật ký giao dịch NĐTNN trong phiên</span>
-                    {stream.foreign?.updatedAt && <span className="text-[10px]">{timeLabel(stream.foreign.updatedAt)}</span>}
-                  </div>
-
-                  {stream.foreignEvents.length ? (
-                    <div className="flex-1 overflow-y-auto max-h-[260px] px-3">
-                      <div className="grid grid-cols-[100px_80px_1fr_120px] border-b border-border/40 py-1.5 text-[10px] text-muted-2">
-                        <span>Thời gian</span>
-                        <span>Chiều</span>
-                        <span className="text-right">Khối lượng</span>
-                        <span className="text-right">Giá trị</span>
-                      </div>
-                      {stream.foreignEvents.map((event) => (
-                        <div
-                          key={event.id}
-                          className="grid grid-cols-[100px_80px_1fr_120px] items-center border-b border-border/30 py-1.5 font-mono text-xs last:border-0"
-                        >
-                          <span className="text-muted-2">{timeLabel(event.time)}</span>
-                          <span>
-                            <span
-                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                                event.side === "BUY" ? "bg-up/15 text-up" : "bg-down/15 text-down"
-                              }`}
-                            >
-                              {event.side === "BUY" ? "NN MUA" : "NN BÁN"}
-                            </span>
-                          </span>
-                          <span className="text-right font-bold text-foreground">{formatVolume(event.volume)}</span>
-                          <span className="text-right text-muted-2">{formatMarketValue(event.value)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="px-4 py-8 text-center text-xs text-muted-2">
-                      {stream.foreign
-                        ? "Đã nạp đầy đủ số liệu lũy kế. Khối ngoại chưa phát sinh lệnh mới trong tích tắc vừa qua."
-                        : "Đang kết nối luồng NĐT nước ngoài..."}
-                    </div>
-                  )}
                 </div>
 
                 <div className="text-[10px] text-muted leading-relaxed">
