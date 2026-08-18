@@ -1,7 +1,14 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import { clusterTrades } from "../lib/trade-clustering.ts"
+import { clusterTrades, parseTradeSeconds } from "../lib/trade-clustering.ts"
+
+test("parseTradeSeconds correctly parses and sorts trade time strings", () => {
+  const times = ["09:15:00", "10:55:46", "09:30:15", "11:02:00"]
+  const sorted = [...times].sort((a, b) => parseTradeSeconds(b) - parseTradeSeconds(a))
+
+  assert.deepEqual(sorted, ["11:02:00", "10:55:46", "09:30:15", "09:15:00"], "Newest time must come first")
+})
 
 test("clusterTrades groups trades with same action occurring in the same second or <= 1s apart", () => {
   const trades = [

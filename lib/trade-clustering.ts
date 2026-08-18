@@ -7,20 +7,28 @@ export interface ClusteredTrade {
   count: number
 }
 
-export function parseTradeSeconds(timeStr: string): number {
+export function parseTradeSeconds(timeStr: string | number): number {
   if (!timeStr) return 0
-  if (timeStr.includes("T") || timeStr.includes("-")) {
-    const ms = Date.parse(timeStr)
+  if (typeof timeStr === "number") {
+    return timeStr > 1_000_000_000_000 ? Math.floor(timeStr / 1000) : timeStr
+  }
+  const str = String(timeStr).trim()
+  if (str.includes("T") || str.includes("-")) {
+    const ms = Date.parse(str)
     if (!Number.isNaN(ms)) return Math.floor(ms / 1000)
   }
-  const match = timeStr.match(/(\d{1,2}):(\d{2}):(\d{2})/)
+  const match = str.match(/(\d{1,2}):(\d{2}):(\d{2})/)
   if (match) {
     const h = parseInt(match[1], 10) || 0
     const m = parseInt(match[2], 10) || 0
     const s = parseInt(match[3], 10) || 0
     return h * 3600 + m * 60 + s
   }
-  const parsed = Date.parse(timeStr)
+  const num = Number(str)
+  if (!Number.isNaN(num) && num > 0) {
+    return num > 1_000_000_000_000 ? Math.floor(num / 1000) : num
+  }
+  const parsed = Date.parse(str)
   if (!Number.isNaN(parsed)) return Math.floor(parsed / 1000)
   return 0
 }

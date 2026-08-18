@@ -293,7 +293,7 @@ function nextQuote(symbol: string, data: Record<string, unknown>, current: Stock
   }
 }
 
-import { clusterTrades, type ClusteredTrade } from "@/lib/trade-clustering"
+import { clusterTrades, parseTradeSeconds, type ClusteredTrade } from "@/lib/trade-clustering"
 
 export type { ClusteredTrade }
 
@@ -312,13 +312,12 @@ export interface CachedSessionData {
 
 // In-memory client-side cache for session orderbook data
 export const sessionOrderBookCache = new Map<string, CachedSessionData>()
-const CLIENT_CACHE_TTL_MS = 60_000 // 60s cache TTL
 
 function mergeTrades(incoming: StreamTrade[], current: StreamTrade[]) {
   const deduped = new Map<string, StreamTrade>()
   for (const trade of [...incoming, ...current]) deduped.set(trade.id, trade)
   return [...deduped.values()]
-    .sort((a, b) => Date.parse(b.time) - Date.parse(a.time))
+    .sort((a, b) => parseTradeSeconds(b.time) - parseTradeSeconds(a.time))
     .slice(0, MAX_SESSION_TRADES)
 }
 
@@ -404,19 +403,12 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     setForeignEvents([])
   }, [symbol, initialMeta])
 
-  // Fetch REST session history + initial hydration with smart cache
+  // Fetch REST session history + initial hydration with smart cache (SWR)
   useEffect(() => {
-    const cached = sessionOrderBookCache.get(symbol)
-    const isFresh = cached && Date.now() - cached.cachedAt < CLIENT_CACHE_TTL_MS
-
-    if (isFresh) {
-      setHistoryState("READY")
-      setHistoryMessage(`Bộ nhớ đệm (${cached.trades.length.toLocaleString("vi-VN")} lệnh) · Realtime WS sẵn sàng.`)
-      return
-    }
-
     const controller = new AbortController()
     let disposed = false
+    const cached = sessionOrderBookCache.get(symbol)
+
     if (!cached) {
       setHistoryState("LOADING")
       setHistoryMessage("")
@@ -873,6 +865,41 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     }
   }, [symbol, reconnectKey])
 
+  const latestSnapshotRef = useRef({
+    prices: priceHistory,
+    company,
+    foreign,
+    foreignTimeline,
+    quote,
+    bids,
+    asks,
+    trades,
+    putThrough: putThroughDeals,
+  })
+  latestSnapshotRef.current = {
+    prices: priceHistory,
+    company,
+    foreign,
+    foreignTimeline,
+    quote,
+    bids,
+    asks,
+    trades,
+    putThrough: putThroughDeals,
+  }
+
+  useEffect(() => {
+    return () => {
+      const snap = latestSnapshotRef.current
+      if (snap.trades.length || snap.bids.length || snap.asks.length || snap.quote) {
+        sessionOrderBookCache.set(symbol, {
+          ...snap,
+          cachedAt: Date.now(),
+        })
+      }
+    }
+  }, [symbol])
+
   return { state, bids, asks, trades, foreign, foreignEvents, foreignTimeline, putThroughDeals, company, quote, priceHistory, historyState, historyMessage, updatedAt, error }
 }
 
@@ -894,10 +921,10 @@ function buildForeignTimeline(
     ]
   }
 
-  // Sort trades chronologically
+  // Sort trades chronologically (oldest first)
   const sortedTrades = [...trades].sort((a, b) => {
-    const ta = typeof a.time === "string" ? Date.parse(a.time) || 0 : 0
-    const tb = typeof b.time === "string" ? Date.parse(b.time) || 0 : 0
+    const ta = parseTradeSeconds(a.time)
+    const tb = parseTradeSeconds(b.time)
     return ta - tb
   })
 
