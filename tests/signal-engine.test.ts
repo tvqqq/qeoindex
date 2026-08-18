@@ -68,6 +68,25 @@ test("BUY rejects each price, trend, volume, and extension boundary", () => {
   assert.match(decide({ resistance: "30" }, 25.3).reason, /chưa breakout/)
 })
 
+test("BUY diagnostics expose every gate and use avg20 fallback when prior volume is zero", () => {
+  const timestamp = atIct("10:30")
+  const zeroVolumeScan = { ...scan, volume: 0, relVolume: 0 }
+  const quote: LiveQuote = { ticker: "HPG", price: 25.5, totalVolume: 8_000_000, timestamp }
+  const withoutFallback = evaluateBuy(zeroVolumeScan, quote, timestamp)
+  assert.equal(withoutFallback.signal, false)
+  assert.match(withoutFallback.reason, /volume pace N\/A/)
+  assert.match(withoutFallback.diagnostics ?? "", /unavailable/)
+
+  const withFallback = evaluateBuy(zeroVolumeScan, quote, timestamp, 10_000_000)
+  assert.equal(withFallback.signal, true)
+  assert.ok((withFallback.volumePace ?? 0) >= 1.35)
+  assert.match(withFallback.diagnostics ?? "", /avg20-fallback/)
+  assert.match(withFallback.diagnostics ?? "", /change/)
+  assert.match(withFallback.diagnostics ?? "", /MA20/)
+  assert.match(withFallback.diagnostics ?? "", /breakout/)
+  assert.match(withFallback.diagnostics ?? "", /trigger/)
+})
+
 test("EXIT evaluates the hard stop before structural rules", () => {
   const quote: LiveQuote = { ticker: "HPG", price: 23.9, totalVolume: 8_000_000, timestamp: atIct("10:30") }
   const result = evaluateExit({ id: "rec", ticker: "HPG", buyPrice: 25, stopPrice: 24, maxFavorablePct: 1, maxAdversePct: -2 }, scan, quote, quote.timestamp)
