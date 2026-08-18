@@ -1,13 +1,15 @@
 import { cache } from "react"
-import { getResearchData } from "./research-data"
-import { getScannerData } from "./scanner-data"
-import { fetchDailyMarketHistory, fetchHourlyMarketHistory } from "./market-history"
+import { getResearchData, getResearchTickerData } from "./research-data"
+import { getScannerData, getScannerTickerData } from "./scanner-data"
+import { fetchDailyMarketHistoryUi, fetchHourlyMarketHistoryUi } from "./market-history"
 
-// React cache() memoizes the return value per request.
-// Multiple async server components calling these with the same args
-// share a single in-flight Promise — no extra network requests.
+// React cache() still deduplicates in-flight work within one server request.
+// The underlying UI getters now also use Vercel Runtime Cache / optional Redis
+// across requests, while operational scanner/signal code keeps separate fresh APIs.
 
 export const getCachedResearchData = cache(getResearchData)
+export const getCachedResearchTickerData = cache((ticker: string) => getResearchTickerData(ticker))
 export const getCachedScannerData = cache(getScannerData)
-export const getCachedDailyHistory = cache((symbol: string) => fetchDailyMarketHistory(symbol))
-export const getCachedHourlyHistory = cache((symbol: string) => fetchHourlyMarketHistory(symbol))
+export const getCachedScannerTickerData = cache((ticker: string) => getScannerTickerData(ticker))
+export const getCachedDailyHistory = cache((symbol: string) => fetchDailyMarketHistoryUi(symbol))
+export const getCachedHourlyHistory = cache((symbol: string) => fetchHourlyMarketHistoryUi(symbol))
