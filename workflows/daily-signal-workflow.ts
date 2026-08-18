@@ -28,6 +28,10 @@ function atVietnamTime(dateKey: string, hour: number, minute: number, second = 0
   return new Date(`${dateKey}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}+07:00`)
 }
 
+export function nextSignalMonitorIntervalMinutes(openCount: number, bullishCandidates: number) {
+  return openCount > 0 || bullishCandidates > 0 ? 5 : 15
+}
+
 async function monitorWindow(dateKey: string, startMinutes: number, endMinutes: number, initialOpen: number) {
   let cursor = startMinutes
   let openCount = initialOpen
@@ -37,7 +41,7 @@ async function monitorWindow(dateKey: string, startMinutes: number, endMinutes: 
     await sleep(atVietnamTime(dateKey, hour, minute))
     const result = await monitorSignalStep()
     openCount = result.openAfter ?? openCount
-    cursor += openCount > 0 ? 5 : 15
+    cursor += nextSignalMonitorIntervalMinutes(openCount, result.bullishCandidates ?? 0)
   }
   return openCount
 }
