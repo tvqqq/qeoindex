@@ -68,3 +68,48 @@ test("clusterTrades groups sweeping trades within <=1s with highest price for BU
   assert.equal(clustered[1].price, 66.4)
   assert.equal(clustered[1].count, 2)
 })
+
+test("calculateSessionCountdown handles ATO (09:00 - 09:15) and ATC (14:30 - 14:45) exact boundaries", async () => {
+  const { calculateSessionCountdown } = await import("../lib/session-countdown.ts")
+
+  // Monday: 2026-08-17 (UTC 02:00:00 = VN 09:00:00)
+  const dAtoStart = new Date("2026-08-17T02:00:00.000Z") // VN 09:00:00
+  const atoStartRes = calculateSessionCountdown(dAtoStart)
+  assert.deepEqual(atoStartRes, { type: "ATO", label: "15:00", remainingSec: 900 })
+
+  // Monday: VN 09:10:30 (UTC 02:10:30) -> 04:30 remaining
+  const dAtoMid = new Date("2026-08-17T02:10:30.000Z")
+  const atoMidRes = calculateSessionCountdown(dAtoMid)
+  assert.deepEqual(atoMidRes, { type: "ATO", label: "04:30", remainingSec: 270 })
+
+  // Monday: VN 09:14:59 (UTC 02:14:59) -> 00:01 remaining
+  const dAtoLast = new Date("2026-08-17T02:14:59.000Z")
+  const atoLastRes = calculateSessionCountdown(dAtoLast)
+  assert.deepEqual(atoLastRes, { type: "ATO", label: "00:01", remainingSec: 1 })
+
+  // Monday: VN 09:15:00 (UTC 02:15:00) -> ATO ended, returns null
+  const dAtoEnd = new Date("2026-08-17T02:15:00.000Z")
+  assert.equal(calculateSessionCountdown(dAtoEnd), null)
+
+  // Monday: VN 11:30:00 (lunch break) -> returns null
+  const dLunch = new Date("2026-08-17T04:30:00.000Z")
+  assert.equal(calculateSessionCountdown(dLunch), null)
+
+  // Monday: VN 14:30:00 (UTC 07:30:00) -> ATC starts (15:00 remaining)
+  const dAtcStart = new Date("2026-08-17T07:30:00.000Z")
+  const atcStartRes = calculateSessionCountdown(dAtcStart)
+  assert.deepEqual(atcStartRes, { type: "ATC", label: "15:00", remainingSec: 900 })
+
+  // Monday: VN 14:44:59 (UTC 07:44:59) -> ATC 00:01 remaining
+  const dAtcLast = new Date("2026-08-17T07:44:59.000Z")
+  const atcLastRes = calculateSessionCountdown(dAtcLast)
+  assert.deepEqual(atcLastRes, { type: "ATC", label: "00:01", remainingSec: 1 })
+
+  // Monday: VN 14:45:00 (UTC 07:45:00) -> ATC ended, returns null
+  const dAtcEnd = new Date("2026-08-17T07:45:00.000Z")
+  assert.equal(calculateSessionCountdown(dAtcEnd), null)
+
+  // Sunday: VN 09:05:00 (Weekend) -> returns null
+  const dSunday = new Date("2026-08-16T02:05:00.000Z")
+  assert.equal(calculateSessionCountdown(dSunday), null)
+})

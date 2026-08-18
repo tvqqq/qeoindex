@@ -5,6 +5,7 @@ import {
   Activity,
   AlertCircle,
   BarChart3,
+  Clock,
   ExternalLink,
   GripVertical,
   Handshake,
@@ -25,6 +26,7 @@ import { marketToneFromPrice, marketToneHex, marketToneText } from "@/lib/market
 import { normalizeMarketPrice } from "@/lib/intraday-5m"
 import { useFlashAnimation, usePriceFlashAnimation } from "@/lib/use-flash-animation"
 import { useWhaleConfetti, ConfettiOverlay } from "@/components/orderbook/confetti"
+import { calculateSessionCountdown } from "@/lib/session-countdown"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
 
 export type DepthLevel = { price: number; volume: number }
@@ -218,6 +220,23 @@ function timeLabel(value: string) {
     minute: "2-digit",
     second: "2-digit",
   })
+}
+
+export function useSessionCountdown() {
+  const [countdown, setCountdown] = useState<{ type: "ATO" | "ATC"; label: string; remainingSec: number } | null>(() => {
+    return calculateSessionCountdown()
+  })
+
+  useEffect(() => {
+    const update = () => {
+      setCountdown(calculateSessionCountdown())
+    }
+    update()
+    const timer = setInterval(update, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  return countdown
 }
 
 function getPriceColorClass(
@@ -1682,6 +1701,7 @@ export function LiveOrderBookPanel({
 
   // Confetti for whale trades
   const confetti = useWhaleConfetti()
+  const sessionCountdown = useSessionCountdown()
 
   // High-performance Drag-to-Move with window listener + requestAnimationFrame (0ms latency, zero re-renders while moving)
   const onHeaderPointerDown = useCallback(
@@ -2114,6 +2134,15 @@ export function LiveOrderBookPanel({
                     <b className="text-up font-bold">{formatCompactVolume(bidTotal)}</b>
                     <span className="text-muted text-[11px]">({depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "50%"})</span>
                   </span>
+
+                  {/* CENTER ATO / ATC COUNTDOWN BADGE */}
+                  {sessionCountdown ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-amber-500/40 bg-amber-500/15 text-amber-400 font-bold text-[11px] animate-pulse shadow-sm">
+                      <Clock className="h-3 w-3" />
+                      <span>{sessionCountdown.type}: {sessionCountdown.label}</span>
+                    </span>
+                  ) : null}
+
                   <span className="flex items-center gap-1.5 font-medium">
                     <span className="h-2 w-2 rounded-full bg-down shrink-0" />
                     <span className="text-muted-2">Bán:</span>
