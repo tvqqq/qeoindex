@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     const result = await promoteDraftToNotion(draft, vnindex?.marketRegime || "Neutral")
     return NextResponse.json({ ok: true, ticker, thesisId: result.thesis.id, thesisUrl: result.thesis.url, logId: result.log.id, probabilities: { bull: draft.bullProbability, base: draft.baseProbability, bear: draft.bearProbability } })
   } catch (error) {
-    console.error("[StockOS promote]", error)
+    console.error("[QeoIndex promote]", error)
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Promotion failed" }, { status: 500 })
   }
 }
