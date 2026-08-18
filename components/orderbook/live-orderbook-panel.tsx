@@ -170,7 +170,11 @@ function firstPositive(data: Record<string, unknown>, keys: string[]) {
 
 function formatPrice(value?: number | null, allowNegative = false) {
   if (typeof value !== "number" || !Number.isFinite(value) || (!allowNegative && value <= 0)) return "—"
-  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value)
+  const normalized = value >= 1000 ? value / 1000 : value
+  return new Intl.NumberFormat("vi-VN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(normalized)
 }
 
 function formatVolume(value?: number | null) {
@@ -1977,7 +1981,9 @@ export function LiveOrderBookPanel({
     let sessionAtcVol = 0
 
     for (const t of stream.trades) {
-      const price = quotePrice ? normalizeMarketPrice(t.price, quotePrice) ?? t.price : t.price
+      const rawPrice = t.price
+      if (!rawPrice || rawPrice <= 0) continue
+      const price = Number((rawPrice >= 1000 ? rawPrice / 1000 : rawPrice).toFixed(2))
       const cur = profileMap.get(price) || { price, buyVol: 0, sellVol: 0, atoVol: 0, atcVol: 0, totalVol: 0 }
 
       const timeStr = String(t.time ?? "").trim()
