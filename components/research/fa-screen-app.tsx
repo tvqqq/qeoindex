@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from "lucide-react"
 
+import { TickerResearchLink } from "@/components/ticker-research-link"
 import { TopNav } from "@/components/top-nav"
 import {
   FA_SCREEN_ROWS,
@@ -242,7 +243,7 @@ export function FaScreenApp() {
           <div className="rounded-xl border border-border bg-panel p-4">
             <div className="text-sm font-semibold text-foreground/70">Universe snapshot</div>
             <div className="mt-2 font-mono text-2xl font-semibold">99 mã</div>
-            <p className="mt-1 text-xs leading-5 text-foreground/50">Rank 23 là MSN và được loại khỏi bảng vì StockOS đã có FA thesis riêng.</p>
+            <p className="mt-1 text-xs leading-5 text-foreground/50">Rank 23 là MSN và được loại khỏi bảng vì QeoIndex đã có FA thesis riêng.</p>
           </div>
         </section>
 
@@ -293,7 +294,7 @@ export function FaScreenApp() {
                   <tr key={row.ticker} className="border-b border-border/70 align-top transition-colors last:border-b-0 hover:bg-panel-2/55">
                     <td className="px-4 py-3 font-mono text-xs text-foreground/45">#{row.rank}</td>
                     <td className="px-4 py-3">
-                      <Link href={`/research/${row.ticker.toLowerCase()}`} className="font-mono text-base font-bold text-foreground transition-colors hover:text-brand">{row.ticker}</Link>
+                      <TickerResearchLink ticker={row.ticker} className="font-mono text-base font-bold text-foreground transition-colors hover:text-brand">{row.ticker}</TickerResearchLink>
                       {row.confidence === "Low–Medium" && <div className="mt-1 text-[11px] font-medium text-amber-300">Low–Medium confidence</div>}
                     </td>
                     <td className="max-w-[180px] px-4 py-3 text-foreground/65">{row.sector}</td>
