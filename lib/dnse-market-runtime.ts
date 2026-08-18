@@ -55,6 +55,16 @@ export interface DnseCompanyOverview {
   sector?: string
 }
 
+export interface DnsePutThroughDeal {
+  id: string
+  time: string
+  price: number
+  volume: number
+  value: number
+  sym: string
+  type?: string
+}
+
 export interface DnseSessionHistory {
   symbol: string
   sessionStart: number
@@ -65,6 +75,7 @@ export interface DnseSessionHistory {
   latestQuote: DnseSessionQuote | null
   foreign?: DnseForeignSnapshot | null
   company?: DnseCompanyOverview | null
+  putThrough?: DnsePutThroughDeal[]
 }
 
 function credentials() {
@@ -368,7 +379,7 @@ async function fetchFastMarketOverview(symbol: string) {
     const foreignSellVol = finiteNumber(vpsData?.fSVolume) ?? 0
     const foreignBuyVal = finiteNumber(vpsData?.fBValue) ?? 0
     const foreignSellVal = finiteNumber(vpsData?.fSValue) ?? 0
-    const availableRoom = finiteNumber(ssiData?.remainForeignQtty ?? (vpsData?.fRoom ? Number(vpsData.fRoom) * 10 : null))
+    const availableRoom = finiteNumber(ssiData?.remainForeignQtty ?? (vpsData?.fRoom ? Number(vpsData.fRoom) : null))
     const listedShare = finiteNumber(ssiData?.listedShare)
 
     const foreign: DnseForeignSnapshot = {
@@ -389,15 +400,50 @@ async function fetchFastMarketOverview(symbol: string) {
   }
 }
 
+async function fetchPutThroughDeals(symbol: string): Promise<DnsePutThroughDeal[]> {
+  try {
+    const res = await fetch("https://bgapidatafeed.vps.com.vn/getlistpt", {
+      headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" },
+      signal: AbortSignal.timeout(3500),
+    })
+    if (!res.ok) return []
+    const list = await res.json()
+    if (!Array.isArray(list)) return []
+    const ticker = symbol.toUpperCase().trim()
+    return list
+      .filter((item: any) => String(item?.sym || "").toUpperCase().trim() === ticker)
+      .map((item: any, idx: number) => {
+        const rawPrice = finiteNumber(item?.price)
+        const price = rawPrice && rawPrice > 1000 ? rawPrice / 1000 : (rawPrice ?? 0)
+        const volume = finiteNumber(item?.volume) ?? 0
+        const rawValue = finiteNumber(item?.value) ?? 0
+        const value = rawValue > 1_000_000 ? rawValue : rawValue * 1000
+        return {
+          id: String(item?.transId || item?.id || `pt-${idx}`),
+          time: String(item?.time || "—"),
+          price,
+          volume,
+          value: value || price * 1000 * volume,
+          sym: ticker,
+          type: String(item?.type || "PTM"),
+        }
+      })
+      .sort((a, b) => (b.time > a.time ? 1 : -1))
+  } catch {
+    return []
+  }
+}
+
 export async function fetchDnseSessionHistory(symbol: string, now = new Date()): Promise<DnseSessionHistory> {
   const ticker = symbol.trim().toUpperCase()
   if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new Error("Invalid DNSE symbol")
 
-  const [pricesRes, tradeResult, latestQuoteRes, fastOverviewRes] = await Promise.allSettled([
+  const [pricesRes, tradeResult, latestQuoteRes, fastOverviewRes, putThroughRes] = await Promise.allSettled([
     fetchDnseMinuteHistory(ticker, now, 360),
     fetchDnseSessionTrades(ticker, now),
     fetchDnseLatestQuote(ticker),
     fetchFastMarketOverview(ticker),
+    fetchPutThroughDeals(ticker),
   ])
 
   let prices = pricesRes.status === "fulfilled" ? pricesRes.value : []
@@ -405,6 +451,7 @@ export async function fetchDnseSessionHistory(symbol: string, now = new Date()):
   const tradesTruncated = tradeResult.status === "fulfilled" ? tradeResult.value.truncated : false
   let latestQuote = latestQuoteRes.status === "fulfilled" ? latestQuoteRes.value : null
   const fastOverview = fastOverviewRes.status === "fulfilled" ? fastOverviewRes.value : null
+  const putThrough = putThroughRes.status === "fulfilled" ? putThroughRes.value : []
 
   // Fallback for prices if DNSE 1m returned empty (e.g. outside session or weekend)
   if (!prices.length) {
@@ -456,5 +503,6 @@ export async function fetchDnseSessionHistory(symbol: string, now = new Date()):
     latestQuote,
     foreign: fastOverview?.foreign ?? null,
     company: fastOverview?.company ?? null,
+    putThrough,
   }
 }

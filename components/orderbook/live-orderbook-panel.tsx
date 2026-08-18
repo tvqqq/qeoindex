@@ -6,6 +6,7 @@ import {
   BarChart3,
   ExternalLink,
   GripVertical,
+  Handshake,
   Layers,
   ListFilter,
   Maximize2,
@@ -43,7 +44,7 @@ type StockQuote = {
   updatedAt: string
 }
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
-type ActivityTab = "trades" | "foreign" | "profile"
+type ActivityTab = "trades" | "foreign" | "profile" | "putthrough"
 type HistoryState = "LOADING" | "READY" | "PARTIAL" | "ERROR"
 
 type ForeignSnapshot = {
@@ -61,6 +62,7 @@ type ForeignSnapshot = {
 
 type ForeignFlowEvent = { id: string; time: string; side: "BUY" | "SELL"; volume: number; value: number | null }
 type ForeignTimelinePoint = { time: string; timestamp: number; buyValue: number; sellValue: number; netValue: number }
+type PutThroughDeal = { id: string; time: string; price: number; volume: number; value: number; type?: string; sym?: string }
 
 type CompanyInfo = {
   nameVi: string
@@ -106,6 +108,7 @@ type SessionHistoryResponse = {
     exchange?: string
     sector?: string
   } | null
+  putThrough?: PutThroughDeal[]
 }
 
 const ORDERBOOK_VOLUME_MULTIPLIER = 10
@@ -202,6 +205,28 @@ function timeLabel(value: string) {
   })
 }
 
+function getPriceColorClass(
+  price?: number,
+  reference?: number,
+  ceiling?: number,
+  floor?: number
+): string {
+  if (!price || !Number.isFinite(price)) return "text-foreground font-bold"
+
+  const ref = reference ? (reference > 1000 && price < 1000 ? reference / 1000 : reference < 1000 && price > 1000 ? reference * 1000 : reference) : undefined
+  const ceil = ceiling ? (ceiling > 1000 && price < 1000 ? ceiling / 1000 : ceiling < 1000 && price > 1000 ? ceiling * 1000 : ceiling) : undefined
+  const flr = floor ? (floor > 1000 && price < 1000 ? floor / 1000 : floor < 1000 && price > 1000 ? floor * 1000 : floor) : undefined
+
+  if (ceil && price >= ceil - 0.01) return "text-ceiling font-bold"
+  if (flr && price <= flr + 0.01) return "text-floor font-bold"
+  if (ref) {
+    if (Math.abs(price - ref) < 0.01) return "text-ref font-bold"
+    if (price > ref) return "text-up font-bold"
+    if (price < ref) return "text-down font-bold"
+  }
+  return "text-foreground font-bold"
+}
+
 function explicitSide(rawSide: unknown): TradeSide {
   const side = String(rawSide ?? "").toUpperCase()
   if (["BUY", "B", "MUA", "BU", "NB"].includes(side)) return "BUY"
@@ -284,6 +309,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   const [foreign, setForeign] = useState<ForeignSnapshot | null>(null)
   const [foreignEvents, setForeignEvents] = useState<ForeignFlowEvent[]>([])
   const [foreignTimeline, setForeignTimeline] = useState<ForeignTimelinePoint[]>([])
+  const [putThroughDeals, setPutThroughDeals] = useState<PutThroughDeal[]>([])
   const [company, setCompany] = useState<CompanyInfo | null>(() => (initialMeta?.companyName ? { nameVi: initialMeta.companyName, sector: initialMeta.sector } : null))
   const [quote, setQuote] = useState<StockQuote | null>(() => {
     if (!initialMeta?.price) return null
@@ -451,6 +477,10 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
         } else {
           setHistoryState("READY")
           setHistoryMessage(`Đầu phiên 09:00 · ${prices.length} nến · ${historicalTrades.length.toLocaleString("vi-VN")} lệnh.`)
+        }
+
+        if (payload.putThrough) {
+          setPutThroughDeals(payload.putThrough)
         }
       } catch (nextError) {
         if (disposed || (nextError instanceof DOMException && nextError.name === "AbortError")) return
@@ -764,7 +794,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     }
   }, [symbol, reconnectKey])
 
-  return { state, bids, asks, trades, foreign, foreignEvents, foreignTimeline, company, quote, priceHistory, historyState, historyMessage, updatedAt, error }
+  return { state, bids, asks, trades, foreign, foreignEvents, foreignTimeline, putThroughDeals, company, quote, priceHistory, historyState, historyMessage, updatedAt, error }
 }
 
 function buildForeignTimeline(
@@ -1547,8 +1577,12 @@ export function LiveOrderBookPanel({
                       ) : null}
 
                       <span className="relative font-bold text-foreground pl-1">{formatVolume(bid?.volume)}</span>
-                      <span className="relative text-right font-bold text-up">{formatPrice(bid?.price)}</span>
-                      <span className="relative font-bold text-down">{formatPrice(ask?.price)}</span>
+                      <span className={`relative text-right ${getPriceColorClass(bid?.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>
+                        {formatPrice(bid?.price)}
+                      </span>
+                      <span className={`relative ${getPriceColorClass(ask?.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>
+                        {formatPrice(ask?.price)}
+                      </span>
                       <span className="relative text-right font-bold text-foreground pr-1">{formatVolume(ask?.volume)}</span>
                     </div>
                   )
@@ -1609,6 +1643,22 @@ export function LiveOrderBookPanel({
                 >
                   <Layers className="h-3.5 w-3.5" />
                   <span>Bước giá</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActivityTab("putthrough")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
+                    activityTab === "putthrough" ? "bg-amber-500/15 text-amber-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
+                  }`}
+                >
+                  <Handshake className="h-3.5 w-3.5" />
+                  <span>Thỏa thuận</span>
+                  {stream.putThroughDeals.length > 0 && (
+                    <span className="rounded-full bg-amber-500/25 px-1.5 py-0.2 text-[9px] text-amber-300 font-mono">
+                      {stream.putThroughDeals.length}
+                    </span>
+                  )}
                 </button>
               </div>
 
@@ -1791,10 +1841,20 @@ export function LiveOrderBookPanel({
                   <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
                     <div className="text-[10px] text-muted-2 font-medium">Room Ngoại còn lại</div>
                     <div className="mt-1 font-mono text-sm font-bold text-foreground">
-                      {foreignRoom ? formatCompactVolume(foreignRoom) : "—"}
+                      {foreignRoom !== null && foreignRoom !== undefined
+                        ? foreignRoom === 0
+                          ? "Hết room (0 cp)"
+                          : `${formatCompactVolume(foreignRoom)} cp`
+                        : "—"}
                     </div>
                     <div className="mt-0.5 text-[10px] text-muted font-mono">
-                      {roomPercentage !== null ? `Còn ${roomPercentage.toFixed(1)}% room` : "Theo quy định VSD"}
+                      {roomPercentage !== null
+                        ? `Còn ${roomPercentage.toFixed(1)}% VĐL (${formatCompactVolume(foreignRoom)} cp)`
+                        : foreignRoom !== null && foreignRoom !== undefined && foreignRoom > 0
+                          ? `${formatVolume(foreignRoom)} cp khả dụng`
+                          : foreignRoom === 0
+                            ? "Khối ngoại đã hết room"
+                            : "Theo quy định VSD"}
                     </div>
                   </div>
                 </div>
@@ -1891,6 +1951,74 @@ export function LiveOrderBookPanel({
                     {stream.historyState === "LOADING"
                       ? "Đang tải toàn bộ dữ liệu bước giá trong phiên..."
                       : "Chưa có đủ dữ liệu khớp lệnh để vẽ phân bổ bước giá."}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB CONTENT: GIAO DỊCH THỎA THUẬN (PUT-THROUGH) */}
+            {activityTab === "putthrough" && (
+              <div className="flex flex-col flex-1">
+                {/* Summary Header */}
+                <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="text-muted-2">Giao dịch thỏa thuận trong ngày:</span>
+                  <div className="flex items-center gap-3 font-mono text-[11px]">
+                    <span className="text-muted-2">
+                      Số lệnh: <b className="text-foreground">{stream.putThroughDeals.length}</b>
+                    </span>
+                    <span className="text-muted-2">
+                      Tổng KL:{" "}
+                      <b className="text-foreground">
+                        {formatCompactVolume(stream.putThroughDeals.reduce((sum, d) => sum + d.volume, 0))}
+                      </b>
+                    </span>
+                    <span className="text-muted-2">
+                      Tổng GT:{" "}
+                      <b className="text-up font-semibold">
+                        {formatMarketValue(stream.putThroughDeals.reduce((sum, d) => sum + d.value, 0))}
+                      </b>
+                    </span>
+                  </div>
+                </div>
+
+                {stream.putThroughDeals.length > 0 ? (
+                  <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col">
+                    <div className="grid grid-cols-[80px_1fr_90px_110px_70px] border-b border-border/60 bg-[#181919] px-3 py-1.5 text-[11px] font-semibold text-muted-2">
+                      <span>Thời gian</span>
+                      <span className="text-right">Khối lượng</span>
+                      <span className="text-right">Giá TT</span>
+                      <span className="text-right">Tổng GT</span>
+                      <span className="text-right">Loại</span>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto max-h-[340px] px-3">
+                      {stream.putThroughDeals.map((deal) => {
+                        const priceColor = getPriceColorClass(deal.price, quote?.reference, quote?.ceiling, quote?.floor)
+
+                        return (
+                          <div
+                            key={deal.id}
+                            className="grid grid-cols-[80px_1fr_90px_110px_70px] items-center border-b border-border/30 py-1.5 font-mono text-xs last:border-0 hover:bg-panel-2/40"
+                          >
+                            <span className="text-muted-2">{timeLabel(deal.time)}</span>
+                            <span className="text-right font-bold text-foreground">{formatVolume(deal.volume)}</span>
+                            <span className={`text-right font-bold ${priceColor}`}>{formatPrice(deal.price)}</span>
+                            <span className="text-right font-bold text-foreground">{formatMarketValue(deal.value)}</span>
+                            <div className="flex justify-end">
+                              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold border bg-panel-2 text-muted-2 border-border">
+                                {deal.type || "PTM"}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2">
+                    {stream.historyState === "LOADING"
+                      ? "Đang tải dữ liệu giao dịch thỏa thuận..."
+                      : `Chưa có giao dịch thỏa thuận nào cho mã ${symbol} trong phiên hôm nay.`}
                   </div>
                 )}
               </div>
