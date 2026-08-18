@@ -60,6 +60,7 @@ type ForeignSnapshot = {
 }
 
 type ForeignFlowEvent = { id: string; time: string; side: "BUY" | "SELL"; volume: number; value: number | null }
+type ForeignTimelinePoint = { time: string; timestamp: number; buyValue: number; sellValue: number; netValue: number }
 
 type CompanyInfo = {
   nameVi: string
@@ -282,6 +283,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   const [trades, setTrades] = useState<StreamTrade[]>([])
   const [foreign, setForeign] = useState<ForeignSnapshot | null>(null)
   const [foreignEvents, setForeignEvents] = useState<ForeignFlowEvent[]>([])
+  const [foreignTimeline, setForeignTimeline] = useState<ForeignTimelinePoint[]>([])
   const [company, setCompany] = useState<CompanyInfo | null>(() => (initialMeta?.companyName ? { nameVi: initialMeta.companyName, sector: initialMeta.sector } : null))
   const [quote, setQuote] = useState<StockQuote | null>(() => {
     if (!initialMeta?.price) return null
@@ -377,6 +379,17 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           const sellVol = number(payload.foreign.totalSellVolume)
           const buyVal = number(payload.foreign.totalBuyValue)
           const sellVal = number(payload.foreign.totalSellValue)
+          const nowMs = Date.now()
+          setForeignTimeline([
+            { time: "09:15", timestamp: nowMs - 3600000, buyValue: 0, sellValue: 0, netValue: 0 },
+            {
+              time: timeLabel(payload.foreign.updatedAt || new Date().toISOString()),
+              timestamp: nowMs,
+              buyValue: buyVal,
+              sellValue: sellVal,
+              netValue: buyVal - sellVal,
+            },
+          ])
           setForeign((current) => ({
             symbol,
             totalBuyVolume: buyVol || current?.totalBuyVolume || 0,
@@ -414,11 +427,12 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
         }
 
         const historicalTrades: StreamTrade[] = (payload.trades ?? [])
-          .map((trade) => {
+          .map((trade, index) => {
             const rawPrice = number(trade.price)
             const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
+            const tradeId = trade.id && trade.id !== "3220" ? trade.id : `${trade.time}-${index}`
             return {
-              id: `history-${trade.id}`,
+              id: `history-${tradeId}`,
               time: normalizeTime(trade.time),
               price,
               volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
@@ -640,18 +654,40 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
             const room = nullableNumber(data?.foreignerBuyPossibleQuantity ?? data?.foreignBuyPossibleQuantity ?? data?.room ?? data?.availableRoom)
             const limit = nullableNumber(data?.foreignerOrderLimitQuantity ?? data?.orderLimitQuantity ?? data?.totalRoom)
 
-            setForeign((current) => ({
-              symbol,
-              totalBuyVolume: totalBuyVol || (buyVolume > 0 && current ? current.totalBuyVolume + buyVolume : current?.totalBuyVolume || 0),
-              totalSellVolume: totalSellVol || (sellVolume > 0 && current ? current.totalSellVolume + sellVolume : current?.totalSellVolume || 0),
-              totalBuyValue: totalBuyVal || (buyValue > 0 && current ? current.totalBuyValue + buyValue : current?.totalBuyValue || 0),
-              totalSellValue: totalSellVal || (sellValue > 0 && current ? current.totalSellValue + sellValue : current?.totalSellValue || 0),
-              availableRoom: room ?? current?.availableRoom ?? null,
-              orderLimitQuantity: limit ?? current?.orderLimitQuantity ?? null,
-              listedShare: current?.listedShare ?? null,
-              investorTypeCode: String(data?.foreignInvestorTypeCode ?? current?.investorTypeCode ?? ""),
-              updatedAt: time,
-            }))
+            setForeign((current) => {
+              const nextBuyVol = totalBuyVol || (buyVolume > 0 && current ? current.totalBuyVolume + buyVolume : current?.totalBuyVolume || 0)
+              const nextSellVol = totalSellVol || (sellVolume > 0 && current ? current.totalSellVolume + sellVolume : current?.totalSellVolume || 0)
+              const nextBuy = totalBuyVal || (buyValue > 0 && current ? current.totalBuyValue + buyValue : current?.totalBuyValue || 0)
+              const nextSell = totalSellVal || (sellValue > 0 && current ? current.totalSellValue + sellValue : current?.totalSellValue || 0)
+              const nextNet = nextBuy - nextSell
+
+              setForeignTimeline((prev) => {
+                const newPoint = {
+                  time: timeLabel(time),
+                  timestamp: Date.now(),
+                  buyValue: nextBuy,
+                  sellValue: nextSell,
+                  netValue: nextNet,
+                }
+                if (!prev.length) {
+                  return [{ time: "09:15", timestamp: Date.now() - 60000, buyValue: 0, sellValue: 0, netValue: 0 }, newPoint]
+                }
+                return [...prev.slice(-120), newPoint]
+              })
+
+              return {
+                symbol,
+                totalBuyVolume: nextBuyVol,
+                totalSellVolume: nextSellVol,
+                totalBuyValue: nextBuy,
+                totalSellValue: nextSell,
+                availableRoom: room ?? current?.availableRoom ?? null,
+                orderLimitQuantity: limit ?? current?.orderLimitQuantity ?? null,
+                listedShare: current?.listedShare ?? null,
+                investorTypeCode: String(data?.foreignInvestorTypeCode ?? current?.investorTypeCode ?? ""),
+                updatedAt: time,
+              }
+            })
 
             // Deduplicate event transactions
             const eventKey = `${time}-${buyVolume}-${sellVolume}`
@@ -728,8 +764,187 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     }
   }, [symbol, reconnectKey])
 
-  return { state, bids, asks, trades, foreign, foreignEvents, company, quote, priceHistory, historyState, historyMessage, updatedAt, error }
+  return { state, bids, asks, trades, foreign, foreignEvents, foreignTimeline, company, quote, priceHistory, historyState, historyMessage, updatedAt, error }
 }
+
+const ForeignFlowChart = memo(function ForeignFlowChart({
+  timeline,
+  currentNetValue,
+  currentBuyValue,
+  currentSellValue,
+  height = 140,
+}: {
+  timeline: ForeignTimelinePoint[]
+  currentNetValue: number | null
+  currentBuyValue?: number | null
+  currentSellValue?: number | null
+  height?: number
+}) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const points = useMemo(() => {
+    if (timeline.length >= 2) return timeline
+    const buy = currentBuyValue || 0
+    const sell = currentSellValue || 0
+    const net = currentNetValue || (buy - sell)
+    return [
+      { time: "09:15", timestamp: 1, buyValue: 0, sellValue: 0, netValue: 0 },
+      { time: "Hiện tại", timestamp: 2, buyValue: buy, sellValue: sell, netValue: net },
+    ]
+  }, [timeline, currentNetValue, currentBuyValue, currentSellValue])
+
+  const { coordinates, zeroY, netPathD, netAreaD, buyPathD, sellPathD } = useMemo(() => {
+    const netVals = points.map((p) => p.netValue)
+    const buyVals = points.map((p) => p.buyValue)
+    const sellVals = points.map((p) => p.sellValue)
+
+    const rawMin = Math.min(0, ...netVals, ...sellVals.map((v) => -v))
+    const rawMax = Math.max(0, ...netVals, ...buyVals)
+    const range = Math.max(1_000_000, rawMax - rawMin)
+    const padding = 14
+    const usableH = height - padding * 2
+    const width = 600
+
+    const coords = points.map((pt, idx) => {
+      const x = (idx / (points.length - 1 || 1)) * width
+      const netY = height - padding - ((pt.netValue - rawMin) / range) * usableH
+      const buyY = height - padding - ((pt.buyValue - rawMin) / range) * usableH
+      const sellY = height - padding - ((-pt.sellValue - rawMin) / range) * usableH
+      return { x, netY, buyY, sellY, ...pt }
+    })
+
+    const zeroYPos = height - padding - ((0 - rawMin) / range) * usableH
+
+    const netD = coords.reduce((acc, pt, idx) => (idx === 0 ? `M ${pt.x},${pt.netY}` : `${acc} L ${pt.x},${pt.netY}`), "")
+    const netArea = coords.length ? `${netD} L ${coords.at(-1)?.x},${zeroYPos} L ${coords[0].x},${zeroYPos} Z` : ""
+    const buyD = coords.reduce((acc, pt, idx) => (idx === 0 ? `M ${pt.x},${pt.buyY}` : `${acc} L ${pt.x},${pt.buyY}`), "")
+    const sellD = coords.reduce((acc, pt, idx) => (idx === 0 ? `M ${pt.x},${pt.sellY}` : `${acc} L ${pt.x},${pt.sellY}`), "")
+
+    return {
+      coordinates: coords,
+      minNet: rawMin,
+      maxNet: rawMax,
+      zeroY: zeroYPos,
+      netPathD: netD,
+      netAreaD: netArea,
+      buyPathD: buyD,
+      sellPathD: sellD,
+    }
+  }, [points, height])
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!containerRef.current || coordinates.length < 2) return
+    const rect = containerRef.current.getBoundingClientRect()
+    const xPct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    const index = Math.round(xPct * (coordinates.length - 1))
+    setHoverIndex(index)
+  }
+
+  const handlePointerLeave = () => setHoverIndex(null)
+
+  const hovered = hoverIndex !== null && coordinates[hoverIndex] ? coordinates[hoverIndex] : null
+  const isNetPositive = (currentNetValue || 0) >= 0
+
+  return (
+    <div className="flex flex-col space-y-2 rounded-lg border border-border/80 bg-[#121313] p-3">
+      {/* Header & Legend */}
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-semibold text-foreground flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-brand" />
+          Biến động GT Khối Ngoại Trong Phiên
+        </span>
+        <div className="flex items-center gap-2.5 font-mono text-[10px]">
+          <span className="flex items-center gap-1 text-up font-semibold">
+            <span className="inline-block h-1.5 w-3 rounded bg-up" /> Mua lũy kế
+          </span>
+          <span className="flex items-center gap-1 text-down font-semibold">
+            <span className="inline-block h-1.5 w-3 rounded bg-down" /> Bán lũy kế
+          </span>
+          <span className="flex items-center gap-1 text-purple-400 font-bold">
+            <span className="inline-block h-2 w-2 rounded-full bg-purple-400" /> Ròng
+          </span>
+        </div>
+      </div>
+
+      {/* SVG Chart Container */}
+      <div
+        ref={containerRef}
+        onPointerMove={handlePointerMove}
+        onPointerLeave={handlePointerLeave}
+        className="group relative h-[140px] w-full cursor-crosshair select-none overflow-hidden rounded bg-[#161717] p-1.5"
+      >
+        <svg viewBox="0 0 600 140" preserveAspectRatio="none" className="h-full w-full overflow-visible">
+          <defs>
+            <linearGradient id="foreignNetGradPos" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#22c98a" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="#22c98a" stopOpacity="0.0" />
+            </linearGradient>
+            <linearGradient id="foreignNetGradNeg" x1="0" y1="1" x2="0" y2="0">
+              <stop offset="0%" stopColor="#f2495c" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="#f2495c" stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
+
+          {/* Zero baseline */}
+          <line x1="0" y1={zeroY} x2="600" y2={zeroY} stroke="#64748b" strokeDasharray="3 3" strokeOpacity="0.5" strokeWidth="1" />
+
+          {/* Net Flow Fill Area */}
+          <path d={netAreaD} fill={isNetPositive ? "url(#foreignNetGradPos)" : "url(#foreignNetGradNeg)"} />
+
+          {/* Buy Cumulative Line */}
+          <path d={buyPathD} fill="none" stroke="#22c98a" strokeWidth="1.2" strokeDasharray="3 2" strokeOpacity="0.7" />
+
+          {/* Sell Cumulative Line */}
+          <path d={sellPathD} fill="none" stroke="#f2495c" strokeWidth="1.2" strokeDasharray="3 2" strokeOpacity="0.7" />
+
+          {/* Net Value Main Line */}
+          <path d={netPathD} fill="none" stroke={isNetPositive ? "#22c98a" : "#f2495c"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+
+          {/* Current / Hovered point */}
+          {hovered ? (
+            <>
+              <line x1={hovered.x} y1="0" x2={hovered.x} y2="140" stroke="#ffffff" strokeOpacity="0.3" strokeDasharray="2 2" strokeWidth="1" />
+              <circle cx={hovered.x} cy={hovered.netY} r="4.5" fill={hovered.netValue >= 0 ? "#22c98a" : "#f2495c"} stroke="#ffffff" strokeWidth="1.5" />
+            </>
+          ) : (
+            coordinates.at(-1) && (
+              <circle
+                cx={coordinates.at(-1)?.x}
+                cy={coordinates.at(-1)?.netY}
+                r="4"
+                fill={isNetPositive ? "#22c98a" : "#f2495c"}
+                className="animate-pulse"
+              />
+            )
+          )}
+        </svg>
+
+        {/* Floating Tooltip */}
+        {hovered ? (
+          <div className="pointer-events-none absolute left-3 top-2 flex flex-wrap items-center gap-2 font-mono text-[11px] rounded bg-black/85 px-2.5 py-1 backdrop-blur-md border border-border/80 shadow-lg">
+            <span className="text-muted-2">{hovered.time}</span>
+            <span className="text-muted">·</span>
+            <span>
+              Mua ròng:{" "}
+              <b className={hovered.netValue > 0 ? "text-up" : hovered.netValue < 0 ? "text-down" : "text-ref"}>
+                {hovered.netValue > 0 ? "+" : ""}{formatMarketValue(hovered.netValue)}
+              </b>
+            </span>
+            <span className="text-muted">·</span>
+            <span className="text-up font-semibold">Mua: {formatMarketValue(hovered.buyValue)}</span>
+            <span className="text-muted">·</span>
+            <span className="text-down font-semibold">Bán: {formatMarketValue(hovered.sellValue)}</span>
+          </div>
+        ) : (
+          <div className="pointer-events-none absolute bottom-1 right-2 font-mono text-[9px] text-muted-2">
+            Đầu phiên 09:15 ➔ Hiện tại
+          </div>
+        )}
+      </div>
+    </div>
+  )
+})
 
 /**
  * Main LiveOrderBookPanel Component
@@ -1488,6 +1703,14 @@ export function LiveOrderBookPanel({
                     </div>
                   </div>
                 </div>
+
+                {/* Foreign Flow Timeline Chart (Biến động GT mua bán của NN trong phiên) */}
+                <ForeignFlowChart
+                  timeline={stream.foreignTimeline}
+                  currentNetValue={foreignNetValue}
+                  currentBuyValue={stream.foreign?.totalBuyValue}
+                  currentSellValue={stream.foreign?.totalSellValue}
+                />
 
                 <div className="text-[10px] text-muted leading-relaxed">
                   * Dữ liệu NĐTNN được tổng hợp trực tiếp từ sở giao dịch & feed DNSE T=f. Khối lượng và giá trị không bị suy diễn từ bảng khớp lệnh thông thường.

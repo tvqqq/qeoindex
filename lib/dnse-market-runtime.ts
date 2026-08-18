@@ -203,7 +203,15 @@ function normalizeTrade(row: any, index: number): DnseSessionTrade | null {
   const time = timestampSeconds(row?.transactTime ?? row?.time ?? row?.timestamp ?? row?.ts ?? row?.sID ?? row?.timeServer)
   if (!price || price <= 0 || !volume || volume <= 0 || !time || time <= 0) return null
   const side = String(row?.side ?? row?.matchSide ?? row?.aggressorSide ?? "")
-  const sourceId = String(row?.id ?? row?.tradeId ?? row?.seqNo ?? row?.sequence ?? row?.transId ?? row?.sID ?? "").trim()
+  const sourceId = String(
+    row?.transId ||
+    row?.tradeId ||
+    (row?.sequence ? `seq-${row.sequence}` : "") ||
+    (row?.sID ? `sid-${row.sID}-${index}` : "") ||
+    (row?.seqNo ? `seqno-${row.seqNo}` : "") ||
+    (row?.id && String(row.id).length > 5 ? String(row.id) : "") ||
+    ""
+  ).trim()
   return {
     id: sourceId || `trade-${Math.round(time * 1000)}-${price}-${volume}-${side}-${index}`,
     time,
@@ -252,65 +260,66 @@ export async function fetchDnseMinuteHistory(symbol: string, now = new Date(), m
 }
 
 async function fetchDnseSessionTrades(symbol: string, now: Date, maxRows = 30_000) {
-  const from = vietnamSessionStart(now)
-  const to = Math.floor(now.getTime() / 1000)
   const rows: DnseSessionTrade[] = []
-  let nextPageToken: string | null = null
-  let page = 0
   let truncated = false
 
+  // 1. Primary fast full session trades from VPS (all trades from 09:15:00 to current time)
   try {
-    do {
-      const raw = await signedGet(`/price/${symbol}/trades`, {
-        boardId: "G1",
-        from,
-        to,
-        limit: 500,
-        order: "ASC",
-        nextPageToken: nextPageToken ?? undefined,
-      })
-      const parsed = pageRows(raw, "trades")
-      for (let index = 0; index < parsed.rows.length; index += 1) {
-        const trade = normalizeTrade(parsed.rows[index], page * 500 + index)
-        if (trade) rows.push(trade)
-        if (rows.length >= maxRows) {
-          truncated = Boolean(parsed.nextPageToken) || index < parsed.rows.length - 1
-          break
-        }
-      }
-      nextPageToken = rows.length >= maxRows ? null : parsed.nextPageToken
-      page += 1
-    } while (nextPageToken && page < 40)
-  } catch {
-    // If DNSE fails, fallback to VPS full trades feed
-  }
-
-  // Fallback to VPS full trades feed if DNSE returned empty or failed
-  if (!rows.length) {
-    try {
-      const vpsRes = await fetch(`https://bgapidatafeed.vps.com.vn/getliststocktrade/${symbol}`, {
-        headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" },
-        signal: AbortSignal.timeout(6000),
-      })
-      if (vpsRes.ok) {
-        const vpsTrades = await vpsRes.json()
-        if (Array.isArray(vpsTrades)) {
-          for (let i = 0; i < vpsTrades.length; i++) {
-            const trade = normalizeTrade(vpsTrades[i], i)
-            if (trade) rows.push(trade)
-            if (rows.length >= maxRows) {
-              truncated = true
-              break
-            }
+    const vpsRes = await fetch(`https://bgapidatafeed.vps.com.vn/getliststocktrade/${symbol}`, {
+      headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" },
+      signal: AbortSignal.timeout(4500),
+    })
+    if (vpsRes.ok) {
+      const vpsTrades = await vpsRes.json()
+      if (Array.isArray(vpsTrades) && vpsTrades.length > 0) {
+        for (let i = 0; i < vpsTrades.length; i++) {
+          const trade = normalizeTrade(vpsTrades[i], i)
+          if (trade) rows.push(trade)
+          if (rows.length >= maxRows) {
+            truncated = true
+            break
           }
         }
       }
+    }
+  } catch {
+    // Ignore VPS error, fallback to DNSE API
+  }
+
+  // 2. If VPS returned empty, fallback to DNSE signedGet
+  if (!rows.length) {
+    const from = vietnamSessionStart(now)
+    const to = Math.floor(now.getTime() / 1000)
+    let nextPageToken: string | null = null
+    let page = 0
+
+    try {
+      do {
+        const raw = await signedGet(`/price/${symbol}/trades`, {
+          boardId: "G1",
+          from,
+          to,
+          limit: 500,
+          order: "ASC",
+          nextPageToken: nextPageToken ?? undefined,
+        })
+        const parsed = pageRows(raw, "trades")
+        for (let index = 0; index < parsed.rows.length; index += 1) {
+          const trade = normalizeTrade(parsed.rows[index], page * 500 + index)
+          if (trade) rows.push(trade)
+          if (rows.length >= maxRows) {
+            truncated = Boolean(parsed.nextPageToken) || index < parsed.rows.length - 1
+            break
+          }
+        }
+        nextPageToken = rows.length >= maxRows ? null : parsed.nextPageToken
+        page += 1
+      } while (nextPageToken && page < 10)
     } catch {
-      // Ignore VPS fallback errors
+      // Ignore DNSE error
     }
   }
 
-  if (nextPageToken) truncated = true
   rows.sort((a, b) => a.time - b.time)
   return { rows, truncated }
 }
