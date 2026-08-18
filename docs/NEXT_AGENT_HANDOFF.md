@@ -30,6 +30,7 @@ Do not discard, reset, or overwrite unrelated work. The Top 100/EOD/index-fallba
 - Scanner history policy is unified on the improvement branch: fewer than 60 completed Daily bars are rejected; 60–199 bars persist as `Incomplete` with forced `LOW` confidence; 200 or more bars persist as `Complete`.
 - Same-date scanner persistence is monotonic: `Incomplete` may upgrade to `Complete`, but an existing `Complete` result is never automatically downgraded because a provider later returns less history.
 - `pnpm build` runs `test:core`, targeted lint for the touched scanner/UI files, explicit TypeScript, and the tracked-source secret scan before Next.js compilation.
+- Production deployment is Git-driven: only `main` is deployment-enabled and Vercel Git Integration is the normal production deployment mechanism.
 
 ## Priority status
 
@@ -102,14 +103,36 @@ pnpm test:signal-core
 pnpm test:board-contract
 ```
 
-If runtime behavior changes and deployment is authorized:
+## Git and production release
+
+Normal release flow:
+
+```text
+feature/work branch
+  -> validate locally
+  -> commit + push branch
+  -> PR / squash or merge once into main
+  -> Vercel Git Integration auto-deploys main
+  -> verify deployment READY
+  -> smoke qeoindex.qeoqeo.com and changed APIs
+```
+
+Important rules:
+
+- Do not run `vercel --prod`, `vercel deploy --prod`, a Deploy Hook, or another manual production deployment after pushing/merging the same release to `main`.
+- Use Vercel tooling to inspect deployment status/logs; inspection must not create another deployment.
+- Do not redeploy just to smoke-test or verify an existing release.
+- A manual production deployment is exceptional recovery only and requires explicit user authorization plus confirmation that Git auto-deploy will not also run for that release.
+- If Vercel returns a deployment quota/rate-limit error, stop retrying and report the blocked release.
+- Target invariant: one approved release merged to `main` → one Vercel production deployment.
+
+After the Git-triggered deployment reaches `READY`:
 
 ```bash
-pnpm exec vercel --prod --yes
 curl -sS https://qeoindex.qeoqeo.com/api/market/indexes
 ```
 
-Confirm the deployment is `READY`, the official domain serves the release, the legacy fallback alias still works if retained, the home page returns successfully, and changed APIs contain valid data.
+Confirm the official domain serves the release, the legacy fallback alias still works if retained, the home page returns successfully, and changed APIs contain valid data.
 
 ## Guardrails
 
@@ -122,6 +145,8 @@ Confirm the deployment is `READY`, the official domain serves the release, the l
 - Do not report deployment success as a smoke test without checking the live page/API values.
 - Do not claim screenshot/pixel visual QA from source-contract tests alone.
 - Preserve legacy technical identifiers when changing them would invalidate sessions or integrations; public branding remains QeoIndex.
+- Never create both a Git-triggered and manual Vercel production deployment for the same release.
+- Never retry production deployment in a loop after a Vercel quota/rate-limit error.
 
 ## Final report format
 
