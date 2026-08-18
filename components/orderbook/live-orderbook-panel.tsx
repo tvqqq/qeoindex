@@ -24,6 +24,7 @@ import { MarketChangePill } from "@/components/market-change-pill"
 import { marketToneFromPrice, marketToneHex, marketToneText } from "@/lib/market-tone"
 import { normalizeMarketPrice } from "@/lib/intraday-5m"
 import { useFlashAnimation, usePriceFlashAnimation } from "@/lib/use-flash-animation"
+import { useWhaleConfetti, ConfettiOverlay } from "@/components/orderbook/confetti"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
 
 export type DepthLevel = { price: number; volume: number }
@@ -115,10 +116,22 @@ type SessionHistoryResponse = {
 
 const ORDERBOOK_VOLUME_MULTIPLIER = 10
 const LARGE_TRADE_MIN_VOLUME = 10_000
-const WHALE_TRADE_MIN_VOLUME = 50_000
 const OPEN_PRICE_KEYS = ["openPrice", "openingPrice", "open", "openValue", "firstPrice"]
 const STREAM_STALE_MS = 45_000
 const MAX_SESSION_TRADES = 30_000
+
+/** HOSE tick size: ≥50 → 0.1, ≥10 → 0.05, <10 → 0.01. Whale threshold adapts accordingly. */
+function getWhaleThreshold(price?: number | null): number {
+  if (!price || price <= 0) return 50_000
+  // price is in thousands (e.g. 66.8 = 66,800 VND)
+  if (price >= 50) return 30_000   // tick = 0.1 → ≥30K
+  return 50_000                     // tick = 0.05 → ≥50K
+}
+
+function getWhaleLabel(price?: number | null): string {
+  const threshold = getWhaleThreshold(price)
+  return threshold >= 50_000 ? "≥50K" : "≥30K"
+}
 
 const DEFAULT_WIDTH = 460
 const MIN_WIDTH = 460
@@ -1406,6 +1419,35 @@ export function LiveOrderBookPanel({
   const isWsReady = stream.state === "LIVE" || stream.historyState === "READY" || stream.trades.length > 0 || stream.bids.length > 0 || stream.quote !== null
   const headerPriceFlash = usePriceFlashAnimation(quote?.price, quote?.reference)
 
+  // Confetti for whale trades
+  const confetti = useWhaleConfetti()
+  const prevTradeCountRef = useRef(stream.trades.length)
+  const isInitialLoadRef = useRef(true)
+
+  useEffect(() => {
+    const currentCount = stream.trades.length
+    const prevCount = prevTradeCountRef.current
+    prevTradeCountRef.current = currentCount
+
+    // Skip initial load (historical data) — only fire on new live trades
+    if (isInitialLoadRef.current) {
+      if (stream.historyState === "READY" || stream.historyState === "PARTIAL") {
+        isInitialLoadRef.current = false
+      }
+      return
+    }
+
+    // Detect new trades added since last render
+    if (currentCount > prevCount) {
+      const newTrades = stream.trades.slice(0, currentCount - prevCount)
+      const threshold = getWhaleThreshold(quote?.price)
+      const hasNewWhale = newTrades.some((t) => t.volume >= threshold)
+      if (hasNewWhale) {
+        confetti.fire()
+      }
+    }
+  }, [stream.trades, stream.historyState, quote?.price, confetti])
+
   // High-performance Drag-to-Move with window listener + requestAnimationFrame (0ms latency, zero re-renders while moving)
   const onHeaderPointerDown = useCallback(
     (event: React.PointerEvent<HTMLElement>) => {
@@ -1567,15 +1609,19 @@ export function LiveOrderBookPanel({
     return clusterTrades(stream.trades)
   }, [stream.trades])
 
+  // Dynamic whale threshold based on price tick size
+  const whaleThreshold = useMemo(() => getWhaleThreshold(quote?.price), [quote?.price])
+  const whaleLabel = useMemo(() => getWhaleLabel(quote?.price), [quote?.price])
+
   // Tape filtering
   const visibleTrades = useMemo(() => {
     if (tradeFilter === "large") return clusteredTrades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME)
-    if (tradeFilter === "whale") return clusteredTrades.filter((t) => t.volume >= WHALE_TRADE_MIN_VOLUME)
+    if (tradeFilter === "whale") return clusteredTrades.filter((t) => t.volume >= whaleThreshold)
     return clusteredTrades
-  }, [tradeFilter, clusteredTrades])
+  }, [tradeFilter, clusteredTrades, whaleThreshold])
 
   const largeTradeCount = useMemo(() => clusteredTrades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME).length, [clusteredTrades])
-  const whaleTradeCount = useMemo(() => clusteredTrades.filter((t) => t.volume >= WHALE_TRADE_MIN_VOLUME).length, [clusteredTrades])
+  const whaleTradeCount = useMemo(() => clusteredTrades.filter((t) => t.volume >= whaleThreshold).length, [clusteredTrades, whaleThreshold])
 
   // Active Buy vs Sell volume breakdown from trades
   const tradeStats = useMemo(() => {
@@ -1676,6 +1722,9 @@ export function LiveOrderBookPanel({
       onPointerDown={onPanelPointerDown}
       data-orderbook={stockKey}
     >
+      {/* Whale trade confetti celebration */}
+      <ConfettiOverlay active={confetti.active} />
+
       {/* HEADER / DRAG HANDLE */}
       <header
         className="flex cursor-grab select-none items-center justify-between gap-2 border-b border-border/80 bg-[#191b1a] px-3.5 py-2.5 active:cursor-grabbing touch-none"
@@ -1943,7 +1992,7 @@ export function LiveOrderBookPanel({
                     }`}
                   >
                     <SharkIcon className="h-3.5 w-3.5" />
-                    <span>Cá mập ≥50K</span>
+                    <span>Cá mập {whaleLabel}</span>
                     {isWsReady && whaleTradeCount > 0 && <span className="rounded bg-up/25 px-1 text-[10px] font-bold">{whaleTradeCount}</span>}
                   </button>
                 </div>
@@ -2002,7 +2051,7 @@ export function LiveOrderBookPanel({
                     <div className="flex-1 overflow-y-auto max-h-[340px] px-3.5">
                       {visibleTrades.map((trade) => {
                         const isLarge = trade.volume >= LARGE_TRADE_MIN_VOLUME
-                        const isWhale = trade.volume >= WHALE_TRADE_MIN_VOLUME
+                        const isWhale = trade.volume >= whaleThreshold
 
                         return (
                           <div
@@ -2026,7 +2075,7 @@ export function LiveOrderBookPanel({
                                 </span>
                               )}
                               {isWhale ? (
-                                <span className="rounded bg-up/25 px-1 py-0.2 text-[9px] text-up font-bold shrink-0">50K+</span>
+                                <span className="rounded bg-up/25 px-1 py-0.2 text-[9px] text-up font-bold shrink-0">{whaleThreshold >= 50_000 ? "50K+" : "30K+"}</span>
                               ) : isLarge ? (
                                 <span className="rounded bg-ref/25 px-1 py-0.2 text-[9px] text-ref font-bold shrink-0">10K+</span>
                               ) : null}
