@@ -1,9 +1,9 @@
 "use client"
 
-import Link from "next/link"
 import { ExternalLink, Star } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { Sparkline } from "@/components/sparkline"
+import { TickerResearchLink } from "@/components/ticker-research-link"
 import { normalizeMarketPrice } from "@/lib/intraday-5m"
 import {
   marketToneFromChange,
@@ -259,14 +259,14 @@ export function LiveStockRow({
         {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact title="% thay đổi so với giá tham chiếu (đóng cửa phiên trước)" /> : <span className="text-[10px] text-muted">Chờ giá</span>}
       </div>
 
-      <Link
-        href={`/research/${stock.ticker.toLowerCase()}`}
+      <TickerResearchLink
+        ticker={stock.ticker}
         onClick={(event) => event.stopPropagation()}
         className="absolute right-1 top-1 rounded p-1 text-muted opacity-0 transition-opacity hover:bg-panel hover:text-foreground group-hover:opacity-100 focus:opacity-100"
         aria-label={`Mở phân tích ${stock.ticker}`}
       >
         <ExternalLink className="h-3 w-3" />
-      </Link>
+      </TickerResearchLink>
     </div>
   )
 }
