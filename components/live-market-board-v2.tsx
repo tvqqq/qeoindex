@@ -1200,7 +1200,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
               const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
               const avgTone = marketToneFromChange(avg)
               return (
-                <section key={key} className="flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b0f14]/90 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.08)] hover:border-white/[0.14] transition-colors">
+                <section key={key} className="flex min-w-0 flex-col rounded-2xl border border-white/[0.08] bg-[#0b0f14] shadow-[0_4px_20px_rgba(0,0,0,0.35)] transition-colors hover:border-white/[0.14]">
                   <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3 py-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -1217,7 +1217,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
                     </div>
                     {typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}
                   </header>
-                  <div className="flex-1 space-y-1.5 overflow-y-auto p-1.5 overscroll-contain">
+                  <div className="space-y-1.5 p-1.5">
                     {stocks.length ? (
                       stocks.map((stock) => (
                         <LiveStockRow
