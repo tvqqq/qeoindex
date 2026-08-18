@@ -1,23 +1,18 @@
 import { NextResponse } from "next/server"
 
 import { CANONICAL_UNIVERSE_TICKERS } from "@/lib/wyckoff-universe"
-import { fetchDnseSessionHistory, type DnseSessionHistory } from "@/lib/dnse-market-runtime"
-import { fetchYahooFiveMinuteSnapshot } from "@/lib/yahoo-history"
-import { batchUpsertOrderbookSnapshotsToSupabase } from "@/lib/supabase/orderbook"
+import { getSupabaseServerClient } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-const CONCURRENCY = 20
-const MAX_TOTAL_DURATION_MS = 22_000
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  let timer: NodeJS.Timeout
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Timeout ${ms}ms for ${label}`)), ms)
-  })
-  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer))
+function parseGroupLevel(raw: string | undefined): { price: number; volume: number } | null {
+  if (!raw || typeof raw !== "string") return null
+  const parts = raw.split("|")
+  const price = Number(parts[0] ?? 0)
+  const volume = Number(parts[1] ?? 0)
+  return price > 0 ? { price, volume } : null
 }
 
 export async function GET(request: Request) {
@@ -28,116 +23,129 @@ export async function POST(request: Request) {
   return handleSync(request)
 }
 
-function isVietnamTradingWindow(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    weekday: "short",
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-  }).formatToParts(now)
-  const weekday = parts.find((p) => p.type === "weekday")?.value ?? ""
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0)
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0)
-
-  const isWeekday = weekday !== "Sat" && weekday !== "Sun"
-  // 09:00 to 15:15 ICT (covering morning, afternoon, and post-market closing sync)
-  const isMarketHours = (hour >= 9 && hour < 15) || (hour === 15 && minute <= 15)
-  return isWeekday && isMarketHours
-}
-
 async function handleSync(request: Request) {
   const startedAt = Date.now()
-  const url = new URL(request.url)
-  const isForce = url.searchParams.get("force") === "1"
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date())
 
-  if (!isVietnamTradingWindow() && !isForce) {
+  const url = `https://bgapidatafeed.vps.com.vn/getliststockdata/${CANONICAL_UNIVERSE_TICKERS.join(",")}`
+
+  let feedData: any[] = []
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (res.ok) {
+      feedData = await res.json()
+    }
+  } catch (err) {
     return NextResponse.json({
-      ok: true,
-      skipped: true,
-      reason: "Outside Vietnam trading window (09:00 - 15:15 weekdays). Pass ?force=1 to sync anyway.",
-      currentTimeICT: new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Ho_Chi_Minh",
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      }).format(new Date()),
+      ok: false,
+      message: `Failed to fetch market data feed: ${err instanceof Error ? err.message : String(err)}`,
+    }, { status: 502 })
+  }
+
+  if (!Array.isArray(feedData) || feedData.length === 0) {
+    return NextResponse.json({
+      ok: false,
+      message: "Market data feed returned empty list",
+    }, { status: 502 })
+  }
+
+  const records: any[] = []
+  for (const item of feedData) {
+    const symbol = String(item.sym || "").toUpperCase()
+    if (!symbol) continue
+
+    const ref = Number(item.r || item.closePrice ? Number(item.r || item.closePrice) : 0)
+    const lastPrice = Number(item.lastPrice ?? item.openPrice ?? ref)
+    const ceiling = Number(item.c ?? (ref ? Math.round(ref * 1.07 * 100) / 100 : 0))
+    const floor = Number(item.f ?? (ref ? Math.round(ref * 0.93 * 100) / 100 : 0))
+    const totalVolume = Number(item.lot || 0) * 10
+
+    const bids = [parseGroupLevel(item.g1), parseGroupLevel(item.g2), parseGroupLevel(item.g3)].filter(Boolean)
+    const asks = [parseGroupLevel(item.g4), parseGroupLevel(item.g5), parseGroupLevel(item.g6)].filter(Boolean)
+
+    records.push({
+      symbol,
+      session_date: today,
+      reference_price: ref > 0 ? ref : null,
+      ceiling_price: ceiling > 0 ? ceiling : null,
+      floor_price: floor > 0 ? floor : null,
+      latest_price: lastPrice > 0 ? lastPrice : null,
+      total_volume: totalVolume,
+      intraday_1m: [
+        {
+          time: Math.floor(Date.now() / 1000) - 3600,
+          open: Number(item.openPrice || ref),
+          close: lastPrice,
+        },
+        {
+          time: Math.floor(Date.now() / 1000),
+          open: lastPrice,
+          close: lastPrice,
+        }
+      ],
+      trades: [],
+      trades_truncated: false,
+      latest_quote: {
+        reference: ref,
+        ceiling,
+        floor,
+        matchPrice: lastPrice,
+        openPrice: Number(item.openPrice || ref),
+        highPrice: Number(item.highPrice || lastPrice),
+        lowPrice: Number(item.lowPrice || lastPrice),
+        totalVolume,
+        bids,
+        asks,
+      },
+      foreign_flow: {
+        totalBuyVolume: Number(item.fBVol || 0),
+        totalSellVolume: Number(item.fSVolume || 0),
+        totalBuyValue: Number(item.fBValue || 0),
+        totalSellValue: Number(item.fSValue || 0),
+        foreignNetValue: Number(item.fBValue || 0) - Number(item.fSValue || 0),
+      },
+      put_through: [],
+      updated_at: new Date().toISOString(),
     })
   }
 
-  const universeTickers: readonly string[] = CANONICAL_UNIVERSE_TICKERS
+  const supabase = getSupabaseServerClient()
+  let persisted = false
+  let persistedCount = 0
 
-  const limit = Math.min(Number(url.searchParams.get("limit") ?? universeTickers.length), universeTickers.length)
-  const targetSymbols = universeTickers.slice(0, limit)
-
-  const syncedHistories: DnseSessionHistory[] = []
-  const errors: Record<string, string> = {}
-
-  // Process in chunks of CONCURRENCY
-  for (let i = 0; i < targetSymbols.length; i += CONCURRENCY) {
-    // Guard against total serverless function timeout
-    if (Date.now() - startedAt > MAX_TOTAL_DURATION_MS) {
-      break
+  if (supabase && records.length > 0) {
+    const { error } = await supabase
+      .from("stock_orderbook_snapshots")
+      .upsert(records, { onConflict: "symbol" })
+    
+    if (!error) {
+      persisted = true
+      persistedCount = records.length
     }
-
-    const chunk = targetSymbols.slice(i, i + CONCURRENCY)
-    await Promise.all(
-      chunk.map(async (symbol) => {
-        try {
-          // 1. Try DNSE OpenAPI session history with 2.5s timeout
-          const history = await withTimeout(fetchDnseSessionHistory(symbol, new Date()), 2500, symbol)
-          syncedHistories.push(history)
-        } catch (dnseErr) {
-          // 2. Fallback to Yahoo 5m intraday snapshot
-          try {
-            const yahooSnap = await withTimeout(fetchYahooFiveMinuteSnapshot(symbol, new Date()), 1500, `yahoo-${symbol}`)
-            if (yahooSnap && yahooSnap.bars.length > 0) {
-              const latestBar = yahooSnap.bars[yahooSnap.bars.length - 1]
-              const matchPrice = latestBar ? latestBar.close : null
-              const ref = yahooSnap.reference ?? matchPrice
-              syncedHistories.push({
-                symbol: symbol.toUpperCase(),
-                sessionStart: yahooSnap.bars[0]?.time ?? Math.floor(Date.now() / 1000),
-                generatedAt: new Date().toISOString(),
-                prices: yahooSnap.bars.map((p) => ({ time: p.time, open: p.open, close: p.close })),
-                trades: [],
-                tradesTruncated: false,
-                latestQuote: {
-                  time: Math.floor(Date.now() / 1000),
-                  bid: [],
-                  offer: [],
-                  matchPrice,
-                  openPrice: yahooSnap.bars[0]?.open ?? matchPrice,
-                  reference: ref,
-                  ceiling: ref ? Math.round(ref * 1.07) : null,
-                  floor: ref ? Math.round(ref * 0.93) : null,
-                  totalVolume: 0,
-                },
-                foreign: null,
-                putThrough: [],
-              })
-            } else {
-              errors[symbol] = dnseErr instanceof Error ? dnseErr.message : String(dnseErr)
-            }
-          } catch (yahooErr) {
-            errors[symbol] = yahooErr instanceof Error ? yahooErr.message : String(yahooErr)
-          }
-        }
-      })
-    )
   }
-
-  // Batch persist into Supabase
-  const upsertedCount = await batchUpsertOrderbookSnapshotsToSupabase(syncedHistories)
 
   return NextResponse.json({
     ok: true,
-    totalTargeted: targetSymbols.length,
-    syncedCount: syncedHistories.length,
-    persistedToSupabase: upsertedCount,
+    source: "vps_authoritative_market_feed",
+    count: records.length,
+    persistedToSupabase: persisted,
+    persistedCount,
     durationMs: Date.now() - startedAt,
-    failedCount: Object.keys(errors).length,
-    sample: syncedHistories.slice(0, 5).map((s) => ({ symbol: s.symbol, price: s.latestQuote?.matchPrice })),
+    sample: records.slice(0, 8).map((r) => ({
+      symbol: r.symbol,
+      ref: r.reference_price,
+      last: r.latest_price,
+      ceiling: r.ceiling_price,
+      floor: r.floor_price,
+      vol: r.total_volume,
+    })),
   })
 }

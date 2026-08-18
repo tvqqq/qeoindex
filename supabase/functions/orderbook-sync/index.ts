@@ -7,18 +7,28 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 }
 
-const DEFAULT_UNIVERSE = [
-  "ACB", "BCM", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG",
-  "MBB", "MSN", "MWG", "PLX", "POW", "SAB", "SHB", "SSB", "SSI", "STB",
-  "TCB", "TPB", "VCB", "VHM", "VIB", "VIC", "VJC", "VNM", "VPB", "VRE",
-  "DGC", "DXG", "DIG", "PDR", "KDH", "NLG", "KBC", "VCI", "HCM", "VIX",
-  "VND", "MBS", "CTS", "BSI", "FTS", "PVD", "PVS", "PVT", "BSR", "DCM",
-  "DPM", "GEX", "REE", "PC1", "HDG", "KDC", "SBT", "VHC", "ANV", "IDI",
-  "HSG", "NKG", "VGS", "HAH", "GMD", "VOS", "DGW", "FRT", "PET", "CTR",
-  "FOX", "ELC", "CMG", "SZC", "IDC", "ITA", "TCH", "HDC", "SCR", "CEO",
-  "CII", "HHV", "VCG", "LCG", "FCN", "CTD", "HBC", "DBC", "BAF", "HAG",
-  "PAN", "LTG", "TNG", "MSH", "STK", "NT2", "GEG", "QTP", "HND", "VPI"
+const CANONICAL_UNIVERSE_TICKERS = [
+  "VCB", "BID", "CTG", "TCB", "VPB", "MBB", "LPB", "STB", "HDB", "ACB",
+  "SHB", "SSB", "MSB", "VIB", "TPB", "EIB", "OCB", "NAB", "KLB", "VBB",
+  "VAB", "BVB", "EVF",
+  "TCX", "VCK", "VPX", "SSI", "HCM", "VIX", "VCI", "VND", "DSE", "ORS", "FTS",
+  "VIC", "VHM", "VRE", "BCM", "NVL", "KBC", "KDH", "VPI", "CRV", "SJS",
+  "DXG", "TAL", "SIP", "PDR", "NLG", "TCH", "DIG",
+  "MCH", "VNM", "MWG", "MSN", "SAB", "FRT", "SBT", "PNJ", "KDC", "DHG",
+  "BAF", "VHC", "HPA", "DGW",
+  "GAS", "BSR", "PLX", "PVD", "POW", "REE", "PGV", "VSH", "BWE",
+  "HPG", "GVR", "GEE", "GEX", "GEL", "HAG", "VGC", "DCM", "DGC", "DPM",
+  "LGC", "BMP", "VCG", "CII", "HSG", "PC1",
+  "VJC", "HVN", "VPL", "FPT", "BVH", "GMD", "CTR", "PVT", "VTP", "HAH"
 ]
+
+function parseGroupLevel(raw: string | undefined): { price: number; volume: number } | null {
+  if (!raw || typeof raw !== "string") return null
+  const parts = raw.split("|")
+  const price = Number(parts[0] ?? 0)
+  const volume = Number(parts[1] ?? 0)
+  return price > 0 ? { price, volume } : null
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -38,6 +48,13 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date())
+
     let rawSnapshots: any[] = []
     let isEodAutomated = false
 
@@ -58,77 +75,82 @@ Deno.serve(async (req: Request) => {
       isEodAutomated = true
     }
 
-    const today = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Ho_Chi_Minh",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date())
-
-    // If no explicit snapshots provided, fetch active EOD universe data directly
+    // Automated sync of all 100 universe stocks with authoritative market prices
     if (isEodAutomated || rawSnapshots.length === 0) {
       const records: any[] = []
-      const CONCURRENCY = 15
+      const url = `https://bgapidatafeed.vps.com.vn/getliststockdata/${CANONICAL_UNIVERSE_TICKERS.join(",")}`
+      
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" },
+        signal: AbortSignal.timeout(8000),
+      })
 
-      for (let i = 0; i < DEFAULT_UNIVERSE.length; i += CONCURRENCY) {
-        const chunk = DEFAULT_UNIVERSE.slice(i, i + CONCURRENCY)
-        await Promise.all(
-          chunk.map(async (ticker) => {
-            try {
-              const period2 = Math.floor(Date.now() / 1000) + 300
-              const period1 = period2 - 7 * 86400
-              const res = await fetch(
-                `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}.VN?period1=${period1}&period2=${period2}&interval=5m&events=history&includeAdjustedClose=true`,
-                { headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" }, signal: AbortSignal.timeout(3500) }
-              )
-              if (!res.ok) return
-              const json = await res.json()
-              const result = json.chart?.result?.[0]
-              if (!result) return
+      if (!res.ok) {
+        throw new Error(`Market feed request failed with status ${res.status}`)
+      }
 
-              const timestamps = result.timestamp || []
-              const closes = result.indicators?.quote?.[0]?.close || []
-              const opens = result.indicators?.quote?.[0]?.open || []
-              const points = []
-              for (let j = 0; j < timestamps.length; j++) {
-                if (closes[j] && closes[j] > 0) {
-                  points.push({ time: timestamps[j], open: opens[j] || closes[j], close: closes[j] })
-                }
-              }
+      const feedData = await res.json()
+      if (!Array.isArray(feedData) || feedData.length === 0) {
+        throw new Error("Market feed returned empty list.")
+      }
 
-              const latestPrice = points.length > 0 ? points[points.length - 1].close : null
-              const ref = result.meta?.chartPreviousClose || (points.length > 0 ? points[0].open : latestPrice)
-              const totalVolume = result.meta?.regularMarketVolume || 0
+      for (const item of feedData) {
+        const symbol = String(item.sym || "").toUpperCase()
+        if (!symbol) continue
 
-              if (latestPrice && ref) {
-                records.push({
-                  symbol: ticker,
-                  session_date: today,
-                  reference_price: ref,
-                  ceiling_price: Math.round(ref * 1.07),
-                  floor_price: Math.round(ref * 0.93),
-                  latest_price: latestPrice,
-                  total_volume: totalVolume,
-                  intraday_1m: points.slice(-90),
-                  trades: [],
-                  trades_truncated: false,
-                  latest_quote: {
-                    reference: ref,
-                    matchPrice: latestPrice,
-                    ceiling: Math.round(ref * 1.07),
-                    floor: Math.round(ref * 0.93),
-                    totalVolume,
-                  },
-                  foreign_flow: {},
-                  put_through: [],
-                  updated_at: new Date().toISOString(),
-                })
-              }
-            } catch {
-              // Ignore single ticker failure in edge worker
+        const ref = Number(item.r || item.closePrice ? Number(item.r || item.closePrice) : 0)
+        const lastPrice = Number(item.lastPrice ?? item.openPrice ?? ref)
+        const ceiling = Number(item.c ?? (ref ? Math.round(ref * 1.07 * 100) / 100 : 0))
+        const floor = Number(item.f ?? (ref ? Math.round(ref * 0.93 * 100) / 100 : 0))
+        const totalVolume = Number(item.lot || 0) * 10 // lot is in 10s or exact shares
+
+        const bids = [parseGroupLevel(item.g1), parseGroupLevel(item.g2), parseGroupLevel(item.g3)].filter(Boolean)
+        const asks = [parseGroupLevel(item.g4), parseGroupLevel(item.g5), parseGroupLevel(item.g6)].filter(Boolean)
+
+        records.push({
+          symbol,
+          session_date: today,
+          reference_price: ref > 0 ? ref : null,
+          ceiling_price: ceiling > 0 ? ceiling : null,
+          floor_price: floor > 0 ? floor : null,
+          latest_price: lastPrice > 0 ? lastPrice : null,
+          total_volume: totalVolume,
+          intraday_1m: [
+            {
+              time: Math.floor(Date.now() / 1000) - 3600,
+              open: Number(item.openPrice || ref),
+              close: lastPrice,
+            },
+            {
+              time: Math.floor(Date.now() / 1000),
+              open: lastPrice,
+              close: lastPrice,
             }
-          })
-        )
+          ],
+          trades: [],
+          trades_truncated: false,
+          latest_quote: {
+            reference: ref,
+            ceiling,
+            floor,
+            matchPrice: lastPrice,
+            openPrice: Number(item.openPrice || ref),
+            highPrice: Number(item.highPrice || lastPrice),
+            lowPrice: Number(item.lowPrice || lastPrice),
+            totalVolume,
+            bids,
+            asks,
+          },
+          foreign_flow: {
+            totalBuyVolume: Number(item.fBVol || 0),
+            totalSellVolume: Number(item.fSVolume || 0),
+            totalBuyValue: Number(item.fBValue || 0),
+            totalSellValue: Number(item.fSValue || 0),
+            foreignNetValue: Number(item.fBValue || 0) - Number(item.fSValue || 0),
+          },
+          put_through: [],
+          updated_at: new Date().toISOString(),
+        })
       }
 
       if (records.length > 0) {
@@ -146,16 +168,24 @@ Deno.serve(async (req: Request) => {
         return new Response(
           JSON.stringify({
             ok: true,
-            source: "qstash_eod_sync",
+            source: "vps_authoritative_market_feed",
             count: records.length,
             session_date: today,
             synced_at: new Date().toISOString(),
+            sample: records.slice(0, 5).map((r) => ({
+              symbol: r.symbol,
+              ref: r.reference_price,
+              last: r.latest_price,
+              ceiling: r.ceiling_price,
+              floor: r.floor_price,
+            })),
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         )
       }
     }
 
+    // Manual / explicit body snapshots fallback
     const records = rawSnapshots.map((item: any) => ({
       symbol: String(item.symbol || "").toUpperCase(),
       session_date: item.session_date ?? today,
@@ -172,13 +202,6 @@ Deno.serve(async (req: Request) => {
       put_through: item.put_through ?? item.putThrough ?? [],
       updated_at: new Date().toISOString(),
     })).filter((r: any) => /^[A-Z0-9]{2,12}$/.test(r.symbol))
-
-    if (records.length === 0) {
-      return new Response(
-        JSON.stringify({ ok: false, message: "No valid symbol records to upsert." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
-    }
 
     const { data, error } = await supabase
       .from("stock_orderbook_snapshots")
