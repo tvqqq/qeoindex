@@ -118,6 +118,57 @@ export async function getOrderbookSnapshotFromSupabase(symbol: string): Promise<
   }
 }
 
+export interface BoardOverviewRow {
+  symbol: string
+  session_date: string
+  reference_price: number | null
+  ceiling_price: number | null
+  floor_price: number | null
+  latest_price: number | null
+  total_volume: number
+  intraday_1m: unknown[]
+  foreign_flow: Record<string, unknown>
+  updated_at: string
+}
+
+export async function getBoardOverviewSnapshotsFromSupabase(): Promise<Record<string, BoardOverviewRow>> {
+  const client = getSupabaseServerClient()
+  if (!client) return {}
+
+  try {
+    const { data, error } = await client
+      .from("stock_orderbook_snapshots")
+      .select("symbol, session_date, reference_price, ceiling_price, floor_price, latest_price, total_volume, intraday_1m, foreign_flow, updated_at")
+
+    if (error || !data) return {}
+
+    const result: Record<string, BoardOverviewRow> = {}
+    for (const rawRow of data as any[]) {
+      if (rawRow.symbol) {
+        const sym = rawRow.symbol.toUpperCase()
+        const ref = normalizeToKiloPrice(rawRow.reference_price)
+        const last = normalizeToKiloPrice(rawRow.latest_price) || ref
+        result[sym] = {
+          symbol: sym,
+          session_date: String(rawRow.session_date || ""),
+          reference_price: ref,
+          ceiling_price: normalizeToKiloPrice(rawRow.ceiling_price) || (ref ? Math.round(ref * 1.07 * 100) / 100 : null),
+          floor_price: normalizeToKiloPrice(rawRow.floor_price) || (ref ? Math.round(ref * 0.93 * 100) / 100 : null),
+          latest_price: last,
+          total_volume: normalizeVolume(rawRow.total_volume),
+          intraday_1m: normalizeIntradayBars(rawRow.intraday_1m),
+          foreign_flow: normalizeForeignFlow(rawRow.foreign_flow, last) as any,
+          updated_at: String(rawRow.updated_at || ""),
+        }
+      }
+    }
+    return result
+  } catch (error) {
+    console.warn("[Supabase Orderbook] Failed to read board overview snapshots:", error)
+    return {}
+  }
+}
+
 export async function getAllOrderbookSnapshotsFromSupabase(): Promise<Record<string, StoredOrderbookRow>> {
   const client = getSupabaseServerClient()
   if (!client) return {}

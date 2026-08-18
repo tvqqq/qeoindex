@@ -4,7 +4,7 @@ import { OrderBookManager } from "@/components/orderbook/orderbook-manager"
 import { TopNav } from "@/components/top-nav"
 import { sectorForTicker } from "@/lib/market-sectors"
 import { CANONICAL_UNIVERSE_STOCKS } from "@/lib/wyckoff-universe"
-import { getAllOrderbookSnapshotsFromSupabase } from "@/lib/supabase/orderbook"
+import { getBoardOverviewSnapshotsFromSupabase } from "@/lib/supabase/orderbook"
 import { isTradingSessionOpen } from "@/lib/session-countdown"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/lib/intraday-5m"
@@ -14,12 +14,12 @@ export const dynamic = "force-dynamic"
 export default async function Page() {
   const isSessionOpen = isTradingSessionOpen(new Date())
 
-  // Read EOD snapshots directly from Supabase database
-  const snapshots = await getAllOrderbookSnapshotsFromSupabase()
+  // Read lightweight EOD snapshots directly from Supabase database (sub-50ms)
+  const snapshots = await getBoardOverviewSnapshotsFromSupabase()
 
   const universe: BoardUniverseStock[] = CANONICAL_UNIVERSE_STOCKS.map((stock) => {
     const snap = snapshots[stock.ticker]
-    const lastClosePrice = snap?.latest_price || snap?.reference_price || (snap?.latest_quote as any)?.matchPrice || (snap?.latest_quote as any)?.reference || null
+    const lastClosePrice = snap?.latest_price || snap?.reference_price || null
     return {
       ticker: stock.ticker,
       rank: stock.rank,
@@ -35,8 +35,8 @@ export default async function Page() {
 
   for (const stock of universe) {
     const snap = snapshots[stock.ticker]
-    const latestPrice = snap?.latest_price || (snap?.latest_quote as any)?.matchPrice || snap?.reference_price || (Array.isArray(snap?.trades) && snap.trades.length > 0 ? (snap.trades[snap.trades.length - 1] as any)?.price : null)
-    const ref = snap?.reference_price || (snap?.latest_quote as any)?.reference || latestPrice
+    const latestPrice = snap?.latest_price || snap?.reference_price
+    const ref = snap?.reference_price || latestPrice
 
     if (latestPrice && latestPrice > 0 && ref && ref > 0) {
       const change = latestPrice - ref
@@ -49,7 +49,7 @@ export default async function Page() {
         floor: snap?.floor_price ?? Math.round(ref * 0.93 * 100) / 100,
         change,
         changePercent,
-        volume: snap?.total_volume || (snap?.latest_quote as any)?.totalVolume || 0,
+        volume: snap?.total_volume || 0,
         foreignNetValue: (snap?.foreign_flow as any)?.foreignNetValue,
         foreignBuyValue: (snap?.foreign_flow as any)?.totalBuyValue,
         foreignSellValue: (snap?.foreign_flow as any)?.totalSellValue,

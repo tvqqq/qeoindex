@@ -1282,23 +1282,60 @@ export function LiveMarketBoardV2({
               const sectorQuotes = stocks.map((stock) => displayQuotes[stock.ticker] as LiveStockQuote | undefined).filter(Boolean) as LiveStockQuote[]
               const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
               const avgTone = marketToneFromChange(avg)
+              const gainers = sectorQuotes.filter((q) => q.changePercent > 0.05).length
+              const refCount = sectorQuotes.filter((q) => Math.abs(q.changePercent) <= 0.05).length
+              const losers = sectorQuotes.filter((q) => q.changePercent < -0.05).length
+              const totalCount = stocks.length || 1
+              const gainerPct = (gainers / totalCount) * 100
+              const refPct = (refCount / totalCount) * 100
+              const loserPct = (losers / totalCount) * 100
+
               return (
                 <section key={key} className="flex min-w-0 flex-col rounded-2xl border border-white/[0.08] bg-[#0b0f14] shadow-[0_4px_20px_rgba(0,0,0,0.35)] transition-colors hover:border-white/[0.14]">
-                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3 py-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                  <header className="relative flex h-[72px] shrink-0 flex-col justify-between overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3 py-2">
+                    <div className="flex items-center justify-between gap-1.5 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         <span className="text-sm shrink-0 leading-none opacity-90">{SECTOR_EMOJIS[key] ?? "📊"}</span>
                         <h2 className="truncate text-[13px] font-bold tracking-tight text-foreground/95" title={label}>
                           {label}
                         </h2>
                       </div>
-                      <div className="mt-1.5 flex items-center gap-1.5">
-                        <span className="inline-flex rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-0.5 font-mono text-[9.5px] font-medium text-muted-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-                          {stocks.length} mã
-                        </span>
+                      {typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}
+                    </div>
+                    {/* Sector Market Breadth Bar */}
+                    <div className="flex flex-col gap-1 w-full">
+                      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                        {gainerPct > 0 && (
+                          <div
+                            className="h-full bg-emerald-500 transition-all duration-500"
+                            style={{ width: `${gainerPct}%` }}
+                            title={`${gainers} mã tăng`}
+                          />
+                        )}
+                        {refPct > 0 && (
+                          <div
+                            className="h-full bg-amber-400/80 transition-all duration-500"
+                            style={{ width: `${refPct}%` }}
+                            title={`${refCount} mã tham chiếu`}
+                          />
+                        )}
+                        {loserPct > 0 && (
+                          <div
+                            className="h-full bg-rose-500 transition-all duration-500"
+                            style={{ width: `${loserPct}%` }}
+                            title={`${losers} mã giảm`}
+                          />
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-[9.5px] font-mono leading-none">
+                        <div className="flex items-center gap-1 font-semibold">
+                          <span className="text-emerald-400">{gainers}🟢</span>
+                          <span className="text-amber-400/90">{refCount}🟡</span>
+                          <span className="text-rose-400">{losers}🔴</span>
+                        </div>
+                        <span className="text-muted-2 text-[9px] font-medium">{stocks.length} mã</span>
                       </div>
                     </div>
-                    {typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}
                   </header>
                   <div className="space-y-1.5 p-1.5">
                     {stocks.length ? (
