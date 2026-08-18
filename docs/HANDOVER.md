@@ -45,6 +45,7 @@ The local `lib/wyckoff-universe.ts` constant defines the safety cap (`UNIVERSE_S
 | `lib/scanner-data.ts`, `lib/scanner-runner.ts` | Notion persistence reads and scanner orchestration. |
 | `tests/market-board-visual-contract.test.ts` | Deterministic source-contract regression guards for board layout/EOD/highlight invariants; not screenshot QA. |
 | `docs/market-board.md` | Detailed board data flow and regression expectations. |
+| `docs/build-performance.md` | Measured build baseline, CI/cache policy, and build-optimization measurement rules. |
 
 ## Market-board lifecycle
 
@@ -119,7 +120,7 @@ Use `.env.example` as the inventory. Main categories are Notion data-source IDs/
 | Any TypeScript/UI change | targeted ESLint, `pnpm typecheck`, `pnpm build --webpack` |
 | Security/env change | `pnpm scan:secrets` |
 
-`pnpm build` runs `test:core`, `lint:touched`, `typecheck`, and `scan:secrets` through `prebuild` before Next.js compilation. Full `pnpm lint` still has pre-existing errors outside the market-board scope; broad lint cleanup remains a separate change.
+`pnpm build` runs `test:core`, cached `lint:touched`, and `scan:secrets` through `prebuild`; the subsequent Next.js production build performs the production TypeScript check. GitHub Verify additionally runs standalone `pnpm typecheck`. Full `pnpm lint` still has pre-existing warnings outside the market-board scope; broad lint cleanup remains a separate change. See `docs/build-performance.md` for the measured build/cache policy.
 
 ## Git and deployment workflow
 
