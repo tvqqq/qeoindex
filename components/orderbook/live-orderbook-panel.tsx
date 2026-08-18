@@ -260,16 +260,17 @@ function getPriceColorClass(
 ): string {
   if (!price || !Number.isFinite(price)) return "text-foreground font-bold"
 
-  const ref = reference ? (reference > 1000 && price < 1000 ? reference / 1000 : reference < 1000 && price > 1000 ? reference * 1000 : reference) : undefined
-  const ceil = ceiling ? (ceiling > 1000 && price < 1000 ? ceiling / 1000 : ceiling < 1000 && price > 1000 ? ceiling * 1000 : ceiling) : undefined
-  const flr = floor ? (floor > 1000 && price < 1000 ? floor / 1000 : floor < 1000 && price > 1000 ? floor * 1000 : floor) : undefined
+  const normPrice = price >= 1000 ? price / 1000 : price
+  const ref = reference ? (reference >= 1000 ? reference / 1000 : reference) : undefined
+  const ceil = ceiling ? (ceiling >= 1000 ? ceiling / 1000 : ceiling) : undefined
+  const flr = floor ? (floor >= 1000 ? floor / 1000 : floor) : undefined
 
-  if (ceil && price >= ceil - 0.01) return "text-ceiling font-bold"
-  if (flr && price <= flr + 0.01) return "text-floor font-bold"
+  if (ceil && normPrice >= ceil - 0.01) return "text-ceiling font-bold"
+  if (flr && normPrice <= flr + 0.01) return "text-floor font-bold"
   if (ref) {
-    if (Math.abs(price - ref) < 0.01) return "text-ref font-bold"
-    if (price > ref) return "text-up font-bold"
-    if (price < ref) return "text-down font-bold"
+    if (Math.abs(normPrice - ref) < 0.01) return "text-ref font-bold"
+    if (normPrice > ref) return "text-up font-bold"
+    if (normPrice < ref) return "text-down font-bold"
   }
   return "text-foreground font-bold"
 }
@@ -2608,37 +2609,12 @@ export function LiveOrderBookPanel({
                           const sellSegmentPct = row.totalVol > 0 ? (row.sellVol / row.totalVol) * 100 : 0
                           const atcSegmentPct = row.totalVol > 0 ? (row.atcVol / row.totalVol) * 100 : 0
 
-                          const normalizedRef = quote?.reference
-                            ? quote.price
-                              ? normalizeMarketPrice(quote.reference, quote.price) ?? quote.reference
-                              : quote.reference
-                            : undefined
-                          const normalizedCeil = quote?.ceiling
-                            ? quote.price
-                              ? normalizeMarketPrice(quote.ceiling, quote.price) ?? quote.ceiling
-                              : quote.ceiling
-                            : undefined
-                          const normalizedFlr = quote?.floor
-                            ? quote.price
-                              ? normalizeMarketPrice(quote.floor, quote.price) ?? quote.floor
-                              : quote.floor
-                            : undefined
-
-                          const isRef = normalizedRef ? Math.abs(row.price - normalizedRef) < 0.01 : false
-                          const isCeil = normalizedCeil ? row.price >= normalizedCeil - 0.01 : false
-                          const isFlr = normalizedFlr ? row.price <= normalizedFlr + 0.01 : false
-
-                          const priceColorClass = isCeil
-                            ? "text-ceiling"
-                            : isFlr
-                              ? "text-floor"
-                              : isRef
-                                ? "text-ref"
-                                : normalizedRef && row.price > normalizedRef
-                                  ? "text-up"
-                                  : normalizedRef && row.price < normalizedRef
-                                    ? "text-down"
-                                    : "text-foreground"
+                          const priceColorClass = getPriceColorClass(
+                            row.price,
+                            quote?.reference,
+                            quote?.ceiling,
+                            quote?.floor
+                          )
 
                           return (
                             <div
@@ -2646,7 +2622,7 @@ export function LiveOrderBookPanel({
                               className="grid grid-cols-[60px_1fr_60px] items-center gap-2 py-0.5 group hover:bg-panel-2/40 rounded px-1"
                             >
                               {/* Left: Price Label */}
-                              <div className={`font-bold text-xs sm:text-[13px] ${priceColorClass} shrink-0`}>
+                              <div className={`text-xs sm:text-[13px] ${priceColorClass} shrink-0`}>
                                 {formatPrice(row.price)}
                               </div>
 
