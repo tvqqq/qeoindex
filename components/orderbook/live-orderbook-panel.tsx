@@ -2265,15 +2265,34 @@ export function LiveOrderBookPanel({
                               const isWhale = trade.volume >= whaleThreshold
                               const pill = sidePillMeta(trade.side)
 
+                              const sideColorClass =
+                                trade.side === "BUY"
+                                  ? "text-up"
+                                  : trade.side === "SELL"
+                                    ? "text-down"
+                                    : "text-foreground"
+
+                              const sideBgClass =
+                                trade.side === "BUY"
+                                  ? "bg-up/10"
+                                  : trade.side === "SELL"
+                                    ? "bg-down/10"
+                                    : "bg-ref/10"
+
+                              const tagBadgeClass =
+                                trade.side === "BUY"
+                                  ? "bg-up/25 text-up border-up/30"
+                                  : trade.side === "SELL"
+                                    ? "bg-down/25 text-down border-down/30"
+                                    : "bg-ref/25 text-ref border-ref/30"
+
                               return (
                                 <div
                                   key={trade.id}
                                   className={`grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 py-1.5 font-mono text-xs hover:bg-panel-2/50 ${
-                                    isWhale
-                                      ? "bg-up/10 text-up font-bold -mx-3 px-3"
-                                      : isLarge
-                                        ? "bg-ref/10 text-ref font-bold -mx-3 px-3"
-                                        : "text-foreground"
+                                    isWhale || isLarge
+                                      ? `${sideBgClass} font-bold -mx-3 px-3`
+                                      : "text-foreground"
                                   }`}
                                 >
                                   <div className="flex items-center gap-1.5 min-w-0">
@@ -2287,17 +2306,21 @@ export function LiveOrderBookPanel({
                                       </span>
                                     )}
                                     {isWhale ? (
-                                      <span className="rounded bg-up/25 px-1.5 py-0.5 text-[10px] text-up font-bold shrink-0">
+                                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}>
                                         {whaleThreshold >= 50_000 ? "50K+" : "30K+"}
                                       </span>
                                     ) : isLarge ? (
-                                      <span className="rounded bg-ref/25 px-1.5 py-0.5 text-[10px] text-ref font-bold shrink-0">
+                                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}>
                                         10K+
                                       </span>
                                     ) : null}
                                   </div>
-                                  <span className="text-right font-bold text-sm sm:text-[14px] flex items-center justify-end gap-1.5">
-                                    {formatVolume(trade.volume)}
+                                  <span
+                                    className={`text-right font-bold text-sm sm:text-[14px] flex items-center justify-end gap-1.5 ${
+                                      isWhale || isLarge ? sideColorClass : "text-foreground"
+                                    }`}
+                                  >
+                                    <span>{formatVolume(trade.volume)}</span>
                                     <span
                                       className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${pill.className} leading-none shrink-0`}
                                     >
