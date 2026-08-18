@@ -1,5 +1,6 @@
 import type { OhlcvBar } from "./technical-indicators.ts"
 import { normalizeFiveMinuteBars, previousSessionClose, selectLatestSession } from "./intraday-5m.ts"
+import { normalizeToKiloPrice, normalizeVolume } from "./market-data-contract.ts"
 
 const DEFAULT_LOOKBACK_DAYS = 620
 const DEFAULT_HOURLY_LOOKBACK_DAYS = 180
@@ -43,56 +44,43 @@ type YahooOhlcvResult = {
 }
 
 async function fetchYahooOhlcvResult(symbol: string, interval: "1d" | "60m" | "5m", lookbackDays: number, now = new Date()): Promise<YahooOhlcvResult> {
-  const period2 = Math.floor(now.getTime() / 1000) + (interval === "1d" ? 86400 : interval === "60m" ? 3600 : 300)
+  const period2 = Math.floor(now.getTime() / 1000)
   const period1 = period2 - lookbackDays * 86400
-  const ticker = `${symbol.toUpperCase()}.VN`
-  const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}`)
-  url.searchParams.set("period1", String(period1))
-  url.searchParams.set("period2", String(period2))
-  url.searchParams.set("interval", interval)
-  url.searchParams.set("events", "history")
-  url.searchParams.set("includeAdjustedClose", "true")
-
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      "User-Agent": "StockOS/1.0 research-scanner",
-    },
-    cache: "no-store",
-    signal: AbortSignal.timeout(8_000),
-  })
-  const body = await response.text()
-  if (!response.ok) throw new Error(`Yahoo OHLC ${ticker} ${interval} failed (${response.status}): ${body.slice(0, 160)}`)
-
-  const payload = JSON.parse(body)
-  const result = payload?.chart?.result?.[0]
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol.toUpperCase()}.VN?period1=${period1}&period2=${period2}&interval=${interval}&events=history&includeAdjustedClose=true`
+  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" }, next: { revalidate: 60 } })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN failed (${res.status}): ${text.slice(0, 120)}`)
+  }
+  const json = await res.json()
+  const result = json.chart?.result?.[0]
   if (!result) {
-    const description = payload?.chart?.error?.description ?? "no chart result"
-    throw new Error(`Yahoo OHLC ${ticker}: ${description}`)
+    throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned no chart result`)
   }
 
-  const timestamps: unknown[] = result.timestamp ?? []
+  const timestamps = result.timestamp || []
   const quote = result?.indicators?.quote?.[0] ?? {}
   const bars: OhlcvBar[] = []
   for (let i = 0; i < timestamps.length; i += 1) {
     const time = finite(timestamps[i])
-    const open = finite(quote.open?.[i])
-    const high = finite(quote.high?.[i])
-    const low = finite(quote.low?.[i])
-    const close = finite(quote.close?.[i])
-    const volume = finite(quote.volume?.[i])
-    if ([time, open, high, low, close].some((value) => value == null || value <= 0) || volume == null || volume < 0) continue
+    const open = normalizeToKiloPrice(finite(quote.open?.[i]))
+    const high = normalizeToKiloPrice(finite(quote.high?.[i]))
+    const low = normalizeToKiloPrice(finite(quote.low?.[i]))
+    const close = normalizeToKiloPrice(finite(quote.close?.[i]))
+    const volume = normalizeVolume(finite(quote.volume?.[i]))
+    if ([time, open, high, low, close].some((value) => value == null || value <= 0) || volume < 0) continue
     bars.push({
       time: time as number,
       open: open as number,
-      high: high as number,
-      low: low as number,
+      high: (high ?? close) as number,
+      low: (low ?? close) as number,
       close: close as number,
-      volume: volume as number,
+      volume,
     })
   }
 
-  const metaPreviousClose = finite(result?.meta?.previousClose) ?? finite(result?.meta?.chartPreviousClose)
+  const rawPrev = finite(result?.meta?.previousClose) ?? finite(result?.meta?.chartPreviousClose)
+  const metaPreviousClose = normalizeToKiloPrice(rawPrev)
   return {
     bars: bars.sort((a, b) => a.time - b.time),
     previousClose: metaPreviousClose && metaPreviousClose > 0 ? metaPreviousClose : null,

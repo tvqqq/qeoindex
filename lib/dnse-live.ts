@@ -2,6 +2,7 @@ import "server-only"
 import { createHmac } from "node:crypto"
 
 import type { LiveQuote } from "@/lib/signal-engine"
+import { normalizeToKiloPrice, normalizeVolume } from "@/lib/market-data-contract"
 
 const WS_URL = process.env.DNSE_WS_URL ?? "wss://ws-openapi.dnse.com.vn/v1/stream?encoding=json"
 
@@ -86,9 +87,10 @@ export async function fetchDnseLiveSnapshot(symbols: string[], timeoutMs = 5500)
         }
         if (data.T === "t" && data.symbol) {
           const ticker = String(data.symbol).toUpperCase()
-          const price = Number(data.matchPrice ?? 0)
-          const totalVolume = Number(data.totalVolumeTraded ?? 0)
-          if (price > 0) quotes[ticker] = { ticker, price, totalVolume: Math.max(0, totalVolume), timestamp: Date.now() }
+          const rawPrice = Number(data.matchPrice ?? 0)
+          const price = normalizeToKiloPrice(rawPrice)
+          const totalVolume = normalizeVolume(Number(data.totalVolumeTraded ?? 0))
+          if (price && price > 0) quotes[ticker] = { ticker, price, totalVolume, timestamp: Date.now() }
         } else if (data.T === "mi" && String(data.indexName ?? "").toUpperCase() === "VNINDEX") {
           const value = Number(data.valueIndexes ?? 0)
           if (value > 0) vnindex = value

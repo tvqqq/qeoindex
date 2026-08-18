@@ -1,5 +1,17 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import type { DnseSessionHistory } from "@/lib/dnse-market-runtime"
+import {
+  normalizeToKiloPrice,
+  normalizeVolume,
+  normalizeTradeSide,
+  formatSessionTradeTime,
+  normalizeDepthLevels,
+  normalizeForeignFlow,
+  toCanonicalOrderbookSnapshot,
+  type CanonicalOrderbookSnapshot,
+} from "@/lib/market-data-contract"
+
+export { normalizeToKiloPrice, normalizeVolume, normalizeTradeSide, formatSessionTradeTime }
 
 export interface StoredOrderbookRow {
   symbol: string
@@ -18,24 +30,14 @@ export interface StoredOrderbookRow {
   updated_at: string
 }
 
-/**
- * Universal Price Normalizer for Vietnamese Stocks.
- * Strictly enforces frontend convention in thousands (nghìn đồng):
- * e.g. 21.85 (NOT 21850.00), 17.60 (NOT 17600.00), 145.60 (NOT 145600.00).
- */
-export function normalizeToKiloPrice(price: number | null | undefined): number | null {
-  if (price == null || !Number.isFinite(price) || price <= 0) return null
-  const normalized = price >= 500 ? price / 1000 : price
-  return Math.round(normalized * 100) / 100
-}
-
 function normalizeIntradayBars(bars: unknown[]): Array<{ time: number; open: number; close: number }> {
   if (!Array.isArray(bars)) return []
   return bars.map((b: any) => {
     const rawOpen = typeof b.open === "number" ? b.open : typeof b.c === "number" ? b.c : 0
     const rawClose = typeof b.close === "number" ? b.close : typeof b.c === "number" ? b.c : rawOpen
+    const tNum = Number(b.time || b.t || 0)
     return {
-      time: Number(b.time || b.t || 0),
+      time: tNum,
       open: normalizeToKiloPrice(rawOpen) ?? 0,
       close: normalizeToKiloPrice(rawClose) ?? 0,
     }
@@ -44,13 +46,18 @@ function normalizeIntradayBars(bars: unknown[]): Array<{ time: number; open: num
 
 function normalizeTrades(trades: unknown[]): Array<{ id: string; time: number; price: number; volume: number; side: string }> {
   if (!Array.isArray(trades)) return []
-  return trades.map((t: any, idx: number) => ({
-    id: String(t.id || t.transId || `t-${idx}`),
-    time: Number(t.time || 0),
-    price: normalizeToKiloPrice(t.price) ?? 0,
-    volume: Number(t.volume || t.lastVol || 0),
-    side: String(t.side || "REF").toUpperCase(),
-  })).filter((t) => t.price > 0)
+  return trades.map((t: any, idx: number) => {
+    const timeStr = formatSessionTradeTime(t.time)
+    const [hh, mm, ss] = timeStr.split(":").map(Number)
+    const secOfDay = (hh || 0) * 3600 + (mm || 0) * 60 + (ss || 0)
+    return {
+      id: String(t.id || t.transId || `t-${idx}`),
+      time: typeof t.time === "number" && t.time < 86400 ? t.time : secOfDay,
+      price: normalizeToKiloPrice(t.price) ?? 0,
+      volume: normalizeVolume(t.volume || t.lastVol),
+      side: normalizeTradeSide(t.side, t.cl),
+    }
+  }).filter((t) => t.price > 0)
 }
 
 export async function getOrderbookSnapshotFromSupabase(symbol: string): Promise<DnseSessionHistory | null> {
@@ -66,30 +73,44 @@ export async function getOrderbookSnapshotFromSupabase(symbol: string): Promise<
 
     if (error || !data) return null
 
-    const row = data as StoredOrderbookRow
-    const sessionStart = row.intraday_1m?.[0] ? Number((row.intraday_1m[0] as any).time) : Math.floor(Date.now() / 1000)
-
-    const normRef = normalizeToKiloPrice(row.reference_price)
-    const normCeil = normalizeToKiloPrice(row.ceiling_price)
-    const normFloor = normalizeToKiloPrice(row.floor_price)
-    const normLast = normalizeToKiloPrice(row.latest_price)
+    const canonical = toCanonicalOrderbookSnapshot(symbol, data)
 
     return {
-      symbol: row.symbol,
-      sessionStart,
-      generatedAt: row.updated_at,
-      prices: normalizeIntradayBars(row.intraday_1m as unknown[]),
-      trades: normalizeTrades(row.trades as unknown[]),
-      tradesTruncated: Boolean(row.trades_truncated),
+      symbol: canonical.symbol,
+      sessionStart: Math.floor(Date.now() / 1000),
+      generatedAt: canonical.updatedAt,
+      prices: canonical.intraday1m.map((p) => ({
+        time: typeof p.time === "number" ? p.time : Math.floor(Date.now() / 1000),
+        open: p.open,
+        close: p.close,
+      })),
+      trades: canonical.trades.map((t) => {
+        const [hh, mm, ss] = t.time.split(":").map(Number)
+        return {
+          id: t.id,
+          time: (hh || 0) * 3600 + (mm || 0) * 60 + (ss || 0),
+          price: t.price,
+          volume: t.volume,
+          side: t.side,
+        }
+      }),
+      tradesTruncated: canonical.tradesTruncated,
       latestQuote: {
-        ...(row.latest_quote as any ?? {}),
-        reference: normRef,
-        ceiling: normCeil,
-        floor: normFloor,
-        matchPrice: normLast,
+        reference: canonical.referencePrice,
+        ceiling: canonical.ceilingPrice,
+        floor: canonical.floorPrice,
+        matchPrice: canonical.latestPrice,
+        openPrice: canonical.latestQuote.openPrice,
+        highPrice: canonical.latestQuote.highPrice,
+        lowPrice: canonical.latestQuote.lowPrice,
+        avgPrice: canonical.latestQuote.avgPrice,
+        totalVolume: canonical.totalVolume,
+        bid: canonical.latestQuote.bids,
+        offer: canonical.latestQuote.asks,
+        time: Math.floor(Date.now() / 1000),
       },
-      foreign: (row.foreign_flow as any) ?? null,
-      putThrough: Array.isArray(row.put_through) ? (row.put_through as any) : [],
+      foreign: canonical.foreignFlow as any,
+      putThrough: canonical.putThrough as any,
     }
   } catch (error) {
     console.warn(`[Supabase Orderbook] Failed to read ${symbol}:`, error)
@@ -112,14 +133,22 @@ export async function getAllOrderbookSnapshotsFromSupabase(): Promise<Record<str
     for (const rawRow of data as StoredOrderbookRow[]) {
       if (rawRow.symbol) {
         const sym = rawRow.symbol.toUpperCase()
+        const canonical = toCanonicalOrderbookSnapshot(sym, rawRow)
         result[sym] = {
-          ...rawRow,
-          reference_price: normalizeToKiloPrice(rawRow.reference_price),
-          ceiling_price: normalizeToKiloPrice(rawRow.ceiling_price),
-          floor_price: normalizeToKiloPrice(rawRow.floor_price),
-          latest_price: normalizeToKiloPrice(rawRow.latest_price),
-          intraday_1m: normalizeIntradayBars(rawRow.intraday_1m as unknown[]),
-          trades: normalizeTrades(rawRow.trades as unknown[]),
+          symbol: canonical.symbol,
+          session_date: canonical.sessionDate,
+          reference_price: canonical.referencePrice,
+          ceiling_price: canonical.ceilingPrice,
+          floor_price: canonical.floorPrice,
+          latest_price: canonical.latestPrice,
+          total_volume: canonical.totalVolume,
+          intraday_1m: canonical.intraday1m,
+          trades: canonical.trades,
+          trades_truncated: canonical.tradesTruncated,
+          latest_quote: canonical.latestQuote as any,
+          foreign_flow: canonical.foreignFlow as any,
+          put_through: canonical.putThrough,
+          updated_at: canonical.updatedAt,
         }
       }
     }
@@ -135,39 +164,28 @@ export async function upsertOrderbookSnapshotToSupabase(history: DnseSessionHist
   if (!client) return false
 
   try {
-    const today = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Ho_Chi_Minh",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date())
-
-    const ref = normalizeToKiloPrice(history.latestQuote?.reference)
-    const ceil = normalizeToKiloPrice(history.latestQuote?.ceiling)
-    const floor = normalizeToKiloPrice(history.latestQuote?.floor)
-    const last = normalizeToKiloPrice(history.latestQuote?.matchPrice)
+    const canonical = toCanonicalOrderbookSnapshot(history.symbol, {
+      ...history,
+      latest_quote: history.latestQuote,
+      foreign_flow: history.foreign,
+      put_through: history.putThrough,
+    })
 
     const payload = {
-      symbol: history.symbol.toUpperCase(),
-      session_date: today,
-      reference_price: ref,
-      ceiling_price: ceil,
-      floor_price: floor,
-      latest_price: last,
-      total_volume: history.latestQuote?.totalVolume ?? 0,
-      intraday_1m: normalizeIntradayBars(history.prices ?? []),
-      trades: normalizeTrades(history.trades ?? []),
-      trades_truncated: history.tradesTruncated ?? false,
-      latest_quote: {
-        ...(history.latestQuote ?? {}),
-        reference: ref,
-        ceiling: ceil,
-        floor: floor,
-        matchPrice: last,
-      },
-      foreign_flow: history.foreign ?? {},
-      put_through: history.putThrough ?? [],
-      updated_at: new Date().toISOString(),
+      symbol: canonical.symbol,
+      session_date: canonical.sessionDate,
+      reference_price: canonical.referencePrice,
+      ceiling_price: canonical.ceilingPrice,
+      floor_price: canonical.floorPrice,
+      latest_price: canonical.latestPrice,
+      total_volume: canonical.totalVolume,
+      intraday_1m: canonical.intraday1m,
+      trades: canonical.trades,
+      trades_truncated: canonical.tradesTruncated,
+      latest_quote: canonical.latestQuote,
+      foreign_flow: canonical.foreignFlow,
+      put_through: canonical.putThrough,
+      updated_at: canonical.updatedAt,
     }
 
     const { error } = await client
@@ -190,40 +208,29 @@ export async function batchUpsertOrderbookSnapshotsToSupabase(histories: DnseSes
   if (!client || histories.length === 0) return 0
 
   try {
-    const today = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Ho_Chi_Minh",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date())
-
     const records = histories.map((history) => {
-      const ref = normalizeToKiloPrice(history.latestQuote?.reference)
-      const ceil = normalizeToKiloPrice(history.latestQuote?.ceiling)
-      const floor = normalizeToKiloPrice(history.latestQuote?.floor)
-      const last = normalizeToKiloPrice(history.latestQuote?.matchPrice)
+      const canonical = toCanonicalOrderbookSnapshot(history.symbol, {
+        ...history,
+        latest_quote: history.latestQuote,
+        foreign_flow: history.foreign,
+        put_through: history.putThrough,
+      })
 
       return {
-        symbol: history.symbol.toUpperCase(),
-        session_date: today,
-        reference_price: ref,
-        ceiling_price: ceil,
-        floor_price: floor,
-        latest_price: last,
-        total_volume: history.latestQuote?.totalVolume ?? 0,
-        intraday_1m: normalizeIntradayBars(history.prices ?? []),
-        trades: normalizeTrades(history.trades ?? []),
-        trades_truncated: history.tradesTruncated ?? false,
-        latest_quote: {
-          ...(history.latestQuote ?? {}),
-          reference: ref,
-          ceiling: ceil,
-          floor: floor,
-          matchPrice: last,
-        },
-        foreign_flow: history.foreign ?? {},
-        put_through: history.putThrough ?? [],
-        updated_at: new Date().toISOString(),
+        symbol: canonical.symbol,
+        session_date: canonical.sessionDate,
+        reference_price: canonical.referencePrice,
+        ceiling_price: canonical.ceilingPrice,
+        floor_price: canonical.floorPrice,
+        latest_price: canonical.latestPrice,
+        total_volume: canonical.totalVolume,
+        intraday_1m: canonical.intraday1m,
+        trades: canonical.trades,
+        trades_truncated: canonical.tradesTruncated,
+        latest_quote: canonical.latestQuote,
+        foreign_flow: canonical.foreignFlow,
+        put_through: canonical.putThrough,
+        updated_at: canonical.updatedAt,
       }
     })
 

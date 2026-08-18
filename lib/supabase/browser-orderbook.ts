@@ -1,5 +1,6 @@
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import type { DnseSessionHistory } from "@/lib/dnse-market-runtime"
+import { toCanonicalOrderbookSnapshot } from "@/lib/market-data-contract"
 
 export async function fetchOrderbookFromSupabaseDirect(symbol: string): Promise<DnseSessionHistory | null> {
   if (!isSupabaseConfigured()) return null
@@ -16,18 +17,44 @@ export async function fetchOrderbookFromSupabaseDirect(symbol: string): Promise<
 
     if (error || !data) return null
 
-    const sessionStart = data.intraday_1m?.[0] ? Number(data.intraday_1m[0].time) : Math.floor(Date.now() / 1000)
+    const canonical = toCanonicalOrderbookSnapshot(symbol, data)
 
     return {
-      symbol: data.symbol,
-      sessionStart,
-      generatedAt: data.updated_at,
-      prices: Array.isArray(data.intraday_1m) ? data.intraday_1m : [],
-      trades: Array.isArray(data.trades) ? data.trades : [],
-      tradesTruncated: Boolean(data.trades_truncated),
-      latestQuote: data.latest_quote ?? null,
-      foreign: data.foreign_flow ?? null,
-      putThrough: Array.isArray(data.put_through) ? data.put_through : [],
+      symbol: canonical.symbol,
+      sessionStart: Math.floor(Date.now() / 1000),
+      generatedAt: canonical.updatedAt,
+      prices: canonical.intraday1m.map((p) => ({
+        time: typeof p.time === "number" ? p.time : Math.floor(Date.now() / 1000),
+        open: p.open,
+        close: p.close,
+      })),
+      trades: canonical.trades.map((t) => {
+        const [hh, mm, ss] = t.time.split(":").map(Number)
+        return {
+          id: t.id,
+          time: (hh || 0) * 3600 + (mm || 0) * 60 + (ss || 0),
+          price: t.price,
+          volume: t.volume,
+          side: t.side,
+        }
+      }),
+      tradesTruncated: canonical.tradesTruncated,
+      latestQuote: {
+        reference: canonical.referencePrice,
+        ceiling: canonical.ceilingPrice,
+        floor: canonical.floorPrice,
+        matchPrice: canonical.latestPrice,
+        openPrice: canonical.latestQuote.openPrice,
+        highPrice: canonical.latestQuote.highPrice,
+        lowPrice: canonical.latestQuote.lowPrice,
+        avgPrice: canonical.latestQuote.avgPrice,
+        totalVolume: canonical.totalVolume,
+        bid: canonical.latestQuote.bids,
+        offer: canonical.latestQuote.asks,
+        time: Math.floor(Date.now() / 1000),
+      },
+      foreign: canonical.foreignFlow as any,
+      putThrough: canonical.putThrough as any,
     }
   } catch (err) {
     console.warn(`[Supabase Browser] Failed to direct query ${symbol}:`, err)
@@ -61,17 +88,43 @@ export function subscribeToOrderbookRealtime(
         const row = (payload.new || payload.old) as any
         if (!row || !row.symbol) return
 
-        const sessionStart = row.intraday_1m?.[0] ? Number(row.intraday_1m[0].time) : Math.floor(Date.now() / 1000)
+        const canonical = toCanonicalOrderbookSnapshot(upper, row)
         onSnapshot({
-          symbol: row.symbol,
-          sessionStart,
-          generatedAt: row.updated_at,
-          prices: Array.isArray(row.intraday_1m) ? row.intraday_1m : [],
-          trades: Array.isArray(row.trades) ? row.trades : [],
-          tradesTruncated: Boolean(row.trades_truncated),
-          latestQuote: row.latest_quote ?? null,
-          foreign: row.foreign_flow ?? null,
-          putThrough: Array.isArray(row.put_through) ? row.put_through : [],
+          symbol: canonical.symbol,
+          sessionStart: Math.floor(Date.now() / 1000),
+          generatedAt: canonical.updatedAt,
+          prices: canonical.intraday1m.map((p) => ({
+            time: typeof p.time === "number" ? p.time : Math.floor(Date.now() / 1000),
+            open: p.open,
+            close: p.close,
+          })),
+          trades: canonical.trades.map((t) => {
+            const [hh, mm, ss] = t.time.split(":").map(Number)
+            return {
+              id: t.id,
+              time: (hh || 0) * 3600 + (mm || 0) * 60 + (ss || 0),
+              price: t.price,
+              volume: t.volume,
+              side: t.side,
+            }
+          }),
+          tradesTruncated: canonical.tradesTruncated,
+          latestQuote: {
+            reference: canonical.referencePrice,
+            ceiling: canonical.ceilingPrice,
+            floor: canonical.floorPrice,
+            matchPrice: canonical.latestPrice,
+            openPrice: canonical.latestQuote.openPrice,
+            highPrice: canonical.latestQuote.highPrice,
+            lowPrice: canonical.latestQuote.lowPrice,
+            avgPrice: canonical.latestQuote.avgPrice,
+            totalVolume: canonical.totalVolume,
+            bid: canonical.latestQuote.bids,
+            offer: canonical.latestQuote.asks,
+            time: Math.floor(Date.now() / 1000),
+          },
+          foreign: canonical.foreignFlow as any,
+          putThrough: canonical.putThrough as any,
         })
       }
     )
