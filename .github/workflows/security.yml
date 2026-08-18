@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   secret-scan:
     runs-on: ubuntu-latest
@@ -22,21 +26,31 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Restore tooling cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .next/cache/eslint
+            .next/cache/typescript
+          key: qeoindex-tooling-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            qeoindex-tooling-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      - name: Signal engine tests
-        run: npm run test:signal-core
-      - name: Scanner policy tests
-        run: npm run test:scanner-core
-      - name: Market board contract
-        run: npm run test:board-contract
-      - name: P1 + P2 performance contract
-        run: npm run test:ui-cache
+        run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Core regression suite
+        run: pnpm test:core
       - name: Touched lint
-        run: npm run lint:touched
+        run: pnpm lint:touched
       - name: TypeScript
-        run: npm run typecheck
+        run: pnpm typecheck
