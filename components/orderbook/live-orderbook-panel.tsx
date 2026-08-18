@@ -1379,7 +1379,7 @@ function ForeignRealtimeCard({
           <span className="text-right">GT Mua-Bán</span>
         </div>
 
-        {/* Row 2: Giá Trị Values with highlighted GT Mua-Bán */}
+        {/* Row 2: Giá Trị Values with GT Mua-Bán in a label pill */}
         <div className="grid grid-cols-3 items-center px-3 py-2 text-xs sm:text-[13px] font-bold">
           <span className="text-up">
             {buyVal ? formatMarketValue(buyVal) : "—"}
@@ -1387,18 +1387,24 @@ function ForeignRealtimeCard({
           <span className="text-center text-down">
             {sellVal ? formatMarketValue(sellVal) : "—"}
           </span>
-          {/* Highlighted prominent GT Mua-Bán */}
-          <span
-            className={`text-right font-black text-sm sm:text-base transition-all ${
-              isNetValPos ? "text-up" : isNetValNeg ? "text-down" : "text-ref"
-            } ${
-              netVolFlash === "up" ? "flash-up font-black" : netVolFlash === "down" ? "flash-down font-black" : ""
-            }`}
-          >
-            {netVal !== null && netVal !== undefined
-              ? `${netVal > 0 ? "+" : ""}${formatMarketValue(netVal)}`
-              : "—"}
-          </span>
+          {/* Highlighted prominent GT Mua-Bán inside a label pill */}
+          <div className="flex justify-end items-center">
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-md font-bold text-xs sm:text-[13px] border ${
+                isNetValPos
+                  ? "bg-up/15 text-up border-up/40 shadow-sm"
+                  : isNetValNeg
+                    ? "bg-down/15 text-down border-down/40 shadow-sm"
+                    : "bg-panel-2 text-ref border-border"
+              } ${
+                netVolFlash === "up" ? "flash-up font-black" : netVolFlash === "down" ? "flash-down font-black" : ""
+              }`}
+            >
+              {netVal !== null && netVal !== undefined
+                ? `${netVal > 0 ? "+" : ""}${formatMarketValue(netVal)}`
+                : "—"}
+            </span>
+          </div>
         </div>
       </div>
 

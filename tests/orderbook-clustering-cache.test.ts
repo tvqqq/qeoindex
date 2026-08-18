@@ -44,14 +44,27 @@ test("clusterTrades groups trades with same action occurring in the same second 
   assert.equal(clustered[2].count, 2)
 })
 
-test("clusterTrades keeps different price ticks separate and does not distort price with averages", () => {
+test("clusterTrades groups sweeping trades within <=1s with highest price for BUY and lowest for SELL", () => {
   const trades = [
-    { id: "t1", time: "09:30:10", price: 30.0, volume: 1000, side: "BUY" as const },
-    { id: "t2", time: "09:30:09", price: 30.2, volume: 1000, side: "BUY" as const },
+    // Aggressive buy order sweeping 66.7 and 66.8 at 14:25:36
+    { id: "t1", time: "14:25:36", price: 66.7, volume: 28600, side: "BUY" as const },
+    { id: "t2", time: "14:25:36", price: 66.8, volume: 11400, side: "BUY" as const },
+    // Aggressive sell order sweeping 66.5 and 66.4 at 14:25:30
+    { id: "t3", time: "14:25:30", price: 66.5, volume: 5000, side: "SELL" as const },
+    { id: "t4", time: "14:25:30", price: 66.4, volume: 15000, side: "SELL" as const },
   ]
 
   const clustered = clusterTrades(trades)
-  assert.equal(clustered.length, 2, "Different prices within 1s should not merge into invalid average ticks")
-  assert.equal(clustered[0].price, 30.0)
-  assert.equal(clustered[1].price, 30.2)
+  assert.equal(clustered.length, 2)
+  // Cluster 1 (BUY): 28.600 + 11.400 = 40.000, highest price = 66.8
+  assert.equal(clustered[0].side, "BUY")
+  assert.equal(clustered[0].volume, 40000)
+  assert.equal(clustered[0].price, 66.8)
+  assert.equal(clustered[0].count, 2)
+
+  // Cluster 2 (SELL): 5.000 + 15.000 = 20.000, lowest price = 66.4
+  assert.equal(clustered[1].side, "SELL")
+  assert.equal(clustered[1].volume, 20000)
+  assert.equal(clustered[1].price, 66.4)
+  assert.equal(clustered[1].count, 2)
 })

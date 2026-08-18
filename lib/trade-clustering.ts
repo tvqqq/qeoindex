@@ -34,7 +34,8 @@ export function parseTradeSeconds(timeStr: string | number): number {
 }
 
 /**
- * Gộp các giao dịch có cùng mức giá (price), cùng chiều (side) và diễn ra cùng giây hoặc cách nhau <= 1s thành 1 lệnh
+ * Gộp các giao dịch có cùng chiều (side) diễn ra cùng giây hoặc cách nhau <= 1s thành 1 lệnh.
+ * Khối lượng được gộp đầy đủ, giá khớp lấy mức giá quyết định (giá cao nhất với lệnh Mua, giá thấp nhất với lệnh Bán).
  */
 export function clusterTrades<T extends { id: string; time: string; price: number; volume: number; side: "BUY" | "SELL" | "UNKNOWN" }>(
   trades: T[]
@@ -67,15 +68,22 @@ export function clusterTrades<T extends { id: string; time: string; price: numbe
       continue
     }
 
-    const isSamePrice = Math.abs(t.price - currentCluster.price) < 0.0001
     const isSameSide = t.side === currentCluster.side
     const secDiff = Math.abs(currentCluster.earliestSec - sec)
     const isWithin1Sec = secDiff <= 1
 
-    if (isSamePrice && isSameSide && isWithin1Sec) {
+    if (isSameSide && isWithin1Sec) {
       currentCluster.totalVolume += t.volume
       currentCluster.earliestSec = Math.min(currentCluster.earliestSec, sec)
       currentCluster.count += 1
+      // Lấy mức giá cao nhất khi MUA (quét lên) và thấp nhất khi BÁN (quét xuống)
+      if (t.side === "BUY") {
+        currentCluster.price = Math.max(currentCluster.price, t.price)
+      } else if (t.side === "SELL") {
+        currentCluster.price = Math.min(currentCluster.price, t.price)
+      } else {
+        currentCluster.price = Math.max(currentCluster.price, t.price)
+      }
     } else {
       result.push({
         id: currentCluster.id,
