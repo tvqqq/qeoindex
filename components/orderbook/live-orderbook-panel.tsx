@@ -1994,22 +1994,20 @@ export function LiveOrderBookPanel({
 
                 {visibleTrades.length ? (
                   <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col">
-                    <div className="grid grid-cols-[1.2fr_1fr_1fr_0.8fr] items-center gap-x-2 border-b border-border/60 bg-[#171819] px-3.5 py-1.5 text-xs font-bold text-muted-2">
+                    <div className="grid grid-cols-[1.4fr_1fr_0.8fr] items-center gap-x-2 border-b border-border/60 bg-[#171819] px-3.5 py-1.5 text-xs font-bold text-muted-2">
                       <span>Thời gian</span>
                       <span className="text-right">Khối lượng</span>
                       <span className="text-right">Giá</span>
-                      <span className="text-right pr-1">Loại</span>
                     </div>
                     <div className="flex-1 overflow-y-auto max-h-[340px] px-3.5">
                       {visibleTrades.map((trade) => {
-                        const meta = sideMeta(trade.side)
                         const isLarge = trade.volume >= LARGE_TRADE_MIN_VOLUME
                         const isWhale = trade.volume >= WHALE_TRADE_MIN_VOLUME
 
                         return (
                           <div
                             key={trade.id}
-                            className={`grid grid-cols-[1.2fr_1fr_1fr_0.8fr] items-center gap-x-2 border-b py-1 font-mono text-xs last:border-0 hover:bg-panel-2/50 ${
+                            className={`grid grid-cols-[1.4fr_1fr_0.8fr] items-center gap-x-2 border-b py-1 font-mono text-xs last:border-0 hover:bg-panel-2/50 ${
                               isWhale
                                 ? "border-up/30 bg-up/10 text-up font-bold -mx-3.5 px-3.5"
                                 : isLarge
@@ -2027,25 +2025,27 @@ export function LiveOrderBookPanel({
                                   x{trade.count}
                                 </span>
                               )}
-                            </div>
-                            <span className="text-right font-bold text-[13px] flex items-center justify-end gap-1.5">
-                              {formatVolume(trade.volume)}
                               {isWhale ? (
-                                <span className="rounded bg-up/25 px-1 py-0.2 text-[9px] text-up font-bold">50K+</span>
+                                <span className="rounded bg-up/25 px-1 py-0.2 text-[9px] text-up font-bold shrink-0">50K+</span>
                               ) : isLarge ? (
-                                <span className="rounded bg-ref/25 px-1 py-0.2 text-[9px] text-ref font-bold">10K+</span>
+                                <span className="rounded bg-ref/25 px-1 py-0.2 text-[9px] text-ref font-bold shrink-0">10K+</span>
                               ) : null}
+                            </div>
+                            <span className="text-right font-bold text-[13px] flex items-center justify-end gap-1">
+                              {formatVolume(trade.volume)}
+                              <span
+                                className={`text-[10px] font-bold ${
+                                  trade.side === "BUY" ? "text-up" : trade.side === "SELL" ? "text-down" : "text-muted-2"
+                                }`}
+                              >
+                                {trade.side === "BUY" ? "M" : trade.side === "SELL" ? "B" : ""}
+                              </span>
                             </span>
                             <span
                               className={`text-right font-bold text-[13px] ${getPriceColorClass(trade.price, quote?.reference, quote?.ceiling, quote?.floor)}`}
                             >
                               {formatPrice(trade.price)}
                             </span>
-                            <div className="flex justify-end pr-1">
-                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${meta.className}`}>
-                                {meta.label}
-                              </span>
-                            </div>
                           </div>
                         )
                       })}

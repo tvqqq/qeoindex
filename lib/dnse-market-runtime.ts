@@ -348,7 +348,7 @@ function parseDepthLevel(price: number | null | undefined, volume: number | null
   if (!price || !Number.isFinite(price) || price <= 0 || !volume || !Number.isFinite(volume) || volume <= 0) return null
   return {
     price: price > 1000 ? price / 1000 : price,
-    volume,
+    volume: volume / 10,
   }
 }
 
@@ -361,7 +361,7 @@ function parseVpsPipeDepth(val: unknown): { price: number; volume: number } | nu
   if (Number.isFinite(rawPrice) && rawPrice > 0 && Number.isFinite(rawVolLot) && rawVolLot > 0) {
     return {
       price: rawPrice > 1000 ? rawPrice / 1000 : rawPrice,
-      volume: rawVolLot * 10,
+      volume: rawVolLot,
     }
   }
   return null
