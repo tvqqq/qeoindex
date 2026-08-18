@@ -10,7 +10,7 @@ export default async function ScannerPage() {
   try {
     data = await getScannerData()
   } catch (error) {
-    console.error("[StockOS scanner] Notion read failed", error)
+    console.error("[QeoIndex scanner] Notion read failed", error)
     return <NotionUnavailable section="Wyckoff Scanner" detail="Không đọc được Universe / Daily Scan từ Notion. Scanner không fallback sang Supabase hoặc snapshot." />
   }
   return (
