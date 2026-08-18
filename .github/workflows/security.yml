@@ -34,5 +34,7 @@ jobs:
         run: npm run test:scanner-core
       - name: Market board contract
         run: npm run test:board-contract
+      - name: P1 + P2 performance contract
+        run: npm run test:ui-cache
       - name: TypeScript
         run: npm run typecheck
