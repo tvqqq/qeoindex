@@ -12,6 +12,7 @@ import {
   marketToneText,
   type MarketTone,
 } from "@/lib/market-tone"
+import { usePriceFlashAnimation } from "@/lib/use-flash-animation"
 
 export interface LiveBoardStock {
   ticker: string
@@ -185,6 +186,7 @@ export function LiveStockRow({
   const strongGainer = (quote?.changePercent ?? 0) >= 3
   const { rowClass, tickerClass } = getGainerStyles(quote, tone)
   const foreign = formatForeignNetValue(quote?.foreignNetValue)
+  const priceFlash = usePriceFlashAnimation(quote?.price, quote?.reference)
 
   return (
     <div
@@ -194,7 +196,17 @@ export function LiveStockRow({
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen() }
       }}
-      className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(42px,1fr)_64px] items-center gap-1 rounded-lg border bg-cell/75 px-2 py-2 transition-all hover:border-border-strong hover:bg-panel-2 focus:outline-none focus:ring-1 focus:ring-brand ${strongGainer ? rowClass : "border-border-strong/80"}`}
+      className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(42px,1fr)_64px] items-center gap-1 rounded-lg border bg-cell/75 px-2 py-2 transition-all hover:border-border-strong hover:bg-panel-2 focus:outline-none focus:ring-1 focus:ring-brand ${
+        priceFlash === "up"
+          ? "flash-up border-up/80 shadow-[0_0_10px_rgba(34,201,138,0.25)]"
+          : priceFlash === "down"
+            ? "flash-down border-down/80 shadow-[0_0_10px_rgba(255,71,87,0.25)]"
+            : priceFlash === "ref"
+              ? "flash-ref border-ref/80"
+              : strongGainer
+                ? rowClass
+                : "border-border-strong/80"
+      }`}
       title={`Mở sổ lệnh ${stock.ticker}`}
     >
       <div className="min-w-0">
@@ -231,7 +243,19 @@ export function LiveStockRow({
       </div>
 
       <div className="flex min-w-0 flex-col items-end gap-1.5">
-        <div className={`max-w-full truncate font-mono text-[11px] font-semibold leading-none ${text}`}>{formatBoardPrice(quote?.price)}</div>
+        <div
+          className={`max-w-full truncate font-mono text-[11px] font-semibold leading-none rounded px-0.5 transition-colors ${text} ${
+            priceFlash === "up"
+              ? "flash-text-up font-bold"
+              : priceFlash === "down"
+                ? "flash-text-down font-bold"
+                : priceFlash === "ref"
+                  ? "flash-text-ref font-bold"
+                  : ""
+          }`}
+        >
+          {formatBoardPrice(quote?.price)}
+        </div>
         {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact title="% thay đổi so với giá tham chiếu (đóng cửa phiên trước)" /> : <span className="text-[10px] text-muted">Chờ giá</span>}
       </div>
 
@@ -269,9 +293,22 @@ export function LiveMoverCard({
   const strongGainer = (quote?.changePercent ?? 0) >= 3
   const { cardClass, tickerClass } = getGainerStyles(quote, tone)
   const foreign = formatForeignNetValue(quote?.foreignNetValue)
+  const priceFlash = usePriceFlashAnimation(quote?.price, quote?.reference)
 
   return (
-    <div className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-panel px-4 py-3 transition-all hover:border-brand/60 hover:bg-panel-2/70 ${strongGainer ? cardClass : "border-border"}`}>
+    <div
+      className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-panel px-4 py-3 transition-all hover:border-brand/60 hover:bg-panel-2/70 ${
+        priceFlash === "up"
+          ? "flash-up border-up/80"
+          : priceFlash === "down"
+            ? "flash-down border-down/80"
+            : priceFlash === "ref"
+              ? "flash-ref border-ref/80"
+              : strongGainer
+                ? cardClass
+                : "border-border"
+      }`}
+    >
       <button type="button" onClick={onOpen} className="absolute inset-0 rounded-2xl focus:outline-none focus:ring-1 focus:ring-brand" aria-label={`Mở sổ lệnh ${stock.ticker}`} />
       <div>
         <div className="flex items-center gap-1.5">
@@ -305,7 +342,19 @@ export function LiveMoverCard({
       </div>
       <div className="flex flex-col items-end gap-2 text-right">
         {quote ? <MarketChangePill value={quote.changePercent} tone={tone} title="% thay đổi so với giá tham chiếu (đóng cửa phiên trước)" /> : <span className="text-muted-2">—</span>}
-        <div className={`font-mono text-xs font-semibold ${text}`}>{formatBoardPrice(quote?.price)}</div>
+        <div
+          className={`font-mono text-xs font-semibold rounded px-1 transition-colors ${text} ${
+            priceFlash === "up"
+              ? "flash-text-up font-bold"
+              : priceFlash === "down"
+                ? "flash-text-down font-bold"
+                : priceFlash === "ref"
+                  ? "flash-text-ref font-bold"
+                  : ""
+          }`}
+        >
+          {formatBoardPrice(quote?.price)}
+        </div>
         <div className="text-[10px] text-muted">Yahoo 5m + DNSE live</div>
       </div>
     </div>

@@ -23,6 +23,7 @@ import {
 import { MarketChangePill } from "@/components/market-change-pill"
 import { marketToneFromPrice, marketToneHex, marketToneText } from "@/lib/market-tone"
 import { normalizeMarketPrice } from "@/lib/intraday-5m"
+import { useFlashAnimation, usePriceFlashAnimation } from "@/lib/use-flash-animation"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
 
 export type DepthLevel = { price: number; volume: number }
@@ -1246,6 +1247,114 @@ function TapeLoadingSkeleton() {
   )
 }
 
+function OrderBookDepthRow({
+  bid,
+  ask,
+  maxDepthVolume,
+  quote,
+}: {
+  bid?: DepthLevel
+  ask?: DepthLevel
+  maxDepthVolume: number
+  quote?: StockQuote | null
+}) {
+  const bidWidthPct = bid?.volume ? (bid.volume / maxDepthVolume) * 100 : 0
+  const askWidthPct = ask?.volume ? (ask.volume / maxDepthVolume) * 100 : 0
+
+  const bidVolFlash = useFlashAnimation(bid?.volume, 1)
+  const bidPriceFlash = usePriceFlashAnimation(bid?.price, quote?.reference)
+  const askPriceFlash = usePriceFlashAnimation(ask?.price, quote?.reference)
+  const askVolFlash = useFlashAnimation(ask?.volume, 1)
+
+  return (
+    <div className="relative grid grid-cols-[1fr_85px_85px_1fr] gap-x-3 items-center py-1 rounded hover:bg-panel-2/40">
+      {/* Left Bid Volume bar */}
+      {bid?.volume ? (
+        <div
+          className="absolute inset-y-0 left-0 bg-up/15 rounded-l border-r border-up/25 transition-all duration-300"
+          style={{ width: `${(bidWidthPct / 2).toFixed(1)}%` }}
+          aria-hidden="true"
+        />
+      ) : null}
+
+      {/* Right Ask Volume bar */}
+      {ask?.volume ? (
+        <div
+          className="absolute inset-y-0 right-0 bg-down/15 rounded-r border-l border-down/25 transition-all duration-300"
+          style={{ width: `${(askWidthPct / 2).toFixed(1)}%` }}
+          aria-hidden="true"
+        />
+      ) : null}
+
+      {/* KL Mua */}
+      <span
+        className={`relative font-bold text-foreground pl-1.5 rounded px-1 transition-colors ${
+          bidVolFlash === "up"
+            ? "flash-up text-up font-black"
+            : bidVolFlash === "down"
+              ? "flash-down text-down font-black"
+              : ""
+        }`}
+      >
+        {formatVolume(bid?.volume)}
+      </span>
+
+      {/* Giá Mua */}
+      <span
+        className={`relative text-right font-bold rounded px-1 transition-colors ${getPriceColorClass(
+          bid?.price,
+          quote?.reference,
+          quote?.ceiling,
+          quote?.floor
+        )} ${
+          bidPriceFlash === "up"
+            ? "flash-text-up"
+            : bidPriceFlash === "down"
+              ? "flash-text-down"
+              : bidPriceFlash === "ref"
+                ? "flash-text-ref"
+                : ""
+        }`}
+      >
+        {formatPrice(bid?.price)}
+      </span>
+
+      {/* Giá Bán */}
+      <span
+        className={`relative font-bold rounded px-1 transition-colors ${getPriceColorClass(
+          ask?.price,
+          quote?.reference,
+          quote?.ceiling,
+          quote?.floor
+        )} ${
+          askPriceFlash === "up"
+            ? "flash-text-up"
+            : askPriceFlash === "down"
+              ? "flash-text-down"
+              : askPriceFlash === "ref"
+                ? "flash-text-ref"
+                : ""
+        }`}
+      >
+        {formatPrice(ask?.price)}
+      </span>
+
+      {/* KL Bán */}
+      <span
+        className={`relative text-right font-bold text-foreground pr-1.5 rounded px-1 transition-colors ${
+          askVolFlash === "up"
+            ? "flash-up text-up font-black"
+            : askVolFlash === "down"
+              ? "flash-down text-down font-black"
+              : ""
+        }`}
+      >
+        {formatVolume(ask?.volume)}
+      </span>
+    </div>
+  )
+}
+
 /**
  * Main LiveOrderBookPanel Component
  */
@@ -1287,6 +1396,7 @@ export function LiveOrderBookPanel({
   const stream = useDnseOrderBookStream(symbol, reconnectKey, initialMeta)
   const quote = stream.quote
   const isWsReady = stream.state === "LIVE"
+  const headerPriceFlash = usePriceFlashAnimation(quote?.price, quote?.reference)
 
   // High-performance Drag-to-Move with window listener + requestAnimationFrame (0ms latency, zero re-renders while moving)
   const onHeaderPointerDown = useCallback(
@@ -1580,7 +1690,19 @@ export function LiveOrderBookPanel({
 
         {/* Live Price & Change Pill */}
         <div className="ml-auto flex items-center gap-2.5 shrink-0">
-          <span className={`font-mono text-xl font-black sm:text-2xl tracking-tight ${color}`}>{formatPrice(quote?.price)}</span>
+          <span
+            className={`font-mono text-xl font-black sm:text-2xl tracking-tight rounded px-1.5 transition-colors ${color} ${
+              headerPriceFlash === "up"
+                ? "flash-text-up font-black"
+                : headerPriceFlash === "down"
+                  ? "flash-text-down font-black"
+                  : headerPriceFlash === "ref"
+                    ? "flash-text-ref font-black"
+                    : ""
+            }`}
+          >
+            {formatPrice(quote?.price)}
+          </span>
           {quote ? <MarketChangePill value={quote.changePercent} tone={tone} /> : null}
         </div>
 
@@ -1738,41 +1860,15 @@ export function LiveOrderBookPanel({
               </div>
 
               <div className="mt-1.5 space-y-1 font-mono text-[13px]">
-                {rows.map(({ bid, ask }, rowIndex) => {
-                  const bidWidthPct = bid?.volume ? (bid.volume / maxDepthVolume) * 100 : 0
-                  const askWidthPct = ask?.volume ? (ask.volume / maxDepthVolume) * 100 : 0
-
-                  return (
-                    <div key={rowIndex} className="relative grid grid-cols-[1fr_85px_85px_1fr] gap-x-3 items-center py-1 rounded hover:bg-panel-2/40">
-                      {/* Left Bid Volume bar */}
-                      {bid?.volume ? (
-                        <div
-                          className="absolute inset-y-0 left-0 bg-up/15 rounded-l border-r border-up/25"
-                          style={{ width: `${(bidWidthPct / 2).toFixed(1)}%` }}
-                          aria-hidden="true"
-                        />
-                      ) : null}
-
-                      {/* Right Ask Volume bar */}
-                      {ask?.volume ? (
-                        <div
-                          className="absolute inset-y-0 right-0 bg-down/15 rounded-r border-l border-down/25"
-                          style={{ width: `${(askWidthPct / 2).toFixed(1)}%` }}
-                          aria-hidden="true"
-                        />
-                      ) : null}
-
-                      <span className="relative font-bold text-foreground pl-1.5">{formatVolume(bid?.volume)}</span>
-                      <span className={`relative text-right font-bold ${getPriceColorClass(bid?.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>
-                        {formatPrice(bid?.price)}
-                      </span>
-                      <span className={`relative font-bold ${getPriceColorClass(ask?.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>
-                        {formatPrice(ask?.price)}
-                      </span>
-                      <span className="relative text-right font-bold text-foreground pr-1.5">{formatVolume(ask?.volume)}</span>
-                    </div>
-                  )
-                })}
+                {rows.map(({ bid, ask }, rowIndex) => (
+                  <OrderBookDepthRow
+                    key={rowIndex}
+                    bid={bid}
+                    ask={ask}
+                    maxDepthVolume={maxDepthVolume}
+                    quote={quote}
+                  />
+                ))}
               </div>
 
               {/* Total Ratio Bar */}
