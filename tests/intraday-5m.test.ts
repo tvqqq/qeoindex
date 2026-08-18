@@ -119,3 +119,21 @@ test("EOD history falls back to the latest available trading session", () => {
   assert.equal(selectLatestSession(bars, "2026-08-16", dateOf)?.date, "2026-08-14")
   assert.equal(selectLatestSession(bars, "2026-08-17", dateOf)?.date, "2026-08-17")
 })
+
+test("at 9:00 AM on a trading day, session starts and reference anchors to previous EOD close", async () => {
+  const { isTradingSessionActiveOrPastOpen, vietnamSessionStartSeconds } = await import("../lib/yahoo-history.ts")
+  // Tuesday at 08:59:59 AM ICT -> not yet active open
+  const tuesdayBefore9 = new Date("2026-08-18T08:59:59+07:00")
+  assert.equal(isTradingSessionActiveOrPastOpen(tuesdayBefore9), false)
+
+  // Tuesday at 09:00:00 AM ICT -> active open
+  const tuesdayAt9 = new Date("2026-08-18T09:00:00+07:00")
+  assert.equal(isTradingSessionActiveOrPastOpen(tuesdayAt9), true)
+
+  // Saturday at 10:00 AM ICT -> weekend, not active
+  const saturdayAt10 = new Date("2026-08-22T10:00:00+07:00")
+  assert.equal(isTradingSessionActiveOrPastOpen(saturdayAt10), false)
+
+  // Session start seconds for 2026-08-18 is 09:00 ICT (02:00 UTC)
+  assert.equal(vietnamSessionStartSeconds("2026-08-18"), Math.floor(Date.UTC(2026, 7, 18, 2, 0, 0) / 1000))
+})

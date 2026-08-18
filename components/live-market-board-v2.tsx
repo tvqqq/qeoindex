@@ -73,6 +73,20 @@ function compareByPerformance(a: BoardUniverseStock, b: BoardUniverseStock, quot
   return a.rank - b.rank
 }
 
+function currentSessionIdentifier(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    weekday: "short",
+    hour12: false,
+    hour: "2-digit",
+  }).formatToParts(date)
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? ""
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0)
+  const isTradingDay = weekday !== "Sat" && weekday !== "Sun"
+  const isPastOpen = hour >= 9
+  return `${vietnamSessionDay(date)}:${isTradingDay && isPastOpen ? "OPEN" : "PRE"}`
+}
+
 function WatchlistSection({
   stocks,
   quotes,
@@ -92,15 +106,17 @@ function WatchlistSection({
   const watched = stocks.filter((s) => watchlist.has(s.ticker))
   if (watched.length === 0) return null
   return (
-    <div className="border-b border-border bg-panel/60">
-      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
-        <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-        <span className="text-[11px] font-semibold tracking-wide text-muted-2 uppercase">Theo dõi</span>
-        <span className="ml-1 rounded-full border border-border bg-background/60 px-2 py-0.5 text-[10px] font-semibold text-muted">{watched.length} mã</span>
+    <div className="mb-2.5 rounded-xl border border-amber-500/25 bg-panel/90 p-2.5 shadow-sm">
+      <div className="mb-2 flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+          <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">Danh sách theo dõi</h2>
+          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">{watched.length} mã</span>
+        </div>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-2 px-3 scrollbar-hide">
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
         {watched.map((stock) => (
-          <div key={stock.ticker} className="min-w-[160px] max-w-[160px] shrink-0">
+          <div key={stock.ticker} className="min-w-[200px] max-w-[240px] flex-1 shrink-0">
             <LiveStockRow
               stock={stock}
               quote={quotes[stock.ticker] as LiveStockQuote | undefined}
@@ -139,7 +155,7 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>({})
   const dailyReferences = useRef<Record<string, number>>({})
   const indexReferences = useRef<Record<string, number>>({})
-  const sessionDay = useRef(vietnamSessionDay())
+  const sessionIdentifier = useRef(currentSessionIdentifier())
   const lastFrameAt = useRef(0)
 
   const [watchlist, setWatchlist] = useState<Set<string>>(() => {
@@ -280,6 +296,21 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   }, [])
 
   useEffect(() => {
+    const timer = window.setInterval(() => {
+      const nextSession = currentSessionIdentifier(new Date())
+      if (sessionIdentifier.current !== nextSession) {
+        sessionIdentifier.current = nextSession
+        dailyReferences.current = {}
+        indexReferences.current = {}
+        setQuotes({})
+        setPriceHistory({})
+        setHistoryReloadKey((key) => key + 1)
+      }
+    }, 5_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
     let disposed = false
     let socket: WebSocket | null = null
     let reconnectTimer: number | null = null
@@ -387,9 +418,9 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
 
           const now = new Date()
           const receivedAt = now.toISOString()
-          const currentSessionDay = vietnamSessionDay(now)
-          if (sessionDay.current !== currentSessionDay) {
-            sessionDay.current = currentSessionDay
+          const currentSession = currentSessionIdentifier(now)
+          if (sessionIdentifier.current !== currentSession) {
+            sessionIdentifier.current = currentSession
             dailyReferences.current = {}
             indexReferences.current = {}
             setQuotes({})
@@ -575,19 +606,28 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
   const historyCount = universe.filter((stock) => (priceHistory[stock.ticker]?.length ?? 0) > 1).length
   const advances = universe.filter((stock) => ((displayQuotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) > 0).length
   const declines = universe.filter((stock) => ((displayQuotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) < 0).length
-  const openBook = useCallback((ticker: string) => openOrderBook(`board:${ticker}`, ticker), [openOrderBook])
+  const openBook = useCallback(
+    (ticker: string) => {
+      const q = displayQuotes[ticker] as LiveStockQuote | undefined
+      const s = universe.find((st) => st.ticker === ticker)
+      const h = (priceHistory[ticker] ?? []).map((p) => p.close)
+      openOrderBook(`board:${ticker}`, ticker, {
+        sector: s?.sector,
+        price: q?.price,
+        reference: q?.reference,
+        ceiling: q?.ceiling,
+        floor: q?.floor,
+        changePercent: q?.changePercent,
+        volume: q?.volume,
+        history: h,
+      })
+    },
+    [displayQuotes, universe, priceHistory, openOrderBook],
+  )
   const reconnect = useCallback(() => setReconnectKey((key) => key + 1), [])
   const handleToggleWatch = useCallback((ticker: string) => toggleWatch(ticker), [toggleWatch])
 
   return <div className="flex h-full min-h-0 flex-col bg-background">
-    <WatchlistSection
-      stocks={universe}
-      quotes={displayQuotes}
-      priceHistory={priceHistory}
-      watchlist={watchlist}
-      onToggleWatch={handleToggleWatch}
-      onOpen={openBook}
-    />
     <IndexStrip quotes={quotes} />
     <div className="flex flex-wrap items-center gap-2 border-b border-border bg-panel px-3 py-2.5">
       <div className="relative min-w-[210px] flex-1 md:max-w-[320px]"><Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã trong Top 100..." className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-xs outline-none" /></div>
@@ -597,7 +637,16 @@ export function LiveMarketBoardV2({ universe }: { universe: BoardUniverseStock[]
     </div>
     {streamState !== "LIVE" ? <div className="flex items-start gap-2 border-b border-ref/30 bg-ref/5 px-4 py-2.5 text-xs"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-ref" /><span>Bảng điện tự giữ kết nối DNSE và tự reconnect khi stale/mất mạng. {streamError ? `Lỗi gần nhất: ${streamError}` : "Đang chờ stream DNSE."}</span></div> : null}
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-4 py-2 text-[11px] text-muted-2"><span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" />Top 100 HOSE · Yahoo 5m + DNSE live</span><span>Tăng <b className="text-up">{advances}</b></span><span>Giảm <b className="text-down">{declines}</b></span><span>Có giá <b className="text-foreground">{pricedCount}</b>/{universe.length}</span><span>History <b className="text-foreground">{historyCount}</b>/{universe.length}</span>{lastMessageAt ? <span className="ml-auto">DNSE {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span> : null}</div>
-    <div className="min-h-0 flex-1 overflow-auto p-2">{mode === "sector" ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{grouped.map(({ key, label, stocks }) => {
+    <div className="min-h-0 flex-1 overflow-auto p-2">
+      <WatchlistSection
+        stocks={universe}
+        quotes={displayQuotes}
+        priceHistory={priceHistory}
+        watchlist={watchlist}
+        onToggleWatch={handleToggleWatch}
+        onOpen={openBook}
+      />
+      {mode === "sector" ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{grouped.map(({ key, label, stocks }) => {
       const sectorQuotes = stocks.map((stock) => displayQuotes[stock.ticker] as LiveStockQuote | undefined).filter(Boolean) as LiveStockQuote[]
       const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
       const avgTone = marketToneFromChange(avg)

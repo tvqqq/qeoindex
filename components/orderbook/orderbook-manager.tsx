@@ -13,6 +13,7 @@ export function OrderBookManager() {
           key={book.key}
           stockKey={book.key}
           symbol={book.symbol}
+          initialMeta={book.initialMeta}
           index={index}
           z={70 + order.indexOf(book.key)}
           onClose={() => close(book.key)}

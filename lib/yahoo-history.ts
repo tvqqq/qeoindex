@@ -1,5 +1,5 @@
-import type { OhlcvBar } from "@/lib/technical-indicators"
-import { normalizeFiveMinuteBars, previousSessionClose, selectLatestSession } from "@/lib/intraday-5m"
+import type { OhlcvBar } from "./technical-indicators.ts"
+import { normalizeFiveMinuteBars, previousSessionClose, selectLatestSession } from "./intraday-5m.ts"
 
 const DEFAULT_LOOKBACK_DAYS = 620
 const DEFAULT_HOURLY_LOOKBACK_DAYS = 180
@@ -103,6 +103,48 @@ async function fetchYahooOhlcv(symbol: string, interval: "1d" | "60m" | "5m", lo
   return (await fetchYahooOhlcvResult(symbol, interval, lookbackDays, now)).bars
 }
 
+function vietnamDateParts(timestampMs: number) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(timestampMs))
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ""
+  return {
+    weekday: value("weekday"),
+    year: Number(value("year")),
+    month: Number(value("month")),
+    day: Number(value("day")),
+    hour: Number(value("hour")),
+    minute: Number(value("minute")),
+  }
+}
+
+export function isVietnamTradingDay(now = new Date()) {
+  const { weekday } = vietnamDateParts(now.getTime())
+  return weekday !== "Sat" && weekday !== "Sun"
+}
+
+export function isPastVietnamSessionOpen(now = new Date()) {
+  const { hour } = vietnamDateParts(now.getTime())
+  return hour >= 9
+}
+
+export function isTradingSessionActiveOrPastOpen(now = new Date()) {
+  return isVietnamTradingDay(now) && isPastVietnamSessionOpen(now)
+}
+
+export function vietnamSessionStartSeconds(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number)
+  // Vietnam is UTC+7, so 09:00 ICT is 02:00 UTC
+  return Math.floor(Date.UTC(year, month - 1, day, 2, 0, 0) / 1000)
+}
+
 export type YahooFiveMinuteSnapshot = {
   bars: OhlcvBar[]
   reference: number
@@ -115,6 +157,21 @@ export async function fetchYahooFiveMinuteSnapshot(symbol: string, now = new Dat
   const dateOf = (bar: OhlcvBar) => vietnamDateKey(bar.time * 1000)
   const session = selectLatestSession(raw.bars, today, dateOf)
   if (!session?.items.length) throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned no usable recent 5m session`)
+
+  // At 9:00 AM on a trading day, a new session starts. If Yahoo does not yet have bars for today,
+  // reset to yesterday's EOD close as today's reference price and start with a flat reference baseline.
+  if (isTradingSessionActiveOrPastOpen(now) && session.date < today) {
+    const yesterdayClose = session.items.at(-1)?.close ?? raw.previousClose
+    if (yesterdayClose && yesterdayClose > 0) {
+      const sessionStart = vietnamSessionStartSeconds(today)
+      const resetBars: OhlcvBar[] = [
+        { time: sessionStart, open: yesterdayClose, high: yesterdayClose, low: yesterdayClose, close: yesterdayClose, volume: 0 },
+        { time: sessionStart + 300, open: yesterdayClose, high: yesterdayClose, low: yesterdayClose, close: yesterdayClose, volume: 0 },
+      ]
+      return { bars: resetBars, reference: yesterdayClose, sessionDate: today }
+    }
+  }
+
   const sessionEnd = vietnamSessionEndSeconds(session.date)
   const endTime = session.date === today && !marketClosed(now)
     ? Math.min(now.getTime() / 1000, sessionEnd)

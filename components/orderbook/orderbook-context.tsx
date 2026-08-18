@@ -2,14 +2,27 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react"
 
+export interface StockInitialMeta {
+  companyName?: string
+  sector?: string
+  price?: number
+  reference?: number
+  ceiling?: number
+  floor?: number
+  changePercent?: number
+  volume?: number
+  history?: number[]
+}
+
 export interface OpenBook {
   key: string // group:symbol
   symbol: string
+  initialMeta?: StockInitialMeta
 }
 
 interface OrderBookCtx {
   books: OpenBook[]
-  open: (key: string, symbol: string) => void
+  open: (key: string, symbol: string, initialMeta?: StockInitialMeta) => void
   close: (key: string) => void
   isOpen: (key: string) => boolean
   focus: (key: string) => void
@@ -22,10 +35,16 @@ export function OrderBookProvider({ children }: { children: React.ReactNode }) {
   const [books, setBooks] = useState<OpenBook[]>([])
   const [order, setOrder] = useState<string[]>([])
 
-  const open = useCallback((key: string, symbol: string) => {
+  const open = useCallback((key: string, symbol: string, initialMeta?: StockInitialMeta) => {
     setBooks((prev) => {
-      if (prev.some((b) => b.key === key)) return prev
-      return [...prev, { key, symbol }]
+      const existing = prev.find((b) => b.key === key)
+      if (existing) {
+        if (initialMeta && !existing.initialMeta) {
+          return prev.map((b) => (b.key === key ? { ...b, initialMeta } : b))
+        }
+        return prev
+      }
+      return [...prev, { key, symbol, initialMeta }]
     })
     setOrder((prev) => [...prev.filter((k) => k !== key), key])
   }, [])

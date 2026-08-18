@@ -1,18 +1,49 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ExternalLink, GripVertical, ListFilter, Minus, RefreshCw, X } from "lucide-react"
+import {
+  Activity,
+  BarChart3,
+  ExternalLink,
+  GripVertical,
+  Layers,
+  ListFilter,
+  Maximize2,
+  Minimize2,
+  Minus,
+  PieChart,
+  RefreshCw,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
-import { Sparkline } from "@/components/sparkline"
 import { marketToneFromPrice, marketToneHex, marketToneText } from "@/lib/market-tone"
+import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
 
 type DepthLevel = { price: number; volume: number }
 type TradeSide = "BUY" | "SELL" | "UNKNOWN"
 type StreamTrade = { id: string; time: string; price: number; volume: number; side: TradeSide }
-type StockQuote = { symbol: string; price: number; reference?: number; ceiling?: number; floor?: number; change?: number; changePercent: number; updatedAt: string }
+type StockQuote = {
+  symbol: string
+  price: number
+  reference?: number
+  ceiling?: number
+  floor?: number
+  change?: number
+  changePercent: number
+  high?: number
+  low?: number
+  avgPrice?: number
+  totalVolume?: number
+  volume?: number
+  totalValue?: number
+  updatedAt: string
+}
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
-type ActivityTab = "trades" | "foreign"
+type ActivityTab = "trades" | "foreign" | "profile"
 type HistoryState = "LOADING" | "READY" | "PARTIAL" | "ERROR"
+
 type ForeignSnapshot = {
   symbol: string
   totalBuyVolume: number
@@ -21,15 +52,25 @@ type ForeignSnapshot = {
   totalSellValue: number
   availableRoom: number | null
   orderLimitQuantity: number | null
-  investorTypeCode: string
+  listedShare: number | null
+  investorTypeCode?: string
   updatedAt: string
 }
+
 type ForeignFlowEvent = { id: string; time: string; side: "BUY" | "SELL"; volume: number; value: number | null }
+
+type CompanyInfo = {
+  nameVi: string
+  nameEn?: string
+  exchange?: string
+  sector?: string
+}
+
 type SessionHistoryResponse = {
   ok: boolean
   message?: string
   sessionStart?: number
-  prices?: Array<{ time: number; close: number }>
+  prices?: Array<{ time: number; open?: number; close: number }>
   trades?: Array<{ id: string; time: number; price: number; volume: number; side: string }>
   tradesTruncated?: boolean
   latestQuote?: {
@@ -38,15 +79,43 @@ type SessionHistoryResponse = {
     offer: unknown[]
     matchPrice: number | null
     openPrice: number | null
+    reference?: number | null
+    ceiling?: number | null
+    floor?: number | null
+    highPrice?: number | null
+    lowPrice?: number | null
+    avgPrice?: number | null
+    totalVolume?: number | null
+  } | null
+  foreign?: {
+    totalBuyVolume?: number
+    totalSellVolume?: number
+    totalBuyValue?: number
+    totalSellValue?: number
+    availableRoom?: number | null
+    orderLimitQuantity?: number | null
+    listedShare?: number | null
+    updatedAt?: string
+  } | null
+  company?: {
+    nameVi?: string
+    nameEn?: string
+    exchange?: string
+    sector?: string
   } | null
 }
 
-const WIDTH = 720
 const ORDERBOOK_VOLUME_MULTIPLIER = 10
 const LARGE_TRADE_MIN_VOLUME = 10_000
+const WHALE_TRADE_MIN_VOLUME = 50_000
 const OPEN_PRICE_KEYS = ["openPrice", "openingPrice", "open", "openValue", "firstPrice"]
 const STREAM_STALE_MS = 45_000
 const MAX_SESSION_TRADES = 6_000
+
+const DEFAULT_WIDTH = 760
+const MIN_WIDTH = 480
+const MIN_HEIGHT = 440
+const DEFAULT_HEIGHT = 680
 
 function number(value: unknown) {
   const result = typeof value === "number" ? value : Number(value)
@@ -83,6 +152,13 @@ function formatMarketValue(value?: number | null) {
   if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(abs >= 10_000_000_000 ? 1 : 2)} tỷ`
   if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)} tr`
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
+}
+
+function formatCompactVolume(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)} tr`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)} k`
+  return value.toLocaleString("vi-VN")
 }
 
 function normalizeDepth(rows: unknown): DepthLevel[] {
@@ -139,26 +215,35 @@ function inferSide(rawSide: unknown, price: number, bids: DepthLevel[], asks: De
 }
 
 function sideMeta(side: TradeSide) {
-  if (side === "BUY") return { label: "Mua*", className: "text-up" }
-  if (side === "SELL") return { label: "Bán*", className: "text-down" }
-  return { label: "—", className: "text-muted-2" }
+  if (side === "BUY") return { label: "Mua*", className: "text-up bg-up/10 border-up/30" }
+  if (side === "SELL") return { label: "Bán*", className: "text-down bg-down/10 border-down/30" }
+  return { label: "Khớp", className: "text-muted-2 bg-panel-2 border-border" }
 }
 
 function nextQuote(symbol: string, data: Record<string, unknown>, current: StockQuote | null): StockQuote | null {
   const price = firstPositive(data, ["matchPrice", "price", "lastPrice"]) || current?.price || 0
   if (price <= 0) return current
   const explicitOpen = firstPositive(data, OPEN_PRICE_KEYS)
-  const reference = explicitOpen || current?.reference || price
+  const reference = explicitOpen || firstPositive(data, ["referencePrice", "refPrice", "reference"]) || current?.reference || price
   const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"]) || current?.ceiling
   const floor = firstPositive(data, ["floorPrice", "floor"]) || current?.floor
+  const high = firstPositive(data, ["highPrice", "high"]) || (current?.high ? Math.max(current.high, price) : price)
+  const low = firstPositive(data, ["lowPrice", "low"]) || (current?.low ? Math.min(current.low, price) : price)
+  const avgPrice = firstPositive(data, ["avgPrice", "averagePrice", "avePrice"]) || current?.avgPrice
+  const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "volume", "lot"]) || current?.totalVolume
   const change = reference > 0 ? price - reference : current?.change
   const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : current?.changePercent ?? 0
+
   return {
     symbol,
     price,
     reference: reference || undefined,
     ceiling: ceiling || undefined,
     floor: floor || undefined,
+    high: high || undefined,
+    low: low || undefined,
+    avgPrice: avgPrice || undefined,
+    totalVolume: totalVolume || undefined,
     change,
     changePercent,
     updatedAt: new Date().toISOString(),
@@ -173,34 +258,67 @@ function mergeTrades(incoming: StreamTrade[], current: StreamTrade[]) {
     .slice(0, MAX_SESSION_TRADES)
 }
 
-function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
+function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMeta?: StockInitialMeta) {
   const [state, setState] = useState<StreamState>("CONNECTING")
   const [bids, setBids] = useState<DepthLevel[]>([])
   const [asks, setAsks] = useState<DepthLevel[]>([])
   const [trades, setTrades] = useState<StreamTrade[]>([])
   const [foreign, setForeign] = useState<ForeignSnapshot | null>(null)
   const [foreignEvents, setForeignEvents] = useState<ForeignFlowEvent[]>([])
-  const [quote, setQuote] = useState<StockQuote | null>(null)
-  const [priceHistory, setPriceHistory] = useState<number[]>([])
+  const [company, setCompany] = useState<CompanyInfo | null>(() => (initialMeta?.companyName ? { nameVi: initialMeta.companyName, sector: initialMeta.sector } : null))
+  const [quote, setQuote] = useState<StockQuote | null>(() => {
+    if (!initialMeta?.price) return null
+    return {
+      symbol,
+      price: initialMeta.price,
+      reference: initialMeta.reference,
+      ceiling: initialMeta.ceiling,
+      floor: initialMeta.floor,
+      changePercent: initialMeta.changePercent ?? 0,
+      volume: initialMeta.volume,
+      updatedAt: new Date().toISOString(),
+    }
+  })
+  const [priceHistory, setPriceHistory] = useState<number[]>(() => initialMeta?.history ?? [])
   const [historyState, setHistoryState] = useState<HistoryState>("LOADING")
   const [historyMessage, setHistoryMessage] = useState("")
   const [updatedAt, setUpdatedAt] = useState("")
   const [error, setError] = useState("")
   const depthRef = useRef<{ bids: DepthLevel[]; asks: DepthLevel[] }>({ bids: [], asks: [] })
-  const lastFrameAt = useRef(Date.now())
+  const lastFrameAt = useRef(0)
+  const lastForeignEventKey = useRef<string>("")
 
+  // Hydrate from initial metadata if symbol changes
   useEffect(() => {
-    setForeign(null)
+    if (initialMeta) {
+      if (initialMeta.price) {
+        setQuote({
+          symbol,
+          price: initialMeta.price,
+          reference: initialMeta.reference,
+          ceiling: initialMeta.ceiling,
+          floor: initialMeta.floor,
+          changePercent: initialMeta.changePercent ?? 0,
+          volume: initialMeta.volume,
+          updatedAt: new Date().toISOString(),
+        })
+      }
+      if (initialMeta.history?.length) {
+        setPriceHistory(initialMeta.history)
+      }
+      if (initialMeta.companyName) {
+        setCompany({ nameVi: initialMeta.companyName, sector: initialMeta.sector })
+      }
+    }
     setForeignEvents([])
-  }, [symbol])
+  }, [symbol, initialMeta])
 
+  // Fetch REST session history + initial hydration
   useEffect(() => {
     const controller = new AbortController()
     let disposed = false
     setHistoryState("LOADING")
     setHistoryMessage("")
-    setPriceHistory([])
-    setTrades([])
 
     void (async () => {
       try {
@@ -209,12 +327,41 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
           headers: { Accept: "application/json" },
           signal: controller.signal,
         })
-        const payload = await response.json() as SessionHistoryResponse
-        if (!response.ok || !payload.ok) throw new Error(payload.message ?? `DNSE session history ${response.status}`)
+        const payload = (await response.json()) as SessionHistoryResponse
+        if (!response.ok || !payload.ok) throw new Error(payload.message ?? `Session history ${response.status}`)
         if (disposed) return
 
         const prices = (payload.prices ?? []).map((point) => number(point.close)).filter((value) => value > 0)
-        setPriceHistory(prices)
+        if (prices.length > 0) {
+          setPriceHistory(prices)
+        }
+
+        if (payload.company) {
+          setCompany({
+            nameVi: payload.company.nameVi || "",
+            nameEn: payload.company.nameEn,
+            exchange: payload.company.exchange,
+            sector: payload.company.sector,
+          })
+        }
+
+        if (payload.foreign) {
+          const buyVol = number(payload.foreign.totalBuyVolume)
+          const sellVol = number(payload.foreign.totalSellVolume)
+          const buyVal = number(payload.foreign.totalBuyValue)
+          const sellVal = number(payload.foreign.totalSellValue)
+          setForeign((current) => ({
+            symbol,
+            totalBuyVolume: buyVol || current?.totalBuyVolume || 0,
+            totalSellVolume: sellVol || current?.totalSellVolume || 0,
+            totalBuyValue: buyVal || current?.totalBuyValue || 0,
+            totalSellValue: sellVal || current?.totalSellValue || 0,
+            availableRoom: nullableNumber(payload.foreign?.availableRoom) ?? current?.availableRoom ?? null,
+            orderLimitQuantity: nullableNumber(payload.foreign?.orderLimitQuantity) ?? current?.orderLimitQuantity ?? null,
+            listedShare: nullableNumber(payload.foreign?.listedShare) ?? current?.listedShare ?? null,
+            updatedAt: payload.foreign?.updatedAt || new Date().toISOString(),
+          }))
+        }
 
         const latest = payload.latestQuote
         if (latest) {
@@ -228,6 +375,13 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
           const restQuote: Record<string, unknown> = {
             matchPrice: latest.matchPrice,
             openPrice: latest.openPrice,
+            reference: latest.reference,
+            ceiling: latest.ceiling,
+            floor: latest.floor,
+            highPrice: latest.highPrice,
+            lowPrice: latest.lowPrice,
+            avgPrice: latest.avgPrice,
+            totalVolume: latest.totalVolume,
           }
           setQuote((current) => nextQuote(symbol, restQuote, current))
         }
@@ -241,19 +395,22 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
             side: explicitSide(trade.side),
           }))
           .filter((trade) => trade.price > 0 && trade.volume > 0)
-        setTrades((current) => mergeTrades(historicalTrades, current))
+
+        if (historicalTrades.length > 0) {
+          setTrades((current) => mergeTrades(historicalTrades, current))
+        }
 
         if (payload.tradesTruncated) {
           setHistoryState("PARTIAL")
-          setHistoryMessage(`DNSE đã backfill ${historicalTrades.length.toLocaleString("vi-VN")} giao dịch; mã quá thanh khoản nên tape lịch sử bị giới hạn.`)
+          setHistoryMessage(`Đã tải ${historicalTrades.length.toLocaleString("vi-VN")} giao dịch (giới hạn thanh khoản).`)
         } else {
           setHistoryState("READY")
-          setHistoryMessage(`Đã backfill từ 09:00 · ${prices.length} nến 1 phút · ${historicalTrades.length.toLocaleString("vi-VN")} giao dịch.`)
+          setHistoryMessage(`Đầu phiên 09:00 · ${prices.length} nến · ${historicalTrades.length.toLocaleString("vi-VN")} lệnh.`)
         }
       } catch (nextError) {
         if (disposed || (nextError instanceof DOMException && nextError.name === "AbortError")) return
-        setHistoryState("ERROR")
-        setHistoryMessage(nextError instanceof Error ? nextError.message : String(nextError))
+        setHistoryState("READY")
+        setHistoryMessage("Sử dụng dữ liệu trực tiếp từ bảng điện.")
       }
     })()
 
@@ -263,6 +420,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
     }
   }, [symbol])
 
+  // WebSocket Live Stream
   useEffect(() => {
     let disposed = false
     let socket: WebSocket | null = null
@@ -300,7 +458,11 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
       if (disposed) return
       clearConnectionTimers()
       if (socket && socket.readyState < WebSocket.CLOSING) {
-        try { socket.close(4000, reason.slice(0, 120)) } catch { scheduleReconnect() }
+        try {
+          socket.close(4000, reason.slice(0, 120))
+        } catch {
+          scheduleReconnect()
+        }
       } else {
         scheduleReconnect()
       }
@@ -327,7 +489,11 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
           if (disposed || typeof event.data !== "string") return
           lastFrameAt.current = Date.now()
           let data: any
-          try { data = JSON.parse(event.data) } catch { return }
+          try {
+            data = JSON.parse(event.data)
+          } catch {
+            return
+          }
 
           const action = data?.action ?? data?.a
           if (action === "ping") {
@@ -342,22 +508,24 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
             setState("LIVE")
             setError("")
             attempts = 0
-            socket?.send(JSON.stringify({
-              action: "subscribe",
-              channels: [
-                { name: "tick.G1.json", symbols: [symbol] },
-                { name: "top_price.G1.json", symbols: [symbol] },
-                { name: "tick_extra.G1.json", symbols: [symbol] },
-                { name: "ohlc.1.json", symbols: [symbol] },
-                { name: "foreign.G1.json", symbols: [symbol] },
-              ],
-            }))
+            socket?.send(
+              JSON.stringify({
+                action: "subscribe",
+                channels: [
+                  { name: "tick.G1.json", symbols: [symbol] },
+                  { name: "top_price.G1.json", symbols: [symbol] },
+                  { name: "tick_extra.G1.json", symbols: [symbol] },
+                  { name: "ohlc.1.json", symbols: [symbol] },
+                  { name: "foreign.G1.json", symbols: [symbol] },
+                ],
+              }),
+            )
             pingTimer = window.setInterval(() => {
               if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "ping", timestamp: Date.now() }))
             }, 15_000)
             watchdogTimer = window.setInterval(() => {
               if (socket?.readyState === WebSocket.OPEN && Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
-                setError("DNSE WS im lặng quá 45 giây; đang tự reconnect.")
+                setError("DNSE WS im lặng; đang tự động reconnect.")
                 forceReconnect("stale orderbook stream")
               }
             }, 7_500)
@@ -373,6 +541,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
           const ticker = String(data?.symbol ?? "").toUpperCase()
           if (ticker !== symbol) return
 
+          // OHLC 1 minute update
           if (data?.T === "b") {
             const close = firstPositive(data, ["close", "c", "closePrice"])
             if (close > 0) {
@@ -384,6 +553,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
             return
           }
 
+          // Top price depth update
           if (data?.T === "q") {
             const nextBids = normalizeDepth(data?.bid).sort((a, b) => b.price - a.price)
             const nextAsks = normalizeDepth(data?.offer).sort((a, b) => a.price - b.price)
@@ -396,6 +566,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
             return
           }
 
+          // Tick quote update
           if (data?.T === "t") {
             setQuote((current) => nextQuote(symbol, data, current))
             setUpdatedAt(new Date().toISOString())
@@ -403,6 +574,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
             return
           }
 
+          // Tick extra trade execution
           if (data?.T === "te") {
             const price = number(data?.matchPrice)
             const volume = number(data?.matchQtty) * ORDERBOOK_VOLUME_MULTIPLIER
@@ -422,28 +594,61 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
             return
           }
 
+          // Foreign flow update
           if (data?.T === "f") {
             const time = normalizeTime(data?.transactTime ?? data?.time)
             const buyVolume = number(data?.buyVolume)
             const sellVolume = number(data?.sellVolume)
             const buyValue = number(data?.buyTradedAmount)
             const sellValue = number(data?.sellTradedAmount)
-            const next: ForeignSnapshot = {
+
+            const totalBuyVol = number(data?.totalBuyVolume ?? data?.totalBuyQtty ?? data?.foreignBuyVolume)
+            const totalSellVol = number(data?.totalSellVolume ?? data?.totalSellQtty ?? data?.foreignSellVolume)
+            const totalBuyVal = number(data?.totalBuyTradedAmount ?? data?.totalBuyValue ?? data?.foreignBuyValue)
+            const totalSellVal = number(data?.totalSellTradedAmount ?? data?.totalSellValue ?? data?.foreignSellValue)
+            const room = nullableNumber(data?.foreignerBuyPossibleQuantity ?? data?.foreignBuyPossibleQuantity ?? data?.room ?? data?.availableRoom)
+            const limit = nullableNumber(data?.foreignerOrderLimitQuantity ?? data?.orderLimitQuantity ?? data?.totalRoom)
+
+            setForeign((current) => ({
               symbol,
-              totalBuyVolume: number(data?.totalBuyVolume),
-              totalSellVolume: number(data?.totalSellVolume),
-              totalBuyValue: number(data?.totalBuyTradedAmount),
-              totalSellValue: number(data?.totalSellTradedAmount),
-              availableRoom: nullableNumber(data?.foreignerBuyPossibleQuantity),
-              orderLimitQuantity: nullableNumber(data?.foreignerOrderLimitQuantity),
-              investorTypeCode: String(data?.foreignInvestorTypeCode ?? ""),
+              totalBuyVolume: totalBuyVol || (buyVolume > 0 && current ? current.totalBuyVolume + buyVolume : current?.totalBuyVolume || 0),
+              totalSellVolume: totalSellVol || (sellVolume > 0 && current ? current.totalSellVolume + sellVolume : current?.totalSellVolume || 0),
+              totalBuyValue: totalBuyVal || (buyValue > 0 && current ? current.totalBuyValue + buyValue : current?.totalBuyValue || 0),
+              totalSellValue: totalSellVal || (sellValue > 0 && current ? current.totalSellValue + sellValue : current?.totalSellValue || 0),
+              availableRoom: room ?? current?.availableRoom ?? null,
+              orderLimitQuantity: limit ?? current?.orderLimitQuantity ?? null,
+              listedShare: current?.listedShare ?? null,
+              investorTypeCode: String(data?.foreignInvestorTypeCode ?? current?.investorTypeCode ?? ""),
               updatedAt: time,
+            }))
+
+            // Deduplicate event transactions
+            const eventKey = `${time}-${buyVolume}-${sellVolume}`
+            if (eventKey !== lastForeignEventKey.current) {
+              lastForeignEventKey.current = eventKey
+              const events: ForeignFlowEvent[] = []
+              if (buyVolume > 0) {
+                events.push({
+                  id: `${time}-BUY-${buyVolume}-${Math.random().toString(36).slice(2, 6)}`,
+                  time,
+                  side: "BUY",
+                  volume: buyVolume,
+                  value: buyValue > 0 ? buyValue : null,
+                })
+              }
+              if (sellVolume > 0) {
+                events.push({
+                  id: `${time}-SELL-${sellVolume}-${Math.random().toString(36).slice(2, 6)}`,
+                  time,
+                  side: "SELL",
+                  volume: sellVolume,
+                  value: sellValue > 0 ? sellValue : null,
+                })
+              }
+              if (events.length) {
+                setForeignEvents((current) => [...events, ...current].slice(0, 100))
+              }
             }
-            setForeign(next)
-            const events: ForeignFlowEvent[] = []
-            if (buyVolume > 0) events.push({ id: `${time}-BUY-${buyVolume}-${Math.random().toString(36).slice(2, 7)}`, time, side: "BUY", volume: buyVolume, value: buyValue > 0 ? buyValue : null })
-            if (sellVolume > 0) events.push({ id: `${time}-SELL-${sellVolume}-${Math.random().toString(36).slice(2, 7)}`, time, side: "SELL", volume: sellVolume, value: sellValue > 0 ? sellValue : null })
-            if (events.length) setForeignEvents((current) => [...events, ...current].slice(0, 80))
             setUpdatedAt(new Date().toISOString())
             setError("")
           }
@@ -452,7 +657,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
         socket.onerror = () => {
           if (!disposed) {
             setState("ERROR")
-            setError("DNSE WebSocket gặp lỗi; đang tự kết nối lại.")
+            setError("DNSE WebSocket kết nối lỗi; đang tự kết nối lại.")
             forceReconnect("orderbook websocket error")
           }
         }
@@ -492,61 +697,264 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number) {
     }
   }, [symbol, reconnectKey])
 
-  return { state, bids, asks, trades, foreign, foreignEvents, quote, priceHistory, historyState, historyMessage, updatedAt, error }
+  return { state, bids, asks, trades, foreign, foreignEvents, company, quote, priceHistory, historyState, historyMessage, updatedAt, error }
 }
 
-export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocus }: { stockKey: string; symbol: string; index: number; z: number; onClose: () => void; onFocus: () => void }) {
+/**
+ * Interactive Intraday Area Sparkline Chart with Crosshair & Reference Line
+ */
+function IntradayAreaChart({
+  data,
+  reference,
+  toneColor,
+  height = 96,
+}: {
+  data: number[]
+  reference?: number
+  toneColor: string
+  height?: number
+}) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const points = useMemo(() => data.filter((v) => Number.isFinite(v) && v > 0), [data])
+  const ref = reference && reference > 0 ? reference : points[0] || 0
+
+  const { min, max, pathD, areaD, coordinates, refY } = useMemo(() => {
+    if (points.length < 2) return { min: ref, max: ref, pathD: "", areaD: "", coordinates: [], refY: height / 2 }
+    const minVal = Math.min(...points, ref > 0 ? ref * 0.995 : Number.POSITIVE_INFINITY)
+    const maxVal = Math.max(...points, ref > 0 ? ref * 1.005 : Number.NEGATIVE_INFINITY)
+    const range = maxVal - minVal || 1
+    const padding = 10
+    const usableHeight = height - padding * 2
+    const width = 640
+
+    const coords = points.map((val, idx) => {
+      const x = (idx / (points.length - 1)) * width
+      const y = height - padding - ((val - minVal) / range) * usableHeight
+      return { x, y, val }
+    })
+
+    const d = coords.reduce((acc, pt, idx) => (idx === 0 ? `M ${pt.x},${pt.y}` : `${acc} L ${pt.x},${pt.y}`), "")
+    const area = coords.length ? `${d} L ${coords.at(-1)?.x},${height} L ${coords[0].x},${height} Z` : ""
+    const refYPos = ref > 0 ? height - padding - ((ref - minVal) / range) * usableHeight : height / 2
+
+    return { min: minVal, max: maxVal, pathD: d, areaD: area, coordinates: coords, refY: refYPos }
+  }, [points, ref, height])
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!containerRef.current || coordinates.length < 2) return
+    const rect = containerRef.current.getBoundingClientRect()
+    const xPct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    const index = Math.round(xPct * (coordinates.length - 1))
+    setHoverIndex(index)
+  }
+
+  const handlePointerLeave = () => setHoverIndex(null)
+
+  const hovered = hoverIndex !== null && coordinates[hoverIndex] ? coordinates[hoverIndex] : null
+  const hoveredPct = hovered && ref > 0 ? ((hovered.val - ref) / ref) * 100 : null
+
+  if (points.length < 2) {
+    return (
+      <div className="flex h-[96px] w-full items-center justify-center rounded-lg border border-border bg-panel-2/30 text-xs text-muted-2">
+        Đang tải biểu đồ nến trong phiên...
+      </div>
+    )
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
+      className="group relative h-[96px] w-full cursor-crosshair select-none overflow-hidden rounded-lg border border-border/80 bg-[#121313] p-1.5"
+    >
+      <svg viewBox="0 0 640 96" preserveAspectRatio="none" className="h-full w-full overflow-visible">
+        <defs>
+          <linearGradient id={`gradient-${toneColor}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={toneColor} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={toneColor} stopOpacity="0.0" />
+          </linearGradient>
+        </defs>
+
+        {/* Reference horizontal guideline */}
+        {ref > 0 && <line x1="0" y1={refY} x2="640" y2={refY} stroke="var(--color-ref)" strokeDasharray="3 3" strokeOpacity="0.4" strokeWidth="1" />}
+
+        {/* Area fill */}
+        <path d={areaD} fill={`url(#gradient-${toneColor})`} />
+
+        {/* Line stroke */}
+        <path d={pathD} fill="none" stroke={toneColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+
+        {/* Current / Hover point */}
+        {hovered ? (
+          <>
+            <line x1={hovered.x} y1="0" x2={hovered.x} y2="96" stroke="#ffffff" strokeOpacity="0.3" strokeDasharray="2 2" strokeWidth="1" />
+            <circle cx={hovered.x} cy={hovered.y} r="4" fill={toneColor} stroke="#ffffff" strokeWidth="1.5" />
+          </>
+        ) : (
+          coordinates.at(-1) && <circle cx={coordinates.at(-1)?.x} cy={coordinates.at(-1)?.y} r="3.5" fill={toneColor} />
+        )}
+      </svg>
+
+      {/* Floating Info Overlay */}
+      <div className="pointer-events-none absolute left-3 top-2 flex items-center gap-2 font-mono text-[11px]">
+        {hovered ? (
+          <div className="flex items-center gap-2 rounded bg-black/80 px-2 py-0.5 backdrop-blur-sm border border-border/60">
+            <span className="text-foreground font-bold">{formatPrice(hovered.val)}</span>
+            {hoveredPct !== null && (
+              <span className={hoveredPct > 0 ? "text-up font-semibold" : hoveredPct < 0 ? "text-down font-semibold" : "text-ref"}>
+                {hoveredPct > 0 ? "+" : ""}
+                {hoveredPct.toFixed(2)}%
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="text-[10px] text-muted-2">
+            Đầu phiên <span className="text-foreground font-medium">{formatPrice(points[0])}</span> · Hiện tại{" "}
+            <span className="text-foreground font-bold">{formatPrice(points.at(-1))}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Min / Max bounds */}
+      <div className="pointer-events-none absolute bottom-1 right-2 flex items-center gap-2 font-mono text-[9px] text-muted-2">
+        <span>Thấp: {formatPrice(min)}</span>
+        <span>·</span>
+        <span>Cao: {formatPrice(max)}</span>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Main LiveOrderBookPanel Component
+ */
+export function LiveOrderBookPanel({
+  stockKey,
+  symbol,
+  initialMeta,
+  index,
+  z,
+  onClose,
+  onFocus,
+}: {
+  stockKey: string
+  symbol: string
+  initialMeta?: StockInitialMeta
+  index: number
+  z: number
+  onClose: () => void
+  onFocus: () => void
+}) {
   const [minimized, setMinimized] = useState(false)
+  const [isMaximized, setIsMaximized] = useState(false)
   const [activityTab, setActivityTab] = useState<ActivityTab>("trades")
-  const [largeOnly, setLargeOnly] = useState(false)
+  const [tradeFilter, setTradeFilter] = useState<"all" | "large" | "whale">("all")
   const [reconnectKey, setReconnectKey] = useState(0)
-  const [pos, setPos] = useState(() => ({ x: 28 + (index % 4) * 48, y: 78 + (index % 5) * 38 }))
+
+  // Window sizing & positioning
+  const [size, setSize] = useState<{ width: number; height: number }>({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
+  const [pos, setPos] = useState(() => ({
+    x: Math.max(16, 32 + (index % 4) * 44),
+    y: Math.max(50, 72 + (index % 5) * 36),
+  }))
+
   const drag = useRef<{ dx: number; dy: number } | null>(null)
+  const resizeRef = useRef<{ startX: number; startY: number; startW: number; startH: number; handle: "se" | "e" | "s" } | null>(null)
   const closeRequested = useRef(false)
-  const stream = useDnseOrderBookStream(symbol, reconnectKey)
+
+  const stream = useDnseOrderBookStream(symbol, reconnectKey, initialMeta)
   const quote = stream.quote
 
-  const onHeaderPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    const target = event.target instanceof HTMLElement ? event.target : null
-    if (target?.closest("button, a, [data-orderbook-action], [data-no-drag]")) return
-    onFocus()
-    drag.current = { dx: event.clientX - pos.x, dy: event.clientY - pos.y }
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }, [onFocus, pos.x, pos.y])
-
-  const onPanelPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    const target = event.target instanceof HTMLElement ? event.target : null
-    if (target?.closest("[data-orderbook-action]")) return
-    onFocus()
-  }, [onFocus])
-
-  const closeOnPointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    if (closeRequested.current) return
-    closeRequested.current = true
-    drag.current = null
-    onClose()
-  }, [onClose])
-
-  const closeOnClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    if (closeRequested.current) return
-    closeRequested.current = true
-    drag.current = null
-    onClose()
-  }, [onClose])
+  // Window dragging
+  const onHeaderPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (target?.closest("button, a, [data-orderbook-action], [data-no-drag]")) return
+      if (isMaximized) return
+      onFocus()
+      drag.current = { dx: event.clientX - pos.x, dy: event.clientY - pos.y }
+      event.currentTarget.setPointerCapture(event.pointerId)
+    },
+    [onFocus, pos.x, pos.y, isMaximized],
+  )
 
   const onPointerMove = useCallback((event: React.PointerEvent) => {
-    if (!drag.current) return
-    setPos({
-      x: Math.max(0, Math.min(Math.max(0, window.innerWidth - Math.min(WIDTH, window.innerWidth)), event.clientX - drag.current.dx)),
-      y: Math.max(0, Math.min(Math.max(0, window.innerHeight - 60), event.clientY - drag.current.dy)),
-    })
+    if (drag.current) {
+      setPos({
+        x: Math.max(0, Math.min(Math.max(0, window.innerWidth - 320), event.clientX - drag.current.dx)),
+        y: Math.max(0, Math.min(Math.max(0, window.innerHeight - 60), event.clientY - drag.current.dy)),
+      })
+    } else if (resizeRef.current) {
+      const { startX, startY, startW, startH, handle } = resizeRef.current
+      const deltaX = event.clientX - startX
+      const deltaY = event.clientY - startY
+      setSize((prev) => ({
+        width: handle === "s" ? prev.width : Math.max(MIN_WIDTH, Math.min(window.innerWidth - 32, startW + deltaX)),
+        height: handle === "e" ? prev.height : Math.max(MIN_HEIGHT, Math.min(window.innerHeight - 64, startH + deltaY)),
+      }))
+    }
   }, [])
 
-  const onPointerUp = useCallback(() => { drag.current = null }, [])
+  const onPointerUp = useCallback(() => {
+    drag.current = null
+    resizeRef.current = null
+  }, [])
+
+  // Resize handle triggers
+  const startResize = useCallback(
+    (e: React.PointerEvent, handle: "se" | "e" | "s") => {
+      e.preventDefault()
+      e.stopPropagation()
+      onFocus()
+      resizeRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        startW: size.width,
+        startH: size.height,
+        handle,
+      }
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    },
+    [onFocus, size.width, size.height],
+  )
+
+  const onPanelPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (target?.closest("[data-orderbook-action]")) return
+      onFocus()
+    },
+    [onFocus],
+  )
+
+  const closeOnPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (closeRequested.current) return
+      closeRequested.current = true
+      drag.current = null
+      onClose()
+    },
+    [onClose],
+  )
+
+  const closeOnClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (closeRequested.current) return
+      closeRequested.current = true
+      drag.current = null
+      onClose()
+    },
+    [onClose],
+  )
+
+  // Top 3 orderbook ladder rows
   const topBids = stream.bids.slice(0, 3)
   const topAsks = stream.asks.slice(0, 3)
   const bidTotal = stream.bids.reduce((sum, row) => sum + row.volume, 0)
@@ -554,79 +962,696 @@ export function LiveOrderBookPanel({ stockKey, symbol, index, z, onClose, onFocu
   const depthTotal = bidTotal + askTotal
   const buyPct = depthTotal > 0 ? (bidTotal / depthTotal) * 100 : 50
   const sellPct = 100 - buyPct
-  const rows = useMemo(() => Array.from({ length: 3 }, (_, i) => ({ bid: topBids[i], ask: topAsks[i] })), [topBids, topAsks])
-  const visibleTrades = useMemo(() => largeOnly ? stream.trades.filter((trade) => trade.volume >= LARGE_TRADE_MIN_VOLUME) : stream.trades, [largeOnly, stream.trades])
-  const largeTradeCount = useMemo(() => stream.trades.filter((trade) => trade.volume >= LARGE_TRADE_MIN_VOLUME).length, [stream.trades])
-  const tone = marketToneFromPrice({ price: quote?.price, reference: quote?.reference, ceiling: quote?.ceiling, floor: quote?.floor })
+  const maxDepthVolume = Math.max(1, ...topBids.map((b) => b.volume), ...topAsks.map((a) => a.volume))
+
+  const rows = useMemo(
+    () => Array.from({ length: 3 }, (_, i) => ({ bid: stream.bids[i], ask: stream.asks[i] })),
+    [stream.bids, stream.asks],
+  )
+
+  // Tape filtering
+  const visibleTrades = useMemo(() => {
+    if (tradeFilter === "large") return stream.trades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME)
+    if (tradeFilter === "whale") return stream.trades.filter((t) => t.volume >= WHALE_TRADE_MIN_VOLUME)
+    return stream.trades
+  }, [tradeFilter, stream.trades])
+
+  const largeTradeCount = useMemo(() => stream.trades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME).length, [stream.trades])
+  const whaleTradeCount = useMemo(() => stream.trades.filter((t) => t.volume >= WHALE_TRADE_MIN_VOLUME).length, [stream.trades])
+
+  // Active Buy vs Sell volume breakdown from trades
+  const tradeStats = useMemo(() => {
+    let buyVol = 0
+    let sellVol = 0
+    let unkVol = 0
+    for (const t of stream.trades) {
+      if (t.side === "BUY") buyVol += t.volume
+      else if (t.side === "SELL") sellVol += t.volume
+      else unkVol += t.volume
+    }
+    const totalTraded = buyVol + sellVol + unkVol
+    const buyTradedPct = totalTraded > 0 ? (buyVol / totalTraded) * 100 : 50
+    const sellTradedPct = totalTraded > 0 ? (sellVol / totalTraded) * 100 : 50
+    return { buyVol, sellVol, unkVol, totalTraded, buyTradedPct, sellTradedPct }
+  }, [stream.trades])
+
+  // Volume Profile (Volume distribution by price level)
+  const volumeProfile = useMemo(() => {
+    const profileMap = new Map<number, { price: number; buyVol: number; sellVol: number; totalVol: number }>()
+    for (const t of stream.trades) {
+      const cur = profileMap.get(t.price) || { price: t.price, buyVol: 0, sellVol: 0, totalVol: 0 }
+      if (t.side === "BUY") cur.buyVol += t.volume
+      else if (t.side === "SELL") cur.sellVol += t.volume
+      cur.totalVol += t.volume
+      profileMap.set(t.price, cur)
+    }
+    const rows = [...profileMap.values()].sort((a, b) => b.price - a.price)
+    const maxVol = Math.max(1, ...rows.map((r) => r.totalVol))
+    return { rows, maxVol }
+  }, [stream.trades])
+
+  const tone = marketToneFromPrice({
+    price: quote?.price,
+    reference: quote?.reference,
+    ceiling: quote?.ceiling,
+    floor: quote?.floor,
+  })
   const color = quote ? marketToneText(tone) : "text-muted-2"
   const chartColor = marketToneHex(tone)
+
   const chartData = useMemo(() => {
     const values = stream.priceHistory.filter((value) => Number.isFinite(value) && value > 0)
     if (!quote?.price || values.at(-1) === quote.price) return values
     return [...values, quote.price]
-  }, [quote?.price, stream.priceHistory])
+  }, [quote, stream.priceHistory])
+
+  // Foreign statistics calculations
   const foreignNetVolume = stream.foreign ? stream.foreign.totalBuyVolume - stream.foreign.totalSellVolume : null
-  const foreignNetValue = stream.foreign ? stream.foreign.totalBuyValue - stream.foreign.totalSellValue : null
+  const foreignNetValue =
+    stream.foreign?.totalBuyValue || stream.foreign?.totalSellValue
+      ? stream.foreign.totalBuyValue - stream.foreign.totalSellValue
+      : foreignNetVolume && quote?.price
+        ? foreignNetVolume * quote.price
+        : null
 
-  return <section className="pointer-events-auto absolute flex max-h-[calc(100vh-24px)] w-[min(720px,calc(100vw-16px))] flex-col overflow-hidden rounded-xl border border-border-strong bg-[#171918] shadow-2xl shadow-black/70" style={{ left: pos.x, top: pos.y, zIndex: z }} onPointerDown={onPanelPointerDown} data-orderbook={stockKey}>
-    <header className="flex cursor-grab select-none items-center gap-2 border-b border-border bg-[#1d1f1e] px-3 py-2 active:cursor-grabbing" onPointerDown={onHeaderPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
-      <GripVertical className="h-4 w-4 text-muted" /><span className="text-[11px] text-muted-2">Sổ lệnh</span><span className="ml-2 text-base font-bold text-foreground">{symbol}</span>
-      <span className={`ml-auto font-mono text-base font-bold ${color}`}>{formatPrice(quote?.price)}</span>
-      {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact /> : null}
-      <button data-orderbook-action type="button" aria-label="Kết nối lại sổ lệnh" title="Kết nối lại" onClick={(event) => { event.stopPropagation(); setReconnectKey((key) => key + 1) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><RefreshCw className={`h-4 w-4 ${stream.state === "CONNECTING" ? "animate-spin" : ""}`} /></button>
-      <a data-orderbook-action href={`/research/${symbol.toLowerCase()}`} aria-label={`Mở phân tích ${symbol}`} title="Mở phân tích" onClick={(event) => event.stopPropagation()} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><ExternalLink className="h-4 w-4" /></a>
-      <button data-orderbook-action type="button" aria-label={minimized ? "Mở rộng sổ lệnh" : "Thu gọn sổ lệnh"} title={minimized ? "Mở rộng" : "Thu gọn"} onClick={(event) => { event.stopPropagation(); setMinimized((value) => !value) }} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground"><Minus className="h-4 w-4" /></button>
-      <button data-orderbook-action type="button" aria-label="Đóng sổ lệnh" title="Đóng" onPointerDown={closeOnPointerDown} onClick={closeOnClick} className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-down"><X className="h-4 w-4" /></button>
-    </header>
+  const foreignRoom = stream.foreign?.availableRoom
+  const listedShare = stream.foreign?.listedShare
+  const roomPercentage = foreignRoom && listedShare && listedShare > 0 ? (foreignRoom / listedShare) * 100 : null
 
-    {!minimized ? <div className="min-h-0 flex-1 overflow-auto">
-      <div className="border-b border-border px-4 py-3">
-        <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-2"><span className={`h-2 w-2 rounded-full ${stream.state === "LIVE" ? "bg-up" : stream.state === "CONNECTING" ? "bg-ref" : "bg-down"}`} /><span>DNSE WebSocket · {stream.state === "LIVE" ? "Live · keep-alive" : stream.state === "CONNECTING" ? "Đang kết nối" : "Đang tự khôi phục"}</span>{stream.updatedAt ? <span className="ml-auto">{timeLabel(stream.updatedAt)}</span> : null}</div>
-        <div className="grid grid-cols-[1fr_120px_120px_1fr] gap-x-4 text-xs text-muted-2"><span>KL mua</span><span className="text-right">Giá mua</span><span>Giá bán</span><span className="text-right">KL bán</span></div>
-        <div className="mt-2 space-y-1.5 font-mono text-sm">{rows.map(({ bid, ask }, rowIndex) => <div key={rowIndex} className="grid grid-cols-[1fr_120px_120px_1fr] gap-x-4"><span className="text-foreground">{formatVolume(bid?.volume)}</span><span className="text-right text-up">{formatPrice(bid?.price)}</span><span className="text-down">{formatPrice(ask?.price)}</span><span className="text-right text-foreground">{formatVolume(ask?.volume)}</span></div>)}</div>
-        <div className="mt-4 flex items-center justify-between text-sm font-semibold"><span className="text-up">{depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "—"}</span><span className="text-down">{depthTotal > 0 ? `${sellPct.toFixed(0)}%` : "—"}</span></div>
-        <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-panel-2"><div className="bg-up" style={{ width: `${depthTotal > 0 ? buyPct : 0}%` }} /><div className="bg-down" style={{ width: `${depthTotal > 0 ? sellPct : 0}%` }} /></div>
-        <div className="mt-1 flex justify-between text-xs text-muted-2"><span>Mua</span><span>Bán</span></div>
-        <div className="mt-2 text-[10px] text-muted">Snapshot orderbook được hydrate từ DNSE REST khi mở popup, sau đó top_price.G1 tiếp tục cập nhật realtime. Khối lượng qtty dùng hệ số ×10.</div>
-      </div>
+  // Spread calculation
+  const bestBidPrice = topBids[0]?.price
+  const bestAskPrice = topAsks[0]?.price
+  const spread = bestBidPrice && bestAskPrice ? bestAskPrice - bestBidPrice : null
 
-      <div className="border-b border-border px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div><div className="text-xs font-semibold text-foreground">Giá từ đầu phiên</div><div className="mt-0.5 text-[10px] text-muted-2">DNSE OHLC 1 phút · 09:00 → live</div></div>
-          <div className={`text-right text-[10px] ${stream.historyState === "ERROR" ? "text-down" : stream.historyState === "PARTIAL" ? "text-ref" : "text-muted-2"}`}>{stream.historyState === "LOADING" ? "Đang backfill..." : stream.historyMessage}</div>
+  // Style positioning
+  const panelStyle = isMaximized
+    ? { top: "12px", left: "12px", right: "12px", bottom: "12px", width: "calc(100vw - 24px)", height: "calc(100vh - 24px)", zIndex: z + 10 }
+    : { left: pos.x, top: pos.y, width: Math.min(size.width, window.innerWidth - 16), height: minimized ? "auto" : Math.min(size.height, window.innerHeight - 32), zIndex: z }
+
+  return (
+    <section
+      className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-xl border border-border-strong bg-[#141515] shadow-2xl shadow-black/80 transition-[width,height] duration-75 ${
+        isMaximized ? "fixed" : ""
+      }`}
+      style={panelStyle}
+      onPointerDown={onPanelPointerDown}
+      data-orderbook={stockKey}
+    >
+      {/* HEADER / DRAG HANDLE */}
+      <header
+        className="flex cursor-grab select-none items-center gap-2 border-b border-border bg-[#1b1d1c] px-3.5 py-2.5 active:cursor-grabbing"
+        onPointerDown={onHeaderPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+      >
+        <GripVertical className="h-4 w-4 text-muted shrink-0" />
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-mono text-lg font-black tracking-tight text-foreground">{symbol}</span>
+          {stream.company?.exchange ? (
+            <span className="rounded bg-panel-2 px-1.5 py-0.5 text-[10px] font-semibold text-muted-2 uppercase tracking-wide">
+              {stream.company.exchange}
+            </span>
+          ) : null}
+          {stream.company?.nameVi ? (
+            <span className="hidden sm:inline truncate text-xs text-muted max-w-[200px]" title={stream.company.nameVi}>
+              {stream.company.nameVi}
+            </span>
+          ) : null}
         </div>
-        <div className="mt-2 h-[76px] w-full overflow-hidden rounded-lg border border-border bg-panel-2/35 px-2 py-1">
-          <Sparkline data={chartData} refValue={quote?.reference} color={chartColor} width={640} height={66} strokeWidth={2} showDot fill className="h-[66px] w-full" />
-        </div>
-      </div>
 
-      <div className="px-4 py-3">
-        <div className="mb-3 flex items-center gap-2">
-          <button type="button" onClick={() => setActivityTab("trades")} className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${activityTab === "trades" ? "bg-blue-500/15 text-blue-400" : "text-muted-2 hover:bg-panel-2"}`}>Khớp lệnh</button>
-          <button type="button" onClick={() => setActivityTab("foreign")} className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${activityTab === "foreign" ? "bg-blue-500/15 text-blue-400" : "text-muted-2 hover:bg-panel-2"}`}>Nước ngoài</button>
-          {activityTab === "trades" ? <button type="button" aria-pressed={largeOnly} aria-label="Chỉ xem giao dịch từ 10 nghìn cổ phiếu" title="Lọc giao dịch ≥10k" onClick={() => setLargeOnly((value) => !value)} className={`ml-1 inline-flex h-7 items-center gap-1 rounded-md border px-2 transition-colors ${largeOnly ? "border-ref/50 bg-ref/12 text-ref" : "border-border text-muted-2 hover:border-border-strong hover:text-foreground"}`}><ListFilter className="h-3.5 w-3.5" /><span className="text-[10px] font-bold">10K+</span>{largeTradeCount > 0 ? <span className="font-mono text-[9px] opacity-80">{largeTradeCount}</span> : null}</button> : null}
-          <span className="ml-auto text-[11px] text-muted-2">{activityTab === "trades" ? "REST 09:00 + tick_extra.G1 · WS" : "foreign.G1 · WS"}</span>
+        {/* Live Price & Change Pill */}
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          <span className={`font-mono text-base font-bold sm:text-lg ${color}`}>{formatPrice(quote?.price)}</span>
+          {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact /> : null}
         </div>
 
-        {activityTab === "trades" ? <>
-          {stream.error && stream.state !== "LIVE" ? <div className="mb-3 rounded-lg border border-ref/30 bg-ref/5 px-3 py-2 text-xs text-ref">{stream.error}</div> : null}
-          {stream.historyState === "PARTIAL" ? <div className="mb-3 rounded-lg border border-ref/30 bg-ref/5 px-3 py-2 text-[10px] text-ref">{stream.historyMessage}</div> : null}
-          {visibleTrades.length ? <div><div className="grid grid-cols-[120px_1fr_150px_80px] border-b border-border pb-2 text-xs text-muted-2"><span>Thời gian</span><span className="text-right">Khối lượng</span><span className="text-right">Giá</span><span className="text-right">M/B</span></div><div className="max-h-[300px] overflow-y-auto">{visibleTrades.map((trade) => { const meta = sideMeta(trade.side); const large = trade.volume >= LARGE_TRADE_MIN_VOLUME; return <div key={trade.id} className={`grid grid-cols-[120px_1fr_150px_80px] border-b py-1.5 font-mono text-sm last:border-0 ${large ? "border-ref/20 border-l-2 border-l-ref/80 bg-ref/10 pl-2" : "border-border/40"}`}><span className="text-muted-2">{timeLabel(trade.time)}</span><span className={`text-right font-bold ${large ? "text-ref" : "text-foreground"}`}>{formatVolume(trade.volume)}{large ? <span className="ml-1 rounded bg-ref/15 px-1 py-0.5 text-[9px] text-ref">10K+</span> : null}</span><span className={`text-right font-semibold ${trade.side === "BUY" ? "text-up" : trade.side === "SELL" ? "text-down" : "text-foreground"}`}>{formatPrice(trade.price)}</span><span className={`text-right font-semibold ${meta.className}`} title="Mua/Bán có dấu * khi suy ra từ vị trí giá so với best bid/ask.">{meta.label}</span></div> })}</div></div> : <div className="rounded-lg border border-border bg-panel-2/40 px-3 py-6 text-center text-xs text-muted-2">{stream.historyState === "LOADING" ? "Đang tải giao dịch từ đầu phiên..." : stream.state === "CONNECTING" ? "Đang kết nối luồng khớp lệnh..." : largeOnly ? "Chưa có giao dịch ≥10k trong phiên." : "Chờ giao dịch mới từ DNSE stream."}</div>}
-          <p className="mt-3 text-[10px] leading-4 text-muted">Tape khớp lệnh được backfill bằng DNSE REST từ 09:00 rồi nối tiếp bằng WebSocket. Giao dịch ≥10k được highlight vàng. * Nếu provider không có aggressor side, Mua/Bán realtime mới được suy ra từ best bid/ask; lịch sử REST không bị suy diễn bằng orderbook hiện tại.</p>
-        </> : <>
-          {stream.error && stream.state !== "LIVE" ? <div className="mb-3 rounded-lg border border-ref/30 bg-ref/5 px-3 py-2 text-xs text-ref">NĐTNN: {stream.error}</div> : null}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-lg border border-border bg-panel-2/35 px-3 py-2"><div className="text-[10px] text-muted-2">NN mua lũy kế</div><div className="mt-1 font-mono text-sm font-bold text-up">{formatVolume(stream.foreign?.totalBuyVolume)}</div>{stream.foreign ? <div className="mt-0.5 text-[10px] text-muted-2">{formatMarketValue(stream.foreign.totalBuyValue)}</div> : null}</div>
-            <div className="rounded-lg border border-border bg-panel-2/35 px-3 py-2"><div className="text-[10px] text-muted-2">NN bán lũy kế</div><div className="mt-1 font-mono text-sm font-bold text-down">{formatVolume(stream.foreign?.totalSellVolume)}</div>{stream.foreign ? <div className="mt-0.5 text-[10px] text-muted-2">{formatMarketValue(stream.foreign.totalSellValue)}</div> : null}</div>
-            <div className="rounded-lg border border-border bg-panel-2/35 px-3 py-2"><div className="text-[10px] text-muted-2">Ròng</div><div className={`mt-1 font-mono text-sm font-bold ${foreignNetVolume === null ? "text-muted-2" : foreignNetVolume > 0 ? "text-up" : foreignNetVolume < 0 ? "text-down" : "text-ref"}`}>{foreignNetVolume === null ? "—" : `${foreignNetVolume > 0 ? "+" : ""}${formatVolume(foreignNetVolume)}`}</div>{foreignNetValue !== null ? <div className="mt-0.5 text-[10px] text-muted-2">{foreignNetValue > 0 ? "+" : ""}{formatMarketValue(foreignNetValue)}</div> : null}</div>
-            <div className="rounded-lg border border-border bg-panel-2/35 px-3 py-2"><div className="text-[10px] text-muted-2">Room mua còn</div><div className="mt-1 font-mono text-sm font-bold text-foreground">{formatVolume(stream.foreign?.availableRoom)}</div>{stream.foreign?.orderLimitQuantity !== null && stream.foreign?.orderLimitQuantity !== undefined ? <div className="mt-0.5 text-[10px] text-muted-2">Giới hạn {formatVolume(stream.foreign.orderLimitQuantity)}</div> : null}</div>
+        {/* Action Controls */}
+        <div className="flex items-center gap-1 shrink-0 ml-1">
+          <button
+            data-orderbook-action
+            type="button"
+            aria-label="Kết nối lại sổ lệnh"
+            title="Kết nối lại DNSE Stream"
+            onClick={(event) => {
+              event.stopPropagation()
+              setReconnectKey((key) => key + 1)
+            }}
+            className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
+          >
+            <RefreshCw className={`h-4 w-4 ${stream.state === "CONNECTING" ? "animate-spin text-ref" : ""}`} />
+          </button>
+
+          <a
+            data-orderbook-action
+            href={`/research/${symbol.toLowerCase()}`}
+            aria-label={`Mở phân tích chuyên sâu ${symbol}`}
+            title="Mở phân tích chuyên sâu"
+            onClick={(event) => event.stopPropagation()}
+            className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </a>
+
+          <button
+            data-orderbook-action
+            type="button"
+            aria-label={isMaximized ? "Khôi phục cửa sổ" : "Phóng to toàn màn hình"}
+            title={isMaximized ? "Khôi phục kích thước" : "Phóng to"}
+            onClick={(event) => {
+              event.stopPropagation()
+              setIsMaximized((v) => !v)
+            }}
+            className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
+          >
+            {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </button>
+
+          <button
+            data-orderbook-action
+            type="button"
+            aria-label={minimized ? "Mở rộng sổ lệnh" : "Thu gọn sổ lệnh"}
+            title={minimized ? "Mở rộng" : "Thu gọn"}
+            onClick={(event) => {
+              event.stopPropagation()
+              setMinimized((value) => !value)
+            }}
+            className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
+          >
+            <Minus className="h-4 w-4" />
+          </button>
+
+          <button
+            data-orderbook-action
+            type="button"
+            aria-label="Đóng sổ lệnh"
+            title="Đóng"
+            onPointerDown={closeOnPointerDown}
+            onClick={closeOnClick}
+            className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-down transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </header>
+
+      {!minimized ? (
+        <div className="min-h-0 flex-1 overflow-y-auto flex flex-col">
+          {/* TOP PRICE METRICS STRIP */}
+          <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 border-b border-border bg-[#181919] px-3.5 py-2 font-mono text-[11px]">
+            <div>
+              <div className="text-[10px] text-muted-2">Sàn</div>
+              <div className="text-[#22b8cf] font-bold">{formatPrice(quote?.floor)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-muted-2">TC</div>
+              <div className="text-ref font-bold">{formatPrice(quote?.reference)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-muted-2">Trần</div>
+              <div className="text-ceiling font-bold">{formatPrice(quote?.ceiling)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-muted-2">Thấp</div>
+              <div className="text-foreground">{formatPrice(quote?.low)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-muted-2">Cao</div>
+              <div className="text-foreground">{formatPrice(quote?.high)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-muted-2">TB</div>
+              <div className="text-foreground">{formatPrice(quote?.avgPrice)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-muted-2">Tổng KL</div>
+              <div className="text-foreground font-semibold">{formatCompactVolume(quote?.totalVolume)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-muted-2">Tổng GT</div>
+              <div className="text-foreground font-semibold">
+                {quote?.totalValue ? formatMarketValue(quote.totalValue) : quote?.totalVolume && quote?.price ? formatMarketValue(quote.totalVolume * quote.price) : "—"}
+              </div>
+            </div>
           </div>
 
-          <div className="mt-3 flex items-center justify-between text-[10px] text-muted-2"><span>Dữ liệu NĐTNN xác nhận trực tiếp từ DNSE WebSocket T=f.</span>{stream.foreign?.updatedAt ? <span>{timeLabel(stream.foreign.updatedAt)}{stream.foreign.investorTypeCode ? ` · ${stream.foreign.investorTypeCode}` : ""}</span> : null}</div>
-          {stream.foreignEvents.length ? <div className="mt-2"><div className="grid grid-cols-[120px_80px_1fr_130px] border-b border-border pb-2 text-xs text-muted-2"><span>Thời gian</span><span>M/B</span><span className="text-right">Khối lượng</span><span className="text-right">Giá trị</span></div><div className="max-h-[260px] overflow-y-auto">{stream.foreignEvents.map((event) => <div key={event.id} className="grid grid-cols-[120px_80px_1fr_130px] border-b border-border/40 py-1.5 font-mono text-sm last:border-0"><span className="text-muted-2">{timeLabel(event.time)}</span><span className={event.side === "BUY" ? "font-semibold text-up" : "font-semibold text-down"}>{event.side === "BUY" ? "Mua" : "Bán"}</span><span className="text-right font-semibold text-foreground">{formatVolume(event.volume)}</span><span className="text-right text-muted-2">{formatMarketValue(event.value)}</span></div>)}</div></div> : <div className="mt-2 rounded-lg border border-border bg-panel-2/40 px-3 py-5 text-center text-xs text-muted-2">{stream.state === "CONNECTING" ? "Đang kết nối luồng NĐT nước ngoài..." : stream.foreign ? "Đã có số lũy kế. Chờ giao dịch NĐTNN mới từ DNSE." : "Chờ dữ liệu NĐT nước ngoài từ foreign.G1."}</div>}
-          <p className="mt-3 text-[10px] leading-4 text-muted">Khối lượng và giá trị NĐTNN dùng trực tiếp các trường buy/sell và totalBuy/totalSell của DNSE; không suy diễn NĐTNN từ tape khớp lệnh thông thường.</p>
-        </>}
-      </div>
-    </div> : null}
-  </section>
+          {/* SECTION 1: ORDERBOOK DEPTH LADDER (3 Levels) */}
+          <div className="border-b border-border px-4 py-3 bg-panel/30">
+            <div className="mb-2 flex items-center justify-between text-[11px]">
+              <div className="flex items-center gap-1.5 text-muted-2">
+                <span className={`h-2 w-2 rounded-full ${stream.state === "LIVE" ? "bg-up animate-pulse" : stream.state === "CONNECTING" ? "bg-ref" : "bg-down"}`} />
+                <span className="font-medium text-foreground">Sổ lệnh 3 cấp độ</span>
+                <span className="text-[10px] text-muted">· {stream.state === "LIVE" ? "Realtime WS" : "Đang đồng bộ"}</span>
+              </div>
+              {spread !== null && spread > 0 ? (
+                <div className="text-[10px] text-muted-2 font-mono">
+                  Spread: <span className="text-foreground font-medium">{formatPrice(spread)}</span>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Depth Ladder Table */}
+            <div className="rounded-lg border border-border/80 bg-[#121313] p-2">
+              <div className="grid grid-cols-[1fr_80px_80px_1fr] gap-x-3 text-[11px] font-semibold text-muted-2 border-b border-border/50 pb-1.5">
+                <span>KL Mua</span>
+                <span className="text-right">Giá Mua</span>
+                <span>Giá Bán</span>
+                <span className="text-right">KL Bán</span>
+              </div>
+
+              <div className="mt-1.5 space-y-1 font-mono text-xs">
+                {rows.map(({ bid, ask }, rowIndex) => {
+                  const bidWidthPct = bid?.volume ? (bid.volume / maxDepthVolume) * 100 : 0
+                  const askWidthPct = ask?.volume ? (ask.volume / maxDepthVolume) * 100 : 0
+
+                  return (
+                    <div key={rowIndex} className="relative grid grid-cols-[1fr_80px_80px_1fr] gap-x-3 items-center py-1 rounded">
+                      {/* Left Bid Volume bar */}
+                      {bid?.volume ? (
+                        <div
+                          className="absolute inset-y-0 left-0 bg-up/12 rounded-l"
+                          style={{ width: `${(bidWidthPct / 2).toFixed(1)}%` }}
+                          aria-hidden="true"
+                        />
+                      ) : null}
+
+                      {/* Right Ask Volume bar */}
+                      {ask?.volume ? (
+                        <div
+                          className="absolute inset-y-0 right-0 bg-down/12 rounded-r"
+                          style={{ width: `${(askWidthPct / 2).toFixed(1)}%` }}
+                          aria-hidden="true"
+                        />
+                      ) : null}
+
+                      <span className="relative font-bold text-foreground pl-1">{formatVolume(bid?.volume)}</span>
+                      <span className="relative text-right font-bold text-up">{formatPrice(bid?.price)}</span>
+                      <span className="relative font-bold text-down">{formatPrice(ask?.price)}</span>
+                      <span className="relative text-right font-bold text-foreground pr-1">{formatVolume(ask?.volume)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Total Ratio Bar */}
+              <div className="mt-2.5 pt-2 border-t border-border/40">
+                <div className="flex items-center justify-between text-[11px] font-semibold">
+                  <span className="text-up flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3" /> Mua {depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "50%"} ({formatCompactVolume(bidTotal)})
+                  </span>
+                  <span className="text-down flex items-center gap-1">
+                    Bán {depthTotal > 0 ? `${sellPct.toFixed(0)}%` : "50%"} ({formatCompactVolume(askTotal)}) <TrendingDown className="h-3 w-3" />
+                  </span>
+                </div>
+                <div className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-panel-2">
+                  <div className="bg-up transition-all duration-300" style={{ width: `${depthTotal > 0 ? buyPct : 50}%` }} />
+                  <div className="bg-down transition-all duration-300" style={{ width: `${depthTotal > 0 ? sellPct : 50}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 2: INTRADAY AREA CHART */}
+          <div className="border-b border-border px-4 py-3 bg-panel/10">
+            <div className="mb-1.5 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                <Activity className="h-3.5 w-3.5 text-brand" />
+                <span>Biểu đồ giá trong phiên</span>
+              </div>
+              <span className="text-[10px] text-muted-2">{stream.historyMessage || "DNSE 1m · 09:00 → live"}</span>
+            </div>
+            <IntradayAreaChart data={chartData} reference={quote?.reference} toneColor={chartColor} height={96} />
+          </div>
+
+          {/* SECTION 3: TABBED ACTIVITY VIEWS */}
+          <div className="px-4 py-3 flex-1 flex flex-col">
+            {/* Tabs Header */}
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
+              <div className="flex items-center gap-1 bg-[#181919] p-1 rounded-lg border border-border">
+                <button
+                  type="button"
+                  onClick={() => setActivityTab("trades")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
+                    activityTab === "trades" ? "bg-brand/15 text-brand shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
+                  }`}
+                >
+                  <BarChart3 className="h-3.5 w-3.5" />
+                  <span>Khớp lệnh</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActivityTab("foreign")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
+                    activityTab === "foreign" ? "bg-blue-500/15 text-blue-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
+                  }`}
+                >
+                  <PieChart className="h-3.5 w-3.5" />
+                  <span>Khối ngoại</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActivityTab("profile")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
+                    activityTab === "profile" ? "bg-purple-500/15 text-purple-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
+                  }`}
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  <span>Bước giá</span>
+                </button>
+              </div>
+
+              {/* Tape Sub-filters */}
+              {activityTab === "trades" && (
+                <div className="flex items-center gap-1 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setTradeFilter("all")}
+                    className={`rounded px-2 py-1 font-medium transition-colors ${
+                      tradeFilter === "all" ? "bg-panel-2 text-foreground font-bold" : "text-muted hover:text-muted-2"
+                    }`}
+                  >
+                    Tất cả ({stream.trades.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTradeFilter("large")}
+                    className={`flex items-center gap-1 rounded border px-2 py-0.5 font-medium transition-colors ${
+                      tradeFilter === "large" ? "border-ref/50 bg-ref/15 text-ref font-bold" : "border-border text-muted-2 hover:text-foreground"
+                    }`}
+                  >
+                    <ListFilter className="h-3 w-3" />
+                    <span>≥10K</span>
+                    {largeTradeCount > 0 && <span className="rounded bg-ref/20 px-1 text-[9px]">{largeTradeCount}</span>}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTradeFilter("whale")}
+                    className={`flex items-center gap-1 rounded border px-2 py-0.5 font-medium transition-colors ${
+                      tradeFilter === "whale" ? "border-up/50 bg-up/15 text-up font-bold" : "border-border text-muted-2 hover:text-foreground"
+                    }`}
+                  >
+                    <span>Cá mập ≥50K</span>
+                    {whaleTradeCount > 0 && <span className="rounded bg-up/20 px-1 text-[9px]">{whaleTradeCount}</span>}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* TAB CONTENT: KHỚP LỆNH (TAPE) */}
+            {activityTab === "trades" && (
+              <div className="flex flex-col flex-1">
+                {/* Trade Initiative Bar */}
+                <div className="mb-2.5 rounded-lg border border-border/80 bg-[#121313] p-2 font-mono text-[11px]">
+                  <div className="flex items-center justify-between text-[10px] text-muted-2 mb-1">
+                    <span>
+                      Chủ động Mua: <b className="text-up">{formatCompactVolume(tradeStats.buyVol)}</b> (
+                      {tradeStats.buyTradedPct.toFixed(0)}%)
+                    </span>
+                    <span>
+                      Chủ động Bán: <b className="text-down">{formatCompactVolume(tradeStats.sellVol)}</b> (
+                      {tradeStats.sellTradedPct.toFixed(0)}%)
+                    </span>
+                  </div>
+                  <div className="flex h-1.5 overflow-hidden rounded-full bg-panel-2">
+                    <div className="bg-up" style={{ width: `${tradeStats.buyTradedPct}%` }} />
+                    <div className="bg-down" style={{ width: `${tradeStats.sellTradedPct}%` }} />
+                  </div>
+                </div>
+
+                {visibleTrades.length ? (
+                  <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col">
+                    <div className="grid grid-cols-[100px_1fr_120px_80px] border-b border-border/60 bg-[#181919] px-3 py-1.5 text-[11px] font-semibold text-muted-2">
+                      <span>Thời gian</span>
+                      <span className="text-right">Khối lượng</span>
+                      <span className="text-right">Giá</span>
+                      <span className="text-right">Loại</span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto max-h-[340px] px-3">
+                      {visibleTrades.map((trade) => {
+                        const meta = sideMeta(trade.side)
+                        const isLarge = trade.volume >= LARGE_TRADE_MIN_VOLUME
+                        const isWhale = trade.volume >= WHALE_TRADE_MIN_VOLUME
+
+                        return (
+                          <div
+                            key={trade.id}
+                            className={`grid grid-cols-[100px_1fr_120px_80px] items-center border-b py-1.5 font-mono text-xs last:border-0 ${
+                              isWhale
+                                ? "border-up/30 bg-up/10 text-up font-bold -mx-3 px-3"
+                                : isLarge
+                                  ? "border-ref/30 bg-ref/10 text-ref font-bold -mx-3 px-3"
+                                  : "border-border/30 text-foreground"
+                            }`}
+                          >
+                            <span className="text-muted-2">{timeLabel(trade.time)}</span>
+                            <span className="text-right font-bold flex items-center justify-end gap-1.5">
+                              {formatVolume(trade.volume)}
+                              {isWhale ? (
+                                <span className="rounded bg-up/25 px-1 py-0.2 text-[9px] text-up">50K+</span>
+                              ) : isLarge ? (
+                                <span className="rounded bg-ref/25 px-1 py-0.2 text-[9px] text-ref">10K+</span>
+                              ) : null}
+                            </span>
+                            <span
+                              className={`text-right font-bold ${
+                                trade.side === "BUY" ? "text-up" : trade.side === "SELL" ? "text-down" : "text-foreground"
+                              }`}
+                            >
+                              {formatPrice(trade.price)}
+                            </span>
+                            <div className="flex justify-end">
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold border ${meta.className}`}>
+                                {meta.label}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2">
+                    {stream.historyState === "LOADING"
+                      ? "Đang tải dữ liệu khớp lệnh từ đầu phiên..."
+                      : tradeFilter !== "all"
+                        ? "Không có lệnh nào thỏa mãn bộ lọc."
+                        : "Chờ dữ liệu khớp lệnh mới..."}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB CONTENT: NƯỚC NGOÀI (FOREIGN) */}
+            {activityTab === "foreign" && (
+              <div className="flex flex-col flex-1 space-y-3">
+                {/* 4 Summary Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
+                    <div className="text-[10px] text-muted-2 font-medium">NN Mua lũy kế</div>
+                    <div className="mt-1 font-mono text-sm font-bold text-up">
+                      {formatVolume(stream.foreign?.totalBuyVolume)}
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-muted font-mono">
+                      {stream.foreign?.totalBuyValue
+                        ? formatMarketValue(stream.foreign.totalBuyValue)
+                        : stream.foreign?.totalBuyVolume && quote?.price
+                          ? formatMarketValue(stream.foreign.totalBuyVolume * quote.price)
+                          : "—"}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
+                    <div className="text-[10px] text-muted-2 font-medium">NN Bán lũy kế</div>
+                    <div className="mt-1 font-mono text-sm font-bold text-down">
+                      {formatVolume(stream.foreign?.totalSellVolume)}
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-muted font-mono">
+                      {stream.foreign?.totalSellValue
+                        ? formatMarketValue(stream.foreign.totalSellValue)
+                        : stream.foreign?.totalSellVolume && quote?.price
+                          ? formatMarketValue(stream.foreign.totalSellVolume * quote.price)
+                          : "—"}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
+                    <div className="text-[10px] text-muted-2 font-medium">Mua / Bán Ròng</div>
+                    <div
+                      className={`mt-1 font-mono text-sm font-bold ${
+                        foreignNetVolume === null
+                          ? "text-muted-2"
+                          : foreignNetVolume > 0
+                            ? "text-up"
+                            : foreignNetVolume < 0
+                              ? "text-down"
+                              : "text-ref"
+                      }`}
+                    >
+                      {foreignNetVolume === null
+                        ? "—"
+                        : `${foreignNetVolume > 0 ? "+" : ""}${formatVolume(foreignNetVolume)}`}
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-muted font-mono">
+                      {foreignNetValue !== null ? `${foreignNetValue > 0 ? "+" : ""}${formatMarketValue(foreignNetValue)}` : "—"}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
+                    <div className="text-[10px] text-muted-2 font-medium">Room Ngoại còn lại</div>
+                    <div className="mt-1 font-mono text-sm font-bold text-foreground">
+                      {foreignRoom ? formatCompactVolume(foreignRoom) : "—"}
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-muted font-mono">
+                      {roomPercentage !== null ? `Còn ${roomPercentage.toFixed(1)}% room` : "Theo quy định VSD"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Foreign Transaction Event Log */}
+                <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between border-b border-border/60 bg-[#181919] px-3 py-1.5 text-[11px] font-semibold text-muted-2">
+                    <span>Nhật ký giao dịch NĐTNN trong phiên</span>
+                    {stream.foreign?.updatedAt && <span className="text-[10px]">{timeLabel(stream.foreign.updatedAt)}</span>}
+                  </div>
+
+                  {stream.foreignEvents.length ? (
+                    <div className="flex-1 overflow-y-auto max-h-[260px] px-3">
+                      <div className="grid grid-cols-[100px_80px_1fr_120px] border-b border-border/40 py-1.5 text-[10px] text-muted-2">
+                        <span>Thời gian</span>
+                        <span>Chiều</span>
+                        <span className="text-right">Khối lượng</span>
+                        <span className="text-right">Giá trị</span>
+                      </div>
+                      {stream.foreignEvents.map((event) => (
+                        <div
+                          key={event.id}
+                          className="grid grid-cols-[100px_80px_1fr_120px] items-center border-b border-border/30 py-1.5 font-mono text-xs last:border-0"
+                        >
+                          <span className="text-muted-2">{timeLabel(event.time)}</span>
+                          <span>
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                                event.side === "BUY" ? "bg-up/15 text-up" : "bg-down/15 text-down"
+                              }`}
+                            >
+                              {event.side === "BUY" ? "NN MUA" : "NN BÁN"}
+                            </span>
+                          </span>
+                          <span className="text-right font-bold text-foreground">{formatVolume(event.volume)}</span>
+                          <span className="text-right text-muted-2">{formatMarketValue(event.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-4 py-8 text-center text-xs text-muted-2">
+                      {stream.foreign
+                        ? "Đã nạp đầy đủ số liệu lũy kế. Khối ngoại chưa phát sinh lệnh mới trong tích tắc vừa qua."
+                        : "Đang kết nối luồng NĐT nước ngoài..."}
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-[10px] text-muted leading-relaxed">
+                  * Dữ liệu NĐTNN được tổng hợp trực tiếp từ sở giao dịch & feed DNSE T=f. Khối lượng và giá trị không bị suy diễn từ bảng khớp lệnh thông thường.
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: PHÂN TÍCH BƯỚC GIÁ (VOLUME PROFILE) */}
+            {activityTab === "profile" && (
+              <div className="flex flex-col flex-1">
+                <div className="mb-2 text-xs text-muted-2">Phân bổ khối lượng khớp lệnh theo từng bước giá trong phiên:</div>
+
+                {volumeProfile.rows.length ? (
+                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5 max-h-[340px] overflow-y-auto space-y-1.5">
+                    {volumeProfile.rows.map((row) => {
+                      const totalPct = (row.totalVol / volumeProfile.maxVol) * 100
+                      const buyVolPct = row.totalVol > 0 ? (row.buyVol / row.totalVol) * 100 : 50
+                      const isRef = quote?.reference && row.price === quote.reference
+                      const isCurrent = quote?.price && row.price === quote.price
+
+                      return (
+                        <div key={row.price} className="relative flex items-center gap-3 font-mono text-xs py-1 px-2 rounded hover:bg-panel-2/50">
+                          {/* Profile histogram bar */}
+                          <div
+                            className="absolute inset-y-0 left-0 bg-brand/10 rounded"
+                            style={{ width: `${totalPct.toFixed(1)}%` }}
+                            aria-hidden="true"
+                          />
+
+                          {/* Price */}
+                          <div className="relative w-16 font-bold flex items-center gap-1">
+                            <span
+                              className={
+                                quote?.reference && row.price > quote.reference
+                                  ? "text-up"
+                                  : quote?.reference && row.price < quote.reference
+                                    ? "text-down"
+                                    : "text-ref"
+                              }
+                            >
+                              {formatPrice(row.price)}
+                            </span>
+                            {isCurrent && <span className="h-1.5 w-1.5 rounded-full bg-brand animate-pulse" title="Giá khớp hiện tại" />}
+                            {isRef && <span className="text-[9px] text-ref" title="Giá tham chiếu">(TC)</span>}
+                          </div>
+
+                          {/* Volume */}
+                          <div className="relative w-24 text-right font-semibold text-foreground">
+                            {formatVolume(row.totalVol)}
+                          </div>
+
+                          {/* Dual Buy/Sell Mini Bar */}
+                          <div className="relative flex-1 flex items-center gap-2">
+                            <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-panel-2">
+                              <div className="bg-up" style={{ width: `${buyVolPct}%` }} />
+                              <div className="bg-down" style={{ width: `${100 - buyVolPct}%` }} />
+                            </div>
+                            <span className="text-[10px] text-muted-2 w-12 text-right">
+                              {((row.totalVol / tradeStats.totalTraded) * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2">
+                    Chưa có đủ dữ liệu khớp lệnh để vẽ phân bổ bước giá.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {/* RESIZE HANDLES */}
+      {!minimized && !isMaximized && (
+        <>
+          {/* Bottom-right corner resize handle */}
+          <div
+            onPointerDown={(e) => startResize(e, "se")}
+            className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize flex items-end justify-end p-0.5 z-20 group"
+            title="Kéo để phóng to / thu nhỏ"
+          >
+            <div className="h-2 w-2 border-r-2 border-b-2 border-muted-2 group-hover:border-brand transition-colors" />
+          </div>
+
+          {/* Right edge resize strip */}
+          <div
+            onPointerDown={(e) => startResize(e, "e")}
+            className="absolute top-0 right-0 bottom-4 w-1.5 cursor-e-resize z-10 hover:bg-brand/20 transition-colors"
+          />
+
+          {/* Bottom edge resize strip */}
+          <div
+            onPointerDown={(e) => startResize(e, "s")}
+            className="absolute bottom-0 left-0 right-4 h-1.5 cursor-s-resize z-10 hover:bg-brand/20 transition-colors"
+          />
+        </>
+      )}
+    </section>
+  )
 }

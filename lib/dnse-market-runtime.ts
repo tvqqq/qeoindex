@@ -1,6 +1,7 @@
 import "server-only"
 
 import { createHmac, randomUUID } from "node:crypto"
+import { fetchYahooFiveMinuteSnapshot } from "@/lib/yahoo-history"
 
 const DEFAULT_BASE_URL = "https://openapi.dnse.com.vn"
 const VIETNAM_TZ = "Asia/Ho_Chi_Minh"
@@ -25,6 +26,33 @@ export interface DnseSessionQuote {
   offer: unknown[]
   matchPrice: number | null
   openPrice: number | null
+  reference?: number | null
+  ceiling?: number | null
+  floor?: number | null
+  highPrice?: number | null
+  lowPrice?: number | null
+  avgPrice?: number | null
+  totalVolume?: number | null
+}
+
+export interface DnseForeignSnapshot {
+  symbol: string
+  totalBuyVolume: number
+  totalSellVolume: number
+  totalBuyValue: number
+  totalSellValue: number
+  availableRoom: number | null
+  orderLimitQuantity: number | null
+  listedShare: number | null
+  investorTypeCode?: string
+  updatedAt: string
+}
+
+export interface DnseCompanyOverview {
+  nameVi: string
+  nameEn: string
+  exchange: string
+  sector?: string
 }
 
 export interface DnseSessionHistory {
@@ -35,6 +63,8 @@ export interface DnseSessionHistory {
   trades: DnseSessionTrade[]
   tradesTruncated: boolean
   latestQuote: DnseSessionQuote | null
+  foreign?: DnseForeignSnapshot | null
+  company?: DnseCompanyOverview | null
 }
 
 function credentials() {
@@ -262,23 +292,128 @@ async function fetchDnseLatestQuote(symbol: string) {
   }
 }
 
+async function fetchFastMarketOverview(symbol: string) {
+  try {
+    const [ssiRes, vpsRes] = await Promise.allSettled([
+      fetch(`https://iboard-query.ssi.com.vn/stock/${symbol}`, {
+        headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" },
+        signal: AbortSignal.timeout(3500),
+      }).then((r) => (r.ok ? r.json() : null)),
+      fetch(`https://bgapidatafeed.vps.com.vn/getliststockdata/${symbol}`, {
+        headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" },
+        signal: AbortSignal.timeout(3500),
+      }).then((r) => (r.ok ? r.json() : null)),
+    ])
+
+    const ssiData = ssiRes.status === "fulfilled" ? ssiRes.value?.data : null
+    const vpsData = vpsRes.status === "fulfilled" && Array.isArray(vpsRes.value) ? vpsRes.value[0] : null
+
+    const company: DnseCompanyOverview = {
+      nameVi: String(ssiData?.companyNameVi || ssiData?.clientName || "").trim(),
+      nameEn: String(ssiData?.companyNameEn || ssiData?.clientNameEn || "").trim(),
+      exchange: String(ssiData?.exchange || "HOSE").toUpperCase(),
+    }
+
+    const ceiling = finiteNumber(ssiData?.ceiling ?? (vpsData?.c ? Number(vpsData.c) * 1000 : null))
+    const floor = finiteNumber(ssiData?.floor ?? (vpsData?.f ? Number(vpsData.f) * 1000 : null))
+    const refPrice = finiteNumber(ssiData?.refPrice ?? (vpsData?.r ? Number(vpsData.r) * 1000 : null))
+    const highPrice = finiteNumber(vpsData?.highPrice ? Number(vpsData.highPrice) * 1000 : null)
+    const lowPrice = finiteNumber(vpsData?.lowPrice ? Number(vpsData.lowPrice) * 1000 : null)
+    const avgPrice = finiteNumber(vpsData?.avePrice ? Number(vpsData.avePrice) * 1000 : null)
+    const totalVolume = finiteNumber(vpsData?.lot ? Number(vpsData.lot) * 10 : null)
+    const matchPrice = finiteNumber(vpsData?.lastPrice ? Number(vpsData.lastPrice) * 1000 : null)
+
+    const foreignBuyVol = finiteNumber(vpsData?.fBVol) ?? 0
+    const foreignSellVol = finiteNumber(vpsData?.fSVolume) ?? 0
+    const foreignBuyVal = finiteNumber(vpsData?.fBValue) ?? 0
+    const foreignSellVal = finiteNumber(vpsData?.fSValue) ?? 0
+    const availableRoom = finiteNumber(ssiData?.remainForeignQtty ?? (vpsData?.fRoom ? Number(vpsData.fRoom) * 10 : null))
+    const listedShare = finiteNumber(ssiData?.listedShare)
+
+    const foreign: DnseForeignSnapshot = {
+      symbol,
+      totalBuyVolume: foreignBuyVol,
+      totalSellVolume: foreignSellVol,
+      totalBuyValue: foreignBuyVal,
+      totalSellValue: foreignSellVal,
+      availableRoom,
+      orderLimitQuantity: null,
+      listedShare,
+      updatedAt: new Date().toISOString(),
+    }
+
+    return { company, ceiling, floor, refPrice, highPrice, lowPrice, avgPrice, totalVolume, matchPrice, foreign }
+  } catch {
+    return null
+  }
+}
+
 export async function fetchDnseSessionHistory(symbol: string, now = new Date()): Promise<DnseSessionHistory> {
   const ticker = symbol.trim().toUpperCase()
   if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new Error("Invalid DNSE symbol")
 
-  const [prices, tradeResult, latestQuote] = await Promise.all([
+  const [pricesRes, tradeResult, latestQuoteRes, fastOverviewRes] = await Promise.allSettled([
     fetchDnseMinuteHistory(ticker, now, 360),
     fetchDnseSessionTrades(ticker, now),
     fetchDnseLatestQuote(ticker),
+    fetchFastMarketOverview(ticker),
   ])
+
+  let prices = pricesRes.status === "fulfilled" ? pricesRes.value : []
+  const trades = tradeResult.status === "fulfilled" ? tradeResult.value.rows : []
+  const tradesTruncated = tradeResult.status === "fulfilled" ? tradeResult.value.truncated : false
+  let latestQuote = latestQuoteRes.status === "fulfilled" ? latestQuoteRes.value : null
+  const fastOverview = fastOverviewRes.status === "fulfilled" ? fastOverviewRes.value : null
+
+  // Fallback for prices if DNSE 1m returned empty (e.g. outside session or weekend)
+  if (!prices.length) {
+    try {
+      const yahoo = await fetchYahooFiveMinuteSnapshot(ticker, now)
+      if (yahoo.bars.length > 0) {
+        prices = yahoo.bars.map((b) => ({ time: b.time, open: b.open, close: b.close }))
+      }
+    } catch {
+      // Ignore Yahoo fallback error
+    }
+  }
+
+  // Merge latest quote
+  if (fastOverview) {
+    if (!latestQuote) {
+      latestQuote = {
+        time: Math.floor(now.getTime() / 1000),
+        bid: [],
+        offer: [],
+        matchPrice: fastOverview.matchPrice || prices.at(-1)?.close || null,
+        openPrice: prices[0]?.open || null,
+        reference: fastOverview.refPrice,
+        ceiling: fastOverview.ceiling,
+        floor: fastOverview.floor,
+        highPrice: fastOverview.highPrice,
+        lowPrice: fastOverview.lowPrice,
+        avgPrice: fastOverview.avgPrice,
+        totalVolume: fastOverview.totalVolume,
+      }
+    } else {
+      latestQuote.reference = latestQuote.reference ?? fastOverview.refPrice
+      latestQuote.ceiling = latestQuote.ceiling ?? fastOverview.ceiling
+      latestQuote.floor = latestQuote.floor ?? fastOverview.floor
+      latestQuote.highPrice = latestQuote.highPrice ?? fastOverview.highPrice
+      latestQuote.lowPrice = latestQuote.lowPrice ?? fastOverview.lowPrice
+      latestQuote.avgPrice = latestQuote.avgPrice ?? fastOverview.avgPrice
+      latestQuote.totalVolume = latestQuote.totalVolume ?? fastOverview.totalVolume
+    }
+  }
 
   return {
     symbol: ticker,
     sessionStart: vietnamSessionStart(now),
     generatedAt: now.toISOString(),
     prices,
-    trades: tradeResult.rows,
-    tradesTruncated: tradeResult.truncated,
+    trades,
+    tradesTruncated,
     latestQuote,
+    foreign: fastOverview?.foreign ?? null,
+    company: fastOverview?.company ?? null,
   }
 }

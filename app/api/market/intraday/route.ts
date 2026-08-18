@@ -81,7 +81,7 @@ function vietnamDateKey(now: Date) {
 
 function snapshotCacheKey(symbols: string[], now: Date) {
   const timestamp = Math.floor(now.getTime() / 1000)
-  return `top100:v7:${vietnamDateKey(now)}:${Math.floor(timestamp / FIVE_MINUTE_SECONDS)}:${symbols.join("-")}`
+  return `top100:v8:${vietnamDateKey(now)}:${Math.floor(timestamp / FIVE_MINUTE_SECONDS)}:${symbols.join("-")}`
 }
 
 function secondsToNextBucket(now: Date) {
@@ -145,7 +145,7 @@ export async function GET(request: Request) {
   const now = new Date()
   const key = snapshotCacheKey(symbols, now)
   const ttl = secondsToNextBucket(now)
-  const cache = getCache({ namespace: "market-board-v7" })
+  const cache = getCache({ namespace: "market-board-v8" })
   let snapshot: IntradaySnapshot | null = null
   let cacheLayer: "runtime" | "redis" | "provider" = "provider"
 

@@ -123,10 +123,10 @@ export function LiveStockRow({
           type="button"
           onClick={onToggleWatch}
           aria-label={isWatched ? `Bỏ theo dõi ${stock.ticker}` : `Theo dõi ${stock.ticker}`}
-          className={`absolute left-1 top-1 rounded p-0.5 transition-all focus:outline-none focus:ring-1 focus:ring-brand ${
+          className={`absolute top-1 left-1/2 -translate-x-1/2 z-10 rounded p-0.5 transition-all hover:scale-110 focus:outline-none focus:ring-1 focus:ring-brand ${
             isWatched
               ? "text-amber-400 opacity-100"
-              : "text-muted opacity-0 group-hover:opacity-100"
+              : "text-muted opacity-0 group-hover:opacity-100 hover:text-amber-300"
           }`}
         >
           <Star className={`h-3 w-3 ${isWatched ? "fill-amber-400" : ""}`} />
