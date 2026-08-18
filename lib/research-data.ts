@@ -173,7 +173,7 @@ function unavailable(configured: boolean, message: string): ResearchData {
 
 export async function getResearchData(): Promise<ResearchData> {
   if (!token()) {
-    return unavailable(false, "Notion chưa được cấu hình cho environment này. StockOS không dùng snapshot/backend dự phòng.")
+    return unavailable(false, "Notion chưa được cấu hình cho environment này. QeoIndex không dùng snapshot/backend dự phòng.")
   }
   try {
     const [thesisPages, logPages] = await Promise.all([
@@ -195,7 +195,7 @@ export async function getResearchData(): Promise<ResearchData> {
       logs,
     }
   } catch (error) {
-    console.error("[StockOS Research] Notion query failed", error)
-    return unavailable(true, "Notion đã cấu hình nhưng truy vấn hiện lỗi. StockOS không hiển thị dữ liệu stale/fallback.")
+    console.error("[QeoIndex Research] Notion query failed", error)
+    return unavailable(true, "Notion đã cấu hình nhưng truy vấn hiện lỗi. QeoIndex không hiển thị dữ liệu stale/fallback.")
   }
 }
