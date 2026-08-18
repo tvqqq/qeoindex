@@ -112,7 +112,7 @@ const LARGE_TRADE_MIN_VOLUME = 10_000
 const WHALE_TRADE_MIN_VOLUME = 50_000
 const OPEN_PRICE_KEYS = ["openPrice", "openingPrice", "open", "openValue", "firstPrice"]
 const STREAM_STALE_MS = 45_000
-const MAX_SESSION_TRADES = 6_000
+const MAX_SESSION_TRADES = 30_000
 
 const DEFAULT_WIDTH = 460
 const MIN_WIDTH = 460
@@ -189,6 +189,8 @@ function normalizeTime(value: unknown) {
 }
 
 function timeLabel(value: string) {
+  if (!value) return "—"
+  if (/^\d{2}:\d{2}:\d{2}$/.test(value)) return value
   const parsed = Date.parse(value)
   if (!Number.isFinite(parsed)) return value || "—"
   return new Date(parsed).toLocaleTimeString("vi-VN", {
@@ -412,13 +414,17 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
         }
 
         const historicalTrades: StreamTrade[] = (payload.trades ?? [])
-          .map((trade) => ({
-            id: `history-${trade.id}`,
-            time: normalizeTime(trade.time),
-            price: number(trade.price),
-            volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
-            side: explicitSide(trade.side),
-          }))
+          .map((trade) => {
+            const rawPrice = number(trade.price)
+            const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
+            return {
+              id: `history-${trade.id}`,
+              time: normalizeTime(trade.time),
+              price,
+              volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
+              side: explicitSide(trade.side),
+            }
+          })
           .filter((trade) => trade.price > 0 && trade.volume > 0)
 
         if (historicalTrades.length > 0) {
@@ -948,20 +954,23 @@ export function LiveOrderBookPanel({
     return { buyVol, sellVol, unkVol, totalTraded, buyTradedPct, sellTradedPct }
   }, [stream.trades])
 
-  // Volume Profile (Volume distribution by price level)
+  const quotePrice = quote?.price
+
+  // Volume Profile (Volume distribution by price level across all session trades)
   const volumeProfile = useMemo(() => {
     const profileMap = new Map<number, { price: number; buyVol: number; sellVol: number; totalVol: number }>()
     for (const t of stream.trades) {
-      const cur = profileMap.get(t.price) || { price: t.price, buyVol: 0, sellVol: 0, totalVol: 0 }
+      const price = quotePrice ? normalizeMarketPrice(t.price, quotePrice) ?? t.price : t.price
+      const cur = profileMap.get(price) || { price, buyVol: 0, sellVol: 0, totalVol: 0 }
       if (t.side === "BUY") cur.buyVol += t.volume
       else if (t.side === "SELL") cur.sellVol += t.volume
       cur.totalVol += t.volume
-      profileMap.set(t.price, cur)
+      profileMap.set(price, cur)
     }
     const profileRows = [...profileMap.values()].sort((a, b) => b.price - a.price)
     const maxVol = Math.max(1, ...profileRows.map((r) => r.totalVol))
     return { rows: profileRows, maxVol }
-  }, [stream.trades])
+  }, [stream.trades, quotePrice])
 
   const tone = useMemo(() => {
     if (!quote?.price) return "ref"
@@ -1489,15 +1498,34 @@ export function LiveOrderBookPanel({
             {/* TAB CONTENT: PHÂN TÍCH BƯỚC GIÁ (VOLUME PROFILE) */}
             {activityTab === "profile" && (
               <div className="flex flex-col flex-1">
-                <div className="mb-2 text-xs text-muted-2">Phân bổ khối lượng khớp lệnh theo từng bước giá trong phiên:</div>
+                <div className="mb-2 text-xs text-muted-2 flex items-center justify-between">
+                  <span>Phân bổ khối lượng khớp lệnh theo từng bước giá trong phiên:</span>
+                  <span className="font-mono text-[10px] text-muted">{volumeProfile.rows.length} bước giá</span>
+                </div>
 
                 {volumeProfile.rows.length ? (
-                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5 max-h-[340px] overflow-y-auto space-y-1.5">
+                  <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5 max-h-[360px] overflow-y-auto space-y-1.5">
                     {volumeProfile.rows.map((row) => {
                       const totalPct = (row.totalVol / volumeProfile.maxVol) * 100
                       const buyVolPct = row.totalVol > 0 ? (row.buyVol / row.totalVol) * 100 : 50
-                      const isRef = quote?.reference && row.price === quote.reference
-                      const isCurrent = quote?.price && row.price === quote.price
+                      const normalizedRef = quote?.reference ? (quote.price ? normalizeMarketPrice(quote.reference, quote.price) ?? quote.reference : quote.reference) : undefined
+                      const normalizedCeil = quote?.ceiling ? (quote.price ? normalizeMarketPrice(quote.ceiling, quote.price) ?? quote.ceiling : quote.ceiling) : undefined
+                      const normalizedFlr = quote?.floor ? (quote.price ? normalizeMarketPrice(quote.floor, quote.price) ?? quote.floor : quote.floor) : undefined
+
+                      const isRef = normalizedRef ? Math.abs(row.price - normalizedRef) < 0.01 : false
+                      const isCeil = normalizedCeil ? row.price >= normalizedCeil - 0.01 : false
+                      const isFlr = normalizedFlr ? row.price <= normalizedFlr + 0.01 : false
+                      const isCurrent = quote?.price ? Math.abs(row.price - quote.price) < 0.01 : false
+
+                      const priceColor = isCeil
+                        ? "text-ceiling font-bold"
+                        : isFlr
+                          ? "text-floor font-bold"
+                          : normalizedRef && row.price > normalizedRef
+                            ? "text-up font-bold"
+                            : normalizedRef && row.price < normalizedRef
+                              ? "text-down font-bold"
+                              : "text-ref font-bold"
 
                       return (
                         <div key={row.price} className="relative flex items-center gap-3 font-mono text-xs py-1 px-2 rounded hover:bg-panel-2/50">
@@ -1509,20 +1537,16 @@ export function LiveOrderBookPanel({
                           />
 
                           {/* Price */}
-                          <div className="relative w-16 font-bold flex items-center gap-1">
-                            <span
-                              className={
-                                quote?.reference && row.price > quote.reference
-                                  ? "text-up"
-                                  : quote?.reference && row.price < quote.reference
-                                    ? "text-down"
-                                    : "text-ref"
-                              }
-                            >
-                              {formatPrice(row.price)}
-                            </span>
-                            {isCurrent && <span className="h-1.5 w-1.5 rounded-full bg-brand animate-pulse" title="Giá khớp hiện tại" />}
-                            {isRef && <span className="text-[9px] text-ref" title="Giá tham chiếu">(TC)</span>}
+                          <div className="relative w-20 font-bold flex items-center gap-1">
+                            <span className={priceColor}>{formatPrice(row.price)}</span>
+                            {isCurrent && <span className="h-1.5 w-1.5 rounded-full bg-brand animate-pulse shrink-0" title="Giá khớp hiện tại" />}
+                            {isCeil ? (
+                              <span className="text-[9px] text-ceiling font-semibold shrink-0">(Trần)</span>
+                            ) : isFlr ? (
+                              <span className="text-[9px] text-floor font-semibold shrink-0">(Sàn)</span>
+                            ) : isRef ? (
+                              <span className="text-[9px] text-ref font-semibold shrink-0">(TC)</span>
+                            ) : null}
                           </div>
 
                           {/* Volume */}
@@ -1537,7 +1561,7 @@ export function LiveOrderBookPanel({
                               <div className="bg-down" style={{ width: `${100 - buyVolPct}%` }} />
                             </div>
                             <span className="text-[10px] text-muted-2 w-12 text-right">
-                              {((row.totalVol / tradeStats.totalTraded) * 100).toFixed(1)}%
+                              {((row.totalVol / (tradeStats.totalTraded || 1)) * 100).toFixed(1)}%
                             </span>
                           </div>
                         </div>
@@ -1546,7 +1570,9 @@ export function LiveOrderBookPanel({
                   </div>
                 ) : (
                   <div className="rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2">
-                    Chưa có đủ dữ liệu khớp lệnh để vẽ phân bổ bước giá.
+                    {stream.historyState === "LOADING"
+                      ? "Đang tải toàn bộ dữ liệu bước giá trong phiên..."
+                      : "Chưa có đủ dữ liệu khớp lệnh để vẽ phân bổ bước giá."}
                   </div>
                 )}
               </div>

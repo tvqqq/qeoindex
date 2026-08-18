@@ -155,6 +155,11 @@ function timestampSeconds(value: unknown): number | null {
   }
   const text = String(value ?? "").trim()
   if (!text) return null
+  if (/^\d{2}:\d{2}:\d{2}$/.test(text)) {
+    const [hh, mm, ss] = text.split(":").map(Number)
+    const { year, month, day } = vietnamDateParts(Date.now())
+    return Math.floor(Date.UTC(year, month - 1, day, hh - 7, mm, ss) / 1000)
+  }
   const numeric = Number(text)
   if (Number.isFinite(numeric)) return numeric > 10_000_000_000 ? numeric / 1000 : numeric
   const millis = Date.parse(text)
@@ -180,13 +185,10 @@ function normalizeIntraday(raw: unknown): DnseIntradayPoint[] {
     points = Array.from({ length }, (_, index) => ({ time: times[index], open: opens[index] || closes[index], close: closes[index] }))
   }
 
-  return points
-    .filter((point) => Number.isFinite(point.time) && point.time > 0 && Number.isFinite(point.open) && point.open > 0 && Number.isFinite(point.close) && point.close > 0)
-    .sort((a, b) => a.time - b.time)
+  return points.filter((point) => point.time > 0 && Number.isFinite(point.close) && point.close > 0)
 }
 
-function pageRows(raw: unknown, preferredKey: "trades" | "quotes") {
-  const payload: any = raw
+function pageRows(payload: any, preferredKey: string) {
   const source: any = payload?.data ?? payload?.result ?? payload
   const candidates = [source?.[preferredKey], source?.items, source?.rows, source, payload?.[preferredKey], payload?.items]
   const rows = candidates.find((value) => Array.isArray(value)) ?? []
@@ -195,14 +197,15 @@ function pageRows(raw: unknown, preferredKey: "trades" | "quotes") {
 }
 
 function normalizeTrade(row: any, index: number): DnseSessionTrade | null {
-  const price = finiteNumber(row?.matchPrice ?? row?.price ?? row?.lastPrice)
-  const volume = finiteNumber(row?.matchQtty ?? row?.quantity ?? row?.qtty ?? row?.volume)
-  const time = timestampSeconds(row?.transactTime ?? row?.time ?? row?.timestamp ?? row?.ts)
+  const rawPrice = finiteNumber(row?.matchPrice ?? row?.price ?? row?.lastPrice)
+  const price = rawPrice && rawPrice > 1000 ? rawPrice / 1000 : rawPrice
+  const volume = finiteNumber(row?.matchQtty ?? row?.quantity ?? row?.qtty ?? row?.volume ?? row?.lastVol)
+  const time = timestampSeconds(row?.transactTime ?? row?.time ?? row?.timestamp ?? row?.ts ?? row?.sID ?? row?.timeServer)
   if (!price || price <= 0 || !volume || volume <= 0 || !time || time <= 0) return null
   const side = String(row?.side ?? row?.matchSide ?? row?.aggressorSide ?? "")
-  const sourceId = String(row?.id ?? row?.tradeId ?? row?.seqNo ?? row?.sequence ?? "").trim()
+  const sourceId = String(row?.id ?? row?.tradeId ?? row?.seqNo ?? row?.sequence ?? row?.transId ?? row?.sID ?? "").trim()
   return {
-    id: sourceId || `rest-${Math.round(time * 1000)}-${price}-${volume}-${side}-${index}`,
+    id: sourceId || `trade-${Math.round(time * 1000)}-${price}-${volume}-${side}-${index}`,
     time,
     price,
     volume,
@@ -248,7 +251,7 @@ export async function fetchDnseMinuteHistory(symbol: string, now = new Date(), m
   return fetchDnseOhlcHistory(symbol, 1, now, maxPoints)
 }
 
-async function fetchDnseSessionTrades(symbol: string, now: Date, maxRows = 6_000) {
+async function fetchDnseSessionTrades(symbol: string, now: Date, maxRows = 30_000) {
   const from = vietnamSessionStart(now)
   const to = Math.floor(now.getTime() / 1000)
   const rows: DnseSessionTrade[] = []
@@ -256,27 +259,56 @@ async function fetchDnseSessionTrades(symbol: string, now: Date, maxRows = 6_000
   let page = 0
   let truncated = false
 
-  do {
-    const raw = await signedGet(`/price/${symbol}/trades`, {
-      boardId: "G1",
-      from,
-      to,
-      limit: 500,
-      order: "ASC",
-      nextPageToken: nextPageToken ?? undefined,
-    })
-    const parsed = pageRows(raw, "trades")
-    for (let index = 0; index < parsed.rows.length; index += 1) {
-      const trade = normalizeTrade(parsed.rows[index], page * 500 + index)
-      if (trade) rows.push(trade)
-      if (rows.length >= maxRows) {
-        truncated = Boolean(parsed.nextPageToken) || index < parsed.rows.length - 1
-        break
+  try {
+    do {
+      const raw = await signedGet(`/price/${symbol}/trades`, {
+        boardId: "G1",
+        from,
+        to,
+        limit: 500,
+        order: "ASC",
+        nextPageToken: nextPageToken ?? undefined,
+      })
+      const parsed = pageRows(raw, "trades")
+      for (let index = 0; index < parsed.rows.length; index += 1) {
+        const trade = normalizeTrade(parsed.rows[index], page * 500 + index)
+        if (trade) rows.push(trade)
+        if (rows.length >= maxRows) {
+          truncated = Boolean(parsed.nextPageToken) || index < parsed.rows.length - 1
+          break
+        }
       }
+      nextPageToken = rows.length >= maxRows ? null : parsed.nextPageToken
+      page += 1
+    } while (nextPageToken && page < 40)
+  } catch {
+    // If DNSE fails, fallback to VPS full trades feed
+  }
+
+  // Fallback to VPS full trades feed if DNSE returned empty or failed
+  if (!rows.length) {
+    try {
+      const vpsRes = await fetch(`https://bgapidatafeed.vps.com.vn/getliststocktrade/${symbol}`, {
+        headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" },
+        signal: AbortSignal.timeout(6000),
+      })
+      if (vpsRes.ok) {
+        const vpsTrades = await vpsRes.json()
+        if (Array.isArray(vpsTrades)) {
+          for (let i = 0; i < vpsTrades.length; i++) {
+            const trade = normalizeTrade(vpsTrades[i], i)
+            if (trade) rows.push(trade)
+            if (rows.length >= maxRows) {
+              truncated = true
+              break
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore VPS fallback errors
     }
-    nextPageToken = rows.length >= maxRows ? null : parsed.nextPageToken
-    page += 1
-  } while (nextPageToken && page < 20)
+  }
 
   if (nextPageToken) truncated = true
   rows.sort((a, b) => a.time - b.time)
