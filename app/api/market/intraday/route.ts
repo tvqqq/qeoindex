@@ -31,7 +31,7 @@ type IntradayRow = {
   error: string | null
 }
 
-type IntradaySnapshot = {
+export type IntradaySnapshot = {
   rows: IntradayRow[]
   generatedAt: string
 }
@@ -44,6 +44,26 @@ function getRedis() {
     ? Redis.fromEnv()
     : null
   return redis
+}
+
+export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly string[], now: Date = new Date()): Promise<IntradaySnapshot | null> {
+  const key = snapshotCacheKey(symbols, now)
+  const cache = getCache({ namespace: "market-board-v8" })
+
+  try {
+    const cached = await cache.get(key)
+    if (isIntradaySnapshot(cached, symbols)) return cached
+  } catch { /* Runtime Cache fail open */ }
+
+  const redisClient = getRedis()
+  if (redisClient) {
+    try {
+      const cached = await redisClient.get<IntradaySnapshot>(key)
+      if (isIntradaySnapshot(cached, symbols)) return cached
+    } catch { /* Redis fail open */ }
+  }
+
+  return null
 }
 
 function isIntradayRow(value: unknown): value is IntradayRow {
@@ -59,7 +79,7 @@ function isIntradayRow(value: unknown): value is IntradayRow {
     && row.price > 0
 }
 
-function isIntradaySnapshot(value: unknown, symbols: string[]): value is IntradaySnapshot {
+function isIntradaySnapshot(value: unknown, symbols: string[] | readonly string[]): value is IntradaySnapshot {
   if (!value || typeof value !== "object") return false
   const snapshot = value as Partial<IntradaySnapshot>
   if (!Array.isArray(snapshot.rows) || !snapshot.rows.every(isIntradayRow)) return false
@@ -80,7 +100,7 @@ function vietnamDateKey(now: Date) {
   }).format(now)
 }
 
-function snapshotCacheKey(symbols: string[], now: Date) {
+function snapshotCacheKey(symbols: string[] | readonly string[], now: Date) {
   const status = getMarketSessionStatus(now)
   return `top100:v8:${vietnamDateKey(now)}:${status.cacheBucketKey}:${symbols.join("-")}`
 }
@@ -90,7 +110,7 @@ function secondsToNextBucket(now: Date) {
   return status.ttlSeconds
 }
 
-async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>) {
+async function mapWithConcurrency<T, R>(items: T[] | readonly T[], concurrency: number, worker: (item: T) => Promise<R>) {
   const results = new Array<R | undefined>(items.length)
   let cursor = 0
   async function run() {
@@ -105,7 +125,7 @@ async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker:
 
 import { fetchLiveBatchQuotes } from "@/lib/broker-live-quotes"
 
-async function fetchSnapshot(symbols: string[], now: Date): Promise<IntradaySnapshot> {
+async function fetchSnapshot(symbols: string[] | readonly string[], now: Date): Promise<IntradaySnapshot> {
   const [liveBatchResult, rows] = await Promise.all([
     fetchLiveBatchQuotes(symbols),
     mapWithConcurrency(symbols, FETCH_CONCURRENCY, async (symbol): Promise<IntradayRow> => {

@@ -8,6 +8,7 @@ import { getBoardOverviewSnapshotsFromSupabase } from "@/lib/supabase/orderbook"
 import { isTradingSessionOpen, getMarketSessionStatus } from "@/lib/session-countdown"
 import { fetchLiveBatchQuotes } from "@/lib/broker-live-quotes"
 import { readThroughUiCache } from "@/lib/ui-data-cache"
+import { getCachedIntraday5mSnapshot } from "@/app/api/market/intraday/route"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/lib/intraday-5m"
 
@@ -37,17 +38,24 @@ function vietnamDateKey(now: Date) {
   }).format(now)
 }
 
-async function loadInitialBoardDataCanonical(): Promise<InitialBoardData> {
-  // Read live broker quotes and Supabase snapshots in parallel (sub-150ms)
-  const [snapshots, liveQuotes] = await Promise.all([
+async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardData> {
+  const currentDay = vietnamDateKey(now)
+  // Read live broker quotes, Supabase snapshots, and cached 5m intraday in parallel (sub-150ms)
+  const [snapshots, liveQuotes, cached5m] = await Promise.all([
     getBoardOverviewSnapshotsFromSupabase(),
     fetchLiveBatchQuotes(CANONICAL_UNIVERSE_TICKERS),
+    getCachedIntraday5mSnapshot(CANONICAL_UNIVERSE_TICKERS, now),
   ])
+
+  const cachedRowsBySymbol = cached5m?.rows
+    ? Object.fromEntries(cached5m.rows.map((row) => [row.symbol, row]))
+    : null
 
   const universe: BoardUniverseStock[] = CANONICAL_UNIVERSE_STOCKS.map((stock) => {
     const snap = snapshots[stock.ticker]
     const live = liveQuotes[stock.ticker]
-    const lastClosePrice = live?.price || snap?.latest_price || snap?.reference_price || null
+    const cachedRow = cachedRowsBySymbol?.[stock.ticker]
+    const lastClosePrice = live?.price || snap?.latest_price || cachedRow?.price || snap?.reference_price || null
     return {
       ticker: stock.ticker,
       rank: stock.rank,
@@ -64,14 +72,22 @@ async function loadInitialBoardDataCanonical(): Promise<InitialBoardData> {
   for (const stock of universe) {
     const snap = snapshots[stock.ticker]
     const live = liveQuotes[stock.ticker]
-    const intraday = Array.isArray(snap?.intraday_1m)
-      ? (snap.intraday_1m as unknown as IntradayPoint[]).slice(-INITIAL_HISTORY_POINTS)
-      : []
+    const cachedRow = cachedRowsBySymbol?.[stock.ticker]
+
+    // 1. Prefer warm 5m points from Redis cache for 100% accurate mini charts
+    let intraday: IntradayPoint[] = []
+    if (cachedRow?.points && cachedRow.points.length > 0) {
+      intraday = cachedRow.points.slice(-INITIAL_HISTORY_POINTS)
+    } else if (Array.isArray(snap?.intraday_1m) && snap?.session_date === currentDay) {
+      // Fallback to Supabase 1m ONLY if it matches today's session
+      intraday = (snap.intraday_1m as unknown as IntradayPoint[]).slice(-INITIAL_HISTORY_POINTS)
+    }
+
     const lastBarClose = intraday.length > 0 ? (intraday[intraday.length - 1].close ?? (intraday[intraday.length - 1] as any)?.c) : null
     const firstBarOpen = intraday.length > 0 ? ((intraday[0] as any)?.open ?? (intraday[0] as any)?.o ?? intraday[0]?.close) : null
 
-    const latestPrice = live?.price || snap?.latest_price || snap?.reference_price || lastBarClose || firstBarOpen
-    const ref = live?.reference || snap?.reference_price || firstBarOpen || latestPrice
+    const latestPrice = live?.price || snap?.latest_price || cachedRow?.price || snap?.reference_price || lastBarClose || firstBarOpen
+    const ref = live?.reference || snap?.reference_price || cachedRow?.reference || firstBarOpen || latestPrice
 
     if (latestPrice && latestPrice > 0 && ref && ref > 0) {
       const change = live?.change ?? (latestPrice - ref)
@@ -115,7 +131,7 @@ export default async function Page() {
     name: "QeoIndex Board SSR Initial Data",
     ttlSeconds,
     validate: isInitialBoardData,
-    load: loadInitialBoardDataCanonical,
+    load: () => loadInitialBoardDataCanonical(now),
   })
 
   return (
