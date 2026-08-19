@@ -1,702 +1,702 @@
 {
-  "VIC": {
-    "ticker": "VIC",
-    "type": "tradingview",
-    "logoid": "vingroup-joint-stock-company",
-    "url": "/logos/VIC.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vingroup-joint-stock-company--big.svg"
-  },
-  "VHM": {
-    "ticker": "VHM",
-    "type": "tradingview",
-    "logoid": "vinhomes-joint-stock-company-units-thailand-depositery-receipts-repr-001-sh",
-    "url": "/logos/VHM.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vinhomes-joint-stock-company-units-thailand-depositery-receipts-repr-001-sh--big.svg"
-  },
   "VCB": {
     "ticker": "VCB",
-    "type": "tradingview",
-    "logoid": "joint-stock-commercial-bank-for-foreign-trade-of-vietnam",
-    "url": "/logos/VCB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/joint-stock-commercial-bank-for-foreign-trade-of-vietnam--big.svg"
-  },
-  "BID": {
-    "ticker": "BID",
-    "type": "tradingview",
-    "logoid": "joint-stock-commercial-bank-for-investment-and-development-of-vietnam",
-    "url": "/logos/BID.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/joint-stock-commercial-bank-for-investment-and-development-of-vietnam--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/VCB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VCB",
+    "sizeBytes": 10834
   },
   "CTG": {
     "ticker": "CTG",
-    "type": "tradingview",
-    "logoid": "vietnam-joint-stock-commercial-bank",
-    "url": "/logos/CTG.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vietnam-joint-stock-commercial-bank--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/CTG.png",
+    "externalUrl": "https://finance.vietstock.vn/image/CTG",
+    "sizeBytes": 20601
+  },
+  "VHM": {
+    "ticker": "VHM",
+    "source": "vietstock-official",
+    "url": "/logos/VHM.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VHM",
+    "sizeBytes": 38657
+  },
+  "BID": {
+    "ticker": "BID",
+    "source": "vietstock-official",
+    "url": "/logos/BID.png",
+    "externalUrl": "https://finance.vietstock.vn/image/BID",
+    "sizeBytes": 114076
+  },
+  "VIC": {
+    "ticker": "VIC",
+    "source": "vietstock-official",
+    "url": "/logos/VIC.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VIC",
+    "sizeBytes": 131225
   },
   "TCB": {
     "ticker": "TCB",
-    "type": "tradingview",
-    "logoid": "techcombank",
-    "url": "/logos/TCB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/techcombank--big.svg"
-  },
-  "VPB": {
-    "ticker": "VPB",
-    "type": "tradingview",
-    "logoid": "vietnam-prosperity-joint-stock-commercial-bank",
-    "url": "/logos/VPB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vietnam-prosperity-joint-stock-commercial-bank--big.svg"
-  },
-  "MBB": {
-    "ticker": "MBB",
-    "type": "tradingview",
-    "logoid": "military-commercial-joint-stock-bank",
-    "url": "/logos/MBB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/military-commercial-joint-stock-bank--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/TCB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/TCB",
+    "sizeBytes": 16843
   },
   "HPG": {
     "ticker": "HPG",
-    "type": "tradingview",
-    "logoid": "hoa-phat-group",
-    "url": "/logos/HPG.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/hoa-phat-group--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/HPG.png",
+    "externalUrl": "https://finance.vietstock.vn/image/HPG",
+    "sizeBytes": 4874
+  },
+  "MBB": {
+    "ticker": "MBB",
+    "source": "vietstock-official",
+    "url": "/logos/MBB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/MBB",
+    "sizeBytes": 56829
   },
   "GAS": {
     "ticker": "GAS",
-    "type": "tradingview",
-    "logoid": "petrovietnam-gas",
-    "url": "/logos/GAS.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/petrovietnam-gas--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/GAS.png",
+    "externalUrl": "https://finance.vietstock.vn/image/GAS",
+    "sizeBytes": 115236
+  },
+  "VPB": {
+    "ticker": "VPB",
+    "source": "vietstock-official",
+    "url": "/logos/VPB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VPB",
+    "sizeBytes": 130865
   },
   "MCH": {
     "ticker": "MCH",
-    "type": "tradingview",
-    "logoid": "masan-consumer",
-    "url": "/logos/MCH.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/masan-consumer--big.svg"
-  },
-  "LPB": {
-    "ticker": "LPB",
-    "type": "tradingview",
-    "logoid": "nhtmcp-buu-dien-lien-viet",
-    "url": "/logos/LPB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/nhtmcp-buu-dien-lien-viet--big.svg"
-  },
-  "VPL": {
-    "ticker": "VPL",
-    "type": "tradingview",
-    "logoid": "vp-plc",
-    "url": "/logos/VPL.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vp-plc--big.svg"
-  },
-  "STB": {
-    "ticker": "STB",
-    "type": "tradingview",
-    "logoid": "sai-gon-thuong-tin-commercial-joint-stock-bank",
-    "url": "/logos/STB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/sai-gon-thuong-tin-commercial-joint-stock-bank--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/MCH.png",
+    "externalUrl": "https://finance.vietstock.vn/image/MCH",
+    "sizeBytes": 19603
   },
   "HDB": {
     "ticker": "HDB",
-    "type": "tradingview",
-    "logoid": "hdfc-bank",
-    "url": "/logos/HDB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/hdfc-bank--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/HDB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/HDB",
+    "sizeBytes": 40030
   },
-  "BSR": {
-    "ticker": "BSR",
-    "type": "tradingview",
-    "logoid": "binh-son-refining-and-petrochem",
-    "url": "/logos/BSR.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/binh-son-refining-and-petrochem--big.svg"
+  "LPB": {
+    "ticker": "LPB",
+    "source": "vietstock-official",
+    "url": "/logos/LPB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/LPB",
+    "sizeBytes": 3563
+  },
+  "STB": {
+    "ticker": "STB",
+    "source": "vietstock-official",
+    "url": "/logos/STB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/STB",
+    "sizeBytes": 132827
+  },
+  "VPL": {
+    "ticker": "VPL",
+    "source": "vietstock-official",
+    "url": "/logos/VPL.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VPL",
+    "sizeBytes": 12200
   },
   "ACB": {
     "ticker": "ACB",
-    "type": "tradingview",
-    "logoid": "ngan-hang-tmcp-a-chau",
-    "url": "/logos/ACB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/ngan-hang-tmcp-a-chau--big.svg"
-  },
-  "VNM": {
-    "ticker": "VNM",
-    "type": "tradingview",
-    "logoid": "vietnam-dairy-products",
-    "url": "/logos/VNM.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vietnam-dairy-products--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/ACB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/ACB",
+    "sizeBytes": 2044
   },
   "FPT": {
     "ticker": "FPT",
-    "type": "tradingview",
-    "logoid": "fpt-corporation",
-    "url": "/logos/FPT.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/fpt-corporation--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/FPT.png",
+    "externalUrl": "https://finance.vietstock.vn/image/FPT",
+    "sizeBytes": 90659
   },
   "GVR": {
     "ticker": "GVR",
-    "type": "tradingview",
-    "logoid": "td-cn-cao-su-vn-ctcp",
-    "url": "/logos/GVR.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/td-cn-cao-su-vn-ctcp--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/GVR.png",
+    "externalUrl": "https://finance.vietstock.vn/image/GVR",
+    "sizeBytes": 35012
   },
-  "DMX": {
-    "ticker": "DMX",
-    "type": "tradingview",
-    "logoid": "district-metals",
-    "url": "/logos/DMX.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/district-metals--big.svg"
+  "BSR": {
+    "ticker": "BSR",
+    "source": "vietstock-official",
+    "url": "/logos/BSR.png",
+    "externalUrl": "https://finance.vietstock.vn/image/BSR",
+    "sizeBytes": 44305
   },
-  "TCX": {
-    "ticker": "TCX",
-    "type": "tradingview",
-    "logoid": "tucows",
-    "url": "/logos/TCX.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/tucows--big.svg"
-  },
-  "MWG": {
-    "ticker": "MWG",
-    "type": "tradingview",
-    "logoid": "mobile-world-investment-corporation",
-    "url": "/logos/MWG.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/mobile-world-investment-corporation--big.svg"
+  "VNM": {
+    "ticker": "VNM",
+    "source": "vietstock-official",
+    "url": "/logos/VNM.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VNM",
+    "sizeBytes": 20299
   },
   "MSN": {
     "ticker": "MSN",
-    "type": "tradingview",
-    "logoid": "masan",
-    "url": "/logos/MSN.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/masan--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/MSN.png",
+    "externalUrl": "https://finance.vietstock.vn/image/MSN",
+    "sizeBytes": 9125
+  },
+  "DMX": {
+    "ticker": "DMX",
+    "source": "vietstock-official",
+    "url": "/logos/DMX.png",
+    "externalUrl": "https://finance.vietstock.vn/image/DMX",
+    "sizeBytes": 13213
   },
   "VJC": {
     "ticker": "VJC",
-    "type": "tradingview",
-    "logoid": "jgc",
-    "url": "/logos/VJC.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/jgc--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/VJC.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VJC",
+    "sizeBytes": 3451
   },
-  "HVN": {
-    "ticker": "HVN",
-    "type": "tradingview",
-    "logoid": "harvey-norman",
-    "url": "/logos/HVN.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/harvey-norman--big.svg"
+  "MWG": {
+    "ticker": "MWG",
+    "source": "vietstock-official",
+    "url": "/logos/MWG.png",
+    "externalUrl": "https://finance.vietstock.vn/image/MWG",
+    "sizeBytes": 25033
+  },
+  "TCX": {
+    "ticker": "TCX",
+    "source": "vietstock-official",
+    "url": "/logos/TCX.png",
+    "externalUrl": "https://finance.vietstock.vn/image/TCX",
+    "sizeBytes": 35554
   },
   "VCK": {
     "ticker": "VCK",
-    "type": "tradingview",
-    "logoid": "vps-securities-jsc",
-    "url": "/logos/VCK.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vps-securities-jsc--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/VCK.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VCK",
+    "sizeBytes": 3656
+  },
+  "HVN": {
+    "ticker": "HVN",
+    "source": "vietstock-official",
+    "url": "/logos/HVN.png",
+    "externalUrl": "https://finance.vietstock.vn/image/HVN",
+    "sizeBytes": 20104
   },
   "SHB": {
     "ticker": "SHB",
-    "type": "tradingview",
-    "logoid": "ngan-hang-tmcp-sai-gon",
-    "url": "/logos/SHB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/ngan-hang-tmcp-sai-gon--big.svg"
-  },
-  "SSI": {
-    "ticker": "SSI",
-    "type": "tradingview",
-    "logoid": "saigon-securities-incorporation",
-    "url": "/logos/SSI.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/saigon-securities-incorporation--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/SHB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/SHB",
+    "sizeBytes": 26552
   },
   "SAB": {
     "ticker": "SAB",
-    "type": "tradingview",
-    "logoid": "banco-de-sabadell",
-    "url": "/logos/SAB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/banco-de-sabadell--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/SAB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/SAB",
+    "sizeBytes": 67450
   },
-  "VRE": {
-    "ticker": "VRE",
-    "type": "tradingview",
-    "logoid": "vincom-retail",
-    "url": "/logos/VRE.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vincom-retail--big.svg"
-  },
-  "SSB": {
-    "ticker": "SSB",
-    "type": "tradingview",
-    "logoid": "independent-bank-group",
-    "url": "/logos/SSB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/independent-bank-group--big.svg"
+  "SSI": {
+    "ticker": "SSI",
+    "source": "vietstock-official",
+    "url": "/logos/SSI.png",
+    "externalUrl": "https://finance.vietstock.vn/image/SSI",
+    "sizeBytes": 721999
   },
   "MSB": {
     "ticker": "MSB",
-    "type": "tradingview",
-    "logoid": "mesoblast",
-    "url": "/logos/MSB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/mesoblast--big.svg"
-  },
-  "VIB": {
-    "ticker": "VIB",
-    "type": "tradingview",
-    "logoid": "ngan-hang-tmcp-quoc-te-vn",
-    "url": "/logos/VIB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/ngan-hang-tmcp-quoc-te-vn--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/MSB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/MSB",
+    "sizeBytes": 11860
   },
   "BVH": {
     "ticker": "BVH",
-    "type": "tradingview",
-    "logoid": "bao-viet",
-    "url": "/logos/BVH.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/bao-viet--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/BVH.png",
+    "externalUrl": "https://finance.vietstock.vn/image/BVH",
+    "sizeBytes": 30233
   },
-  "VPX": {
-    "ticker": "VPX",
-    "type": "tradingview",
-    "logoid": "vpbank-securities-jsc",
-    "url": "/logos/VPX.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vpbank-securities-jsc--big.svg"
+  "VIB": {
+    "ticker": "VIB",
+    "source": "vietstock-official",
+    "url": "/logos/VIB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VIB",
+    "sizeBytes": 18036
   },
-  "PLX": {
-    "ticker": "PLX",
-    "type": "tradingview",
-    "logoid": "viet-nam-national-petroleum-group",
-    "url": "/logos/PLX.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/viet-nam-national-petroleum-group--big.svg"
+  "SSB": {
+    "ticker": "SSB",
+    "source": "vietstock-official",
+    "url": "/logos/SSB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/SSB",
+    "sizeBytes": 23211
+  },
+  "VRE": {
+    "ticker": "VRE",
+    "source": "vietstock-official",
+    "url": "/logos/VRE.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VRE",
+    "sizeBytes": 27671
   },
   "GEE": {
     "ticker": "GEE",
-    "type": "tradingview",
-    "logoid": "gee-ltd",
-    "url": "/logos/GEE.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/gee-ltd--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/GEE.png",
+    "externalUrl": "https://finance.vietstock.vn/image/GEE",
+    "sizeBytes": 20379
   },
-  "POW": {
-    "ticker": "POW",
-    "type": "tradingview",
-    "logoid": "power-metal-resources-plc-ord-gbp002",
-    "url": "/logos/POW.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/power-metal-resources-plc-ord-gbp002--big.svg"
+  "PLX": {
+    "ticker": "PLX",
+    "source": "vietstock-official",
+    "url": "/logos/PLX.png",
+    "externalUrl": "https://finance.vietstock.vn/image/PLX",
+    "sizeBytes": 52515
   },
   "TPB": {
     "ticker": "TPB",
-    "type": "tradingview",
-    "logoid": "turning-point-brands",
-    "url": "/logos/TPB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/turning-point-brands--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/TPB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/TPB",
+    "sizeBytes": 71632
   },
-  "BCM": {
-    "ticker": "BCM",
-    "type": "tradingview",
-    "logoid": "brunello-cucinelli",
-    "url": "/logos/BCM.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/brunello-cucinelli--big.svg"
+  "POW": {
+    "ticker": "POW",
+    "source": "vietstock-official",
+    "url": "/logos/POW.png",
+    "externalUrl": "https://finance.vietstock.vn/image/POW",
+    "sizeBytes": 67654
   },
-  "HCM": {
-    "ticker": "HCM",
-    "type": "tradingview",
-    "logoid": "ho-chi-minh-city-securities-corporation",
-    "url": "/logos/HCM.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/ho-chi-minh-city-securities-corporation--big.svg"
-  },
-  "EIB": {
-    "ticker": "EIB",
-    "type": "tradingview",
-    "logoid": "ecoscience-international-berhad",
-    "url": "/logos/EIB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/ecoscience-international-berhad--big.svg"
+  "VPX": {
+    "ticker": "VPX",
+    "source": "vietstock-official",
+    "url": "/logos/VPX.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VPX",
+    "sizeBytes": 98661
   },
   "NVL": {
     "ticker": "NVL",
-    "type": "tradingview",
-    "logoid": "no-va-land-investment",
-    "url": "/logos/NVL.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/no-va-land-investment--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/NVL.png",
+    "externalUrl": "https://finance.vietstock.vn/image/NVL",
+    "sizeBytes": 33748
+  },
+  "EIB": {
+    "ticker": "EIB",
+    "source": "vietstock-official",
+    "url": "/logos/EIB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/EIB",
+    "sizeBytes": 15005
   },
   "VIX": {
     "ticker": "VIX",
-    "type": "tradingview",
-    "logoid": "ctcp-chung-khoan-vix",
-    "url": "/logos/VIX.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/ctcp-chung-khoan-vix--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/VIX.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VIX",
+    "sizeBytes": 1710
+  },
+  "HCM": {
+    "ticker": "HCM",
+    "source": "vietstock-official",
+    "url": "/logos/HCM.png",
+    "externalUrl": "https://finance.vietstock.vn/image/HCM",
+    "sizeBytes": 4482
+  },
+  "BCM": {
+    "ticker": "BCM",
+    "source": "vietstock-official",
+    "url": "/logos/BCM.png",
+    "externalUrl": "https://finance.vietstock.vn/image/BCM",
+    "sizeBytes": 98679
   },
   "GMD": {
     "ticker": "GMD",
-    "type": "tradingview",
-    "logoid": "genesis-minerals-limited",
-    "url": "/logos/GMD.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/genesis-minerals-limited--big.svg"
-  },
-  "GEX": {
-    "ticker": "GEX",
-    "type": "tradingview",
-    "logoid": "viet-nam-electrical-equipment-joint-stock-corporation",
-    "url": "/logos/GEX.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/viet-nam-electrical-equipment-joint-stock-corporation--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/GMD.png",
+    "externalUrl": "https://finance.vietstock.vn/image/GMD",
+    "sizeBytes": 46583
   },
   "OCB": {
     "ticker": "OCB",
-    "type": "tradingview",
-    "logoid": "ocb-bhd",
-    "url": "/logos/OCB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/ocb-bhd--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/OCB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/OCB",
+    "sizeBytes": 29332
   },
-  "REE": {
-    "ticker": "REE",
-    "type": "tradingview",
-    "logoid": "rarex-ltd",
-    "url": "/logos/REE.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/rarex-ltd--big.svg"
+  "GEX": {
+    "ticker": "GEX",
+    "source": "vietstock-official",
+    "url": "/logos/GEX.png",
+    "externalUrl": "https://finance.vietstock.vn/image/GEX",
+    "sizeBytes": 75911
   },
   "GEL": {
     "ticker": "GEL",
-    "type": "tradingview",
-    "logoid": "genesis-energy-lp",
-    "url": "/logos/GEL.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/genesis-energy-lp--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/GEL.png",
+    "externalUrl": "https://finance.vietstock.vn/image/GEL",
+    "sizeBytes": 39544
   },
-  "PGV": {
-    "ticker": "PGV",
-    "type": "tradingview",
-    "logoid": "progressive-ohio",
-    "url": "/logos/PGV.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/progressive-ohio--big.svg"
-  },
-  "KBC": {
-    "ticker": "KBC",
-    "type": "tradingview",
-    "logoid": "kbc-groep-nv",
-    "url": "/logos/KBC.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/kbc-groep-nv--big.svg"
-  },
-  "VCI": {
-    "ticker": "VCI",
-    "type": "tradingview",
-    "logoid": "viet-capital-securities-joint-stock-company",
-    "url": "/logos/VCI.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/viet-capital-securities-joint-stock-company--big.svg"
-  },
-  "VND": {
-    "ticker": "VND",
-    "type": "tradingview",
-    "logoid": "vndirect-securities-corporation",
-    "url": "/logos/VND.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vndirect-securities-corporation--big.svg"
+  "REE": {
+    "ticker": "REE",
+    "source": "vietstock-official",
+    "url": "/logos/REE.png",
+    "externalUrl": "https://finance.vietstock.vn/image/REE",
+    "sizeBytes": 49896
   },
   "NAB": {
     "ticker": "NAB",
-    "type": "tradingview",
-    "logoid": "national-australia-bank",
-    "url": "/logos/NAB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/national-australia-bank--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/NAB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/NAB",
+    "sizeBytes": 3408
   },
-  "FRT": {
-    "ticker": "FRT",
-    "type": "tradingview",
-    "logoid": "federal-realty-investment-trust",
-    "url": "/logos/FRT.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/federal-realty-investment-trust--big.svg"
+  "KBC": {
+    "ticker": "KBC",
+    "source": "vietstock-official",
+    "url": "/logos/KBC.png",
+    "externalUrl": "https://finance.vietstock.vn/image/KBC",
+    "sizeBytes": 19888
+  },
+  "VCI": {
+    "ticker": "VCI",
+    "source": "vietstock-official",
+    "url": "/logos/VCI.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VCI",
+    "sizeBytes": 7432
+  },
+  "PGV": {
+    "ticker": "PGV",
+    "source": "vietstock-official",
+    "url": "/logos/PGV.png",
+    "externalUrl": "https://finance.vietstock.vn/image/PGV",
+    "sizeBytes": 23779
+  },
+  "VND": {
+    "ticker": "VND",
+    "source": "vietstock-official",
+    "url": "/logos/VND.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VND",
+    "sizeBytes": 92302
   },
   "KDH": {
     "ticker": "KDH",
-    "type": "tradingview",
-    "logoid": "thonburi-medical-centre-pub-co-ltd-non-voting",
-    "url": "/logos/KDH.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/thonburi-medical-centre-pub-co-ltd-non-voting--big.svg"
-  },
-  "VPI": {
-    "ticker": "VPI",
-    "type": "tradingview",
-    "logoid": "vitality-products",
-    "url": "/logos/VPI.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vitality-products--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/KDH.png",
+    "externalUrl": "https://finance.vietstock.vn/image/KDH",
+    "sizeBytes": 14685
   },
   "SBT": {
     "ticker": "SBT",
-    "type": "tradingview",
-    "logoid": "oeneo",
-    "url": "/logos/SBT.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/oeneo--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/SBT.png",
+    "externalUrl": "https://finance.vietstock.vn/image/SBT",
+    "sizeBytes": 13700
   },
   "PNJ": {
     "ticker": "PNJ",
-    "type": "tradingview",
-    "logoid": "phu-nhuan-jewelry-joint-stock-company",
-    "url": "/logos/PNJ.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/phu-nhuan-jewelry-joint-stock-company--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/PNJ.png",
+    "externalUrl": "https://finance.vietstock.vn/image/PNJ",
+    "sizeBytes": 75301
   },
-  "HAG": {
-    "ticker": "HAG",
-    "type": "tradingview",
-    "logoid": "hensoldt-ag",
-    "url": "/logos/HAG.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/hensoldt-ag--big.svg"
+  "FRT": {
+    "ticker": "FRT",
+    "source": "vietstock-official",
+    "url": "/logos/FRT.png",
+    "externalUrl": "https://finance.vietstock.vn/image/FRT",
+    "sizeBytes": 110509
   },
-  "VGC": {
-    "ticker": "VGC",
-    "type": "tradingview",
-    "logoid": "country/CA",
-    "url": "/logos/VGC.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/country/CA--big.svg"
+  "VPI": {
+    "ticker": "VPI",
+    "source": "vietstock-official",
+    "url": "/logos/VPI.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VPI",
+    "sizeBytes": 47042
   },
   "PVD": {
     "ticker": "PVD",
-    "type": "tradingview",
-    "logoid": "petrovietnam-drilling-and-well-service",
-    "url": "/logos/PVD.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/petrovietnam-drilling-and-well-service--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/PVD.png",
+    "externalUrl": "https://finance.vietstock.vn/image/PVD",
+    "sizeBytes": 12834
   },
-  "DCM": {
-    "ticker": "DCM",
-    "type": "tradingview",
-    "logoid": "data-communications-management",
-    "url": "/logos/DCM.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/data-communications-management--big.svg"
+  "VGC": {
+    "ticker": "VGC",
+    "source": "vietstock-official",
+    "url": "/logos/VGC.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VGC",
+    "sizeBytes": 25717
   },
   "DGC": {
     "ticker": "DGC",
-    "type": "tradingview",
-    "logoid": "ctcptd-hoa-chat-duc-giang",
-    "url": "/logos/DGC.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/ctcptd-hoa-chat-duc-giang--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/DGC.png",
+    "externalUrl": "https://finance.vietstock.vn/image/DGC",
+    "sizeBytes": 44507
   },
-  "CRV": {
-    "ticker": "CRV",
-    "type": "tradingview",
-    "logoid": "crv-real-estate-gr",
-    "url": "/logos/CRV.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/crv-real-estate-gr--big.svg"
+  "DCM": {
+    "ticker": "DCM",
+    "source": "vietstock-official",
+    "url": "/logos/DCM.png",
+    "externalUrl": "https://finance.vietstock.vn/image/DCM",
+    "sizeBytes": 68264
   },
-  "DPM": {
-    "ticker": "DPM",
-    "type": "tradingview",
-    "logoid": "petrovietnam-fertilizer-and-chemicals",
-    "url": "/logos/DPM.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/petrovietnam-fertilizer-and-chemicals--big.svg"
+  "HAG": {
+    "ticker": "HAG",
+    "source": "vietstock-official",
+    "url": "/logos/HAG.png",
+    "externalUrl": "https://finance.vietstock.vn/image/HAG",
+    "sizeBytes": 386678
   },
   "KDC": {
     "ticker": "KDC",
-    "type": "tradingview",
-    "logoid": "kido",
-    "url": "/logos/KDC.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/kido--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/KDC.png",
+    "externalUrl": "https://finance.vietstock.vn/image/KDC",
+    "sizeBytes": 8475
   },
-  "VBB": {
-    "ticker": "VBB",
-    "type": "tradingview",
-    "logoid": "vietnam-thuong-tin-cjsb",
-    "url": "/logos/VBB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vietnam-thuong-tin-cjsb--big.svg"
+  "CRV": {
+    "ticker": "CRV",
+    "source": "vietstock-official",
+    "url": "/logos/CRV.png",
+    "externalUrl": "https://finance.vietstock.vn/image/CRV",
+    "sizeBytes": 7961
+  },
+  "DPM": {
+    "ticker": "DPM",
+    "source": "vietstock-official",
+    "url": "/logos/DPM.png",
+    "externalUrl": "https://finance.vietstock.vn/image/DPM",
+    "sizeBytes": 105361
   },
   "SJS": {
     "ticker": "SJS",
-    "type": "tradingview",
-    "logoid": "sjs-enterprises",
-    "url": "/logos/SJS.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/sjs-enterprises--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/SJS.png",
+    "externalUrl": "https://finance.vietstock.vn/image/SJS",
+    "sizeBytes": 87322
   },
-  "DXG": {
-    "ticker": "DXG",
-    "type": "tradingview",
-    "logoid": "dat-xanh",
-    "url": "/logos/DXG.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/dat-xanh--big.svg"
+  "VBB": {
+    "ticker": "VBB",
+    "source": "vietstock-official",
+    "url": "/logos/VBB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VBB",
+    "sizeBytes": 60990
   },
   "LGC": {
     "ticker": "LGC",
-    "type": "tradingview",
-    "logoid": "heritage-global",
-    "url": "/logos/LGC.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/heritage-global--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/LGC.png",
+    "externalUrl": "https://finance.vietstock.vn/image/LGC",
+    "sizeBytes": 5626
   },
   "TAL": {
     "ticker": "TAL",
-    "type": "tradingview",
-    "logoid": "tal-education",
-    "url": "/logos/TAL.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/tal-education--big.svg"
-  },
-  "DHG": {
-    "ticker": "DHG",
-    "type": "tradingview",
-    "logoid": "dhg-pharmaceutical-joint-stock-company",
-    "url": "/logos/DHG.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/dhg-pharmaceutical-joint-stock-company--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/TAL.png",
+    "externalUrl": "https://finance.vietstock.vn/image/TAL",
+    "sizeBytes": 8837
   },
   "SIP": {
     "ticker": "SIP",
-    "type": "tradingview",
-    "logoid": "sipef",
-    "url": "/logos/SIP.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/sipef--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/SIP.png",
+    "externalUrl": "https://finance.vietstock.vn/image/SIP",
+    "sizeBytes": 67885
+  },
+  "DXG": {
+    "ticker": "DXG",
+    "source": "vietstock-official",
+    "url": "/logos/DXG.png",
+    "externalUrl": "https://finance.vietstock.vn/image/DXG",
+    "sizeBytes": 39286
+  },
+  "DHG": {
+    "ticker": "DHG",
+    "source": "vietstock-official",
+    "url": "/logos/DHG.png",
+    "externalUrl": "https://finance.vietstock.vn/image/DHG",
+    "sizeBytes": 62608
   },
   "BMP": {
     "ticker": "BMP",
-    "type": "tradingview",
-    "logoid": "country/EU",
-    "url": "/logos/BMP.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/country/EU--big.svg"
-  },
-  "PDR": {
-    "ticker": "PDR",
-    "type": "tradingview",
-    "logoid": "phat-dat-real-estate-development",
-    "url": "/logos/PDR.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/phat-dat-real-estate-development--big.svg"
-  },
-  "BAF": {
-    "ticker": "BAF",
-    "type": "tradingview",
-    "logoid": "ctcp-nong-nghiep-baf-viet",
-    "url": "/logos/BAF.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/ctcp-nong-nghiep-baf-viet--big.svg"
-  },
-  "NLG": {
-    "ticker": "NLG",
-    "type": "tradingview",
-    "logoid": "nam-long-investment",
-    "url": "/logos/NLG.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/nam-long-investment--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/BMP.png",
+    "externalUrl": "https://finance.vietstock.vn/image/BMP",
+    "sizeBytes": 21328
   },
   "VCG": {
     "ticker": "VCG",
-    "type": "tradingview",
-    "logoid": "callinex-mines",
-    "url": "/logos/VCG.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/callinex-mines--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/VCG.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VCG",
+    "sizeBytes": 5420
   },
-  "VHC": {
-    "ticker": "VHC",
-    "type": "tradingview",
-    "logoid": "virnetx",
-    "url": "/logos/VHC.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/virnetx--big.svg"
+  "NLG": {
+    "ticker": "NLG",
+    "source": "vietstock-official",
+    "url": "/logos/NLG.png",
+    "externalUrl": "https://finance.vietstock.vn/image/NLG",
+    "sizeBytes": 39907
   },
-  "TCH": {
-    "ticker": "TCH",
-    "type": "tradingview",
-    "logoid": "country/EU",
-    "url": "/logos/TCH.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/country/EU--big.svg"
+  "BAF": {
+    "ticker": "BAF",
+    "source": "vietstock-official",
+    "url": "/logos/BAF.png",
+    "externalUrl": "https://finance.vietstock.vn/image/BAF",
+    "sizeBytes": 35730
   },
-  "VSH": {
-    "ticker": "VSH",
-    "type": "tradingview",
-    "logoid": "vishay-intertechnology",
-    "url": "/logos/VSH.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/vishay-intertechnology--big.svg"
+  "PDR": {
+    "ticker": "PDR",
+    "source": "vietstock-official",
+    "url": "/logos/PDR.png",
+    "externalUrl": "https://finance.vietstock.vn/image/PDR",
+    "sizeBytes": 11724
   },
   "CTR": {
     "ticker": "CTR",
-    "type": "tradingview",
-    "logoid": "tctcp-cong-trinh-viettel",
-    "url": "/logos/CTR.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/tctcp-cong-trinh-viettel--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/CTR.png",
+    "externalUrl": "https://finance.vietstock.vn/image/CTR",
+    "sizeBytes": 19675
+  },
+  "VHC": {
+    "ticker": "VHC",
+    "source": "vietstock-official",
+    "url": "/logos/VHC.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VHC",
+    "sizeBytes": 34776
   },
   "KLB": {
     "ticker": "KLB",
-    "type": "tradingview",
-    "logoid": "kien-long-commercial-jsc",
-    "url": "/logos/KLB.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/kien-long-commercial-jsc--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/KLB.png",
+    "externalUrl": "https://finance.vietstock.vn/image/KLB",
+    "sizeBytes": 30467
   },
-  "BWE": {
-    "ticker": "BWE",
-    "type": "tradingview",
-    "logoid": "bw-lpg-ltd",
-    "url": "/logos/BWE.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/bw-lpg-ltd--big.svg"
+  "VSH": {
+    "ticker": "VSH",
+    "source": "vietstock-official",
+    "url": "/logos/VSH.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VSH",
+    "sizeBytes": 66975
   },
-  "DSE": {
-    "ticker": "DSE",
-    "type": "tradingview",
-    "logoid": "daiwa-securities-group",
-    "url": "/logos/DSE.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/daiwa-securities-group--big.svg"
+  "TCH": {
+    "ticker": "TCH",
+    "source": "vietstock-official",
+    "url": "/logos/TCH.png",
+    "externalUrl": "https://finance.vietstock.vn/image/TCH",
+    "sizeBytes": 63435
   },
   "CII": {
     "ticker": "CII",
-    "type": "tradingview",
-    "logoid": "ho-chi-minh-city-infrastructure-investment-joint-stock-company",
-    "url": "/logos/CII.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/ho-chi-minh-city-infrastructure-investment-joint-stock-company--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/CII.png",
+    "externalUrl": "https://finance.vietstock.vn/image/CII",
+    "sizeBytes": 4627
+  },
+  "DSE": {
+    "ticker": "DSE",
+    "source": "vietstock-official",
+    "url": "/logos/DSE.png",
+    "externalUrl": "https://finance.vietstock.vn/image/DSE",
+    "sizeBytes": 9103
+  },
+  "BWE": {
+    "ticker": "BWE",
+    "source": "vietstock-official",
+    "url": "/logos/BWE.png",
+    "externalUrl": "https://finance.vietstock.vn/image/BWE",
+    "sizeBytes": 56465
   },
   "EVF": {
     "ticker": "EVF",
-    "type": "tradingview",
-    "logoid": "ct-tai-chinh-cp-dien-luc",
-    "url": "/logos/EVF.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/ct-tai-chinh-cp-dien-luc--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/EVF.png",
+    "externalUrl": "https://finance.vietstock.vn/image/EVF",
+    "sizeBytes": 103771
   },
   "PVT": {
     "ticker": "PVT",
-    "type": "tradingview",
-    "logoid": "rms-mezzanine",
-    "url": "/logos/PVT.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/rms-mezzanine--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/PVT.png",
+    "externalUrl": "https://finance.vietstock.vn/image/PVT",
+    "sizeBytes": 412986
   },
   "VTP": {
     "ticker": "VTP",
-    "type": "tradingview",
-    "logoid": "viettel-post-jvc",
-    "url": "/logos/VTP.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/viettel-post-jvc--big.svg"
-  },
-  "HPA": {
-    "ticker": "HPA",
-    "type": "tradingview",
-    "logoid": "hoa-phat-group",
-    "url": "/logos/HPA.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/hoa-phat-group--big.svg"
-  },
-  "ORS": {
-    "ticker": "ORS",
-    "type": "tradingview",
-    "logoid": "orsero-npv",
-    "url": "/logos/ORS.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/orsero-npv--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/VTP.png",
+    "externalUrl": "https://finance.vietstock.vn/image/VTP",
+    "sizeBytes": 26526
   },
   "DGW": {
     "ticker": "DGW",
-    "type": "tradingview",
-    "logoid": "digiworld",
-    "url": "/logos/DGW.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/digiworld--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/DGW.png",
+    "externalUrl": "https://finance.vietstock.vn/image/DGW",
+    "sizeBytes": 30168
+  },
+  "ORS": {
+    "ticker": "ORS",
+    "source": "vietstock-official",
+    "url": "/logos/ORS.png",
+    "externalUrl": "https://finance.vietstock.vn/image/ORS",
+    "sizeBytes": 73518
+  },
+  "HPA": {
+    "ticker": "HPA",
+    "source": "vietstock-official",
+    "url": "/logos/HPA.png",
+    "externalUrl": "https://finance.vietstock.vn/image/HPA",
+    "sizeBytes": 26641
   },
   "HAH": {
     "ticker": "HAH",
-    "type": "tradingview",
-    "logoid": "hai-an-transport-and-stevedoring-joint-stock-company",
-    "url": "/logos/HAH.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/hai-an-transport-and-stevedoring-joint-stock-company--big.svg"
-  },
-  "HSG": {
-    "ticker": "HSG",
-    "type": "tradingview",
-    "logoid": "hong-kong-and-shanghai-hotels",
-    "url": "/logos/HSG.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/hong-kong-and-shanghai-hotels--big.svg"
-  },
-  "PC1": {
-    "ticker": "PC1",
-    "type": "tradingview",
-    "logoid": "power-construction-joint-stock-company",
-    "url": "/logos/PC1.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/power-construction-joint-stock-company--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/HAH.png",
+    "externalUrl": "https://finance.vietstock.vn/image/HAH",
+    "sizeBytes": 173537
   },
   "DIG": {
     "ticker": "DIG",
-    "type": "tradingview",
-    "logoid": "development-investment-construction",
-    "url": "/logos/DIG.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/development-investment-construction--big.svg"
-  },
-  "FTS": {
-    "ticker": "FTS",
-    "type": "tradingview",
-    "logoid": "fortis",
-    "url": "/logos/FTS.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/fortis--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/DIG.png",
+    "externalUrl": "https://finance.vietstock.vn/image/DIG",
+    "sizeBytes": 22011
   },
   "PHR": {
     "ticker": "PHR",
-    "type": "tradingview",
-    "logoid": "phreesia",
-    "url": "/logos/PHR.svg",
-    "externalUrl": "https://s3-symbol-logo.tradingview.com/phreesia--big.svg"
+    "source": "vietstock-official",
+    "url": "/logos/PHR.png",
+    "externalUrl": "https://finance.vietstock.vn/image/PHR",
+    "sizeBytes": 18675
+  },
+  "FTS": {
+    "ticker": "FTS",
+    "source": "vietstock-official",
+    "url": "/logos/FTS.png",
+    "externalUrl": "https://finance.vietstock.vn/image/FTS",
+    "sizeBytes": 154100
+  },
+  "PC1": {
+    "ticker": "PC1",
+    "source": "vietstock-official",
+    "url": "/logos/PC1.png",
+    "externalUrl": "https://finance.vietstock.vn/image/PC1",
+    "sizeBytes": 62828
+  },
+  "HSG": {
+    "ticker": "HSG",
+    "source": "vietstock-official",
+    "url": "/logos/HSG.png",
+    "externalUrl": "https://finance.vietstock.vn/image/HSG",
+    "sizeBytes": 331199
   }
 }

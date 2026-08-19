@@ -39,7 +39,7 @@ export const StockLogo = memo(function StockLogo({
 
   return (
     <div
-      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-[#161c24] p-0.5 shadow-sm transition-transform hover:scale-105 select-none ${className}`}
+      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/15 bg-[#ffffff] p-0.5 shadow-sm transition-transform hover:scale-105 select-none ${className}`}
       style={{
         width: size,
         height: size,
@@ -47,13 +47,13 @@ export const StockLogo = memo(function StockLogo({
       title={alt || `Logo ${ticker}`}
     >
       <img
-        src={`/logos/${ticker}.svg`}
+        src={`/logos/${ticker}.png`}
         alt={alt || `Logo ${ticker}`}
         width={size}
         height={size}
         loading="lazy"
         onError={() => setError(true)}
-        className="h-full w-full object-contain rounded-[6px]"
+        className="h-full w-full object-contain rounded-[4px]"
       />
     </div>
   )

@@ -80,7 +80,7 @@ async function updateNotionIcons() {
     }
 
     const logoInfo = logoMap[ticker]
-    const logoUrl = logoInfo?.externalUrl || `https://qeoindex.com/logos/${ticker}.svg`
+    const logoUrl = logoInfo?.externalUrl || `https://finance.vietstock.vn/image/${ticker}`
 
     try {
       const patchRes = await fetch(`https://api.notion.com/v1/pages/${page.id}`, {
