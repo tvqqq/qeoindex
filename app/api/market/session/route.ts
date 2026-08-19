@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { fetchDnseSessionHistory } from "@/lib/dnse-market-runtime"
 import { getOrderbookSnapshotFromSupabase, upsertOrderbookSnapshotToSupabase } from "@/lib/supabase/orderbook"
+import { isTradingSessionOpen } from "@/lib/session-countdown"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -23,7 +24,8 @@ interface SessionCacheItem {
   expiresAt: number
 }
 const serverCache = new Map<string, SessionCacheItem>()
-const SERVER_TTL_MS = 15_000
+const IN_SESSION_TTL_MS = 2_500
+const OFF_SESSION_TTL_MS = 60_000
 
 export function clearServerSessionCache() {
   serverCache.clear()
@@ -37,6 +39,8 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const forceRefresh = url.searchParams.get("refresh") === "1"
+  const now = new Date()
+  const inSession = isTradingSessionOpen(now)
 
   // 1. In-memory hot cache
   if (!forceRefresh) {
@@ -46,8 +50,8 @@ export async function GET(request: Request) {
     }
   }
 
-  // 2. Fast-path: Check Supabase Snapshot first for instant sub-20ms response
-  if (!forceRefresh) {
+  // 2. Off-session Fast-path: Check Supabase Snapshot first for instant sub-20ms response when market is closed
+  if (!forceRefresh && !inSession) {
     try {
       const snapshot = await getOrderbookSnapshotFromSupabase(symbol)
       const hasMeaningfulOrderbook = Boolean(
@@ -72,27 +76,17 @@ export async function GET(request: Request) {
             trades: snapshot.tradesTruncated ? "session-backfill-truncated" : "full-session-backfill",
           },
         }
-        serverCache.set(symbol, { data: payload, expiresAt: Date.now() + SERVER_TTL_MS })
-
-        // Asynchronously refresh in background from DNSE to keep snapshot fresh
-        void fetchDnseSessionHistory(symbol, new Date())
-          .then((freshHistory) => {
-            if (freshHistory && (freshHistory.prices.length > 0 || freshHistory.trades.length > 0 || freshHistory.latestQuote?.matchPrice)) {
-              void upsertOrderbookSnapshotToSupabase(freshHistory)
-            }
-          })
-          .catch(() => { /* silent background error */ })
-
+        serverCache.set(symbol, { data: payload, expiresAt: Date.now() + OFF_SESSION_TTL_MS })
         return NextResponse.json(payload, { headers: NO_STORE_HEADERS })
       }
     } catch {
-      // ignore and continue to direct DNSE fetch
+      // ignore and continue to direct fetch
     }
   }
 
-  // 3. Fetch canonical DNSE session history & persist snapshot to Supabase
+  // 3. Fetch canonical live DNSE/VPS session history (always fresh during trading hours)
   try {
-    const history = await fetchDnseSessionHistory(symbol, new Date())
+    const history = await fetchDnseSessionHistory(symbol, now)
     const payload = {
       ok: true,
       provider: "DNSE",
@@ -106,7 +100,8 @@ export async function GET(request: Request) {
         trades: history.tradesTruncated ? "session-backfill-truncated" : "full-session-backfill",
       },
     }
-    serverCache.set(symbol, { data: payload, expiresAt: Date.now() + SERVER_TTL_MS })
+    const ttl = inSession ? IN_SESSION_TTL_MS : OFF_SESSION_TTL_MS
+    serverCache.set(symbol, { data: payload, expiresAt: Date.now() + ttl })
     void upsertOrderbookSnapshotToSupabase(history)
     return NextResponse.json(payload, { headers: NO_STORE_HEADERS })
   } catch (error) {
