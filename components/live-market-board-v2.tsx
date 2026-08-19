@@ -478,7 +478,7 @@ export function LiveMarketBoardV2({
   initialHistories?: Record<string, IntradayPoint[]>
   isSessionOpen?: boolean
 }) {
-  const sessionOpen = isSessionOpen ?? isTradingSessionOpen()
+  const [sessionOpen, setSessionOpen] = useState<boolean>(() => isSessionOpen ?? isTradingSessionOpen())
   const { open: openOrderBook } = useOrderBooks()
   const [quotes, setQuotes] = useState<Record<string, LiveStockQuote | IndexQuote>>(() => {
     const initial: Record<string, LiveStockQuote | IndexQuote> = initialQuotes ? { ...initialQuotes } : {}
@@ -722,8 +722,12 @@ export function LiveMarketBoardV2({
   }, [])
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      const nextSession = currentSessionIdentifier(new Date())
+    const checkSession = () => {
+      const now = new Date()
+      const isOpen = isTradingSessionOpen(now)
+      setSessionOpen((prev) => (prev !== isOpen ? isOpen : prev))
+
+      const nextSession = currentSessionIdentifier(now)
       if (sessionIdentifier.current !== nextSession) {
         sessionIdentifier.current = nextSession
         dailyReferences.current = {}
@@ -731,8 +735,11 @@ export function LiveMarketBoardV2({
         setQuotes({})
         setPriceHistory({})
         setHistoryReloadKey((key) => key + 1)
+        setReconnectKey((key) => key + 1)
       }
-    }, 5_000)
+    }
+
+    const timer = window.setInterval(checkSession, 1000)
     return () => window.clearInterval(timer)
   }, [])
 
