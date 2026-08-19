@@ -604,13 +604,24 @@ export function LiveMarketBoardV2({
           const next = { ...current }
           for (const symbol of symbolList) {
             const history = payload.histories?.[symbol]
-            if (!history?.price || !history.reference) continue
+            if (!history?.reference) continue
             dailyReferences.current[symbol] = history.reference
             const existing = current[symbol] as LiveStockQuote | undefined
-            const price = history.price
             const ref = history.reference
+
+            // If existing quote was already received live from WebSocket / stream, preserve the live price!
+            const hasLiveQuote = Boolean(
+              existing &&
+              existing.price &&
+              existing.price > 0 &&
+              (existing.price !== ref || (existing.volume && existing.volume > 0))
+            )
+
+            const price = hasLiveQuote ? (existing!.price) : (history.price || existing?.price || ref)
             const change = price - ref
             const changePercent = ref > 0 ? (change / ref) * 100 : (history.changePercent ?? 0)
+            const volume = hasLiveQuote ? (existing!.volume || 0) : (existing?.volume || 0)
+
             next[symbol] = {
               ...(existing ?? {}),
               symbol,
@@ -618,7 +629,8 @@ export function LiveMarketBoardV2({
               reference: ref,
               change,
               changePercent,
-              updatedAt: history.lastBarAt ? new Date(history.lastBarAt * 1000).toISOString() : (existing?.updatedAt || receivedAt),
+              volume,
+              updatedAt: hasLiveQuote && existing?.updatedAt ? existing.updatedAt : (history.lastBarAt ? new Date(history.lastBarAt * 1000).toISOString() : receivedAt),
             }
           }
           return next
