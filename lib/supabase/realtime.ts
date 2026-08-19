@@ -16,8 +16,11 @@ export interface RealtimeMarketTick {
 export type RealtimeCallback = (tick: RealtimeMarketTick) => void
 
 /**
- * Subscribes to Supabase Realtime Broadcast channel for live market ticks.
- * Returns unsubscribe function or null if Supabase is not configured.
+ * Subscribes to Supabase Realtime market ticks.
+ *
+ * Broadcast and Postgres changes can produce several updates for the same symbol
+ * during a single browser frame. Coalesce them here so consumers never receive
+ * more than one callback per symbol per animation frame.
  */
 export function subscribeMarketRealtime(
   channelName: string = "market:top100",
@@ -28,6 +31,32 @@ export function subscribeMarketRealtime(
   const supabase = getSupabaseBrowserClient()
   if (!supabase) return null
 
+  const pending = new Map<string, RealtimeMarketTick>()
+  let frame: number | null = null
+  let disposed = false
+
+  const flush = () => {
+    frame = null
+    if (disposed) return
+    const ticks = Array.from(pending.values())
+    pending.clear()
+    for (const tick of ticks) onTick(tick)
+  }
+
+  const enqueue = (tick: RealtimeMarketTick) => {
+    if (disposed || !tick.symbol) return
+    pending.set(tick.symbol.toUpperCase(), tick)
+    if (frame === null && typeof window !== "undefined") {
+      frame = window.requestAnimationFrame(flush)
+    }
+  }
+
+  const handlePayload = (payload: unknown) => {
+    if (payload && typeof payload === "object" && "symbol" in payload) {
+      enqueue(payload as RealtimeMarketTick)
+    }
+  }
+
   const channel = supabase.channel(channelName, {
     config: {
       broadcast: { self: false },
@@ -36,9 +65,7 @@ export function subscribeMarketRealtime(
 
   channel
     .on("broadcast", { event: "tick" }, ({ payload }) => {
-      if (payload && typeof payload === "object" && "symbol" in payload) {
-        onTick(payload as RealtimeMarketTick)
-      }
+      handlePayload(payload)
     })
     .on(
       "postgres_changes",
@@ -50,7 +77,7 @@ export function subscribeMarketRealtime(
       (payload) => {
         const row = payload.new as any
         if (row?.symbol && row?.latest_price) {
-          onTick({
+          enqueue({
             symbol: row.symbol,
             price: Number(row.latest_price),
             reference: Number(row.reference_price ?? row.latest_price),
@@ -65,6 +92,12 @@ export function subscribeMarketRealtime(
     .subscribe()
 
   return () => {
+    disposed = true
+    if (frame !== null && typeof window !== "undefined") {
+      window.cancelAnimationFrame(frame)
+    }
+    frame = null
+    pending.clear()
     void supabase.removeChannel(channel)
   }
 }
