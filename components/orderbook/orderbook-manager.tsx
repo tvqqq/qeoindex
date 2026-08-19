@@ -1,10 +1,27 @@
 "use client"
 
+import { useEffect } from "react"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveOrderBookPanel } from "@/components/orderbook/live-orderbook-panel"
 
 export function OrderBookManager() {
   const { books, order, close, focus } = useOrderBooks()
+
+  // ESC Shortcut: close the currently focused / top-most popup
+  useEffect(() => {
+    if (!books.length) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault()
+        const topKey = order[order.length - 1] || books[books.length - 1]?.key
+        if (topKey) {
+          close(topKey)
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [books, order, close])
 
   if (!books.length) return null
 

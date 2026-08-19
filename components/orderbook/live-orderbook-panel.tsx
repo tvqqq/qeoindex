@@ -411,7 +411,9 @@ function nextQuote(symbol: string, data: Record<string, unknown>, current: Stock
   const rawAvg = firstPositive(data, ["avgPrice", "averagePrice", "avePrice"]) || current?.avgPrice
   const avgPrice = rawAvg ? normalizeMarketPrice(rawAvg, reference || price) ?? rawAvg : undefined
   
-  const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "nmTotalTradedQty", "expectedMatchedVolume", "volume", "lot"]) || current?.totalVolume
+  const rawLot = Number(data?.lot)
+  const lotVolume = Number.isFinite(rawLot) && rawLot > 0 ? rawLot * 10 : 0
+  const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "nmTotalTradedQty", "expectedMatchedVolume", "volume"]) || lotVolume || current?.totalVolume
   const change = reference && reference > 0 ? price - reference : (current?.change ?? 0)
   const changePercent = reference && reference > 0 ? ((price - reference) / reference) * 100 : (current?.changePercent ?? 0)
 
@@ -1876,13 +1878,13 @@ function TradeInitiativeAndMarketStatsCard({
           <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
             <div className="text-[9px] text-muted-2 uppercase font-semibold">Tổng GT</div>
             <div className="text-xs sm:text-[13px] font-bold text-foreground">
-              {quote?.totalValue
-                ? formatMarketValue(quote.totalValue)
-                : quote?.totalVolume && quote?.price
-                  ? formatMarketValue(quote.totalVolume * quote.price)
-                  : totalVolume && quote?.price
-                    ? formatMarketValue(totalVolume * quote.price)
-                    : "—"}
+              {(() => {
+                const vol = quote?.totalVolume ?? totalVolume
+                const rawP = quote?.price ? (quote.price >= 500 ? quote.price : quote.price * 1000) : 0
+                if (quote?.totalValue) return formatMarketValue(quote.totalValue)
+                if (vol > 0 && rawP > 0) return formatMarketValue(vol * rawP)
+                return "—"
+              })()}
             </div>
           </div>
         </div>
@@ -2050,7 +2052,6 @@ export function LiveOrderBookPanel({
   const stream = useDnseOrderBookStream(symbol, reconnectKey, initialMeta)
   const quote = stream.quote
   const isWsReady = stream.state === "LIVE" || stream.historyState === "READY" || stream.trades.length > 0 || stream.bids.length > 0 || stream.quote !== null
-  const headerPriceFlash = usePriceFlashAnimation(quote?.price, quote?.reference)
 
   // Confetti for whale trades
   const confetti = useWhaleConfetti()
@@ -2287,7 +2288,13 @@ export function LiveOrderBookPanel({
     return { buyVol, sellVol, unkVol, totalTraded, buyTradedPct, sellTradedPct }
   }, [stream.trades])
 
-  const quotePrice = quote?.price
+  // Realtime active price: synchronized across latest Tape trade -> stream.quote.price -> stream.quote.reference
+  const latestTradePrice = stream.trades[0]?.price && stream.trades[0].price > 0 ? stream.trades[0].price : null
+  const activePrice = latestTradePrice ?? quote?.price ?? quote?.reference ?? null
+  const reference = quote?.reference ? (normalizeMarketPrice(quote.reference, activePrice || 0) ?? quote.reference) : undefined
+  const changePercent = reference && reference > 0 && activePrice != null ? Math.round(((activePrice - reference) / reference) * 10000) / 100 : (quote?.changePercent ?? 0)
+
+  const quotePrice = activePrice ?? undefined
 
   // Foreign Flow Timeline (Biến động GT mua bán của NN từ đầu phiên 09:15:00 tới hiện tại)
   const foreignTimeline = useMemo(() => {
@@ -2352,25 +2359,25 @@ export function LiveOrderBookPanel({
   }, [stream.trades, quotePrice])
 
   const tone = useMemo(() => {
-    if (!quote?.price) return "ref"
-    const price = quote.price
-    const ref = quote.reference ? normalizeMarketPrice(quote.reference, price) ?? quote.reference : undefined
-    const ceil = quote.ceiling ? normalizeMarketPrice(quote.ceiling, price) ?? quote.ceiling : undefined
-    const flr = quote.floor ? normalizeMarketPrice(quote.floor, price) ?? quote.floor : undefined
+    if (!activePrice) return "ref"
+    const price = activePrice
+    const ceil = quote?.ceiling ? normalizeMarketPrice(quote.ceiling, price) ?? quote.ceiling : undefined
+    const flr = quote?.floor ? normalizeMarketPrice(quote.floor, price) ?? quote.floor : undefined
 
     const baseTone = marketToneFromPrice({
       price,
-      reference: ref,
+      reference,
       ceiling: ceil,
       floor: flr,
+      changePercent,
     })
     if (baseTone === "ceiling" || baseTone === "floor") return baseTone
-    const change = quote.changePercent ?? 0
-    if (change >= 6.85) return "ceiling"
-    if (change <= -6.85) return "floor"
+    if (changePercent >= 6.85) return "ceiling"
+    if (changePercent <= -6.85) return "floor"
     return baseTone
-  }, [quote])
-  const color = quote ? marketToneText(tone) : "text-muted-2"
+  }, [activePrice, reference, quote?.ceiling, quote?.floor, changePercent])
+  const color = activePrice ? marketToneText(tone) : "text-muted-2"
+  const headerPriceFlash = usePriceFlashAnimation(activePrice, reference)
 
   // Foreign statistics calculations
   const foreignNetVolume = stream.foreign ? stream.foreign.totalBuyVolume - stream.foreign.totalSellVolume : null
@@ -2446,9 +2453,9 @@ export function LiveOrderBookPanel({
                       : ""
               }`}
             >
-              {formatPrice(quote?.price)}
+              {formatPrice(activePrice)}
             </span>
-            {quote ? <MarketChangePill value={quote.changePercent} tone={tone} compact /> : null}
+            {activePrice ? <MarketChangePill value={changePercent} tone={tone} compact /> : null}
           </div>
 
           {/* Action Controls (3 clean icons) */}
