@@ -74,7 +74,7 @@ test("DNSE websocket messages use animation-frame buffering without retaining cl
   assert.match(boardSource, /let messageQueue: string\[\] = \[\]/)
   assert.match(boardSource, /window\.requestAnimationFrame\(flushMessageQueue\)/)
   assert.match(boardSource, /window\.cancelAnimationFrame\(messageFrame\)/)
-  assert.match(boardSource, /const raw = event\.data[\s\S]*?scheduleMessage\(event\.data\)/)
+  assert.match(boardSource, /socket\.onmessage = \(event\) =>[\s\S]*?scheduleMessage\(event\.data\)/)
   assert.match(boardSource, /for \(const raw of queued\)/)
   assert.match(boardSource, /clearMessageQueue\(\)[\s\S]*?socket\.close\(1000, "board closed"\)/)
 })
