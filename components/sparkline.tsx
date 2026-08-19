@@ -19,7 +19,6 @@ function compactPoints(data: number[]) {
   const points = data.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
   if (points.length <= MAX_RENDER_POINTS) return points
 
-  // Keep the whole visible session shape while reducing SVG/path work.
   const result = new Array<number>(MAX_RENDER_POINTS)
   const lastIndex = points.length - 1
   const step = lastIndex / (MAX_RENDER_POINTS - 1)
@@ -48,19 +47,16 @@ export const Sparkline = memo(function Sparkline({
 }: SparklineProps) {
   const hasRef = typeof refValue === "number" && Number.isFinite(refValue) && refValue > 0
   const ref = hasRef ? (refValue as number) : undefined
-
-  const dataKey = data.length > 0 ? `${data.length}-${data[0]}-${data[data.length - 1]}-${ref}` : ""
+  const middle = data.length > 2 ? data[Math.floor(data.length / 2)] : data[0]
+  const dataKey = data.length > 0 ? `${data.length}-${data[0]}-${middle}-${data[data.length - 1]}-${ref}` : ""
 
   const computed = useMemo(() => {
     const points = compactPoints(data)
     if (points.length < 2) return null
 
-    // 1. Dynamic Auto-Fit Range: Scale strictly to actual price action high & low
     const rawMin = Math.min(...points)
     const rawMax = Math.max(...points)
     const delta = rawMax - rawMin
-
-    // Add 15% top & bottom padding so waves are clearly visible without touching boundary
     const padding = delta > 0 ? delta * 0.15 : (rawMin * 0.005 || 0.05)
     const min = rawMin - padding
     const max = rawMax + padding
@@ -77,7 +73,6 @@ export const Sparkline = memo(function Sparkline({
       return [x, y]
     })
 
-    // 2. Smooth Cubic Spline Bézier Curve Path
     let path = `M ${coords[0][0].toFixed(2)},${coords[0][1].toFixed(2)}`
     for (let i = 0; i < coords.length - 1; i++) {
       const [x0, y0] = coords[i]
@@ -90,7 +85,6 @@ export const Sparkline = memo(function Sparkline({
     const lastX = last[0]
     const lastY = last[1]
 
-    // 3. Clear Reference Baseline Y (anchored within visible boundary)
     let refY: number | null = null
     if (ref != null) {
       const calculatedRefY = padY + usableH - ((ref - min) / range) * usableH
@@ -98,9 +92,8 @@ export const Sparkline = memo(function Sparkline({
     }
 
     const uid = Math.abs(Math.round(coords[0][0] * 100)) + "-" + color.replace(/[^a-z0-9]/gi, "")
-
     return { path, lastX, lastY, refY, padX, uid }
-  }, [dataKey, ref, width, height, strokeWidth, color, data])
+  }, [dataKey, ref, width, height, strokeWidth, color])
 
   if (!computed) {
     return <svg width={width} height={height} aria-hidden="true" className={className} />
@@ -127,41 +120,18 @@ export const Sparkline = memo(function Sparkline({
         )}
       </defs>
 
-      {/* Dotted Reference Baseline (Crisp & Visible) */}
       {hasRef && refY != null && (
         <g opacity={0.85}>
-          <line
-            x1={0}
-            x2={width}
-            y1={refY}
-            y2={refY}
-            stroke={refColor}
-            strokeDasharray="2.5 2"
-            strokeWidth={1.15}
-          />
+          <line x1={0} x2={width} y1={refY} y2={refY} stroke={refColor} strokeDasharray="2.5 2" strokeWidth={1.15} />
         </g>
       )}
 
-      {/* Gradient Area Fill */}
       {fill && (
-        <path
-          d={`${path} L ${lastX.toFixed(2)},${height} L ${padX.toFixed(2)},${height} Z`}
-          fill={`url(#spark-grad-${uid})`}
-          stroke="none"
-        />
+        <path d={`${path} L ${lastX.toFixed(2)},${height} L ${padX.toFixed(2)},${height} Z`} fill={`url(#spark-grad-${uid})`} stroke="none" />
       )}
 
-      {/* Main Smooth Sparkline Stroke */}
-      <path
-        d={path}
-        fill="none"
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
+      <path d={path} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinejoin="round" strokeLinecap="round" />
 
-      {/* End Point Glow Dot */}
       {showDot && (
         <>
           <circle cx={lastX} cy={lastY} r={strokeWidth + 1.2} fill={color} fillOpacity={0.25} />
