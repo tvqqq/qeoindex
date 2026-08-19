@@ -13,10 +13,26 @@ interface SparklineProps {
   className?: string
 }
 
+const MAX_RENDER_POINTS = 36
+
+function compactPoints(data: number[]) {
+  const points = data.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
+  if (points.length <= MAX_RENDER_POINTS) return points
+
+  // Keep the whole visible session shape while reducing SVG/path work.
+  const result = new Array<number>(MAX_RENDER_POINTS)
+  const lastIndex = points.length - 1
+  const step = lastIndex / (MAX_RENDER_POINTS - 1)
+  for (let i = 0; i < MAX_RENDER_POINTS; i += 1) {
+    result[i] = points[Math.round(i * step)]
+  }
+  return result
+}
+
 /**
  * Professional Smooth SVG Sparkline with Dynamic Intraday Auto-Fit Scaling.
- * Uses Monotonic Cubic Spline / Smooth Bézier Curves and Gradient Fill
- * to accurately depict intraday price action, waves, and momentum.
+ * Render work is capped at 36 points so a 100-symbol live board does not
+ * rebuild large SVG paths on every realtime quote.
  */
 export const Sparkline = memo(function Sparkline({
   data,
@@ -36,7 +52,7 @@ export const Sparkline = memo(function Sparkline({
   const dataKey = data.length > 0 ? `${data.length}-${data[0]}-${data[data.length - 1]}-${ref}` : ""
 
   const computed = useMemo(() => {
-    const points = data.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
+    const points = compactPoints(data)
     if (points.length < 2) return null
 
     // 1. Dynamic Auto-Fit Range: Scale strictly to actual price action high & low
@@ -84,7 +100,7 @@ export const Sparkline = memo(function Sparkline({
     const uid = Math.abs(Math.round(coords[0][0] * 100)) + "-" + color.replace(/[^a-z0-9]/gi, "")
 
     return { path, lastX, lastY, refY, padX, uid }
-  }, [dataKey, ref, width, height, strokeWidth, color])
+  }, [dataKey, ref, width, height, strokeWidth, color, data])
 
   if (!computed) {
     return <svg width={width} height={height} aria-hidden="true" className={className} />
