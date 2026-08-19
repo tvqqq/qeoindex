@@ -1,5 +1,4 @@
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client"
-import type { LiveStockQuote } from "@/components/live-market-stock"
 
 export interface RealtimeMarketTick {
   symbol: string
