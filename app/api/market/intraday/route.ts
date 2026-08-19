@@ -46,22 +46,41 @@ function getRedis() {
   return redis
 }
 
+function latestSnapshotCacheKey(symbols: string[] | readonly string[], now: Date) {
+  return `top100:v8:${vietnamDateKey(now)}:latest:${symbols.join("-")}`
+}
+
 export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly string[], now: Date = new Date()): Promise<IntradaySnapshot | null> {
-  const key = snapshotCacheKey(symbols, now)
+  const bucketKey = snapshotCacheKey(symbols, now)
+  const latestKey = latestSnapshotCacheKey(symbols, now)
   const cache = getCache({ namespace: "market-board-v8" })
 
+  // 1. Exact bucket from Runtime Cache
   try {
-    const cached = await cache.get(key)
+    const cached = await cache.get(bucketKey)
     if (isIntradaySnapshot(cached, symbols)) return cached
   } catch { /* Runtime Cache fail open */ }
 
   const redisClient = getRedis()
   if (redisClient) {
+    // 2. Exact bucket from Redis
     try {
-      const cached = await redisClient.get<IntradaySnapshot>(key)
+      const cached = await redisClient.get<IntradaySnapshot>(bucketKey)
       if (isIntradaySnapshot(cached, symbols)) return cached
     } catch { /* Redis fail open */ }
+
+    // 3. Fallback to latest available snapshot of today from Redis
+    try {
+      const cachedLatest = await redisClient.get<IntradaySnapshot>(latestKey)
+      if (isIntradaySnapshot(cachedLatest, symbols)) return cachedLatest
+    } catch { /* Redis fail open */ }
   }
+
+  // 4. Fallback to latest snapshot from Runtime Cache
+  try {
+    const cachedLatest = await cache.get(latestKey)
+    if (isIntradaySnapshot(cachedLatest, symbols)) return cachedLatest
+  } catch { /* Runtime Cache fail open */ }
 
   return null
 }
@@ -202,6 +221,7 @@ export async function GET(request: Request) {
 
   const now = new Date()
   const key = snapshotCacheKey(symbols, now)
+  const latestKey = latestSnapshotCacheKey(symbols, now)
   const ttl = secondsToNextBucket(now)
   const cache = getCache({ namespace: "market-board-v8" })
   let snapshot: IntradaySnapshot | null = null
@@ -232,9 +252,12 @@ export async function GET(request: Request) {
   if (!snapshot) {
     snapshot = await fetchSnapshot(symbols, now)
     const writeTtl = secondsToNextBucket(new Date())
+    const latestTtl = 86400 // Keep daily latest in Redis for 24h
     await Promise.allSettled([
       cache.set(key, snapshot, { ttl: writeTtl, tags: ["market-board"], name: "Top 100 5m snapshot" }),
+      cache.set(latestKey, snapshot, { ttl: latestTtl, tags: ["market-board"], name: "Top 100 5m latest" }),
       redisClient ? redisClient.set(key, snapshot, { ex: writeTtl }) : Promise.resolve(),
+      redisClient ? redisClient.set(latestKey, snapshot, { ex: latestTtl }) : Promise.resolve(),
     ])
   }
 

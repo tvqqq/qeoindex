@@ -78,7 +78,7 @@ async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardDat
     let intraday: IntradayPoint[] = []
     if (cachedRow?.points && cachedRow.points.length > 0) {
       intraday = cachedRow.points.slice(-INITIAL_HISTORY_POINTS)
-    } else if (Array.isArray(snap?.intraday_1m) && snap?.session_date === currentDay) {
+    } else if (Array.isArray(snap?.intraday_1m) && snap?.session_date === currentDay && snap.intraday_1m.length > 0) {
       // Fallback to Supabase 1m ONLY if it matches today's session
       intraday = (snap.intraday_1m as unknown as IntradayPoint[]).slice(-INITIAL_HISTORY_POINTS)
     }
@@ -88,6 +88,15 @@ async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardDat
 
     const latestPrice = live?.price || snap?.latest_price || cachedRow?.price || snap?.reference_price || lastBarClose || firstBarOpen
     const ref = live?.reference || snap?.reference_price || cachedRow?.reference || firstBarOpen || latestPrice
+
+    // If intraday is still empty, synthesize an anchor baseline [ref, latestPrice] so chart is NEVER blank
+    if (intraday.length === 0 && ref && ref > 0 && latestPrice && latestPrice > 0) {
+      const nowSec = Math.floor(now.getTime() / 1000)
+      intraday = [
+        { time: nowSec - 300, close: ref },
+        { time: nowSec, close: latestPrice },
+      ]
+    }
 
     if (latestPrice && latestPrice > 0 && ref && ref > 0) {
       const change = live?.change ?? (latestPrice - ref)
