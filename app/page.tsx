@@ -11,6 +11,7 @@ import { readThroughUiCache } from "@/lib/ui-data-cache"
 import { getCachedIntraday5mSnapshot } from "@/app/api/market/intraday/route"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/lib/intraday-5m"
+import { getEodForeignRoom } from "@/lib/eod-shares"
 
 export const dynamic = "force-dynamic"
 
@@ -116,6 +117,7 @@ async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardDat
         foreignSellValue: (snap?.foreign_flow as any)?.totalSellValue,
         foreignBuyVolume: (snap?.foreign_flow as any)?.totalBuyVolume,
         foreignSellVolume: (snap?.foreign_flow as any)?.totalSellVolume,
+        foreignRoom: live?.foreignRoom ?? (snap?.foreign_flow as any)?.foreignRoom ?? getEodForeignRoom(stock.ticker) ?? null,
         updatedAt: snap?.updated_at || new Date().toISOString(),
       }
       if (intraday.length > 0) {

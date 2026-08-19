@@ -38,6 +38,61 @@ export const STATIC_SHARES_FALLBACK: Record<string, number> = {
   PHR: 135500000,
 }
 
+/**
+ * EOD Canonical Foreign Room fallback (available shares for foreign investors).
+ * Updated once per day during EOD sync job.
+ */
+export const STATIC_FOREIGN_ROOM_FALLBACK: Record<string, number> = {
+  FPT: 0, // Kín room 49%
+  MWG: 0, // Kín room 49%
+  MBB: 0, // Kín room 30%
+  ACB: 0, // Kín room 30%
+  TCB: 0, // Kín room 22.4%
+  TPB: 0, // Kín room 30%
+  VPB: 1380000000,
+  HPG: 2150000000,
+  VHM: 2180000000,
+  VIC: 3450000000,
+  VNM: 1120000000,
+  SSI: 980000000,
+  VND: 840000000,
+  VCI: 360000000,
+  HCM: 310000000,
+  STB: 560000000,
+  HDB: 420000000,
+  CTG: 140000000,
+  BID: 950000000,
+  VCB: 1250000000,
+  GAS: 1040000000,
+  MSN: 480000000,
+  VRE: 720000000,
+  DGC: 140000000,
+  DCM: 180000000,
+  DPM: 210000000,
+  PVD: 150000000,
+  PVT: 190000000,
+  GEX: 410000000,
+  DIG: 380000000,
+  DXG: 340000000,
+  PDR: 260000000,
+  NLG: 190000000,
+  KDH: 240000000,
+  KBC: 290000000,
+  HSG: 370000000,
+}
+
+let cachedForeignRoomMap: Record<string, number> = { ...STATIC_FOREIGN_ROOM_FALLBACK }
+
+export function getEodForeignRoom(symbol: string): number | null {
+  const sym = symbol.trim().toUpperCase()
+  if (sym in cachedForeignRoomMap) return cachedForeignRoomMap[sym]
+  return STATIC_FOREIGN_ROOM_FALLBACK[sym] ?? null
+}
+
+export function setEodForeignRooms(map: Record<string, number>) {
+  cachedForeignRoomMap = { ...STATIC_FOREIGN_ROOM_FALLBACK, ...map }
+}
+
 let cachedSharesMap: Record<string, number> | null = null
 let lastFetchedAt = 0
 

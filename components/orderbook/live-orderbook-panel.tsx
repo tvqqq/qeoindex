@@ -27,7 +27,7 @@ import { normalizeMarketPrice } from "@/lib/intraday-5m"
 import { useFlashAnimation, usePriceFlashAnimation } from "@/lib/use-flash-animation"
 import { useWhaleConfetti, ConfettiOverlay } from "@/components/orderbook/confetti"
 import { calculateSessionCountdown } from "@/lib/session-countdown"
-import { calculateForeignRoomPercent } from "@/lib/eod-shares"
+import { calculateForeignRoomPercent, getEodForeignRoom } from "@/lib/eod-shares"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
 import { fetchOrderbookFromSupabaseDirect, subscribeToOrderbookRealtime } from "@/lib/supabase/browser-orderbook"
 import { StockLogo } from "@/components/stock-logo"
@@ -469,18 +469,19 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   const [trades, setTrades] = useState<StreamTrade[]>(() => cachedInitial?.trades ?? [])
   const [foreign, setForeign] = useState<ForeignSnapshot | null>(() => {
     if (cachedInitial?.foreign) return cachedInitial.foreign
-    if (initialMeta?.foreignBuyVolume || initialMeta?.foreignSellVolume || initialMeta?.foreignNetValue) {
-      const buyVol = initialMeta.foreignBuyVolume || 0
-      const sellVol = initialMeta.foreignSellVolume || 0
-      const buyVal = initialMeta.foreignBuyValue || (buyVol && initialMeta.price ? buyVol * (initialMeta.price >= 500 ? initialMeta.price : initialMeta.price * 1000) : 0)
-      const sellVal = initialMeta.foreignSellValue || (sellVol && initialMeta.price ? sellVol * (initialMeta.price >= 500 ? initialMeta.price : initialMeta.price * 1000) : 0)
+    const eodRoom = initialMeta?.foreignRoom ?? getEodForeignRoom(symbol)
+    if (initialMeta?.foreignBuyVolume || initialMeta?.foreignSellVolume || initialMeta?.foreignNetValue || eodRoom != null) {
+      const buyVol = initialMeta?.foreignBuyVolume || 0
+      const sellVol = initialMeta?.foreignSellVolume || 0
+      const buyVal = initialMeta?.foreignBuyValue || (buyVol && initialMeta?.price ? buyVol * (initialMeta.price >= 500 ? initialMeta.price : initialMeta.price * 1000) : 0)
+      const sellVal = initialMeta?.foreignSellValue || (sellVol && initialMeta?.price ? sellVol * (initialMeta.price >= 500 ? initialMeta.price : initialMeta.price * 1000) : 0)
       return {
         symbol,
         totalBuyVolume: buyVol,
         totalSellVolume: sellVol,
         totalBuyValue: buyVal,
         totalSellValue: sellVal,
-        availableRoom: initialMeta.foreignRoom ?? null,
+        availableRoom: eodRoom ?? null,
         orderLimitQuantity: null,
         listedShare: null,
         updatedAt: new Date().toISOString(),
@@ -559,20 +560,21 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           updatedAt: new Date().toISOString(),
         })
       }
-      if (initialMeta.foreignBuyVolume || initialMeta.foreignSellVolume || initialMeta.foreignNetValue) {
+      const eodRoom = initialMeta.foreignRoom ?? getEodForeignRoom(symbol)
+      if (initialMeta.foreignBuyVolume || initialMeta.foreignSellVolume || initialMeta.foreignNetValue || eodRoom != null) {
         const buyVol = initialMeta.foreignBuyVolume || 0
         const sellVol = initialMeta.foreignSellVolume || 0
         const buyVal = initialMeta.foreignBuyValue || (buyVol && initialMeta.price ? buyVol * (initialMeta.price >= 500 ? initialMeta.price : initialMeta.price * 1000) : 0)
         const sellVal = initialMeta.foreignSellValue || (sellVol && initialMeta.price ? sellVol * (initialMeta.price >= 500 ? initialMeta.price : initialMeta.price * 1000) : 0)
         setForeign((curr) => {
-          if (curr && (curr.totalBuyVolume > 0 || curr.totalSellVolume > 0)) return curr
+          if (curr && (curr.totalBuyVolume > 0 || curr.totalSellVolume > 0 || curr.availableRoom != null)) return curr
           return {
             symbol,
             totalBuyVolume: buyVol,
             totalSellVolume: sellVol,
             totalBuyValue: buyVal,
             totalSellValue: sellVal,
-            availableRoom: initialMeta.foreignRoom ?? null,
+            availableRoom: eodRoom ?? null,
             orderLimitQuantity: null,
             listedShare: null,
             updatedAt: new Date().toISOString(),
@@ -2407,7 +2409,7 @@ export function LiveOrderBookPanel({
         ? foreignNetVolume * quote.price
         : null
 
-  const foreignRoom = stream.foreign?.availableRoom
+  const foreignRoom = stream.foreign?.availableRoom ?? initialMeta?.foreignRoom ?? getEodForeignRoom(symbol)
   const { percent: roomPercentage } = calculateForeignRoomPercent(foreignRoom, symbol, stream.foreign?.listedShare)
 
   // Foreign live flash animations
