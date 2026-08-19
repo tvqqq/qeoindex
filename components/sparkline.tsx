@@ -22,7 +22,7 @@ export const Sparkline = memo(function Sparkline({
   data,
   refValue,
   color,
-  refColor = "rgba(148, 163, 184, 0.35)",
+  refColor = "rgba(226, 232, 240, 0.65)",
   width = 64,
   height = 28,
   strokeWidth = 1.6,
@@ -74,13 +74,11 @@ export const Sparkline = memo(function Sparkline({
     const lastX = last[0]
     const lastY = last[1]
 
-    // Optional reference line Y (only if within visible frame)
+    // 3. Clear Reference Baseline Y (anchored within visible boundary)
     let refY: number | null = null
     if (ref != null) {
       const calculatedRefY = padY + usableH - ((ref - min) / range) * usableH
-      if (calculatedRefY >= 0 && calculatedRefY <= height) {
-        refY = calculatedRefY
-      }
+      refY = Math.max(padY + 1, Math.min(height - padY - 1, calculatedRefY))
     }
 
     const uid = Math.abs(Math.round(coords[0][0] * 100)) + "-" + color.replace(/[^a-z0-9]/gi, "")
@@ -113,17 +111,17 @@ export const Sparkline = memo(function Sparkline({
         )}
       </defs>
 
-      {/* Dotted Reference Baseline (when near/in range) */}
+      {/* Dotted Reference Baseline (Crisp & Visible) */}
       {hasRef && refY != null && (
-        <g opacity={0.6}>
+        <g opacity={0.85}>
           <line
             x1={0}
             x2={width}
             y1={refY}
             y2={refY}
             stroke={refColor}
-            strokeDasharray="2 2"
-            strokeWidth={1}
+            strokeDasharray="2.5 2"
+            strokeWidth={1.15}
           />
         </g>
       )}
