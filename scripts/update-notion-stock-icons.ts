@@ -4,15 +4,17 @@ import path from "path"
 const DATABASE_ID = process.env.NOTION_DATABASE_ID || "5a0d4faf-9e5d-4fcc-b523-08ed8e5b1772"
 const NOTION_TOKEN = process.env.NOTION_API_KEY || process.env.NOTION_TOKEN
 
+const APP_URL = (
+  process.env.APP_URL ||
+  process.env.NEXT_PUBLIC_APP_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "") ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+  "https://qeoindex.com"
+).replace(/\/$/, "")
+
 if (!NOTION_TOKEN) {
   console.error("❌ Thiếu NOTION_API_KEY hoặc NOTION_TOKEN. Hãy cung cấp token hợp lệ để chạy cập nhật icon trên Notion.")
   process.exit(1)
-}
-
-const logoIndexPath = path.join(process.cwd(), "public", "logos", "index.json")
-let logoMap: Record<string, any> = {}
-if (fs.existsSync(logoIndexPath)) {
-  logoMap = JSON.parse(fs.readFileSync(logoIndexPath, "utf8"))
 }
 
 async function updateNotionIcons() {
@@ -79,8 +81,8 @@ async function updateNotionIcons() {
       continue
     }
 
-    const logoInfo = logoMap[ticker]
-    const logoUrl = logoInfo?.externalUrl || `https://finance.vietstock.vn/image/${ticker}`
+    // Lấy link logo trực tiếp từ Vercel server: <APP_URL>/logos/<TICKER>.png
+    const logoUrl = `${APP_URL}/logos/${ticker}.png`
 
     try {
       const patchRes = await fetch(`https://api.notion.com/v1/pages/${page.id}`, {
