@@ -14,17 +14,18 @@ interface SparklineProps {
 }
 
 /**
- * High-performance, GPU-accelerated SVG Sparkline with Dynamic Gradient Fill & Reference Baseline.
- * Memoized with pre-computed paths to guarantee smooth 60fps scrolling across 100 tickers.
+ * Professional Smooth SVG Sparkline with Dynamic Intraday Auto-Fit Scaling.
+ * Uses Monotonic Cubic Spline / Smooth Bézier Curves and Gradient Fill
+ * to accurately depict intraday price action, waves, and momentum.
  */
 export const Sparkline = memo(function Sparkline({
   data,
   refValue,
   color,
-  refColor = "rgba(148, 163, 184, 0.45)",
-  width = 78,
-  height = 34,
-  strokeWidth = 1.75,
+  refColor = "rgba(148, 163, 184, 0.35)",
+  width = 64,
+  height = 28,
+  strokeWidth = 1.6,
   showDot = true,
   fill = true,
   className = "",
@@ -35,37 +36,63 @@ export const Sparkline = memo(function Sparkline({
   const dataKey = data.length > 0 ? `${data.length}-${data[0]}-${data[data.length - 1]}-${ref}` : ""
 
   const computed = useMemo(() => {
-    if (data.length < 2) return null
+    const points = data.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
+    if (points.length < 2) return null
 
-    const rawMin = Math.min(...data, ...(ref != null ? [ref] : []))
-    const rawMax = Math.max(...data, ...(ref != null ? [ref] : []))
+    // 1. Dynamic Auto-Fit Range: Scale strictly to actual price action high & low
+    const rawMin = Math.min(...points)
+    const rawMax = Math.max(...points)
+    const delta = rawMax - rawMin
 
-    const delta = rawMax - rawMin || (ref ? ref * 0.02 : 1)
-    const padding = delta * 0.08
+    // Add 15% top & bottom padding so waves are clearly visible without touching boundary
+    const padding = delta > 0 ? delta * 0.15 : (rawMin * 0.005 || 0.05)
     const min = rawMin - padding
     const max = rawMax + padding
     const range = max - min || 1
-    const pad = strokeWidth + 0.5
 
-    const getX = (i: number) => (i / (data.length - 1)) * (width - pad * 2) + pad
-    const getY = (v: number) => height - pad - ((v - min) / range) * (height - pad * 2)
+    const padX = strokeWidth + 1
+    const padY = strokeWidth + 1
+    const usableW = width - padX * 2
+    const usableH = height - padY * 2
 
-    const points = data.map((v, i) => `${getX(i).toFixed(2)},${getY(v).toFixed(2)}`)
-    const path = "M" + points.join(" L")
+    const coords: [number, number][] = points.map((v, i) => {
+      const x = padX + (i / (points.length - 1)) * usableW
+      const y = padY + usableH - ((v - min) / range) * usableH
+      return [x, y]
+    })
 
-    const lastX = getX(data.length - 1)
-    const lastY = getY(data[data.length - 1])
-    const refY = ref != null ? getY(ref) : null
-    const uid = Math.abs(Math.round(getX(0) * 100)) + "-" + color.replace(/[^a-z0-9]/gi, "")
+    // 2. Smooth Cubic Spline Bézier Curve Path
+    let path = `M ${coords[0][0].toFixed(2)},${coords[0][1].toFixed(2)}`
+    for (let i = 0; i < coords.length - 1; i++) {
+      const [x0, y0] = coords[i]
+      const [x1, y1] = coords[i + 1]
+      const midX = (x0 + x1) / 2
+      path += ` C ${midX.toFixed(2)},${y0.toFixed(2)} ${midX.toFixed(2)},${y1.toFixed(2)} ${x1.toFixed(2)},${y1.toFixed(2)}`
+    }
 
-    return { path, lastX, lastY, refY, pad, uid }
+    const last = coords[coords.length - 1]
+    const lastX = last[0]
+    const lastY = last[1]
+
+    // Optional reference line Y (only if within visible frame)
+    let refY: number | null = null
+    if (ref != null) {
+      const calculatedRefY = padY + usableH - ((ref - min) / range) * usableH
+      if (calculatedRefY >= 0 && calculatedRefY <= height) {
+        refY = calculatedRefY
+      }
+    }
+
+    const uid = Math.abs(Math.round(coords[0][0] * 100)) + "-" + color.replace(/[^a-z0-9]/gi, "")
+
+    return { path, lastX, lastY, refY, padX, uid }
   }, [dataKey, ref, width, height, strokeWidth, color])
 
   if (!computed) {
     return <svg width={width} height={height} aria-hidden="true" className={className} />
   }
 
-  const { path, lastX, lastY, refY, pad, uid } = computed
+  const { path, lastX, lastY, refY, padX, uid } = computed
 
   return (
     <svg
@@ -79,16 +106,16 @@ export const Sparkline = memo(function Sparkline({
       <defs>
         {fill && (
           <linearGradient id={`spark-grad-${uid}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.35} />
-            <stop offset="65%" stopColor={color} stopOpacity={0.08} />
+            <stop offset="0%" stopColor={color} stopOpacity={0.32} />
+            <stop offset="65%" stopColor={color} stopOpacity={0.06} />
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         )}
       </defs>
 
-      {/* Dotted Reference Baseline */}
+      {/* Dotted Reference Baseline (when near/in range) */}
       {hasRef && refY != null && (
-        <g opacity={0.75}>
+        <g opacity={0.6}>
           <line
             x1={0}
             x2={width}
@@ -104,13 +131,13 @@ export const Sparkline = memo(function Sparkline({
       {/* Gradient Area Fill */}
       {fill && (
         <path
-          d={`${path} L${lastX.toFixed(2)},${height} L${pad},${height} Z`}
+          d={`${path} L ${lastX.toFixed(2)},${height} L ${padX.toFixed(2)},${height} Z`}
           fill={`url(#spark-grad-${uid})`}
           stroke="none"
         />
       )}
 
-      {/* Main Sparkline Stroke */}
+      {/* Main Smooth Sparkline Stroke */}
       <path
         d={path}
         fill="none"
@@ -124,7 +151,7 @@ export const Sparkline = memo(function Sparkline({
       {showDot && (
         <>
           <circle cx={lastX} cy={lastY} r={strokeWidth + 1.2} fill={color} fillOpacity={0.25} />
-          <circle cx={lastX} cy={lastY} r={strokeWidth + 0.4} fill={color} />
+          <circle cx={lastX} cy={lastY} r={strokeWidth + 0.3} fill={color} />
         </>
       )}
     </svg>
