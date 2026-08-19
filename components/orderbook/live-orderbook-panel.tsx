@@ -2329,27 +2329,27 @@ export function LiveOrderBookPanel({
 
       {/* HEADER / DRAG HANDLE */}
       <header
-        className="flex cursor-grab select-none items-center justify-between gap-2 border-b border-white/[0.08] bg-white/[0.03] backdrop-blur-xl px-4 py-2.5 active:cursor-grabbing touch-none"
+        className="flex cursor-grab select-none items-center justify-between gap-2.5 border-b border-white/[0.10] bg-gradient-to-r from-[#121820]/95 via-[#182330]/95 to-[#121820]/95 px-4 py-2.5 active:cursor-grabbing touch-none backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_4px_16px_rgba(0,0,0,0.4)]"
         onPointerDown={onHeaderPointerDown}
       >
         {/* Left Ticker, Logo & Exchange */}
-        <div className="flex items-center gap-2 min-w-0 shrink">
-          <GripVertical className="h-4 w-4 text-muted shrink-0" />
-          <StockLogo symbol={symbol} size={30} className="shrink-0" />
-          <span className="font-mono text-lg sm:text-xl font-black tracking-tight text-foreground shrink-0">{symbol}</span>
+        <div className="flex items-center gap-2.5 min-w-0 shrink">
+          <GripVertical className="h-4 w-4 text-white/30 hover:text-white/60 shrink-0 transition-colors" />
+          <StockLogo symbol={symbol} size={30} className="shrink-0 ring-1 ring-white/15" />
+          <span className="font-mono text-lg sm:text-xl font-black tracking-tight text-white shrink-0 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{symbol}</span>
           {stream.company?.exchange ? (
-            <span className="hidden sm:inline-flex rounded-full bg-white/[0.06] border border-white/[0.08] px-2 py-0.5 text-[9.5px] font-bold text-muted-2 uppercase tracking-wider shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+            <span className="hidden sm:inline-flex rounded-full bg-white/[0.08] border border-white/[0.12] px-2 py-0.5 text-[9.5px] font-bold text-white/70 uppercase tracking-wider shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">
               {stream.company.exchange}
             </span>
           ) : null}
         </div>
 
         {/* Center / Right Price & Action Controls */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0">
           {/* Live Price & Change Pill */}
           <div className="flex items-center gap-2">
             <span
-              className={`font-mono text-lg sm:text-xl font-black tracking-tight rounded px-1 transition-colors ${color} ${
+              className={`font-mono text-lg sm:text-xl font-black tracking-tight rounded px-1 transition-colors drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] ${color} ${
                 headerPriceFlash === "up"
                   ? "flash-text-up font-black"
                   : headerPriceFlash === "down"
@@ -2365,14 +2365,14 @@ export function LiveOrderBookPanel({
           </div>
 
           {/* Action Controls (3 clean icons) */}
-          <div className="flex items-center gap-0.5 border-l border-border/60 pl-1.5 ml-0.5">
+          <div className="flex items-center gap-0.5 border-l border-white/10 pl-1.5 ml-0.5">
             <a
               data-orderbook-action
               href={`/research/${symbol.toLowerCase()}`}
               aria-label={`Mở phân tích chuyên sâu ${symbol}`}
               title="Mở phân tích chuyên sâu"
               onClick={(event) => event.stopPropagation()}
-              className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
+              className="rounded p-1.5 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
@@ -2386,7 +2386,7 @@ export function LiveOrderBookPanel({
                 event.stopPropagation()
                 setIsMaximized((v) => !v)
               }}
-              className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-foreground transition-colors"
+              className="rounded p-1.5 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
             >
               {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </button>
@@ -2398,7 +2398,7 @@ export function LiveOrderBookPanel({
               title="Đóng"
               onPointerDown={closeOnPointerDown}
               onClick={closeOnClick}
-              className="rounded p-1.5 text-muted-2 hover:bg-panel-2 hover:text-down transition-colors"
+              className="rounded p-1.5 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"
             >
               <X className="h-4 w-4" />
             </button>
@@ -3047,26 +3047,38 @@ export function LiveOrderBookPanel({
       {/* RESIZE HANDLES (Interactive everywhere via window listeners with 0ms drag latency) */}
       {!minimized && !isMaximized && (
         <>
-          {/* Bottom-right corner resize handle */}
+          {/* Bottom-right corner resize handle - hugging the rounded corner border */}
           <div
             onPointerDown={(e) => startResize(e, "se")}
-            className="absolute bottom-0 right-0 h-5 w-5 cursor-se-resize flex items-end justify-end p-1 z-30 group touch-none select-none"
+            className="absolute bottom-0 right-0 h-6 w-6 cursor-se-resize flex items-end justify-end p-1 z-30 group touch-none select-none rounded-br-2xl"
             title="Kéo để phóng to / thu nhỏ"
           >
-            <div className="h-2.5 w-2.5 border-r-2 border-b-2 border-muted-2/80 group-hover:border-brand group-active:border-brand transition-colors" />
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              className="text-white/25 group-hover:text-emerald-400 group-active:text-emerald-400 transition-colors"
+            >
+              <path
+                d="M8.5 1.5 L1.5 8.5 M8.5 5 L5 8.5"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
           </div>
 
           {/* Right edge resize strip */}
           <div
             onPointerDown={(e) => startResize(e, "e")}
-            className="absolute top-0 right-0 bottom-5 w-2 cursor-e-resize z-20 hover:bg-brand/25 active:bg-brand/40 transition-colors touch-none select-none"
+            className="absolute top-0 right-0 bottom-6 w-2 cursor-e-resize z-20 hover:bg-emerald-400/20 active:bg-emerald-400/30 transition-colors touch-none select-none"
             title="Kéo ngang"
           />
 
           {/* Bottom edge resize strip */}
           <div
             onPointerDown={(e) => startResize(e, "s")}
-            className="absolute bottom-0 left-0 right-5 h-2 cursor-s-resize z-20 hover:bg-brand/25 active:bg-brand/40 transition-colors touch-none select-none"
+            className="absolute bottom-0 left-0 right-6 h-2 cursor-s-resize z-20 hover:bg-emerald-400/20 active:bg-emerald-400/30 transition-colors touch-none select-none"
             title="Kéo dọc"
           />
         </>
