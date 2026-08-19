@@ -386,31 +386,32 @@ function sidePillMeta(side: TradeSide) {
 }
 
 function nextQuote(symbol: string, data: Record<string, unknown>, current: StockQuote | null): StockQuote | null {
-  const rawPrice = firstPositive(data, ["matchPrice", "price", "lastPrice"]) || current?.price || 0
-  if (rawPrice <= 0) return current
-  const price = current?.price ? normalizeMarketPrice(rawPrice, current.price) ?? rawPrice : rawPrice
+  const rawReference = firstPositive(data, ["referencePrice", "refPrice", "reference", "r"]) || current?.reference || 0
+  const rawPrice = firstPositive(data, ["expectedMatchedPrice", "expectedPrice", "matchedPrice", "matchPrice", "price", "lastPrice"]) || (rawReference > 0 ? rawReference : (current?.price || 0))
+  if (rawPrice <= 0 && rawReference <= 0) return current
 
-  const rawReference = firstPositive(data, ["referencePrice", "refPrice", "reference"]) || current?.reference || price
-  const reference = normalizeMarketPrice(rawReference, price) ?? rawReference
+  const reference = rawReference > 0 ? normalizeMarketPrice(rawReference) ?? rawReference : current?.reference
+  const price = rawPrice > 0 ? normalizeMarketPrice(rawPrice, reference) ?? rawPrice : (reference ?? current?.price ?? 0)
+  if (price <= 0) return current
 
-  const rawCeiling = firstPositive(data, ["ceilingPrice", "ceiling"]) || current?.ceiling
-  const ceiling = rawCeiling ? normalizeMarketPrice(rawCeiling, price) ?? rawCeiling : undefined
+  const rawCeiling = firstPositive(data, ["ceilingPrice", "ceiling", "c"]) || current?.ceiling
+  const ceiling = rawCeiling ? normalizeMarketPrice(rawCeiling, reference || price) ?? rawCeiling : undefined
 
-  const rawFloor = firstPositive(data, ["floorPrice", "floor"]) || current?.floor
-  const floor = rawFloor ? normalizeMarketPrice(rawFloor, price) ?? rawFloor : undefined
+  const rawFloor = firstPositive(data, ["floorPrice", "floor", "f"]) || current?.floor
+  const floor = rawFloor ? normalizeMarketPrice(rawFloor, reference || price) ?? rawFloor : undefined
 
-  const rawHigh = firstPositive(data, ["highPrice", "high"]) || (current?.high ? Math.max(current.high, price) : price)
-  const high = rawHigh ? normalizeMarketPrice(rawHigh, price) ?? rawHigh : price
+  const rawHigh = firstPositive(data, ["highPrice", "high", "highest"]) || (current?.high ? Math.max(current.high, price) : price)
+  const high = rawHigh ? normalizeMarketPrice(rawHigh, reference || price) ?? rawHigh : price
 
-  const rawLow = firstPositive(data, ["lowPrice", "low"]) || (current?.low ? Math.min(current.low, price) : price)
-  const low = rawLow ? normalizeMarketPrice(rawLow, price) ?? rawLow : price
+  const rawLow = firstPositive(data, ["lowPrice", "low", "lowest"]) || (current?.low ? Math.min(current.low, price) : price)
+  const low = rawLow ? normalizeMarketPrice(rawLow, reference || price) ?? rawLow : price
 
   const rawAvg = firstPositive(data, ["avgPrice", "averagePrice", "avePrice"]) || current?.avgPrice
-  const avgPrice = rawAvg ? normalizeMarketPrice(rawAvg, price) ?? rawAvg : undefined
+  const avgPrice = rawAvg ? normalizeMarketPrice(rawAvg, reference || price) ?? rawAvg : undefined
   
-  const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "volume", "lot"]) || current?.totalVolume
-  const change = reference > 0 ? price - reference : current?.change
-  const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : current?.changePercent ?? 0
+  const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "nmTotalTradedQty", "expectedMatchedVolume", "volume", "lot"]) || current?.totalVolume
+  const change = reference && reference > 0 ? price - reference : (current?.change ?? 0)
+  const changePercent = reference && reference > 0 ? ((price - reference) / reference) * 100 : (current?.changePercent ?? 0)
 
   return {
     symbol,
@@ -469,20 +470,23 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   const [company, setCompany] = useState<CompanyInfo | null>(() => cachedInitial?.company ?? (initialMeta?.companyName ? { nameVi: initialMeta.companyName, sector: initialMeta.sector } : null))
   const [quote, setQuote] = useState<StockQuote | null>(() => {
     if (cachedInitial?.quote) return cachedInitial.quote
-    if (!initialMeta?.price) return null
-    const price = initialMeta.price
-    const reference = initialMeta.reference ? normalizeMarketPrice(initialMeta.reference, price) ?? initialMeta.reference : undefined
-    const ceiling = initialMeta.ceiling ? normalizeMarketPrice(initialMeta.ceiling, price) ?? initialMeta.ceiling : undefined
-    const floor = initialMeta.floor ? normalizeMarketPrice(initialMeta.floor, price) ?? initialMeta.floor : undefined
+    if (!initialMeta?.price && !initialMeta?.reference) return null
+    const reference = initialMeta?.reference ? normalizeMarketPrice(initialMeta.reference) ?? initialMeta.reference : undefined
+    const price = initialMeta?.price ? normalizeMarketPrice(initialMeta.price, reference) ?? initialMeta.price : (reference ?? 0)
+    const ceiling = initialMeta?.ceiling ? normalizeMarketPrice(initialMeta.ceiling, reference || price) ?? initialMeta.ceiling : undefined
+    const floor = initialMeta?.floor ? normalizeMarketPrice(initialMeta.floor, reference || price) ?? initialMeta.floor : undefined
+    const change = reference && price ? price - reference : 0
+    const changePercent = reference && reference > 0 ? (change / reference) * 100 : (initialMeta?.changePercent ?? 0)
     return {
       symbol,
       price,
       reference,
       ceiling,
       floor,
-      changePercent: initialMeta.changePercent ?? 0,
-      totalVolume: initialMeta.volume,
-      volume: initialMeta.volume,
+      change,
+      changePercent,
+      totalVolume: initialMeta?.volume,
+      volume: initialMeta?.volume,
       updatedAt: new Date().toISOString(),
     }
   })
@@ -511,18 +515,21 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       setHistoryState("READY")
       setHistoryMessage("Đã tải từ bộ nhớ đệm.")
     } else if (initialMeta) {
-      if (initialMeta.price) {
-        const price = initialMeta.price
-        const reference = initialMeta.reference ? normalizeMarketPrice(initialMeta.reference, price) ?? initialMeta.reference : undefined
-        const ceiling = initialMeta.ceiling ? normalizeMarketPrice(initialMeta.ceiling, price) ?? initialMeta.ceiling : undefined
-        const floor = initialMeta.floor ? normalizeMarketPrice(initialMeta.floor, price) ?? initialMeta.floor : undefined
+      if (initialMeta.price || initialMeta.reference) {
+        const reference = initialMeta.reference ? normalizeMarketPrice(initialMeta.reference) ?? initialMeta.reference : undefined
+        const price = initialMeta.price ? normalizeMarketPrice(initialMeta.price, reference) ?? initialMeta.price : (reference ?? 0)
+        const ceiling = initialMeta.ceiling ? normalizeMarketPrice(initialMeta.ceiling, reference || price) ?? initialMeta.ceiling : undefined
+        const floor = initialMeta.floor ? normalizeMarketPrice(initialMeta.floor, reference || price) ?? initialMeta.floor : undefined
+        const change = reference && price ? price - reference : 0
+        const changePercent = reference && reference > 0 ? (change / reference) * 100 : (initialMeta.changePercent ?? 0)
         setQuote({
           symbol,
           price,
           reference,
           ceiling,
           floor,
-          changePercent: initialMeta.changePercent ?? 0,
+          change,
+          changePercent,
           totalVolume: initialMeta.volume,
           volume: initialMeta.volume,
           updatedAt: new Date().toISOString(),

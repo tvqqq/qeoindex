@@ -406,8 +406,8 @@ async function fetchFastMarketOverview(symbol: string) {
     const highPrice = finiteNumber(ssiData?.highest ?? (vpsData?.highPrice ? Number(vpsData.highPrice) * 1000 : null))
     const lowPrice = finiteNumber(ssiData?.lowest ?? (vpsData?.lowPrice ? Number(vpsData.lowPrice) * 1000 : null))
     const avgPrice = finiteNumber(ssiData?.avgPrice ?? (vpsData?.avePrice ? Number(vpsData.avePrice) * 1000 : null))
-    const totalVolume = finiteNumber(ssiData?.nmTotalTradedQty ?? (vpsData?.lot ? Number(vpsData.lot) * 10 : null))
-    const matchPrice = finiteNumber(ssiData?.matchedPrice ?? (vpsData?.lastPrice ? Number(vpsData.lastPrice) * 1000 : null))
+    const totalVolume = finiteNumber(ssiData?.expectedMatchedVolume ?? ssiData?.nmTotalTradedQty ?? (vpsData?.lot ? Number(vpsData.lot) * 10 : null))
+    const matchPrice = finiteNumber(ssiData?.expectedMatchedPrice ?? ssiData?.matchedPrice ?? (vpsData?.lastPrice ? Number(vpsData.lastPrice) * 1000 : null) ?? refPrice)
 
     const foreignBuyVol = finiteNumber(ssiData?.buyForeignQtty ?? (vpsData?.fBVol ? Number(vpsData.fBVol) * 10 : 0)) ?? 0
     const foreignSellVol = finiteNumber(ssiData?.sellForeignQtty ?? (vpsData?.fSVolume ? Number(vpsData.fSVolume) * 10 : 0)) ?? 0
