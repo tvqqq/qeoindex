@@ -29,6 +29,7 @@ import { useWhaleConfetti, ConfettiOverlay } from "@/components/orderbook/confet
 import { calculateSessionCountdown } from "@/lib/session-countdown"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
 import { fetchOrderbookFromSupabaseDirect, subscribeToOrderbookRealtime } from "@/lib/supabase/browser-orderbook"
+import { StockLogo } from "@/components/stock-logo"
 
 export type DepthLevel = { price: number; volume: number }
 export type TradeSide = "BUY" | "SELL" | "UNKNOWN"
@@ -2331,9 +2332,10 @@ export function LiveOrderBookPanel({
         className="flex cursor-grab select-none items-center justify-between gap-2 border-b border-white/[0.08] bg-white/[0.03] backdrop-blur-xl px-4 py-2.5 active:cursor-grabbing touch-none"
         onPointerDown={onHeaderPointerDown}
       >
-        {/* Left Ticker & Exchange */}
+        {/* Left Ticker, Logo & Exchange */}
         <div className="flex items-center gap-2 min-w-0 shrink">
           <GripVertical className="h-4 w-4 text-muted shrink-0" />
+          <StockLogo symbol={symbol} size={28} className="shrink-0" />
           <span className="font-mono text-lg sm:text-xl font-black tracking-tight text-foreground shrink-0">{symbol}</span>
           {stream.company?.exchange ? (
             <span className="hidden sm:inline-flex rounded-full bg-white/[0.06] border border-white/[0.08] px-2 py-0.5 text-[9.5px] font-bold text-muted-2 uppercase tracking-wider shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">

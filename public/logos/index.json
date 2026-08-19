@@ -1,0 +1,702 @@
+{
+  "VIC": {
+    "ticker": "VIC",
+    "type": "tradingview",
+    "logoid": "vingroup-joint-stock-company",
+    "url": "/logos/VIC.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vingroup-joint-stock-company--big.svg"
+  },
+  "VHM": {
+    "ticker": "VHM",
+    "type": "tradingview",
+    "logoid": "vinhomes-joint-stock-company-units-thailand-depositery-receipts-repr-001-sh",
+    "url": "/logos/VHM.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vinhomes-joint-stock-company-units-thailand-depositery-receipts-repr-001-sh--big.svg"
+  },
+  "VCB": {
+    "ticker": "VCB",
+    "type": "tradingview",
+    "logoid": "joint-stock-commercial-bank-for-foreign-trade-of-vietnam",
+    "url": "/logos/VCB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/joint-stock-commercial-bank-for-foreign-trade-of-vietnam--big.svg"
+  },
+  "BID": {
+    "ticker": "BID",
+    "type": "tradingview",
+    "logoid": "joint-stock-commercial-bank-for-investment-and-development-of-vietnam",
+    "url": "/logos/BID.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/joint-stock-commercial-bank-for-investment-and-development-of-vietnam--big.svg"
+  },
+  "CTG": {
+    "ticker": "CTG",
+    "type": "tradingview",
+    "logoid": "vietnam-joint-stock-commercial-bank",
+    "url": "/logos/CTG.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vietnam-joint-stock-commercial-bank--big.svg"
+  },
+  "TCB": {
+    "ticker": "TCB",
+    "type": "tradingview",
+    "logoid": "techcombank",
+    "url": "/logos/TCB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/techcombank--big.svg"
+  },
+  "VPB": {
+    "ticker": "VPB",
+    "type": "tradingview",
+    "logoid": "vietnam-prosperity-joint-stock-commercial-bank",
+    "url": "/logos/VPB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vietnam-prosperity-joint-stock-commercial-bank--big.svg"
+  },
+  "MBB": {
+    "ticker": "MBB",
+    "type": "tradingview",
+    "logoid": "military-commercial-joint-stock-bank",
+    "url": "/logos/MBB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/military-commercial-joint-stock-bank--big.svg"
+  },
+  "HPG": {
+    "ticker": "HPG",
+    "type": "tradingview",
+    "logoid": "hoa-phat-group",
+    "url": "/logos/HPG.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/hoa-phat-group--big.svg"
+  },
+  "GAS": {
+    "ticker": "GAS",
+    "type": "tradingview",
+    "logoid": "petrovietnam-gas",
+    "url": "/logos/GAS.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/petrovietnam-gas--big.svg"
+  },
+  "MCH": {
+    "ticker": "MCH",
+    "type": "tradingview",
+    "logoid": "masan-consumer",
+    "url": "/logos/MCH.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/masan-consumer--big.svg"
+  },
+  "LPB": {
+    "ticker": "LPB",
+    "type": "tradingview",
+    "logoid": "nhtmcp-buu-dien-lien-viet",
+    "url": "/logos/LPB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/nhtmcp-buu-dien-lien-viet--big.svg"
+  },
+  "VPL": {
+    "ticker": "VPL",
+    "type": "tradingview",
+    "logoid": "vp-plc",
+    "url": "/logos/VPL.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vp-plc--big.svg"
+  },
+  "STB": {
+    "ticker": "STB",
+    "type": "tradingview",
+    "logoid": "sai-gon-thuong-tin-commercial-joint-stock-bank",
+    "url": "/logos/STB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/sai-gon-thuong-tin-commercial-joint-stock-bank--big.svg"
+  },
+  "HDB": {
+    "ticker": "HDB",
+    "type": "tradingview",
+    "logoid": "hdfc-bank",
+    "url": "/logos/HDB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/hdfc-bank--big.svg"
+  },
+  "BSR": {
+    "ticker": "BSR",
+    "type": "tradingview",
+    "logoid": "binh-son-refining-and-petrochem",
+    "url": "/logos/BSR.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/binh-son-refining-and-petrochem--big.svg"
+  },
+  "ACB": {
+    "ticker": "ACB",
+    "type": "tradingview",
+    "logoid": "ngan-hang-tmcp-a-chau",
+    "url": "/logos/ACB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/ngan-hang-tmcp-a-chau--big.svg"
+  },
+  "VNM": {
+    "ticker": "VNM",
+    "type": "tradingview",
+    "logoid": "vietnam-dairy-products",
+    "url": "/logos/VNM.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vietnam-dairy-products--big.svg"
+  },
+  "FPT": {
+    "ticker": "FPT",
+    "type": "tradingview",
+    "logoid": "fpt-corporation",
+    "url": "/logos/FPT.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/fpt-corporation--big.svg"
+  },
+  "GVR": {
+    "ticker": "GVR",
+    "type": "tradingview",
+    "logoid": "td-cn-cao-su-vn-ctcp",
+    "url": "/logos/GVR.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/td-cn-cao-su-vn-ctcp--big.svg"
+  },
+  "DMX": {
+    "ticker": "DMX",
+    "type": "tradingview",
+    "logoid": "district-metals",
+    "url": "/logos/DMX.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/district-metals--big.svg"
+  },
+  "TCX": {
+    "ticker": "TCX",
+    "type": "tradingview",
+    "logoid": "tucows",
+    "url": "/logos/TCX.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/tucows--big.svg"
+  },
+  "MWG": {
+    "ticker": "MWG",
+    "type": "tradingview",
+    "logoid": "mobile-world-investment-corporation",
+    "url": "/logos/MWG.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/mobile-world-investment-corporation--big.svg"
+  },
+  "MSN": {
+    "ticker": "MSN",
+    "type": "tradingview",
+    "logoid": "masan",
+    "url": "/logos/MSN.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/masan--big.svg"
+  },
+  "VJC": {
+    "ticker": "VJC",
+    "type": "tradingview",
+    "logoid": "jgc",
+    "url": "/logos/VJC.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/jgc--big.svg"
+  },
+  "HVN": {
+    "ticker": "HVN",
+    "type": "tradingview",
+    "logoid": "harvey-norman",
+    "url": "/logos/HVN.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/harvey-norman--big.svg"
+  },
+  "VCK": {
+    "ticker": "VCK",
+    "type": "tradingview",
+    "logoid": "vps-securities-jsc",
+    "url": "/logos/VCK.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vps-securities-jsc--big.svg"
+  },
+  "SHB": {
+    "ticker": "SHB",
+    "type": "tradingview",
+    "logoid": "ngan-hang-tmcp-sai-gon",
+    "url": "/logos/SHB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/ngan-hang-tmcp-sai-gon--big.svg"
+  },
+  "SSI": {
+    "ticker": "SSI",
+    "type": "tradingview",
+    "logoid": "saigon-securities-incorporation",
+    "url": "/logos/SSI.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/saigon-securities-incorporation--big.svg"
+  },
+  "SAB": {
+    "ticker": "SAB",
+    "type": "tradingview",
+    "logoid": "banco-de-sabadell",
+    "url": "/logos/SAB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/banco-de-sabadell--big.svg"
+  },
+  "VRE": {
+    "ticker": "VRE",
+    "type": "tradingview",
+    "logoid": "vincom-retail",
+    "url": "/logos/VRE.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vincom-retail--big.svg"
+  },
+  "SSB": {
+    "ticker": "SSB",
+    "type": "tradingview",
+    "logoid": "independent-bank-group",
+    "url": "/logos/SSB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/independent-bank-group--big.svg"
+  },
+  "MSB": {
+    "ticker": "MSB",
+    "type": "tradingview",
+    "logoid": "mesoblast",
+    "url": "/logos/MSB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/mesoblast--big.svg"
+  },
+  "VIB": {
+    "ticker": "VIB",
+    "type": "tradingview",
+    "logoid": "ngan-hang-tmcp-quoc-te-vn",
+    "url": "/logos/VIB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/ngan-hang-tmcp-quoc-te-vn--big.svg"
+  },
+  "BVH": {
+    "ticker": "BVH",
+    "type": "tradingview",
+    "logoid": "bao-viet",
+    "url": "/logos/BVH.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/bao-viet--big.svg"
+  },
+  "VPX": {
+    "ticker": "VPX",
+    "type": "tradingview",
+    "logoid": "vpbank-securities-jsc",
+    "url": "/logos/VPX.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vpbank-securities-jsc--big.svg"
+  },
+  "PLX": {
+    "ticker": "PLX",
+    "type": "tradingview",
+    "logoid": "viet-nam-national-petroleum-group",
+    "url": "/logos/PLX.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/viet-nam-national-petroleum-group--big.svg"
+  },
+  "GEE": {
+    "ticker": "GEE",
+    "type": "tradingview",
+    "logoid": "gee-ltd",
+    "url": "/logos/GEE.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/gee-ltd--big.svg"
+  },
+  "POW": {
+    "ticker": "POW",
+    "type": "tradingview",
+    "logoid": "power-metal-resources-plc-ord-gbp002",
+    "url": "/logos/POW.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/power-metal-resources-plc-ord-gbp002--big.svg"
+  },
+  "TPB": {
+    "ticker": "TPB",
+    "type": "tradingview",
+    "logoid": "turning-point-brands",
+    "url": "/logos/TPB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/turning-point-brands--big.svg"
+  },
+  "BCM": {
+    "ticker": "BCM",
+    "type": "tradingview",
+    "logoid": "brunello-cucinelli",
+    "url": "/logos/BCM.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/brunello-cucinelli--big.svg"
+  },
+  "HCM": {
+    "ticker": "HCM",
+    "type": "tradingview",
+    "logoid": "ho-chi-minh-city-securities-corporation",
+    "url": "/logos/HCM.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/ho-chi-minh-city-securities-corporation--big.svg"
+  },
+  "EIB": {
+    "ticker": "EIB",
+    "type": "tradingview",
+    "logoid": "ecoscience-international-berhad",
+    "url": "/logos/EIB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/ecoscience-international-berhad--big.svg"
+  },
+  "NVL": {
+    "ticker": "NVL",
+    "type": "tradingview",
+    "logoid": "no-va-land-investment",
+    "url": "/logos/NVL.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/no-va-land-investment--big.svg"
+  },
+  "VIX": {
+    "ticker": "VIX",
+    "type": "tradingview",
+    "logoid": "ctcp-chung-khoan-vix",
+    "url": "/logos/VIX.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/ctcp-chung-khoan-vix--big.svg"
+  },
+  "GMD": {
+    "ticker": "GMD",
+    "type": "tradingview",
+    "logoid": "genesis-minerals-limited",
+    "url": "/logos/GMD.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/genesis-minerals-limited--big.svg"
+  },
+  "GEX": {
+    "ticker": "GEX",
+    "type": "tradingview",
+    "logoid": "viet-nam-electrical-equipment-joint-stock-corporation",
+    "url": "/logos/GEX.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/viet-nam-electrical-equipment-joint-stock-corporation--big.svg"
+  },
+  "OCB": {
+    "ticker": "OCB",
+    "type": "tradingview",
+    "logoid": "ocb-bhd",
+    "url": "/logos/OCB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/ocb-bhd--big.svg"
+  },
+  "REE": {
+    "ticker": "REE",
+    "type": "tradingview",
+    "logoid": "rarex-ltd",
+    "url": "/logos/REE.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/rarex-ltd--big.svg"
+  },
+  "GEL": {
+    "ticker": "GEL",
+    "type": "tradingview",
+    "logoid": "genesis-energy-lp",
+    "url": "/logos/GEL.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/genesis-energy-lp--big.svg"
+  },
+  "PGV": {
+    "ticker": "PGV",
+    "type": "tradingview",
+    "logoid": "progressive-ohio",
+    "url": "/logos/PGV.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/progressive-ohio--big.svg"
+  },
+  "KBC": {
+    "ticker": "KBC",
+    "type": "tradingview",
+    "logoid": "kbc-groep-nv",
+    "url": "/logos/KBC.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/kbc-groep-nv--big.svg"
+  },
+  "VCI": {
+    "ticker": "VCI",
+    "type": "tradingview",
+    "logoid": "viet-capital-securities-joint-stock-company",
+    "url": "/logos/VCI.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/viet-capital-securities-joint-stock-company--big.svg"
+  },
+  "VND": {
+    "ticker": "VND",
+    "type": "tradingview",
+    "logoid": "vndirect-securities-corporation",
+    "url": "/logos/VND.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vndirect-securities-corporation--big.svg"
+  },
+  "NAB": {
+    "ticker": "NAB",
+    "type": "tradingview",
+    "logoid": "national-australia-bank",
+    "url": "/logos/NAB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/national-australia-bank--big.svg"
+  },
+  "FRT": {
+    "ticker": "FRT",
+    "type": "tradingview",
+    "logoid": "federal-realty-investment-trust",
+    "url": "/logos/FRT.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/federal-realty-investment-trust--big.svg"
+  },
+  "KDH": {
+    "ticker": "KDH",
+    "type": "tradingview",
+    "logoid": "thonburi-medical-centre-pub-co-ltd-non-voting",
+    "url": "/logos/KDH.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/thonburi-medical-centre-pub-co-ltd-non-voting--big.svg"
+  },
+  "VPI": {
+    "ticker": "VPI",
+    "type": "tradingview",
+    "logoid": "vitality-products",
+    "url": "/logos/VPI.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vitality-products--big.svg"
+  },
+  "SBT": {
+    "ticker": "SBT",
+    "type": "tradingview",
+    "logoid": "oeneo",
+    "url": "/logos/SBT.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/oeneo--big.svg"
+  },
+  "PNJ": {
+    "ticker": "PNJ",
+    "type": "tradingview",
+    "logoid": "phu-nhuan-jewelry-joint-stock-company",
+    "url": "/logos/PNJ.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/phu-nhuan-jewelry-joint-stock-company--big.svg"
+  },
+  "HAG": {
+    "ticker": "HAG",
+    "type": "tradingview",
+    "logoid": "hensoldt-ag",
+    "url": "/logos/HAG.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/hensoldt-ag--big.svg"
+  },
+  "VGC": {
+    "ticker": "VGC",
+    "type": "tradingview",
+    "logoid": "country/CA",
+    "url": "/logos/VGC.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/country/CA--big.svg"
+  },
+  "PVD": {
+    "ticker": "PVD",
+    "type": "tradingview",
+    "logoid": "petrovietnam-drilling-and-well-service",
+    "url": "/logos/PVD.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/petrovietnam-drilling-and-well-service--big.svg"
+  },
+  "DCM": {
+    "ticker": "DCM",
+    "type": "tradingview",
+    "logoid": "data-communications-management",
+    "url": "/logos/DCM.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/data-communications-management--big.svg"
+  },
+  "DGC": {
+    "ticker": "DGC",
+    "type": "tradingview",
+    "logoid": "ctcptd-hoa-chat-duc-giang",
+    "url": "/logos/DGC.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/ctcptd-hoa-chat-duc-giang--big.svg"
+  },
+  "CRV": {
+    "ticker": "CRV",
+    "type": "tradingview",
+    "logoid": "crv-real-estate-gr",
+    "url": "/logos/CRV.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/crv-real-estate-gr--big.svg"
+  },
+  "DPM": {
+    "ticker": "DPM",
+    "type": "tradingview",
+    "logoid": "petrovietnam-fertilizer-and-chemicals",
+    "url": "/logos/DPM.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/petrovietnam-fertilizer-and-chemicals--big.svg"
+  },
+  "KDC": {
+    "ticker": "KDC",
+    "type": "tradingview",
+    "logoid": "kido",
+    "url": "/logos/KDC.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/kido--big.svg"
+  },
+  "VBB": {
+    "ticker": "VBB",
+    "type": "tradingview",
+    "logoid": "vietnam-thuong-tin-cjsb",
+    "url": "/logos/VBB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vietnam-thuong-tin-cjsb--big.svg"
+  },
+  "SJS": {
+    "ticker": "SJS",
+    "type": "tradingview",
+    "logoid": "sjs-enterprises",
+    "url": "/logos/SJS.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/sjs-enterprises--big.svg"
+  },
+  "DXG": {
+    "ticker": "DXG",
+    "type": "tradingview",
+    "logoid": "dat-xanh",
+    "url": "/logos/DXG.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/dat-xanh--big.svg"
+  },
+  "LGC": {
+    "ticker": "LGC",
+    "type": "tradingview",
+    "logoid": "heritage-global",
+    "url": "/logos/LGC.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/heritage-global--big.svg"
+  },
+  "TAL": {
+    "ticker": "TAL",
+    "type": "tradingview",
+    "logoid": "tal-education",
+    "url": "/logos/TAL.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/tal-education--big.svg"
+  },
+  "DHG": {
+    "ticker": "DHG",
+    "type": "tradingview",
+    "logoid": "dhg-pharmaceutical-joint-stock-company",
+    "url": "/logos/DHG.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/dhg-pharmaceutical-joint-stock-company--big.svg"
+  },
+  "SIP": {
+    "ticker": "SIP",
+    "type": "tradingview",
+    "logoid": "sipef",
+    "url": "/logos/SIP.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/sipef--big.svg"
+  },
+  "BMP": {
+    "ticker": "BMP",
+    "type": "tradingview",
+    "logoid": "country/EU",
+    "url": "/logos/BMP.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/country/EU--big.svg"
+  },
+  "PDR": {
+    "ticker": "PDR",
+    "type": "tradingview",
+    "logoid": "phat-dat-real-estate-development",
+    "url": "/logos/PDR.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/phat-dat-real-estate-development--big.svg"
+  },
+  "BAF": {
+    "ticker": "BAF",
+    "type": "tradingview",
+    "logoid": "ctcp-nong-nghiep-baf-viet",
+    "url": "/logos/BAF.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/ctcp-nong-nghiep-baf-viet--big.svg"
+  },
+  "NLG": {
+    "ticker": "NLG",
+    "type": "tradingview",
+    "logoid": "nam-long-investment",
+    "url": "/logos/NLG.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/nam-long-investment--big.svg"
+  },
+  "VCG": {
+    "ticker": "VCG",
+    "type": "tradingview",
+    "logoid": "callinex-mines",
+    "url": "/logos/VCG.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/callinex-mines--big.svg"
+  },
+  "VHC": {
+    "ticker": "VHC",
+    "type": "tradingview",
+    "logoid": "virnetx",
+    "url": "/logos/VHC.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/virnetx--big.svg"
+  },
+  "TCH": {
+    "ticker": "TCH",
+    "type": "tradingview",
+    "logoid": "country/EU",
+    "url": "/logos/TCH.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/country/EU--big.svg"
+  },
+  "VSH": {
+    "ticker": "VSH",
+    "type": "tradingview",
+    "logoid": "vishay-intertechnology",
+    "url": "/logos/VSH.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/vishay-intertechnology--big.svg"
+  },
+  "CTR": {
+    "ticker": "CTR",
+    "type": "tradingview",
+    "logoid": "tctcp-cong-trinh-viettel",
+    "url": "/logos/CTR.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/tctcp-cong-trinh-viettel--big.svg"
+  },
+  "KLB": {
+    "ticker": "KLB",
+    "type": "tradingview",
+    "logoid": "kien-long-commercial-jsc",
+    "url": "/logos/KLB.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/kien-long-commercial-jsc--big.svg"
+  },
+  "BWE": {
+    "ticker": "BWE",
+    "type": "tradingview",
+    "logoid": "bw-lpg-ltd",
+    "url": "/logos/BWE.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/bw-lpg-ltd--big.svg"
+  },
+  "DSE": {
+    "ticker": "DSE",
+    "type": "tradingview",
+    "logoid": "daiwa-securities-group",
+    "url": "/logos/DSE.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/daiwa-securities-group--big.svg"
+  },
+  "CII": {
+    "ticker": "CII",
+    "type": "tradingview",
+    "logoid": "ho-chi-minh-city-infrastructure-investment-joint-stock-company",
+    "url": "/logos/CII.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/ho-chi-minh-city-infrastructure-investment-joint-stock-company--big.svg"
+  },
+  "EVF": {
+    "ticker": "EVF",
+    "type": "tradingview",
+    "logoid": "ct-tai-chinh-cp-dien-luc",
+    "url": "/logos/EVF.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/ct-tai-chinh-cp-dien-luc--big.svg"
+  },
+  "PVT": {
+    "ticker": "PVT",
+    "type": "tradingview",
+    "logoid": "rms-mezzanine",
+    "url": "/logos/PVT.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/rms-mezzanine--big.svg"
+  },
+  "VTP": {
+    "ticker": "VTP",
+    "type": "tradingview",
+    "logoid": "viettel-post-jvc",
+    "url": "/logos/VTP.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/viettel-post-jvc--big.svg"
+  },
+  "HPA": {
+    "ticker": "HPA",
+    "type": "tradingview",
+    "logoid": "hoa-phat-group",
+    "url": "/logos/HPA.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/hoa-phat-group--big.svg"
+  },
+  "ORS": {
+    "ticker": "ORS",
+    "type": "tradingview",
+    "logoid": "orsero-npv",
+    "url": "/logos/ORS.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/orsero-npv--big.svg"
+  },
+  "DGW": {
+    "ticker": "DGW",
+    "type": "tradingview",
+    "logoid": "digiworld",
+    "url": "/logos/DGW.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/digiworld--big.svg"
+  },
+  "HAH": {
+    "ticker": "HAH",
+    "type": "tradingview",
+    "logoid": "hai-an-transport-and-stevedoring-joint-stock-company",
+    "url": "/logos/HAH.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/hai-an-transport-and-stevedoring-joint-stock-company--big.svg"
+  },
+  "HSG": {
+    "ticker": "HSG",
+    "type": "tradingview",
+    "logoid": "hong-kong-and-shanghai-hotels",
+    "url": "/logos/HSG.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/hong-kong-and-shanghai-hotels--big.svg"
+  },
+  "PC1": {
+    "ticker": "PC1",
+    "type": "tradingview",
+    "logoid": "power-construction-joint-stock-company",
+    "url": "/logos/PC1.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/power-construction-joint-stock-company--big.svg"
+  },
+  "DIG": {
+    "ticker": "DIG",
+    "type": "tradingview",
+    "logoid": "development-investment-construction",
+    "url": "/logos/DIG.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/development-investment-construction--big.svg"
+  },
+  "FTS": {
+    "ticker": "FTS",
+    "type": "tradingview",
+    "logoid": "fortis",
+    "url": "/logos/FTS.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/fortis--big.svg"
+  },
+  "PHR": {
+    "ticker": "PHR",
+    "type": "tradingview",
+    "logoid": "phreesia",
+    "url": "/logos/PHR.svg",
+    "externalUrl": "https://s3-symbol-logo.tradingview.com/phreesia--big.svg"
+  }
+}

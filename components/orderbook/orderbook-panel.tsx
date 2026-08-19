@@ -12,6 +12,7 @@ import {
 } from "@/lib/market-data"
 import { useStock } from "@/lib/use-market"
 import { Sparkline } from "@/components/sparkline"
+import { StockLogo } from "@/components/stock-logo"
 
 const HEX: Record<Trend, string> = {
   up: "#22c98a",
@@ -98,6 +99,7 @@ export function OrderBookPanel({
         onPointerUp={onPointerUp}
       >
         <GripVertical className="h-3.5 w-3.5 text-muted" />
+        <StockLogo symbol={s.symbol} size={22} className="shrink-0" />
         <span className="text-sm font-bold text-foreground">{s.symbol}</span>
         <span className={`font-mono text-sm font-semibold ${text}`}>{formatPrice(s.price)}</span>
         <span className={`font-mono text-xs ${text}`}>{formatPct(s.changePct)}</span>
