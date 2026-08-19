@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Activity,
   BarChart3,
@@ -47,6 +47,7 @@ const BOARD_VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionD
 const BOARD_TRADED_VALUE_FORMATTER = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const BOARD_MARKET_VALUE_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 })
 const MARKET_UI_COMMIT_MS = 100
+const EMPTY_HISTORY: number[] = []
 
 function formatExactVolume(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
@@ -164,10 +165,10 @@ function currentSessionIdentifier(date = new Date()) {
   return `${vietnamSessionDay(date)}:${isTradingDay && isPastOpen ? "OPEN" : "PRE"}`
 }
 
-function WatchlistSection({
+const WatchlistSection = memo(function WatchlistSection({
   stocks,
   quotes,
-  priceHistory,
+  priceHistoryCloses,
   watchlist,
   whaleAlerts,
   onToggleWatch,
@@ -175,7 +176,7 @@ function WatchlistSection({
 }: {
   stocks: BoardUniverseStock[]
   quotes: Record<string, LiveStockQuote | IndexQuote>
-  priceHistory: Record<string, IntradayPoint[]>
+  priceHistoryCloses: Record<string, number[]>
   watchlist: Set<string>
   whaleAlerts: Record<string, boolean>
   onToggleWatch: (ticker: string) => void
@@ -199,7 +200,7 @@ function WatchlistSection({
             <LiveStockRow
               stock={stock}
               quote={quotes[stock.ticker] as LiveStockQuote | undefined}
-              history={(priceHistory[stock.ticker] ?? []).map((p) => p.close)}
+              history={priceHistoryCloses[stock.ticker] ?? EMPTY_HISTORY}
               onOpen={() => onOpen(stock.ticker)}
               isWatched
               isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
@@ -210,9 +211,9 @@ function WatchlistSection({
       </div>
     </div>
   )
-}
+})
 
-function IndexStrip({ quotes }: { quotes: Record<string, LiveStockQuote | IndexQuote> }) {
+const IndexStrip = memo(function IndexStrip({ quotes }: { quotes: Record<string, LiveStockQuote | IndexQuote | undefined> }) {
   return (
     <div className="grid grid-cols-2 gap-2 p-2 border-b border-white/[0.07] bg-[#080c10]/80 backdrop-blur-2xl sm:grid-cols-4">
       {INDEXES.map((symbol) => {
@@ -310,9 +311,9 @@ function IndexStrip({ quotes }: { quotes: Record<string, LiveStockQuote | IndexQ
       })}
     </div>
   )
-}
+})
 
-function FloatingMarketStatus({
+const FloatingMarketStatus = memo(function FloatingMarketStatus({
   streamState,
   streamError,
   liveCount,
@@ -462,7 +463,7 @@ function FloatingMarketStatus({
       </div>
     </div>
   )
-}
+})
 
 function extractInitialRefs(quotes?: Record<string, LiveStockQuote | IndexQuote>): Record<string, number> {
   const refs: Record<string, number> = {}
@@ -1147,22 +1148,61 @@ export function LiveMarketBoardV2({
     }
     return next
   }, [currentSessionDay, priceHistory, quotes, universe])
+
+  const priceHistoryCloses = useMemo(() => {
+    const out: Record<string, number[]> = {}
+    for (const [ticker, pts] of Object.entries(priceHistory)) {
+      out[ticker] = pts.map((p) => p.close)
+    }
+    return out
+  }, [priceHistory])
+
   const filtered = useMemo(() => universe.filter((stock) => (!normalizedQuery || stock.ticker.includes(normalizedQuery)) && (selectedSector === "Tất cả" || stock.sector === selectedSector)), [universe, normalizedQuery, selectedSector])
   const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, displayQuotes)), [displayQuotes, filtered])
-  const grouped = useMemo(() => BOARD_SECTOR_GROUPS.map((group) => ({
-    ...group,
-    stocks: filtered.filter((stock) => group.sectors.some((sector) => sector === stock.sector)).sort((a, b) => compareByPerformance(a, b, displayQuotes)),
-  })), [displayQuotes, filtered])
-  const liveCount = universe.filter((stock) => quotes[stock.ticker]).length
-  const pricedCount = universe.filter((stock) => displayQuotes[stock.ticker]).length
-  const historyCount = universe.filter((stock) => (priceHistory[stock.ticker]?.length ?? 0) > 1).length
-  const advances = universe.filter((stock) => ((displayQuotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) > 0).length
-  const declines = universe.filter((stock) => ((displayQuotes[stock.ticker] as LiveStockQuote | undefined)?.changePercent ?? 0) < 0).length
+  const grouped = useMemo(() => BOARD_SECTOR_GROUPS.map((group) => {
+    const stocks = filtered
+      .filter((stock) => group.sectors.some((sector) => sector === stock.sector))
+      .sort((a, b) => compareByPerformance(a, b, displayQuotes))
+    const sectorQuotes = stocks
+      .map((stock) => displayQuotes[stock.ticker] as LiveStockQuote | undefined)
+      .filter(Boolean) as LiveStockQuote[]
+    const avg = sectorQuotes.length
+      ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length
+      : undefined
+    const avgTone = marketToneFromChange(avg)
+    return {
+      ...group,
+      stocks,
+      avg,
+      avgTone,
+    }
+  }), [displayQuotes, filtered])
+
+  const { liveCount, pricedCount, historyCount, advances, declines } = useMemo(() => {
+    let live = 0
+    let priced = 0
+    let history = 0
+    let adv = 0
+    let dec = 0
+    for (const stock of universe) {
+      if (quotes[stock.ticker]) live++
+      const dq = displayQuotes[stock.ticker] as LiveStockQuote | undefined
+      if (dq) {
+        priced++
+        const pct = dq.changePercent ?? 0
+        if (pct > 0) adv++
+        else if (pct < 0) dec++
+      }
+      if ((priceHistory[stock.ticker]?.length ?? 0) > 1) history++
+    }
+    return { liveCount: live, pricedCount: priced, historyCount: history, advances: adv, declines: dec }
+  }, [universe, quotes, displayQuotes, priceHistory])
+
   const openBook = useCallback(
     (ticker: string) => {
       const q = displayQuotes[ticker] as LiveStockQuote | undefined
       const s = universe.find((st) => st.ticker === ticker)
-      const h = (priceHistory[ticker] ?? []).map((p) => p.close)
+      const h = priceHistoryCloses[ticker] ?? EMPTY_HISTORY
       openOrderBook(`board:${ticker}`, ticker, {
         sector: s?.sector,
         price: q?.price,
@@ -1180,10 +1220,9 @@ export function LiveMarketBoardV2({
         history: h,
       })
     },
-    [displayQuotes, universe, priceHistory, openOrderBook],
+    [displayQuotes, universe, priceHistoryCloses, openOrderBook],
   )
   const reconnect = useCallback(() => setReconnectKey((key) => key + 1), [])
-  const handleToggleWatch = useCallback((ticker: string) => toggleWatch(ticker), [toggleWatch])
 
   const { totalUniverseVolume, totalUniverseValue } = useMemo(() => {
     let vol = 0
@@ -1220,9 +1259,16 @@ export function LiveMarketBoardV2({
   const vnindexUnc = vnindexQuote?.unchanged ?? Math.max(0, universe.length - advances - declines)
   const breadthTotal = vnindexAdv + vnindexDec + vnindexUnc
 
+  const indexQuotes = useMemo(() => ({
+    VNINDEX: quotes.VNINDEX,
+    VN30: quotes.VN30,
+    HNXINDEX: quotes.HNXINDEX,
+    UPCOMINDEX: quotes.UPCOMINDEX,
+  }), [quotes.VNINDEX, quotes.VN30, quotes.HNXINDEX, quotes.UPCOMINDEX])
+
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background">
-      <IndexStrip quotes={quotes} />
+      <IndexStrip quotes={indexQuotes} />
 
       <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-white/[0.07] bg-[#090d12]/85 backdrop-blur-2xl px-3.5 py-2 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.35)]">
         <div className="flex flex-wrap items-center gap-2">
@@ -1365,61 +1411,55 @@ export function LiveMarketBoardV2({
         <WatchlistSection
           stocks={universe}
           quotes={displayQuotes}
-          priceHistory={priceHistory}
+          priceHistoryCloses={priceHistoryCloses}
           watchlist={watchlist}
           whaleAlerts={whaleAlerts}
-          onToggleWatch={handleToggleWatch}
+          onToggleWatch={toggleWatch}
           onOpen={openBook}
         />
         {mode === "sector" ? (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            {grouped.map(({ key, label, stocks }) => {
-              const sectorQuotes = stocks.map((stock) => displayQuotes[stock.ticker] as LiveStockQuote | undefined).filter(Boolean) as LiveStockQuote[]
-              const avg = sectorQuotes.length ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length : undefined
-              const avgTone = marketToneFromChange(avg)
-
-              return (
-                <section key={key} className="flex min-w-0 flex-col rounded-2xl border border-white/[0.08] bg-[#0b0f14] shadow-[0_4px_20px_rgba(0,0,0,0.35)] transition-colors hover:border-white/[0.14]">
-                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3 py-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-sm shrink-0 leading-none opacity-90">{SECTOR_EMOJIS[key] ?? "📊"}</span>
-                        <h2 className="truncate text-[13px] font-bold tracking-tight text-foreground/95" title={label}>
-                          {label}
-                        </h2>
-                      </div>
-                      <div className="mt-1.5 flex items-center gap-1.5">
-                        <span className="inline-flex rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-0.5 font-mono text-[9.5px] font-medium text-muted-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-                          {stocks.length} mã
-                        </span>
-                      </div>
+            {grouped.map(({ key, label, stocks, avg, avgTone }) => (
+              <section key={key} className="flex min-w-0 flex-col rounded-2xl border border-white/[0.08] bg-[#0b0f14] shadow-[0_4px_20px_rgba(0,0,0,0.35)] transition-colors hover:border-white/[0.14]">
+                <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-sm shrink-0 leading-none opacity-90">{SECTOR_EMOJIS[key] ?? "📊"}</span>
+                      <h2 className="truncate text-[13px] font-bold tracking-tight text-foreground/95" title={label}>
+                        {label}
+                      </h2>
                     </div>
-                    {typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}
-                  </header>
-                  <div className="space-y-1.5 p-1.5">
-                    {stocks.length ? (
-                      stocks.map((stock) => (
-                        <LiveStockRow
-                          key={stock.ticker}
-                          stock={stock}
-                          quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined}
-                          history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)}
-                          onOpen={() => openBook(stock.ticker)}
-                          isWatched={watchlist.has(stock.ticker)}
-                          isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
-                          onToggleWatch={(e) => {
-                            e.stopPropagation()
-                            handleToggleWatch(stock.ticker)
-                          }}
-                        />
-                      ))
-                    ) : (
-                      <div className="px-2 py-5 text-center text-[10px] text-muted">Không có mã phù hợp bộ lọc</div>
-                    )}
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <span className="inline-flex rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-0.5 font-mono text-[9.5px] font-medium text-muted-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
+                        {stocks.length} mã
+                      </span>
+                    </div>
                   </div>
-                </section>
-              )
-            })}
+                  {typeof avg === "number" ? <MarketChangePill value={avg} tone={avgTone} compact title="Biến động trung bình nhóm" /> : null}
+                </header>
+                <div className="space-y-1.5 p-1.5">
+                  {stocks.length ? (
+                    stocks.map((stock) => (
+                      <LiveStockRow
+                        key={stock.ticker}
+                        stock={stock}
+                        quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined}
+                        history={priceHistoryCloses[stock.ticker] ?? EMPTY_HISTORY}
+                        onOpen={() => openBook(stock.ticker)}
+                        isWatched={watchlist.has(stock.ticker)}
+                        isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
+                        onToggleWatch={(e) => {
+                          e.stopPropagation()
+                          toggleWatch(stock.ticker)
+                        }}
+                      />
+                    ))
+                  ) : (
+                    <div className="px-2 py-5 text-center text-[10px] text-muted">Không có mã phù hợp bộ lọc</div>
+                  )}
+                </div>
+              </section>
+            ))}
           </div>
         ) : (
           <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1428,13 +1468,13 @@ export function LiveMarketBoardV2({
                 key={stock.ticker}
                 stock={stock}
                 quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined}
-                history={(priceHistory[stock.ticker] ?? []).map((point) => point.close)}
+                history={priceHistoryCloses[stock.ticker] ?? EMPTY_HISTORY}
                 onOpen={() => openBook(stock.ticker)}
                 isWatched={watchlist.has(stock.ticker)}
                 isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
                 onToggleWatch={(e) => {
                   e.stopPropagation()
-                  handleToggleWatch(stock.ticker)
+                  toggleWatch(stock.ticker)
                 }}
               />
             ))}

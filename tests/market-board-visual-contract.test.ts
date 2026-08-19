@@ -65,7 +65,7 @@ test("strong gainer highlight is static and therefore reduced-motion safe", () =
 test("after-close fallback still feeds both visible price and mini chart", () => {
   assert.match(boardSource, /history\.at\(-1\)\?\.close \?\? stock\.lastClose/)
   assert.match(boardSource, /<LiveStockRow[^>]*quote=\{displayQuotes\[stock\.ticker\]/)
-  assert.match(boardSource, /history=\{\(priceHistory\[stock\.ticker\] \?\? \[\]\)\.map/)
+  assert.match(boardSource, /history=\{priceHistoryCloses\[stock\.ticker\] \?\? EMPTY_HISTORY\}/)
   assert.match(stockSource, /<Sparkline data=\{chart\}/)
   assert.match(stockSource, /formatBoardPrice\(quote\?\.price\)/)
 })

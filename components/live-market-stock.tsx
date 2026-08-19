@@ -374,7 +374,6 @@ export const LiveMoverCard = memo(function LiveMoverCard({
         >
           {formatBoardPrice(quote?.price)}
         </div>
-        <div className="text-[10px] text-muted">Yahoo 5m + DNSE live</div>
       </div>
     </div>
   )
