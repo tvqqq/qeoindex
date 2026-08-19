@@ -5,6 +5,7 @@ import { NextResponse } from "next/server"
 import { FIVE_MINUTE_SECONDS, intradaySnapshot, type IntradayPoint } from "@/lib/intraday-5m"
 import { fetchYahooFiveMinuteSnapshot } from "@/lib/yahoo-history"
 import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
+import { isLunchBreak } from "@/lib/session-countdown"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -147,9 +148,9 @@ async function fetchSnapshot(symbols: string[], now: Date): Promise<IntradaySnap
     const change = live.change ?? (reference > 0 ? price - reference : 0)
     const changePercent = live.changePercent ?? (reference > 0 ? ((price - reference) / reference) * 100 : 0)
     
-    // Add current live price to points if points exist
+    // Add current live price to points if points exist (skip during lunch break)
     let points = row.points
-    if (points.length > 0 && price > 0) {
+    if (points.length > 0 && price > 0 && !isLunchBreak(now)) {
       const nowSec = Math.floor(now.getTime() / 1000)
       const lastPoint = points[points.length - 1]
       if (lastPoint && Math.abs(nowSec - lastPoint.time) < 300) {

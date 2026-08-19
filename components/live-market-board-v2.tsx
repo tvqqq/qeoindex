@@ -24,7 +24,7 @@ import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/lib/intraday-5m"
-import { isTradingSessionOpen } from "@/lib/session-countdown"
+import { isTradingSessionOpen, isLunchBreak } from "@/lib/session-countdown"
 import { setSoundEnabled, playWhaleSound } from "@/lib/sound-engine"
 
 export type BoardUniverseStock = LiveBoardStock
@@ -320,6 +320,7 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
   declines,
   lastMessageAt,
   soundEnabled,
+  isLunch,
   onToggleSound,
   onReconnect,
 }: {
@@ -333,6 +334,7 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
   declines: number
   lastMessageAt: string
   soundEnabled: boolean
+  isLunch?: boolean
   onToggleSound: () => void
   onReconnect: () => void
 }) {
@@ -377,7 +379,9 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
             </div>
             <div className="flex justify-between">
               <span>WS Feed live:</span>
-              <span className="text-foreground font-bold">{liveCount}/{universeLength}</span>
+              <span className={`font-bold ${isLunch ? "text-amber-400 font-sans" : "text-foreground"}`}>
+                {isLunch ? "Giờ nghỉ trưa (Tạm dừng)" : `${liveCount}/${universeLength}`}
+              </span>
             </div>
             {lastMessageAt ? (
               <div className="flex justify-between">
@@ -429,27 +433,31 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
           type="button"
           onClick={() => setExpanded((v) => !v)}
           className="flex items-center gap-2 pl-1 hover:opacity-90 transition-opacity"
-          title="Bấm để xem chi tiết trạng thái hệ thống"
+          title={isLunch ? "Đang trong giờ nghỉ trưa (11:30 - 13:00) — Tạm dừng cập nhật giá & nến" : "Bấm để xem chi tiết trạng thái hệ thống"}
         >
           <span
             className={`h-2 w-2 rounded-full ${
-              streamState === "LIVE"
-                ? "bg-up animate-pulse"
-                : streamState === "CONNECTING"
-                  ? "bg-ref"
-                  : streamState === "CLOSED"
-                    ? "bg-white/40"
-                    : "bg-down"
+              isLunch
+                ? "bg-amber-400"
+                : streamState === "LIVE"
+                  ? "bg-up animate-pulse"
+                  : streamState === "CONNECTING"
+                    ? "bg-ref"
+                    : streamState === "CLOSED"
+                      ? "bg-white/40"
+                      : "bg-down"
             }`}
           />
           <span className="font-semibold text-foreground">
-            {streamState === "LIVE"
-              ? "DNSE LIVE"
-              : streamState === "CONNECTING"
-                ? "Đang kết nối"
-                : streamState === "CLOSED"
-                  ? "Ngoài giờ giao dịch"
-                  : "Mất kết nối"}
+            {isLunch
+              ? "Giờ nghỉ trưa"
+              : streamState === "LIVE"
+                ? "DNSE LIVE"
+                : streamState === "CONNECTING"
+                  ? "Đang kết nối"
+                  : streamState === "CLOSED"
+                    ? "Ngoài giờ giao dịch"
+                    : "Mất kết nối"}
           </span>
           <span className="text-muted-2">·</span>
           <span className="font-mono text-up font-bold">▲{advances}</span>
@@ -484,6 +492,7 @@ export function LiveMarketBoardV2({
   isSessionOpen?: boolean
 }) {
   const [sessionOpen, setSessionOpen] = useState<boolean>(() => isSessionOpen ?? isTradingSessionOpen())
+  const [isLunch, setIsLunch] = useState<boolean>(() => isLunchBreak())
   const { open: openOrderBook } = useOrderBooks()
   const [quotes, setQuotes] = useState<Record<string, LiveStockQuote | IndexQuote>>(() => {
     const initial: Record<string, LiveStockQuote | IndexQuote> = initialQuotes ? { ...initialQuotes } : {}
@@ -722,6 +731,7 @@ export function LiveMarketBoardV2({
   }, [historyReloadKey])
 
   const pushFiveMinuteClose = useCallback((ticker: string, close: number, timestampSeconds: number) => {
+    if (isLunchBreak(new Date(timestampSeconds * 1000))) return
     updateLiveHistory((previous) => {
       const current = previous[ticker] ?? []
       const normalizedClose = normalizeMarketPrice(close, current.at(-1)?.close)
@@ -736,7 +746,9 @@ export function LiveMarketBoardV2({
     const checkSession = () => {
       const now = new Date()
       const isOpen = isTradingSessionOpen(now)
+      const lunch = isLunchBreak(now)
       setSessionOpen((prev) => (prev !== isOpen ? isOpen : prev))
+      setIsLunch((prev) => (prev !== lunch ? lunch : prev))
 
       const nextSession = currentSessionIdentifier(now)
       if (sessionIdentifier.current !== nextSession) {
@@ -833,6 +845,11 @@ export function LiveMarketBoardV2({
           setQuotes({})
           setPriceHistory({})
           setHistoryReloadKey((key) => key + 1)
+        }
+
+        // Pause market data processing during lunch break (11:30 - 13:00)
+        if (isLunchBreak(now)) {
+          continue
         }
 
         const type = String(data.T ?? "")
@@ -1497,6 +1514,7 @@ export function LiveMarketBoardV2({
         declines={declines}
         lastMessageAt={lastMessageAt}
         soundEnabled={soundEnabled}
+        isLunch={isLunch}
         onToggleSound={handleToggleSound}
         onReconnect={reconnect}
       />

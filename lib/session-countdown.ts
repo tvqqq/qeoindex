@@ -53,3 +53,12 @@ export function isTradingSessionOpen(date: Date = new Date()): boolean {
   // HOSE Trading session: 09:00:00 (32,400s) -> 15:00:00 (54,000s)
   return totalSeconds >= 32400 && totalSeconds <= 54000
 }
+
+export function isLunchBreak(date: Date = new Date()): boolean {
+  const { dayOfWeek, totalSeconds } = getVnTimeSeconds(date)
+  // Trading days only (Mon-Fri)
+  if (dayOfWeek < 1 || dayOfWeek > 5) return false
+  // Lunch break: 11:30:00 (41,400s) -> 13:00:00 (46,800s)
+  return totalSeconds >= 41400 && totalSeconds < 46800
+}
+

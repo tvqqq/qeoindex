@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import { isTradingSessionOpen, getVnTimeSeconds } from "../lib/session-countdown.ts"
+import { isTradingSessionOpen, isLunchBreak, getVnTimeSeconds } from "../lib/session-countdown.ts"
 
 test("isTradingSessionOpen returns true during active trading hours (09:00 - 15:00 on weekdays)", () => {
   // Tuesday at 10:30 AM ICT (UTC 03:30)
@@ -29,4 +29,30 @@ test("isTradingSessionOpen returns false outside trading hours and on weekends",
   // Sunday at 14:00 PM ICT (UTC 07:00) - weekend
   const sunday1400 = new Date("2026-08-23T07:00:00Z")
   assert.equal(isTradingSessionOpen(sunday1400), false)
+})
+
+test("isLunchBreak returns true only between 11:30 and 13:00 on weekdays", () => {
+  // Tuesday at 11:30 AM ICT (UTC 04:30) -> true
+  const tuesday1130 = new Date("2026-08-18T04:30:00Z")
+  assert.equal(isLunchBreak(tuesday1130), true)
+
+  // Tuesday at 12:15 PM ICT (UTC 05:15) -> true
+  const tuesday1215 = new Date("2026-08-18T05:15:00Z")
+  assert.equal(isLunchBreak(tuesday1215), true)
+
+  // Tuesday at 12:59:59 PM ICT (UTC 05:59:59) -> true
+  const tuesday1259 = new Date("2026-08-18T05:59:59Z")
+  assert.equal(isLunchBreak(tuesday1259), true)
+
+  // Tuesday at 11:29:59 AM ICT (UTC 04:29:59) -> false
+  const tuesday1129 = new Date("2026-08-18T04:29:59Z")
+  assert.equal(isLunchBreak(tuesday1129), false)
+
+  // Tuesday at 13:00:00 PM ICT (UTC 06:00:00) -> false
+  const tuesday1300 = new Date("2026-08-18T06:00:00Z")
+  assert.equal(isLunchBreak(tuesday1300), false)
+
+  // Saturday at 12:00 PM ICT (UTC 05:00) -> false (weekend)
+  const saturday1200 = new Date("2026-08-22T05:00:00Z")
+  assert.equal(isLunchBreak(saturday1200), false)
 })
