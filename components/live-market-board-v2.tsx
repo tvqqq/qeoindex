@@ -467,6 +467,17 @@ function FloatingMarketStatus({
   )
 }
 
+function extractInitialRefs(quotes?: Record<string, LiveStockQuote | IndexQuote>): Record<string, number> {
+  const refs: Record<string, number> = {}
+  if (!quotes) return refs
+  for (const [sym, q] of Object.entries(quotes)) {
+    if (q && "reference" in q && typeof q.reference === "number" && q.reference > 0) {
+      refs[sym] = q.reference
+    }
+  }
+  return refs
+}
+
 export function LiveMarketBoardV2({
   universe,
   initialQuotes,
@@ -515,7 +526,7 @@ export function LiveMarketBoardV2({
     }
   })
   const whaleTimeouts = useRef<Record<string, NodeJS.Timeout>>({})
-  const dailyReferences = useRef<Record<string, number>>({})
+  const dailyReferences = useRef<Record<string, number>>(extractInitialRefs(initialQuotes))
   const indexReferences = useRef<Record<string, number>>({})
   const sessionIdentifier = useRef(currentSessionIdentifier())
   const lastFrameAt = useRef(0)

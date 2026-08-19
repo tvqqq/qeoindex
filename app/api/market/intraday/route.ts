@@ -102,37 +102,74 @@ async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker:
   return results as R[]
 }
 
+import { fetchLiveBatchQuotes } from "@/lib/broker-live-quotes"
+
 async function fetchSnapshot(symbols: string[], now: Date): Promise<IntradaySnapshot> {
-  const rows = await mapWithConcurrency(symbols, FETCH_CONCURRENCY, async (symbol): Promise<IntradayRow> => {
-    try {
-      const yahoo = await fetchYahooFiveMinuteSnapshot(symbol, now)
-      const bars = yahoo.bars
-      const snapshot = intradaySnapshot(bars, yahoo.reference)
-      return {
-        symbol,
-        provider: "Yahoo",
-        points: bars.map(({ time, close }) => ({ time, close })),
-        ...snapshot,
-        lastBarAt: bars.at(-1)?.time ?? null,
-        fallbackReason: null,
-        error: null,
+  const [liveBatchResult, rows] = await Promise.all([
+    fetchLiveBatchQuotes(symbols),
+    mapWithConcurrency(symbols, FETCH_CONCURRENCY, async (symbol): Promise<IntradayRow> => {
+      try {
+        const yahoo = await fetchYahooFiveMinuteSnapshot(symbol, now)
+        const bars = yahoo.bars
+        const snapshot = intradaySnapshot(bars, yahoo.reference)
+        return {
+          symbol,
+          provider: "Yahoo",
+          points: bars.map(({ time, close }) => ({ time, close })),
+          ...snapshot,
+          lastBarAt: bars.at(-1)?.time ?? null,
+          fallbackReason: null,
+          error: null,
+        }
+      } catch (error) {
+        return {
+          symbol,
+          provider: null,
+          points: [],
+          reference: null,
+          price: null,
+          change: null,
+          changePercent: null,
+          lastBarAt: null,
+          fallbackReason: null,
+          error: error instanceof Error ? error.message : String(error),
+        }
       }
-    } catch (error) {
-      return {
-        symbol,
-        provider: null,
-        points: [],
-        reference: null,
-        price: null,
-        change: null,
-        changePercent: null,
-        lastBarAt: null,
-        fallbackReason: null,
-        error: error instanceof Error ? error.message : String(error),
+    }),
+  ])
+
+  // Merge fast live broker prices onto intraday rows
+  const enhancedRows = rows.map((row) => {
+    const live = liveBatchResult[row.symbol]
+    if (!live || !live.price) return row
+    const reference = live.reference ?? row.reference ?? live.price
+    const price = live.price
+    const change = live.change ?? (reference > 0 ? price - reference : 0)
+    const changePercent = live.changePercent ?? (reference > 0 ? ((price - reference) / reference) * 100 : 0)
+    
+    // Add current live price to points if points exist
+    let points = row.points
+    if (points.length > 0 && price > 0) {
+      const nowSec = Math.floor(now.getTime() / 1000)
+      const lastPoint = points[points.length - 1]
+      if (lastPoint && Math.abs(nowSec - lastPoint.time) < 300) {
+        points = [...points.slice(0, -1), { time: lastPoint.time, close: price }]
+      } else {
+        points = [...points, { time: nowSec, close: price }]
       }
     }
+
+    return {
+      ...row,
+      reference,
+      price,
+      change,
+      changePercent,
+      points,
+    }
   })
-  return { rows, generatedAt: new Date().toISOString() }
+
+  return { rows: enhancedRows, generatedAt: new Date().toISOString() }
 }
 
 export async function GET(request: Request) {
