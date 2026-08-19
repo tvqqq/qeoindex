@@ -24,7 +24,7 @@ import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/lib/intraday-5m"
-import { isTradingSessionOpen, isLunchBreak } from "@/lib/session-countdown"
+import { isTradingSessionOpen, isLunchBreak, getVnTimeSeconds } from "@/lib/session-countdown"
 import { setSoundEnabled, playWhaleSound } from "@/lib/sound-engine"
 
 export type BoardUniverseStock = LiveBoardStock
@@ -152,16 +152,9 @@ function compareByPerformance(a: BoardUniverseStock, b: BoardUniverseStock, quot
 }
 
 function currentSessionIdentifier(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    weekday: "short",
-    hour12: false,
-    hour: "2-digit",
-  }).formatToParts(date)
-  const weekday = parts.find((p) => p.type === "weekday")?.value ?? ""
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0)
-  const isTradingDay = weekday !== "Sat" && weekday !== "Sun"
-  const isPastOpen = hour >= 9
+  const { dayOfWeek, totalSeconds } = getVnTimeSeconds(date)
+  const isTradingDay = dayOfWeek >= 1 && dayOfWeek <= 5
+  const isPastOpen = totalSeconds >= 32400
   return `${vietnamSessionDay(date)}:${isTradingDay && isPastOpen ? "OPEN" : "PRE"}`
 }
 
@@ -753,14 +746,6 @@ export function LiveMarketBoardV2({
       const nextSession = currentSessionIdentifier(now)
       if (sessionIdentifier.current !== nextSession) {
         sessionIdentifier.current = nextSession
-        dailyReferences.current = {}
-        indexReferences.current = {}
-        quotesRef.current = {}
-        priceHistoryRef.current = {}
-        lastMessageAtRef.current = ""
-        setQuotes({})
-        setPriceHistory({})
-        setLastMessageAt("")
         setHistoryReloadKey((key) => key + 1)
         setReconnectKey((key) => key + 1)
       }
@@ -838,12 +823,6 @@ export function LiveMarketBoardV2({
         const currentSession = currentSessionIdentifier(now)
         if (sessionIdentifier.current !== currentSession) {
           sessionIdentifier.current = currentSession
-          dailyReferences.current = {}
-          indexReferences.current = {}
-          quotesRef.current = {}
-          priceHistoryRef.current = {}
-          setQuotes({})
-          setPriceHistory({})
           setHistoryReloadKey((key) => key + 1)
         }
 
