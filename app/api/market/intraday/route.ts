@@ -5,7 +5,7 @@ import { NextResponse } from "next/server"
 import { FIVE_MINUTE_SECONDS, intradaySnapshot, type IntradayPoint } from "@/lib/intraday-5m"
 import { fetchYahooFiveMinuteSnapshot } from "@/lib/yahoo-history"
 import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
-import { isLunchBreak } from "@/lib/session-countdown"
+import { isLunchBreak, getMarketSessionStatus } from "@/lib/session-countdown"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -81,13 +81,13 @@ function vietnamDateKey(now: Date) {
 }
 
 function snapshotCacheKey(symbols: string[], now: Date) {
-  const timestamp = Math.floor(now.getTime() / 1000)
-  return `top100:v8:${vietnamDateKey(now)}:${Math.floor(timestamp / FIVE_MINUTE_SECONDS)}:${symbols.join("-")}`
+  const status = getMarketSessionStatus(now)
+  return `top100:v8:${vietnamDateKey(now)}:${status.cacheBucketKey}:${symbols.join("-")}`
 }
 
 function secondsToNextBucket(now: Date) {
-  const timestamp = Math.floor(now.getTime() / 1000)
-  return Math.max(1, FIVE_MINUTE_SECONDS - (timestamp % FIVE_MINUTE_SECONDS))
+  const status = getMarketSessionStatus(now)
+  return status.ttlSeconds
 }
 
 async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>) {

@@ -62,3 +62,86 @@ export function isLunchBreak(date: Date = new Date()): boolean {
   return totalSeconds >= 41400 && totalSeconds < 46800
 }
 
+export type MarketSessionPhase = "PRE_MARKET" | "MORNING" | "LUNCH_BREAK" | "AFTERNOON" | "EOD_CLOSED"
+
+export type MarketSessionStatus = {
+  phase: MarketSessionPhase
+  isLiveSession: boolean
+  cacheBucketKey: string
+  ttlSeconds: number
+}
+
+export function getMarketSessionStatus(date: Date = new Date()): MarketSessionStatus {
+  const { dayOfWeek, totalSeconds } = getVnTimeSeconds(date)
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+
+  if (isWeekend) {
+    const daysUntilMonday = dayOfWeek === 6 ? 2 : 1
+    const secondsRemainingToday = 86400 - totalSeconds
+    const ttlSeconds = secondsRemainingToday + (daysUntilMonday - 1) * 86400 + 32400
+    return {
+      phase: "EOD_CLOSED",
+      isLiveSession: false,
+      cacheBucketKey: "eod_closed",
+      ttlSeconds: Math.max(60, ttlSeconds),
+    }
+  }
+
+  // Weekday before 09:00
+  if (totalSeconds < 32400) {
+    const ttlSeconds = 32400 - totalSeconds
+    return {
+      phase: "PRE_MARKET",
+      isLiveSession: false,
+      cacheBucketKey: "pre_market",
+      ttlSeconds: Math.max(60, ttlSeconds),
+    }
+  }
+
+  // Morning session: 09:00:00 -> 11:30:00
+  if (totalSeconds >= 32400 && totalSeconds < 41400) {
+    const currentBucket = Math.floor(totalSeconds / 300)
+    const ttlSeconds = Math.max(5, Math.min(300 - (totalSeconds % 300), 41400 - totalSeconds))
+    return {
+      phase: "MORNING",
+      isLiveSession: true,
+      cacheBucketKey: `m_${currentBucket}`,
+      ttlSeconds,
+    }
+  }
+
+  // Lunch break: 11:30:00 -> 13:00:00
+  if (totalSeconds >= 41400 && totalSeconds < 46800) {
+    const ttlSeconds = 46800 - totalSeconds
+    return {
+      phase: "LUNCH_BREAK",
+      isLiveSession: false,
+      cacheBucketKey: "lunch_break",
+      ttlSeconds: Math.max(60, ttlSeconds),
+    }
+  }
+
+  // Afternoon session: 13:00:00 -> 15:00:00
+  if (totalSeconds >= 46800 && totalSeconds <= 54000) {
+    const currentBucket = Math.floor(totalSeconds / 300)
+    const ttlSeconds = Math.max(5, Math.min(300 - (totalSeconds % 300), 54000 - totalSeconds + 10))
+    return {
+      phase: "AFTERNOON",
+      isLiveSession: true,
+      cacheBucketKey: `a_${currentBucket}`,
+      ttlSeconds,
+    }
+  }
+
+  // EOD Closed: after 15:00 on weekdays
+  const daysUntilNextSession = dayOfWeek === 5 ? 3 : 1
+  const secondsRemainingToday = 86400 - totalSeconds
+  const ttlSeconds = secondsRemainingToday + (daysUntilNextSession - 1) * 86400 + 32400
+  return {
+    phase: "EOD_CLOSED",
+    isLiveSession: false,
+    cacheBucketKey: "eod_closed",
+    ttlSeconds: Math.max(60, ttlSeconds),
+  }
+}
+

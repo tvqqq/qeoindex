@@ -5,18 +5,39 @@ import { TopNav } from "@/components/top-nav"
 import { sectorForTicker } from "@/lib/market-sectors"
 import { CANONICAL_UNIVERSE_STOCKS, CANONICAL_UNIVERSE_TICKERS } from "@/lib/wyckoff-universe"
 import { getBoardOverviewSnapshotsFromSupabase } from "@/lib/supabase/orderbook"
-import { isTradingSessionOpen } from "@/lib/session-countdown"
+import { isTradingSessionOpen, getMarketSessionStatus } from "@/lib/session-countdown"
 import { fetchLiveBatchQuotes } from "@/lib/broker-live-quotes"
+import { readThroughUiCache } from "@/lib/ui-data-cache"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/lib/intraday-5m"
 
 export const dynamic = "force-dynamic"
 
 const INITIAL_HISTORY_POINTS = 90
+const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v1"
 
-export default async function Page() {
-  const isSessionOpen = isTradingSessionOpen(new Date())
+type InitialBoardData = {
+  universe: BoardUniverseStock[]
+  initialQuotes: Record<string, LiveStockQuote | IndexQuote>
+  initialHistories: Record<string, IntradayPoint[]>
+}
 
+function isInitialBoardData(value: unknown): value is InitialBoardData {
+  if (!value || typeof value !== "object") return false
+  const d = value as Partial<InitialBoardData>
+  return Array.isArray(d.universe) && typeof d.initialQuotes === "object" && typeof d.initialHistories === "object"
+}
+
+function vietnamDateKey(now: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now)
+}
+
+async function loadInitialBoardDataCanonical(): Promise<InitialBoardData> {
   // Read live broker quotes and Supabase snapshots in parallel (sub-150ms)
   const [snapshots, liveQuotes] = await Promise.all([
     getBoardOverviewSnapshotsFromSupabase(),
@@ -77,6 +98,26 @@ export default async function Page() {
     }
   }
 
+  return { universe, initialQuotes, initialHistories }
+}
+
+export default async function Page() {
+  const now = new Date()
+  const isSessionOpen = isTradingSessionOpen(now)
+  const session = getMarketSessionStatus(now)
+  const ttlSeconds = session.isLiveSession ? 4 : Math.min(session.ttlSeconds, 3600)
+  const cacheKey = `ssr:${vietnamDateKey(now)}:${session.cacheBucketKey}`
+
+  const { universe, initialQuotes, initialHistories } = await readThroughUiCache({
+    namespace: BOARD_SSR_CACHE_NAMESPACE,
+    key: cacheKey,
+    tag: "board-ssr",
+    name: "QeoIndex Board SSR Initial Data",
+    ttlSeconds,
+    validate: isInitialBoardData,
+    load: loadInitialBoardDataCanonical,
+  })
+
   return (
     <OrderBookProvider>
       <div className="flex h-screen flex-col overflow-hidden bg-background">
@@ -94,3 +135,4 @@ export default async function Page() {
     </OrderBookProvider>
   )
 }
+

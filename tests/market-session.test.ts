@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import { isTradingSessionOpen, isLunchBreak, getVnTimeSeconds } from "../lib/session-countdown.ts"
+import { isTradingSessionOpen, isLunchBreak, getMarketSessionStatus, getVnTimeSeconds } from "../lib/session-countdown.ts"
 
 test("isTradingSessionOpen returns true during active trading hours (09:00 - 15:00 on weekdays)", () => {
   // Tuesday at 10:30 AM ICT (UTC 03:30)
@@ -56,3 +56,52 @@ test("isLunchBreak returns true only between 11:30 and 13:00 on weekdays", () =>
   const saturday1200 = new Date("2026-08-22T05:00:00Z")
   assert.equal(isLunchBreak(saturday1200), false)
 })
+
+test("getMarketSessionStatus returns accurate session phase, live flag, and cache keys", () => {
+  // 1. Tuesday 08:30 AM ICT (Pre-market)
+  const preMarket = new Date("2026-08-18T01:30:00Z")
+  const preStatus = getMarketSessionStatus(preMarket)
+  assert.equal(preStatus.phase, "PRE_MARKET")
+  assert.equal(preStatus.isLiveSession, false)
+  assert.equal(preStatus.cacheBucketKey, "pre_market")
+  assert.equal(preStatus.ttlSeconds, 1800) // 30 mins to 09:00
+
+  // 2. Tuesday 10:30 AM ICT (Morning session)
+  const morning = new Date("2026-08-18T03:30:00Z")
+  const morningStatus = getMarketSessionStatus(morning)
+  assert.equal(morningStatus.phase, "MORNING")
+  assert.equal(morningStatus.isLiveSession, true)
+  assert.match(morningStatus.cacheBucketKey, /^m_\d+$/)
+
+  // 3. Tuesday 12:00 PM ICT (Lunch break)
+  const lunch = new Date("2026-08-18T05:00:00Z")
+  const lunchStatus = getMarketSessionStatus(lunch)
+  assert.equal(lunchStatus.phase, "LUNCH_BREAK")
+  assert.equal(lunchStatus.isLiveSession, false)
+  assert.equal(lunchStatus.cacheBucketKey, "lunch_break")
+  assert.equal(lunchStatus.ttlSeconds, 3600) // 1 hour to 13:00
+
+  // 4. Tuesday 14:00 PM ICT (Afternoon session)
+  const afternoon = new Date("2026-08-18T07:00:00Z")
+  const afternoonStatus = getMarketSessionStatus(afternoon)
+  assert.equal(afternoonStatus.phase, "AFTERNOON")
+  assert.equal(afternoonStatus.isLiveSession, true)
+  assert.match(afternoonStatus.cacheBucketKey, /^a_\d+$/)
+
+  // 5. Tuesday 18:00 PM ICT (EOD Closed)
+  const eod = new Date("2026-08-18T11:00:00Z")
+  const eodStatus = getMarketSessionStatus(eod)
+  assert.equal(eodStatus.phase, "EOD_CLOSED")
+  assert.equal(eodStatus.isLiveSession, false)
+  assert.equal(eodStatus.cacheBucketKey, "eod_closed")
+  assert.ok(eodStatus.ttlSeconds > 3600)
+
+  // 6. Saturday 14:00 PM ICT (Weekend)
+  const weekend = new Date("2026-08-22T07:00:00Z")
+  const weekendStatus = getMarketSessionStatus(weekend)
+  assert.equal(weekendStatus.phase, "EOD_CLOSED")
+  assert.equal(weekendStatus.isLiveSession, false)
+  assert.equal(weekendStatus.cacheBucketKey, "eod_closed")
+  assert.ok(weekendStatus.ttlSeconds > 86400)
+})
+
