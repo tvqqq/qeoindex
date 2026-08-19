@@ -1,11 +1,29 @@
 import { dnseProviderHealth } from "@/lib/dnse-history"
 import type { HistoricalProvider } from "@/lib/market-history"
+import {
+  createDataSourcePage,
+  isNotionConfigured,
+  queryDataSource,
+  type NotionPage,
+  type NotionProperties,
+} from "@/lib/notion/client"
+import {
+  checkboxValue,
+  dateText,
+  numberProperty,
+  numberValue,
+  pageProperties,
+  richText,
+  richTextProperty,
+  selectText,
+  titleProperty,
+  titleText,
+} from "@/lib/notion/properties"
 import type { ScannerHistoryStatus } from "@/lib/scanner-policy"
 import { invalidateUiCache, readThroughUiCache } from "@/lib/ui-data-cache"
 import { UNIVERSE_DATE, type UniverseStock } from "@/lib/wyckoff-universe"
 import type { ScannerBias, ScannerConfidence, WyckoffScanResult } from "@/lib/wyckoff-engine"
 
-const NOTION_VERSION = "2026-03-11"
 const UNIVERSE_DATA_SOURCE_ID = process.env.NOTION_WYCKOFF_UNIVERSE_DATA_SOURCE_ID ?? "210c502d-0c32-4fdd-9d69-7ef18e2be7d5"
 const SCAN_DATA_SOURCE_ID = process.env.NOTION_DAILY_WYCKOFF_SCAN_DATA_SOURCE_ID ?? "b76e378a-3f0c-4315-82cd-52c844101b73"
 const SCANNER_CACHE = {
@@ -79,61 +97,60 @@ export interface ScannerData {
 
 export type DailyScanStatus = ScannerHistoryStatus
 
-function token() {
-  return process.env.NOTION_API_KEY ?? process.env.NOTION_TOKEN ?? ""
-}
-function headers() {
-  const apiKey = token()
-  if (!apiKey) throw new Error("NOTION_API_KEY is not configured")
-  return { Authorization: `Bearer ${apiKey}`, "Notion-Version": NOTION_VERSION, "Content-Type": "application/json" }
-}
-function title(prop: any) { return (prop?.title ?? []).map((item: any) => item?.plain_text ?? "").join("") }
-function text(prop: any) { return (prop?.rich_text ?? []).map((item: any) => item?.plain_text ?? "").join("") }
-function number(prop: any): number | null { return typeof prop?.number === "number" ? prop.number : null }
-function select(prop: any) { return prop?.select?.name ?? "" }
-function date(prop: any) { return prop?.date?.start ?? "" }
-function checkbox(prop: any) { return Boolean(prop?.checkbox) }
-
-async function notionQuery(dataSourceId: string, body: Record<string, unknown> = {}, maxPages = 1) {
-  const results: any[] = []
-  let startCursor: string | undefined
-  for (let page = 0; page < maxPages; page += 1) {
-    const response = await fetch(`https://api.notion.com/v1/data_sources/${dataSourceId}/query`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ page_size: 100, ...body, ...(startCursor ? { start_cursor: startCursor } : {}) }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    })
-    const payload = await response.json()
-    if (!response.ok) throw new Error(`Notion scanner query failed (${response.status}): ${JSON.stringify(payload).slice(0, 240)}`)
-    results.push(...(payload.results ?? []))
-    if (!payload.has_more || !payload.next_cursor) break
-    startCursor = payload.next_cursor
-  }
-  return results
-}
-
-function parseUniversePage(page: any): UniverseRow | null {
-  const props = page?.properties ?? {}
-  const ticker = title(props.Ticker).trim().toUpperCase()
-  const rank = number(props.Rank)
-  const marketCapT = number(props["Market Cap T"])
+function parseUniversePage(page: NotionPage): UniverseRow | null {
+  const props = pageProperties(page)
+  const ticker = titleText(props.Ticker).trim().toUpperCase()
+  const rank = numberValue(props.Rank)
+  const marketCapT = numberValue(props["Market Cap T"])
   if (!ticker || rank == null || marketCapT == null) return null
-  return { id: page.id, ticker, rank, marketCapT, exchange: "HOSE", active: checkbox(props.Active), providerStatus: select(props["Provider Status"]), lastScan: date(props["Last Scan"]), sector: text(props.Sector) }
+  return {
+    id: page.id,
+    ticker,
+    rank,
+    marketCapT,
+    exchange: "HOSE",
+    active: checkboxValue(props.Active),
+    providerStatus: selectText(props["Provider Status"]),
+    lastScan: dateText(props["Last Scan"]),
+    sector: richText(props.Sector),
+  }
 }
 
-function parseScanPage(page: any): DailyScanRow | null {
-  const props = page?.properties ?? {}
-  const ticker = text(props.Ticker).trim().toUpperCase()
+function parseScanPage(page: NotionPage): DailyScanRow | null {
+  const props = pageProperties(page)
+  const ticker = richText(props.Ticker).trim().toUpperCase()
   if (!ticker) return null
   return {
-    id: page.id, ticker, date: date(props.Date), rank: number(props.Rank) ?? 0, price: number(props.Price), changePct: number(props["Change Pct"]), volume: number(props.Volume),
-    rsi14: number(props.RSI14), macd: number(props.MACD), macdSignal: number(props["MACD Signal"]), ma20: number(props.MA20), ma50: number(props.MA50), ma200: number(props.MA200), atr14: number(props.ATR14), relVolume: number(props["Rel Volume"]),
-    wyckoffState: text(props["Wyckoff State"]), phase: text(props.Phase), taBias: (select(props["TA Bias"]) || "Neutral") as ScannerBias,
-    bullProbability: number(props["Bull Probability"]), baseProbability: number(props["Base Probability"]), bearProbability: number(props["Bear Probability"]),
-    support: text(props.Support), resistance: text(props.Resistance), confirmation: text(props.Confirmation), invalidation: text(props.Invalidation), whatChanged: text(props["What Changed"]), confidence: select(props.Confidence) as ScannerConfidence | "",
-    provider: select(props.Provider), providerDetail: "Notion", status: select(props.Status),
+    id: page.id,
+    ticker,
+    date: dateText(props.Date),
+    rank: numberValue(props.Rank) ?? 0,
+    price: numberValue(props.Price),
+    changePct: numberValue(props["Change Pct"]),
+    volume: numberValue(props.Volume),
+    rsi14: numberValue(props.RSI14),
+    macd: numberValue(props.MACD),
+    macdSignal: numberValue(props["MACD Signal"]),
+    ma20: numberValue(props.MA20),
+    ma50: numberValue(props.MA50),
+    ma200: numberValue(props.MA200),
+    atr14: numberValue(props.ATR14),
+    relVolume: numberValue(props["Rel Volume"]),
+    wyckoffState: richText(props["Wyckoff State"]),
+    phase: richText(props.Phase),
+    taBias: (selectText(props["TA Bias"]) || "Neutral") as ScannerBias,
+    bullProbability: numberValue(props["Bull Probability"]),
+    baseProbability: numberValue(props["Base Probability"]),
+    bearProbability: numberValue(props["Bear Probability"]),
+    support: richText(props.Support),
+    resistance: richText(props.Resistance),
+    confirmation: richText(props.Confirmation),
+    invalidation: richText(props.Invalidation),
+    whatChanged: richText(props["What Changed"]),
+    confidence: selectText(props.Confidence) as ScannerConfidence | "",
+    provider: selectText(props.Provider),
+    providerDetail: "Notion",
+    status: selectText(props.Status),
   }
 }
 
@@ -150,23 +167,37 @@ function isScannerData(value: unknown): value is ScannerData {
 }
 
 async function loadUniverse() {
-  const pages = await notionQuery(UNIVERSE_DATA_SOURCE_ID, { sorts: [{ property: "Rank", direction: "ascending" }] }, 2)
-  const universe = pages.map(parseUniversePage).filter(Boolean).filter((row) => row!.active).sort((a, b) => a!.rank - b!.rank) as UniverseRow[]
+  const { results } = await queryDataSource(UNIVERSE_DATA_SOURCE_ID, {
+    sorts: [{ property: "Rank", direction: "ascending" }],
+    maxPages: 2,
+    errorContext: "Notion scanner query",
+  })
+  const universe = results
+    .map(parseUniversePage)
+    .filter((row): row is UniverseRow => Boolean(row?.active))
+    .sort((a, b) => a.rank - b.rank)
   if (!universe.length) throw new Error("Notion Wyckoff Universe returned no active stocks")
   return universe
 }
 
 async function loadLatestScanPages() {
-  const newest = await notionQuery(SCAN_DATA_SOURCE_ID, { page_size: 1, sorts: [{ property: "Date", direction: "descending" }] })
-  const latestDate = newest.map(parseScanPage).find(Boolean)?.date ?? ""
+  const newest = await queryDataSource(SCAN_DATA_SOURCE_ID, {
+    pageSize: 1,
+    sorts: [{ property: "Date", direction: "descending" }],
+    errorContext: "Notion scanner query",
+  })
+  const latestDate = newest.results.map(parseScanPage).find(Boolean)?.date ?? ""
   if (!latestDate) return []
-  return notionQuery(SCAN_DATA_SOURCE_ID, {
+  const latest = await queryDataSource(SCAN_DATA_SOURCE_ID, {
     filter: { property: "Date", date: { equals: latestDate } },
     sorts: [{ property: "Rank", direction: "ascending" }],
-  }, 2)
+    maxPages: 2,
+    errorContext: "Notion scanner query",
+  })
+  return latest.results
 }
 
-function buildScannerData(universe: UniverseRow[], scanPages: any[]): ScannerData {
+function buildScannerData(universe: UniverseRow[], scanPages: NotionPage[]): ScannerData {
   const latestScans: Record<string, DailyScanRow> = {}
   for (const page of scanPages) {
     const row = parseScanPage(page)
@@ -197,15 +228,16 @@ async function loadScannerDataCanonical(): Promise<ScannerData> {
 
 async function loadScannerTickerDataCanonical(ticker: string): Promise<ScannerData> {
   const normalized = ticker.trim().toUpperCase()
-  const [universe, scanPages] = await Promise.all([
+  const [universe, scanResult] = await Promise.all([
     loadUniverse(),
-    notionQuery(SCAN_DATA_SOURCE_ID, {
-      page_size: 1,
+    queryDataSource(SCAN_DATA_SOURCE_ID, {
+      pageSize: 1,
       filter: { property: "Ticker", rich_text: { equals: normalized } },
       sorts: [{ property: "Date", direction: "descending" }],
+      errorContext: "Notion scanner query",
     }),
   ])
-  return buildScannerData(universe, scanPages)
+  return buildScannerData(universe, scanResult.results)
 }
 
 /** Operational scanner/promotion paths bypass the UI cache for canonical decisions. */
@@ -215,14 +247,14 @@ export async function getScannerDataFresh(): Promise<ScannerData> {
 
 /** UI-facing read path: regional Runtime Cache -> shared Redis -> canonical Notion. */
 export async function getScannerData(): Promise<ScannerData> {
-  if (!token()) return loadScannerDataCanonical()
+  if (!isNotionConfigured()) return loadScannerDataCanonical()
   return readThroughUiCache({ ...SCANNER_CACHE, validate: isScannerData, load: loadScannerDataCanonical })
 }
 
 /** Ticker detail needs the universe for prev/next navigation, but only one scan row. */
 export async function getScannerTickerData(ticker: string): Promise<ScannerData> {
   const normalized = ticker.trim().toUpperCase()
-  if (!token()) return loadScannerTickerDataCanonical(normalized)
+  if (!isNotionConfigured()) return loadScannerTickerDataCanonical(normalized)
   return readThroughUiCache({
     namespace: SCANNER_CACHE.namespace,
     key: `ticker:${normalized}`,
@@ -239,21 +271,80 @@ export async function invalidateScannerDataCache() {
   await invalidateUiCache(SCANNER_CACHE)
 }
 
-function richTextValue(value: string) { return { rich_text: value ? [{ type: "text", text: { content: value.slice(0, 1900) } }] : [] } }
-function numberValue(value: number | null | undefined) { return { number: typeof value === "number" && Number.isFinite(value) ? value : null } }
-
-export async function writeDailyScan(ticker: string, rank: number, scanDate: string, result: WyckoffScanResult, provider: HistoricalProvider = "DNSE", status: DailyScanStatus = "Complete") {
+export async function writeDailyScan(
+  ticker: string,
+  rank: number,
+  scanDate: string,
+  result: WyckoffScanResult,
+  provider: HistoricalProvider = "DNSE",
+  status: DailyScanStatus = "Complete",
+) {
   const t = result.technical
-  const properties: Record<string, any> = {
-    Scan: { title: [{ type: "text", text: { content: `${ticker} — Daily Scan — ${scanDate}` } }] }, Ticker: richTextValue(ticker), Date: { date: { start: scanDate } }, Rank: numberValue(rank), Price: numberValue(t.price), "Change Pct": numberValue(t.changePct), Volume: numberValue(t.volume), RSI14: numberValue(t.rsi14), MACD: numberValue(t.macd), "MACD Signal": numberValue(t.macdSignal), MA20: numberValue(t.ma20), MA50: numberValue(t.ma50), MA200: numberValue(t.ma200), ATR14: numberValue(t.atr14), "Rel Volume": numberValue(t.relVolume), "Wyckoff State": richTextValue(result.wyckoffState), Phase: richTextValue(result.phase), "TA Bias": { select: { name: result.taBias } }, "Bull Probability": numberValue(result.bullProbability), "Base Probability": numberValue(result.baseProbability), "Bear Probability": numberValue(result.bearProbability), Support: richTextValue(result.support), Resistance: richTextValue(result.resistance), Confirmation: richTextValue(result.confirmation), Invalidation: richTextValue(result.invalidation), "What Changed": richTextValue(result.whatChanged), Confidence: { select: { name: result.confidence } }, Provider: { select: { name: provider } }, Status: { select: { name: status } },
+  const properties: NotionProperties = {
+    Scan: titleProperty(`${ticker} — Daily Scan — ${scanDate}`),
+    Ticker: richTextProperty(ticker),
+    Date: { date: { start: scanDate } },
+    Rank: numberProperty(rank),
+    Price: numberProperty(t.price),
+    "Change Pct": numberProperty(t.changePct),
+    Volume: numberProperty(t.volume),
+    RSI14: numberProperty(t.rsi14),
+    MACD: numberProperty(t.macd),
+    "MACD Signal": numberProperty(t.macdSignal),
+    MA20: numberProperty(t.ma20),
+    MA50: numberProperty(t.ma50),
+    MA200: numberProperty(t.ma200),
+    ATR14: numberProperty(t.atr14),
+    "Rel Volume": numberProperty(t.relVolume),
+    "Wyckoff State": richTextProperty(result.wyckoffState),
+    Phase: richTextProperty(result.phase),
+    "TA Bias": { select: { name: result.taBias } },
+    "Bull Probability": numberProperty(result.bullProbability),
+    "Base Probability": numberProperty(result.baseProbability),
+    "Bear Probability": numberProperty(result.bearProbability),
+    Support: richTextProperty(result.support),
+    Resistance: richTextProperty(result.resistance),
+    Confirmation: richTextProperty(result.confirmation),
+    Invalidation: richTextProperty(result.invalidation),
+    "What Changed": richTextProperty(result.whatChanged),
+    Confidence: { select: { name: result.confidence } },
+    Provider: { select: { name: provider } },
+    Status: { select: { name: status } },
   }
-  const response = await fetch("https://api.notion.com/v1/pages", { method: "POST", headers: headers(), body: JSON.stringify({ parent: { data_source_id: SCAN_DATA_SOURCE_ID }, properties }), cache: "no-store", signal: AbortSignal.timeout(10_000) })
-  const payload = await response.json()
-  if (!response.ok) throw new Error(`Notion scan write failed (${response.status}): ${JSON.stringify(payload).slice(0, 260)}`)
-  return payload
+  return createDataSourcePage(SCAN_DATA_SOURCE_ID, properties, {
+    errorContext: "Notion scan write",
+    timeoutMs: 10_000,
+  })
 }
 
 export function rowToPreviousResult(row?: DailyScanRow): WyckoffScanResult | null {
   if (!row || row.bullProbability == null || row.baseProbability == null || row.bearProbability == null) return null
-  return { technical: { price: row.price ?? 0, changePct: row.changePct ?? 0, volume: row.volume ?? 0, ma20: row.ma20, ma50: row.ma50, ma200: row.ma200, rsi14: row.rsi14, macd: row.macd, macdSignal: row.macdSignal, atr14: row.atr14, relVolume: row.relVolume }, wyckoffState: row.wyckoffState, phase: row.phase, taBias: row.taBias, bullProbability: row.bullProbability, baseProbability: row.baseProbability, bearProbability: row.bearProbability, support: row.support, resistance: row.resistance, confirmation: row.confirmation, invalidation: row.invalidation, whatChanged: row.whatChanged, confidence: row.confidence || "LOW", tags: [] }
+  return {
+    technical: {
+      price: row.price ?? 0,
+      changePct: row.changePct ?? 0,
+      volume: row.volume ?? 0,
+      ma20: row.ma20,
+      ma50: row.ma50,
+      ma200: row.ma200,
+      rsi14: row.rsi14,
+      macd: row.macd,
+      macdSignal: row.macdSignal,
+      atr14: row.atr14,
+      relVolume: row.relVolume,
+    },
+    wyckoffState: row.wyckoffState,
+    phase: row.phase,
+    taBias: row.taBias,
+    bullProbability: row.bullProbability,
+    baseProbability: row.baseProbability,
+    bearProbability: row.bearProbability,
+    support: row.support,
+    resistance: row.resistance,
+    confirmation: row.confirmation,
+    invalidation: row.invalidation,
+    whatChanged: row.whatChanged,
+    confidence: row.confidence || "LOW",
+    tags: [],
+  }
 }

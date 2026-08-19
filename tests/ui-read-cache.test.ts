@@ -42,7 +42,7 @@ test("P1 UI reads use Runtime Cache with optional shared Redis", () => {
 test("P1.1 scanner and market history miss paths are bounded", () => {
   const scanner = source("lib/scanner-data.ts")
   assert.match(scanner, /loadLatestScanPages/)
-  assert.match(scanner, /page_size: 1/)
+  assert.match(scanner, /pageSize: 1/)
   assert.match(scanner, /filter: \{ property: "Date", date: \{ equals: latestDate \} \}/)
   assert.match(scanner, /getScannerTickerData/)
   assert.match(scanner, /rich_text: \{ equals: normalized \}/)

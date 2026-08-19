@@ -1,3 +1,21 @@
+import {
+  isNotionConfigured,
+  queryDataSource,
+  type NotionPage,
+  type NotionProperties,
+} from "@/lib/notion/client"
+import {
+  dateText,
+  multiSelectNames,
+  normalizeNotionId,
+  numberValue,
+  pageProperties,
+  relationIds,
+  richText,
+  selectText,
+  titleText,
+  urlText,
+} from "@/lib/notion/properties"
 import type {
   ActualScenario,
   AnalysisLog,
@@ -13,7 +31,6 @@ import { invalidateUiCache, readThroughUiCache } from "@/lib/ui-data-cache"
 
 const STOCK_THESIS_DATA_SOURCE_ID = process.env.NOTION_STOCK_THESIS_DATA_SOURCE_ID ?? "fa161c1b-3f37-4ee2-8d75-0ca64a05ee90"
 const ANALYSIS_LOG_DATA_SOURCE_ID = process.env.NOTION_ANALYSIS_LOG_DATA_SOURCE_ID ?? "3642cc21-8280-44e2-bad6-93f9472ce793"
-const NOTION_VERSION = "2026-03-11"
 const RESEARCH_CACHE = {
   namespace: "research-read-model-v2",
   tag: "qeoindex-research-read-model-v2",
@@ -26,101 +43,6 @@ const PENDING_FILTER = {
     { property: "Actual Scenario", select: { is_empty: true } },
   ],
 } as const
-
-type QueryOptions = {
-  filter?: Record<string, unknown>
-  sorts?: ReadonlyArray<Record<string, unknown>>
-  pageSize?: number
-  startCursor?: string
-  maxPages?: number
-  filterProperties?: string[]
-}
-
-type QueryResult = {
-  results: any[]
-  hasMore: boolean
-  nextCursor: string | null
-}
-
-function token() {
-  return process.env.NOTION_API_KEY ?? process.env.NOTION_TOKEN ?? ""
-}
-
-function headers() {
-  const apiKey = token()
-  if (!apiKey) throw new Error("NOTION_API_KEY is not configured")
-  return {
-    Authorization: `Bearer ${apiKey}`,
-    "Notion-Version": NOTION_VERSION,
-    "Content-Type": "application/json",
-  }
-}
-
-function normalizeId(value: string) {
-  return value.replaceAll("-", "").toLowerCase()
-}
-function titleText(property: any): string {
-  return (property?.title ?? []).map((item: any) => item?.plain_text ?? "").join("")
-}
-function richText(property: any): string {
-  return (property?.rich_text ?? []).map((item: any) => item?.plain_text ?? "").join("")
-}
-function selectText(property: any): string {
-  return property?.select?.name ?? ""
-}
-function urlText(property: any): string {
-  return property?.url ?? ""
-}
-function dateText(property: any): string {
-  return property?.date?.start ?? ""
-}
-function numberValue(property: any): number | null {
-  return typeof property?.number === "number" ? property.number : null
-}
-function multiSelect(property: any): string[] {
-  return (property?.multi_select ?? []).map((item: any) => item?.name).filter(Boolean)
-}
-function relationIds(property: any): string[] {
-  return (property?.relation ?? []).map((item: any) => item?.id).filter(Boolean)
-}
-
-async function queryDataSource(dataSourceId: string, options: QueryOptions = {}): Promise<QueryResult> {
-  const results: any[] = []
-  let startCursor = options.startCursor
-  let hasMore = false
-  let nextCursor: string | null = null
-  const maxPages = Math.max(1, options.maxPages ?? 1)
-  const pageSize = Math.max(1, Math.min(100, options.pageSize ?? 100))
-  const query = new URLSearchParams()
-  for (const property of options.filterProperties ?? []) query.append("filter_properties[]", property)
-  const suffix = query.size ? `?${query.toString()}` : ""
-
-  for (let page = 0; page < maxPages; page += 1) {
-    const response = await fetch(`https://api.notion.com/v1/data_sources/${dataSourceId}/query${suffix}`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({
-        page_size: pageSize,
-        ...(options.filter ? { filter: options.filter } : {}),
-        ...(options.sorts ? { sorts: options.sorts } : {}),
-        ...(startCursor ? { start_cursor: startCursor } : {}),
-      }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    })
-    const payload = await response.json()
-    if (!response.ok) {
-      throw new Error(`Notion query failed (${response.status}): ${JSON.stringify(payload).slice(0, 280)}`)
-    }
-    results.push(...(payload.results ?? []))
-    hasMore = Boolean(payload.has_more && payload.next_cursor)
-    nextCursor = hasMore ? payload.next_cursor : null
-    if (!hasMore) break
-    startCursor = payload.next_cursor
-  }
-
-  return { results, hasMore, nextCursor }
-}
 
 function asBias(value: string): Bias {
   return ["Bullish", "Neutral", "Bearish", "Mixed"].includes(value) ? (value as Bias) : ""
@@ -137,7 +59,7 @@ function asOutcome(value: string): Outcome {
 function asActualScenario(value: string): ActualScenario {
   return ["Bull", "Base", "Bear", "Unresolved"].includes(value) ? (value as ActualScenario) : ""
 }
-function probabilities(properties: Record<string, any>): ProbabilitySet {
+function probabilities(properties: NotionProperties): ProbabilitySet {
   return {
     bull: numberValue(properties["Bull Probability"]),
     base: numberValue(properties["Base Probability"]),
@@ -145,8 +67,8 @@ function probabilities(properties: Record<string, any>): ProbabilitySet {
   }
 }
 
-function parseThesis(page: any): Thesis {
-  const properties = page?.properties ?? {}
+function parseThesis(page: NotionPage): Thesis {
+  const properties = pageProperties(page)
   return {
     id: page.id,
     notionUrl: page.url ?? "",
@@ -172,10 +94,10 @@ function parseThesis(page: any): Thesis {
   }
 }
 
-function parseLog(page: any, tickerByPageId: Map<string, string>): AnalysisLog {
-  const properties = page?.properties ?? {}
+function parseLog(page: NotionPage, tickerByPageId: Map<string, string>): AnalysisLog {
+  const properties = pageProperties(page)
   const ticker = relationIds(properties.Ticker)
-    .map((id) => tickerByPageId.get(normalizeId(id)))
+    .map((id) => tickerByPageId.get(normalizeNotionId(id)))
     .find(Boolean) ?? ""
   return {
     id: page.id,
@@ -183,8 +105,8 @@ function parseLog(page: any, tickerByPageId: Map<string, string>): AnalysisLog {
     ticker,
     analysis: titleText(properties.Analysis),
     date: dateText(properties.Date),
-    timeframes: multiSelect(properties.Timeframes),
-    type: multiSelect(properties.Type),
+    timeframes: multiSelectNames(properties.Timeframes),
+    type: multiSelectNames(properties.Type),
     summary: richText(properties.Summary),
     probabilities: probabilities(properties),
     outcome: asOutcome(selectText(properties.Outcome)),
@@ -232,8 +154,8 @@ async function loadTheses() {
   return sortByUpdated(results.map(parseThesis).filter((row) => row.ticker))
 }
 
-function buildData(theses: Thesis[], logPages: any[], detail: string, extra: Partial<ResearchData> = {}): ResearchData {
-  const tickerByPageId = new Map(theses.map((thesis) => [normalizeId(thesis.id), thesis.ticker] as const))
+function buildData(theses: Thesis[], logPages: NotionPage[], detail: string, extra: Partial<ResearchData> = {}): ResearchData {
+  const tickerByPageId = new Map(theses.map((thesis) => [normalizeNotionId(thesis.id), thesis.ticker] as const))
   const logs = sortByUpdated(logPages.map((page) => parseLog(page, tickerByPageId)))
   return {
     source: "notion",
@@ -264,7 +186,7 @@ async function countPendingReviews() {
 }
 
 async function loadBoundedResearchData(): Promise<ResearchData> {
-  if (!token()) return unavailable(false, "Notion chưa được cấu hình cho environment này. QeoIndex không dùng snapshot/backend dự phòng.")
+  if (!isNotionConfigured()) return unavailable(false, "Notion chưa được cấu hình cho environment này. QeoIndex không dùng snapshot/backend dự phòng.")
   try {
     const [theses, logResult] = await Promise.all([
       loadTheses(),
@@ -278,7 +200,7 @@ async function loadBoundedResearchData(): Promise<ResearchData> {
 }
 
 async function loadResearchDataCanonical(): Promise<ResearchData> {
-  if (!token()) return unavailable(false, "Notion chưa được cấu hình cho environment này. QeoIndex không dùng snapshot/backend dự phòng.")
+  if (!isNotionConfigured()) return unavailable(false, "Notion chưa được cấu hình cho environment này. QeoIndex không dùng snapshot/backend dự phòng.")
   try {
     const [thesisResult, logResult] = await Promise.all([
       queryDataSource(STOCK_THESIS_DATA_SOURCE_ID, { maxPages: 100 }),
@@ -293,7 +215,7 @@ async function loadResearchDataCanonical(): Promise<ResearchData> {
 }
 
 async function loadOverview(): Promise<ResearchData> {
-  if (!token()) return loadBoundedResearchData()
+  if (!isNotionConfigured()) return loadBoundedResearchData()
   try {
     const [theses, pendingReviews] = await Promise.all([loadTheses(), countPendingReviews()])
     return buildData(theses, [], "overview chỉ đọc thesis + pending-review count", { stats: { pendingReviews } })
@@ -304,7 +226,7 @@ async function loadOverview(): Promise<ResearchData> {
 }
 
 async function loadChanges(): Promise<ResearchData> {
-  if (!token()) return loadBoundedResearchData()
+  if (!isNotionConfigured()) return loadBoundedResearchData()
   try {
     const theses = await loadTheses()
     const pages = (await Promise.all(theses.map(async (thesis) => {
@@ -324,7 +246,7 @@ async function loadChanges(): Promise<ResearchData> {
 }
 
 async function loadLogPage(startCursor?: string): Promise<ResearchData> {
-  if (!token()) return loadBoundedResearchData()
+  if (!isNotionConfigured()) return loadBoundedResearchData()
   try {
     const [theses, logResult] = await Promise.all([
       loadTheses(),
@@ -340,7 +262,7 @@ async function loadLogPage(startCursor?: string): Promise<ResearchData> {
 }
 
 async function loadReview(): Promise<ResearchData> {
-  if (!token()) return loadBoundedResearchData()
+  if (!isNotionConfigured()) return loadBoundedResearchData()
   try {
     const resolvedFilter = {
       and: [
@@ -361,7 +283,7 @@ async function loadReview(): Promise<ResearchData> {
 }
 
 async function loadTicker(ticker: string): Promise<ResearchData> {
-  if (!token()) return loadBoundedResearchData()
+  if (!isNotionConfigured()) return loadBoundedResearchData()
   try {
     const theses = await loadTheses()
     const thesis = theses.find((row) => row.ticker === ticker.toUpperCase())
@@ -397,27 +319,27 @@ export async function getResearchDataFresh(): Promise<ResearchData> {
 
 /** Backward-compatible bounded UI projection; never scans an unbounded log history. */
 export async function getResearchData(): Promise<ResearchData> {
-  if (!token()) return loadBoundedResearchData()
+  if (!isNotionConfigured()) return loadBoundedResearchData()
   return readThroughUiCache({ ...cacheConfig("bounded", "QeoIndex Research bounded projection"), load: loadBoundedResearchData })
 }
 
 export async function getResearchOverviewData() {
-  if (!token()) return loadOverview()
+  if (!isNotionConfigured()) return loadOverview()
   return readThroughUiCache({ ...cacheConfig("overview", "QeoIndex Research overview"), load: loadOverview })
 }
 
 export async function getResearchChangesData() {
-  if (!token()) return loadChanges()
+  if (!isNotionConfigured()) return loadChanges()
   return readThroughUiCache({ ...cacheConfig("changes", "QeoIndex Research changes"), load: loadChanges })
 }
 
 export async function getResearchReviewData() {
-  if (!token()) return loadReview()
+  if (!isNotionConfigured()) return loadReview()
   return readThroughUiCache({ ...cacheConfig("review", "QeoIndex Research review"), load: loadReview })
 }
 
 export async function getResearchLogData(startCursor?: string) {
-  if (!token()) return loadLogPage(startCursor)
+  if (!isNotionConfigured()) return loadLogPage(startCursor)
   const cursorKey = startCursor ? startCursor.slice(0, 48) : "first"
   return readThroughUiCache({
     ...cacheConfig(`log:${cursorKey}`, "QeoIndex Research log page", false),
@@ -427,7 +349,7 @@ export async function getResearchLogData(startCursor?: string) {
 
 export async function getResearchTickerData(ticker: string) {
   const normalized = ticker.trim().toUpperCase()
-  if (!token()) return loadTicker(normalized)
+  if (!isNotionConfigured()) return loadTicker(normalized)
   return readThroughUiCache({
     ...cacheConfig(`ticker:${normalized}`, `QeoIndex Research ${normalized}`, false),
     load: () => loadTicker(normalized),
