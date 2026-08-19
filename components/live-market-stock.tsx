@@ -113,6 +113,11 @@ function sparkData(history: number[], livePrice?: number | null) {
       return [...normalized, liveNormalized]
     }
   }
+
+  if (normalized.length === 1) {
+    return [normalized[0], normalized[0]]
+  }
+
   return normalized
 }
 

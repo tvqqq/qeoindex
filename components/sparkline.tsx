@@ -39,12 +39,16 @@ export const Sparkline = memo(function Sparkline({
 
   const computed = useMemo(() => {
     const valid = data.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
-    if (valid.length < 2) return null
+    if (valid.length === 0) return null
 
-    const step = Math.max(1, Math.ceil(valid.length / MAX_SPARKLINE_POINTS))
-    const points = valid.length <= MAX_SPARKLINE_POINTS
-      ? valid
-      : valid.filter((_, index) => index % step === 0 || index === valid.length - 1)
+    const initialPoints = valid.length === 1
+      ? (hasRef ? [ref!, valid[0]] : [valid[0], valid[0]])
+      : valid
+
+    const step = Math.max(1, Math.ceil(initialPoints.length / MAX_SPARKLINE_POINTS))
+    const points = initialPoints.length <= MAX_SPARKLINE_POINTS
+      ? initialPoints
+      : initialPoints.filter((_, index) => index % step === 0 || index === initialPoints.length - 1)
 
     // Dynamic auto-fit range.
     const rawMin = Math.min(...points)

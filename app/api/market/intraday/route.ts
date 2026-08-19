@@ -101,8 +101,9 @@ function isIntradayRow(value: unknown): value is IntradayRow {
 function isIntradaySnapshot(value: unknown, symbols: string[] | readonly string[]): value is IntradaySnapshot {
   if (!value || typeof value !== "object") return false
   const snapshot = value as Partial<IntradaySnapshot>
-  if (!Array.isArray(snapshot.rows) || !snapshot.rows.every(isIntradayRow)) return false
-  return symbols.every((symbol) => snapshot.rows?.some((row) => row.symbol === symbol))
+  if (!Array.isArray(snapshot.rows) || snapshot.rows.length === 0) return false
+  const validCount = snapshot.rows.filter(isIntradayRow).length
+  return validCount >= Math.min(symbols.length * 0.5, 40)
 }
 
 function parseSymbols(request: Request) {

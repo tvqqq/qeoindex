@@ -92,8 +92,9 @@ async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardDat
     // If intraday is still empty, synthesize an anchor baseline [ref, latestPrice] so chart is NEVER blank
     if (intraday.length === 0 && ref && ref > 0 && latestPrice && latestPrice > 0) {
       const nowSec = Math.floor(now.getTime() / 1000)
+      const sessionStartSec = Math.floor(new Date(now).setHours(9, 15, 0, 0) / 1000)
       intraday = [
-        { time: nowSec - 300, close: ref },
+        { time: Math.min(sessionStartSec, nowSec - 3600), close: ref },
         { time: nowSec, close: latestPrice },
       ]
     }
