@@ -387,7 +387,8 @@ function sidePillMeta(side: TradeSide) {
 
 function nextQuote(symbol: string, data: Record<string, unknown>, current: StockQuote | null): StockQuote | null {
   const rawReference = firstPositive(data, ["referencePrice", "refPrice", "reference", "r"]) || current?.reference || 0
-  const rawPrice = firstPositive(data, ["expectedMatchedPrice", "expectedPrice", "matchedPrice", "matchPrice", "price", "lastPrice"]) || (rawReference > 0 ? rawReference : (current?.price || 0))
+  const explicitPrice = firstPositive(data, ["matchPrice", "price", "lastPrice", "matchedPrice", "expectedMatchedPrice", "expectedPrice"])
+  const rawPrice = explicitPrice || current?.price || rawReference || 0
   if (rawPrice <= 0 && rawReference <= 0) return current
 
   const reference = rawReference > 0 ? normalizeMarketPrice(rawReference) ?? rawReference : current?.reference

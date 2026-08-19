@@ -210,7 +210,7 @@ export const LiveStockRow = memo(function LiveStockRow({
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen() }
       }}
-      className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(42px,1fr)_64px] items-center gap-1 rounded-xl border bg-[#0d1217] px-2 py-2 transition-colors hover:bg-[#141a21] hover:border-white/[0.16] focus:outline-none focus:ring-1 focus:ring-brand ${
+      className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(38px,1fr)_68px] items-center gap-1 rounded-xl border bg-[#0d1217] px-2 py-2 transition-colors hover:bg-[#141a21] hover:border-white/[0.16] focus:outline-none focus:ring-1 focus:ring-brand ${
         isWhaleActive
           ? "whale-golden-pulse"
           : priceFlash === "up"
@@ -246,10 +246,10 @@ export const LiveStockRow = memo(function LiveStockRow({
             </button>
           )}
         </div>
-        {/* GT Mua - Bán Khối ngoại realtime (Đỏ nhẹ khi bán ròng, Xanh nhẹ khi mua ròng, font italic) */}
+        {/* GT Mua - Bán Khối ngoại realtime: NN mua = Xám đậm (zinc-300), NN bán = Xám nhạt (zinc-500) */}
         <div
-          className={`mt-1 font-mono text-[9.5px] italic font-medium leading-none truncate ${
-            foreign.tone === "buy" ? "text-emerald-400/90" : foreign.tone === "sell" ? "text-rose-400/90" : "text-muted-2"
+          className={`mt-1 font-mono text-[9.5px] italic leading-none truncate ${
+            foreign.tone === "buy" ? "text-zinc-300 font-semibold" : foreign.tone === "sell" ? "text-zinc-500 font-normal" : "text-zinc-600"
           }`}
           title={`Khối ngoại ${foreign.tone === "buy" ? "Mua ròng" : foreign.tone === "sell" ? "Bán ròng" : "Ròng"}: ${foreign.text}`}
         >
@@ -258,18 +258,18 @@ export const LiveStockRow = memo(function LiveStockRow({
       </div>
 
       <div className="flex min-w-0 items-center justify-center overflow-hidden">
-        <Sparkline data={chart} refValue={chartReference} color={marketToneHex(tone)} width={52} height={26} strokeWidth={1.8} showDot />
+        <Sparkline data={chart} refValue={chartReference} color={marketToneHex(tone)} width={50} height={26} strokeWidth={1.8} showDot />
       </div>
 
-      <div className="flex min-w-0 flex-col items-end gap-1.5">
+      <div className="flex min-w-0 flex-col items-end gap-1">
         <div
-          className={`max-w-full truncate font-mono text-[11px] font-semibold leading-none rounded px-0.5 transition-colors ${text} ${
+          className={`max-w-full truncate font-mono text-[13px] font-bold leading-tight tracking-tight rounded px-0.5 transition-colors ${text} ${
             priceFlash === "up"
-              ? "flash-text-up font-bold"
+              ? "flash-text-up font-black"
               : priceFlash === "down"
-                ? "flash-text-down font-bold"
+                ? "flash-text-down font-black"
                 : priceFlash === "ref"
-                  ? "flash-text-ref font-bold"
+                  ? "flash-text-ref font-black"
                   : ""
           }`}
         >
@@ -344,8 +344,8 @@ export const LiveMoverCard = memo(function LiveMoverCard({
           )}
         </div>
         <div
-          className={`mt-1 font-mono text-xs italic font-semibold ${
-            foreign.tone === "buy" ? "text-emerald-400/90" : foreign.tone === "sell" ? "text-rose-400/90" : "text-muted-2"
+          className={`mt-1 font-mono text-xs italic ${
+            foreign.tone === "buy" ? "text-zinc-300 font-semibold" : foreign.tone === "sell" ? "text-zinc-500 font-normal" : "text-zinc-600"
           }`}
         >
           Khối ngoại: {foreign.text}

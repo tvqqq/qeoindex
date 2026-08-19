@@ -41,9 +41,9 @@ test("all six sector headers keep equal fixed height", () => {
 })
 
 test("stock row keeps clipping guards and hides rank", () => {
-  assert.match(stockSource, /grid min-h-\[58px\].*grid-cols-\[46px_minmax\(42px,1fr\)_64px\]/)
+  assert.match(stockSource, /grid min-h-\[58px\].*grid-cols-\[46px_minmax\(38px,1fr\)_68px\]/)
   assert.match(stockSource, /flex min-w-0 items-center justify-center overflow-hidden/)
-  assert.match(stockSource, /max-w-full truncate font-mono text-\[11px\]/)
+  assert.match(stockSource, /max-w-full truncate font-mono text-\[13px\]/)
   assert.doesNotMatch(stockSource, /stock\.rank/)
 })
 
