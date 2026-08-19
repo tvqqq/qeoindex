@@ -25,8 +25,6 @@ import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/lib/intraday-5m"
 import { isTradingSessionOpen } from "@/lib/session-countdown"
-import { isSupabaseConfigured } from "@/lib/supabase/client"
-import { subscribeMarketRealtime } from "@/lib/supabase/realtime"
 import { setSoundEnabled, playWhaleSound } from "@/lib/sound-engine"
 
 export type BoardUniverseStock = LiveBoardStock
@@ -45,15 +43,20 @@ export type IndexQuote = {
 }
 type BoardMode = "sector" | "movers"
 
+const BOARD_VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 })
+const BOARD_TRADED_VALUE_FORMATTER = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const BOARD_MARKET_VALUE_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 })
+const MARKET_UI_COMMIT_MS = 100
+
 function formatExactVolume(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
-  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
+  return BOARD_VOLUME_FORMATTER.format(value)
 }
 
 function formatExactTradedValue(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
   const billions = value / 1_000_000_000
-  return `${new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(billions)} tỷ`
+  return `${BOARD_TRADED_VALUE_FORMATTER.format(billions)} tỷ`
 }
 
 function formatCompactVolume(value?: number | null) {
@@ -61,7 +64,7 @@ function formatCompactVolume(value?: number | null) {
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)} tỷ`
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)} tr`
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)} k`
-  return value.toLocaleString("vi-VN")
+  return BOARD_VOLUME_FORMATTER.format(value)
 }
 
 function formatMarketValue(value?: number | null) {
@@ -73,9 +76,9 @@ function formatMarketValue(value?: number | null) {
   }
   if (abs >= 1_000_000) {
     const millions = value / 1_000_000
-    return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 }).format(millions)} tr`
+    return `${BOARD_MARKET_VALUE_FORMATTER.format(millions)} tr`
   }
-  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
+  return BOARD_VOLUME_FORMATTER.format(value)
 }
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 type DnseAuthPayload = { action: string; api_key: string; signature: string; timestamp: number; nonce: string }
@@ -229,7 +232,6 @@ function IndexStrip({ quotes }: { quotes: Record<string, LiveStockQuote | IndexQ
                   : "border-white/[0.08] bg-white/[0.025] shadow-[0_8px_24px_-6px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.07)] hover:border-white/[0.14] hover:bg-white/[0.045]"
             }`}
           >
-            {/* Ambient Stock / Financial Wave Vector in Background */}
             <svg
               className={`absolute -right-2 -bottom-2 h-16 w-32 pointer-events-none transition-opacity duration-500 ${
                 isUp ? "text-emerald-500/15 group-hover:text-emerald-500/25" : "text-rose-500/15 group-hover:text-rose-500/25"
@@ -257,7 +259,6 @@ function IndexStrip({ quotes }: { quotes: Record<string, LiveStockQuote | IndexQ
               )}
             </svg>
 
-            {/* Left: Dynamic Vector Icon & Index Label */}
             <div className="relative z-10 flex items-center gap-2.5 min-w-0">
               <div
                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)] transition-transform duration-300 group-hover:scale-105 ${
@@ -301,7 +302,6 @@ function IndexStrip({ quotes }: { quotes: Record<string, LiveStockQuote | IndexQ
               </div>
             </div>
 
-            {/* Right: Liquid Glass Change Pill */}
             <div className="relative z-10 shrink-0">
               {quote ? <MarketChangePill value={quote.changePercent} tone={tone} /> : null}
             </div>
@@ -409,9 +409,7 @@ function FloatingMarketStatus({
         </div>
       ) : null}
 
-      {/* Floating Compact Pill with Integrated Sound Toggle */}
       <div className="flex items-center gap-1 rounded-full border border-white/[0.12] bg-[#0c1015]/90 pl-1.5 pr-3 py-1 shadow-[0_12px_36px_rgba(0,0,0,0.75),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-[11px]">
-        {/* Sound FX Icon Button */}
         <button
           type="button"
           onClick={(e) => {
@@ -430,7 +428,6 @@ function FloatingMarketStatus({
 
         <span className="h-3 w-[1px] bg-white/[0.12]" />
 
-        {/* Status expand button */}
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
@@ -525,11 +522,48 @@ export function LiveMarketBoardV2({
       return false
     }
   })
+  const quotesRef = useRef(quotes)
+  const priceHistoryRef = useRef(priceHistory)
+  const marketUiCommitTimer = useRef<number | null>(null)
+  const lastMessageAtRef = useRef("")
   const whaleTimeouts = useRef<Record<string, NodeJS.Timeout>>({})
   const dailyReferences = useRef<Record<string, number>>(extractInitialRefs(initialQuotes))
   const indexReferences = useRef<Record<string, number>>({})
   const sessionIdentifier = useRef(currentSessionIdentifier())
   const lastFrameAt = useRef(0)
+
+  const scheduleMarketUiCommit = useCallback(() => {
+    if (marketUiCommitTimer.current !== null) return
+    marketUiCommitTimer.current = window.setTimeout(() => {
+      marketUiCommitTimer.current = null
+      setQuotes(quotesRef.current)
+      setPriceHistory(priceHistoryRef.current)
+      setLastMessageAt(lastMessageAtRef.current)
+    }, MARKET_UI_COMMIT_MS)
+  }, [])
+
+  const updateLiveQuotes = useCallback((updater: (current: Record<string, LiveStockQuote | IndexQuote>) => Record<string, LiveStockQuote | IndexQuote>) => {
+    const next = updater(quotesRef.current)
+    if (next === quotesRef.current) return
+    quotesRef.current = next
+    scheduleMarketUiCommit()
+  }, [scheduleMarketUiCommit])
+
+  const updateLiveHistory = useCallback((updater: (current: Record<string, IntradayPoint[]>) => Record<string, IntradayPoint[]>) => {
+    const next = updater(priceHistoryRef.current)
+    if (next === priceHistoryRef.current) return
+    priceHistoryRef.current = next
+    scheduleMarketUiCommit()
+  }, [scheduleMarketUiCommit])
+
+  useEffect(() => {
+    return () => {
+      if (marketUiCommitTimer.current !== null) {
+        window.clearTimeout(marketUiCommitTimer.current)
+        marketUiCommitTimer.current = null
+      }
+    }
+  }, [])
 
   const handleToggleSound = useCallback(() => {
     const next = !soundEnabled
@@ -597,55 +631,52 @@ export function LiveMarketBoardV2({
         const payload = await response.json() as IntradayHistoryResponse
         if (disposed || !payload.histories) return
         const receivedAt = new Date().toISOString()
-        setPriceHistory((current) => {
-          const next = { ...current }
-          for (const symbol of symbolList) {
-            const points = payload.histories?.[symbol]?.points?.filter((point) => Number.isFinite(point.time) && point.time > 0 && Number.isFinite(point.close) && point.close > 0) ?? []
-            if (points.length) {
-              let merged = points.slice(-90)
-              for (const point of current[symbol] ?? []) {
-                merged = mergeFiveMinuteClose(merged, point.close, point.time)
-              }
-              next[symbol] = merged
+        const currentHistory = priceHistoryRef.current
+        const nextHistory = { ...currentHistory }
+        for (const symbol of symbolList) {
+          const points = payload.histories?.[symbol]?.points?.filter((point) => Number.isFinite(point.time) && point.time > 0 && Number.isFinite(point.close) && point.close > 0) ?? []
+          if (points.length) {
+            let merged = points.slice(-90)
+            for (const point of currentHistory[symbol] ?? []) {
+              merged = mergeFiveMinuteClose(merged, point.close, point.time)
             }
+            nextHistory[symbol] = merged
           }
-          return next
-        })
-        setQuotes((current) => {
-          const next = { ...current }
-          for (const symbol of symbolList) {
-            const history = payload.histories?.[symbol]
-            if (!history?.reference) continue
-            dailyReferences.current[symbol] = history.reference
-            const existing = current[symbol] as LiveStockQuote | undefined
-            const ref = history.reference
+        }
+        priceHistoryRef.current = nextHistory
+        setPriceHistory(nextHistory)
 
-            // If existing quote was already received live from WebSocket / stream, preserve the live price!
-            const hasLiveQuote = Boolean(
-              existing &&
-              existing.price &&
-              existing.price > 0 &&
-              (existing.price !== ref || (existing.volume && existing.volume > 0))
-            )
-
-            const price = hasLiveQuote ? (existing!.price) : (history.price || existing?.price || ref)
-            const change = price - ref
-            const changePercent = ref > 0 ? (change / ref) * 100 : (history.changePercent ?? 0)
-            const volume = hasLiveQuote ? (existing!.volume || 0) : (existing?.volume || 0)
-
-            next[symbol] = {
-              ...(existing ?? {}),
-              symbol,
-              price,
-              reference: ref,
-              change,
-              changePercent,
-              volume,
-              updatedAt: hasLiveQuote && existing?.updatedAt ? existing.updatedAt : (history.lastBarAt ? new Date(history.lastBarAt * 1000).toISOString() : receivedAt),
-            }
+        const currentQuotes = quotesRef.current
+        const nextQuotes = { ...currentQuotes }
+        for (const symbol of symbolList) {
+          const history = payload.histories?.[symbol]
+          if (!history?.reference) continue
+          dailyReferences.current[symbol] = history.reference
+          const existing = currentQuotes[symbol] as LiveStockQuote | undefined
+          const ref = history.reference
+          const hasLiveQuote = Boolean(
+            existing &&
+            existing.price &&
+            existing.price > 0 &&
+            (existing.price !== ref || (existing.volume && existing.volume > 0))
+          )
+          const price = hasLiveQuote ? (existing!.price) : (history.price || existing?.price || ref)
+          const change = price - ref
+          const changePercent = ref > 0 ? (change / ref) * 100 : (history.changePercent ?? 0)
+          const volume = hasLiveQuote ? (existing!.volume || 0) : (existing?.volume || 0)
+          nextQuotes[symbol] = {
+            ...(existing ?? {}),
+            symbol,
+            price,
+            reference: ref,
+            change,
+            changePercent,
+            volume,
+            updatedAt: hasLiveQuote && existing?.updatedAt ? existing.updatedAt : (history.lastBarAt ? new Date(history.lastBarAt * 1000).toISOString() : receivedAt),
           }
-          return next
-        })
+        }
+        quotesRef.current = nextQuotes
+        setQuotes(nextQuotes)
       } catch (error) {
         if (!disposed && !(error instanceof DOMException && error.name === "AbortError")) {
           console.warn("Market board 5m bootstrap unavailable", error)
@@ -659,46 +690,6 @@ export function LiveMarketBoardV2({
     }
   }, [symbolKey, historyReloadKey, symbolList, sessionOpen, initialHistories])
 
-  // Supabase Realtime Broadcast & Postgres Changes channel subscription
-  useEffect(() => {
-    if (!sessionOpen || !isSupabaseConfigured()) return
-
-    const unsubscribe = subscribeMarketRealtime("market:top100", (tick) => {
-      const ticker = tick.symbol.toUpperCase()
-      if (!trackedSymbols.has(ticker)) return
-
-      const receivedAt = tick.updatedAt || new Date().toISOString()
-      setQuotes((current) => {
-        const previous = current[ticker] as LiveStockQuote | undefined
-        const price = tick.price
-        const ref = tick.reference || previous?.reference || price
-        const change = tick.change ?? (price - ref)
-        const changePercent = tick.changePercent ?? (ref > 0 ? (change / ref) * 100 : 0)
-
-        return {
-          ...current,
-          [ticker]: {
-            ...(previous ?? {}),
-            symbol: ticker,
-            price,
-            reference: ref,
-            ceiling: tick.ceiling || previous?.ceiling,
-            floor: tick.floor || previous?.floor,
-            change,
-            changePercent,
-            volume: tick.volume || previous?.volume,
-            updatedAt: receivedAt,
-          },
-        }
-      })
-      setLastMessageAt(receivedAt)
-    })
-
-    return () => {
-      unsubscribe?.()
-    }
-  }, [sessionOpen, trackedSymbols])
-
   useEffect(() => {
     const controller = new AbortController()
     void (async () => {
@@ -706,26 +697,26 @@ export function LiveMarketBoardV2({
         const response = await fetch("/api/market/indexes", { cache: "no-store", signal: controller.signal })
         const payload = await response.json() as IndexHistoryResponse
         if (!payload.quotes) return
-        setQuotes((current) => {
-          const next = { ...current }
-          for (const [symbol, quote] of Object.entries(payload.quotes ?? {})) {
-            const derivedReference = typeof quote.change === "number"
-              ? quote.value - quote.change
-              : quote.changePercent !== -100 ? quote.value / (1 + quote.changePercent / 100) : 0
-            if (derivedReference > 0) indexReferences.current[symbol] = derivedReference
-            const existing = current[symbol] as IndexQuote | undefined
-            if (existing?.value && derivedReference > 0) {
-              next[symbol] = {
-                ...existing,
-                change: existing.value - derivedReference,
-                changePercent: ((existing.value - derivedReference) / derivedReference) * 100,
-              }
-            } else if (!existing) {
-              next[symbol] = quote
+        const current = quotesRef.current
+        const next = { ...current }
+        for (const [symbol, quote] of Object.entries(payload.quotes ?? {})) {
+          const derivedReference = typeof quote.change === "number"
+            ? quote.value - quote.change
+            : quote.changePercent !== -100 ? quote.value / (1 + quote.changePercent / 100) : 0
+          if (derivedReference > 0) indexReferences.current[symbol] = derivedReference
+          const existing = current[symbol] as IndexQuote | undefined
+          if (existing?.value && derivedReference > 0) {
+            next[symbol] = {
+              ...existing,
+              change: existing.value - derivedReference,
+              changePercent: ((existing.value - derivedReference) / derivedReference) * 100,
             }
+          } else if (!existing) {
+            next[symbol] = quote
           }
-          return next
-        })
+        }
+        quotesRef.current = next
+        setQuotes(next)
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) console.warn("Index EOD bootstrap unavailable", error)
       }
@@ -734,7 +725,7 @@ export function LiveMarketBoardV2({
   }, [historyReloadKey])
 
   const pushFiveMinuteClose = useCallback((ticker: string, close: number, timestampSeconds: number) => {
-    setPriceHistory((previous) => {
+    updateLiveHistory((previous) => {
       const current = previous[ticker] ?? []
       const normalizedClose = normalizeMarketPrice(close, current.at(-1)?.close)
       if (!normalizedClose) return previous
@@ -742,7 +733,7 @@ export function LiveMarketBoardV2({
       if (merged === current) return previous
       return { ...previous, [ticker]: merged }
     })
-  }, [])
+  }, [updateLiveHistory])
 
   useEffect(() => {
     const checkSession = () => {
@@ -755,8 +746,12 @@ export function LiveMarketBoardV2({
         sessionIdentifier.current = nextSession
         dailyReferences.current = {}
         indexReferences.current = {}
+        quotesRef.current = {}
+        priceHistoryRef.current = {}
+        lastMessageAtRef.current = ""
         setQuotes({})
         setPriceHistory({})
+        setLastMessageAt("")
         setHistoryReloadKey((key) => key + 1)
         setReconnectKey((key) => key + 1)
       }
@@ -773,18 +768,246 @@ export function LiveMarketBoardV2({
     let pingTimer: number | null = null
     let watchdogTimer: number | null = null
     let attempts = 0
-    let messageQueue: Array<() => void> = []
+    let messageQueue: string[] = []
     let messageFrame: number | null = null
 
     const flushMessageQueue = () => {
       messageFrame = null
       const queued = messageQueue
       messageQueue = []
-      for (const process of queued) process()
+      for (const raw of queued) {
+        if (disposed) return
+        let data: Record<string, unknown>
+        try { data = JSON.parse(raw) as Record<string, unknown> } catch { continue }
+
+        const action = String(data.action ?? data.a ?? "")
+        if (action === "ping") {
+          if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "pong", timestamp: data.timestamp }))
+          continue
+        }
+        if (action === "welcome" || data.session_id || data.sid) {
+          if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(authJsonRef.current?.auth ?? {}))
+          continue
+        }
+        if (action === "auth_success") {
+          attempts = 0
+          setStreamState("LIVE")
+          setStreamError("")
+          socket?.send(JSON.stringify(authJsonRef.current?.auth ?? {}))
+          socket?.send(JSON.stringify({
+            action: "subscribe",
+            channels: [
+              { name: "tick.G1.json", symbols: symbolList },
+              { name: "top_price.G1.json", symbols: symbolList },
+              { name: "ohlc.1.json", symbols: symbolList },
+              { name: "foreign.G1.json", symbols: symbolList },
+              ...INDEX_CHANNELS.map((name) => ({ name: `market_index.${name}.json` })),
+            ],
+          }))
+          pingTimer = window.setInterval(() => {
+            if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "ping", timestamp: Date.now() }))
+          }, 15_000)
+          watchdogTimer = window.setInterval(() => {
+            if (socket?.readyState === WebSocket.OPEN && Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
+              setStreamError("Luồng DNSE im lặng quá 60 giây; đang tự kết nối lại.")
+              forceReconnect("stale DNSE stream")
+            }
+          }, 10_000)
+          continue
+        }
+        if (action === "auth_error" || action === "error") {
+          const message = String(data.message ?? data.msg ?? "DNSE WebSocket error")
+          setStreamState("ERROR")
+          setStreamError(message)
+          forceReconnect("DNSE auth/subscription error")
+          continue
+        }
+
+        const now = new Date()
+        const receivedAt = now.toISOString()
+        lastMessageAtRef.current = receivedAt
+        const currentSession = currentSessionIdentifier(now)
+        if (sessionIdentifier.current !== currentSession) {
+          sessionIdentifier.current = currentSession
+          dailyReferences.current = {}
+          indexReferences.current = {}
+          quotesRef.current = {}
+          priceHistoryRef.current = {}
+          setQuotes({})
+          setPriceHistory({})
+          setHistoryReloadKey((key) => key + 1)
+        }
+
+        const type = String(data.T ?? "")
+        if (type === "b" && data.symbol) {
+          const ticker = String(data.symbol).toUpperCase()
+          if (!trackedSymbols.has(ticker)) continue
+          const close = firstPositive(data, ["close", "c", "closePrice"])
+          const timestamp = normalizeEpochSeconds(data.time ?? data.t ?? data.timestamp ?? data.ts, now.getTime() / 1000)
+          if (close > 0) pushFiveMinuteClose(ticker, close, timestamp)
+          scheduleMarketUiCommit()
+          continue
+        }
+
+        if (type === "t" && data.symbol) {
+          const ticker = String(data.symbol).toUpperCase()
+          if (!trackedSymbols.has(ticker)) continue
+          const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
+          if (price <= 0) continue
+          const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "volume"])
+          const matchVol = firstPositive(data, ["matchQtty", "matchVolume", "matchQuantity", "qtty", "q", "vol"])
+          const side = String(data.matchSide || data.side || "").toUpperCase() === "S" ? "SELL" : "BUY"
+
+          if (matchVol >= 30_000 || (price * matchVol * 1000 >= 1_000_000_000)) {
+            triggerWhaleAlert(ticker, side)
+          }
+
+          const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
+          const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
+          const floor = firstPositive(data, ["floorPrice", "floor"])
+          updateLiveQuotes((current) => {
+            const previous = current[ticker] as LiveStockQuote | undefined
+            const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
+            const reference = normalizeMarketPrice(rawReference, price) ?? rawReference
+            if (reference > 0) dailyReferences.current[ticker] = reference
+            const change = reference > 0 ? price - reference : previous?.change
+            const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : previous?.changePercent ?? 0
+            return {
+              ...current,
+              [ticker]: {
+                ...previous,
+                symbol: ticker,
+                price,
+                reference: reference || undefined,
+                ceiling: ceiling || previous?.ceiling,
+                floor: floor || previous?.floor,
+                change,
+                changePercent,
+                volume: totalVolume || previous?.volume,
+                updatedAt: receivedAt,
+              },
+            }
+          })
+          continue
+        }
+
+        if (type === "q" && data.symbol) {
+          const ticker = String(data.symbol).toUpperCase()
+          if (!trackedSymbols.has(ticker)) continue
+          const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
+          const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
+          const floor = firstPositive(data, ["floorPrice", "floor"])
+          const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
+          updateLiveQuotes((current) => {
+            const previous = current[ticker] as LiveStockQuote | undefined
+            const livePrice = price || previous?.price
+            if (!livePrice) return current
+            const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
+            const reference = normalizeMarketPrice(rawReference, livePrice) ?? rawReference
+            if (reference > 0) dailyReferences.current[ticker] = reference
+            return {
+              ...current,
+              [ticker]: {
+                ...previous,
+                symbol: ticker,
+                price: livePrice,
+                reference: reference || undefined,
+                ceiling: ceiling || previous?.ceiling,
+                floor: floor || previous?.floor,
+                change: reference > 0 ? livePrice - reference : previous?.change,
+                changePercent: reference > 0 ? ((livePrice - reference) / reference) * 100 : previous?.changePercent ?? 0,
+                volume: previous?.volume,
+                updatedAt: receivedAt,
+              },
+            }
+          })
+          continue
+        }
+
+        if (type === "mi") {
+          const symbol = normalizeIndexName(data.indexName ?? data.symbol)
+          const value = firstPositive(data, ["valueIndexes", "value", "indexValue"])
+          if (!symbol || value <= 0) continue
+          const explicitReference = firstPositive(data, INDEX_REFERENCE_KEYS)
+          if (explicitReference > 0) indexReferences.current[symbol] = explicitReference
+          const vol = firstPositive(data, ["totalVolumeTraded", "totalVolume", "totalQtty", "allQtty", "vol", "v"])
+          const rawVal = firstPositive(data, ["totalValueTraded", "totalValue", "totalAmount", "allValue", "val"])
+          const val = rawVal > 0 ? (rawVal < 100_000 ? rawVal * 1_000_000_000 : rawVal < 100_000_000 ? rawVal * 1_000_000 : rawVal) : 0
+          updateLiveQuotes((current) => {
+            const previous = current[symbol] as IndexQuote | undefined
+            const previousDerivedReference = previous && typeof previous.change === "number" ? previous.value - previous.change : 0
+            const reference = indexReferences.current[symbol] || previousDerivedReference
+            if (reference > 0) indexReferences.current[symbol] = reference
+            const change = reference > 0 ? value - reference : previous?.change
+            const changePercent = reference > 0 ? ((value - reference) / reference) * 100 : previous?.changePercent ?? 0
+            return {
+              ...current,
+              [symbol]: {
+                symbol,
+                value,
+                change,
+                changePercent,
+                volume: vol || previous?.volume,
+                valueTraded: val || previous?.valueTraded,
+                updatedAt: receivedAt,
+              },
+            }
+          })
+          continue
+        }
+
+        if (type === "f" && data.symbol) {
+          const symbol = String(data.symbol).toUpperCase()
+          if (!trackedSymbols.has(symbol)) continue
+          const totalBuyVal = numeric(data.totalBuyTradedAmount ?? data.totalBuyValue ?? data.foreignBuyValue)
+          const totalSellVal = numeric(data.totalSellTradedAmount ?? data.totalSellValue ?? data.foreignSellValue)
+          const totalBuyVol = numeric(data.totalBuyVolume ?? data.totalBuyQtty ?? data.foreignBuyVolume)
+          const totalSellVol = numeric(data.totalSellVolume ?? data.totalSellQtty ?? data.foreignSellVolume)
+          const buyVal = numeric(data.buyTradedAmount)
+          const sellVal = numeric(data.sellTradedAmount)
+          const buyVol = numeric(data.buyVolume)
+          const sellVol = numeric(data.sellVolume)
+
+          updateLiveQuotes((current) => {
+            const previous = current[symbol] as LiveStockQuote | undefined
+            if (!previous) return current
+
+            const prevBuyVal = previous.foreignBuyValue ?? 0
+            const prevSellVal = previous.foreignSellValue ?? 0
+            const nextBuyVal = totalBuyVal || (buyVal > 0 ? prevBuyVal + buyVal : prevBuyVal)
+            const nextSellVal = totalSellVal || (sellVal > 0 ? prevSellVal + sellVal : prevSellVal)
+            const prevBuyVol = previous.foreignBuyVolume ?? 0
+            const prevSellVol = previous.foreignSellVolume ?? 0
+            const nextBuyVol = totalBuyVol || (buyVol > 0 ? prevBuyVol + buyVol : prevBuyVol)
+            const nextSellVol = totalSellVol || (sellVol > 0 ? prevSellVol + sellVol : prevSellVol)
+
+            let foreignNetValue: number | undefined
+            if (nextBuyVal > 0 || nextSellVal > 0) {
+              foreignNetValue = nextBuyVal - nextSellVal
+            } else if (nextBuyVol > 0 || nextSellVol > 0) {
+              foreignNetValue = (nextBuyVol - nextSellVol) * (previous.price || 0)
+            }
+
+            return {
+              ...current,
+              [symbol]: {
+                ...previous,
+                foreignBuyValue: nextBuyVal || undefined,
+                foreignSellValue: nextSellVal || undefined,
+                foreignBuyVolume: nextBuyVol || undefined,
+                foreignSellVolume: nextSellVol || undefined,
+                foreignNetValue,
+                updatedAt: receivedAt,
+              },
+            }
+          })
+          continue
+        }
+      }
     }
 
-    const scheduleMessage = (process: () => void) => {
-      messageQueue.push(process)
+    const scheduleMessage = (raw: string) => {
+      messageQueue.push(raw)
       if (messageFrame === null) messageFrame = window.requestAnimationFrame(flushMessageQueue)
     }
 
@@ -828,6 +1051,8 @@ export function LiveMarketBoardV2({
       }
     }
 
+    const authJsonRef: { current: DnseAuthResponse | null } = { current: null }
+
     const connect = async () => {
       clearReconnectTimer()
       clearMessageQueue()
@@ -839,6 +1064,7 @@ export function LiveMarketBoardV2({
       try {
         const response = await fetch("/api/market/stream-auth", { cache: "no-store", headers: { Accept: "application/json" } })
         const authJson = await response.json() as DnseAuthResponse
+        authJsonRef.current = authJson
         if (!response.ok || !authJson.ok || !authJson.url || !authJson.auth) throw new Error(authJson.message ?? `DNSE stream auth ${response.status}`)
         if (disposed) return
 
@@ -850,243 +1076,7 @@ export function LiveMarketBoardV2({
         socket.onmessage = (event) => {
           if (disposed || typeof event.data !== "string") return
           lastFrameAt.current = Date.now()
-          const raw = event.data
-          scheduleMessage(() => {
-            if (disposed) return
-            let data: Record<string, unknown>
-            try { data = JSON.parse(raw) as Record<string, unknown> } catch { return }
-
-            const action = String(data.action ?? data.a ?? "")
-            if (action === "ping") {
-              if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "pong", timestamp: data.timestamp }))
-              return
-            }
-            if (action === "welcome" || data.session_id || data.sid) {
-              if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(authJson.auth))
-              return
-            }
-            if (action === "auth_success") {
-              attempts = 0
-              setStreamState("LIVE")
-              setStreamError("")
-              socket?.send(JSON.stringify({
-                action: "subscribe",
-                channels: [
-                  { name: "tick.G1.json", symbols: symbolList },
-                  { name: "top_price.G1.json", symbols: symbolList },
-                  { name: "ohlc.1.json", symbols: symbolList },
-                  { name: "foreign.G1.json", symbols: symbolList },
-                  ...INDEX_CHANNELS.map((name) => ({ name: `market_index.${name}.json` })),
-                ],
-              }))
-              pingTimer = window.setInterval(() => {
-                if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "ping", timestamp: Date.now() }))
-              }, 15_000)
-              watchdogTimer = window.setInterval(() => {
-                if (socket?.readyState === WebSocket.OPEN && Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
-                  setStreamError("Luồng DNSE im lặng quá 60 giây; đang tự kết nối lại.")
-                  forceReconnect("stale DNSE stream")
-                }
-              }, 10_000)
-              return
-            }
-            if (action === "auth_error" || action === "error") {
-              const message = String(data.message ?? data.msg ?? "DNSE WebSocket error")
-              setStreamState("ERROR")
-              setStreamError(message)
-              forceReconnect("DNSE auth/subscription error")
-              return
-            }
-
-            const now = new Date()
-            const receivedAt = now.toISOString()
-            const currentSession = currentSessionIdentifier(now)
-            if (sessionIdentifier.current !== currentSession) {
-              sessionIdentifier.current = currentSession
-              dailyReferences.current = {}
-              indexReferences.current = {}
-              setQuotes({})
-              setPriceHistory({})
-              setHistoryReloadKey((key) => key + 1)
-            }
-
-            const type = String(data.T ?? "")
-            if (type === "b" && data.symbol) {
-              const ticker = String(data.symbol).toUpperCase()
-              if (!trackedSymbols.has(ticker)) return
-              const close = firstPositive(data, ["close", "c", "closePrice"])
-              const timestamp = normalizeEpochSeconds(data.time ?? data.t ?? data.timestamp ?? data.ts, now.getTime() / 1000)
-              if (close > 0) pushFiveMinuteClose(ticker, close, timestamp)
-              setLastMessageAt(receivedAt)
-              setStreamError("")
-              return
-            }
-
-            if (type === "t" && data.symbol) {
-              const ticker = String(data.symbol).toUpperCase()
-              if (!trackedSymbols.has(ticker)) return
-              const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
-              if (price <= 0) return
-              const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "volume"])
-              const matchVol = firstPositive(data, ["matchQtty", "matchVolume", "matchQuantity", "qtty", "q", "vol"])
-              const side = String(data.matchSide || data.side || "").toUpperCase() === "S" ? "SELL" : "BUY"
-
-              // Check Whale Trade (Volume >= 30,000 shares OR Trade Value >= 1B VND)
-              if (matchVol >= 30_000 || (price * matchVol * 1000 >= 1_000_000_000)) {
-                triggerWhaleAlert(ticker, side)
-              }
-
-              const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
-              const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
-              const floor = firstPositive(data, ["floorPrice", "floor"])
-              setQuotes((current) => {
-                const previous = current[ticker] as LiveStockQuote | undefined
-                const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
-                const reference = normalizeMarketPrice(rawReference, price) ?? rawReference
-                if (reference > 0) dailyReferences.current[ticker] = reference
-                const change = reference > 0 ? price - reference : previous?.change
-                const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : previous?.changePercent ?? 0
-                return {
-                  ...current,
-                  [ticker]: {
-                    ...previous,
-                    symbol: ticker,
-                    price,
-                    reference: reference || undefined,
-                    ceiling: ceiling || previous?.ceiling,
-                    floor: floor || previous?.floor,
-                    change,
-                    changePercent,
-                    volume: totalVolume || previous?.volume,
-                    updatedAt: receivedAt,
-                  },
-                }
-              })
-              setLastMessageAt(receivedAt)
-              setStreamError("")
-              return
-            }
-
-            if (type === "q" && data.symbol) {
-              const ticker = String(data.symbol).toUpperCase()
-              if (!trackedSymbols.has(ticker)) return
-              const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
-              const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
-              const floor = firstPositive(data, ["floorPrice", "floor"])
-              const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
-              setQuotes((current) => {
-                const previous = current[ticker] as LiveStockQuote | undefined
-                const livePrice = price || previous?.price
-                if (!livePrice) return current
-                const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
-                const reference = normalizeMarketPrice(rawReference, livePrice) ?? rawReference
-                if (reference > 0) dailyReferences.current[ticker] = reference
-                return {
-                  ...current,
-                  [ticker]: {
-                    ...previous,
-                    symbol: ticker,
-                    price: livePrice,
-                    reference: reference || undefined,
-                    ceiling: ceiling || previous?.ceiling,
-                    floor: floor || previous?.floor,
-                    change: reference > 0 ? livePrice - reference : previous?.change,
-                    changePercent: reference > 0 ? ((livePrice - reference) / reference) * 100 : previous?.changePercent ?? 0,
-                    volume: previous?.volume,
-                    updatedAt: receivedAt,
-                  },
-                }
-              })
-              setLastMessageAt(receivedAt)
-              setStreamError("")
-              return
-            }
-
-            if (type === "mi") {
-              const symbol = normalizeIndexName(data.indexName ?? data.symbol)
-              const value = firstPositive(data, ["valueIndexes", "value", "indexValue"])
-              if (!symbol || value <= 0) return
-              const explicitReference = firstPositive(data, INDEX_REFERENCE_KEYS)
-              if (explicitReference > 0) indexReferences.current[symbol] = explicitReference
-              const vol = firstPositive(data, ["totalVolumeTraded", "totalVolume", "totalQtty", "allQtty", "vol", "v"])
-              const rawVal = firstPositive(data, ["totalValueTraded", "totalValue", "totalAmount", "allValue", "val"])
-              const val = rawVal > 0 ? (rawVal < 100_000 ? rawVal * 1_000_000_000 : rawVal < 100_000_000 ? rawVal * 1_000_000 : rawVal) : 0
-              setQuotes((current) => {
-                const previous = current[symbol] as IndexQuote | undefined
-                const previousDerivedReference = previous && typeof previous.change === "number" ? previous.value - previous.change : 0
-                const reference = indexReferences.current[symbol] || previousDerivedReference
-                if (reference > 0) indexReferences.current[symbol] = reference
-                const change = reference > 0 ? value - reference : previous?.change
-                const changePercent = reference > 0 ? ((value - reference) / reference) * 100 : previous?.changePercent ?? 0
-                return {
-                  ...current,
-                  [symbol]: {
-                    symbol,
-                    value,
-                    change,
-                    changePercent,
-                    volume: vol || previous?.volume,
-                    valueTraded: val || previous?.valueTraded,
-                    updatedAt: receivedAt,
-                  },
-                }
-              })
-              setLastMessageAt(receivedAt)
-              setStreamError("")
-              return
-            }
-
-            if (type === "f" && data.symbol) {
-              const symbol = String(data.symbol).toUpperCase()
-              if (!trackedSymbols.has(symbol)) return
-              const totalBuyVal = numeric(data.totalBuyTradedAmount ?? data.totalBuyValue ?? data.foreignBuyValue)
-              const totalSellVal = numeric(data.totalSellTradedAmount ?? data.totalSellValue ?? data.foreignSellValue)
-              const totalBuyVol = numeric(data.totalBuyVolume ?? data.totalBuyQtty ?? data.foreignBuyVolume)
-              const totalSellVol = numeric(data.totalSellVolume ?? data.totalSellQtty ?? data.foreignSellVolume)
-              const buyVal = numeric(data.buyTradedAmount)
-              const sellVal = numeric(data.sellTradedAmount)
-              const buyVol = numeric(data.buyVolume)
-              const sellVol = numeric(data.sellVolume)
-
-              setQuotes((current) => {
-                const previous = current[symbol] as LiveStockQuote | undefined
-                if (!previous) return current
-
-                const prevBuyVal = previous.foreignBuyValue ?? 0
-                const prevSellVal = previous.foreignSellValue ?? 0
-                const nextBuyVal = totalBuyVal || (buyVal > 0 ? prevBuyVal + buyVal : prevBuyVal)
-                const nextSellVal = totalSellVal || (sellVal > 0 ? prevSellVal + sellVal : prevSellVal)
-
-                const prevBuyVol = previous.foreignBuyVolume ?? 0
-                const prevSellVol = previous.foreignSellVolume ?? 0
-                const nextBuyVol = totalBuyVol || (buyVol > 0 ? prevBuyVol + buyVol : prevBuyVol)
-                const nextSellVol = totalSellVol || (sellVol > 0 ? prevSellVol + sellVol : prevSellVol)
-
-                let foreignNetValue: number | undefined
-                if (nextBuyVal > 0 || nextSellVal > 0) {
-                  foreignNetValue = nextBuyVal - nextSellVal
-                } else if (nextBuyVol > 0 || nextSellVol > 0) {
-                  foreignNetValue = (nextBuyVol - nextSellVol) * (previous.price || 0)
-                }
-
-                return {
-                  ...current,
-                  [symbol]: {
-                    ...previous,
-                    foreignBuyValue: nextBuyVal || undefined,
-                    foreignSellValue: nextSellVal || undefined,
-                    foreignBuyVolume: nextBuyVol || undefined,
-                    foreignSellVolume: nextSellVol || undefined,
-                    foreignNetValue,
-                    updatedAt: receivedAt,
-                  },
-                }
-              })
-              setLastMessageAt(receivedAt)
-              setStreamError("")
-              return
-            }
-          })
+          scheduleMessage(event.data)
         }
 
         socket.onerror = () => {
@@ -1133,7 +1123,7 @@ export function LiveMarketBoardV2({
       window.removeEventListener("online", onOnline)
       if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "board closed")
     }
-  }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols, sessionOpen])
+  }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols, sessionOpen, scheduleMarketUiCommit, updateLiveQuotes])
 
   const normalizedQuery = query.trim().toUpperCase()
   const currentSessionDay = vietnamSessionDay()
@@ -1234,11 +1224,8 @@ export function LiveMarketBoardV2({
     <div className="relative flex h-full min-h-0 flex-col bg-background">
       <IndexStrip quotes={quotes} />
 
-      {/* COMPACT TOP TOOLBAR */}
       <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-white/[0.07] bg-[#090d12]/85 backdrop-blur-2xl px-3.5 py-2 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.35)]">
-        {/* VNINDEX Market Telemetry on the left */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Capsule 1: Thanh khoản & Giá trị */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
               <Coins className="h-3 w-3" />
@@ -1272,7 +1259,6 @@ export function LiveMarketBoardV2({
             </div>
           </div>
 
-          {/* Capsule 2: Độ rộng Thị trường (Market Breadth) */}
           <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
               <BarChart3 className="h-3 w-3" />
@@ -1298,7 +1284,6 @@ export function LiveMarketBoardV2({
             )}
           </div>
 
-          {/* Capsule 3: Khối Ngoại Toàn Thị Trường (Foreign Net Flow) */}
           <div className="hidden 2xl:flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
               <Globe2 className="h-3 w-3" />
@@ -1320,7 +1305,6 @@ export function LiveMarketBoardV2({
           </div>
         </div>
 
-        {/* Search & Filters on the right */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[140px] sm:w-[180px]">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-2" />
@@ -1458,7 +1442,6 @@ export function LiveMarketBoardV2({
         )}
       </div>
 
-      {/* FLOATING STATUS PILL AT BOTTOM RIGHT */}
       <FloatingMarketStatus
         streamState={streamState}
         streamError={streamError}
