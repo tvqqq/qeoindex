@@ -166,36 +166,32 @@ function currentSessionIdentifier(date = new Date()) {
 }
 
 const WatchlistSection = memo(function WatchlistSection({
-  stocks,
+  watchedStocks,
   quotes,
   priceHistoryCloses,
-  watchlist,
   whaleAlerts,
   onToggleWatch,
   onOpen,
 }: {
-  stocks: BoardUniverseStock[]
-  quotes: Record<string, LiveStockQuote | IndexQuote>
+  watchedStocks: BoardUniverseStock[]
+  quotes: Record<string, LiveStockQuote | IndexQuote | undefined>
   priceHistoryCloses: Record<string, number[]>
-  watchlist: Set<string>
   whaleAlerts: Record<string, boolean>
   onToggleWatch: (ticker: string) => void
   onOpen: (ticker: string) => void
 }) {
-  if (watchlist.size === 0) return null
-  const watched = stocks.filter((s) => watchlist.has(s.ticker))
-  if (watched.length === 0) return null
+  if (watchedStocks.length === 0) return null
   return (
     <div className="mb-3 rounded-2xl border border-amber-500/25 bg-[#141008]/85 p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.08)]">
       <div className="mb-2 flex items-center justify-between px-1">
         <div className="flex items-center gap-1.5">
           <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
           <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">Danh sách theo dõi</span>
-          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">{watched.length}</span>
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">{watchedStocks.length}</span>
         </div>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-thin">
-        {watched.map((stock) => (
+        {watchedStocks.map((stock) => (
           <div key={stock.ticker} className="min-w-[180px] max-w-[220px] flex-1 shrink-0">
             <LiveStockRow
               stock={stock}
@@ -1127,7 +1123,7 @@ export function LiveMarketBoardV2({
   }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols, sessionOpen, scheduleMarketUiCommit, updateLiveQuotes])
 
   const normalizedQuery = query.trim().toUpperCase()
-  const currentSessionDay = vietnamSessionDay()
+  const currentSessionDay = useMemo(() => vietnamSessionDay(), [])
   const displayQuotes = useMemo(() => {
     const next = { ...quotes }
     for (const stock of universe) {
@@ -1156,6 +1152,20 @@ export function LiveMarketBoardV2({
     }
     return out
   }, [priceHistory])
+
+  const watchedStocks = useMemo(() => {
+    if (watchlist.size === 0) return []
+    return universe.filter((s) => watchlist.has(s.ticker))
+  }, [universe, watchlist])
+
+  const watchedQuotes = useMemo(() => {
+    if (watchedStocks.length === 0) return {}
+    const out: Record<string, LiveStockQuote | IndexQuote | undefined> = {}
+    for (const s of watchedStocks) {
+      out[s.ticker] = displayQuotes[s.ticker]
+    }
+    return out
+  }, [watchedStocks, displayQuotes])
 
   const filtered = useMemo(() => universe.filter((stock) => (!normalizedQuery || stock.ticker.includes(normalizedQuery)) && (selectedSector === "Tất cả" || stock.sector === selectedSector)), [universe, normalizedQuery, selectedSector])
   const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, displayQuotes)), [displayQuotes, filtered])
@@ -1224,30 +1234,25 @@ export function LiveMarketBoardV2({
   )
   const reconnect = useCallback(() => setReconnectKey((key) => key + 1), [])
 
-  const { totalUniverseVolume, totalUniverseValue } = useMemo(() => {
+  const { totalUniverseVolume, totalUniverseValue, totalForeignNet } = useMemo(() => {
     let vol = 0
     let val = 0
-    for (const stock of universe) {
-      const q = displayQuotes[stock.ticker] as LiveStockQuote | undefined
-      if (q && q.volume && q.volume > 0) {
-        vol += q.volume
-        if (q.price && q.price > 0) {
-          val += q.volume * q.price * 1000
-        }
-      }
-    }
-    return { totalUniverseVolume: vol, totalUniverseValue: val }
-  }, [universe, displayQuotes])
-
-  const totalForeignNet = useMemo(() => {
     let net = 0
     for (const stock of universe) {
       const q = displayQuotes[stock.ticker] as LiveStockQuote | undefined
-      if (q && typeof q.foreignNetValue === "number" && Number.isFinite(q.foreignNetValue)) {
-        net += q.foreignNetValue
+      if (q) {
+        if (q.volume && q.volume > 0) {
+          vol += q.volume
+          if (q.price && q.price > 0) {
+            val += q.volume * q.price * 1000
+          }
+        }
+        if (typeof q.foreignNetValue === "number" && Number.isFinite(q.foreignNetValue)) {
+          net += q.foreignNetValue
+        }
       }
     }
-    return net
+    return { totalUniverseVolume: vol, totalUniverseValue: val, totalForeignNet: net }
   }, [universe, displayQuotes])
 
   const vnindexQuote = quotes.VNINDEX as IndexQuote | undefined
@@ -1409,10 +1414,9 @@ export function LiveMarketBoardV2({
 
       <div className="min-h-0 flex-1 overflow-auto p-2.5">
         <WatchlistSection
-          stocks={universe}
-          quotes={displayQuotes}
+          watchedStocks={watchedStocks}
+          quotes={watchedQuotes}
           priceHistoryCloses={priceHistoryCloses}
-          watchlist={watchlist}
           whaleAlerts={whaleAlerts}
           onToggleWatch={toggleWatch}
           onOpen={openBook}
