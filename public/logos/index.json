@@ -1,702 +1,1002 @@
 {
-  "VCB": {
-    "ticker": "VCB",
-    "source": "vietstock-official",
-    "url": "/logos/VCB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VCB",
-    "sizeBytes": 10834
-  },
-  "CTG": {
-    "ticker": "CTG",
-    "source": "vietstock-official",
-    "url": "/logos/CTG.png",
-    "externalUrl": "https://finance.vietstock.vn/image/CTG",
-    "sizeBytes": 20601
+  "VIC": {
+    "ticker": "VIC",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/VIC",
+    "dimensions": "635x393",
+    "ratio": "1.62",
+    "isSquare": false,
+    "sizeBytes": 131225,
+    "localUrl": "/logos/VIC.png"
   },
   "VHM": {
     "ticker": "VHM",
-    "source": "vietstock-official",
-    "url": "/logos/VHM.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VHM",
-    "sizeBytes": 38657
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/VHM.jpeg",
+    "dimensions": "283x150",
+    "ratio": "1.89",
+    "isSquare": false,
+    "sizeBytes": 59610,
+    "localUrl": "/logos/VHM.png"
+  },
+  "VCB": {
+    "ticker": "VCB",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/VCB.jpeg",
+    "dimensions": "270x95",
+    "ratio": "2.84",
+    "isSquare": false,
+    "sizeBytes": 10834,
+    "localUrl": "/logos/VCB.png"
   },
   "BID": {
     "ticker": "BID",
-    "source": "vietstock-official",
-    "url": "/logos/BID.png",
-    "externalUrl": "https://finance.vietstock.vn/image/BID",
-    "sizeBytes": 114076
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/BID.jpeg",
+    "dimensions": "775x250",
+    "ratio": "3.10",
+    "isSquare": false,
+    "sizeBytes": 114076,
+    "localUrl": "/logos/BID.png"
   },
-  "VIC": {
-    "ticker": "VIC",
-    "source": "vietstock-official",
-    "url": "/logos/VIC.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VIC",
-    "sizeBytes": 131225
+  "CTG": {
+    "ticker": "CTG",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/CTG",
+    "dimensions": "1834x683",
+    "ratio": "2.69",
+    "isSquare": false,
+    "sizeBytes": 20601,
+    "localUrl": "/logos/CTG.png"
   },
   "TCB": {
     "ticker": "TCB",
-    "source": "vietstock-official",
-    "url": "/logos/TCB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/TCB",
-    "sizeBytes": 16843
-  },
-  "HPG": {
-    "ticker": "HPG",
-    "source": "vietstock-official",
-    "url": "/logos/HPG.png",
-    "externalUrl": "https://finance.vietstock.vn/image/HPG",
-    "sizeBytes": 4874
-  },
-  "MBB": {
-    "ticker": "MBB",
-    "source": "vietstock-official",
-    "url": "/logos/MBB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/MBB",
-    "sizeBytes": 56829
-  },
-  "GAS": {
-    "ticker": "GAS",
-    "source": "vietstock-official",
-    "url": "/logos/GAS.png",
-    "externalUrl": "https://finance.vietstock.vn/image/GAS",
-    "sizeBytes": 115236
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/TCB",
+    "dimensions": "994x450",
+    "ratio": "2.21",
+    "isSquare": false,
+    "sizeBytes": 16843,
+    "localUrl": "/logos/TCB.png"
   },
   "VPB": {
     "ticker": "VPB",
-    "source": "vietstock-official",
-    "url": "/logos/VPB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VPB",
-    "sizeBytes": 130865
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/VPB",
+    "dimensions": "5496x1560",
+    "ratio": "3.52",
+    "isSquare": false,
+    "sizeBytes": 130865,
+    "localUrl": "/logos/VPB.png"
+  },
+  "MBB": {
+    "ticker": "MBB",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/MBB",
+    "dimensions": "1200x539",
+    "ratio": "2.23",
+    "isSquare": false,
+    "sizeBytes": 56829,
+    "localUrl": "/logos/MBB.png"
+  },
+  "HPG": {
+    "ticker": "HPG",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/HPG.jpeg",
+    "dimensions": "330x51",
+    "ratio": "6.47",
+    "isSquare": false,
+    "sizeBytes": 4874,
+    "localUrl": "/logos/HPG.png"
+  },
+  "GAS": {
+    "ticker": "GAS",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/GAS",
+    "dimensions": "497x502",
+    "ratio": "0.99",
+    "isSquare": true,
+    "sizeBytes": 115236,
+    "localUrl": "/logos/GAS.png"
   },
   "MCH": {
     "ticker": "MCH",
-    "source": "vietstock-official",
-    "url": "/logos/MCH.png",
-    "externalUrl": "https://finance.vietstock.vn/image/MCH",
-    "sizeBytes": 19603
-  },
-  "HDB": {
-    "ticker": "HDB",
-    "source": "vietstock-official",
-    "url": "/logos/HDB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/HDB",
-    "sizeBytes": 40030
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/MCH.jpg",
+    "dimensions": "387x315",
+    "ratio": "1.23",
+    "isSquare": true,
+    "sizeBytes": 17603,
+    "localUrl": "/logos/MCH.png"
   },
   "LPB": {
     "ticker": "LPB",
-    "source": "vietstock-official",
-    "url": "/logos/LPB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/LPB",
-    "sizeBytes": 3563
-  },
-  "STB": {
-    "ticker": "STB",
-    "source": "vietstock-official",
-    "url": "/logos/STB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/STB",
-    "sizeBytes": 132827
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/LPB.jpeg",
+    "dimensions": "260x47",
+    "ratio": "5.53",
+    "isSquare": false,
+    "sizeBytes": 9910,
+    "localUrl": "/logos/LPB.png"
   },
   "VPL": {
     "ticker": "VPL",
-    "source": "vietstock-official",
-    "url": "/logos/VPL.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VPL",
-    "sizeBytes": 12200
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/VPL.jpeg",
+    "dimensions": "448x276",
+    "ratio": "1.62",
+    "isSquare": false,
+    "sizeBytes": 12200,
+    "localUrl": "/logos/VPL.png"
   },
-  "ACB": {
-    "ticker": "ACB",
-    "source": "vietstock-official",
-    "url": "/logos/ACB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/ACB",
-    "sizeBytes": 2044
+  "STB": {
+    "ticker": "STB",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/STB",
+    "dimensions": "1152x216",
+    "ratio": "5.33",
+    "isSquare": false,
+    "sizeBytes": 132827,
+    "localUrl": "/logos/STB.png"
   },
-  "FPT": {
-    "ticker": "FPT",
-    "source": "vietstock-official",
-    "url": "/logos/FPT.png",
-    "externalUrl": "https://finance.vietstock.vn/image/FPT",
-    "sizeBytes": 90659
-  },
-  "GVR": {
-    "ticker": "GVR",
-    "source": "vietstock-official",
-    "url": "/logos/GVR.png",
-    "externalUrl": "https://finance.vietstock.vn/image/GVR",
-    "sizeBytes": 35012
+  "HDB": {
+    "ticker": "HDB",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/HDB",
+    "dimensions": "1834x778",
+    "ratio": "2.36",
+    "isSquare": false,
+    "sizeBytes": 40030,
+    "localUrl": "/logos/HDB.png"
   },
   "BSR": {
     "ticker": "BSR",
-    "source": "vietstock-official",
-    "url": "/logos/BSR.png",
-    "externalUrl": "https://finance.vietstock.vn/image/BSR",
-    "sizeBytes": 44305
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/BSR",
+    "dimensions": "288x285",
+    "ratio": "1.01",
+    "isSquare": true,
+    "sizeBytes": 44305,
+    "localUrl": "/logos/BSR.png"
+  },
+  "ACB": {
+    "ticker": "ACB",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/ACB.jpeg",
+    "dimensions": "140x55",
+    "ratio": "2.55",
+    "isSquare": false,
+    "sizeBytes": 2044,
+    "localUrl": "/logos/ACB.png"
   },
   "VNM": {
     "ticker": "VNM",
-    "source": "vietstock-official",
-    "url": "/logos/VNM.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VNM",
-    "sizeBytes": 20299
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/VNM.jpeg",
+    "dimensions": "617x400",
+    "ratio": "1.54",
+    "isSquare": false,
+    "sizeBytes": 96659,
+    "localUrl": "/logos/VNM.png"
   },
-  "MSN": {
-    "ticker": "MSN",
-    "source": "vietstock-official",
-    "url": "/logos/MSN.png",
-    "externalUrl": "https://finance.vietstock.vn/image/MSN",
-    "sizeBytes": 9125
+  "FPT": {
+    "ticker": "FPT",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/FPT",
+    "dimensions": "2581x1560",
+    "ratio": "1.65",
+    "isSquare": false,
+    "sizeBytes": 90659,
+    "localUrl": "/logos/FPT.png"
+  },
+  "GVR": {
+    "ticker": "GVR",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/GVR.jpeg",
+    "dimensions": "150x150",
+    "ratio": "1.00",
+    "isSquare": true,
+    "sizeBytes": 35012,
+    "localUrl": "/logos/GVR.png"
   },
   "DMX": {
     "ticker": "DMX",
-    "source": "vietstock-official",
-    "url": "/logos/DMX.png",
-    "externalUrl": "https://finance.vietstock.vn/image/DMX",
-    "sizeBytes": 13213
-  },
-  "VJC": {
-    "ticker": "VJC",
-    "source": "vietstock-official",
-    "url": "/logos/VJC.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VJC",
-    "sizeBytes": 3451
-  },
-  "MWG": {
-    "ticker": "MWG",
-    "source": "vietstock-official",
-    "url": "/logos/MWG.png",
-    "externalUrl": "https://finance.vietstock.vn/image/MWG",
-    "sizeBytes": 25033
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/DMX",
+    "dimensions": "612x215",
+    "ratio": "2.85",
+    "isSquare": false,
+    "sizeBytes": 13213,
+    "localUrl": "/logos/DMX.png"
   },
   "TCX": {
     "ticker": "TCX",
-    "source": "vietstock-official",
-    "url": "/logos/TCX.png",
-    "externalUrl": "https://finance.vietstock.vn/image/TCX",
-    "sizeBytes": 35554
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/TCX.jpeg",
+    "dimensions": "1920x547",
+    "ratio": "3.51",
+    "isSquare": false,
+    "sizeBytes": 35554,
+    "localUrl": "/logos/TCX.png"
   },
-  "VCK": {
-    "ticker": "VCK",
-    "source": "vietstock-official",
-    "url": "/logos/VCK.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VCK",
-    "sizeBytes": 3656
+  "MWG": {
+    "ticker": "MWG",
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/MWG.jpg",
+    "dimensions": "278x271",
+    "ratio": "1.03",
+    "isSquare": true,
+    "sizeBytes": 15874,
+    "localUrl": "/logos/MWG.png"
+  },
+  "MSN": {
+    "ticker": "MSN",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/MSN.jpeg",
+    "dimensions": "191x77",
+    "ratio": "2.48",
+    "isSquare": false,
+    "sizeBytes": 22936,
+    "localUrl": "/logos/MSN.png"
+  },
+  "VJC": {
+    "ticker": "VJC",
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/VJC.jpg",
+    "dimensions": "439x198",
+    "ratio": "2.22",
+    "isSquare": false,
+    "sizeBytes": 10056,
+    "localUrl": "/logos/VJC.png"
   },
   "HVN": {
     "ticker": "HVN",
-    "source": "vietstock-official",
-    "url": "/logos/HVN.png",
-    "externalUrl": "https://finance.vietstock.vn/image/HVN",
-    "sizeBytes": 20104
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/HVN.jpeg",
+    "dimensions": "761x148",
+    "ratio": "5.14",
+    "isSquare": false,
+    "sizeBytes": 20104,
+    "localUrl": "/logos/HVN.png"
+  },
+  "VCK": {
+    "ticker": "VCK",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/VCK.jpeg",
+    "dimensions": "210x80",
+    "ratio": "2.63",
+    "isSquare": false,
+    "sizeBytes": 3656,
+    "localUrl": "/logos/VCK.png"
   },
   "SHB": {
     "ticker": "SHB",
-    "source": "vietstock-official",
-    "url": "/logos/SHB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/SHB",
-    "sizeBytes": 26552
-  },
-  "SAB": {
-    "ticker": "SAB",
-    "source": "vietstock-official",
-    "url": "/logos/SAB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/SAB",
-    "sizeBytes": 67450
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/SHB",
+    "dimensions": "1195x470",
+    "ratio": "2.54",
+    "isSquare": false,
+    "sizeBytes": 26552,
+    "localUrl": "/logos/SHB.png"
   },
   "SSI": {
     "ticker": "SSI",
-    "source": "vietstock-official",
-    "url": "/logos/SSI.png",
-    "externalUrl": "https://finance.vietstock.vn/image/SSI",
-    "sizeBytes": 721999
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/SSI.jpeg",
+    "dimensions": "99x93",
+    "ratio": "1.06",
+    "isSquare": true,
+    "sizeBytes": 7685,
+    "localUrl": "/logos/SSI.png"
   },
-  "MSB": {
-    "ticker": "MSB",
-    "source": "vietstock-official",
-    "url": "/logos/MSB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/MSB",
-    "sizeBytes": 11860
-  },
-  "BVH": {
-    "ticker": "BVH",
-    "source": "vietstock-official",
-    "url": "/logos/BVH.png",
-    "externalUrl": "https://finance.vietstock.vn/image/BVH",
-    "sizeBytes": 30233
-  },
-  "VIB": {
-    "ticker": "VIB",
-    "source": "vietstock-official",
-    "url": "/logos/VIB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VIB",
-    "sizeBytes": 18036
-  },
-  "SSB": {
-    "ticker": "SSB",
-    "source": "vietstock-official",
-    "url": "/logos/SSB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/SSB",
-    "sizeBytes": 23211
+  "SAB": {
+    "ticker": "SAB",
+    "chosenSource": "24hmoney-png",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/SAB.png",
+    "dimensions": "197x196",
+    "ratio": "1.01",
+    "isSquare": true,
+    "sizeBytes": 53178,
+    "localUrl": "/logos/SAB.png"
   },
   "VRE": {
     "ticker": "VRE",
-    "source": "vietstock-official",
-    "url": "/logos/VRE.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VRE",
-    "sizeBytes": 27671
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/VRE.jpeg",
+    "dimensions": "352x150",
+    "ratio": "2.35",
+    "isSquare": false,
+    "sizeBytes": 54045,
+    "localUrl": "/logos/VRE.png"
   },
-  "GEE": {
-    "ticker": "GEE",
-    "source": "vietstock-official",
-    "url": "/logos/GEE.png",
-    "externalUrl": "https://finance.vietstock.vn/image/GEE",
-    "sizeBytes": 20379
+  "SSB": {
+    "ticker": "SSB",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/SSB",
+    "dimensions": "442x105",
+    "ratio": "4.21",
+    "isSquare": false,
+    "sizeBytes": 23211,
+    "localUrl": "/logos/SSB.png"
   },
-  "PLX": {
-    "ticker": "PLX",
-    "source": "vietstock-official",
-    "url": "/logos/PLX.png",
-    "externalUrl": "https://finance.vietstock.vn/image/PLX",
-    "sizeBytes": 52515
+  "MSB": {
+    "ticker": "MSB",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/MSB",
+    "dimensions": "202x90",
+    "ratio": "2.24",
+    "isSquare": false,
+    "sizeBytes": 11860,
+    "localUrl": "/logos/MSB.png"
   },
-  "TPB": {
-    "ticker": "TPB",
-    "source": "vietstock-official",
-    "url": "/logos/TPB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/TPB",
-    "sizeBytes": 71632
+  "VIB": {
+    "ticker": "VIB",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/VIB.jpeg",
+    "dimensions": "150x68",
+    "ratio": "2.21",
+    "isSquare": false,
+    "sizeBytes": 18036,
+    "localUrl": "/logos/VIB.png"
   },
-  "POW": {
-    "ticker": "POW",
-    "source": "vietstock-official",
-    "url": "/logos/POW.png",
-    "externalUrl": "https://finance.vietstock.vn/image/POW",
-    "sizeBytes": 67654
+  "BVH": {
+    "ticker": "BVH",
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/BVH.jpg",
+    "dimensions": "592x203",
+    "ratio": "2.92",
+    "isSquare": false,
+    "sizeBytes": 32994,
+    "localUrl": "/logos/BVH.png"
   },
   "VPX": {
     "ticker": "VPX",
-    "source": "vietstock-official",
-    "url": "/logos/VPX.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VPX",
-    "sizeBytes": 98661
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/VPX.jpeg",
+    "dimensions": "800x256",
+    "ratio": "3.13",
+    "isSquare": false,
+    "sizeBytes": 98661,
+    "localUrl": "/logos/VPX.png"
   },
-  "NVL": {
-    "ticker": "NVL",
-    "source": "vietstock-official",
-    "url": "/logos/NVL.png",
-    "externalUrl": "https://finance.vietstock.vn/image/NVL",
-    "sizeBytes": 33748
+  "PLX": {
+    "ticker": "PLX",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/PLX",
+    "dimensions": "535x109",
+    "ratio": "4.91",
+    "isSquare": false,
+    "sizeBytes": 52515,
+    "localUrl": "/logos/PLX.png"
   },
-  "EIB": {
-    "ticker": "EIB",
-    "source": "vietstock-official",
-    "url": "/logos/EIB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/EIB",
-    "sizeBytes": 15005
+  "GEE": {
+    "ticker": "GEE",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/GEE.jpeg",
+    "dimensions": "450x300",
+    "ratio": "1.50",
+    "isSquare": false,
+    "sizeBytes": 29576,
+    "localUrl": "/logos/GEE.png"
   },
-  "VIX": {
-    "ticker": "VIX",
-    "source": "vietstock-official",
-    "url": "/logos/VIX.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VIX",
-    "sizeBytes": 1710
+  "POW": {
+    "ticker": "POW",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/POW",
+    "dimensions": "388x322",
+    "ratio": "1.20",
+    "isSquare": true,
+    "sizeBytes": 67654,
+    "localUrl": "/logos/POW.png"
   },
-  "HCM": {
-    "ticker": "HCM",
-    "source": "vietstock-official",
-    "url": "/logos/HCM.png",
-    "externalUrl": "https://finance.vietstock.vn/image/HCM",
-    "sizeBytes": 4482
+  "TPB": {
+    "ticker": "TPB",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/TPB.jpeg",
+    "dimensions": "468x150",
+    "ratio": "3.12",
+    "isSquare": false,
+    "sizeBytes": 71632,
+    "localUrl": "/logos/TPB.png"
   },
   "BCM": {
     "ticker": "BCM",
-    "source": "vietstock-official",
-    "url": "/logos/BCM.png",
-    "externalUrl": "https://finance.vietstock.vn/image/BCM",
-    "sizeBytes": 98679
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/BCM",
+    "dimensions": "5027x700",
+    "ratio": "7.18",
+    "isSquare": false,
+    "sizeBytes": 98679,
+    "localUrl": "/logos/BCM.png"
+  },
+  "HCM": {
+    "ticker": "HCM",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/HCM.jpeg",
+    "dimensions": "1138x432",
+    "ratio": "2.63",
+    "isSquare": false,
+    "sizeBytes": 185304,
+    "localUrl": "/logos/HCM.png"
+  },
+  "EIB": {
+    "ticker": "EIB",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/EIB.jpeg",
+    "dimensions": "344x67",
+    "ratio": "5.13",
+    "isSquare": false,
+    "sizeBytes": 20323,
+    "localUrl": "/logos/EIB.png"
+  },
+  "NVL": {
+    "ticker": "NVL",
+    "chosenSource": "24hmoney-png",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/NVL.png",
+    "dimensions": "248x203",
+    "ratio": "1.22",
+    "isSquare": true,
+    "sizeBytes": 6540,
+    "localUrl": "/logos/NVL.png"
+  },
+  "VIX": {
+    "ticker": "VIX",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/VIX.jpeg",
+    "dimensions": "81x40",
+    "ratio": "2.02",
+    "isSquare": false,
+    "sizeBytes": 1710,
+    "localUrl": "/logos/VIX.png"
   },
   "GMD": {
     "ticker": "GMD",
-    "source": "vietstock-official",
-    "url": "/logos/GMD.png",
-    "externalUrl": "https://finance.vietstock.vn/image/GMD",
-    "sizeBytes": 46583
-  },
-  "OCB": {
-    "ticker": "OCB",
-    "source": "vietstock-official",
-    "url": "/logos/OCB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/OCB",
-    "sizeBytes": 29332
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/GMD",
+    "dimensions": "388x208",
+    "ratio": "1.87",
+    "isSquare": false,
+    "sizeBytes": 46583,
+    "localUrl": "/logos/GMD.png"
   },
   "GEX": {
     "ticker": "GEX",
-    "source": "vietstock-official",
-    "url": "/logos/GEX.png",
-    "externalUrl": "https://finance.vietstock.vn/image/GEX",
-    "sizeBytes": 75911
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/GEX",
+    "dimensions": "4378x1440",
+    "ratio": "3.04",
+    "isSquare": false,
+    "sizeBytes": 75911,
+    "localUrl": "/logos/GEX.png"
   },
-  "GEL": {
-    "ticker": "GEL",
-    "source": "vietstock-official",
-    "url": "/logos/GEL.png",
-    "externalUrl": "https://finance.vietstock.vn/image/GEL",
-    "sizeBytes": 39544
+  "OCB": {
+    "ticker": "OCB",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/OCB",
+    "dimensions": "1515x714",
+    "ratio": "2.12",
+    "isSquare": false,
+    "sizeBytes": 29332,
+    "localUrl": "/logos/OCB.png"
   },
   "REE": {
     "ticker": "REE",
-    "source": "vietstock-official",
-    "url": "/logos/REE.png",
-    "externalUrl": "https://finance.vietstock.vn/image/REE",
-    "sizeBytes": 49896
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/REE",
+    "dimensions": "277x206",
+    "ratio": "1.34",
+    "isSquare": false,
+    "sizeBytes": 49896,
+    "localUrl": "/logos/REE.png"
   },
-  "NAB": {
-    "ticker": "NAB",
-    "source": "vietstock-official",
-    "url": "/logos/NAB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/NAB",
-    "sizeBytes": 3408
-  },
-  "KBC": {
-    "ticker": "KBC",
-    "source": "vietstock-official",
-    "url": "/logos/KBC.png",
-    "externalUrl": "https://finance.vietstock.vn/image/KBC",
-    "sizeBytes": 19888
-  },
-  "VCI": {
-    "ticker": "VCI",
-    "source": "vietstock-official",
-    "url": "/logos/VCI.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VCI",
-    "sizeBytes": 7432
+  "GEL": {
+    "ticker": "GEL",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/GEL",
+    "dimensions": "495x116",
+    "ratio": "4.27",
+    "isSquare": false,
+    "sizeBytes": 39544,
+    "localUrl": "/logos/GEL.png"
   },
   "PGV": {
     "ticker": "PGV",
-    "source": "vietstock-official",
-    "url": "/logos/PGV.png",
-    "externalUrl": "https://finance.vietstock.vn/image/PGV",
-    "sizeBytes": 23779
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/PGV.jpeg",
+    "dimensions": "597x150",
+    "ratio": "3.98",
+    "isSquare": false,
+    "sizeBytes": 58404,
+    "localUrl": "/logos/PGV.png"
+  },
+  "KBC": {
+    "ticker": "KBC",
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/KBC.jpg",
+    "dimensions": "369x199",
+    "ratio": "1.85",
+    "isSquare": false,
+    "sizeBytes": 21423,
+    "localUrl": "/logos/KBC.png"
+  },
+  "VCI": {
+    "ticker": "VCI",
+    "chosenSource": "24hmoney-png",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/VCI.png",
+    "dimensions": "335x214",
+    "ratio": "1.57",
+    "isSquare": false,
+    "sizeBytes": 20967,
+    "localUrl": "/logos/VCI.png"
   },
   "VND": {
     "ticker": "VND",
-    "source": "vietstock-official",
-    "url": "/logos/VND.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VND",
-    "sizeBytes": 92302
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/VND",
+    "dimensions": "702x250",
+    "ratio": "2.81",
+    "isSquare": false,
+    "sizeBytes": 92302,
+    "localUrl": "/logos/VND.png"
   },
-  "KDH": {
-    "ticker": "KDH",
-    "source": "vietstock-official",
-    "url": "/logos/KDH.png",
-    "externalUrl": "https://finance.vietstock.vn/image/KDH",
-    "sizeBytes": 14685
-  },
-  "SBT": {
-    "ticker": "SBT",
-    "source": "vietstock-official",
-    "url": "/logos/SBT.png",
-    "externalUrl": "https://finance.vietstock.vn/image/SBT",
-    "sizeBytes": 13700
-  },
-  "PNJ": {
-    "ticker": "PNJ",
-    "source": "vietstock-official",
-    "url": "/logos/PNJ.png",
-    "externalUrl": "https://finance.vietstock.vn/image/PNJ",
-    "sizeBytes": 75301
+  "NAB": {
+    "ticker": "NAB",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/NAB.jpeg",
+    "dimensions": "287x29",
+    "ratio": "9.90",
+    "isSquare": false,
+    "sizeBytes": 3408,
+    "localUrl": "/logos/NAB.png"
   },
   "FRT": {
     "ticker": "FRT",
-    "source": "vietstock-official",
-    "url": "/logos/FRT.png",
-    "externalUrl": "https://finance.vietstock.vn/image/FRT",
-    "sizeBytes": 110509
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/FRT.jpeg",
+    "dimensions": "171x150",
+    "ratio": "1.14",
+    "isSquare": true,
+    "sizeBytes": 31948,
+    "localUrl": "/logos/FRT.png"
+  },
+  "KDH": {
+    "ticker": "KDH",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/KDH.jpeg",
+    "dimensions": "308x60",
+    "ratio": "5.13",
+    "isSquare": false,
+    "sizeBytes": 14685,
+    "localUrl": "/logos/KDH.png"
   },
   "VPI": {
     "ticker": "VPI",
-    "source": "vietstock-official",
-    "url": "/logos/VPI.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VPI",
-    "sizeBytes": 47042
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/VPI.jpg",
+    "dimensions": "500x439",
+    "ratio": "1.14",
+    "isSquare": true,
+    "sizeBytes": 74066,
+    "localUrl": "/logos/VPI.png"
   },
-  "PVD": {
-    "ticker": "PVD",
-    "source": "vietstock-official",
-    "url": "/logos/PVD.png",
-    "externalUrl": "https://finance.vietstock.vn/image/PVD",
-    "sizeBytes": 12834
+  "SBT": {
+    "ticker": "SBT",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/SBT.jpeg",
+    "dimensions": "106x85",
+    "ratio": "1.25",
+    "isSquare": true,
+    "sizeBytes": 2218,
+    "localUrl": "/logos/SBT.png"
   },
-  "VGC": {
-    "ticker": "VGC",
-    "source": "vietstock-official",
-    "url": "/logos/VGC.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VGC",
-    "sizeBytes": 25717
-  },
-  "DGC": {
-    "ticker": "DGC",
-    "source": "vietstock-official",
-    "url": "/logos/DGC.png",
-    "externalUrl": "https://finance.vietstock.vn/image/DGC",
-    "sizeBytes": 44507
-  },
-  "DCM": {
-    "ticker": "DCM",
-    "source": "vietstock-official",
-    "url": "/logos/DCM.png",
-    "externalUrl": "https://finance.vietstock.vn/image/DCM",
-    "sizeBytes": 68264
+  "PNJ": {
+    "ticker": "PNJ",
+    "chosenSource": "24hmoney-png",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/PNJ.png",
+    "dimensions": "224x219",
+    "ratio": "1.02",
+    "isSquare": true,
+    "sizeBytes": 14551,
+    "localUrl": "/logos/PNJ.png"
   },
   "HAG": {
     "ticker": "HAG",
-    "source": "vietstock-official",
-    "url": "/logos/HAG.png",
-    "externalUrl": "https://finance.vietstock.vn/image/HAG",
-    "sizeBytes": 386678
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/HAG",
+    "dimensions": "780x892",
+    "ratio": "0.87",
+    "isSquare": true,
+    "sizeBytes": 386678,
+    "localUrl": "/logos/HAG.png"
   },
-  "KDC": {
-    "ticker": "KDC",
-    "source": "vietstock-official",
-    "url": "/logos/KDC.png",
-    "externalUrl": "https://finance.vietstock.vn/image/KDC",
-    "sizeBytes": 8475
+  "VGC": {
+    "ticker": "VGC",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/VGC.jpeg",
+    "dimensions": "179x150",
+    "ratio": "1.19",
+    "isSquare": true,
+    "sizeBytes": 46018,
+    "localUrl": "/logos/VGC.png"
+  },
+  "PVD": {
+    "ticker": "PVD",
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/PVD.jpg",
+    "dimensions": "187x246",
+    "ratio": "0.76",
+    "isSquare": true,
+    "sizeBytes": 12810,
+    "localUrl": "/logos/PVD.png"
+  },
+  "DCM": {
+    "ticker": "DCM",
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/DCM.jpg",
+    "dimensions": "223x224",
+    "ratio": "1.00",
+    "isSquare": true,
+    "sizeBytes": 19102,
+    "localUrl": "/logos/DCM.png"
+  },
+  "DGC": {
+    "ticker": "DGC",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/DGC.jpeg",
+    "dimensions": "135x150",
+    "ratio": "0.90",
+    "isSquare": true,
+    "sizeBytes": 44507,
+    "localUrl": "/logos/DGC.png"
   },
   "CRV": {
     "ticker": "CRV",
-    "source": "vietstock-official",
-    "url": "/logos/CRV.png",
-    "externalUrl": "https://finance.vietstock.vn/image/CRV",
-    "sizeBytes": 7961
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/CRV",
+    "dimensions": "313x237",
+    "ratio": "1.32",
+    "isSquare": false,
+    "sizeBytes": 7961,
+    "localUrl": "/logos/CRV.png"
   },
   "DPM": {
     "ticker": "DPM",
-    "source": "vietstock-official",
-    "url": "/logos/DPM.png",
-    "externalUrl": "https://finance.vietstock.vn/image/DPM",
-    "sizeBytes": 105361
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/DPM.jpeg",
+    "dimensions": "115x150",
+    "ratio": "0.77",
+    "isSquare": true,
+    "sizeBytes": 11675,
+    "localUrl": "/logos/DPM.png"
   },
-  "SJS": {
-    "ticker": "SJS",
-    "source": "vietstock-official",
-    "url": "/logos/SJS.png",
-    "externalUrl": "https://finance.vietstock.vn/image/SJS",
-    "sizeBytes": 87322
+  "KDC": {
+    "ticker": "KDC",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/KDC.jpeg",
+    "dimensions": "150x133",
+    "ratio": "1.13",
+    "isSquare": true,
+    "sizeBytes": 11913,
+    "localUrl": "/logos/KDC.png"
   },
   "VBB": {
     "ticker": "VBB",
-    "source": "vietstock-official",
-    "url": "/logos/VBB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VBB",
-    "sizeBytes": 60990
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/VBB",
+    "dimensions": "781x223",
+    "ratio": "3.50",
+    "isSquare": false,
+    "sizeBytes": 60990,
+    "localUrl": "/logos/VBB.png"
   },
-  "LGC": {
-    "ticker": "LGC",
-    "source": "vietstock-official",
-    "url": "/logos/LGC.png",
-    "externalUrl": "https://finance.vietstock.vn/image/LGC",
-    "sizeBytes": 5626
-  },
-  "TAL": {
-    "ticker": "TAL",
-    "source": "vietstock-official",
-    "url": "/logos/TAL.png",
-    "externalUrl": "https://finance.vietstock.vn/image/TAL",
-    "sizeBytes": 8837
-  },
-  "SIP": {
-    "ticker": "SIP",
-    "source": "vietstock-official",
-    "url": "/logos/SIP.png",
-    "externalUrl": "https://finance.vietstock.vn/image/SIP",
-    "sizeBytes": 67885
+  "SJS": {
+    "ticker": "SJS",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/SJS.jpeg",
+    "dimensions": "150x166",
+    "ratio": "0.90",
+    "isSquare": true,
+    "sizeBytes": 49631,
+    "localUrl": "/logos/SJS.png"
   },
   "DXG": {
     "ticker": "DXG",
-    "source": "vietstock-official",
-    "url": "/logos/DXG.png",
-    "externalUrl": "https://finance.vietstock.vn/image/DXG",
-    "sizeBytes": 39286
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/DXG",
+    "dimensions": "384x112",
+    "ratio": "3.43",
+    "isSquare": false,
+    "sizeBytes": 39286,
+    "localUrl": "/logos/DXG.png"
+  },
+  "LGC": {
+    "ticker": "LGC",
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/LGC.jpg",
+    "dimensions": "360x248",
+    "ratio": "1.45",
+    "isSquare": false,
+    "sizeBytes": 20673,
+    "localUrl": "/logos/LGC.png"
+  },
+  "TAL": {
+    "ticker": "TAL",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/TAL.jpeg",
+    "dimensions": "813x99",
+    "ratio": "8.21",
+    "isSquare": false,
+    "sizeBytes": 51019,
+    "localUrl": "/logos/TAL.png"
   },
   "DHG": {
     "ticker": "DHG",
-    "source": "vietstock-official",
-    "url": "/logos/DHG.png",
-    "externalUrl": "https://finance.vietstock.vn/image/DHG",
-    "sizeBytes": 62608
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/DHG.jpeg",
+    "dimensions": "400x78",
+    "ratio": "5.13",
+    "isSquare": false,
+    "sizeBytes": 62608,
+    "localUrl": "/logos/DHG.png"
+  },
+  "SIP": {
+    "ticker": "SIP",
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/SIP.jpg",
+    "dimensions": "582x617",
+    "ratio": "0.94",
+    "isSquare": true,
+    "sizeBytes": 88797,
+    "localUrl": "/logos/SIP.png"
   },
   "BMP": {
     "ticker": "BMP",
-    "source": "vietstock-official",
-    "url": "/logos/BMP.png",
-    "externalUrl": "https://finance.vietstock.vn/image/BMP",
-    "sizeBytes": 21328
-  },
-  "VCG": {
-    "ticker": "VCG",
-    "source": "vietstock-official",
-    "url": "/logos/VCG.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VCG",
-    "sizeBytes": 5420
-  },
-  "NLG": {
-    "ticker": "NLG",
-    "source": "vietstock-official",
-    "url": "/logos/NLG.png",
-    "externalUrl": "https://finance.vietstock.vn/image/NLG",
-    "sizeBytes": 39907
-  },
-  "BAF": {
-    "ticker": "BAF",
-    "source": "vietstock-official",
-    "url": "/logos/BAF.png",
-    "externalUrl": "https://finance.vietstock.vn/image/BAF",
-    "sizeBytes": 35730
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/BMP.jpeg",
+    "dimensions": "150x71",
+    "ratio": "2.11",
+    "isSquare": false,
+    "sizeBytes": 21328,
+    "localUrl": "/logos/BMP.png"
   },
   "PDR": {
     "ticker": "PDR",
-    "source": "vietstock-official",
-    "url": "/logos/PDR.png",
-    "externalUrl": "https://finance.vietstock.vn/image/PDR",
-    "sizeBytes": 11724
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/PDR.jpg",
+    "dimensions": "499x196",
+    "ratio": "2.55",
+    "isSquare": false,
+    "sizeBytes": 41795,
+    "localUrl": "/logos/PDR.png"
   },
-  "CTR": {
-    "ticker": "CTR",
-    "source": "vietstock-official",
-    "url": "/logos/CTR.png",
-    "externalUrl": "https://finance.vietstock.vn/image/CTR",
-    "sizeBytes": 19675
+  "BAF": {
+    "ticker": "BAF",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/BAF",
+    "dimensions": "2363x1182",
+    "ratio": "2.00",
+    "isSquare": false,
+    "sizeBytes": 35730,
+    "localUrl": "/logos/BAF.png"
+  },
+  "NLG": {
+    "ticker": "NLG",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/NLG",
+    "dimensions": "343x220",
+    "ratio": "1.56",
+    "isSquare": false,
+    "sizeBytes": 39907,
+    "localUrl": "/logos/NLG.png"
+  },
+  "VCG": {
+    "ticker": "VCG",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/VCG.jpeg",
+    "dimensions": "143x86",
+    "ratio": "1.66",
+    "isSquare": false,
+    "sizeBytes": 24862,
+    "localUrl": "/logos/VCG.png"
   },
   "VHC": {
     "ticker": "VHC",
-    "source": "vietstock-official",
-    "url": "/logos/VHC.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VHC",
-    "sizeBytes": 34776
-  },
-  "KLB": {
-    "ticker": "KLB",
-    "source": "vietstock-official",
-    "url": "/logos/KLB.png",
-    "externalUrl": "https://finance.vietstock.vn/image/KLB",
-    "sizeBytes": 30467
-  },
-  "VSH": {
-    "ticker": "VSH",
-    "source": "vietstock-official",
-    "url": "/logos/VSH.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VSH",
-    "sizeBytes": 66975
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/VHC",
+    "dimensions": "445x338",
+    "ratio": "1.32",
+    "isSquare": false,
+    "sizeBytes": 34776,
+    "localUrl": "/logos/VHC.png"
   },
   "TCH": {
     "ticker": "TCH",
-    "source": "vietstock-official",
-    "url": "/logos/TCH.png",
-    "externalUrl": "https://finance.vietstock.vn/image/TCH",
-    "sizeBytes": 63435
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/TCH.jpg",
+    "dimensions": "2031x646",
+    "ratio": "3.14",
+    "isSquare": false,
+    "sizeBytes": 66344,
+    "localUrl": "/logos/TCH.png"
   },
-  "CII": {
-    "ticker": "CII",
-    "source": "vietstock-official",
-    "url": "/logos/CII.png",
-    "externalUrl": "https://finance.vietstock.vn/image/CII",
-    "sizeBytes": 4627
+  "VSH": {
+    "ticker": "VSH",
+    "chosenSource": "24hmoney-png",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/VSH.png",
+    "dimensions": "164x168",
+    "ratio": "0.98",
+    "isSquare": true,
+    "sizeBytes": 69444,
+    "localUrl": "/logos/VSH.png"
   },
-  "DSE": {
-    "ticker": "DSE",
-    "source": "vietstock-official",
-    "url": "/logos/DSE.png",
-    "externalUrl": "https://finance.vietstock.vn/image/DSE",
-    "sizeBytes": 9103
+  "CTR": {
+    "ticker": "CTR",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/CTR.jpeg",
+    "dimensions": "386x150",
+    "ratio": "2.57",
+    "isSquare": false,
+    "sizeBytes": 19675,
+    "localUrl": "/logos/CTR.png"
+  },
+  "KLB": {
+    "ticker": "KLB",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/KLB.jpeg",
+    "dimensions": "2090x392",
+    "ratio": "5.33",
+    "isSquare": false,
+    "sizeBytes": 30467,
+    "localUrl": "/logos/KLB.png"
   },
   "BWE": {
     "ticker": "BWE",
-    "source": "vietstock-official",
-    "url": "/logos/BWE.png",
-    "externalUrl": "https://finance.vietstock.vn/image/BWE",
-    "sizeBytes": 56465
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/BWE.jpeg",
+    "dimensions": "118x118",
+    "ratio": "1.00",
+    "isSquare": true,
+    "sizeBytes": 20104,
+    "localUrl": "/logos/BWE.png"
+  },
+  "DSE": {
+    "ticker": "DSE",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/DSE.jpeg",
+    "dimensions": "300x105",
+    "ratio": "2.86",
+    "isSquare": false,
+    "sizeBytes": 9103,
+    "localUrl": "/logos/DSE.png"
+  },
+  "CII": {
+    "ticker": "CII",
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/CII.jpg",
+    "dimensions": "239x204",
+    "ratio": "1.17",
+    "isSquare": true,
+    "sizeBytes": 15724,
+    "localUrl": "/logos/CII.png"
   },
   "EVF": {
     "ticker": "EVF",
-    "source": "vietstock-official",
-    "url": "/logos/EVF.png",
-    "externalUrl": "https://finance.vietstock.vn/image/EVF",
-    "sizeBytes": 103771
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/EVF",
+    "dimensions": "751x332",
+    "ratio": "2.26",
+    "isSquare": false,
+    "sizeBytes": 103771,
+    "localUrl": "/logos/EVF.png"
   },
   "PVT": {
     "ticker": "PVT",
-    "source": "vietstock-official",
-    "url": "/logos/PVT.png",
-    "externalUrl": "https://finance.vietstock.vn/image/PVT",
-    "sizeBytes": 412986
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/PVT",
+    "dimensions": "1920x1888",
+    "ratio": "1.02",
+    "isSquare": true,
+    "sizeBytes": 412986,
+    "localUrl": "/logos/PVT.png"
   },
   "VTP": {
     "ticker": "VTP",
-    "source": "vietstock-official",
-    "url": "/logos/VTP.png",
-    "externalUrl": "https://finance.vietstock.vn/image/VTP",
-    "sizeBytes": 26526
-  },
-  "DGW": {
-    "ticker": "DGW",
-    "source": "vietstock-official",
-    "url": "/logos/DGW.png",
-    "externalUrl": "https://finance.vietstock.vn/image/DGW",
-    "sizeBytes": 30168
-  },
-  "ORS": {
-    "ticker": "ORS",
-    "source": "vietstock-official",
-    "url": "/logos/ORS.png",
-    "externalUrl": "https://finance.vietstock.vn/image/ORS",
-    "sizeBytes": 73518
+    "chosenSource": "24hmoney-jpg",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/VTP.jpg",
+    "dimensions": "700x400",
+    "ratio": "1.75",
+    "isSquare": false,
+    "sizeBytes": 46162,
+    "localUrl": "/logos/VTP.png"
   },
   "HPA": {
     "ticker": "HPA",
-    "source": "vietstock-official",
-    "url": "/logos/HPA.png",
-    "externalUrl": "https://finance.vietstock.vn/image/HPA",
-    "sizeBytes": 26641
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/HPA",
+    "dimensions": "337x83",
+    "ratio": "4.06",
+    "isSquare": false,
+    "sizeBytes": 26641,
+    "localUrl": "/logos/HPA.png"
+  },
+  "ORS": {
+    "ticker": "ORS",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/ORS.jpeg",
+    "dimensions": "357x150",
+    "ratio": "2.38",
+    "isSquare": false,
+    "sizeBytes": 73518,
+    "localUrl": "/logos/ORS.png"
+  },
+  "DGW": {
+    "ticker": "DGW",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/DGW",
+    "dimensions": "1517x345",
+    "ratio": "4.40",
+    "isSquare": false,
+    "sizeBytes": 30168,
+    "localUrl": "/logos/DGW.png"
   },
   "HAH": {
     "ticker": "HAH",
-    "source": "vietstock-official",
-    "url": "/logos/HAH.png",
-    "externalUrl": "https://finance.vietstock.vn/image/HAH",
-    "sizeBytes": 173537
-  },
-  "DIG": {
-    "ticker": "DIG",
-    "source": "vietstock-official",
-    "url": "/logos/DIG.png",
-    "externalUrl": "https://finance.vietstock.vn/image/DIG",
-    "sizeBytes": 22011
-  },
-  "PHR": {
-    "ticker": "PHR",
-    "source": "vietstock-official",
-    "url": "/logos/PHR.png",
-    "externalUrl": "https://finance.vietstock.vn/image/PHR",
-    "sizeBytes": 18675
-  },
-  "FTS": {
-    "ticker": "FTS",
-    "source": "vietstock-official",
-    "url": "/logos/FTS.png",
-    "externalUrl": "https://finance.vietstock.vn/image/FTS",
-    "sizeBytes": 154100
-  },
-  "PC1": {
-    "ticker": "PC1",
-    "source": "vietstock-official",
-    "url": "/logos/PC1.png",
-    "externalUrl": "https://finance.vietstock.vn/image/PC1",
-    "sizeBytes": 62828
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/HAH",
+    "dimensions": "1339x339",
+    "ratio": "3.95",
+    "isSquare": false,
+    "sizeBytes": 173537,
+    "localUrl": "/logos/HAH.png"
   },
   "HSG": {
     "ticker": "HSG",
-    "source": "vietstock-official",
-    "url": "/logos/HSG.png",
-    "externalUrl": "https://finance.vietstock.vn/image/HSG",
-    "sizeBytes": 331199
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/HSG.jpeg",
+    "dimensions": "289x289",
+    "ratio": "1.00",
+    "isSquare": true,
+    "sizeBytes": 72538,
+    "localUrl": "/logos/HSG.png"
+  },
+  "PC1": {
+    "ticker": "PC1",
+    "chosenSource": "24hmoney-png",
+    "originalUrl": "https://cdn.24hmoney.vn/upload/images_cr/2021-12-03/partner/images/uploaded/dulieudownload/logodn/PC1.png",
+    "dimensions": "204x204",
+    "ratio": "1.00",
+    "isSquare": true,
+    "sizeBytes": 31908,
+    "localUrl": "/logos/PC1.png"
+  },
+  "DIG": {
+    "ticker": "DIG",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/DIG.jpeg",
+    "dimensions": "161x150",
+    "ratio": "1.07",
+    "isSquare": true,
+    "sizeBytes": 22011,
+    "localUrl": "/logos/DIG.png"
+  },
+  "FTS": {
+    "ticker": "FTS",
+    "chosenSource": "vietstock",
+    "originalUrl": "https://finance.vietstock.vn/image/FTS",
+    "dimensions": "2621x759",
+    "ratio": "3.45",
+    "isSquare": false,
+    "sizeBytes": 154100,
+    "localUrl": "/logos/FTS.png"
+  },
+  "PHR": {
+    "ticker": "PHR",
+    "chosenSource": "ruatichsan-jpeg",
+    "originalUrl": "https://ruatichsan.com/images/logos/PHR.jpeg",
+    "dimensions": "115x132",
+    "ratio": "0.87",
+    "isSquare": true,
+    "sizeBytes": 18675,
+    "localUrl": "/logos/PHR.png"
   }
 }
