@@ -221,10 +221,10 @@ Deno.serve(async (req: Request) => {
           )
         }
 
-        const buyVal = Number(q.fBValue || 0)
-        const sellVal = Number(q.fSValue || 0)
-        const buyVol = Number(q.fBVol || 0)
-        const sellVol = Number(q.fSVolume || 0)
+        const buyVal = Number(q.fBValue || 0) * 1000
+        const sellVal = Number(q.fSValue || 0) * 1000
+        const buyVol = Number(q.fBVol || 0) * 10
+        const sellVol = Number(q.fSVolume || 0) * 10
 
         records.push({
           symbol: ticker,
@@ -256,7 +256,7 @@ Deno.serve(async (req: Request) => {
             totalSellValue: sellVal,
             foreignNetVolume: buyVol - sellVol,
             foreignNetValue: buyVal - sellVal,
-            foreignRoom: Number(q.fRoom || 0),
+            foreignRoom: Number(q.fRoom || 0) * 10,
             updatedAt: new Date().toISOString(),
           },
           put_through: putThrough,

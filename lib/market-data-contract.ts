@@ -195,19 +195,13 @@ export function normalizeDepthLevels(levels: unknown[]): CanonicalDepthLevel[] {
  * Universal Foreign Flow Normalizer.
  */
 export function normalizeForeignFlow(raw: any, fallbackPrice?: number | null): CanonicalForeignFlow {
-  const buyVol = normalizeVolume(raw?.totalBuyVolume ?? raw?.buyVolume ?? raw?.fBVol)
-  const sellVol = normalizeVolume(raw?.totalSellVolume ?? raw?.sellVolume ?? raw?.fSVolume)
+  const rawBuyVol = Number(raw?.totalBuyVolume ?? raw?.buyVolume ?? (raw?.fBVol != null ? Number(raw.fBVol) * 10 : 0)) || 0
+  const rawSellVol = Number(raw?.totalSellVolume ?? raw?.sellVolume ?? (raw?.fSVolume != null ? Number(raw.fSVolume) * 10 : 0)) || 0
+  const buyVol = normalizeVolume(rawBuyVol)
+  const sellVol = normalizeVolume(rawSellVol)
   
-  let buyVal = Number(raw?.totalBuyValue ?? raw?.buyValue ?? raw?.fBValue ?? 0)
-  let sellVal = Number(raw?.totalSellValue ?? raw?.sellValue ?? raw?.fSValue ?? 0)
-
-  // Auto-detect broker scaling: If raw value is under-scaled (< vol * 1000), multiply by 100
-  if (buyVol > 0 && buyVal > 0 && buyVal < buyVol * 1000) {
-    buyVal = buyVal * 100
-  }
-  if (sellVol > 0 && sellVal > 0 && sellVal < sellVol * 1000) {
-    sellVal = sellVal * 100
-  }
+  let buyVal = Number(raw?.totalBuyValue ?? raw?.buyValue ?? (raw?.fBValue != null ? Number(raw.fBValue) * 1000 : 0)) || 0
+  let sellVal = Number(raw?.totalSellValue ?? raw?.sellValue ?? (raw?.fSValue != null ? Number(raw.fSValue) * 1000 : 0)) || 0
 
   if (buyVal <= 0 && buyVol > 0 && fallbackPrice && fallbackPrice > 0) {
     buyVal = buyVol * fallbackPrice * 1000
@@ -221,7 +215,7 @@ export function normalizeForeignFlow(raw: any, fallbackPrice?: number | null): C
     ? raw.foreignNetValue
     : (buyVal - sellVal)
 
-  const room = Number(raw?.foreignRoom ?? raw?.availableRoom ?? raw?.fRoom ?? 0)
+  const room = Number(raw?.foreignRoom ?? raw?.availableRoom ?? (raw?.fRoom != null ? Number(raw.fRoom) * 10 : 0)) || 0
   const updatedAt = String(raw?.updatedAt || raw?.updated_at || new Date().toISOString())
 
   return {

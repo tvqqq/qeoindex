@@ -90,11 +90,11 @@ test("depth level normalizer unifies bid/ask depth prices and volumes", () => {
 
 test("foreign flow normalizer guarantees consistent numeric metrics and net calculations", () => {
   const raw = {
-    fBVol: 100000,
-    fSVolume: 40000,
-    fBValue: 2185000,
-    fSValue: 874000,
-    fRoom: 50000000,
+    fBVol: 10000,
+    fSVolume: 4000,
+    fBValue: 218500,
+    fSValue: 87400,
+    fRoom: 5000000,
   }
   const flow = normalizeForeignFlow(raw)
   assert.equal(flow.totalBuyVolume, 100000)

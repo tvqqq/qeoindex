@@ -10,12 +10,19 @@ export interface LiveBatchQuote {
   high?: number | null
   low?: number | null
   avgPrice?: number | null
+  foreignBuyVolume?: number | null
+  foreignSellVolume?: number | null
+  foreignBuyValue?: number | null
+  foreignSellValue?: number | null
+  foreignNetVolume?: number | null
+  foreignNetValue?: number | null
+  foreignRoom?: number | null
 }
 
 /**
  * Fast Batch Live Quote Fetcher for Vietnamese Stocks.
  * Fetches all 100 universe stocks in a single sub-200ms broker feed request.
- * Guarantees 100% price consistency on page refresh, SSR initial load, and intraday bootstrap.
+ * Guarantees 100% price and foreign flow consistency on page refresh, SSR initial load, and intraday bootstrap.
  */
 export async function fetchLiveBatchQuotes(symbols: string[] | readonly string[]): Promise<Record<string, LiveBatchQuote>> {
   if (!symbols.length) return {}
@@ -39,6 +46,16 @@ export async function fetchLiveBatchQuotes(symbols: string[] | readonly string[]
       const change = price != null && ref != null ? Math.round((price - ref) * 100) / 100 : 0
       const changePercent = ref && ref > 0 && price != null ? Math.round(((price - ref) / ref) * 10000) / 100 : 0
       const volume = item.lot ? Number(item.lot) * 10 : 0
+
+      // Foreign flow: volume in lots of 10 -> *10; value in thousands -> *1000
+      const foreignBuyVolume = item.fBVol ? Number(item.fBVol) * 10 : 0
+      const foreignSellVolume = item.fSVolume ? Number(item.fSVolume) * 10 : 0
+      const foreignBuyValue = item.fBValue ? Number(item.fBValue) * 1000 : 0
+      const foreignSellValue = item.fSValue ? Number(item.fSValue) * 1000 : 0
+      const foreignNetVolume = foreignBuyVolume - foreignSellVolume
+      const foreignNetValue = foreignBuyValue - foreignSellValue
+      const foreignRoom = item.fRoom ? Number(item.fRoom) * 10 : null
+
       quotes[symbol] = {
         symbol,
         price,
@@ -51,6 +68,13 @@ export async function fetchLiveBatchQuotes(symbols: string[] | readonly string[]
         high: item.highPrice ? Number(item.highPrice) : price,
         low: item.lowPrice ? Number(item.lowPrice) : price,
         avgPrice: item.avePrice ? Number(item.avePrice) : price,
+        foreignBuyVolume,
+        foreignSellVolume,
+        foreignBuyValue,
+        foreignSellValue,
+        foreignNetVolume,
+        foreignNetValue,
+        foreignRoom,
       }
     }
     return quotes

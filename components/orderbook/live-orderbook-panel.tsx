@@ -1053,11 +1053,15 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
             const limit = nullableNumber(data?.foreignerOrderLimitQuantity ?? data?.orderLimitQuantity ?? data?.totalRoom)
 
             setForeign((current) => {
-              const nextBuyVol = totalBuyVol || (buyVolume > 0 && current ? current.totalBuyVolume + buyVolume : current?.totalBuyVolume || 0)
-              const nextSellVol = totalSellVol || (sellVolume > 0 && current ? current.totalSellVolume + sellVolume : current?.totalSellVolume || 0)
-              const nextBuy = totalBuyVal || (buyValue > 0 && current ? current.totalBuyValue + buyValue : current?.totalBuyValue || 0)
-              const nextSell = totalSellVal || (sellValue > 0 && current ? current.totalSellValue + sellValue : current?.totalSellValue || 0)
+              const nextBuyVol = totalBuyVol > 0 ? totalBuyVol : (buyVolume > 0 && current ? current.totalBuyVolume + buyVolume : (current?.totalBuyVolume || 0))
+              const nextSellVol = totalSellVol > 0 ? totalSellVol : (sellVolume > 0 && current ? current.totalSellVolume + sellVolume : (current?.totalSellVolume || 0))
+              const nextBuy = totalBuyVal > 0 ? totalBuyVal : (buyValue > 0 && current ? current.totalBuyValue + buyValue : (current?.totalBuyValue || 0))
+              const nextSell = totalSellVal > 0 ? totalSellVal : (sellValue > 0 && current ? current.totalSellValue + sellValue : (current?.totalSellValue || 0))
               const nextNet = nextBuy - nextSell
+
+              if (nextBuyVol === 0 && nextSellVol === 0 && current && (current.totalBuyVolume > 0 || current.totalSellVolume > 0)) {
+                return current
+              }
 
               setForeignTimeline((prev) => {
                 const newPoint = {
@@ -1573,8 +1577,9 @@ function ForeignRealtimeCard({
   const buyVol = foreign?.totalBuyVolume ?? 0
   const sellVol = foreign?.totalSellVolume ?? 0
 
-  const buyVal = foreign?.totalBuyValue ?? (buyVol && quotePrice ? buyVol * quotePrice : 0)
-  const sellVal = foreign?.totalSellValue ?? (sellVol && quotePrice ? sellVol * quotePrice : 0)
+  const rawPrice = quotePrice ? (quotePrice >= 500 ? quotePrice : quotePrice * 1000) : 0
+  const buyVal = foreign?.totalBuyValue ?? (buyVol && rawPrice ? buyVol * rawPrice : 0)
+  const sellVal = foreign?.totalSellValue ?? (sellVol && rawPrice ? sellVol * rawPrice : 0)
 
   const netVol = foreignNetVolume ?? (buyVol - sellVol)
   const netVal = foreignNetValue ?? (buyVal - sellVal)
