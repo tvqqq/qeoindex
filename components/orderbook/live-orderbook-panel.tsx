@@ -1363,7 +1363,7 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
     ]
   }, [timeline, currentNetValue, currentBuyValue, currentSellValue])
 
-  const { coordinates, zeroY, netPathD, netAreaD, buyPathD, sellPathD } = useMemo(() => {
+  const { coordinates, zeroY, netPathD, netAreaD, buyPathD, sellPathD, timelineTicks } = useMemo(() => {
     const netVals = points.map((p) => p.netValue)
     const buyVals = points.map((p) => p.buyValue)
     const sellVals = points.map((p) => p.sellValue)
@@ -1390,6 +1390,25 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
     const buyD = coords.reduce((acc, pt, idx) => (idx === 0 ? `M ${pt.x},${pt.buyY}` : `${acc} L ${pt.x},${pt.buyY}`), "")
     const sellD = coords.reduce((acc, pt, idx) => (idx === 0 ? `M ${pt.x},${pt.sellY}` : `${acc} L ${pt.x},${pt.sellY}`), "")
 
+    // Calculate dynamic milestone ticks across only the elapsed time in the chart
+    let ticks: { x: number; time: string; isStart: boolean; isEnd: boolean }[] = []
+    const count = coords.length
+    if (count >= 2) {
+      const stepCount = count <= 5 ? count : 5
+      const indices = Array.from({ length: stepCount }, (_, i) => Math.round((i / (stepCount - 1)) * (count - 1)))
+      ticks = indices.map((idx, i) => {
+        const pt = coords[idx]
+        const rawTime = String(pt?.time ?? "").trim()
+        const formattedTime = rawTime.length >= 5 ? rawTime.slice(0, 5) : (i === 0 ? "09:15" : "Hiện tại")
+        return {
+          x: pt?.x ?? 0,
+          time: formattedTime,
+          isStart: i === 0,
+          isEnd: i === stepCount - 1,
+        }
+      })
+    }
+
     return {
       coordinates: coords,
       minNet: rawMin,
@@ -1399,6 +1418,7 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
       netAreaD: netArea,
       buyPathD: buyD,
       sellPathD: sellD,
+      timelineTicks: ticks,
     }
   }, [points, height])
 
@@ -1459,22 +1479,13 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
           {/* Zero baseline */}
           <line x1="0" y1={zeroY} x2="600" y2={zeroY} stroke="#64748b" strokeDasharray="3 3" strokeOpacity="0.5" strokeWidth="1" />
 
-          {/* Vertical 30-minute interval grid lines */}
-          {[
-            { pct: 12.5, time: "09:45" },
-            { pct: 25.0, time: "10:15" },
-            { pct: 37.5, time: "10:45" },
-            { pct: 50.0, time: "11:15" },
-            { pct: 56.25, time: "11:30" },
-            { pct: 68.75, time: "13:30" },
-            { pct: 81.25, time: "14:00" },
-            { pct: 93.75, time: "14:30" },
-          ].map((grid, i) => (
+          {/* Vertical dynamic interval grid lines */}
+          {timelineTicks.slice(1, -1).map((tick, i) => (
             <line
               key={i}
-              x1={(grid.pct / 100) * 600}
+              x1={tick.x}
               y1="0"
-              x2={(grid.pct / 100) * 600}
+              x2={tick.x}
               y2="140"
               stroke="#ffffff"
               strokeDasharray="2 3"
@@ -1533,18 +1544,16 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
         ) : null}
       </div>
 
-      {/* 30-minute X-axis Time Milestones */}
-      <div className="flex items-center justify-between px-1 text-[9px] font-mono text-muted-2 border-t border-border/40 pt-1 select-none">
-        <span className="text-muted font-semibold">09:15</span>
-        <span className="hidden sm:inline">09:45</span>
-        <span>10:15</span>
-        <span className="hidden sm:inline">10:45</span>
-        <span>11:15</span>
-        <span className="text-zinc-500 font-semibold">11:30 | 13:00</span>
-        <span className="hidden sm:inline">13:30</span>
-        <span>14:00</span>
-        <span>14:30</span>
-        <span className="text-muted font-semibold">14:45</span>
+      {/* Dynamic X-axis Time Milestones based on actual elapsed session points */}
+      <div className="flex items-center justify-between px-1 text-[9.5px] font-mono text-muted-2 border-t border-border/40 pt-1 select-none">
+        {timelineTicks.map((tick, i) => (
+          <span
+            key={i}
+            className={tick.isStart || tick.isEnd ? "text-foreground font-semibold" : "text-muted"}
+          >
+            {tick.time}
+          </span>
+        ))}
       </div>
     </div>
   )
@@ -1639,17 +1648,18 @@ function ForeignRealtimeCard({
   foreignNetVolume,
   foreignNetValue,
   roomPercentage,
+  latestTradeTime,
 }: {
   foreign: ForeignSnapshot | null
   quotePrice?: number | null
-  foreignNetVolume: number | null
-  foreignNetValue: number | null
-  roomPercentage: number | null
+  foreignNetVolume?: number | null
+  foreignNetValue?: number | null
+  roomPercentage?: number | null
+  latestTradeTime?: string | number
 }) {
   const buyVolFlash = useFlashAnimation(foreign?.totalBuyVolume, 1)
   const sellVolFlash = useFlashAnimation(foreign?.totalSellVolume, 1)
   const netVolFlash = useFlashAnimation(foreignNetVolume, 1)
-  const roomFlash = useFlashAnimation(foreign?.availableRoom, 1)
 
   const buyVol = foreign?.totalBuyVolume ?? 0
   const sellVol = foreign?.totalSellVolume ?? 0
@@ -1666,9 +1676,19 @@ function ForeignRealtimeCard({
   const isNetValPos = netVal > 0
   const isNetValNeg = netVal < 0
 
+  const displayTime = useMemo(() => {
+    if (latestTradeTime) {
+      return timeLabel(latestTradeTime)
+    }
+    if (foreign?.updatedAt && !foreign.updatedAt.includes("09:15:00")) {
+      return timeLabel(foreign.updatedAt)
+    }
+    return new Date().toLocaleTimeString("vi-VN", { hour12: false })
+  }, [latestTradeTime, foreign?.updatedAt])
+
   return (
-    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-2.5 font-mono text-xs space-y-2">
-      {/* Title Header matching Image 1 */}
+    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-3 font-mono text-xs space-y-2.5">
+      {/* Title Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="relative flex h-2 w-2">
@@ -1679,22 +1699,22 @@ function ForeignRealtimeCard({
             GIAO DỊCH NĐTNN
           </span>
         </div>
-        <span className="text-[10px] text-muted font-mono">
-          {foreign?.updatedAt ? timeLabel(foreign.updatedAt) : "Realtime"}
+        <span className="text-[10.5px] text-muted font-mono font-medium">
+          {displayTime}
         </span>
       </div>
 
-      {/* Grid Table matching Image 1 */}
+      {/* Grid Table */}
       <div className="rounded-lg border border-border/60 bg-[#161718] overflow-hidden text-[11px] sm:text-xs">
         {/* Row 1: Khối Lượng Header */}
-        <div className="grid grid-cols-[0.9fr_0.9fr_1.2fr] items-center bg-[#1c1e1f] px-2.5 py-1 text-[10.5px] font-bold text-muted-2 border-b border-border/40">
+        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center bg-[#1c1e1f] px-3 py-1.5 text-[10.5px] font-bold text-muted-2 border-b border-border/40">
           <span>KL Mua</span>
           <span className="text-center">KL Bán</span>
           <span className="text-right">KL Mua-Bán</span>
         </div>
 
         {/* Row 1: Khối Lượng Values */}
-        <div className="grid grid-cols-[0.9fr_0.9fr_1.2fr] items-center px-2.5 py-1.5 text-xs sm:text-[12.5px] font-bold border-b border-border/40 whitespace-nowrap">
+        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center px-3 py-2 text-xs sm:text-[13px] font-bold border-b border-border/40 whitespace-nowrap">
           <span
             className={`text-up transition-colors ${
               buyVolFlash === "up" ? "flash-up font-black" : buyVolFlash === "down" ? "flash-down font-black" : ""
@@ -1723,14 +1743,14 @@ function ForeignRealtimeCard({
         </div>
 
         {/* Row 2: Giá Trị Header */}
-        <div className="grid grid-cols-[0.9fr_0.9fr_1.2fr] items-center bg-[#1c1e1f] px-2.5 py-1 text-[10.5px] font-bold text-muted-2 border-b border-border/40">
+        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center bg-[#1c1e1f] px-3 py-1.5 text-[10.5px] font-bold text-muted-2 border-b border-border/40">
           <span>GT Mua</span>
           <span className="text-center">GT Bán</span>
           <span className="text-right">GT Mua-Bán</span>
         </div>
 
         {/* Row 2: Giá Trị Values with GT Mua-Bán in a label pill */}
-        <div className="grid grid-cols-[0.9fr_0.9fr_1.2fr] items-center px-2.5 py-1.5 text-xs sm:text-[12.5px] font-bold whitespace-nowrap">
+        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center px-3 py-2 text-xs sm:text-[13px] font-bold whitespace-nowrap">
           <span className="text-up">
             {buyVal ? formatMarketValue(buyVal) : "—"}
           </span>
@@ -1740,7 +1760,7 @@ function ForeignRealtimeCard({
           {/* Highlighted prominent GT Mua-Bán inside a label pill */}
           <div className="flex justify-end items-center">
             <span
-              className={`inline-flex items-center px-1.5 py-0.5 rounded-md font-bold text-[11px] sm:text-xs border whitespace-nowrap shrink-0 leading-tight ${
+              className={`inline-flex items-center px-2 py-0.5 rounded-md font-bold text-xs sm:text-[12.5px] border whitespace-nowrap shrink-0 leading-tight ${
                 isNetValPos
                   ? "bg-up/15 text-up border-up/40 shadow-sm"
                   : isNetValNeg
@@ -1782,11 +1802,11 @@ function TradeInitiativeAndMarketStatsCard({
   const totalVolume = Math.max(quote?.totalVolume ?? 0, tradeStats.totalTraded)
 
   return (
-    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-2.5 font-mono text-xs space-y-2">
+    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-3 font-mono text-xs space-y-2.5">
       {/* 1. 4 Records replacing the bar */}
       <div className="rounded-lg border border-border/60 bg-[#161718] divide-y divide-border/40 overflow-hidden text-[11px] sm:text-xs">
         {/* Row 1: Tổng KL khớp */}
-        <div className="flex items-center justify-between px-2.5 py-1 bg-[#1c1e1f]/60">
+        <div className="flex items-center justify-between px-3 py-2 bg-[#1c1e1f]/60">
           <span className="text-foreground/90 font-medium font-sans">
             Tổng KL khớp {symbol}
           </span>
@@ -1796,33 +1816,33 @@ function TradeInitiativeAndMarketStatsCard({
         </div>
 
         {/* Row 2: KL MUA chủ động */}
-        <div className="flex items-center justify-between px-2.5 py-1">
+        <div className="flex items-center justify-between px-3 py-2">
           <span className="text-muted-2 flex items-center gap-1 font-sans">
             KL MUA chủ động
           </span>
           <span className="flex items-center gap-1.5 font-bold text-up sm:text-xs whitespace-nowrap">
             <span>{formatVolume(tradeStats.buyVol)}</span>
-            <span className="rounded px-1 py-0.2 text-[8px] font-bold border border-up/40 bg-up/15 text-up leading-none">
+            <span className="rounded px-1.5 py-0.2 text-[8px] font-bold border border-up/40 bg-up/15 text-up leading-none">
               M
             </span>
           </span>
         </div>
 
         {/* Row 3: KL BÁN chủ động */}
-        <div className="flex items-center justify-between px-2.5 py-1">
+        <div className="flex items-center justify-between px-3 py-2">
           <span className="text-muted-2 flex items-center gap-1 font-sans">
             KL BÁN chủ động
           </span>
           <span className="flex items-center gap-1.5 font-bold text-down sm:text-xs whitespace-nowrap">
             <span>{formatVolume(tradeStats.sellVol)}</span>
-            <span className="rounded px-1 py-0.2 text-[8px] font-bold border border-down/40 bg-down/15 text-down leading-none">
+            <span className="rounded px-1.5 py-0.2 text-[8px] font-bold border border-down/40 bg-down/15 text-down leading-none">
               B
             </span>
           </span>
         </div>
 
         {/* Row 4: KL KHÔNG XÁC ĐỊNH */}
-        <div className="flex items-center justify-between px-2.5 py-1 bg-[#1c1e1f]/40">
+        <div className="flex items-center justify-between px-3 py-2 bg-[#1c1e1f]/40">
           <span className="text-muted-2 font-sans">
             KL KHÔNG XÁC ĐỊNH
           </span>
@@ -1833,51 +1853,51 @@ function TradeInitiativeAndMarketStatsCard({
       </div>
 
       {/* 2. Thông số phiên */}
-      <div className="border-t border-border/50 pt-1.5">
-        <div className="text-[10px] uppercase tracking-wider text-muted-2 font-bold mb-1 flex items-center justify-between">
+      <div className="border-t border-border/50 pt-2">
+        <div className="text-[10px] uppercase tracking-wider text-muted-2 font-bold mb-1.5 flex items-center justify-between">
           <span>THÔNG SỐ PHIÊN</span>
         </div>
-        <div className="grid grid-cols-3 gap-1 text-center">
+        <div className="grid grid-cols-3 gap-1.5 text-center">
           {/* Row 1: Sàn - TC - Trần */}
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1 flex flex-col justify-center">
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
             <div className="text-[9px] text-muted-2 uppercase font-semibold">Sàn</div>
-            <div className="text-xs sm:text-[12px] font-bold text-[#22b8cf] whitespace-nowrap">{formatPrice(quote?.floor)}</div>
+            <div className="text-xs sm:text-[13px] font-bold text-[#22b8cf] whitespace-nowrap">{formatPrice(quote?.floor)}</div>
           </div>
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1 flex flex-col justify-center">
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
             <div className="text-[9px] text-muted-2 uppercase font-semibold">TC</div>
-            <div className="text-xs sm:text-[12px] font-bold text-ref whitespace-nowrap">{formatPrice(quote?.reference)}</div>
+            <div className="text-xs sm:text-[13px] font-bold text-ref whitespace-nowrap">{formatPrice(quote?.reference)}</div>
           </div>
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1 flex flex-col justify-center">
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
             <div className="text-[9px] text-muted-2 uppercase font-semibold">Trần</div>
-            <div className="text-xs sm:text-[12px] font-bold text-ceiling whitespace-nowrap">{formatPrice(quote?.ceiling)}</div>
+            <div className="text-xs sm:text-[13px] font-bold text-ceiling whitespace-nowrap">{formatPrice(quote?.ceiling)}</div>
           </div>
 
           {/* Row 2: Thấp - TB - Cao */}
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1 flex flex-col justify-center">
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
             <div className="text-[9px] text-muted-2 uppercase font-semibold">Thấp</div>
-            <div className="text-xs sm:text-[12px] font-bold text-foreground whitespace-nowrap">{formatPrice(quote?.low)}</div>
+            <div className="text-xs sm:text-[13px] font-bold text-foreground whitespace-nowrap">{formatPrice(quote?.low)}</div>
           </div>
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1 flex flex-col justify-center">
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
             <div className="text-[9px] text-muted-2 uppercase font-semibold">TB</div>
-            <div className="text-xs sm:text-[12px] font-bold text-foreground whitespace-nowrap">{formatPrice(quote?.avgPrice)}</div>
+            <div className="text-xs sm:text-[13px] font-bold text-foreground whitespace-nowrap">{formatPrice(quote?.avgPrice)}</div>
           </div>
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1 flex flex-col justify-center">
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
             <div className="text-[9px] text-muted-2 uppercase font-semibold">Cao</div>
-            <div className="text-xs sm:text-[12px] font-bold text-foreground whitespace-nowrap">{formatPrice(quote?.high)}</div>
+            <div className="text-xs sm:text-[13px] font-bold text-foreground whitespace-nowrap">{formatPrice(quote?.high)}</div>
           </div>
 
           {/* Row 3: Spread - Tổng KL - Tổng GT */}
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1 flex flex-col justify-center">
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
             <div className="text-[9px] text-muted-2 uppercase font-semibold">Spread</div>
-            <div className="text-xs sm:text-[12px] font-bold text-foreground whitespace-nowrap">{spread !== null && spread !== undefined && spread > 0 ? formatPrice(spread) : "—"}</div>
+            <div className="text-xs sm:text-[13px] font-bold text-foreground whitespace-nowrap">{spread !== null && spread !== undefined && spread > 0 ? formatPrice(spread) : "—"}</div>
           </div>
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1 flex flex-col justify-center">
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
             <div className="text-[9px] text-muted-2 uppercase font-semibold">Tổng KL</div>
-            <div className="text-xs sm:text-[12px] font-bold text-foreground whitespace-nowrap">{formatCompactVolume(totalVolume)}</div>
+            <div className="text-xs sm:text-[13px] font-bold text-foreground whitespace-nowrap">{formatCompactVolume(totalVolume)}</div>
           </div>
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1 flex flex-col justify-center">
+          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
             <div className="text-[9px] text-muted-2 uppercase font-semibold">Tổng GT</div>
-            <div className="text-xs sm:text-[12px] font-bold text-foreground whitespace-nowrap">
+            <div className="text-xs sm:text-[13px] font-bold text-foreground whitespace-nowrap">
               {(() => {
                 const rawP = quote?.price ? (quote.price >= 500 ? quote.price : quote.price * 1000) : 0
                 if (quote?.totalValue) return formatMarketValue(quote.totalValue)
@@ -2792,10 +2812,11 @@ export function LiveOrderBookPanel({
                         {/* Widget 1: Realtime Khối Ngoại NN */}
                         <ForeignRealtimeCard
                           foreign={stream.foreign}
-                          quotePrice={quote?.price}
+                          quotePrice={activePrice}
                           foreignNetVolume={foreignNetVolume}
                           foreignNetValue={foreignNetValue}
                           roomPercentage={roomPercentage}
+                          latestTradeTime={stream.trades[0]?.time}
                         />
 
                         {/* Widget 2: Lực Mua/Bán Chủ Động & Thông số phiên (Sàn, TC, Trần, Thấp, Cao, TB, Spread, Tổng KL, Tổng GT) */}
