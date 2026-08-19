@@ -12,6 +12,8 @@ import type { IntradayPoint } from "@/lib/intraday-5m"
 
 export const dynamic = "force-dynamic"
 
+const INITIAL_HISTORY_POINTS = 90
+
 export default async function Page() {
   const isSessionOpen = isTradingSessionOpen(new Date())
 
@@ -41,7 +43,9 @@ export default async function Page() {
   for (const stock of universe) {
     const snap = snapshots[stock.ticker]
     const live = liveQuotes[stock.ticker]
-    const intraday = Array.isArray(snap?.intraday_1m) ? (snap.intraday_1m as unknown as IntradayPoint[]) : []
+    const intraday = Array.isArray(snap?.intraday_1m)
+      ? (snap.intraday_1m as unknown as IntradayPoint[]).slice(-INITIAL_HISTORY_POINTS)
+      : []
     const lastBarClose = intraday.length > 0 ? (intraday[intraday.length - 1].close ?? (intraday[intraday.length - 1] as any)?.c) : null
     const firstBarOpen = intraday.length > 0 ? ((intraday[0] as any)?.open ?? (intraday[0] as any)?.o ?? intraday[0]?.close) : null
 
