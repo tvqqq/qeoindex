@@ -55,11 +55,11 @@ test("daily performance stays anchored to reference price, never session open", 
   assert.match(stockSource, /giá tham chiếu \(đóng cửa phiên trước\)/)
 })
 
-test("strong gainer highlight remains reduced-motion safe", () => {
+test("strong gainer highlight is static and therefore reduced-motion safe", () => {
   assert.match(stockSource, /changePercent \?\? 0\) >= 3/)
   assert.match(stockSource, /strong-gainer border-up\/60/)
-  assert.match(cssSource, /\.strong-gainer\s*\{\s*animation: strong-gainer-pulse/)
-  assert.match(cssSource, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.strong-gainer\s*\{\s*animation: none;/)
+  assert.match(cssSource, /\.strong-gainer\s*\{\s*border-color:/)
+  assert.doesNotMatch(cssSource, /\.strong-gainer\s*\{\s*animation:/)
 })
 
 test("after-close fallback still feeds both visible price and mini chart", () => {
@@ -70,11 +70,22 @@ test("after-close fallback still feeds both visible price and mini chart", () =>
   assert.match(stockSource, /formatBoardPrice\(quote\?\.price\)/)
 })
 
-test("DNSE websocket messages are coalesced into animation-frame batches", () => {
-  assert.match(boardSource, /let messageQueue: Array<\(\) => void> = \[\]/)
+test("DNSE websocket messages use animation-frame buffering without retaining closures", () => {
+  assert.match(boardSource, /let messageQueue: string\[\] = \[\]/)
   assert.match(boardSource, /window\.requestAnimationFrame\(flushMessageQueue\)/)
   assert.match(boardSource, /window\.cancelAnimationFrame\(messageFrame\)/)
-  assert.match(boardSource, /const raw = event\.data[\s\S]*?scheduleMessage\(\(\) => \{/)
-  assert.match(boardSource, /for \(const process of queued\) process\(\)/)
+  assert.match(boardSource, /socket\.onmessage = \(event\) =>[\s\S]*?scheduleMessage\(event\.data\)/)
+  assert.match(boardSource, /for \(const raw of queued\)/)
   assert.match(boardSource, /clearMessageQueue\(\)[\s\S]*?socket\.close\(1000, "board closed"\)/)
+})
+
+test("realtime market state is buffered outside React and committed at a bounded UI rate", () => {
+  assert.match(boardSource, /const MARKET_UI_COMMIT_MS = 100/)
+  assert.match(boardSource, /const quotesRef = useRef\(quotes\)/)
+  assert.match(boardSource, /const priceHistoryRef = useRef\(priceHistory\)/)
+  assert.match(boardSource, /const updateLiveQuotes = useCallback/)
+  assert.match(boardSource, /const updateLiveHistory = useCallback/)
+  assert.match(boardSource, /setQuotes\(quotesRef\.current\)/)
+  assert.match(boardSource, /setPriceHistory\(priceHistoryRef\.current\)/)
+  assert.doesNotMatch(boardSource, /setLastMessageAt\(receivedAt\)/)
 })

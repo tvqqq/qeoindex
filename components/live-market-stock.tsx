@@ -40,16 +40,20 @@ export interface LiveStockQuote {
   updatedAt: string
 }
 
+const BOARD_PRICE_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 })
+const BOARD_VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN")
+const MAX_BOARD_SPARK_POINTS = 48
+
 export function formatBoardPrice(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
-  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value)
+  return BOARD_PRICE_FORMATTER.format(value)
 }
 
 export function formatBoardVolume(value?: number) {
   if (!value || value <= 0) return "—"
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)}tr`
   if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`
-  return value.toLocaleString("vi-VN")
+  return BOARD_VOLUME_FORMATTER.format(value)
 }
 
 export function formatForeignNetValue(value?: number | null) {
@@ -101,7 +105,7 @@ function sparkData(history: number[], livePrice?: number | null) {
   if (!valid.length && livePrice) return [livePrice, livePrice]
 
   const anchor = valid.at(-1)!
-  const normalized = valid.slice(-90).map((price) => normalizeMarketPrice(price, anchor) ?? price)
+  const normalized = valid.slice(-MAX_BOARD_SPARK_POINTS).map((price) => normalizeMarketPrice(price, anchor) ?? price)
 
   if (livePrice && Number.isFinite(livePrice) && livePrice > 0) {
     const liveNormalized = normalizeMarketPrice(livePrice, anchor)
@@ -211,7 +215,7 @@ export const LiveStockRow = memo(function LiveStockRow({
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen() }
       }}
-      className={`group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(38px,1fr)_68px] items-center gap-1 rounded-xl border bg-[#0d1217] px-2 py-2 transition-colors hover:bg-[#141a21] hover:border-white/[0.16] focus:outline-none focus:ring-1 focus:ring-brand ${
+      className={`board-stock-row group relative grid min-h-[58px] cursor-pointer grid-cols-[46px_minmax(38px,1fr)_68px] items-center gap-1 rounded-xl border bg-[#0d1217] px-2 py-2 transition-colors hover:bg-[#141a21] hover:border-white/[0.16] focus:outline-none focus:ring-1 focus:ring-brand ${
         isWhaleActive
           ? "whale-golden-pulse"
           : priceFlash === "up"
@@ -247,7 +251,6 @@ export const LiveStockRow = memo(function LiveStockRow({
             </button>
           )}
         </div>
-        {/* GT Mua - Bán Khối ngoại realtime: NN mua = Xám đậm (zinc-300), NN bán = Xám nhạt (zinc-500) */}
         <div
           className={`mt-1 font-mono text-[9.5px] italic leading-none truncate ${
             foreign.tone === "buy" ? "text-zinc-300 font-semibold" : foreign.tone === "sell" ? "text-zinc-500 font-normal" : "text-zinc-600"
@@ -259,7 +262,7 @@ export const LiveStockRow = memo(function LiveStockRow({
       </div>
 
       <div className="flex min-w-0 items-center justify-center overflow-hidden">
-        <Sparkline data={chart} refValue={chartReference} color={marketToneHex(tone)} width={50} height={26} strokeWidth={1.8} showDot />
+        <Sparkline data={chart} refValue={chartReference} color={marketToneHex(tone)} width={50} height={26} strokeWidth={1.8} showDot fill={false} />
       </div>
 
       <div className="flex min-w-0 flex-col items-end gap-1">
@@ -311,7 +314,7 @@ export const LiveMoverCard = memo(function LiveMoverCard({
 
   return (
     <div
-      className={`group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-[#0c1015] px-4 py-3 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-colors hover:border-white/[0.18] hover:bg-[#141a21] ${
+      className={`board-stock-row group relative grid min-h-[100px] grid-cols-[96px_1fr_104px] items-center gap-4 rounded-2xl border bg-[#0c1015] px-4 py-3 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-colors hover:border-white/[0.18] hover:bg-[#141a21] ${
         isWhaleActive
           ? "whale-golden-pulse"
           : priceFlash === "up"
@@ -354,7 +357,7 @@ export const LiveMoverCard = memo(function LiveMoverCard({
         <div className="mt-1 text-[10px] text-muted">{stock.sector}</div>
       </div>
       <div className="flex justify-center">
-        <Sparkline data={chart} refValue={chartReference} color={marketToneHex(tone)} width={160} height={52} strokeWidth={2.2} showDot />
+        <Sparkline data={chart} refValue={chartReference} color={marketToneHex(tone)} width={160} height={52} strokeWidth={2.2} showDot fill={false} />
       </div>
       <div className="flex flex-col items-end gap-2 text-right">
         {quote ? <MarketChangePill value={quote.changePercent} tone={tone} title="% thay đổi so với giá tham chiếu (đóng cửa phiên trước)" /> : <span className="text-muted-2">—</span>}

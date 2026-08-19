@@ -13,10 +13,12 @@ interface SparklineProps {
   className?: string
 }
 
+const MAX_SPARKLINE_POINTS = 48
+
 /**
- * Professional Smooth SVG Sparkline with Dynamic Intraday Auto-Fit Scaling.
- * Uses Monotonic Cubic Spline / Smooth Bézier Curves and Gradient Fill
- * to accurately depict intraday price action, waves, and momentum.
+ * Lightweight SVG sparkline for dense market boards.
+ * Keeps the visible shape but caps path complexity so hundreds of live rows
+ * do not continuously rebuild large SVG paths on slower machines.
  */
 export const Sparkline = memo(function Sparkline({
   data,
@@ -36,15 +38,18 @@ export const Sparkline = memo(function Sparkline({
   const dataKey = data.length > 0 ? `${data.length}-${data[0]}-${data[data.length - 1]}-${ref}` : ""
 
   const computed = useMemo(() => {
-    const points = data.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
-    if (points.length < 2) return null
+    const valid = data.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
+    if (valid.length < 2) return null
 
-    // 1. Dynamic Auto-Fit Range: Scale strictly to actual price action high & low
+    const step = Math.max(1, Math.ceil(valid.length / MAX_SPARKLINE_POINTS))
+    const points = valid.length <= MAX_SPARKLINE_POINTS
+      ? valid
+      : valid.filter((_, index) => index % step === 0 || index === valid.length - 1)
+
+    // Dynamic auto-fit range.
     const rawMin = Math.min(...points)
     const rawMax = Math.max(...points)
     const delta = rawMax - rawMin
-
-    // Add 15% top & bottom padding so waves are clearly visible without touching boundary
     const padding = delta > 0 ? delta * 0.15 : (rawMin * 0.005 || 0.05)
     const min = rawMin - padding
     const max = rawMax + padding
@@ -61,7 +66,6 @@ export const Sparkline = memo(function Sparkline({
       return [x, y]
     })
 
-    // 2. Smooth Cubic Spline Bézier Curve Path
     let path = `M ${coords[0][0].toFixed(2)},${coords[0][1].toFixed(2)}`
     for (let i = 0; i < coords.length - 1; i++) {
       const [x0, y0] = coords[i]
@@ -74,7 +78,6 @@ export const Sparkline = memo(function Sparkline({
     const lastX = last[0]
     const lastY = last[1]
 
-    // 3. Clear Reference Baseline Y (anchored within visible boundary)
     let refY: number | null = null
     if (ref != null) {
       const calculatedRefY = padY + usableH - ((ref - min) / range) * usableH
@@ -82,7 +85,6 @@ export const Sparkline = memo(function Sparkline({
     }
 
     const uid = Math.abs(Math.round(coords[0][0] * 100)) + "-" + color.replace(/[^a-z0-9]/gi, "")
-
     return { path, lastX, lastY, refY, padX, uid }
   }, [dataKey, ref, width, height, strokeWidth, color])
 
@@ -98,7 +100,7 @@ export const Sparkline = memo(function Sparkline({
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       aria-hidden="true"
-      shapeRendering="geometricPrecision"
+      shapeRendering="optimizeSpeed"
       className={`overflow-visible select-none ${className}`.trim()}
     >
       <defs>
@@ -111,22 +113,19 @@ export const Sparkline = memo(function Sparkline({
         )}
       </defs>
 
-      {/* Dotted Reference Baseline (Crisp & Visible) */}
       {hasRef && refY != null && (
-        <g opacity={0.85}>
-          <line
-            x1={0}
-            x2={width}
-            y1={refY}
-            y2={refY}
-            stroke={refColor}
-            strokeDasharray="2.5 2"
-            strokeWidth={1.15}
-          />
-        </g>
+        <line
+          x1={0}
+          x2={width}
+          y1={refY}
+          y2={refY}
+          stroke={refColor}
+          strokeDasharray="2.5 2"
+          strokeWidth={1.15}
+          opacity={0.85}
+        />
       )}
 
-      {/* Gradient Area Fill */}
       {fill && (
         <path
           d={`${path} L ${lastX.toFixed(2)},${height} L ${padX.toFixed(2)},${height} Z`}
@@ -135,7 +134,6 @@ export const Sparkline = memo(function Sparkline({
         />
       )}
 
-      {/* Main Smooth Sparkline Stroke */}
       <path
         d={path}
         fill="none"
@@ -145,7 +143,6 @@ export const Sparkline = memo(function Sparkline({
         strokeLinecap="round"
       />
 
-      {/* End Point Glow Dot */}
       {showDot && (
         <>
           <circle cx={lastX} cy={lastY} r={strokeWidth + 1.2} fill={color} fillOpacity={0.25} />
