@@ -11,6 +11,12 @@ export interface StockInitialMeta {
   floor?: number
   changePercent?: number
   volume?: number
+  foreignBuyVolume?: number
+  foreignSellVolume?: number
+  foreignBuyValue?: number
+  foreignSellValue?: number
+  foreignNetValue?: number
+  foreignRoom?: number
   history?: number[]
 }
 

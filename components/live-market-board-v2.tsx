@@ -1181,6 +1181,12 @@ export function LiveMarketBoardV2({
         floor: q?.floor,
         changePercent: q?.changePercent,
         volume: q?.volume,
+        foreignBuyVolume: q?.foreignBuyVolume,
+        foreignSellVolume: q?.foreignSellVolume,
+        foreignBuyValue: q?.foreignBuyValue,
+        foreignSellValue: q?.foreignSellValue,
+        foreignNetValue: q?.foreignNetValue,
+        foreignRoom: q?.foreignRoom,
         history: h,
       })
     },

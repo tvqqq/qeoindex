@@ -27,6 +27,7 @@ import { normalizeMarketPrice } from "@/lib/intraday-5m"
 import { useFlashAnimation, usePriceFlashAnimation } from "@/lib/use-flash-animation"
 import { useWhaleConfetti, ConfettiOverlay } from "@/components/orderbook/confetti"
 import { calculateSessionCountdown } from "@/lib/session-countdown"
+import { calculateForeignRoomPercent } from "@/lib/eod-shares"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
 import { fetchOrderbookFromSupabaseDirect, subscribeToOrderbookRealtime } from "@/lib/supabase/browser-orderbook"
 import { StockLogo } from "@/components/stock-logo"
@@ -464,7 +465,27 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   const [bids, setBids] = useState<DepthLevel[]>(() => cachedInitial?.bids ?? [])
   const [asks, setAsks] = useState<DepthLevel[]>(() => cachedInitial?.asks ?? [])
   const [trades, setTrades] = useState<StreamTrade[]>(() => cachedInitial?.trades ?? [])
-  const [foreign, setForeign] = useState<ForeignSnapshot | null>(() => cachedInitial?.foreign ?? null)
+  const [foreign, setForeign] = useState<ForeignSnapshot | null>(() => {
+    if (cachedInitial?.foreign) return cachedInitial.foreign
+    if (initialMeta?.foreignBuyVolume || initialMeta?.foreignSellVolume || initialMeta?.foreignNetValue) {
+      const buyVol = initialMeta.foreignBuyVolume || 0
+      const sellVol = initialMeta.foreignSellVolume || 0
+      const buyVal = initialMeta.foreignBuyValue || (buyVol && initialMeta.price ? buyVol * (initialMeta.price >= 500 ? initialMeta.price : initialMeta.price * 1000) : 0)
+      const sellVal = initialMeta.foreignSellValue || (sellVol && initialMeta.price ? sellVol * (initialMeta.price >= 500 ? initialMeta.price : initialMeta.price * 1000) : 0)
+      return {
+        symbol,
+        totalBuyVolume: buyVol,
+        totalSellVolume: sellVol,
+        totalBuyValue: buyVal,
+        totalSellValue: sellVal,
+        availableRoom: initialMeta.foreignRoom ?? null,
+        orderLimitQuantity: null,
+        listedShare: null,
+        updatedAt: new Date().toISOString(),
+      }
+    }
+    return null
+  })
   const [foreignEvents, setForeignEvents] = useState<ForeignFlowEvent[]>([])
   const [foreignTimeline, setForeignTimeline] = useState<ForeignTimelinePoint[]>(() => cachedInitial?.foreignTimeline ?? [])
   const [putThroughDeals, setPutThroughDeals] = useState<PutThroughDeal[]>(() => cachedInitial?.putThrough ?? [])
@@ -534,6 +555,26 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           totalVolume: initialMeta.volume,
           volume: initialMeta.volume,
           updatedAt: new Date().toISOString(),
+        })
+      }
+      if (initialMeta.foreignBuyVolume || initialMeta.foreignSellVolume || initialMeta.foreignNetValue) {
+        const buyVol = initialMeta.foreignBuyVolume || 0
+        const sellVol = initialMeta.foreignSellVolume || 0
+        const buyVal = initialMeta.foreignBuyValue || (buyVol && initialMeta.price ? buyVol * (initialMeta.price >= 500 ? initialMeta.price : initialMeta.price * 1000) : 0)
+        const sellVal = initialMeta.foreignSellValue || (sellVol && initialMeta.price ? sellVol * (initialMeta.price >= 500 ? initialMeta.price : initialMeta.price * 1000) : 0)
+        setForeign((curr) => {
+          if (curr && (curr.totalBuyVolume > 0 || curr.totalSellVolume > 0)) return curr
+          return {
+            symbol,
+            totalBuyVolume: buyVol,
+            totalSellVolume: sellVol,
+            totalBuyValue: buyVal,
+            totalSellValue: sellVal,
+            availableRoom: initialMeta.foreignRoom ?? null,
+            orderLimitQuantity: null,
+            listedShare: null,
+            updatedAt: new Date().toISOString(),
+          }
         })
       }
       if (initialMeta.history?.length) {
@@ -1416,6 +1457,30 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
           {/* Zero baseline */}
           <line x1="0" y1={zeroY} x2="600" y2={zeroY} stroke="#64748b" strokeDasharray="3 3" strokeOpacity="0.5" strokeWidth="1" />
 
+          {/* Vertical 30-minute interval grid lines */}
+          {[
+            { pct: 12.5, time: "09:45" },
+            { pct: 25.0, time: "10:15" },
+            { pct: 37.5, time: "10:45" },
+            { pct: 50.0, time: "11:15" },
+            { pct: 56.25, time: "11:30" },
+            { pct: 68.75, time: "13:30" },
+            { pct: 81.25, time: "14:00" },
+            { pct: 93.75, time: "14:30" },
+          ].map((grid, i) => (
+            <line
+              key={i}
+              x1={(grid.pct / 100) * 600}
+              y1="0"
+              x2={(grid.pct / 100) * 600}
+              y2="140"
+              stroke="#ffffff"
+              strokeDasharray="2 3"
+              strokeOpacity="0.08"
+              strokeWidth="1"
+            />
+          ))}
+
           {/* Net Flow Fill Area */}
           <path d={netAreaD} fill={isNetPositive ? "url(#foreignNetGradPos)" : "url(#foreignNetGradNeg)"} />
 
@@ -1463,11 +1528,21 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
             <span className="text-muted">·</span>
             <span className="text-down font-semibold">Bán: {formatMarketValue(hovered.sellValue)}</span>
           </div>
-        ) : (
-          <div className="pointer-events-none absolute bottom-1 right-2 font-mono text-[9px] text-muted-2">
-            Đầu phiên 09:15 ➔ Hiện tại
-          </div>
-        )}
+        ) : null}
+      </div>
+
+      {/* 30-minute X-axis Time Milestones */}
+      <div className="flex items-center justify-between px-1 text-[9px] font-mono text-muted-2 border-t border-border/40 pt-1 select-none">
+        <span className="text-muted font-semibold">09:15</span>
+        <span className="hidden sm:inline">09:45</span>
+        <span>10:15</span>
+        <span className="hidden sm:inline">10:45</span>
+        <span>11:15</span>
+        <span className="text-zinc-500 font-semibold">11:30 | 13:00</span>
+        <span className="hidden sm:inline">13:30</span>
+        <span>14:00</span>
+        <span>14:30</span>
+        <span className="text-muted font-semibold">14:45</span>
       </div>
     </div>
   )
@@ -2307,8 +2382,7 @@ export function LiveOrderBookPanel({
         : null
 
   const foreignRoom = stream.foreign?.availableRoom
-  const listedShare = stream.foreign?.listedShare
-  const roomPercentage = foreignRoom && listedShare && listedShare > 0 ? (foreignRoom / listedShare) * 100 : null
+  const { percent: roomPercentage } = calculateForeignRoomPercent(foreignRoom, symbol, stream.foreign?.listedShare)
 
   // Foreign live flash animations
   const foreignBuyVolFlash = useFlashAnimation(stream.foreign?.totalBuyVolume, 1)
@@ -2809,7 +2883,7 @@ export function LiveOrderBookPanel({
                             : "—"}
                         </div>
                         <div className="mt-0.5 text-[11px] text-muted font-mono">
-                          {roomPercentage !== null
+                          {roomPercentage !== null && foreignRoom !== null && foreignRoom !== undefined && foreignRoom > 0
                             ? `Còn ${roomPercentage.toFixed(1)}% VĐL`
                             : foreignRoom !== null && foreignRoom !== undefined && foreignRoom > 0
                               ? `${formatVolume(foreignRoom)} cp khả dụng`

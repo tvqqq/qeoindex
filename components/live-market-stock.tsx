@@ -36,6 +36,7 @@ export interface LiveStockQuote {
   foreignBuyVolume?: number
   foreignSellVolume?: number
   foreignNetValue?: number
+  foreignRoom?: number
   updatedAt: string
 }
 
