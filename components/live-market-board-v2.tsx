@@ -69,18 +69,19 @@ function formatCompactVolume(value?: number | null) {
 }
 
 function formatMarketValue(value?: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
+  if (typeof value !== "number" || !Number.isFinite(value) || value === 0) return "—"
   const abs = Math.abs(value)
   if (abs >= 1_000_000_000) {
-    const billions = value / 1_000_000_000
-    return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: billions >= 1000 ? 0 : 1 }).format(billions)} tỷ`
+    const billions = abs / 1_000_000_000
+    return `${billions >= 100 ? billions.toFixed(0) : billions.toFixed(1)}b`
   }
   if (abs >= 1_000_000) {
-    const millions = value / 1_000_000
-    return `${BOARD_MARKET_VALUE_FORMATTER.format(millions)} tr`
+    const millions = abs / 1_000_000
+    return `${BOARD_MARKET_VALUE_FORMATTER.format(millions)}m`
   }
-  return BOARD_VOLUME_FORMATTER.format(value)
+  return BOARD_VOLUME_FORMATTER.format(abs)
 }
+
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 type DnseAuthPayload = { action: string; api_key: string; signature: string; timestamp: number; nonce: string }
 type DnseAuthResponse = { ok: boolean; url?: string; auth?: DnseAuthPayload; message?: string }
@@ -1318,16 +1319,9 @@ export function LiveMarketBoardV2({
                 ▼ {vnindexDec}
               </span>
             </div>
-            {breadthTotal > 0 && (
-              <div className="hidden xl:flex h-1.5 w-14 overflow-hidden rounded-full bg-white/[0.06] border border-white/[0.08] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">
-                <div style={{ width: `${(vnindexAdv / breadthTotal) * 100}%` }} className="bg-emerald-400" />
-                <div style={{ width: `${(vnindexUnc / breadthTotal) * 100}%` }} className="bg-amber-400" />
-                <div style={{ width: `${(vnindexDec / breadthTotal) * 100}%` }} className="bg-rose-500" />
-              </div>
-            )}
           </div>
 
-          <div className="hidden 2xl:flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
               <Globe2 className="h-3 w-3" />
             </div>
@@ -1342,7 +1336,7 @@ export function LiveMarketBoardV2({
                       : "text-muted-2"
                 }`}
               >
-                {totalForeignNet !== 0 ? `${totalForeignNet > 0 ? "+" : ""}${formatMarketValue(totalForeignNet)}` : "—"}
+                {totalForeignNet !== 0 ? `${totalForeignNet > 0 ? "+" : "-"}${formatMarketValue(totalForeignNet)}` : "0b"}
               </span>
             </div>
           </div>
