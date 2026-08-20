@@ -130,13 +130,12 @@ export async function fetchDnseFiveMinutePoints(symbol: string, now: Date): Prom
 }
 
 export async function fetchSnapshot(symbols: string[] | readonly string[], now: Date): Promise<IntradaySnapshot> {
-  const [liveBatchResult, rows] = await Promise.all([
-    fetchLiveBatchQuotes(symbols),
-    mapWithConcurrency(symbols, FETCH_CONCURRENCY, async (symbol): Promise<IntradayRow> => {
-      // 1. Try high-fidelity DNSE 5m Chart API first (full continuous session bars)
-      const dnsePoints = await fetchDnseFiveMinutePoints(symbol, now)
-      if (dnsePoints && dnsePoints.length > 0) {
-        const live = liveBatchResult[symbol]
+  const liveBatchResult = await fetchLiveBatchQuotes(symbols).catch(() => ({} as Record<string, any>))
+  const rows = await mapWithConcurrency(symbols, FETCH_CONCURRENCY, async (symbol): Promise<IntradayRow> => {
+    // 1. Try high-fidelity DNSE 5m Chart API first (full continuous session bars)
+    const dnsePoints = await fetchDnseFiveMinutePoints(symbol, now)
+    if (dnsePoints && dnsePoints.length > 0) {
+      const live = liveBatchResult[symbol]
         const reference = live?.reference ?? dnsePoints[0]?.close ?? null
         const price = dnsePoints.at(-1)?.close ?? live?.price ?? null
         const change = price !== null && reference !== null ? price - reference : null
@@ -184,8 +183,7 @@ export async function fetchSnapshot(symbols: string[] | readonly string[], now: 
           error: error instanceof Error ? error.message : String(error),
         }
       }
-    }),
-  ])
+    })
 
   // Merge fast live broker prices onto intraday rows
   const enhancedRows = rows.map((row) => {
