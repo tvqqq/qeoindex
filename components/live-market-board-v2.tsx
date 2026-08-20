@@ -615,8 +615,8 @@ export function LiveMarketBoardV2({
 
   useEffect(() => {
     if (!symbolList.length) return
-    const hasInitialHistory = initialHistories && Object.keys(initialHistories).length > 0
-    if (!sessionOpen && hasInitialHistory) return
+    const hasFullInitialHistory = initialHistories && Object.values(initialHistories).some((pts) => pts && pts.length >= 15)
+    if (!sessionOpen && hasFullInitialHistory) return
 
     const controller = new AbortController()
     let disposed = false
@@ -631,16 +631,11 @@ export function LiveMarketBoardV2({
         const payload = await response.json() as IntradayHistoryResponse
         if (disposed || !payload.histories) return
         const receivedAt = new Date().toISOString()
-        const currentHistory = priceHistoryRef.current
-        const nextHistory = { ...currentHistory }
+        const nextHistory: Record<string, IntradayPoint[]> = { ...priceHistoryRef.current }
         for (const symbol of symbolList) {
           const points = payload.histories?.[symbol]?.points?.filter((point) => Number.isFinite(point.time) && point.time > 0 && Number.isFinite(point.close) && point.close > 0) ?? []
           if (points.length) {
-            let merged = points.slice(-90)
-            for (const point of currentHistory[symbol] ?? []) {
-              merged = mergeFiveMinuteClose(merged, point.close, point.time)
-            }
-            nextHistory[symbol] = merged
+            nextHistory[symbol] = points.slice(-90)
           }
         }
         priceHistoryRef.current = nextHistory

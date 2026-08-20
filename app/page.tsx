@@ -8,7 +8,7 @@ import { getBoardOverviewSnapshotsFromSupabase } from "@/lib/supabase/orderbook"
 import { isTradingSessionOpen, getMarketSessionStatus } from "@/lib/session-countdown"
 import { fetchLiveBatchQuotes } from "@/lib/broker-live-quotes"
 import { readThroughUiCache } from "@/lib/ui-data-cache"
-import { getCachedIntraday5mSnapshot } from "@/app/api/market/intraday/route"
+import { getIntraday5mSnapshot } from "@/app/api/market/intraday/route"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/lib/intraday-5m"
 import { getEodForeignRoom } from "@/lib/eod-shares"
@@ -41,15 +41,15 @@ function vietnamDateKey(now: Date) {
 
 async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardData> {
   const currentDay = vietnamDateKey(now)
-  // Read live broker quotes, Supabase snapshots, and cached 5m intraday in parallel (sub-150ms)
-  const [snapshots, liveQuotes, cached5m] = await Promise.all([
+  // Read live broker quotes, Supabase snapshots, and full 5m intraday in parallel (sub-180ms)
+  const [snapshots, liveQuotes, intraday5m] = await Promise.all([
     getBoardOverviewSnapshotsFromSupabase(),
     fetchLiveBatchQuotes(CANONICAL_UNIVERSE_TICKERS),
-    getCachedIntraday5mSnapshot(CANONICAL_UNIVERSE_TICKERS, now),
+    getIntraday5mSnapshot(CANONICAL_UNIVERSE_TICKERS, now),
   ])
 
-  const cachedRowsBySymbol = cached5m?.rows
-    ? Object.fromEntries(cached5m.rows.map((row) => [row.symbol, row]))
+  const cachedRowsBySymbol = intraday5m?.rows
+    ? Object.fromEntries(intraday5m.rows.map((row) => [row.symbol, row]))
     : null
 
   const universe: BoardUniverseStock[] = CANONICAL_UNIVERSE_STOCKS.map((stock) => {
@@ -90,15 +90,6 @@ async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardDat
     const latestPrice = live?.price || snap?.latest_price || cachedRow?.price || snap?.reference_price || lastBarClose || firstBarOpen
     const ref = live?.reference || snap?.reference_price || cachedRow?.reference || firstBarOpen || latestPrice
 
-    // If intraday is still empty, synthesize an anchor baseline [ref, latestPrice] so chart is NEVER blank
-    if (intraday.length === 0 && ref && ref > 0 && latestPrice && latestPrice > 0) {
-      const nowSec = Math.floor(now.getTime() / 1000)
-      const sessionStartSec = Math.floor(new Date(now).setHours(9, 15, 0, 0) / 1000)
-      intraday = [
-        { time: Math.min(sessionStartSec, nowSec - 3600), close: ref },
-        { time: nowSec, close: latestPrice },
-      ]
-    }
 
     if (latestPrice && latestPrice > 0 && ref && ref > 0) {
       const change = live?.change ?? (latestPrice - ref)

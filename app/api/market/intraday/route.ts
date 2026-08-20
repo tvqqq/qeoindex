@@ -85,6 +85,28 @@ export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly s
   return null
 }
 
+export async function getIntraday5mSnapshot(symbols: string[] | readonly string[], now: Date = new Date()): Promise<IntradaySnapshot> {
+  const cached = await getCachedIntraday5mSnapshot(symbols, now)
+  if (cached) return cached
+
+  const snapshot = await fetchSnapshot(symbols, now)
+  const key = snapshotCacheKey(symbols, now)
+  const latestKey = latestSnapshotCacheKey(symbols, now)
+  const cache = getCache({ namespace: "market-board-v8" })
+  const redisClient = getRedis()
+  const writeTtl = secondsToNextBucket(now)
+  const latestTtl = 86400
+
+  void Promise.allSettled([
+    cache.set(key, snapshot, { ttl: writeTtl, tags: ["market-board"], name: "Top 100 5m snapshot" }),
+    cache.set(latestKey, snapshot, { ttl: latestTtl, tags: ["market-board"], name: "Top 100 5m latest" }),
+    redisClient ? redisClient.set(key, snapshot, { ex: writeTtl }) : Promise.resolve(),
+    redisClient ? redisClient.set(latestKey, snapshot, { ex: latestTtl }) : Promise.resolve(),
+  ])
+
+  return snapshot
+}
+
 function isIntradayRow(value: unknown): value is IntradayRow {
   if (!value || typeof value !== "object") return false
   const row = value as Partial<IntradayRow>

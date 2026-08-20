@@ -35,8 +35,6 @@ export const Sparkline = memo(function Sparkline({
   const hasRef = typeof refValue === "number" && Number.isFinite(refValue) && refValue > 0
   const ref = hasRef ? (refValue as number) : undefined
 
-  const dataKey = data.length > 0 ? `${data.length}-${data[0]}-${data[data.length - 1]}-${ref}` : ""
-
   const computed = useMemo(() => {
     const valid = data.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
     if (valid.length === 0) return null
@@ -90,7 +88,7 @@ export const Sparkline = memo(function Sparkline({
 
     const uid = Math.abs(Math.round(coords[0][0] * 100)) + "-" + color.replace(/[^a-z0-9]/gi, "")
     return { path, lastX, lastY, refY, padX, uid }
-  }, [dataKey, ref, width, height, strokeWidth, color])
+  }, [data, ref, width, height, strokeWidth, color])
 
   if (!computed) {
     return <svg width={width} height={height} aria-hidden="true" className={className} />

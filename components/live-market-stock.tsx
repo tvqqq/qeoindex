@@ -185,8 +185,7 @@ function areStockPropsEqual(prev: LiveStockRowProps, next: LiveStockRowProps) {
   if (prev.quote?.reference !== next.quote?.reference) return false
   if (prev.quote?.ceiling !== next.quote?.ceiling) return false
   if (prev.quote?.floor !== next.quote?.floor) return false
-  if (prev.history.length !== next.history.length) return false
-  if (prev.history.at(-1) !== next.history.at(-1)) return false
+  if (prev.history !== next.history) return false
   return true
 }
 
