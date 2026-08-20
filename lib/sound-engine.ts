@@ -23,14 +23,23 @@ const SOUND_STORAGE_KEY = "qeoindex_sound_fx_enabled"
 
 export function isSoundEnabled(): boolean {
   if (typeof window === "undefined") return false
-  return localStorage.getItem(SOUND_STORAGE_KEY) === "true"
+  const val = localStorage.getItem(SOUND_STORAGE_KEY)
+  if (val === null) return true // Enabled by default
+  return val === "true"
 }
 
 export function setSoundEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return
   localStorage.setItem(SOUND_STORAGE_KEY, enabled ? "true" : "false")
   if (enabled) {
-    getAudioContext()
+    unlockAudioContext()
+  }
+}
+
+export function unlockAudioContext(): void {
+  const ctx = getAudioContext()
+  if (ctx && ctx.state === "suspended") {
+    ctx.resume().catch(() => {})
   }
 }
 
@@ -42,39 +51,56 @@ export function playWhaleSound(side: "BUY" | "SELL" | "REF" = "BUY"): void {
   const ctx = getAudioContext()
   if (!ctx) return
 
+  if (ctx.state === "suspended") {
+    ctx.resume().catch(() => {})
+  }
+
   try {
     const now = ctx.currentTime
 
-    // Base frequencies
-    const freq1 = side === "BUY" ? 659.25 : 587.33 // E5 or D5
-    const freq2 = side === "BUY" ? 987.77 : 440.00 // B5 or A4
+    if (side === "BUY") {
+      // Triumphant ascending harmonic bell arpeggio (E5 -> G#5 -> B5 -> E6)
+      const notes = [659.25, 830.61, 987.77, 1318.51]
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        const t = now + idx * 0.08
 
-    const osc1 = ctx.createOscillator()
-    const osc2 = ctx.createOscillator()
-    const gain = ctx.createGain()
+        osc.type = "sine"
+        osc.frequency.setValueAtTime(freq, t)
 
-    osc1.type = "sine"
-    osc2.type = "triangle"
+        gain.gain.setValueAtTime(0.001, t)
+        gain.gain.linearRampToValueAtTime(0.15, t + 0.015)
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.55)
 
-    osc1.frequency.setValueAtTime(freq1, now)
-    osc1.frequency.exponentialRampToValueAtTime(freq2, now + 0.35)
+        osc.connect(gain)
+        gain.connect(ctx.destination)
 
-    osc2.frequency.setValueAtTime(freq1 * 1.5, now)
-    osc2.frequency.exponentialRampToValueAtTime(freq2 * 1.5, now + 0.45)
+        osc.start(t)
+        osc.stop(t + 0.6)
+      })
+    } else {
+      // Powerful descending alarm chime for whale sell (F5 -> D5 -> Bb4 -> G4)
+      const notes = [698.46, 587.33, 466.16, 392.00]
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        const t = now + idx * 0.09
 
-    // Smooth bell envelope (attack: 10ms, decay: 450ms)
-    gain.gain.setValueAtTime(0.001, now)
-    gain.gain.linearRampToValueAtTime(0.12, now + 0.02)
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5)
+        osc.type = "triangle"
+        osc.frequency.setValueAtTime(freq, t)
 
-    osc1.connect(gain)
-    osc2.connect(gain)
-    gain.connect(ctx.destination)
+        gain.gain.setValueAtTime(0.001, t)
+        gain.gain.linearRampToValueAtTime(0.18, t + 0.015)
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.45)
 
-    osc1.start(now)
-    osc2.start(now)
-    osc1.stop(now + 0.52)
-    osc2.stop(now + 0.52)
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+
+        osc.start(t)
+        osc.stop(t + 0.5)
+      })
+    }
   } catch {
     // Ignore audio errors gracefully
   }

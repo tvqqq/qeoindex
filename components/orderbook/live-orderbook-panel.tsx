@@ -26,6 +26,7 @@ import { marketToneFromPrice, marketToneHex, marketToneText } from "@/lib/market
 import { normalizeMarketPrice } from "@/lib/intraday-5m"
 import { useFlashAnimation, usePriceFlashAnimation } from "@/lib/use-flash-animation"
 import { useWhaleConfetti, ConfettiOverlay } from "@/components/orderbook/confetti"
+import { playWhaleSound, unlockAudioContext } from "@/lib/sound-engine"
 import { calculateSessionCountdown } from "@/lib/session-countdown"
 import { calculateForeignRoomPercent, getEodForeignRoom } from "@/lib/eod-shares"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
@@ -2081,9 +2082,14 @@ export function LiveOrderBookPanel({
   const quote = stream.quote
   const isWsReady = stream.state === "LIVE" || stream.historyState === "READY" || stream.trades.length > 0 || stream.bids.length > 0 || stream.quote !== null
 
-  // Confetti for whale trades
+  // Confetti and Lottie for whale trades
   const confetti = useWhaleConfetti()
+  const [isWhaleGlow, setIsWhaleGlow] = useState(false)
   const sessionCountdown = useSessionCountdown()
+
+  useEffect(() => {
+    unlockAudioContext()
+  }, [])
 
   // High-performance Drag-to-Move with window listener + requestAnimationFrame (0ms latency, zero re-renders while moving)
   const onHeaderPointerDown = useCallback(
@@ -2254,7 +2260,7 @@ export function LiveOrderBookPanel({
   const whaleThreshold = useMemo(() => getWhaleThreshold(quote?.price, spread), [quote?.price, spread])
   const whaleLabel = useMemo(() => getWhaleLabel(quote?.price, spread), [quote?.price, spread])
 
-  // Reliable Realtime Whale Confetti Trigger
+  // Reliable Realtime Whale Lottie, Sound & Glow Trigger
   const seenWhaleIdsRef = useRef<Set<string>>(new Set())
   const isInitialTradesLoadedRef = useRef(false)
 
@@ -2265,7 +2271,7 @@ export function LiveOrderBookPanel({
     if (!isInitialTradesLoadedRef.current) {
       if (stream.historyState === "READY" || stream.historyState === "PARTIAL" || clusteredTrades.length > 0) {
         for (const t of clusteredTrades) {
-          if (t.volume >= whaleThreshold) {
+          if (t.volume >= whaleThreshold || (t.price * t.volume * 1000 >= 1_000_000_000)) {
             seenWhaleIdsRef.current.add(t.id)
           }
         }
@@ -2275,18 +2281,17 @@ export function LiveOrderBookPanel({
     }
 
     // On subsequent realtime updates, check for any newly arrived whale trades
-    let hasNewWhale = false
     for (const t of clusteredTrades) {
-      if (t.volume >= whaleThreshold) {
+      if (t.volume >= whaleThreshold || (t.price * t.volume * 1000 >= 1_000_000_000)) {
         if (!seenWhaleIdsRef.current.has(t.id)) {
           seenWhaleIdsRef.current.add(t.id)
-          hasNewWhale = true
+          const side: "BUY" | "SELL" | "REF" = t.side === "SELL" ? "SELL" : "BUY"
+          confetti.fire(side, t.volume, t.price)
+          playWhaleSound(side)
+          setIsWhaleGlow(true)
+          setTimeout(() => setIsWhaleGlow(false), 2800)
         }
       }
-    }
-
-    if (hasNewWhale) {
-      confetti.fire()
     }
   }, [clusteredTrades, whaleThreshold, stream.historyState, confetti])
 
@@ -2439,15 +2444,19 @@ export function LiveOrderBookPanel({
   return (
     <section
       ref={panelRef}
-      className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0b0f14]/94 backdrop-blur-2xl shadow-[0_25px_70px_rgba(0,0,0,0.95),inset_0_1px_0_0_rgba(255,255,255,0.12)] will-change-[width,height,left,top] ${
+      className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl border bg-[#0b0f14]/94 backdrop-blur-2xl will-change-[width,height,left,top] ${
+        isWhaleGlow
+          ? "border-amber-400/90 shadow-[0_0_40px_rgba(251,191,36,0.35),0_25px_70px_rgba(0,0,0,0.95)] ring-2 ring-amber-400/60"
+          : "border-white/[0.12] shadow-[0_25px_70px_rgba(0,0,0,0.95),inset_0_1px_0_0_rgba(255,255,255,0.12)]"
+      } ${
         isMaximized ? "fixed" : ""
-      } ${!isInteracting ? "transition-[width,height,left,top] duration-150 ease-out" : "select-none"}`}
+      } ${!isInteracting ? "transition-[width,height,left,top,border-color,box-shadow] duration-200 ease-out" : "select-none"}`}
       style={panelStyle}
       onPointerDown={onPanelPointerDown}
       data-orderbook={stockKey}
     >
-      {/* Whale trade confetti celebration */}
-      <ConfettiOverlay active={confetti.active} />
+      {/* Whale trade Lottie animation celebration */}
+      <ConfettiOverlay active={confetti.active} side={confetti.side} volume={confetti.alert?.volume} />
 
       {/* HEADER / DRAG HANDLE */}
       <header

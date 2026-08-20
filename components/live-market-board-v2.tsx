@@ -573,9 +573,8 @@ export function LiveMarketBoardV2({
     }
   }, [soundEnabled])
 
-  const triggerWhaleAlert = useCallback((ticker: string, side: "BUY" | "SELL" | "REF" = "BUY") => {
+  const triggerWhaleAlert = useCallback((ticker: string) => {
     setWhaleAlerts((prev) => ({ ...prev, [ticker]: true }))
-    playWhaleSound(side)
     if (whaleTimeouts.current[ticker]) {
       clearTimeout(whaleTimeouts.current[ticker])
     }
@@ -849,10 +848,8 @@ export function LiveMarketBoardV2({
           if (price <= 0) continue
           const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "volume"])
           const matchVol = firstPositive(data, ["matchQtty", "matchVolume", "matchQuantity", "qtty", "q", "vol"])
-          const side = String(data.matchSide || data.side || "").toUpperCase() === "S" ? "SELL" : "BUY"
-
           if (matchVol >= 30_000 || (price * matchVol * 1000 >= 1_000_000_000)) {
-            triggerWhaleAlert(ticker, side)
+            triggerWhaleAlert(ticker)
           }
 
           const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
