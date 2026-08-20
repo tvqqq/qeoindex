@@ -195,7 +195,8 @@ function formatMarketValue(value?: number | null) {
 
 function formatCompactVolume(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)} tr`
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)} tỷ`
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)} tr`
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)} k`
   return value.toLocaleString("vi-VN")
 }
@@ -1437,6 +1438,8 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
   const hovered = hoverIndex !== null && coordinates[hoverIndex] ? coordinates[hoverIndex] : null
   const isNetPositive = (currentNetValue || 0) >= 0
 
+  const zeroPct = Math.max(0, Math.min(100, (zeroY / height) * 100))
+
   return (
     <div className="flex flex-col space-y-2 rounded-lg border border-border/80 bg-[#121313] p-3">
       {/* Header & Legend */}
@@ -1468,13 +1471,17 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
       >
         <svg viewBox="0 0 600 140" preserveAspectRatio="none" className="h-full w-full overflow-visible">
           <defs>
-            <linearGradient id="foreignNetGradPos" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#22c98a" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#22c98a" stopOpacity="0.0" />
+            <linearGradient id="foreignNetLineGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#22c98a" />
+              <stop offset={`${Math.max(0, zeroPct - 0.5)}%`} stopColor="#22c98a" />
+              <stop offset={`${Math.min(100, zeroPct + 0.5)}%`} stopColor="#ff4757" />
+              <stop offset="100%" stopColor="#ff4757" />
             </linearGradient>
-            <linearGradient id="foreignNetGradNeg" x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0%" stopColor="#ff4757" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#ff4757" stopOpacity="0.0" />
+            <linearGradient id="foreignNetAreaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#22c98a" stopOpacity="0.4" />
+              <stop offset={`${Math.max(0, zeroPct - 0.5)}%`} stopColor="#22c98a" stopOpacity="0.05" />
+              <stop offset={`${Math.min(100, zeroPct + 0.5)}%`} stopColor="#ff4757" stopOpacity="0.05" />
+              <stop offset="100%" stopColor="#ff4757" stopOpacity="0.4" />
             </linearGradient>
           </defs>
 
@@ -1497,7 +1504,7 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
           ))}
 
           {/* Net Flow Fill Area */}
-          <path d={netAreaD} fill={isNetPositive ? "url(#foreignNetGradPos)" : "url(#foreignNetGradNeg)"} />
+          <path d={netAreaD} fill="url(#foreignNetAreaGrad)" />
 
           {/* Buy Cumulative Line */}
           <path d={buyPathD} fill="none" stroke="#22c98a" strokeWidth="1.2" strokeDasharray="3 2" strokeOpacity="0.7" />
@@ -1505,8 +1512,8 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
           {/* Sell Cumulative Line */}
           <path d={sellPathD} fill="none" stroke="#ff4757" strokeWidth="1.2" strokeDasharray="3 2" strokeOpacity="0.7" />
 
-          {/* Net Value Main Line */}
-          <path d={netPathD} fill="none" stroke={isNetPositive ? "#22c98a" : "#ff4757"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          {/* Net Value Main Line (Green when positive, Red when negative) */}
+          <path d={netPathD} fill="none" stroke="url(#foreignNetLineGrad)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
 
           {/* Current / Hovered point */}
           {hovered ? (
@@ -1520,7 +1527,7 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
                 cx={coordinates.at(-1)?.x}
                 cy={coordinates.at(-1)?.netY}
                 r="4"
-                fill={isNetPositive ? "#22c98a" : "#ff4757"}
+                fill={(coordinates.at(-1)?.netValue ?? 0) >= 0 ? "#22c98a" : "#ff4757"}
                 className="animate-pulse"
               />
             )
