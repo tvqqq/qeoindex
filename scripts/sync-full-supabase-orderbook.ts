@@ -83,7 +83,7 @@ async function syncAll() {
             time: String(item.time || "—"),
             price: p,
             volume: Number(item.volume || 0),
-            value: Number(item.value || 0),
+            value: Number(item.value ? Number(item.value) * 1000 : p * 1000 * Number(item.volume || 0)),
             type: String(item.type || "PTM"),
           })
         }

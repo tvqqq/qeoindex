@@ -504,6 +504,8 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   const [foreignEvents, setForeignEvents] = useState<ForeignFlowEvent[]>([])
   const [foreignTimeline, setForeignTimeline] = useState<ForeignTimelinePoint[]>(() => cachedInitial?.foreignTimeline ?? [])
   const [putThroughDeals, setPutThroughDeals] = useState<PutThroughDeal[]>(() => cachedInitial?.putThrough ?? [])
+  const seenPutThroughIdsRef = useRef<Set<string>>(new Set(cachedInitial?.putThrough?.map((d) => d.id) ?? []))
+  const [latestPtAlert, setLatestPtAlert] = useState<PutThroughDeal | null>(null)
   const [company, setCompany] = useState<CompanyInfo | null>(() => cachedInitial?.company ?? (initialMeta?.companyName ? { nameVi: initialMeta.companyName, sector: initialMeta.sector } : null))
   const [quote, setQuote] = useState<StockQuote | null>(() => {
     if (cachedInitial?.quote) return cachedInitial.quote
@@ -912,6 +914,59 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     }
   }, [symbol])
 
+  // Realtime Put-Through Polling & Alerting (every 5 seconds)
+  useEffect(() => {
+    let disposed = false
+    const pollPutThrough = async () => {
+      try {
+        const res = await fetch(`/api/market/put-through?symbol=${encodeURIComponent(symbol)}`, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        })
+        if (!res.ok || disposed) return
+        const data = await res.json()
+        if (!data.ok || !Array.isArray(data.putThrough) || disposed) return
+
+        const incoming: PutThroughDeal[] = data.putThrough
+        if (!seenPutThroughIdsRef.current.size) {
+          for (const d of incoming) seenPutThroughIdsRef.current.add(d.id)
+          if (incoming.length > 0) setPutThroughDeals(incoming)
+        } else {
+          let newlyArrived: PutThroughDeal | null = null
+          for (const d of incoming) {
+            if (!seenPutThroughIdsRef.current.has(d.id)) {
+              seenPutThroughIdsRef.current.add(d.id)
+              if (!newlyArrived) newlyArrived = d
+            }
+          }
+          if (incoming.length > 0) {
+            setPutThroughDeals(incoming)
+          }
+          if (newlyArrived) {
+            setLatestPtAlert(newlyArrived)
+          }
+        }
+      } catch {
+        // silent fail on background poll
+      }
+    }
+
+    void pollPutThrough()
+    const timer = window.setInterval(pollPutThrough, 5000)
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+    }
+  }, [symbol])
+
+  useEffect(() => {
+    if (!latestPtAlert) return
+    const timer = window.setTimeout(() => {
+      setLatestPtAlert(null)
+    }, 6000)
+    return () => window.clearTimeout(timer)
+  }, [latestPtAlert])
+
   // WebSocket Live Stream
   useEffect(() => {
     let disposed = false
@@ -1258,7 +1313,25 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     }
   }, [symbol])
 
-  return { state, bids, asks, trades, foreign, foreignEvents, foreignTimeline, putThroughDeals, company, quote, priceHistory, historyState, historyMessage, updatedAt, error }
+  return {
+    state,
+    bids,
+    asks,
+    trades,
+    foreign,
+    foreignEvents,
+    foreignTimeline,
+    putThroughDeals,
+    latestPtAlert,
+    setLatestPtAlert,
+    company,
+    quote,
+    priceHistory,
+    historyState,
+    historyMessage,
+    updatedAt,
+    error,
+  }
 }
 
 function buildForeignTimeline(
@@ -2552,6 +2625,43 @@ export function LiveOrderBookPanel({
           </div>
         </div>
       </header>
+
+      {/* FLOATING PUT-THROUGH DEAL TOAST ALERT */}
+      {stream.latestPtAlert && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            setActivityTab("putthrough")
+            stream.setLatestPtAlert(null)
+          }}
+          className="absolute top-14 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 rounded-full border border-amber-500/50 bg-[#161a20]/95 px-4 py-2 text-xs font-mono shadow-[0_12px_36px_rgba(0,0,0,0.85),inset_0_1px_0_0_rgba(245,158,11,0.3)] backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200 cursor-pointer hover:bg-[#1f242d] hover:border-amber-400 transition-all select-none"
+          title="Bấm để chuyển sang tab Thỏa thuận"
+        >
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0 text-[11px]">
+            🤝
+          </div>
+          <div className="flex items-center gap-1.5 text-foreground font-sans">
+            <span className="font-bold text-amber-300">Thỏa thuận mới:</span>
+            <span className="font-mono font-bold text-foreground">{formatVolume(stream.latestPtAlert.volume)} CP</span>
+            <span className="text-muted-2">@</span>
+            <span className="font-mono font-bold text-up">{formatPrice(stream.latestPtAlert.price)}</span>
+            <span className="rounded bg-amber-500/20 border border-amber-500/35 px-1.5 py-0.2 text-[11px] font-bold text-amber-300 font-mono">
+              {formatMarketValue(stream.latestPtAlert.value)}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              stream.setLatestPtAlert(null)
+            }}
+            className="ml-1 text-muted-2 hover:text-foreground text-[10px] p-0.5 rounded-full hover:bg-white/10 transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {!minimized ? (
         <div className="min-h-0 flex-1 overflow-y-auto flex flex-col bg-[#121313]">

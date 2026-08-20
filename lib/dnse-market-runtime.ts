@@ -492,13 +492,14 @@ async function fetchPutThroughDeals(symbol: string): Promise<DnsePutThroughDeal[
         const price = rawPrice && rawPrice > 1000 ? rawPrice / 1000 : (rawPrice ?? 0)
         const volume = finiteNumber(item?.volume) ?? 0
         const rawValue = finiteNumber(item?.value) ?? 0
-        const value = rawValue > 1_000_000 ? rawValue : rawValue * 1000
+        // VPS rawValue in getlistpt is in thousand VND -> * 1000 for exact VND
+        const value = rawValue > 0 ? rawValue * 1000 : price * 1000 * volume
         return {
           id: String(item?.transId || item?.id || `pt-${idx}`),
           time: String(item?.time || "—"),
           price,
           volume,
-          value: value || price * 1000 * volume,
+          value,
           sym: ticker,
           type: String(item?.type || "PTM"),
         }
