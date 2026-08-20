@@ -57,7 +57,7 @@ export function formatBoardVolume(value?: number) {
 }
 
 export function formatForeignNetValue(value?: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) < 100_000) {
+  if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) < 50_000_000) {
     return { text: "0b", tone: "neutral" as const }
   }
   const isBuy = value > 0
@@ -65,13 +65,9 @@ export function formatForeignNetValue(value?: number | null) {
   const abs = Math.abs(value)
   const inBillions = abs / 1_000_000_000
 
-  let formattedNum = ""
-  if (inBillions >= 100) {
-    formattedNum = inBillions.toFixed(0)
-  } else if (inBillions >= 10) {
-    formattedNum = inBillions.toFixed(1)
-  } else {
-    formattedNum = inBillions.toFixed(2)
+  const formattedNum = inBillions >= 100 ? inBillions.toFixed(0) : inBillions.toFixed(1)
+  if (formattedNum === "0.0" || formattedNum === "0") {
+    return { text: "0b", tone: "neutral" as const }
   }
 
   return {
@@ -96,7 +92,7 @@ function quoteTone(quote?: LiveStockQuote) {
 
 function formatChangePercent(value?: number) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—"
-  return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`
 }
 
 function sparkData(history: number[], livePrice?: number | null) {

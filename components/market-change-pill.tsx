@@ -6,20 +6,22 @@ export const MarketChangePill = memo(function MarketChangePill({
   tone,
   compact = false,
   title,
+  decimals = 1,
 }: {
   value?: number | null
   tone: MarketTone
   compact?: boolean
   title?: string
+  decimals?: number
 }) {
   const label = typeof value === "number" && Number.isFinite(value)
-    ? `${value > 0 ? "+" : ""}${value.toFixed(2)}%`
+    ? `${value > 0 ? "+" : ""}${value.toFixed(decimals)}%`
     : "—"
 
   return (
     <span
       title={title}
-      className={`inline-flex shrink-0 items-center justify-center rounded-full border font-mono font-bold leading-none ${marketTonePill(tone)} ${compact ? "min-w-[50px] px-1.5 py-0.5 text-[11.5px]" : "min-w-[62px] px-2 py-1 text-[12.5px]"}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-full border font-mono font-bold leading-none ${marketTonePill(tone)} ${compact ? "min-w-[46px] px-1.5 py-0.5 text-[11.5px]" : "min-w-[56px] px-2 py-1 text-[12.5px]"}`}
     >
       {label}
     </span>

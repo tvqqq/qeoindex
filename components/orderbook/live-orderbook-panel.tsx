@@ -2476,7 +2476,7 @@ export function LiveOrderBookPanel({
             >
               {formatPrice(activePrice)}
             </span>
-            {activePrice ? <MarketChangePill value={changePercent} tone={tone} compact /> : null}
+            {activePrice ? <MarketChangePill value={changePercent} tone={tone} compact decimals={2} /> : null}
           </div>
 
           {/* Action Controls (3 clean icons) */}
