@@ -314,6 +314,7 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
   lastMessageAt,
   soundEnabled,
   isLunch,
+  sessionOpen,
   onToggleSound,
   onReconnect,
 }: {
@@ -328,6 +329,7 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
   lastMessageAt: string
   soundEnabled: boolean
   isLunch?: boolean
+  sessionOpen?: boolean
   onToggleSound: () => void
   onReconnect: () => void
 }) {
@@ -448,8 +450,8 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
                 ? "DNSE LIVE"
                 : streamState === "CONNECTING"
                   ? "Đang kết nối"
-                  : streamState === "CLOSED"
-                    ? "Ngoài giờ giao dịch"
+                  : streamState === "CLOSED" || !sessionOpen
+                    ? "Ngoài giờ giao dịch realtime"
                     : "Mất kết nối"}
           </span>
           <span className="text-muted-2">·</span>
@@ -1493,6 +1495,7 @@ export function LiveMarketBoardV2({
         lastMessageAt={lastMessageAt}
         soundEnabled={soundEnabled}
         isLunch={isLunch}
+        sessionOpen={sessionOpen}
         onToggleSound={handleToggleSound}
         onReconnect={reconnect}
       />

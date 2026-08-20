@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 
 import { isTradingSessionOpen, isLunchBreak, getMarketSessionStatus, getVnTimeSeconds } from "../lib/session-countdown.ts"
 
-test("isTradingSessionOpen returns true during active trading hours (09:00 - 15:00 on weekdays)", () => {
+test("isTradingSessionOpen returns true during active trading hours (09:00 - 14:46 on weekdays)", () => {
   // Tuesday at 10:30 AM ICT (UTC 03:30)
   const tuesday1030 = new Date("2026-08-18T03:30:00Z")
   assert.equal(isTradingSessionOpen(tuesday1030), true)
@@ -11,12 +11,20 @@ test("isTradingSessionOpen returns true during active trading hours (09:00 - 15:
   // Wednesday at 14:15 PM ICT (UTC 07:15)
   const wednesday1415 = new Date("2026-08-19T07:15:00Z")
   assert.equal(isTradingSessionOpen(wednesday1415), true)
+
+  // Wednesday at 14:45:59 PM ICT (UTC 07:45:59) - right before cutoff
+  const wednesday1445 = new Date("2026-08-19T07:45:59Z")
+  assert.equal(isTradingSessionOpen(wednesday1445), true)
 })
 
 test("isTradingSessionOpen returns false outside trading hours and on weekends", () => {
   // Tuesday at 08:30 AM ICT (UTC 01:30) - before open
   const tuesday0830 = new Date("2026-08-18T01:30:00Z")
   assert.equal(isTradingSessionOpen(tuesday0830), false)
+
+  // Wednesday at 14:46:00 PM ICT (UTC 07:46:00) - exact cutoff
+  const wednesday1446 = new Date("2026-08-19T07:46:00Z")
+  assert.equal(isTradingSessionOpen(wednesday1446), false)
 
   // Tuesday at 15:30 PM ICT (UTC 08:30) - after close
   const tuesday1530 = new Date("2026-08-18T08:30:00Z")

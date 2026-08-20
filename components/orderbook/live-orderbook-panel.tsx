@@ -148,6 +148,16 @@ function getWhaleLabel(price?: number | null, spread?: number | null): string {
   return threshold >= 50_000 ? "≥50K" : "≥30K"
 }
 
+export function isAtoTradeTime(timeStr?: string): boolean {
+  if (!timeStr) return false
+  return timeStr.startsWith("09:15:00") || timeStr.startsWith("09:15:01") || timeStr === "09:15:00" || timeStr === "09:15"
+}
+
+export function isAtcTradeTime(timeStr?: string): boolean {
+  if (!timeStr) return false
+  return timeStr.startsWith("14:45:00") || timeStr.startsWith("14:45:01") || timeStr === "14:45:00" || timeStr === "14:45"
+}
+
 const DEFAULT_WIDTH = 780
 const MIN_WIDTH = 700
 const MIN_HEIGHT = 600
@@ -2271,7 +2281,7 @@ export function LiveOrderBookPanel({
     if (!isInitialTradesLoadedRef.current) {
       if (stream.historyState === "READY" || stream.historyState === "PARTIAL" || clusteredTrades.length > 0) {
         for (const t of clusteredTrades) {
-          if (t.volume >= whaleThreshold) {
+          if (!isAtoTradeTime(t.time) && !isAtcTradeTime(t.time) && t.volume >= whaleThreshold) {
             seenWhaleIdsRef.current.add(t.id)
           }
         }
@@ -2282,6 +2292,8 @@ export function LiveOrderBookPanel({
 
     // On subsequent realtime updates, check for any newly arrived whale trades
     for (const t of clusteredTrades) {
+      if (isAtoTradeTime(t.time) || isAtcTradeTime(t.time)) continue
+
       if (t.volume >= whaleThreshold) {
         if (!seenWhaleIdsRef.current.has(t.id)) {
           seenWhaleIdsRef.current.add(t.id)
@@ -2298,12 +2310,16 @@ export function LiveOrderBookPanel({
   // Tape filtering
   const visibleTrades = useMemo(() => {
     if (tradeFilter === "large") return clusteredTrades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME)
-    if (tradeFilter === "whale") return clusteredTrades.filter((t) => t.volume >= whaleThreshold)
+    if (tradeFilter === "whale") {
+      return clusteredTrades.filter((t) => !isAtoTradeTime(t.time) && !isAtcTradeTime(t.time) && t.volume >= whaleThreshold)
+    }
     return clusteredTrades
   }, [tradeFilter, clusteredTrades, whaleThreshold])
 
   const largeTradeCount = useMemo(() => clusteredTrades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME).length, [clusteredTrades])
-  const whaleTradeCount = useMemo(() => clusteredTrades.filter((t) => t.volume >= whaleThreshold).length, [clusteredTrades, whaleThreshold])
+  const whaleTradeCount = useMemo(() => {
+    return clusteredTrades.filter((t) => !isAtoTradeTime(t.time) && !isAtcTradeTime(t.time) && t.volume >= whaleThreshold).length
+  }, [clusteredTrades, whaleThreshold])
 
   // Active Buy vs Sell volume breakdown from trades
   const tradeStats = useMemo(() => {
@@ -2733,8 +2749,10 @@ export function LiveOrderBookPanel({
                           </div>
                           <div className="flex-1 overflow-y-auto max-h-[480px] px-3 divide-y divide-border/15">
                             {visibleTrades.map((trade) => {
-                              const isLarge = trade.volume >= LARGE_TRADE_MIN_VOLUME
-                              const isWhale = trade.volume >= whaleThreshold
+                              const isAto = isAtoTradeTime(trade.time)
+                              const isAtc = isAtcTradeTime(trade.time)
+                              const isLarge = !isAto && !isAtc && trade.volume >= LARGE_TRADE_MIN_VOLUME
+                              const isWhale = !isAto && !isAtc && trade.volume >= whaleThreshold
                               const pill = sidePillMeta(trade.side)
 
                               const sideColorClass =
@@ -2745,11 +2763,15 @@ export function LiveOrderBookPanel({
                                     : "text-foreground"
 
                               const sideBgClass =
-                                trade.side === "BUY"
-                                  ? "bg-up/10"
-                                  : trade.side === "SELL"
-                                    ? "bg-down/10"
-                                    : "bg-ref/10"
+                                isAto
+                                  ? "bg-blue-950/20"
+                                  : isAtc
+                                    ? "bg-purple-950/20"
+                                    : trade.side === "BUY"
+                                      ? "bg-up/10"
+                                      : trade.side === "SELL"
+                                        ? "bg-down/10"
+                                        : "bg-ref/10"
 
                               const tagBadgeClass =
                                 trade.side === "BUY"
@@ -2762,7 +2784,7 @@ export function LiveOrderBookPanel({
                                 <div
                                   key={trade.id}
                                   className={`grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 py-1.5 font-mono text-xs hover:bg-panel-2/50 ${
-                                    isWhale || isLarge
+                                    isWhale || isLarge || isAto || isAtc
                                       ? `${sideBgClass} font-bold -mx-3 px-3`
                                       : "text-foreground"
                                   }`}
@@ -2777,7 +2799,15 @@ export function LiveOrderBookPanel({
                                         x{trade.count}
                                       </span>
                                     )}
-                                    {isWhale ? (
+                                    {isAto ? (
+                                      <span className="flex items-center rounded px-1.5 py-0.5 text-[10px] font-black shrink-0 border border-blue-400/50 bg-blue-950/70 text-blue-300 shadow-sm">
+                                        ATO
+                                      </span>
+                                    ) : isAtc ? (
+                                      <span className="flex items-center rounded px-1.5 py-0.5 text-[10px] font-black shrink-0 border border-purple-400/50 bg-purple-950/70 text-purple-300 shadow-sm">
+                                        ATC
+                                      </span>
+                                    ) : isWhale ? (
                                       <span className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}>
                                         <span>🐋</span>
                                         <span>{trade.volume >= 50_000 ? "50K+" : "30K+"}</span>

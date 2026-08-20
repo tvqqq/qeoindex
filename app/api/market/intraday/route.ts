@@ -145,10 +145,59 @@ async function mapWithConcurrency<T, R>(items: T[] | readonly T[], concurrency: 
 
 import { fetchLiveBatchQuotes } from "@/lib/broker-live-quotes"
 
+async function fetchDnseFiveMinutePoints(symbol: string, now: Date): Promise<IntradayPoint[] | null> {
+  const to = Math.floor(now.getTime() / 1000)
+  const from = Math.floor(new Date(now).setHours(9, 0, 0, 0) / 1000)
+  try {
+    const res = await fetch(`https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?resolution=5&symbol=${symbol.toUpperCase()}&from=${from}&to=${to}`, {
+      headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" },
+      signal: AbortSignal.timeout(3000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!Array.isArray(data?.t) || !Array.isArray(data?.c) || !data.t.length) return null
+
+    const points: IntradayPoint[] = []
+    for (let i = 0; i < data.t.length; i++) {
+      const time = Number(data.t[i])
+      const close = Number(data.c[i])
+      if (Number.isFinite(time) && time > 0 && Number.isFinite(close) && close > 0) {
+        points.push({ time, close })
+      }
+    }
+    return points.length > 0 ? points : null
+  } catch {
+    return null
+  }
+}
+
 async function fetchSnapshot(symbols: string[] | readonly string[], now: Date): Promise<IntradaySnapshot> {
   const [liveBatchResult, rows] = await Promise.all([
     fetchLiveBatchQuotes(symbols),
     mapWithConcurrency(symbols, FETCH_CONCURRENCY, async (symbol): Promise<IntradayRow> => {
+      // 1. Try high-fidelity DNSE 5m Chart API first (full continuous session bars)
+      const dnsePoints = await fetchDnseFiveMinutePoints(symbol, now)
+      if (dnsePoints && dnsePoints.length > 0) {
+        const live = liveBatchResult[symbol]
+        const reference = live?.reference ?? dnsePoints[0]?.close ?? null
+        const price = dnsePoints.at(-1)?.close ?? live?.price ?? null
+        const change = price !== null && reference !== null ? price - reference : null
+        const changePercent = price !== null && reference !== null && reference > 0 ? ((price - reference) / reference) * 100 : null
+        return {
+          symbol,
+          provider: "Yahoo", // Keep polymorphic contract provider type
+          points: dnsePoints,
+          reference,
+          price,
+          change,
+          changePercent,
+          lastBarAt: dnsePoints.at(-1)?.time ?? null,
+          fallbackReason: null,
+          error: null,
+        }
+      }
+
+      // 2. Fallback to Yahoo if DNSE is unavailable
       try {
         const yahoo = await fetchYahooFiveMinuteSnapshot(symbol, now)
         const bars = yahoo.bars
@@ -163,14 +212,15 @@ async function fetchSnapshot(symbols: string[] | readonly string[], now: Date): 
           error: null,
         }
       } catch (error) {
+        const live = liveBatchResult[symbol]
         return {
           symbol,
           provider: null,
           points: [],
-          reference: null,
-          price: null,
-          change: null,
-          changePercent: null,
+          reference: live?.reference ?? null,
+          price: live?.price ?? null,
+          change: live?.change ?? null,
+          changePercent: live?.changePercent ?? null,
           lastBarAt: null,
           fallbackReason: null,
           error: error instanceof Error ? error.message : String(error),

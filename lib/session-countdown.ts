@@ -50,8 +50,8 @@ export function isTradingSessionOpen(date: Date = new Date()): boolean {
   const { dayOfWeek, totalSeconds } = getVnTimeSeconds(date)
   // Trading days only (Mon-Fri)
   if (dayOfWeek < 1 || dayOfWeek > 5) return false
-  // HOSE Trading session: 09:00:00 (32,400s) -> 15:00:00 (54,000s)
-  return totalSeconds >= 32400 && totalSeconds <= 54000
+  // HOSE Trading session: 09:00:00 (32,400s) -> 14:46:00 (53,160s)
+  return totalSeconds >= 32400 && totalSeconds < 53160
 }
 
 export function isLunchBreak(date: Date = new Date()): boolean {
@@ -121,10 +121,10 @@ export function getMarketSessionStatus(date: Date = new Date()): MarketSessionSt
     }
   }
 
-  // Afternoon session: 13:00:00 -> 15:00:00
-  if (totalSeconds >= 46800 && totalSeconds <= 54000) {
+  // Afternoon session: 13:00:00 -> 14:46:00 (stops at 14:46)
+  if (totalSeconds >= 46800 && totalSeconds < 53160) {
     const currentBucket = Math.floor(totalSeconds / 300)
-    const ttlSeconds = Math.max(5, Math.min(300 - (totalSeconds % 300), 54000 - totalSeconds + 10))
+    const ttlSeconds = Math.max(5, Math.min(300 - (totalSeconds % 300), 53160 - totalSeconds + 10))
     return {
       phase: "AFTERNOON",
       isLiveSession: true,
@@ -133,7 +133,7 @@ export function getMarketSessionStatus(date: Date = new Date()): MarketSessionSt
     }
   }
 
-  // EOD Closed: after 15:00 on weekdays
+  // EOD Closed: after 14:46 on weekdays
   const daysUntilNextSession = dayOfWeek === 5 ? 3 : 1
   const secondsRemainingToday = 86400 - totalSeconds
   const ttlSeconds = secondsRemainingToday + (daysUntilNextSession - 1) * 86400 + 32400
