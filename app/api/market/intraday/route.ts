@@ -47,13 +47,13 @@ function getRedis() {
 }
 
 function latestSnapshotCacheKey(symbols: string[] | readonly string[], now: Date) {
-  return `top100:v8:${vietnamDateKey(now)}:latest:${symbols.join("-")}`
+  return `top100:v10:${vietnamDateKey(now)}:latest:${symbols.join("-")}`
 }
 
 export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly string[], now: Date = new Date()): Promise<IntradaySnapshot | null> {
   const bucketKey = snapshotCacheKey(symbols, now)
   const latestKey = latestSnapshotCacheKey(symbols, now)
-  const cache = getCache({ namespace: "market-board-v8" })
+  const cache = getCache({ namespace: "market-board-v10" })
 
   // 1. Exact bucket from Runtime Cache
   try {
@@ -144,7 +144,7 @@ function vietnamDateKey(now: Date) {
 
 function snapshotCacheKey(symbols: string[] | readonly string[], now: Date) {
   const status = getMarketSessionStatus(now)
-  return `top100:v8:${vietnamDateKey(now)}:${status.cacheBucketKey}:${symbols.join("-")}`
+  return `top100:v10:${vietnamDateKey(now)}:${status.cacheBucketKey}:${symbols.join("-")}`
 }
 
 function secondsToNextBucket(now: Date) {
@@ -168,12 +168,21 @@ async function mapWithConcurrency<T, R>(items: T[] | readonly T[], concurrency: 
 import { fetchLiveBatchQuotes } from "@/lib/broker-live-quotes"
 
 async function fetchDnseFiveMinutePoints(symbol: string, now: Date): Promise<IntradayPoint[] | null> {
-  const to = Math.floor(now.getTime() / 1000)
-  const from = Math.floor(new Date(now).setHours(9, 0, 0, 0) / 1000)
+  const vnDateStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now)
+  const [y, m, d] = vnDateStr.split("-").map(Number)
+  // 09:00:00 ICT = 02:00:00 UTC
+  const from = Math.floor(Date.UTC(y, m - 1, d, 2, 0, 0) / 1000)
+  const to = Math.max(from + 300, Math.floor(now.getTime() / 1000))
+
   try {
     const res = await fetch(`https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?resolution=5&symbol=${symbol.toUpperCase()}&from=${from}&to=${to}`, {
       headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" },
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(3500),
     })
     if (!res.ok) return null
     const data = await res.json()

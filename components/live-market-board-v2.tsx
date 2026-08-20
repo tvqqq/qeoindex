@@ -616,8 +616,6 @@ export function LiveMarketBoardV2({
 
   useEffect(() => {
     if (!symbolList.length) return
-    const hasFullInitialHistory = initialHistories && Object.values(initialHistories).some((pts) => pts && pts.length >= 15)
-    if (!sessionOpen && hasFullInitialHistory) return
 
     const controller = new AbortController()
     let disposed = false

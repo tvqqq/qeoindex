@@ -16,7 +16,7 @@ import { getEodForeignRoom } from "@/lib/eod-shares"
 export const dynamic = "force-dynamic"
 
 const INITIAL_HISTORY_POINTS = 90
-const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v1"
+const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v3"
 
 type InitialBoardData = {
   universe: BoardUniverseStock[]
