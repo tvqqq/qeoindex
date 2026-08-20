@@ -848,7 +848,9 @@ export function LiveMarketBoardV2({
           if (price <= 0) continue
           const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "volume"])
           const matchVol = firstPositive(data, ["matchQtty", "matchVolume", "matchQuantity", "qtty", "q", "vol"])
-          if (matchVol >= 30_000 || (price * matchVol * 1000 >= 1_000_000_000)) {
+          const normalizedPrice = price > 1000 ? price / 1000 : price
+          const whaleThreshold = normalizedPrice >= 50 ? 30_000 : 50_000
+          if (matchVol >= whaleThreshold) {
             triggerWhaleAlert(ticker)
           }
 

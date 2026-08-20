@@ -2271,7 +2271,7 @@ export function LiveOrderBookPanel({
     if (!isInitialTradesLoadedRef.current) {
       if (stream.historyState === "READY" || stream.historyState === "PARTIAL" || clusteredTrades.length > 0) {
         for (const t of clusteredTrades) {
-          if (t.volume >= whaleThreshold || (t.price * t.volume * 1000 >= 1_000_000_000)) {
+          if (t.volume >= whaleThreshold) {
             seenWhaleIdsRef.current.add(t.id)
           }
         }
@@ -2282,7 +2282,7 @@ export function LiveOrderBookPanel({
 
     // On subsequent realtime updates, check for any newly arrived whale trades
     for (const t of clusteredTrades) {
-      if (t.volume >= whaleThreshold || (t.price * t.volume * 1000 >= 1_000_000_000)) {
+      if (t.volume >= whaleThreshold) {
         if (!seenWhaleIdsRef.current.has(t.id)) {
           seenWhaleIdsRef.current.add(t.id)
           const side: "BUY" | "SELL" | "REF" = t.side === "SELL" ? "SELL" : "BUY"
