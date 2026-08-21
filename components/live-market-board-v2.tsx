@@ -540,6 +540,24 @@ export function LiveMarketBoardV2({
   const [mode, setMode] = useState<BoardMode>("sector")
   const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>(() => initialHistories ? { ...initialHistories } : {})
   const [whaleAlerts, setWhaleAlerts] = useState<Record<string, boolean>>({})
+  const [showWatchlist, setShowWatchlist] = useState<boolean>(() => {
+    try {
+      return typeof window !== "undefined" ? localStorage.getItem("qeoindex_show_watchlist") !== "false" : true
+    } catch {
+      return true
+    }
+  })
+
+  const toggleShowWatchlist = useCallback(() => {
+    setShowWatchlist((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem("qeoindex_show_watchlist", String(next))
+      } catch {}
+      return next
+    })
+  }, [])
+
   const [soundEnabled, setSoundEnabledState] = useState<boolean>(() => {
     try {
       return typeof window !== "undefined" && localStorage.getItem("qeoindex_sound_fx_enabled") === "true"
@@ -1364,6 +1382,40 @@ export function LiveMarketBoardV2({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Watchlist Toggle Button: nằm ngang với thanh search bar để không tốn 1 row mới */}
+          <button
+            type="button"
+            onClick={toggleShowWatchlist}
+            className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-all select-none ${
+              showWatchlist && watchedStocks.length > 0
+                ? "border-amber-500/50 bg-amber-500/15 text-amber-300 font-bold shadow-[0_0_12px_rgba(245,158,11,0.25),inset_0_1px_0_0_rgba(255,255,255,0.15)]"
+                : showWatchlist
+                  ? "border-white/[0.12] bg-white/[0.05] text-slate-300 hover:text-amber-300 hover:border-amber-500/30"
+                  : "border-white/[0.08] bg-white/[0.02] text-muted-2 hover:text-foreground hover:border-white/20"
+            }`}
+            title={showWatchlist ? "Ẩn danh sách theo dõi" : "Hiện danh sách theo dõi"}
+          >
+            <Star
+              className={`h-3.5 w-3.5 transition-transform ${
+                showWatchlist && watchedStocks.length > 0
+                  ? "fill-amber-400 text-amber-400 scale-110"
+                  : "text-slate-400"
+              }`}
+            />
+            <span className="hidden sm:inline">Theo dõi</span>
+            {watchedStocks.length > 0 ? (
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                  showWatchlist
+                    ? "bg-amber-400 text-black font-black"
+                    : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                }`}
+              >
+                {watchedStocks.length}
+              </span>
+            ) : null}
+          </button>
+
           <div className="relative min-w-[140px] sm:w-[180px]">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-2" />
             <input
@@ -1420,14 +1472,16 @@ export function LiveMarketBoardV2({
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-auto p-2.5">
-        <WatchlistSection
-          watchedStocks={watchedStocks}
-          quotes={watchedQuotes}
-          priceHistoryCloses={priceHistoryCloses}
-          whaleAlerts={whaleAlerts}
-          onToggleWatch={toggleWatch}
-          onOpen={openBook}
-        />
+        {showWatchlist && watchedStocks.length > 0 && (
+          <WatchlistSection
+            watchedStocks={watchedStocks}
+            quotes={watchedQuotes}
+            priceHistoryCloses={priceHistoryCloses}
+            whaleAlerts={whaleAlerts}
+            onToggleWatch={toggleWatch}
+            onOpen={openBook}
+          />
+        )}
         {mode === "sector" ? (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {grouped.map(({ key, label, stocks, avg, avgTone }) => {
