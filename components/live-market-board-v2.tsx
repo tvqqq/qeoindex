@@ -122,6 +122,15 @@ const SECTOR_BORDER_ACCENTS: Record<string, string> = {
   other: "border-t-indigo-400 shadow-[0_-1px_12px_rgba(99,102,241,0.25)]",
 }
 
+const SECTOR_ICON_BADGES: Record<string, string> = {
+  bank: "bg-cyan-500/20 text-cyan-300 border-cyan-400/40 shadow-[0_0_10px_rgba(34,184,207,0.35)]",
+  securities: "bg-purple-500/20 text-purple-300 border-purple-400/40 shadow-[0_0_10px_rgba(168,85,247,0.35)]",
+  consumer: "bg-rose-500/20 text-rose-300 border-rose-400/40 shadow-[0_0_10px_rgba(244,63,94,0.35)]",
+  "real-estate": "bg-amber-500/20 text-amber-300 border-amber-400/40 shadow-[0_0_10px_rgba(245,158,11,0.35)]",
+  "industrial-tech": "bg-emerald-500/20 text-emerald-300 border-emerald-400/40 shadow-[0_0_10px_rgba(16,185,129,0.35)]",
+  other: "bg-indigo-500/20 text-indigo-300 border-indigo-400/40 shadow-[0_0_10px_rgba(99,102,241,0.35)]",
+}
+
 function numeric(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value)
   return Number.isFinite(parsed) ? parsed : 0
@@ -1428,45 +1437,45 @@ export function LiveMarketBoardV2({
                   key={key}
                   className={`flex min-w-0 flex-col rounded-2xl border border-white/[0.08] border-t-2 bg-[#0b0f14] shadow-[0_4px_20px_rgba(0,0,0,0.35)] transition-colors hover:border-white/[0.14] ${SECTOR_BORDER_ACCENTS[key] ?? "border-t-emerald-400"}`}
                 >
-                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3.5 py-2 select-none">
-                    {/* Left: Icon + Tên ngành, dưới là Số lượng mã CP */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-white/[0.06] border border-white/[0.08] text-slate-300">
-                          <SectorIcon className="h-3 w-3" />
-                        </div>
-                        <h2 className="truncate text-xs sm:text-[13px] font-bold tracking-tight text-foreground" title={label}>
-                          {label}
-                        </h2>
+                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2.5 overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3.5 py-2 select-none">
+                    {/* Left: Icon matching border-top color + Tên ngành (Wrap xuống hàng nếu dài) */}
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border transition-transform duration-200 shadow-sm ${
+                          SECTOR_ICON_BADGES[key] ?? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40"
+                        }`}
+                      >
+                        <SectorIcon className="h-4 w-4 drop-shadow-sm" />
                       </div>
-                      <div className="mt-1 flex items-center pl-6.5">
-                        <span className="font-mono text-[10px] text-muted-2 font-normal">
-                          {stocks.length} mã CP
-                        </span>
-                      </div>
+                      <h2
+                        className="text-xs sm:text-[13.5px] font-bold tracking-tight text-foreground leading-[1.25] line-clamp-2 min-w-0"
+                        title={label}
+                      >
+                        {label}
+                      </h2>
                     </div>
 
-                    {/* Right: Chỉ có % tăng giảm (Font vừa vặn, tối đa diện tích hiển thị tên ngành) */}
+                    {/* Right: Chỉ có % tăng giảm (To rõ, font-ticker font-extrabold) */}
                     <div className="shrink-0 flex items-center justify-end pl-1">
                       {typeof avg === "number" ? (
                         <span
-                          className={`font-ticker font-extrabold text-[15px] sm:text-base leading-none tracking-tight ${
+                          className={`font-ticker font-extrabold text-lg sm:text-xl md:text-2xl leading-none tracking-tight ${
                             avgTone === "ceiling"
-                              ? "text-purple-400 drop-shadow-[0_0_8px_rgba(192,132,252,0.4)] font-black"
+                              ? "text-purple-400 drop-shadow-[0_0_10px_rgba(192,132,252,0.4)] font-black"
                               : avgTone === "floor"
-                                ? "text-cyan-400 drop-shadow-[0_0_8px_rgba(34,184,207,0.4)] font-black"
+                                ? "text-cyan-400 drop-shadow-[0_0_10px_rgba(34,184,207,0.4)] font-black"
                                 : avgTone === "up"
-                                  ? "text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]"
+                                  ? "text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.4)]"
                                   : avgTone === "down"
-                                    ? "text-rose-400 drop-shadow-[0_0_8px_rgba(244,63,94,0.4)]"
-                                    : "text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]"
+                                    ? "text-rose-400 drop-shadow-[0_0_10px_rgba(244,63,94,0.4)]"
+                                    : "text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.4)]"
                           }`}
                           title="Biến động trung bình ngành"
                         >
                           {avg > 0 ? "+" : ""}{avg.toFixed(1)}%
                         </span>
                       ) : (
-                        <span className="font-mono text-sm font-bold text-muted-2">—</span>
+                        <span className="font-mono text-base font-bold text-muted-2">—</span>
                       )}
                     </div>
                   </header>
