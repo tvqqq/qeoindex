@@ -83,14 +83,30 @@ test("DNSE websocket messages use animation-frame buffering without retaining cl
   assert.match(boardSource, /clearMessageQueue\(\)[\s\S]*?socket\.close\(1000, "board closed"\)/)
 })
 
-test("realtime market state remains buffered outside React at a bounded UI rate", () => {
-  assert.match(boardSource, /const MARKET_UI_COMMIT_MS = 100/)
-  assert.match(boardSource, /const quotesRef = useRef\(quotes\)/)
-  assert.match(boardSource, /const priceHistoryRef = useRef\(priceHistory\)/)
-  assert.match(boardSource, /const updateLiveQuotes = useCallback/)
-  assert.match(boardSource, /setQuotes\(quotesRef\.current\)/)
-  assert.match(boardSource, /setPriceHistory\(priceHistoryRef\.current\)/)
+test("realtime market state uses a ref-backed store with slower React commits", () => {
+  assert.match(boardSource, /const MARKET_UI_COMMIT_MS = 250/)
+  assert.match(boardSource, /const MARKET_ORDERING_REFRESH_MS = 1000/)
+  assert.match(boardSource, /const quotesRef = useRef<Record<string, LiveStockQuote \| IndexQuote>>\(\{ \.\.\.quotes \}\)/)
+  assert.match(boardSource, /const priceHistoryRef = useRef<Record<string, IntradayPoint\[\]>>\(\{ \.\.\.priceHistory \}\)/)
+  assert.match(boardSource, /const updateLiveQuote = useCallback/)
+  assert.match(boardSource, /quotesRef\.current\[symbol\] = next/)
+  assert.match(boardSource, /const quoteSnapshot = \{ \.\.\.quotesRef\.current \}/)
+  assert.match(boardSource, /setQuotes\(quoteSnapshot\)/)
+  assert.match(boardSource, /setPriceHistory\(\{ \.\.\.priceHistoryRef\.current \}\)/)
   assert.doesNotMatch(boardSource, /setLastMessageAt\(receivedAt\)/)
+})
+
+test("sector and mover ordering refresh independently from 250ms price paints", () => {
+  assert.match(boardSource, /setOrderingQuotes\(latestCommittedQuotesRef\.current\)/)
+  assert.match(boardSource, /compareByPerformance\(a, b, orderingQuotes\)/)
+  assert.match(boardSource, /sectorQuotes = stocks[\s\S]*orderingQuotes\[stock\.ticker\]/)
+  assert.doesNotMatch(boardSource, /sort\(\(a, b\) => compareByPerformance\(a, b, displayQuotes\)\)/)
+})
+
+test("browser intraday bootstrap can reuse sufficiently complete SSR history", () => {
+  assert.match(boardSource, /const SSR_HISTORY_COVERAGE_MIN = 0\.95/)
+  assert.match(boardSource, /const hasSufficientSsrHistory = useMemo/)
+  assert.match(boardSource, /historyReloadKey === 0 && hasSufficientSsrHistory/)
 })
 
 test("dense board does not force one permanent GPU layer per stock row", () => {

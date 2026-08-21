@@ -45,8 +45,9 @@ Applied production security migrations:
 1. `20260821161500_user_auth_rls.sql`
 2. `20260821164300_revoke_bootstrap_rpc_execute.sql`
 3. `20260821173500_harden_orderbook_rls_and_indexes.sql`
+4. `20260821175200_gate_orderbook_by_market_feature.sql`
 
-`profiles`, `user_preferences`, `user_features`, `watchlists`, and `watchlist_items` use RLS ownership via `auth.uid()`. `user_features` is read-only for normal users. `stock_orderbook_snapshots` no longer allows anonymous direct Supabase reads; direct SELECT is for `authenticated`, while trusted ingestion uses the service role.
+`profiles`, `user_preferences`, `user_features`, `watchlists`, and `watchlist_items` use RLS ownership via `auth.uid()`. `user_features` is read-only for normal users. `stock_orderbook_snapshots` no longer allows anonymous direct Supabase reads; authenticated direct SELECT is additionally gated by the user's enabled `market_board` entitlement, while trusted ingestion uses the service role.
 
 Supabase Security Advisor still reports the hosted-Auth setting **Leaked Password Protection Disabled**. Enable it in Supabase Auth settings before expanding access. Also verify hosted public/email signup remains disabled because QeoIndex exposes login only.
 
@@ -84,7 +85,7 @@ The two destructive market maintenance routes are POST-only. Do not restore unau
 | Realtime stocks/indices | DNSE WebSocket | Credentials/signatures stay server-side; stale watchdog reconnects. |
 | Index bootstrap | TradingView/DNSE server routes | Keep after-close values visible even without a WebSocket frame. |
 | Shared board cache | Vercel Runtime Cache + optional Upstash Redis | Cache failure fails open to the bounded provider path. |
-| Orderbook persistence | Supabase Postgres | Browser access is authenticated; server ingestion uses service role. |
+| Orderbook persistence | Supabase Postgres | Browser access is authenticated + `market_board` RLS-gated; server ingestion uses service role. |
 | Optional Finhay adapter | Finhay MCP OAuth | Tokens remain secure server cookies; browser routes require `finhay_live`. |
 
 ## Market-board lifecycle
@@ -92,38 +93,39 @@ The two destructive market maintenance routes are POST-only. Do not restore unau
 1. `app/page.tsx` verifies the server session before any protected board load.
 2. SSR assembles snapshots, batch quotes, and the shared 5-minute history snapshot in parallel.
 3. The SSR model is kept in the UI cache with a short live-session TTL.
-4. The browser connects to DNSE WebSocket and subscribes to tick, top-price, OHLC, foreign, and index channels.
-5. WebSocket callbacks are queued into `requestAnimationFrame`; live state is buffered outside React and committed at a bounded rate.
-6. `/api/market/intraday` prefers exact/today-latest cached snapshots before provider fan-out.
-7. The 60-second stale-stream watchdog reconnects independently from REST/cache hydration.
+4. If SSR has usable multi-point history for at least 95% of Top 100, the browser skips the redundant first-mount `/api/market/intraday` bootstrap. Session rollover still forces a refresh.
+5. The browser connects to DNSE WebSocket and subscribes to tick, top-price, OHLC, foreign, and index channels.
+6. WebSocket callbacks are queued into `requestAnimationFrame`; quote/history writes go into detached ref-backed stores.
+7. React publishes visible quote/history snapshots at most every 250ms (~4Hz). Sector and Top Movers ordering use a separate quote snapshot refreshed at most once per second.
+8. `/api/market/intraday` prefers exact/today-latest cached snapshots before provider fan-out.
+9. The 60-second stale-stream watchdog reconnects independently from REST/cache hydration.
 
 Do not introduce a 100-request browser fan-out.
 
 ## Board performance status — 2026-08-21
 
-The latest audit was triggered by visible lag and high laptop temperature. Confirmed hotspots and fixes:
+The audit was triggered by visible lag and high laptop temperature. Confirmed hotspots and fixes:
 
 - Removed `.board-stock-row { transform: translateZ(0) }`. It could promote roughly 100 rows into persistent GPU/compositor layers.
 - Added `app/market-board-performance.module.css` for the authenticated board surface:
   - disable dense `backdrop-filter` blur utilities;
   - use `contain: layout style` on rows;
   - suppress row drop-shadow filters.
-- `Sparkline` now ignores the transient last live endpoint in its memo comparator, so SVG paths do not rebuild on every trade tick. Stable 5-minute history changes still redraw charts.
-- `/api/market/intraday` now uses today's latest known-good cache before launching the expensive provider path.
-- Vercel runtime inspection before this change showed three 20-second timeout events across `/api/market/intraday` and `/api/market/index-candles` in the previous 24 hours.
+- `Sparkline` ignores the transient last live endpoint in its memo comparator, so SVG paths do not rebuild on every trade tick. Stable 5-minute history changes still redraw charts.
+- `/api/market/intraday` uses today's latest known-good cache before launching the expensive provider path.
+- `live-market-board-v2.tsx` now uses per-symbol ref-backed writes instead of cloning the entire quote/history outer map per DNSE frame.
+- `MARKET_UI_COMMIT_MS` is 250ms (~4Hz), down from 100ms (~10Hz maximum parent update opportunities).
+- Sector/Top Movers sorting uses `MARKET_ORDERING_REFRESH_MS = 1000`, decoupling ranking churn from live price paint.
+- First-mount browser intraday bootstrap is skipped when SSR history coverage is already sufficient (>=95%).
+- Vercel runtime inspection before these changes showed three 20-second timeout events across `/api/market/intraday` and `/api/market/index-candles` in the previous 24 hours.
 
-The main remaining client hotspot is the state machine inside `live-market-board-v2.tsx`: `MARKET_UI_COMMIT_MS` is still 100ms and sector/mover ordering is recomputed against the current quote map on each React commit. If production remains hot after the low-composite fixes, the next isolated performance PR should:
+These are architectural reductions in update/recompute opportunities, not a guaranteed CPU or temperature percentage. Browser/device profiling during a live market session remains the source of truth for actual client gains.
 
-1. mutate a ref-backed quote store per tick;
-2. clone the quote map only once every ~200–250ms;
-3. refresh sorting/order snapshots around once per second;
-4. skip the browser intraday bootstrap when SSR history coverage is already sufficient.
-
-Do not combine that structural state-machine rewrite with unrelated UI work. Preserve screenshot and orderbook behavior and profile it before/after.
+If production remains hot, profile before further throttling. The next likely boundary is splitting high-frequency row price paint from aggregate board statistics, or moving rows toward a subscription/store model. Do not combine that work with unrelated UI changes.
 
 Do not reintroduce `content-visibility` or naive row virtualization without redesigning screenshots: the current screenshot flow needs the full board DOM, including off-screen sectors.
 
-See `docs/market-board.md` for the detailed data/performance contract.
+See `docs/market-board.md` and `docs/perf-market-board-state-buffer.md` for the detailed data/performance contract.
 
 ## Board UI invariants
 
@@ -179,7 +181,7 @@ A strict CSP is deliberately deferred until the DNSE WebSocket/external-provider
 | TypeScript/UI | `pnpm typecheck` and production build |
 | Security/env | `pnpm scan:secrets` |
 
-GitHub `Verify` runs secret scan, the core regression suite, touched lint, and TypeScript on pull requests and pushes to `main`.
+GitHub `Verify` runs secret scan, the core regression suite, touched lint, TypeScript, and a production Next.js build on pull requests. Pushes to `main` rerun the same release gate.
 
 ## Git and deployment workflow
 
@@ -197,7 +199,7 @@ feature/work branch
 
 Rules:
 
-- `vercel.json` disables Git deployments for every branch except `main`.
+- `vercel.json` intends to disable Git deployments for every branch except `main`. Periodically verify the Vercel Git Integration setting because preview deployments have still been observed for feature-branch commits.
 - Never manually deploy a feature branch to production.
 - Do not run a second manual production deployment after merging the same release.
 - If Vercel reports quota/rate-limit errors, stop retrying.
@@ -208,7 +210,7 @@ Supabase DB migrations are different: approved DDL/function changes apply immedi
 ## Release checklist
 
 1. Preserve unrelated work; never reset a user branch to isolate a task.
-2. Run area tests, touched ESLint, TypeScript, and secret scan.
+2. Run area tests, touched ESLint, TypeScript, production build, and secret scan.
 3. For DB changes, run Supabase Security/Performance Advisors after migration.
 4. Push the feature branch and wait for GitHub Verify.
 5. Review the PR diff and any remaining operational warnings.
@@ -220,8 +222,8 @@ Supabase DB migrations are different: approved DDL/function changes apply immedi
 
 | Symptom | First checks |
 | --- | --- |
-| Board is hot/laggy | Chrome/Safari Performance + Layers; verify no row GPU promotion/backdrop blur; inspect React commit frequency and sector sorting. |
-| `/api/market/intraday` is slow | Inspect Runtime Cache/Redis hit path before provider fan-out; compare Vercel timeout logs. |
+| Board is hot/laggy | Chrome/Safari Performance + Layers; inspect actual React commit frequency, row paint cost, aggregate/header recomputation, and open order-book windows. |
+| `/api/market/intraday` is slow | Inspect Runtime Cache/Redis hit path and whether SSR history reuse suppressed redundant client bootstrap; compare Vercel timeout logs. |
 | Charts exist but prices are `—` | Inspect SSR quote/reference selection and intraday cache validity. |
 | Prices disappear after close | Verify latest-session history and Supabase snapshot fallback. |
 | VNINDEX/VN30 are blank | Inspect `/api/market/indexes`, then DNSE index frames; sockets may be quiet after close. |
@@ -233,5 +235,5 @@ Supabase DB migrations are different: approved DDL/function changes apply immedi
 
 - Hosted Auth leaked-password protection still needs to be enabled in Supabase settings.
 - CSP remains deferred pending a tested WebSocket/external-source policy.
-- The deeper quote-store/React commit throttling rewrite is intentionally deferred to a focused performance change if low-composite fixes are insufficient.
+- Further board throttling should be evidence-driven from authenticated live-session browser profiling; the 250ms quote / 1s ordering split is now the default contract.
 - Automated browser screenshot tooling is not guaranteed in every agent runtime; deterministic source tests do not count as pixel QA.
