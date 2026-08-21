@@ -5,7 +5,11 @@ import { BOARD_SECTOR_GROUPS } from "../lib/market-sectors.ts"
 
 const boardSource = readFileSync(new URL("../components/live-market-board-v2.tsx", import.meta.url), "utf8")
 const stockSource = readFileSync(new URL("../components/live-market-stock.tsx", import.meta.url), "utf8")
+const sparklineSource = readFileSync(new URL("../components/sparkline.tsx", import.meta.url), "utf8")
+const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8")
+const perfCssSource = readFileSync(new URL("../app/market-board-performance.module.css", import.meta.url), "utf8")
 const cssSource = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")
+const intradayRouteSource = readFileSync(new URL("../app/api/market/intraday/route.ts", import.meta.url), "utf8")
 
 function boardColumnsAt(width: number) {
   if (width >= 1280) return 6
@@ -79,13 +83,33 @@ test("DNSE websocket messages use animation-frame buffering without retaining cl
   assert.match(boardSource, /clearMessageQueue\(\)[\s\S]*?socket\.close\(1000, "board closed"\)/)
 })
 
-test("realtime market state is buffered outside React and committed at a bounded UI rate", () => {
+test("realtime market state remains buffered outside React at a bounded UI rate", () => {
   assert.match(boardSource, /const MARKET_UI_COMMIT_MS = 100/)
   assert.match(boardSource, /const quotesRef = useRef\(quotes\)/)
   assert.match(boardSource, /const priceHistoryRef = useRef\(priceHistory\)/)
   assert.match(boardSource, /const updateLiveQuotes = useCallback/)
-  assert.match(boardSource, /const updateLiveHistory = useCallback/)
   assert.match(boardSource, /setQuotes\(quotesRef\.current\)/)
   assert.match(boardSource, /setPriceHistory\(priceHistoryRef\.current\)/)
   assert.doesNotMatch(boardSource, /setLastMessageAt\(receivedAt\)/)
+})
+
+test("dense board does not force one permanent GPU layer per stock row", () => {
+  assert.match(pageSource, /market-board-performance\.module\.css/)
+  assert.match(pageSource, /styles\.performanceSurface/)
+  assert.doesNotMatch(cssSource, /\.board-stock-row\s*\{[^}]*translateZ\(0\)/s)
+  assert.match(perfCssSource, /contain: layout style/)
+  assert.match(perfCssSource, /backdrop-filter: none !important/)
+})
+
+test("sparklines ignore the transient live endpoint between 5m history changes", () => {
+  assert.match(sparklineSource, /function sparklinePropsEqual/)
+  assert.match(sparklineSource, /const stableLength = Math\.max\(0, a\.length - 1\)/)
+  assert.match(sparklineSource, /memo\(function Sparkline[\s\S]*sparklinePropsEqual\)/)
+})
+
+test("intraday API prefers today's cached snapshot before expensive provider fan-out", () => {
+  assert.match(intradayRouteSource, /getCachedIntraday5mSnapshot/)
+  assert.match(intradayRouteSource, /cacheLayer = snapshot \? "cache" : "provider"/)
+  assert.match(intradayRouteSource, /getIntraday5mSnapshot/)
+  assert.doesNotMatch(intradayRouteSource, /fetchSnapshot/)
 })
