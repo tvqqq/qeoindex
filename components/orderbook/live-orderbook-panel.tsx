@@ -2694,34 +2694,73 @@ export function LiveOrderBookPanel({
                 ))}
               </div>
 
-              {/* Total Ratio Bar matching Image 3 style */}
-              <div className="mt-2 pt-2 border-t border-border/50">
-                <div className="flex items-center justify-between text-xs font-mono mb-1.5">
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <span className="h-2 w-2 rounded-full bg-up shrink-0" />
-                    <span className="text-muted-2">Mua:</span>
-                    <b className="text-up font-bold">{formatCompactVolume(bidTotal)}</b>
-                    <span className="text-muted text-[11px]">({depthTotal > 0 ? `${buyPct.toFixed(0)}%` : "50%"})</span>
-                  </span>
+              {/* ACCUMULATION / DISTRIBUTION RATIO BAR (Image 1 Style) */}
+              <div className="mt-2.5 pt-2.5 border-t border-white/[0.08]">
+                {/* Upper stats row */}
+                <div className="flex items-end justify-between mb-1.5">
+                  {/* Left: Accumulation (Buy) */}
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 tracking-wider uppercase">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                      <span>ACCUMULATION</span>
+                    </div>
+                    <div className="font-ticker font-extrabold text-xl sm:text-2xl text-emerald-400 tracking-tight drop-shadow-[0_0_10px_rgba(52,211,153,0.35)] leading-tight mt-0.5">
+                      {depthTotal > 0 ? `${buyPct.toFixed(1)}%` : "50.0%"}
+                    </div>
+                    <div className="font-mono text-[9.5px] text-slate-400 tracking-tight mt-0.5">
+                      VOL: +{formatCompactVolume(bidTotal)}
+                    </div>
+                  </div>
 
-                  {/* CENTER ATO / ATC COUNTDOWN BADGE */}
-                  {sessionCountdown ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-amber-500/40 bg-amber-500/15 text-amber-400 font-bold text-[11px] animate-pulse shadow-sm">
-                      <Clock className="h-3 w-3" />
-                      <span>{sessionCountdown.type}: {sessionCountdown.label}</span>
+                  {/* Center: Flow Balance / Countdown */}
+                  <div className="flex flex-col items-center justify-center pb-0.5">
+                    {sessionCountdown ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-amber-500/40 bg-amber-500/15 text-amber-400 font-bold text-[10px] animate-pulse shadow-sm mb-1">
+                        <Clock className="h-3 w-3" />
+                        <span>{sessionCountdown.type}: {sessionCountdown.label}</span>
+                      </span>
+                    ) : null}
+                    <span className="text-[8.5px] font-extrabold text-slate-400 tracking-widest uppercase">
+                      FLOW BALANCE
                     </span>
-                  ) : null}
+                    <span className="font-mono text-xs font-bold text-slate-200 mt-0.5">
+                      {depthTotal > 0 ? `${Math.round(buyPct)} : ${Math.round(sellPct)}` : "50 : 50"}
+                    </span>
+                  </div>
 
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <span className="h-2 w-2 rounded-full bg-down shrink-0" />
-                    <span className="text-muted-2">Bán:</span>
-                    <b className="text-down font-bold">{formatCompactVolume(askTotal)}</b>
-                    <span className="text-muted text-[11px]">({depthTotal > 0 ? `${sellPct.toFixed(0)}%` : "50%"})</span>
-                  </span>
+                  {/* Right: Distribution (Sell) */}
+                  <div className="flex flex-col items-end">
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-rose-400 tracking-wider uppercase">
+                      <span>DISTRIBUTION</span>
+                      <span className="h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.8)]" />
+                    </div>
+                    <div className="font-ticker font-extrabold text-xl sm:text-2xl text-rose-400 tracking-tight drop-shadow-[0_0_10px_rgba(244,63,94,0.35)] leading-tight mt-0.5 text-right">
+                      {depthTotal > 0 ? `${sellPct.toFixed(1)}%` : "50.0%"}
+                    </div>
+                    <div className="font-mono text-[9.5px] text-slate-400 tracking-tight mt-0.5 text-right">
+                      VOL: -{formatCompactVolume(askTotal)}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex h-2 overflow-hidden rounded-full bg-[#1e2021]">
-                  <div className="bg-up transition-all duration-300" style={{ width: `${depthTotal > 0 ? buyPct : 50}%` }} />
-                  <div className="bg-down transition-all duration-300" style={{ width: `${depthTotal > 0 ? sellPct : 50}%` }} />
+
+                {/* The Progress Bar with White Gradient Transition in the Middle */}
+                <div
+                  className="relative h-2 w-full rounded-full overflow-hidden shadow-[0_0_12px_rgba(0,0,0,0.6),inset_0_1px_2px_rgba(0,0,0,0.8)] transition-all duration-300"
+                  style={{
+                    background: depthTotal > 0
+                      ? `linear-gradient(to right, #10b981 0%, #22c98a ${Math.max(0, buyPct - 2.5)}%, #ffffff ${buyPct}%, #f43f5e ${Math.min(100, buyPct + 2.5)}%, #ff4757 100%)`
+                      : "linear-gradient(to right, #22c98a 0%, #ffffff 50%, #ff4757 100%)",
+                  }}
+                />
+
+                {/* Sub-footer below bar */}
+                <div className="flex items-center justify-between mt-1 text-[8.5px] font-bold tracking-wider uppercase">
+                  <span className={buyPct >= 50 ? "text-emerald-400/80 font-extrabold" : "text-slate-600 font-normal"}>
+                    ACCUMULATION DOMINANCE
+                  </span>
+                  <span className={sellPct > 50 ? "text-rose-400/80 font-extrabold" : "text-slate-600 font-normal"}>
+                    DISTRIBUTION DOMINANCE
+                  </span>
                 </div>
               </div>
             </div>
