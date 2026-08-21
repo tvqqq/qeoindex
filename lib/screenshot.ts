@@ -142,7 +142,7 @@ export async function captureMarketBoardScreenshot(
   const clone = element.cloneNode(true) as HTMLElement
 
   clone.style.position = "fixed"
-  clone.style.top = "0"
+  clone.style.top = "-99999px"
   clone.style.left = "0"
   clone.style.width = `${TARGET_BOARD_WIDTH}px`
   clone.style.minWidth = `${TARGET_BOARD_WIDTH}px`
@@ -152,7 +152,7 @@ export async function captureMarketBoardScreenshot(
   clone.style.maxHeight = "none"
   clone.style.overflow = "visible"
   clone.style.zIndex = "-9999"
-  clone.style.opacity = "0.01"
+  clone.style.opacity = "1"
   clone.style.pointerEvents = "none"
   clone.style.backgroundColor = "#06080a"
 
