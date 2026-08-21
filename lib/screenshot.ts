@@ -185,7 +185,7 @@ export async function captureMarketBoardScreenshot(
   })
 
   // Remove screenshot-excluded elements from clone
-  const excluded = clone.querySelectorAll<HTMLElement>("[data-screenshot-exclude="true"]")
+  const excluded = clone.querySelectorAll<HTMLElement>('[data-screenshot-exclude="true"]')
   excluded.forEach((el) => el.remove())
 
   document.body.appendChild(clone)
