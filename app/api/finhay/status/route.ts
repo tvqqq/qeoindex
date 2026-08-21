@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireApiFeature } from "@/lib/auth/server"
 import { getFinhayMarketSession } from "@/lib/finhay-live"
 import { getActiveFinhayAccessToken } from "@/lib/finhay-session"
 
@@ -6,6 +7,9 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
+  const auth = await requireApiFeature("finhay_live")
+  if (!auth.ok) return auth.response
+
   const accessToken = await getActiveFinhayAccessToken()
   if (!accessToken) {
     return NextResponse.json({
@@ -13,7 +17,7 @@ export async function GET() {
       state: "AUTH_REQUIRED",
       message: "QeoIndex chưa có phiên OAuth Finhay riêng.",
       connectUrl: "/api/finhay/auth/start",
-    })
+    }, { status: 401 })
   }
 
   try {

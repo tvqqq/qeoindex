@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { requireApiFeature } from "@/lib/auth/server"
 import { getScannerData } from "@/lib/scanner-data"
 import { getOpenRecommendations } from "@/lib/signal-data"
 import { marketSessionProgress, SIGNAL_ENGINE_VERSION } from "@/lib/signal-engine"
@@ -8,6 +9,9 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 export async function GET() {
+  const auth = await requireApiFeature("signals")
+  if (!auth.ok) return auth.response
+
   try {
     const [scanner, open] = await Promise.all([getScannerData(), getOpenRecommendations()])
     const bullish = Object.values(scanner.latestScans).filter((row) => row.taBias === "Bullish" && row.status === "Complete")

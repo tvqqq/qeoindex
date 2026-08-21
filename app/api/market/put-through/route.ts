@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 
+import { requireApiFeature } from "@/lib/auth/server"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -15,6 +17,9 @@ function finiteNumber(value: unknown): number | null {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireApiFeature("market_board")
+  if (!auth.ok) return auth.response
+
   const url = new URL(request.url)
   const symbol = (url.searchParams.get("symbol") ?? "").trim().toUpperCase()
   if (!symbol || !/^[A-Z0-9]{2,12}$/.test(symbol)) {
@@ -41,7 +46,6 @@ export async function GET(request: Request) {
         const price = rawPrice && rawPrice > 1000 ? rawPrice / 1000 : (rawPrice ?? 0)
         const volume = finiteNumber(item?.volume) ?? 0
         const rawValue = finiteNumber(item?.value) ?? 0
-        // VPS rawValue in getlistpt is in thousand VND, so multiply by 1000 to get exact VND
         const value = rawValue > 0 ? rawValue * 1000 : price * 1000 * volume
         return {
           id: String(item?.transId || item?.id || `pt-${idx}`),
