@@ -232,7 +232,7 @@ export const LiveStockRow = memo(function LiveStockRow({
     >
       <div className="min-w-0">
         <div className="flex items-center gap-0.5">
-          <span className={`font-mono text-[16px] leading-none tracking-[0.02em] ${tickerClass}`}>{stock.ticker}</span>
+          <span className={`font-ticker font-extrabold text-[16px] leading-none tracking-tight ${tickerClass}`}>{stock.ticker}</span>
           {isWhaleActive && (
             <span className="text-[10px] leading-none animate-bounce" title="Lệnh lớn vừa khớp!">🐋</span>
           )}
@@ -331,7 +331,7 @@ export const LiveMoverCard = memo(function LiveMoverCard({
       <button type="button" onClick={onOpen} className="absolute inset-0 rounded-2xl focus:outline-none focus:ring-1 focus:ring-brand" aria-label={`Mở sổ lệnh ${stock.ticker}`} />
       <div>
         <div className="flex items-center gap-1.5">
-          <span className={`font-mono text-2xl ${tickerClass}`}>{stock.ticker}</span>
+          <span className={`font-ticker font-extrabold text-2xl tracking-tight ${tickerClass}`}>{stock.ticker}</span>
           {onToggleWatch && (
             <button
               type="button"

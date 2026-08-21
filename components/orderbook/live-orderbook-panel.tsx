@@ -2560,7 +2560,7 @@ export function LiveOrderBookPanel({
             size={32}
             className="shrink-0 rounded-full border-white/40 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
           />
-          <span className="font-mono text-xl sm:text-2xl font-black bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent italic pr-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.2)] tracking-tighter shrink-0 select-none">
+          <span className="font-ticker text-xl sm:text-2xl font-extrabold italic bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent pr-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.2)] tracking-tight shrink-0 select-none">
             {symbol}
           </span>
           {stream.company?.exchange ? (

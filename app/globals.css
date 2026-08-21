@@ -3,6 +3,7 @@
 @theme inline {
   --font-sans: 'Geist', 'Geist Fallback', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono', 'Geist Mono Fallback', ui-monospace, monospace;
+  --font-ticker: var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
 
   --color-background: #06080a;
   --color-foreground: #e1e7ec;
@@ -74,6 +75,10 @@ body::after {
 .board-stock-row {
   content-visibility: auto;
   contain: style paint;
+}
+
+.font-ticker {
+  font-family: var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Thin scrollbars for trading grid */
