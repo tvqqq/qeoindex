@@ -1497,15 +1497,15 @@ export function LiveMarketBoardV2({
                       </h2>
                     </div>
 
-                    {/* Right: Chỉ có % tăng giảm (To rõ, font-ticker font-extrabold) */}
+                    {/* Right: Chỉ có % tăng giảm (SemiBold 600 Italic) */}
                     <div className="shrink-0 flex items-center justify-end pl-1">
                       {typeof avg === "number" ? (
                         <span
-                          className={`font-ticker font-extrabold text-lg sm:text-xl md:text-2xl leading-none tracking-tight ${
+                          className={`font-ticker font-semibold italic text-lg sm:text-xl md:text-2xl leading-none tracking-tight ${
                             avgTone === "ceiling"
-                              ? "text-purple-400 drop-shadow-[0_0_10px_rgba(192,132,252,0.4)] font-black"
+                              ? "text-purple-400 drop-shadow-[0_0_10px_rgba(192,132,252,0.4)]"
                               : avgTone === "floor"
-                                ? "text-cyan-400 drop-shadow-[0_0_10px_rgba(34,184,207,0.4)] font-black"
+                                ? "text-cyan-400 drop-shadow-[0_0_10px_rgba(34,184,207,0.4)]"
                                 : avgTone === "up"
                                   ? "text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.4)]"
                                   : avgTone === "down"
