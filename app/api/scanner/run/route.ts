@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
+
+import { isMachineRequestAuthorized } from "@/lib/auth/machine"
 import { runScannerUniverse } from "@/lib/scanner-runner"
 import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
 
+export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
-function authorized(request: NextRequest) {
-  const configured = [process.env.SCANNER_RUN_SECRET, process.env.CRON_SECRET].filter(Boolean) as string[]
-  if (!configured.length) return process.env.NODE_ENV !== "production"
-  const header = request.headers.get("authorization") ?? ""
-  return configured.some((secret) => header === `Bearer ${secret}`)
-}
-
 async function run(request: NextRequest) {
-  if (!authorized(request)) {
+  if (!isMachineRequestAuthorized(
+    request,
+    [process.env.SCANNER_RUN_SECRET, process.env.CRON_SECRET],
+    { allowUnconfiguredInDevelopment: true },
+  )) {
     return NextResponse.json({ ok: false, error: "Scanner authorization is not configured or invalid." }, { status: 401 })
   }
 
