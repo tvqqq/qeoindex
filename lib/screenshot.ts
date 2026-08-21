@@ -49,31 +49,31 @@ async function drawNavbarWatermark(
 ) {
   ctx.save()
 
-  // Sized +15% for balanced elegance
-  const scale = Math.max(0.9, (boardWidth / 1400) * 1.28)
-  const iconSize = Math.round(64 * scale)
-  const badgeSize = Math.round(92 * scale)
-  const badgeRadius = Math.round(24 * scale)
+  // Compact, tasteful scale that sits softly in the background
+  const scale = Math.max(0.85, (boardWidth / 1600) * 1.15)
+  const iconSize = Math.round(56 * scale)
+  const badgeSize = Math.round(82 * scale)
+  const badgeRadius = Math.round(22 * scale)
 
-  // Subtle submerged opacity (~11%)
-  ctx.globalAlpha = 0.11
+  // Soft, translucent, non-intrusive watermark opacity
+  ctx.globalAlpha = 0.08
 
   // 1. Draw rounded badge container
   const badgeX = centerX - badgeSize / 2
-  const badgeY = centerY - Math.round(92 * scale)
+  const badgeY = centerY - Math.round(86 * scale)
 
   const badgeGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX + badgeSize, badgeY + badgeSize)
-  badgeGrad.addColorStop(0, "rgba(34, 201, 138, 0.45)")
-  badgeGrad.addColorStop(0.5, "rgba(168, 85, 247, 0.45)")
-  badgeGrad.addColorStop(1, "rgba(34, 201, 138, 0.35)")
+  badgeGrad.addColorStop(0, "rgba(34, 201, 138, 0.35)")
+  badgeGrad.addColorStop(0.5, "rgba(168, 85, 247, 0.35)")
+  badgeGrad.addColorStop(1, "rgba(34, 201, 138, 0.25)")
 
   ctx.fillStyle = badgeGrad
-  ctx.shadowColor = "rgba(34, 201, 138, 0.5)"
-  ctx.shadowBlur = Math.round(20 * scale)
+  ctx.shadowColor = "rgba(34, 201, 138, 0.4)"
+  ctx.shadowBlur = Math.round(16 * scale)
   roundRect(ctx, badgeX, badgeY, badgeSize, badgeSize, badgeRadius)
   ctx.fill()
 
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.45)"
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.35)"
   ctx.lineWidth = Math.round(1.5 * scale)
   roundRect(ctx, badgeX, badgeY, badgeSize, badgeSize, badgeRadius)
   ctx.stroke()
@@ -93,12 +93,12 @@ async function drawNavbarWatermark(
   // 3. Draw Title "QeoIndex"
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
-  const titleY = badgeY + badgeSize + Math.round(36 * scale)
+  const titleY = badgeY + badgeSize + Math.round(34 * scale)
 
-  ctx.font = `italic 800 ${Math.round(46 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
+  ctx.font = `italic 800 ${Math.round(42 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
   ctx.fillStyle = "#ffffff"
-  ctx.shadowColor = "rgba(34, 201, 138, 0.6)"
-  ctx.shadowBlur = Math.round(20 * scale)
+  ctx.shadowColor = "rgba(34, 201, 138, 0.5)"
+  ctx.shadowBlur = Math.round(16 * scale)
 
   const qeoWidth = ctx.measureText("Qeo").width
   const indexWidth = ctx.measureText("Index").width
@@ -106,7 +106,7 @@ async function drawNavbarWatermark(
 
   ctx.textAlign = "left"
   const titleStartX = centerX - totalTitleWidth / 2
-  ctx.fillStyle = "rgba(255, 255, 255, 0.95)"
+  ctx.fillStyle = "rgba(255, 255, 255, 0.9)"
   ctx.fillText("Qeo", titleStartX, titleY)
 
   const indexGrad = ctx.createLinearGradient(titleStartX + qeoWidth, titleY, titleStartX + totalTitleWidth, titleY)
@@ -118,17 +118,14 @@ async function drawNavbarWatermark(
 
   // 4. Draw Slogan "Đọc thị trường. Giữ kỷ luật"
   ctx.textAlign = "center"
-  ctx.font = `600 ${Math.round(18 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
-  ctx.fillStyle = "rgba(203, 213, 225, 0.9)"
+  ctx.font = `500 ${Math.round(16 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
+  ctx.fillStyle = "rgba(203, 213, 225, 0.85)"
   ctx.shadowBlur = 0
-  const sloganY = titleY + Math.round(30 * scale)
+  const sloganY = titleY + Math.round(28 * scale)
   ctx.fillText("Đọc thị trường. Giữ kỷ luật", centerX, sloganY)
 
   ctx.restore()
 }
-
-// Canonical compact desktop width for 6-column presentation
-const TARGET_BOARD_WIDTH = 1380
 
 export async function captureMarketBoardScreenshot(
   element: HTMLElement,
@@ -138,116 +135,25 @@ export async function captureMarketBoardScreenshot(
 ): Promise<Blob | null> {
   const pixelRatio = options?.pixelRatio ?? 2
 
-  // 1. Create a compact, standardized 6-column clone inside an offscreen container
-  const container = document.createElement("div")
-  container.style.position = "fixed"
-  container.style.top = "-99999px"
-  container.style.left = "-99999px"
-  container.style.width = `${TARGET_BOARD_WIDTH}px`
-  container.style.height = "100px"
-  container.style.overflow = "hidden"
-  container.style.zIndex = "-9999"
-  container.style.pointerEvents = "none"
-
-  const clone = element.cloneNode(true) as HTMLElement
-  clone.className = `${clone.className} ${document.documentElement.className} ${document.body.className} dark`
-  clone.style.position = "relative"
-  clone.style.top = "0"
-  clone.style.left = "0"
-  clone.style.margin = "0"
-  clone.style.width = `${TARGET_BOARD_WIDTH}px`
-  clone.style.minWidth = `${TARGET_BOARD_WIDTH}px`
-  clone.style.maxWidth = `${TARGET_BOARD_WIDTH}px`
-  clone.style.height = "auto"
-  clone.style.minHeight = "auto"
-  clone.style.maxHeight = "none"
-  clone.style.overflow = "visible"
-  clone.style.opacity = "1"
-  clone.style.color = "#e1e7ec"
-  clone.style.backgroundColor = "#06080a"
-
-  // Explicitly inject Tailwind 4 theme CSS custom properties into clone
-  clone.style.setProperty("--color-background", "#06080a")
-  clone.style.setProperty("--color-foreground", "#e1e7ec")
-  clone.style.setProperty("--color-panel", "#0b0f13")
-  clone.style.setProperty("--color-panel-2", "#0f1418")
-  clone.style.setProperty("--color-cell", "#080c0f")
-  clone.style.setProperty("--color-border", "#161e23")
-  clone.style.setProperty("--color-border-strong", "#243038")
-  clone.style.setProperty("--color-muted", "#62727d")
-  clone.style.setProperty("--color-muted-2", "#8a9ba7")
-  clone.style.setProperty("--color-up", "#22c98a")
-  clone.style.setProperty("--color-up-dim", "#0f3b2c")
-  clone.style.setProperty("--color-down", "#ff4757")
-  clone.style.setProperty("--color-down-dim", "#3a1519")
-  clone.style.setProperty("--color-ceiling", "#b07cff")
-  clone.style.setProperty("--color-ceiling-dim", "#2c1d47")
-  clone.style.setProperty("--color-floor", "#22b8cf")
-  clone.style.setProperty("--color-floor-dim", "#0b3540")
-  clone.style.setProperty("--color-ref", "#e2b93b")
-  clone.style.setProperty("--color-ref-dim", "#3f3414")
-  clone.style.setProperty("--color-brand", "#22c98a")
-
-  // Unroll all scrollable inner containers
-  const scrollContainers = clone.querySelectorAll<HTMLElement>(
-    ".overflow-auto, .overflow-y-auto, .overflow-hidden, .min-h-0, .flex-1"
-  )
-  scrollContainers.forEach((el) => {
-    el.style.overflow = "visible"
-    el.style.height = "auto"
-    el.style.maxHeight = "none"
-    el.style.flex = "none"
+  // 1. Capture DOM to raw canvas
+  const boardCanvas = await toCanvas(element, {
+    pixelRatio,
+    backgroundColor: "#06080a",
+    cacheBust: true,
+    filter: (node) => {
+      if (node instanceof HTMLElement && node.dataset.screenshotExclude === "true") {
+        return false
+      }
+      return true
+    },
   })
-
-  // Force exact 6-column grid with clean gap
-  const grids = clone.querySelectorAll<HTMLElement>(".grid")
-  grids.forEach((grid) => {
-    if (grid.querySelectorAll("section").length >= 6) {
-      grid.style.display = "grid"
-      grid.style.gridTemplateColumns = "repeat(6, minmax(0, 1fr))"
-      grid.style.gap = "6px"
-      grid.style.width = "100%"
-    }
-  })
-
-  const sections = clone.querySelectorAll<HTMLElement>("section")
-  sections.forEach((sec) => {
-    sec.style.height = "auto"
-    sec.style.minHeight = "auto"
-    sec.style.overflow = "visible"
-  })
-
-  // Remove screenshot-excluded elements from clone
-  const excluded = clone.querySelectorAll<HTMLElement>('[data-screenshot-exclude="true"]')
-  excluded.forEach((el) => el.remove())
-
-  container.appendChild(clone)
-  document.body.appendChild(container)
-
-  let boardCanvas: HTMLCanvasElement
-  try {
-    // Allow browser reflow
-    await new Promise((r) => setTimeout(r, 60))
-    const cloneHeight = clone.scrollHeight || clone.offsetHeight || 1100
-
-    boardCanvas = await toCanvas(clone, {
-      pixelRatio,
-      width: TARGET_BOARD_WIDTH,
-      height: cloneHeight,
-      backgroundColor: "#06080a",
-      cacheBust: false,
-      skipFonts: true,
-    })
-  } finally {
-    document.body.removeChild(container)
-  }
 
   // 2. Setup high-res framed composition canvas
-  const scale = boardCanvas.width / (TARGET_BOARD_WIDTH * pixelRatio)
-  const paddingX = Math.round(boardCanvas.width * 0.05)
-  const paddingY = Math.round(boardCanvas.height * 0.045)
-  const glassRimPadding = Math.round(18 * pixelRatio * scale)
-  const footerExtra = Math.round(48 * pixelRatio * scale)
+  const scale = boardCanvas.width / 1600
+  const paddingX = Math.round(boardCanvas.width * 0.055)
+  const paddingY = Math.round(boardCanvas.height * 0.065)
+  const glassRimPadding = Math.round(18 * scale)
+  const footerExtra = Math.round(46 * scale)
 
   const finalCanvas = document.createElement("canvas")
   finalCanvas.width = boardCanvas.width + paddingX * 2
@@ -273,7 +179,7 @@ export async function captureMarketBoardScreenshot(
   const centerGlow = ctx.createRadialGradient(
     finalCanvas.width * 0.5,
     finalCanvas.height * 0.55,
-    120,
+    100,
     finalCanvas.width * 0.5,
     finalCanvas.height * 0.55,
     finalCanvas.width * 0.75
@@ -296,7 +202,7 @@ export async function captureMarketBoardScreenshot(
   const boardY = paddingY
   const boardW = boardCanvas.width
   const boardH = boardCanvas.height
-  const innerRadius = Math.round(22 * pixelRatio * scale)
+  const innerRadius = Math.round(20 * scale)
 
   const rimX = boardX - glassRimPadding
   const rimY = boardY - glassRimPadding
@@ -307,8 +213,8 @@ export async function captureMarketBoardScreenshot(
   // Translucent Glass Rim Shadow
   ctx.save()
   ctx.shadowColor = "rgba(46, 16, 101, 0.4)"
-  ctx.shadowBlur = Math.round(44 * pixelRatio * scale)
-  ctx.shadowOffsetY = Math.round(18 * pixelRatio * scale)
+  ctx.shadowBlur = Math.round(40 * scale)
+  ctx.shadowOffsetY = Math.round(18 * scale)
 
   // Frosted Translucent Glass Fill
   const glassFill = ctx.createLinearGradient(rimX, rimY, rimX, rimY + rimH)
@@ -323,7 +229,7 @@ export async function captureMarketBoardScreenshot(
   // Translucent Glass Rim Stroke Outline
   ctx.save()
   ctx.strokeStyle = "rgba(255, 255, 255, 0.55)"
-  ctx.lineWidth = Math.max(1.5, Math.round(2 * pixelRatio * scale))
+  ctx.lineWidth = Math.max(1.5, Math.round(2 * scale))
   roundRect(ctx, rimX, rimY, rimW, rimH, rimRadius)
   ctx.stroke()
   ctx.restore()
@@ -332,8 +238,8 @@ export async function captureMarketBoardScreenshot(
   // Deep Drop Shadow
   ctx.save()
   ctx.shadowColor = "rgba(0, 0, 0, 0.88)"
-  ctx.shadowBlur = Math.round(50 * pixelRatio * scale)
-  ctx.shadowOffsetY = Math.round(24 * pixelRatio * scale)
+  ctx.shadowBlur = Math.round(48 * scale)
+  ctx.shadowOffsetY = Math.round(22 * scale)
   ctx.fillStyle = "#06080a"
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.fill()
@@ -342,7 +248,7 @@ export async function captureMarketBoardScreenshot(
   // Neon Ambient Glow around inner board window
   ctx.save()
   ctx.shadowColor = "rgba(168, 85, 247, 0.45)"
-  ctx.shadowBlur = Math.round(38 * pixelRatio * scale)
+  ctx.shadowBlur = Math.round(36 * scale)
   ctx.fillStyle = "#06080a"
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.fill()
@@ -354,14 +260,14 @@ export async function captureMarketBoardScreenshot(
   ctx.clip()
   ctx.drawImage(boardCanvas, boardX, boardY, boardW, boardH)
 
-  // Draw Centered Navbar-style Watermark directly over the board screenshot (+15% larger)
+  // Draw Centered Navbar-style Watermark directly over the board screenshot (subtle & submerged)
   await drawNavbarWatermark(ctx, boardX + boardW / 2, boardY + boardH / 2, boardW)
   ctx.restore()
 
   // Inner Window Outer Stroke Border
   ctx.save()
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.22)"
-  ctx.lineWidth = Math.max(1, Math.round(1.5 * pixelRatio * scale))
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.2)"
+  ctx.lineWidth = Math.max(1, Math.round(1.5 * scale))
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.stroke()
   ctx.restore()
@@ -370,7 +276,7 @@ export async function captureMarketBoardScreenshot(
   ctx.save()
   ctx.textAlign = "right"
   ctx.textBaseline = "middle"
-  ctx.font = `700 ${Math.max(14, Math.round(finalCanvas.width * 0.012))}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
+  ctx.font = `700 ${Math.max(13, Math.round(finalCanvas.width * 0.0115))}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
   ctx.fillStyle = "#3b0764"
   ctx.shadowColor = "rgba(255, 255, 255, 0.75)"
   ctx.shadowBlur = 6
@@ -380,7 +286,7 @@ export async function captureMarketBoardScreenshot(
   const dateStr = now.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })
   const stamp = `© qeoindex.qeoqeo.com · ${dateStr} ${timeStr}`
 
-  ctx.fillText(stamp, finalCanvas.width - paddingX, finalCanvas.height - paddingY / 2 + 5)
+  ctx.fillText(stamp, finalCanvas.width - paddingX, finalCanvas.height - paddingY / 2 + Math.round(4 * scale))
   ctx.restore()
 
   return new Promise<Blob | null>((resolve) => {
