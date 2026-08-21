@@ -133,11 +133,11 @@ export function TopNav() {
           </div>
           <div className="flex flex-col leading-none">
             <div className="flex items-center gap-1.5">
-              <span className="font-ticker font-extrabold italic text-[17px] tracking-tight text-white flex items-center">
-                Qeo<span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 drop-shadow-[0_0_8px_rgba(34,201,138,0.6)]">Index</span>
+              <span className="font-ticker font-extrabold italic text-[17px] tracking-tight text-white flex items-center select-none">
+                Qeo<span className="animate-title-flow text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-200 via-cyan-300 to-emerald-400 drop-shadow-[0_0_10px_rgba(34,201,138,0.75)]">Index</span>
               </span>
-              {/* Lottie Trending Upward Animation */}
-              <TrendingUpwardLottie className="h-6 w-6" />
+              {/* Money Growth Lottie Animation */}
+              <TrendingUpwardLottie className="h-7 w-7" />
             </div>
             <span className="font-ticker font-medium not-italic text-[10.5px] text-slate-400 tracking-tight mt-0.5">{BRAND.slogan}</span>
           </div>

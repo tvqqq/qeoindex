@@ -81,6 +81,23 @@ body::after {
   font-family: var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
 }
 
+@keyframes title-gradient-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-title-flow {
+  background-size: 200% auto;
+  animation: title-gradient-flow 3s ease-in-out infinite;
+}
+
 /* Thin scrollbars for trading grid */
 * {
   scrollbar-width: thin;
