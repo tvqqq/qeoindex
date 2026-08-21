@@ -96,7 +96,7 @@ test("realtime market state remains buffered outside React at a bounded UI rate"
 test("dense board does not force one permanent GPU layer per stock row", () => {
   assert.match(pageSource, /market-board-performance\.module\.css/)
   assert.match(pageSource, /styles\.performanceSurface/)
-  assert.doesNotMatch(cssSource, /\.board-stock-row\s*\{[^}]*translateZ\(0\)/s)
+  assert.doesNotMatch(cssSource, /\.board-stock-row\s*\{[^}]*translateZ\(0\)/)
   assert.match(perfCssSource, /contain: layout style/)
   assert.match(perfCssSource, /backdrop-filter: none !important/)
 })
