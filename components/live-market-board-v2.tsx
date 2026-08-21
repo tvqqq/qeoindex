@@ -57,7 +57,9 @@ type BoardMode = "sector" | "movers"
 const BOARD_VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 })
 const BOARD_TRADED_VALUE_FORMATTER = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const BOARD_MARKET_VALUE_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 })
-const MARKET_UI_COMMIT_MS = 100
+const MARKET_UI_COMMIT_MS = 250
+const MARKET_ORDERING_REFRESH_MS = 1000
+const SSR_HISTORY_COVERAGE_MIN = 0.95
 const EMPTY_HISTORY: number[] = []
 
 function formatExactVolume(value?: number | null) {
@@ -597,6 +599,7 @@ export function LiveMarketBoardV2({
     }
     return initial
   })
+  const [orderingQuotes, setOrderingQuotes] = useState<Record<string, LiveStockQuote | IndexQuote>>(() => quotes)
   const [streamState, setStreamState] = useState<StreamState>(() => sessionOpen ? "CONNECTING" : "CLOSED")
   const [streamError, setStreamError] = useState("")
   const [lastMessageAt, setLastMessageAt] = useState("")
@@ -655,9 +658,14 @@ export function LiveMarketBoardV2({
     }
   }, [isCapturing])
 
-  const quotesRef = useRef(quotes)
-  const priceHistoryRef = useRef(priceHistory)
+  const quotesRef = useRef<Record<string, LiveStockQuote | IndexQuote>>({ ...quotes })
+  const priceHistoryRef = useRef<Record<string, IntradayPoint[]>>({ ...priceHistory })
+  const latestCommittedQuotesRef = useRef(quotes)
+  const quotesDirtyRef = useRef(false)
+  const historyDirtyRef = useRef(false)
   const marketUiCommitTimer = useRef<number | null>(null)
+  const marketOrderingTimer = useRef<number | null>(null)
+  const lastOrderingRefreshAt = useRef(Date.now())
   const lastMessageAtRef = useRef("")
   const whaleTimeouts = useRef<Record<string, NodeJS.Timeout>>({})
   const dailyReferences = useRef<Record<string, number>>(extractInitialRefs(initialQuotes))
@@ -665,27 +673,74 @@ export function LiveMarketBoardV2({
   const sessionIdentifier = useRef(currentSessionIdentifier())
   const lastFrameAt = useRef(0)
 
+  const scheduleMarketOrderingRefresh = useCallback((snapshot: Record<string, LiveStockQuote | IndexQuote>) => {
+    latestCommittedQuotesRef.current = snapshot
+    const now = Date.now()
+    const elapsed = now - lastOrderingRefreshAt.current
+
+    if (elapsed >= MARKET_ORDERING_REFRESH_MS) {
+      if (marketOrderingTimer.current !== null) {
+        window.clearTimeout(marketOrderingTimer.current)
+        marketOrderingTimer.current = null
+      }
+      lastOrderingRefreshAt.current = now
+      setOrderingQuotes(snapshot)
+      return
+    }
+
+    if (marketOrderingTimer.current !== null) return
+    marketOrderingTimer.current = window.setTimeout(() => {
+      marketOrderingTimer.current = null
+      lastOrderingRefreshAt.current = Date.now()
+      setOrderingQuotes(latestCommittedQuotesRef.current)
+    }, MARKET_ORDERING_REFRESH_MS - elapsed)
+  }, [])
+
   const scheduleMarketUiCommit = useCallback(() => {
     if (marketUiCommitTimer.current !== null) return
     marketUiCommitTimer.current = window.setTimeout(() => {
       marketUiCommitTimer.current = null
-      setQuotes(quotesRef.current)
-      setPriceHistory(priceHistoryRef.current)
-      setLastMessageAt(lastMessageAtRef.current)
-    }, MARKET_UI_COMMIT_MS)
-  }, [])
 
-  const updateLiveQuotes = useCallback((updater: (current: Record<string, LiveStockQuote | IndexQuote>) => Record<string, LiveStockQuote | IndexQuote>) => {
-    const next = updater(quotesRef.current)
-    if (next === quotesRef.current) return
-    quotesRef.current = next
+      if (quotesDirtyRef.current) {
+        quotesDirtyRef.current = false
+        const quoteSnapshot = { ...quotesRef.current }
+        setQuotes(quoteSnapshot)
+        scheduleMarketOrderingRefresh(quoteSnapshot)
+      }
+
+      if (historyDirtyRef.current) {
+        historyDirtyRef.current = false
+        setPriceHistory({ ...priceHistoryRef.current })
+      }
+
+      const messageAt = lastMessageAtRef.current
+      if (messageAt) {
+        setLastMessageAt((previous) => previous === messageAt ? previous : messageAt)
+      }
+    }, MARKET_UI_COMMIT_MS)
+  }, [scheduleMarketOrderingRefresh])
+
+  const updateLiveQuote = useCallback((
+    symbol: string,
+    updater: (current: LiveStockQuote | IndexQuote | undefined) => LiveStockQuote | IndexQuote | undefined,
+  ) => {
+    const current = quotesRef.current[symbol]
+    const next = updater(current)
+    if (!next || next === current) return
+    quotesRef.current[symbol] = next
+    quotesDirtyRef.current = true
     scheduleMarketUiCommit()
   }, [scheduleMarketUiCommit])
 
-  const updateLiveHistory = useCallback((updater: (current: Record<string, IntradayPoint[]>) => Record<string, IntradayPoint[]>) => {
-    const next = updater(priceHistoryRef.current)
-    if (next === priceHistoryRef.current) return
-    priceHistoryRef.current = next
+  const updateLiveHistory = useCallback((
+    ticker: string,
+    updater: (current: IntradayPoint[]) => IntradayPoint[],
+  ) => {
+    const current = priceHistoryRef.current[ticker] ?? []
+    const next = updater(current)
+    if (next === current) return
+    priceHistoryRef.current[ticker] = next
+    historyDirtyRef.current = true
     scheduleMarketUiCommit()
   }, [scheduleMarketUiCommit])
 
@@ -694,6 +749,10 @@ export function LiveMarketBoardV2({
       if (marketUiCommitTimer.current !== null) {
         window.clearTimeout(marketUiCommitTimer.current)
         marketUiCommitTimer.current = null
+      }
+      if (marketOrderingTimer.current !== null) {
+        window.clearTimeout(marketOrderingTimer.current)
+        marketOrderingTimer.current = null
       }
     }
   }, [])
@@ -744,9 +803,19 @@ export function LiveMarketBoardV2({
   const symbolList = useMemo(() => universe.map((stock) => stock.ticker), [universe])
   const symbolKey = symbolList.join(",")
   const trackedSymbols = useMemo(() => new Set(symbolList), [symbolList])
+  const hasSufficientSsrHistory = useMemo(() => {
+    if (!initialHistories || symbolList.length === 0) return false
+    let covered = 0
+    for (const symbol of symbolList) {
+      const points = initialHistories[symbol]
+      if (points && points.length >= 2) covered += 1
+    }
+    return covered / symbolList.length >= SSR_HISTORY_COVERAGE_MIN
+  }, [initialHistories, symbolList])
 
   useEffect(() => {
     if (!symbolList.length) return
+    if (historyReloadKey === 0 && hasSufficientSsrHistory) return
 
     const controller = new AbortController()
     let disposed = false
@@ -768,7 +837,8 @@ export function LiveMarketBoardV2({
             nextHistory[symbol] = points.slice(-90)
           }
         }
-        priceHistoryRef.current = nextHistory
+        priceHistoryRef.current = { ...nextHistory }
+        historyDirtyRef.current = false
         setPriceHistory(nextHistory)
 
         const currentQuotes = quotesRef.current
@@ -800,8 +870,16 @@ export function LiveMarketBoardV2({
             updatedAt: hasLiveQuote && existing?.updatedAt ? existing.updatedAt : (history.lastBarAt ? new Date(history.lastBarAt * 1000).toISOString() : receivedAt),
           }
         }
-        quotesRef.current = nextQuotes
+        quotesRef.current = { ...nextQuotes }
+        quotesDirtyRef.current = false
+        latestCommittedQuotesRef.current = nextQuotes
+        lastOrderingRefreshAt.current = Date.now()
+        if (marketOrderingTimer.current !== null) {
+          window.clearTimeout(marketOrderingTimer.current)
+          marketOrderingTimer.current = null
+        }
         setQuotes(nextQuotes)
+        setOrderingQuotes(nextQuotes)
       } catch (error) {
         if (!disposed && !(error instanceof DOMException && error.name === "AbortError")) {
           console.warn("Market board 5m bootstrap unavailable", error)
@@ -813,7 +891,7 @@ export function LiveMarketBoardV2({
       disposed = true
       controller.abort()
     }
-  }, [symbolKey, historyReloadKey, symbolList, sessionOpen, initialHistories])
+  }, [symbolKey, historyReloadKey, symbolList, sessionOpen, hasSufficientSsrHistory])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -840,7 +918,9 @@ export function LiveMarketBoardV2({
             next[symbol] = quote
           }
         }
-        quotesRef.current = next
+        quotesRef.current = { ...next }
+        quotesDirtyRef.current = false
+        latestCommittedQuotesRef.current = next
         setQuotes(next)
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) console.warn("Index EOD bootstrap unavailable", error)
@@ -851,13 +931,10 @@ export function LiveMarketBoardV2({
 
   const pushFiveMinuteClose = useCallback((ticker: string, close: number, timestampSeconds: number) => {
     if (isLunchBreak(new Date(timestampSeconds * 1000))) return
-    updateLiveHistory((previous) => {
-      const current = previous[ticker] ?? []
+    updateLiveHistory(ticker, (current) => {
       const normalizedClose = normalizeMarketPrice(close, current.at(-1)?.close)
-      if (!normalizedClose) return previous
-      const merged = mergeFiveMinuteClose(current, normalizedClose, timestampSeconds)
-      if (merged === current) return previous
-      return { ...previous, [ticker]: merged }
+      if (!normalizedClose) return current
+      return mergeFiveMinuteClose(current, normalizedClose, timestampSeconds)
     })
   }, [updateLiveHistory])
 
@@ -966,7 +1043,6 @@ export function LiveMarketBoardV2({
           const close = firstPositive(data, ["close", "c", "closePrice"])
           const timestamp = normalizeEpochSeconds(data.time ?? data.t ?? data.timestamp ?? data.ts, now.getTime() / 1000)
           if (close > 0) pushFiveMinuteClose(ticker, close, timestamp)
-          scheduleMarketUiCommit()
           continue
         }
 
@@ -986,27 +1062,24 @@ export function LiveMarketBoardV2({
           const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
           const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
           const floor = firstPositive(data, ["floorPrice", "floor"])
-          updateLiveQuotes((current) => {
-            const previous = current[ticker] as LiveStockQuote | undefined
+          updateLiveQuote(ticker, (currentQuote) => {
+            const previous = currentQuote as LiveStockQuote | undefined
             const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
             const reference = normalizeMarketPrice(rawReference, price) ?? rawReference
             if (reference > 0) dailyReferences.current[ticker] = reference
             const change = reference > 0 ? price - reference : previous?.change
             const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : previous?.changePercent ?? 0
             return {
-              ...current,
-              [ticker]: {
-                ...previous,
-                symbol: ticker,
-                price,
-                reference: reference || undefined,
-                ceiling: ceiling || previous?.ceiling,
-                floor: floor || previous?.floor,
-                change,
-                changePercent,
-                volume: totalVolume || previous?.volume,
-                updatedAt: receivedAt,
-              },
+              ...previous,
+              symbol: ticker,
+              price,
+              reference: reference || undefined,
+              ceiling: ceiling || previous?.ceiling,
+              floor: floor || previous?.floor,
+              change,
+              changePercent,
+              volume: totalVolume || previous?.volume,
+              updatedAt: receivedAt,
             }
           })
           continue
@@ -1019,27 +1092,24 @@ export function LiveMarketBoardV2({
           const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
           const floor = firstPositive(data, ["floorPrice", "floor"])
           const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
-          updateLiveQuotes((current) => {
-            const previous = current[ticker] as LiveStockQuote | undefined
+          updateLiveQuote(ticker, (currentQuote) => {
+            const previous = currentQuote as LiveStockQuote | undefined
             const livePrice = price || previous?.price
-            if (!livePrice) return current
+            if (!livePrice) return previous
             const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
             const reference = normalizeMarketPrice(rawReference, livePrice) ?? rawReference
             if (reference > 0) dailyReferences.current[ticker] = reference
             return {
-              ...current,
-              [ticker]: {
-                ...previous,
-                symbol: ticker,
-                price: livePrice,
-                reference: reference || undefined,
-                ceiling: ceiling || previous?.ceiling,
-                floor: floor || previous?.floor,
-                change: reference > 0 ? livePrice - reference : previous?.change,
-                changePercent: reference > 0 ? ((livePrice - reference) / reference) * 100 : previous?.changePercent ?? 0,
-                volume: previous?.volume,
-                updatedAt: receivedAt,
-              },
+              ...previous,
+              symbol: ticker,
+              price: livePrice,
+              reference: reference || undefined,
+              ceiling: ceiling || previous?.ceiling,
+              floor: floor || previous?.floor,
+              change: reference > 0 ? livePrice - reference : previous?.change,
+              changePercent: reference > 0 ? ((livePrice - reference) / reference) * 100 : previous?.changePercent ?? 0,
+              volume: previous?.volume,
+              updatedAt: receivedAt,
             }
           })
           continue
@@ -1054,24 +1124,21 @@ export function LiveMarketBoardV2({
           const vol = firstPositive(data, ["totalVolumeTraded", "totalVolume", "totalQtty", "allQtty", "vol", "v"])
           const rawVal = firstPositive(data, ["totalValueTraded", "totalValue", "totalAmount", "allValue", "val"])
           const val = rawVal > 0 ? (rawVal < 100_000 ? rawVal * 1_000_000_000 : rawVal < 100_000_000 ? rawVal * 1_000_000 : rawVal) : 0
-          updateLiveQuotes((current) => {
-            const previous = current[symbol] as IndexQuote | undefined
+          updateLiveQuote(symbol, (currentQuote) => {
+            const previous = currentQuote as IndexQuote | undefined
             const previousDerivedReference = previous && typeof previous.change === "number" ? previous.value - previous.change : 0
             const reference = indexReferences.current[symbol] || previousDerivedReference
             if (reference > 0) indexReferences.current[symbol] = reference
             const change = reference > 0 ? value - reference : previous?.change
             const changePercent = reference > 0 ? ((value - reference) / reference) * 100 : previous?.changePercent ?? 0
             return {
-              ...current,
-              [symbol]: {
-                symbol,
-                value,
-                change,
-                changePercent,
-                volume: vol || previous?.volume,
-                valueTraded: val || previous?.valueTraded,
-                updatedAt: receivedAt,
-              },
+              symbol,
+              value,
+              change,
+              changePercent,
+              volume: vol || previous?.volume,
+              valueTraded: val || previous?.valueTraded,
+              updatedAt: receivedAt,
             }
           })
           continue
@@ -1089,9 +1156,9 @@ export function LiveMarketBoardV2({
           const buyVol = numeric(data.buyVolume)
           const sellVol = numeric(data.sellVolume)
 
-          updateLiveQuotes((current) => {
-            const previous = current[symbol] as LiveStockQuote | undefined
-            if (!previous) return current
+          updateLiveQuote(symbol, (currentQuote) => {
+            const previous = currentQuote as LiveStockQuote | undefined
+            if (!previous) return previous
 
             const prevBuyVal = previous.foreignBuyValue ?? 0
             const prevSellVal = previous.foreignSellValue ?? 0
@@ -1110,16 +1177,13 @@ export function LiveMarketBoardV2({
             }
 
             return {
-              ...current,
-              [symbol]: {
-                ...previous,
-                foreignBuyValue: nextBuyVal || undefined,
-                foreignSellValue: nextSellVal || undefined,
-                foreignBuyVolume: nextBuyVol || undefined,
-                foreignSellVolume: nextSellVol || undefined,
-                foreignNetValue,
-                updatedAt: receivedAt,
-              },
+              ...previous,
+              foreignBuyValue: nextBuyVal || undefined,
+              foreignSellValue: nextSellVal || undefined,
+              foreignBuyVolume: nextBuyVol || undefined,
+              foreignSellVolume: nextSellVol || undefined,
+              foreignNetValue,
+              updatedAt: receivedAt,
             }
           })
           continue
@@ -1244,19 +1308,20 @@ export function LiveMarketBoardV2({
       window.removeEventListener("online", onOnline)
       if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "board closed")
     }
-  }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols, sessionOpen, scheduleMarketUiCommit, updateLiveQuotes])
+  }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols, sessionOpen, updateLiveQuote])
 
   const normalizedQuery = query.trim().toUpperCase()
   const currentSessionDay = useMemo(() => vietnamSessionDay(), [])
   const displayQuotes = useMemo(() => {
-    const next = { ...quotes }
+    let next: Record<string, LiveStockQuote | IndexQuote> | null = null
     for (const stock of universe) {
-      if (next[stock.ticker]) continue
+      if (quotes[stock.ticker]) continue
       const history = priceHistory[stock.ticker] ?? []
       const price = history.at(-1)?.close ?? stock.lastClose
       if (!price || price <= 0) continue
       const priorNotionClose = stock.lastCloseDate && stock.lastCloseDate < currentSessionDay ? stock.lastClose : null
       const reference = priorNotionClose ?? price
+      if (!next) next = { ...quotes }
       next[stock.ticker] = {
         symbol: stock.ticker,
         price,
@@ -1266,7 +1331,7 @@ export function LiveMarketBoardV2({
         updatedAt: stock.lastCloseDate ?? new Date().toISOString(),
       }
     }
-    return next
+    return next ?? quotes
   }, [currentSessionDay, priceHistory, quotes, universe])
 
   const priceHistoryCloses = useMemo(() => {
@@ -1292,13 +1357,13 @@ export function LiveMarketBoardV2({
   }, [watchedStocks, displayQuotes])
 
   const filtered = useMemo(() => universe.filter((stock) => (!normalizedQuery || stock.ticker.includes(normalizedQuery))), [universe, normalizedQuery])
-  const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, displayQuotes)), [displayQuotes, filtered])
+  const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, orderingQuotes)), [orderingQuotes, filtered])
   const grouped = useMemo(() => BOARD_SECTOR_GROUPS.map((group) => {
     const stocks = filtered
       .filter((stock) => group.sectors.some((sector) => sector === stock.sector))
-      .sort((a, b) => compareByPerformance(a, b, displayQuotes))
+      .sort((a, b) => compareByPerformance(a, b, orderingQuotes))
     const sectorQuotes = stocks
-      .map((stock) => displayQuotes[stock.ticker] as LiveStockQuote | undefined)
+      .map((stock) => orderingQuotes[stock.ticker] as LiveStockQuote | undefined)
       .filter(Boolean) as LiveStockQuote[]
     const avg = sectorQuotes.length
       ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length
@@ -1310,7 +1375,7 @@ export function LiveMarketBoardV2({
       avg,
       avgTone,
     }
-  }), [displayQuotes, filtered])
+  }), [orderingQuotes, filtered])
 
   const { liveCount, pricedCount, historyCount, advances, declines } = useMemo(() => {
     let live = 0
