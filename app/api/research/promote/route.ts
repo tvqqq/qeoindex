@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireApiFeature } from "@/lib/auth/server"
 import { fetchDailyMarketHistory, fetchHourlyMarketHistory } from "@/lib/market-history"
 import { buildMultiTimeframeStudies, buildPromotionDraft } from "@/lib/multi-timeframe"
 import { promoteDraftToNotion } from "@/lib/notion-promote"
@@ -9,12 +10,14 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
+  const auth = await requireApiFeature("research")
+  if (!auth.ok) return auth.response
+
   try {
     const body = await request.json().catch(() => ({}))
     const ticker = String(body?.ticker ?? "").trim().toUpperCase()
     if (!/^[A-Z0-9]{2,10}$/.test(ticker) || ticker === "VNINDEX") return NextResponse.json({ ok: false, error: "Ticker không hợp lệ cho promotion." }, { status: 400 })
 
-    // Write paths bypass the UI cache so canonical existence/universe checks cannot be stale.
     const research = await getResearchDataFresh()
     if (!research.connection.notionLive) return NextResponse.json({ ok: false, error: "Notion canonical source hiện không live; dừng promotion." }, { status: 503 })
     if (research.theses.some((row) => row.ticker === ticker)) return NextResponse.json({ ok: false, error: `${ticker} đã có canonical thesis.` }, { status: 409 })

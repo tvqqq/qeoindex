@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireApiFeature } from "@/lib/auth/server"
 import { getFinhayIndexQuote, getFinhayStockQuote } from "@/lib/finhay-live"
 import { getActiveFinhayAccessToken } from "@/lib/finhay-session"
 
@@ -14,6 +15,9 @@ function parseList(value: string | null, max: number) {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireApiFeature("finhay_live")
+  if (!auth.ok) return auth.response
+
   const accessToken = await getActiveFinhayAccessToken()
   if (!accessToken) {
     return NextResponse.json({ ok: false, state: "AUTH_REQUIRED", connectUrl: "/api/finhay/auth/start" }, { status: 401 })

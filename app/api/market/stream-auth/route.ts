@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireApiFeature } from "@/lib/auth/server"
 import { createDnseStreamAuth } from "@/lib/dnse-stream-auth"
 
 export const runtime = "nodejs"
@@ -11,6 +12,9 @@ const NO_STORE_HEADERS = {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireApiFeature("market_board")
+  if (!auth.ok) return auth.response
+
   const origin = request.headers.get("origin")
   const expectedOrigin = new URL(request.url).origin
   if (origin && origin !== expectedOrigin) {

@@ -1,7 +1,9 @@
 "use client"
 
 import { type ReactNode, useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { BRAND } from "@/lib/brand"
+import { syncServerSession } from "@/lib/auth/client-session"
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { LandingLogin } from "@/components/auth/landing-login"
 
@@ -25,7 +27,14 @@ function AuthLoadingScreen() {
   )
 }
 
-export function AppAuthGate({ children }: { children: ReactNode }) {
+export function AppAuthGate({
+  children,
+  serverSessionPresent,
+}: {
+  children: ReactNode
+  serverSessionPresent: boolean
+}) {
+  const router = useRouter()
   const [status, setStatus] = useState<AuthStatus>(() =>
     isSupabaseConfigured() ? "checking" : "unconfigured"
   )
@@ -39,27 +48,38 @@ export function AppAuthGate({ children }: { children: ReactNode }) {
 
     let active = true
 
+    async function applySession(session: Parameters<typeof syncServerSession>[0]) {
+      const synced = await syncServerSession(session)
+      if (!active) return
+
+      const authenticated = Boolean(session && synced)
+      setStatus(authenticated ? "authenticated" : "anonymous")
+
+      if ((authenticated && !serverSessionPresent) || (!authenticated && serverSessionPresent)) {
+        router.refresh()
+      }
+    }
+
     void supabase.auth.getSession().then(({ data, error }) => {
       if (!active) return
       if (error) {
-        setStatus("anonymous")
+        void applySession(null)
         return
       }
-      setStatus(data.session ? "authenticated" : "anonymous")
+      void applySession(data.session)
     })
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!active) return
-      setStatus(session ? "authenticated" : "anonymous")
+      void applySession(session)
     })
 
     return () => {
       active = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [router, serverSessionPresent])
 
   if (status === "checking") {
     return <AuthLoadingScreen />

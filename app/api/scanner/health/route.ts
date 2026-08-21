@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requireApiFeature } from "@/lib/auth/server"
 import { vietnamDateKey } from "@/lib/dnse-history"
 import { fetchDailyMarketHistory } from "@/lib/market-history"
 import { getScannerData } from "@/lib/scanner-data"
@@ -35,6 +36,9 @@ async function sampleHealth(symbol: string) {
 }
 
 export async function GET(request: NextRequest) {
+  const auth = await requireApiFeature("research")
+  if (!auth.ok) return auth.response
+
   const coverage = new URL(request.url).searchParams.get("coverage") === "1"
   if (!coverage) {
     try {

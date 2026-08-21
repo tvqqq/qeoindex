@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { requireApiFeature } from "@/lib/auth/server"
 import { fetchDnseSessionHistory } from "@/lib/dnse-market-runtime"
 import { getOrderbookSnapshotFromSupabase, upsertOrderbookSnapshotToSupabase } from "@/lib/supabase/orderbook"
 import { isTradingSessionOpen } from "@/lib/session-countdown"
@@ -32,6 +33,9 @@ export function clearServerSessionCache() {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireApiFeature("market_board")
+  if (!auth.ok) return auth.response
+
   const symbol = parseSymbol(request)
   if (!symbol) {
     return NextResponse.json({ ok: false, message: "Missing valid symbol." }, { status: 400, headers: NO_STORE_HEADERS })
@@ -42,7 +46,6 @@ export async function GET(request: Request) {
   const now = new Date()
   const inSession = isTradingSessionOpen(now)
 
-  // 1. In-memory hot cache
   if (!forceRefresh) {
     const cached = serverCache.get(symbol)
     if (cached && Date.now() < cached.expiresAt) {
@@ -50,7 +53,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // 2. Off-session Fast-path: Check Supabase Snapshot first for instant sub-20ms response when market is closed
   if (!forceRefresh && !inSession) {
     try {
       const snapshot = await getOrderbookSnapshotFromSupabase(symbol)
@@ -84,7 +86,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // 3. Fetch canonical live DNSE/VPS session history (always fresh during trading hours)
   try {
     const history = await fetchDnseSessionHistory(symbol, now)
     const payload = {
@@ -105,7 +106,6 @@ export async function GET(request: Request) {
     void upsertOrderbookSnapshotToSupabase(history)
     return NextResponse.json(payload, { headers: NO_STORE_HEADERS })
   } catch (error) {
-    // 4. Final fallback to Supabase snapshot if DNSE API is unavailable / rate-limited
     const fallback = await getOrderbookSnapshotFromSupabase(symbol)
     if (fallback) {
       const payload = {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireApiFeature } from "@/lib/auth/server"
 import { createPkce, discoverFinhayOAuth, registerFinhayClient } from "@/lib/finhay-live"
 import { setFinhayOAuthAttempt } from "@/lib/finhay-session"
 
@@ -6,6 +7,9 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
+  const auth = await requireApiFeature("finhay_live")
+  if (!auth.ok) return auth.response
+
   try {
     const requestUrl = new URL(request.url)
     const redirectUri = new URL("/api/finhay/auth/callback", requestUrl.origin).toString()

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { requireApiFeature } from "@/lib/auth/server"
 import { fetchDnseIndexCandleHistory } from "@/lib/dnse-index-candles"
 import {
   INDEX_CHART_SYMBOLS,
@@ -35,6 +36,9 @@ type CachedPayload = {
 const hotCache = new Map<IndexChartResolution, CachedPayload>()
 
 export async function GET(request: NextRequest) {
+  const auth = await requireApiFeature("market_board")
+  if (!auth.ok) return auth.response
+
   const rawResolution = request.nextUrl.searchParams.get("resolution") ?? "1"
   if (!isIndexChartResolution(rawResolution)) {
     return NextResponse.json(

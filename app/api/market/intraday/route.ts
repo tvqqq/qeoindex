@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getCache } from "@vercel/functions"
 
+import { requireApiFeature } from "@/lib/auth/server"
 import {
   parseSymbols,
   snapshotCacheKey,
@@ -23,6 +24,9 @@ const NO_STORE_HEADERS = {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireApiFeature("market_board")
+  if (!auth.ok) return auth.response
+
   const startedAt = performance.now()
   const symbols = parseSymbols(request)
   if (!symbols.length) {
@@ -62,7 +66,7 @@ export async function GET(request: Request) {
   if (!snapshot) {
     snapshot = await fetchSnapshot(symbols, now)
     const writeTtl = secondsToNextBucket(new Date())
-    const latestTtl = 86400 // Keep daily latest in Redis for 24h
+    const latestTtl = 86400
     await Promise.allSettled([
       cache.set(key, snapshot, { ttl: writeTtl, tags: ["market-board"], name: "Top 100 5m snapshot" }),
       cache.set(latestKey, snapshot, { ttl: latestTtl, tags: ["market-board"], name: "Top 100 5m latest" }),

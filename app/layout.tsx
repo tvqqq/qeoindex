@@ -3,6 +3,7 @@ import { SpeedInsights } from '@vercel/speed-insights/next'
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono, Plus_Jakarta_Sans } from 'next/font/google'
 import { AppAuthGate } from '@/components/auth/app-auth-gate'
+import { getServerAuthContext } from '@/lib/auth/server'
 import { BRAND } from '@/lib/brand'
 import './globals.css'
 
@@ -41,15 +42,17 @@ export const viewport: Viewport = {
   themeColor: '#07090b',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const serverSessionAuthenticated = Boolean(await getServerAuthContext())
+
   return (
     <html lang="vi" className={`${geistSans.variable} ${geistMono.variable} ${plusJakartaSans.variable} bg-background`}>
       <body className="font-sans antialiased">
-        <AppAuthGate>{children}</AppAuthGate>
+        <AppAuthGate serverSessionPresent={serverSessionAuthenticated}>{children}</AppAuthGate>
         {process.env.NODE_ENV === 'production' && <Analytics />}
         {process.env.NODE_ENV === 'production' && <SpeedInsights />}
       </body>

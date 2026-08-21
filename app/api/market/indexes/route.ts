@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { requireApiFeature } from "@/lib/auth/server"
 import { fetchTradingViewIndexes } from "@/lib/tradingview-index"
 import { readThroughUiCache } from "@/lib/ui-data-cache"
 import { getMarketSessionStatus } from "@/lib/session-countdown"
@@ -25,6 +26,9 @@ function vietnamDateKey(now: Date) {
 }
 
 export async function GET() {
+  const auth = await requireApiFeature("market_board")
+  if (!auth.ok) return auth.response
+
   try {
     const now = new Date()
     const session = getMarketSessionStatus(now)
@@ -46,4 +50,3 @@ export async function GET() {
     return NextResponse.json({ ok: false, provider: "TradingView snapshot + DNSE live", quotes: {}, errors: [{ error: error instanceof Error ? error.message : String(error) }], generatedAt: new Date().toISOString() }, { status: 503, headers: NO_STORE_HEADERS })
   }
 }
-

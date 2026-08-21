@@ -1,7 +1,9 @@
+import { LandingLogin } from "@/components/auth/landing-login"
 import { LiveMarketBoardV2, type BoardUniverseStock, type IndexQuote } from "@/components/live-market-board-v2"
 import { OrderBookProvider } from "@/components/orderbook/orderbook-context"
 import { OrderBookManager } from "@/components/orderbook/orderbook-manager"
 import { TopNav } from "@/components/top-nav"
+import { getServerAuthContext } from "@/lib/auth/server"
 import { sectorForTicker } from "@/lib/market-sectors"
 import { CANONICAL_UNIVERSE_STOCKS, CANONICAL_UNIVERSE_TICKERS } from "@/lib/wyckoff-universe"
 import { getBoardOverviewSnapshotsFromSupabase } from "@/lib/supabase/orderbook"
@@ -41,7 +43,6 @@ function vietnamDateKey(now: Date) {
 
 async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardData> {
   const currentDay = vietnamDateKey(now)
-  // Read live broker quotes, Supabase snapshots, and full 5m intraday in parallel (sub-180ms)
   const [snapshots, liveQuotes, intraday5m] = await Promise.all([
     getBoardOverviewSnapshotsFromSupabase(),
     fetchLiveBatchQuotes(CANONICAL_UNIVERSE_TICKERS),
@@ -75,12 +76,10 @@ async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardDat
     const live = liveQuotes[stock.ticker]
     const cachedRow = cachedRowsBySymbol?.[stock.ticker]
 
-    // 1. Prefer warm 5m points from Redis cache for 100% accurate mini charts
     let intraday: IntradayPoint[] = []
     if (cachedRow?.points && cachedRow.points.length > 0) {
       intraday = cachedRow.points.slice(-INITIAL_HISTORY_POINTS)
     } else if (Array.isArray(snap?.intraday_1m) && snap?.session_date === currentDay && snap.intraday_1m.length > 0) {
-      // Fallback to Supabase 1m ONLY if it matches today's session
       intraday = (snap.intraday_1m as unknown as IntradayPoint[]).slice(-INITIAL_HISTORY_POINTS)
     }
 
@@ -89,7 +88,6 @@ async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardDat
 
     const latestPrice = live?.price || snap?.latest_price || cachedRow?.price || snap?.reference_price || lastBarClose || firstBarOpen
     const ref = live?.reference || snap?.reference_price || cachedRow?.reference || firstBarOpen || latestPrice
-
 
     if (latestPrice && latestPrice > 0 && ref && ref > 0) {
       const change = live?.change ?? (latestPrice - ref)
@@ -121,6 +119,9 @@ async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardDat
 }
 
 export default async function Page() {
+  const auth = await getServerAuthContext()
+  if (!auth) return <LandingLogin />
+
   const now = new Date()
   const isSessionOpen = isTradingSessionOpen(now)
   const session = getMarketSessionStatus(now)
@@ -154,4 +155,3 @@ export default async function Page() {
     </OrderBookProvider>
   )
 }
-
