@@ -256,6 +256,13 @@ function normalizeLatestQuote(raw: unknown): DnseSessionQuote | null {
     offer,
     matchPrice: finiteNumber(row?.matchPrice ?? row?.price ?? row?.lastPrice),
     openPrice: finiteNumber(row?.openPrice ?? row?.openingPrice ?? row?.open),
+    reference: finiteNumber(row?.referencePrice ?? row?.refPrice ?? row?.reference ?? row?.r ?? row?.basicPrice),
+    ceiling: finiteNumber(row?.ceilingPrice ?? row?.ceiling ?? row?.c),
+    floor: finiteNumber(row?.floorPrice ?? row?.floor ?? row?.f),
+    highPrice: finiteNumber(row?.highPrice ?? row?.highest ?? row?.h),
+    lowPrice: finiteNumber(row?.lowPrice ?? row?.lowest ?? row?.l),
+    avgPrice: finiteNumber(row?.avgPrice ?? row?.averagePrice ?? row?.avePrice),
+    totalVolume: finiteNumber(row?.totalVolumeTraded ?? row?.totalVolume ?? (row?.lot ? Number(row.lot) * 10 : null)),
   }
 }
 
@@ -549,7 +556,21 @@ export async function fetchDnseSessionHistory(symbol: string, now = new Date()):
   const tradeVolume = trades.reduce((sum, t) => sum + (t.volume || 0), 0)
 
   const matchPrice = latestQuote?.matchPrice || fastOverview?.matchPrice || lastTradePrice || lastBarClose || null
-  const refPrice = latestQuote?.reference ?? fastOverview?.refPrice ?? firstBarOpen ?? firstTradePrice ?? matchPrice ?? null
+  const explicitRef = latestQuote?.reference ?? fastOverview?.refPrice ?? null
+  const explicitCeil = latestQuote?.ceiling ?? fastOverview?.ceiling ?? null
+  const explicitFloor = latestQuote?.floor ?? fastOverview?.floor ?? null
+
+  let refPrice = explicitRef
+  if (!refPrice && explicitCeil && explicitFloor) {
+    refPrice = Math.round(((explicitCeil + explicitFloor) / 2) * 100) / 100
+  } else if (!refPrice && explicitCeil) {
+    refPrice = Math.round((explicitCeil / 1.07) * 100) / 100
+  } else if (!refPrice) {
+    refPrice = firstBarOpen ?? firstTradePrice ?? matchPrice ?? null
+  }
+
+  const ceilingPrice = explicitCeil ?? (refPrice ? Math.round(refPrice * 1.07 * 100) / 100 : null)
+  const floorPrice = explicitFloor ?? (refPrice ? Math.round(refPrice * 0.93 * 100) / 100 : null)
 
   if (!latestQuote) {
     latestQuote = {
@@ -559,8 +580,8 @@ export async function fetchDnseSessionHistory(symbol: string, now = new Date()):
       matchPrice,
       openPrice: prices[0]?.open || firstTradePrice || refPrice,
       reference: refPrice,
-      ceiling: fastOverview?.ceiling ?? (refPrice ? Math.round(refPrice * 1.07 * 100) / 100 : null),
-      floor: fastOverview?.floor ?? (refPrice ? Math.round(refPrice * 0.93 * 100) / 100 : null),
+      ceiling: ceilingPrice,
+      floor: floorPrice,
       highPrice: fastOverview?.highPrice ?? matchPrice,
       lowPrice: fastOverview?.lowPrice ?? matchPrice,
       avgPrice: fastOverview?.avgPrice ?? matchPrice,
@@ -569,8 +590,8 @@ export async function fetchDnseSessionHistory(symbol: string, now = new Date()):
   } else {
     latestQuote.matchPrice = latestQuote.matchPrice ?? matchPrice
     latestQuote.reference = latestQuote.reference ?? refPrice
-    latestQuote.ceiling = latestQuote.ceiling ?? fastOverview?.ceiling ?? (refPrice ? Math.round(refPrice * 1.07 * 100) / 100 : null)
-    latestQuote.floor = latestQuote.floor ?? fastOverview?.floor ?? (refPrice ? Math.round(refPrice * 0.93 * 100) / 100 : null)
+    latestQuote.ceiling = latestQuote.ceiling ?? ceilingPrice
+    latestQuote.floor = latestQuote.floor ?? floorPrice
     latestQuote.totalVolume = latestQuote.totalVolume || fastOverview?.totalVolume || tradeVolume
     if (!latestQuote.bid?.length && fastOverview?.bids?.length) {
       latestQuote.bid = fastOverview.bids

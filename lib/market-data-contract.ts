@@ -261,14 +261,24 @@ export function toCanonicalOrderbookSnapshot(symbol: string, raw: any): Canonica
   const lastBarClose = intraday1m.length > 0 ? intraday1m[intraday1m.length - 1].close : null
   const firstBarOpen = intraday1m.length > 0 ? intraday1m[0].open : null
 
-  const parsedRef = normalizeToKiloPrice(raw?.reference_price ?? raw?.reference ?? raw?.refPrice ?? raw?.r ?? raw?.closePrice)
+  const parsedRef = normalizeToKiloPrice(raw?.reference_price ?? raw?.reference ?? raw?.refPrice ?? raw?.r ?? raw?.basicPrice ?? raw?.closePrice)
+  const parsedCeil = normalizeToKiloPrice(raw?.ceiling_price ?? raw?.ceiling ?? raw?.c)
+  const parsedFloor = normalizeToKiloPrice(raw?.floor_price ?? raw?.floor ?? raw?.f)
   const parsedLast = normalizeToKiloPrice(raw?.latest_price ?? raw?.matchPrice ?? raw?.lastPrice ?? raw?.price)
 
   const last = parsedLast ?? lastTradePrice ?? lastBarClose ?? parsedRef
-  const ref = parsedRef ?? firstBarOpen ?? firstTradePrice ?? last
 
-  const ceil = normalizeToKiloPrice(raw?.ceiling_price ?? raw?.ceiling ?? raw?.c ?? (ref ? Math.round(ref * 1.07 * 100) / 100 : null))
-  const floor = normalizeToKiloPrice(raw?.floor_price ?? raw?.floor ?? raw?.f ?? (ref ? Math.round(ref * 0.93 * 100) / 100 : null))
+  let ref = parsedRef
+  if (!ref && parsedCeil && parsedFloor) {
+    ref = Math.round(((parsedCeil + parsedFloor) / 2) * 100) / 100
+  } else if (!ref && parsedCeil) {
+    ref = Math.round((parsedCeil / 1.07) * 100) / 100
+  } else if (!ref) {
+    ref = firstBarOpen ?? firstTradePrice ?? last
+  }
+
+  const ceil = parsedCeil ?? (ref ? Math.round(ref * 1.07 * 100) / 100 : null)
+  const floor = parsedFloor ?? (ref ? Math.round(ref * 0.93 * 100) / 100 : null)
 
   let totalVolume = normalizeVolume(raw?.total_volume ?? raw?.totalVolume ?? raw?.totalVolumeTraded ?? (raw?.lot ? Number(raw.lot) * 10 : 0))
   if (totalVolume === 0 && trades.length > 0) {

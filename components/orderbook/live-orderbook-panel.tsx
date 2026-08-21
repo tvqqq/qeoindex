@@ -356,11 +356,11 @@ function getPriceColorClass(
 
   const normPrice = price >= 1000 ? price / 1000 : price
   const ref = reference ? (reference >= 1000 ? reference / 1000 : reference) : undefined
-  const ceil = ceiling ? (ceiling >= 1000 ? ceiling / 1000 : ceiling) : undefined
-  const flr = floor ? (floor >= 1000 ? floor / 1000 : floor) : undefined
+  const ceil = ceiling ? (ceiling >= 1000 ? ceiling / 1000 : ceiling) : (ref ? Math.round(ref * 1.07 * 100) / 100 : undefined)
+  const flr = floor ? (floor >= 1000 ? floor / 1000 : floor) : (ref ? Math.round(ref * 0.93 * 100) / 100 : undefined)
 
-  if (ceil && normPrice >= ceil - 0.01) return "text-ceiling font-bold"
-  if (flr && normPrice <= flr + 0.01) return "text-floor font-bold"
+  if (ceil && Math.abs(normPrice - ceil) < 0.05) return "text-ceiling font-bold"
+  if (flr && Math.abs(normPrice - flr) < 0.05) return "text-floor font-bold"
   if (ref) {
     if (Math.abs(normPrice - ref) < 0.01) return "text-ref font-bold"
     if (normPrice > ref) return "text-up font-bold"
@@ -399,7 +399,21 @@ function sidePillMeta(side: TradeSide) {
 }
 
 function nextQuote(symbol: string, data: Record<string, unknown>, current: StockQuote | null): StockQuote | null {
-  const rawReference = firstPositive(data, ["referencePrice", "refPrice", "reference", "r"]) || current?.reference || 0
+  const explicitRef = firstPositive(data, ["referencePrice", "refPrice", "reference", "r"])
+  const explicitCeil = firstPositive(data, ["ceilingPrice", "ceiling", "c"])
+  const explicitFloor = firstPositive(data, ["floorPrice", "floor", "f"])
+
+  // If explicit reference is missing or equal to price (which happens on bad feeds for gap-up stocks), protect current reference
+  let rawReference = explicitRef
+  if (!rawReference || (rawReference === current?.price && current?.reference && current.reference !== rawReference)) {
+    rawReference = current?.reference || 0
+  }
+  if (!rawReference && explicitCeil && explicitFloor) {
+    rawReference = (explicitCeil + explicitFloor) / 2
+  } else if (!rawReference && explicitCeil) {
+    rawReference = explicitCeil / 1.07
+  }
+
   const explicitPrice = firstPositive(data, ["matchPrice", "price", "lastPrice", "matchedPrice", "expectedMatchedPrice", "expectedPrice"])
   const rawPrice = explicitPrice || current?.price || rawReference || 0
   if (rawPrice <= 0 && rawReference <= 0) return current
@@ -408,11 +422,13 @@ function nextQuote(symbol: string, data: Record<string, unknown>, current: Stock
   const price = rawPrice > 0 ? normalizeMarketPrice(rawPrice, reference) ?? rawPrice : (reference ?? current?.price ?? 0)
   if (price <= 0) return current
 
-  const rawCeiling = firstPositive(data, ["ceilingPrice", "ceiling", "c"]) || current?.ceiling
-  const ceiling = rawCeiling ? normalizeMarketPrice(rawCeiling, reference || price) ?? rawCeiling : undefined
+  const ceiling = explicitCeil
+    ? normalizeMarketPrice(explicitCeil, reference || price) ?? explicitCeil
+    : current?.ceiling ?? (reference ? Math.round(reference * 1.07 * 100) / 100 : undefined)
 
-  const rawFloor = firstPositive(data, ["floorPrice", "floor", "f"]) || current?.floor
-  const floor = rawFloor ? normalizeMarketPrice(rawFloor, reference || price) ?? rawFloor : undefined
+  const floor = explicitFloor
+    ? normalizeMarketPrice(explicitFloor, reference || price) ?? explicitFloor
+    : current?.floor ?? (reference ? Math.round(reference * 0.93 * 100) / 100 : undefined)
 
   const rawHigh = firstPositive(data, ["highPrice", "high", "highest"]) || (current?.high ? Math.max(current.high, price) : price)
   const high = rawHigh ? normalizeMarketPrice(rawHigh, reference || price) ?? rawHigh : price
@@ -2483,8 +2499,8 @@ export function LiveOrderBookPanel({
   const tone = useMemo(() => {
     if (!activePrice) return "ref"
     const price = activePrice
-    const ceil = quote?.ceiling ? normalizeMarketPrice(quote.ceiling, price) ?? quote.ceiling : undefined
-    const flr = quote?.floor ? normalizeMarketPrice(quote.floor, price) ?? quote.floor : undefined
+    const ceil = quote?.ceiling ? normalizeMarketPrice(quote.ceiling, price) ?? quote.ceiling : (reference ? Math.round(reference * 1.07 * 100) / 100 : undefined)
+    const flr = quote?.floor ? normalizeMarketPrice(quote.floor, price) ?? quote.floor : (reference ? Math.round(reference * 0.93 * 100) / 100 : undefined)
 
     const baseTone = marketToneFromPrice({
       price,
@@ -2494,6 +2510,8 @@ export function LiveOrderBookPanel({
       changePercent,
     })
     if (baseTone === "ceiling" || baseTone === "floor") return baseTone
+    if (ceil && Math.abs(price - ceil) < 0.05) return "ceiling"
+    if (flr && Math.abs(price - flr) < 0.05) return "floor"
     if (changePercent >= 6.85) return "ceiling"
     if (changePercent <= -6.85) return "floor"
     return baseTone
