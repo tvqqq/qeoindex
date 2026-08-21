@@ -138,12 +138,22 @@ export async function captureMarketBoardScreenshot(
 ): Promise<Blob | null> {
   const pixelRatio = options?.pixelRatio ?? 2
 
-  // 1. Create a compact, standardized 6-column clone
-  const clone = element.cloneNode(true) as HTMLElement
+  // 1. Create a compact, standardized 6-column clone inside an offscreen container
+  const container = document.createElement("div")
+  container.style.position = "fixed"
+  container.style.top = "-99999px"
+  container.style.left = "-99999px"
+  container.style.width = `${TARGET_BOARD_WIDTH}px`
+  container.style.height = "100px"
+  container.style.overflow = "hidden"
+  container.style.zIndex = "-9999"
+  container.style.pointerEvents = "none"
 
-  clone.style.position = "fixed"
-  clone.style.top = "-99999px"
+  const clone = element.cloneNode(true) as HTMLElement
+  clone.style.position = "relative"
+  clone.style.top = "0"
   clone.style.left = "0"
+  clone.style.margin = "0"
   clone.style.width = `${TARGET_BOARD_WIDTH}px`
   clone.style.minWidth = `${TARGET_BOARD_WIDTH}px`
   clone.style.maxWidth = `${TARGET_BOARD_WIDTH}px`
@@ -151,9 +161,7 @@ export async function captureMarketBoardScreenshot(
   clone.style.minHeight = "auto"
   clone.style.maxHeight = "none"
   clone.style.overflow = "visible"
-  clone.style.zIndex = "-9999"
   clone.style.opacity = "1"
-  clone.style.pointerEvents = "none"
   clone.style.backgroundColor = "#06080a"
 
   // Unroll all scrollable inner containers
@@ -189,7 +197,8 @@ export async function captureMarketBoardScreenshot(
   const excluded = clone.querySelectorAll<HTMLElement>('[data-screenshot-exclude="true"]')
   excluded.forEach((el) => el.remove())
 
-  document.body.appendChild(clone)
+  container.appendChild(clone)
+  document.body.appendChild(container)
 
   let boardCanvas: HTMLCanvasElement
   try {
@@ -206,7 +215,7 @@ export async function captureMarketBoardScreenshot(
       skipFonts: true,
     })
   } finally {
-    document.body.removeChild(clone)
+    document.body.removeChild(container)
   }
 
   // 2. Setup high-res framed composition canvas
