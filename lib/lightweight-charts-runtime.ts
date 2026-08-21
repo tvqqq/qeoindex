@@ -7,6 +7,7 @@ export interface LightweightSeriesApi {
 
 export interface LightweightTimeScaleApi {
   fitContent(): void
+  setVisibleLogicalRange(range: { from: number; to: number }): void
 }
 
 export interface LightweightPaneApi {

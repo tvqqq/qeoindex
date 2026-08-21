@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { parseTradingViewIndexes } from "../lib/tradingview-index.ts"
@@ -9,6 +10,10 @@ import {
   mergePartialCandle,
   normalizeDnseOhlcFrame,
 } from "../lib/index-candles.ts"
+
+const modalSource = readFileSync(new URL("../components/index-chart/index-chart-modal.tsx", import.meta.url), "utf8")
+const minuteChartSource = readFileSync(new URL("../components/index-chart/index-minute-chart.tsx", import.meta.url), "utf8")
+const historySource = readFileSync(new URL("../lib/dnse-index-candles.ts", import.meta.url), "utf8")
 
 test("TradingView scan maps VNINDEX and VN30 snapshots", () => {
   const quotes = parseTradingViewIndexes({ data: [
@@ -112,4 +117,23 @@ test("VNINDEX market-index ticks aggregate into one-minute candles and cumulativ
   assert.equal(second.bar.low, 1740)
   assert.equal(second.bar.close, 1743)
   assert.equal(second.bar.volume, 40_000)
+})
+
+test("index chart modal keeps orderbook-style floating window controls", () => {
+  assert.match(modalSource, /onPointerDown=\{startDrag\}/)
+  assert.match(modalSource, /startResize\("se", event\)/)
+  assert.match(modalSource, /setIsMaximized/)
+  assert.match(modalSource, /setIsMinimized/)
+  assert.match(modalSource, /<Maximize2/)
+  assert.match(modalSource, /<Minimize2/)
+  assert.match(modalSource, /<Minus/)
+})
+
+test("index charts preload multiple sessions while keeping latest bars readable", () => {
+  assert.match(historySource, /HISTORY_LOOKBACK_DAYS = 14/)
+  assert.match(historySource, /DEFAULT_MAX_POINTS = 2_600/)
+  assert.match(historySource, /chart-api\/v2\/ohlcs/)
+  assert.doesNotMatch(historySource, /sessionBars\.slice/)
+  assert.match(minuteChartSource, /INITIAL_VISIBLE_BARS = 420/)
+  assert.match(minuteChartSource, /setVisibleLogicalRange/)
 })

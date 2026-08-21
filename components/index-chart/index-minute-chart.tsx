@@ -6,8 +6,11 @@ import type { CandleBar, IndexChartSymbol } from "@/lib/index-candles"
 
 const UP_COLOR = "#22c98a"
 const DOWN_COLOR = "#ff4757"
+const INITIAL_VISIBLE_BARS = 420
 const TIME_FORMATTER = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
+  day: "2-digit",
+  month: "2-digit",
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,
@@ -19,9 +22,19 @@ function formatChartTime(time: unknown) {
   return TIME_FORMATTER.format(new Date(seconds * 1000))
 }
 
+function barSignature(bar?: CandleBar) {
+  return bar ? `${bar.time}:${bar.open}:${bar.high}:${bar.low}:${bar.close}:${bar.volume}` : ""
+}
+
 function prefixSignature(data: CandleBar[]) {
   if (data.length <= 1) return ""
-  return data.slice(0, -1).map((bar) => `${bar.time}:${bar.open}:${bar.high}:${bar.low}:${bar.close}:${bar.volume}`).join("|")
+  const lastStableIndex = data.length - 2
+  const middleIndex = Math.floor(lastStableIndex / 2)
+  return [
+    barSignature(data[0]),
+    barSignature(data[middleIndex]),
+    barSignature(data[lastStableIndex]),
+  ].join("|")
 }
 
 function candleDatum(bar: CandleBar): Record<string, unknown> {
@@ -42,8 +55,22 @@ export function IndexMinuteChart({ symbol, data }: { symbol: IndexChartSymbol; d
   const candleSeriesRef = useRef<LightweightSeriesApi | null>(null)
   const volumeSeriesRef = useRef<LightweightSeriesApi | null>(null)
   const dataRef = useRef(data)
-  const renderedRef = useRef<{ length: number; prefix: string } | null>(null)
+  const renderedRef = useRef<{ length: number; prefix: string; firstTime: number } | null>(null)
   const [runtimeError, setRuntimeError] = useState("")
+
+  const anchorLatest = useCallback((bars: CandleBar[]) => {
+    const chart = chartRef.current
+    if (!chart || !bars.length) return
+    if (bars.length <= INITIAL_VISIBLE_BARS) {
+      chart.timeScale().fitContent()
+      return
+    }
+    const last = bars.length - 1
+    chart.timeScale().setVisibleLogicalRange({
+      from: Math.max(-0.5, last - INITIAL_VISIBLE_BARS + 1),
+      to: last + 4,
+    })
+  }, [])
 
   const syncData = useCallback((bars: CandleBar[], fit = false) => {
     const candleSeries = candleSeriesRef.current
@@ -53,10 +80,12 @@ export function IndexMinuteChart({ symbol, data }: { symbol: IndexChartSymbol; d
 
     const previous = renderedRef.current
     const prefix = prefixSignature(bars)
+    const firstTime = bars[0].time
     const canIncrementalUpdate = Boolean(
       previous &&
       previous.length === bars.length &&
-      previous.prefix === prefix,
+      previous.prefix === prefix &&
+      previous.firstTime === firstTime,
     )
 
     if (canIncrementalUpdate) {
@@ -67,9 +96,15 @@ export function IndexMinuteChart({ symbol, data }: { symbol: IndexChartSymbol; d
       candleSeries.setData(bars.map(candleDatum))
       volumeSeries.setData(bars.map(volumeDatum))
     }
-    renderedRef.current = { length: bars.length, prefix }
-    if (fit || !previous) chart.timeScale().fitContent()
-  }, [])
+
+    const historyExpandedBackwards = Boolean(
+      previous &&
+      firstTime < previous.firstTime &&
+      bars.length > previous.length + 20,
+    )
+    renderedRef.current = { length: bars.length, prefix, firstTime }
+    if (fit || !previous || historyExpandedBackwards) anchorLatest(bars)
+  }, [anchorLatest])
 
   useEffect(() => {
     dataRef.current = data
@@ -165,7 +200,7 @@ export function IndexMinuteChart({ symbol, data }: { symbol: IndexChartSymbol; d
   }, [symbol, syncData])
 
   return (
-    <div className="relative h-full min-h-[320px] w-full overflow-hidden rounded-b-2xl bg-[#080c10]">
+    <div className="relative h-full min-h-[300px] w-full overflow-hidden rounded-b-2xl bg-[#080c10]">
       <div ref={containerRef} className="absolute inset-0" />
       {runtimeError ? (
         <div className="absolute inset-0 z-10 grid place-items-center bg-[#080c10]/95 p-6 text-center">
