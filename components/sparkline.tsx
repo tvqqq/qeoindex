@@ -59,14 +59,14 @@ export const Sparkline = memo(function Sparkline({
   className = "",
 }: SparklineProps) {
   const hasRef = typeof refValue === "number" && Number.isFinite(refValue) && refValue > 0
-  const ref = hasRef ? (refValue as number) : undefined
+  const ref = hasRef ? refValue : undefined
 
   const computed = useMemo(() => {
     const valid = data.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
     if (valid.length === 0) return null
 
     const initialPoints = valid.length === 1
-      ? (hasRef ? [ref!, valid[0]] : [valid[0], valid[0]])
+      ? (ref != null ? [ref, valid[0]] : [valid[0], valid[0]])
       : valid
 
     const step = Math.max(1, Math.ceil(initialPoints.length / MAX_SPARKLINE_POINTS))
