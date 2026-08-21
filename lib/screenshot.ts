@@ -150,6 +150,7 @@ export async function captureMarketBoardScreenshot(
   container.style.pointerEvents = "none"
 
   const clone = element.cloneNode(true) as HTMLElement
+  clone.className = `${clone.className} ${document.documentElement.className} ${document.body.className} dark`
   clone.style.position = "relative"
   clone.style.top = "0"
   clone.style.left = "0"
@@ -162,7 +163,30 @@ export async function captureMarketBoardScreenshot(
   clone.style.maxHeight = "none"
   clone.style.overflow = "visible"
   clone.style.opacity = "1"
+  clone.style.color = "#e1e7ec"
   clone.style.backgroundColor = "#06080a"
+
+  // Explicitly inject Tailwind 4 theme CSS custom properties into clone
+  clone.style.setProperty("--color-background", "#06080a")
+  clone.style.setProperty("--color-foreground", "#e1e7ec")
+  clone.style.setProperty("--color-panel", "#0b0f13")
+  clone.style.setProperty("--color-panel-2", "#0f1418")
+  clone.style.setProperty("--color-cell", "#080c0f")
+  clone.style.setProperty("--color-border", "#161e23")
+  clone.style.setProperty("--color-border-strong", "#243038")
+  clone.style.setProperty("--color-muted", "#62727d")
+  clone.style.setProperty("--color-muted-2", "#8a9ba7")
+  clone.style.setProperty("--color-up", "#22c98a")
+  clone.style.setProperty("--color-up-dim", "#0f3b2c")
+  clone.style.setProperty("--color-down", "#ff4757")
+  clone.style.setProperty("--color-down-dim", "#3a1519")
+  clone.style.setProperty("--color-ceiling", "#b07cff")
+  clone.style.setProperty("--color-ceiling-dim", "#2c1d47")
+  clone.style.setProperty("--color-floor", "#22b8cf")
+  clone.style.setProperty("--color-floor-dim", "#0b3540")
+  clone.style.setProperty("--color-ref", "#e2b93b")
+  clone.style.setProperty("--color-ref-dim", "#3f3414")
+  clone.style.setProperty("--color-brand", "#22c98a")
 
   // Unroll all scrollable inner containers
   const scrollContainers = clone.querySelectorAll<HTMLElement>(
