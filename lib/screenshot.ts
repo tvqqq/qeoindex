@@ -49,31 +49,32 @@ async function drawNavbarWatermark(
 ) {
   ctx.save()
 
-  const scale = Math.max(0.8, boardWidth / 1600)
-  const iconSize = Math.round(54 * scale)
-  const badgeSize = Math.round(78 * scale)
-  const badgeRadius = Math.round(20 * scale)
+  // Significantly larger scale for prominent centered watermark
+  const scale = Math.max(1.2, (boardWidth / 1600) * 1.6)
+  const iconSize = Math.round(92 * scale)
+  const badgeSize = Math.round(136 * scale)
+  const badgeRadius = Math.round(36 * scale)
 
-  // Watermark opacity
-  ctx.globalAlpha = 0.15
+  // Prominent translucent watermark
+  ctx.globalAlpha = 0.22
 
-  // 1. Draw rounded badge container
+  // 1. Draw large rounded badge container with emerald & purple gradient
   const badgeX = centerX - badgeSize / 2
-  const badgeY = centerY - Math.round(92 * scale)
+  const badgeY = centerY - Math.round(135 * scale)
 
   const badgeGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX + badgeSize, badgeY + badgeSize)
-  badgeGrad.addColorStop(0, "rgba(34, 201, 138, 0.45)")
-  badgeGrad.addColorStop(0.5, "rgba(168, 85, 247, 0.45)")
-  badgeGrad.addColorStop(1, "rgba(34, 201, 138, 0.35)")
+  badgeGrad.addColorStop(0, "rgba(34, 201, 138, 0.55)")
+  badgeGrad.addColorStop(0.5, "rgba(168, 85, 247, 0.55)")
+  badgeGrad.addColorStop(1, "rgba(34, 201, 138, 0.45)")
 
   ctx.fillStyle = badgeGrad
-  ctx.shadowColor = "rgba(34, 201, 138, 0.6)"
-  ctx.shadowBlur = Math.round(24 * scale)
+  ctx.shadowColor = "rgba(34, 201, 138, 0.75)"
+  ctx.shadowBlur = Math.round(32 * scale)
   roundRect(ctx, badgeX, badgeY, badgeSize, badgeSize, badgeRadius)
   ctx.fill()
 
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.45)"
-  ctx.lineWidth = Math.round(1.5 * scale)
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.6)"
+  ctx.lineWidth = Math.round(2 * scale)
   roundRect(ctx, badgeX, badgeY, badgeSize, badgeSize, badgeRadius)
   ctx.stroke()
 
@@ -92,12 +93,12 @@ async function drawNavbarWatermark(
   // 3. Draw Title "QeoIndex"
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
-  const titleY = badgeY + badgeSize + Math.round(36 * scale)
+  const titleY = badgeY + badgeSize + Math.round(52 * scale)
 
-  ctx.font = `italic 800 ${Math.round(44 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
+  ctx.font = `italic 800 ${Math.round(66 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
   ctx.fillStyle = "#ffffff"
-  ctx.shadowColor = "rgba(34, 201, 138, 0.7)"
-  ctx.shadowBlur = Math.round(24 * scale)
+  ctx.shadowColor = "rgba(34, 201, 138, 0.85)"
+  ctx.shadowBlur = Math.round(32 * scale)
 
   const qeoWidth = ctx.measureText("Qeo").width
   const indexWidth = ctx.measureText("Index").width
@@ -105,7 +106,7 @@ async function drawNavbarWatermark(
 
   ctx.textAlign = "left"
   const titleStartX = centerX - totalTitleWidth / 2
-  ctx.fillStyle = "rgba(255, 255, 255, 0.95)"
+  ctx.fillStyle = "rgba(255, 255, 255, 0.98)"
   ctx.fillText("Qeo", titleStartX, titleY)
 
   const indexGrad = ctx.createLinearGradient(titleStartX + qeoWidth, titleY, titleStartX + totalTitleWidth, titleY)
@@ -117,10 +118,11 @@ async function drawNavbarWatermark(
 
   // 4. Draw Slogan "Đọc thị trường. Giữ kỷ luật"
   ctx.textAlign = "center"
-  ctx.font = `500 ${Math.round(18 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
-  ctx.fillStyle = "rgba(203, 213, 225, 0.9)"
-  ctx.shadowBlur = 0
-  const sloganY = titleY + Math.round(32 * scale)
+  ctx.font = `600 ${Math.round(26 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
+  ctx.fillStyle = "rgba(226, 232, 240, 0.95)"
+  ctx.shadowBlur = Math.round(12 * scale)
+  ctx.shadowColor = "rgba(0, 0, 0, 0.8)"
+  const sloganY = titleY + Math.round(44 * scale)
   ctx.fillText("Đọc thị trường. Giữ kỷ luật", centerX, sloganY)
 
   ctx.restore()
@@ -148,85 +150,106 @@ export async function captureMarketBoardScreenshot(
   })
 
   // 2. Setup high-res framed composition canvas
-  const paddingX = Math.round(boardCanvas.width * 0.045)
-  const paddingY = Math.round(boardCanvas.height * 0.055)
-  const footerHeight = Math.round(36 * (boardCanvas.width / 1600))
+  const scale = boardCanvas.width / 1600
+  const paddingX = Math.round(boardCanvas.width * 0.055)
+  const paddingY = Math.round(boardCanvas.height * 0.065)
+  const glassRimPadding = Math.round(18 * scale)
+  const footerExtra = Math.round(46 * scale)
 
   const finalCanvas = document.createElement("canvas")
   finalCanvas.width = boardCanvas.width + paddingX * 2
-  finalCanvas.height = boardCanvas.height + paddingY * 2 + footerHeight
+  finalCanvas.height = boardCanvas.height + paddingY * 2 + footerExtra
 
   const ctx = finalCanvas.getContext("2d")
   if (!ctx) return null
 
   ctx.save()
 
-  // 3. Draw Outer Purple / Violet Mesh Gradient Background
+  // 3. Draw Bright Purple / Lilac / White Gradient Background
   const bgGrad = ctx.createLinearGradient(0, 0, finalCanvas.width, finalCanvas.height)
-  bgGrad.addColorStop(0, "#190e2b")
-  bgGrad.addColorStop(0.35, "#2d134d")
-  bgGrad.addColorStop(0.7, "#1a0f30")
-  bgGrad.addColorStop(1, "#0d0718")
+  bgGrad.addColorStop(0, "#3e1b6b")
+  bgGrad.addColorStop(0.18, "#581c87")
+  bgGrad.addColorStop(0.48, "#7e22ce")
+  bgGrad.addColorStop(0.78, "#c084fc")
+  bgGrad.addColorStop(0.92, "#e9d5ff")
+  bgGrad.addColorStop(1, "#f5f3ff")
   ctx.fillStyle = bgGrad
   ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height)
 
-  // Radial purple ambient glow
-  const purpleGlow = ctx.createRadialGradient(
-    finalCanvas.width * 0.3,
-    finalCanvas.height * 0.25,
-    50,
-    finalCanvas.width * 0.3,
-    finalCanvas.height * 0.25,
-    finalCanvas.width * 0.7
+  // Luminous radial center ambient glow
+  const centerGlow = ctx.createRadialGradient(
+    finalCanvas.width * 0.5,
+    finalCanvas.height * 0.55,
+    100,
+    finalCanvas.width * 0.5,
+    finalCanvas.height * 0.55,
+    finalCanvas.width * 0.75
   )
-  purpleGlow.addColorStop(0, "rgba(168, 85, 247, 0.25)")
-  purpleGlow.addColorStop(0.6, "rgba(147, 51, 234, 0.08)")
-  purpleGlow.addColorStop(1, "rgba(147, 51, 234, 0)")
-  ctx.fillStyle = purpleGlow
+  centerGlow.addColorStop(0, "rgba(255, 255, 255, 0.45)")
+  centerGlow.addColorStop(0.5, "rgba(243, 232, 255, 0.2)")
+  centerGlow.addColorStop(1, "rgba(243, 232, 255, 0)")
+  ctx.fillStyle = centerGlow
   ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height)
 
-  // Radial emerald glow
-  const emeraldGlow = ctx.createRadialGradient(
-    finalCanvas.width * 0.75,
-    finalCanvas.height * 0.8,
-    40,
-    finalCanvas.width * 0.75,
-    finalCanvas.height * 0.8,
-    finalCanvas.width * 0.6
-  )
-  emeraldGlow.addColorStop(0, "rgba(34, 201, 138, 0.15)")
-  emeraldGlow.addColorStop(1, "rgba(34, 201, 138, 0)")
-  ctx.fillStyle = emeraldGlow
-  ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height)
+  // Top violet vignette
+  const topVignette = ctx.createLinearGradient(0, 0, 0, finalCanvas.height * 0.35)
+  topVignette.addColorStop(0, "rgba(46, 16, 101, 0.45)")
+  topVignette.addColorStop(1, "rgba(46, 16, 101, 0)")
+  ctx.fillStyle = topVignette
+  ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height * 0.35)
 
-  // Outer frame outline with rounded corners
-  const outerBorderRadius = Math.round(28 * (boardCanvas.width / 1600))
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.12)"
-  ctx.lineWidth = Math.round(2 * (boardCanvas.width / 1600))
-  roundRect(ctx, 12, 12, finalCanvas.width - 24, finalCanvas.height - 24, outerBorderRadius)
-  ctx.stroke()
-
-  // 4. Draw Inner Window (Board Screenshot) with Multi-layer Shadow and Rounded Corners
+  // 4. Outer Translucent Glass Rim (Border trong suốt bao quanh board)
   const boardX = paddingX
   const boardY = paddingY
   const boardW = boardCanvas.width
   const boardH = boardCanvas.height
-  const innerRadius = Math.round(20 * (boardCanvas.width / 1600))
+  const innerRadius = Math.round(20 * scale)
 
+  const rimX = boardX - glassRimPadding
+  const rimY = boardY - glassRimPadding
+  const rimW = boardW + glassRimPadding * 2
+  const rimH = boardH + glassRimPadding * 2
+  const rimRadius = innerRadius + glassRimPadding
+
+  // Translucent Glass Rim Shadow
+  ctx.save()
+  ctx.shadowColor = "rgba(46, 16, 101, 0.4)"
+  ctx.shadowBlur = Math.round(40 * scale)
+  ctx.shadowOffsetY = Math.round(18 * scale)
+
+  // Frosted Translucent Glass Fill
+  const glassFill = ctx.createLinearGradient(rimX, rimY, rimX, rimY + rimH)
+  glassFill.addColorStop(0, "rgba(255, 255, 255, 0.32)")
+  glassFill.addColorStop(0.5, "rgba(255, 255, 255, 0.18)")
+  glassFill.addColorStop(1, "rgba(255, 255, 255, 0.28)")
+  ctx.fillStyle = glassFill
+  roundRect(ctx, rimX, rimY, rimW, rimH, rimRadius)
+  ctx.fill()
+  ctx.restore()
+
+  // Translucent Glass Rim Stroke Outline
+  ctx.save()
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.55)"
+  ctx.lineWidth = Math.max(1.5, Math.round(2 * scale))
+  roundRect(ctx, rimX, rimY, rimW, rimH, rimRadius)
+  ctx.stroke()
+  ctx.restore()
+
+  // 5. Draw Inner Window (Board Screenshot) with Multi-layer Shadow and Rounded Corners
   // Deep Drop Shadow
   ctx.save()
-  ctx.shadowColor = "rgba(0, 0, 0, 0.85)"
-  ctx.shadowBlur = Math.round(48 * (boardCanvas.width / 1600))
-  ctx.shadowOffsetY = Math.round(22 * (boardCanvas.width / 1600))
+  ctx.shadowColor = "rgba(0, 0, 0, 0.88)"
+  ctx.shadowBlur = Math.round(48 * scale)
+  ctx.shadowOffsetY = Math.round(22 * scale)
   ctx.fillStyle = "#06080a"
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.fill()
   ctx.restore()
 
-  // Purple Neon Ambient Glow around board window
+  // Neon Ambient Glow around inner board window
   ctx.save()
-  ctx.shadowColor = "rgba(168, 85, 247, 0.35)"
-  ctx.shadowBlur = Math.round(36 * (boardCanvas.width / 1600))
+  ctx.shadowColor = "rgba(168, 85, 247, 0.45)"
+  ctx.shadowBlur = Math.round(36 * scale)
   ctx.fillStyle = "#06080a"
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.fill()
@@ -238,33 +261,33 @@ export async function captureMarketBoardScreenshot(
   ctx.clip()
   ctx.drawImage(boardCanvas, boardX, boardY, boardW, boardH)
 
-  // Draw Centered Navbar-style Watermark directly over the board screenshot
+  // Draw Centered Navbar-style Watermark directly over the board screenshot (Large & Prominent)
   await drawNavbarWatermark(ctx, boardX + boardW / 2, boardY + boardH / 2, boardW)
   ctx.restore()
 
   // Inner Window Outer Stroke Border
   ctx.save()
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.16)"
-  ctx.lineWidth = Math.round(1.5 * (boardCanvas.width / 1600))
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.2)"
+  ctx.lineWidth = Math.max(1, Math.round(1.5 * scale))
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.stroke()
   ctx.restore()
 
-  // 5. Outer Footer Branding: qeoindex.qeoqeo.com · DD/MM/YYYY HH:MM:SS
+  // 6. Outer Footer Copyright Stamp: © qeoindex.qeoqeo.com · DD/MM/YYYY HH:MM:SS
   ctx.save()
   ctx.textAlign = "right"
   ctx.textBaseline = "middle"
-  ctx.font = `600 ${Math.max(13, Math.round(finalCanvas.width * 0.0105))}px "Plus Jakarta Sans", sans-serif`
-  ctx.fillStyle = "rgba(255, 255, 255, 0.6)"
-  ctx.shadowColor = "rgba(0, 0, 0, 0.7)"
-  ctx.shadowBlur = 8
+  ctx.font = `700 ${Math.max(13, Math.round(finalCanvas.width * 0.0115))}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
+  ctx.fillStyle = "#3b0764"
+  ctx.shadowColor = "rgba(255, 255, 255, 0.75)"
+  ctx.shadowBlur = 6
 
   const now = new Date()
   const timeStr = now.toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour12: false })
   const dateStr = now.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })
-  const stamp = `qeoindex.qeoqeo.com · ${dateStr} ${timeStr}`
+  const stamp = `© qeoindex.qeoqeo.com · ${dateStr} ${timeStr}`
 
-  ctx.fillText(stamp, finalCanvas.width - paddingX, finalCanvas.height - paddingY / 2)
+  ctx.fillText(stamp, finalCanvas.width - paddingX, finalCanvas.height - paddingY / 2 + Math.round(4 * scale))
   ctx.restore()
 
   return new Promise<Blob | null>((resolve) => {
