@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono, Plus_Jakarta_Sans } from 'next/font/google'
+import { AppAuthGate } from '@/components/auth/app-auth-gate'
 import { BRAND } from '@/lib/brand'
 import './globals.css'
 
@@ -48,7 +49,7 @@ export default function RootLayout({
   return (
     <html lang="vi" className={`${geistSans.variable} ${geistMono.variable} ${plusJakartaSans.variable} bg-background`}>
       <body className="font-sans antialiased">
-        {children}
+        <AppAuthGate>{children}</AppAuthGate>
         {process.env.NODE_ENV === 'production' && <Analytics />}
         {process.env.NODE_ENV === 'production' && <SpeedInsights />}
       </body>
