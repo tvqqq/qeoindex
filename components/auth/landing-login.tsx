@@ -1,7 +1,7 @@
 "use client"
 
 import { type FormEvent, useState } from "react"
-import { ArrowRight, Eye, EyeOff, LineChart, Radar, RadioTower } from "lucide-react"
+import { ArrowRight, ArrowUpRight, Eye, EyeOff, LineChart, Radar, RadioTower } from "lucide-react"
 import { BRAND } from "@/lib/brand"
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client"
 
@@ -148,41 +148,54 @@ export function LandingLogin() {
       <div className="pointer-events-none absolute inset-0 opacity-[0.11] [background-image:linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] [background-size:64px_64px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-[1480px] flex-col px-5 py-5 sm:px-8 lg:px-10">
-        <header className="flex items-center justify-between rounded-[22px] border border-white/[0.08] bg-[#071017]/70 px-4 py-3.5 shadow-[0_14px_50px_-38px_rgba(34,201,138,0.9)] backdrop-blur-2xl sm:px-5">
+        <header className="flex items-center justify-between gap-4 rounded-[22px] border border-white/[0.08] bg-[#071017]/70 px-4 py-3.5 shadow-[0_14px_50px_-38px_rgba(34,201,138,0.9)] backdrop-blur-2xl sm:px-5">
           <BrandLockup />
-          <div className="hidden items-center gap-2 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-600 sm:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.9)]" />
-            Thị trường Việt Nam
-          </div>
+          <a
+            href="https://qeoqeo.com/"
+            className="group flex shrink-0 items-center gap-2 rounded-full border border-emerald-300/20 bg-white/[0.025] px-3.5 py-2 font-ticker text-[11px] font-bold text-slate-300 shadow-[0_0_18px_-12px_rgba(110,231,183,0.8)] transition hover:border-amber-300/35 hover:bg-white/[0.045] hover:text-white hover:shadow-[0_0_24px_-10px_rgba(244,184,75,0.75)] sm:px-4"
+            aria-label="Liên hệ qua qeoqeo.com"
+          >
+            <span>Liên hệ</span>
+            <ArrowUpRight className="h-3.5 w-3.5 text-emerald-300 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-amber-300" />
+          </a>
         </header>
 
         <section className="grid flex-1 items-center gap-10 py-12 lg:grid-cols-[1.12fr_0.88fr] lg:gap-16 lg:py-16">
           <div className="min-w-0">
-            <div className="inline-flex items-center gap-2 rounded-full border border-amber-300/15 bg-amber-300/[0.045] px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-amber-200/75">
-              QeoIndex / market workspace
+            <div className="relative isolate py-6 sm:py-8 lg:py-10">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -left-[7%] top-1/2 -z-20 -translate-y-[55%] select-none font-ticker text-[clamp(17rem,31vw,31rem)] font-extrabold italic leading-none text-transparent opacity-75 [-webkit-text-stroke:1.5px_rgba(110,231,183,0.34)] [text-shadow:0_0_18px_rgba(110,231,183,0.34),0_0_64px_rgba(34,201,138,0.24),0_0_110px_rgba(244,184,75,0.12)]"
+              >
+                O
+              </div>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -left-[2%] top-1/2 -z-30 h-[min(31vw,29rem)] w-[min(31vw,29rem)] min-h-[17rem] min-w-[17rem] -translate-y-1/2 rounded-full bg-[radial-gradient(circle,transparent_49%,rgba(110,231,183,0.09)_51%,rgba(244,184,75,0.055)_57%,transparent_69%)] blur-[2px]"
+              />
+
+              <h1 className="relative max-w-[780px] py-3 font-ticker text-[clamp(3rem,13vw,5.2rem)] font-extrabold italic leading-[1.02] tracking-[-0.045em] text-[#f1eee5] lg:text-[clamp(4.8rem,6.3vw,6.4rem)]">
+                <span className="block">Đọc thị trường.</span>
+                <span className="mt-1 block bg-gradient-to-r from-amber-300 via-[#f4b84b] to-emerald-300 bg-clip-text pb-1 text-transparent drop-shadow-[0_0_30px_rgba(244,184,75,0.1)]">
+                  Giữ kỷ luật.
+                </span>
+              </h1>
+
+              <p className="relative mt-6 max-w-xl font-ticker text-[15px] font-medium leading-7 text-slate-400 sm:text-base">
+                Một workspace gọn cho bảng điện realtime, Wyckoff insights và tín hiệu thị trường Việt Nam.
+              </p>
+
+              <div className="relative mt-7 flex flex-wrap gap-2.5">
+                {FEATURES.map(({ label, icon: Icon }) => (
+                  <div key={label} className="flex items-center gap-2 rounded-full border border-white/[0.075] bg-white/[0.025] px-3.5 py-2 text-[11px] font-semibold text-slate-300 backdrop-blur-xl">
+                    <Icon className="h-3.5 w-3.5 text-emerald-300/80" />
+                    {label}
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <h1 className="mt-7 max-w-[760px] font-ticker text-[clamp(3.5rem,8vw,7.6rem)] font-extrabold italic leading-[0.82] tracking-[-0.075em] text-[#f1eee5]">
-              Thấy nhịp sàn.
-              <span className="mt-2 block bg-gradient-to-r from-amber-300 via-[#f4b84b] to-emerald-300 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(244,184,75,0.1)]">
-                Giữ nhịp mình.
-              </span>
-            </h1>
-
-            <p className="mt-7 max-w-xl font-ticker text-[15px] font-medium leading-7 text-slate-400 sm:text-base">
-              Một workspace gọn cho bảng điện realtime, Wyckoff insights và tín hiệu thị trường Việt Nam.
-            </p>
-
-            <div className="mt-7 flex flex-wrap gap-2.5">
-              {FEATURES.map(({ label, icon: Icon }) => (
-                <div key={label} className="flex items-center gap-2 rounded-full border border-white/[0.075] bg-white/[0.025] px-3.5 py-2 text-[11px] font-semibold text-slate-300 backdrop-blur-xl">
-                  <Icon className="h-3.5 w-3.5 text-emerald-300/80" />
-                  {label}
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-10 hidden max-w-[610px] lg:block">
+            <div className="mt-4 hidden max-w-[610px] lg:block">
               <MarketPulseCard />
             </div>
           </div>
@@ -194,8 +207,7 @@ export function LandingLogin() {
 
               <div className="relative rounded-[26px] border border-white/[0.055] bg-[#081017]/78 px-6 py-7 sm:px-8 sm:py-9">
                 <div className="mb-8">
-                  <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-slate-600">Điểm truy cập bảo mật</p>
-                  <h2 className="mt-3 font-ticker text-2xl font-extrabold italic tracking-[-0.035em] text-white sm:text-[28px]">Đăng nhập QeoIndex</h2>
+                  <h2 className="font-ticker text-2xl font-extrabold italic tracking-[-0.035em] text-white sm:text-[28px]">Đăng nhập QeoIndex</h2>
                   <p className="mt-2 text-sm text-slate-500">Truy cập bảng điện và workspace cá nhân.</p>
                 </div>
 
