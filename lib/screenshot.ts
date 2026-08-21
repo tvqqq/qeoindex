@@ -49,32 +49,32 @@ async function drawNavbarWatermark(
 ) {
   ctx.save()
 
-  // Significantly larger scale for prominent centered watermark
-  const scale = Math.max(1.2, (boardWidth / 1600) * 1.6)
-  const iconSize = Math.round(92 * scale)
-  const badgeSize = Math.round(136 * scale)
-  const badgeRadius = Math.round(36 * scale)
+  // Compact, tasteful scale that sits softly in the background
+  const scale = Math.max(0.85, (boardWidth / 1600) * 1.15)
+  const iconSize = Math.round(56 * scale)
+  const badgeSize = Math.round(82 * scale)
+  const badgeRadius = Math.round(22 * scale)
 
-  // Prominent translucent watermark
-  ctx.globalAlpha = 0.22
+  // Soft, translucent, non-intrusive watermark opacity
+  ctx.globalAlpha = 0.08
 
-  // 1. Draw large rounded badge container with emerald & purple gradient
+  // 1. Draw rounded badge container
   const badgeX = centerX - badgeSize / 2
-  const badgeY = centerY - Math.round(135 * scale)
+  const badgeY = centerY - Math.round(86 * scale)
 
   const badgeGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX + badgeSize, badgeY + badgeSize)
-  badgeGrad.addColorStop(0, "rgba(34, 201, 138, 0.55)")
-  badgeGrad.addColorStop(0.5, "rgba(168, 85, 247, 0.55)")
-  badgeGrad.addColorStop(1, "rgba(34, 201, 138, 0.45)")
+  badgeGrad.addColorStop(0, "rgba(34, 201, 138, 0.35)")
+  badgeGrad.addColorStop(0.5, "rgba(168, 85, 247, 0.35)")
+  badgeGrad.addColorStop(1, "rgba(34, 201, 138, 0.25)")
 
   ctx.fillStyle = badgeGrad
-  ctx.shadowColor = "rgba(34, 201, 138, 0.75)"
-  ctx.shadowBlur = Math.round(32 * scale)
+  ctx.shadowColor = "rgba(34, 201, 138, 0.4)"
+  ctx.shadowBlur = Math.round(16 * scale)
   roundRect(ctx, badgeX, badgeY, badgeSize, badgeSize, badgeRadius)
   ctx.fill()
 
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.6)"
-  ctx.lineWidth = Math.round(2 * scale)
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.35)"
+  ctx.lineWidth = Math.round(1.5 * scale)
   roundRect(ctx, badgeX, badgeY, badgeSize, badgeSize, badgeRadius)
   ctx.stroke()
 
@@ -93,12 +93,12 @@ async function drawNavbarWatermark(
   // 3. Draw Title "QeoIndex"
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
-  const titleY = badgeY + badgeSize + Math.round(52 * scale)
+  const titleY = badgeY + badgeSize + Math.round(34 * scale)
 
-  ctx.font = `italic 800 ${Math.round(66 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
+  ctx.font = `italic 800 ${Math.round(42 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
   ctx.fillStyle = "#ffffff"
-  ctx.shadowColor = "rgba(34, 201, 138, 0.85)"
-  ctx.shadowBlur = Math.round(32 * scale)
+  ctx.shadowColor = "rgba(34, 201, 138, 0.5)"
+  ctx.shadowBlur = Math.round(16 * scale)
 
   const qeoWidth = ctx.measureText("Qeo").width
   const indexWidth = ctx.measureText("Index").width
@@ -106,7 +106,7 @@ async function drawNavbarWatermark(
 
   ctx.textAlign = "left"
   const titleStartX = centerX - totalTitleWidth / 2
-  ctx.fillStyle = "rgba(255, 255, 255, 0.98)"
+  ctx.fillStyle = "rgba(255, 255, 255, 0.9)"
   ctx.fillText("Qeo", titleStartX, titleY)
 
   const indexGrad = ctx.createLinearGradient(titleStartX + qeoWidth, titleY, titleStartX + totalTitleWidth, titleY)
@@ -118,11 +118,10 @@ async function drawNavbarWatermark(
 
   // 4. Draw Slogan "Đọc thị trường. Giữ kỷ luật"
   ctx.textAlign = "center"
-  ctx.font = `600 ${Math.round(26 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
-  ctx.fillStyle = "rgba(226, 232, 240, 0.95)"
-  ctx.shadowBlur = Math.round(12 * scale)
-  ctx.shadowColor = "rgba(0, 0, 0, 0.8)"
-  const sloganY = titleY + Math.round(44 * scale)
+  ctx.font = `500 ${Math.round(16 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
+  ctx.fillStyle = "rgba(203, 213, 225, 0.85)"
+  ctx.shadowBlur = 0
+  const sloganY = titleY + Math.round(28 * scale)
   ctx.fillText("Đọc thị trường. Giữ kỷ luật", centerX, sloganY)
 
   ctx.restore()
@@ -261,7 +260,7 @@ export async function captureMarketBoardScreenshot(
   ctx.clip()
   ctx.drawImage(boardCanvas, boardX, boardY, boardW, boardH)
 
-  // Draw Centered Navbar-style Watermark directly over the board screenshot (Large & Prominent)
+  // Draw Centered Navbar-style Watermark directly over the board screenshot (subtle & submerged)
   await drawNavbarWatermark(ctx, boardX + boardW / 2, boardY + boardH / 2, boardW)
   ctx.restore()
 
