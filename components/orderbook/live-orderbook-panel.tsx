@@ -2694,52 +2694,36 @@ export function LiveOrderBookPanel({
                 ))}
               </div>
 
-              {/* ACCUMULATION / DISTRIBUTION RATIO BAR (Image 1 Style) */}
+              {/* ACCUMULATION / DISTRIBUTION RATIO BAR */}
               <div className="mt-2.5 pt-2.5 border-t border-white/[0.08]">
                 {/* Upper stats row */}
-                <div className="flex items-end justify-between mb-1.5">
-                  {/* Left: Accumulation (Buy) */}
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 tracking-wider uppercase">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-                      <span>ACCUMULATION</span>
-                    </div>
-                    <div className="font-ticker font-extrabold text-xl sm:text-2xl text-emerald-400 tracking-tight drop-shadow-[0_0_10px_rgba(52,211,153,0.35)] leading-tight mt-0.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  {/* Left: Mua */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" />
+                    <span className="text-xs font-bold text-slate-300">Mua</span>
+                    <span className="font-ticker font-extrabold text-sm sm:text-base text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.35)]">
                       {depthTotal > 0 ? `${buyPct.toFixed(1)}%` : "50.0%"}
-                    </div>
-                    <div className="font-mono text-[9.5px] text-slate-400 tracking-tight mt-0.5">
-                      VOL: +{formatCompactVolume(bidTotal)}
-                    </div>
+                    </span>
                   </div>
 
-                  {/* Center: Flow Balance / Countdown */}
-                  <div className="flex flex-col items-center justify-center pb-0.5">
-                    {sessionCountdown ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-amber-500/40 bg-amber-500/15 text-amber-400 font-bold text-[10px] animate-pulse shadow-sm mb-1">
-                        <Clock className="h-3 w-3" />
+                  {/* Center: ATO / ATC Countdown Timer */}
+                  {sessionCountdown ? (
+                    <div className="flex items-center justify-center">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-amber-400/50 bg-amber-500/15 text-amber-300 font-mono font-black text-[11px] shadow-[0_0_12px_rgba(251,191,36,0.3)] animate-pulse">
+                        <Clock className="h-3.5 w-3.5 text-amber-400" />
                         <span>{sessionCountdown.type}: {sessionCountdown.label}</span>
                       </span>
-                    ) : null}
-                    <span className="text-[8.5px] font-extrabold text-slate-400 tracking-widest uppercase">
-                      FLOW BALANCE
-                    </span>
-                    <span className="font-mono text-xs font-bold text-slate-200 mt-0.5">
-                      {depthTotal > 0 ? `${Math.round(buyPct)} : ${Math.round(sellPct)}` : "50 : 50"}
-                    </span>
-                  </div>
+                    </div>
+                  ) : null}
 
-                  {/* Right: Distribution (Sell) */}
-                  <div className="flex flex-col items-end">
-                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-rose-400 tracking-wider uppercase">
-                      <span>DISTRIBUTION</span>
-                      <span className="h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.8)]" />
-                    </div>
-                    <div className="font-ticker font-extrabold text-xl sm:text-2xl text-rose-400 tracking-tight drop-shadow-[0_0_10px_rgba(244,63,94,0.35)] leading-tight mt-0.5 text-right">
+                  {/* Right: Bán */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-ticker font-extrabold text-sm sm:text-base text-rose-400 drop-shadow-[0_0_8px_rgba(244,63,94,0.35)]">
                       {depthTotal > 0 ? `${sellPct.toFixed(1)}%` : "50.0%"}
-                    </div>
-                    <div className="font-mono text-[9.5px] text-slate-400 tracking-tight mt-0.5 text-right">
-                      VOL: -{formatCompactVolume(askTotal)}
-                    </div>
+                    </span>
+                    <span className="text-xs font-bold text-slate-300">Bán</span>
+                    <span className="h-2 w-2 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.8)] shrink-0" />
                   </div>
                 </div>
 
@@ -2753,13 +2737,13 @@ export function LiveOrderBookPanel({
                   }}
                 />
 
-                {/* Sub-footer below bar */}
-                <div className="flex items-center justify-between mt-1 text-[8.5px] font-bold tracking-wider uppercase">
-                  <span className={buyPct >= 50 ? "text-emerald-400/80 font-extrabold" : "text-slate-600 font-normal"}>
-                    ACCUMULATION DOMINANCE
+                {/* Sub-footer below bar: Volume stats */}
+                <div className="flex items-center justify-between mt-1 text-[10.5px] font-mono">
+                  <span className="text-emerald-400/90 font-medium">
+                    VOL: +{formatCompactVolume(bidTotal)}
                   </span>
-                  <span className={sellPct > 50 ? "text-rose-400/80 font-extrabold" : "text-slate-600 font-normal"}>
-                    DISTRIBUTION DOMINANCE
+                  <span className="text-rose-400/90 font-medium">
+                    VOL: -{formatCompactVolume(askTotal)}
                   </span>
                 </div>
               </div>
