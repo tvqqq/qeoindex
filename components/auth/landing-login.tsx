@@ -146,6 +146,14 @@ export function LandingLogin() {
     <main className="relative min-h-screen overflow-hidden bg-[#05080b] text-slate-100">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(34,201,138,0.09),transparent_31%),radial-gradient(circle_at_78%_23%,rgba(245,184,75,0.07),transparent_27%),radial-gradient(circle_at_52%_76%,rgba(103,232,249,0.045),transparent_33%)]" />
       <div className="pointer-events-none absolute inset-0 opacity-[0.11] [background-image:linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] [background-size:64px_64px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-[24%] top-[18%] h-[68%] w-[56%] rounded-[48%] bg-[radial-gradient(ellipse_at_center,rgba(74,222,128,0.15)_0%,rgba(34,201,138,0.09)_28%,rgba(34,201,138,0.035)_51%,transparent_74%)] blur-[72px]"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-[18%] top-[33%] h-[42%] w-[42%] -rotate-6 rounded-[50%] bg-[linear-gradient(115deg,transparent_10%,rgba(74,222,128,0.08)_34%,rgba(110,231,183,0.16)_49%,rgba(34,201,138,0.055)_63%,transparent_82%)] blur-[56px]"
+      />
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-[1480px] flex-col px-5 py-5 sm:px-8 lg:px-10">
         <header className="flex items-center justify-between gap-4 rounded-[22px] border border-white/[0.08] bg-[#071017]/70 px-4 py-3.5 shadow-[0_14px_50px_-38px_rgba(34,201,138,0.9)] backdrop-blur-2xl sm:px-5">
@@ -165,13 +173,13 @@ export function LandingLogin() {
             <div className="relative isolate py-6 sm:py-8 lg:py-10">
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute -left-[7%] top-1/2 -z-20 -translate-y-[55%] select-none font-ticker text-[clamp(17rem,31vw,31rem)] font-extrabold italic leading-none text-transparent opacity-75 [-webkit-text-stroke:1.5px_rgba(110,231,183,0.34)] [text-shadow:0_0_18px_rgba(110,231,183,0.34),0_0_64px_rgba(34,201,138,0.24),0_0_110px_rgba(244,184,75,0.12)]"
+                className="pointer-events-none absolute -left-[7%] top-1/2 -z-20 -translate-y-[55%] select-none font-ticker text-[clamp(17rem,31vw,31rem)] font-extrabold italic leading-none text-transparent opacity-30 [-webkit-text-stroke:1.2px_rgba(110,231,183,0.16)] [text-shadow:0_0_18px_rgba(110,231,183,0.16),0_0_56px_rgba(34,201,138,0.1),0_0_96px_rgba(244,184,75,0.055)]"
               >
                 O
               </div>
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute -left-[2%] top-1/2 -z-30 h-[min(31vw,29rem)] w-[min(31vw,29rem)] min-h-[17rem] min-w-[17rem] -translate-y-1/2 rounded-full bg-[radial-gradient(circle,transparent_49%,rgba(110,231,183,0.09)_51%,rgba(244,184,75,0.055)_57%,transparent_69%)] blur-[2px]"
+                className="pointer-events-none absolute -left-[2%] top-1/2 -z-30 h-[min(31vw,29rem)] w-[min(31vw,29rem)] min-h-[17rem] min-w-[17rem] -translate-y-1/2 rounded-full bg-[radial-gradient(circle,transparent_49%,rgba(110,231,183,0.035)_51%,rgba(244,184,75,0.022)_57%,transparent_69%)] blur-[3px]"
               />
 
               <h1 className="relative max-w-[780px] py-3 font-ticker text-[clamp(3rem,13vw,5.2rem)] font-extrabold italic leading-[1.02] tracking-[-0.045em] text-[#f1eee5] lg:text-[clamp(4.8rem,6.3vw,6.4rem)]">
@@ -182,7 +190,7 @@ export function LandingLogin() {
               </h1>
 
               <p className="relative mt-6 max-w-xl font-ticker text-[15px] font-medium leading-7 text-slate-400 sm:text-base">
-                Một workspace gọn cho bảng điện realtime, Wyckoff insights và tín hiệu thị trường Việt Nam.
+                Một workspace gọn cho bảng điện realtime, Wyckoff insights và tín hiệu liên thị trường.
               </p>
 
               <div className="relative mt-7 flex flex-wrap gap-2.5">
