@@ -24,7 +24,7 @@ import {
   VolumeX,
 } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
-import { BOARD_SECTOR_GROUPS, SECTOR_ORDER } from "@/lib/market-sectors"
+import { BOARD_SECTOR_GROUPS } from "@/lib/market-sectors"
 import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
@@ -536,7 +536,6 @@ export function LiveMarketBoardV2({
   const [reconnectKey, setReconnectKey] = useState(0)
   const [historyReloadKey, setHistoryReloadKey] = useState(0)
   const [query, setQuery] = useState("")
-  const [selectedSector, setSelectedSector] = useState("Tất cả")
   const [mode, setMode] = useState<BoardMode>("sector")
   const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>(() => initialHistories ? { ...initialHistories } : {})
   const [whaleAlerts, setWhaleAlerts] = useState<Record<string, boolean>>({})
@@ -1199,7 +1198,7 @@ export function LiveMarketBoardV2({
     return out
   }, [watchedStocks, displayQuotes])
 
-  const filtered = useMemo(() => universe.filter((stock) => (!normalizedQuery || stock.ticker.includes(normalizedQuery)) && (selectedSector === "Tất cả" || stock.sector === selectedSector)), [universe, normalizedQuery, selectedSector])
+  const filtered = useMemo(() => universe.filter((stock) => (!normalizedQuery || stock.ticker.includes(normalizedQuery))), [universe, normalizedQuery])
   const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, displayQuotes)), [displayQuotes, filtered])
   const grouped = useMemo(() => BOARD_SECTOR_GROUPS.map((group) => {
     const stocks = filtered
@@ -1426,17 +1425,6 @@ export function LiveMarketBoardV2({
             />
           </div>
 
-          <select
-            value={selectedSector}
-            onChange={(event) => setSelectedSector(event.target.value)}
-            className="h-8 rounded-full border border-white/[0.08] bg-[#0d1217] px-3.5 text-xs text-foreground outline-none focus:border-brand/60 transition-all shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] cursor-pointer"
-          >
-            <option>Tất cả</option>
-            {SECTOR_ORDER.map((sector) => (
-              <option key={sector}>{sector}</option>
-            ))}
-          </select>
-
           <div className="flex items-center rounded-full border border-white/[0.08] bg-white/[0.03] p-0.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
             <button
               onClick={() => setMode("sector")}
@@ -1447,7 +1435,7 @@ export function LiveMarketBoardV2({
               }`}
             >
               <LayoutGrid className="h-3 w-3" />
-              <span>{BOARD_SECTOR_GROUPS.length} nhóm</span>
+              <span>Tất cả</span>
             </button>
             <button
               onClick={() => setMode("movers")}
