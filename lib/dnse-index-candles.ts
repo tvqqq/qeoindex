@@ -1,7 +1,13 @@
 import "server-only"
 
 import { createHmac, randomUUID } from "node:crypto"
-import { normalizeCandleBar, type CandleBar, type IndexChartSymbol } from "@/lib/index-candles"
+import {
+  normalizeCandleBar,
+  resampleCandleSeries,
+  type CandleBar,
+  type IndexChartResolution,
+  type IndexChartSymbol,
+} from "@/lib/index-candles"
 
 const DEFAULT_BASE_URL = "https://openapi.dnse.com.vn"
 const PUBLIC_CHART_BASE_URLS = [
@@ -11,8 +17,21 @@ const PUBLIC_CHART_BASE_URLS = [
 const VIETNAM_TZ = "Asia/Ho_Chi_Minh"
 const PUBLIC_CHART_TIMEOUT_MS = 4_000
 const OHLC_ATTEMPT_TIMEOUT_MS = 8_000
-const HISTORY_LOOKBACK_DAYS = 14
-const DEFAULT_MAX_POINTS = 2_600
+
+type HistoryConfig = {
+  sourceResolution: Exclude<IndexChartResolution, "4H">
+  lookbackDays: number
+  maxPoints: number
+}
+
+const HISTORY_CONFIG: Record<IndexChartResolution, HistoryConfig> = {
+  "1": { sourceResolution: "1", lookbackDays: 14, maxPoints: 2_600 },
+  "5": { sourceResolution: "5", lookbackDays: 75, maxPoints: 3_200 },
+  "30": { sourceResolution: "30", lookbackDays: 300, maxPoints: 3_200 },
+  "1H": { sourceResolution: "1H", lookbackDays: 540, maxPoints: 3_200 },
+  "4H": { sourceResolution: "1H", lookbackDays: 900, maxPoints: 3_200 },
+  "1D": { sourceResolution: "1D", lookbackDays: 1_825, maxPoints: 1_800 },
+}
 
 function credentials() {
   const apiKey = process.env.DNSE_API_KEY ?? ""
@@ -130,8 +149,13 @@ function vietnamDateKey(timestampSeconds: number) {
 
 type OhlcAttempt = { label: string; params: Record<string, string | number> }
 
-function openApiAttemptFor(symbol: IndexChartSymbol, from: number, to: number): OhlcAttempt {
-  const common = { resolution: "1", from, to }
+function openApiAttemptFor(
+  symbol: IndexChartSymbol,
+  resolution: Exclude<IndexChartResolution, "4H">,
+  from: number,
+  to: number,
+): OhlcAttempt {
+  const common = { resolution, from, to }
   return symbol === "VNINDEX"
     ? { label: "openapi INDEX/symbol", params: { ...common, symbol, type: "INDEX" } }
     : { label: "openapi DERIVATIVE/symbol", params: { ...common, symbol, type: "DERIVATIVE" } }
@@ -141,30 +165,69 @@ function publicKindsFor(symbol: IndexChartSymbol) {
   return symbol === "VNINDEX" ? ["index", "stock"] : ["derivative"]
 }
 
+function publicResolutionCandidates(resolution: Exclude<IndexChartResolution, "4H">) {
+  if (resolution === "1H") return ["1H", "60"] as const
+  if (resolution === "1D") return ["1D", "D"] as const
+  return [resolution] as const
+}
+
 function trimHistory(bars: CandleBar[], from: number, to: number, maxPoints: number) {
   const filtered = bars.filter((bar) => bar.time >= from && bar.time <= to)
-  const limit = Math.max(390, Math.min(maxPoints, 3_200))
+  const limit = Math.max(120, Math.min(maxPoints, 4_000))
   return filtered.slice(-limit)
 }
 
-export async function fetchDnseIndexCandleHistory(symbol: IndexChartSymbol, now = new Date(), maxPoints = DEFAULT_MAX_POINTS) {
-  const to = Math.floor(now.getTime() / 1000)
-  const from = to - HISTORY_LOOKBACK_DAYS * 24 * 60 * 60
-  const failures: string[] = []
-  const publicParams = { resolution: "1", symbol, from, to }
+function finalizeHistory(
+  symbol: IndexChartSymbol,
+  resolution: IndexChartResolution,
+  sourceBars: CandleBar[],
+  from: number,
+  to: number,
+  maxPoints: number,
+) {
+  const normalized = resolution === "4H"
+    ? resampleCandleSeries(sourceBars, "4H", symbol)
+    : sourceBars
+  return trimHistory(normalized, from, to, maxPoints)
+}
 
+export async function fetchDnseIndexCandleHistory(
+  symbol: IndexChartSymbol,
+  now = new Date(),
+  resolution: IndexChartResolution = "1",
+  maxPoints?: number,
+) {
+  const config = HISTORY_CONFIG[resolution]
+  const limit = maxPoints ?? config.maxPoints
+  const to = Math.floor(now.getTime() / 1000)
+  const from = to - config.lookbackDays * 24 * 60 * 60
+  const failures: string[] = []
   const publicAttempts = PUBLIC_CHART_BASE_URLS.flatMap((baseUrl) =>
-    publicKindsFor(symbol).map((kind) => ({ baseUrl, kind, label: `${new URL(baseUrl).hostname} ${kind}` })),
+    publicKindsFor(symbol).flatMap((kind) =>
+      publicResolutionCandidates(config.sourceResolution).map((sourceResolution) => ({
+        baseUrl,
+        kind,
+        sourceResolution,
+        label: `${new URL(baseUrl).hostname} ${kind} ${sourceResolution}`,
+      })),
+    ),
   )
   const publicResults = await Promise.allSettled(publicAttempts.map(async (attempt) => {
     try {
       return {
         attempt,
-        bars: trimHistory(
-          normalizeDnseChartHistory(await publicChartGet(attempt.baseUrl, attempt.kind, publicParams)),
+        bars: finalizeHistory(
+          symbol,
+          resolution,
+          normalizeDnseChartHistory(await publicChartGet(attempt.baseUrl, attempt.kind, {
+            resolution: attempt.sourceResolution,
+            symbol,
+            from,
+            to,
+          })),
           from,
           to,
-          maxPoints,
+          limit,
         ),
       }
     } catch (error) {
@@ -176,6 +239,7 @@ export async function fetchDnseIndexCandleHistory(symbol: IndexChartSymbol, now 
       const { bars, attempt } = result.value
       return {
         symbol,
+        resolution,
         bars,
         sessionDate: vietnamDateKey(bars[bars.length - 1].time),
         transport: attempt.label,
@@ -188,12 +252,20 @@ export async function fetchDnseIndexCandleHistory(symbol: IndexChartSymbol, now 
     }
   }
 
-  const attempt = openApiAttemptFor(symbol, from, to)
+  const attempt = openApiAttemptFor(symbol, config.sourceResolution, from, to)
   try {
-    const bars = trimHistory(normalizeDnseChartHistory(await signedGet(attempt.params)), from, to, maxPoints)
+    const bars = finalizeHistory(
+      symbol,
+      resolution,
+      normalizeDnseChartHistory(await signedGet(attempt.params)),
+      from,
+      to,
+      limit,
+    )
     if (bars.length) {
       return {
         symbol,
+        resolution,
         bars,
         sessionDate: vietnamDateKey(bars[bars.length - 1].time),
         transport: attempt.label,
@@ -204,5 +276,5 @@ export async function fetchDnseIndexCandleHistory(symbol: IndexChartSymbol, now 
     failures.push(`${attempt.label}: ${error instanceof Error ? error.message : "failed"}`)
   }
 
-  throw new Error(`DNSE OHLC unavailable for ${symbol} (${failures.join("; ")})`)
+  throw new Error(`DNSE OHLC unavailable for ${symbol} ${resolution} (${failures.join("; ")})`)
 }

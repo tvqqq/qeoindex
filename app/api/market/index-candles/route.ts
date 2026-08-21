@@ -1,7 +1,13 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 
 import { fetchDnseIndexCandleHistory } from "@/lib/dnse-index-candles"
-import { INDEX_CHART_SYMBOLS, type CandleBar, type IndexChartSymbol } from "@/lib/index-candles"
+import {
+  INDEX_CHART_SYMBOLS,
+  isIndexChartResolution,
+  type CandleBar,
+  type IndexChartResolution,
+  type IndexChartSymbol,
+} from "@/lib/index-candles"
 import { isTradingSessionOpen } from "@/lib/session-countdown"
 
 export const runtime = "nodejs"
@@ -18,7 +24,7 @@ type CachedPayload = {
   expiresAt: number
   data: {
     ok: boolean
-    resolution: "1"
+    resolution: IndexChartResolution
     generatedAt: string
     candles: Record<IndexChartSymbol, CandleBar[]>
     sessionDates: Partial<Record<IndexChartSymbol, string>>
@@ -26,16 +32,26 @@ type CachedPayload = {
   }
 }
 
-let hotCache: CachedPayload | null = null
+const hotCache = new Map<IndexChartResolution, CachedPayload>()
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const rawResolution = request.nextUrl.searchParams.get("resolution") ?? "1"
+  if (!isIndexChartResolution(rawResolution)) {
+    return NextResponse.json(
+      { ok: false, error: "Unsupported chart resolution" },
+      { status: 400, headers: NO_STORE_HEADERS },
+    )
+  }
+
+  const resolution = rawResolution
   const now = new Date()
-  if (hotCache && Date.now() < hotCache.expiresAt) {
-    return NextResponse.json(hotCache.data, { headers: NO_STORE_HEADERS })
+  const cached = hotCache.get(resolution)
+  if (cached && Date.now() < cached.expiresAt) {
+    return NextResponse.json(cached.data, { headers: NO_STORE_HEADERS })
   }
 
   const settled = await Promise.allSettled(
-    INDEX_CHART_SYMBOLS.map((symbol) => fetchDnseIndexCandleHistory(symbol, now)),
+    INDEX_CHART_SYMBOLS.map((symbol) => fetchDnseIndexCandleHistory(symbol, now, resolution)),
   )
   const candles: Record<IndexChartSymbol, CandleBar[]> = { VNINDEX: [], VN30F1M: [] }
   const sessionDates: Partial<Record<IndexChartSymbol, string>> = {}
@@ -54,7 +70,7 @@ export async function GET() {
   const ok = INDEX_CHART_SYMBOLS.some((symbol) => candles[symbol].length > 0)
   const data = {
     ok,
-    resolution: "1" as const,
+    resolution,
     generatedAt: now.toISOString(),
     candles,
     sessionDates,
@@ -62,10 +78,10 @@ export async function GET() {
   }
 
   if (ok) {
-    hotCache = {
+    hotCache.set(resolution, {
       data,
       expiresAt: Date.now() + (isTradingSessionOpen(now) ? 3_000 : 60_000),
-    }
+    })
   }
 
   return NextResponse.json(data, { status: ok ? 200 : 503, headers: NO_STORE_HEADERS })

@@ -5,11 +5,13 @@ import {
   EMPTY_VNINDEX_ACCUMULATOR,
   INDEX_CHART_SYMBOLS,
   accumulateVnindexFrame,
-  mergeCandleSeries,
+  mergeMinuteIntoTimeframeSeries,
+  mergeTimeframeSeries,
   normalizeCandleBar,
   normalizeDnseOhlcFrame,
-  upsertCandleBar,
+  timeframeBucketKey,
   type CandleBar,
+  type IndexChartResolution,
   type IndexChartSymbol,
   type VnIndexAccumulatorState,
 } from "@/lib/index-candles"
@@ -20,50 +22,51 @@ type ErrorMap = Partial<Record<IndexChartSymbol, string>>
 
 type ApiResponse = {
   ok?: boolean
+  resolution?: IndexChartResolution
   generatedAt?: string
   candles?: Partial<Record<IndexChartSymbol, unknown[]>>
   errors?: ErrorMap
 }
 
-const EMPTY_CANDLES: CandleMap = { VNINDEX: [], VN30F1M: [] }
+function emptyCandles(): CandleMap {
+  return { VNINDEX: [], VN30F1M: [] }
+}
 
-export function useIndexCandles(open: boolean) {
-  const [candles, setCandles] = useState<CandleMap>(EMPTY_CANDLES)
+export function useIndexCandles(open: boolean, resolution: IndexChartResolution) {
+  const [candles, setCandles] = useState<CandleMap>(() => emptyCandles())
   const [isLoading, setIsLoading] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [errors, setErrors] = useState<ErrorMap>({})
   const [generatedAt, setGeneratedAt] = useState("")
   const [lastLiveAt, setLastLiveAt] = useState(0)
 
-  const candlesRef = useRef<CandleMap>(EMPTY_CANDLES)
+  const candlesRef = useRef<CandleMap>(emptyCandles())
+  const cacheRef = useRef<Partial<Record<IndexChartResolution, CandleMap>>>({})
   const abortRef = useRef<AbortController | null>(null)
   const openRef = useRef(open)
+  const resolutionRef = useRef(resolution)
   const accumulatorRef = useRef<VnIndexAccumulatorState>({ ...EMPTY_VNINDEX_ACCUMULATOR })
-  const partialTimesRef = useRef<Record<IndexChartSymbol, Set<number>>>({ VNINDEX: new Set(), VN30F1M: new Set() })
-  const fullLiveTimesRef = useRef<Record<IndexChartSymbol, Set<number>>>({ VNINDEX: new Set(), VN30F1M: new Set() })
+  const liveBucketKeysRef = useRef<Record<IndexChartSymbol, Set<string>>>({ VNINDEX: new Set(), VN30F1M: new Set() })
 
   const commitCandles = useCallback((next: CandleMap) => {
     candlesRef.current = next
+    cacheRef.current[resolutionRef.current] = next
     setCandles(next)
   }, [])
 
-  const applyLiveBar = useCallback((symbol: IndexChartSymbol, bar: CandleBar, partial: boolean) => {
-    const partialTimes = partialTimesRef.current[symbol]
-    const fullTimes = fullLiveTimesRef.current[symbol]
-    if (partial) {
-      partialTimes.clear()
-      partialTimes.add(bar.time)
-      fullTimes.clear()
-    } else {
-      fullTimes.clear()
-      fullTimes.add(bar.time)
-      partialTimes.clear()
-    }
-
+  const applyLiveMinuteBar = useCallback((symbol: IndexChartSymbol, bar: CandleBar, partialMinute: boolean) => {
+    const activeResolution = resolutionRef.current
+    liveBucketKeysRef.current[symbol].add(timeframeBucketKey(bar.time, symbol, activeResolution))
     const current = candlesRef.current
     const next = {
       ...current,
-      [symbol]: upsertCandleBar(current[symbol], bar, partial),
+      [symbol]: mergeMinuteIntoTimeframeSeries(
+        current[symbol],
+        bar,
+        activeResolution,
+        symbol,
+        partialMinute,
+      ),
     }
     commitCandles(next)
     setLastLiveAt(Date.now())
@@ -72,6 +75,7 @@ export function useIndexCandles(open: boolean) {
 
   const performFetch = useCallback(async (manual = false) => {
     if (!openRef.current) return
+    const requestedResolution = resolutionRef.current
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -79,13 +83,13 @@ export function useIndexCandles(open: boolean) {
     if (!candlesRef.current.VNINDEX.length && !candlesRef.current.VN30F1M.length) setIsLoading(true)
 
     try {
-      const response = await fetch("/api/market/index-candles", {
+      const response = await fetch(`/api/market/index-candles?resolution=${encodeURIComponent(requestedResolution)}`, {
         cache: "no-store",
         headers: { Accept: "application/json" },
         signal: controller.signal,
       })
       const payload = await response.json() as ApiResponse
-      if (controller.signal.aborted || !openRef.current) return
+      if (controller.signal.aborted || !openRef.current || resolutionRef.current !== requestedResolution) return
 
       const current = candlesRef.current
       const next: CandleMap = { ...current }
@@ -94,18 +98,24 @@ export function useIndexCandles(open: boolean) {
           .map((value) => normalizeCandleBar(value))
           .filter((value): value is CandleBar => value !== null)
         if (!restBars.length) continue
-        const overlayTimes = new Set<number>([
-          ...partialTimesRef.current[symbol],
-          ...fullLiveTimesRef.current[symbol],
-        ])
-        const liveOverlay = current[symbol].filter((bar) => overlayTimes.has(bar.time))
-        next[symbol] = mergeCandleSeries(restBars, liveOverlay, partialTimesRef.current[symbol])
+
+        const liveKeys = liveBucketKeysRef.current[symbol]
+        const liveOverlay = current[symbol].filter((bar) =>
+          liveKeys.has(timeframeBucketKey(bar.time, symbol, requestedResolution)),
+        )
+        next[symbol] = mergeTimeframeSeries(
+          restBars,
+          liveOverlay,
+          requestedResolution,
+          symbol,
+          symbol === "VNINDEX" || requestedResolution !== "1",
+        )
       }
       commitCandles(next)
       setErrors(payload.errors ?? {})
       setGeneratedAt(payload.generatedAt ?? new Date().toISOString())
       if (!response.ok && !next.VNINDEX.length && !next.VN30F1M.length) {
-        throw new Error("Không tải được dữ liệu nến 1 phút từ DNSE")
+        throw new Error(`Không tải được dữ liệu ${requestedResolution} từ DNSE`)
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return
@@ -114,7 +124,7 @@ export function useIndexCandles(open: boolean) {
         setErrors({ VNINDEX: message, VN30F1M: message })
       }
     } finally {
-      if (!controller.signal.aborted) {
+      if (!controller.signal.aborted && resolutionRef.current === requestedResolution) {
         setIsLoading(false)
         setIsRefreshing(false)
       }
@@ -127,21 +137,26 @@ export function useIndexCandles(open: boolean) {
 
   useEffect(() => {
     openRef.current = open
+    resolutionRef.current = resolution
     if (!open) {
       abortRef.current?.abort()
       return
     }
 
+    const cached = cacheRef.current[resolution] ?? emptyCandles()
+    candlesRef.current = cached
+    setCandles(cached)
+    setErrors({})
+    setIsLoading(!cached.VNINDEX.length && !cached.VN30F1M.length)
+    setIsRefreshing(false)
     accumulatorRef.current = { ...EMPTY_VNINDEX_ACCUMULATOR }
-    partialTimesRef.current.VNINDEX.clear()
-    partialTimesRef.current.VN30F1M.clear()
-    fullLiveTimesRef.current.VNINDEX.clear()
-    fullLiveTimesRef.current.VN30F1M.clear()
+    liveBucketKeysRef.current.VNINDEX.clear()
+    liveBucketKeysRef.current.VN30F1M.clear()
 
     const unsubscribe = subscribeDnseMarketFrames((frame) => {
       const full = normalizeDnseOhlcFrame(frame)
       if (full) {
-        applyLiveBar(full.symbol, full.bar, false)
+        applyLiveMinuteBar(full.symbol, full.bar, false)
         return
       }
 
@@ -149,7 +164,7 @@ export function useIndexCandles(open: boolean) {
         const result = accumulateVnindexFrame(accumulatorRef.current, frame)
         if (!result) return
         accumulatorRef.current = result.state
-        applyLiveBar("VNINDEX", result.bar, true)
+        applyLiveMinuteBar("VNINDEX", result.bar, true)
       }
     })
 
@@ -167,12 +182,10 @@ export function useIndexCandles(open: boolean) {
       window.clearInterval(poll)
       document.removeEventListener("visibilitychange", onVisibility)
       abortRef.current?.abort()
-      partialTimesRef.current.VNINDEX.clear()
-      partialTimesRef.current.VN30F1M.clear()
-      fullLiveTimesRef.current.VNINDEX.clear()
-      fullLiveTimesRef.current.VN30F1M.clear()
+      liveBucketKeysRef.current.VNINDEX.clear()
+      liveBucketKeysRef.current.VN30F1M.clear()
     }
-  }, [open, applyLiveBar, performFetch])
+  }, [open, resolution, applyLiveMinuteBar, performFetch])
 
   return {
     candles,

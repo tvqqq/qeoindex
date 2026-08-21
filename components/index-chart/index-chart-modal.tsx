@@ -14,7 +14,13 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { IndexMinuteChart } from "@/components/index-chart/index-minute-chart"
 import { useIndexCandles } from "@/components/index-chart/use-index-candles"
-import type { CandleBar, IndexChartSymbol } from "@/lib/index-candles"
+import {
+  INDEX_CHART_RESOLUTIONS,
+  INDEX_CHART_RESOLUTION_LABELS,
+  type CandleBar,
+  type IndexChartResolution,
+  type IndexChartSymbol,
+} from "@/lib/index-candles"
 
 const PRICE_FORMATTER = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 1, maximumFractionDigits: 2 })
 const VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 })
@@ -67,9 +73,16 @@ function sessionMeta(bars: CandleBar[]) {
   return { open: firstLatest?.open, sessionCount }
 }
 
-function ChartCard({ symbol, bars, loading, error }: {
+function ChartCard({
+  symbol,
+  bars,
+  resolution,
+  loading,
+  error,
+}: {
   symbol: IndexChartSymbol
   bars: CandleBar[]
+  resolution: IndexChartResolution
   loading: boolean
   error?: string
 }) {
@@ -80,6 +93,7 @@ function ChartCard({ symbol, bars, loading, error }: {
   const tone = change > 0 ? "text-emerald-400" : change < 0 ? "text-rose-400" : "text-amber-300"
   const title = symbol === "VNINDEX" ? "VN-INDEX" : "VN30F1M"
   const subtitle = symbol === "VNINDEX" ? "Thị trường cơ sở" : "Phái sinh tháng gần nhất"
+  const timeframeLabel = INDEX_CHART_RESOLUTION_LABELS[resolution]
 
   return (
     <section className="flex min-h-[390px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[0.09] bg-[#080c10] shadow-[0_18px_50px_-28px_rgba(0,0,0,0.95),inset_0_1px_0_rgba(255,255,255,0.06)]">
@@ -87,7 +101,7 @@ function ChartCard({ symbol, bars, loading, error }: {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-ticker text-sm font-extrabold tracking-wide text-white">{title}</span>
-            <span className="rounded-md border border-cyan-400/20 bg-cyan-400/8 px-1.5 py-0.5 font-mono text-[9px] font-bold text-cyan-300">1m</span>
+            <span className="rounded-md border border-cyan-400/20 bg-cyan-400/8 px-1.5 py-0.5 font-mono text-[9px] font-bold text-cyan-300">{timeframeLabel}</span>
           </div>
           <div className="mt-0.5 text-[10px] text-slate-500">
             {subtitle}{sessionCount > 1 ? ` · ${sessionCount} phiên lịch sử` : ""}
@@ -119,7 +133,7 @@ function ChartCard({ symbol, bars, loading, error }: {
 
       <div className="relative min-h-[300px] flex-1">
         {bars.length ? (
-          <IndexMinuteChart symbol={symbol} data={bars} />
+          <IndexMinuteChart symbol={symbol} data={bars} resolution={resolution} />
         ) : loading ? (
           <div className="absolute inset-0 overflow-hidden bg-[#080c10] p-5">
             <div className="h-full animate-pulse rounded-xl bg-[linear-gradient(110deg,rgba(255,255,255,0.025),rgba(255,255,255,0.065),rgba(255,255,255,0.025))] bg-[length:200%_100%]" />
@@ -128,7 +142,7 @@ function ChartCard({ symbol, bars, loading, error }: {
           <div className="absolute inset-0 grid place-items-center p-6 text-center">
             <div className="max-w-sm">
               <Activity className="mx-auto mb-3 h-6 w-6 text-slate-600" />
-              <div className="text-xs font-semibold text-slate-300">Chưa có dữ liệu nến 1 phút</div>
+              <div className="text-xs font-semibold text-slate-300">Chưa có dữ liệu nến {timeframeLabel}</div>
               <div className="mt-1 text-[10px] leading-relaxed text-slate-500" title={error}>
                 DNSE chưa trả OHLCV hợp lệ cho {title}. Hệ thống vẫn giữ chart còn lại hoạt động độc lập.
               </div>
@@ -157,7 +171,8 @@ function initialPosition(size: { width: number; height: number }) {
 }
 
 export function IndexChartModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { candles, isLoading, isRefreshing, errors, generatedAt, lastLiveAt, refresh } = useIndexCandles(open)
+  const [resolution, setResolution] = useState<IndexChartResolution>("1")
+  const { candles, isLoading, isRefreshing, errors, generatedAt, lastLiveAt, refresh } = useIndexCandles(open, resolution)
   const firstSizeRef = useRef(initialSize())
   const [size, setSize] = useState(firstSizeRef.current)
   const [pos, setPos] = useState(() => initialPosition(firstSizeRef.current))
@@ -321,9 +336,9 @@ export function IndexChartModal({ open, onOpenChange }: { open: boolean; onOpenC
                   <BarChart3 className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
-                  <Dialog.Title className="truncate text-sm font-extrabold tracking-tight text-white sm:text-base">VN Market · Biểu đồ 1 phút</Dialog.Title>
+                  <Dialog.Title className="truncate text-sm font-extrabold tracking-tight text-white sm:text-base">VN Market · Multi-timeframe</Dialog.Title>
                   <Dialog.Description className="mt-0.5 hidden text-[10px] text-slate-500 sm:block sm:text-[11px]">
-                    VN-INDEX cơ sở và VN30F1M phái sinh · multi-session OHLCV DNSE
+                    VN-INDEX cơ sở và VN30F1M phái sinh · OHLCV DNSE
                   </Dialog.Description>
                 </div>
               </div>
@@ -381,13 +396,38 @@ export function IndexChartModal({ open, onOpenChange }: { open: boolean; onOpenC
 
             {!isMinimized ? (
               <>
+                <div data-chart-action className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-white/[0.06] bg-white/[0.018] px-3 py-2 sm:px-4">
+                  <span className="mr-1 hidden text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-600 sm:inline">Timeframe</span>
+                  {INDEX_CHART_RESOLUTIONS.map((value) => {
+                    const active = value === resolution
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setResolution(value)}
+                        aria-pressed={active}
+                        className={`min-w-11 rounded-lg border px-2.5 py-1.5 font-mono text-[10px] font-bold transition ${
+                          active
+                            ? "border-emerald-400/35 bg-emerald-400/12 text-emerald-300 shadow-[0_0_16px_rgba(34,201,138,0.08)]"
+                            : "border-white/[0.08] bg-white/[0.025] text-slate-500 hover:border-white/[0.14] hover:bg-white/[0.05] hover:text-slate-300"
+                        }`}
+                      >
+                        {INDEX_CHART_RESOLUTION_LABELS[value]}
+                      </button>
+                    )
+                  })}
+                  <span className="ml-auto hidden text-[9px] text-slate-600 md:inline">
+                    Intraday: giờ trên trục X · ngày đánh dấu tại đầu phiên
+                  </span>
+                </div>
+
                 <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3 sm:p-4 lg:grid-cols-2 lg:gap-4">
-                  <ChartCard symbol="VNINDEX" bars={candles.VNINDEX} loading={isLoading} error={errors.VNINDEX} />
-                  <ChartCard symbol="VN30F1M" bars={candles.VN30F1M} loading={isLoading} error={errors.VN30F1M} />
+                  <ChartCard symbol="VNINDEX" bars={candles.VNINDEX} resolution={resolution} loading={isLoading} error={errors.VNINDEX} />
+                  <ChartCard symbol="VN30F1M" bars={candles.VN30F1M} resolution={resolution} loading={isLoading} error={errors.VN30F1M} />
                 </main>
 
                 <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] bg-white/[0.015] px-4 py-2 text-[9px] text-slate-600 sm:px-5">
-                  <span>History ưu tiên DNSE chart API; realtime dùng WebSocket. Kéo chart sang trái để xem các phiên trước.</span>
+                  <span>History theo timeframe từ DNSE; realtime được hợp nhất từ luồng 1m. Kéo chart sang trái để xem lịch sử.</span>
                   <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer" className="transition hover:text-slate-400">
                     TradingView Lightweight Charts™ · Copyright © 2025 TradingView, Inc.
                   </a>

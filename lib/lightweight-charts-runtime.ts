@@ -5,9 +5,17 @@ export interface LightweightSeriesApi {
   update(data: Record<string, unknown>): void
 }
 
+export interface LightweightLogicalRange {
+  from: number
+  to: number
+}
+
 export interface LightweightTimeScaleApi {
   fitContent(): void
-  setVisibleLogicalRange(range: { from: number; to: number }): void
+  setVisibleLogicalRange(range: LightweightLogicalRange): void
+  timeToCoordinate(time: number): number | null
+  subscribeVisibleLogicalRangeChange(handler: (range: LightweightLogicalRange | null) => void): void
+  unsubscribeVisibleLogicalRangeChange(handler: (range: LightweightLogicalRange | null) => void): void
 }
 
 export interface LightweightPaneApi {

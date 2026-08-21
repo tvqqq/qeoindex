@@ -2,24 +2,89 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { loadLightweightCharts, type LightweightChartApi, type LightweightSeriesApi } from "@/lib/lightweight-charts-runtime"
-import type { CandleBar, IndexChartSymbol } from "@/lib/index-candles"
+import {
+  candleDateKey,
+  isSessionSeparatorResolution,
+  type CandleBar,
+  type IndexChartResolution,
+  type IndexChartSymbol,
+} from "@/lib/index-candles"
 
 const UP_COLOR = "#22c98a"
 const DOWN_COLOR = "#ff4757"
-const INITIAL_VISIBLE_BARS = 420
-const TIME_FORMATTER = new Intl.DateTimeFormat("vi-VN", {
+const INITIAL_VISIBLE_BARS: Record<IndexChartResolution, number> = {
+  "1": 420,
+  "5": 300,
+  "30": 220,
+  "1H": 180,
+  "4H": 160,
+  "1D": 180,
+}
+const BAR_SPACING: Record<IndexChartResolution, number> = {
+  "1": 7,
+  "5": 7,
+  "30": 8,
+  "1H": 9,
+  "4H": 10,
+  "1D": 9,
+}
+const TIME_ONLY_FORMATTER = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
-  day: "2-digit",
-  month: "2-digit",
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,
 })
+const DATE_ONLY_FORMATTER = new Intl.DateTimeFormat("vi-VN", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  day: "2-digit",
+  month: "2-digit",
+})
+const FULL_TIME_FORMATTER = new Intl.DateTimeFormat("vi-VN", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+})
+const FULL_DATE_FORMATTER = new Intl.DateTimeFormat("vi-VN", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+})
 
-function formatChartTime(time: unknown) {
+function chartSeconds(time: unknown) {
   const seconds = typeof time === "number" ? time : Number(time)
-  if (!Number.isFinite(seconds)) return ""
-  return TIME_FORMATTER.format(new Date(seconds * 1000))
+  return Number.isFinite(seconds) ? seconds : null
+}
+
+export function formatIndexAxisTick(time: unknown, resolution: IndexChartResolution) {
+  const seconds = chartSeconds(time)
+  if (seconds === null) return ""
+  const date = new Date(seconds * 1000)
+  return resolution === "1D" ? DATE_ONLY_FORMATTER.format(date) : TIME_ONLY_FORMATTER.format(date)
+}
+
+function formatCrosshairTime(time: unknown, resolution: IndexChartResolution) {
+  const seconds = chartSeconds(time)
+  if (seconds === null) return ""
+  const date = new Date(seconds * 1000)
+  return resolution === "1D" ? FULL_DATE_FORMATTER.format(date) : FULL_TIME_FORMATTER.format(date)
+}
+
+export function dayStartTimes(data: CandleBar[]) {
+  const result: number[] = []
+  let previousDate = ""
+  for (const bar of data) {
+    const date = candleDateKey(bar.time)
+    if (date !== previousDate) {
+      result.push(bar.time)
+      previousDate = date
+    }
+  }
+  return result
 }
 
 function barSignature(bar?: CandleBar) {
@@ -49,28 +114,75 @@ function volumeDatum(bar: CandleBar): Record<string, unknown> {
   }
 }
 
-export function IndexMinuteChart({ symbol, data }: { symbol: IndexChartSymbol; data: CandleBar[] }) {
+export function IndexMinuteChart({
+  symbol,
+  data,
+  resolution,
+}: {
+  symbol: IndexChartSymbol
+  data: CandleBar[]
+  resolution: IndexChartResolution
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const markerLayerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<LightweightChartApi | null>(null)
   const candleSeriesRef = useRef<LightweightSeriesApi | null>(null)
   const volumeSeriesRef = useRef<LightweightSeriesApi | null>(null)
   const dataRef = useRef(data)
   const renderedRef = useRef<{ length: number; prefix: string; firstTime: number } | null>(null)
+  const markerRafRef = useRef<number | null>(null)
   const [runtimeError, setRuntimeError] = useState("")
+
+  const renderDayMarkers = useCallback(() => {
+    const layer = markerLayerRef.current
+    const chart = chartRef.current
+    if (!layer || !chart) return
+    layer.replaceChildren()
+    if (!isSessionSeparatorResolution(resolution)) return
+
+    const starts = dayStartTimes(dataRef.current)
+    const timeScale = chart.timeScale()
+    starts.forEach((time, index) => {
+      const x = timeScale.timeToCoordinate(time)
+      if (x === null || !Number.isFinite(x) || x < -60 || x > layer.clientWidth + 60) return
+
+      if (index > 0) {
+        const line = document.createElement("div")
+        line.className = "absolute top-0 bottom-[26px] w-px bg-slate-400/[0.18]"
+        line.style.left = `${Math.round(x)}px`
+        layer.appendChild(line)
+      }
+
+      const label = document.createElement("span")
+      label.className = "absolute bottom-[3px] -translate-x-1/2 rounded bg-[#080c10]/95 px-1 font-mono text-[9px] font-semibold text-slate-500"
+      label.style.left = `${Math.round(x)}px`
+      label.textContent = DATE_ONLY_FORMATTER.format(new Date(time * 1000))
+      layer.appendChild(label)
+    })
+  }, [resolution])
+
+  const scheduleDayMarkers = useCallback(() => {
+    if (markerRafRef.current !== null) return
+    markerRafRef.current = window.requestAnimationFrame(() => {
+      markerRafRef.current = null
+      renderDayMarkers()
+    })
+  }, [renderDayMarkers])
 
   const anchorLatest = useCallback((bars: CandleBar[]) => {
     const chart = chartRef.current
     if (!chart || !bars.length) return
-    if (bars.length <= INITIAL_VISIBLE_BARS) {
+    const visibleBars = INITIAL_VISIBLE_BARS[resolution]
+    if (bars.length <= visibleBars) {
       chart.timeScale().fitContent()
       return
     }
     const last = bars.length - 1
     chart.timeScale().setVisibleLogicalRange({
-      from: Math.max(-0.5, last - INITIAL_VISIBLE_BARS + 1),
+      from: Math.max(-0.5, last - visibleBars + 1),
       to: last + 4,
     })
-  }, [])
+  }, [resolution])
 
   const syncData = useCallback((bars: CandleBar[], fit = false) => {
     const candleSeries = candleSeriesRef.current
@@ -104,7 +216,8 @@ export function IndexMinuteChart({ symbol, data }: { symbol: IndexChartSymbol; d
     )
     renderedRef.current = { length: bars.length, prefix, firstTime }
     if (fit || !previous || historyExpandedBackwards) anchorLatest(bars)
-  }, [anchorLatest])
+    scheduleDayMarkers()
+  }, [anchorLatest, scheduleDayMarkers])
 
   useEffect(() => {
     dataRef.current = data
@@ -115,6 +228,8 @@ export function IndexMinuteChart({ symbol, data }: { symbol: IndexChartSymbol; d
     const container = containerRef.current
     if (!container) return
     let disposed = false
+    let resizeObserver: ResizeObserver | null = null
+    let rangeHandler: ((range: { from: number; to: number } | null) => void) | null = null
 
     void (async () => {
       try {
@@ -136,7 +251,7 @@ export function IndexMinuteChart({ symbol, data }: { symbol: IndexChartSymbol; d
             },
           },
           grid: {
-            vertLines: { color: "rgba(255,255,255,0.035)" },
+            vertLines: { color: "rgba(255,255,255,0.028)" },
             horzLines: { color: "rgba(255,255,255,0.035)" },
           },
           rightPriceScale: {
@@ -145,16 +260,16 @@ export function IndexMinuteChart({ symbol, data }: { symbol: IndexChartSymbol; d
           },
           timeScale: {
             borderColor: "rgba(255,255,255,0.08)",
-            timeVisible: true,
+            timeVisible: resolution !== "1D",
             secondsVisible: false,
             rightOffset: 4,
-            barSpacing: 7,
+            barSpacing: BAR_SPACING[resolution],
             minBarSpacing: 2,
-            tickMarkFormatter: (time: unknown) => formatChartTime(time),
+            tickMarkFormatter: (time: unknown) => formatIndexAxisTick(time, resolution),
           },
           localization: {
             locale: "vi-VN",
-            timeFormatter: (time: unknown) => formatChartTime(time),
+            timeFormatter: (time: unknown) => formatCrosshairTime(time, resolution),
           },
           crosshair: {
             vertLine: { color: "rgba(148,163,184,0.35)", labelBackgroundColor: "#334155" },
@@ -183,6 +298,13 @@ export function IndexMinuteChart({ symbol, data }: { symbol: IndexChartSymbol; d
         candleSeriesRef.current = candles
         volumeSeriesRef.current = volume
         setRuntimeError("")
+
+        rangeHandler = () => scheduleDayMarkers()
+        chart.timeScale().subscribeVisibleLogicalRangeChange(rangeHandler)
+        if (typeof ResizeObserver !== "undefined") {
+          resizeObserver = new ResizeObserver(() => scheduleDayMarkers())
+          resizeObserver.observe(container)
+        }
         syncData(dataRef.current, true)
       } catch (error) {
         if (!disposed) setRuntimeError(error instanceof Error ? error.message : "Không thể khởi tạo biểu đồ")
@@ -191,17 +313,27 @@ export function IndexMinuteChart({ symbol, data }: { symbol: IndexChartSymbol; d
 
     return () => {
       disposed = true
+      if (markerRafRef.current !== null) {
+        window.cancelAnimationFrame(markerRafRef.current)
+        markerRafRef.current = null
+      }
+      resizeObserver?.disconnect()
+      if (rangeHandler && chartRef.current) {
+        chartRef.current.timeScale().unsubscribeVisibleLogicalRangeChange(rangeHandler)
+      }
       chartRef.current?.remove()
       chartRef.current = null
       candleSeriesRef.current = null
       volumeSeriesRef.current = null
       renderedRef.current = null
+      markerLayerRef.current?.replaceChildren()
     }
-  }, [symbol, syncData])
+  }, [symbol, resolution, scheduleDayMarkers, syncData])
 
   return (
     <div className="relative h-full min-h-[300px] w-full overflow-hidden rounded-b-2xl bg-[#080c10]">
       <div ref={containerRef} className="absolute inset-0" />
+      <div ref={markerLayerRef} className="pointer-events-none absolute inset-0 z-[2] overflow-hidden" aria-hidden="true" />
       {runtimeError ? (
         <div className="absolute inset-0 z-10 grid place-items-center bg-[#080c10]/95 p-6 text-center">
           <div className="max-w-sm rounded-xl border border-rose-500/25 bg-rose-500/5 px-4 py-3 text-xs leading-relaxed text-rose-300">
