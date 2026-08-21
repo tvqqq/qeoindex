@@ -7,9 +7,18 @@ export const dynamic = "force-dynamic"
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0", "X-Content-Type-Options": "nosniff" }
 const DEFAULT_PAGES = new Set(["board", "research", "signals", "scanner", "fa"])
+const MAX_SETTINGS_BYTES = 16 * 1024
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function accountServerError(operation: string, error: unknown) {
+  console.error(`[QeoIndex Account] ${operation} failed`, error)
+  return NextResponse.json(
+    { ok: false, error: "Account request failed." },
+    { status: 500, headers: NO_STORE_HEADERS },
+  )
 }
 
 async function loadAccount(context: ServerAuthContext) {
@@ -42,7 +51,7 @@ export async function GET() {
   try {
     return NextResponse.json({ ok: true, ...(await loadAccount(auth.context)) }, { headers: NO_STORE_HEADERS })
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: NO_STORE_HEADERS })
+    return accountServerError("load", error)
   }
 }
 
@@ -98,6 +107,10 @@ export async function PATCH(request: Request) {
       if (!isPlainObject(body.settings)) {
         return NextResponse.json({ ok: false, error: "settings must be an object." }, { status: 400, headers: NO_STORE_HEADERS })
       }
+      const encodedSettings = JSON.stringify(body.settings)
+      if (Buffer.byteLength(encodedSettings, "utf8") > MAX_SETTINGS_BYTES) {
+        return NextResponse.json({ ok: false, error: "settings payload is too large." }, { status: 400, headers: NO_STORE_HEADERS })
+      }
       preferencePatch.settings = body.settings
       preferenceChanged = true
     }
@@ -114,6 +127,6 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true, ...(await loadAccount(auth.context)) }, { headers: NO_STORE_HEADERS })
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: NO_STORE_HEADERS })
+    return accountServerError("update", error)
   }
 }
