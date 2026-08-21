@@ -54,3 +54,5 @@ jobs:
         run: pnpm lint:touched
       - name: TypeScript
         run: pnpm typecheck
+      - name: Production build
+        run: pnpm exec next build

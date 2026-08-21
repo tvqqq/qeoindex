@@ -1,0 +1,21 @@
+.performanceSurface :global(.backdrop-blur-2xl),
+.performanceSurface :global(.backdrop-blur-xl),
+.performanceSurface :global(.backdrop-blur-md) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.performanceSurface :global(.board-stock-row) {
+  contain: layout style;
+}
+
+.performanceSurface :global(.board-stock-row) :global(.drop-shadow-sm),
+.performanceSurface :global(.board-stock-row) :global([class*="drop-shadow-"]) {
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .performanceSurface :global(.board-stock-row) {
+    transition: none !important;
+  }
+}

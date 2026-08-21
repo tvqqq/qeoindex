@@ -16,6 +16,7 @@ const FEATURE_ROUTES: Array<[string, string]> = [
   ["app/api/finhay/status/route.ts", "finhay_live"],
   ["app/api/finhay/quote/route.ts", "finhay_live"],
   ["app/api/finhay/auth/start/route.ts", "finhay_live"],
+  ["app/api/finhay/auth/callback/route.ts", "finhay_live"],
   ["app/api/finhay/auth/disconnect/route.ts", "finhay_live"],
   ["app/api/research/promote/route.ts", "research"],
   ["app/api/scanner/health/route.ts", "research"],
@@ -44,7 +45,36 @@ test("server-rendered app surfaces verify the server session", () => {
   assert.match(source("components/auth/app-auth-gate.tsx"), /syncServerSession/)
 })
 
-test("machine endpoints retain dedicated secret authentication", () => {
-  assert.match(source("app/api/signals/daily/route.ts"), /CRON_SECRET/)
-  assert.match(source("app/api/signals/monitor/route.ts"), /SIGNAL_MONITOR_SECRET/)
+test("machine endpoints share constant-time bearer authorization", () => {
+  const machineAuth = source("lib/auth/machine.ts")
+  assert.match(machineAuth, /timingSafeEqual/)
+  assert.match(machineAuth, /createHash\("sha256"\)/)
+
+  const routes: Array<[string, RegExp]> = [
+    ["app/api/signals/daily/route.ts", /CRON_SECRET/],
+    ["app/api/signals/monitor/route.ts", /SIGNAL_MONITOR_SECRET/],
+    ["app/api/scanner/run/route.ts", /SCANNER_RUN_SECRET/],
+    ["app/api/market/cache/invalidate/route.ts", /MARKET_CACHE_ADMIN_SECRET/],
+    ["app/api/market/sync-universe/route.ts", /MARKET_SYNC_SECRET/],
+  ]
+
+  for (const [path, secretPattern] of routes) {
+    const code = source(path)
+    assert.match(code, /isMachineRequestAuthorized/, `${path} must use shared machine auth`)
+    assert.match(code, secretPattern, `${path} must keep its dedicated secret`)
+  }
+})
+
+test("destructive market maintenance endpoints are POST-only", () => {
+  for (const path of ["app/api/market/cache/invalidate/route.ts", "app/api/market/sync-universe/route.ts"]) {
+    const code = source(path)
+    assert.match(code, /export async function POST/)
+    assert.doesNotMatch(code, /export async function GET/)
+  }
+})
+
+test("trusted Supabase infrastructure client never falls back to public anon credentials", () => {
+  const code = source("lib/supabase/server.ts")
+  assert.match(code, /SUPABASE_SERVICE_ROLE_KEY/)
+  assert.doesNotMatch(code, /NEXT_PUBLIC_SUPABASE_ANON_KEY/)
 })

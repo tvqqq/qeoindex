@@ -7,6 +7,15 @@ export const dynamic = "force-dynamic"
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0", "X-Content-Type-Options": "nosniff" }
 const TICKER_PATTERN = /^[A-Z0-9]{2,12}$/
+const MAX_SORT_ORDER = 10_000
+
+function watchlistServerError(operation: string, error: unknown) {
+  console.error(`[QeoIndex Watchlist] ${operation} failed`, error)
+  return NextResponse.json(
+    { ok: false, error: "Watchlist request failed." },
+    { status: 500, headers: NO_STORE_HEADERS },
+  )
+}
 
 async function ensureDefaultWatchlist(context: ServerAuthContext) {
   const userId = context.user.id
@@ -59,7 +68,7 @@ export async function GET() {
   try {
     return NextResponse.json({ ok: true, ...(await loadDefaultWatchlist(auth.context)) }, { headers: NO_STORE_HEADERS })
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: NO_STORE_HEADERS })
+    return watchlistServerError("load", error)
   }
 }
 
@@ -73,7 +82,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Ticker không hợp lệ." }, { status: 400, headers: NO_STORE_HEADERS })
   }
 
-  const sortOrder = Number.isInteger(body?.sortOrder) ? Number(body?.sortOrder) : 0
+  const requestedSortOrder = Number(body?.sortOrder ?? 0)
+  const sortOrder = Number.isInteger(requestedSortOrder)
+    ? Math.max(0, Math.min(MAX_SORT_ORDER, requestedSortOrder))
+    : 0
 
   try {
     const watchlist = await ensureDefaultWatchlist(auth.context)
@@ -91,7 +103,7 @@ export async function POST(request: Request) {
     if (result.error) throw result.error
     return NextResponse.json({ ok: true, watchlistId: watchlist.id, item: result.data }, { headers: NO_STORE_HEADERS })
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: NO_STORE_HEADERS })
+    return watchlistServerError("upsert", error)
   }
 }
 
@@ -116,6 +128,6 @@ export async function DELETE(request: Request) {
     if (result.error) throw result.error
     return NextResponse.json({ ok: true, ticker }, { headers: NO_STORE_HEADERS })
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: NO_STORE_HEADERS })
+    return watchlistServerError("delete", error)
   }
 }

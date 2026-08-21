@@ -1,20 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
 import { start } from "workflow/api"
 
+import { isMachineRequestAuthorized } from "@/lib/auth/machine"
 import { notifyOpsError } from "@/lib/ops-alerts"
 import { dailySignalWorkflow } from "@/workflows/daily-signal-workflow"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-function authorized(request: NextRequest) {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return process.env.NODE_ENV !== "production"
-  return request.headers.get("authorization") === `Bearer ${secret}`
-}
-
 export async function GET(request: NextRequest) {
-  if (!authorized(request)) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+  if (!isMachineRequestAuthorized(
+    request,
+    [process.env.CRON_SECRET],
+    { allowUnconfiguredInDevelopment: true },
+  )) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+  }
 
   try {
     const startedAt = new Date().toISOString()

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { isMachineRequestAuthorized } from "@/lib/auth/machine"
 import { CANONICAL_UNIVERSE_TICKERS } from "@/lib/wyckoff-universe"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -15,15 +16,15 @@ function parseGroupLevel(raw: string | undefined): { price: number; volume: numb
   return price > 0 ? { price, volume } : null
 }
 
-export async function GET(request: Request) {
-  return handleSync(request)
-}
-
 export async function POST(request: Request) {
-  return handleSync(request)
-}
+  if (!isMachineRequestAuthorized(
+    request,
+    [process.env.MARKET_SYNC_SECRET, process.env.CRON_SECRET],
+    { allowUnconfiguredInDevelopment: true },
+  )) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+  }
 
-async function handleSync(request: Request) {
   const startedAt = Date.now()
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Ho_Chi_Minh",
@@ -32,44 +33,41 @@ async function handleSync(request: Request) {
     day: "2-digit",
   }).format(new Date())
 
-  const url = `https://bgapidatafeed.vps.com.vn/getliststockdata/${CANONICAL_UNIVERSE_TICKERS.join(",")}`
+  const feedUrl = `https://bgapidatafeed.vps.com.vn/getliststockdata/${CANONICAL_UNIVERSE_TICKERS.join(",")}`
 
-  let feedData: any[] = []
+  let feedData: unknown = []
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" },
-      signal: AbortSignal.timeout(10000),
+    const response = await fetch(feedUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 QeoIndex/1.0" },
+      signal: AbortSignal.timeout(10_000),
     })
-    if (res.ok) {
-      feedData = await res.json()
+    if (!response.ok) {
+      return NextResponse.json({ ok: false, message: "Market data provider unavailable." }, { status: 502 })
     }
-  } catch (err) {
-    return NextResponse.json({
-      ok: false,
-      message: `Failed to fetch market data feed: ${err instanceof Error ? err.message : String(err)}`,
-    }, { status: 502 })
+    feedData = await response.json()
+  } catch (error) {
+    console.error("[Market Sync] Provider fetch failed", error)
+    return NextResponse.json({ ok: false, message: "Market data provider unavailable." }, { status: 502 })
   }
 
   if (!Array.isArray(feedData) || feedData.length === 0) {
-    return NextResponse.json({
-      ok: false,
-      message: "Market data feed returned empty list",
-    }, { status: 502 })
+    return NextResponse.json({ ok: false, message: "Market data provider returned no rows." }, { status: 502 })
   }
 
-  const records: any[] = []
-  for (const item of feedData) {
+  const records: Array<Record<string, unknown>> = []
+  for (const rawItem of feedData) {
+    const item = rawItem as Record<string, any>
     const symbol = String(item.sym || "").toUpperCase()
-    if (!symbol) continue
+    if (!symbol || !CANONICAL_UNIVERSE_TICKERS.includes(symbol as (typeof CANONICAL_UNIVERSE_TICKERS)[number])) continue
 
-    const ref = Number(item.r || item.closePrice ? Number(item.r || item.closePrice) : 0)
+    const ref = Number(item.r || item.closePrice || 0)
     const lastPrice = Number(item.lastPrice ?? item.openPrice ?? ref)
     const ceiling = Number(item.c ?? (ref ? Math.round(ref * 1.07 * 100) / 100 : 0))
     const floor = Number(item.f ?? (ref ? Math.round(ref * 0.93 * 100) / 100 : 0))
     const totalVolume = Number(item.lot || 0) * 10
-
     const bids = [parseGroupLevel(item.g1), parseGroupLevel(item.g2), parseGroupLevel(item.g3)].filter(Boolean)
     const asks = [parseGroupLevel(item.g4), parseGroupLevel(item.g5), parseGroupLevel(item.g6)].filter(Boolean)
+    const nowSeconds = Math.floor(Date.now() / 1000)
 
     records.push({
       symbol,
@@ -80,16 +78,8 @@ async function handleSync(request: Request) {
       latest_price: lastPrice > 0 ? lastPrice : null,
       total_volume: totalVolume,
       intraday_1m: [
-        {
-          time: Math.floor(Date.now() / 1000) - 3600,
-          open: Number(item.openPrice || ref),
-          close: lastPrice,
-        },
-        {
-          time: Math.floor(Date.now() / 1000),
-          open: lastPrice,
-          close: lastPrice,
-        }
+        { time: nowSeconds - 3600, open: Number(item.openPrice || ref), close: lastPrice },
+        { time: nowSeconds, open: lastPrice, close: lastPrice },
       ],
       trades: [],
       trades_truncated: false,
@@ -120,34 +110,25 @@ async function handleSync(request: Request) {
   }
 
   const supabase = getSupabaseServerClient()
-  let persisted = false
-  let persistedCount = 0
+  if (!supabase) {
+    return NextResponse.json({ ok: false, message: "Snapshot storage is not configured." }, { status: 503 })
+  }
 
-  if (supabase && records.length > 0) {
-    const { error } = await supabase
-      .from("stock_orderbook_snapshots")
-      .upsert(records, { onConflict: "symbol" })
-    
-    if (!error) {
-      persisted = true
-      persistedCount = records.length
-    }
+  const { error } = await supabase
+    .from("stock_orderbook_snapshots")
+    .upsert(records, { onConflict: "symbol" })
+
+  if (error) {
+    console.error("[Market Sync] Supabase upsert failed", error)
+    return NextResponse.json({ ok: false, message: "Snapshot persistence failed." }, { status: 503 })
   }
 
   return NextResponse.json({
     ok: true,
     source: "vps_authoritative_market_feed",
     count: records.length,
-    persistedToSupabase: persisted,
-    persistedCount,
+    persistedToSupabase: true,
+    persistedCount: records.length,
     durationMs: Date.now() - startedAt,
-    sample: records.slice(0, 8).map((r) => ({
-      symbol: r.symbol,
-      ref: r.reference_price,
-      last: r.latest_price,
-      ceiling: r.ceiling_price,
-      floor: r.floor_price,
-      vol: r.total_volume,
-    })),
   })
 }

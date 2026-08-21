@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+
+import { requireApiFeature } from "@/lib/auth/server"
 import { discoverFinhayOAuth, exchangeFinhayCode } from "@/lib/finhay-live"
 import { clearFinhayOAuthAttempt, getFinhayOAuthAttempt, setFinhayTokens } from "@/lib/finhay-session"
 
@@ -6,6 +8,9 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
+  const auth = await requireApiFeature("finhay_live")
+  if (!auth.ok) return auth.response
+
   const requestUrl = new URL(request.url)
   const destination = new URL("/research", requestUrl.origin)
 

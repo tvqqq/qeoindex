@@ -14,6 +14,7 @@ import { getIntraday5mSnapshot } from "@/lib/intraday-5m-service"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/lib/intraday-5m"
 import { getEodForeignRoom } from "@/lib/eod-shares"
+import styles from "./market-board-performance.module.css"
 
 export const dynamic = "force-dynamic"
 
@@ -140,7 +141,7 @@ export default async function Page() {
 
   return (
     <OrderBookProvider>
-      <div className="flex h-screen flex-col overflow-hidden bg-background">
+      <div data-market-board className={`${styles.performanceSurface} flex h-screen flex-col overflow-hidden bg-background`}>
         <TopNav />
         <main className="min-h-0 flex-1">
           <LiveMarketBoardV2

@@ -3,6 +3,7 @@ import { Redis } from "@upstash/redis"
 import { getCache } from "@vercel/functions"
 
 import { clearServerSessionCache } from "@/app/api/market/session/route"
+import { isMachineRequestAuthorized } from "@/lib/auth/machine"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic"
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "private, no-store, max-age=0",
-  "Pragma": "no-cache",
+  Pragma: "no-cache",
   "X-Content-Type-Options": "nosniff",
 }
 
@@ -21,28 +22,32 @@ function getRedis() {
 }
 
 export async function POST(request: Request) {
+  if (!isMachineRequestAuthorized(
+    request,
+    [process.env.MARKET_CACHE_ADMIN_SECRET, process.env.CRON_SECRET],
+    { allowUnconfiguredInDevelopment: true },
+  )) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401, headers: NO_STORE_HEADERS })
+  }
+
   const startedAt = performance.now()
   const cleared: string[] = []
 
-  // 1. Clear In-memory Session Cache
   clearServerSessionCache()
   cleared.push("in-memory-session-cache")
 
-  // 2. Expire Vercel Runtime Cache tags
   try {
     const marketCache = getCache({ namespace: "market-board-v8" })
     await marketCache.expireTag("market-board")
     cleared.push("vercel-runtime-cache:market-board")
   } catch {
-    // runtime cache not available or failed
+    // Runtime cache is optional in local/test environments.
   }
 
-  // 3. Clear Upstash Redis keys for market
   const redis = getRedis()
   let redisKeysRemoved = 0
   if (redis) {
     try {
-      // Find and delete qeoindex market cache keys
       const keys = await redis.keys("qeoindex:*")
       if (keys.length > 0) {
         await redis.del(...keys)
@@ -54,27 +59,26 @@ export async function POST(request: Request) {
     }
   }
 
-  // 4. Inspect Supabase Connection & Stored Snapshots Count
   const supabase = getSupabaseServerClient()
   let supabaseStatus = "not_configured"
   let supabaseRowsCount = 0
-  let storedSymbols: string[] = []
 
   if (supabase) {
     try {
       const { data, error, count } = await supabase
         .from("stock_orderbook_snapshots")
         .select("symbol", { count: "exact" })
-      
+
       if (!error && data) {
         supabaseStatus = "connected"
         supabaseRowsCount = count ?? data.length
-        storedSymbols = data.map((row) => row.symbol)
       } else if (error) {
-        supabaseStatus = `error: ${error.message}`
+        supabaseStatus = "error"
+        console.warn("[Cache Invalidate] Supabase inspection warning:", error.message)
       }
     } catch (error) {
-      supabaseStatus = `exception: ${error instanceof Error ? error.message : String(error)}`
+      supabaseStatus = "error"
+      console.warn("[Cache Invalidate] Supabase inspection exception:", error)
     }
   }
 
@@ -86,15 +90,10 @@ export async function POST(request: Request) {
     supabase: {
       status: supabaseStatus,
       rowsCount: supabaseRowsCount,
-      storedSymbols: storedSymbols.slice(0, 20),
     },
     redis: {
       connected: Boolean(redis),
       keysRemoved: redisKeysRemoved,
     },
   }, { headers: NO_STORE_HEADERS })
-}
-
-export async function GET(request: Request) {
-  return POST(request)
 }

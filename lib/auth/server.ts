@@ -7,6 +7,8 @@ import { createClient, type SupabaseClient, type User } from "@supabase/supabase
 
 export const AUTH_COOKIE_NAME = "qeoindex_access_token"
 
+export type UserFeatureKey = "market_board" | "research" | "signals" | "finhay_live"
+
 export type ServerAuthContext = {
   user: User
   supabase: SupabaseClient
@@ -89,7 +91,7 @@ export async function requireApiUser(): Promise<
   return { ok: true, context }
 }
 
-export async function requireApiFeature(featureKey: string): Promise<
+export async function requireApiFeature(featureKey: UserFeatureKey): Promise<
   | { ok: true; context: ServerAuthContext }
   | { ok: false; response: NextResponse }
 > {

@@ -1,27 +1,79 @@
-# Market board data flow
+# Market board data and performance model
 
-The market board hydrates the Top 100 HOSE universe from Notion before relying on DNSE WebSocket updates:
+Last updated: 2026-08-21
 
-- The index strip hydrates VN-INDEX, VN30, and HNX-INDEX from a bounded TradingView market snapshot through `/api/market/indexes`. These values remain visible after the closing bell; DNSE WebSocket index ticks overwrite them when live data is available.
+## Server bootstrap
 
-- Notion's `Wyckoff Universe — Top 100 HOSE` database is the source of truth for membership, active status, rank, market capitalization, and sector. QeoIndex must not replace that membership with a hard-coded market list.
+The authenticated `/` page verifies the Supabase server session before loading board data. The server then assembles one initial board model from three bounded sources in parallel:
 
-- `/api/market/intraday` fetches Yahoo Finance `.VN` as native 5-minute OHLC bars and returns chart closes and the initial quote snapshot together. During and after a trading day it uses that session; on weekends, holidays, or when today's bars are unavailable it falls back to the latest completed session in the seven-day window. DNSE remains the realtime WebSocket provider after bootstrap.
-- The browser requests all Top 100 symbols once. The server bounds Yahoo work to 12 concurrent symbols and returns one atomic snapshot so price and chart render together.
-- The complete Top 100 snapshot is one atomic cache object. Vercel Runtime Cache is the regional L1; optional Upstash Redis is the shared L2; Yahoo is fetched only after both miss. The cache key includes the Vietnam session date and current 5-minute bucket, and expires at the next bucket boundary.
-- Redis uses the server-only `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` variables. Both cache layers fail open, so missing credentials or a cache outage never blocks provider fetching.
-- Partial updates inside one 5-minute bucket are collapsed to one close. Quiet/missing buckets are forward-filled with the previous close so every mini chart keeps the same session time scale instead of compressing illiquid stocks.
-- Yahoo candles with zero/invalid OHLC are discarded before normalization. Some `.VN` responses include zero-valued placeholders outside trading windows; accepting them would overwrite the valid EOD close and make the UI show a chart beside an empty price.
-- The initial percentage change uses the first 5-minute candle's open and the latest candle's close.
-- The UI derives an EOD quote from the hydrated chart (then from the latest Notion close as a last resort) whenever DNSE has no live tick. This keeps prices and mini charts visible after the closing bell without presenting the fallback as a live WebSocket tick.
-- Sector cards use fixed-height group headers and stronger row separators for multi-column readability. Stocks at or above +3% receive a restrained green pulse; reduced-motion clients keep the static highlight without animation.
-- The board presents six visual groups. Energy and Utilities retain their canonical sector values but render inside `Các ngành còn lại`. The grid scales from one to two, three, and finally six columns so desktop keeps one balanced row while smaller screens avoid compressed cards.
-- Chart history keeps `{time, close}` points. DNSE `ohlc.1.json` updates are merged by their 5-minute timestamp: same-bucket updates replace that bucket, new buckets append, and replayed/out-of-order events update their original bucket without resetting or reordering the session.
-- DNSE closes are normalized against the latest Yahoo close so feeds expressed in thousands (for example `58.5`) cannot flatten a VND-scaled chart (`58,500`). The displayed quote is never appended as an extra non-candle chart point.
-- Tick and top-price channels remain the source of live price, volume, ceiling, and floor data. The existing stale-stream watchdog reconnects independently of REST hydration.
+- Supabase orderbook snapshots for persisted reference/session/orderbook data.
+- Broker batch quotes for current quote fields.
+- The shared 5-minute intraday snapshot cache for mini-chart history.
 
-Keep provider calls bounded. Do not replace the server-side concurrency limit with an unbounded 100-symbol fan-out.
+The SSR model is cached through the QeoIndex UI cache with a short live-session TTL. This lets the first render contain usable prices and chart history before the browser WebSocket becomes live.
+
+## Intraday history cache
+
+`lib/intraday-5m-service.ts` keeps the complete Top 100 history snapshot as one cache object:
+
+1. Vercel Runtime Cache exact session bucket.
+2. Upstash Redis exact session bucket when configured.
+3. Today's latest known-good snapshot from Redis/Runtime Cache.
+4. Provider fan-out only when no acceptable cached snapshot exists.
+
+The provider path tries the DNSE 5-minute chart endpoint first and falls back to Yahoo when required. Fetch concurrency remains bounded at 12 symbols.
+
+`/api/market/intraday` now follows the same stale-while-live strategy and accepts today's latest known-good snapshot before starting a 100-symbol provider fan-out. This matters because the browser immediately transitions to the DNSE realtime stream; blocking a hydration request for a perfect new 5-minute snapshot is worse than serving a slightly older valid chart shape and letting live ticks take over.
+
+Vercel runtime audit on 2026-08-21 found three 20-second timeouts across `/api/market/index-candles` and `/api/market/intraday`. The cache-first change directly targets the intraday portion of that failure mode.
+
+## Browser realtime path
+
+- DNSE WebSocket messages are queued and flushed on `requestAnimationFrame` instead of creating one React update per raw socket callback.
+- Live market state is stored outside React and committed at a bounded interval (`MARKET_UI_COMMIT_MS`).
+- `LiveStockRow` and `LiveMoverCard` are memoized and only redraw when their visible quote/history/watch state changes.
+- Mini-chart SVGs are memoized separately. A changing transient live endpoint no longer rebuilds the entire sparkline path on every trade tick; the chart redraws when its stable history shape changes, while the textual price remains realtime.
+- Chart history stays bounded to the most recent display points.
+
+## GPU/compositing controls
+
+The 2026-08-21 performance audit identified GPU compositing as a likely contributor to hot laptops:
+
+- `.board-stock-row` previously used `transform: translateZ(0)`, which can promote roughly 100 rows to persistent compositor layers. This forced promotion has been removed.
+- The authenticated board page applies `market-board-performance.module.css`, which disables expensive `backdrop-filter` blur utilities inside the dense market-board surface while preserving the opaque glass-like backgrounds, borders, and shadows.
+- Dense rows use `contain: layout style` to reduce unnecessary layout propagation without using `content-visibility`.
+- Drop-shadow filters inside stock rows are suppressed on the performance surface.
+
+Do **not** reintroduce `content-visibility` or naive row virtualization without redesigning the screenshot flow. QeoIndex captures the complete board DOM for screenshots; earlier visibility-based rendering shortcuts can omit off-screen sectors from the exported image.
+
+## Price/reference rules
+
+- Daily performance is anchored to the official/reference previous close, never to the session open.
+- The initial SSR quote uses the best available live/snapshot/reference source in that order.
+- DNSE 1-minute OHLC events are normalized into the board's 5-minute chart buckets.
+- Price-unit normalization prevents feeds expressed in thousands from flattening VND-scaled histories.
+- After close, cached intraday history and persisted snapshots keep prices/charts visible without labeling them as a live WebSocket tick.
+
+## Layout contract
+
+- Six sector groups render in a responsive 1 / 2 / 3 / 6 column grid.
+- Sector headers keep a fixed 72px height.
+- Strong gainers use a static border highlight; permanent pulse animation is avoided.
+- The watchlist is a horizontal section above the sector grid and remains compatible with full-board screenshots.
+
+## Remaining performance hotspot
+
+The main remaining client-side hotspot is `components/live-market-board-v2.tsx`: the React market-state commit interval is still 100ms, and sector/mover ordering is recalculated from the current quote map on each commit. If production profiling still shows high CPU after the compositor, sparkline, and cache fixes, the next change should be structural rather than cosmetic:
+
+1. mutate a ref-backed quote store per socket tick;
+2. clone the quote map only once per ~200–250ms React commit;
+3. update sector/mover ordering on a slower ~1s snapshot;
+4. skip the browser intraday bootstrap entirely when SSR history coverage is already sufficient.
+
+That change touches the core realtime state machine and should be isolated in its own PR with profiler evidence and screenshot/orderbook regression checks.
 
 ## Regression coverage
 
-`pnpm test:intraday` covers same-bucket replacement, bucket rollover, replay/out-of-order events, DNSE/Yahoo price-unit normalization, and latest-session EOD fallback selection.
+- `pnpm test:board-contract` covers layout, reference-price semantics, WebSocket buffering, low-composite rendering, and sparkline memo behavior.
+- `pnpm test:intraday` covers bucket replacement/rollover, replay ordering, unit normalization, and latest-session fallback.
+- `pnpm test:supabase` covers final snapshot RLS and Auth/API security contracts.
