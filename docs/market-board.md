@@ -12,6 +12,8 @@ The authenticated `/` page verifies the Supabase server session before loading b
 
 The SSR model is cached through the QeoIndex UI cache with a short live-session TTL. This lets the first render contain usable prices and chart history before the browser WebSocket becomes live.
 
+When SSR already provides usable multi-point history for at least 95% of the Top 100 universe, the browser does not immediately call `/api/market/intraday` again on first mount. A session rollover still increments the reload key and forces a fresh browser history bootstrap.
+
 ## Intraday history cache
 
 `lib/intraday-5m-service.ts` keeps the complete Top 100 history snapshot as one cache object:
@@ -23,17 +25,22 @@ The SSR model is cached through the QeoIndex UI cache with a short live-session 
 
 The provider path tries the DNSE 5-minute chart endpoint first and falls back to Yahoo when required. Fetch concurrency remains bounded at 12 symbols.
 
-`/api/market/intraday` now follows the same stale-while-live strategy and accepts today's latest known-good snapshot before starting a 100-symbol provider fan-out. This matters because the browser immediately transitions to the DNSE realtime stream; blocking a hydration request for a perfect new 5-minute snapshot is worse than serving a slightly older valid chart shape and letting live ticks take over.
+`/api/market/intraday` follows the same stale-while-live strategy and accepts today's latest known-good snapshot before starting a 100-symbol provider fan-out. This matters because the browser immediately transitions to the DNSE realtime stream; blocking a hydration request for a perfect new 5-minute snapshot is worse than serving a slightly older valid chart shape and letting live ticks take over.
 
-Vercel runtime audit on 2026-08-21 found three 20-second timeouts across `/api/market/index-candles` and `/api/market/intraday`. The cache-first change directly targets the intraday portion of that failure mode.
+Vercel runtime audit on 2026-08-21 found three 20-second timeouts across `/api/market/index-candles` and `/api/market/intraday`. The cache-first and SSR-history-reuse changes directly target the intraday portion of that failure mode.
 
 ## Browser realtime path
 
 - DNSE WebSocket messages are queued and flushed on `requestAnimationFrame` instead of creating one React update per raw socket callback.
-- Live market state is stored outside React and committed at a bounded interval (`MARKET_UI_COMMIT_MS`).
+- Live quote/history writes go into detached ref-backed stores. A socket tick replaces only the affected symbol entry rather than cloning the full Top 100 quote map.
+- Visible quote state is committed to React at most every 250ms (`MARKET_UI_COMMIT_MS`), approximately 4Hz.
+- Sector and Top Movers ordering use a separate quote snapshot refreshed at most once per second (`MARKET_ORDERING_REFRESH_MS`). Price paint therefore does not force ranking/group sorting on every React commit.
+- History updates replace only the affected ticker inside the ref-backed store and clone the outer history map at the next bounded UI commit.
 - `LiveStockRow` and `LiveMoverCard` are memoized and only redraw when their visible quote/history/watch state changes.
-- Mini-chart SVGs are memoized separately. A changing transient live endpoint no longer rebuilds the entire sparkline path on every trade tick; the chart redraws when its stable history shape changes, while the textual price remains realtime.
+- Mini-chart SVGs are memoized separately. A changing transient live endpoint no longer rebuilds the entire sparkline path on every trade tick; the chart redraws when its stable history shape changes, while the textual price remains responsive.
 - Chart history stays bounded to the most recent display points.
+
+The 250ms cadence is a UI paint policy, not a data-ingestion throttle. DNSE frames continue to be processed as they arrive; the browser merely publishes a bounded snapshot into React.
 
 ## GPU/compositing controls
 
@@ -61,19 +68,22 @@ Do **not** reintroduce `content-visibility` or naive row virtualization without 
 - Strong gainers use a static border highlight; permanent pulse animation is avoided.
 - The watchlist is a horizontal section above the sector grid and remains compatible with full-board screenshots.
 
-## Remaining performance hotspot
+## Current performance status
 
-The main remaining client-side hotspot is `components/live-market-board-v2.tsx`: the React market-state commit interval is still 100ms, and sector/mover ordering is recalculated from the current quote map on each commit. If production profiling still shows high CPU after the compositor, sparkline, and cache fixes, the next change should be structural rather than cosmetic:
+The structural state-machine optimization is now implemented in the focused `perf/market-board-state-buffer` change:
 
-1. mutate a ref-backed quote store per socket tick;
-2. clone the quote map only once per ~200–250ms React commit;
-3. update sector/mover ordering on a slower ~1s snapshot;
-4. skip the browser intraday bootstrap entirely when SSR history coverage is already sufficient.
+1. ref-backed quote/history stores avoid full-map clones for each socket tick;
+2. React quote snapshots are bounded to ~4Hz instead of ~10Hz;
+3. ranking and sector average snapshots refresh at ~1Hz;
+4. redundant first-mount intraday bootstrap is skipped when SSR history coverage is sufficient.
 
-That change touches the core realtime state machine and should be isolated in its own PR with profiler evidence and screenshot/orderbook regression checks.
+This materially reduces the maximum parent-board update opportunities and ranking recomputation frequency, but it is not a claim about a fixed CPU/temperature percentage. Actual gains depend on live market message volume, browser, device, open order-book windows, and whether DevTools/other tabs are active.
+
+If production is still hot after this change, profile before adding more throttling. The next likely structural boundary would be splitting high-frequency quote paint from aggregate header statistics or moving individual rows to a subscription/store model. Do not jump directly to virtualization because the screenshot workflow requires the complete DOM.
 
 ## Regression coverage
 
-- `pnpm test:board-contract` covers layout, reference-price semantics, WebSocket buffering, low-composite rendering, and sparkline memo behavior.
+- `pnpm test:board-contract` covers layout, reference-price semantics, WebSocket buffering, 250ms quote commits, 1s ordering snapshots, SSR history reuse, low-composite rendering, and sparkline memo behavior.
 - `pnpm test:intraday` covers bucket replacement/rollover, replay ordering, unit normalization, and latest-session fallback.
 - `pnpm test:supabase` covers final snapshot RLS and Auth/API security contracts.
+- GitHub `Verify` also runs the production Next.js build before a PR can be considered release-ready.
