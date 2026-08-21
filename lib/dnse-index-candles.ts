@@ -5,6 +5,7 @@ import { normalizeCandleBar, type CandleBar, type IndexChartSymbol } from "@/lib
 
 const DEFAULT_BASE_URL = "https://openapi.dnse.com.vn"
 const VIETNAM_TZ = "Asia/Ho_Chi_Minh"
+const OHLC_ATTEMPT_TIMEOUT_MS = 2_500
 
 function credentials() {
   const apiKey = process.env.DNSE_API_KEY ?? ""
@@ -41,7 +42,7 @@ async function signedGet(params: Record<string, string | number>) {
   const response = await fetch(url, {
     headers: signatureHeaders("GET", path, apiKey, apiSecret),
     cache: "no-store",
-    signal: AbortSignal.timeout(7_000),
+    signal: AbortSignal.timeout(OHLC_ATTEMPT_TIMEOUT_MS),
   })
   const text = await response.text()
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
