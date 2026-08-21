@@ -665,7 +665,7 @@ export function LiveMarketBoardV2({
   const historyDirtyRef = useRef(false)
   const marketUiCommitTimer = useRef<number | null>(null)
   const marketOrderingTimer = useRef<number | null>(null)
-  const lastOrderingRefreshAt = useRef(Date.now())
+  const lastOrderingRefreshAt = useRef(0)
   const lastMessageAtRef = useRef("")
   const whaleTimeouts = useRef<Record<string, NodeJS.Timeout>>({})
   const dailyReferences = useRef<Record<string, number>>(extractInitialRefs(initialQuotes))
@@ -1308,7 +1308,7 @@ export function LiveMarketBoardV2({
       window.removeEventListener("online", onOnline)
       if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "board closed")
     }
-  }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols, sessionOpen, updateLiveQuote])
+  }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols, sessionOpen, triggerWhaleAlert, updateLiveQuote])
 
   const normalizedQuery = query.trim().toUpperCase()
   const currentSessionDay = useMemo(() => vietnamSessionDay(), [])
