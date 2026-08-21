@@ -14,10 +14,10 @@ import {
   Radar,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
   Zap,
 } from "lucide-react"
 import { BRAND } from "@/lib/brand"
+import { TrendingUpwardLottie } from "@/components/trending-upward-animation"
 
 const INSIGHTS_ITEMS = [
   {
@@ -133,16 +133,13 @@ export function TopNav() {
           </div>
           <div className="flex flex-col leading-none">
             <div className="flex items-center gap-1.5">
-              <span className="text-base font-black tracking-tight text-white flex items-center">
+              <span className="font-ticker font-extrabold text-[16px] tracking-tight text-white flex items-center">
                 Qeo<span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 drop-shadow-[0_0_8px_rgba(34,201,138,0.6)]">Index</span>
               </span>
-              {/* Animated Neon Green Uptrend Badge */}
-              <div className="relative flex items-center justify-center h-4 w-4 rounded bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(34,201,138,0.5),inset_0_1px_0_0_rgba(255,255,255,0.3)]">
-                <TrendingUp className="h-2.5 w-2.5 drop-shadow-[0_0_4px_rgba(34,201,138,0.9)] animate-pulse" />
-                <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping opacity-75" />
-              </div>
+              {/* Lottie Trending Upward Animation */}
+              <TrendingUpwardLottie className="h-5 w-5" />
             </div>
-            <span className="text-[10px] font-medium text-slate-400 tracking-tight mt-0.5">{BRAND.slogan}</span>
+            <span className="font-ticker italic text-[10.5px] font-medium text-slate-400 tracking-tight mt-0.5">{BRAND.slogan}</span>
           </div>
         </Link>
 
