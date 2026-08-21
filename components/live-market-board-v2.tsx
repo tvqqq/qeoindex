@@ -1490,7 +1490,7 @@ export function LiveMarketBoardV2({
                         <SectorIcon className="h-4 w-4 drop-shadow-sm" />
                       </div>
                       <h2
-                        className="text-xs sm:text-[13.5px] font-bold tracking-tight text-foreground leading-[1.25] line-clamp-2 min-w-0"
+                        className="font-ticker font-bold text-[14.5px] sm:text-[15.5px] tracking-tight text-foreground leading-[1.2] line-clamp-2 min-w-0"
                         title={label}
                       >
                         {label}

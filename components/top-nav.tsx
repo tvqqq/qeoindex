@@ -17,7 +17,6 @@ import {
   Zap,
 } from "lucide-react"
 import { BRAND } from "@/lib/brand"
-import { TrendingUpwardLottie } from "@/components/trending-upward-animation"
 
 const INSIGHTS_ITEMS = [
   {
@@ -132,13 +131,9 @@ export function TopNav() {
             <img src="/brand/stockos-mark.svg" alt="" className="h-6 w-6 shrink-0 drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]" />
           </div>
           <div className="flex flex-col leading-none">
-            <div className="flex items-center gap-1.5">
-              <span className="font-ticker font-extrabold italic text-[17px] tracking-tight text-white flex items-center select-none">
-                Qeo<span className="animate-title-flow text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-200 via-cyan-300 to-emerald-400 drop-shadow-[0_0_10px_rgba(34,201,138,0.75)]">Index</span>
-              </span>
-              {/* Money Growth Lottie Animation */}
-              <TrendingUpwardLottie className="h-7 w-7" />
-            </div>
+            <span className="font-ticker font-extrabold italic text-[17px] tracking-tight text-white flex items-center select-none">
+              Qeo<span className="animate-title-flow text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-200 via-cyan-300 to-emerald-400 drop-shadow-[0_0_10px_rgba(34,201,138,0.75)]">Index</span>
+            </span>
             <span className="font-ticker font-medium not-italic text-[10.5px] text-slate-400 tracking-tight mt-0.5">{BRAND.slogan}</span>
           </div>
         </Link>

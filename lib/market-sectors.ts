@@ -19,7 +19,7 @@ export const BOARD_SECTOR_GROUPS = [
   { key: "securities", label: "Chứng khoán", sectors: ["Chứng khoán"] },
   { key: "consumer", label: "Tiêu dùng & Bán lẻ", sectors: ["Tiêu dùng & Bán lẻ"] },
   { key: "real-estate", label: "Bất động sản", sectors: ["Bất động sản"] },
-  { key: "industrial-tech", label: "Công nghiệp & Vật liệu + Công nghệ", sectors: ["Công nghiệp & Vật liệu", "Công nghệ"] },
+  { key: "industrial-tech", label: "Công nghiệp", sectors: ["Công nghiệp & Vật liệu", "Công nghệ"] },
   { key: "other", label: "Các ngành còn lại", sectors: ["Năng lượng", "Điện & Utilities", "Hàng không & Du lịch", "Bảo hiểm", "Logistics"] },
 ] as const satisfies ReadonlyArray<{ key: string; label: string; sectors: readonly MarketSector[] }>
 
