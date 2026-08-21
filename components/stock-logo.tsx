@@ -20,11 +20,13 @@ export const StockLogo = memo(function StockLogo({
 
   if (!ticker) return null
 
+  const defaultRounded = className.includes("rounded-") ? "" : "rounded-lg"
+
   // If image errored, display clean branded fallback badge
   if (error) {
     return (
       <div
-        className={`inline-flex shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] font-mono font-bold text-foreground/80 shadow-sm select-none ${className}`}
+        className={`inline-flex shrink-0 items-center justify-center ${defaultRounded} border border-white/10 bg-white/[0.06] font-mono font-bold text-foreground/80 shadow-sm select-none ${className}`}
         style={{
           width: size,
           height: size,
@@ -39,7 +41,7 @@ export const StockLogo = memo(function StockLogo({
 
   return (
     <div
-      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/20 bg-[#ffffff] p-1 shadow-[0_2px_8px_rgba(0,0,0,0.2)] transition-transform hover:scale-105 select-none ${className}`}
+      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden ${defaultRounded} border border-white/20 bg-[#ffffff] p-1 shadow-[0_2px_8px_rgba(0,0,0,0.2)] transition-transform hover:scale-105 select-none ${className}`}
       style={{
         width: size,
         height: size,

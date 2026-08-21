@@ -2555,8 +2555,14 @@ export function LiveOrderBookPanel({
         {/* Left Ticker, Logo & Exchange */}
         <div className="flex items-center gap-2.5 min-w-0 shrink">
           <GripVertical className="h-4 w-4 text-white/30 hover:text-white/60 shrink-0 transition-colors" />
-          <StockLogo symbol={symbol} size={30} className="shrink-0 ring-1 ring-white/15" />
-          <span className="font-mono text-lg sm:text-xl font-black tracking-tight text-white shrink-0 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{symbol}</span>
+          <StockLogo
+            symbol={symbol}
+            size={32}
+            className="shrink-0 rounded-full border-white/40 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+          />
+          <span className="font-mono text-xl sm:text-2xl font-black bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent italic pr-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.2)] tracking-tighter shrink-0 select-none">
+            {symbol}
+          </span>
           {stream.company?.exchange ? (
             <span className="hidden sm:inline-flex rounded-full bg-white/[0.08] border border-white/[0.12] px-2 py-0.5 text-[9.5px] font-bold text-white/70 uppercase tracking-wider shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">
               {stream.company.exchange}
