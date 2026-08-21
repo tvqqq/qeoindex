@@ -71,10 +71,9 @@ body::after {
   z-index: 0;
 }
 
-/* Trading rows: let the browser skip layout/paint for off-screen rows. */
+/* Trading rows */
 .board-stock-row {
-  content-visibility: auto;
-  contain: style paint;
+  transform: translateZ(0);
 }
 
 .font-ticker {

@@ -139,7 +139,8 @@ export async function captureMarketBoardScreenshot(
   const boardCanvas = await toCanvas(element, {
     pixelRatio,
     backgroundColor: "#06080a",
-    cacheBust: true,
+    cacheBust: false,
+    skipFonts: true,
     filter: (node) => {
       if (node instanceof HTMLElement && node.dataset.screenshotExclude === "true") {
         return false
