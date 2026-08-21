@@ -635,10 +635,12 @@ export function LiveMarketBoardV2({
   const boardContainerRef = useRef<HTMLDivElement>(null)
   const [isCapturing, setIsCapturing] = useState(false)
   const [copiedToast, setCopiedToast] = useState(false)
+  const [showFlash, setShowFlash] = useState(false)
 
   const handleCaptureScreenshot = useCallback(async () => {
     if (isCapturing || !boardContainerRef.current) return
     setIsCapturing(true)
+    setShowFlash(true)
     try {
       const blob = await captureMarketBoardScreenshot(boardContainerRef.current, { pixelRatio: 2 })
       if (blob) {
@@ -1677,6 +1679,14 @@ export function LiveMarketBoardV2({
         isCapturing={isCapturing}
         copiedToast={copiedToast}
       />
+
+      {showFlash && (
+        <div
+          data-screenshot-exclude="true"
+          className="fixed inset-0 z-50 pointer-events-none bg-white/75 backdrop-blur-sm animate-camera-flash select-none"
+          onAnimationEnd={() => setShowFlash(false)}
+        />
+      )}
     </div>
   )
 }
