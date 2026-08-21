@@ -83,8 +83,14 @@ const COMMIT_DATE = process.env.NEXT_PUBLIC_GIT_COMMIT_DATE || ""
 export function TopNav() {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
+  const [prevPathname, setPrevPathname] = useState(pathname)
   const menuRef = useRef<HTMLDivElement>(null)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname)
+    setIsOpen(false)
+  }
 
   const isBoardActive = pathname === "/"
   const isInsightsActive = pathname.startsWith("/research")
@@ -99,10 +105,6 @@ export function TopNav() {
       setIsOpen(false)
     }, 180)
   }
-
-  useEffect(() => {
-    setIsOpen(false)
-  }, [pathname])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
