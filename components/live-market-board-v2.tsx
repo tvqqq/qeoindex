@@ -5,7 +5,9 @@ import {
   Activity,
   BarChart3,
   Building2,
+  Camera,
   ChartNoAxesCombined,
+  Check,
   ChevronUp,
   CircleAlert,
   Coins,
@@ -14,6 +16,7 @@ import {
   Landmark,
   Layers,
   LayoutGrid,
+  Loader2,
   RefreshCw,
   Search,
   ShoppingBag,
@@ -33,6 +36,7 @@ import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type
 import { isTradingSessionOpen, isLunchBreak, getVnTimeSeconds } from "@/lib/session-countdown"
 import { setSoundEnabled, playWhaleSound } from "@/lib/sound-engine"
 import { publishDnseMarketFrame } from "@/lib/dnse-market-stream"
+import { captureMarketBoardScreenshot, copyBlobToClipboard } from "@/lib/screenshot"
 
 export type BoardUniverseStock = LiveBoardStock
 export type IndexQuote = {
@@ -365,6 +369,9 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
   sessionOpen,
   onToggleSound,
   onReconnect,
+  onCaptureScreenshot,
+  isCapturing,
+  copiedToast,
 }: {
   streamState: StreamState
   streamError: string
@@ -380,11 +387,21 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
   sessionOpen?: boolean
   onToggleSound: () => void
   onReconnect: () => void
+  onCaptureScreenshot: () => void
+  isCapturing?: boolean
+  copiedToast?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="fixed bottom-3 right-3 z-30 flex flex-col items-end select-none">
+    <div className="fixed bottom-3 right-3 z-30 flex flex-col items-end select-none" data-screenshot-exclude="true">
+      {copiedToast ? (
+        <div className="mb-2 flex items-center gap-2 rounded-full border border-emerald-500/40 bg-[#091811]/95 px-3.5 py-1.5 text-xs text-emerald-300 shadow-[0_10px_30px_rgba(16,185,129,0.35),inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-2xl animate-in fade-in slide-in-from-bottom-2 duration-200 select-none">
+          <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+          <span className="font-semibold">Đã sao chép ảnh bảng điện vào Clipboard!</span>
+        </div>
+      ) : null}
+
       {expanded ? (
         <div className="mb-2 w-72 rounded-2xl border border-white/[0.12] bg-[#0b0f14]/95 p-3.5 shadow-[0_20px_60px_rgba(0,0,0,0.9),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-xs space-y-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
           <div className="flex items-center justify-between border-b border-white/[0.08] pb-2">
@@ -468,6 +485,31 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
           title={soundEnabled ? "Âm thanh Lệnh Cá Mập: Đang BẬT (Click để tắt)" : "Âm thanh Lệnh Cá Mập: Đang TẮT (Click để bật)"}
         >
           {soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-amber-400" /> : <VolumeX className="h-3.5 w-3.5" />}
+        </button>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onCaptureScreenshot()
+          }}
+          disabled={isCapturing}
+          className={`flex h-6 w-6 items-center justify-center rounded-full transition-all ${
+            copiedToast
+              ? "bg-emerald-500/25 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.4)]"
+              : isCapturing
+                ? "bg-white/[0.08] text-white animate-pulse cursor-wait"
+                : "text-muted-2 hover:text-foreground hover:bg-white/[0.08]"
+          }`}
+          title="Chụp ảnh toàn bộ bảng điện (Tự động kèm logo chìm QeoIndex và sao chép vào Clipboard)"
+        >
+          {copiedToast ? (
+            <Check className="h-3.5 w-3.5 text-emerald-400" />
+          ) : isCapturing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+          ) : (
+            <Camera className="h-3.5 w-3.5" />
+          )}
         </button>
 
         <span className="h-3 w-[1px] bg-white/[0.12]" />
@@ -589,6 +631,28 @@ export function LiveMarketBoardV2({
       return false
     }
   })
+
+  const boardContainerRef = useRef<HTMLDivElement>(null)
+  const [isCapturing, setIsCapturing] = useState(false)
+  const [copiedToast, setCopiedToast] = useState(false)
+
+  const handleCaptureScreenshot = useCallback(async () => {
+    if (isCapturing || !boardContainerRef.current) return
+    setIsCapturing(true)
+    try {
+      const blob = await captureMarketBoardScreenshot(boardContainerRef.current, { pixelRatio: 2 })
+      if (blob) {
+        await copyBlobToClipboard(blob)
+        setCopiedToast(true)
+        setTimeout(() => setCopiedToast(false), 3000)
+      }
+    } catch (err) {
+      console.error("Screenshot capture error:", err)
+    } finally {
+      setIsCapturing(false)
+    }
+  }, [isCapturing])
+
   const quotesRef = useRef(quotes)
   const priceHistoryRef = useRef(priceHistory)
   const marketUiCommitTimer = useRef<number | null>(null)
@@ -1321,7 +1385,6 @@ export function LiveMarketBoardV2({
   const vnindexAdv = vnindexQuote?.advances ?? advances
   const vnindexDec = vnindexQuote?.declines ?? declines
   const vnindexUnc = vnindexQuote?.unchanged ?? Math.max(0, universe.length - advances - declines)
-  const breadthTotal = vnindexAdv + vnindexDec + vnindexUnc
 
   const indexQuotes = useMemo(() => ({
     VNINDEX: quotes.VNINDEX,
@@ -1331,7 +1394,7 @@ export function LiveMarketBoardV2({
   }), [quotes.VNINDEX, quotes.VN30, quotes.HNXINDEX, quotes.UPCOMINDEX])
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-background">
+    <div ref={boardContainerRef} className="relative flex h-full min-h-0 flex-col bg-background">
       <IndexStrip quotes={indexQuotes} onOpenChart={openIndexChart} />
       <IndexChartModal open={indexChartOpen} onOpenChange={setIndexChartOpen} />
 
@@ -1610,6 +1673,9 @@ export function LiveMarketBoardV2({
         sessionOpen={sessionOpen}
         onToggleSound={handleToggleSound}
         onReconnect={reconnect}
+        onCaptureScreenshot={handleCaptureScreenshot}
+        isCapturing={isCapturing}
+        copiedToast={copiedToast}
       />
     </div>
   )
