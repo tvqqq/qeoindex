@@ -71,9 +71,10 @@ body::after {
   z-index: 0;
 }
 
-/* Trading rows */
+/* Let the browser composite dense trading rows naturally. Forcing translateZ(0)
+ * on every row creates ~100 permanent GPU layers and increases heat/memory use. */
 .board-stock-row {
-  transform: translateZ(0);
+  will-change: auto;
 }
 
 .font-ticker {
