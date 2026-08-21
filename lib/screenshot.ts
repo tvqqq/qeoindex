@@ -127,9 +127,8 @@ async function drawNavbarWatermark(
   ctx.restore()
 }
 
-// Canonical fixed high-res screenshot dimensions across all screen sizes
-const CANONICAL_CANVAS_WIDTH = 2400
-const CANONICAL_CANVAS_HEIGHT = 1860
+// Canonical fixed desktop width for unified screenshot layout
+const DESKTOP_BOARD_WIDTH = 1760
 
 export async function captureMarketBoardScreenshot(
   element: HTMLElement,
@@ -139,23 +138,83 @@ export async function captureMarketBoardScreenshot(
 ): Promise<Blob | null> {
   const pixelRatio = options?.pixelRatio ?? 2
 
-  // 1. Capture DOM to raw canvas
-  const boardCanvas = await toCanvas(element, {
-    pixelRatio,
-    backgroundColor: "#06080a",
-    cacheBust: true,
-    filter: (node) => {
-      if (node instanceof HTMLElement && node.dataset.screenshotExclude === "true") {
-        return false
-      }
-      return true
-    },
+  // 1. Create a standardized desktop clone to ensure identical 6-column layout on all screen sizes
+  const clone = element.cloneNode(true) as HTMLElement
+
+  clone.style.position = "fixed"
+  clone.style.left = "-99999px"
+  clone.style.top = "0"
+  clone.style.width = `${DESKTOP_BOARD_WIDTH}px`
+  clone.style.minWidth = `${DESKTOP_BOARD_WIDTH}px`
+  clone.style.maxWidth = `${DESKTOP_BOARD_WIDTH}px`
+  clone.style.height = "auto"
+  clone.style.minHeight = "auto"
+  clone.style.maxHeight = "none"
+  clone.style.overflow = "visible"
+  clone.style.zIndex = "-99999"
+  clone.style.backgroundColor = "#06080a"
+
+  // Expand all scrollable containers in clone to show full vertical contents without scrollbars
+  const scrollContainers = clone.querySelectorAll<HTMLElement>(
+    ".overflow-auto, .overflow-y-auto, .overflow-hidden, .min-h-0, .flex-1"
+  )
+  scrollContainers.forEach((el) => {
+    el.style.overflow = "visible"
+    el.style.height = "auto"
+    el.style.maxHeight = "none"
+    el.style.flex = "none"
   })
 
-  // 2. Setup unified canonical canvas dimensions (standardized across all devices)
+  // Force exact 6-column desktop sector grid
+  const sectorGrids = clone.querySelectorAll<HTMLElement>(".grid")
+  sectorGrids.forEach((grid) => {
+    if (grid.querySelectorAll("section").length >= 6) {
+      grid.style.display = "grid"
+      grid.style.gridTemplateColumns = "repeat(6, minmax(0, 1fr))"
+      grid.style.gap = "8px"
+      grid.style.width = "100%"
+    }
+  })
+
+  // Ensure sector sections expand naturally
+  const sections = clone.querySelectorAll<HTMLElement>("section")
+  sections.forEach((sec) => {
+    sec.style.height = "auto"
+    sec.style.minHeight = "auto"
+    sec.style.overflow = "visible"
+  })
+
+  // Remove screenshot-excluded elements from clone
+  const excluded = clone.querySelectorAll<HTMLElement>("[data-screenshot-exclude="true"]")
+  excluded.forEach((el) => el.remove())
+
+  document.body.appendChild(clone)
+
+  let boardCanvas: HTMLCanvasElement
+  try {
+    await new Promise((r) => setTimeout(r, 40))
+    const cloneHeight = clone.scrollHeight || clone.offsetHeight || 1600
+
+    boardCanvas = await toCanvas(clone, {
+      pixelRatio,
+      width: DESKTOP_BOARD_WIDTH,
+      height: cloneHeight,
+      backgroundColor: "#06080a",
+      cacheBust: true,
+    })
+  } finally {
+    document.body.removeChild(clone)
+  }
+
+  // 2. Setup high-res framed composition canvas
+  const paddingX = Math.round(boardCanvas.width * 0.05)
+  const paddingY = Math.round(boardCanvas.height * 0.055)
+  const glassRimPadding = Math.round(18 * (boardCanvas.width / DESKTOP_BOARD_WIDTH))
+  const footerExtra = Math.round(48 * (boardCanvas.width / DESKTOP_BOARD_WIDTH))
+
   const finalCanvas = document.createElement("canvas")
-  finalCanvas.width = CANONICAL_CANVAS_WIDTH
-  finalCanvas.height = CANONICAL_CANVAS_HEIGHT
+  finalCanvas.width = boardCanvas.width + paddingX * 2
+  finalCanvas.height = boardCanvas.height + paddingY * 2 + footerExtra
 
   const ctx = finalCanvas.getContext("2d")
   if (!ctx) return null
@@ -196,15 +255,11 @@ export async function captureMarketBoardScreenshot(
   ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height * 0.35)
 
   // 4. Outer Translucent Glass Rim (Border trong suốt bao quanh board)
-  const paddingX = 110
-  const paddingY = 85
-  const glassRimPadding = 22
-  const innerRadius = 26
-
   const boardX = paddingX
   const boardY = paddingY
-  const boardW = CANONICAL_CANVAS_WIDTH - paddingX * 2 // 2180px
-  const boardH = CANONICAL_CANVAS_HEIGHT - paddingY * 2 - 50 // 1640px
+  const boardW = boardCanvas.width
+  const boardH = boardCanvas.height
+  const innerRadius = Math.round(22 * (boardCanvas.width / DESKTOP_BOARD_WIDTH))
 
   const rimX = boardX - glassRimPadding
   const rimY = boardY - glassRimPadding
@@ -215,8 +270,8 @@ export async function captureMarketBoardScreenshot(
   // Translucent Glass Rim Shadow
   ctx.save()
   ctx.shadowColor = "rgba(46, 16, 101, 0.4)"
-  ctx.shadowBlur = 48
-  ctx.shadowOffsetY = 20
+  ctx.shadowBlur = Math.round(44 * (boardCanvas.width / DESKTOP_BOARD_WIDTH))
+  ctx.shadowOffsetY = Math.round(18 * (boardCanvas.width / DESKTOP_BOARD_WIDTH))
 
   // Frosted Translucent Glass Fill
   const glassFill = ctx.createLinearGradient(rimX, rimY, rimX, rimY + rimH)
@@ -231,7 +286,7 @@ export async function captureMarketBoardScreenshot(
   // Translucent Glass Rim Stroke Outline
   ctx.save()
   ctx.strokeStyle = "rgba(255, 255, 255, 0.55)"
-  ctx.lineWidth = 2.5
+  ctx.lineWidth = Math.max(1.5, Math.round(2 * (boardCanvas.width / DESKTOP_BOARD_WIDTH)))
   roundRect(ctx, rimX, rimY, rimW, rimH, rimRadius)
   ctx.stroke()
   ctx.restore()
@@ -240,8 +295,8 @@ export async function captureMarketBoardScreenshot(
   // Deep Drop Shadow
   ctx.save()
   ctx.shadowColor = "rgba(0, 0, 0, 0.88)"
-  ctx.shadowBlur = 54
-  ctx.shadowOffsetY = 24
+  ctx.shadowBlur = Math.round(50 * (boardCanvas.width / DESKTOP_BOARD_WIDTH))
+  ctx.shadowOffsetY = Math.round(24 * (boardCanvas.width / DESKTOP_BOARD_WIDTH))
   ctx.fillStyle = "#06080a"
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.fill()
@@ -250,17 +305,17 @@ export async function captureMarketBoardScreenshot(
   // Neon Ambient Glow around inner board window
   ctx.save()
   ctx.shadowColor = "rgba(168, 85, 247, 0.45)"
-  ctx.shadowBlur = 40
+  ctx.shadowBlur = Math.round(38 * (boardCanvas.width / DESKTOP_BOARD_WIDTH))
   ctx.fillStyle = "#06080a"
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.fill()
   ctx.restore()
 
-  // Clip and Draw the board screenshot smoothly scaled into canonical bounds
+  // Clip and Draw the board screenshot
   ctx.save()
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.clip()
-  ctx.drawImage(boardCanvas, 0, 0, boardCanvas.width, boardCanvas.height, boardX, boardY, boardW, boardH)
+  ctx.drawImage(boardCanvas, boardX, boardY, boardW, boardH)
 
   // Draw Centered Navbar-style Watermark directly over the board screenshot (+15% larger)
   await drawNavbarWatermark(ctx, boardX + boardW / 2, boardY + boardH / 2, boardW)
@@ -269,7 +324,7 @@ export async function captureMarketBoardScreenshot(
   // Inner Window Outer Stroke Border
   ctx.save()
   ctx.strokeStyle = "rgba(255, 255, 255, 0.22)"
-  ctx.lineWidth = 1.5
+  ctx.lineWidth = Math.max(1, Math.round(1.5 * (boardCanvas.width / DESKTOP_BOARD_WIDTH)))
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.stroke()
   ctx.restore()
@@ -278,7 +333,7 @@ export async function captureMarketBoardScreenshot(
   ctx.save()
   ctx.textAlign = "right"
   ctx.textBaseline = "middle"
-  ctx.font = `700 19px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
+  ctx.font = `700 ${Math.max(14, Math.round(finalCanvas.width * 0.011))}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
   ctx.fillStyle = "#3b0764"
   ctx.shadowColor = "rgba(255, 255, 255, 0.75)"
   ctx.shadowBlur = 6
