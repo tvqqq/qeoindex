@@ -50,17 +50,17 @@ async function drawNavbarWatermark(
   ctx.save()
 
   // Sized +15% for balanced elegance
-  const scale = Math.max(0.95, (boardWidth / 1600) * 1.32)
-  const iconSize = Math.round(66 * scale)
-  const badgeSize = Math.round(96 * scale)
-  const badgeRadius = Math.round(25 * scale)
+  const scale = Math.max(0.9, (boardWidth / 1400) * 1.28)
+  const iconSize = Math.round(64 * scale)
+  const badgeSize = Math.round(92 * scale)
+  const badgeRadius = Math.round(24 * scale)
 
   // Subtle submerged opacity (~11%)
   ctx.globalAlpha = 0.11
 
   // 1. Draw rounded badge container
   const badgeX = centerX - badgeSize / 2
-  const badgeY = centerY - Math.round(96 * scale)
+  const badgeY = centerY - Math.round(92 * scale)
 
   const badgeGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX + badgeSize, badgeY + badgeSize)
   badgeGrad.addColorStop(0, "rgba(34, 201, 138, 0.45)")
@@ -93,9 +93,9 @@ async function drawNavbarWatermark(
   // 3. Draw Title "QeoIndex"
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
-  const titleY = badgeY + badgeSize + Math.round(38 * scale)
+  const titleY = badgeY + badgeSize + Math.round(36 * scale)
 
-  ctx.font = `italic 800 ${Math.round(48 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
+  ctx.font = `italic 800 ${Math.round(46 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
   ctx.fillStyle = "#ffffff"
   ctx.shadowColor = "rgba(34, 201, 138, 0.6)"
   ctx.shadowBlur = Math.round(20 * scale)
@@ -118,14 +118,17 @@ async function drawNavbarWatermark(
 
   // 4. Draw Slogan "Đọc thị trường. Giữ kỷ luật"
   ctx.textAlign = "center"
-  ctx.font = `600 ${Math.round(18.5 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
+  ctx.font = `600 ${Math.round(18 * scale)}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
   ctx.fillStyle = "rgba(203, 213, 225, 0.9)"
   ctx.shadowBlur = 0
-  const sloganY = titleY + Math.round(32 * scale)
+  const sloganY = titleY + Math.round(30 * scale)
   ctx.fillText("Đọc thị trường. Giữ kỷ luật", centerX, sloganY)
 
   ctx.restore()
 }
+
+// Canonical compact desktop width for 6-column presentation
+const TARGET_BOARD_WIDTH = 1380
 
 export async function captureMarketBoardScreenshot(
   element: HTMLElement,
@@ -135,26 +138,83 @@ export async function captureMarketBoardScreenshot(
 ): Promise<Blob | null> {
   const pixelRatio = options?.pixelRatio ?? 2
 
-  // 1. Direct high-fidelity capture of the live board element
-  const boardCanvas = await toCanvas(element, {
-    pixelRatio,
-    backgroundColor: "#06080a",
-    cacheBust: false,
-    skipFonts: true,
-    filter: (node) => {
-      if (node instanceof HTMLElement && node.dataset.screenshotExclude === "true") {
-        return false
-      }
-      return true
-    },
+  // 1. Create a compact, standardized 6-column clone
+  const clone = element.cloneNode(true) as HTMLElement
+
+  clone.style.position = "fixed"
+  clone.style.top = "0"
+  clone.style.left = "0"
+  clone.style.width = `${TARGET_BOARD_WIDTH}px`
+  clone.style.minWidth = `${TARGET_BOARD_WIDTH}px`
+  clone.style.maxWidth = `${TARGET_BOARD_WIDTH}px`
+  clone.style.height = "auto"
+  clone.style.minHeight = "auto"
+  clone.style.maxHeight = "none"
+  clone.style.overflow = "visible"
+  clone.style.zIndex = "-9999"
+  clone.style.opacity = "0.01"
+  clone.style.pointerEvents = "none"
+  clone.style.backgroundColor = "#06080a"
+
+  // Unroll all scrollable inner containers
+  const scrollContainers = clone.querySelectorAll<HTMLElement>(
+    ".overflow-auto, .overflow-y-auto, .overflow-hidden, .min-h-0, .flex-1"
+  )
+  scrollContainers.forEach((el) => {
+    el.style.overflow = "visible"
+    el.style.height = "auto"
+    el.style.maxHeight = "none"
+    el.style.flex = "none"
   })
 
+  // Force exact 6-column grid with clean gap
+  const grids = clone.querySelectorAll<HTMLElement>(".grid")
+  grids.forEach((grid) => {
+    if (grid.querySelectorAll("section").length >= 6) {
+      grid.style.display = "grid"
+      grid.style.gridTemplateColumns = "repeat(6, minmax(0, 1fr))"
+      grid.style.gap = "6px"
+      grid.style.width = "100%"
+    }
+  })
+
+  const sections = clone.querySelectorAll<HTMLElement>("section")
+  sections.forEach((sec) => {
+    sec.style.height = "auto"
+    sec.style.minHeight = "auto"
+    sec.style.overflow = "visible"
+  })
+
+  // Remove screenshot-excluded elements from clone
+  const excluded = clone.querySelectorAll<HTMLElement>('[data-screenshot-exclude="true"]')
+  excluded.forEach((el) => el.remove())
+
+  document.body.appendChild(clone)
+
+  let boardCanvas: HTMLCanvasElement
+  try {
+    // Allow browser reflow
+    await new Promise((r) => setTimeout(r, 60))
+    const cloneHeight = clone.scrollHeight || clone.offsetHeight || 1100
+
+    boardCanvas = await toCanvas(clone, {
+      pixelRatio,
+      width: TARGET_BOARD_WIDTH,
+      height: cloneHeight,
+      backgroundColor: "#06080a",
+      cacheBust: false,
+      skipFonts: true,
+    })
+  } finally {
+    document.body.removeChild(clone)
+  }
+
   // 2. Setup high-res framed composition canvas
-  const scale = boardCanvas.width / 1600
+  const scale = boardCanvas.width / (TARGET_BOARD_WIDTH * pixelRatio)
   const paddingX = Math.round(boardCanvas.width * 0.05)
-  const paddingY = Math.round(boardCanvas.height * 0.055)
-  const glassRimPadding = Math.round(18 * scale)
-  const footerExtra = Math.round(48 * scale)
+  const paddingY = Math.round(boardCanvas.height * 0.045)
+  const glassRimPadding = Math.round(18 * pixelRatio * scale)
+  const footerExtra = Math.round(48 * pixelRatio * scale)
 
   const finalCanvas = document.createElement("canvas")
   finalCanvas.width = boardCanvas.width + paddingX * 2
@@ -203,7 +263,7 @@ export async function captureMarketBoardScreenshot(
   const boardY = paddingY
   const boardW = boardCanvas.width
   const boardH = boardCanvas.height
-  const innerRadius = Math.round(22 * scale)
+  const innerRadius = Math.round(22 * pixelRatio * scale)
 
   const rimX = boardX - glassRimPadding
   const rimY = boardY - glassRimPadding
@@ -214,8 +274,8 @@ export async function captureMarketBoardScreenshot(
   // Translucent Glass Rim Shadow
   ctx.save()
   ctx.shadowColor = "rgba(46, 16, 101, 0.4)"
-  ctx.shadowBlur = Math.round(44 * scale)
-  ctx.shadowOffsetY = Math.round(18 * scale)
+  ctx.shadowBlur = Math.round(44 * pixelRatio * scale)
+  ctx.shadowOffsetY = Math.round(18 * pixelRatio * scale)
 
   // Frosted Translucent Glass Fill
   const glassFill = ctx.createLinearGradient(rimX, rimY, rimX, rimY + rimH)
@@ -230,7 +290,7 @@ export async function captureMarketBoardScreenshot(
   // Translucent Glass Rim Stroke Outline
   ctx.save()
   ctx.strokeStyle = "rgba(255, 255, 255, 0.55)"
-  ctx.lineWidth = Math.max(1.5, Math.round(2 * scale))
+  ctx.lineWidth = Math.max(1.5, Math.round(2 * pixelRatio * scale))
   roundRect(ctx, rimX, rimY, rimW, rimH, rimRadius)
   ctx.stroke()
   ctx.restore()
@@ -239,8 +299,8 @@ export async function captureMarketBoardScreenshot(
   // Deep Drop Shadow
   ctx.save()
   ctx.shadowColor = "rgba(0, 0, 0, 0.88)"
-  ctx.shadowBlur = Math.round(50 * scale)
-  ctx.shadowOffsetY = Math.round(24 * scale)
+  ctx.shadowBlur = Math.round(50 * pixelRatio * scale)
+  ctx.shadowOffsetY = Math.round(24 * pixelRatio * scale)
   ctx.fillStyle = "#06080a"
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.fill()
@@ -249,7 +309,7 @@ export async function captureMarketBoardScreenshot(
   // Neon Ambient Glow around inner board window
   ctx.save()
   ctx.shadowColor = "rgba(168, 85, 247, 0.45)"
-  ctx.shadowBlur = Math.round(38 * scale)
+  ctx.shadowBlur = Math.round(38 * pixelRatio * scale)
   ctx.fillStyle = "#06080a"
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.fill()
@@ -268,7 +328,7 @@ export async function captureMarketBoardScreenshot(
   // Inner Window Outer Stroke Border
   ctx.save()
   ctx.strokeStyle = "rgba(255, 255, 255, 0.22)"
-  ctx.lineWidth = Math.max(1, Math.round(1.5 * scale))
+  ctx.lineWidth = Math.max(1, Math.round(1.5 * pixelRatio * scale))
   roundRect(ctx, boardX, boardY, boardW, boardH, innerRadius)
   ctx.stroke()
   ctx.restore()
@@ -277,7 +337,7 @@ export async function captureMarketBoardScreenshot(
   ctx.save()
   ctx.textAlign = "right"
   ctx.textBaseline = "middle"
-  ctx.font = `700 ${Math.max(14, Math.round(finalCanvas.width * 0.011))}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
+  ctx.font = `700 ${Math.max(14, Math.round(finalCanvas.width * 0.012))}px "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif`
   ctx.fillStyle = "#3b0764"
   ctx.shadowColor = "rgba(255, 255, 255, 0.75)"
   ctx.shadowBlur = 6
