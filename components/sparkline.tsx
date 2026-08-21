@@ -14,6 +14,32 @@ interface SparklineProps {
 }
 
 const MAX_SPARKLINE_POINTS = 48
+const SPARK_EPSILON = 1e-6
+
+function sparklinePropsEqual(previous: SparklineProps, next: SparklineProps) {
+  if (previous.refValue !== next.refValue) return false
+  if (previous.color !== next.color) return false
+  if (previous.refColor !== next.refColor) return false
+  if (previous.width !== next.width || previous.height !== next.height) return false
+  if (previous.strokeWidth !== next.strokeWidth) return false
+  if (previous.showDot !== next.showDot || previous.fill !== next.fill) return false
+  if (previous.className !== next.className) return false
+
+  const a = previous.data
+  const b = next.data
+  if (a === b) return true
+  if (a.length !== b.length) return false
+
+  // The dense board appends the current live price as the final point. Ignore
+  // changes to that transient endpoint so an SVG path is not rebuilt on every
+  // trade tick. A new 5m candle shifts/appends historical points and therefore
+  // still invalidates this memo comparison.
+  const stableLength = Math.max(0, a.length - 1)
+  for (let index = 0; index < stableLength; index += 1) {
+    if (Math.abs(a[index] - b[index]) > SPARK_EPSILON) return false
+  }
+  return true
+}
 
 /**
  * Lightweight SVG sparkline for dense market boards.
@@ -48,7 +74,6 @@ export const Sparkline = memo(function Sparkline({
       ? initialPoints
       : initialPoints.filter((_, index) => index % step === 0 || index === initialPoints.length - 1)
 
-    // Dynamic auto-fit range.
     const rawMin = Math.min(...points)
     const rawMax = Math.max(...points)
     const delta = rawMax - rawMin
@@ -153,4 +178,4 @@ export const Sparkline = memo(function Sparkline({
       )}
     </svg>
   )
-})
+}, sparklinePropsEqual)
