@@ -24,6 +24,7 @@ import {
   VolumeX,
 } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
+import { IndexChartModal } from "@/components/index-chart/index-chart-modal"
 import { BOARD_SECTOR_GROUPS } from "@/lib/market-sectors"
 import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
@@ -31,6 +32,7 @@ import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, typ
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/lib/intraday-5m"
 import { isTradingSessionOpen, isLunchBreak, getVnTimeSeconds } from "@/lib/session-countdown"
 import { setSoundEnabled, playWhaleSound } from "@/lib/sound-engine"
+import { publishDnseMarketFrame } from "@/lib/dnse-market-stream"
 
 export type BoardUniverseStock = LiveBoardStock
 export type IndexQuote = {
@@ -226,7 +228,13 @@ const WatchlistSection = memo(function WatchlistSection({
   )
 })
 
-const IndexStrip = memo(function IndexStrip({ quotes }: { quotes: Record<string, LiveStockQuote | IndexQuote | undefined> }) {
+const IndexStrip = memo(function IndexStrip({
+  quotes,
+  onOpenChart,
+}: {
+  quotes: Record<string, LiveStockQuote | IndexQuote | undefined>
+  onOpenChart: () => void
+}) {
   return (
     <div className="grid grid-cols-2 gap-2 p-2 border-b border-white/[0.07] bg-[#080c10]/80 backdrop-blur-2xl sm:grid-cols-4">
       {INDEXES.map((symbol) => {
@@ -234,11 +242,24 @@ const IndexStrip = memo(function IndexStrip({ quotes }: { quotes: Record<string,
         const tone = marketToneFromChange(quote?.changePercent)
         const text = quote ? marketToneText(tone) : "text-muted-2"
         const isUp = (quote?.changePercent ?? 0) >= 0
+        const isChartTrigger = symbol === "VNINDEX"
 
         return (
           <div
             key={symbol}
+            role={isChartTrigger ? "button" : undefined}
+            tabIndex={isChartTrigger ? 0 : undefined}
+            aria-label={isChartTrigger ? "Mở biểu đồ VN-INDEX và VN30F1M 1 phút" : undefined}
+            onClick={isChartTrigger ? onOpenChart : undefined}
+            onKeyDown={isChartTrigger ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault()
+                onOpenChart()
+              }
+            } : undefined}
             className={`group relative flex items-center justify-between overflow-hidden rounded-2xl border px-3.5 py-2.5 backdrop-blur-xl transition-all duration-300 ${
+              isChartTrigger ? "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/55" : ""
+            } ${
               tone === "up"
                 ? "border-emerald-500/25 bg-[#081510]/60 shadow-[0_8px_24px_-6px_rgba(34,201,138,0.15),inset_0_1px_0_0_rgba(255,255,255,0.08)] hover:border-emerald-500/40 hover:bg-[#0b1d16]/75"
                 : tone === "down"
@@ -297,6 +318,9 @@ const IndexStrip = memo(function IndexStrip({ quotes }: { quotes: Record<string,
                   <span className="text-[11px] font-bold tracking-wider text-foreground/90 uppercase font-sans">
                     {INDEX_LABELS[symbol]}
                   </span>
+                  {isChartTrigger ? (
+                    <span className="rounded border border-cyan-400/20 bg-cyan-400/8 px-1 py-px font-mono text-[8px] font-bold text-cyan-300">1m</span>
+                  ) : null}
                   {quote?.volume && (
                     <span className="hidden xl:inline-block font-mono text-[9.5px] font-medium text-muted-2">
                       · {formatCompactVolume(quote.volume)}
@@ -512,6 +536,7 @@ export function LiveMarketBoardV2({
 }) {
   const [sessionOpen, setSessionOpen] = useState<boolean>(() => isSessionOpen ?? isTradingSessionOpen())
   const [isLunch, setIsLunch] = useState<boolean>(() => isLunchBreak())
+  const [indexChartOpen, setIndexChartOpen] = useState(false)
   const { open: openOrderBook } = useOrderBooks()
   const [quotes, setQuotes] = useState<Record<string, LiveStockQuote | IndexQuote>>(() => {
     const initial: Record<string, LiveStockQuote | IndexQuote> = initialQuotes ? { ...initialQuotes } : {}
@@ -828,7 +853,7 @@ export function LiveMarketBoardV2({
             channels: [
               { name: "tick.G1.json", symbols: symbolList },
               { name: "top_price.G1.json", symbols: symbolList },
-              { name: "ohlc.1.json", symbols: symbolList },
+              { name: "ohlc.1.json", symbols: [...symbolList, "VN30F1M"] },
               { name: "foreign.G1.json", symbols: symbolList },
               ...INDEX_CHANNELS.map((name) => ({ name: `market_index.${name}.json` })),
             ],
@@ -860,6 +885,8 @@ export function LiveMarketBoardV2({
           sessionIdentifier.current = currentSession
           setHistoryReloadKey((key) => key + 1)
         }
+
+        publishDnseMarketFrame(data)
 
         // Pause market data processing during lunch break (11:30 - 13:00)
         if (isLunchBreak(now)) {
@@ -1264,6 +1291,7 @@ export function LiveMarketBoardV2({
     [displayQuotes, universe, priceHistoryCloses, openOrderBook],
   )
   const reconnect = useCallback(() => setReconnectKey((key) => key + 1), [])
+  const openIndexChart = useCallback(() => setIndexChartOpen(true), [])
 
   const { totalUniverseVolume, totalUniverseValue, totalForeignNet } = useMemo(() => {
     let vol = 0
@@ -1304,7 +1332,8 @@ export function LiveMarketBoardV2({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background">
-      <IndexStrip quotes={indexQuotes} />
+      <IndexStrip quotes={indexQuotes} onOpenChart={openIndexChart} />
+      <IndexChartModal open={indexChartOpen} onOpenChange={setIndexChartOpen} />
 
       <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-white/[0.07] bg-[#090d12]/85 backdrop-blur-2xl px-3.5 py-2 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.35)]">
         <div className="flex flex-wrap items-center gap-2">
