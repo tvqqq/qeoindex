@@ -1,22 +1,23 @@
 # QeoIndex engineering handover
 
-Last updated: 2026-08-21. This is the canonical fast-start document for agents and maintainers.
+Last updated: 2026-08-22. This is the canonical fast-start document for agents and maintainers.
 
 ## Product and production
 
-- Product: QeoIndex — realtime/EOD Vietnamese stock board plus research, scanner, recommendation, and signal workflows.
+- Product: QeoIndex — realtime/EOD Vietnamese stock board plus public Insights, research, scanner, recommendation, and signal workflows.
 - Brand slogan: `Đọc thị trường. Giữ kỷ luật.`
 - Official domain: <https://qeoindex.qeoqeo.com>.
 - Framework: Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4, pnpm.
 - Vercel project: `tvqqq/stockos` is the legacy infrastructure slug; it is not the product brand.
-- Primary page: `app/page.tsx` renders `components/live-market-board-v2.tsx` inside the order-book provider.
+- Primary protected board: `app/page.tsx` renders `components/live-market-board-v2.tsx` inside the order-book provider.
+- Public Insights homepage: `app/insights/page.tsx` composes market + Supabase + bounded Notion read models and is intentionally anonymous-readable.
 - Supabase production project: `qeoindex` (`glwhhrmejlonhyorvtzm`, Singapore region).
 
 Read `AGENTS.md` before editing. When a local checkout is available, use the version-specific Next.js docs under `node_modules/next/dist/docs/`; do not assume older App Router behavior.
 
 ## Security model
 
-The client auth gate is UX only. The real user-facing boundary is:
+The client auth gate is UX only. Protected user-facing surfaces use this boundary:
 
 ```text
 Supabase Auth
@@ -27,29 +28,38 @@ Supabase Auth
   -> RLS auth.uid()
 ```
 
+`/insights` is the intentional public exception. It does not rely on a user session or feature entitlement. Public Supabase data is read with the publishable/anon key and explicit read-only RLS; protected `/research/*`, market APIs, and user-owned tables retain their normal auth boundaries.
+
 Important files:
 
 | Path | Responsibility |
 | --- | --- |
 | `lib/auth/server.ts` | Verify Supabase access tokens, read HttpOnly session, enforce typed user feature gates. |
 | `lib/auth/machine.ts` | Constant-time bearer-secret authorization for machine/admin endpoints. |
+| `components/auth/app-auth-gate.tsx` | UX auth gate; bypasses `/insights` only. Never use it as API authorization. |
 | `app/api/auth/session/route.ts` | Synchronize the browser Supabase session to the verified server cookie. |
 | `app/api/me/route.ts` | User profile/preferences API; user ID always comes from server auth. |
 | `app/api/watchlist/route.ts` | Per-user default watchlist API; ownership enforced again by RLS. |
 | `lib/supabase/server.ts` | Trusted infrastructure-only service-role client. It fails closed without `SUPABASE_SERVICE_ROLE_KEY`. |
+| `lib/supabase/public-server.ts` | Least-privilege server client for intentionally public Supabase read models; uses anon key + RLS. |
+| `lib/insights-data.ts` | Public Insights homepage read-model composition and degradation behavior. |
+| `docs/insights.md` | Public Insights data, RLS, UI, and future rating-ingestion contract. |
 | `docs/auth.md` | Full Auth/RLS architecture and verification checklist. |
 | `docs/security.md` | Current security audit, endpoint policy, headers, and remaining actions. |
 
-Applied production security migrations:
+Applied production security/data migrations:
 
 1. `20260821161500_user_auth_rls.sql`
 2. `20260821164300_revoke_bootstrap_rpc_execute.sql`
 3. `20260821173500_harden_orderbook_rls_and_indexes.sql`
 4. `20260821175200_gate_orderbook_by_market_feature.sql`
+5. `20260822084500_insights_stock_ratings.sql`
 
 `profiles`, `user_preferences`, `user_features`, `watchlists`, and `watchlist_items` use RLS ownership via `auth.uid()`. `user_features` is read-only for normal users. `stock_orderbook_snapshots` no longer allows anonymous direct Supabase reads; authenticated direct SELECT is additionally gated by the user's enabled `market_board` entitlement, while trusted ingestion uses the service role.
 
-Supabase Security Advisor still reports the hosted-Auth setting **Leaked Password Protection Disabled**. Enable it in Supabase Auth settings before expanding access. Also verify hosted public/email signup remains disabled because QeoIndex exposes login only.
+`insights_stock_ratings` is different by design: RLS is enabled, `anon` and `authenticated` receive SELECT only, and no browser role receives INSERT/UPDATE/DELETE. The future daily third-party ingest must write server-side with service-role credentials and upsert idempotently on `(as_of_date, ticker, source)`.
+
+Supabase Security Advisor still reports the hosted-Auth setting **Leaked Password Protection Disabled**. Enable it in Supabase Auth settings before expanding account access. Also verify hosted public/email signup remains disabled because QeoIndex exposes login only.
 
 ## Browser API feature gates
 
@@ -58,7 +68,7 @@ Supabase Security Advisor still reports the hosted-Auth setting **Leaked Passwor
 - `signals`: signal health UI endpoint.
 - `finhay_live`: Finhay status/quote/connect/disconnect/OAuth callback.
 
-`AppAuthGate` must never be referenced as justification for exposing an API.
+`/insights` does not call protected browser market APIs to obtain its public index data; it composes the bounded server read model directly. `AppAuthGate` must never be referenced as justification for exposing an API.
 
 ## Machine/admin endpoints
 
@@ -74,12 +84,16 @@ Machine endpoints use `isMachineRequestAuthorized()` instead of browser sessions
 
 The two destructive market maintenance routes are POST-only. Do not restore unauthenticated GET aliases.
 
+The future Insights rating cron is not implemented yet. When added, treat ingestion as a machine/server write path; never expose a public browser write endpoint merely because rating reads are public.
+
 ## Data boundaries
 
 | Concern | Runtime source | Important rule |
 | --- | --- | --- |
 | Board universe | `lib/wyckoff-universe.ts` canonical Top 100 constants | Keep the 100-symbol safety cap and deterministic sector/rank metadata. |
 | Persistent research/thesis/scans | Notion canonical workspace | Fail visibly if the canonical research source is unavailable; market feeds are not research persistence. |
+| Public Insights rating snapshots | Supabase `insights_stock_ratings` | Public SELECT is intentional; writes are server/service-role only; do not fabricate missing scores. |
+| Public Insights research summaries | Existing bounded Notion read models | Homepage summaries are public; detailed `/research/*` routes remain authenticated. |
 | Initial stock quotes | Broker batch quotes + Supabase snapshots | SSR should render usable values before WebSocket connect. |
 | Intraday mini charts | Shared 5m snapshot service: DNSE chart first, Yahoo fallback | Keep provider concurrency bounded; prefer valid cached history to blocking a browser request. |
 | Realtime stocks/indices | DNSE WebSocket | Credentials/signatures stay server-side; stale watchdog reconnects. |
@@ -87,6 +101,27 @@ The two destructive market maintenance routes are POST-only. Do not restore unau
 | Shared board cache | Vercel Runtime Cache + optional Upstash Redis | Cache failure fails open to the bounded provider path. |
 | Orderbook persistence | Supabase Postgres | Browser access is authenticated + `market_board` RLS-gated; server ingestion uses service role. |
 | Optional Finhay adapter | Finhay MCP OAuth | Tokens remain secure server cookies; browser routes require `finhay_live`. |
+
+## Public Insights homepage
+
+`/insights` is designed as a public read-only dashboard:
+
+1. `app/insights/page.tsx` does not require `getServerAuthContext()` and is allowed through the UX `AppAuthGate` public-route exception.
+2. `lib/insights-data.ts` loads independent modules with `Promise.allSettled` so one source failure does not blank the whole page.
+3. VNIndex/secondary indexes use the same session-aware index cache/read path as the market board, but without calling the protected browser `/api/market/indexes` route.
+4. Rating data reads the latest `as_of_date` from Supabase using `lib/supabase/public-server.ts` and public-read RLS, cached for five minutes.
+5. Research overview, scanner, and signal summaries reuse their bounded Notion UI caches.
+6. FA breadth is currently a distribution over the explicit FA research snapshot; it is not presented as live fundamentals.
+7. Empty/error modules remain explicit. No public Insights module should silently replace missing canonical data with synthetic values.
+
+The rating table schema is ready, but the third-party fetch + daily cron job is intentionally deferred until the upstream API contract is available. See `docs/insights.md`.
+
+UI conventions:
+
+- Plus Jakarta Sans through `font-ticker` is the dominant dashboard font.
+- shadcn-compatible local Card/Badge/Table primitives are under `components/ui/`.
+- SmoothUI-inspired Shine Text and Glow Card behavior lives under `components/smoothui/` and respects `prefers-reduced-motion`.
+- The Glow Card updates CSS custom properties directly on pointer movement; do not turn pointer tracking into React state churn.
 
 ## Market-board lifecycle
 
@@ -169,6 +204,7 @@ A strict CSP is deliberately deferred until the DNSE WebSocket/external-provider
 
 | Change area | Minimum checks |
 | --- | --- |
+| Public Insights page / rating RLS | `pnpm test:insights` + anonymous route QA + Supabase advisors |
 | Universe/sectors/groups | `pnpm test:universe` |
 | EOD/mini chart/DNSE merge | `pnpm test:intraday` |
 | Board layout/performance contract | `pnpm test:board-contract` plus browser visual QA when available |
@@ -222,6 +258,9 @@ Supabase DB migrations are different: approved DDL/function changes apply immedi
 
 | Symptom | First checks |
 | --- | --- |
+| `/insights` shows login | Verify the explicit `/insights` exception in `AppAuthGate`; do not weaken `/research` auth. |
+| Insights rating table empty | Query newest `insights_stock_ratings.as_of_date`; until the third-party cron exists, an explicit empty state is expected. |
+| Insights module fails while others work | Inspect that source's bounded read model/cache; `Promise.allSettled` intentionally isolates module failures. |
 | Board is hot/laggy | Chrome/Safari Performance + Layers; inspect actual React commit frequency, row paint cost, aggregate/header recomputation, and open order-book windows. |
 | `/api/market/intraday` is slow | Inspect Runtime Cache/Redis hit path and whether SSR history reuse suppressed redundant client bootstrap; compare Vercel timeout logs. |
 | Charts exist but prices are `—` | Inspect SSR quote/reference selection and intraday cache validity. |
@@ -233,6 +272,7 @@ Supabase DB migrations are different: approved DDL/function changes apply immedi
 
 ## Known/deferred constraints
 
+- Insights third-party rating fetch + daily cron is not implemented until the upstream API contract is supplied; the schema/read path is ready and intentionally shows no fake data.
 - Hosted Auth leaked-password protection still needs to be enabled in Supabase settings.
 - CSP remains deferred pending a tested WebSocket/external-source policy.
 - Further board throttling should be evidence-driven from authenticated live-session browser profiling; the 250ms quote / 1s ordering split is now the default contract.
