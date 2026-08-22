@@ -29,6 +29,8 @@ test("insights has no public auth bypass and reads with the user-scoped client",
   assert.match(insightsData, /getInsightsDashboardData\(supabase: SupabaseClient\)/)
   assert.match(insightsData, /\.from\("insights_stock_ratings"\)/)
   assert.match(insightsData, /\.eq\("is_published", true\)/)
+  assert.match(insightsData, /baseQuery\(\)\.eq\("is_top100", true\)\.limit\(100\)/)
+  assert.match(insightsData, /new Map\(/)
 })
 
 test("rating table exposes keyboard modal and hover tooltip interactions", () => {

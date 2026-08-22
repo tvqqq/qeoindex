@@ -146,19 +146,34 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
 
   if (latest.error) return { rows: [], message: `Supabase rating chưa sẵn sàng: ${latest.error.message}` }
   if (!latest.data?.as_of_date) return { rows: [], message: "Chưa có snapshot rating được cron công bố." }
+  const latestDate = latest.data.as_of_date
 
-  const result = await supabase
+  const selection = "ticker,company_name,sector,industry_group,exchange,is_top100,top100_rank,price,price_change_pct,average_volume_50_sessions,market_cap_billion,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,rs_short,rs_medium,rsi_14,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics,as_of_date,source"
+  const baseQuery = () => supabase
     .from("insights_stock_ratings")
-    .select("ticker,company_name,sector,industry_group,exchange,is_top100,top100_rank,price,price_change_pct,average_volume_50_sessions,market_cap_billion,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,rs_short,rs_medium,rsi_14,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics,as_of_date,source")
+    .select(selection)
     .eq("is_published", true)
-    .eq("as_of_date", latest.data.as_of_date)
+    .eq("as_of_date", latestDate)
     .eq("source", "kfsp")
     .order("kfsp_composite_score", { ascending: false, nullsFirst: false })
     .order("ticker", { ascending: true })
-    .limit(500)
 
-  if (result.error) return { rows: [], message: `Không đọc được rating: ${result.error.message}` }
-  const rows = (result.data as RatingDatabaseRow[]).flatMap((row) => {
+  const [topRatings, top100] = await Promise.all([
+    baseQuery().limit(500),
+    baseQuery().eq("is_top100", true).limit(100),
+  ])
+  if (topRatings.error) return { rows: [], message: `Không đọc được rating: ${topRatings.error.message}` }
+  if (top100.error) return { rows: [], message: `Không đọc được Top 100: ${top100.error.message}` }
+
+  const databaseRows = [...new Map(
+    ([...(topRatings.data || []), ...(top100.data || [])] as RatingDatabaseRow[])
+      .map((row) => [row.ticker, row]),
+  ).values()].sort((left, right) =>
+    Number(right.kfsp_composite_score ?? -1) - Number(left.kfsp_composite_score ?? -1)
+      || left.ticker.localeCompare(right.ticker),
+  )
+
+  const rows = databaseRows.flatMap((row) => {
     if (row.kfsp_composite_score == null) return []
     const ratingScore = componentScore(row.kfsp_composite_score, 0)
     const technical = componentScore(row.kfsp_score_4m, ratingScore)
@@ -201,7 +216,7 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
       },
     }]
   })
-  return { rows, message: `${rows.length} mã · snapshot ${latest.data.as_of_date}` }
+  return { rows, message: `${rows.length} mã · snapshot ${latestDate}` }
 }
 
 function parseMetricGroups(value: unknown): KfspMetricGroups {
