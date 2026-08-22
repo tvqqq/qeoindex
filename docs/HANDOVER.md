@@ -54,10 +54,11 @@ Applied production security/data migrations:
 3. `20260821173500_harden_orderbook_rls_and_indexes.sql`
 4. `20260821175200_gate_orderbook_by_market_feature.sql`
 5. `20260822084500_insights_stock_ratings.sql`
+6. `20260822090000_limit_insights_rating_public_columns.sql`
 
 `profiles`, `user_preferences`, `user_features`, `watchlists`, and `watchlist_items` use RLS ownership via `auth.uid()`. `user_features` is read-only for normal users. `stock_orderbook_snapshots` no longer allows anonymous direct Supabase reads; authenticated direct SELECT is additionally gated by the user's enabled `market_board` entitlement, while trusted ingestion uses the service role.
 
-`insights_stock_ratings` is different by design: RLS is enabled, `anon` and `authenticated` receive SELECT only, and no browser role receives INSERT/UPDATE/DELETE. The future daily third-party ingest must write server-side with service-role credentials and upsert idempotently on `(as_of_date, ticker, source)`.
+`insights_stock_ratings` is different by design: RLS is enabled and public roles receive SELECT only on the normalized homepage column allowlist. `source_url` and `raw_payload` remain private ingestion/debug fields, and no browser role receives INSERT/UPDATE/DELETE. The future daily third-party ingest must write server-side with service-role credentials and upsert idempotently on `(as_of_date, ticker, source)`.
 
 Supabase Security Advisor still reports the hosted-Auth setting **Leaked Password Protection Disabled**. Enable it in Supabase Auth settings before expanding account access. Also verify hosted public/email signup remains disabled because QeoIndex exposes login only.
 
@@ -92,7 +93,7 @@ The future Insights rating cron is not implemented yet. When added, treat ingest
 | --- | --- | --- |
 | Board universe | `lib/wyckoff-universe.ts` canonical Top 100 constants | Keep the 100-symbol safety cap and deterministic sector/rank metadata. |
 | Persistent research/thesis/scans | Notion canonical workspace | Fail visibly if the canonical research source is unavailable; market feeds are not research persistence. |
-| Public Insights rating snapshots | Supabase `insights_stock_ratings` | Public SELECT is intentional; writes are server/service-role only; do not fabricate missing scores. |
+| Public Insights rating snapshots | Supabase `insights_stock_ratings` | Public SELECT is limited to normalized fields; writes and raw ingestion metadata stay server-only; do not fabricate missing scores. |
 | Public Insights research summaries | Existing bounded Notion read models | Homepage summaries are public; detailed `/research/*` routes remain authenticated. |
 | Initial stock quotes | Broker batch quotes + Supabase snapshots | SSR should render usable values before WebSocket connect. |
 | Intraday mini charts | Shared 5m snapshot service: DNSE chart first, Yahoo fallback | Keep provider concurrency bounded; prefer valid cached history to blocking a browser request. |
