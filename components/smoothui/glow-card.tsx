@@ -1,6 +1,6 @@
 "use client"
 
-import type { CSSProperties, ComponentProps } from "react"
+import type { ComponentProps } from "react"
 
 import { cn } from "@/lib/utils"
 import styles from "./glow-card.module.css"
@@ -17,12 +17,8 @@ export function GlowCard({ className, children, onPointerMove, ...props }: Compo
       className={cn(styles.root, className)}
       onPointerMove={(event) => {
         const rect = event.currentTarget.getBoundingClientRect()
-        const style = event.currentTarget.style as CSSProperties & {
-          setProperty?: (property: string, value: string) => void
-        }
         event.currentTarget.style.setProperty("--glow-x", `${event.clientX - rect.left}px`)
         event.currentTarget.style.setProperty("--glow-y", `${event.clientY - rect.top}px`)
-        void style
         onPointerMove?.(event)
       }}
     >
