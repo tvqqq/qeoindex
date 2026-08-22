@@ -1,7 +1,7 @@
 "use client"
 
 import { type ReactNode, useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { BRAND } from "@/lib/brand"
 import { syncServerSession } from "@/lib/auth/client-session"
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client"
@@ -34,12 +34,16 @@ export function AppAuthGate({
   children: ReactNode
   serverSessionPresent: boolean
 }) {
+  const pathname = usePathname()
   const router = useRouter()
+  const isPublicInsightsRoute = pathname === "/insights" || pathname.startsWith("/insights/")
   const [status, setStatus] = useState<AuthStatus>(() =>
     isSupabaseConfigured() ? "checking" : "unconfigured"
   )
 
   useEffect(() => {
+    if (isPublicInsightsRoute) return
+
     const supabase = getSupabaseBrowserClient()
     if (!supabase) {
       setStatus("unconfigured")
@@ -79,7 +83,9 @@ export function AppAuthGate({
       active = false
       subscription.unsubscribe()
     }
-  }, [router, serverSessionPresent])
+  }, [isPublicInsightsRoute, router, serverSessionPresent])
+
+  if (isPublicInsightsRoute) return children
 
   if (status === "checking") {
     return <AuthLoadingScreen />
