@@ -1,0 +1,30 @@
+.shine {
+  display: inline-block;
+  background-image: linear-gradient(
+    110deg,
+    var(--shine-base, #9aa7b4) 0%,
+    var(--shine-base, #9aa7b4) 38%,
+    var(--shine-color, #ffffff) 50%,
+    var(--shine-base, #9aa7b4) 62%,
+    var(--shine-base, #9aa7b4) 100%
+  );
+  background-size: 240% 100%;
+  background-position: 120% 0;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: smoothui-shine var(--shine-duration, 3200ms) ease-in-out infinite;
+}
+
+@keyframes smoothui-shine {
+  0%, 18% { background-position: 120% 0; }
+  58%, 100% { background-position: -120% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shine {
+    animation: none;
+    background: none;
+    color: var(--shine-base, #9aa7b4);
+  }
+}
