@@ -4,11 +4,14 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 import {
   Activity,
+  ArrowDown,
+  ArrowUp,
   ArrowRight,
   BarChart3,
   Bolt,
   BrainCircuit,
   CalendarDays,
+  ChevronsUpDown,
   ChartNoAxesCombined,
   CircleDollarSign,
   Crown,
@@ -36,6 +39,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { InsightsDashboardData, InsightsModuleSummary, InsightsRatingRow, KfspMetricValue } from "@/lib/insights-data"
@@ -105,6 +109,8 @@ function metricValue(row: InsightsRatingRow, key: string): KfspMetricValue | und
     kfsp_price_potential: row.pricePotential,
     rs_short: row.rsShort,
     rs_medium: row.rsMedium,
+    kfsp_stock_rrg_state: row.stockRrgState,
+    kfsp_sector_rrg_state: row.sectorRrgState,
     rsi_14: row.rsi14,
     weekly_change_pct: row.weeklyChangePercent,
     monthly_change_pct: row.monthlyChangePercent,
@@ -244,6 +250,64 @@ function overviewField(key: string) {
   const definition = OVERVIEW_FIELD_BY_KEY.get(key)
   if (!definition) throw new Error(`Missing KFSP overview definition: ${key}`)
   return definition
+}
+
+const RRG_FIELD_DEFINITIONS = {
+  stockRrgState: {
+    providerKey: "rrg_co_phieu", key: "kfsp_stock_rrg_state", group: "kfsp",
+    label: "RRG cổ phiếu", description: "Trạng thái Relative Rotation Graph của cổ phiếu.", format: "text",
+  },
+  sectorRrgState: {
+    providerKey: "rrg_nganh", key: "kfsp_sector_rrg_state", group: "kfsp",
+    label: "RRG ngành", description: "Trạng thái Relative Rotation Graph của ngành.", format: "text",
+  },
+} satisfies Record<string, KfspFieldDefinition>
+
+type RatingSortKey = keyof Pick<InsightsRatingRow,
+  "ticker" | "sector" | "exchange" | "price" | "canslimScore" | "score4m" | "pricePotential" |
+  "volume" | "marketCapBillion" | "rsShort" | "rsMedium" | "stockRrgState" | "sectorRrgState" |
+  "rsi14" | "weeklyChangePercent" | "monthlyChangePercent" | "beta" | "peTtm" | "pbTtm" | "ratingScore"
+>
+type SortDirection = "asc" | "desc"
+
+function compareRatingValues(left: string | number | null, right: string | number | null, direction: SortDirection) {
+  if (left == null && right == null) return 0
+  if (left == null) return 1
+  if (right == null) return -1
+  const result = typeof left === "number" && typeof right === "number"
+    ? left - right
+    : String(left).localeCompare(String(right), "vi", { numeric: true, sensitivity: "base" })
+  return direction === "asc" ? result : -result
+}
+
+function RrgBadge({ value }: { value: string | null }) {
+  const tone = value === "Dẫn dắt" ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-300"
+    : value === "Phục hồi" ? "border-sky-300/30 bg-sky-400/15 text-sky-300"
+      : value === "Suy yếu" ? "border-amber-300/30 bg-amber-400/15 text-amber-300"
+        : value === "Đội sổ" ? "border-rose-300/30 bg-rose-400/15 text-rose-300"
+          : "border-white/10 bg-white/[0.03] text-muted-2"
+  return <Badge variant="outline" className={cn("min-w-24 justify-center font-bold", tone)}>{value || "—"}</Badge>
+}
+
+function SortableHead({ sortKey, activeKey, direction, onSort, definition, label, className }: {
+  sortKey: RatingSortKey
+  activeKey: RatingSortKey
+  direction: SortDirection
+  onSort: (key: RatingSortKey) => void
+  definition?: KfspFieldDefinition
+  label?: string
+  className?: string
+}) {
+  const active = sortKey === activeKey
+  const Icon = active ? direction === "asc" ? ArrowUp : ArrowDown : ChevronsUpDown
+  return (
+    <TableHead aria-sort={active ? direction === "asc" ? "ascending" : "descending" : "none"} className={className}>
+      <button type="button" onClick={() => onSort(sortKey)} className="inline-flex w-full items-center justify-center gap-1.5 rounded-md outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50">
+        {definition ? <MetricLabel definition={definition} /> : label}
+        <Icon className={cn("size-3.5 shrink-0", active ? "text-brand" : "text-muted")} />
+      </button>
+    </TableHead>
+  )
 }
 
 function ScorePill({ value, tone, label, description }: { value: number; tone: ScoreTone; label: string; description?: string }) {
@@ -437,8 +501,10 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
 }
 
 export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
-  const [filter, setFilter] = useState("all")
+  const [universeFilter, setUniverseFilter] = useState<"top100" | "all">("top100")
+  const [sectorFilter, setSectorFilter] = useState("all")
   const [query, setQuery] = useState("")
+  const [sort, setSort] = useState<{ key: RatingSortKey; direction: SortDirection }>({ key: "ratingScore", direction: "desc" })
   const [selectedRating, setSelectedRating] = useState<InsightsRatingRow | null>(null)
   const quote = data.vnindex
   const positive = (quote?.changePercent ?? 0) >= 0
@@ -446,12 +512,19 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
   const sectors = useMemo(() => [...new Set(data.ratings.map((row) => row.sector))].sort((a, b) => a.localeCompare(b, "vi")), [data.ratings])
   const filteredRatings = useMemo(() => {
     const normalized = query.trim().toUpperCase()
-    return data.ratings.filter((row) => {
-      if (filter === "top100" && !row.isTop100) return false
-      if (filter.startsWith("sector:") && row.sector !== filter.slice(7)) return false
-      return !normalized || row.ticker.includes(normalized) || row.companyName.toUpperCase().includes(normalized) || row.sector.toUpperCase().includes(normalized)
-    })
-  }, [data.ratings, filter, query])
+    return data.ratings
+      .filter((row) => {
+        if (universeFilter === "top100" && !row.isTop100) return false
+        if (sectorFilter !== "all" && row.sector !== sectorFilter) return false
+        return !normalized || row.ticker.includes(normalized) || row.companyName.toUpperCase().includes(normalized) || row.sector.toUpperCase().includes(normalized)
+      })
+      .sort((left, right) => compareRatingValues(left[sort.key], right[sort.key], sort.direction) || left.ticker.localeCompare(right.ticker))
+  }, [data.ratings, query, sectorFilter, sort, universeFilter])
+  const handleSort = (key: RatingSortKey) => {
+    setSort((current) => current.key === key
+      ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+      : { key, direction: "desc" })
+  }
 
   return (
     <div className="min-h-screen bg-background font-ticker text-foreground">
@@ -544,13 +617,27 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
           </div>
 
           <Card className="mt-5 border border-white/[0.07] bg-panel/95 py-0 ring-0">
-            <CardHeader className="flex-col gap-4 border-b border-white/[0.06] p-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
-                {[["all", "Tất cả"], ["top100", "Top 100"], ...sectors.map((sector) => [`sector:${sector}`, sector])].map(([value, label]) => (
-                  <Button key={value} type="button" variant="outline" size="sm" onClick={() => setFilter(value)} className={cn("shrink-0 border-white/10 bg-white/[0.02] text-muted-2", filter === value && "border-brand/40 bg-brand/12 text-brand")}>
-                    {value === "top100" && <Crown className="size-3.5 text-amber-300" />}{label}
-                  </Button>
-                ))}
+            <CardHeader className="flex-col gap-4 border-b border-white/[0.06] p-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
+                <div className="flex rounded-lg border border-white/10 bg-cell p-1">
+                  {([ ["top100", "Top 100"], ["all", "Tất cả"] ] as const).map(([value, label]) => (
+                    <Button key={value} type="button" variant="ghost" size="sm" onClick={() => setUniverseFilter(value)} className={cn("flex-1 text-muted-2 sm:flex-none", universeFilter === value && "bg-brand/15 text-brand hover:bg-brand/20 hover:text-brand")}>
+                      {value === "top100" && <Crown className="size-3.5 text-amber-300" />}{label}
+                    </Button>
+                  ))}
+                </div>
+                <Select value={sectorFilter} onValueChange={(value) => setSectorFilter(value ?? "all")}>
+                  <SelectTrigger aria-label="Lọc theo ngành" className="h-10 w-full min-w-64 border-white/10 bg-cell px-3 text-base font-bold text-white hover:bg-white/[0.05] sm:w-80">
+                    <SelectValue>{sectorFilter === "all" ? "Ngành: Tất cả ngành" : `Ngành: ${sectorFilter}`}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent align="start" className="max-h-96 border border-white/10 bg-[#111724] p-1 font-ticker text-base text-white shadow-2xl">
+                    <SelectGroup>
+                      <SelectLabel className="px-2 py-2 font-bold uppercase tracking-wider text-muted-2">Danh sách ngành</SelectLabel>
+                      <SelectItem value="all" className="px-3 py-2.5 text-base focus:bg-brand/15 focus:text-brand">Tất cả ngành</SelectItem>
+                      {sectors.map((sector) => <SelectItem key={sector} value={sector} className="px-3 py-2.5 text-base focus:bg-brand/15 focus:text-brand">Ngành: {sector}</SelectItem>)}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="relative w-full lg:w-80">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
@@ -558,25 +645,27 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <Table className="min-w-[1900px] font-ticker">
+              <Table className="min-w-[2260px] font-ticker">
                 <TableHeader className="sticky top-0 z-20 bg-[#05090f]">
                   <TableRow className="border-white/[0.08] hover:bg-transparent">
-                    <TableHead className="sticky left-0 z-30 h-16 min-w-80 bg-[#05090f] px-4 text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"># · Cổ phiếu / Ngành</TableHead>
-                    <TableHead className="min-w-28 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("price")} /></TableHead>
-                    <TableHead className="min-w-28 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-emerald-300"><MetricLabel definition={overviewField("kfsp_canslim_score")} /></TableHead>
-                    <TableHead className="min-w-24 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-amber-300"><MetricLabel definition={overviewField("kfsp_score_4m")} /></TableHead>
-                    <TableHead className="min-w-32 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-ref"><MetricLabel definition={overviewField("kfsp_price_potential")} /></TableHead>
-                    <TableHead className="min-w-36 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("average_volume_50_sessions")} /></TableHead>
-                    <TableHead className="min-w-32 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("market_cap_billion")} /></TableHead>
-                    <TableHead className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-cyan-300"><MetricLabel definition={overviewField("rs_short")} /></TableHead>
-                    <TableHead className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-violet-300"><MetricLabel definition={overviewField("rs_medium")} /></TableHead>
-                    <TableHead className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-cyan-200"><MetricLabel definition={overviewField("rsi_14")} /></TableHead>
-                    <TableHead className="min-w-28 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("weekly_change_pct")} /></TableHead>
-                    <TableHead className="min-w-28 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("monthly_change_pct")} /></TableHead>
-                    <TableHead className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("beta")} /></TableHead>
-                    <TableHead className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("pe_ttm")} /></TableHead>
-                    <TableHead className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("pb_ttm")} /></TableHead>
-                    <TableHead className="min-w-40 px-4 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-brand">Rating tổng hợp</TableHead>
+                    <SortableHead sortKey="ticker" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="# · Cổ phiếu / Ngành" className="sticky left-0 z-30 h-16 min-w-80 bg-[#05090f] px-4 text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
+                    <SortableHead sortKey="price" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("price")} className="min-w-28 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
+                    <SortableHead sortKey="canslimScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_canslim_score")} className="min-w-28 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-emerald-300" />
+                    <SortableHead sortKey="score4m" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_score_4m")} className="min-w-24 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-amber-300" />
+                    <SortableHead sortKey="pricePotential" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_price_potential")} className="min-w-32 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-ref" />
+                    <SortableHead sortKey="volume" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("average_volume_50_sessions")} className="min-w-36 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
+                    <SortableHead sortKey="marketCapBillion" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("market_cap_billion")} className="min-w-32 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
+                    <SortableHead sortKey="rsShort" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_short")} className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-cyan-300" />
+                    <SortableHead sortKey="rsMedium" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_medium")} className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-violet-300" />
+                    <SortableHead sortKey="stockRrgState" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={RRG_FIELD_DEFINITIONS.stockRrgState} className="min-w-32 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-cyan-300" />
+                    <SortableHead sortKey="sectorRrgState" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={RRG_FIELD_DEFINITIONS.sectorRrgState} className="min-w-32 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-emerald-300" />
+                    <SortableHead sortKey="rsi14" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rsi_14")} className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-cyan-200" />
+                    <SortableHead sortKey="weeklyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("weekly_change_pct")} className="min-w-28 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
+                    <SortableHead sortKey="monthlyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("monthly_change_pct")} className="min-w-28 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
+                    <SortableHead sortKey="beta" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("beta")} className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
+                    <SortableHead sortKey="peTtm" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("pe_ttm")} className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
+                    <SortableHead sortKey="pbTtm" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("pb_ttm")} className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
+                    <SortableHead sortKey="ratingScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="Rating tổng hợp" className="min-w-40 px-4 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-brand" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -612,7 +701,9 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
                       <TableCell className="text-right font-mono text-sm font-semibold text-muted-2">{row.marketCapBillion == null ? "—" : formatNumber(row.marketCapBillion)}</TableCell>
                       <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.rsShort, overviewField("rs_short")))}>{formatNumber(row.rsShort)}</TableCell>
                       <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.rsMedium, overviewField("rs_medium")))}>{formatNumber(row.rsMedium)}</TableCell>
-                      <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.rsi14, overviewField("rsi_14")))}>{formatNumber(row.rsi14)}</TableCell>
+                      <TableCell className="text-center"><RrgBadge value={row.stockRrgState} /></TableCell>
+                      <TableCell className="text-center"><RrgBadge value={row.sectorRrgState} /></TableCell>
+                      <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.rsi14, overviewField("rsi_14")))}>{typeof row.rsi14 === "number" ? formatNumber(row.rsi14) : row.rsi14 || "—"}</TableCell>
                       <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.weeklyChangePercent, overviewField("weekly_change_pct")))}>{formatPercent(row.weeklyChangePercent)}</TableCell>
                       <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.monthlyChangePercent, overviewField("monthly_change_pct")))}>{formatPercent(row.monthlyChangePercent)}</TableCell>
                       <TableCell className="text-center font-mono text-sm font-semibold text-white">{formatNumber(row.beta)}</TableCell>
@@ -623,7 +714,7 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {!filteredRatings.length && <TableRow><TableCell colSpan={16} className="h-32 text-center text-sm text-muted-2">Không có mã phù hợp với bộ lọc.</TableCell></TableRow>}
+                  {!filteredRatings.length && <TableRow><TableCell colSpan={18} className="h-32 text-center text-sm text-muted-2">Không có mã phù hợp với bộ lọc.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </CardContent>

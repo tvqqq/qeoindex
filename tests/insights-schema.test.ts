@@ -43,6 +43,12 @@ test("rating table exposes keyboard modal and hover tooltip interactions", () =>
   assert.match(insightsDashboard, /Top 100/)
   assert.match(insightsDashboard, /MetricLabel/)
   assert.match(insightsDashboard, /role="tab"/)
+  assert.match(insightsDashboard, /useState<"top100" \| "all">\("top100"\)/)
+  assert.match(insightsDashboard, /SelectTrigger aria-label="Lọc theo ngành"/)
+  assert.match(insightsDashboard, /function SortableHead/)
+  assert.match(insightsDashboard, /sortKey="stockRrgState"/)
+  assert.match(insightsDashboard, /sortKey="sectorRrgState"/)
+  assert.match(insightsData, /kfsp_stock_rrg_state,kfsp_sector_rrg_state/)
 })
 
 test("KFSP contract maps all nine provider groups without leaking provider credentials", () => {
@@ -58,6 +64,10 @@ test("KFSP contract maps all nine provider groups without leaking provider crede
   assert.match(syncFunction, /Deno\.env\.get\("KFSP_PASSWORD"\)/)
   assert.match(syncFunction, /AbortSignal\.timeout\(PROVIDER_TIMEOUT_MS\)/)
   assert.match(syncFunction, /constantTimeEqual\(expectedSecret, providedSecret\)/)
+  assert.match(syncFunction, /api\/watchlist\/canslim-fourm\/by-mack/)
+  assert.match(syncFunction, /url\.searchParams\.append\("mack\[\]", ticker\)/)
+  assert.match(syncFunction, /Object\.assign\(providerRecord, supplemental\.get\(ticker\) \|\| \{\}\)/)
+  assert.match(syncFunction, /fairValue, providerPrice/)
   assert.doesNotMatch(syncFunction, /@gmail\.com/i)
   assert.doesNotMatch(syncFunction, /Bearer\s+eyJ/i)
 })

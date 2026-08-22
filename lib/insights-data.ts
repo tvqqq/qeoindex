@@ -32,7 +32,9 @@ export interface InsightsRatingRow {
   pricePotential: string | null
   rsShort: number | null
   rsMedium: number | null
-  rsi14: number | null
+  stockRrgState: string | null
+  sectorRrgState: string | null
+  rsi14: number | string | null
   weeklyChangePercent: number | null
   monthlyChangePercent: number | null
   beta: number | null
@@ -93,6 +95,8 @@ type RatingDatabaseRow = {
   kfsp_price_potential: string | null
   kfsp_stock_rs_score: number | null
   kfsp_sector_rs_score: number | null
+  kfsp_stock_rrg_state: string | null
+  kfsp_sector_rrg_state: string | null
   rs_short: number | null
   rs_medium: number | null
   rsi_14: number | null
@@ -123,7 +127,8 @@ function makePreviewRating(ticker: string, companyName: string, sector: string, 
     ticker, companyName, sector, industryGroup: sector, exchange: "HOSE", isTop100: true, top100Rank: null,
     ratingScore, price, changePercent, volume, marketCapBillion: null,
     score4m: technical, canslimScore: fundamental, pricePotential: changePercent >= 0 ? "Tăng ↑" : "Giảm ↓",
-    rsShort: momentum, rsMedium: moneyFlow, rsi14: null, weeklyChangePercent: null, monthlyChangePercent: null,
+    rsShort: momentum, rsMedium: moneyFlow, stockRrgState: "Dẫn dắt", sectorRrgState: "Dẫn dắt",
+    rsi14: null, weeklyChangePercent: null, monthlyChangePercent: null,
     beta: null, peTtm: null, pbTtm: null, asOfDate: "", provider: "UI preview", metricGroups: {},
     scoreComponents: { technical, momentum, moneyFlow, fundamental },
   }
@@ -149,7 +154,7 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
   if (!latest.data?.as_of_date) return { rows: [], message: "Chưa có snapshot rating được cron công bố." }
   const latestDate = latest.data.as_of_date
 
-  const selection = "ticker,company_name,sector,industry_group,exchange,is_top100,top100_rank,price,price_change_pct,average_volume_50_sessions,market_cap_billion,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,rs_short,rs_medium,rsi_14,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics,as_of_date,source"
+  const selection = "ticker,company_name,sector,industry_group,exchange,is_top100,top100_rank,price,price_change_pct,average_volume_50_sessions,market_cap_billion,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,kfsp_stock_rrg_state,kfsp_sector_rrg_state,rs_short,rs_medium,rsi_14,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics,as_of_date,source"
   const baseQuery = () => supabase
     .from("insights_stock_ratings")
     .select(selection)
@@ -182,6 +187,7 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
     const moneyFlow = componentScore(row.kfsp_sector_rs_score, ratingScore)
     const fundamental = componentScore(row.kfsp_canslim_score, ratingScore)
     const metricGroups = parseMetricGroups(row.kfsp_metrics)
+    const metricRsi = metricGroups.technical?.rsi_14
     return [{
       ticker: row.ticker,
       companyName: row.company_name || (row.exchange ? `${row.ticker} · ${row.exchange}` : row.ticker),
@@ -200,7 +206,11 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
       pricePotential: row.kfsp_price_potential,
       rsShort: row.rs_short == null ? null : Number(row.rs_short),
       rsMedium: row.rs_medium == null ? null : Number(row.rs_medium),
-      rsi14: row.rsi_14 == null ? null : Number(row.rsi_14),
+      stockRrgState: row.kfsp_stock_rrg_state,
+      sectorRrgState: row.kfsp_sector_rrg_state,
+      rsi14: row.rsi_14 == null
+        ? typeof metricRsi === "number" || typeof metricRsi === "string" ? metricRsi : null
+        : Number(row.rsi_14),
       weeklyChangePercent: row.weekly_change_pct == null ? null : Number(row.weekly_change_pct),
       monthlyChangePercent: row.monthly_change_pct == null ? null : Number(row.monthly_change_pct),
       beta: row.beta == null ? null : Number(row.beta),

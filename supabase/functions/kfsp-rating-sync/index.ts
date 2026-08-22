@@ -19,6 +19,7 @@ type MetricGroups = Record<KfspGroupKey, Record<string, JsonValue>> & {
 const PROVIDER_TIMEOUT_MS = 8_000
 const TOKEN_EXPIRY_SKEW_MS = 5 * 60 * 1_000
 const FILTER_URL = Deno.env.get("KFSP_FILTER_URL") || "https://api2.kfsp.vn/api/filter"
+const SUPPLEMENTAL_URL = Deno.env.get("KFSP_SUPPLEMENTAL_URL") || "https://api2.kfsp.vn/api/watchlist/canslim-fourm/by-mack"
 const LOGIN_URL = Deno.env.get("KFSP_LOGIN_URL") || "https://api.kfsp.vn/api/login"
 const TOP100_RANK = new Map(CANONICAL_TOP100_TICKERS.map((ticker, index) => [ticker, index + 1]))
 
@@ -139,6 +140,29 @@ async function fetchFilterPayload(token: string) {
   })
 }
 
+async function fetchSupplementalRecords(token: string, tickers: string[]) {
+  const batches: string[][] = []
+  for (let index = 0; index < tickers.length; index += 150) batches.push(tickers.slice(index, index + 150))
+  const results = await Promise.allSettled(batches.map(async (batch) => {
+    const url = new URL(SUPPLEMENTAL_URL)
+    for (const ticker of batch) url.searchParams.append("mack[]", ticker)
+    url.searchParams.set("token", token)
+    const { response, payload } = await fetchJson(url.toString(), {
+      method: "GET",
+      headers: { Accept: "application/json", Origin: "https://kfsp.vn", Referer: "https://kfsp.vn/" },
+    })
+    if (!response.ok) throw new Error(`KFSP_SUPPLEMENTAL_HTTP_${response.status}`)
+    const root = asObject(payload)
+    const records = Array.isArray(payload) ? payload : Array.isArray(root?.data) ? root.data : []
+    return records.flatMap((record) => {
+      const object = asObject(record)
+      const ticker = String(object?.mack || object?.ticker || "").trim().toUpperCase()
+      return object && ticker ? [[ticker, object] as const] : []
+    })
+  }))
+  return new Map(results.flatMap((result) => result.status === "fulfilled" ? result.value : []))
+}
+
 function normalizeTickers(raw: unknown): string[] {
   const values = Array.isArray(raw)
     ? raw
@@ -253,7 +277,7 @@ function pricePotentialLabel(value: JsonValue | undefined, fairValue: number | n
   return "Tăng ↑↑↑"
 }
 
-function buildProviderRows(payload: unknown, asOfDate: string, syncRunId: string, fetchedAt: string) {
+function buildProviderRows(payload: unknown, supplemental: Map<string, Record<string, unknown>>, asOfDate: string, syncRunId: string, fetchedAt: string) {
   const root = asObject(payload)
   const source = asObject(root?.data) || root
   if (!source) throw new Error("KFSP_FILTER_RESPONSE_INVALID")
@@ -265,6 +289,7 @@ function buildProviderRows(payload: unknown, asOfDate: string, syncRunId: string
   return tickers.map((ticker, index) => {
     const providerRecord: Record<string, unknown> = { mack: ticker }
     for (const [key, values] of fields) providerRecord[key] = (values as unknown[])[index] ?? null
+    Object.assign(providerRecord, supplemental.get(ticker) || {})
     const { metrics, englishRecord } = normalizeProviderRecord(providerRecord)
     const score4m = score(findMetric(metrics, "kfsp_score_4m"))
     const canslim = score(findMetric(metrics, "kfsp_canslim_score"))
@@ -293,7 +318,7 @@ function buildProviderRows(payload: unknown, asOfDate: string, syncRunId: string
       kfsp_composite_score: compositeScore([score4m, canslim, stockRs, sectorRs]),
       kfsp_score_4m: score4m,
       kfsp_canslim_score: canslim,
-      kfsp_price_potential: pricePotentialLabel(findMetric(metrics, "kfsp_price_potential"), fairValue, price),
+      kfsp_price_potential: pricePotentialLabel(findMetric(metrics, "kfsp_price_potential"), fairValue, providerPrice),
       kfsp_stock_rs_score: stockRs,
       kfsp_sector_rs_score: sectorRs,
       kfsp_stock_rrg_state: textValue(findMetric(metrics, "kfsp_stock_rrg_state")),
@@ -359,7 +384,10 @@ Deno.serve(async (req: Request) => {
     }
     if (!filter.response.ok) throw new Error(`KFSP_FILTER_HTTP_${filter.response.status}`)
 
-    const rows = buildProviderRows(filter.payload, asOfDate, syncRunId, fetchedAt)
+    const filterRoot = asObject(filter.payload)
+    const filterSource = asObject(filterRoot?.data) || filterRoot
+    const supplemental = await fetchSupplementalRecords(auth.token, normalizeTickers(filterSource?.mack))
+    const rows = buildProviderRows(filter.payload, supplemental, asOfDate, syncRunId, fetchedAt)
     const minimumRows = Math.max(1, Number(Deno.env.get("KFSP_MINIMUM_ROWS") || 50))
     if (rows.length < minimumRows) throw new Error("KFSP_FILTER_BATCH_INCOMPLETE")
     if (rows.some((row) => row.kfsp_composite_score == null && row.kfsp_score_4m == null && row.kfsp_canslim_score == null && row.kfsp_stock_rs_score == null)) {
