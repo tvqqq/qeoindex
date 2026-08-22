@@ -130,6 +130,7 @@ function makePreviewRating(ticker: string, companyName: string, sector: string, 
 }
 
 function componentScore(value: unknown, fallback: number) {
+  if (value == null || value === "") return fallback
   const parsed = Number(value)
   return Number.isFinite(parsed) ? Math.round(Math.max(0, Math.min(100, parsed))) : fallback
 }

@@ -29,6 +29,8 @@
 
 The QeoIndex composite score is the arithmetic mean of the available KFSP 4M, CANSLIM, stock RS-S, and sector RS-S values. This is a QeoIndex comparison score, not a provider recommendation. The canonical Top 100 array is shared with the market-board universe.
 
+The live filter contract currently sends `gia_hien_tai` in VND, while QeoIndex displays and stores the browser-safe `price` column in thousands of VND. The sync normalizes that unit once before publishing. It also aliases provider `rs_s_co_phieu`, `rs_m_co_phieu`, and `rs_l_co_phieu` into the stable `rs_short`, `rs_medium`, and `rs_long` read model. Missing 4M/CANSLIM components stay nullable in storage; the UI uses the composite score as the documented visual fallback instead of converting SQL `null` to zero.
+
 Supabase Cron runs at `0 0 * * *` UTC, equivalent to 07:00 Asia/Ho_Chi_Minh. It reads the request secret from Vault key `kfsp_sync_secret`. An incomplete batch fails closed and leaves the last published snapshot untouched.
 
 ## Production configuration
@@ -66,4 +68,4 @@ Then invoke one authenticated machine sync and confirm `published_count`, latest
 
 ## Rollout status (2026-08-22)
 
-Migration `20260822112420_kfsp_rating_pipeline.sql`, the Edge Function, the nine-group catalog, and the interactive UI are implemented in this checkout. Production requires the three KFSP secrets plus the matching Vault secret before the first live sync can succeed.
+Migration `20260822112420_kfsp_rating_pipeline.sql`, the Edge Function, the nine-group catalog, and the interactive UI are live in production. The 2026-08-22 initialization published 1,752 distinct tickers, including exactly 100 canonical Top 100 rows; the daily 07:00 ICT cron remains enabled. Future releases should re-check both the sync-run counts and representative rendered values because a successful provider request alone does not prove field aliases or units are correct.

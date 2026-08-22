@@ -145,6 +145,7 @@ See `docs/market-board.md` and `docs/perf-market-board-state-buffer.md` for the 
 
 - `/insights` is available to every signed-in user, without a separate feature entitlement. Anonymous visitors remain on the login screen.
 - Supabase `insights_stock_ratings` is read-only for `authenticated` through RLS and browser-safe column grants; `anon` has no grant. The KFSP Edge Function stages and atomically publishes complete daily snapshots at 07:00 ICT, while provider tokens and diagnostics remain service-role only.
+- The provider sends live prices in VND; the sync owns the one-time conversion to thousands of VND and the stable RS aliases before publication. Production was initialized on 2026-08-22 with 1,752 rows and exactly 100 canonical Top 100 rows.
 - The rating table supports Top 100/sector filtering, metric tooltips, row keyboard activation, and a nine-tab detail dialog matching the KFSP watchlist contract. The shared KFSP catalog also owns the canonical Top 100 ticker array used by the market board.
 - `/research/*`, the market board, and all operational/write APIs retain their existing auth/feature gates. See `docs/insights-homepage.md` for the rating ingestion contract.
 

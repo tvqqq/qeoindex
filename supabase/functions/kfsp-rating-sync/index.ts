@@ -200,6 +200,9 @@ function normalizeProviderRecord(record: Record<string, unknown>) {
       if (key in metrics[group.key]) metrics.overview[key] = metrics[group.key][key]
     }
   }
+  if ("kfsp_stock_rs_score" in metrics.kfsp) {
+    metrics.overview.rs_short = metrics.kfsp.kfsp_stock_rs_score
+  }
   metrics.metadata.provider_key_map = providerKeyMap
   metrics.metadata.contract_version = KFSP_CONTRACT_VERSION
   return { metrics, englishRecord }
@@ -267,7 +270,9 @@ function buildProviderRows(payload: unknown, asOfDate: string, syncRunId: string
     const canslim = score(findMetric(metrics, "kfsp_canslim_score"))
     const stockRs = score(findMetric(metrics, "kfsp_stock_rs_score"))
     const sectorRs = score(findMetric(metrics, "kfsp_sector_rs_score"))
-    const price = numeric(findMetric(metrics, "price"))
+    const providerPrice = numeric(findMetric(metrics, "price"))
+    const price = providerPrice == null ? null : providerPrice / 1_000
+    if (price != null) metrics.overview.price = price
     const fairValue = numeric(findMetric(metrics, "kfsp_fair_value"))
     const rank = TOP100_RANK.get(ticker) ?? null
 

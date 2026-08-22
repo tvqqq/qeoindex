@@ -49,15 +49,21 @@ test("KFSP contract maps all nine provider groups without leaking provider crede
   for (const group of ["overview", "general", "valuation", "fundamentals", "price_volatility", "price_range", "liquidity", "technical", "kfsp"]) {
     assert.match(fieldCatalog, new RegExp(`key: "${group}"`))
   }
-  for (const providerKey of ["diem_4m", "diem_canslim", "rs_s_co_phieu", "rs_nganh", "rrg_co_phieu", "rsi_14", "macd_vs_signal", "klgd_tb_50_ngay"]) {
+  for (const providerKey of ["gia_hien_tai", "diem_4m", "diem_canslim", "rs_s_co_phieu", "rs_m_co_phieu", "rs_l_co_phieu", "rs_nganh", "rrg_co_phieu", "rsi_14", "macd_vs_signal", "klgd_tb_50_ngay"]) {
     assert.match(fieldCatalog, new RegExp(`"${providerKey}"`))
   }
+  assert.match(syncFunction, /providerPrice == null \? null : providerPrice \/ 1_000/)
+  assert.match(syncFunction, /metrics\.overview\.rs_short = metrics\.kfsp\.kfsp_stock_rs_score/)
   assert.match(syncFunction, /Deno\.env\.get\("KFSP_USERNAME"\)/)
   assert.match(syncFunction, /Deno\.env\.get\("KFSP_PASSWORD"\)/)
   assert.match(syncFunction, /AbortSignal\.timeout\(PROVIDER_TIMEOUT_MS\)/)
   assert.match(syncFunction, /constantTimeEqual\(expectedSecret, providedSecret\)/)
   assert.doesNotMatch(syncFunction, /@gmail\.com/i)
   assert.doesNotMatch(syncFunction, /Bearer\s+eyJ/i)
+})
+
+test("missing component scores fall back to the composite score instead of zero", () => {
+  assert.match(insightsData, /if \(value == null \|\| value === ""\) return fallback/)
 })
 
 test("KFSP snapshot publish is atomic, authenticated read-only, and scheduled for 07:00 ICT", () => {
