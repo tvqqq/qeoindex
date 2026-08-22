@@ -20,6 +20,15 @@ import { BRAND } from "@/lib/brand"
 
 const INSIGHTS_ITEMS = [
   {
+    label: "Tổng quan Insights",
+    href: "/insights",
+    icon: Sparkles,
+    badge: "PUBLIC",
+    badgeColor: "bg-emerald-500/15 border-emerald-500/30 text-emerald-400",
+    iconBg: "bg-emerald-500/10 border-emerald-500/25 text-emerald-400",
+    description: "VNIndex, rating, Wyckoff, tín hiệu và thesis",
+  },
+  {
     label: "Quét Wyckoff",
     href: "/research/scanner",
     icon: Radar,
@@ -92,7 +101,7 @@ export function TopNav() {
   }
 
   const isBoardActive = pathname === "/"
-  const isInsightsActive = pathname.startsWith("/research")
+  const isInsightsActive = pathname === "/insights" || pathname.startsWith("/research")
 
   const handleMouseEnter = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
@@ -138,9 +147,7 @@ export function TopNav() {
           </div>
         </Link>
 
-        {/* Liquid Glass Navigation with Emerald & Purple Neon Glow */}
         <nav className="flex min-w-0 items-center gap-1.5 p-1 rounded-full bg-[#080c10]/90 border border-white/[0.1] shadow-[0_0_24px_-4px_rgba(176,124,255,0.18),0_0_24px_-4px_rgba(34,201,138,0.18),inset_0_1px_0_0_rgba(255,255,255,0.1)] backdrop-blur-2xl">
-          {/* 1. BẢNG ĐIỆN TAB */}
           <Link
             href="/"
             className={[
@@ -160,7 +167,6 @@ export function TopNav() {
             <span>Bảng điện</span>
           </Link>
 
-          {/* 2. INSIGHTS PARENT DROPDOWN */}
           <div
             ref={menuRef}
             className="relative"
@@ -196,11 +202,9 @@ export function TopNav() {
               />
             </button>
 
-            {/* Dropdown Menu Panel (Image 1 Style) */}
             {isOpen && (
               <div className="absolute left-0 top-full pt-2 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-left">
                 <div className="w-[360px] sm:w-[390px] rounded-2xl border border-white/[0.12] bg-[#0c1015]/96 p-2 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.95),0_0_30px_rgba(34,201,138,0.12)] backdrop-blur-2xl select-none">
-                  {/* Header Title + Subtitle */}
                   <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-white/[0.08] mb-1.5">
                     <div className="flex flex-col">
                       <span className="font-bold text-sm text-foreground tracking-tight flex items-center gap-1.5">
@@ -208,15 +212,14 @@ export function TopNav() {
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       </span>
                       <span className="text-[11px] text-muted-2 font-normal mt-0.5">
-                        Phân tích thị trường chuyên sâu
+                        Dashboard public + research workspace
                       </span>
                     </div>
-                    <span className="rounded-md bg-amber-500/15 border border-amber-500/35 px-1.5 py-0.5 text-[9.5px] font-black text-amber-400 uppercase tracking-wider shadow-[0_0_8px_rgba(245,158,11,0.2)]">
-                      ULTRA
+                    <span className="rounded-md bg-emerald-500/15 border border-emerald-500/35 px-1.5 py-0.5 text-[9.5px] font-black text-emerald-400 uppercase tracking-wider shadow-[0_0_8px_rgba(34,201,138,0.2)]">
+                      QEO
                     </span>
                   </div>
 
-                  {/* Sub-items List */}
                   <div className="space-y-1">
                     {INSIGHTS_ITEMS.map((item) => {
                       const on = pathname === item.href || (item.href === "/research" && pathname.startsWith("/research") && !INSIGHTS_ITEMS.some((i) => i.href !== "/research" && pathname === i.href))
@@ -232,25 +235,17 @@ export function TopNav() {
                               : "hover:bg-white/[0.05] border border-transparent hover:border-white/[0.08]"
                           }`}
                         >
-                          <div
-                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-transform duration-200 group-hover:scale-105 shadow-sm ${item.iconBg}`}
-                          >
+                          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-transform duration-200 group-hover:scale-105 shadow-sm ${item.iconBg}`}>
                             <Icon className="h-4 w-4 drop-shadow-sm" />
                           </div>
 
                           <div className="flex flex-1 flex-col min-w-0">
                             <div className="flex items-center gap-1.5">
-                              <span
-                                className={`text-xs font-bold transition-colors ${
-                                  on ? "text-emerald-300" : "text-foreground group-hover:text-emerald-300"
-                                }`}
-                              >
+                              <span className={`text-xs font-bold transition-colors ${on ? "text-emerald-300" : "text-foreground group-hover:text-emerald-300"}`}>
                                 {item.label}
                               </span>
                               {item.badge && (
-                                <span
-                                  className={`rounded-full border px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider ${item.badgeColor}`}
-                                >
+                                <span className={`rounded-full border px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider ${item.badgeColor}`}>
                                   {item.badge}
                                 </span>
                               )}
@@ -270,7 +265,6 @@ export function TopNav() {
         </nav>
       </div>
 
-      {/* Hover-to-Reveal Commit Timestamp Pill */}
       <div className="relative group/commit flex shrink-0 items-center font-mono text-xs">
         {COMMIT_SHA && (
           <div
