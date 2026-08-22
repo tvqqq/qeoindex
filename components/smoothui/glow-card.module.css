@@ -1,0 +1,36 @@
+.root {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.glow {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    420px circle at var(--glow-x, 50%) var(--glow-y, 50%),
+    rgba(34, 201, 138, 0.13),
+    rgba(176, 124, 255, 0.055) 32%,
+    transparent 66%
+  );
+  transition: opacity 180ms ease;
+}
+
+.root:hover .glow,
+.root:focus-within .glow {
+  opacity: 1;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glow {
+    display: none;
+  }
+}
