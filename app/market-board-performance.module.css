@@ -14,8 +14,24 @@
   filter: none;
 }
 
+/* SmoothUI-style micro-interaction only on the six sector panels.
+ * No will-change: the browser promotes a layer only while the user hovers. */
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .performanceSurface main section {
+    transition:
+      transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+      border-color 180ms ease;
+  }
+
+  .performanceSurface main section:hover {
+    transform: translate3d(0, -2px, 0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .performanceSurface :global(.board-stock-row) {
+  .performanceSurface :global(.board-stock-row),
+  .performanceSurface main section {
     transition: none !important;
+    transform: none !important;
   }
 }
