@@ -9,17 +9,38 @@ import { getScannerData } from "@/lib/scanner-data"
 import { getSignalUiData } from "@/lib/signal-data"
 import { buildRecommendationPerformance } from "@/lib/signal-performance"
 import { fetchTradingViewIndexes, type MarketIndexQuote } from "@/lib/tradingview-index"
+import { KFSP_GROUPS, type KfspGroupKey } from "@/supabase/functions/_shared/kfsp-catalog"
+
+export type KfspMetricValue = string | number | boolean | null
+export type KfspMetricGroups = Partial<Record<KfspGroupKey, Record<string, KfspMetricValue>>>
 
 export interface InsightsRatingRow {
   ticker: string
   companyName: string
   sector: string
+  industryGroup: string
+  exchange: string | null
+  isTop100: boolean
+  top100Rank: number | null
   ratingScore: number
   price: number | null
   changePercent: number | null
   volume: number | null
+  marketCapBillion: number | null
+  score4m: number
+  canslimScore: number
+  pricePotential: string | null
+  rsShort: number | null
+  rsMedium: number | null
+  rsi14: number | null
+  weeklyChangePercent: number | null
+  monthlyChangePercent: number | null
+  beta: number | null
+  peTtm: number | null
+  pbTtm: number | null
   asOfDate: string
   provider: string
+  metricGroups: KfspMetricGroups
   scoreComponents: {
     technical: number
     momentum: number
@@ -58,13 +79,29 @@ export interface InsightsDashboardData {
 
 type RatingDatabaseRow = {
   ticker: string
+  company_name: string | null
   sector: string | null
+  industry_group: string | null
   exchange: string | null
-  composite_score: number | null
-  score_4m: number | null
-  canslim_score: number | null
-  stock_rs_score: number | null
-  sector_rs_score: number | null
+  is_top100: boolean
+  top100_rank: number | null
+  average_volume_50_sessions: number | null
+  market_cap_billion: number | null
+  kfsp_composite_score: number | null
+  kfsp_score_4m: number | null
+  kfsp_canslim_score: number | null
+  kfsp_price_potential: string | null
+  kfsp_stock_rs_score: number | null
+  kfsp_sector_rs_score: number | null
+  rs_short: number | null
+  rs_medium: number | null
+  rsi_14: number | null
+  weekly_change_pct: number | null
+  monthly_change_pct: number | null
+  beta: number | null
+  pe_ttm: number | null
+  pb_ttm: number | null
+  kfsp_metrics: unknown
   price: number | null
   price_change_pct: number | null
   as_of_date: string
@@ -72,14 +109,25 @@ type RatingDatabaseRow = {
 }
 
 const RATING_PREVIEW: InsightsRatingRow[] = [
-  { ticker: "FPT", companyName: "FPT Corporation", sector: "Công nghệ", ratingScore: 94, price: 128.4, changePercent: 2.8, volume: 2_840_000, asOfDate: "", provider: "UI preview", scoreComponents: { technical: 96, momentum: 93, moneyFlow: 92, fundamental: 95 } },
-  { ticker: "MWG", companyName: "Thế Giới Di Động", sector: "Bán lẻ", ratingScore: 91, price: 64.8, changePercent: 1.9, volume: 5_170_000, asOfDate: "", provider: "UI preview", scoreComponents: { technical: 92, momentum: 94, moneyFlow: 89, fundamental: 88 } },
-  { ticker: "VCB", companyName: "Vietcombank", sector: "Ngân hàng", ratingScore: 88, price: 92.1, changePercent: 1.3, volume: 1_210_000, asOfDate: "", provider: "UI preview", scoreComponents: { technical: 86, momentum: 84, moneyFlow: 88, fundamental: 94 } },
-  { ticker: "HPG", companyName: "Hòa Phát", sector: "Thép", ratingScore: 84, price: 28.65, changePercent: 1.1, volume: 12_430_000, asOfDate: "", provider: "UI preview", scoreComponents: { technical: 87, momentum: 89, moneyFlow: 85, fundamental: 75 } },
-  { ticker: "CTG", companyName: "VietinBank", sector: "Ngân hàng", ratingScore: 82, price: 38.2, changePercent: 0.7, volume: 4_320_000, asOfDate: "", provider: "UI preview", scoreComponents: { technical: 78, momentum: 81, moneyFlow: 83, fundamental: 88 } },
-  { ticker: "VHM", companyName: "Vinhomes", sector: "Bất động sản", ratingScore: 76, price: 41.5, changePercent: -0.4, volume: 6_080_000, asOfDate: "", provider: "UI preview", scoreComponents: { technical: 72, momentum: 68, moneyFlow: 77, fundamental: 87 } },
-  { ticker: "SSI", companyName: "SSI Securities", sector: "Chứng khoán", ratingScore: 72, price: 31.25, changePercent: -1.2, volume: 8_660_000, asOfDate: "", provider: "UI preview", scoreComponents: { technical: 69, momentum: 65, moneyFlow: 78, fundamental: 76 } },
+  makePreviewRating("FPT", "FPT Corporation", "Công nghệ", 94, 128.4, 2.8, 2_840_000, 96, 93, 92, 95),
+  makePreviewRating("MWG", "Thế Giới Di Động", "Bán lẻ", 91, 64.8, 1.9, 5_170_000, 92, 94, 89, 88),
+  makePreviewRating("VCB", "Vietcombank", "Ngân hàng", 88, 92.1, 1.3, 1_210_000, 86, 84, 88, 94),
+  makePreviewRating("HPG", "Hòa Phát", "Thép", 84, 28.65, 1.1, 12_430_000, 87, 89, 85, 75),
+  makePreviewRating("CTG", "VietinBank", "Ngân hàng", 82, 38.2, 0.7, 4_320_000, 78, 81, 83, 88),
+  makePreviewRating("VHM", "Vinhomes", "Bất động sản", 76, 41.5, -0.4, 6_080_000, 72, 68, 77, 87),
+  makePreviewRating("SSI", "SSI Securities", "Chứng khoán", 72, 31.25, -1.2, 8_660_000, 69, 65, 78, 76),
 ]
+
+function makePreviewRating(ticker: string, companyName: string, sector: string, ratingScore: number, price: number, changePercent: number, volume: number, technical: number, momentum: number, moneyFlow: number, fundamental: number): InsightsRatingRow {
+  return {
+    ticker, companyName, sector, industryGroup: sector, exchange: "HOSE", isTop100: true, top100Rank: null,
+    ratingScore, price, changePercent, volume, marketCapBillion: null,
+    score4m: technical, canslimScore: fundamental, pricePotential: changePercent >= 0 ? "Tăng ↑" : "Giảm ↓",
+    rsShort: momentum, rsMedium: moneyFlow, rsi14: null, weeklyChangePercent: null, monthlyChangePercent: null,
+    beta: null, peTtm: null, pbTtm: null, asOfDate: "", provider: "UI preview", metricGroups: {},
+    scoreComponents: { technical, momentum, moneyFlow, fundamental },
+  }
+}
 
 function componentScore(value: unknown, fallback: number) {
   const parsed = Number(value)
@@ -91,6 +139,7 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
     .from("insights_stock_ratings")
     .select("as_of_date")
     .eq("is_published", true)
+    .eq("source", "kfsp")
     .order("as_of_date", { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -100,36 +149,73 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
 
   const result = await supabase
     .from("insights_stock_ratings")
-    .select("ticker,sector,exchange,composite_score,score_4m,canslim_score,stock_rs_score,sector_rs_score,price,price_change_pct,as_of_date,source")
+    .select("ticker,company_name,sector,industry_group,exchange,is_top100,top100_rank,price,price_change_pct,average_volume_50_sessions,market_cap_billion,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,rs_short,rs_medium,rsi_14,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics,as_of_date,source")
     .eq("is_published", true)
     .eq("as_of_date", latest.data.as_of_date)
-    .order("composite_score", { ascending: false, nullsFirst: false })
+    .eq("source", "kfsp")
+    .order("kfsp_composite_score", { ascending: false, nullsFirst: false })
     .order("ticker", { ascending: true })
-    .limit(100)
+    .limit(500)
 
   if (result.error) return { rows: [], message: `Không đọc được rating: ${result.error.message}` }
   const rows = (result.data as RatingDatabaseRow[]).flatMap((row) => {
-    if (row.composite_score == null) return []
-    const ratingScore = componentScore(row.composite_score, 0)
+    if (row.kfsp_composite_score == null) return []
+    const ratingScore = componentScore(row.kfsp_composite_score, 0)
+    const technical = componentScore(row.kfsp_score_4m, ratingScore)
+    const momentum = componentScore(row.kfsp_stock_rs_score, ratingScore)
+    const moneyFlow = componentScore(row.kfsp_sector_rs_score, ratingScore)
+    const fundamental = componentScore(row.kfsp_canslim_score, ratingScore)
+    const metricGroups = parseMetricGroups(row.kfsp_metrics)
     return [{
       ticker: row.ticker,
-      companyName: row.exchange ? `${row.ticker} · ${row.exchange}` : row.ticker,
+      companyName: row.company_name || (row.exchange ? `${row.ticker} · ${row.exchange}` : row.ticker),
       sector: row.sector || "Chưa phân ngành",
+      industryGroup: row.industry_group || row.sector || "Chưa phân ngành",
+      exchange: row.exchange,
+      isTop100: Boolean(row.is_top100),
+      top100Rank: row.top100_rank == null ? null : Number(row.top100_rank),
       ratingScore,
       price: row.price == null ? null : Number(row.price),
       changePercent: row.price_change_pct == null ? null : Number(row.price_change_pct),
-      volume: null,
+      volume: row.average_volume_50_sessions == null ? null : Number(row.average_volume_50_sessions),
+      marketCapBillion: row.market_cap_billion == null ? null : Number(row.market_cap_billion),
+      score4m: technical,
+      canslimScore: fundamental,
+      pricePotential: row.kfsp_price_potential,
+      rsShort: row.rs_short == null ? null : Number(row.rs_short),
+      rsMedium: row.rs_medium == null ? null : Number(row.rs_medium),
+      rsi14: row.rsi_14 == null ? null : Number(row.rsi_14),
+      weeklyChangePercent: row.weekly_change_pct == null ? null : Number(row.weekly_change_pct),
+      monthlyChangePercent: row.monthly_change_pct == null ? null : Number(row.monthly_change_pct),
+      beta: row.beta == null ? null : Number(row.beta),
+      peTtm: row.pe_ttm == null ? null : Number(row.pe_ttm),
+      pbTtm: row.pb_ttm == null ? null : Number(row.pb_ttm),
       asOfDate: row.as_of_date,
       provider: row.source,
+      metricGroups,
       scoreComponents: {
-        technical: componentScore(row.score_4m, ratingScore),
-        momentum: componentScore(row.stock_rs_score, ratingScore),
-        moneyFlow: componentScore(row.sector_rs_score, ratingScore),
-        fundamental: componentScore(row.canslim_score, ratingScore),
+        technical,
+        momentum,
+        moneyFlow,
+        fundamental,
       },
     }]
   })
   return { rows, message: `${rows.length} mã · snapshot ${latest.data.as_of_date}` }
+}
+
+function parseMetricGroups(value: unknown): KfspMetricGroups {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const source = value as Record<string, unknown>
+  return Object.fromEntries(KFSP_GROUPS.flatMap((group) => {
+    const candidate = source[group.key]
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return []
+    const metrics = Object.fromEntries(Object.entries(candidate as Record<string, unknown>).flatMap(([key, metric]) => {
+      if (metric == null || ["string", "number", "boolean"].includes(typeof metric)) return [[key, metric as KfspMetricValue]]
+      return []
+    }))
+    return [[group.key, metrics]]
+  }))
 }
 
 function settledValue<T>(result: PromiseSettledResult<T>): T | null {

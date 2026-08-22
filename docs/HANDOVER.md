@@ -144,7 +144,8 @@ See `docs/market-board.md` and `docs/perf-market-board-state-buffer.md` for the 
 ### Authenticated Insights homepage
 
 - `/insights` is available to every signed-in user, without a separate feature entitlement. Anonymous visitors remain on the login screen.
-- Supabase `insights_stock_ratings` is read-only for `authenticated` through RLS; `anon` has no grant, and only trusted service-role cron ingestion may write. The UI clearly labels its preview rows until the first published daily snapshot exists.
+- Supabase `insights_stock_ratings` is read-only for `authenticated` through RLS and browser-safe column grants; `anon` has no grant. The KFSP Edge Function stages and atomically publishes complete daily snapshots at 07:00 ICT, while provider tokens and diagnostics remain service-role only.
+- The rating table supports Top 100/sector filtering, metric tooltips, row keyboard activation, and a nine-tab detail dialog matching the KFSP watchlist contract. The shared KFSP catalog also owns the canonical Top 100 ticker array used by the market board.
 - `/research/*`, the market board, and all operational/write APIs retain their existing auth/feature gates. See `docs/insights-homepage.md` for the rating ingestion contract.
 
 - `scannerHistoryPolicy` remains canonical for runner/persistence/health:

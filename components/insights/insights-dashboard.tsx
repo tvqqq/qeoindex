@@ -11,6 +11,7 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   CircleDollarSign,
+  Crown,
   Database,
   ExternalLink,
   Gauge,
@@ -37,8 +38,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import type { InsightsDashboardData, InsightsModuleSummary, InsightsRatingRow } from "@/lib/insights-data"
+import type { InsightsDashboardData, InsightsModuleSummary, InsightsRatingRow, KfspMetricValue } from "@/lib/insights-data"
 import { cn } from "@/lib/utils"
+import {
+  KFSP_FIELD_CATALOG,
+  KFSP_GROUPS,
+  type KfspFieldDefinition,
+  type KfspGroupKey,
+} from "@/supabase/functions/_shared/kfsp-catalog"
 
 const MODULE_ICONS = {
   scanner: Radar,
@@ -71,6 +78,75 @@ function formatPrice(value: number | null) {
 function formatPercent(value: number | null) {
   if (value == null) return "—"
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`
+}
+
+function formatNumber(value: number | null, maximumFractionDigits = 2) {
+  if (value == null) return "—"
+  return value.toLocaleString("vi-VN", { maximumFractionDigits })
+}
+
+function metricValue(row: InsightsRatingRow, key: string): KfspMetricValue | undefined {
+  for (const group of KFSP_GROUPS) {
+    const value = row.metricGroups[group.key]?.[key]
+    if (value !== undefined) return value
+  }
+  const fallback: Record<string, KfspMetricValue | undefined> = {
+    ticker: row.ticker,
+    company_name: row.companyName,
+    sector: row.sector,
+    exchange: row.exchange,
+    price: row.price,
+    price_change_pct: row.changePercent,
+    average_volume_50_sessions: row.volume,
+    market_cap_billion: row.marketCapBillion,
+    kfsp_composite_score: row.ratingScore,
+    kfsp_score_4m: row.score4m,
+    kfsp_canslim_score: row.canslimScore,
+    kfsp_price_potential: row.pricePotential,
+    rs_short: row.rsShort,
+    rs_medium: row.rsMedium,
+    rsi_14: row.rsi14,
+    weekly_change_pct: row.weeklyChangePercent,
+    monthly_change_pct: row.monthlyChangePercent,
+    beta: row.beta,
+    pe_ttm: row.peTtm,
+    pb_ttm: row.pbTtm,
+  }
+  return fallback[key]
+}
+
+function formatMetric(value: KfspMetricValue | undefined, definition: KfspFieldDefinition) {
+  if (value == null || value === "" || value === "--") return "—"
+  if (definition.format === "link") return String(value)
+  const numeric = typeof value === "number" ? value : Number(String(value).replace(/,/g, "").replace(/%/g, ""))
+  if (!Number.isFinite(numeric)) return String(value)
+  if (definition.format === "percent") return `${formatNumber(numeric)}%`
+  if (definition.format === "price") return formatPrice(numeric)
+  if (definition.format === "volume") return Math.round(numeric).toLocaleString("vi-VN")
+  if (definition.format === "currency_billion") return `${formatNumber(numeric)} tỷ`
+  if (definition.format === "score") return `${formatNumber(numeric)}/100`
+  return formatNumber(numeric)
+}
+
+function metricTone(value: KfspMetricValue | undefined, definition: KfspFieldDefinition) {
+  if (definition.format !== "percent" && definition.format !== "score") return "text-white"
+  const numeric = Number(String(value ?? "").replace(/,/g, "").replace(/%/g, ""))
+  if (!Number.isFinite(numeric)) return "text-white"
+  if (definition.format === "score") return numeric >= 60 ? "text-up" : numeric < 40 ? "text-down" : "text-ref"
+  return numeric > 0 ? "text-up" : numeric < 0 ? "text-down" : "text-ref"
+}
+
+function MetricLabel({ definition, className }: { definition: KfspFieldDefinition; className?: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className={cn("inline-flex cursor-help items-center gap-1", className)} />}>
+        {definition.label}<Info className="size-3 opacity-55" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-72 border border-white/10 bg-[#090e19] px-3 py-2 text-sm leading-5 text-white shadow-2xl">
+        {definition.description}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 function formatTradedValue(value?: number) {
@@ -160,14 +236,25 @@ const SCORE_TONE: Record<ScoreTone, string> = {
   emerald: "border-emerald-300/35 bg-emerald-300/[0.09] text-emerald-300 shadow-[0_0_18px_-8px_rgba(110,231,183,0.65)]",
 }
 
-function ScorePill({ value, tone, label }: { value: number; tone: ScoreTone; label: string }) {
+const OVERVIEW_FIELD_BY_KEY = new Map(
+  KFSP_FIELD_CATALOG.filter((field) => field.group === "overview").map((field) => [field.key, field]),
+)
+
+function overviewField(key: string) {
+  const definition = OVERVIEW_FIELD_BY_KEY.get(key)
+  if (!definition) throw new Error(`Missing KFSP overview definition: ${key}`)
+  return definition
+}
+
+function ScorePill({ value, tone, label, description }: { value: number; tone: ScoreTone; label: string; description?: string }) {
   return (
     <Tooltip>
       <TooltipTrigger render={<span className={cn("inline-flex h-8 min-w-14 cursor-help items-center justify-center gap-1 rounded-md border px-2 font-mono text-sm font-black", SCORE_TONE[tone])} />}>
         <Bolt className="size-3.5" /> {value}
       </TooltipTrigger>
       <TooltipContent className="border border-white/10 bg-[#090e19] px-3 py-2 font-ticker text-white shadow-2xl">
-        {label}: <strong className="text-brand">{value}/100</strong>
+        <div>{label}: <strong className="text-brand">{value}/100</strong></div>
+        {description && <div className="mt-1 max-w-64 text-xs leading-5 text-muted-2">{description}</div>}
       </TooltipContent>
     </Tooltip>
   )
@@ -190,8 +277,11 @@ function RatingTooltip({ row, children }: { row: InsightsRatingRow; children: Re
           <div className="flex justify-between gap-4"><span className="text-muted-2">Ngành</span><strong className="text-right text-white">{row.sector}</strong></div>
           <div className="flex justify-between gap-4"><span className="text-muted-2">Giá</span><strong className="font-mono text-white">{formatPrice(row.price)}</strong></div>
           <div className="flex justify-between gap-4"><span className="text-muted-2">Khối lượng</span><strong className="font-mono text-white">{compactVolume(row.volume)}</strong></div>
+          <div className="flex justify-between gap-4"><span className="text-muted-2">Vốn hóa</span><strong className="font-mono text-white">{row.marketCapBillion == null ? "—" : `${formatNumber(row.marketCapBillion)} tỷ`}</strong></div>
+          <div className="flex justify-between gap-4"><span className="text-muted-2">4M / CANSLIM</span><strong className="font-mono text-white">{row.score4m} / {row.canslimScore}</strong></div>
           <div className="flex justify-between gap-4"><span className="text-muted-2">Biến động</span><strong className={cn("font-mono", (row.changePercent ?? 0) >= 0 ? "text-up" : "text-down")}>{formatPercent(row.changePercent)}</strong></div>
         </div>
+        {row.isTop100 && <Badge variant="outline" className="mt-4 border-amber-300/30 bg-amber-300/10 text-amber-200"><Crown className="size-3.5" /> Top 100{row.top100Rank ? ` · #${row.top100Rank}` : ""}</Badge>}
         <div className="mt-4 border-t border-white/[0.07] pt-3 text-xs font-semibold text-cyan-200">Click vào dòng để mở hồ sơ phân tích</div>
       </TooltipContent>
     </Tooltip>
@@ -200,10 +290,10 @@ function RatingTooltip({ row, children }: { row: InsightsRatingRow; children: Re
 
 function ScoreProfileChart({ row }: { row: InsightsRatingRow }) {
   const metrics = [
-    ["Kỹ thuật", row.scoreComponents.technical],
-    ["Động lượng", row.scoreComponents.momentum],
-    ["Dòng tiền", row.scoreComponents.moneyFlow],
-    ["Cơ bản", row.scoreComponents.fundamental],
+    ["4M", row.score4m],
+    ["RS-S CK", row.scoreComponents.momentum],
+    ["RS-S ngành", row.scoreComponents.moneyFlow],
+    ["CANSLIM", row.canslimScore],
     ["Tổng hợp", row.ratingScore],
   ] as const
   const width = 880
@@ -237,24 +327,28 @@ function ScoreProfileChart({ row }: { row: InsightsRatingRow }) {
 }
 
 function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; onOpenChange: (open: boolean) => void }) {
+  const [activeGroup, setActiveGroup] = useState<KfspGroupKey>("overview")
   if (!row) return null
   const positive = (row.changePercent ?? 0) >= 0
+  const activeGroupDefinition = KFSP_GROUPS.find((group) => group.key === activeGroup) ?? KFSP_GROUPS[0]
+  const activeFields = KFSP_FIELD_CATALOG.filter((field) => field.group === activeGroup)
   const scoreCards = [
-    { label: "Kỹ thuật", value: row.scoreComponents.technical, tone: "amber" as const, icon: Activity },
-    { label: "Động lượng", value: row.scoreComponents.momentum, tone: "violet" as const, icon: Bolt },
-    { label: "Dòng tiền", value: row.scoreComponents.moneyFlow, tone: "cyan" as const, icon: CircleDollarSign },
-    { label: "Cơ bản", value: row.scoreComponents.fundamental, tone: "emerald" as const, icon: Layers3 },
+    { label: "Điểm 4M", value: row.score4m, tone: "amber" as const, icon: Activity, description: "Điểm mô hình 4M do KFSP cung cấp." },
+    { label: "RS-S cổ phiếu", value: row.scoreComponents.momentum, tone: "violet" as const, icon: Bolt, description: "Sức mạnh tương đối của cổ phiếu trong mô hình KFSP." },
+    { label: "RS-S ngành", value: row.scoreComponents.moneyFlow, tone: "cyan" as const, icon: CircleDollarSign, description: "Sức mạnh tương đối của ngành trong mô hình KFSP." },
+    { label: "CANSLIM", value: row.canslimScore, tone: "emerald" as const, icon: Layers3, description: "Điểm sàng lọc CANSLIM do KFSP cung cấp." },
   ]
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto border border-cyan-300/20 bg-[#060c16] p-0 shadow-[0_40px_120px_-20px_rgba(0,0,0,.98),0_0_70px_-35px_rgba(103,232,249,.6)] sm:max-w-[1080px]">
+      <DialogContent className="max-h-[94vh] overflow-y-auto border border-cyan-300/20 bg-[#060c16] p-0 shadow-[0_40px_120px_-20px_rgba(0,0,0,.98),0_0_70px_-35px_rgba(103,232,249,.6)] sm:max-w-[min(1500px,calc(100vw-2rem))]">
         <DialogHeader className="border-b border-white/[0.07] bg-[#08111f] p-6 pr-14">
           <div className="flex flex-wrap items-center gap-4">
             <StockLogo symbol={row.ticker} size={56} className="rounded-full shadow-[0_0_28px_-6px_rgba(139,124,255,.8)]" />
             <div>
               <DialogTitle className="text-2xl font-extrabold text-white">{row.companyName} <span className="text-violet-300">{row.ticker}</span></DialogTitle>
-              <DialogDescription className="mt-1 font-ticker text-sm text-muted-2">Rating score & market profile · {row.provider}</DialogDescription>
+              <DialogDescription className="mt-1 font-ticker text-sm text-muted-2">{row.exchange || "Sàn đang cập nhật"} · {row.sector} · rating & market profile</DialogDescription>
             </div>
+            {row.isTop100 && <Badge variant="outline" className="border-amber-300/30 bg-amber-300/10 text-amber-200"><Crown className="size-3.5" /> Top 100{row.top100Rank ? ` · #${row.top100Rank}` : ""}</Badge>}
             <Badge variant="outline" className="ml-auto h-9 border-brand/35 bg-brand/10 px-4 font-mono text-lg font-black text-brand">{row.ratingScore}/100</Badge>
           </div>
         </DialogHeader>
@@ -276,19 +370,64 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
             {row.asOfDate && <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-muted-2">Snapshot {row.asOfDate}</Badge>}
           </div>
 
-          <ScoreProfileChart row={row} />
-
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {scoreCards.map(({ label, value, tone, icon: Icon }) => (
+            {scoreCards.map(({ label, value, tone, icon: Icon, description }) => (
               <div key={label} className="rounded-xl border border-white/[0.07] bg-[#091321] p-4">
-                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-sm font-bold text-muted-2"><Icon className="size-4" /> {label}</span><ScorePill value={value} tone={tone} label={label} /></div>
+                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-sm font-bold text-muted-2"><Icon className="size-4" /> {label}</span><ScorePill value={value} tone={tone} label={label} description={description} /></div>
                 <div className="mt-4"><AnimatedProgressBar value={value} color={tone === "amber" ? "#fcd34d" : tone === "violet" ? "#a78bfa" : tone === "cyan" ? "#67e8f9" : "#6ee7b7"} /></div>
               </div>
             ))}
           </div>
 
+          <ScoreProfileChart row={row} />
+
+          <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07101a]">
+            <div className="overflow-x-auto border-b border-white/[0.08] bg-[#0a1320]">
+              <div className="flex min-w-max px-2 pt-2" role="tablist" aria-label="Nhóm dữ liệu rating">
+                {KFSP_GROUPS.map((group) => (
+                  <button
+                    key={group.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeGroup === group.key}
+                    onClick={() => setActiveGroup(group.key)}
+                    className={cn("rounded-t-lg px-4 py-3 text-sm font-extrabold text-muted-2 transition-colors hover:text-white", activeGroup === group.key && "bg-[#111a29] text-fuchsia-400 shadow-[inset_0_2px_0_rgba(217,70,239,.8)]")}
+                  >
+                    {group.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="p-4 sm:p-5">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-extrabold text-white">{activeGroupDefinition.label}</h3>
+                  <p className="mt-1 text-xs text-muted-2">Hover vào tên chỉ số để xem diễn giải dữ liệu.</p>
+                </div>
+                <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-muted-2">{activeFields.length} chỉ số</Badge>
+              </div>
+              <div className="grid gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.08] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {activeFields.map((definition) => {
+                  const value = metricValue(row, definition.key)
+                  const formatted = formatMetric(value, definition)
+                  const isLink = definition.format === "link" && /^https?:\/\//i.test(formatted)
+                  return (
+                    <div key={`${activeGroup}-${definition.providerKey}`} className="min-h-24 bg-[#0a1220] p-4">
+                      <MetricLabel definition={definition} className="text-xs font-bold text-muted-2" />
+                      {isLink ? (
+                        <a href={formatted} target="_blank" rel="noreferrer" className="mt-3 flex items-center gap-1 break-all text-sm font-bold text-brand hover:underline">Truy cập <ExternalLink className="size-3.5" /></a>
+                      ) : (
+                        <div className={cn("mt-3 break-words font-mono text-base font-black", metricTone(value, definition))}>{formatted}</div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </section>
+
           <div className="flex flex-col gap-3 border-t border-white/[0.07] pt-5 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-2 text-muted-2"><Info className="mt-0.5 size-4 shrink-0 text-ref" /><span>Dữ liệu phục vụ phân tích, không phải khuyến nghị đầu tư. Biểu đồ thể hiện cấu trúc điểm hiện tại, không phải time series.</span></div>
+            <div className="flex items-start gap-2 text-muted-2"><Info className="mt-0.5 size-4 shrink-0 text-ref" /><span>Dữ liệu snapshot từ KFSP/Supabase phục vụ phân tích, không phải khuyến nghị đầu tư. Chỉ số nhà cung cấp chưa trả về được hiển thị “—”.</span></div>
             <Link href={`/research/${row.ticker.toLowerCase()}`} className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-brand/30 bg-brand/10 px-4 py-2 font-bold text-brand transition-colors hover:bg-brand/15">Mở nghiên cứu <ExternalLink className="size-4" /></Link>
           </div>
         </div>
@@ -298,18 +437,19 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
 }
 
 export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
-  const [filter, setFilter] = useState<"all" | "up" | "down">("all")
+  const [filter, setFilter] = useState("all")
   const [query, setQuery] = useState("")
   const [selectedRating, setSelectedRating] = useState<InsightsRatingRow | null>(null)
   const quote = data.vnindex
   const positive = (quote?.changePercent ?? 0) >= 0
   const breadthTotal = (quote?.advances ?? 0) + (quote?.declines ?? 0)
+  const sectors = useMemo(() => [...new Set(data.ratings.map((row) => row.sector))].sort((a, b) => a.localeCompare(b, "vi")), [data.ratings])
   const filteredRatings = useMemo(() => {
     const normalized = query.trim().toUpperCase()
     return data.ratings.filter((row) => {
-      if (filter === "up" && (row.changePercent ?? 0) < 0) return false
-      if (filter === "down" && (row.changePercent ?? 0) >= 0) return false
-      return !normalized || row.ticker.includes(normalized) || row.companyName.toUpperCase().includes(normalized)
+      if (filter === "top100" && !row.isTop100) return false
+      if (filter.startsWith("sector:") && row.sector !== filter.slice(7)) return false
+      return !normalized || row.ticker.includes(normalized) || row.companyName.toUpperCase().includes(normalized) || row.sector.toUpperCase().includes(normalized)
     })
   }, [data.ratings, filter, query])
 
@@ -405,9 +545,11 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
 
           <Card className="mt-5 border border-white/[0.07] bg-panel/95 py-0 ring-0">
             <CardHeader className="flex-col gap-4 border-b border-white/[0.06] p-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-wrap gap-2">
-                {([['all', 'Tất cả'], ['up', 'Tăng'], ['down', 'Giảm']] as const).map(([value, label]) => (
-                  <Button key={value} type="button" variant="outline" size="sm" onClick={() => setFilter(value)} className={cn("border-white/10 bg-white/[0.02] text-muted-2", filter === value && "border-brand/40 bg-brand/12 text-brand")}>{label}</Button>
+              <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
+                {[["all", "Tất cả"], ["top100", "Top 100"], ...sectors.map((sector) => [`sector:${sector}`, sector])].map(([value, label]) => (
+                  <Button key={value} type="button" variant="outline" size="sm" onClick={() => setFilter(value)} className={cn("shrink-0 border-white/10 bg-white/[0.02] text-muted-2", filter === value && "border-brand/40 bg-brand/12 text-brand")}>
+                    {value === "top100" && <Crown className="size-3.5 text-amber-300" />}{label}
+                  </Button>
                 ))}
               </div>
               <div className="relative w-full lg:w-80">
@@ -416,17 +558,25 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-[#05090f]">
+              <Table className="min-w-[1900px] font-ticker">
+                <TableHeader className="sticky top-0 z-20 bg-[#05090f]">
                   <TableRow className="border-white/[0.08] hover:bg-transparent">
-                    <TableHead className="h-14 px-4 text-xs font-extrabold uppercase tracking-[0.12em] text-muted-2"># · Cổ phiếu</TableHead>
-                    <TableHead className="text-right text-xs font-extrabold uppercase tracking-[0.12em] text-muted-2">Giá / %</TableHead>
-                    <TableHead className="hidden text-right text-xs font-extrabold uppercase tracking-[0.12em] text-muted-2 md:table-cell">Khối lượng</TableHead>
-                    <TableHead className="hidden text-center text-xs font-extrabold uppercase tracking-[0.12em] text-amber-300 lg:table-cell"><span className="inline-flex items-center gap-1"><Bolt className="size-3.5" /> Kỹ thuật</span></TableHead>
-                    <TableHead className="hidden text-center text-xs font-extrabold uppercase tracking-[0.12em] text-violet-300 lg:table-cell"><span className="inline-flex items-center gap-1"><Bolt className="size-3.5" /> Động lượng</span></TableHead>
-                    <TableHead className="hidden text-center text-xs font-extrabold uppercase tracking-[0.12em] text-cyan-300 xl:table-cell"><span className="inline-flex items-center gap-1"><CircleDollarSign className="size-3.5" /> Dòng tiền</span></TableHead>
-                    <TableHead className="hidden text-center text-xs font-extrabold uppercase tracking-[0.12em] text-emerald-300 xl:table-cell"><span className="inline-flex items-center gap-1"><Layers3 className="size-3.5" /> Cơ bản</span></TableHead>
-                    <TableHead className="min-w-40 px-4 text-right text-xs font-extrabold uppercase tracking-[0.12em] text-brand">Rating</TableHead>
+                    <TableHead className="sticky left-0 z-30 h-16 min-w-80 bg-[#05090f] px-4 text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"># · Cổ phiếu / Ngành</TableHead>
+                    <TableHead className="min-w-28 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("price")} /></TableHead>
+                    <TableHead className="min-w-28 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-emerald-300"><MetricLabel definition={overviewField("kfsp_canslim_score")} /></TableHead>
+                    <TableHead className="min-w-24 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-amber-300"><MetricLabel definition={overviewField("kfsp_score_4m")} /></TableHead>
+                    <TableHead className="min-w-32 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-ref"><MetricLabel definition={overviewField("kfsp_price_potential")} /></TableHead>
+                    <TableHead className="min-w-36 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("average_volume_50_sessions")} /></TableHead>
+                    <TableHead className="min-w-32 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("market_cap_billion")} /></TableHead>
+                    <TableHead className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-cyan-300"><MetricLabel definition={overviewField("rs_short")} /></TableHead>
+                    <TableHead className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-violet-300"><MetricLabel definition={overviewField("rs_medium")} /></TableHead>
+                    <TableHead className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-cyan-200"><MetricLabel definition={overviewField("rsi_14")} /></TableHead>
+                    <TableHead className="min-w-28 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("weekly_change_pct")} /></TableHead>
+                    <TableHead className="min-w-28 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("monthly_change_pct")} /></TableHead>
+                    <TableHead className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("beta")} /></TableHead>
+                    <TableHead className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("pe_ttm")} /></TableHead>
+                    <TableHead className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2"><MetricLabel definition={overviewField("pb_ttm")} /></TableHead>
+                    <TableHead className="min-w-40 px-4 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-brand">Rating tổng hợp</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -445,27 +595,35 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
                       }}
                       className="group cursor-pointer border-white/[0.065] bg-[#07101a]/35 outline-none transition-all hover:bg-cyan-300/[0.035] hover:shadow-[inset_3px_0_0_rgba(103,232,249,.7),0_0_24px_-16px_rgba(103,232,249,.7)] focus-visible:bg-cyan-300/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50"
                     >
-                      <TableCell className="px-4 py-3.5">
+                      <TableCell className="sticky left-0 z-10 bg-[#07101a] px-4 py-3.5 group-hover:bg-[#071720]">
                         <RatingTooltip row={row}>
-                          <div className="flex min-w-56 items-center gap-3">
+                          <div className="flex min-w-72 items-center gap-3">
                             <span className="flex h-8 w-9 items-center justify-center rounded-md border border-white/[0.07] bg-white/[0.025] font-mono text-xs font-bold text-muted">{String(index + 1).padStart(2, "0")}</span>
                             <StockLogo symbol={row.ticker} size={38} className="rounded-full group-hover:shadow-[0_0_20px_-5px_rgba(103,232,249,.75)]" />
-                            <div className="min-w-0"><div className="text-base font-extrabold text-white group-hover:text-cyan-200">{row.ticker}</div><div className="mt-0.5 max-w-40 truncate text-xs font-medium text-muted-2 2xl:max-w-56">{row.companyName} · {row.sector}</div></div>
+                            <div className="min-w-0"><div className="flex items-center gap-2 text-base font-extrabold text-white group-hover:text-cyan-200">{row.ticker}{row.isTop100 && <Crown className="size-3.5 text-amber-300" />}</div><div className="mt-0.5 max-w-48 truncate text-xs font-medium text-muted-2">{row.companyName}</div><div className="mt-0.5 text-[11px] font-bold uppercase tracking-wide text-cyan-300/75">{row.sector}</div></div>
                           </div>
                         </RatingTooltip>
                       </TableCell>
                       <TableCell className="text-right"><div className="font-mono text-base font-black text-white">{formatPrice(row.price)}</div><div className={cn("mt-1 font-mono text-xs font-extrabold", (row.changePercent ?? 0) >= 0 ? "text-up" : "text-down")}>{formatPercent(row.changePercent)}</div></TableCell>
-                      <TableCell className="hidden text-right font-mono text-sm font-semibold text-muted-2 md:table-cell">{compactVolume(row.volume)}</TableCell>
-                      <TableCell className="hidden text-center lg:table-cell" onClick={(event) => event.stopPropagation()}><ScorePill value={row.scoreComponents.technical} tone="amber" label="Kỹ thuật" /></TableCell>
-                      <TableCell className="hidden text-center lg:table-cell" onClick={(event) => event.stopPropagation()}><ScorePill value={row.scoreComponents.momentum} tone="violet" label="Động lượng" /></TableCell>
-                      <TableCell className="hidden text-center xl:table-cell" onClick={(event) => event.stopPropagation()}><ScorePill value={row.scoreComponents.moneyFlow} tone="cyan" label="Dòng tiền" /></TableCell>
-                      <TableCell className="hidden text-center xl:table-cell" onClick={(event) => event.stopPropagation()}><ScorePill value={row.scoreComponents.fundamental} tone="emerald" label="Cơ bản" /></TableCell>
+                      <TableCell className="text-center"><ScorePill value={row.canslimScore} tone="emerald" label="Điểm CANSLIM" description={overviewField("kfsp_canslim_score").description} /></TableCell>
+                      <TableCell className="text-center"><ScorePill value={row.score4m} tone="amber" label="Điểm 4M" description={overviewField("kfsp_score_4m").description} /></TableCell>
+                      <TableCell className="text-center"><Badge variant="outline" className={cn("border-white/10 bg-white/[0.03] font-bold", row.pricePotential?.startsWith("Tăng") ? "text-up" : row.pricePotential?.startsWith("Giảm") ? "text-down" : "text-ref")}>{row.pricePotential || "—"}</Badge></TableCell>
+                      <TableCell className="text-right font-mono text-sm font-semibold text-muted-2">{compactVolume(row.volume)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm font-semibold text-muted-2">{row.marketCapBillion == null ? "—" : formatNumber(row.marketCapBillion)}</TableCell>
+                      <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.rsShort, overviewField("rs_short")))}>{formatNumber(row.rsShort)}</TableCell>
+                      <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.rsMedium, overviewField("rs_medium")))}>{formatNumber(row.rsMedium)}</TableCell>
+                      <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.rsi14, overviewField("rsi_14")))}>{formatNumber(row.rsi14)}</TableCell>
+                      <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.weeklyChangePercent, overviewField("weekly_change_pct")))}>{formatPercent(row.weeklyChangePercent)}</TableCell>
+                      <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.monthlyChangePercent, overviewField("monthly_change_pct")))}>{formatPercent(row.monthlyChangePercent)}</TableCell>
+                      <TableCell className="text-center font-mono text-sm font-semibold text-white">{formatNumber(row.beta)}</TableCell>
+                      <TableCell className="text-center font-mono text-sm font-semibold text-white">{formatNumber(row.peTtm)}</TableCell>
+                      <TableCell className="text-center font-mono text-sm font-semibold text-white">{formatNumber(row.pbTtm)}</TableCell>
                       <TableCell className="px-4">
                         <div className="flex items-center justify-end gap-3"><div className="hidden w-20 sm:block"><AnimatedProgressBar value={row.ratingScore} color={row.ratingScore >= 80 ? "#22c98a" : row.ratingScore >= 65 ? "#e2b93b" : "#ff4757"} /></div><strong className={cn("flex size-11 items-center justify-center rounded-lg border font-mono text-lg", row.ratingScore >= 80 ? "border-up/35 bg-up/10 text-up" : row.ratingScore >= 65 ? "border-ref/35 bg-ref/10 text-ref" : "border-down/35 bg-down/10 text-down")}>{row.ratingScore}</strong><ArrowRight className="size-4 text-muted transition-transform group-hover:translate-x-1 group-hover:text-cyan-300" /></div>
                       </TableCell>
                     </TableRow>
                   ))}
-                  {!filteredRatings.length && <TableRow><TableCell colSpan={8} className="h-32 text-center text-sm text-muted-2">Không có mã phù hợp với bộ lọc.</TableCell></TableRow>}
+                  {!filteredRatings.length && <TableRow><TableCell colSpan={16} className="h-32 text-center text-sm text-muted-2">Không có mã phù hợp với bộ lọc.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </CardContent>
