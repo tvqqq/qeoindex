@@ -39,9 +39,12 @@ Missing upstream fields remain visibly unavailable. The public page does not fab
 
 Canonical table: `public.insights_stock_ratings`.
 
-Schema migration: `20260822084500_insights_stock_ratings.sql`.
+Schema migrations:
 
-Important fields include:
+- `20260822084500_insights_stock_ratings.sql`
+- `20260822090000_limit_insights_rating_public_columns.sql`
+
+Important normalized public fields include:
 
 - `as_of_date`, `ticker`, `sector`, `exchange`;
 - `price`, `price_change_pct`;
@@ -49,7 +52,9 @@ Important fields include:
 - `score_4m`, `canslim_score`;
 - `stock_rs_score`, `sector_rs_score`;
 - `stock_rrg_state`, `sector_rrg_state`;
-- `source`, `source_url`, `raw_payload`, `fetched_at`.
+- `source`, `fetched_at`.
+
+The table also retains `source_url` and `raw_payload` for server-side ingestion/debugging, but those columns are **not granted to `anon` or `authenticated`**. Public roles receive a column-level SELECT allowlist only for the normalized homepage fields.
 
 The page reads only the newest available `as_of_date`, sorted by composite score. When no snapshot exists, it shows an explicit pipeline-pending state instead of demo/fake scores.
 
@@ -72,10 +77,10 @@ The third-party rating integration is intentionally separated from the homepage 
 2. validate ticker and numeric score ranges before persistence;
 3. normalize the source into the `insights_stock_ratings` columns;
 4. upsert idempotently on `(as_of_date, ticker, source)`;
-5. retain the normalized source URL/raw payload only when appropriate for debugging/evidence;
+5. retain source URL/raw payload only when appropriate for private debugging/evidence;
 6. invalidate the `insights-ratings` UI cache after a successful batch.
 
-Write access is **service-role/server job only**. `anon` and `authenticated` receive `SELECT` only; neither browser role receives INSERT/UPDATE/DELETE grants.
+Write access is **service-role/server job only**. `anon` and `authenticated` receive SELECT only on the normalized public columns; neither browser role receives INSERT/UPDATE/DELETE or access to `source_url`/`raw_payload`.
 
 ## Security model
 
@@ -84,7 +89,7 @@ Public access is intentional for this route.
 - `AppAuthGate` bypasses only `/insights` and descendants.
 - `app/research/layout.tsx` remains server-session protected.
 - The rating page read uses `lib/supabase/public-server.ts`, which is built from the publishable/anon key; it never uses `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS.
-- `insights_stock_ratings` has RLS enabled with a public SELECT policy and no public write policy/grant.
+- `insights_stock_ratings` has RLS enabled with a public SELECT policy, column-level public grants, and no public write policy/grant.
 - Existing protected market/research APIs retain their current feature/session checks.
 
 Do not broaden the public exception to `/research/*`, `/api/market/*`, or user-owned tables merely because `/insights` is public.
