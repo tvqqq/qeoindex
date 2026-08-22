@@ -31,17 +31,23 @@ test("Insights read model composes public market, Supabase, and Notion projectio
   assert.doesNotMatch(publicSupabase, /SUPABASE_SERVICE_ROLE_KEY/)
 })
 
-test("rating snapshots are public-read and browser-write denied by schema", () => {
-  const migration = source("supabase/migrations/20260822084500_insights_stock_ratings.sql")
+test("rating snapshots expose normalized public columns but keep ingestion metadata private", () => {
+  const baseMigration = source("supabase/migrations/20260822084500_insights_stock_ratings.sql")
+  const columnMigration = source("supabase/migrations/20260822090000_limit_insights_rating_public_columns.sql")
 
   for (const column of ["composite_score", "score_4m", "canslim_score", "stock_rs_score", "sector_rs_score", "stock_rrg_state", "sector_rrg_state"]) {
-    assert.match(migration, new RegExp(column))
+    assert.match(baseMigration, new RegExp(column))
   }
-  assert.match(migration, /enable row level security/)
-  assert.match(migration, /grant select on public\.insights_stock_ratings to anon/)
-  assert.match(migration, /grant select on public\.insights_stock_ratings to authenticated/)
-  assert.match(migration, /for select[\s\S]*to anon, authenticated[\s\S]*using \(true\)/)
-  assert.doesNotMatch(migration, /grant (insert|update|delete)/)
+  assert.match(baseMigration, /enable row level security/)
+  assert.match(baseMigration, /for select[\s\S]*to anon, authenticated[\s\S]*using \(true\)/)
+  assert.doesNotMatch(baseMigration, /grant (insert|update|delete)/)
+
+  assert.match(columnMigration, /revoke select on public\.insights_stock_ratings from anon/)
+  assert.match(columnMigration, /revoke select on public\.insights_stock_ratings from authenticated/)
+  assert.match(columnMigration, /grant select \([\s\S]*composite_score[\s\S]*fetched_at[\s\S]*\) on public\.insights_stock_ratings to anon/)
+  assert.match(columnMigration, /\) on public\.insights_stock_ratings to authenticated/)
+  assert.doesNotMatch(columnMigration, /source_url/)
+  assert.doesNotMatch(columnMigration, /raw_payload/)
 })
 
 test("Insights UI uses Plus Jakarta ticker typography, shadcn primitives and reduced-motion SmoothUI patterns", () => {
