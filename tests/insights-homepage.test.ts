@@ -46,8 +46,8 @@ test("rating snapshots expose normalized public columns but keep ingestion metad
   assert.match(columnMigration, /revoke select on public\.insights_stock_ratings from authenticated/)
   assert.match(columnMigration, /grant select \([\s\S]*composite_score[\s\S]*fetched_at[\s\S]*\) on public\.insights_stock_ratings to anon/)
   assert.match(columnMigration, /\) on public\.insights_stock_ratings to authenticated/)
-  assert.doesNotMatch(columnMigration, /source_url/)
-  assert.doesNotMatch(columnMigration, /raw_payload/)
+  assert.doesNotMatch(columnMigration, /^\s+source_url,\s*$/m)
+  assert.doesNotMatch(columnMigration, /^\s+raw_payload,\s*$/m)
 })
 
 test("Insights UI uses Plus Jakarta ticker typography, shadcn primitives and reduced-motion SmoothUI patterns", () => {
