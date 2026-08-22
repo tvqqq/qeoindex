@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
 const migrationSql = readFileSync(new URL("../supabase/migrations/20260818_orderbook_snapshots.sql", import.meta.url), "utf8")
-const hardeningSql = readFileSync(new URL("../supabase/migrations/20260821173500_harden_orderbook_rls_and_indexes.sql", import.meta.url), "utf8")
+const hardeningSql = readFileSync(new URL("../supabase/migrations/20260821103811_harden_orderbook_rls_and_indexes.sql", import.meta.url), "utf8")
 const cronMigrationSql = readFileSync(new URL("../supabase/migrations/20260818194500_pg_cron_orderbook_sync.sql", import.meta.url), "utf8")
 
 test("base Supabase migration defines complete stock orderbook table and RLS", () => {

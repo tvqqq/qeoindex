@@ -3,6 +3,7 @@ import { SpeedInsights } from '@vercel/speed-insights/next'
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono, Plus_Jakarta_Sans } from 'next/font/google'
 import { AppAuthGate } from '@/components/auth/app-auth-gate'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { getServerAuthContext } from '@/lib/auth/server'
 import { BRAND } from '@/lib/brand'
 import './globals.css'
@@ -52,7 +53,9 @@ export default async function RootLayout({
   return (
     <html lang="vi" className={`${geistSans.variable} ${geistMono.variable} ${plusJakartaSans.variable} bg-background`}>
       <body className="font-sans antialiased">
-        <AppAuthGate serverSessionPresent={serverSessionAuthenticated}>{children}</AppAuthGate>
+        <TooltipProvider>
+          <AppAuthGate serverSessionPresent={serverSessionAuthenticated}>{children}</AppAuthGate>
+        </TooltipProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
         {process.env.NODE_ENV === 'production' && <SpeedInsights />}
       </body>

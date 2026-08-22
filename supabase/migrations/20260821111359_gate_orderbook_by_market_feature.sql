@@ -17,4 +17,4 @@ create policy "Market feature read access to orderbook snapshots"
     ))
   );
 
-commit;
+commit;;

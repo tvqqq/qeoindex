@@ -49,4 +49,3 @@ CREATE POLICY "Allow service role full access to orderbook snapshots"
   ON public.stock_orderbook_snapshots
   FOR ALL
   USING (auth.role() = 'service_role');
-

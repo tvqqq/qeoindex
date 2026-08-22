@@ -279,4 +279,4 @@ create policy watchlist_items_delete_own on public.watchlist_items
 for delete to authenticated
 using (user_id = (select auth.uid()));
 
-commit;
+commit;;

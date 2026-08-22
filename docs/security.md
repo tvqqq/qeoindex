@@ -59,9 +59,9 @@ User-owned tables are protected by RLS and ownership is derived from `auth.uid()
 
 Relevant migrations:
 
-- `20260821161500_user_auth_rls.sql`
-- `20260821164300_revoke_bootstrap_rpc_execute.sql`
-- `20260821173500_harden_orderbook_rls_and_indexes.sql`
+- `20260821094252_user_auth_rls.sql`
+- `20260821094322_revoke_bootstrap_rpc_execute.sql`
+- `20260821103811_harden_orderbook_rls_and_indexes.sql`
 
 The 2026-08-21 database audit also added a covering `(watchlist_id, user_id)` index for the composite ownership foreign key.
 

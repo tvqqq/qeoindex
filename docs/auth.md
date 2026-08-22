@@ -54,9 +54,9 @@ This prevents an unauthenticated client from bypassing QeoIndex API gates by que
 
 The following auth/security migrations have been applied to the production `qeoindex` Supabase project:
 
-1. `20260821161500_user_auth_rls.sql`
-2. `20260821164300_revoke_bootstrap_rpc_execute.sql`
-3. `20260821173500_harden_orderbook_rls_and_indexes.sql`
+1. `20260821094252_user_auth_rls.sql`
+2. `20260821094322_revoke_bootstrap_rpc_execute.sql`
+3. `20260821103811_harden_orderbook_rls_and_indexes.sql`
 
 After the third migration, Supabase database security/performance warnings related to the orderbook RLS and the composite watchlist foreign key were cleared. Newly created indexes may still appear as `unused_index` INFO until traffic exercises them; do not remove them solely on that early signal.
 

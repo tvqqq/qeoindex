@@ -10,10 +10,24 @@
   --color-panel: #0b0f13;
   --color-panel-2: #0f1418;
   --color-cell: #080c0f;
+  --color-card: #0b0f13;
+  --color-card-foreground: #e1e7ec;
+  --color-popover: #090e17;
+  --color-popover-foreground: #e1e7ec;
   --color-border: #161e23;
   --color-border-strong: #243038;
   --color-muted: #62727d;
   --color-muted-2: #8a9ba7;
+  --color-muted-foreground: #8a9ba7;
+  --color-input: #243038;
+  --color-ring: #22c98a;
+  --color-primary: #22c98a;
+  --color-primary-foreground: #04100c;
+  --color-secondary: #182127;
+  --color-secondary-foreground: #e1e7ec;
+  --color-accent: #182127;
+  --color-accent-foreground: #e1e7ec;
+  --color-destructive: #ff4757;
 
   --color-up: #22c98a;
   --color-up-dim: #0f3b2c;

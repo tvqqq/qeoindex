@@ -42,10 +42,11 @@ Important files:
 
 Applied production security migrations:
 
-1. `20260821161500_user_auth_rls.sql`
-2. `20260821164300_revoke_bootstrap_rpc_execute.sql`
-3. `20260821173500_harden_orderbook_rls_and_indexes.sql`
-4. `20260821175200_gate_orderbook_by_market_feature.sql`
+1. `20260821094252_user_auth_rls.sql`
+2. `20260821094322_revoke_bootstrap_rpc_execute.sql`
+3. `20260821103811_harden_orderbook_rls_and_indexes.sql`
+4. `20260821111359_gate_orderbook_by_market_feature.sql`
+5. `20260822092848_require_auth_for_insights_stock_ratings.sql`
 
 `profiles`, `user_preferences`, `user_features`, `watchlists`, and `watchlist_items` use RLS ownership via `auth.uid()`. `user_features` is read-only for normal users. `stock_orderbook_snapshots` no longer allows anonymous direct Supabase reads; authenticated direct SELECT is additionally gated by the user's enabled `market_board` entitlement, while trusted ingestion uses the service role.
 
@@ -139,6 +140,12 @@ See `docs/market-board.md` and `docs/perf-market-board-state-buffer.md` for the 
 - Source-contract tests are not a substitute for real browser visual QA.
 
 ## Scanner and research
+
+### Authenticated Insights homepage
+
+- `/insights` is available to every signed-in user, without a separate feature entitlement. Anonymous visitors remain on the login screen.
+- Supabase `insights_stock_ratings` is read-only for `authenticated` through RLS; `anon` has no grant, and only trusted service-role cron ingestion may write. The UI clearly labels its preview rows until the first published daily snapshot exists.
+- `/research/*`, the market board, and all operational/write APIs retain their existing auth/feature gates. See `docs/insights-homepage.md` for the rating ingestion contract.
 
 - `scannerHistoryPolicy` remains canonical for runner/persistence/health:
   - fewer than 60 completed Daily bars: reject;

@@ -20,6 +20,15 @@ import { BRAND } from "@/lib/brand"
 
 const INSIGHTS_ITEMS = [
   {
+    label: "Tổng quan Insights",
+    href: "/insights",
+    icon: Sparkles,
+    badge: "SIGNED IN",
+    badgeColor: "bg-cyan-500/15 border-cyan-500/30 text-cyan-300",
+    iconBg: "bg-emerald-500/10 border-emerald-500/25 text-emerald-400",
+    description: "VNIndex, rating score và research pulse",
+  },
+  {
     label: "Quét Wyckoff",
     href: "/research/scanner",
     icon: Radar,
@@ -92,7 +101,7 @@ export function TopNav() {
   }
 
   const isBoardActive = pathname === "/"
-  const isInsightsActive = pathname.startsWith("/research")
+  const isInsightsActive = pathname === "/insights" || pathname.startsWith("/research")
 
   const handleMouseEnter = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)

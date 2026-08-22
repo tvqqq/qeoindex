@@ -20,3 +20,4 @@ create index if not exists watchlist_items_watchlist_owner_idx
   on public.watchlist_items (watchlist_id, user_id);
 
 commit;
+;
