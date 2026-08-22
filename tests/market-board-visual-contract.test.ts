@@ -10,6 +10,7 @@ const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "ut
 const perfCssSource = readFileSync(new URL("../app/market-board-performance.module.css", import.meta.url), "utf8")
 const cssSource = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")
 const intradayRouteSource = readFileSync(new URL("../app/api/market/intraday/route.ts", import.meta.url), "utf8")
+const boardTransitionSource = readFileSync(new URL("../components/smoothui/market-board-transition/index.tsx", import.meta.url), "utf8")
 
 function boardColumnsAt(width: number) {
   if (width >= 1280) return 6
@@ -115,6 +116,22 @@ test("dense board does not force one permanent GPU layer per stock row", () => {
   assert.doesNotMatch(cssSource, /\.board-stock-row\s*\{[^}]*translateZ\(0\)/)
   assert.match(perfCssSource, /contain: layout style/)
   assert.match(perfCssSource, /backdrop-filter: none !important/)
+})
+
+test("SmoothUI motion stays coarse-grained and idle during realtime quote updates", () => {
+  assert.match(pageSource, /MarketBoardTransition/)
+  assert.match(boardTransitionSource, /LazyMotion/)
+  assert.match(boardTransitionSource, /domAnimation/)
+  assert.match(boardTransitionSource, /useReducedMotion/)
+  assert.match(boardTransitionSource, /duration: 0\.22/)
+  assert.match(boardTransitionSource, /translate3d\(0, 6px, 0\)/)
+  assert.doesNotMatch(boardTransitionSource, /AnimatePresence|layoutId|\blayout=/)
+  assert.doesNotMatch(boardTransitionSource, /filter:|blur\(/)
+  assert.doesNotMatch(boardTransitionSource, /will-change\s*:/)
+  assert.doesNotMatch(stockSource, /from "motion\/react"/)
+  assert.match(perfCssSource, /\(hover: hover\) and \(pointer: fine\) and \(prefers-reduced-motion: no-preference\)/)
+  assert.match(perfCssSource, /\.performanceSurface main section:hover[\s\S]*translate3d\(0, -2px, 0\)/)
+  assert.doesNotMatch(perfCssSource, /will-change\s*:/)
 })
 
 test("sparklines ignore the transient live endpoint between 5m history changes", () => {
