@@ -2,6 +2,7 @@ import { LandingLogin } from "@/components/auth/landing-login"
 import { LiveMarketBoardV2, type BoardUniverseStock, type IndexQuote } from "@/components/live-market-board-v2"
 import { OrderBookProvider } from "@/components/orderbook/orderbook-context"
 import { OrderBookManager } from "@/components/orderbook/orderbook-manager"
+import MarketBoardTransition from "@/components/smoothui/market-board-transition"
 import { TopNav } from "@/components/top-nav"
 import { getServerAuthContext } from "@/lib/auth/server"
 import { sectorForTicker } from "@/lib/market-sectors"
@@ -144,12 +145,14 @@ export default async function Page() {
       <div data-market-board className={`${styles.performanceSurface} flex h-screen flex-col overflow-hidden bg-background`}>
         <TopNav />
         <main className="min-h-0 flex-1">
-          <LiveMarketBoardV2
-            universe={universe}
-            initialQuotes={initialQuotes}
-            initialHistories={initialHistories}
-            isSessionOpen={isSessionOpen}
-          />
+          <MarketBoardTransition className="h-full min-h-0">
+            <LiveMarketBoardV2
+              universe={universe}
+              initialQuotes={initialQuotes}
+              initialHistories={initialHistories}
+              isSessionOpen={isSessionOpen}
+            />
+          </MarketBoardTransition>
         </main>
         <OrderBookManager />
       </div>
