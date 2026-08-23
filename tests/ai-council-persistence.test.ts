@@ -100,3 +100,62 @@ test("Council v2 keeps deterministic evidence hashes and exposes bounded adaptiv
   assert.match(dashboard, /Historical audit trail/)
   assert.match(dashboard, /Immutable revisions · close-to-close outcomes/)
 })
+
+test("P4 persists advisory LLM debates without granting signal authority", () => {
+  const migration = source("supabase/migrations/20260823115556_ai_council_llm_debates.sql")
+
+  assert.match(migration, /create table if not exists public\.ai_council_llm_debates/)
+  assert.match(migration, /run_id uuid not null unique references public\.ai_council_runs/)
+  assert.match(migration, /final_authority text not null default 'deterministic'/)
+  assert.match(migration, /llm_advisory_only boolean not null default true/)
+  assert.match(migration, /no hidden chain-of-thought is persisted/i)
+  assert.match(migration, /grant select on table public\.ai_council_llm_debates to authenticated/)
+  assert.doesNotMatch(migration, /grant (?:insert|update|delete)[^;]*ai_council_llm_debates[^;]*to authenticated/i)
+})
+
+test("P4 event selector caps spend and escalates only material deterministic events", () => {
+  const llm = source("lib/ai-council-llm.ts")
+
+  for (const reason of ["explicit_watchlist", "signal_changed", "high_disagreement", "breakout_watch", "risk_conflict"]) {
+    assert.match(llm, new RegExp(`"${reason}"`))
+  }
+  assert.match(llm, /DEFAULT_MAX_TICKERS = 3/)
+  assert.match(llm, /HARD_MAX_TICKERS = 6/)
+  assert.match(llm, /AI_COUNCIL_LLM_MAX_TICKERS/)
+  assert.match(llm, /stock\.signal === "BUY_ON_CONFIRMATION"/)
+  assert.match(llm, /previousSignal && previousSignal !== stock\.signal/)
+  assert.match(llm, /stock\.riskStatus === "veto"/)
+})
+
+test("P4 uses OpenAI Responses Structured Outputs with no tools and fails closed when unconfigured", () => {
+  const llm = source("lib/ai-council-llm.ts")
+  const env = source(".env.example")
+
+  assert.match(llm, /https:\/\/api\.openai\.com\/v1\/responses/)
+  assert.match(llm, /type: "json_schema"/)
+  assert.match(llm, /strict: true/)
+  assert.match(llm, /store: false/)
+  assert.match(llm, /tools: \[\]/)
+  assert.match(llm, /OPENAI_API_KEY is not configured/)
+  assert.match(llm, /deterministic QeoIndex policy remains the final decision authority/i)
+  assert.match(llm, /Do not reveal chain-of-thought/i)
+  assert.match(env, /OPENAI_API_KEY=/)
+  assert.match(env, /AI_COUNCIL_LLM_MODEL=gpt-5-mini/)
+})
+
+test("P4 debate cron is isolated after deterministic Council and exposes an authenticated audit page", () => {
+  const route = source("app/api/ai-council/debate-daily/route.ts")
+  const page = source("app/insights/ai-council/debates/page.tsx")
+  const councilPage = source("app/insights/ai-council/page.tsx")
+  const vercel = JSON.parse(source("vercel.json")) as { crons: Array<{ path: string; schedule: string }> }
+  const debateCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/debate-daily")
+
+  assert.match(route, /isMachineRequestAuthorized/)
+  assert.match(route, /runSelectedAiCouncilLlmDebates/)
+  assert.match(route, /finalAuthority: "deterministic"/)
+  assert.equal(debateCron?.schedule, "25 10 * * 1-5")
+  assert.match(page, /getServerAuthContext/)
+  assert.match(page, /LLM Debate Lab/)
+  assert.match(page, /DETERMINISTIC/)
+  assert.match(councilPage, /\/insights\/ai-council\/debates/)
+})

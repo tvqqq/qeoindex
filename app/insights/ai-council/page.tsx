@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { BarChart3 } from "lucide-react"
+import { BarChart3, Swords } from "lucide-react"
 
 import { LandingLogin } from "@/components/auth/landing-login"
 import { AiCouncilDashboard } from "@/components/insights/ai-council-dashboard"
@@ -32,13 +32,22 @@ export default async function AiCouncilPage({
   return (
     <>
       <AiCouncilDashboard data={runtime.data} initialTicker={initialTicker} />
-      <Link
-        href="/insights/ai-council/performance"
-        className="fixed bottom-5 right-5 z-50 inline-flex items-center gap-2 rounded-xl border border-violet-400/25 bg-[#0b1017]/95 px-3.5 py-2.5 text-[10px] font-black text-violet-200 shadow-2xl backdrop-blur hover:border-violet-300/45 hover:text-white"
-      >
-        <BarChart3 className="size-4" />
-        Performance Lab
-      </Link>
+      <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2">
+        <Link
+          href="/insights/ai-council/debates"
+          className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/25 bg-[#0b1017]/95 px-3.5 py-2.5 text-[10px] font-black text-cyan-200 shadow-2xl backdrop-blur hover:border-cyan-300/45 hover:text-white"
+        >
+          <Swords className="size-4" />
+          LLM Debate Lab
+        </Link>
+        <Link
+          href="/insights/ai-council/performance"
+          className="inline-flex items-center gap-2 rounded-xl border border-violet-400/25 bg-[#0b1017]/95 px-3.5 py-2.5 text-[10px] font-black text-violet-200 shadow-2xl backdrop-blur hover:border-violet-300/45 hover:text-white"
+        >
+          <BarChart3 className="size-4" />
+          Performance Lab
+        </Link>
+      </div>
     </>
   )
 }
