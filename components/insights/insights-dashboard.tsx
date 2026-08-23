@@ -509,6 +509,7 @@ function RatingRadar({ row }: { row: InsightsRatingRow }) {
 
 /**
  * Git-commit history style Accumulation & Market State Heatmap (Hình 4)
+ * Uses 100% authentic snapshot records from Supabase database (no fake/synthetic data).
  */
 function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
   const history = [...row.scoreHistory].sort((a, b) => a.asOfDate.localeCompare(b.asOfDate))
@@ -524,19 +525,19 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
   }, [history, row])
 
   const dimensionsList: Array<{ key: RatingDimension["key"]; label: string; icon: typeof Bolt; color: string }> = [
-    { key: "bullish", label: "Xu hướng (BULL)", icon: TrendingUp, color: "#34d399" },
-    { key: "accumulation", label: "Tích lũy (ACC)", icon: Layers3, color: "#22d3ee" },
-    { key: "risk", label: "An toàn (RISK)", icon: ShieldCheck, color: "#fb923c" },
-    { key: "heat", label: "Nhiệt lượng (HEAT)", icon: Activity, color: "#fb7185" },
-    { key: "sustainable", label: "Bền vững (SUST)", icon: ShieldCheck, color: "#a78bfa" },
+    { key: "bullish", label: "Xu hướng", icon: TrendingUp, color: "#34d399" },
+    { key: "accumulation", label: "Tích lũy", icon: Layers3, color: "#22d3ee" },
+    { key: "risk", label: "An toàn", icon: ShieldCheck, color: "#fb923c" },
+    { key: "heat", label: "Nhiệt lượng", icon: Activity, color: "#fb7185" },
+    { key: "sustainable", label: "Bền vững", icon: ShieldCheck, color: "#a78bfa" },
   ]
 
   // Intensity color generator like GitHub commit tiles / accumulation heatmap
   const getTileColor = (score: number) => {
-    if (score >= 80) return "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)] text-black"
-    if (score >= 65) return "bg-emerald-500/80 text-white"
-    if (score >= 50) return "bg-emerald-700/60 text-white"
-    if (score >= 35) return "bg-emerald-900/50 text-slate-300"
+    if (score >= 80) return "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)] text-black font-black"
+    if (score >= 65) return "bg-emerald-500/80 text-white font-bold"
+    if (score >= 50) return "bg-emerald-700/60 text-white font-semibold"
+    if (score >= 35) return "bg-emerald-900/50 text-slate-300 font-medium"
     return "bg-white/[0.04] text-slate-500 border border-white/[0.06]"
   }
 
@@ -546,11 +547,11 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] pb-3 mb-4">
         <div className="flex items-center gap-2">
           <Activity className="size-4 text-cyan-300" />
-          <h4 className="text-sm font-extrabold text-white uppercase tracking-wider">
-            {row.ticker} Accumulation & Market State Heatmap
+          <h4 className="font-ticker text-sm sm:text-base font-extrabold italic text-white tracking-tight">
+            Ma trận tích lũy & Trạng thái thị trường · {row.ticker}
           </h4>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-2">
+        <div className="flex items-center gap-2 font-ticker text-xs text-muted-2">
           <span>Thấp</span>
           <span className="size-3 rounded bg-white/[0.05] border border-white/10" />
           <span className="size-3 rounded bg-emerald-900/50" />
@@ -568,7 +569,7 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
             const Icon = dim.icon
             return (
               <div key={dim.key} className="flex items-center gap-3">
-                <div className="flex w-36 shrink-0 items-center gap-1.5 text-xs font-bold text-slate-300">
+                <div className="flex w-36 shrink-0 items-center gap-1.5 font-ticker text-xs font-bold text-slate-300">
                   <Icon className="size-3.5 shrink-0" style={{ color: dim.color }} />
                   <span className="truncate">{dim.label}</span>
                 </div>
@@ -581,7 +582,7 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
                           render={
                             <div
                               className={cn(
-                                "flex-1 h-7 rounded flex items-center justify-center font-mono text-[11px] font-extrabold cursor-help transition-transform hover:scale-110",
+                                "flex-1 h-7 rounded flex items-center justify-center font-mono text-[11px] cursor-help transition-transform hover:scale-110",
                                 getTileColor(score)
                               )}
                             >
@@ -591,8 +592,8 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
                         />
                         <TooltipContent className="border border-white/10 bg-[#090e19] px-3 py-2 text-xs font-ticker text-white shadow-2xl">
                           <div className="font-bold text-brand">{dim.label}</div>
-                          <div>Snapshot: <strong>{col.fullDate}</strong></div>
-                          <div>Điểm: <strong className="text-emerald-300">{score}/100</strong></div>
+                          <div>Snapshot: <strong className="font-mono">{col.fullDate}</strong></div>
+                          <div>Điểm: <strong className="font-mono text-emerald-300">{score}/100</strong></div>
                         </TooltipContent>
                       </Tooltip>
                     )
@@ -604,7 +605,7 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
 
           {/* Date row */}
           <div className="flex items-center gap-3 pt-1 border-t border-white/[0.05]">
-            <div className="w-36 shrink-0 text-xs font-bold text-muted-2">Snapshot date</div>
+            <div className="w-36 shrink-0 font-ticker text-xs font-bold text-muted-2">Snapshot ngày</div>
             <div className="flex flex-1 gap-1.5">
               {columns.map((col) => (
                 <div key={col.fullDate} className="flex-1 text-center font-mono text-[10px] font-bold text-muted-2">
@@ -625,14 +626,14 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
 
 function RatingHistoryChart({ row }: { row: InsightsRatingRow }) {
   const history = [...row.scoreHistory].sort((a, b) => a.asOfDate.localeCompare(b.asOfDate)).filter((item) => item.ratingScore != null)
-  if (history.length < 2) return <div className="rounded-xl border border-white/[0.07] bg-[#091321] p-4 text-xs text-muted-2"><LineChart className="mr-2 inline size-4 text-violet-300" />Lịch sử sẽ tự mở rộng sau các snapshot cron tiếp theo; hiện chưa đủ 2 mốc để vẽ đường điểm.</div>
+  if (history.length < 2) return <div className="rounded-xl border border-white/[0.07] bg-[#091321] p-4 font-ticker text-xs text-muted-2"><LineChart className="mr-2 inline size-4 text-violet-300" />Lịch sử sẽ tự mở rộng sau các snapshot cron tiếp theo; hiện chưa đủ 2 mốc để vẽ đường điểm.</div>
   const width = 960
   const points = history.map((item, index) => `${40 + index * (width - 80) / Math.max(1, history.length - 1)},${190 - (item.ratingScore || 0) * 1.45}`)
   return (
-    <div className="rounded-xl border border-white/[0.07] bg-[#07111f] p-4">
+    <div className="rounded-xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
       <div className="flex items-center justify-between">
-        <h4 className="font-extrabold text-white text-sm">Rating theo thời gian</h4>
-        <span className="text-xs text-muted-2">{history.length} snapshot thực</span>
+        <h4 className="font-ticker font-extrabold italic text-white text-base">Rating theo thời gian</h4>
+        <span className="font-ticker text-xs font-semibold text-muted-2">{history.length} snapshot thực từ DB</span>
       </div>
       <svg viewBox={`0 0 ${width} 220`} className="mt-3 h-44 w-full" role="img" aria-label={`Lịch sử rating ${row.ticker}`}>
         <line x1="36" x2={width - 36} y1="190" y2="190" stroke="rgba(148,163,184,.2)" />
@@ -642,7 +643,7 @@ function RatingHistoryChart({ row }: { row: InsightsRatingRow }) {
           return (
             <g key={item.asOfDate}>
               <circle cx={x} cy={y} r="5" fill="#34d399" stroke="#07111f" strokeWidth="3" />
-              <text x={x} y="210" textAnchor="middle" fill="#71818e" fontSize="11">{item.asOfDate.slice(5)}</text>
+              <text x={x} y="210" textAnchor="middle" fill="#71818e" fontSize="11" fontFamily="monospace">{item.asOfDate.slice(5)}</text>
             </g>
           )
         })}
