@@ -80,6 +80,7 @@ export async function GET(request: Request) {
         ticker,
         companyName: selectedMetadata?.companyName ?? ticker,
         exchange: selectedMetadata?.exchange ?? "HOSE",
+        sector: selectedMetadata?.sector,
         studies,
         generatedAt: scanner.generatedAt,
       }
