@@ -1,33 +1,5 @@
-import { SignalsApp } from "@/components/research/signals-app"
-import { getSignalUiData } from "@/lib/signal-data"
-import { buildRecommendationPerformance } from "@/lib/signal-performance"
+import { redirect } from "next/navigation"
 
-export const dynamic = "force-dynamic"
-export const revalidate = 0
-
-export default async function SignalsPage() {
-  let recommendations = [] as Awaited<ReturnType<typeof getSignalUiData>>["recommendations"]
-  let events = [] as Awaited<ReturnType<typeof getSignalUiData>>["events"]
-  let readError = ""
-  const notionConfigured = Boolean(process.env.NOTION_API_KEY || process.env.NOTION_TOKEN)
-  if (!notionConfigured) {
-    readError = "Notion chưa được cấu hình cho environment này; không dùng backend dự phòng."
-  } else {
-    try {
-      const data = await getSignalUiData()
-      recommendations = data.recommendations
-      events = data.events
-    } catch (error) {
-      readError = error instanceof Error ? error.message : String(error)
-      console.error("Signals page Notion read failed", error)
-    }
-  }
-  return <SignalsApp
-    recommendations={recommendations}
-    events={events}
-    performance={buildRecommendationPerformance(recommendations)}
-    readError={readError}
-    monitorReady={Boolean(process.env.DNSE_API_KEY && process.env.DNSE_API_SECRET)}
-    cronSecretReady={Boolean(process.env.CRON_SECRET)}
-  />
+export default function SignalsPage() {
+  redirect("/research?view=signals")
 }
