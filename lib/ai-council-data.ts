@@ -1,21 +1,58 @@
 import "server-only"
 
+import { createHash } from "node:crypto"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import {
   buildCouncilStock,
   type AiCouncilStock,
   type CouncilRatingEvidence,
+  type CouncilRiskStance,
+  type CouncilSignal,
   type CouncilTimeframe,
   type CouncilWyckoffEvidence,
 } from "@/lib/ai-council-model"
+
+export type AiCouncilStockSnapshot = AiCouncilStock & {
+  evidenceHash: string
+}
+
+export interface AiCouncilOutcomeHistory {
+  status: "pending" | "partial" | "matured" | "unavailable"
+  sessionsObserved: number
+  evaluatedThroughDate: string | null
+  return1dPct: number | null
+  return5dPct: number | null
+  return20dPct: number | null
+  mfe20dPct: number | null
+  mae20dPct: number | null
+  directionCorrect5d: boolean | null
+}
+
+export interface AiCouncilHistoryEntry {
+  id: string
+  ticker: string
+  asOfDate: string
+  signal: CouncilSignal
+  councilScore: number
+  confidence: number
+  consensus: number
+  riskStatus: CouncilRiskStance
+  price: number | null
+  policyVersion: string
+  evidenceHash: string
+  createdAt: string
+  outcome: AiCouncilOutcomeHistory | null
+}
 
 export interface AiCouncilData {
   generatedAt: string
   ratingDate: string | null
   mode: "evidence-ensemble-v1"
   message: string
-  stocks: AiCouncilStock[]
+  historyMessage: string
+  stocks: AiCouncilStockSnapshot[]
+  history: AiCouncilHistoryEntry[]
 }
 
 type RatingRow = {
@@ -63,6 +100,36 @@ type WyckoffRow = {
   technical: unknown
   evidence: unknown
 }
+
+type HistoryRunRow = {
+  id: string
+  ticker: string
+  as_of_date: string
+  signal: string
+  council_score: number
+  confidence: number
+  consensus: number
+  risk_status: string
+  price: number | null
+  policy_version: string
+  evidence_hash: string
+  created_at: string
+}
+
+type HistoryOutcomeRow = {
+  run_id: string
+  outcome_status: string
+  sessions_observed: number
+  evaluated_through_date: string | null
+  return_1d_pct: number | null
+  return_5d_pct: number | null
+  return_20d_pct: number | null
+  mfe_20d_pct: number | null
+  mae_20d_pct: number | null
+  direction_correct_5d: boolean | null
+}
+
+const TIMEFRAME_ORDER: CouncilTimeframe[] = ["1W", "1D", "4H", "1H"]
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -178,7 +245,111 @@ function normalizeWyckoff(row: WyckoffRow): CouncilWyckoffEvidence | null {
   }
 }
 
-export async function getAiCouncilData(supabase: SupabaseClient): Promise<AiCouncilData> {
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (!value || typeof value !== "object") return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, canonicalize(child)]),
+  )
+}
+
+function buildEvidenceHash(rating: CouncilRatingEvidence, snapshots: CouncilWyckoffEvidence[]) {
+  const orderedSnapshots = [...snapshots].sort((left, right) => {
+    const leftIndex = TIMEFRAME_ORDER.indexOf(left.timeframe)
+    const rightIndex = TIMEFRAME_ORDER.indexOf(right.timeframe)
+    return leftIndex - rightIndex || (left.barClosedAt || "").localeCompare(right.barClosedAt || "")
+  })
+  const payload = JSON.stringify(canonicalize({ rating, snapshots: orderedSnapshots }))
+  return createHash("sha256").update(payload, "utf8").digest("hex")
+}
+
+function isCouncilSignal(value: string): value is CouncilSignal {
+  return value === "BUY" || value === "BUY_ON_CONFIRMATION" || value === "WAIT" || value === "REDUCE" || value === "SELL"
+}
+
+function isCouncilRisk(value: string): value is CouncilRiskStance {
+  return value === "approve" || value === "caution" || value === "veto"
+}
+
+async function loadCouncilHistory(supabase: SupabaseClient, tickers: string[]) {
+  if (!tickers.length) return { history: [] as AiCouncilHistoryEntry[], message: "" }
+
+  const runsResult = await supabase
+    .from("ai_council_runs")
+    .select("id,ticker,as_of_date,signal,council_score,confidence,consensus,risk_status,price,policy_version,evidence_hash,created_at")
+    .in("ticker", tickers)
+    .order("as_of_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(800)
+
+  if (runsResult.error) {
+    return { history: [] as AiCouncilHistoryEntry[], message: `Historical audit trail chưa sẵn sàng: ${runsResult.error.message}` }
+  }
+
+  const runs = (runsResult.data || []) as HistoryRunRow[]
+  const runIds = runs.map((run) => run.id)
+  const outcomeRows: HistoryOutcomeRow[] = []
+
+  for (let offset = 0; offset < runIds.length; offset += 100) {
+    const result = await supabase
+      .from("ai_council_outcomes")
+      .select("run_id,outcome_status,sessions_observed,evaluated_through_date,return_1d_pct,return_5d_pct,return_20d_pct,mfe_20d_pct,mae_20d_pct,direction_correct_5d")
+      .in("run_id", runIds.slice(offset, offset + 100))
+    if (result.error) {
+      return { history: [] as AiCouncilHistoryEntry[], message: `Council outcomes chưa đọc được: ${result.error.message}` }
+    }
+    outcomeRows.push(...((result.data || []) as HistoryOutcomeRow[]))
+  }
+
+  const outcomeByRun = new Map(outcomeRows.map((row) => [row.run_id, row]))
+  const perTicker = new Map<string, number>()
+  const history: AiCouncilHistoryEntry[] = []
+
+  for (const run of runs) {
+    if (!isCouncilSignal(run.signal) || !isCouncilRisk(run.risk_status)) continue
+    const seen = perTicker.get(run.ticker) || 0
+    if (seen >= 8) continue
+    perTicker.set(run.ticker, seen + 1)
+    const outcome = outcomeByRun.get(run.id)
+    history.push({
+      id: run.id,
+      ticker: run.ticker,
+      asOfDate: run.as_of_date,
+      signal: run.signal,
+      councilScore: Number(run.council_score),
+      confidence: Number(run.confidence),
+      consensus: Number(run.consensus),
+      riskStatus: run.risk_status,
+      price: nullableNumber(run.price),
+      policyVersion: run.policy_version,
+      evidenceHash: run.evidence_hash,
+      createdAt: run.created_at,
+      outcome: outcome ? {
+        status: (outcome.outcome_status === "partial" || outcome.outcome_status === "matured" || outcome.outcome_status === "unavailable") ? outcome.outcome_status : "pending",
+        sessionsObserved: Number(outcome.sessions_observed || 0),
+        evaluatedThroughDate: outcome.evaluated_through_date,
+        return1dPct: nullableNumber(outcome.return_1d_pct),
+        return5dPct: nullableNumber(outcome.return_5d_pct),
+        return20dPct: nullableNumber(outcome.return_20d_pct),
+        mfe20dPct: nullableNumber(outcome.mfe_20d_pct),
+        mae20dPct: nullableNumber(outcome.mae_20d_pct),
+        directionCorrect5d: outcome.direction_correct_5d,
+      } : null,
+    })
+  }
+
+  return {
+    history,
+    message: history.length ? "Persisted Council revisions are immutable; forward outcomes update as new published sessions arrive." : "Chưa có persisted Council run; cron sẽ bắt đầu tạo audit trail sau snapshot giao dịch kế tiếp.",
+  }
+}
+
+export async function getAiCouncilData(
+  supabase: SupabaseClient,
+  options: { includeHistory?: boolean } = {},
+): Promise<AiCouncilData> {
   const generatedAt = new Date().toISOString()
   const latest = await supabase
     .from("insights_stock_ratings")
@@ -196,7 +367,9 @@ export async function getAiCouncilData(supabase: SupabaseClient): Promise<AiCoun
       ratingDate: null,
       mode: "evidence-ensemble-v1",
       message: latest.error ? `Không đọc được rating snapshot: ${latest.error.message}` : "Chưa có Top 100 rating snapshot được publish.",
+      historyMessage: "",
       stocks: [],
+      history: [],
     }
   }
 
@@ -217,7 +390,9 @@ export async function getAiCouncilData(supabase: SupabaseClient): Promise<AiCoun
       ratingDate,
       mode: "evidence-ensemble-v1",
       message: `Không đọc được Top 100 evidence: ${ratingsResult.error.message}`,
+      historyMessage: "",
       stocks: [],
+      history: [],
     }
   }
 
@@ -245,14 +420,27 @@ export async function getAiCouncilData(supabase: SupabaseClient): Promise<AiCoun
   }
 
   const stocks = ratings
-    .map((row) => buildCouncilStock(normalizeRating(row), wyckoffByTicker.get(row.ticker) || []))
+    .map((row) => {
+      const rating = normalizeRating(row)
+      const snapshots = wyckoffByTicker.get(row.ticker) || []
+      return {
+        ...buildCouncilStock(rating, snapshots),
+        evidenceHash: buildEvidenceHash(rating, snapshots),
+      }
+    })
     .sort((left, right) => (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER) || right.councilScore - left.councilScore || left.ticker.localeCompare(right.ticker))
+
+  const historyResult = options.includeHistory === false
+    ? { history: [] as AiCouncilHistoryEntry[], message: "" }
+    : await loadCouncilHistory(supabase, tickers)
 
   return {
     generatedAt,
     ratingDate,
     mode: "evidence-ensemble-v1",
     message: `Council V1 dùng independent evidence agents + deterministic Chair trên snapshot ${ratingDate}.${wyckoffMessage}`,
+    historyMessage: historyResult.message,
     stocks,
+    history: historyResult.history,
   }
 }
