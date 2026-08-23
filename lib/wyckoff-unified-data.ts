@@ -45,6 +45,31 @@ function toAnalysis(row: SnapshotRow): WyckoffScanResult {
   }
 }
 
+function buildStudies(
+  selectedRows: SnapshotRow[],
+  seriesRows: Array<{
+    timeframe: WyckoffChartTimeframe
+    bars: OhlcvBar[]
+    provider: string
+    provider_detail: string
+  }>,
+) {
+  const analyses = Object.fromEntries(selectedRows.map((row) => [row.timeframe, toAnalysis(row)])) as Partial<Record<WyckoffChartTimeframe, WyckoffScanResult>>
+  const dailySeries = seriesRows.find((row) => row.timeframe === "1D")
+  const hourlySeries = seriesRows.find((row) => row.timeframe === "1H")
+  if (!dailySeries || !hourlySeries) return null
+
+  return buildWyckoffChartStudies({
+    dailyBars: dailySeries.bars,
+    hourlyBars: hourlySeries.bars,
+    dailyProvider: dailySeries.provider,
+    dailyDetail: dailySeries.provider_detail,
+    hourlyProvider: hourlySeries.provider,
+    hourlyDetail: hourlySeries.provider_detail,
+    analysisOverrides: analyses,
+  })
+}
+
 export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedTicker: string) {
   const { data: latestMembership, error: membershipDateError } = await supabase
     .from("wyckoff_universe_memberships")
@@ -81,20 +106,8 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
   ])
   if (dailyError || selectedError || seriesError || !selectedRows?.length || !seriesRows?.length) return null
 
-  const analyses = Object.fromEntries((selectedRows as SnapshotRow[]).map((row) => [row.timeframe, toAnalysis(row)])) as Partial<Record<WyckoffChartTimeframe, WyckoffScanResult>>
-  const dailySeries = seriesRows.find((row) => row.timeframe === "1D")
-  const hourlySeries = seriesRows.find((row) => row.timeframe === "1H")
-  if (!dailySeries || !hourlySeries) return null
-
-  const studies = buildWyckoffChartStudies({
-    dailyBars: dailySeries.bars as OhlcvBar[],
-    hourlyBars: hourlySeries.bars as OhlcvBar[],
-    dailyProvider: dailySeries.provider,
-    dailyDetail: dailySeries.provider_detail,
-    hourlyProvider: hourlySeries.provider,
-    hourlyDetail: hourlySeries.provider_detail,
-    analysisOverrides: analyses,
-  })
+  const studies = buildStudies(selectedRows as SnapshotRow[], seriesRows as Array<{ timeframe: WyckoffChartTimeframe; bars: OhlcvBar[]; provider: string; provider_detail: string }>)
+  if (!studies) return null
 
   const dailyByTicker = new Map((dailyRows as SnapshotRow[]).map((row) => [row.ticker, row]))
   const stocks: WyckoffListItem[] = memberships.map((membership) => {
@@ -120,6 +133,54 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
     exchange: selectedMetadata?.exchange ?? "HOSE",
     studies,
     stocks,
+    generatedAt: selectedRows[0].published_at as string,
+  }
+}
+
+export async function getUnifiedWyckoffTickerData(supabase: SupabaseClient, requestedTicker: string) {
+  const ticker = requestedTicker.trim().toUpperCase()
+  if (!ticker) return null
+
+  const { data: latestMembership, error: membershipDateError } = await supabase
+    .from("wyckoff_universe_memberships")
+    .select("effective_date")
+    .eq("universe_key", "hose_top100")
+    .eq("active", true)
+    .order("effective_date", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (membershipDateError || !latestMembership?.effective_date) return null
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("wyckoff_universe_memberships")
+    .select("ticker")
+    .eq("universe_key", "hose_top100")
+    .eq("effective_date", latestMembership.effective_date)
+    .eq("active", true)
+    .eq("ticker", ticker)
+    .maybeSingle()
+  if (membershipError || !membership?.ticker) return null
+
+  const [
+    { data: selectedRows, error: selectedError },
+    { data: seriesRows, error: seriesError },
+    companyMetadata,
+  ] = await Promise.all([
+    supabase.from("wyckoff_latest_by_timeframe").select("*").eq("ticker", ticker),
+    supabase.from("wyckoff_chart_series").select("*").eq("ticker", ticker).in("timeframe", ["1H", "1D"]),
+    getWyckoffCompanyMetadata(supabase, [ticker]),
+  ])
+  if (selectedError || seriesError || !selectedRows?.length || !seriesRows?.length) return null
+
+  const studies = buildStudies(selectedRows as SnapshotRow[], seriesRows as Array<{ timeframe: WyckoffChartTimeframe; bars: OhlcvBar[]; provider: string; provider_detail: string }>)
+  if (!studies) return null
+
+  const selectedMetadata = companyMetadata.get(ticker)
+  return {
+    ticker,
+    companyName: selectedMetadata?.companyName ?? ticker,
+    exchange: selectedMetadata?.exchange ?? "HOSE",
+    studies,
     generatedAt: selectedRows[0].published_at as string,
   }
 }
