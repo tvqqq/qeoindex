@@ -12,6 +12,20 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Read `docs/HANDOVER.md` after this file. It is the canonical architecture, source-of-truth, validation, deployment, and troubleshooting guide.
 - Use `docs/market-board.md` for the detailed realtime/EOD market-board data flow.
+- Before any UI/design implementation or review, read `docs/UI_LESSONS_LEARNED.md`. Its UI performance rules are mandatory for all agents.
+
+## Mandatory UI design and performance invariants
+
+- Realtime, chart, canvas, order-book, and dense-table screens are performance-sensitive by default. Stable interaction and low CPU/GPU cost take priority over decorative fidelity.
+- Do not add large persistent `backdrop-filter` / `backdrop-blur-*` surfaces near charts, canvas, realtime boards, or dense tables unless browser profiling demonstrates they are safe.
+- Avoid CSS `filter` stacks such as `drop-shadow(...)`, blur, or brightness on large/frequently repainting UI. Prefer borders, backgrounds, gradients, and small bounded `box-shadow`.
+- Do not move decorative typography/font classes to a page root solely to style a small subset of children. Scope typography to the component that needs it.
+- Do not use `transition-all` in performance-sensitive UI. Transition only the required properties; prefer transform/opacity for motion and honor `prefers-reduced-motion`.
+- Dense/dynamic ticker links must not rely on automatic Next.js viewport prefetch. Use `prefetch={false}` or the project intent-prefetch helper. Review even small new dynamic links when they mount beside a heavy chart.
+- Keep chart/canvas containers dimensionally stable. Do not introduce ancestor layout animation, cosmetic remounts, or overlapping compositor-heavy effects that can force resize/repaint loops.
+- When debugging UI jitter, inspect React renders, layout/style recalculation, paint/compositing/GPU layers, and background navigation/network work. Do not assume the chart library is the cause without comparing the surrounding shell to the last known-good commit.
+- Mockups and shadcn/SmoothUI examples define visual intent, not mandatory rendering primitives. Agents must simplify expensive blur/glow/filter/animation effects when needed to preserve responsiveness.
+- Every UI performance regression fix should add a deterministic guardrail where practical, and material chart/realtime UI changes require a real-browser visual check before release.
 
 ## Git and production deployment invariants
 
