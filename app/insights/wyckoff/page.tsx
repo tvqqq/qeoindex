@@ -1,7 +1,8 @@
 import type { Metadata } from "next"
 
 import { LandingLogin } from "@/components/auth/landing-login"
-import { WyckoffChartDashboard, type WyckoffListItem } from "@/components/insights/wyckoff-chart-dashboard"
+import type { WyckoffListItem } from "@/components/insights/wyckoff-chart-dashboard"
+import { WyckoffInfographicDashboard } from "@/components/insights/wyckoff-infographic-dashboard"
 import { NotionUnavailable } from "@/components/notion-unavailable"
 import { getServerAuthContext } from "@/lib/auth/server"
 import { getCachedDailyHistory, getCachedHourlyHistory, getCachedLongDailyHistory } from "@/lib/request-cache"
@@ -59,7 +60,7 @@ export default async function WyckoffChartPage({
     console.error("[QeoIndex Wyckoff chart] unified read failed; using compatibility fallback", error)
   }
   if (unified) {
-    return <WyckoffChartDashboard {...unified} initialTimeframe={initialTimeframe} dataSource="Supabase unified" />
+    return <WyckoffInfographicDashboard {...unified} initialTimeframe={initialTimeframe} dataSource="Supabase unified" />
   }
 
   let scanner: Awaited<ReturnType<typeof getScannerData>>
@@ -125,7 +126,7 @@ export default async function WyckoffChartPage({
   })
 
   return (
-    <WyckoffChartDashboard
+    <WyckoffInfographicDashboard
       ticker={ticker}
       companyName={selectedMetadata?.companyName ?? ticker}
       exchange={selectedMetadata?.exchange ?? "HOSE"}
