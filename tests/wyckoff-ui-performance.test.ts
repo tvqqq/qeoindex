@@ -23,7 +23,7 @@ test("Wyckoff header keeps company identity and removes the Rating back row", ()
 
 test("Wyckoff watchlist stays ticker-first and groups rows by the market-board sector taxonomy", () => {
   const rowStart = dashboard.indexOf("const WatchlistRow")
-  const rowEnd = dashboard.indexOf("export function WyckoffChartDashboard", rowStart)
+  const rowEnd = dashboard.indexOf("export function WyckoffStockWorkspace", rowStart)
   const rowSource = dashboard.slice(rowStart, rowEnd)
 
   assert.match(dashboard, /BOARD_SECTOR_GROUPS/)
@@ -104,7 +104,7 @@ test("Price Flow is suppressed during ticker commits to avoid simultaneous compo
   assert.match(priceFlow, /const shouldAnimate = animate && !reducedMotion/)
 
   const rowStart = dashboard.indexOf("const WatchlistRow")
-  const rowEnd = dashboard.indexOf("export function WyckoffChartDashboard", rowStart)
+  const rowEnd = dashboard.indexOf("export function WyckoffStockWorkspace", rowStart)
   assert.doesNotMatch(dashboard.slice(rowStart, rowEnd), /PriceFlow/)
 })
 
@@ -136,7 +136,7 @@ test("Wyckoff dashboard avoids large ticker-switch motion ancestors", () => {
   assert.doesNotMatch(dashboard, /LazyMotion|AnimatePresence|motion\/react/)
   assert.doesNotMatch(dashboard, /transition-all|backdrop-blur|backdrop-filter|drop-shadow/)
   assert.doesNotMatch(dashboard, /filter:\s*/)
-  assert.match(dashboard, /<WyckoffLightweightChart ticker=\{activeTicker\} study=\{current\} loading=\{Boolean\(pendingTicker\)\}/)
+  assert.match(dashboard, /<WyckoffLightweightChart ticker=\{ticker\} study=\{current\} loading=\{isLoading\}/)
 })
 
 test("company metadata is selected-ticker only and remains fail-open", () => {

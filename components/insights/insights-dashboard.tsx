@@ -55,6 +55,10 @@ import {
 
 import AnimatedProgressBar from "@/components/smoothui/animated-progress-bar"
 import SoftBlurIn from "@/components/smoothui/soft-blur-in"
+import { AiLoader } from "@/components/smoothui/ai-loader"
+import InsightsTransition from "@/components/smoothui/insights-transition"
+import { WyckoffStockWorkspace, type WyckoffListItem } from "@/components/insights/wyckoff-chart-dashboard"
+import type { WyckoffChartStudy, WyckoffChartTimeframe } from "@/lib/wyckoff-chart-model"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { TtaiDashboard } from "@/components/insights/ttai-dashboard"
 import { StockLogo } from "@/components/stock-logo"
@@ -667,8 +671,101 @@ function RatingHistoryChart({ row }: { row: InsightsRatingRow }) {
   )
 }
 
+interface WyckoffApiResponse {
+  ok: boolean
+  ticker: string
+  companyName?: string
+  exchange?: string
+  sector?: string
+  studies: WyckoffChartStudy[]
+  initialTimeframe: WyckoffChartTimeframe
+  stocks: WyckoffListItem[]
+  generatedAt: string
+  dataSource?: string
+  error?: string
+}
+
+function WyckoffTabPanel({ ticker }: { ticker: string }) {
+  const [fetchState, setFetchState] = useState<{
+    status: "loading" | "success" | "error"
+    payload: WyckoffApiResponse | null
+    error: string | null
+  }>({
+    status: "loading",
+    payload: null,
+    error: null,
+  })
+
+  useEffect(() => {
+    let isMounted = true
+
+    fetch(`/api/insights/wyckoff?ticker=${encodeURIComponent(ticker)}&timeframe=1D`)
+      .then((res) => res.json())
+      .then((res: WyckoffApiResponse) => {
+        if (!isMounted) return
+        if (res.ok && res.studies) {
+          setFetchState({ status: "success", payload: res, error: null })
+        } else {
+          setFetchState({ status: "error", payload: null, error: res.error || "Không tải được dữ liệu Wyckoff." })
+        }
+      })
+      .catch((err: unknown) => {
+        if (!isMounted) return
+        const message = err instanceof Error ? err.message : "Lỗi tải dữ liệu Wyckoff."
+        setFetchState({ status: "error", payload: null, error: message })
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [ticker])
+
+  if (fetchState.status === "loading") {
+    return (
+      <div id="rating-panel-wyckoff" role="tabpanel" aria-labelledby="rating-tab-wyckoff" className="flex min-h-[560px] flex-col items-center justify-center rounded-2xl border border-white/[0.07] bg-[#07111f] p-8 text-center font-ticker">
+        <AiLoader label={`Đang tải chart Wyckoff ${ticker}...`} />
+      </div>
+    )
+  }
+
+  if (fetchState.status === "error" || !fetchState.payload) {
+    return (
+      <div id="rating-panel-wyckoff" role="tabpanel" aria-labelledby="rating-tab-wyckoff" className="flex min-h-[400px] flex-col items-center justify-center rounded-2xl border border-white/[0.07] bg-[#07111f] p-8 text-center font-ticker">
+        <p className="text-sm font-semibold text-rose-300">{fetchState.error || "Chưa có dữ liệu Wyckoff cho mã này."}</p>
+        <Link
+          href={`/insights/wyckoff?ticker=${ticker}&timeframe=1D`}
+          prefetch={false}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-2 font-ticker text-xs font-bold text-cyan-300 transition-colors hover:bg-cyan-500/20"
+        >
+          <BarChart3 className="size-3.5" />
+          <span>Mở trang Wyckoff chuyên sâu</span>
+        </Link>
+      </div>
+    )
+  }
+
+  const payload = fetchState.payload
+
+  return (
+    <section id="rating-panel-wyckoff" role="tabpanel" aria-labelledby="rating-tab-wyckoff" className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-3 font-ticker sm:p-4">
+      <WyckoffStockWorkspace
+        ticker={payload.ticker || ticker}
+        companyName={payload.companyName}
+        exchange={payload.exchange}
+        sector={payload.sector}
+        studies={payload.studies}
+        initialTimeframe={payload.initialTimeframe || "1D"}
+        stocks={payload.stocks || []}
+        generatedAt={payload.generatedAt || ""}
+        dataSource={payload.dataSource || "Supabase unified"}
+        embedded={true}
+      />
+    </section>
+  )
+}
+
 function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; onOpenChange: (open: boolean) => void }) {
-  type StockDetailTab = "overview" | "info" | "ta" | "ttai"
+  type StockDetailTab = "overview" | "wyckoff" | "info" | "ta" | "ttai"
   const [topTab, setTopTab] = useState<StockDetailTab>("overview")
   if (!row) return null
 
@@ -755,6 +852,7 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
 
   const tabItems: Array<{ key: StockDetailTab; label: string; icon: typeof Gauge }> = [
     { key: "overview", label: "Tổng quan", icon: Gauge },
+    { key: "wyckoff", label: "Chart Wyckoff", icon: BarChart3 },
     { key: "info", label: "Thông tin doanh nghiệp", icon: Building2 },
     { key: "ta", label: "Phân tích TA", icon: LineChart },
     { key: "ttai", label: "TTAI", icon: Sparkles },
@@ -920,8 +1018,8 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                 </div>
               </div>
 
-              <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,37%)_minmax(0,63%)]">
-                {/* CỘT TRÁI (37% width) */}
+              <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,30%)_minmax(0,70%)]">
+                {/* CỘT TRÁI (30% width) */}
                 <div className="space-y-4">
                   {/* 1. FA quick read */}
                   <div className="flex flex-col rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
@@ -978,7 +1076,7 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                   </div>
                 </div>
 
-                {/* CỘT PHẢI (63% width) */}
+                {/* CỘT PHẢI (70% width) */}
                 <div className="space-y-4">
                   {/* 1. QeoIndex state radar */}
                   <RatingRadar row={row} />
@@ -1008,6 +1106,8 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
               </div>
             </section>
           )}
+
+          {topTab === "wyckoff" && <WyckoffTabPanel ticker={row.ticker} />}
 
           {topTab === "info" && (
             <section id="rating-panel-info" role="tabpanel" aria-labelledby="rating-tab-info" className="space-y-4">
@@ -1331,7 +1431,8 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
   return (
     <div className="min-h-screen bg-background font-ticker text-foreground">
       <TopNav />
-      <main className="mx-auto w-full max-w-[1880px] px-3 pb-16 pt-8 sm:px-5 lg:px-6">
+      <InsightsTransition>
+        <main className="mx-auto w-full max-w-[1880px] px-3 pb-16 pt-8 sm:px-5 lg:px-6">
         <section className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-muted-2">
@@ -1751,6 +1852,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
           </div>
         </section>
       </main>
+      </InsightsTransition>
       <RatingDialog key={selectedRating?.ticker ?? "closed"} row={selectedRating} onOpenChange={(open) => { if (!open) setSelectedRating(null) }} />
     </div>
   )

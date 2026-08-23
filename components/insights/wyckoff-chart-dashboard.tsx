@@ -39,22 +39,23 @@ export interface WyckoffListItem {
   date: string
 }
 
-type WatchlistFilterTab = "all" | "accumulation" | "distribution" | "top100"
-type TickerSelectHandler = (event: MouseEvent<HTMLAnchorElement>, ticker: string) => void
-
-type WyckoffTickerPayload = {
+export interface WyckoffTickerPayload {
   ticker: string
   companyName: string
-  exchange: string | null
+  exchange: string
+  sector?: string
   studies: WyckoffChartStudy[]
   generatedAt: string
 }
 
-type WyckoffTickerApiResponse = {
+interface WyckoffTickerApiResponse {
   ok: boolean
   data?: WyckoffTickerPayload
   error?: string
 }
+
+type WatchlistFilterTab = "all" | "accumulation" | "distribution" | "top100"
+type TickerSelectHandler = (event: MouseEvent<HTMLAnchorElement>, ticker: string) => void
 
 const WATCHLIST_TABS: Array<{ id: WatchlistFilterTab; label: string }> = [
   { id: "all", label: "Tất cả" },
@@ -65,16 +66,6 @@ const WATCHLIST_TABS: Array<{ id: WatchlistFilterTab; label: string }> = [
 
 const TICKER_SWITCH_DEBOUNCE_MS = 60
 const TICKER_CACHE_LIMIT = 8
-
-function rememberTickerData(cache: Map<string, WyckoffTickerPayload>, data: WyckoffTickerPayload) {
-  cache.delete(data.ticker)
-  cache.set(data.ticker, data)
-  while (cache.size > TICKER_CACHE_LIMIT) {
-    const oldest = cache.keys().next().value as string | undefined
-    if (!oldest) break
-    cache.delete(oldest)
-  }
-}
 
 function number(value: number | null | undefined, digits = 2) {
   if (value == null || !Number.isFinite(value)) return "—"
@@ -104,45 +95,86 @@ function biasTone(bias: string) {
   return "border-amber-300/25 bg-amber-300/8 text-amber-200"
 }
 
-function phaseShort(phase: string | undefined) {
-  if (!phase) return "Chưa phân loại"
-  if (/Spring/i.test(phase)) return "Spring · Phase C"
-  if (/UT\/UTAD/i.test(phase)) return "UT/UTAD · Phase C"
-  if (/SOS/i.test(phase)) return "SOS · Phase D"
-  if (/SOW/i.test(phase)) return "SOW · Phase D"
-  if (/Markup/i.test(phase)) return "Markup watch"
-  if (/Markdown/i.test(phase)) return "Markdown watch"
-  return phase
+function phaseShort(phase: string | null | undefined) {
+  if (!phase) return "Đang cập nhật"
+  return phase.replace(/^(Accumulation|Distribution|Re-accumulation|Re-distribution)\s*-\s*/i, "")
 }
 
-function phaseShortBadge(phase: string | undefined) {
-  if (!phase) return "Chờ scan"
-  if (/Spring/i.test(phase)) return "Spring C"
-  if (/UT\/UTAD/i.test(phase)) return "UTAD C"
-  if (/SOS/i.test(phase)) return "SOS D"
-  if (/SOW/i.test(phase)) return "SOW D"
-  if (/Markup/i.test(phase)) return "Markup"
-  if (/Markdown/i.test(phase)) return "Markdown"
-  return phase.slice(0, 9)
+function phaseShortBadge(phase: string | null | undefined) {
+  if (!phase) return "—"
+  return phase
+    .replace(/^Accumulation\s*-\s*/i, "ACC · ")
+    .replace(/^Distribution\s*-\s*/i, "DIST · ")
+    .replace(/^Re-accumulation\s*-\s*/i, "RE-ACC · ")
+    .replace(/^Re-distribution\s*-\s*/i, "RE-DIST · ")
 }
 
 function biasBadgeStyle(bias: string, phase: string) {
-  if (bias === "Bullish" || /Spring|SOS|Markup/i.test(phase)) {
-    return "border-emerald-500/30 bg-emerald-500/12 text-emerald-300"
+  if (bias === "Bullish" || /Spring|SOS|Markup|LPS/i.test(phase)) {
+    return "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-300"
   }
-  if (bias === "Bearish" || /UTAD|SOW|Markdown/i.test(phase)) {
-    return "border-rose-500/30 bg-rose-500/12 text-rose-300"
+  if (bias === "Bearish" || /UTAD|SOW|Markdown|LPSY/i.test(phase)) {
+    return "border-rose-400/25 bg-rose-400/[0.08] text-rose-300"
   }
-  return "border-amber-500/30 bg-amber-500/12 text-amber-300"
+  return "border-amber-300/20 bg-amber-300/[0.06] text-amber-200"
 }
 
 function updateTimeframeQuery(timeframe: WyckoffChartTimeframe) {
+  if (typeof window === "undefined") return
   const url = new URL(window.location.href)
   url.searchParams.set("timeframe", timeframe)
   window.history.replaceState(window.history.state, "", url)
 }
 
-function SymbolIdentity({ ticker, companyName, exchange, sector }: { ticker: string; companyName: string; exchange: string; sector: string }) {
+function rememberTickerData(cache: Map<string, WyckoffTickerPayload>, payload: WyckoffTickerPayload) {
+  if (cache.has(payload.ticker)) cache.delete(payload.ticker)
+  cache.set(payload.ticker, payload)
+  if (cache.size > TICKER_CACHE_LIMIT) {
+    const first = cache.keys().next().value
+    if (first) cache.delete(first)
+  }
+}
+
+function MetricCard({
+  tone,
+  icon,
+  title,
+  children,
+}: {
+  tone: "emerald" | "cyan" | "amber" | "purple"
+  icon: React.ReactNode
+  title: string
+  children: React.ReactNode
+}) {
+  const toneClass = {
+    emerald: "border-emerald-400/16 text-emerald-300",
+    cyan: "border-cyan-400/16 text-cyan-300",
+    amber: "border-amber-400/16 text-amber-300",
+    purple: "border-purple-400/16 text-purple-300",
+  }[tone]
+
+  return (
+    <div className={cn("min-w-0 rounded-lg border bg-[#081019] p-3 shadow-sm", toneClass)}>
+      <div className="flex items-center gap-1.5 font-ticker text-[10.5px] font-bold uppercase tracking-wide">
+        {icon}
+        <span className="truncate">{title}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function SymbolIdentity({
+  ticker,
+  companyName,
+  exchange,
+  sector,
+}: {
+  ticker: string
+  companyName: string
+  exchange: string
+  sector?: string
+}) {
   return (
     <div className="min-w-0">
       <div className="flex min-w-0 items-baseline gap-2.5">
@@ -172,6 +204,7 @@ const WatchlistRow = memo(function WatchlistRow({
   onSelectTicker: TickerSelectHandler
 }) {
   const href = `/insights/wyckoff?ticker=${encodeURIComponent(stock.ticker)}&timeframe=${activeTimeframe}`
+
   return (
     <a
       href={href}
@@ -197,16 +230,212 @@ const WatchlistRow = memo(function WatchlistRow({
   )
 })
 
-export function WyckoffChartDashboard({
+export function WyckoffStockWorkspace({
   ticker,
   companyName,
   exchange,
+  sector,
   studies,
   initialTimeframe,
   stocks,
-  generatedAt,
+  generatedAt: _generatedAt,
   dataSource = "Notion canonical",
+  embedded = false,
+  priceMotion = true,
+  isLoading = false,
+  onChooseTimeframe,
 }: {
+  ticker: string
+  companyName?: string
+  exchange?: string | null
+  sector?: string | null
+  studies: WyckoffChartStudy[]
+  initialTimeframe: WyckoffChartTimeframe
+  stocks: WyckoffListItem[]
+  generatedAt: string
+  dataSource?: string
+  embedded?: boolean
+  priceMotion?: boolean
+  isLoading?: boolean
+  onChooseTimeframe?: (timeframe: WyckoffChartTimeframe) => void
+}) {
+  const [activeTimeframe, setActiveTimeframe] = useState(initialTimeframe)
+
+  const stockByTicker = useMemo(() => new Map(stocks.map((stock) => [stock.ticker, stock])), [stocks])
+  const selected = stockByTicker.get(ticker)
+  const current = useMemo(() => studies.find((study) => study.timeframe === activeTimeframe) ?? studies[0], [activeTimeframe, studies])
+  const timeframeTabs = useMemo(() => studies.map((study) => ({ value: study.timeframe, label: study.timeframe })), [studies])
+  const latest = current?.bars.at(-1)
+  const change = current?.analysis?.technical.changePct ?? selected?.changePct ?? null
+  const headerCompanyName = companyName?.trim() || ticker
+  const headerExchange = exchange?.trim() || "HOSE"
+  const headerSector = sector?.trim() || selected?.sector || ""
+
+  function chooseTimeframe(timeframe: WyckoffChartTimeframe) {
+    if (timeframe === activeTimeframe) return
+    setActiveTimeframe(timeframe)
+    if (!embedded) {
+      updateTimeframeQuery(timeframe)
+    }
+    onChooseTimeframe?.(timeframe)
+  }
+
+  return (
+    <div className="min-w-0 space-y-3 font-ticker">
+      <header className="rounded-xl border border-white/[0.09] bg-[#0b1119] px-3 py-2.5 shadow-sm sm:px-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <StockLogo symbol={ticker} size={36} className="shrink-0 rounded-full border-white/30" />
+            <SymbolIdentity
+              ticker={ticker}
+              companyName={headerCompanyName}
+              exchange={headerExchange}
+              sector={headerSector}
+            />
+          </div>
+
+          <div className="shrink-0 text-right">
+            <PriceFlow animate={priceMotion} value={latest?.close ?? selected?.price} digits={2} className="font-mono text-2xl font-black tracking-tight text-white sm:text-[28px]" />
+            <div className="mt-0.5 flex justify-end">
+              <span className={cn("rounded border px-2 py-0.5", changePillTone(change))}>
+                <PriceFlow animate={priceMotion} value={change} digits={2} suffix="%" showSign className="font-mono text-[11px] font-bold" />
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-12">
+          <span className={cn("rounded-full border px-2 py-0.5 font-ticker text-[9.5px] font-bold uppercase tracking-wide", biasTone(current?.analysis?.taBias ?? selected?.bias ?? ""))}>
+            {current?.analysis?.taBias ?? selected?.bias ?? "Pending"}
+          </span>
+          {selected?.rank ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 font-ticker text-[9.5px] font-bold text-amber-300">
+              <Crown className="size-2.5" /> Top 100 · #{selected.rank}
+            </span>
+          ) : null}
+          <span className="rounded-full border border-white/[0.08] bg-white/[0.035] px-2 py-0.5 text-[9.5px] font-semibold text-slate-400">{current?.provider || dataSource}</span>
+        </div>
+      </header>
+
+      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard tone="emerald" icon={<TrendingUp className="size-3.5" />} title={`Giá & Động lượng ${activeTimeframe}`}>
+          <div className="mt-1.5 flex items-baseline gap-2">
+            <PriceFlow animate={priceMotion} value={latest?.close ?? selected?.price} digits={2} className="font-mono text-xl font-black text-white" />
+            <PriceFlow animate={priceMotion} value={change} digits={2} suffix="%" showSign className={cn("font-mono text-xs font-bold", changeTone(change))} />
+          </div>
+          <div className="mt-1 text-[10.5px] text-slate-500">{current?.bars.length ?? 0} nến hoàn tất</div>
+        </MetricCard>
+
+        <MetricCard tone="cyan" icon={<Layers className="size-3.5" />} title="Pha Wyckoff hiện tại">
+          <div className="mt-1.5 truncate font-ticker text-[15px] font-extrabold text-cyan-300" title={current?.phaseGuide.title}>{current?.phaseGuide.title || phaseShort(selected?.phase)}</div>
+          <div className="mt-1 flex items-center gap-2 font-mono text-[10.5px] text-slate-500">
+            <span>Bull <strong className="text-emerald-300">{current?.analysis?.bullProbability ?? 0}%</strong></span>
+            <span>Base <strong className="text-amber-300">{current?.analysis?.baseProbability ?? 0}%</strong></span>
+            <span>Bear <strong className="text-rose-300">{current?.analysis?.bearProbability ?? 0}%</strong></span>
+          </div>
+        </MetricCard>
+
+        <MetricCard tone="amber" icon={<Target className="size-3.5" />} title="Vùng giá then chốt">
+          <div className="mt-1.5 truncate font-mono text-[15px] font-black text-amber-300" title={`${current?.analysis?.support || "—"} / ${current?.analysis?.resistance || "—"}`}>
+            {current?.analysis?.support || "—"} <span className="text-slate-600">/</span> {current?.analysis?.resistance || "—"}
+          </div>
+          <div className="mt-1 truncate text-[10.5px] text-slate-500" title={current?.analysis?.confirmation}>{current?.analysis?.confirmation || "Chờ confirmation ở vùng quyết định"}</div>
+        </MetricCard>
+
+        <MetricCard tone="purple" icon={<Zap className="size-3.5" />} title="Cấu trúc & tín hiệu">
+          <div className="mt-1.5 truncate font-ticker text-[15px] font-extrabold text-purple-200">
+            {current?.analysis?.taBias === "Bullish" ? "TÍCH LŨY MẠNH" : current?.analysis?.taBias === "Bearish" ? "PHÂN PHỐI / SOW" : current?.analysis?.taBias === "Mixed" ? "TÍCH LŨY BIÊN ĐỘ" : "TRUNG LẬP"}
+          </div>
+          <div className="mt-1 truncate text-[10.5px] text-slate-500" title={current?.analysis?.whatChanged}>{current?.analysis?.whatChanged || "Theo dõi price-volume behavior"}</div>
+        </MetricCard>
+      </div>
+
+      <section className="overflow-hidden rounded-xl border border-white/[0.09] bg-[#080c12] shadow-sm">
+        <div data-wyckoff-chart-toolbar className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] bg-[#0b1018] px-2.5 py-1.5 sm:px-3">
+          <AnimatedTabs
+            tabs={timeframeTabs}
+            value={activeTimeframe}
+            onValueChange={chooseTimeframe}
+            ariaLabel="Khung thời gian biểu đồ"
+            variant="segment"
+            tabClassName="font-mono text-[11px] font-bold"
+          />
+
+          <div className="flex items-center gap-2 text-[10.5px] text-slate-500">
+            <span className="hidden items-center gap-1.5 sm:inline-flex"><Layers className="size-3" /> Wyckoff structure</span>
+            <span className="rounded border border-white/[0.08] bg-white/[0.035] px-2 py-1 font-mono text-slate-400">{current?.bars.length ?? 0} bars</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] bg-[#080d14] px-3 py-2 text-[10.5px]">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-slate-400">
+            <strong className="font-ticker text-[12px] text-slate-100">{ticker} · {activeTimeframe} · {headerExchange}</strong>
+            {latest ? (
+              <>
+                <span className="inline-flex items-center gap-1">O <PriceFlow animate={priceMotion} value={latest.open} digits={2} className="font-bold text-slate-300" /></span>
+                <span className="inline-flex items-center gap-1">H <PriceFlow animate={priceMotion} value={latest.high} digits={2} className="font-bold text-emerald-300" /></span>
+                <span className="inline-flex items-center gap-1">L <PriceFlow animate={priceMotion} value={latest.low} digits={2} className="font-bold text-rose-300" /></span>
+                <span className="inline-flex items-center gap-1">C <PriceFlow animate={priceMotion} value={latest.close} digits={2} className="font-bold text-slate-100" /></span>
+              </>
+            ) : null}
+          </div>
+          <div className="flex min-w-0 items-center gap-2 text-slate-600">
+            <span className="max-w-[320px] truncate" title={current?.detail}>{current?.detail}</span>
+            <span>·</span>
+            <span className="shrink-0">{dataSource}</span>
+          </div>
+        </div>
+
+        <div className="relative">
+          {current ? <WyckoffLightweightChart ticker={ticker} study={current} loading={isLoading} /> : null}
+          <div className="pointer-events-none absolute left-3 top-3 z-[3] max-w-[min(480px,calc(100%-1.5rem))] rounded-lg border border-white/[0.09] bg-[#080d15]/92 px-3 py-2 font-ticker sm:left-4 sm:top-4">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 rounded border border-purple-400/20 bg-purple-400/[0.08] px-1.5 py-0.5 text-[9.5px] font-extrabold uppercase tracking-wide text-purple-200">{current?.timeframe}</span>
+              <span className="min-w-0 truncate text-[11px] font-bold text-white">{current?.phaseGuide.title}</span>
+              <Tooltip>
+                <TooltipTrigger render={<button type="button" className="pointer-events-auto shrink-0 rounded p-1 text-slate-500 hover:bg-white/[0.06] hover:text-white" aria-label="Giải thích pha Wyckoff"><HelpCircle className="h-3.5 w-3.5" /></button>} />
+                <TooltipContent side="bottom" align="start" className="block max-w-sm border border-white/10 bg-[#0b111b] p-3 text-left text-xs leading-5 text-slate-200 shadow-lg">
+                  <div className="font-bold text-emerald-300">Hiện tại</div>
+                  <p className="mt-1">{current?.phaseGuide.now}</p>
+                  <div className="mt-2 font-bold text-cyan-300">Cần quan sát tiếp</div>
+                  <p className="mt-1">{current?.phaseGuide.next}</p>
+                  <div className="mt-2 font-bold text-rose-300">Rủi ro / phủ định</div>
+                  <p className="mt-1">{current?.phaseGuide.risk}</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <p className="mt-1 line-clamp-2 text-[10.5px] leading-4 text-slate-500">{current?.analysis?.wyckoffState ?? current?.error}</p>
+          </div>
+        </div>
+
+        <div className="border-t border-white/[0.08] bg-[#080d14] p-3 font-ticker sm:p-4">
+          <div className="grid gap-2.5 lg:grid-cols-3">
+            {current?.scenarios.map((scenario) => {
+              const Icon = scenario.key === "bull" ? TrendingUp : scenario.key === "bear" ? TrendingDown : Target
+              return (
+                <article key={scenario.key} className="rounded-lg border border-white/[0.07] bg-white/[0.022] p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wide" style={{ color: scenario.color }}><Icon className="h-3.5 w-3.5" />{scenario.label}</span>
+                    <PriceFlow animate={priceMotion} value={scenario.probability} digits={0} suffix="%" className="font-mono text-sm font-black text-white" />
+                  </div>
+                  <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full" style={{ width: `${scenario.probability}%`, backgroundColor: scenario.color }} /></div>
+                  <p className="mt-2 text-[11px] leading-5 text-slate-500">{scenario.description}</p>
+                </article>
+              )
+            })}
+          </div>
+          <div className="mt-2.5 grid gap-2 text-[11px] sm:grid-cols-2">
+            <div className="flex items-start gap-2 rounded-lg border border-emerald-400/12 bg-emerald-400/[0.03] px-3 py-2 text-slate-500"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" /><span><strong className="text-slate-300">Xác nhận:</strong> {current?.analysis?.confirmation ?? "Chưa đủ dữ liệu."}</span></div>
+            <div className="flex items-start gap-2 rounded-lg border border-rose-400/12 bg-rose-400/[0.03] px-3 py-2 text-slate-500"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-300" /><span><strong className="text-slate-300">Phủ định:</strong> {current?.analysis?.invalidation ?? "Chưa đủ dữ liệu."}</span></div>
+          </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-slate-600">Projection định lượng từ cấu trúc pha, ATR và xác suất; không phải dữ liệu giá tương lai hay khuyến nghị mua bán.</p>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+export function WyckoffChartDashboard(props: {
   ticker: string
   companyName?: string
   exchange?: string | null
@@ -217,14 +446,14 @@ export function WyckoffChartDashboard({
   dataSource?: string
 }) {
   const initialTickerData: WyckoffTickerPayload = {
-    ticker,
-    companyName: companyName?.trim() || ticker,
-    exchange: exchange?.trim() || "HOSE",
-    studies,
-    generatedAt,
+    ticker: props.ticker,
+    companyName: props.companyName?.trim() || props.ticker,
+    exchange: props.exchange?.trim() || "HOSE",
+    studies: props.studies,
+    generatedAt: props.generatedAt,
   }
   const [tickerData, setTickerData] = useState<WyckoffTickerPayload>(() => initialTickerData)
-  const [activeTimeframe, setActiveTimeframe] = useState(initialTimeframe)
+  const [activeTimeframe, setActiveTimeframe] = useState(props.initialTimeframe)
   const [query, setQuery] = useState("")
   const [activeTab, setActiveTab] = useState<WatchlistFilterTab>("all")
   const [pendingTicker, setPendingTicker] = useState("")
@@ -234,22 +463,14 @@ export function WyckoffChartDashboard({
   const switchAbortRef = useRef<AbortController | null>(null)
   const switchSequenceRef = useRef(0)
   const motionReleaseFrameRef = useRef(0)
-  const tickerCacheRef = useRef<Map<string, WyckoffTickerPayload>>(new Map([[ticker, initialTickerData]]))
+  const tickerCacheRef = useRef<Map<string, WyckoffTickerPayload>>(new Map([[props.ticker, initialTickerData]]))
   const deferredQuery = useDeferredValue(query)
 
   const activeTicker = tickerData.ticker
   const activeStudies = tickerData.studies
-  const stockByTicker = useMemo(() => new Map(stocks.map((stock) => [stock.ticker, stock])), [stocks])
-  const selected = stockByTicker.get(activeTicker)
-  const current = useMemo(() => activeStudies.find((study) => study.timeframe === activeTimeframe) ?? activeStudies[0], [activeTimeframe, activeStudies])
-  const timeframeTabs = useMemo(() => activeStudies.map((study) => ({ value: study.timeframe, label: study.timeframe })), [activeStudies])
-  const latest = current?.bars.at(-1)
-  const change = current?.analysis?.technical.changePct ?? selected?.changePct ?? null
-  const headerCompanyName = tickerData.companyName
-  const headerExchange = tickerData.exchange?.trim() || "HOSE"
 
   const filteredStocks = useMemo(() => {
-    let list = stocks
+    let list = props.stocks
     if (activeTab === "accumulation") {
       list = list.filter((stock) => stock.bias === "Bullish" || /Spring|SOS|Markup/i.test(stock.phase))
     } else if (activeTab === "distribution") {
@@ -257,10 +478,11 @@ export function WyckoffChartDashboard({
     } else if (activeTab === "top100") {
       list = list.filter((stock) => stock.rank > 0 && stock.rank <= 100)
     }
+
     const normalized = deferredQuery.trim().toUpperCase()
     if (!normalized) return list
     return list.filter((stock) => `${stock.ticker} ${stock.phase} ${stock.bias}`.toUpperCase().includes(normalized))
-  }, [activeTab, deferredQuery, stocks])
+  }, [activeTab, deferredQuery, props.stocks])
 
   const groupedStocks = useMemo(() => BOARD_SECTOR_GROUPS
     .map((group) => ({
@@ -345,10 +567,10 @@ export function WyckoffChartDashboard({
 
   const selectTicker = useCallback<TickerSelectHandler>((event, nextTicker) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    if (dataSource !== "Supabase unified") return
+    if (props.dataSource !== "Supabase unified") return
     event.preventDefault()
     scheduleTickerLoad(nextTicker)
-  }, [dataSource, scheduleTickerLoad])
+  }, [props.dataSource, scheduleTickerLoad])
 
   function chooseTimeframe(timeframe: WyckoffChartTimeframe) {
     if (timeframe === activeTimeframe) return
@@ -363,82 +585,20 @@ export function WyckoffChartDashboard({
       <TopNav />
       <main className="mx-auto max-w-[1920px] px-3 py-3 sm:px-4 lg:px-5">
         <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_390px]">
-          <div className="min-w-0 space-y-3">
-            <header className="rounded-xl border border-white/[0.09] bg-[#0b1119] px-3 py-2.5 shadow-sm sm:px-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <StockLogo symbol={activeTicker} size={36} className="shrink-0 rounded-full border-white/30" />
-                  <SymbolIdentity ticker={activeTicker} companyName={headerCompanyName} exchange={headerExchange} sector={selected?.sector || ""} />
-                </div>
-                <div className="shrink-0 text-right">
-                  <PriceFlow animate={priceMotion} value={latest?.close ?? selected?.price} digits={2} className="font-mono text-2xl font-black tracking-tight text-white sm:text-[28px]" />
-                  <div className="mt-0.5 flex justify-end">
-                    <span className={cn("rounded border px-2 py-0.5", changePillTone(change))}>
-                      <PriceFlow animate={priceMotion} value={change} digits={2} suffix="%" showSign className="font-mono text-[11px] font-bold" />
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-12">
-                <span className={cn("rounded-full border px-2 py-0.5 font-ticker text-[9.5px] font-bold uppercase tracking-wide", biasTone(current?.analysis?.taBias ?? selected?.bias ?? ""))}>{current?.analysis?.taBias ?? selected?.bias ?? "Pending"}</span>
-                {selected?.rank ? <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 font-ticker text-[9.5px] font-bold text-amber-300"><Crown className="size-2.5" /> Top 100 · #{selected.rank}</span> : null}
-                <span className="rounded-full border border-white/[0.08] bg-white/[0.035] px-2 py-0.5 text-[9.5px] font-semibold text-slate-400">{current?.provider || dataSource}</span>
-              </div>
-            </header>
-
-            <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricCard tone="emerald" icon={<TrendingUp className="size-3.5" />} title={`Giá & Động lượng ${activeTimeframe}`}>
-                <div className="mt-1.5 flex items-baseline gap-2">
-                  <PriceFlow animate={priceMotion} value={latest?.close ?? selected?.price} digits={2} className="font-mono text-xl font-black text-white" />
-                  <PriceFlow animate={priceMotion} value={change} digits={2} suffix="%" showSign className={cn("font-mono text-xs font-bold", changeTone(change))} />
-                </div>
-                <div className="mt-1 text-[10.5px] text-slate-500">{current?.bars.length ?? 0} nến hoàn tất</div>
-              </MetricCard>
-              <MetricCard tone="cyan" icon={<Layers className="size-3.5" />} title="Pha Wyckoff hiện tại">
-                <div className="mt-1.5 truncate font-ticker text-[15px] font-extrabold text-cyan-300" title={current?.phaseGuide.title}>{current?.phaseGuide.title || phaseShort(selected?.phase)}</div>
-                <div className="mt-1 flex items-center gap-2 font-mono text-[10.5px] text-slate-500"><span>Bull <strong className="text-emerald-300">{current?.analysis?.bullProbability ?? 0}%</strong></span><span>Base <strong className="text-amber-300">{current?.analysis?.baseProbability ?? 0}%</strong></span><span>Bear <strong className="text-rose-300">{current?.analysis?.bearProbability ?? 0}%</strong></span></div>
-              </MetricCard>
-              <MetricCard tone="amber" icon={<Target className="size-3.5" />} title="Vùng giá then chốt">
-                <div className="mt-1.5 truncate font-mono text-[15px] font-black text-amber-300" title={`${current?.analysis?.support || "—"} / ${current?.analysis?.resistance || "—"}`}>{current?.analysis?.support || "—"} <span className="text-slate-600">/</span> {current?.analysis?.resistance || "—"}</div>
-                <div className="mt-1 truncate text-[10.5px] text-slate-500" title={current?.analysis?.confirmation}>{current?.analysis?.confirmation || "Chờ confirmation ở vùng quyết định"}</div>
-              </MetricCard>
-              <MetricCard tone="purple" icon={<Zap className="size-3.5" />} title="Cấu trúc & tín hiệu">
-                <div className="mt-1.5 truncate font-ticker text-[15px] font-extrabold text-purple-200">{current?.analysis?.taBias === "Bullish" ? "TÍCH LŨY MẠNH" : current?.analysis?.taBias === "Bearish" ? "PHÂN PHỐI / SOW" : current?.analysis?.taBias === "Mixed" ? "TÍCH LŨY BIÊN ĐỘ" : "TRUNG LẬP"}</div>
-                <div className="mt-1 truncate text-[10.5px] text-slate-500" title={current?.analysis?.whatChanged}>{current?.analysis?.whatChanged || "Theo dõi price-volume behavior"}</div>
-              </MetricCard>
-            </div>
-
-            <section className="overflow-hidden rounded-xl border border-white/[0.09] bg-[#080c12] shadow-sm">
-              <div data-wyckoff-chart-toolbar className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] bg-[#0b1018] px-2.5 py-1.5 sm:px-3">
-                <AnimatedTabs tabs={timeframeTabs} value={activeTimeframe} onValueChange={chooseTimeframe} ariaLabel="Khung thời gian biểu đồ" variant="segment" tabClassName="font-mono text-[11px] font-bold" />
-                <div className="flex items-center gap-2 text-[10.5px] text-slate-500"><span className="hidden items-center gap-1.5 sm:inline-flex"><Layers className="size-3" /> Wyckoff structure</span><span className="rounded border border-white/[0.08] bg-white/[0.035] px-2 py-1 font-mono text-slate-400">{current?.bars.length ?? 0} bars</span></div>
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] bg-[#080d14] px-3 py-2 text-[10.5px]">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-slate-400">
-                  <strong className="font-ticker text-[12px] text-slate-100">{activeTicker} · {activeTimeframe} · {headerExchange}</strong>
-                  {latest ? <><span className="inline-flex items-center gap-1">O <PriceFlow animate={priceMotion} value={latest.open} digits={2} className="font-bold text-slate-300" /></span><span className="inline-flex items-center gap-1">H <PriceFlow animate={priceMotion} value={latest.high} digits={2} className="font-bold text-emerald-300" /></span><span className="inline-flex items-center gap-1">L <PriceFlow animate={priceMotion} value={latest.low} digits={2} className="font-bold text-rose-300" /></span><span className="inline-flex items-center gap-1">C <PriceFlow animate={priceMotion} value={latest.close} digits={2} className="font-bold text-slate-100" /></span></> : null}
-                </div>
-                <div className="flex min-w-0 items-center gap-2 text-slate-600"><span className="max-w-[320px] truncate" title={current?.detail}>{current?.detail}</span><span>·</span><span className="shrink-0">{dataSource}</span></div>
-              </div>
-              <div className="relative">
-                {current ? <WyckoffLightweightChart ticker={activeTicker} study={current} loading={Boolean(pendingTicker)} /> : null}
-                <div className="pointer-events-none absolute left-3 top-3 z-[3] max-w-[min(480px,calc(100%-1.5rem))] rounded-lg border border-white/[0.09] bg-[#080d15]/92 px-3 py-2 font-ticker sm:left-4 sm:top-4">
-                  <div className="flex min-w-0 items-center gap-2"><span className="shrink-0 rounded border border-purple-400/20 bg-purple-400/[0.08] px-1.5 py-0.5 text-[9.5px] font-extrabold uppercase tracking-wide text-purple-200">{current?.timeframe}</span><span className="min-w-0 truncate text-[11px] font-bold text-white">{current?.phaseGuide.title}</span><Tooltip><TooltipTrigger render={<button type="button" className="pointer-events-auto shrink-0 rounded p-1 text-slate-500 hover:bg-white/[0.06] hover:text-white" aria-label="Giải thích pha Wyckoff"><HelpCircle className="h-3.5 w-3.5" /></button>} /><TooltipContent side="bottom" align="start" className="block max-w-sm border border-white/10 bg-[#0b111b] p-3 text-left text-xs leading-5 text-slate-200 shadow-lg"><div className="font-bold text-emerald-300">Hiện tại</div><p className="mt-1">{current?.phaseGuide.now}</p><div className="mt-2 font-bold text-cyan-300">Cần quan sát tiếp</div><p className="mt-1">{current?.phaseGuide.next}</p><div className="mt-2 font-bold text-rose-300">Rủi ro / phủ định</div><p className="mt-1">{current?.phaseGuide.risk}</p></TooltipContent></Tooltip></div>
-                  <p className="mt-1 line-clamp-2 text-[10.5px] leading-4 text-slate-500">{current?.analysis?.wyckoffState ?? current?.error}</p>
-                </div>
-              </div>
-              <div className="border-t border-white/[0.08] bg-[#080d14] p-3 font-ticker sm:p-4">
-                <div className="grid gap-2.5 lg:grid-cols-3">
-                  {current?.scenarios.map((scenario) => {
-                    const Icon = scenario.key === "bull" ? TrendingUp : scenario.key === "bear" ? TrendingDown : Target
-                    return <article key={scenario.key} className="rounded-lg border border-white/[0.07] bg-white/[0.022] p-3"><div className="flex items-center justify-between gap-3"><span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wide" style={{ color: scenario.color }}><Icon className="h-3.5 w-3.5" />{scenario.label}</span><PriceFlow animate={priceMotion} value={scenario.probability} digits={0} suffix="%" className="font-mono text-sm font-black text-white" /></div><div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full" style={{ width: `${scenario.probability}%`, backgroundColor: scenario.color }} /></div><p className="mt-2 text-[11px] leading-5 text-slate-500">{scenario.description}</p></article>
-                  })}
-                </div>
-                <div className="mt-2.5 grid gap-2 text-[11px] sm:grid-cols-2"><div className="flex items-start gap-2 rounded-lg border border-emerald-400/12 bg-emerald-400/[0.03] px-3 py-2 text-slate-500"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" /><span><strong className="text-slate-300">Xác nhận:</strong> {current?.analysis?.confirmation ?? "Chưa đủ dữ liệu."}</span></div><div className="flex items-start gap-2 rounded-lg border border-rose-400/12 bg-rose-400/[0.03] px-3 py-2 text-slate-500"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-300" /><span><strong className="text-slate-300">Phủ định:</strong> {current?.analysis?.invalidation ?? "Chưa đủ dữ liệu."}</span></div></div>
-                <p className="mt-2 text-[10px] leading-relaxed text-slate-600">Projection định lượng từ cấu trúc pha, ATR và xác suất; không phải dữ liệu giá tương lai hay khuyến nghị mua bán.</p>
-              </div>
-            </section>
-          </div>
+          <WyckoffStockWorkspace
+            ticker={activeTicker}
+            companyName={tickerData.companyName}
+            exchange={tickerData.exchange}
+            sector={tickerData.sector}
+            studies={activeStudies}
+            initialTimeframe={activeTimeframe}
+            stocks={props.stocks}
+            generatedAt={tickerData.generatedAt}
+            dataSource={props.dataSource}
+            priceMotion={priceMotion}
+            isLoading={Boolean(pendingTicker)}
+            onChooseTimeframe={chooseTimeframe}
+          />
 
           <aside className="sticky top-3.5 flex h-[calc(100vh-76px)] min-h-[620px] flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-[#090e15] shadow-sm">
             <div className="space-y-2.5 border-b border-white/[0.08] bg-[#080d14] p-3">
@@ -457,9 +617,4 @@ export function WyckoffChartDashboard({
       </main>
     </div>
   )
-}
-
-function MetricCard({ tone, icon, title, children }: { tone: "emerald" | "cyan" | "amber" | "purple"; icon: React.ReactNode; title: string; children: React.ReactNode }) {
-  const toneClass = { emerald: "border-emerald-400/16 text-emerald-300", cyan: "border-cyan-400/16 text-cyan-300", amber: "border-amber-400/16 text-amber-300", purple: "border-purple-400/16 text-purple-300" }[tone]
-  return <div className={cn("min-w-0 rounded-lg border bg-[#081019] p-3 shadow-sm", toneClass)}><div className="flex items-center gap-1.5 font-ticker text-[10.5px] font-bold uppercase tracking-wide">{icon}<span className="truncate">{title}</span></div>{children}</div>
 }
