@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
-import type { ReactNode } from "react"
 import Link from "next/link"
-import { ArrowLeft, BrainCircuit, CircleAlert, Gauge, Scale, ShieldCheck, Swords, Target, TrendingDown, TrendingUp } from "lucide-react"
+import type { ReactNode } from "react"
+import { ArrowLeft, BrainCircuit, CircleAlert, Coins, Gauge, Scale, ShieldCheck, Swords, Target, TrendingDown, TrendingUp, Zap } from "lucide-react"
 
 import { LandingLogin } from "@/components/auth/landing-login"
 import { TopNav } from "@/components/top-nav"
@@ -39,6 +39,12 @@ function leanTone(lean: "bull" | "base" | "bear") {
   return "text-amber-300"
 }
 
+function money(value: number | null) {
+  if (value == null) return "—"
+  if (value < 0.01) return `$${value.toFixed(4)}`
+  return `$${value.toFixed(3)}`
+}
+
 function RolePanel({
   title,
   tone,
@@ -67,6 +73,7 @@ function RolePanel({
 }
 
 function DebateCard({ row }: { row: AiCouncilLlmDebateRecord }) {
+  const cacheRate = row.inputTokens > 0 ? Math.min(100, (row.cachedInputTokens / row.inputTokens) * 100) : 0
   return (
     <article className="overflow-hidden rounded-3xl border border-white/[0.08] bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,.09),transparent_30%),#080d13]">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-3.5">
@@ -76,9 +83,11 @@ function DebateCard({ row }: { row: AiCouncilLlmDebateRecord }) {
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-xs font-black text-white">{row.asOfDate}</span>
               <span className={cn("rounded-full border px-2 py-0.5 text-[8px] font-black uppercase", statusTone(row.status))}>{row.status}</span>
+              {row.escalated ? <span className="rounded-full border border-fuchsia-400/25 bg-fuchsia-400/[0.06] px-2 py-0.5 text-[8px] font-black text-fuchsia-300">SOL ESCALATION</span> : null}
+              {row.fallbackUsed ? <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.05] px-2 py-0.5 text-[8px] font-black text-amber-300">FALLBACK</span> : null}
               {row.selectionReasons.map((reason) => <span key={reason} className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[8px] font-bold text-slate-500">{REASON_LABEL[reason]}</span>)}
             </div>
-            <p className="mt-1 text-[9px] text-slate-600">{row.model} · {row.promptVersion} · {row.totalTokens.toLocaleString("vi-VN")} tokens</p>
+            <p className="mt-1 text-[9px] text-slate-600">{row.promptVersion} · {row.totalTokens.toLocaleString("vi-VN")} tokens · cache {cacheRate.toFixed(0)}% · est. {money(row.estimatedCostUsd)}</p>
           </div>
         </div>
         <div className="text-right">
@@ -89,7 +98,7 @@ function DebateCard({ row }: { row: AiCouncilLlmDebateRecord }) {
 
       <div className="grid gap-3 p-4 lg:grid-cols-3">
         <RolePanel
-          title="Bull"
+          title={`Bull · ${row.modelRoute?.bull.model || "LLM"}`}
           tone="text-emerald-300"
           icon={<TrendingUp className="size-3.5" />}
           summary={row.bull?.thesis || ""}
@@ -97,7 +106,7 @@ function DebateCard({ row }: { row: AiCouncilLlmDebateRecord }) {
           bullets={row.bull?.evidence || []}
         />
         <RolePanel
-          title="Bear"
+          title={`Bear · ${row.modelRoute?.bear.model || "LLM"}`}
           tone="text-rose-300"
           icon={<TrendingDown className="size-3.5" />}
           summary={row.bear?.thesis || ""}
@@ -105,7 +114,7 @@ function DebateCard({ row }: { row: AiCouncilLlmDebateRecord }) {
           bullets={row.bear?.evidence || []}
         />
         <RolePanel
-          title={`Risk · ${row.risk?.stance?.toUpperCase() || "—"}`}
+          title={`Risk · ${row.risk?.stance?.toUpperCase() || "—"} · ${row.modelRoute?.risk.model || "LLM"}`}
           tone={row.risk?.stance === "veto" ? "text-rose-300" : row.risk?.stance === "caution" ? "text-amber-300" : "text-cyan-300"}
           icon={<ShieldCheck className="size-3.5" />}
           summary={row.risk?.riskSummary || ""}
@@ -117,7 +126,7 @@ function DebateCard({ row }: { row: AiCouncilLlmDebateRecord }) {
       <section className="mx-4 mb-4 rounded-2xl border border-violet-400/15 bg-violet-400/[0.035] p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-violet-300"><Scale className="size-4" />Advisory LLM Chair</div>
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-violet-300"><Scale className="size-4" />Advisory LLM Chair · {row.escalated ? row.modelRoute?.escalation.model : row.modelRoute?.chair.model}</div>
             <p className="mt-2 max-w-5xl text-[12px] leading-5 text-slate-300">{row.chair?.summary || (row.error ? "Chair chưa hoàn tất; xem audit error bên dưới." : "Chưa có Chair output.")}</p>
           </div>
           <div className="text-right">
@@ -132,6 +141,7 @@ function DebateCard({ row }: { row: AiCouncilLlmDebateRecord }) {
             <div className="rounded-xl border border-white/[0.06] bg-black/15 p-3"><div className="text-[8px] font-black uppercase text-slate-600">Policy alignment</div><p className={cn("mt-1.5 text-[10px] font-bold", row.chair.agreesWithDeterministic ? "text-emerald-300" : "text-amber-300")}>{row.chair.agreesWithDeterministic ? "Agrees with deterministic signal" : "Disagrees — advisory only, no override"}</p></div>
           </div>
         ) : null}
+        {row.escalationReason ? <p className="mt-3 rounded-xl border border-fuchsia-400/10 bg-fuchsia-400/[0.025] px-3 py-2 text-[9px] leading-4 text-fuchsia-200/70">Sol escalation reason: {row.escalationReason}</p> : null}
         {row.error ? <p className="mt-3 rounded-xl border border-rose-400/10 bg-rose-400/[0.025] px-3 py-2 text-[9px] leading-4 text-rose-200/60">{row.error}</p> : null}
       </section>
     </article>
@@ -143,6 +153,8 @@ export default async function AiCouncilDebatesPage() {
   if (!auth) return <LandingLogin />
   const data = await getAiCouncilDebateDashboardData(auth.supabase)
   const latestRows = data.latestDate ? data.rows.filter((row) => row.asOfDate === data.latestDate) : []
+  const totalInputTokens = latestRows.reduce((sum, row) => sum + row.inputTokens, 0)
+  const cacheRate = totalInputTokens > 0 ? (data.cachedInputTokens / totalInputTokens) * 100 : 0
 
   return (
     <div className="min-h-screen bg-[#06090d] text-white">
@@ -153,26 +165,33 @@ export default async function AiCouncilDebatesPage() {
             <Link href="/insights/ai-council" className="mb-3 inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-violet-300"><ArrowLeft className="size-3.5" />AI Council</Link>
             <div className="flex items-center gap-2.5">
               <span className="flex size-10 items-center justify-center rounded-xl border border-violet-400/20 bg-violet-400/[0.08] text-violet-300"><Swords className="size-5" /></span>
-              <div><h1 className="font-ticker text-2xl font-black">LLM Debate Lab</h1><p className="text-[10px] text-slate-500">P4 event-selected blind Bull/Bear/Risk debate · Structured Outputs · advisory Chair · deterministic policy remains final.</p></div>
+              <div><h1 className="font-ticker text-2xl font-black">LLM Debate Lab</h1><p className="text-[10px] text-slate-500">P4.1 hybrid router · Luna Bull/Bear · Terra Risk/Chair · Sol severe-conflict escalation · deterministic policy remains final.</p></div>
             </div>
           </div>
-          <div className="flex items-center gap-2 rounded-xl border border-white/[0.07] bg-[#080d13] px-3 py-2 text-[9px] text-slate-500"><Gauge className="size-3.5 text-cyan-300"/><span>{data.enabledByConfiguration ? `Runtime enabled · ${data.model}` : "Runtime disabled · configure OPENAI_API_KEY"}</span></div>
+          <div className="max-w-2xl rounded-xl border border-white/[0.07] bg-[#080d13] px-3 py-2 text-[9px] text-slate-500"><div className="flex items-center gap-2"><Gauge className="size-3.5 shrink-0 text-cyan-300"/><span>{data.enabledByConfiguration ? "Runtime enabled" : "Runtime disabled"} · {data.model}</span></div></div>
         </header>
 
-        <section className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-2xl border border-white/[0.08] bg-[#080d13] p-4"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider text-slate-600"><BrainCircuit className="size-4 text-violet-300"/>Latest debate date</div><div className="mt-3 font-mono text-xl font-black">{data.latestDate || "—"}</div><p className="mt-1 text-[9px] text-slate-600">{latestRows.length} event-selected runs</p></div>
           <div className="rounded-2xl border border-white/[0.08] bg-[#080d13] p-4"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider text-slate-600"><Target className="size-4 text-emerald-300"/>Completed</div><div className="mt-3 font-mono text-2xl font-black text-emerald-300">{data.completed}</div><p className="mt-1 text-[9px] text-slate-600">{data.partial} partial · {data.failed} failed</p></div>
-          <div className="rounded-2xl border border-white/[0.08] bg-[#080d13] p-4"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider text-slate-600"><Gauge className="size-4 text-cyan-300"/>Token budget</div><div className="mt-3 font-mono text-2xl font-black text-cyan-300">{data.totalTokens.toLocaleString("vi-VN")}</div><p className="mt-1 text-[9px] text-slate-600">Latest-date persisted usage</p></div>
-          <div className="rounded-2xl border border-white/[0.08] bg-[#080d13] p-4"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider text-slate-600"><ShieldCheck className="size-4 text-amber-300"/>Hard guardrail</div><div className="mt-3 font-mono text-lg font-black text-amber-300">DETERMINISTIC</div><p className="mt-1 text-[9px] text-slate-600">LLM cannot overwrite signals or outcomes.</p></div>
+          <div className="rounded-2xl border border-white/[0.08] bg-[#080d13] p-4"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider text-slate-600"><Gauge className="size-4 text-cyan-300"/>Prompt cache</div><div className="mt-3 font-mono text-2xl font-black text-cyan-300">{cacheRate.toFixed(0)}%</div><p className="mt-1 text-[9px] text-slate-600">{data.cachedInputTokens.toLocaleString("vi-VN")} cached input tokens</p></div>
+          <div className="rounded-2xl border border-white/[0.08] bg-[#080d13] p-4"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider text-slate-600"><Coins className="size-4 text-amber-300"/>List-cost estimate</div><div className="mt-3 font-mono text-2xl font-black text-amber-300">{money(data.estimatedCostUsd)}</div><p className="mt-1 text-[9px] text-slate-600">Promotions / cache-write billing may differ</p></div>
+          <div className="rounded-2xl border border-white/[0.08] bg-[#080d13] p-4"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider text-slate-600"><Zap className="size-4 text-fuchsia-300"/>Escalation</div><div className="mt-3 font-mono text-2xl font-black text-fuchsia-300">{data.escalated}</div><p className="mt-1 text-[9px] text-slate-600">Sol attempts · {data.fallbackUsed} fallback runs</p></div>
         </section>
 
         <section className="mb-4 rounded-2xl border border-cyan-400/12 bg-cyan-400/[0.025] px-4 py-3">
-          <div className="flex items-start gap-2"><CircleAlert className="mt-0.5 size-4 shrink-0 text-cyan-300"/><p className="text-[10px] leading-5 text-slate-400">{data.message} P4 chỉ chọn run có signal change, disagreement, BUY_ON_CONFIRMATION, risk conflict hoặc ticker được pin bằng env. Bull/Bear/Risk nhận cùng một evidence packet và không có web access.</p></div>
+          <div className="flex items-start gap-2"><CircleAlert className="mt-0.5 size-4 shrink-0 text-cyan-300"/><p className="text-[10px] leading-5 text-slate-400">{data.message} P4 chỉ chọn run có signal change, disagreement, BUY_ON_CONFIRMATION, risk conflict hoặc ticker được pin. Prompt cache dùng stable evidence key; Sol chỉ chạy khi compound conflict vượt escalation gate.</p></div>
+        </section>
+
+        <section className="mb-4 grid gap-3 lg:grid-cols-3">
+          <div className="rounded-2xl border border-emerald-400/12 bg-emerald-400/[0.025] p-3.5"><div className="text-[9px] font-black uppercase tracking-wider text-emerald-300">Cheap divergence layer</div><p className="mt-2 text-[11px] leading-5 text-slate-400">Bull + Bear: <span className="font-mono text-slate-200">{data.modelRoute.bull.model}</span> · effort {data.modelRoute.bull.reasoningEffort}. Hai vai trò dùng cùng evidence prefix để tối đa cache reuse.</p></div>
+          <div className="rounded-2xl border border-cyan-400/12 bg-cyan-400/[0.025] p-3.5"><div className="text-[9px] font-black uppercase tracking-wider text-cyan-300">Reasoning layer</div><p className="mt-2 text-[11px] leading-5 text-slate-400">Risk + Chair: <span className="font-mono text-slate-200">{data.modelRoute.risk.model}</span> · effort {data.modelRoute.risk.reasoningEffort}/{data.modelRoute.chair.reasoningEffort}.</p></div>
+          <div className="rounded-2xl border border-fuchsia-400/12 bg-fuchsia-400/[0.025] p-3.5"><div className="text-[9px] font-black uppercase tracking-wider text-fuchsia-300">Severe conflict only</div><p className="mt-2 text-[11px] leading-5 text-slate-400">Escalation: <span className="font-mono text-slate-200">{data.modelRoute.escalation.model}</span> · effort {data.modelRoute.escalation.reasoningEffort}. Final signal vẫn là deterministic Council.</p></div>
         </section>
 
         <div className="space-y-4">
           {data.rows.length ? data.rows.map((row) => <DebateCard key={row.id} row={row} />) : (
-            <div className="rounded-3xl border border-dashed border-white/[0.1] bg-[#080d13] px-5 py-16 text-center"><Swords className="mx-auto size-8 text-slate-700"/><h2 className="mt-3 text-sm font-extrabold text-slate-300">Chưa có LLM debate</h2><p className="mx-auto mt-2 max-w-xl text-[10px] leading-5 text-slate-600">Đây là expected state trước phiên cron đầu tiên hoặc khi chưa cấu hình API key. Deterministic Council vẫn hoạt động độc lập.</p></div>
+            <div className="rounded-3xl border border-dashed border-white/[0.1] bg-[#080d13] px-5 py-16 text-center"><Swords className="mx-auto size-8 text-slate-700"/><h2 className="mt-3 text-sm font-extrabold text-slate-300">Chưa có LLM debate</h2><p className="mx-auto mt-2 max-w-xl text-[10px] leading-5 text-slate-600">Nếu OPENAI_API_KEY đã được thêm, trạng thái này vẫn bình thường trước deterministic Council run kế tiếp hoặc khi không có event vượt P4 selection gates.</p></div>
           )}
         </div>
       </main>

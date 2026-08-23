@@ -38,10 +38,10 @@ export async function GET(request: NextRequest) {
       ...result,
       schedule: "17:25 Asia/Ho_Chi_Minh on trading weekdays",
       finalAuthority: "deterministic",
-      behavior: "Event-select deterministic Council runs -> blind Bull/Bear/Risk structured outputs -> advisory LLM Chair -> immutable audit persistence. LLM output never overrides the deterministic signal.",
+      behavior: "Event-select deterministic Council runs -> Luna Bull/Bear -> Terra Risk/Chair -> Sol Chair only on severe conflict -> immutable cost/cache audit. LLM output never overrides the deterministic signal.",
     })
   } catch (error) {
-    console.error("AI Council P4 LLM debate failed", error)
+    console.error("AI Council P4.1 LLM debate failed", error)
     await notifyOpsError({
       source: "api/ai-council/debate-daily",
       message: error instanceof Error ? error.message : String(error),

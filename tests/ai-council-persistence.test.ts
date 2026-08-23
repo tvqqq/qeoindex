@@ -127,20 +127,56 @@ test("P4 event selector caps spend and escalates only material deterministic eve
   assert.match(llm, /stock\.riskStatus === "veto"/)
 })
 
-test("P4 uses OpenAI Responses Structured Outputs with no tools and fails closed when unconfigured", () => {
+test("P4.1 routes roles to Luna/Terra/Sol with bounded fallback and reasoning effort", () => {
   const llm = source("lib/ai-council-llm.ts")
   const env = source(".env.example")
+
+  assert.match(llm, /DEFAULT_BULL_MODEL = "gpt-5\.6-luna"/)
+  assert.match(llm, /DEFAULT_BEAR_MODEL = "gpt-5\.6-luna"/)
+  assert.match(llm, /DEFAULT_RISK_MODEL = "gpt-5\.6-terra"/)
+  assert.match(llm, /DEFAULT_CHAIR_MODEL = "gpt-5\.6-terra"/)
+  assert.match(llm, /DEFAULT_ESCALATION_MODEL = "gpt-5\.6-sol"/)
+  assert.match(llm, /DEFAULT_FALLBACK_MODEL = "gpt-5-mini"/)
+  assert.match(llm, /AI_COUNCIL_LLM_BULL_EFFORT", "low"/)
+  assert.match(llm, /AI_COUNCIL_LLM_RISK_EFFORT", "medium"/)
+  assert.match(llm, /AI_COUNCIL_LLM_ESCALATION_EFFORT", "high"/)
+  assert.match(env, /AI_COUNCIL_LLM_BULL_MODEL=gpt-5\.6-luna/)
+  assert.match(env, /AI_COUNCIL_LLM_RISK_MODEL=gpt-5\.6-terra/)
+  assert.match(env, /AI_COUNCIL_LLM_ESCALATION_MODEL=gpt-5\.6-sol/)
+})
+
+test("P4.1 uses Responses Structured Outputs, stable prompt-cache keys, and token telemetry", () => {
+  const llm = source("lib/ai-council-llm.ts")
+  const migration = source("supabase/migrations/20260823195500_ai_council_llm_router_telemetry.sql")
 
   assert.match(llm, /https:\/\/api\.openai\.com\/v1\/responses/)
   assert.match(llm, /type: "json_schema"/)
   assert.match(llm, /strict: true/)
+  assert.match(llm, /prompt_cache_key: params\.cacheKey/)
+  assert.match(llm, /input_tokens_details/)
+  assert.match(llm, /cached_tokens/)
+  assert.match(llm, /reasoning_tokens/)
   assert.match(llm, /store: false/)
   assert.match(llm, /tools: \[\]/)
   assert.match(llm, /OPENAI_API_KEY is not configured/)
   assert.match(llm, /deterministic QeoIndex policy remains the final decision authority/i)
   assert.match(llm, /Do not reveal chain-of-thought/i)
-  assert.match(env, /OPENAI_API_KEY=/)
-  assert.match(env, /AI_COUNCIL_LLM_MODEL=gpt-5-mini/)
+  assert.match(migration, /cached_input_tokens integer/)
+  assert.match(migration, /estimated_cost_usd numeric/)
+  assert.match(migration, /model_route jsonb/)
+  assert.match(migration, /escalated boolean/)
+  assert.match(migration, /fallback_used boolean/)
+})
+
+test("P4.1 severe-conflict gate reserves Sol escalation for compound disagreement", () => {
+  const llm = source("lib/ai-council-llm.ts")
+
+  assert.match(llm, /reasons\.has\("signal_changed"\) && reasons\.has\("risk_conflict"\)/)
+  assert.match(llm, /selection\.stock\.consensus <= 55/)
+  assert.match(llm, /bull\.confidence >= 65 && bear\.confidence >= 65/)
+  assert.match(llm, /risk\?\.stance === "veto" && selection\.stock\.councilScore >= 60/)
+  assert.match(llm, /chair_escalation/)
+  assert.match(llm, /Sol is reserved for severe-conflict Chair escalation/)
 })
 
 test("P4 debate cron is isolated after deterministic Council and exposes an authenticated audit page", () => {
@@ -156,6 +192,7 @@ test("P4 debate cron is isolated after deterministic Council and exposes an auth
   assert.equal(debateCron?.schedule, "25 10 * * 1-5")
   assert.match(page, /getServerAuthContext/)
   assert.match(page, /LLM Debate Lab/)
-  assert.match(page, /DETERMINISTIC/)
+  assert.match(page, /Luna Bull\/Bear/)
+  assert.match(page, /Sol severe-conflict escalation/)
   assert.match(councilPage, /\/insights\/ai-council\/debates/)
 })
