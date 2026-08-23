@@ -1,6 +1,8 @@
 "use client"
 
-export interface LightweightPriceLineApi {}
+export interface LightweightPriceLineApi {
+  readonly __qeoindexPriceLineOpaque?: never
+}
 
 export interface LightweightSeriesApi {
   setData(data: ReadonlyArray<Record<string, unknown>>): void
