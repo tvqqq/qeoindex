@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { CandlestickChart, ChevronDown, Compass, GitCommit, LayoutDashboard, Sparkles } from "lucide-react"
+import { BrainCircuit, CandlestickChart, ChevronDown, Compass, GitCommit, LayoutDashboard, Sparkles } from "lucide-react"
 
 import { BRAND } from "@/lib/brand"
 
@@ -28,6 +28,15 @@ const INSIGHTS_ITEMS = [
     badgeColor: "border-purple-500/30 bg-purple-500/15 text-purple-300",
     iconBg: "border-purple-500/25 bg-purple-500/10 text-purple-300",
     description: "Chart 1H–1M, phase và kịch bản tiếp theo",
+  },
+  {
+    label: "AI Council",
+    href: "/insights/ai-council",
+    icon: BrainCircuit,
+    badge: "BETA",
+    badgeColor: "border-violet-500/30 bg-violet-500/15 text-violet-300",
+    iconBg: "border-violet-500/25 bg-violet-500/10 text-violet-300",
+    description: "5 specialist agents, Bull/Bear debate và Risk audit",
   },
   {
     label: "Nghiên cứu",
