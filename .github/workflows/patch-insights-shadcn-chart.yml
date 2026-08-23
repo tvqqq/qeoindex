@@ -90,3 +90,5 @@ function RatingDialog'''
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "feat(insights): align overview charts with shadcn style"
           git push origin HEAD:feat/insights-shadcn-chart-polish
+
+# one-shot workflow; delete after patch lands
