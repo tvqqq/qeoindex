@@ -282,6 +282,14 @@ Deno.serve(async (req: Request) => {
   if (!expectedSecret) return response({ ok: false, error: "SYNC_SECRET_NOT_CONFIGURED" }, 503)
   if (!constantTimeEqual(expectedSecret, providedSecret)) return response({ ok: false, error: "UNAUTHORIZED" }, 401)
 
+  const requestBody = asObject(await req.json().catch(() => null))
+  const requestedTickers = new Set(
+    (Array.isArray(requestBody?.tickers) ? requestBody.tickers : [])
+      .map((value) => String(value || "").trim().toUpperCase())
+      .filter((ticker) => /^[A-Z0-9]{2,12}$/.test(ticker)),
+  )
+  const forceRequested = requestBody?.force === true && requestedTickers.size > 0
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || ""
   const supabaseKey = serviceRoleKey()
   if (!supabaseUrl || !supabaseKey) return response({ ok: false, error: "SUPABASE_NOT_CONFIGURED" }, 500)
@@ -298,9 +306,13 @@ Deno.serve(async (req: Request) => {
     const maxPerRun = Math.max(1, Math.min(50, Number(Deno.env.get("KFSP_TTAI_MAX_PER_RUN") || DEFAULT_MAX_PER_RUN)))
     const candidates = ratings
       .map((row) => ({ ...row, financialPeriod: currentFinancialPeriod(row.kfsp_metrics) }))
-      .filter((row) => row.financialPeriod && state.get(row.ticker) !== row.financialPeriod)
+      .filter((row) => {
+        if (!row.financialPeriod) return false
+        if (requestedTickers.size > 0 && !requestedTickers.has(row.ticker)) return false
+        return forceRequested || state.get(row.ticker) !== row.financialPeriod
+      })
       .sort((left, right) => Number(right.is_top100) - Number(left.is_top100) || left.ticker.localeCompare(right.ticker))
-      .slice(0, maxPerRun)
+      .slice(0, requestedTickers.size > 0 ? Math.min(50, requestedTickers.size) : maxPerRun)
 
     await supabase.from("kfsp_ttai_sync_runs").update({ latest_rating_date: latestDate, candidate_count: candidates.length }).eq("id", runId)
     if (!candidates.length) {
