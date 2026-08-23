@@ -57,6 +57,32 @@ export async function fetchDailyMarketHistory(symbol: string, now = new Date()):
   throw new Error(errors.join(" | ").slice(0, 520))
 }
 
+const WYCKOFF_LONG_LOOKBACK_DAYS = 8 * 366
+
+/** Selected-ticker chart path only. Scanner fan-out keeps the bounded default lookback above. */
+export async function fetchLongDailyMarketHistory(symbol: string, now = new Date()): Promise<HistoricalBarsResult> {
+  const errors: string[] = []
+  if (shouldTryDnse()) {
+    try {
+      const bars = await fetchDnseDailyOhlcv(symbol, now, WYCKOFF_LONG_LOOKBACK_DAYS)
+      return { bars, provider: "DNSE", detail: "DNSE OpenAPI · 1D · 8-year Wyckoff window" }
+    } catch (error) {
+      errors.push(`DNSE: ${markDnseUnavailable(error)}`)
+    }
+  } else {
+    errors.push("DNSE: temporarily bypassed after network failure")
+  }
+
+  try {
+    const bars = await fetchYahooDailyOhlcv(symbol, now, WYCKOFF_LONG_LOOKBACK_DAYS)
+    return { bars, provider: "Fallback", detail: "Yahoo Finance .VN fallback · 1D · 8-year Wyckoff window" }
+  } catch (error) {
+    errors.push(`Yahoo: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  throw new Error(errors.join(" | ").slice(0, 520))
+}
+
 export async function fetchHourlyMarketHistory(symbol: string, now = new Date()): Promise<HistoricalBarsResult> {
   const errors: string[] = []
   if (shouldTryDnse()) {
@@ -104,5 +130,18 @@ export async function fetchHourlyMarketHistoryUi(symbol: string): Promise<Histor
     ttlSeconds: 5 * 60,
     validate: isHistoricalBarsResult,
     load: () => fetchHourlyMarketHistory(normalized),
+  })
+}
+
+export async function fetchLongDailyMarketHistoryUi(symbol: string): Promise<HistoricalBarsResult> {
+  const normalized = symbol.trim().toUpperCase()
+  return readThroughUiCache({
+    namespace: "market-history-ui-v1",
+    key: `daily-long:${normalized}`,
+    tag: "qeoindex-market-history-ui-v1",
+    name: `QeoIndex ${normalized} long Daily Wyckoff history`,
+    ttlSeconds: 30 * 60,
+    validate: isHistoricalBarsResult,
+    load: () => fetchLongDailyMarketHistory(normalized),
   })
 }

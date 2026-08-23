@@ -1,6 +1,6 @@
 # QeoIndex engineering handover
 
-Last updated: 2026-08-21. This is the canonical fast-start document for agents and maintainers.
+Last updated: 2026-08-23. This is the canonical fast-start document for agents and maintainers.
 
 ## Product and production
 
@@ -140,6 +140,14 @@ See `docs/market-board.md` and `docs/perf-market-board-state-buffer.md` for the 
 - Source-contract tests are not a substitute for real browser visual QA.
 
 ## Scanner and research
+
+### Wyckoff chart workspace
+
+- `/insights/wyckoff?ticker=FPT&timeframe=1D` is the chart-first Top 100 workspace. It supports `1H`, `4H`, `1D`, `1W`, and `1M`; each ticker/timeframe is shareable by query string.
+- The sidebar reads canonical Notion universe/latest Daily scans. The selected chart reads completed provider bars; `4H`, `1W`, and `1M` are deterministic aggregates. Daily bars are aligned to the canonical scan date.
+- Future lines are conditional Bull/Base/Bear projections from phase, ATR, levels, and rule-engine probabilities. Do not label them as predicted prices.
+- `docs/wyckoff-chart-unified-data.md` documents the Supabase unified schema. `/api/wyckoff/run` writes five timeframe snapshots plus bounded chart series; the page reads this model first and keeps a Notion/provider compatibility fallback during cutover.
+- `scripts/chatgpt-plus-wyckoff-schedule-prompt.md` is the copy-ready scheduled-task prompt. Its bearer credential belongs in private Custom GPT Action auth, never in the prompt.
 
 ### Authenticated Insights homepage
 

@@ -177,8 +177,8 @@ export async function fetchYahooFiveMinuteOhlcv(symbol: string, now = new Date()
   return (await fetchYahooFiveMinuteSnapshot(symbol, now)).bars
 }
 
-export async function fetchYahooDailyOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
-  let bars = await fetchYahooOhlcv(symbol, "1d", DEFAULT_LOOKBACK_DAYS, now)
+export async function fetchYahooDailyOhlcv(symbol: string, now = new Date(), lookbackDays = DEFAULT_LOOKBACK_DAYS): Promise<OhlcvBar[]> {
+  let bars = await fetchYahooOhlcv(symbol, "1d", lookbackDays, now)
   if (!marketClosed(now)) {
     const today = vietnamDateKey(now.getTime())
     bars = bars.filter((bar) => vietnamDateKey(bar.time * 1000) !== today)

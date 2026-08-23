@@ -145,9 +145,9 @@ async function requestOhlc(symbol: string, resolution: string, from: number, to:
   return bars
 }
 
-export async function fetchDailyOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
+export async function fetchDailyOhlcv(symbol: string, now = new Date(), lookbackDays = DEFAULT_LOOKBACK_DAYS): Promise<OhlcvBar[]> {
   const to = Math.floor(now.getTime() / 1000)
-  const from = to - DEFAULT_LOOKBACK_DAYS * 86400
+  const from = to - lookbackDays * 86400
   const errors: string[] = []
   for (const resolution of ["1D", "D"]) {
     try {

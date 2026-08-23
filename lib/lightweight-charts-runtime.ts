@@ -3,6 +3,11 @@
 export interface LightweightSeriesApi {
   setData(data: ReadonlyArray<Record<string, unknown>>): void
   update(data: Record<string, unknown>): void
+  createPriceLine?(options: Record<string, unknown>): unknown
+}
+
+export interface LightweightSeriesMarkersApi {
+  setMarkers(markers: ReadonlyArray<Record<string, unknown>>): void
 }
 
 export interface LightweightLogicalRange {
@@ -33,7 +38,13 @@ export interface LightweightChartsRuntime {
   createChart(container: HTMLElement, options?: Record<string, unknown>): LightweightChartApi
   CandlestickSeries: unknown
   HistogramSeries: unknown
+  LineSeries: unknown
   ColorType: { Solid: string }
+  createSeriesMarkers?: (
+    series: LightweightSeriesApi,
+    markers?: ReadonlyArray<Record<string, unknown>>,
+    options?: Record<string, unknown>,
+  ) => LightweightSeriesMarkersApi
   version?: () => string
 }
 

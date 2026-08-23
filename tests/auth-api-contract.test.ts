@@ -41,6 +41,7 @@ test("per-user account and watchlist APIs derive user from server auth", () => {
 
 test("server-rendered app surfaces verify the server session", () => {
   assert.match(source("app/page.tsx"), /getServerAuthContext/)
+  assert.match(source("app/insights/wyckoff/page.tsx"), /getServerAuthContext/)
   assert.match(source("app/research/layout.tsx"), /getServerAuthContext/)
   assert.match(source("components/auth/app-auth-gate.tsx"), /syncServerSession/)
 })

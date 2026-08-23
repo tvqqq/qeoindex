@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import {
   BarChart2,
   BookOpen,
+  CandlestickChart,
   ChevronDown,
   Compass,
   GitCommit,
@@ -36,6 +37,15 @@ const INSIGHTS_ITEMS = [
     badgeColor: "bg-emerald-500/15 border-emerald-500/30 text-emerald-400",
     iconBg: "bg-cyan-500/10 border-cyan-500/25 text-cyan-400",
     description: "Bộ lọc pha tích lũy & cấu trúc Wyckoff",
+  },
+  {
+    label: "Phân tích chart Wyckoff",
+    href: "/insights/wyckoff",
+    icon: CandlestickChart,
+    badge: "NEW",
+    badgeColor: "bg-purple-500/15 border-purple-500/30 text-purple-300",
+    iconBg: "bg-purple-500/10 border-purple-500/25 text-purple-300",
+    description: "Chart 1H–1M, phase và kịch bản tiếp theo",
   },
   {
     label: "Tín hiệu giao dịch",
@@ -101,7 +111,7 @@ export function TopNav() {
   }
 
   const isBoardActive = pathname === "/"
-  const isInsightsActive = pathname === "/insights" || pathname.startsWith("/research")
+  const isInsightsActive = pathname.startsWith("/insights") || pathname.startsWith("/research")
 
   const handleMouseEnter = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
