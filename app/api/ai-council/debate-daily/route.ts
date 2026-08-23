@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { runSelectedAiCouncilLlmDebates } from "@/lib/ai-council-llm"
+import { enrichCouncilStocksWithLlmEvidence } from "@/lib/ai-council-llm-evidence"
 import { getAiCouncilRuntimeData } from "@/lib/ai-council-runtime"
 import { isMachineRequestAuthorized } from "@/lib/auth/machine"
 import { notifyOpsError } from "@/lib/ops-alerts"
@@ -32,6 +33,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const runtimeData = await getAiCouncilRuntimeData(supabase, { includeHistory: false })
+    const evidenceFidelity = await enrichCouncilStocksWithLlmEvidence(supabase, {
+      ratingDate: runtimeData.data.ratingDate,
+      stocks: runtimeData.data.stocks,
+    })
+    const debateStocks = evidenceFidelity.stocks
+
     const priorDebates = await supabase
       .from("ai_council_llm_debates")
       .select("id", { count: "exact", head: true })
@@ -42,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     const run = () => runSelectedAiCouncilLlmDebates(supabase, {
       ratingDate: runtimeData.data.ratingDate,
-      stocks: runtimeData.data.stocks,
+      stocks: debateStocks,
       benchmark: runtimeData.benchmark,
       weightProfile: runtimeData.weightProfile,
     })
@@ -61,7 +68,7 @@ export async function GET(request: NextRequest) {
       && (priorDebates.count || 0) === 0
       && !process.env.AI_COUNCIL_LLM_TICKERS?.trim()
     ) {
-      validationTicker = firstValidationTicker(runtimeData.data.stocks)
+      validationTicker = firstValidationTicker(debateStocks)
       if (validationTicker) {
         const originalTickers = process.env.AI_COUNCIL_LLM_TICKERS
         const originalMaxTickers = process.env.AI_COUNCIL_LLM_MAX_TICKERS
@@ -83,14 +90,24 @@ export async function GET(request: NextRequest) {
       ok: true,
       status: result.enabled ? "completed" : "disabled",
       ...result,
+      evidenceFidelity: {
+        contextVersion: evidenceFidelity.contextVersion,
+        contextsBuilt: evidenceFidelity.contextsBuilt,
+        contextsReused: evidenceFidelity.contextsReused,
+        contextsPersisted: evidenceFidelity.contextsPersisted,
+        missingRunIdentities: evidenceFidelity.missingRunIdentities,
+        ttaiRowsLoaded: evidenceFidelity.ttaiRowsLoaded,
+        wyckoffRowsLoaded: evidenceFidelity.wyckoffRowsLoaded,
+        detail: evidenceFidelity.detail,
+      },
       validationBootstrap,
       validationTicker: validationBootstrap ? validationTicker : null,
       schedule: "17:25 Asia/Ho_Chi_Minh on trading weekdays",
       finalAuthority: "deterministic",
-      behavior: "Event-select deterministic Council runs -> Luna Bull/Bear -> Terra Risk/Chair -> Sol Chair only on severe conflict -> immutable cost/cache audit. On the first live production day only, one deterministic stock is used as a bounded validation bootstrap if no event qualifies. LLM output never overrides the deterministic signal.",
+      behavior: "Freeze raw current KFSP/TTAI metrics + quarterly 4M/CANSLIM trajectory + raw Wyckoff MTF context -> event-select deterministic Council runs -> Luna Bull/Bear -> Terra Risk/Chair -> Sol Chair only on severe conflict -> immutable cost/cache audit. The evidence-fidelity context is advisory-only and never changes deterministic scoring or signal authority.",
     })
   } catch (error) {
-    console.error("AI Council P4.2 LLM debate failed", error)
+    console.error("AI Council P4.3 LLM debate failed", error)
     await notifyOpsError({
       source: "api/ai-council/debate-daily",
       message: error instanceof Error ? error.message : String(error),

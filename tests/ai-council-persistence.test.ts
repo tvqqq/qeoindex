@@ -179,6 +179,39 @@ test("P4.1 severe-conflict gate reserves Sol escalation for compound disagreemen
   assert.match(llm, /Sol is reserved for severe-conflict Chair escalation/)
 })
 
+test("P4.3 freezes raw KFSP, TTAI history and Wyckoff context without changing deterministic authority", () => {
+  const evidence = source("lib/ai-council-llm-evidence.ts")
+  const migration = source("supabase/migrations/20260823214500_ai_council_llm_evidence_fidelity.sql")
+  const route = source("app/api/ai-council/debate-daily/route.ts")
+
+  assert.match(evidence, /AI_COUNCIL_LLM_EVIDENCE_VERSION = "llm-evidence-fidelity-v1"/)
+  assert.match(evidence, /"price_volatility"/)
+  assert.match(evidence, /"price_range"/)
+  assert.match(evidence, /"technical"/)
+  assert.match(evidence, /"fundamentals"/)
+  assert.match(evidence, /"valuation"/)
+  assert.match(evidence, /kfsp_ttai_quarterly_history/)
+  assert.match(evidence, /TTAI_HISTORY_LIMIT = 8/)
+  assert.match(evidence, /fourm_components,canslim_components/)
+  assert.match(evidence, /wyckoff_latest_by_timeframe/)
+  assert.match(evidence, /\["1W", "1D", "4H", "1H"\]/)
+  assert.match(evidence, /P4\.3 context-only raw evidence/)
+  assert.match(evidence, /does not change the deterministic Council score, signal, calibration weights, or risk gate/i)
+  assert.doesNotMatch(evidence, /buildCouncilStock|applyCouncilWeightProfile/)
+
+  assert.match(migration, /create table if not exists public\.ai_council_llm_evidence/)
+  assert.match(migration, /run_id uuid primary key references public\.ai_council_runs/)
+  assert.match(migration, /context_hash text not null check \(context_hash ~ '\^\[0-9a-f\]\{64\}\$'\)/)
+  assert.match(migration, /context_payload jsonb not null/)
+  assert.match(migration, /before update on public\.ai_council_llm_evidence/)
+  assert.match(migration, /grant select on table public\.ai_council_llm_evidence to authenticated/)
+
+  assert.match(route, /enrichCouncilStocksWithLlmEvidence/)
+  assert.match(route, /stocks: debateStocks/)
+  assert.match(route, /finalAuthority: "deterministic"/)
+  assert.match(route, /evidenceFidelity:/)
+})
+
 test("P4 debate cron is isolated after deterministic Council and exposes an authenticated audit page", () => {
   const route = source("app/api/ai-council/debate-daily/route.ts")
   const page = source("app/insights/ai-council/debates/page.tsx")
