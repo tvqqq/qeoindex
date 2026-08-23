@@ -1,0 +1,45 @@
+name: Fix Insights stock detail compile cleanup
+
+on:
+  push:
+    branches:
+      - feat/insights-stock-detail-dashboard
+    paths:
+      - .github/workflows/fix-insights-stock-detail-types.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/insights-stock-detail-dashboard
+          fetch-depth: 0
+      - name: Apply compile cleanup
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const path = 'components/insights/insights-dashboard.tsx'
+          let source = fs.readFileSync(path, 'utf8')
+          source = source.replace('  type KfspFieldDefinition,\n  type KfspGroupKey,\n', '  type KfspFieldDefinition,\n')
+          source = source.replace(/\nconst KFSP_GROUP_ICONS: Record<KfspGroupKey, typeof Gauge> = \{[\s\S]*?\n\}\n\nconst DATE_FORMAT/, '\nconst DATE_FORMAT')
+          source = source.replace(
+            '  const rsi = metricNumber("rsi_14") ?? row.rsi14\n',
+            '  const rowRsi = typeof row.rsi14 === "number" ? row.rsi14 : Number(row.rsi14)\n  const rsi = metricNumber("rsi_14") ?? (Number.isFinite(rowRsi) ? rowRsi : null)\n',
+          )
+          fs.writeFileSync(path, source)
+          NODE
+      - name: Commit cleanup
+        run: |
+          if git diff --quiet -- components/insights/insights-dashboard.tsx; then
+            echo "No source changes required"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/insights/insights-dashboard.tsx
+          git commit -m "fix(insights): clean stock detail dashboard types"
+          git push origin HEAD:feat/insights-stock-detail-dashboard
