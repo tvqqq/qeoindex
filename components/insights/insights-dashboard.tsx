@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import {
   Activity,
   ArrowDown,
@@ -10,27 +10,51 @@ import {
   BarChart3,
   Bolt,
   BrainCircuit,
+  Building2,
+  Car,
   CalendarDays,
   CalendarRange,
+  ChevronDown,
+  ChevronRight,
   ChevronsUpDown,
   ChartNoAxesCombined,
   CircleAlert,
+  Compass,
+  Cpu,
   Crown,
   Database,
   ExternalLink,
+  Factory,
+  Flame,
+  FlaskConical,
   Gauge,
+  GraduationCap,
+  Gem,
+  HardHat,
+  HeartPulse,
   Info,
+  Landmark,
   Layers3,
+  Leaf,
   LineChart,
+  PackageOpen,
+  Plane,
   Radar,
   RefreshCw,
   Rocket,
   Search,
   ShieldCheck,
+  ShoppingBag,
   Sparkles,
+  Sprout,
   TrendingDown,
   TrendingUp,
+  Truck,
   Target,
+  TreePine,
+  Utensils,
+  Waves,
+  Wifi,
   Zap,
 } from "lucide-react"
 
@@ -73,6 +97,39 @@ const DATE_FORMAT = new Intl.DateTimeFormat("vi-VN", {
   minute: "2-digit",
   hour12: false,
 })
+
+function getSectorIcon(sector: string) {
+  const normalized = sector.toLowerCase()
+  if (normalized.includes("ngân hàng") || normalized.includes("bank")) return Landmark
+  if (normalized.includes("chứng khoán") || normalized.includes("tài chính")) return LineChart
+  if (normalized.includes("bảo hiểm")) return ShieldCheck
+  if (normalized.includes("hàng không")) return Plane
+  if (normalized.includes("cao su")) return TreePine
+  if (normalized.includes("bất động sản")) return Building2
+  if (normalized.includes("vật liệu xây dựng")) return Layers3
+  if (normalized.includes("đầu tư xây dựng") || normalized.includes("xây dựng")) return HardHat
+  if (normalized.includes("công nghệ") || normalized.includes("it")) return Cpu
+  if (normalized.includes("viễn thông")) return Wifi
+  if (normalized.includes("bán lẻ") || normalized.includes("thương mại")) return ShoppingBag
+  if (normalized.includes("tiêu dùng")) return PackageOpen
+  if (normalized.includes("thép") || normalized.includes("kim loại")) return Layers3
+  if (normalized.includes("khoáng sản")) return Gem
+  if (normalized.includes("dầu khí") || normalized.includes("năng lượng")) return Flame
+  if (normalized.includes("điện") || normalized.includes("công ích")) return Zap
+  if (normalized.includes("thực phẩm") || normalized.includes("đồ uống")) return Utensils
+  if (normalized.includes("nông nghiệp")) return Sprout
+  if (normalized.includes("thủy sản")) return Waves
+  if (normalized.includes("y tế") || normalized.includes("dược")) return HeartPulse
+  if (normalized.includes("hóa chất")) return FlaskConical
+  if (normalized.includes("phân bón")) return Leaf
+  if (normalized.includes("nhựa")) return PackageOpen
+  if (normalized.includes("ô tô")) return Car
+  if (normalized.includes("giáo dục")) return GraduationCap
+  if (normalized.includes("sản xuất")) return Factory
+  if (normalized.includes("vận tải") || normalized.includes("logistics") || normalized.includes("cảng")) return Truck
+  if (normalized.includes("du lịch") || normalized.includes("dịch vụ")) return Compass
+  return Layers3
+}
 
 function compactVolume(value: number | null) {
   if (value == null) return "—"
@@ -155,7 +212,7 @@ function MetricLabel({ definition, className }: { definition: KfspFieldDefinitio
   return (
     <Tooltip>
       <TooltipTrigger render={<span className={cn("inline-flex cursor-help items-center gap-1", className)} />}>
-        {definition.label}<Info className="size-3 opacity-55" />
+        {definition.label}<Info className="size-3.5 opacity-55" />
       </TooltipTrigger>
       <TooltipContent className="max-w-72 border border-white/10 bg-[#090e19] px-3 py-2 text-sm leading-5 text-white shadow-2xl">
         {definition.description}
@@ -243,6 +300,13 @@ function ModuleCard({ module }: { module: InsightsModuleSummary }) {
 }
 
 type ScoreTone = "amber" | "violet" | "cyan" | "emerald"
+type DetailTab = "overview" | "metrics" | "history"
+
+const DETAIL_TABS: Array<{ key: DetailTab; label: string; icon: typeof Radar }> = [
+  { key: "overview", label: "Tổng quan & Động lượng", icon: Radar },
+  { key: "metrics", label: "9 Nhóm chỉ số KFSP", icon: Layers3 },
+  { key: "history", label: "Lịch sử Rating", icon: LineChart },
+]
 
 const SCORE_TONE: Record<ScoreTone, string> = {
   amber: "border-amber-300/35 bg-amber-300/[0.09] text-amber-300 shadow-[0_0_18px_-8px_rgba(252,211,77,0.65)]",
@@ -295,7 +359,7 @@ function RrgBadge({ value }: { value: string | null }) {
       : value === "Suy yếu" ? "border-amber-300/30 bg-amber-400/15 text-amber-300"
         : value === "Đội sổ" ? "border-rose-300/30 bg-rose-400/15 text-rose-300"
           : "border-white/10 bg-white/[0.03] text-muted-2"
-  return <Badge variant="outline" className={cn("min-w-20 justify-center gap-1 px-1.5 font-bold", tone)}><Icon className="size-3" />{value || "—"}</Badge>
+  return <Badge variant="outline" className={cn("min-w-20 justify-center gap-1 px-1.5 text-xs font-bold", tone)}><Icon className="size-3.5" />{value || "—"}</Badge>
 }
 
 function SortableHead({ sortKey, activeKey, direction, onSort, definition, label, className }: {
@@ -311,7 +375,7 @@ function SortableHead({ sortKey, activeKey, direction, onSort, definition, label
   const Icon = active ? direction === "asc" ? ArrowUp : ArrowDown : ChevronsUpDown
   return (
     <TableHead aria-sort={active ? direction === "asc" ? "ascending" : "descending" : "none"} className={className}>
-      <button type="button" onClick={() => onSort(sortKey)} className="inline-flex w-full items-center justify-center gap-1.5 rounded-md outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50">
+      <button type="button" onClick={() => onSort(sortKey)} className="inline-flex w-full items-center justify-center gap-1 rounded-md outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50">
         {definition ? <MetricLabel definition={definition} /> : label}
         <Icon className={cn("size-3.5 shrink-0", active ? "text-brand" : "text-muted")} />
       </button>
@@ -319,14 +383,16 @@ function SortableHead({ sortKey, activeKey, direction, onSort, definition, label
   )
 }
 
-function ScorePill({ value, tone, label, description, icon: Icon = Bolt }: { value: number; tone: ScoreTone; label: string; description?: string; icon?: typeof Bolt }) {
+function ScorePill({ value, tone, label, description, icon: Icon = Bolt }: { value: number | null | undefined; tone: ScoreTone; label: string; description?: string; icon?: typeof Bolt }) {
+  if (value == null) return <span className="font-mono text-xs text-muted-2">—</span>
+  const rounded = Math.round(value)
   return (
     <Tooltip>
-      <TooltipTrigger render={<span className={cn("inline-flex h-8 min-w-14 cursor-help items-center justify-center gap-1 rounded-md border px-2 font-mono text-sm font-black", SCORE_TONE[tone])} />}>
-        <Icon className="size-3.5" /> {Math.round(value)}
+      <TooltipTrigger render={<span className={cn("inline-flex h-8 min-w-13 cursor-help items-center justify-center gap-1 rounded-md border px-1.5 font-mono text-xs sm:text-sm font-black", SCORE_TONE[tone])} />}>
+        <Icon className="size-3 sm:size-3.5 shrink-0" /> {rounded}
       </TooltipTrigger>
       <TooltipContent className="border border-white/10 bg-[#090e19] px-3 py-2 font-ticker text-white shadow-2xl">
-        <div>{label}: <strong className="text-brand">{value}/100</strong></div>
+        <div>{label}: <strong className="text-brand">{rounded}/100</strong></div>
         {description && <div className="mt-1 max-w-64 text-xs leading-5 text-muted-2">{description}</div>}
       </TooltipContent>
     </Tooltip>
@@ -336,7 +402,7 @@ function ScorePill({ value, tone, label, description, icon: Icon = Bolt }: { val
 function sectorSortValue(row: InsightsSectorSummary, key: RatingSortKey): string | number | null {
   const mapping: Record<RatingSortKey, string | number | null> = {
     ticker: row.sector,
-    price: row.averagePrice,
+    price: row.totalMarketCapBillion,
     canslimScore: row.averageCanslimScore,
     score4m: row.averageScore4m,
     pricePotential: row.stockCount ? row.pricePotentialUpCount / row.stockCount * 100 : null,
@@ -354,21 +420,22 @@ function RatingTooltip({ row, children }: { row: InsightsRatingRow; children: Re
   return (
     <Tooltip>
       <TooltipTrigger render={children} />
-      <TooltipContent side="right" sideOffset={12} align="start" className="block w-[330px] max-w-[calc(100vw-2rem)] rounded-xl border border-cyan-300/20 bg-[#080d19] p-5 font-ticker text-foreground shadow-[0_24px_80px_-20px_rgba(0,0,0,.95),0_0_32px_-16px_rgba(103,232,249,.55)]">
+      <TooltipContent side="right" sideOffset={12} align="start" className="block w-[340px] max-w-[calc(100vw-2rem)] rounded-xl border border-cyan-300/20 bg-[#080d19] p-5 font-ticker text-foreground shadow-[0_24px_80px_-20px_rgba(0,0,0,.95),0_0_32px_-16px_rgba(103,232,249,.55)]">
         <div className="flex items-center gap-3">
           <StockLogo symbol={row.ticker} size={48} className="rounded-full shadow-[0_0_22px_-5px_rgba(103,232,249,.65)]" />
           <div className="min-w-0">
             <div className="text-xl font-extrabold text-white">{row.ticker}</div>
-            <div className="truncate text-sm text-muted-2">{row.companyName}</div>
+            <div className="truncate text-xs text-muted-2">{row.companyName}</div>
           </div>
           <span className="ml-auto rounded-lg border border-brand/30 bg-brand/10 px-2.5 py-1 font-mono text-lg font-black text-brand">{row.ratingScore}</span>
         </div>
-        <div className="mt-5 grid gap-3 text-sm">
+        <div className="mt-5 grid gap-3 text-xs">
           <div className="flex justify-between gap-4"><span className="text-muted-2">Ngành</span><strong className="text-right text-white">{row.sector}</strong></div>
           <div className="flex justify-between gap-4"><span className="text-muted-2">Giá</span><strong className="font-mono text-white">{formatPrice(row.price)}</strong></div>
           <div className="flex justify-between gap-4"><span className="text-muted-2">Khối lượng</span><strong className="font-mono text-white">{compactVolume(row.volume)}</strong></div>
           <div className="flex justify-between gap-4"><span className="text-muted-2">Vốn hóa</span><strong className="font-mono text-white">{row.marketCapBillion == null ? "—" : `${formatNumber(row.marketCapBillion)} tỷ`}</strong></div>
           <div className="flex justify-between gap-4"><span className="text-muted-2">4M / CANSLIM</span><strong className="font-mono text-white">{row.score4m} / {row.canslimScore}</strong></div>
+          <div className="flex justify-between gap-4"><span className="text-muted-2">RSs / RSm</span><strong className="font-mono text-white">{row.rsShort ?? "—"} / {row.rsMedium ?? "—"}</strong></div>
           <div className="flex justify-between gap-4"><span className="text-muted-2">Biến động</span><strong className={cn("font-mono", (row.changePercent ?? 0) >= 0 ? "text-up" : "text-down")}>{formatPercent(row.changePercent)}</strong></div>
         </div>
         {row.isTop100 && <Badge variant="outline" className="mt-4 border-amber-300/30 bg-amber-300/10 text-amber-200"><Crown className="size-3.5" /> Top 100{row.top100Rank ? ` · #${row.top100Rank}` : ""}</Badge>}
@@ -390,7 +457,7 @@ function snapshotModel(snapshot: RatingModelSnapshot) {
   return calculateRatingModel(snapshot)
 }
 
-function radarPoints(dimensions: RatingDimension[], radius: number, center = 160) {
+function radarPoints(dimensions: RatingDimension[], radius: number, center = 140) {
   return dimensions.map((dimension, index) => {
     const angle = -Math.PI / 2 + index * Math.PI * 2 / dimensions.length
     const length = radius * dimension.score / 100
@@ -412,29 +479,56 @@ function RatingRadar({ row }: { row: InsightsRatingRow }) {
   })
   const model = calculateRatingModel(row)
   return (
-    <div className="rounded-2xl border border-cyan-300/10 bg-[#07111f] p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h3 className="font-extrabold text-white">QeoIndex state radar</h3><p className="mt-1 max-w-xl text-xs leading-5 text-muted-2">Heuristic minh bạch từ CANSLIM, 4M, RS, RRG, biến động, RSI và beta; không phải mô hình độc quyền KFSP.</p></div>
-        <div className="flex flex-wrap gap-3 text-[11px] font-bold text-muted-2">{series.map((item) => <span key={item.label} className="flex items-center gap-1.5"><i className="h-px w-5" style={{ background: item.color }} />{item.label}</span>)}<span className="flex items-center gap-1.5 text-white"><i className="h-0.5 w-5 bg-violet-300" />Hiện tại</span></div>
+    <div className="rounded-xl border border-cyan-300/10 bg-[#07111f] p-3.5 sm:p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h4 className="text-sm font-extrabold text-white">QeoIndex state radar</h4>
+          <p className="mt-0.5 max-w-md text-[11px] leading-4 text-muted-2">Heuristic minh bạch từ CANSLIM, 4M, RS, RRG, biến động, RSI, beta.</p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-[10px] font-bold text-muted-2">
+          {series.map((item) => <span key={item.label} className="flex items-center gap-1"><i className="h-px w-3.5" style={{ background: item.color }} />{item.label}</span>)}
+          <span className="flex items-center gap-1 text-white"><i className="h-0.5 w-3.5 bg-violet-300" />Hiện tại</span>
+        </div>
       </div>
-      <div className="mt-2 grid items-center gap-5 lg:grid-cols-[420px_1fr]">
-        <svg viewBox="0 0 320 320" className="mx-auto aspect-square w-full max-w-[390px]" role="img" aria-label={`Radar trạng thái ${row.ticker}`}>
-          {[25, 50, 75, 100].map((level) => <polygon key={level} points={radarPoints(model.dimensions.map((item) => ({ ...item, score: level })), 116)} fill="none" stroke="rgba(148,163,184,.13)" />)}
+      <div className="mt-2 grid items-center gap-4 md:grid-cols-[280px_1fr]">
+        <svg viewBox="0 0 280 280" className="mx-auto aspect-square w-full max-w-[260px]" role="img" aria-label={`Radar trạng thái ${row.ticker}`}>
+          {[25, 50, 75, 100].map((level) => <polygon key={level} points={radarPoints(model.dimensions.map((item) => ({ ...item, score: level })), 96, 140)} fill="none" stroke="rgba(148,163,184,.13)" />)}
           {model.dimensions.map((dimension, index) => {
             const angle = -Math.PI / 2 + index * Math.PI * 2 / model.dimensions.length
-            const x = 160 + Math.cos(angle) * 144
-            const y = 160 + Math.sin(angle) * 144
-            return <g key={dimension.key}><line x1="160" y1="160" x2={160 + Math.cos(angle) * 116} y2={160 + Math.sin(angle) * 116} stroke="rgba(148,163,184,.12)" /><text x={x} y={y} textAnchor="middle" dominantBaseline="middle" fill={DIMENSION_STYLE[dimension.key].color} fontSize="12" fontWeight="800">{dimension.shortLabel} {dimension.score}</text></g>
+            const x = 140 + Math.cos(angle) * 118
+            const y = 140 + Math.sin(angle) * 118
+            return (
+              <g key={dimension.key}>
+                <line x1="140" y1="140" x2={140 + Math.cos(angle) * 96} y2={140 + Math.sin(angle) * 96} stroke="rgba(148,163,184,.12)" />
+                <text x={x} y={y} textAnchor="middle" dominantBaseline="middle" fill={DIMENSION_STYLE[dimension.key].color} fontSize="11" fontWeight="800">{dimension.shortLabel} {dimension.score}</text>
+              </g>
+            )
           })}
-          {series.map((item) => <polygon key={item.label} points={radarPoints(item.model.dimensions, 116)} fill="none" stroke={item.color} strokeWidth="1.5" strokeDasharray={item.dash} opacity=".8" />)}
-          <polygon points={radarPoints(model.dimensions, 116)} fill="rgba(167,139,250,.17)" stroke="#a78bfa" strokeWidth="3" />
+          {series.map((item) => <polygon key={item.label} points={radarPoints(item.model.dimensions, 96, 140)} fill="none" stroke={item.color} strokeWidth="1.5" strokeDasharray={item.dash} opacity=".8" />)}
+          <polygon points={radarPoints(model.dimensions, 96, 140)} fill="rgba(167,139,250,.17)" stroke="#a78bfa" strokeWidth="2.5" />
         </svg>
         <div className="grid gap-2 sm:grid-cols-2">
           {model.dimensions.map((dimension) => {
             const style = DIMENSION_STYLE[dimension.key]
             const Icon = style.icon
             const deltas = [1, 7, 30].map((days) => historyDelta(dimension.score, history, days, (snapshot) => snapshotModel(snapshot).dimensions.find((item) => item.key === dimension.key)?.score ?? null))
-            return <div key={dimension.key} className="rounded-xl border border-white/[0.07] bg-[#0a1422] p-3.5"><div className="flex items-center gap-2"><Icon className="size-4" style={{ color: style.color }} /><span className="text-sm font-extrabold text-white">{dimension.label}</span><strong className="ml-auto font-mono text-lg" style={{ color: style.color }}>{dimension.score}</strong></div><div className="mt-2 h-1 overflow-hidden rounded bg-white/10"><div className="h-full rounded" style={{ width: `${dimension.score}%`, background: style.color }} /></div><div className="mt-2 flex gap-3 font-mono text-[10px] text-muted-2">{[1, 7, 30].map((days, index) => <span key={days}>{days}D <b className={cn(deltas[index] == null ? "text-muted" : deltas[index]! >= 0 ? "text-up" : "text-down")}>{deltas[index] == null ? "—" : `${deltas[index]! >= 0 ? "+" : ""}${deltas[index]}`}</b></span>)}</div></div>
+            return (
+              <div key={dimension.key} className="rounded-lg border border-white/[0.07] bg-[#0a1422] p-2.5">
+                <div className="flex items-center gap-1.5">
+                  <Icon className="size-3.5 shrink-0" style={{ color: style.color }} />
+                  <span className="truncate text-xs font-bold text-white">{dimension.label}</span>
+                  <strong className="ml-auto font-mono text-sm" style={{ color: style.color }}>{dimension.score}</strong>
+                </div>
+                <div className="mt-1.5 h-1 overflow-hidden rounded bg-white/10">
+                  <div className="h-full rounded" style={{ width: `${dimension.score}%`, background: style.color }} />
+                </div>
+                <div className="mt-1.5 flex gap-2 font-mono text-[9px] text-muted-2">
+                  {[1, 7, 30].map((days, index) => (
+                    <span key={days}>{days}D <b className={cn(deltas[index] == null ? "text-muted" : deltas[index]! >= 0 ? "text-up" : "text-down")}>{deltas[index] == null ? "—" : `${deltas[index]! >= 0 ? "+" : ""}${deltas[index]}`}</b></span>
+                  ))}
+                </div>
+              </div>
+            )
           })}
         </div>
       </div>
@@ -444,13 +538,34 @@ function RatingRadar({ row }: { row: InsightsRatingRow }) {
 
 function RatingHistoryChart({ row }: { row: InsightsRatingRow }) {
   const history = [...row.scoreHistory].sort((a, b) => a.asOfDate.localeCompare(b.asOfDate)).filter((item) => item.ratingScore != null)
-  if (history.length < 2) return <div className="rounded-xl border border-white/[0.07] bg-[#091321] p-4 text-sm text-muted-2"><LineChart className="mr-2 inline size-4 text-violet-300" />Lịch sử sẽ tự mở rộng sau các snapshot cron tiếp theo; hiện chưa đủ 2 mốc để vẽ đường điểm.</div>
+  if (history.length < 2) return <div className="rounded-xl border border-white/[0.07] bg-[#091321] p-4 text-xs text-muted-2"><LineChart className="mr-2 inline size-4 text-violet-300" />Lịch sử sẽ tự mở rộng sau các snapshot cron tiếp theo; hiện chưa đủ 2 mốc để vẽ đường điểm.</div>
   const width = 960
   const points = history.map((item, index) => `${40 + index * (width - 80) / Math.max(1, history.length - 1)},${190 - (item.ratingScore || 0) * 1.45}`)
-  return <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4"><div className="flex items-center justify-between"><h3 className="font-extrabold text-white">Rating theo thời gian</h3><span className="text-xs text-muted-2">{history.length} snapshot thực</span></div><svg viewBox={`0 0 ${width} 220`} className="mt-3 h-48 w-full" role="img" aria-label={`Lịch sử rating ${row.ticker}`}><line x1="36" x2={width - 36} y1="190" y2="190" stroke="rgba(148,163,184,.2)" /><polyline points={points.join(" ")} fill="none" stroke="#a78bfa" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />{history.map((item, index) => { const [x, y] = points[index].split(",").map(Number); return <g key={item.asOfDate}><circle cx={x} cy={y} r="5" fill="#34d399" stroke="#07111f" strokeWidth="3" /><text x={x} y="210" textAnchor="middle" fill="#71818e" fontSize="11">{item.asOfDate.slice(5)}</text></g> })}</svg></div>
+  return (
+    <div className="rounded-xl border border-white/[0.07] bg-[#07111f] p-4">
+      <div className="flex items-center justify-between">
+        <h4 className="font-extrabold text-white text-sm">Rating theo thời gian</h4>
+        <span className="text-xs text-muted-2">{history.length} snapshot thực</span>
+      </div>
+      <svg viewBox={`0 0 ${width} 220`} className="mt-3 h-44 w-full" role="img" aria-label={`Lịch sử rating ${row.ticker}`}>
+        <line x1="36" x2={width - 36} y1="190" y2="190" stroke="rgba(148,163,184,.2)" />
+        <polyline points={points.join(" ")} fill="none" stroke="#a78bfa" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
+        {history.map((item, index) => {
+          const [x, y] = points[index].split(",").map(Number)
+          return (
+            <g key={item.asOfDate}>
+              <circle cx={x} cy={y} r="5" fill="#34d399" stroke="#07111f" strokeWidth="3" />
+              <text x={x} y="210" textAnchor="middle" fill="#71818e" fontSize="11">{item.asOfDate.slice(5)}</text>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
 }
 
 function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; onOpenChange: (open: boolean) => void }) {
+  const [topTab, setTopTab] = useState<DetailTab>("overview")
   const [activeGroup, setActiveGroup] = useState<KfspGroupKey>("overview")
   if (!row) return null
   const positive = (row.changePercent ?? 0) >= 0
@@ -463,104 +578,251 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
     { label: "RSs", value: row.rsShort ?? row.scoreComponents.momentum, tone: "cyan" as const, icon: Zap, description: "Sức mạnh tương đối ngắn hạn của cổ phiếu." },
     { label: "RSm", value: row.rsMedium ?? row.scoreComponents.moneyFlow, tone: "violet" as const, icon: Radar, description: "Sức mạnh tương đối trung hạn của cổ phiếu." },
   ]
+
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] overflow-y-auto border border-cyan-300/20 bg-[#060c16] p-0 shadow-[0_40px_120px_-20px_rgba(0,0,0,.98),0_0_70px_-35px_rgba(103,232,249,.6)] sm:max-w-[min(1500px,calc(100vw-2rem))]">
-        <DialogHeader className="border-b border-white/[0.07] bg-[#08111f] p-6 pr-14">
-          <div className="flex flex-wrap items-center gap-4">
-            <StockLogo symbol={row.ticker} size={56} className="rounded-full shadow-[0_0_28px_-6px_rgba(139,124,255,.8)]" />
+      <DialogContent className="max-h-[92vh] flex flex-col overflow-hidden border border-cyan-300/20 bg-[#060c16] p-0 shadow-[0_40px_120px_-20px_rgba(0,0,0,.98),0_0_70px_-35px_rgba(103,232,249,.6)] sm:max-w-[min(1440px,calc(100vw-2rem))]">
+        {/* Compact Header */}
+        <DialogHeader className="shrink-0 border-b border-white/[0.07] bg-[#08111f] px-5 py-3.5 pr-14">
+          <div className="flex flex-wrap items-center gap-3">
+            <StockLogo symbol={row.ticker} size={44} className="rounded-full shadow-[0_0_24px_-5px_rgba(139,124,255,.8)]" />
             <div>
-              <DialogTitle className="text-2xl font-extrabold text-white">{row.companyName} <span className="text-violet-300">{row.ticker}</span></DialogTitle>
-              <DialogDescription className="mt-1 font-ticker text-sm text-muted-2">{row.exchange || "Sàn đang cập nhật"} · {row.sector} · rating & market profile</DialogDescription>
+              <DialogTitle className="text-xl font-extrabold text-white flex items-center gap-2">
+                {row.companyName} <span className="text-violet-300 font-mono">{row.ticker}</span>
+              </DialogTitle>
+              <DialogDescription className="mt-0.5 font-ticker text-xs text-muted-2">
+                {row.exchange || "HOSE"} · {row.sector} · snapshot {row.asOfDate || "latest"}
+              </DialogDescription>
             </div>
-            {row.isTop100 && <Badge variant="outline" className="border-amber-300/30 bg-amber-300/10 text-amber-200"><Crown className="size-3.5" /> Top 100{row.top100Rank ? ` · #${row.top100Rank}` : ""}</Badge>}
-            <Badge variant="outline" className="ml-auto h-9 border-brand/35 bg-brand/10 px-4 font-mono text-lg font-black text-brand">{row.ratingScore}/100</Badge>
+            {row.isTop100 && (
+              <Badge variant="outline" className="border-amber-300/30 bg-amber-300/10 text-amber-200 text-xs">
+                <Crown className="size-3" /> Top 100{row.top100Rank ? ` · #${row.top100Rank}` : ""}
+              </Badge>
+            )}
+            <Badge variant="outline" className="ml-auto h-8 border-brand/35 bg-brand/10 px-3 font-mono text-base font-black text-brand">
+              {row.ratingScore}/100
+            </Badge>
           </div>
         </DialogHeader>
 
-        <div className="space-y-5 p-5 sm:p-6">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["Giá", formatPrice(row.price), "text-white"],
-              ["Biến động", formatPercent(row.changePercent), positive ? "text-up" : "text-down"],
-              ["Khối lượng", compactVolume(row.volume), "text-cyan-300"],
-              ["Rating tổng hợp", `${row.ratingScore}/100`, "text-violet-300"],
-            ].map(([label, value, tone]) => <div key={label} className="rounded-xl border border-white/[0.07] bg-[#091321] p-4"><div className="text-xs font-bold uppercase tracking-wider text-muted">{label}</div><div className={cn("mt-2 font-mono text-xl font-black", tone)}>{value}</div></div>)}
+        {/* Top Navigation Tabs directly under compact header */}
+        <div className="shrink-0 border-b border-white/[0.08] bg-[#091222] px-5">
+          <div className="flex gap-2" role="tablist" aria-label="Điều hướng hồ sơ rating">
+            {DETAIL_TABS.map((tab, index) => {
+              const Icon = tab.icon
+              return (
+                <Button
+                  key={tab.key}
+                  id={`rating-tab-${tab.key}`}
+                  type="button"
+                  role="tab"
+                  variant="ghost"
+                  tabIndex={topTab === tab.key ? 0 : -1}
+                  aria-selected={topTab === tab.key}
+                  aria-controls={`rating-panel-${tab.key}`}
+                  onClick={() => setTopTab(tab.key)}
+                  onKeyDown={(event) => {
+                    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
+                    event.preventDefault()
+                    const nextIndex = event.key === "Home" ? 0
+                      : event.key === "End" ? DETAIL_TABS.length - 1
+                        : (index + (event.key === "ArrowRight" ? 1 : -1) + DETAIL_TABS.length) % DETAIL_TABS.length
+                    const nextTab = DETAIL_TABS[nextIndex]
+                    setTopTab(nextTab.key)
+                    document.getElementById(`rating-tab-${nextTab.key}`)?.focus()
+                  }}
+                  className={cn(
+                    "h-auto rounded-none border-b-2 border-transparent px-3 py-2.5 text-xs font-extrabold text-muted-2 hover:bg-transparent hover:text-white sm:text-sm",
+                    topTab === tab.key && "border-brand text-brand hover:text-brand",
+                  )}
+                >
+                  <Icon className="size-4" /> {tab.label}
+                </Button>
+              )
+            })}
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.07] bg-[#091321] p-4">
-            <span className="mr-2 text-xs font-extrabold uppercase tracking-wider text-muted">Phân loại</span>
-            <Badge variant="outline" className="border-cyan-300/25 bg-cyan-300/[0.08] text-cyan-300">{row.sector}</Badge>
-            <Badge variant="outline" className={row.ratingScore >= 85 ? "border-up/30 bg-up/10 text-up" : row.ratingScore >= 70 ? "border-ref/30 bg-ref/10 text-ref" : "border-down/30 bg-down/10 text-down"}>{row.ratingScore >= 85 ? "Conviction cao" : row.ratingScore >= 70 ? "Đáng theo dõi" : "Cần thận trọng"}</Badge>
-            {row.asOfDate && <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-muted-2">Snapshot {row.asOfDate}</Badge>}
-          </div>
-
-          <div className="rounded-xl border border-violet-400/20 bg-violet-400/[0.07] p-4 sm:flex sm:items-center sm:gap-4">
-            <span className="inline-flex size-11 items-center justify-center rounded-xl border border-cyan-300/25 bg-cyan-300/10 text-cyan-300"><Radar className="size-5" /></span>
-            <div className="mt-3 sm:mt-0"><div className="text-xs font-extrabold uppercase tracking-[0.16em] text-violet-300">Market state · QeoIndex heuristic</div><div className="mt-1 text-xl font-extrabold text-white">{ratingModel.state}</div><p className="mt-1 text-sm text-muted-2">{ratingModel.summary}</p></div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {scoreCards.map(({ label, value, tone, icon: Icon, description }) => (
-              <div key={label} className="rounded-xl border border-white/[0.07] bg-[#091321] p-4">
-                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-sm font-bold text-muted-2"><Icon className="size-4" /> {label}</span><ScorePill value={value} tone={tone} label={label} description={description} /></div>
-                <div className="mt-4"><AnimatedProgressBar value={value} color={tone === "amber" ? "#fcd34d" : tone === "violet" ? "#a78bfa" : tone === "cyan" ? "#67e8f9" : "#6ee7b7"} /></div>
-              </div>
-            ))}
-          </div>
-
-          <RatingRadar row={row} />
-          <RatingHistoryChart row={row} />
-
-          <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07101a]">
-            <div className="overflow-x-auto border-b border-white/[0.08] bg-[#0a1320]">
-              <div className="flex min-w-max px-2 pt-2" role="tablist" aria-label="Nhóm dữ liệu rating">
-                {KFSP_GROUPS.map((group) => (
-                  <button
-                    key={group.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={activeGroup === group.key}
-                    onClick={() => setActiveGroup(group.key)}
-                    className={cn("rounded-t-lg px-4 py-3 text-sm font-extrabold text-muted-2 transition-colors hover:text-white", activeGroup === group.key && "bg-[#111a29] text-fuchsia-400 shadow-[inset_0_2px_0_rgba(217,70,239,.8)]")}
-                  >
-                    {group.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="p-4 sm:p-5">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 className="font-extrabold text-white">{activeGroupDefinition.label}</h3>
-                  <p className="mt-1 text-xs text-muted-2">Hover vào tên chỉ số để xem diễn giải dữ liệu.</p>
-                </div>
-                <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-muted-2">{activeFields.length} chỉ số</Badge>
-              </div>
-              <div className="grid gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.08] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {activeFields.map((definition) => {
-                  const value = metricValue(row, definition.key)
-                  const formatted = formatMetric(value, definition)
-                  const isLink = definition.format === "link" && /^https?:\/\//i.test(formatted)
-                  return (
-                    <div key={`${activeGroup}-${definition.providerKey}`} className="min-h-24 bg-[#0a1220] p-4">
-                      <MetricLabel definition={definition} className="text-xs font-bold text-muted-2" />
-                      {isLink ? (
-                        <a href={formatted} target="_blank" rel="noreferrer" className="mt-3 flex items-center gap-1 break-all text-sm font-bold text-brand hover:underline">Truy cập <ExternalLink className="size-3.5" /></a>
-                      ) : (
-                        <div className={cn("mt-3 break-words font-mono text-base font-black", metricTone(value, definition))}>{formatted}</div>
-                      )}
+        {/* Scrollable Content Body */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+          {topTab === "overview" && (
+            <div id="rating-panel-overview" role="tabpanel" aria-labelledby="rating-tab-overview" className="grid gap-4 lg:grid-cols-12">
+              {/* Left Column: Core Overview & 4 Core Models */}
+              <div className="space-y-3 lg:col-span-5">
+                {/* 4 quick stats */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-white/[0.07] bg-[#091321] p-3">
+                    <div className="text-[11px] font-bold uppercase text-muted">Giá hiện tại</div>
+                    <div className="mt-1 font-mono text-base font-black text-white">{formatPrice(row.price)}</div>
+                  </div>
+                  <div className="rounded-lg border border-white/[0.07] bg-[#091321] p-3">
+                    <div className="text-[11px] font-bold uppercase text-muted">Biến động phiên</div>
+                    <div className={cn("mt-1 font-mono text-base font-black", positive ? "text-up" : "text-down")}>
+                      {formatPercent(row.changePercent)}
                     </div>
-                  )
-                })}
+                  </div>
+                  <div className="rounded-lg border border-white/[0.07] bg-[#091321] p-3">
+                    <div className="text-[11px] font-bold uppercase text-muted">Khối lượng 50p</div>
+                    <div className="mt-1 font-mono text-base font-black text-cyan-300">{compactVolume(row.volume)}</div>
+                  </div>
+                  <div className="rounded-lg border border-white/[0.07] bg-[#091321] p-3">
+                    <div className="text-[11px] font-bold uppercase text-muted">Vốn hóa</div>
+                    <div className="mt-1 font-mono text-base font-black text-white">
+                      {row.marketCapBillion == null ? "—" : `${formatNumber(row.marketCapBillion)} tỷ`}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Heuristic State Banner */}
+                <div className="rounded-xl border border-violet-400/20 bg-violet-400/[0.07] p-3 flex items-start gap-3">
+                  <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-cyan-300/25 bg-cyan-300/10 text-cyan-300">
+                    <Radar className="size-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-violet-300">Market state · QeoIndex heuristic</div>
+                    <div className="mt-0.5 text-base font-extrabold text-white">{ratingModel.state}</div>
+                    <p className="mt-0.5 text-xs text-muted-2 leading-relaxed">{ratingModel.summary}</p>
+                  </div>
+                </div>
+
+                {/* 4 Core Score Cards */}
+                <div className="grid grid-cols-2 gap-2">
+                  {scoreCards.map(({ label, value, tone, icon: Icon, description }) => (
+                    <div key={label} className="rounded-lg border border-white/[0.07] bg-[#091321] p-3">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-muted-2">
+                          <Icon className="size-3.5 shrink-0" /> {label}
+                        </span>
+                        <ScorePill value={value} tone={tone} label={label} description={description} />
+                      </div>
+                      <div className="mt-2.5">
+                        <AnimatedProgressBar value={value} color={tone === "amber" ? "#fcd34d" : tone === "violet" ? "#a78bfa" : tone === "cyan" ? "#67e8f9" : "#6ee7b7"} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Quick tags */}
+                <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-white/[0.07] bg-[#091321] p-2.5">
+                  <Badge variant="outline" className="border-cyan-300/25 bg-cyan-300/[0.08] text-cyan-300 text-xs">{row.sector}</Badge>
+                  <Badge variant="outline" className={row.ratingScore >= 85 ? "border-up/30 bg-up/10 text-up text-xs" : row.ratingScore >= 70 ? "border-ref/30 bg-ref/10 text-ref text-xs" : "border-down/30 bg-down/10 text-down text-xs"}>
+                    {row.ratingScore >= 85 ? "Conviction cao" : row.ratingScore >= 70 ? "Đáng theo dõi" : "Cần thận trọng"}
+                  </Badge>
+                  <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-muted-2 text-xs">
+                    RRG: {row.stockRrgState || "—"}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Right Column: 5-Axis Radar & Dimension Breakdown */}
+              <div className="space-y-3 lg:col-span-7">
+                <RatingRadar row={row} />
               </div>
             </div>
-          </section>
+          )}
 
-          <div className="flex flex-col gap-3 border-t border-white/[0.07] pt-5 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-2 text-muted-2"><Info className="mt-0.5 size-4 shrink-0 text-ref" /><span>Dữ liệu snapshot từ KFSP/Supabase phục vụ phân tích, không phải khuyến nghị đầu tư. State radar là heuristic QeoIndex công khai, không đại diện mô hình độc quyền của nhà cung cấp.</span></div>
-            <Link href={`/research/${row.ticker.toLowerCase()}`} className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-brand/30 bg-brand/10 px-4 py-2 font-bold text-brand transition-colors hover:bg-brand/15">Mở nghiên cứu <ExternalLink className="size-4" /></Link>
+          {topTab === "metrics" && (
+            <section id="rating-panel-metrics" role="tabpanel" aria-labelledby="rating-tab-metrics" className="overflow-hidden rounded-xl border border-white/[0.08] bg-[#07101a]">
+              {/* Secondary Group Selector */}
+              <div className="overflow-x-auto border-b border-white/[0.08] bg-[#0a1320] p-1.5">
+                <div className="flex min-w-max gap-1">
+                  {KFSP_GROUPS.map((group) => (
+                    <Button
+                      key={group.key}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setActiveGroup(group.key)}
+                      className={cn(
+                        "h-8 px-3 text-xs font-extrabold text-muted-2 hover:text-white",
+                        activeGroup === group.key && "bg-brand/15 text-brand hover:bg-brand/20 hover:text-brand"
+                      )}
+                    >
+                      {group.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="font-extrabold text-white text-sm">{activeGroupDefinition.label}</h4>
+                    <p className="mt-0.5 text-xs text-muted-2">Hover vào tên chỉ số để xem diễn giải định nghĩa.</p>
+                  </div>
+                  <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-xs text-muted-2">{activeFields.length} chỉ số</Badge>
+                </div>
+                <div className="grid gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.08] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {activeFields.map((definition) => {
+                    const value = metricValue(row, definition.key)
+                    const formatted = formatMetric(value, definition)
+                    const isLink = definition.format === "link" && /^https?:\/\//i.test(formatted)
+                    return (
+                      <div key={`${activeGroup}-${definition.providerKey}`} className="min-h-20 bg-[#0a1220] p-3">
+                        <MetricLabel definition={definition} className="text-xs font-bold text-muted-2" />
+                        {isLink ? (
+                          <a href={formatted} target="_blank" rel="noreferrer" className="mt-2 flex items-center gap-1 break-all text-xs font-bold text-brand hover:underline">Truy cập <ExternalLink className="size-3" /></a>
+                        ) : (
+                          <div className={cn("mt-2 break-words font-mono text-sm font-black", metricTone(value, definition))}>{formatted}</div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {topTab === "history" && (
+            <div id="rating-panel-history" role="tabpanel" aria-labelledby="rating-tab-history" className="space-y-4">
+              <RatingHistoryChart row={row} />
+              {row.scoreHistory.length > 0 && (
+                <div className="rounded-xl border border-white/[0.07] bg-[#07111f] p-4">
+                  <h4 className="font-extrabold text-white text-sm mb-3">Bảng lịch sử snapshot</h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left font-mono text-xs">
+                      <thead>
+                        <tr className="border-b border-white/10 text-muted-2 text-[11px]">
+                          <th className="pb-2 font-bold">Ngày snapshot</th>
+                          <th className="pb-2 font-bold text-center">Rating</th>
+                          <th className="pb-2 font-bold text-center">CANSLIM</th>
+                          <th className="pb-2 font-bold text-center">4M</th>
+                          <th className="pb-2 font-bold text-center">RSs</th>
+                          <th className="pb-2 font-bold text-center">RSm</th>
+                          <th className="pb-2 font-bold text-center">RRG</th>
+                          <th className="pb-2 font-bold text-center">RSI</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5 text-white">
+                        {row.scoreHistory.map((item) => (
+                          <tr key={item.asOfDate} className="hover:bg-white/[0.02]">
+                            <td className="py-2.5 font-sans font-medium text-muted-2">{item.asOfDate}</td>
+                            <td className="py-2.5 text-center font-black text-brand">{item.ratingScore ?? "—"}</td>
+                            <td className="py-2.5 text-center text-emerald-300">{item.canslimScore ?? "—"}</td>
+                            <td className="py-2.5 text-center text-amber-300">{item.score4m ?? "—"}</td>
+                            <td className="py-2.5 text-center text-cyan-300">{item.rsShort ?? "—"}</td>
+                            <td className="py-2.5 text-center text-violet-300">{item.rsMedium ?? "—"}</td>
+                            <td className="py-2.5 text-center font-sans text-xs">{item.stockRrgState || "—"}</td>
+                            <td className="py-2.5 text-center">{item.rsi14 ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Compact Footer */}
+        <div className="shrink-0 flex flex-col gap-2 border-t border-white/[0.07] bg-[#08111f] px-5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2 text-muted-2 text-[11px] leading-relaxed">
+            <Info className="mt-0.5 size-3.5 shrink-0 text-ref" />
+            <span>Dữ liệu snapshot từ KFSP/Supabase. State radar là heuristic QeoIndex minh bạch, không phải khuyến nghị đầu tư.</span>
           </div>
+          <Link href={`/research/${row.ticker.toLowerCase()}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/10 px-3 py-1.5 text-xs font-bold text-brand transition-colors hover:bg-brand/15">
+            Mở nghiên cứu <ExternalLink className="size-3.5" />
+          </Link>
         </div>
       </DialogContent>
     </Dialog>
@@ -573,10 +835,13 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
   const [query, setQuery] = useState("")
   const [sort, setSort] = useState<{ key: RatingSortKey; direction: SortDirection }>({ key: "ratingScore", direction: "desc" })
   const [selectedRating, setSelectedRating] = useState<InsightsRatingRow | null>(null)
+  const [expandedSectors, setExpandedSectors] = useState<Set<string>>(new Set())
+
   const quote = data.vnindex
   const positive = (quote?.changePercent ?? 0) >= 0
   const breadthTotal = (quote?.advances ?? 0) + (quote?.declines ?? 0)
   const sectors = useMemo(() => data.sectorSummaries.map((row) => row.sector).sort((a, b) => a.localeCompare(b, "vi")), [data.sectorSummaries])
+
   const filteredRatings = useMemo(() => {
     const normalized = query.trim().toUpperCase()
     return data.ratings
@@ -587,13 +852,37 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
       })
       .sort((left, right) => compareRatingValues(left[sort.key], right[sort.key], sort.direction) || left.ticker.localeCompare(right.ticker))
   }, [data.ratings, query, sectorFilter, sort, universeFilter])
+
   const showSectorGroups = universeFilter === "all" && sectorFilter === "all" && !query.trim()
+
   const sortedSectorSummaries = useMemo(() => [...data.sectorSummaries]
     .sort((left, right) => compareRatingValues(sectorSortValue(left, sort.key), sectorSortValue(right, sort.key), sort.direction) || left.sector.localeCompare(right.sector, "vi")), [data.sectorSummaries, sort])
+
+  // Sector child stocks map
+  const sectorChildStocksMap = useMemo(() => {
+    const map = new Map<string, InsightsRatingRow[]>()
+    for (const sector of sectors) {
+      const children = data.ratings
+        .filter((row) => row.sector === sector)
+        .sort((left, right) => compareRatingValues(left[sort.key], right[sort.key], sort.direction) || left.ticker.localeCompare(right.ticker))
+      map.set(sector, children)
+    }
+    return map
+  }, [data.ratings, sectors, sort])
+
   const handleSort = (key: RatingSortKey) => {
     setSort((current) => current.key === key
       ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
       : { key, direction: "desc" })
+  }
+
+  const toggleSector = (sector: string) => {
+    setExpandedSectors((prev) => {
+      const next = new Set(prev)
+      if (next.has(sector)) next.delete(sector)
+      else next.add(sector)
+      return next
+    })
   }
 
   return (
@@ -691,27 +980,27 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
               <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
                 <div className="flex rounded-lg border border-white/10 bg-cell p-1">
                   {([ ["top100", "Top 100"], ["all", "Tất cả"] ] as const).map(([value, label]) => (
-                    <Button key={value} type="button" variant="ghost" size="sm" onClick={() => setUniverseFilter(value)} className={cn("flex-1 text-muted-2 sm:flex-none", universeFilter === value && "bg-brand/15 text-brand hover:bg-brand/20 hover:text-brand")}>
+                    <Button key={value} type="button" variant="ghost" size="sm" onClick={() => setUniverseFilter(value)} className={cn("flex-1 text-muted-2 sm:flex-none text-xs sm:text-sm font-bold", universeFilter === value && "bg-brand/15 text-brand hover:bg-brand/20 hover:text-brand")}>
                       {value === "top100" && <Crown className="size-3.5 text-amber-300" />}{label}
                     </Button>
                   ))}
                 </div>
                 <Select value={sectorFilter} onValueChange={(value) => setSectorFilter(value ?? "all")}>
-                  <SelectTrigger aria-label="Lọc theo ngành" className="h-10 w-full min-w-64 border-white/10 bg-cell px-3 text-base font-bold text-white hover:bg-white/[0.05] sm:w-80">
+                  <SelectTrigger aria-label="Lọc theo ngành" className="h-10 w-full min-w-64 border-white/10 bg-cell px-3 text-sm sm:text-base font-bold text-white hover:bg-white/[0.05] sm:w-80">
                     <SelectValue>{sectorFilter === "all" ? "Ngành: Tất cả ngành" : `Ngành: ${sectorFilter}`}</SelectValue>
                   </SelectTrigger>
-                  <SelectContent align="start" className="max-h-96 border border-white/10 bg-[#111724] p-1 font-ticker text-base text-white shadow-2xl">
+                  <SelectContent align="start" className="max-h-96 border border-white/10 bg-[#111724] p-1 font-ticker text-sm sm:text-base text-white shadow-2xl">
                     <SelectGroup>
-                      <SelectLabel className="px-2 py-2 font-bold uppercase tracking-wider text-muted-2">Danh sách ngành</SelectLabel>
-                      <SelectItem value="all" className="px-3 py-2.5 text-base focus:bg-brand/15 focus:text-brand">Tất cả ngành</SelectItem>
-                      {sectors.map((sector) => <SelectItem key={sector} value={sector} className="px-3 py-2.5 text-base focus:bg-brand/15 focus:text-brand">Ngành: {sector}</SelectItem>)}
+                      <SelectLabel className="px-2 py-2 font-bold uppercase tracking-wider text-muted-2 text-xs">Danh sách ngành</SelectLabel>
+                      <SelectItem value="all" className="px-3 py-2.5 text-sm sm:text-base focus:bg-brand/15 focus:text-brand">Tất cả ngành</SelectItem>
+                      {sectors.map((sector) => <SelectItem key={sector} value={sector} className="px-3 py-2.5 text-sm sm:text-base focus:bg-brand/15 focus:text-brand">Ngành: {sector}</SelectItem>)}
                     </SelectGroup>
                   </SelectContent>
                 </Select>
               </div>
               <div className="relative w-full lg:w-80">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-                <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã hoặc tên..." aria-label="Tìm mã cổ phiếu" className="h-10 border-white/10 bg-cell pl-9 text-base text-white placeholder:text-muted focus-visible:border-brand/50 focus-visible:ring-brand/20" />
+                <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã hoặc tên..." aria-label="Tìm mã cổ phiếu" className="h-10 border-white/10 bg-cell pl-9 text-sm sm:text-base text-white placeholder:text-muted focus-visible:border-brand/50 focus-visible:ring-brand/20" />
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -719,35 +1008,189 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
                 <colgroup><col className="w-[20%]" /><col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[7%]" /><col className="w-[9%]" /><col className="w-[6%]" /><col className="w-[6%]" /><col className="w-[10%]" /><col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[10%]" /></colgroup>
                 <TableHeader className="sticky top-0 z-20 bg-[#05090f]">
                   <TableRow className="border-white/[0.08] hover:bg-transparent">
-                    <SortableHead sortKey="ticker" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="# · Cổ phiếu / Ngành" className="h-16 px-2 text-[10px] font-extrabold uppercase text-muted-2" />
-                    <SortableHead sortKey="price" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("price")} className="px-1 text-[10px] font-extrabold uppercase text-muted-2" />
-                    <SortableHead sortKey="canslimScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_canslim_score")} className="px-1 text-[10px] font-extrabold uppercase text-emerald-300" />
-                    <SortableHead sortKey="score4m" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_score_4m")} className="px-1 text-[10px] font-extrabold uppercase text-amber-300" />
-                    <SortableHead sortKey="pricePotential" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_price_potential")} className="px-1 text-[10px] font-extrabold uppercase text-ref" />
-                    <SortableHead sortKey="rsShort" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_short")} className="px-1 text-[10px] font-extrabold uppercase text-emerald-300" />
-                    <SortableHead sortKey="rsMedium" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_medium")} className="px-1 text-[10px] font-extrabold uppercase text-violet-300" />
-                    <SortableHead sortKey="stockRrgState" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={showSectorGroups ? RRG_FIELD_DEFINITIONS.sectorRrgState : RRG_FIELD_DEFINITIONS.stockRrgState} className="px-1 text-[10px] font-extrabold uppercase text-cyan-300" />
-                    <SortableHead sortKey="weeklyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("weekly_change_pct")} className="px-1 text-[10px] font-extrabold uppercase text-cyan-200" />
-                    <SortableHead sortKey="monthlyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("monthly_change_pct")} className="px-1 text-[10px] font-extrabold uppercase text-violet-200" />
-                    <SortableHead sortKey="ratingScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="Rating tổng hợp" className="px-1 text-[10px] font-extrabold uppercase text-brand" />
+                    <SortableHead sortKey="ticker" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="# · Cổ phiếu / Ngành" className="h-14 px-2 text-xs font-extrabold uppercase text-muted-2" />
+                    <SortableHead sortKey="price" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={showSectorGroups ? undefined : overviewField("price")} label={showSectorGroups ? "Vốn hóa" : undefined} className="px-1 text-xs font-extrabold uppercase text-muted-2" />
+                    <SortableHead sortKey="canslimScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_canslim_score")} className="px-1 text-xs font-extrabold uppercase text-emerald-300" />
+                    <SortableHead sortKey="score4m" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_score_4m")} className="px-1 text-xs font-extrabold uppercase text-amber-300" />
+                    <SortableHead sortKey="pricePotential" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_price_potential")} className="px-1 text-xs font-extrabold uppercase text-ref" />
+                    <SortableHead sortKey="rsShort" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_short")} className="px-1 text-xs font-extrabold uppercase text-cyan-300" />
+                    <SortableHead sortKey="rsMedium" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_medium")} className="px-1 text-xs font-extrabold uppercase text-violet-300" />
+                    <SortableHead sortKey="stockRrgState" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={showSectorGroups ? RRG_FIELD_DEFINITIONS.sectorRrgState : RRG_FIELD_DEFINITIONS.stockRrgState} className="px-1 text-xs font-extrabold uppercase text-cyan-300" />
+                    <SortableHead sortKey="weeklyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("weekly_change_pct")} className="px-1 text-xs font-extrabold uppercase text-cyan-200" />
+                    <SortableHead sortKey="monthlyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("monthly_change_pct")} className="px-1 text-xs font-extrabold uppercase text-violet-200" />
+                    <SortableHead sortKey="ratingScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="Rating tổng hợp" className="px-1 text-xs font-extrabold uppercase text-brand" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {showSectorGroups && sortedSectorSummaries.map((row, index) => (
-                    <TableRow key={row.sector} tabIndex={0} role="button" aria-label={`Mở ngành ${row.sector}`} onClick={() => setSectorFilter(row.sector)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSectorFilter(row.sector) } }} className="group cursor-pointer border-white/[0.065] bg-[#07101a]/35 outline-none transition-colors hover:bg-cyan-300/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50">
-                      <TableCell className="px-2 py-4"><div className="flex items-center gap-2"><span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-cyan-300/15 bg-cyan-300/[0.06] font-mono text-[11px] font-bold text-cyan-300">{String(index + 1).padStart(2, "0")}</span><span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-violet-300/20 bg-violet-300/10 text-violet-300"><Layers3 className="size-4" /></span><div className="min-w-0"><div className="truncate text-sm font-extrabold uppercase text-white">{row.sector}</div><div className="mt-1 truncate text-[10px] text-muted-2">Σ {row.stockCount} mã · Top100 {row.top100Count} · Vốn hóa Σ {formatMarketCapBillion(row.totalMarketCapBillion)}</div></div></div></TableCell>
-                      <TableCell className="px-1 text-center font-mono text-xs font-black text-white"><span className="block text-[9px] text-muted">AVG</span>{formatPrice(row.averagePrice)}</TableCell>
-                      <TableCell className="px-1 text-center">{row.averageCanslimScore == null ? "—" : <ScorePill value={row.averageCanslimScore} tone="emerald" icon={Target} label="CANSLIM trung bình ngành" />}</TableCell>
-                      <TableCell className="px-1 text-center">{row.averageScore4m == null ? "—" : <ScorePill value={row.averageScore4m} tone="amber" label="4M trung bình ngành" />}</TableCell>
-                      <TableCell className="px-1 text-center"><Badge variant="outline" className="gap-1 border-up/25 bg-up/[0.08] px-1.5 text-[10px] font-bold text-up"><TrendingUp className="size-3" />{Math.round(row.pricePotentialUpCount / Math.max(1, row.stockCount) * 100)}% tăng</Badge></TableCell>
-                      <TableCell className="px-1 text-center"><span className="inline-flex items-center gap-1 font-mono text-xs font-black text-emerald-300"><Zap className="size-3" />{formatNumber(row.averageRsShort)}</span></TableCell>
-                      <TableCell className="px-1 text-center"><span className="inline-flex items-center gap-1 font-mono text-xs font-black text-violet-300"><Radar className="size-3" />{formatNumber(row.averageRsMedium)}</span></TableCell>
-                      <TableCell className="px-1 text-center"><RrgBadge value={row.dominantRrgState} /></TableCell>
-                      <TableCell className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-bold", (row.averageWeeklyChangePercent || 0) >= 0 ? "text-up" : "text-down")}><CalendarDays className="size-3" />{formatPercent(row.averageWeeklyChangePercent)}</span></TableCell>
-                      <TableCell className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-bold", (row.averageMonthlyChangePercent || 0) >= 0 ? "text-up" : "text-down")}><CalendarRange className="size-3" />{formatPercent(row.averageMonthlyChangePercent)}</span></TableCell>
-                      <TableCell className="px-1 text-center"><strong className={cn("inline-flex size-10 items-center justify-center rounded-lg border font-mono text-base", (row.averageRatingScore || 0) >= 70 ? "border-up/30 bg-up/10 text-up" : "border-ref/30 bg-ref/10 text-ref")}>{row.averageRatingScore == null ? "—" : Math.round(row.averageRatingScore)}</strong></TableCell>
-                    </TableRow>
-                  ))}
+                  {showSectorGroups && sortedSectorSummaries.map((sectorSummary, index) => {
+                    const isExpanded = expandedSectors.has(sectorSummary.sector)
+                    const SectorIcon = getSectorIcon(sectorSummary.sector)
+                    const childRows = sectorChildStocksMap.get(sectorSummary.sector) || []
+                    return (
+                      <Fragment key={sectorSummary.sector}>
+                        {/* Expandable Sector Parent Row */}
+                        <TableRow
+                          onClick={() => toggleSector(sectorSummary.sector)}
+                          className={cn(
+                            "group cursor-pointer border-white/[0.07] bg-[#07101a]/60 outline-none transition-colors hover:bg-cyan-300/[0.05] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50",
+                            isExpanded && "bg-[#0b1626]/80 border-cyan-300/20"
+                          )}
+                        >
+                          <TableCell className="px-2 py-3.5">
+                            <button
+                              type="button"
+                              aria-expanded={isExpanded}
+                              aria-controls={`sector-children-${index}`}
+                              aria-label={`Nhóm ngành ${sectorSummary.sector}, ${sectorSummary.stockCount} mã, ${isExpanded ? "đang mở rộng" : "đang thu gọn"}`}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                toggleSector(sectorSummary.sector)
+                              }}
+                              className="flex w-full items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
+                            >
+                              <span className="flex size-6 shrink-0 items-center justify-center text-muted-2 group-hover:text-cyan-300 transition-colors">
+                                {isExpanded ? <ChevronDown className="size-4 text-cyan-300" /> : <ChevronRight className="size-4" />}
+                              </span>
+                              <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-cyan-300/15 bg-cyan-300/[0.06] font-mono text-xs font-bold text-cyan-300">
+                                {String(index + 1).padStart(2, "0")}
+                              </span>
+                              <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-violet-300/25 bg-violet-300/10 text-violet-300">
+                                <SectorIcon className="size-4" />
+                              </span>
+                              <div className="min-w-0">
+                                <div className="truncate text-sm sm:text-base font-extrabold uppercase text-white group-hover:text-cyan-200">
+                                  {sectorSummary.sector}
+                                </div>
+                                <div className="mt-0.5 truncate text-xs text-muted-2">
+                                  Σ {sectorSummary.stockCount} mã ({childRows.length} nạp) · Top100 {sectorSummary.top100Count}
+                                </div>
+                              </div>
+                            </button>
+                          </TableCell>
+                          {/* Sector parent replaces average price with a useful aggregate. */}
+                          <TableCell className="px-1 text-center font-mono text-xs font-bold text-muted-2">{formatMarketCapBillion(sectorSummary.totalMarketCapBillion)}</TableCell>
+                          <TableCell className="px-1 text-center">
+                            <ScorePill value={sectorSummary.averageCanslimScore} tone="emerald" icon={Target} label="CANSLIM TB ngành" description="Điểm CANSLIM trung bình của ngành" />
+                          </TableCell>
+                          <TableCell className="px-1 text-center">
+                            <ScorePill value={sectorSummary.averageScore4m} tone="amber" icon={Bolt} label="4M TB ngành" description="Điểm 4M trung bình của ngành" />
+                          </TableCell>
+                          <TableCell className="px-1 text-center">
+                            <Badge variant="outline" className="gap-1 border-up/25 bg-up/[0.08] px-1.5 text-xs font-bold text-up">
+                              <TrendingUp className="size-3.5" />{Math.round(sectorSummary.pricePotentialUpCount / Math.max(1, sectorSummary.stockCount) * 100)}% tăng
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="px-1 text-center">
+                            <ScorePill value={sectorSummary.averageRsShort} tone="cyan" icon={Zap} label="RSs TB ngành" description={overviewField("rs_short").description} />
+                          </TableCell>
+                          <TableCell className="px-1 text-center">
+                            <ScorePill value={sectorSummary.averageRsMedium} tone="violet" icon={Radar} label="RSm TB ngành" description={overviewField("rs_medium").description} />
+                          </TableCell>
+                          <TableCell className="px-1 text-center"><RrgBadge value={sectorSummary.dominantRrgState} /></TableCell>
+                          <TableCell className="px-1 text-center">
+                            <span className={cn("inline-flex items-center gap-1 font-mono text-xs sm:text-sm font-bold", (sectorSummary.averageWeeklyChangePercent || 0) >= 0 ? "text-up" : "text-down")}>
+                              <CalendarDays className="size-3.5" />{formatPercent(sectorSummary.averageWeeklyChangePercent)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="px-1 text-center">
+                            <span className={cn("inline-flex items-center gap-1 font-mono text-xs sm:text-sm font-bold", (sectorSummary.averageMonthlyChangePercent || 0) >= 0 ? "text-up" : "text-down")}>
+                              <CalendarRange className="size-3.5" />{formatPercent(sectorSummary.averageMonthlyChangePercent)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="px-1 text-center">
+                            <strong className={cn("inline-flex size-9 sm:size-10 items-center justify-center rounded-lg border font-mono text-base font-black", (sectorSummary.averageRatingScore || 0) >= 70 ? "border-up/30 bg-up/10 text-up" : "border-ref/30 bg-ref/10 text-ref")}>
+                              {sectorSummary.averageRatingScore == null ? "—" : Math.round(sectorSummary.averageRatingScore)}
+                            </strong>
+                          </TableCell>
+                        </TableRow>
+
+                        {/* Child Rows when expanded */}
+                        {isExpanded && childRows.length === 0 && (
+                          <TableRow id={`sector-children-${index}`} className="border-white/[0.04] bg-[#050b14]/50">
+                            <TableCell colSpan={11} className="py-3 pl-12 text-xs italic text-muted-2">
+                              Chưa có mã chi tiết nạp sẵn từ dataset Top 500 / Top 100 cho ngành này.
+                            </TableCell>
+                          </TableRow>
+                        )}
+
+                        {isExpanded && childRows.map((child, childIndex) => (
+                          <TableRow
+                            id={childIndex === 0 ? `sector-children-${index}` : undefined}
+                            key={`${sectorSummary.sector}-${child.ticker}-${child.asOfDate}`}
+                            tabIndex={0}
+                            role="button"
+                            aria-label={`Mở hồ sơ rating ${child.ticker}`}
+                            onClick={() => setSelectedRating(child)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault()
+                                setSelectedRating(child)
+                              }
+                            }}
+                            className="group cursor-pointer border-white/[0.045] bg-[#040810]/70 outline-none transition-all hover:bg-cyan-300/[0.04] hover:shadow-[inset_3px_0_0_rgba(103,232,249,.7),0_0_24px_-16px_rgba(103,232,249,.7)] focus-visible:bg-cyan-300/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50"
+                          >
+                            <TableCell className="px-2 py-3 pl-7 sm:pl-9">
+                              <RatingTooltip row={child}>
+                                <div className="relative flex items-center gap-2">
+                                  {/* Connector Line */}
+                                  <div className="pointer-events-none absolute -left-4 top-1/2 -mt-2.5 h-5 w-3 rounded-bl-sm border-b-2 border-l-2 border-cyan-500/30" />
+                                  <StockLogo symbol={child.ticker} size={32} className="shrink-0 rounded-full group-hover:shadow-[0_0_18px_-4px_rgba(103,232,249,.75)]" />
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5 text-sm sm:text-base font-extrabold text-white group-hover:text-cyan-200">
+                                      {child.ticker}{child.isTop100 && <Crown className="size-3 text-amber-300" />}
+                                    </div>
+                                    <div className="truncate text-xs font-medium text-muted-2">{child.companyName}</div>
+                                  </div>
+                                </div>
+                              </RatingTooltip>
+                            </TableCell>
+                            <TableCell className="px-1 text-center">
+                              <div className="font-mono text-sm font-black text-white">{formatPrice(child.price)}</div>
+                              <div className={cn("mt-0.5 font-mono text-xs font-extrabold", (child.changePercent ?? 0) >= 0 ? "text-up" : "text-down")}>
+                                {formatPercent(child.changePercent)}
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-1 text-center">
+                              <ScorePill value={child.canslimScore} tone="emerald" icon={Target} label="Điểm CANSLIM" description={overviewField("kfsp_canslim_score").description} />
+                            </TableCell>
+                            <TableCell className="px-1 text-center">
+                              <ScorePill value={child.score4m} tone="amber" icon={Bolt} label="Điểm 4M" description={overviewField("kfsp_score_4m").description} />
+                            </TableCell>
+                            <TableCell className="px-1 text-center">
+                              <Badge variant="outline" className={cn("gap-1 border-white/10 bg-white/[0.03] px-1.5 text-xs font-bold", child.pricePotential?.startsWith("Tăng") ? "text-up" : child.pricePotential?.startsWith("Giảm") ? "text-down" : "text-ref")}>
+                                {child.pricePotential?.startsWith("Giảm") ? <TrendingDown className="size-3.5" /> : <TrendingUp className="size-3.5" />}{child.pricePotential || "—"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="px-1 text-center">
+                              <ScorePill value={child.rsShort ?? child.scoreComponents.momentum} tone="cyan" icon={Zap} label="RSs" description={overviewField("rs_short").description} />
+                            </TableCell>
+                            <TableCell className="px-1 text-center">
+                              <ScorePill value={child.rsMedium ?? child.scoreComponents.moneyFlow} tone="violet" icon={Radar} label="RSm" description={overviewField("rs_medium").description} />
+                            </TableCell>
+                            <TableCell className="px-1 text-center"><RrgBadge value={child.stockRrgState} /></TableCell>
+                            <TableCell className="px-1 text-center">
+                              <span className={cn("inline-flex items-center gap-1 font-mono text-xs sm:text-sm font-bold", metricTone(child.weeklyChangePercent, overviewField("weekly_change_pct")))}>
+                                <CalendarDays className="size-3.5" />{formatPercent(child.weeklyChangePercent)}
+                              </span>
+                            </TableCell>
+                            <TableCell className="px-1 text-center">
+                              <span className={cn("inline-flex items-center gap-1 font-mono text-xs sm:text-sm font-bold", metricTone(child.monthlyChangePercent, overviewField("monthly_change_pct")))}>
+                                <CalendarRange className="size-3.5" />{formatPercent(child.monthlyChangePercent)}
+                              </span>
+                            </TableCell>
+                            <TableCell className="px-1 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <strong className={cn("flex size-9 sm:size-10 items-center justify-center rounded-lg border font-mono text-base font-black", child.ratingScore >= 80 ? "border-up/35 bg-up/10 text-up" : child.ratingScore >= 65 ? "border-ref/35 bg-ref/10 text-ref" : "border-down/35 bg-down/10 text-down")}>
+                                  {child.ratingScore}
+                                </strong>
+                                <ArrowRight className="size-3.5 text-muted transition-transform group-hover:translate-x-1 group-hover:text-cyan-300" />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
                   {!showSectorGroups && filteredRatings.map((row, index) => (
                     <TableRow
                       key={`${row.ticker}-${row.asOfDate}`}
@@ -766,22 +1209,60 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
                       <TableCell className="px-2 py-3.5">
                         <RatingTooltip row={row}>
                           <div className="flex items-center gap-2">
-                            <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-white/[0.07] bg-white/[0.025] font-mono text-[11px] font-bold text-muted">{String(index + 1).padStart(2, "0")}</span>
+                            <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-white/[0.07] bg-white/[0.025] font-mono text-xs font-bold text-muted">{String(index + 1).padStart(2, "0")}</span>
                             <StockLogo symbol={row.ticker} size={36} className="shrink-0 rounded-full group-hover:shadow-[0_0_20px_-5px_rgba(103,232,249,.75)]" />
-                            <div className="min-w-0"><div className="flex items-center gap-1.5 text-sm font-extrabold text-white group-hover:text-cyan-200">{row.ticker}{row.isTop100 && <Crown className="size-3 text-amber-300" />}</div><div className="mt-0.5 truncate text-[10px] font-medium text-muted-2">{row.companyName}</div><div className="mt-0.5 truncate text-[9px] font-bold uppercase text-cyan-300/75">{row.sector}</div></div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 text-sm sm:text-base font-extrabold text-white group-hover:text-cyan-200">
+                                {row.ticker}{row.isTop100 && <Crown className="size-3 text-amber-300" />}
+                              </div>
+                              <div className="mt-0.5 truncate text-xs font-medium text-muted-2">{row.companyName}</div>
+                              <div className="mt-0.5 truncate text-[11px] font-bold uppercase text-cyan-300/80">{row.sector}</div>
+                            </div>
                           </div>
                         </RatingTooltip>
                       </TableCell>
-                      <TableCell className="px-1 text-center"><div className="font-mono text-xs font-black text-white">{formatPrice(row.price)}</div><div className={cn("mt-1 font-mono text-[10px] font-extrabold", (row.changePercent ?? 0) >= 0 ? "text-up" : "text-down")}>{formatPercent(row.changePercent)}</div></TableCell>
-                      <TableCell className="px-1 text-center"><ScorePill value={row.canslimScore} tone="emerald" icon={Target} label="Điểm CANSLIM" description={overviewField("kfsp_canslim_score").description} /></TableCell>
-                      <TableCell className="px-1 text-center"><ScorePill value={row.score4m} tone="amber" label="Điểm 4M" description={overviewField("kfsp_score_4m").description} /></TableCell>
-                      <TableCell className="px-1 text-center"><Badge variant="outline" className={cn("gap-1 border-white/10 bg-white/[0.03] px-1.5 text-[10px] font-bold", row.pricePotential?.startsWith("Tăng") ? "text-up" : row.pricePotential?.startsWith("Giảm") ? "text-down" : "text-ref")}>{row.pricePotential?.startsWith("Giảm") ? <TrendingDown className="size-3" /> : <TrendingUp className="size-3" />}{row.pricePotential || "—"}</Badge></TableCell>
-                      <TableCell className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-black", metricTone(row.rsShort, overviewField("rs_short")))}><Zap className="size-3" />{formatNumber(row.rsShort)}</span></TableCell>
-                      <TableCell className="px-1 text-center"><span className="inline-flex items-center gap-1 font-mono text-xs font-black text-violet-300"><Radar className="size-3" />{formatNumber(row.rsMedium)}</span></TableCell>
+                      <TableCell className="px-1 text-center">
+                        <div className="font-mono text-sm font-black text-white">{formatPrice(row.price)}</div>
+                        <div className={cn("mt-0.5 font-mono text-xs font-extrabold", (row.changePercent ?? 0) >= 0 ? "text-up" : "text-down")}>
+                          {formatPercent(row.changePercent)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-1 text-center">
+                        <ScorePill value={row.canslimScore} tone="emerald" icon={Target} label="Điểm CANSLIM" description={overviewField("kfsp_canslim_score").description} />
+                      </TableCell>
+                      <TableCell className="px-1 text-center">
+                        <ScorePill value={row.score4m} tone="amber" icon={Bolt} label="Điểm 4M" description={overviewField("kfsp_score_4m").description} />
+                      </TableCell>
+                      <TableCell className="px-1 text-center">
+                        <Badge variant="outline" className={cn("gap-1 border-white/10 bg-white/[0.03] px-1.5 text-xs font-bold", row.pricePotential?.startsWith("Tăng") ? "text-up" : row.pricePotential?.startsWith("Giảm") ? "text-down" : "text-ref")}>
+                          {row.pricePotential?.startsWith("Giảm") ? <TrendingDown className="size-3.5" /> : <TrendingUp className="size-3.5" />}{row.pricePotential || "—"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-1 text-center">
+                        <ScorePill value={row.rsShort ?? row.scoreComponents.momentum} tone="cyan" icon={Zap} label="RSs" description={overviewField("rs_short").description} />
+                      </TableCell>
+                      <TableCell className="px-1 text-center">
+                        <ScorePill value={row.rsMedium ?? row.scoreComponents.moneyFlow} tone="violet" icon={Radar} label="RSm" description={overviewField("rs_medium").description} />
+                      </TableCell>
                       <TableCell className="px-1 text-center"><RrgBadge value={row.stockRrgState} /></TableCell>
-                      <TableCell className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-bold", metricTone(row.weeklyChangePercent, overviewField("weekly_change_pct")))}><CalendarDays className="size-3" />{formatPercent(row.weeklyChangePercent)}</span></TableCell>
-                      <TableCell className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-bold", metricTone(row.monthlyChangePercent, overviewField("monthly_change_pct")))}><CalendarRange className="size-3" />{formatPercent(row.monthlyChangePercent)}</span></TableCell>
-                      <TableCell className="px-1 text-center"><div className="flex items-center justify-center gap-1"><strong className={cn("flex size-10 items-center justify-center rounded-lg border font-mono text-base", row.ratingScore >= 80 ? "border-up/35 bg-up/10 text-up" : row.ratingScore >= 65 ? "border-ref/35 bg-ref/10 text-ref" : "border-down/35 bg-down/10 text-down")}>{row.ratingScore}</strong><ArrowRight className="size-3 text-muted transition-transform group-hover:translate-x-1 group-hover:text-cyan-300" /></div></TableCell>
+                      <TableCell className="px-1 text-center">
+                        <span className={cn("inline-flex items-center gap-1 font-mono text-xs sm:text-sm font-bold", metricTone(row.weeklyChangePercent, overviewField("weekly_change_pct")))}>
+                          <CalendarDays className="size-3.5" />{formatPercent(row.weeklyChangePercent)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="px-1 text-center">
+                        <span className={cn("inline-flex items-center gap-1 font-mono text-xs sm:text-sm font-bold", metricTone(row.monthlyChangePercent, overviewField("monthly_change_pct")))}>
+                          <CalendarRange className="size-3.5" />{formatPercent(row.monthlyChangePercent)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="px-1 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <strong className={cn("flex size-9 sm:size-10 items-center justify-center rounded-lg border font-mono text-base font-black", row.ratingScore >= 80 ? "border-up/35 bg-up/10 text-up" : row.ratingScore >= 65 ? "border-ref/35 bg-ref/10 text-ref" : "border-down/35 bg-down/10 text-down")}>
+                            {row.ratingScore}
+                          </strong>
+                          <ArrowRight className="size-3.5 text-muted transition-transform group-hover:translate-x-1 group-hover:text-cyan-300" />
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {!showSectorGroups && !filteredRatings.length && <TableRow><TableCell colSpan={11} className="h-32 text-center text-sm text-muted-2">Không có mã phù hợp với bộ lọc.</TableCell></TableRow>}
@@ -789,7 +1270,7 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
               </Table>
             </CardContent>
             <div className="flex flex-col gap-2 border-t border-white/[0.06] px-4 py-4 text-xs font-medium text-muted-2 sm:flex-row sm:items-center sm:justify-between">
-              <span>{showSectorGroups ? <>Hiển thị <strong className="text-white">{sortedSectorSummaries.length}</strong> nhóm ngành · click để drill-down</> : <>Hiển thị <strong className="text-white">{filteredRatings.length}</strong> / {data.ratings.length} mã</>}</span>
+              <span>{showSectorGroups ? <>Hiển thị <strong className="text-white">{sortedSectorSummaries.length}</strong> nhóm ngành · click dòng hoặc icon mở rộng để xem chi tiết mã</> : <>Hiển thị <strong className="text-white">{filteredRatings.length}</strong> / {data.ratings.length} mã</>}</span>
               <span>{data.ratingMessage}</span>
             </div>
           </Card>
@@ -808,7 +1289,7 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
           </div>
         </section>
       </main>
-      <RatingDialog row={selectedRating} onOpenChange={(open) => { if (!open) setSelectedRating(null) }} />
+      <RatingDialog key={selectedRating?.ticker ?? "closed"} row={selectedRating} onOpenChange={(open) => { if (!open) setSelectedRating(null) }} />
     </div>
   )
 }
