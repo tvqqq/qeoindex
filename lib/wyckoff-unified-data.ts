@@ -94,6 +94,15 @@ function normalizeMarker(value: unknown): WyckoffEventMarker | null {
   }
 }
 
+function latestSnapshotEvent(row: SnapshotRow | undefined) {
+  if (!row) return ""
+  const marker = Array.isArray(row.markers)
+    ? row.markers.map(normalizeMarker).filter((item): item is WyckoffEventMarker => item !== null).at(-1)
+    : null
+  if (marker?.label) return marker.label
+  return strings(row.evidence?.rulesTriggered)[0] || ""
+}
+
 function normalizeScenario(value: unknown, timeframe: WyckoffChartTimeframe): WyckoffScenario | null {
   if (!isRecord(value)) return null
   const key = value.key === "bull" || value.key === "base" || value.key === "bear" ? value.key : null
@@ -234,6 +243,7 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
       confidence: row?.confidence ?? "",
       status: row ? "Complete" : "Pending",
       date: row?.bar_closed_at?.slice(0, 10) ?? "",
+      latestEvent: latestSnapshotEvent(row),
     }
   })
 
