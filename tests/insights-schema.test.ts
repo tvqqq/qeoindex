@@ -53,27 +53,29 @@ test("rating table exposes keyboard modal, grouped dashboard tabs, history, and 
   assert.match(insightsDashboard, /role="tab"/)
   assert.match(insightsDashboard, /role="tablist"/)
   assert.match(ttaiDashboard, /role="tabpanel"/)
-  assert.match(insightsDashboard, /type StockDetailTab = "overview" \| "info" \| "fa" \| "ta" \| "ttai"/)
-  for (const tab of ["Tổng quan", "Thông tin", "Chỉ số FA", "Phân tích TA", "TTAI"]) {
+  assert.match(insightsDashboard, /type StockDetailTab = "overview" \| "info" \| "ta" \| "ttai"/)
+  for (const tab of ["Tổng quan", "Thông tin doanh nghiệp", "Phân tích TA", "TTAI"]) {
     assert.match(insightsDashboard, new RegExp(`label: "${tab}"`))
   }
-  for (const panel of ["overview", "info", "fa", "ta", "ttai"]) {
+  for (const panel of ["overview", "info", "ta", "ttai"]) {
     assert.match(insightsDashboard + ttaiDashboard, new RegExp(`rating-panel-${panel}`))
   }
+  assert.doesNotMatch(insightsDashboard, /rating-panel-fa|rating-tab-fa|topTab === "fa"/)
   assert.doesNotMatch(insightsDashboard, /topTab === "metrics"/)
   assert.doesNotMatch(insightsDashboard, /topTab === "history"/)
   assert.doesNotMatch(insightsDashboard, /topTab === "kfsp"/)
   assert.doesNotMatch(insightsDashboard, /> Chỉ số cổ phiếu</)
-  assert.match(insightsDashboard, /xl:col-span-8[\s\S]*<RatingRadar row=\{row\}/)
-  assert.match(insightsDashboard, /space-y-4 xl:col-span-4[\s\S]*Hiệu suất giá[\s\S]*Range & thanh khoản/)
+  assert.match(insightsDashboard, /xl:col-span-5 xl:grid-rows-2[\s\S]*FA quick read[\s\S]*TA quick read/)
+  assert.match(insightsDashboard, /space-y-4 xl:col-span-7[\s\S]*<RatingRadar row=\{row\} \/>[\s\S]*Hiệu suất giá[\s\S]*Range & thanh khoản/)
   assert.doesNotMatch(insightsDashboard, /<details className="rounded-2xl[\s\S]*Ma trận trạng thái & tích lũy/)
-  assert.match(insightsDashboard, /<AccumulationHeatmap row=\{row\} \/>/)
-  assert.match(insightsDashboard, /<RatingHistoryChart row=\{row\} \/>/)
-  assert.match(globalsCss, /#rating-panel-overview > :nth-child\(2\) > :first-child[\s\S]*grid-column: 1 \/ span 8/)
-  assert.match(globalsCss, /#rating-panel-overview > :nth-child\(4\)[\s\S]*grid-column: 1 \/ span 8;[\s\S]*grid-row: 3/)
+  assert.match(insightsDashboard, /grid gap-4 xl:grid-cols-2[\s\S]*<AccumulationHeatmap row=\{row\} \/>[\s\S]*<RatingHistoryChart row=\{row\} \/>/)
+  assert.doesNotMatch(globalsCss, /#rating-panel-overview > :nth-child/)
   assert.match(insightsDashboard, /FA quick read/)
   assert.match(insightsDashboard, /TA quick read/)
   assert.match(insightsDashboard, /Thông tin doanh nghiệp/)
+  assert.match(insightsDashboard, /Chỉ số tài chính & định giá/)
+  assert.match(insightsDashboard, /aria-label="Công cụ phân tích chuyên sâu"/)
+  assert.doesNotMatch(insightsDashboard, /Dữ liệu snapshot từ KFSP\/Supabase/)
   assert.match(insightsDashboard, /net_revenue_growth_pct/)
   assert.match(insightsDashboard, /price_vs_sma200_pct/)
   assert.match(insightsDashboard, /net_foreign_trading_billion/)

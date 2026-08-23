@@ -619,9 +619,6 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
         </div>
       </div>
 
-      <div className="mt-4 border-t border-white/[0.06] pt-4">
-        <RatingHistoryChart row={row} />
-      </div>
     </div>
   )
 }
@@ -655,7 +652,7 @@ function RatingHistoryChart({ row }: { row: InsightsRatingRow }) {
 }
 
 function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; onOpenChange: (open: boolean) => void }) {
-  type StockDetailTab = "overview" | "info" | "fa" | "ta" | "ttai"
+  type StockDetailTab = "overview" | "info" | "ta" | "ttai"
   const [topTab, setTopTab] = useState<StockDetailTab>("overview")
   if (!row) return null
 
@@ -742,8 +739,7 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
 
   const tabItems: Array<{ key: StockDetailTab; label: string; icon: typeof Gauge }> = [
     { key: "overview", label: "Tổng quan", icon: Gauge },
-    { key: "info", label: "Thông tin", icon: Building2 },
-    { key: "fa", label: "Chỉ số FA", icon: BadgePercent },
+    { key: "info", label: "Thông tin doanh nghiệp", icon: Building2 },
     { key: "ta", label: "Phân tích TA", icon: LineChart },
     { key: "ttai", label: "TTAI", icon: Sparkles },
   ]
@@ -825,18 +821,8 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
               )}
             </div>
 
-            {/* Action Controls */}
-            <div className="flex items-center gap-2 border-l border-white/10 pl-2 ml-0.5">
-              <Link
-                href={`/insights/wyckoff?ticker=${row.ticker}&timeframe=1D`}
-                aria-label={`Phân tích chart Wyckoff ${row.ticker}`}
-                title="Phân tích chart Wyckoff"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/35 bg-cyan-500/10 px-2.5 py-1 font-ticker text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 hover:border-cyan-400/60 transition-all shadow-[0_0_12px_rgba(34,211,238,0.2)]"
-              >
-                <BarChart3 className="size-3.5" />
-                <span>Phân tích Wyckoff</span>
-              </Link>
-
+            {/* Close control */}
+            <div className="flex items-center border-l border-white/10 pl-2 ml-0.5">
               <button
                 type="button"
                 aria-label="Đóng"
@@ -851,32 +837,45 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
           <DialogDescription className="sr-only">Hồ sơ chi tiết cổ phiếu {row.ticker}</DialogDescription>
         </header>
 
-        <div className="shrink-0 overflow-x-auto border-b border-white/[0.08] bg-[#080d19] px-5 py-3">
-          <nav className="inline-flex min-w-max items-center gap-1.5 rounded-full border border-white/[0.1] bg-[#080c10]/90 p-1 shadow-[0_0_24px_-4px_rgba(176,124,255,0.18),0_0_24px_-4px_rgba(34,201,138,0.18)]" role="tablist" aria-label="Điều hướng hồ sơ cổ phiếu">
-            {tabItems.map((tab) => {
-              const Icon = tab.icon
-              const active = topTab === tab.key
-              return (
-                <button
-                  key={tab.key}
-                  id={`rating-tab-${tab.key}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  aria-controls={`rating-panel-${tab.key}`}
-                  onClick={() => setTopTab(tab.key)}
-                  className={cn(
-                    "inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-xs font-extrabold transition-all sm:text-sm",
-                    active
-                      ? "border-emerald-400/45 bg-gradient-to-r from-emerald-500/25 via-purple-500/20 to-emerald-500/20 text-emerald-200 shadow-[0_0_16px_rgba(176,124,255,0.28),0_0_10px_rgba(34,201,138,0.32)]"
-                      : "border-transparent text-slate-400 hover:border-white/10 hover:bg-white/[0.05] hover:text-white",
-                  )}
-                >
-                  <Icon className="size-4" /> {tab.label}
-                </button>
-              )
-            })}
-          </nav>
+        <div className="shrink-0 border-b border-white/[0.08] bg-[#080d19] px-5 py-3">
+          <div className="flex items-center justify-between gap-4 overflow-x-auto">
+            <nav className="inline-flex min-w-max items-center gap-1.5 rounded-full border border-white/[0.1] bg-[#080c10]/90 p-1 shadow-[0_0_24px_-4px_rgba(176,124,255,0.18),0_0_24px_-4px_rgba(34,201,138,0.18)]" role="tablist" aria-label="Điều hướng hồ sơ cổ phiếu">
+              {tabItems.map((tab) => {
+                const Icon = tab.icon
+                const active = topTab === tab.key
+                return (
+                  <button
+                    key={tab.key}
+                    id={`rating-tab-${tab.key}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    aria-controls={`rating-panel-${tab.key}`}
+                    onClick={() => setTopTab(tab.key)}
+                    className={cn(
+                      "inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-xs font-extrabold transition-colors sm:text-sm",
+                      active
+                        ? "border-emerald-400/45 bg-gradient-to-r from-emerald-500/25 via-purple-500/20 to-emerald-500/20 text-emerald-200 shadow-[0_0_16px_rgba(176,124,255,0.28),0_0_10px_rgba(34,201,138,0.32)]"
+                        : "border-transparent text-slate-400 hover:border-white/10 hover:bg-white/[0.05] hover:text-white",
+                    )}
+                  >
+                    <Icon className="size-4" /> {tab.label}
+                  </button>
+                )
+              })}
+            </nav>
+            <aside className="sticky right-0 shrink-0 border-l border-white/10 bg-[#080d19] pl-4" aria-label="Công cụ phân tích chuyên sâu">
+              <Link
+                href={`/insights/wyckoff?ticker=${row.ticker}&timeframe=1D`}
+                aria-label={`Phân tích chart Wyckoff ${row.ticker}`}
+                title="Phân tích chart Wyckoff"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-cyan-400/35 bg-cyan-500/10 px-3 py-2 font-ticker text-xs font-bold text-cyan-300 transition-colors hover:border-cyan-400/60 hover:bg-cyan-500/20"
+              >
+                <BarChart3 className="size-3.5" />
+                <span>Phân tích Wyckoff</span>
+              </Link>
+            </aside>
+          </div>
         </div>
 
         <div className="min-h-[580px] flex-1 overflow-y-auto p-4 sm:p-5">
@@ -905,11 +904,23 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                 </div>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-12">
-                <div className="xl:col-span-8">
-                  <RatingRadar row={row} />
+              <div className="grid items-stretch gap-4 xl:grid-cols-12">
+                <div className="grid gap-4 xl:col-span-5 xl:grid-rows-2">
+                  <div className="flex min-h-[360px] flex-col rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
+                    <div className="mb-4 flex items-center gap-2"><BadgePercent className="size-5 text-emerald-300" /><div><h4 className="font-extrabold text-white">FA quick read</h4><p className="text-xs text-muted-2">Growth, profitability và valuation quan trọng.</p></div></div>
+                    <div className="grid flex-1 content-stretch gap-2 sm:grid-cols-2">
+                      {["net_revenue_growth_pct", "net_income_growth_pct", "roe_ttm_pct", "net_margin_ttm_pct", "pe_ttm", "pb_ttm"].map((key) => metricTile(key, "h-full"))}
+                    </div>
+                  </div>
+                  <div className="flex min-h-[360px] flex-col rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
+                    <div className="mb-4 flex items-center gap-2"><LineChart className="size-5 text-cyan-300" /><div><h4 className="font-extrabold text-white">TA quick read</h4><p className="text-xs text-muted-2">Trend, oscillator và trạng thái kỹ thuật.</p></div></div>
+                    <div className="grid flex-1 content-stretch gap-2 sm:grid-cols-2">
+                      {["price_vs_sma20_pct", "price_vs_sma50_pct", "price_vs_sma200_pct", "rsi_14", "macd_vs_signal", "position_in_bollinger_band"].map((key) => metricTile(key, "h-full"))}
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-4 xl:col-span-4">
+                <div className="space-y-4 xl:col-span-7">
+                  <RatingRadar row={row} />
                   <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4">
                     <div className="mb-4 flex items-center justify-between"><div><h4 className="text-base font-extrabold text-white">Hiệu suất giá</h4><p className="mt-1 text-xs text-muted-2">Động lượng 1D → 1Y.</p></div><Activity className="size-5 text-emerald-300" /></div>
                     {renderPerformanceBars()}
@@ -928,21 +939,9 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
               </div>
 
               <div className="grid gap-4 xl:grid-cols-2">
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
-                  <div className="mb-4 flex items-center gap-2"><BadgePercent className="size-5 text-emerald-300" /><div><h4 className="font-extrabold text-white">FA quick read</h4><p className="text-xs text-muted-2">Growth, profitability và valuation quan trọng.</p></div></div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {["net_revenue_growth_pct", "net_income_growth_pct", "roe_ttm_pct", "net_margin_ttm_pct", "pe_ttm", "pb_ttm"].map((key) => metricTile(key))}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
-                  <div className="mb-4 flex items-center gap-2"><LineChart className="size-5 text-cyan-300" /><div><h4 className="font-extrabold text-white">TA quick read</h4><p className="text-xs text-muted-2">Trend, oscillator và trạng thái kỹ thuật.</p></div></div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {["price_vs_sma20_pct", "price_vs_sma50_pct", "price_vs_sma200_pct", "rsi_14", "macd_vs_signal", "position_in_bollinger_band"].map((key) => metricTile(key))}
-                  </div>
-                </div>
+                <AccumulationHeatmap row={row} />
+                <RatingHistoryChart row={row} />
               </div>
-
-              <AccumulationHeatmap row={row} />
             </section>
           )}
 
@@ -958,11 +957,9 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                   </div>
                 ))}
               </div>
-            </section>
-          )}
-
-          {topTab === "fa" && (
-            <section id="rating-panel-fa" role="tabpanel" aria-labelledby="rating-tab-fa" className="space-y-4">
+              <div className="border-t border-white/[0.07] pt-4">
+                <div className="mb-4 flex items-center gap-2"><BadgePercent className="size-5 text-emerald-300" /><div><h3 className="font-extrabold text-white">Chỉ số tài chính & định giá</h3><p className="text-xs text-muted-2">Các chỉ số FA nằm cùng hồ sơ doanh nghiệp để đọc liền mạch.</p></div></div>
+              </div>
               <div className="grid gap-4 xl:grid-cols-2">
                 <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center gap-2"><BadgePercent className="size-5 text-emerald-300" /><div><h3 className="font-extrabold text-white">Định giá</h3><p className="text-xs text-muted-2">Multiple và dữ liệu trên mỗi cổ phiếu.</p></div></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{["eps_ttm_vnd", "pe_ttm", "bvps_ttm_vnd", "pb_ttm", "eps_ttm_growth_pct", "bvps_ttm_growth_pct"].map((key) => metricTile(key))}</div></div>
                 <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center gap-2"><FileText className="size-5 text-amber-300" /><div><h3 className="font-extrabold text-white">Financial snapshot</h3><p className="text-xs text-muted-2">Kỳ BCTC gần nhất và quy mô TTM.</p></div></div><div className="grid gap-2 sm:grid-cols-2">{["financial_period", "net_revenue_ttm_billion", "net_income_ttm_billion"].map((key) => metricTile(key))}</div></div>
@@ -1001,20 +998,6 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
           {topTab === "ttai" && <TtaiDashboard row={row} />}
         </div>
 
-        <div className="shrink-0 flex flex-col gap-2 border-t border-white/[0.07] bg-[#08111f] px-5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between font-ticker">
-          <div className="flex items-start gap-2 text-muted-2 leading-relaxed">
-            <Info className="mt-0.5 size-3.5 shrink-0 text-ref" />
-            <span>Dữ liệu snapshot từ KFSP/Supabase. State radar là heuristic QeoIndex minh bạch, không phải khuyến nghị đầu tư.</span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Link
-              href={`/insights/wyckoff?ticker=${row.ticker}&timeframe=1D`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/35 bg-cyan-400/10 px-3.5 py-1.5 font-bold text-cyan-300 transition-all hover:bg-cyan-400/20 shadow-[0_0_12px_rgba(34,211,238,0.15)]"
-            >
-              <BarChart3 className="size-3.5" /> Mở phân tích Wyckoff
-            </Link>
-          </div>
-        </div>
       </DialogContent>
     </Dialog>
   )
