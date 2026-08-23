@@ -101,75 +101,80 @@ export function WyckoffChartDashboard({
   }
 
   return (
-    <div className="min-h-screen bg-[#05080d] text-slate-100 font-ticker">
+    <div className="min-h-screen bg-[#05080d] text-slate-100">
       <TopNav />
 
       <main className="mx-auto max-w-[1920px] px-3 py-4 sm:px-4 lg:px-5">
-        {/* ORDERBOOK-STYLED HEADER WITH BACK BUTTON TO INSIGHTS DETAIL POPUP */}
-        <header className="mb-4 flex select-none items-center justify-between gap-2.5 border border-white/[0.10] bg-gradient-to-r from-[#121820]/95 via-[#182330]/95 to-[#121820]/95 px-4 py-2.5 rounded-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_4px_16px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
+        {/* Keep the chart shell on normal paint layers. Backdrop/filter effects here
+            force expensive recompositing next to the auto-sized canvas chart. */}
+        <header className="mb-4 flex select-none items-center justify-between gap-2.5 rounded-xl border border-white/[0.10] bg-gradient-to-r from-[#121820] via-[#182330] to-[#121820] px-4 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.10),0_4px_16px_rgba(0,0,0,0.32)]">
           {/* Left: Back Button, Grip, Logo, Ticker & Bias */}
-          <div className="flex items-center gap-2.5 min-w-0 shrink">
+          <div className="flex min-w-0 shrink items-center gap-2.5">
             <Link
               href={`/insights?ticker=${ticker}`}
+              prefetch={false}
               aria-label={`Quay lại Insights & mở popup chi tiết ${ticker}`}
               title={`Quay lại Insights & mở popup chi tiết ${ticker}`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 font-ticker text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 hover:border-cyan-400/50 transition-all shadow-[0_0_12px_rgba(34,211,238,0.2)] shrink-0"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 font-ticker text-xs font-bold text-cyan-300 transition-colors hover:border-cyan-400/50 hover:bg-cyan-500/20"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Chi tiết rating</span>
             </Link>
 
-            <GripVertical className="h-4 w-4 text-white/30 hover:text-white/60 shrink-0 transition-colors hidden sm:block" />
-            
+            <GripVertical className="hidden h-4 w-4 shrink-0 text-white/30 transition-colors hover:text-white/60 sm:block" />
+
             <StockLogo
               symbol={ticker}
               size={32}
-              className="shrink-0 rounded-full border-white/40 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+              className="shrink-0 rounded-full border-white/40"
             />
-            
-            <span className="font-ticker text-xl sm:text-2xl font-extrabold italic bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent pr-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.2)] tracking-tight shrink-0 select-none">
+
+            <span className="shrink-0 select-none bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text pr-2 font-ticker text-xl font-extrabold italic tracking-tight text-transparent sm:text-2xl">
               {ticker}
             </span>
-            
+
             {selected?.sector ? (
-              <span className="hidden md:inline-flex rounded-full bg-white/[0.08] border border-white/[0.12] px-2 py-0.5 font-ticker text-[9.5px] font-bold text-white/70 uppercase tracking-wider shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">
+              <span className="hidden shrink-0 rounded-full border border-white/[0.12] bg-white/[0.08] px-2 py-0.5 font-ticker text-[9.5px] font-bold uppercase tracking-wider text-white/70 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)] md:inline-flex">
                 {selected.sector}
               </span>
             ) : null}
 
-            <span className={`rounded-full border px-2 py-0.5 font-ticker text-[10px] font-bold shrink-0 ${biasTone(current?.analysis?.taBias ?? selected?.bias ?? "")}`}>
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 font-ticker text-[10px] font-bold ${biasTone(current?.analysis?.taBias ?? selected?.bias ?? "")}`}>
               {current?.analysis?.taBias ?? selected?.bias ?? "Pending"}
             </span>
           </div>
 
           {/* Right: Live Price & Change Pill, Divider, Action Controls */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex shrink-0 items-center gap-2.5">
             {/* Price & Change Pill */}
             <div className="flex items-center gap-2">
-              <span className={`font-mono text-lg sm:text-xl font-black tracking-tight rounded px-1 transition-colors drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] ${(change ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+              <span className={`rounded px-1 font-mono text-lg font-black tracking-tight transition-colors sm:text-xl ${(change ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
                 {number(latest?.close ?? selected?.price)}
               </span>
-              <span className={`inline-flex shrink-0 items-center justify-center font-mono text-xs font-bold px-1.5 py-0.5 rounded leading-none ${(change ?? 0) >= 0 ? "text-emerald-300 bg-emerald-500/10 border border-emerald-500/20" : "text-rose-300 bg-rose-500/10 border border-rose-500/20"}`}>
+              <span className={`inline-flex shrink-0 items-center justify-center rounded border px-1.5 py-0.5 font-mono text-xs font-bold leading-none ${(change ?? 0) >= 0 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : "border-rose-500/20 bg-rose-500/10 text-rose-300"}`}>
                 {percent(change)}
               </span>
             </div>
 
-            {/* Action Controls */}
-            <div className="flex items-center gap-0.5 border-l border-white/10 pl-1.5 ml-0.5">
+            {/* Header links are explicit navigation only. Avoid background RSC prefetch
+                while the chart/runtime is mounting. */}
+            <div className="ml-0.5 flex items-center gap-0.5 border-l border-white/10 pl-1.5">
               <Link
                 href={`/insights?ticker=${ticker}`}
+                prefetch={false}
                 aria-label={`Mở popup chi tiết rating ${ticker}`}
                 title="Hồ sơ rating Insights"
-                className="rounded p-1.5 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
+                className="rounded p-1.5 text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white"
               >
                 <Sparkles className="h-3.5 w-3.5" />
               </Link>
 
               <Link
                 href={`/research/${ticker.toLowerCase()}`}
+                prefetch={false}
                 aria-label={`Mở phân tích chuyên sâu ${ticker}`}
                 title="Mở phân tích chuyên sâu"
-                className="rounded p-1.5 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
+                className="rounded p-1.5 text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
               </Link>
