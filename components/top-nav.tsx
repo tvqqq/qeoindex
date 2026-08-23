@@ -13,7 +13,7 @@ const NAV_ITEMS = [
   { label: "Bảng điện", href: "/", icon: LayoutDashboard, active: (pathname: string) => pathname === "/" },
   { label: "Insights", href: "/insights", icon: Sparkles, active: (pathname: string) => pathname === "/insights" },
   {
-    label: "Chart Wyckoff",
+    label: "Phân tích chart Wyckoff",
     href: "/insights/wyckoff",
     icon: CandlestickChart,
     active: (pathname: string) => pathname.startsWith("/insights/wyckoff"),
