@@ -70,7 +70,6 @@ import {
   KFSP_FIELD_CATALOG,
   KFSP_GROUPS,
   type KfspFieldDefinition,
-  type KfspGroupKey,
 } from "@/supabase/functions/_shared/kfsp-catalog"
 
 const MODULE_ICONS = {
@@ -79,18 +78,6 @@ const MODULE_ICONS = {
   fa: BarChart3,
   research: BrainCircuit,
 } as const
-
-const KFSP_GROUP_ICONS: Record<KfspGroupKey, typeof Gauge> = {
-  overview: Gauge,
-  general: Building2,
-  valuation: BadgePercent,
-  fundamentals: FileText,
-  price_volatility: Activity,
-  price_range: Maximize2,
-  liquidity: Droplets,
-  technical: LineChart,
-  kfsp: Sparkles,
-}
 
 const DATE_FORMAT = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
@@ -711,326 +698,321 @@ function RatingHistoryChart({ row }: { row: InsightsRatingRow }) {
 }
 
 function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; onOpenChange: (open: boolean) => void }) {
-  const [topTab, setTopTab] = useState<"overview" | "metrics" | "history">("overview")
-  const [activeGroup, setActiveGroup] = useState<KfspGroupKey>("overview")
+  type StockDetailTab = "overview" | "info" | "fa" | "ta" | "kfsp"
+  const [topTab, setTopTab] = useState<StockDetailTab>("overview")
   if (!row) return null
-  const activeGroupDefinition = KFSP_GROUPS.find((group) => group.key === activeGroup) ?? KFSP_GROUPS[0]
-  const activeFields = KFSP_FIELD_CATALOG.filter((field) => field.group === activeGroup)
-  const ratingModel = calculateRatingModel(row)
-  
-  const scoreCards = [
-    { label: "CANSLIM", value: row.canslimScore, tone: "emerald" as const, icon: Target, description: "Điểm sàng lọc CANSLIM do KFSP cung cấp." },
-    { label: "Điểm 4M", value: row.score4m, tone: "amber" as const, icon: Bolt, description: "Điểm mô hình 4M do KFSP cung cấp." },
-    { label: "RSs", value: row.rsShort ?? row.scoreComponents.momentum, tone: "cyan" as const, icon: Zap, description: "Sức mạnh tương đối ngắn hạn của cổ phiếu." },
-    { label: "RSm", value: row.rsMedium ?? row.scoreComponents.moneyFlow, tone: "violet" as const, icon: Radar, description: "Sức mạnh tương đối trung hạn của cổ phiếu." },
-  ]
 
-  // Calculations for 3 top summary cards (Hình 3 style)
+  const ratingModel = calculateRatingModel(row)
+  const fieldByKey = new Map(KFSP_FIELD_CATALOG.map((field) => [field.key, field]))
   const deltaRs7d = historyDelta(row.rsShort ?? 50, row.scoreHistory, 7, (item) => item.rsShort)
   const deltaRs30d = historyDelta(row.rsShort ?? 50, row.scoreHistory, 30, (item) => item.rsShort)
 
+  const metricNumber = (key: string): number | null => {
+    const value = metricValue(row, key)
+    if (typeof value === "number" && Number.isFinite(value)) return value
+    if (typeof value === "string") {
+      const normalized = value.trim().replace(/%$/, "")
+      const numeric = Number(normalized)
+      return Number.isFinite(numeric) ? numeric : null
+    }
+    return null
+  }
+
+  const metricDisplay = (key: string) => {
+    const definition = fieldByKey.get(key)
+    if (!definition) return "—"
+    return formatMetric(metricValue(row, key), definition)
+  }
+
+  const metricTile = (key: string, className?: string) => {
+    const definition = fieldByKey.get(key)
+    if (!definition) return null
+    const value = metricValue(row, key)
+    const formatted = formatMetric(value, definition)
+    const isLink = definition.format === "link" && /^https?:\/\//i.test(formatted)
+    return (
+      <div key={key} className={cn("min-h-24 rounded-xl border border-white/[0.07] bg-[#091321] p-4", className)}>
+        <MetricLabel definition={definition} className="text-xs font-bold text-muted-2" />
+        {isLink ? (
+          <a href={formatted} target="_blank" rel="noreferrer" className="mt-2.5 inline-flex items-center gap-1 break-all text-sm font-bold text-brand hover:underline">
+            Truy cập <ExternalLink className="size-3.5" />
+          </a>
+        ) : (
+          <div className={cn("mt-2.5 break-words font-mono text-base font-black", metricTone(value, definition))}>{formatted}</div>
+        )}
+      </div>
+    )
+  }
+
+  const performance = [
+    { label: "1D", value: metricNumber("price_change_1d_pct") ?? row.changePercent },
+    { label: "1W", value: metricNumber("price_change_1w_pct") ?? row.weeklyChangePercent },
+    { label: "2W", value: metricNumber("price_change_2w_pct") },
+    { label: "1M", value: metricNumber("price_change_1m_pct") ?? row.monthlyChangePercent },
+    { label: "3M", value: metricNumber("price_change_3m_pct") },
+    { label: "YTD", value: metricNumber("price_change_ytd_pct") },
+    { label: "1Y", value: metricNumber("price_change_1y_pct") },
+  ]
+  const performanceScale = Math.max(1, ...performance.map((item) => Math.abs(item.value ?? 0)))
+
+  const smaDistance = [10, 20, 50, 100, 200].map((period) => ({
+    label: `SMA${period}`,
+    value: metricNumber(`price_vs_sma${period}_pct`),
+  }))
+  const smaScale = Math.max(1, ...smaDistance.map((item) => Math.abs(item.value ?? 0)))
+  const smaAboveCount = smaDistance.filter((item) => (item.value ?? -Infinity) > 0).length
+
+  const volumeSeries = [
+    { label: "Hôm nay", value: metricNumber("volume_1d") },
+    { label: "TB 10D", value: metricNumber("average_volume_10d") },
+    { label: "TB 20D", value: metricNumber("average_volume_20d") },
+    { label: "TB 50D", value: metricNumber("average_volume_50d") ?? row.volume },
+  ]
+  const volumeScale = Math.max(1, ...volumeSeries.map((item) => item.value ?? 0))
+
+  const tradedValueSeries = [
+    { label: "Hôm nay", value: metricNumber("traded_value_1d_billion") },
+    { label: "TB 10D", value: metricNumber("average_traded_value_10d_billion") },
+    { label: "TB 20D", value: metricNumber("average_traded_value_20d_billion") },
+    { label: "TB 50D", value: metricNumber("average_traded_value_50d_billion") },
+  ]
+  const tradedValueScale = Math.max(1, ...tradedValueSeries.map((item) => item.value ?? 0))
+
+  const rowRsi = typeof row.rsi14 === "number" ? row.rsi14 : Number(row.rsi14)
+  const rsi = metricNumber("rsi_14") ?? (Number.isFinite(rowRsi) ? rowRsi : null)
+  const freeFloat = metricNumber("free_float_pct")
+  const foreignRoom = metricNumber("foreign_room_remaining_pct")
+
+  const tabItems: Array<{ key: StockDetailTab; label: string; icon: typeof Gauge }> = [
+    { key: "overview", label: "Tổng quan", icon: Gauge },
+    { key: "info", label: "Thông tin", icon: Building2 },
+    { key: "fa", label: "Chỉ số FA", icon: BadgePercent },
+    { key: "ta", label: "Phân tích TA", icon: LineChart },
+    { key: "kfsp", label: "KFSP", icon: Sparkles },
+  ]
+
+  const renderPerformanceBars = () => (
+    <div className="space-y-3">
+      {performance.map((item) => {
+        const value = item.value
+        const width = value == null ? 0 : Math.min(50, Math.abs(value) / performanceScale * 50)
+        return (
+          <div key={item.label} className="grid grid-cols-[42px_1fr_74px] items-center gap-3">
+            <span className="text-xs font-extrabold text-muted-2">{item.label}</span>
+            <div className="relative h-2.5 overflow-hidden rounded-full bg-white/[0.05]">
+              <span className="absolute left-1/2 top-0 h-full w-px bg-white/20" />
+              {value != null && (
+                <span
+                  className={cn("absolute top-0 h-full rounded-full", value >= 0 ? "left-1/2 bg-emerald-400" : "right-1/2 bg-rose-400")}
+                  style={{ width: `${width}%` }}
+                />
+              )}
+            </div>
+            <span className={cn("text-right font-mono text-sm font-black", value == null ? "text-muted-2" : value >= 0 ? "text-up" : "text-down")}>{formatPercent(value)}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] flex flex-col overflow-hidden border border-cyan-300/20 bg-[#060c16] p-0 shadow-[0_40px_120px_-20px_rgba(0,0,0,.98),0_0_70px_-35px_rgba(103,232,249,.6)] sm:max-w-[min(1440px,calc(100vw-2rem))]">
-        {/* Header styled like Orderbook popup: Avatar -> Ticker -> Company Name -> HOSE tag, with NO right-side badge */}
+      <DialogContent className="flex max-h-[94vh] flex-col overflow-hidden border border-cyan-300/20 bg-[#060c16] p-0 font-ticker shadow-[0_40px_120px_-20px_rgba(0,0,0,.98),0_0_70px_-35px_rgba(103,232,249,.6)] sm:max-w-[min(1440px,calc(100vw-2rem))]">
         <DialogHeader className="shrink-0 border-b border-white/[0.10] bg-gradient-to-r from-[#121820]/95 via-[#182330]/95 to-[#121820]/95 px-5 py-3.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_4px_16px_rgba(0,0,0,0.4)]">
           <div className="flex flex-wrap items-center gap-3">
-            <StockLogo
-              symbol={row.ticker}
-              size={36}
-              className="shrink-0 rounded-full border-white/40 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
-            />
-            <div className="flex flex-wrap items-baseline gap-2.5 min-w-0">
-              <DialogTitle className="font-ticker text-2xl font-extrabold italic bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent tracking-tight shrink-0 select-none">
-                {row.ticker}
-              </DialogTitle>
-              <span className="text-sm font-medium text-slate-300 truncate max-w-lg">
-                {row.companyName}
-              </span>
+            <StockLogo symbol={row.ticker} size={38} className="shrink-0 rounded-full border-white/40 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]" />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-baseline gap-2.5">
+                <DialogTitle className="font-ticker text-2xl font-extrabold italic tracking-tight text-white">{row.ticker}</DialogTitle>
+                <span className="max-w-lg truncate text-sm font-semibold text-slate-300">{row.companyName}</span>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-bold text-muted-2">
+                <span>{row.exchange || "—"}</span><span>·</span><span>{row.sector}</span><span>·</span><span>Snapshot {row.asOfDate || "—"}</span>
+              </div>
             </div>
-            <span className="rounded-full bg-white/[0.08] border border-white/[0.12] px-2.5 py-0.5 text-[10px] font-bold text-white/80 uppercase tracking-wider shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">
-              {row.exchange || "HOSE"}
-            </span>
-            {row.isTop100 && (
-              <Badge variant="outline" className="border-amber-300/30 bg-amber-300/10 text-amber-200 text-xs">
-                <Crown className="size-3" /> Top 100{row.top100Rank ? ` · #${row.top100Rank}` : ""}
-              </Badge>
-            )}
+            <div className="ml-auto flex flex-wrap items-center gap-3 pr-8">
+              <div className="text-right">
+                <div className="font-mono text-xl font-black text-white">{formatPrice(row.price)}</div>
+                <div className={cn("font-mono text-xs font-black", (row.changePercent ?? 0) >= 0 ? "text-up" : "text-down")}>{formatPercent(row.changePercent)}</div>
+              </div>
+              <div className="rounded-xl border border-violet-300/25 bg-violet-400/10 px-3 py-2 text-center shadow-[0_0_20px_-10px_rgba(167,139,250,.8)]">
+                <div className="text-[10px] font-extrabold uppercase tracking-widest text-violet-200/70">Rating</div>
+                <div className="font-mono text-xl font-black text-violet-200">{row.ratingScore}/100</div>
+              </div>
+              {row.isTop100 && <Badge variant="outline" className="border-amber-300/30 bg-amber-300/10 text-amber-200"><Crown className="size-3" /> Top 100{row.top100Rank ? ` · #${row.top100Rank}` : ""}</Badge>}
+            </div>
           </div>
-          <DialogDescription className="sr-only">Hồ sơ chi tiết cổ phiếu {row.ticker}</DialogDescription>
+          <DialogDescription className="sr-only">Dashboard chi tiết cổ phiếu {row.ticker}</DialogDescription>
         </DialogHeader>
 
-        {/* 3 Top Important Pillar Cards (Hình 3 style) */}
-        <div className="shrink-0 bg-[#070e1a] px-5 py-3 border-b border-white/[0.07]">
-          <div className="grid gap-3 sm:grid-cols-3">
-            {/* Card 1: Sức mạnh dòng tiền (RS) */}
-            <div className="rounded-xl border border-cyan-400/25 bg-cyan-950/20 p-3.5 shadow-[0_0_20px_-8px_rgba(34,211,238,0.25)] flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-cyan-300/80 flex items-center gap-1.5">
-                  <Zap className="size-3.5 text-cyan-300" /> Sức mạnh dòng tiền (RS)
-                </span>
-                <TrendingUp className="size-4 text-cyan-300" />
-              </div>
-              <div className="mt-2 font-mono text-2xl font-black text-cyan-300">
-                RSs {row.rsShort ?? 0} <span className="text-base text-cyan-400/60">· RSm {row.rsMedium ?? 0}</span>
-              </div>
-              <div className="mt-1.5 flex items-center justify-between text-xs text-slate-300 font-mono">
-                <span>RRG: <strong className="text-white">{row.stockRrgState || "—"}</strong></span>
-                <span>7D: <b className={(deltaRs7d ?? 0) >= 0 ? "text-up" : "text-down"}>{deltaRs7d == null ? "—" : `${(deltaRs7d ?? 0) >= 0 ? "+" : ""}${deltaRs7d}`}</b> (30D: <b className={(deltaRs30d ?? 0) >= 0 ? "text-up" : "text-down"}>{deltaRs30d == null ? "—" : `${(deltaRs30d ?? 0) >= 0 ? "+" : ""}${deltaRs30d}`}</b>)</span>
-              </div>
-            </div>
-
-            {/* Card 2: Chất lượng CANSLIM & 4M */}
-            <div className="rounded-xl border border-emerald-400/25 bg-emerald-950/20 p-3.5 shadow-[0_0_20px_-8px_rgba(52,211,153,0.25)] flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-300/80 flex items-center gap-1.5">
-                  <Target className="size-3.5 text-emerald-300" /> Mô hình CANSLIM & 4M
-                </span>
-                <ShieldCheck className="size-4 text-emerald-300" />
-              </div>
-              <div className="mt-2 font-mono text-2xl font-black text-emerald-300">
-                CANSLIM {row.canslimScore} <span className="text-base text-amber-300">· 4M {row.score4m}</span>
-              </div>
-              <div className="mt-1.5 flex items-center justify-between text-xs text-slate-300 font-mono">
-                <span>P/E: <strong className="text-white">{formatNumber(row.peTtm)}</strong></span>
-                <span>P/B: <strong className="text-white">{formatNumber(row.pbTtm)}</strong></span>
-                <span>Vốn hóa: <strong className="text-white">{row.marketCapBillion ? formatMarketCapBillion(row.marketCapBillion) : "—"}</strong></span>
-              </div>
-            </div>
-
-            {/* Card 3: Rating tổng hợp & Trạng thái */}
-            <div className="rounded-xl border border-violet-400/25 bg-violet-950/20 p-3.5 shadow-[0_0_20px_-8px_rgba(167,139,250,0.25)] flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-violet-300/80 flex items-center gap-1.5">
-                  <Sparkles className="size-3.5 text-violet-300" /> Rating tổng hợp & Trạng thái
-                </span>
-                <Radar className="size-4 text-violet-300" />
-              </div>
-              <div className="mt-2 font-mono text-2xl font-black text-violet-300">
-                {row.ratingScore}/100 <span className="text-base font-sans font-bold text-white">· {ratingModel.state}</span>
-              </div>
-              <div className="mt-1.5 flex items-center justify-between text-xs text-slate-300 font-mono">
-                <span>Tiềm năng: <strong className="text-up">{row.pricePotential || "—"}</strong></span>
-                <span>RSI(14): <strong className="text-white">{row.rsi14 ?? "—"}</strong></span>
-                <span>Beta: <strong className="text-white">{row.beta ?? "—"}</strong></span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Liquid Glass Navigation Tabs (like Navbar Liquid Pill) */}
-        <div className="shrink-0 px-5 pt-3 pb-2 bg-[#080d19]">
-          <nav className="inline-flex items-center gap-1.5 p-1 rounded-full bg-[#080c10]/90 border border-white/[0.1] shadow-[0_0_24px_-4px_rgba(176,124,255,0.18),0_0_24px_-4px_rgba(34,201,138,0.18),inset_0_1px_0_0_rgba(255,255,255,0.1)] backdrop-blur-2xl" role="tablist" aria-label="Điều hướng hồ sơ rating">
-            <button
-              id="rating-tab-overview"
-              type="button"
-              role="tab"
-              aria-selected={topTab === "overview"}
-              aria-controls="rating-panel-overview"
-              onClick={() => setTopTab("overview")}
-              className={cn(
-                "group relative flex items-center gap-2 whitespace-nowrap px-4 py-2 text-xs sm:text-sm font-extrabold rounded-full transition-all duration-300 select-none",
-                topTab === "overview"
-                  ? "bg-gradient-to-r from-emerald-500/25 via-purple-500/20 to-emerald-500/25 text-emerald-300 font-bold border border-emerald-400/50 shadow-[0_0_16px_rgba(176,124,255,0.35),0_0_10px_rgba(34,201,138,0.4),inset_0_1px_0_0_rgba(255,255,255,0.3)]"
-                  : "text-slate-300 hover:text-white hover:bg-gradient-to-r hover:from-emerald-500/10 hover:via-purple-500/10 hover:to-transparent hover:border-purple-500/30 border border-transparent"
-              )}
-            >
-              <Radar className="size-4" /> Tổng quan & Động lượng
-            </button>
-            <button
-              id="rating-tab-metrics"
-              type="button"
-              role="tab"
-              aria-selected={topTab === "metrics"}
-              aria-controls="rating-panel-metrics"
-              onClick={() => setTopTab("metrics")}
-              className={cn(
-                "group relative flex items-center gap-2 whitespace-nowrap px-4 py-2 text-xs sm:text-sm font-extrabold rounded-full transition-all duration-300 select-none",
-                topTab === "metrics"
-                  ? "bg-gradient-to-r from-emerald-500/25 via-purple-500/20 to-emerald-500/25 text-emerald-300 font-bold border border-emerald-400/50 shadow-[0_0_16px_rgba(176,124,255,0.35),0_0_10px_rgba(34,201,138,0.4),inset_0_1px_0_0_rgba(255,255,255,0.3)]"
-                  : "text-slate-300 hover:text-white hover:bg-gradient-to-r hover:from-emerald-500/10 hover:via-purple-500/10 hover:to-transparent hover:border-purple-500/30 border border-transparent"
-              )}
-            >
-              <Layers3 className="size-4" /> Chỉ số cổ phiếu
-            </button>
-            <button
-              id="rating-tab-history"
-              type="button"
-              role="tab"
-              aria-selected={topTab === "history"}
-              aria-controls="rating-panel-history"
-              onClick={() => setTopTab("history")}
-              className={cn(
-                "group relative flex items-center gap-2 whitespace-nowrap px-4 py-2 text-xs sm:text-sm font-extrabold rounded-full transition-all duration-300 select-none",
-                topTab === "history"
-                  ? "bg-gradient-to-r from-emerald-500/25 via-purple-500/20 to-emerald-500/25 text-emerald-300 font-bold border border-emerald-400/50 shadow-[0_0_16px_rgba(176,124,255,0.35),0_0_10px_rgba(34,201,138,0.4),inset_0_1px_0_0_rgba(255,255,255,0.3)]"
-                  : "text-slate-300 hover:text-white hover:bg-gradient-to-r hover:from-emerald-500/10 hover:via-purple-500/10 hover:to-transparent hover:border-purple-500/30 border border-transparent"
-              )}
-            >
-              <LineChart className="size-4" /> Lịch sử Rating
-            </button>
+        <div className="shrink-0 overflow-x-auto border-b border-white/[0.08] bg-[#080d19] px-5 py-3">
+          <nav className="inline-flex min-w-max items-center gap-1.5 rounded-full border border-white/[0.1] bg-[#080c10]/90 p-1 shadow-[0_0_24px_-4px_rgba(176,124,255,0.18),0_0_24px_-4px_rgba(34,201,138,0.18)]" role="tablist" aria-label="Điều hướng hồ sơ cổ phiếu">
+            {tabItems.map((tab) => {
+              const Icon = tab.icon
+              const active = topTab === tab.key
+              return (
+                <button
+                  key={tab.key}
+                  id={`rating-tab-${tab.key}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  aria-controls={`rating-panel-${tab.key}`}
+                  onClick={() => setTopTab(tab.key)}
+                  className={cn(
+                    "inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-xs font-extrabold transition-all sm:text-sm",
+                    active
+                      ? "border-emerald-400/45 bg-gradient-to-r from-emerald-500/25 via-purple-500/20 to-emerald-500/20 text-emerald-200 shadow-[0_0_16px_rgba(176,124,255,0.28),0_0_10px_rgba(34,201,138,0.32)]"
+                      : "border-transparent text-slate-400 hover:border-white/10 hover:bg-white/[0.05] hover:text-white",
+                  )}
+                >
+                  <Icon className="size-4" /> {tab.label}
+                </button>
+              )
+            })}
           </nav>
         </div>
 
-        {/* Scrollable Content Body with stable min-height to prevent mouse cursor jumping */}
-        <div className="flex-1 min-h-[580px] max-h-[75vh] overflow-y-auto p-4 sm:p-5 space-y-4">
+        <div className="min-h-[580px] flex-1 overflow-y-auto p-4 sm:p-5">
           {topTab === "overview" && (
-            <div id="rating-panel-overview" role="tabpanel" aria-labelledby="rating-tab-overview" className="space-y-4">
-              {/* Git History Accumulation Heatmap (Hình 4) */}
-              <AccumulationHeatmap row={row} />
-
-              <div className="grid gap-4 lg:grid-cols-12">
-                {/* 4 Core Score Progress Cards */}
-                <div className="space-y-3 lg:col-span-5">
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {scoreCards.map(({ label, value, tone, icon: Icon, description }) => (
-                      <div key={label} className="rounded-xl border border-white/[0.07] bg-[#091321] p-3.5">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="flex items-center gap-1.5 text-sm font-extrabold text-muted-2">
-                            <Icon className="size-4 shrink-0" /> {label}
-                          </span>
-                          <ScorePill value={value} tone={tone} label={label} description={description} />
-                        </div>
-                        <div className="mt-3">
-                          <AnimatedProgressBar value={value} color={tone === "amber" ? "#fcd34d" : tone === "violet" ? "#a78bfa" : tone === "cyan" ? "#67e8f9" : "#6ee7b7"} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Classification & Snapshot details */}
-                  <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.07] bg-[#091321] p-3 text-xs">
-                    <Badge variant="outline" className="border-cyan-300/25 bg-cyan-300/[0.08] text-cyan-300 text-xs">{row.sector}</Badge>
-                    <Badge variant="outline" className={row.ratingScore >= 85 ? "border-up/30 bg-up/10 text-up text-xs" : row.ratingScore >= 70 ? "border-ref/30 bg-ref/10 text-ref text-xs" : "border-down/30 bg-down/10 text-down text-xs"}>
-                      {row.ratingScore >= 85 ? "Conviction cao" : row.ratingScore >= 70 ? "Đáng theo dõi" : "Cần thận trọng"}
-                    </Badge>
-                    <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-muted-2 text-xs">
-                      RRG: {row.stockRrgState || "—"}
-                    </Badge>
-                    {row.asOfDate && <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-muted-2 text-xs">Snapshot {row.asOfDate}</Badge>}
-                  </div>
+            <section id="rating-panel-overview" role="tabpanel" aria-labelledby="rating-tab-overview" className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border border-violet-300/20 bg-violet-400/[0.07] p-4">
+                  <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-violet-200/70"><span>Composite</span><Sparkles className="size-4" /></div>
+                  <div className="mt-3 font-mono text-3xl font-black text-violet-200">{row.ratingScore}<span className="text-base text-violet-200/50">/100</span></div>
+                  <div className="mt-2 text-sm font-bold text-white">{ratingModel.state}</div>
                 </div>
-
-                {/* 5-Axis Radar & Dimension Breakdown */}
-                <div className="space-y-3 lg:col-span-7">
-                  <RatingRadar row={row} />
+                <div className="rounded-xl border border-emerald-300/20 bg-emerald-400/[0.07] p-4">
+                  <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-emerald-200/70"><span>CANSLIM / 4M</span><Target className="size-4" /></div>
+                  <div className="mt-3 flex items-end gap-3"><span className="font-mono text-2xl font-black text-emerald-300">{row.canslimScore}</span><span className="pb-1 text-muted-2">/</span><span className="font-mono text-2xl font-black text-amber-300">{row.score4m}</span></div>
+                  <div className="mt-3 grid grid-cols-2 gap-2"><AnimatedProgressBar value={row.canslimScore} color="#6ee7b7" /><AnimatedProgressBar value={row.score4m} color="#fcd34d" /></div>
+                </div>
+                <div className="rounded-xl border border-cyan-300/20 bg-cyan-400/[0.07] p-4">
+                  <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-cyan-200/70"><span>RS Momentum</span><Zap className="size-4" /></div>
+                  <div className="mt-3 font-mono text-2xl font-black text-cyan-200">{row.rsShort ?? "—"}<span className="text-base text-cyan-200/45"> · {row.rsMedium ?? "—"}</span></div>
+                  <div className="mt-2 flex gap-3 text-xs font-bold text-muted-2"><span>7D <b className={(deltaRs7d ?? 0) >= 0 ? "text-up" : "text-down"}>{deltaRs7d == null ? "—" : `${deltaRs7d >= 0 ? "+" : ""}${deltaRs7d}`}</b></span><span>30D <b className={(deltaRs30d ?? 0) >= 0 ? "text-up" : "text-down"}>{deltaRs30d == null ? "—" : `${deltaRs30d >= 0 ? "+" : ""}${deltaRs30d}`}</b></span></div>
+                </div>
+                <div className="rounded-xl border border-amber-300/20 bg-amber-400/[0.06] p-4">
+                  <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-amber-200/70"><span>Market state</span><Radar className="size-4" /></div>
+                  <div className="mt-3 text-xl font-black text-white">{row.stockRrgState || "—"}</div>
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs font-bold text-muted-2"><span>RSI <b className="text-white">{rsi ?? "—"}</b></span><span>Beta <b className="text-white">{row.beta ?? metricDisplay("beta")}</b></span><span>{smaAboveCount}/5 SMA phía trên</span></div>
                 </div>
               </div>
-            </div>
+
+              <div className="grid gap-4 xl:grid-cols-12">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 xl:col-span-7">
+                  <div className="mb-4 flex items-center justify-between"><div><h4 className="text-base font-extrabold text-white">Hiệu suất giá</h4><p className="mt-1 text-xs text-muted-2">So sánh động lượng từ 1 phiên đến 1 năm.</p></div><Activity className="size-5 text-emerald-300" /></div>
+                  {renderPerformanceBars()}
+                </div>
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 xl:col-span-5">
+                  <div className="mb-4 flex items-center justify-between"><div><h4 className="text-base font-extrabold text-white">Range & thanh khoản</h4><p className="mt-1 text-xs text-muted-2">Vị thế giá và cường độ giao dịch.</p></div><Droplets className="size-5 text-cyan-300" /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-xs font-bold text-muted-2">Cách đỉnh 52W</span><div className="mt-2 font-mono text-lg font-black text-white">{metricDisplay("distance_to_52w_high_pct")}</div></div>
+                    <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-xs font-bold text-muted-2">Cách đáy 52W</span><div className="mt-2 font-mono text-lg font-black text-white">{metricDisplay("distance_to_52w_low_pct")}</div></div>
+                    <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-xs font-bold text-muted-2">Volume vs phiên trước</span><div className="mt-2 font-mono text-lg font-black text-white">{metricDisplay("volume_vs_previous_session_pct")}</div></div>
+                    <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-xs font-bold text-muted-2">GTGD vs phiên trước</span><div className="mt-2 font-mono text-lg font-black text-white">{metricDisplay("traded_value_vs_previous_session_pct")}</div></div>
+                  </div>
+                  <div className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-xs font-semibold text-muted-2">KLGD TB 50 phiên: <strong className="font-mono text-white">{compactVolume(row.volume)}</strong> · Vốn hóa: <strong className="font-mono text-white">{row.marketCapBillion == null ? "—" : formatMarketCapBillion(row.marketCapBillion)}</strong></div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
+                  <div className="mb-4 flex items-center gap-2"><BadgePercent className="size-5 text-emerald-300" /><div><h4 className="font-extrabold text-white">FA quick read</h4><p className="text-xs text-muted-2">Growth, profitability và valuation quan trọng.</p></div></div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {["net_revenue_growth_pct", "net_income_growth_pct", "roe_ttm_pct", "net_margin_ttm_pct", "pe_ttm", "pb_ttm"].map((key) => metricTile(key))}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
+                  <div className="mb-4 flex items-center gap-2"><LineChart className="size-5 text-cyan-300" /><div><h4 className="font-extrabold text-white">TA quick read</h4><p className="text-xs text-muted-2">Trend, oscillator và trạng thái kỹ thuật.</p></div></div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {["price_vs_sma20_pct", "price_vs_sma50_pct", "price_vs_sma200_pct", "rsi_14", "macd_vs_signal", "position_in_bollinger_band"].map((key) => metricTile(key))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-2"><RatingHistoryChart row={row} /><RatingRadar row={row} /></div>
+              <details className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4">
+                <summary className="cursor-pointer select-none text-sm font-extrabold text-white">Ma trận trạng thái & tích lũy</summary>
+                <div className="mt-4"><AccumulationHeatmap row={row} /></div>
+              </details>
+            </section>
           )}
 
-          {topTab === "metrics" && (
-            <section id="rating-panel-metrics" role="tabpanel" aria-labelledby="rating-tab-metrics" className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07101a]">
-              {/* Sub-tabs with top border like commit b635a4df286096776b4bd68358195b7d60077718 */}
-              <div className="overflow-x-auto border-b border-white/[0.08] bg-[#0a1320]">
-                <div className="flex min-w-max px-2 pt-2" role="tablist" aria-label="Nhóm dữ liệu rating">
-                  {KFSP_GROUPS.map((group) => {
-                    const GroupIcon = KFSP_GROUP_ICONS[group.key] || Gauge
-                    return (
-                      <button
-                        key={group.key}
-                        type="button"
-                        role="tab"
-                        aria-selected={activeGroup === group.key}
-                        onClick={() => setActiveGroup(group.key)}
-                        className={cn(
-                          "inline-flex items-center gap-2 rounded-t-lg px-4 py-3 text-sm font-extrabold text-muted-2 transition-colors hover:text-white",
-                          activeGroup === group.key && "bg-[#111a29] text-fuchsia-400 shadow-[inset_0_2px_0_rgba(217,70,239,.8)] border-t border-fuchsia-400"
-                        )}
-                      >
-                        <GroupIcon className="size-4 shrink-0" />
-                        {group.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-              <div className="p-4 sm:p-5">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h4 className="font-extrabold text-white text-base">{activeGroupDefinition.label}</h4>
-                    <p className="mt-0.5 text-xs text-muted-2">Hover vào tên chỉ số để xem diễn giải định nghĩa.</p>
+          {topTab === "info" && (
+            <section id="rating-panel-info" role="tabpanel" aria-labelledby="rating-tab-info" className="space-y-4">
+              <div className="flex items-start gap-3 rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-cyan-300/20 bg-cyan-300/10"><Building2 className="size-5 text-cyan-200" /></span><div><h3 className="text-lg font-extrabold text-white">Thông tin doanh nghiệp</h3><p className="mt-1 text-sm text-muted-2">Hồ sơ, quy mô và cấu trúc cổ phiếu. Dữ liệu dòng tiền giao dịch được chuyển sang tab TA.</p></div></div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{["company_name", "charter_capital_billion", "market_cap_billion", "shares_outstanding", "website"].map((key) => metricTile(key))}</div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {[{ label: "Free float", value: freeFloat, display: metricDisplay("free_float_pct") }, { label: "Room nước ngoài còn lại", value: foreignRoom, display: metricDisplay("foreign_room_remaining_pct") }].map((item) => (
+                  <div key={item.label} className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5">
+                    <div className="flex items-center justify-between"><span className="text-sm font-bold text-muted-2">{item.label}</span><span className="font-mono text-lg font-black text-white">{item.display}</span></div>
+                    <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400" style={{ width: `${Math.max(0, Math.min(100, item.value ?? 0))}%` }} /></div>
                   </div>
-                  <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-xs text-muted-2">{activeFields.length} chỉ số</Badge>
-                </div>
-                <div className="grid gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.08] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {activeFields.map((definition) => {
-                    const value = metricValue(row, definition.key)
-                    const formatted = formatMetric(value, definition)
-                    const isLink = definition.format === "link" && /^https?:\/\//i.test(formatted)
-                    return (
-                      <div key={`${activeGroup}-${definition.providerKey}`} className="min-h-24 bg-[#0a1220] p-4">
-                        <MetricLabel definition={definition} className="text-xs font-bold text-muted-2" />
-                        {isLink ? (
-                          <a href={formatted} target="_blank" rel="noreferrer" className="mt-2.5 flex items-center gap-1 break-all text-sm font-bold text-brand hover:underline">Truy cập <ExternalLink className="size-3.5" /></a>
-                        ) : (
-                          <div className={cn("mt-2.5 break-words font-mono text-base font-black", metricTone(value, definition))}>{formatted}</div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                ))}
               </div>
             </section>
           )}
 
-          {topTab === "history" && (
-            <div id="rating-panel-history" role="tabpanel" aria-labelledby="rating-tab-history" className="space-y-4">
-              <RatingHistoryChart row={row} />
-              {row.scoreHistory.length > 0 && (
-                <div className="rounded-xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
-                  <h4 className="font-extrabold text-white text-base mb-3">Bảng lịch sử snapshot</h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left font-mono text-xs sm:text-sm">
-                      <thead>
-                        <tr className="border-b border-white/10 text-muted-2 text-xs">
-                          <th className="pb-2.5 font-bold">Ngày snapshot</th>
-                          <th className="pb-2.5 font-bold text-center">Rating</th>
-                          <th className="pb-2.5 font-bold text-center">CANSLIM</th>
-                          <th className="pb-2.5 font-bold text-center">4M</th>
-                          <th className="pb-2.5 font-bold text-center">RSs</th>
-                          <th className="pb-2.5 font-bold text-center">RSm</th>
-                          <th className="pb-2.5 font-bold text-center">RRG</th>
-                          <th className="pb-2.5 font-bold text-center">RSI</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5 text-white">
-                        {row.scoreHistory.map((item) => (
-                          <tr key={item.asOfDate} className="hover:bg-white/[0.02]">
-                            <td className="py-3 font-sans font-medium text-muted-2">{item.asOfDate}</td>
-                            <td className="py-3 text-center font-black text-brand">{item.ratingScore ?? "—"}</td>
-                            <td className="py-3 text-center text-emerald-300 font-bold">{item.canslimScore ?? "—"}</td>
-                            <td className="py-3 text-center text-amber-300 font-bold">{item.score4m ?? "—"}</td>
-                            <td className="py-3 text-center text-cyan-300 font-bold">{item.rsShort ?? "—"}</td>
-                            <td className="py-3 text-center text-violet-300 font-bold">{item.rsMedium ?? "—"}</td>
-                            <td className="py-3 text-center font-sans text-xs">{item.stockRrgState || "—"}</td>
-                            <td className="py-3 text-center">{item.rsi14 ?? "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
+          {topTab === "fa" && (
+            <section id="rating-panel-fa" role="tabpanel" aria-labelledby="rating-tab-fa" className="space-y-4">
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center gap-2"><BadgePercent className="size-5 text-emerald-300" /><div><h3 className="font-extrabold text-white">Định giá</h3><p className="text-xs text-muted-2">Multiple và dữ liệu trên mỗi cổ phiếu.</p></div></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{["eps_ttm_vnd", "pe_ttm", "bvps_ttm_vnd", "pb_ttm", "eps_ttm_growth_pct", "bvps_ttm_growth_pct"].map((key) => metricTile(key))}</div></div>
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center gap-2"><FileText className="size-5 text-amber-300" /><div><h3 className="font-extrabold text-white">Financial snapshot</h3><p className="text-xs text-muted-2">Kỳ BCTC gần nhất và quy mô TTM.</p></div></div><div className="grid gap-2 sm:grid-cols-2">{["financial_period", "net_revenue_ttm_billion", "net_income_ttm_billion"].map((key) => metricTile(key))}</div></div>
+              </div>
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><h3 className="font-extrabold text-white">Tăng trưởng</h3><p className="mt-1 text-xs text-muted-2">So sánh tốc độ tăng trưởng của các driver chính.</p><div className="mt-5 space-y-4">{[{ label: "Doanh thu", key: "net_revenue_growth_pct" }, { label: "LN sau thuế", key: "net_income_growth_pct" }, { label: "EPS", key: "eps_ttm_growth_pct" }, { label: "BVPS", key: "bvps_ttm_growth_pct" }].map((item) => { const value = metricNumber(item.key); const width = value == null ? 0 : Math.min(100, Math.abs(value)); return <div key={item.key}><div className="mb-1.5 flex items-center justify-between text-xs font-bold"><span className="text-muted-2">{item.label}</span><span className={value == null ? "text-muted-2" : value >= 0 ? "text-up" : "text-down"}>{value == null ? "—" : formatPercent(value)}</span></div><div className="h-2 rounded-full bg-white/[0.05]"><div className={cn("h-full rounded-full", (value ?? 0) >= 0 ? "bg-emerald-400" : "bg-rose-400")} style={{ width: `${width}%` }} /></div></div> })}</div></div>
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><h3 className="font-extrabold text-white">Khả năng sinh lời</h3><p className="mt-1 text-xs text-muted-2">Margin, hiệu quả tài sản và vốn chủ sở hữu.</p><div className="mt-4 grid gap-3 sm:grid-cols-3">{["net_margin_ttm_pct", "roa_ttm_pct", "roe_ttm_pct"].map((key) => metricTile(key))}</div></div>
+              </div>
+            </section>
+          )}
+
+          {topTab === "ta" && (
+            <section id="rating-panel-ta" role="tabpanel" aria-labelledby="rating-tab-ta" className="space-y-4">
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center justify-between"><div><h3 className="font-extrabold text-white">Momentum đa khung</h3><p className="text-xs text-muted-2">1D → 1Y, màu xanh/đỏ theo hướng biến động.</p></div><Activity className="size-5 text-emerald-300" /></div>{renderPerformanceBars()}</div>
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center justify-between"><div><h3 className="font-extrabold text-white">Trend so với SMA</h3><p className="text-xs text-muted-2">Giá hiện trên {smaAboveCount}/5 đường SMA.</p></div><TrendingUp className="size-5 text-cyan-300" /></div><div className="space-y-3">{smaDistance.map((item) => { const width = item.value == null ? 0 : Math.min(50, Math.abs(item.value) / smaScale * 50); return <div key={item.label} className="grid grid-cols-[60px_1fr_70px] items-center gap-3"><span className="text-xs font-extrabold text-muted-2">{item.label}</span><div className="relative h-2.5 rounded-full bg-white/[0.05]"><span className="absolute left-1/2 top-0 h-full w-px bg-white/20" />{item.value != null && <span className={cn("absolute top-0 h-full rounded-full", item.value >= 0 ? "left-1/2 bg-cyan-400" : "right-1/2 bg-rose-400")} style={{ width: `${width}%` }} />}</div><span className={cn("text-right font-mono text-xs font-black", item.value == null ? "text-muted-2" : item.value >= 0 ? "text-up" : "text-down")}>{formatPercent(item.value)}</span></div> })}</div></div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-3">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><h3 className="font-extrabold text-white">RSI (14)</h3><div className="mt-5 flex items-center justify-between text-xs font-bold text-muted-2"><span>0</span><span>30</span><span>70</span><span>100</span></div><div className="relative mt-2 h-3 rounded-full bg-gradient-to-r from-cyan-500/35 via-white/10 to-rose-500/35"><span className="absolute top-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#07111f] bg-white shadow-[0_0_14px_rgba(255,255,255,.5)]" style={{ left: `${Math.max(0, Math.min(100, rsi ?? 50))}%` }} /></div><div className="mt-4 font-mono text-2xl font-black text-white">{rsi ?? "—"}</div><p className="mt-1 text-xs text-muted-2">{rsi == null ? "Không có dữ liệu" : rsi < 30 ? "Vùng quá bán" : rsi > 70 ? "Vùng quá mua" : "Vùng trung tính"}</p></div>
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><h3 className="font-extrabold text-white">MACD</h3><div className="mt-5 text-xl font-black text-white">{metricDisplay("macd_vs_signal")}</div><p className="mt-2 text-xs text-muted-2">Vị trí MACD so với đường Signal.</p></div>
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><h3 className="font-extrabold text-white">Bollinger Band</h3><div className="mt-5 text-xl font-black text-white">{metricDisplay("position_in_bollinger_band")}</div><p className="mt-2 text-xs text-muted-2">Vị trí giá trong/ngoài dải Bollinger.</p></div>
+              </div>
+
+              <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center gap-2"><Maximize2 className="size-5 text-violet-300" /><div><h3 className="font-extrabold text-white">Phạm vi giá</h3><p className="text-xs text-muted-2">Không suy diễn vị trí nếu provider chỉ trả nhãn text.</p></div></div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="text-xs uppercase tracking-wider text-muted-2"><tr className="border-b border-white/10"><th className="pb-3">Khung</th><th className="pb-3">Độ rộng</th><th className="pb-3">Vị trí</th><th className="pb-3">Khoảng cách đặc biệt</th></tr></thead><tbody className="divide-y divide-white/[0.06] text-white">{[{ label: "10D", width: "range_width_10d_pct", position: "position_in_10d_range", distance: null }, { label: "20D", width: "range_width_20d_pct", position: "position_in_20d_range", distance: null }, { label: "50D", width: "range_width_50d_pct", position: "position_in_50d_range", distance: null }, { label: "52W", width: "range_width_52w_pct", position: "position_in_52w_range", distance: "distance_to_52w_high_pct" }].map((item) => <tr key={item.label}><td className="py-3 font-extrabold">{item.label}</td><td className="py-3 font-mono">{metricDisplay(item.width)}</td><td className="py-3 font-semibold">{metricDisplay(item.position)}</td><td className="py-3 font-mono text-muted-2">{item.distance ? `Đỉnh: ${metricDisplay(item.distance)} · Đáy: ${metricDisplay("distance_to_52w_low_pct")}` : "—"}</td></tr>)}</tbody></table></div></div>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center justify-between"><div><h3 className="font-extrabold text-white">Khối lượng</h3><p className="text-xs text-muted-2">Hôm nay so với trung bình 10/20/50 phiên.</p></div><Droplets className="size-5 text-cyan-300" /></div><div className="space-y-3">{volumeSeries.map((item) => <div key={item.label} className="grid grid-cols-[72px_1fr_90px] items-center gap-3"><span className="text-xs font-bold text-muted-2">{item.label}</span><div className="h-2.5 rounded-full bg-white/[0.05]"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, (item.value ?? 0) / volumeScale * 100)}%` }} /></div><span className="text-right font-mono text-xs font-black text-white">{item.value == null ? "—" : compactVolume(item.value)}</span></div>)}</div></div>
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center justify-between"><div><h3 className="font-extrabold text-white">Giá trị giao dịch</h3><p className="text-xs text-muted-2">Đơn vị tỷ đồng.</p></div><BarChart3 className="size-5 text-amber-300" /></div><div className="space-y-3">{tradedValueSeries.map((item) => <div key={item.label} className="grid grid-cols-[72px_1fr_90px] items-center gap-3"><span className="text-xs font-bold text-muted-2">{item.label}</span><div className="h-2.5 rounded-full bg-white/[0.05]"><div className="h-full rounded-full bg-amber-400" style={{ width: `${Math.min(100, (item.value ?? 0) / tradedValueScale * 100)}%` }} /></div><span className="text-right font-mono text-xs font-black text-white">{item.value == null ? "—" : `${formatNumber(item.value)} tỷ`}</span></div>)}</div></div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{["volume_vs_previous_session_pct", "traded_value_vs_previous_session_pct", "net_foreign_trading_billion", "net_proprietary_trading_billion"].map((key) => metricTile(key))}{metricTile("beta")}</div>
+            </section>
+          )}
+
+          {topTab === "kfsp" && (
+            <section id="rating-panel-kfsp" role="tabpanel" aria-labelledby="rating-tab-kfsp" className="space-y-4">
+              <div className="flex items-start gap-3 rounded-2xl border border-violet-300/15 bg-violet-400/[0.05] p-5"><span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-violet-300/20 bg-violet-300/10"><Sparkles className="size-5 text-violet-200" /></span><div><h3 className="text-lg font-extrabold text-white">KFSP</h3><p className="mt-1 text-sm text-muted-2">Giữ nguyên semantic của 4M, CANSLIM, RS-S và RRG do KFSP cung cấp; không trộn với RSs/RSm của nhóm TA.</p></div></div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border border-amber-300/20 bg-[#091321] p-4"><MetricLabel definition={fieldByKey.get("kfsp_score_4m")!} className="text-xs font-bold text-muted-2" /><div className="mt-3"><ScorePill value={metricNumber("kfsp_score_4m") ?? row.score4m} tone="amber" label="Điểm 4M" icon={Bolt} /></div><div className="mt-3"><AnimatedProgressBar value={metricNumber("kfsp_score_4m") ?? row.score4m} color="#fcd34d" /></div></div>
+                <div className="rounded-xl border border-emerald-300/20 bg-[#091321] p-4"><MetricLabel definition={fieldByKey.get("kfsp_canslim_score")!} className="text-xs font-bold text-muted-2" /><div className="mt-3"><ScorePill value={metricNumber("kfsp_canslim_score") ?? row.canslimScore} tone="emerald" label="Điểm CANSLIM" icon={Target} /></div><div className="mt-3"><AnimatedProgressBar value={metricNumber("kfsp_canslim_score") ?? row.canslimScore} color="#6ee7b7" /></div></div>
+                <div className="rounded-xl border border-cyan-300/20 bg-[#091321] p-4"><MetricLabel definition={fieldByKey.get("kfsp_stock_rs_score")!} className="text-xs font-bold text-muted-2" /><div className="mt-3"><ScorePill value={metricNumber("kfsp_stock_rs_score")} tone="cyan" label="RS-S cổ phiếu" icon={Zap} /></div></div>
+                <div className="rounded-xl border border-violet-300/20 bg-[#091321] p-4"><MetricLabel definition={fieldByKey.get("kfsp_sector_rs_score")!} className="text-xs font-bold text-muted-2" /><div className="mt-3"><ScorePill value={metricNumber("kfsp_sector_rs_score")} tone="violet" label="RS-S ngành" icon={Radar} /></div></div>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2"><div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><MetricLabel definition={fieldByKey.get("kfsp_stock_rrg_state")!} className="text-sm font-extrabold text-muted-2" /><div className="mt-4"><RrgBadge value={String(metricValue(row, "kfsp_stock_rrg_state") ?? row.stockRrgState ?? "")} /></div></div><div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><MetricLabel definition={fieldByKey.get("kfsp_sector_rrg_state")!} className="text-sm font-extrabold text-muted-2" /><div className="mt-4"><RrgBadge value={String(metricValue(row, "kfsp_sector_rrg_state") ?? row.sectorRrgState ?? "")} /></div></div></div>
+            </section>
           )}
         </div>
 
-        {/* Compact Footer */}
         <div className="shrink-0 flex flex-col gap-2 border-t border-white/[0.07] bg-[#08111f] px-5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2 text-muted-2 text-xs leading-relaxed">
-            <Info className="mt-0.5 size-3.5 shrink-0 text-ref" />
-            <span>Dữ liệu snapshot từ KFSP/Supabase. State radar là heuristic QeoIndex minh bạch, không phải khuyến nghị đầu tư.</span>
-          </div>
-          <Link href={`/research/${row.ticker.toLowerCase()}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/10 px-3.5 py-2 text-xs font-bold text-brand transition-colors hover:bg-brand/15">
-            Mở nghiên cứu <ExternalLink className="size-3.5" />
-          </Link>
+          <div className="flex items-start gap-2 text-muted-2"><Info className="mt-0.5 size-3.5 shrink-0 text-ref" /><span>Dữ liệu snapshot từ KFSP/Supabase. Dashboard chỉ tổ chức lại presentation; không thay đổi dữ liệu gốc hay phương pháp KFSP.</span></div>
+          <Link href={`/research/${row.ticker.toLowerCase()}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/10 px-3.5 py-2 font-bold text-brand transition-colors hover:bg-brand/15">Mở nghiên cứu <ExternalLink className="size-3.5" /></Link>
         </div>
       </DialogContent>
     </Dialog>
   )
 }
-
 export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
   const [universeFilter, setUniverseFilter] = useState<"top100" | "all">("top100")
   const [sectorFilter, setSectorFilter] = useState("all")
