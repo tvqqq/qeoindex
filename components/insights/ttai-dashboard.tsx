@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { Bolt, Info, LoaderCircle, Radar, RefreshCw, Target, Zap } from "lucide-react"
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -257,8 +257,6 @@ export function TtaiDashboard({ row }: { row: InsightsRatingRow }) {
 
   useEffect(() => {
     const controller = new AbortController()
-    setLoading(true)
-    setError(null)
     fetch(`/api/insights/stock-history?ticker=${encodeURIComponent(row.ticker)}`, { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
         const payload = await response.json().catch(() => null)
@@ -274,14 +272,14 @@ export function TtaiDashboard({ row }: { row: InsightsRatingRow }) {
     return () => controller.abort()
   }, [row.ticker])
 
-  const daily = data?.dailyHistory || []
-  const quarterly = data?.quarterlyHistory || []
-  const currentSummary = useMemo(() => ({
+  const daily = data?.dailyHistory ?? []
+  const quarterly = data?.quarterlyHistory ?? []
+  const currentSummary = {
     stockRs: daily.at(-1)?.stockRs ?? row.rsShort,
     sectorRs: daily.at(-1)?.sectorRs ?? null,
     stockRrg: daily.at(-1)?.stockRrgState ?? row.stockRrgState,
     sectorRrg: daily.at(-1)?.sectorRrgState ?? row.sectorRrgState,
-  }), [daily, row.rsShort, row.sectorRrgState, row.stockRrgState])
+  }
 
   return (
     <section id="rating-panel-ttai" role="tabpanel" aria-labelledby="rating-tab-ttai" className="space-y-4">

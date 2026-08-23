@@ -515,7 +515,7 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
   
   // Use only published snapshots. Never synthesize historical periods in analytical UI.
   const columns = useMemo(() => {
-    const source = history.length ? history : [toHistorySnapshot(row)]
+    const source = history.length ? history : [row]
     return source.map((item) => ({
       date: item.asOfDate ? item.asOfDate.slice(5) : "—",
       fullDate: item.asOfDate || row.asOfDate || "—",
