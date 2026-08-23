@@ -53,6 +53,7 @@ import {
 import AnimatedProgressBar from "@/components/smoothui/animated-progress-bar"
 import SoftBlurIn from "@/components/smoothui/soft-blur-in"
 import { MarketChangePill } from "@/components/market-change-pill"
+import { TtaiDashboard } from "@/components/insights/ttai-dashboard"
 import { StockLogo } from "@/components/stock-logo"
 import { TopNav } from "@/components/top-nav"
 import { Badge } from "@/components/ui/badge"
@@ -512,37 +513,14 @@ function RatingRadar({ row }: { row: InsightsRatingRow }) {
 function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
   const history = [...row.scoreHistory].sort((a, b) => a.asOfDate.localeCompare(b.asOfDate))
   
-  // Synthesize multi-period date columns (real history when available, or standard windows)
+  // Use only published snapshots. Never synthesize historical periods in analytical UI.
   const columns = useMemo(() => {
-    if (history.length >= 6) {
-      return history.map((item) => ({
-        date: item.asOfDate.slice(5),
-        fullDate: item.asOfDate,
-        model: snapshotModel(item),
-        rating: item.ratingScore ?? 50,
-      }))
-    }
-    // Generate recent snapshot points from base row
-    const baseModel = calculateRatingModel(row)
-    const deltas = [-30, -21, -14, -7, -3, -1, 0]
-    return deltas.map((dayOffset) => {
-      const d = new Date(`${row.asOfDate || "2026-08-23"}T00:00:00Z`)
-      d.setUTCDate(d.getUTCDate() + dayOffset)
-      const dateStr = d.toISOString().slice(5, 10)
-      const factor = 1 + (dayOffset / 100) * ((row.changePercent ?? 1) >= 0 ? 0.3 : -0.3)
-      return {
-        date: dateStr,
-        fullDate: d.toISOString().slice(0, 10),
-        model: {
-          dimensions: baseModel.dimensions.map((dim) => ({
-            ...dim,
-            score: Math.max(10, Math.min(98, Math.round(dim.score * factor))),
-          })),
-          state: baseModel.state,
-        },
-        rating: Math.max(10, Math.min(99, Math.round(row.ratingScore * factor))),
-      }
-    })
+    const source = history.length ? history : [row]
+    return source.map((item) => ({
+      date: item.asOfDate ? item.asOfDate.slice(5) : "—",
+      fullDate: item.asOfDate || row.asOfDate || "—",
+      model: snapshotModel(item),
+    }))
   }, [history, row])
 
   const dimensionsList: Array<{ key: RatingDimension["key"]; label: string; icon: typeof Bolt; color: string }> = [
@@ -562,13 +540,6 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
     return "bg-white/[0.04] text-slate-500 border border-white/[0.06]"
   }
 
-  const chartWidth = 720
-  const chartHeight = 60
-  const polyPoints = columns.map((col, idx) => {
-    const x = 30 + idx * (chartWidth - 60) / Math.max(1, columns.length - 1)
-    const y = chartHeight - 10 - (col.rating / 100) * (chartHeight - 20)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  })
 
   return (
     <div className="rounded-xl border border-white/[0.08] bg-[#07111f] p-4 sm:p-5">
@@ -645,25 +616,8 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
         </div>
       </div>
 
-      {/* Mini Trendline Overlay (Curve in Hình 4) */}
-      <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between">
-        <span className="text-xs font-bold text-muted-2 flex items-center gap-1.5">
-          <LineChart className="size-3.5 text-amber-400" /> Xu hướng Composite Rating qua các phiên
-        </span>
-        <span className="text-xs font-mono font-bold text-amber-300">
-          Hiện tại: {row.ratingScore}/100
-        </span>
-      </div>
-      <div className="mt-2 h-14 w-full overflow-hidden rounded-lg bg-[#050c17] p-1">
-        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-full w-full" role="img" aria-label="Đường xu hướng rating">
-          <polyline points={polyPoints.join(" ")} fill="none" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-          {columns.map((col, idx) => {
-            const [x, y] = polyPoints[idx].split(",").map(Number)
-            return (
-              <circle key={col.fullDate} cx={x} cy={y} r="3.5" fill="#f59e0b" stroke="#050c17" strokeWidth="1.5" />
-            )
-          })}
-        </svg>
+      <div className="mt-4 border-t border-white/[0.06] pt-4">
+        <RatingHistoryChart row={row} />
       </div>
     </div>
   )
@@ -698,7 +652,7 @@ function RatingHistoryChart({ row }: { row: InsightsRatingRow }) {
 }
 
 function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; onOpenChange: (open: boolean) => void }) {
-  type StockDetailTab = "overview" | "info" | "fa" | "ta" | "kfsp"
+  type StockDetailTab = "overview" | "info" | "fa" | "ta" | "ttai"
   const [topTab, setTopTab] = useState<StockDetailTab>("overview")
   if (!row) return null
 
@@ -788,7 +742,7 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
     { key: "info", label: "Thông tin", icon: Building2 },
     { key: "fa", label: "Chỉ số FA", icon: BadgePercent },
     { key: "ta", label: "Phân tích TA", icon: LineChart },
-    { key: "kfsp", label: "KFSP", icon: Sparkles },
+    { key: "ttai", label: "TTAI", icon: Sparkles },
   ]
 
   const renderPerformanceBars = () => (
@@ -900,19 +854,24 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
               </div>
 
               <div className="grid gap-4 xl:grid-cols-12">
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 xl:col-span-7">
-                  <div className="mb-4 flex items-center justify-between"><div><h4 className="text-base font-extrabold text-white">Hiệu suất giá</h4><p className="mt-1 text-xs text-muted-2">So sánh động lượng từ 1 phiên đến 1 năm.</p></div><Activity className="size-5 text-emerald-300" /></div>
-                  {renderPerformanceBars()}
+                <div className="xl:col-span-8">
+                  <RatingRadar row={row} />
                 </div>
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 xl:col-span-5">
-                  <div className="mb-4 flex items-center justify-between"><div><h4 className="text-base font-extrabold text-white">Range & thanh khoản</h4><p className="mt-1 text-xs text-muted-2">Vị thế giá và cường độ giao dịch.</p></div><Droplets className="size-5 text-cyan-300" /></div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-xs font-bold text-muted-2">Cách đỉnh 52W</span><div className="mt-2 font-mono text-lg font-black text-white">{metricDisplay("distance_to_52w_high_pct")}</div></div>
-                    <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-xs font-bold text-muted-2">Cách đáy 52W</span><div className="mt-2 font-mono text-lg font-black text-white">{metricDisplay("distance_to_52w_low_pct")}</div></div>
-                    <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-xs font-bold text-muted-2">Volume vs phiên trước</span><div className="mt-2 font-mono text-lg font-black text-white">{metricDisplay("volume_vs_previous_session_pct")}</div></div>
-                    <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-xs font-bold text-muted-2">GTGD vs phiên trước</span><div className="mt-2 font-mono text-lg font-black text-white">{metricDisplay("traded_value_vs_previous_session_pct")}</div></div>
+                <div className="space-y-4 xl:col-span-4">
+                  <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4">
+                    <div className="mb-4 flex items-center justify-between"><div><h4 className="text-base font-extrabold text-white">Hiệu suất giá</h4><p className="mt-1 text-xs text-muted-2">Động lượng 1D → 1Y.</p></div><Activity className="size-5 text-emerald-300" /></div>
+                    {renderPerformanceBars()}
                   </div>
-                  <div className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-xs font-semibold text-muted-2">KLGD TB 50 phiên: <strong className="font-mono text-white">{compactVolume(row.volume)}</strong> · Vốn hóa: <strong className="font-mono text-white">{row.marketCapBillion == null ? "—" : formatMarketCapBillion(row.marketCapBillion)}</strong></div>
+                  <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4">
+                    <div className="mb-4 flex items-center justify-between"><div><h4 className="text-base font-extrabold text-white">Range & thanh khoản</h4><p className="mt-1 text-xs text-muted-2">Vị thế giá và cường độ giao dịch.</p></div><Droplets className="size-5 text-cyan-300" /></div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-[11px] font-bold text-muted-2">Cách đỉnh 52W</span><div className="mt-1.5 font-mono text-base font-black text-white">{metricDisplay("distance_to_52w_high_pct")}</div></div>
+                      <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-[11px] font-bold text-muted-2">Cách đáy 52W</span><div className="mt-1.5 font-mono text-base font-black text-white">{metricDisplay("distance_to_52w_low_pct")}</div></div>
+                      <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-[11px] font-bold text-muted-2">Volume vs trước</span><div className="mt-1.5 font-mono text-base font-black text-white">{metricDisplay("volume_vs_previous_session_pct")}</div></div>
+                      <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-[11px] font-bold text-muted-2">GTGD vs trước</span><div className="mt-1.5 font-mono text-base font-black text-white">{metricDisplay("traded_value_vs_previous_session_pct")}</div></div>
+                    </div>
+                    <div className="mt-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5 text-[11px] font-semibold text-muted-2">KLGD TB 50P <strong className="font-mono text-white">{compactVolume(row.volume)}</strong> · Vốn hóa <strong className="font-mono text-white">{row.marketCapBillion == null ? "—" : formatMarketCapBillion(row.marketCapBillion)}</strong></div>
+                  </div>
                 </div>
               </div>
 
@@ -931,11 +890,7 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                 </div>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-2"><RatingHistoryChart row={row} /><RatingRadar row={row} /></div>
-              <details className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4">
-                <summary className="cursor-pointer select-none text-sm font-extrabold text-white">Ma trận trạng thái & tích lũy</summary>
-                <div className="mt-4"><AccumulationHeatmap row={row} /></div>
-              </details>
+              <AccumulationHeatmap row={row} />
             </section>
           )}
 
@@ -991,22 +946,11 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
             </section>
           )}
 
-          {topTab === "kfsp" && (
-            <section id="rating-panel-kfsp" role="tabpanel" aria-labelledby="rating-tab-kfsp" className="space-y-4">
-              <div className="flex items-start gap-3 rounded-2xl border border-violet-300/15 bg-violet-400/[0.05] p-5"><span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-violet-300/20 bg-violet-300/10"><Sparkles className="size-5 text-violet-200" /></span><div><h3 className="text-lg font-extrabold text-white">KFSP</h3><p className="mt-1 text-sm text-muted-2">Giữ nguyên semantic của 4M, CANSLIM, RS-S và RRG do KFSP cung cấp; không trộn với RSs/RSm của nhóm TA.</p></div></div>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-xl border border-amber-300/20 bg-[#091321] p-4"><MetricLabel definition={fieldByKey.get("kfsp_score_4m")!} className="text-xs font-bold text-muted-2" /><div className="mt-3"><ScorePill value={metricNumber("kfsp_score_4m") ?? row.score4m} tone="amber" label="Điểm 4M" icon={Bolt} /></div><div className="mt-3"><AnimatedProgressBar value={metricNumber("kfsp_score_4m") ?? row.score4m} color="#fcd34d" /></div></div>
-                <div className="rounded-xl border border-emerald-300/20 bg-[#091321] p-4"><MetricLabel definition={fieldByKey.get("kfsp_canslim_score")!} className="text-xs font-bold text-muted-2" /><div className="mt-3"><ScorePill value={metricNumber("kfsp_canslim_score") ?? row.canslimScore} tone="emerald" label="Điểm CANSLIM" icon={Target} /></div><div className="mt-3"><AnimatedProgressBar value={metricNumber("kfsp_canslim_score") ?? row.canslimScore} color="#6ee7b7" /></div></div>
-                <div className="rounded-xl border border-cyan-300/20 bg-[#091321] p-4"><MetricLabel definition={fieldByKey.get("kfsp_stock_rs_score")!} className="text-xs font-bold text-muted-2" /><div className="mt-3"><ScorePill value={metricNumber("kfsp_stock_rs_score")} tone="cyan" label="RS-S cổ phiếu" icon={Zap} /></div></div>
-                <div className="rounded-xl border border-violet-300/20 bg-[#091321] p-4"><MetricLabel definition={fieldByKey.get("kfsp_sector_rs_score")!} className="text-xs font-bold text-muted-2" /><div className="mt-3"><ScorePill value={metricNumber("kfsp_sector_rs_score")} tone="violet" label="RS-S ngành" icon={Radar} /></div></div>
-              </div>
-              <div className="grid gap-4 lg:grid-cols-2"><div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><MetricLabel definition={fieldByKey.get("kfsp_stock_rrg_state")!} className="text-sm font-extrabold text-muted-2" /><div className="mt-4"><RrgBadge value={String(metricValue(row, "kfsp_stock_rrg_state") ?? row.stockRrgState ?? "")} /></div></div><div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><MetricLabel definition={fieldByKey.get("kfsp_sector_rrg_state")!} className="text-sm font-extrabold text-muted-2" /><div className="mt-4"><RrgBadge value={String(metricValue(row, "kfsp_sector_rrg_state") ?? row.sectorRrgState ?? "")} /></div></div></div>
-            </section>
-          )}
+          {topTab === "ttai" && <TtaiDashboard row={row} />}
         </div>
 
         <div className="shrink-0 flex flex-col gap-2 border-t border-white/[0.07] bg-[#08111f] px-5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2 text-muted-2"><Info className="mt-0.5 size-3.5 shrink-0 text-ref" /><span>Dữ liệu snapshot từ KFSP/Supabase. Dashboard chỉ tổ chức lại presentation; không thay đổi dữ liệu gốc hay phương pháp KFSP.</span></div>
+          <div className="flex items-start gap-2 text-muted-2"><Info className="mt-0.5 size-3.5 shrink-0 text-ref" /><span>Dữ liệu snapshot từ KFSP/Supabase. TTAI hiển thị lịch sử provider và không tái tính phương pháp chấm điểm KFSP.</span></div>
           <Link href={`/research/${row.ticker.toLowerCase()}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/10 px-3.5 py-2 font-bold text-brand transition-colors hover:bg-brand/15">Mở nghiên cứu <ExternalLink className="size-3.5" /></Link>
         </div>
       </DialogContent>

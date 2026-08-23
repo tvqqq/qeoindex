@@ -40,10 +40,10 @@ Insights uses the information density of a Vietnamese market board without sacri
 The detail popup uses **one navigation level only**. The former `Tổng quan & Động lượng → Chỉ số cổ phiếu → 9 sub-tabs → Lịch sử Rating` hierarchy is replaced by five semantic tabs:
 
 ```text
-Tổng quan | Thông tin | Chỉ số FA | Phân tích TA | KFSP
+Tổng quan | Thông tin | Chỉ số FA | Phân tích TA | TTAI
 ```
 
-The storage/provider taxonomy remains unchanged. `KFSP_GROUPS`, Supabase payloads, provider fields, and ingestion logic are not rewritten merely because the presentation taxonomy is simpler.
+`TTAI` is the product-facing name for the provider analytical layer. Storage/provider names such as `KFSP_GROUPS`, `kfsp_*` columns, Supabase payloads, and ingestion contracts remain unchanged.
 
 ### Header
 
@@ -70,15 +70,15 @@ Primary KPI row:
 
 Dashboard modules:
 
-- **Hiệu suất giá**: diverging horizontal bars for 1D, 1W, 2W, 1M, 3M, YTD, 1Y.
-- **Range & thanh khoản**: distance to 52W high/low and session-vs-baseline liquidity deltas.
+- **QeoIndex state radar**: primary analytical module in the larger upper-left column.
+- **Hiệu suất giá**: compact diverging bars for 1D, 1W, 2W, 1M, 3M, YTD, 1Y in the narrower right column.
+- **Range & thanh khoản**: compact 52W/liquidity block stacked under performance in the right column.
 - **FA quick read**: revenue/profit growth, ROE, net margin, P/E, P/B.
 - **TA quick read**: price vs SMA20/50/200, RSI, MACD, Bollinger state.
-- **Rating Trend**: real snapshot history line chart. Rating history is no longer a top-level tab.
-- **QeoIndex state radar**: remains visible as analytical context.
-- **Accumulation/state matrix**: preserved as a progressive-disclosure `<details>` section instead of competing with first-pass KPIs.
+- **Accumulation/state matrix**: always visible; no dropdown/progressive-disclosure wrapper.
+- **Rating theo thời gian**: real snapshot history embedded under the state matrix. It replaces the previous duplicate mini Composite trend.
 
-Do not fabricate missing data. Missing provider fields remain `—`.
+Historical analytical UI must use published snapshots only. Do not synthesize fake dates/scores when history is sparse. Missing provider fields remain `—`.
 
 ### 2. Thông tin
 
@@ -161,18 +161,23 @@ Do not infer a graphical position from a provider text label when the underlying
 - net proprietary trading;
 - Beta as risk/volatility context.
 
-### 5. KFSP
+### 5. TTAI
 
-KFSP remains a dedicated top-level tab and preserves the provider semantics:
+TTAI preserves KFSP provider semantics while presenting the data as history-oriented dashboards:
 
-- Điểm 4M;
-- Điểm CANSLIM;
-- RS-S cổ phiếu;
-- RS-S ngành;
-- RRG cổ phiếu;
-- RRG ngành.
+- **RS-S stock vs sector**: two-line daily history chart;
+- **RRG cổ phiếu**: categorical quadrant-state trajectory;
+- **RRG ngành**: categorical quadrant-state trajectory;
+- **Điểm 4M**: quarterly score history plus latest component radar;
+- **Điểm CANSLIM**: quarterly score history plus latest component radar.
 
-Do not conflate provider `RS-S` scores with the TA `RSs/RSm` series. Labels and tooltips must keep that distinction explicit.
+Do not conflate provider `RS-S` scores with the TA `RSs/RSm` terminology. The daily provider pipeline currently maps `rs_short` to stock RS-S for compatibility, but TTAI explicitly labels the stock/sector provider scores.
+
+Current snapshots expose RRG state labels but do not expose raw two-dimensional RRG coordinates. The TTAI RRG visualization must therefore remain explicitly categorical and must not invent provider RS-Ratio/RS-Momentum values.
+
+4M/CANSLIM component tooltips explain the provider criterion meaning where supported, but must not claim a weighting formula that the provider response does not disclose.
+
+See `docs/insights-ttai-history.md` for storage, parsing, sync trigger, and RLS details.
 
 ## Data-to-presentation mapping
 
@@ -187,10 +192,11 @@ Do not conflate provider `RS-S` scores with the TA `RSs/RSm` series. Labels and 
 | `price_range` | Phân tích TA |
 | `liquidity` | Phân tích TA |
 | `technical` | Phân tích TA |
-| `kfsp` | KFSP |
-| rating history | Tổng quan → Rating Trend |
+| `kfsp` | TTAI current snapshot metrics |
+| `kfsp_ttai_quarterly_history` | TTAI 4M/CANSLIM quarterly history |
+| daily `insights_stock_ratings` history | TTAI RS-S/RRG history + Tổng quan Rating/State history |
 
-This regrouping is a presentation concern; it does not require a Supabase schema migration.
+The UI regrouping does not rewrite the provider contract. TTAI quarterly history adds a dedicated normalized table because the provider chart endpoint returns historical score/component data that is not present in the daily snapshot contract.
 
 ## Typography and density
 
@@ -221,6 +227,7 @@ This regrouping is a presentation concern; it does not require a Supabase schema
 
 - Missing field: `—`.
 - Missing history: no synthetic history; show the explicit insufficient-history state.
+- Quarterly history schema unavailable: keep daily RS-S/RRG usable and label the quarterly-history gap.
 - Backend unavailable/no published snapshot: keep the existing labeled degradation behavior.
 - Partial provider batches never reach the UI because publish fails closed.
 
@@ -234,6 +241,7 @@ For changes to the table or detail dialog, verify at minimum:
 4. All RRG states and long Vietnamese labels.
 5. Detail dialog with one snapshot and multiple snapshots.
 6. All five detail tabs with no nested metric-tab navigation.
-7. Keyboard open/close, focus restoration, tooltip alternatives, reduced motion.
-8. Viewports near 390, 768, 1440, 1920; record horizontal overflow.
-9. Browser console and network errors.
+7. TTAI daily history with one/many points and quarterly history with one/many periods.
+8. Keyboard open/close, focus restoration, tooltip alternatives, reduced motion.
+9. Viewports near 390, 768, 1440, 1920; record horizontal overflow.
+10. Browser console and network errors.
