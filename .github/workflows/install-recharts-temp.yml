@@ -1,0 +1,35 @@
+name: Install Recharts temporary
+
+on:
+  push:
+    branches:
+      - feat/insights-shadcn-chart-polish
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/insights-shadcn-chart-polish
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm add recharts@^3
+      - name: Commit dependency
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json pnpm-lock.yaml
+          git commit -m "chore(insights): add Recharts for shadcn charts"
+          git push origin HEAD:feat/insights-shadcn-chart-polish
