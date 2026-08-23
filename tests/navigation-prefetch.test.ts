@@ -57,16 +57,20 @@ test("Wyckoff chart shell avoids eager route work and compositor-heavy navigatio
   assert.doesNotMatch(header, /<Link/, "Rating navigation must stay outside the stock identity header")
 })
 
-test("top navigation exposes direct Insights, Wyckoff chart and one research hub", () => {
+test("top navigation restores Insights as a styled parent menu with three child pages", () => {
   const nav = source("components/top-nav.tsx")
 
-  assert.match(nav, /label: "Insights", href: "\/insights"/)
-  assert.match(nav, /label: "Phân tích chart Wyckoff"/)
-  assert.match(nav, /href: "\/insights\/wyckoff"/)
+  assert.match(nav, /const INSIGHTS_ITEMS = \[/)
+  assert.match(nav, /label: "Tổng quan Insights",\s*href: "\/insights"/)
+  assert.match(nav, /label: "Phân tích chart Wyckoff",\s*href: "\/insights\/wyckoff"/)
   assert.match(nav, /label: "Nghiên cứu",\s*href: "\/research"/)
-  assert.equal(nav.includes("ChevronDown"), false, "Insights must be a direct link, not a dropdown")
-  assert.equal(nav.includes("INSIGHTS_ITEMS"), false, "the old multi-item Insights dropdown must stay removed")
-  assert.equal(nav.includes("backdrop-blur"), false, "top navigation should not reintroduce a persistent backdrop-filter surface")
+  assert.match(nav, /<ChevronDown/)
+  assert.match(nav, /href="\/insights"[\s\S]*onClick=\{\(\) => setIsOpen\(false\)\}/, "clicking the Insights parent label should still open /insights")
+  assert.match(nav, /aria-label="Các trang Insights"/)
+  assert.equal(nav.includes("backdrop-blur"), false, "parent menu should preserve the old visual hierarchy without persistent backdrop-filter blur")
+  assert.equal(nav.includes("transition-all"), false, "parent menu should keep transitions bounded")
+  assert.equal(nav.includes("label: \"Quét Wyckoff\""), false, "legacy research modules should stay consolidated under the research hub")
+  assert.equal(nav.includes("label: \"Tín hiệu giao dịch\""), false, "legacy research modules should stay consolidated under the research hub")
 })
 
 test("legacy research sub-pages redirect into the single research route", () => {
