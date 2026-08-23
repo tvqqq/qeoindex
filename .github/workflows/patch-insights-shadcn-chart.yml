@@ -1,9 +1,9 @@
 name: Patch Insights shadcn chart polish
 
 on:
-  push:
-    branches:
-      - feat/insights-shadcn-chart-polish
+  pull_request:
+    types: [opened, synchronize]
+    branches: [main]
 
 permissions:
   contents: write
