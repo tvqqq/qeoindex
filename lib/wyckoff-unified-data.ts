@@ -3,8 +3,20 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { WyckoffListItem } from "@/components/insights/wyckoff-chart-dashboard"
 import { getWyckoffCompanyMetadata } from "@/lib/wyckoff-company-metadata"
 import type { OhlcvBar } from "@/lib/technical-indicators"
-import { buildWyckoffChartStudies, type WyckoffChartTimeframe } from "@/lib/wyckoff-chart-model"
+import {
+  buildWyckoffChartStudies,
+  type WyckoffChartTimeframe,
+  type WyckoffEventLabel,
+  type WyckoffEventMarker,
+  type WyckoffScenario,
+  type WyckoffScenarioHorizon,
+} from "@/lib/wyckoff-chart-model"
 import type { WyckoffScanResult } from "@/lib/wyckoff-engine"
+
+type SnapshotEvidence = {
+  rulesTriggered?: unknown
+  [key: string]: unknown
+}
 
 type SnapshotRow = {
   ticker: string
@@ -23,7 +35,96 @@ type SnapshotRow = {
   invalidation: string
   what_changed: string
   technical: WyckoffScanResult["technical"]
+  evidence?: SnapshotEvidence | null
+  markers?: unknown
+  scenarios?: unknown
   published_at: string
+}
+
+const EVENT_LABELS = new Set<WyckoffEventLabel>(["SPR", "UT", "SOS", "SOW", "TEST", "LPS", "LPSY"])
+const SCENARIO_HORIZONS = new Set<WyckoffScenarioHorizon>(["intraday", "swing", "week", "month", "long_term"])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function finiteNumber(value: unknown) {
+  const number = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN
+  return Number.isFinite(number) ? number : null
+}
+
+function timestampSeconds(value: unknown) {
+  const numeric = finiteNumber(value)
+  if (numeric != null && numeric > 0) return numeric > 10_000_000_000 ? Math.round(numeric / 1000) : Math.round(numeric)
+  if (typeof value !== "string" || !value.trim()) return null
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? Math.round(parsed / 1000) : null
+}
+
+function strings(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim())
+}
+
+function horizonForTimeframe(timeframe: WyckoffChartTimeframe): WyckoffScenarioHorizon {
+  if (timeframe === "1H") return "intraday"
+  if (timeframe === "4H") return "swing"
+  if (timeframe === "1D") return "week"
+  if (timeframe === "1W") return "month"
+  return "long_term"
+}
+
+function scenarioColor(key: WyckoffScenario["key"]) {
+  if (key === "bull") return "#22c98a"
+  if (key === "bear") return "#ff4757"
+  return "#a7b0bd"
+}
+
+function normalizeMarker(value: unknown): WyckoffEventMarker | null {
+  if (!isRecord(value)) return null
+  const time = timestampSeconds(value.time)
+  const label = typeof value.label === "string" ? value.label.trim().toUpperCase() as WyckoffEventLabel : null
+  const tone = value.tone === "bullish" || value.tone === "bearish" || value.tone === "neutral" ? value.tone : "neutral"
+  if (time == null || !label || !EVENT_LABELS.has(label)) return null
+  return {
+    time,
+    label,
+    tone,
+    detail: typeof value.detail === "string" ? value.detail.trim() : "",
+  }
+}
+
+function normalizeScenario(value: unknown, timeframe: WyckoffChartTimeframe): WyckoffScenario | null {
+  if (!isRecord(value)) return null
+  const key = value.key === "bull" || value.key === "base" || value.key === "bear" ? value.key : null
+  const probability = finiteNumber(value.probability)
+  const target = finiteNumber(value.target)
+  if (!key || probability == null || probability < 0 || probability > 100 || target == null || target <= 0) return null
+  const path = Array.isArray(value.path) ? value.path.flatMap((point) => {
+    if (!isRecord(point)) return []
+    const time = timestampSeconds(point.time)
+    const pointValue = finiteNumber(point.value)
+    return time != null && pointValue != null && pointValue > 0 ? [{ time, value: pointValue }] : []
+  }) : []
+  if (!path.length) return null
+  const horizon = typeof value.horizon === "string" && SCENARIO_HORIZONS.has(value.horizon as WyckoffScenarioHorizon)
+    ? value.horizon as WyckoffScenarioHorizon
+    : horizonForTimeframe(timeframe)
+  const defaultLabel = key === "bull" ? "Cầu thắng" : key === "bear" ? "Cung áp đảo" : "Kịch bản cơ sở"
+  return {
+    key,
+    label: typeof value.label === "string" && value.label.trim() ? value.label.trim() : defaultLabel,
+    probability: Math.round(probability),
+    color: scenarioColor(key),
+    target,
+    description: typeof value.description === "string" ? value.description.trim() : "",
+    path,
+    horizon,
+    trigger: typeof value.trigger === "string" ? value.trigger.trim() : undefined,
+    confirmation: typeof value.confirmation === "string" ? value.confirmation.trim() : undefined,
+    invalidation: typeof value.invalidation === "string" ? value.invalidation.trim() : undefined,
+    evidence: strings(value.evidence),
+  }
 }
 
 function toAnalysis(row: SnapshotRow): WyckoffScanResult {
@@ -41,7 +142,7 @@ function toAnalysis(row: SnapshotRow): WyckoffScanResult {
     confirmation: row.confirmation,
     invalidation: row.invalidation,
     whatChanged: row.what_changed,
-    tags: [],
+    tags: strings(row.evidence?.rulesTriggered),
   }
 }
 
@@ -55,6 +156,14 @@ function buildStudies(
   }>,
 ) {
   const analyses = Object.fromEntries(selectedRows.map((row) => [row.timeframe, toAnalysis(row)])) as Partial<Record<WyckoffChartTimeframe, WyckoffScanResult>>
+  const markerOverrides = Object.fromEntries(selectedRows.map((row) => [
+    row.timeframe,
+    Array.isArray(row.markers) ? row.markers.map(normalizeMarker).filter((marker): marker is WyckoffEventMarker => marker !== null) : [],
+  ])) as Partial<Record<WyckoffChartTimeframe, WyckoffEventMarker[]>>
+  const scenarioOverrides = Object.fromEntries(selectedRows.map((row) => [
+    row.timeframe,
+    Array.isArray(row.scenarios) ? row.scenarios.map((scenario) => normalizeScenario(scenario, row.timeframe)).filter((scenario): scenario is WyckoffScenario => scenario !== null) : [],
+  ])) as Partial<Record<WyckoffChartTimeframe, WyckoffScenario[]>>
   const dailySeries = seriesRows.find((row) => row.timeframe === "1D")
   const hourlySeries = seriesRows.find((row) => row.timeframe === "1H")
   if (!dailySeries || !hourlySeries) return null
@@ -67,6 +176,8 @@ function buildStudies(
     hourlyProvider: hourlySeries.provider,
     hourlyDetail: hourlySeries.provider_detail,
     analysisOverrides: analyses,
+    markerOverrides,
+    scenarioOverrides,
   })
 }
 
