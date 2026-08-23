@@ -2,7 +2,7 @@ begin;
 
 create table if not exists public.kfsp_ttai_quarterly_history (
   ticker text not null check (ticker ~ '^[A-Z0-9]{2,12}$'),
-  period text not null check (period ~ '^Q[1-4]\\.[0-9]{2}$'),
+  period text not null check (period ~ '^Q[1-4]\.[0-9]{2}$'),
   period_year smallint not null check (period_year between 2000 and 2100),
   period_quarter smallint not null check (period_quarter between 1 and 4),
   fourm_score numeric check (fourm_score is null or fourm_score between 0 and 100),
