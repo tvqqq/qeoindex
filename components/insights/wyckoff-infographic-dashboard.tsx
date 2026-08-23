@@ -13,22 +13,14 @@ import {
   type ReactNode,
 } from "react"
 import {
-  Activity,
   AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
   BarChart3,
-  BookOpenCheck,
   CheckCircle2,
   CircleDot,
-  Compass,
-  Crown,
-  Gauge,
   Layers3,
   Radar,
   Search,
   ShieldCheck,
-  Sparkles,
   Target,
   TrendingDown,
   TrendingUp,
@@ -47,12 +39,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { BOARD_SECTOR_GROUPS, boardSectorGroupForSector } from "@/lib/market-sectors"
-import type {
-  WyckoffChartStudy,
-  WyckoffChartTimeframe,
-  WyckoffForecastHorizon,
-  WyckoffScenario,
-} from "@/lib/wyckoff-chart-model"
+import type { WyckoffChartStudy, WyckoffChartTimeframe } from "@/lib/wyckoff-chart-model"
 import { cn } from "@/lib/utils"
 
 interface WyckoffTickerApiResponse {
@@ -63,7 +50,8 @@ interface WyckoffTickerApiResponse {
 
 type WatchlistFilterTab = "all" | "accumulation" | "distribution" | "top100"
 type TickerSelectHandler = (event: MouseEvent<HTMLAnchorElement>, ticker: string) => void
-type Accent = "emerald" | "cyan" | "amber" | "purple" | "rose" | "slate"
+
+type Tone = "emerald" | "cyan" | "amber" | "rose" | "slate"
 
 const WATCHLIST_TABS: Array<{ id: WatchlistFilterTab; label: string }> = [
   { id: "all", label: "Tất cả" },
@@ -74,50 +62,27 @@ const WATCHLIST_TABS: Array<{ id: WatchlistFilterTab; label: string }> = [
 
 const TICKER_SWITCH_DEBOUNCE_MS = 60
 const TICKER_CACHE_LIMIT = 8
-const WATCHLIST_GRID_CLASS = "grid-cols-[64px_74px_64px_minmax(0,1fr)]"
+const WATCHLIST_GRID_CLASS = "grid-cols-[70px_88px_minmax(0,1fr)]"
 
-const accentClasses: Record<Accent, { border: string; icon: string; soft: string; text: string }> = {
-  emerald: {
-    border: "border-emerald-400/20",
-    icon: "bg-emerald-400/10 text-emerald-300 ring-emerald-400/20",
-    soft: "bg-emerald-400/[0.055]",
-    text: "text-emerald-300",
-  },
-  cyan: {
-    border: "border-cyan-400/20",
-    icon: "bg-cyan-400/10 text-cyan-300 ring-cyan-400/20",
-    soft: "bg-cyan-400/[0.055]",
-    text: "text-cyan-300",
-  },
-  amber: {
-    border: "border-amber-400/20",
-    icon: "bg-amber-400/10 text-amber-300 ring-amber-400/20",
-    soft: "bg-amber-400/[0.055]",
-    text: "text-amber-300",
-  },
-  purple: {
-    border: "border-purple-400/20",
-    icon: "bg-purple-400/10 text-purple-300 ring-purple-400/20",
-    soft: "bg-purple-400/[0.055]",
-    text: "text-purple-300",
-  },
-  rose: {
-    border: "border-rose-400/20",
-    icon: "bg-rose-400/10 text-rose-300 ring-rose-400/20",
-    soft: "bg-rose-400/[0.055]",
-    text: "text-rose-300",
-  },
-  slate: {
-    border: "border-white/10",
-    icon: "bg-white/[0.055] text-slate-300 ring-white/10",
-    soft: "bg-white/[0.025]",
-    text: "text-slate-300",
-  },
+const TYPE = {
+  display: "text-2xl font-extrabold leading-tight tracking-[-0.03em]",
+  section: "text-lg font-extrabold leading-tight tracking-[-0.02em]",
+  value: "text-lg font-bold leading-snug",
+  body: "text-sm font-medium leading-6",
+  meta: "text-xs font-semibold leading-5",
+} as const
+
+const TONE: Record<Tone, { border: string; soft: string; text: string }> = {
+  emerald: { border: "border-emerald-400/18", soft: "bg-emerald-400/[0.045]", text: "text-emerald-300" },
+  cyan: { border: "border-cyan-400/18", soft: "bg-cyan-400/[0.045]", text: "text-cyan-300" },
+  amber: { border: "border-amber-400/18", soft: "bg-amber-400/[0.045]", text: "text-amber-300" },
+  rose: { border: "border-rose-400/18", soft: "bg-rose-400/[0.045]", text: "text-rose-300" },
+  slate: { border: "border-white/[0.08]", soft: "bg-white/[0.025]", text: "text-slate-300" },
 }
 
 function formatNumber(value: number | null | undefined, digits = 2) {
   if (value == null || !Number.isFinite(value)) return "—"
-  return value.toLocaleString("en-US", { maximumFractionDigits: digits })
+  return value.toLocaleString("vi-VN", { maximumFractionDigits: digits })
 }
 
 function signedPercent(value: number | null | undefined) {
@@ -129,20 +94,6 @@ function changeTone(value: number | null | undefined) {
   if ((value ?? 0) > 0) return "text-emerald-300"
   if ((value ?? 0) < 0) return "text-rose-300"
   return "text-amber-200"
-}
-
-function biasAccent(bias: string | null | undefined): Accent {
-  if (bias === "Bullish") return "emerald"
-  if (bias === "Bearish") return "rose"
-  if (bias === "Mixed") return "purple"
-  return "amber"
-}
-
-function biasBadgeClass(bias: string | null | undefined) {
-  if (bias === "Bullish") return "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
-  if (bias === "Bearish") return "border-rose-400/25 bg-rose-400/10 text-rose-200"
-  if (bias === "Mixed") return "border-purple-400/25 bg-purple-400/10 text-purple-200"
-  return "border-amber-400/25 bg-amber-400/10 text-amber-200"
 }
 
 function phaseCompactLabel(phase: string | null | undefined) {
@@ -157,6 +108,52 @@ function phaseCompactLabel(phase: string | null | undefined) {
   if (normalized.includes("unclass")) return "UNCLASS"
   const compact = phase.trim().toUpperCase()
   return compact.length > 12 ? `${compact.slice(0, 11)}…` : compact
+}
+
+function eventFromPhase(phase: string | null | undefined) {
+  if (!phase) return "—"
+  if (/Spring/i.test(phase)) return "SPR"
+  if (/UTAD|\bUT\b/i.test(phase)) return "UT"
+  if (/SOS/i.test(phase)) return "SOS"
+  if (/SOW/i.test(phase)) return "SOW"
+  if (/LPSY/i.test(phase)) return "LPSY"
+  if (/LPS/i.test(phase)) return "LPS"
+  if (/Test/i.test(phase)) return "TEST"
+  return "—"
+}
+
+function latestStudyEvent(study: WyckoffChartStudy | null | undefined) {
+  return study?.markers.at(-1)?.label || study?.analysis?.tags?.[0] || eventFromPhase(study?.analysis?.phase)
+}
+
+function watchlistEvent(stock: WyckoffListItem) {
+  return stock.latestEvent || eventFromPhase(stock.phase)
+}
+
+function eventTone(value: string): Tone {
+  if (/SPR|SOS|LPS|TEST|demand|absorp|no supply/i.test(value)) return "emerald"
+  if (/UT|SOW|LPSY|supply|no demand|failed/i.test(value)) return "rose"
+  if (value === "—") return "slate"
+  return "cyan"
+}
+
+function numericLevels(value: string | null | undefined) {
+  return (value?.match(/[0-9][0-9,.]*/g) ?? [])
+    .map((item) => Number(item.replaceAll(",", "")))
+    .filter((item) => Number.isFinite(item) && item > 0)
+}
+
+function rangePosition(study: WyckoffChartStudy) {
+  const close = study.bars.at(-1)?.close
+  const support = numericLevels(study.analysis?.support).sort((a, b) => a - b)[0]
+  const resistance = numericLevels(study.analysis?.resistance).sort((a, b) => b - a)[0]
+  if (close == null || support == null || resistance == null || resistance <= support) return "Chưa rõ range"
+  if (close > resistance) return "Trên supply"
+  if (close < support) return "Dưới demand"
+  const ratio = (close - support) / (resistance - support)
+  if (ratio >= 0.66) return "Nửa trên range"
+  if (ratio <= 0.34) return "Nửa dưới range"
+  return "Giữa range"
 }
 
 function updateUrlQuery(key: "ticker" | "timeframe", value: string) {
@@ -175,175 +172,75 @@ function rememberTickerData(cache: Map<string, WyckoffTickerPayload>, payload: W
   }
 }
 
-function dominantScenario(scenarios: WyckoffScenario[]) {
-  return scenarios.reduce<WyckoffScenario | null>((best, scenario) => {
-    if (!best || scenario.probability > best.probability) return scenario
-    return best
-  }, null)
-}
-
-function signalAccent(signal: string): Accent {
-  if (/spring|sos|lps|demand|absorp|no supply|test/i.test(signal)) return "emerald"
-  if (/utad|\but\b|sow|lpsy|supply|no demand|failed/i.test(signal)) return "rose"
-  return "cyan"
-}
-
-function signalIcon(signal: string) {
-  if (/spring|sos|lps|demand|absorp|no supply/i.test(signal)) return <ArrowUpRight className="size-3.5" />
-  if (/utad|\but\b|sow|lpsy|supply|no demand|failed/i.test(signal)) return <ArrowDownRight className="size-3.5" />
-  return <CircleDot className="size-3.5" />
-}
-
-function probabilitySegments(study: WyckoffChartStudy | null | undefined) {
-  const bull = study?.analysis?.bullProbability ?? 0
-  const base = study?.analysis?.baseProbability ?? 0
-  const bear = study?.analysis?.bearProbability ?? 0
-  return { bull, base, bear }
-}
-
-function probabilitySegmentsFromScenarios(scenarios: WyckoffScenario[]) {
-  const map = new Map(scenarios.map((scenario) => [scenario.key, scenario.probability]))
-  return {
-    bull: map.get("bull") ?? 0,
-    base: map.get("base") ?? 0,
-    bear: map.get("bear") ?? 0,
-  }
-}
-
-function ProbabilityBar({ bull, base, bear, className }: { bull: number; base: number; bear: number; className?: string }) {
+function SectionHeader({ icon, title, note }: { icon: ReactNode; title: string; note?: string }) {
   return (
-    <div className={cn("overflow-hidden rounded-full bg-white/[0.055]", className)} aria-label={`Bull ${bull}%, Base ${base}%, Bear ${bear}%`}>
-      <div className="flex h-full w-full">
-        <div className="bg-emerald-400/80" style={{ width: `${bull}%` }} />
-        <div className="bg-amber-300/70" style={{ width: `${base}%` }} />
-        <div className="bg-rose-400/80" style={{ width: `${bear}%` }} />
-      </div>
-    </div>
-  )
-}
-
-function SectionTitle({ icon, eyebrow, title, description }: { icon: ReactNode; eyebrow: string; title: string; description?: string }) {
-  return (
-    <div className="flex items-start gap-3">
-      <div className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl bg-cyan-400/[0.08] text-cyan-300 ring-1 ring-cyan-400/15">
-        {icon}
-      </div>
+    <div className="flex min-w-0 items-start gap-3">
+      <div className="grid size-9 shrink-0 place-items-center rounded-xl border border-cyan-400/15 bg-cyan-400/[0.06] text-cyan-300">{icon}</div>
       <div className="min-w-0">
-        <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-cyan-300/80">{eyebrow}</div>
-        <h2 className="mt-0.5 text-xl font-extrabold tracking-[-0.02em] text-white sm:text-2xl">{title}</h2>
-        {description ? <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">{description}</p> : null}
+        <h2 className={cn(TYPE.section, "text-white")}>{title}</h2>
+        {note ? <p className={cn(TYPE.meta, "mt-0.5 text-slate-500")}>{note}</p> : null}
       </div>
     </div>
   )
 }
 
-function InfographicCard({
-  accent,
-  icon,
-  label,
-  value,
-  description,
-  children,
-}: {
-  accent: Accent
-  icon: ReactNode
-  label: string
-  value: ReactNode
-  description: string
-  children?: ReactNode
-}) {
-  const tone = accentClasses[accent]
+function StructureSummary({ study }: { study: WyckoffChartStudy }) {
+  const items = [
+    { label: "Hiện tại", value: study.phaseGuide.now, icon: <Radar className="size-4" />, tone: "cyan" as Tone },
+    { label: "Quan sát tiếp", value: study.phaseGuide.next, icon: <CheckCircle2 className="size-4" />, tone: "emerald" as Tone },
+    { label: "Phủ định", value: study.phaseGuide.risk, icon: <AlertTriangle className="size-4" />, tone: "rose" as Tone },
+  ]
   return (
-    <Card className={cn("gap-0 rounded-2xl border bg-[#0b1118] py-0 ring-0", tone.border)}>
-      <CardContent className="p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500">{label}</div>
-            <div className={cn("mt-2 text-[22px] font-extrabold leading-tight tracking-[-0.03em] sm:text-[26px]", tone.text)}>{value}</div>
+    <Card className="gap-0 rounded-2xl border border-white/[0.08] bg-[#0a1017] py-0 ring-0">
+      <CardHeader className="border-b border-white/[0.06] px-4 py-4 sm:px-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <SectionHeader icon={<Radar className="size-4" />} title="Cấu trúc Wyckoff hiện tại" note={`${study.timeframe} · completed bars only`} />
+          <div className="text-right">
+            <div className={cn(TYPE.display, "text-cyan-200")}>{study.phaseGuide.title}</div>
+            <div className={cn(TYPE.meta, "mt-1 text-slate-500")}>{study.analysis?.phase || "Unclassified"}</div>
           </div>
-          <div className={cn("grid size-10 shrink-0 place-items-center rounded-xl ring-1", tone.icon)}>{icon}</div>
         </div>
-        <p className="mt-2 text-sm leading-5 text-slate-400">{description}</p>
-        {children ? <div className="mt-4">{children}</div> : null}
+      </CardHeader>
+      <CardContent className="grid gap-3 p-4 sm:p-5 lg:grid-cols-3">
+        {items.map((item) => {
+          const tone = TONE[item.tone]
+          return (
+            <div key={item.label} className={cn("rounded-xl border p-3.5", tone.border, tone.soft)}>
+              <div className={cn(TYPE.meta, "flex items-center gap-2 uppercase tracking-[0.08em]", tone.text)}>{item.icon}{item.label}</div>
+              <p className={cn(TYPE.body, "mt-2 line-clamp-3 text-slate-300")}>{item.value}</p>
+            </div>
+          )
+        })}
       </CardContent>
     </Card>
-  )
-}
-
-function PhaseNarrative({ study }: { study: WyckoffChartStudy }) {
-  const items = [
-    { label: "Hiện tại", value: study.phaseGuide.now, icon: <Radar className="size-4" />, accent: "cyan" as const },
-    { label: "Cần quan sát tiếp", value: study.phaseGuide.next, icon: <CheckCircle2 className="size-4" />, accent: "emerald" as const },
-    { label: "Rủi ro / phủ định", value: study.phaseGuide.risk, icon: <AlertTriangle className="size-4" />, accent: "rose" as const },
-  ]
-
-  return (
-    <div className="grid gap-3 lg:grid-cols-3">
-      {items.map((item) => {
-        const tone = accentClasses[item.accent]
-        return (
-          <div key={item.label} className={cn("rounded-xl border p-4", tone.border, tone.soft)}>
-            <div className={cn("flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.1em]", tone.text)}>
-              {item.icon}
-              {item.label}
-            </div>
-            <p className="mt-2 text-sm font-medium leading-6 text-slate-300">{item.value}</p>
-          </div>
-        )
-      })}
-    </div>
   )
 }
 
 function DecisionZones({ study }: { study: WyckoffChartStudy }) {
   const analysis = study.analysis
-  const support = analysis?.support || "—"
-  const resistance = analysis?.resistance || "—"
-
   return (
-    <Card className="gap-0 rounded-2xl border border-amber-400/18 bg-[#0b1118] py-0 ring-0">
-      <CardHeader className="border-b border-white/[0.07] px-4 py-4 sm:px-5">
-        <SectionTitle
-          icon={<Target className="size-5" />}
-          eyebrow="Decision map"
-          title="Vùng giá then chốt"
-          description="Tách riêng các vùng quyết định để không nhầm support/resistance với tín hiệu vào lệnh. Chart vẫn giữ nearest level để đọc cấu trúc trực quan."
-        />
+    <Card className="gap-0 rounded-2xl border border-amber-400/15 bg-[#0a1017] py-0 ring-0">
+      <CardHeader className="border-b border-white/[0.06] px-4 py-4 sm:px-5">
+        <SectionHeader icon={<Target className="size-4" />} title="Vùng giá then chốt" note="Demand / Supply và điều kiện xác nhận cấu trúc" />
       </CardHeader>
-      <CardContent className="p-4 sm:p-5">
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1.15fr]">
+      <CardContent className="space-y-3 p-4 sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-emerald-400/18 bg-emerald-400/[0.045] p-4">
-            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-emerald-300">
-              <TrendingUp className="size-4" /> Demand / Support
-            </div>
-            <div className="mt-3 break-words font-mono text-2xl font-black tracking-tight text-white">{support}</div>
-            <p className="mt-2 text-sm leading-5 text-slate-400">Ưu tiên quan sát khả năng giữ vùng, chất lượng Test và volume co lại khi reaction.</p>
+            <div className={cn(TYPE.meta, "flex items-center gap-2 uppercase tracking-[0.08em] text-emerald-300")}><TrendingUp className="size-4" />Demand / Support</div>
+            <div className={cn(TYPE.value, "mt-2 break-words tabular-nums text-white")}>{analysis?.support || "—"}</div>
+            <p className={cn(TYPE.meta, "mt-1 text-slate-500")}>Giữ vùng + Test với supply co lại.</p>
           </div>
-
           <div className="rounded-xl border border-rose-400/18 bg-rose-400/[0.045] p-4">
-            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-rose-300">
-              <TrendingDown className="size-4" /> Supply / Resistance
-            </div>
-            <div className="mt-3 break-words font-mono text-2xl font-black tracking-tight text-white">{resistance}</div>
-            <p className="mt-2 text-sm leading-5 text-slate-400">Breakout chỉ có giá trị khi giữ được phía trên và có follow-through; rejection làm tăng rủi ro failed break.</p>
+            <div className={cn(TYPE.meta, "flex items-center gap-2 uppercase tracking-[0.08em] text-rose-300")}><TrendingDown className="size-4" />Supply / Resistance</div>
+            <div className={cn(TYPE.value, "mt-2 break-words tabular-nums text-white")}>{analysis?.resistance || "—"}</div>
+            <p className={cn(TYPE.meta, "mt-1 text-slate-500")}>Break cần Hold → Test → Follow-through.</p>
           </div>
-
-          <div className="rounded-xl border border-amber-400/18 bg-amber-400/[0.04] p-4">
-            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-amber-300">
-              <Compass className="size-4" /> Confirmation sequence
-            </div>
-            <div className="mt-4 grid grid-cols-4 gap-2">
-              {["Break", "Hold", "Test", "Follow-through"].map((step, index) => (
-                <div key={step} className="text-center">
-                  <div className="mx-auto grid size-8 place-items-center rounded-full border border-amber-400/25 bg-amber-400/[0.08] font-mono text-xs font-black text-amber-200">{index + 1}</div>
-                  <div className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">{step}</div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 space-y-2 text-sm leading-5">
-              <p className="text-slate-300"><strong className="text-emerald-300">Xác nhận:</strong> {analysis?.confirmation || "Chưa đủ dữ liệu."}</p>
-              <p className="text-slate-400"><strong className="text-rose-300">Phủ định:</strong> {analysis?.invalidation || "Chưa đủ dữ liệu."}</p>
-            </div>
+        </div>
+        <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
+          <div className={cn(TYPE.meta, "text-amber-300")}>Break → Hold → Test → Follow-through</div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <p className={cn(TYPE.body, "text-slate-300")}><strong className="text-emerald-300">Confirm:</strong> {analysis?.confirmation || "Chưa đủ dữ liệu."}</p>
+            <p className={cn(TYPE.body, "text-slate-400")}><strong className="text-rose-300">Invalid:</strong> {analysis?.invalidation || "Chưa đủ dữ liệu."}</p>
           </div>
         </div>
       </CardContent>
@@ -351,136 +248,64 @@ function DecisionZones({ study }: { study: WyckoffChartStudy }) {
   )
 }
 
-function SignalEvidence({ study }: { study: WyckoffChartStudy }) {
+function WyckoffEvents({ study }: { study: WyckoffChartStudy }) {
   const analysis = study.analysis
-  const ruleSignals = analysis?.tags ?? []
-  const markerSignals = study.markers.slice(-8).map((marker) => marker.label)
-  const signals = [...new Set([...ruleSignals, ...markerSignals])].slice(0, 14)
-  const technical = analysis?.technical
-
-  const technicalItems = [
-    { label: "RSI 14", value: technical?.rsi14 == null ? "—" : formatNumber(technical.rsi14, 1) },
-    { label: "Relative Vol", value: technical?.relVolume == null ? "—" : `${formatNumber(technical.relVolume, 2)}×` },
-    { label: "MA20", value: technical?.ma20 == null ? "—" : formatNumber(technical.ma20, 2) },
-    { label: "MA50", value: technical?.ma50 == null ? "—" : formatNumber(technical.ma50, 2) },
-  ]
+  const markerEvents = study.markers.slice(-8).map((marker) => marker.label)
+  const ruleEvents = analysis?.tags ?? []
+  const events = [...new Set([...markerEvents, ...ruleEvents])].slice(0, 10)
+  const relVolume = analysis?.technical.relVolume
 
   return (
-    <Card className="gap-0 rounded-2xl border border-cyan-400/16 bg-[#0b1118] py-0 ring-0">
-      <CardHeader className="border-b border-white/[0.07] px-4 py-4 sm:px-5">
-        <SectionTitle
-          icon={<Zap className="size-5" />}
-          eyebrow="Evidence layer"
-          title="Wyckoff signals & evidence"
-          description="Signal chỉ được hiển thị khi snapshot hoặc marker có evidence. Không suy diễn institutional intent từ một nến hoặc một cột volume."
-        />
+    <Card className="gap-0 rounded-2xl border border-cyan-400/15 bg-[#0a1017] py-0 ring-0">
+      <CardHeader className="border-b border-white/[0.06] px-4 py-4 sm:px-5">
+        <SectionHeader icon={<Zap className="size-4" />} title="Wyckoff events & evidence" note="Chỉ giữ event, price-volume behavior và thay đổi cấu trúc" />
       </CardHeader>
       <CardContent className="p-4 sm:p-5">
-        <div className="grid gap-4 xl:grid-cols-[1.25fr_.75fr]">
-          <div>
-            <div className="flex flex-wrap gap-2">
-              {signals.length ? signals.map((signal) => {
-                const accent = signalAccent(signal)
-                const tone = accentClasses[accent]
-                return (
-                  <Badge key={signal} variant="outline" className={cn("h-7 gap-1.5 rounded-full px-2.5 text-[11px] font-bold", tone.border, tone.soft, tone.text)}>
-                    {signalIcon(signal)}
-                    {signal}
-                  </Badge>
-                )
-              }) : <span className="text-sm text-slate-500">Chưa có rule/marker đủ điều kiện gắn nhãn.</span>}
-            </div>
-
-            <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
-              <div className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">Cấu trúc đang đọc</div>
-              <p className="mt-2 text-base font-semibold leading-7 text-slate-200">{analysis?.wyckoffState || study.error || "Chưa đủ dữ liệu để phân loại Wyckoff."}</p>
-              {analysis?.whatChanged ? <p className="mt-2 text-sm leading-6 text-slate-400">{analysis.whatChanged}</p> : null}
-            </div>
+        <div className="flex flex-wrap gap-2">
+          {events.length ? events.map((event) => {
+            const tone = TONE[eventTone(event)]
+            return <Badge key={event} variant="outline" className={cn("h-7 rounded-full px-2.5 text-xs font-bold", tone.border, tone.soft, tone.text)}>{event}</Badge>
+          }) : <span className={cn(TYPE.body, "text-slate-500")}>Chưa có event đủ điều kiện gắn nhãn.</span>}
+        </div>
+        <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className={cn(TYPE.meta, "uppercase tracking-[0.08em] text-slate-500")}>Price × Volume reading</div>
+            <Badge variant="outline" className="border-white/[0.08] bg-white/[0.025] text-xs font-semibold text-slate-300">RelVol {relVolume == null ? "—" : `${formatNumber(relVolume, 2)}×`}</Badge>
           </div>
+          <p className={cn(TYPE.body, "mt-2 text-slate-300")}>{analysis?.wyckoffState || study.error || "Chưa đủ dữ liệu để phân loại Wyckoff."}</p>
+          {analysis?.whatChanged ? <p className={cn(TYPE.meta, "mt-2 text-slate-500")}>{analysis.whatChanged}</p> : null}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
-            {technicalItems.map((item) => (
-              <div key={item.label} className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-3">
-                <div className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-500">{item.label}</div>
-                <div className="mt-1.5 font-mono text-lg font-black text-white">{item.value}</div>
+function MultiTimeframeStructure({ studies }: { studies: WyckoffChartStudy[] }) {
+  return (
+    <Card className="gap-0 rounded-2xl border border-white/[0.08] bg-[#0a1017] py-0 ring-0">
+      <CardHeader className="border-b border-white/[0.06] px-4 py-4 sm:px-5">
+        <SectionHeader icon={<Layers3 className="size-4" />} title="Multi-timeframe Wyckoff structure" note="Đọc conflict / alignment giữa 1H → 1M, không dùng forecast target" />
+      </CardHeader>
+      <CardContent className="grid gap-2 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-5">
+        {studies.map((study) => {
+          const event = latestStudyEvent(study)
+          const tone = TONE[eventTone(event)]
+          return (
+            <div key={study.timeframe} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className={cn(TYPE.value, "text-white")}>{study.timeframe}</span>
+                <Badge variant="outline" className={cn("h-6 px-2 text-xs font-bold", tone.border, tone.soft, tone.text)}>{event}</Badge>
               </div>
-            ))}
-          </div>
-        </div>
+              <div className={cn(TYPE.body, "mt-3 text-slate-300")}>{study.phaseGuide.title}</div>
+              <div className="mt-3 space-y-1">
+                <div className={cn(TYPE.meta, "text-slate-500")}>{phaseCompactLabel(study.analysis?.phase)} · {rangePosition(study)}</div>
+                <div className={cn(TYPE.meta, "tabular-nums text-slate-600")}>RelVol {study.analysis?.technical.relVolume == null ? "—" : `${formatNumber(study.analysis.technical.relVolume, 2)}×`}</div>
+              </div>
+            </div>
+          )
+        })}
       </CardContent>
     </Card>
-  )
-}
-
-function OutlookCard({ outlook }: { outlook: WyckoffForecastHorizon }) {
-  const probabilities = probabilitySegmentsFromScenarios(outlook.scenarios)
-  const dominant = dominantScenario(outlook.scenarios)
-  const accent = biasAccent(outlook.bias)
-  const tone = accentClasses[accent]
-
-  return (
-    <Card className={cn("gap-0 rounded-2xl border bg-[#0b1118] py-0 ring-0", tone.border)}>
-      <CardContent className="p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">{outlook.sourceTimeframe} source</div>
-            <h3 className="mt-1 text-xl font-extrabold tracking-tight text-white">{outlook.label}</h3>
-          </div>
-          <div className="flex flex-col items-end gap-1.5">
-            <Badge variant="outline" className={cn("h-6 rounded-full px-2.5 text-[10px] font-extrabold", biasBadgeClass(outlook.bias))}>{outlook.bias ?? "Pending"}</Badge>
-            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600">Confidence {outlook.confidence ?? "—"}</span>
-          </div>
-        </div>
-
-        <p className="mt-3 line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-slate-300">{outlook.phase}</p>
-
-        <div className="mt-4">
-          <div className="mb-2 flex items-center justify-between font-mono text-[11px] font-bold">
-            <span className="text-emerald-300">Bull {probabilities.bull}%</span>
-            <span className="text-amber-200">Base {probabilities.base}%</span>
-            <span className="text-rose-300">Bear {probabilities.bear}%</span>
-          </div>
-          <ProbabilityBar {...probabilities} className="h-2.5" />
-        </div>
-
-        {dominant ? (
-          <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.025] p-3.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-extrabold uppercase tracking-[0.1em] text-slate-500">Kịch bản trội</span>
-              <span className={cn("font-mono text-sm font-black", dominant.key === "bull" ? "text-emerald-300" : dominant.key === "bear" ? "text-rose-300" : "text-amber-200")}>{dominant.probability}%</span>
-            </div>
-            <div className="mt-1 text-base font-extrabold text-white">{dominant.label}</div>
-            <div className="mt-2 flex items-baseline justify-between gap-3">
-              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Conditional target</span>
-              <span className="font-mono text-xl font-black text-white">{formatNumber(dominant.target, 2)}</span>
-            </div>
-            <div className="mt-3 space-y-2 text-sm leading-5">
-              <p className="text-slate-400"><strong className="text-cyan-300">Trigger:</strong> {dominant.trigger || dominant.description || "Chờ event mới tại vùng quyết định."}</p>
-              <p className="text-slate-400"><strong className="text-emerald-300">Confirm:</strong> {dominant.confirmation || "Chờ confirmation price-volume."}</p>
-              <p className="text-slate-400"><strong className="text-rose-300">Invalidate:</strong> {dominant.invalidation || "Chưa có invalidation rõ."}</p>
-            </div>
-          </div>
-        ) : <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 text-sm text-slate-500">Chưa đủ dữ liệu để dựng 3 kịch bản cho horizon này.</div>}
-      </CardContent>
-    </Card>
-  )
-}
-
-function OutlookBoard({ outlooks }: { outlooks: WyckoffForecastHorizon[] }) {
-  return (
-    <section>
-      <div className="mb-4">
-        <SectionTitle
-          icon={<Sparkles className="size-5" />}
-          eyebrow="Multi-horizon outlook"
-          title="Kịch bản theo thời gian"
-          description="1D đại diện tuần, 1W đại diện tháng và 1M đại diện dài hạn. Xác suất là conditional allocation từ evidence hiện có, không phải forecast chắc chắn."
-        />
-      </div>
-      <div className="grid gap-3 xl:grid-cols-3">
-        {outlooks.map((outlook) => <OutlookCard key={outlook.key} outlook={outlook} />)}
-      </div>
-    </section>
   )
 }
 
@@ -499,31 +324,24 @@ function WatchlistRow({
 }) {
   const isActive = stock.ticker === activeTicker
   const isPending = stock.ticker === pendingTicker
+  const event = watchlistEvent(stock)
+  const tone = TONE[eventTone(event)]
   const href = `/insights/wyckoff?ticker=${encodeURIComponent(stock.ticker)}&timeframe=${activeTimeframe}`
 
   return (
     <a
       href={href}
-      onClick={(event) => onSelectTicker(event, stock.ticker)}
+      onClick={(mouseEvent) => onSelectTicker(mouseEvent, stock.ticker)}
       className={cn(
         "grid min-h-14 items-center gap-1 border-b border-white/[0.04] px-3 py-2.5 [contain-intrinsic-size:56px] [content-visibility:auto]",
         WATCHLIST_GRID_CLASS,
-        isActive
-          ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.075]"
-          : isPending
-            ? "border-l-2 border-l-cyan-400/50 bg-cyan-400/[0.035]"
-            : "hover:bg-white/[0.03]",
+        isActive ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.07]" : isPending ? "border-l-2 border-l-cyan-400/50 bg-cyan-400/[0.035]" : "hover:bg-white/[0.025]",
       )}
-      aria-current={isActive ? "page" : undefined}
-      aria-busy={isPending || undefined}
     >
-      <div className={cn("text-base font-extrabold tracking-tight", isActive || isPending ? "text-cyan-300" : "text-slate-100")}>{stock.ticker}</div>
-      <div className="text-right font-mono text-sm font-bold tabular-nums text-slate-100">{formatNumber(stock.price)}</div>
-      <div className={cn("text-right font-mono text-xs font-bold tabular-nums", changeTone(stock.changePct))}>{signedPercent(stock.changePct)}</div>
+      <div className="text-[15px] font-extrabold tracking-tight text-white">{stock.ticker}</div>
+      <div className="text-right text-xs font-bold text-slate-400" title={stock.phase}>{phaseCompactLabel(stock.phase)}</div>
       <div className="min-w-0 text-right">
-        <Badge variant="outline" className={cn("max-w-full justify-center overflow-hidden text-ellipsis whitespace-nowrap border-white/10 bg-white/[0.025] px-1.5 text-[9px] font-extrabold", biasBadgeClass(stock.bias))}>
-          {phaseCompactLabel(stock.phase)}
-        </Badge>
+        <Badge variant="outline" className={cn("max-w-full justify-center overflow-hidden text-ellipsis whitespace-nowrap px-2 text-xs font-bold", tone.border, tone.soft, tone.text)}>{event}</Badge>
       </div>
     </a>
   )
@@ -568,22 +386,18 @@ export function WyckoffInfographicDashboard(props: {
   const latest = current?.bars.at(-1)
   const selectedStock = useMemo(() => props.stocks.find((stock) => stock.ticker === activeTicker), [activeTicker, props.stocks])
   const change = current?.analysis?.technical.changePct ?? selectedStock?.changePct ?? null
-  const probabilities = probabilitySegments(current)
   const timeframeTabs = useMemo(() => activeStudies.map((study) => ({ value: study.timeframe, label: study.timeframe })), [activeStudies])
-  const primarySignal = current?.analysis?.tags?.[0] || current?.markers.at(-1)?.label || "Chờ event mới"
+  const latestEvent = latestStudyEvent(current)
 
   const filteredStocks = useMemo(() => {
     let list = props.stocks
-    if (activeTab === "accumulation") {
-      list = list.filter((stock) => stock.bias === "Bullish" || /Spring|SOS|Markup|LPS/i.test(stock.phase))
-    } else if (activeTab === "distribution") {
-      list = list.filter((stock) => stock.bias === "Bearish" || /UTAD|SOW|Markdown|LPSY/i.test(stock.phase))
-    } else if (activeTab === "top100") {
-      list = list.filter((stock) => stock.rank > 0 && stock.rank <= 100)
-    }
+    if (activeTab === "accumulation") list = list.filter((stock) => /Accum|Spring|SOS|LPS|Markup/i.test(`${stock.phase} ${watchlistEvent(stock)}`))
+    else if (activeTab === "distribution") list = list.filter((stock) => /Distrib|UT|SOW|LPSY|Markdown/i.test(`${stock.phase} ${watchlistEvent(stock)}`))
+    else if (activeTab === "top100") list = list.filter((stock) => stock.rank > 0 && stock.rank <= 100)
+
     const normalized = deferredQuery.trim().toUpperCase()
     if (!normalized) return list
-    return list.filter((stock) => `${stock.ticker} ${stock.phase} ${stock.bias} ${stock.sector}`.toUpperCase().includes(normalized))
+    return list.filter((stock) => `${stock.ticker} ${stock.phase} ${watchlistEvent(stock)} ${stock.sector}`.toUpperCase().includes(normalized))
   }, [activeTab, deferredQuery, props.stocks])
 
   const groupedStocks = useMemo(() => BOARD_SECTOR_GROUPS
@@ -637,10 +451,7 @@ export function WyckoffInfographicDashboard(props: {
       switchAbortRef.current = controller
       void (async () => {
         try {
-          const response = await fetch(`/api/insights/wyckoff?ticker=${encodeURIComponent(nextTicker)}`, {
-            signal: controller.signal,
-            headers: { Accept: "application/json" },
-          })
+          const response = await fetch(`/api/insights/wyckoff?ticker=${encodeURIComponent(nextTicker)}`, { signal: controller.signal, headers: { Accept: "application/json" } })
           const payload = await response.json() as WyckoffTickerApiResponse
           if (!response.ok || !payload.ok || !payload.data) throw new Error(payload.error || `Không tải được dữ liệu ${nextTicker}`)
           if (controller.signal.aborted || sequence !== switchSequenceRef.current) return
@@ -678,248 +489,114 @@ export function WyckoffInfographicDashboard(props: {
 
   const priceMotion = !suppressValueMotion
   const headerSector = selectedStock?.sector || "Chưa phân ngành"
-  const currentAccent = biasAccent(current?.analysis?.taBias)
-  const phaseTone = accentClasses[currentAccent]
 
   return (
     <div className="min-h-screen bg-[#05080d] font-ticker text-slate-100">
       <TopNav />
       <main className="mx-auto max-w-[2000px] px-3 py-4 sm:px-4 lg:px-5 xl:px-6">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_390px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_350px]">
           <div className="min-w-0 space-y-4">
-            <Card className="gap-0 rounded-2xl border border-white/[0.09] bg-[#0a1017] py-0 ring-0">
-              <CardContent className="p-4 sm:p-5 lg:p-6">
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <Card className="gap-0 rounded-2xl border border-white/[0.08] bg-[#0a1017] py-0 ring-0">
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0">
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className="h-7 border-cyan-400/20 bg-cyan-400/[0.06] px-2.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-cyan-300">
-                        <Layers3 className="size-3.5" /> Insights / Wyckoff
-                      </Badge>
-                      <Badge variant="outline" className={cn("h-7 px-2.5 text-[10px] font-extrabold uppercase tracking-[0.1em]", biasBadgeClass(current?.analysis?.taBias))}>
-                        {current?.analysis?.taBias ?? "Pending"}
-                      </Badge>
-                      {selectedStock?.rank ? (
-                        <Badge variant="outline" className="h-7 border-amber-400/20 bg-amber-400/[0.06] px-2.5 text-[10px] font-extrabold text-amber-300">
-                          <Crown className="size-3.5" /> Top 100 · #{selectedStock.rank}
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <StockIdentity
-                      ticker={activeTicker}
-                      companyName={tickerData.companyName}
-                      exchange={tickerData.exchange}
-                      detail={headerSector}
-                      logoSize={48}
-                      className="min-w-0"
-                    />
-                    <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-500">
-                      <span className="inline-flex items-center gap-1.5"><BookOpenCheck className="size-4 text-cyan-400" /> {props.dataSource || "Canonical data"}</span>
-                      <span className="text-slate-700">•</span>
-                      <span>Snapshot {tickerData.generatedAt.slice(0, 10)}</span>
-                      <span className="text-slate-700">•</span>
-                      <span>{current?.bars.length ?? 0} completed bars · {activeTimeframe}</span>
+                    <StockIdentity ticker={activeTicker} companyName={tickerData.companyName} exchange={tickerData.exchange} detail={headerSector} logoSize={44} className="min-w-0" />
+                    <div className={cn(TYPE.meta, "mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-500")}>
+                      <span>Wyckoff structure lab</span><span>•</span><span>{props.dataSource || "Canonical data"}</span><span>•</span><span>Snapshot {tickerData.generatedAt.slice(0, 10)}</span>
                     </div>
                   </div>
-
-                  <div className="min-w-[220px] rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4 text-left lg:text-right">
-                    <div className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">Giá hiện tại</div>
-                    <div className="mt-1 flex items-end gap-3 lg:justify-end">
-                      <PriceFlow animate={priceMotion} value={latest?.close ?? selectedStock?.price} digits={2} className="font-mono text-4xl font-black tracking-[-0.04em] text-white" />
-                      <PriceFlow animate={priceMotion} value={change} digits={2} suffix="%" showSign className={cn("pb-1 font-mono text-base font-black", changeTone(change))} />
+                  <div className="flex items-center gap-4 lg:text-right">
+                    <div>
+                      <div className={cn(TYPE.meta, "text-slate-500")}>Giá</div>
+                      <div className="mt-0.5 flex items-baseline gap-2 lg:justify-end">
+                        <PriceFlow animate={priceMotion} value={latest?.close ?? selectedStock?.price} digits={2} className="text-2xl font-extrabold tabular-nums text-white" />
+                        <PriceFlow animate={priceMotion} value={change} digits={2} suffix="%" showSign className={cn("text-sm font-bold tabular-nums", changeTone(change))} />
+                      </div>
                     </div>
-                    <div className="mt-2 text-sm font-semibold text-slate-400">{current?.phaseGuide.title || "Đang cập nhật cấu trúc"}</div>
+                    <a href={`/insights/ai-council?ticker=${encodeURIComponent(activeTicker)}`} className="rounded-xl border border-violet-400/18 bg-violet-400/[0.045] px-3 py-2 text-xs font-bold text-violet-200 hover:border-violet-300/35 hover:text-white">AI Council →</a>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-              <InfographicCard
-                accent={currentAccent}
-                icon={<Radar className="size-5" />}
-                label="Pha Wyckoff hiện tại"
-                value={current?.phaseGuide.title || "Pending"}
-                description={current?.analysis?.confidence ? `Confidence ${current.analysis.confidence} · ${activeTimeframe}` : `Đang đọc cấu trúc ${activeTimeframe}`}
-              >
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className={cn("border-white/10 bg-white/[0.025] text-[10px] font-bold", biasBadgeClass(current?.analysis?.taBias))}>{current?.analysis?.taBias ?? "Pending"}</Badge>
-                  <span className="text-xs font-semibold text-slate-500">{current?.analysis?.phase || "Unclassified"}</span>
-                </div>
-              </InfographicCard>
-
-              <InfographicCard
-                accent="amber"
-                icon={<Target className="size-5" />}
-                label="Vùng giá then chốt"
-                value={<span className="font-mono text-[21px] text-white sm:text-[24px]">{current?.analysis?.support || "—"} <span className="text-slate-600">/</span> {current?.analysis?.resistance || "—"}</span>}
-                description="Demand / Support ở trái · Supply / Resistance ở phải"
-              >
-                <div className="text-xs font-semibold text-amber-200/80">Break → Hold → Test → Follow-through</div>
-              </InfographicCard>
-
-              <InfographicCard
-                accent="purple"
-                icon={<Gauge className="size-5" />}
-                label="Bias & xác suất"
-                value={`${Math.max(probabilities.bull, probabilities.base, probabilities.bear)}% kịch bản trội`}
-                description={`Bull ${probabilities.bull}% · Base ${probabilities.base}% · Bear ${probabilities.bear}%`}
-              >
-                <ProbabilityBar {...probabilities} className="h-2.5" />
-              </InfographicCard>
-
-              <InfographicCard
-                accent={signalAccent(primarySignal)}
-                icon={<Activity className="size-5" />}
-                label="Tín hiệu nổi bật"
-                value={primarySignal}
-                description={current?.analysis?.whatChanged || "Theo dõi price-volume behavior tại vùng quyết định."}
-              >
-                <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
-                  <span>RSI {formatNumber(current?.analysis?.technical.rsi14, 1)}</span>
-                  <span>RelVol {current?.analysis?.technical.relVolume == null ? "—" : `${formatNumber(current.analysis.technical.relVolume, 2)}×`}</span>
-                </div>
-              </InfographicCard>
-            </div>
+            {current ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-cyan-400/12 bg-cyan-400/[0.025] px-4 py-3">
+                <span className={cn(TYPE.meta, "uppercase tracking-[0.08em] text-cyan-300")}>Wyckoff snapshot</span>
+                <span className="text-slate-700">•</span>
+                <strong className={cn(TYPE.body, "text-white")}>{current.phaseGuide.title}</strong>
+                <span className="text-slate-700">•</span>
+                <Badge variant="outline" className={cn("h-7 px-2.5 text-xs font-bold", TONE[eventTone(latestEvent)].border, TONE[eventTone(latestEvent)].soft, TONE[eventTone(latestEvent)].text)}>{latestEvent}</Badge>
+                <span className={cn(TYPE.meta, "text-slate-500")}>Demand {current.analysis?.support || "—"}</span>
+                <span className={cn(TYPE.meta, "text-slate-500")}>Supply {current.analysis?.resistance || "—"}</span>
+                <span className={cn(TYPE.meta, "text-slate-500")}>RelVol {current.analysis?.technical.relVolume == null ? "—" : `${formatNumber(current.analysis.technical.relVolume, 2)}×`}</span>
+                <span className={cn(TYPE.meta, "text-slate-600")}>Confidence {current.analysis?.confidence || "—"}</span>
+              </div>
+            ) : null}
 
             {current ? (
-              <Card className="gap-0 overflow-hidden rounded-2xl border border-white/[0.09] bg-[#080c12] py-0 ring-0">
-                <CardHeader className="border-b border-white/[0.07] px-4 py-4 sm:px-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <SectionTitle
-                      icon={<BarChart3 className="size-5" />}
-                      eyebrow="Price × Volume × Structure"
-                      title="Bản đồ cung – cầu"
-                      description="Chart là evidence layer; các scenario phía dưới chỉ là đường đi có điều kiện dựa trên snapshot đã hoàn tất."
-                    />
-                    <AnimatedTabs
-                      tabs={timeframeTabs}
-                      value={activeTimeframe}
-                      onValueChange={chooseTimeframe}
-                      ariaLabel="Khung thời gian biểu đồ"
-                      variant="segment"
-                      tabClassName="min-w-12 font-mono text-[12px] font-extrabold"
-                    />
+              <Card className="gap-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080c12] py-0 ring-0">
+                <CardHeader data-wyckoff-chart-toolbar className="border-b border-white/[0.06] px-4 py-4 sm:px-5">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <SectionHeader icon={<BarChart3 className="size-4" />} title="Price × Volume × Wyckoff events" note="Chart là evidence chính; không hiển thị probability hoặc future scenario path" />
+                    <AnimatedTabs tabs={timeframeTabs} value={activeTimeframe} onValueChange={chooseTimeframe} ariaLabel="Khung thời gian biểu đồ" variant="segment" tabClassName="min-w-12 text-xs font-extrabold" />
                   </div>
                 </CardHeader>
-
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] bg-[#070c12] px-4 py-3 text-xs sm:px-5">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 font-mono text-slate-500">
-                    <strong className="font-ticker text-sm text-slate-100">{activeTicker} · {activeTimeframe} · {tickerData.exchange}</strong>
-                    {latest ? (
-                      <>
-                        <span>O <strong className="text-slate-300">{formatNumber(latest.open)}</strong></span>
-                        <span>H <strong className="text-emerald-300">{formatNumber(latest.high)}</strong></span>
-                        <span>L <strong className="text-rose-300">{formatNumber(latest.low)}</strong></span>
-                        <span>C <strong className="text-white">{formatNumber(latest.close)}</strong></span>
-                      </>
-                    ) : null}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.05] bg-[#070c12] px-4 py-2.5 sm:px-5">
+                  <div className={cn(TYPE.meta, "flex flex-wrap items-center gap-x-3 gap-y-1 tabular-nums text-slate-500")}>
+                    <strong className="text-slate-200">{activeTicker} · {activeTimeframe}</strong>
+                    {latest ? <><span>O {formatNumber(latest.open)}</span><span className="text-emerald-300">H {formatNumber(latest.high)}</span><span className="text-rose-300">L {formatNumber(latest.low)}</span><span className="text-white">C {formatNumber(latest.close)}</span></> : null}
                   </div>
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <Badge variant="outline" className="border-white/10 bg-white/[0.025] text-[10px] font-bold text-slate-400">{current.provider}</Badge>
-                    <span className="hidden max-w-[280px] truncate sm:block" title={current.detail}>{current.detail}</span>
-                  </div>
+                  <Badge variant="outline" className="border-white/[0.08] bg-white/[0.025] text-xs font-semibold text-slate-400">{current.provider}</Badge>
                 </div>
-
-                <div className="relative">
-                  <WyckoffLightweightChart ticker={activeTicker} study={current} loading={Boolean(pendingTicker)} />
-                  <div className="pointer-events-none absolute left-4 top-4 z-[3] hidden max-w-[420px] rounded-xl border border-white/[0.09] bg-[#081019]/95 p-3 lg:block">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={cn("border-white/10 bg-white/[0.025] text-[10px] font-extrabold", phaseTone.text)}>{activeTimeframe}</Badge>
-                      <span className="text-sm font-extrabold text-white">{current.phaseGuide.title}</span>
-                    </div>
-                    <p className="mt-2 line-clamp-2 text-xs font-medium leading-5 text-slate-400">{current.analysis?.wyckoffState || current.error}</p>
-                  </div>
-                </div>
-
-                <CardContent className="border-t border-white/[0.07] p-4 sm:p-5">
-                  <PhaseNarrative study={current} />
-                </CardContent>
+                <WyckoffLightweightChart ticker={activeTicker} study={current} loading={Boolean(pendingTicker)} showIntelligence={false} showScenarios={false} />
               </Card>
             ) : null}
 
-            {current ? <DecisionZones study={current} /> : null}
-            {current ? <SignalEvidence study={current} /> : null}
-            {current ? <OutlookBoard outlooks={current.outlooks} /> : null}
+            {current ? <StructureSummary study={current} /> : null}
+            {current ? <div className="grid gap-4 2xl:grid-cols-2"><DecisionZones study={current} /><WyckoffEvents study={current} /></div> : null}
+            <MultiTimeframeStructure studies={activeStudies} />
 
-            <div className="flex items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-3.5 text-sm leading-6 text-slate-500">
-              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-cyan-400" />
-              <span><strong className="text-slate-300">Methodology guardrail:</strong> Projection là kịch bản điều kiện từ cấu trúc Wyckoff, price-volume và completed bars; không phải dữ liệu giá tương lai hay khuyến nghị mua bán.</span>
+            <div className={cn(TYPE.meta, "flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-slate-500")}>
+              <span className="inline-flex items-center gap-2"><ShieldCheck className="size-4 text-cyan-400" />Trang này chỉ đọc cấu trúc Wyckoff, event và price-volume evidence.</span>
+              <a href={`/insights/ai-council?ticker=${encodeURIComponent(activeTicker)}`} className="font-bold text-violet-300 hover:text-violet-200">Decision / probability → AI Council</a>
             </div>
           </div>
 
-          <Card className="hidden h-[680px] gap-0 overflow-hidden rounded-2xl border border-white/[0.09] bg-[#090e15] py-0 ring-0 lg:flex xl:sticky xl:top-3.5 xl:h-[calc(100vh-76px)] xl:min-h-[660px]">
-            <div className="border-b border-white/[0.08] bg-[#080d14] p-4">
+          <Card className="hidden h-[680px] gap-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#090e15] py-0 ring-0 lg:flex xl:sticky xl:top-3.5 xl:h-[calc(100vh-76px)] xl:min-h-[660px]">
+            <div className="border-b border-white/[0.07] bg-[#080d14] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="grid size-9 place-items-center rounded-xl bg-cyan-400/[0.08] text-cyan-300 ring-1 ring-cyan-400/15"><BarChart3 className="size-4" /></div>
-                  <div>
-                    <CardTitle className="text-base font-extrabold text-white">Watchlist Wyckoff</CardTitle>
-                    <div className="mt-0.5 text-xs text-slate-500">Top 100 · grouped by sector</div>
-                  </div>
+                  <div className="grid size-9 place-items-center rounded-xl border border-cyan-400/15 bg-cyan-400/[0.06] text-cyan-300"><Radar className="size-4" /></div>
+                  <div><CardTitle className={cn(TYPE.section, "text-white")}>Wyckoff Watchlist</CardTitle><div className={cn(TYPE.meta, "text-slate-500")}>Mã · Phase · Event</div></div>
                 </div>
-                <Badge variant="outline" className="h-7 border-cyan-400/20 bg-cyan-400/[0.06] px-2.5 font-mono text-xs font-black text-cyan-300">{filteredStocks.length}</Badge>
+                <Badge variant="outline" className="h-7 border-cyan-400/18 bg-cyan-400/[0.05] px-2.5 text-xs font-bold tabular-nums text-cyan-300">{filteredStocks.length}</Badge>
               </div>
 
-              {switchError ? <div className="mt-3 rounded-lg border border-rose-400/18 bg-rose-400/[0.05] px-3 py-2 text-xs font-semibold leading-5 text-rose-300" role="alert">{switchError}</div> : null}
+              {switchError ? <div className={cn(TYPE.meta, "mt-3 rounded-lg border border-rose-400/18 bg-rose-400/[0.05] px-3 py-2 text-rose-300")} role="alert">{switchError}</div> : null}
 
               <div className="relative mt-4">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-600" />
-                <Input
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Tìm mã, pha, ngành..."
-                  className="h-10 rounded-xl border-white/[0.09] bg-[#05080e] pl-9 pr-9 text-sm font-semibold text-white placeholder:text-slate-600 focus-visible:border-cyan-400/40"
-                />
-                {query ? (
-                  <Button type="button" variant="ghost" size="icon-sm" onClick={() => setQuery("")} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white" aria-label="Xóa tìm kiếm">
-                    <X className="size-3.5" />
-                  </Button>
-                ) : null}
+                <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã, pha, event..." className="h-10 rounded-xl border-white/[0.08] bg-[#05080e] pl-9 pr-9 text-sm font-semibold text-white placeholder:text-slate-600 focus-visible:border-cyan-400/40" />
+                {query ? <Button type="button" variant="ghost" size="icon-sm" onClick={() => setQuery("")} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white" aria-label="Xóa tìm kiếm"><X className="size-3.5" /></Button> : null}
               </div>
 
               <div className="mt-3 grid grid-cols-4 gap-1" role="tablist" aria-label="Lọc watchlist Wyckoff">
-                {WATCHLIST_TABS.map((tab) => (
-                  <Button
-                    key={tab.id}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    role="tab"
-                    aria-selected={activeTab === tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={cn("h-8 rounded-lg px-1 text-[10px] font-extrabold", activeTab === tab.id ? "bg-cyan-400/[0.1] text-cyan-300" : "text-slate-500")}
-                  >
-                    {tab.label}
-                  </Button>
-                ))}
+                {WATCHLIST_TABS.map((tab) => <Button key={tab.id} type="button" variant="ghost" size="sm" role="tab" aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id)} className={cn("h-8 rounded-lg px-1 text-xs font-bold", activeTab === tab.id ? "bg-cyan-400/[0.1] text-cyan-300" : "text-slate-500")}>{tab.label}</Button>)}
               </div>
             </div>
 
-            <div className={cn("grid items-center gap-1 border-b border-white/[0.06] bg-[#070b10] px-3 py-2.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-600", WATCHLIST_GRID_CLASS)}>
-              <div>Mã</div><div className="text-right">Giá</div><div className="text-right">+/- %</div><div className="text-right">Pha</div>
+            <div className={cn("grid items-center gap-1 border-b border-white/[0.05] bg-[#070b10] px-3 py-2.5 text-xs font-bold uppercase tracking-[0.06em] text-slate-600", WATCHLIST_GRID_CLASS)}>
+              <div>Mã</div><div className="text-right">Phase</div><div className="text-right">Event</div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {groupedStocks.map((group) => (
                 <section key={group.key} aria-label={group.label}>
-                  <div className="flex items-center justify-between border-b border-white/[0.05] bg-[#0a1119] px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-500">
-                    <span>{group.label}</span>
-                    <span className="font-mono text-slate-600">{group.items.length}</span>
-                  </div>
-                  {group.items.map((stock) => (
-                    <MemoWatchlistRow
-                      key={stock.ticker}
-                      stock={stock}
-                      activeTicker={activeTicker}
-                      pendingTicker={pendingTicker}
-                      activeTimeframe={activeTimeframe}
-                      onSelectTicker={selectTicker}
-                    />
-                  ))}
+                  <div className={cn(TYPE.meta, "flex items-center justify-between border-b border-white/[0.04] bg-[#0a1119] px-3 py-2 uppercase tracking-[0.06em] text-slate-500")}><span>{group.label}</span><span className="tabular-nums text-slate-600">{group.items.length}</span></div>
+                  {group.items.map((stock) => <MemoWatchlistRow key={stock.ticker} stock={stock} activeTicker={activeTicker} pendingTicker={pendingTicker} activeTimeframe={activeTimeframe} onSelectTicker={selectTicker} />)}
                 </section>
               ))}
-              {!filteredStocks.length ? <div className="p-8 text-center text-sm text-slate-500">Không tìm thấy mã phù hợp</div> : null}
+              {!filteredStocks.length ? <div className={cn(TYPE.body, "p-8 text-center text-slate-500")}>Không tìm thấy mã phù hợp</div> : null}
             </div>
           </Card>
         </div>
