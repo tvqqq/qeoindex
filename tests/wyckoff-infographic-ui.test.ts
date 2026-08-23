@@ -104,6 +104,20 @@ test("Wyckoff watchlist is wider, left-aligned, column-tinted and tooltip-free",
   assert.match(unified, /phase1W: row1W\?\.phase/)
 })
 
+test("watchlist phase chips use compact 3-7 character labels and fixed alignment", () => {
+  assert.match(infographic, /watchLabel: "ACC"/)
+  assert.match(infographic, /watchLabel: "RE-ACC"/)
+  assert.match(infographic, /watchLabel: "DIST"/)
+  assert.match(infographic, /watchLabel: "RE-DIST"/)
+  assert.match(infographic, /watchLabel: "MARKUP"/)
+  assert.match(infographic, /watchLabel: "MARKDN"/)
+  assert.match(infographic, /watchLabel: "UNCLASS"/)
+  assert.match(infographic, /w-\[104px\]/)
+  assert.match(infographic, /grid-cols-\[16px_minmax\(0,1fr\)\]/)
+  assert.match(infographic, /\{meta\.watchLabel\}/)
+  assert.match(infographic, /flex min-w-0 items-center justify-center border-l/)
+})
+
 test("watchlist keeps lightweight hover and ticker-selection transitions without chart motion ancestors", () => {
   assert.match(infographic, /transition-\[background-color,border-color,transform,box-shadow\] duration-200 ease-out/)
   assert.match(infographic, /hover:translate-x-0\.5/)
