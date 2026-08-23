@@ -42,7 +42,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { BOARD_SECTOR_GROUPS, boardSectorGroupForSector } from "@/lib/market-sectors"
 import type { WyckoffChartStudy, WyckoffChartTimeframe, WyckoffEventLabel } from "@/lib/wyckoff-chart-model"
 import { cn } from "@/lib/utils"
@@ -69,6 +68,7 @@ type PhaseKey =
   | "markup"
   | "markdown"
   | "unclassified"
+type WatchlistColumn = "ticker" | "1H" | "1D" | "1W"
 
 type PhaseMeta = {
   label: string
@@ -87,7 +87,19 @@ const WATCHLIST_TABS: Array<{ id: WatchlistFilterTab; label: string }> = [
 
 const TICKER_SWITCH_DEBOUNCE_MS = 60
 const TICKER_CACHE_LIMIT = 8
-const WATCHLIST_GRID_CLASS = "grid-cols-[64px_repeat(3,minmax(0,1fr))]"
+const WATCHLIST_GRID_CLASS = "grid-cols-[76px_repeat(3,minmax(0,1fr))]"
+const WATCHLIST_COLUMN_BG: Record<WatchlistColumn, string> = {
+  ticker: "bg-slate-400/[0.025]",
+  "1H": "bg-cyan-400/[0.018]",
+  "1D": "bg-sky-400/[0.026]",
+  "1W": "bg-violet-400/[0.022]",
+}
+const WATCHLIST_HEADER_BG: Record<WatchlistColumn, string> = {
+  ticker: "bg-slate-400/[0.055]",
+  "1H": "bg-cyan-400/[0.045] text-cyan-200",
+  "1D": "bg-sky-400/[0.065] text-sky-200",
+  "1W": "bg-violet-400/[0.05] text-violet-200",
+}
 
 const TYPE = {
   display: "text-2xl font-extrabold leading-tight tracking-[-0.03em]",
@@ -402,31 +414,17 @@ function PhaseChip({ phase, selected = false }: { phase: string; selected?: bool
   const meta = PHASE_META[phaseKey(phase)]
   const Icon = meta.icon
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <span
-            className={cn(
-              "group/phase inline-flex min-h-8 w-full min-w-0 items-center justify-center gap-1 rounded-lg border px-1.5 py-1 text-center text-xs font-bold leading-tight",
-              "transition-[transform,background-color,border-color,color,box-shadow] duration-200 ease-out hover:-translate-y-px",
-              meta.chip,
-              selected && "shadow-[0_0_0_1px_rgba(34,211,238,0.18),0_8px_24px_-16px_rgba(34,211,238,0.9)]",
-            )}
-          >
-            <Icon className={cn("size-3.5 shrink-0 transition-transform duration-200 ease-out group-hover/phase:rotate-3", meta.iconClass)} />
-            <span className="min-w-0 break-words">{meta.label}</span>
-          </span>
-        }
-      />
-      <TooltipContent side="left" sideOffset={10} className="max-w-[320px] border-white/[0.1] bg-[#0b1119] p-3 text-left font-ticker shadow-2xl">
-        <div className="flex items-center gap-2">
-          <Icon className={cn("size-4", meta.iconClass)} />
-          <strong className="text-sm text-white">{meta.label}</strong>
-        </div>
-        <p className="mt-1 text-xs font-bold text-slate-300">{meta.shortVi}</p>
-        <p className="mt-1.5 text-xs font-medium leading-5 text-slate-400">{meta.explanationVi}</p>
-      </TooltipContent>
-    </Tooltip>
+    <span
+      className={cn(
+        "group/phase inline-flex min-h-8 w-full min-w-0 items-center justify-center gap-1 rounded-lg border px-1.5 py-1 text-center text-xs font-bold leading-tight",
+        "transition-[transform,background-color,border-color,color,box-shadow] duration-200 ease-out hover:-translate-y-px",
+        meta.chip,
+        selected && "shadow-[0_0_0_1px_rgba(34,211,238,0.18),0_8px_24px_-16px_rgba(34,211,238,0.9)]",
+      )}
+    >
+      <Icon className={cn("size-3.5 shrink-0 transition-transform duration-200 ease-out group-hover/phase:rotate-3", meta.iconClass)} />
+      <span className="min-w-0 break-words">{meta.label}</span>
+    </span>
   )
 }
 
@@ -567,9 +565,9 @@ function MultiTimeframeStructure({ studies }: { studies: WyckoffChartStudy[] }) 
   )
 }
 
-function WatchlistPhaseCell({ phase, selected = false }: { phase: string; selected?: boolean }) {
+function WatchlistPhaseCell({ phase, timeframe, selected = false }: { phase: string; timeframe: "1H" | "1D" | "1W"; selected?: boolean }) {
   return (
-    <div className="min-w-0 border-l border-white/[0.065] px-1.5 py-1">
+    <div className={cn("min-w-0 border-l border-white/[0.065] px-2 py-1.5 transition-colors duration-200", WATCHLIST_COLUMN_BG[timeframe])}>
       <PhaseChip phase={phase} selected={selected} />
     </div>
   )
@@ -596,22 +594,22 @@ function WatchlistRow({
       href={href}
       onClick={(event) => onSelectTicker(event, stock.ticker)}
       className={cn(
-        "group grid min-h-[72px] items-stretch border-b border-white/[0.04] px-0 [contain-intrinsic-size:72px] [content-visibility:auto]",
-        "transition-[background-color,border-color,transform] duration-200 ease-out active:scale-[0.995]",
+        "group/row grid min-h-[74px] items-stretch border-b border-white/[0.04] px-0 [contain-intrinsic-size:74px] [content-visibility:auto]",
+        "transition-[background-color,border-color,transform,box-shadow] duration-200 ease-out hover:translate-x-0.5 active:scale-[0.995]",
         WATCHLIST_GRID_CLASS,
         isActive
-          ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.075] shadow-[inset_10px_0_30px_-26px_rgba(34,211,238,0.9)]"
+          ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.08] shadow-[inset_12px_0_34px_-25px_rgba(34,211,238,0.95),0_8px_28px_-24px_rgba(34,211,238,0.8)]"
           : isPending
-            ? "border-l-2 border-l-cyan-400/50 bg-cyan-400/[0.035]"
-            : "hover:bg-white/[0.028]",
+            ? "border-l-2 border-l-cyan-400/60 bg-cyan-400/[0.045] shadow-[inset_10px_0_28px_-24px_rgba(34,211,238,0.75)]"
+            : "hover:bg-white/[0.032] hover:shadow-[inset_8px_0_24px_-24px_rgba(148,163,184,0.8)]",
       )}
       aria-current={isActive ? "page" : undefined}
       aria-busy={isPending || undefined}
     >
-      <div className={cn("flex items-center px-3 text-[15px] font-extrabold tracking-tight transition-colors duration-200", isActive || isPending ? "text-cyan-200" : "text-white")}>{stock.ticker}</div>
-      <WatchlistPhaseCell phase={phaseFor(stock, "1H")} selected={isActive} />
-      <WatchlistPhaseCell phase={phaseFor(stock, "1D")} selected={isActive} />
-      <WatchlistPhaseCell phase={phaseFor(stock, "1W")} selected={isActive} />
+      <div className={cn("flex items-center px-3 text-[15px] font-extrabold tracking-tight transition-[background-color,color] duration-200", WATCHLIST_COLUMN_BG.ticker, isActive || isPending ? "text-cyan-200" : "text-white")}>{stock.ticker}</div>
+      <WatchlistPhaseCell timeframe="1H" phase={phaseFor(stock, "1H")} selected={isActive} />
+      <WatchlistPhaseCell timeframe="1D" phase={phaseFor(stock, "1D")} selected={isActive} />
+      <WatchlistPhaseCell timeframe="1W" phase={phaseFor(stock, "1W")} selected={isActive} />
     </a>
   )
 }
@@ -630,11 +628,11 @@ function WatchlistExplainPanel({ stock }: { stock: WatchlistStock | undefined })
     <div key={stock.ticker} className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.018] p-3 animate-in fade-in-0 slide-in-from-top-1 duration-200">
       <div className="flex items-center justify-between gap-2">
         <div className={cn(TYPE.meta, "text-slate-300")}><strong className="text-white">{stock.ticker}</strong> · đọc nhanh Phase</div>
-        <span className="text-xs font-semibold text-slate-600">hover Phase để xem chi tiết</span>
+        <span className="text-xs font-semibold text-slate-600">So sánh 1H → 1D → 1W</span>
       </div>
-      <div className="mt-2 grid grid-cols-3 divide-x divide-white/[0.06] rounded-lg border border-white/[0.055] bg-[#060a10]">
+      <div className="mt-2 grid grid-cols-3 divide-x divide-white/[0.06] overflow-hidden rounded-lg border border-white/[0.055] bg-[#060a10]">
         {cells.map(({ timeframe, meta, Icon }) => (
-          <div key={timeframe} className="min-w-0 px-2 py-2.5">
+          <div key={timeframe} className={cn("min-w-0 px-2 py-2.5", WATCHLIST_COLUMN_BG[timeframe])}>
             <div className="flex items-center gap-1.5">
               <Icon className={cn("size-3.5 shrink-0", meta.iconClass)} />
               <span className="text-xs font-extrabold text-white">{timeframe}</span>
@@ -808,8 +806,8 @@ export function WyckoffInfographicDashboard(props: {
     <div className="min-h-screen bg-[#05080d] font-ticker text-slate-100">
       <TopNav />
       <main className="mx-auto max-w-[2000px] px-3 py-4 sm:px-4 lg:px-5 xl:px-6">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_430px]">
-          <div className="min-w-0 space-y-4">
+        <div className="grid gap-4 xl:grid-cols-[540px_minmax(0,1fr)] 2xl:grid-cols-[580px_minmax(0,1fr)]">
+          <div className={cn("min-w-0 space-y-4 xl:order-2 transition-opacity duration-200 ease-out", pendingTicker && "opacity-80")}>
             <Card className="gap-0 rounded-2xl border border-white/[0.08] bg-[#0a1017] py-0 ring-0">
               <CardContent className="p-4 sm:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -874,7 +872,7 @@ export function WyckoffInfographicDashboard(props: {
             </div>
           </div>
 
-          <Card className="hidden h-[680px] gap-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#090e15] py-0 ring-0 lg:flex xl:sticky xl:top-3.5 xl:h-[calc(100vh-76px)] xl:min-h-[660px]">
+          <Card className="hidden h-[680px] gap-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#090e15] py-0 ring-0 xl:order-1 xl:sticky xl:top-3.5 xl:flex xl:h-[calc(100vh-76px)] xl:min-h-[660px]">
             <div className="border-b border-white/[0.07] bg-[#080d14] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2.5">
@@ -900,11 +898,11 @@ export function WyckoffInfographicDashboard(props: {
               <WatchlistExplainPanel stock={selectedStock} />
             </div>
 
-            <div className={cn("grid items-center border-b border-white/[0.05] bg-[#070b10] px-0 py-0 text-xs font-bold uppercase tracking-[0.06em] text-slate-600", WATCHLIST_GRID_CLASS)}>
-              <div className="px-3 py-3">Mã</div>
-              <div className="border-l border-white/[0.065] px-2 py-3 text-center">1H</div>
-              <div className="border-l border-white/[0.065] px-2 py-3 text-center text-cyan-400">1D</div>
-              <div className="border-l border-white/[0.065] px-2 py-3 text-center">1W</div>
+            <div className={cn("grid items-center border-b border-white/[0.05] px-0 py-0 text-xs font-bold uppercase tracking-[0.06em] text-slate-500", WATCHLIST_GRID_CLASS)}>
+              <div className={cn("px-3 py-3", WATCHLIST_HEADER_BG.ticker)}>Mã</div>
+              <div className={cn("border-l border-white/[0.065] px-2 py-3 text-center", WATCHLIST_HEADER_BG["1H"])}>1H</div>
+              <div className={cn("border-l border-white/[0.065] px-2 py-3 text-center", WATCHLIST_HEADER_BG["1D"])}>1D</div>
+              <div className={cn("border-l border-white/[0.065] px-2 py-3 text-center", WATCHLIST_HEADER_BG["1W"])}>1W</div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
