@@ -1,9 +1,15 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { AiLoader } from "@/components/smoothui/ai-loader"
-import { loadLightweightCharts, type LightweightChartApi } from "@/lib/lightweight-charts-runtime"
+import {
+  loadLightweightCharts,
+  type LightweightChartApi,
+  type LightweightPriceLineApi,
+  type LightweightSeriesApi,
+  type LightweightSeriesMarkersApi,
+} from "@/lib/lightweight-charts-runtime"
 import type { WyckoffChartStudy } from "@/lib/wyckoff-chart-model"
 
 function pricePrecision(value: number) {
@@ -19,137 +25,191 @@ function numericLevels(value: string) {
     .filter((item) => Number.isFinite(item) && item > 0)
 }
 
-type ChartSlot = {
-  key: string
+type ScenarioKey = "bull" | "base" | "bear"
+
+type ChartController = {
   chart: LightweightChartApi
-  layer: HTMLDivElement
+  candles: LightweightSeriesApi
+  volume: LightweightSeriesApi
+  markers: LightweightSeriesMarkersApi | null
+  scenarioSeries: Record<ScenarioKey, LightweightSeriesApi>
+  priceLines: LightweightPriceLineApi[]
 }
 
-function removeSlot(slot: ChartSlot | null) {
-  if (!slot) return
-  try {
-    slot.chart.remove()
-  } catch {
-    // Lightweight Charts can already be detached during rapid navigation.
+function scenarioKey(value: string): ScenarioKey | null {
+  if (value === "bull" || value === "base" || value === "bear") return value
+  return null
+}
+
+function clearPriceLines(controller: ChartController) {
+  for (const line of controller.priceLines) {
+    controller.candles.removePriceLine?.(line)
   }
-  slot.layer.remove()
+  controller.priceLines = []
 }
 
-function nextPaint() {
-  return new Promise<void>((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+function applyStudy(controller: ChartController, study: WyckoffChartStudy) {
+  const latest = study.bars.at(-1)
+  if (!latest) return
+
+  const format = pricePrecision(latest.close)
+  const intraday = study.timeframe === "1H" || study.timeframe === "4H"
+
+  controller.chart.applyOptions({
+    timeScale: {
+      timeVisible: intraday,
+      secondsVisible: false,
+      rightOffset: 8,
+      barSpacing: intraday ? 8 : 9,
+      minBarSpacing: 2,
+    },
+  })
+
+  controller.candles.applyOptions({
+    priceFormat: { type: "price", ...format },
+  })
+  controller.candles.setData(study.bars.map((bar) => ({
+    time: bar.time,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+  })))
+
+  controller.volume.setData(study.bars.map((bar) => ({
+    time: bar.time,
+    value: bar.volume,
+    color: bar.close >= bar.open ? "rgba(34,201,138,0.38)" : "rgba(255,71,87,0.38)",
+  })))
+  controller.chart.panes()[1]?.setHeight(108)
+
+  controller.markers?.setMarkers(study.markers.map((marker) => ({
+    time: marker.time,
+    position: marker.tone === "bullish" ? "belowBar" : "aboveBar",
+    color: marker.tone === "bullish" ? "#22c98a" : "#ff477c",
+    shape: marker.tone === "bullish" ? "arrowUp" : "arrowDown",
+    text: marker.label,
+    size: 1.25,
+  })))
+
+  clearPriceLines(controller)
+  if (study.analysis) {
+    numericLevels(study.analysis.support).slice(0, 3).forEach((price, index) => {
+      const line = controller.candles.createPriceLine?.({
+        price,
+        color: index === 0 ? "rgba(34,201,138,0.78)" : "rgba(34,184,207,0.42)",
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: index === 0,
+        title: index === 0 ? "Hỗ trợ" : "",
+      })
+      if (line) controller.priceLines.push(line)
+    })
+    numericLevels(study.analysis.resistance).slice(0, 3).forEach((price, index) => {
+      const line = controller.candles.createPriceLine?.({
+        price,
+        color: index === 0 ? "rgba(255,71,87,0.78)" : "rgba(176,124,255,0.42)",
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: index === 0,
+        title: index === 0 ? "Kháng cự" : "",
+      })
+      if (line) controller.priceLines.push(line)
+    })
+  }
+
+  for (const series of Object.values(controller.scenarioSeries)) {
+    series.setData([])
+  }
+  for (const scenario of study.scenarios) {
+    const key = scenarioKey(scenario.key)
+    if (!key) continue
+    const series = controller.scenarioSeries[key]
+    series.applyOptions({
+      color: scenario.color,
+      lineWidth: key === "base" ? 2 : 3,
+      lineStyle: key === "base" ? 2 : 0,
+      lineType: 2,
+      crosshairMarkerVisible: false,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      title: `${scenario.label} ${scenario.probability}%`,
+      priceFormat: { type: "price", ...format },
+    })
+    series.setData(scenario.path.map((point) => ({ time: point.time, value: point.value })))
+  }
+
+  const visible = study.timeframe === "1M" ? 84 : study.timeframe === "1W" ? 150 : 180
+  const last = study.bars.length - 1
+  controller.chart.timeScale().setVisibleLogicalRange({
+    from: Math.max(-0.5, last - visible + 1),
+    to: last + 8,
   })
 }
 
-export function WyckoffLightweightChart({ ticker, study }: { ticker: string; study: WyckoffChartStudy }) {
+export function WyckoffLightweightChart({
+  ticker,
+  study,
+  loading = false,
+}: {
+  ticker: string
+  study: WyckoffChartStudy
+  loading?: boolean
+}) {
   const hostRef = useRef<HTMLDivElement>(null)
-  const activeSlotRef = useRef<ChartSlot | null>(null)
-  const pendingSlotRef = useRef<ChartSlot | null>(null)
-  const studyRef = useRef(study)
-  const tickerRef = useRef(ticker)
+  const controllerRef = useRef<ChartController | null>(null)
+  const updateFrameRef = useRef(0)
+  const settleFrameRef = useRef(0)
+  const [chartReady, setChartReady] = useState(false)
   const [readyKey, setReadyKey] = useState("")
-  const [runtimeError, setRuntimeError] = useState<{ key: string; message: string } | null>(null)
+  const [runtimeError, setRuntimeError] = useState("")
 
-  const firstBar = study.bars[0]
-  const lastBar = study.bars.at(-1)
-  const analysis = study.analysis
-  const scenarioSignature = study.scenarios
-    .map((scenario) => `${scenario.key}:${scenario.probability}:${scenario.path.at(-1)?.value ?? ""}`)
-    .join(",")
-  const renderKey = [
-    ticker,
-    study.timeframe,
-    study.bars.length,
-    firstBar?.time ?? 0,
-    lastBar?.time ?? 0,
-    lastBar?.open ?? 0,
-    lastBar?.high ?? 0,
-    lastBar?.low ?? 0,
-    lastBar?.close ?? 0,
-    lastBar?.volume ?? 0,
-    analysis?.support ?? "",
-    analysis?.resistance ?? "",
-    analysis?.bullProbability ?? 0,
-    analysis?.baseProbability ?? 0,
-    analysis?.bearProbability ?? 0,
-    study.markers.length,
-    scenarioSignature,
-  ].join("|")
-
-  const activeError = runtimeError?.key === renderKey ? runtimeError.message : ""
-  const isLoading = study.bars.length > 0 && readyKey !== renderKey && !activeError
-  const isInitialLoading = isLoading && readyKey === ""
-
-  useEffect(() => {
-    studyRef.current = study
-    tickerRef.current = ticker
+  const renderKey = useMemo(() => {
+    const firstBar = study.bars[0]
+    const lastBar = study.bars.at(-1)
+    const scenarioSignature = study.scenarios
+      .map((scenario) => `${scenario.key}:${scenario.probability}:${scenario.path.at(-1)?.value ?? ""}`)
+      .join(",")
+    return [
+      ticker,
+      study.timeframe,
+      study.bars.length,
+      firstBar?.time ?? 0,
+      lastBar?.time ?? 0,
+      lastBar?.open ?? 0,
+      lastBar?.high ?? 0,
+      lastBar?.low ?? 0,
+      lastBar?.close ?? 0,
+      lastBar?.volume ?? 0,
+      study.analysis?.support ?? "",
+      study.analysis?.resistance ?? "",
+      study.analysis?.bullProbability ?? 0,
+      study.analysis?.baseProbability ?? 0,
+      study.analysis?.bearProbability ?? 0,
+      study.markers.length,
+      scenarioSignature,
+    ].join("|")
   }, [study, ticker])
 
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
 
-    let resizeFrame = 0
-    const applySize = () => {
-      const width = Math.max(1, Math.floor(host.clientWidth))
-      const height = Math.max(1, Math.floor(host.clientHeight))
-      activeSlotRef.current?.chart.applyOptions({ width, height })
-      pendingSlotRef.current?.chart.applyOptions({ width, height })
-    }
-
-    applySize()
-    const resizeObserver = typeof ResizeObserver === "undefined"
-      ? null
-      : new ResizeObserver(() => {
-          cancelAnimationFrame(resizeFrame)
-          resizeFrame = requestAnimationFrame(applySize)
-        })
-
-    resizeObserver?.observe(host)
-
-    return () => {
-      resizeObserver?.disconnect()
-      cancelAnimationFrame(resizeFrame)
-      removeSlot(pendingSlotRef.current)
-      removeSlot(activeSlotRef.current)
-      pendingSlotRef.current = null
-      activeSlotRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    const host = hostRef.current
-    const nextStudy = studyRef.current
-    const nextTicker = tickerRef.current
-    if (!host || !nextStudy.bars.length) return
-    if (activeSlotRef.current?.key === renderKey) return
-
     let cancelled = false
-    let localSlot: ChartSlot | null = null
+    let resizeFrame = 0
+    let chart: LightweightChartApi | null = null
+    let resizeObserver: ResizeObserver | null = null
 
     void (async () => {
       try {
         const lwc = await loadLightweightCharts()
         if (cancelled || !hostRef.current) return
 
-        const layer = document.createElement("div")
-        layer.dataset.wyckoffChartLayer = renderKey
-        layer.style.position = "absolute"
-        layer.style.inset = "0"
-        layer.style.visibility = "hidden"
-        layer.style.pointerEvents = "none"
-        layer.style.background = "#070b11"
-        host.appendChild(layer)
-
-        const latest = nextStudy.bars.at(-1)!
-        const format = pricePrecision(latest.close)
-        const intraday = nextStudy.timeframe === "1H" || nextStudy.timeframe === "4H"
-        const initialWidth = Math.max(1, Math.floor(host.clientWidth))
-        const initialHeight = Math.max(1, Math.floor(host.clientHeight))
-
-        const chart = lwc.createChart(layer, {
-          width: initialWidth,
-          height: initialHeight,
+        const width = Math.max(1, Math.floor(host.clientWidth))
+        const height = Math.max(1, Math.floor(host.clientHeight))
+        chart = lwc.createChart(host, {
+          width,
+          height,
           layout: {
             attributionLogo: true,
             background: { type: lwc.ColorType.Solid, color: "#070b11" },
@@ -171,10 +231,8 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
           },
           timeScale: {
             borderColor: "rgba(255,255,255,0.08)",
-            timeVisible: intraday,
             secondsVisible: false,
             rightOffset: 8,
-            barSpacing: intraday ? 8 : 9,
             minBarSpacing: 2,
           },
           localization: { locale: "vi-VN" },
@@ -186,130 +244,94 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
           handleScale: true,
         })
 
-        localSlot = { key: renderKey, chart, layer }
-        pendingSlotRef.current = localSlot
-
         const candles = chart.addSeries(lwc.CandlestickSeries, {
           upColor: "#22c98a",
           downColor: "#ff4757",
           wickUpColor: "#22c98a",
           wickDownColor: "#ff4757",
           borderVisible: false,
-          priceFormat: { type: "price", ...format },
           priceLineVisible: true,
           lastValueVisible: true,
         }, 0)
-        candles.setData(nextStudy.bars.map((bar) => ({
-          time: bar.time,
-          open: bar.open,
-          high: bar.high,
-          low: bar.low,
-          close: bar.close,
-        })))
-
         const volume = chart.addSeries(lwc.HistogramSeries, {
           priceFormat: { type: "volume" },
           priceLineVisible: false,
           lastValueVisible: false,
         }, 1)
-        volume.setData(nextStudy.bars.map((bar) => ({
-          time: bar.time,
-          value: bar.volume,
-          color: bar.close >= bar.open ? "rgba(34,201,138,0.38)" : "rgba(255,71,87,0.38)",
-        })))
-        chart.panes()[1]?.setHeight(108)
-
-        if (lwc.createSeriesMarkers && nextStudy.markers.length) {
-          lwc.createSeriesMarkers(candles, nextStudy.markers.map((marker) => ({
-            time: marker.time,
-            position: marker.tone === "bullish" ? "belowBar" : "aboveBar",
-            color: marker.tone === "bullish" ? "#22c98a" : "#ff477c",
-            shape: marker.tone === "bullish" ? "arrowUp" : "arrowDown",
-            text: marker.label,
-            size: 1.25,
-          })))
+        const markers = lwc.createSeriesMarkers?.(candles, []) ?? null
+        const scenarioSeries = {
+          bull: chart.addSeries(lwc.LineSeries, { priceLineVisible: false, crosshairMarkerVisible: false }, 0),
+          base: chart.addSeries(lwc.LineSeries, { priceLineVisible: false, crosshairMarkerVisible: false }, 0),
+          bear: chart.addSeries(lwc.LineSeries, { priceLineVisible: false, crosshairMarkerVisible: false }, 0),
         }
 
-        if (candles.createPriceLine && nextStudy.analysis) {
-          numericLevels(nextStudy.analysis.support).slice(0, 3).forEach((price, index) => candles.createPriceLine?.({
-            price,
-            color: index === 0 ? "rgba(34,201,138,0.78)" : "rgba(34,184,207,0.42)",
-            lineWidth: 1,
-            lineStyle: 2,
-            axisLabelVisible: index === 0,
-            title: index === 0 ? "Hỗ trợ" : "",
-          }))
-          numericLevels(nextStudy.analysis.resistance).slice(0, 3).forEach((price, index) => candles.createPriceLine?.({
-            price,
-            color: index === 0 ? "rgba(255,71,87,0.78)" : "rgba(176,124,255,0.42)",
-            lineWidth: 1,
-            lineStyle: 2,
-            axisLabelVisible: index === 0,
-            title: index === 0 ? "Kháng cự" : "",
-          }))
+        controllerRef.current = {
+          chart,
+          candles,
+          volume,
+          markers,
+          scenarioSeries,
+          priceLines: [],
         }
 
-        if (lwc.LineSeries) {
-          nextStudy.scenarios.forEach((scenario) => {
-            const series = chart.addSeries(lwc.LineSeries, {
-              color: scenario.color,
-              lineWidth: scenario.key === "base" ? 2 : 3,
-              lineStyle: scenario.key === "base" ? 2 : 0,
-              lineType: 2,
-              crosshairMarkerVisible: false,
-              priceLineVisible: false,
-              lastValueVisible: true,
-              title: `${scenario.label} ${scenario.probability}%`,
-              priceFormat: { type: "price", ...format },
-            }, 0)
-            series.setData(scenario.path.map((point) => ({ time: point.time, value: point.value })))
-          })
-        }
-
-        const visible = nextStudy.timeframe === "1M" ? 84 : nextStudy.timeframe === "1W" ? 150 : 180
-        const last = nextStudy.bars.length - 1
-        chart.timeScale().setVisibleLogicalRange({
-          from: Math.max(-0.5, last - visible + 1),
-          to: last + 8,
-        })
-
-        await nextPaint()
-        if (cancelled || pendingSlotRef.current !== localSlot) {
-          removeSlot(localSlot)
-          return
-        }
-
-        const previousSlot = activeSlotRef.current
-        layer.style.visibility = "visible"
-        layer.style.pointerEvents = "auto"
-        activeSlotRef.current = localSlot
-        pendingSlotRef.current = null
-        removeSlot(previousSlot)
-
-        setRuntimeError((current) => current?.key === renderKey ? null : current)
-        setReadyKey(renderKey)
+        resizeObserver = typeof ResizeObserver === "undefined"
+          ? null
+          : new ResizeObserver(() => {
+              cancelAnimationFrame(resizeFrame)
+              resizeFrame = requestAnimationFrame(() => {
+                const currentHost = hostRef.current
+                const currentChart = controllerRef.current?.chart
+                if (!currentHost || !currentChart) return
+                currentChart.applyOptions({
+                  width: Math.max(1, Math.floor(currentHost.clientWidth)),
+                  height: Math.max(1, Math.floor(currentHost.clientHeight)),
+                })
+              })
+            })
+        resizeObserver?.observe(host)
+        setChartReady(true)
       } catch (error) {
-        if (localSlot && pendingSlotRef.current === localSlot) {
-          pendingSlotRef.current = null
-          removeSlot(localSlot)
-        }
         if (!cancelled) {
-          setRuntimeError({
-            key: renderKey,
-            message: error instanceof Error ? error.message : `Không thể khởi tạo biểu đồ ${nextTicker}`,
-          })
+          setRuntimeError(error instanceof Error ? error.message : `Không thể khởi tạo biểu đồ ${ticker}`)
         }
       }
     })()
 
     return () => {
       cancelled = true
-      if (localSlot && pendingSlotRef.current === localSlot) {
-        pendingSlotRef.current = null
-        removeSlot(localSlot)
-      }
+      resizeObserver?.disconnect()
+      cancelAnimationFrame(resizeFrame)
+      cancelAnimationFrame(updateFrameRef.current)
+      cancelAnimationFrame(settleFrameRef.current)
+      controllerRef.current = null
+      chart?.remove()
     }
-  }, [renderKey])
+  }, [ticker])
+
+  useEffect(() => {
+    if (!chartReady || !study.bars.length) return
+    const controller = controllerRef.current
+    if (!controller) return
+
+    cancelAnimationFrame(updateFrameRef.current)
+    cancelAnimationFrame(settleFrameRef.current)
+    updateFrameRef.current = requestAnimationFrame(() => {
+      try {
+        applyStudy(controller, study)
+        setRuntimeError("")
+        settleFrameRef.current = requestAnimationFrame(() => setReadyKey(renderKey))
+      } catch (error) {
+        setRuntimeError(error instanceof Error ? error.message : `Không thể cập nhật biểu đồ ${ticker}`)
+      }
+    })
+
+    return () => {
+      cancelAnimationFrame(updateFrameRef.current)
+      cancelAnimationFrame(settleFrameRef.current)
+    }
+  }, [chartReady, renderKey, study, ticker])
+
+  const isUpdating = loading || !chartReady || readyKey !== renderKey
 
   return (
     <div data-wyckoff-chart-canvas className="relative h-[520px] w-full overflow-hidden bg-[#070b11] [contain:layout_paint] xl:h-[660px]">
@@ -321,21 +343,20 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
         </div>
       ) : null}
 
-      {isInitialLoading ? (
-        <div className="pointer-events-none absolute inset-0 z-[5] grid place-items-center bg-[#070b11]">
-          <AiLoader label={`Đang dựng biểu đồ ${ticker} · ${study.timeframe}`} />
+      {isUpdating && study.bars.length ? (
+        <div className="pointer-events-none absolute inset-0 z-[7] grid place-items-center">
+          <AiLoader
+            label={`Đang cập nhật biểu đồ ${ticker}`}
+            showLabel={false}
+            compositorSafe
+            className="border-cyan-400/15 bg-[#081019]/88 px-3 py-2"
+          />
         </div>
       ) : null}
 
-      {isLoading && !isInitialLoading ? (
-        <div className="pointer-events-none absolute right-3 top-3 z-[7] rounded-lg border border-white/[0.09] bg-[#090e15] px-2.5 py-1.5 shadow-sm">
-          <AiLoader label={`Đang cập nhật ${ticker} · ${study.timeframe}`} compact />
-        </div>
-      ) : null}
-
-      {activeError ? (
+      {runtimeError ? (
         <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-lg border border-rose-500/25 bg-[#120b10] px-3 py-2 text-center text-xs leading-relaxed text-rose-300 shadow-sm">
-          {activeError}
+          {runtimeError}
         </div>
       ) : null}
     </div>
