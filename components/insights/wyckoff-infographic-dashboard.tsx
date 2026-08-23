@@ -16,15 +16,22 @@ import {
 import {
   AlertTriangle,
   BarChart3,
+  Building2,
   CheckCircle2,
+  ChevronRight,
+  ChevronsUpDown,
   CircleDashed,
   CircleDot,
+  Compass,
+  Landmark,
   Layers3,
+  LineChart,
   Radar,
   RefreshCw,
   Repeat2,
   Search,
   ShieldCheck,
+  ShoppingBag,
   Target,
   TrendingDown,
   TrendingUp,
@@ -88,7 +95,7 @@ const WATCHLIST_TABS: Array<{ id: WatchlistFilterTab; label: string }> = [
 
 const TICKER_SWITCH_DEBOUNCE_MS = 60
 const TICKER_CACHE_LIMIT = 8
-const WATCHLIST_GRID_CLASS = "grid-cols-[76px_repeat(3,minmax(0,1fr))]"
+const WATCHLIST_GRID_CLASS = "grid-cols-[68px_repeat(3,minmax(0,1fr))]"
 const WATCHLIST_COLUMN_BG: Record<WatchlistColumn, string> = {
   ticker: "bg-slate-400/[0.025]",
   "1H": "bg-cyan-400/[0.018]",
@@ -100,6 +107,14 @@ const WATCHLIST_HEADER_BG: Record<WatchlistColumn, string> = {
   "1H": "bg-cyan-400/[0.045] text-cyan-200",
   "1D": "bg-sky-400/[0.065] text-sky-200",
   "1W": "bg-violet-400/[0.05] text-violet-200",
+}
+const WATCHLIST_SECTOR_ICON: Record<string, ComponentType<{ className?: string }>> = {
+  bank: Landmark,
+  securities: LineChart,
+  consumer: ShoppingBag,
+  "real-estate": Building2,
+  "industrial-tech": Layers3,
+  other: Compass,
 }
 
 const TYPE = {
@@ -425,13 +440,13 @@ function PhaseChip({ phase, selected = false }: { phase: string; selected?: bool
     <span
       aria-label={meta.label}
       className={cn(
-        "group/phase mx-auto grid min-h-8 w-[104px] grid-cols-[16px_minmax(0,1fr)] items-center gap-1.5 rounded-lg border px-2 py-1 text-left text-xs font-extrabold leading-none tracking-[0.04em]",
+        "group/phase mx-auto grid min-h-7 w-[92px] grid-cols-[14px_minmax(0,1fr)] items-center gap-1 rounded-md border px-1.5 py-0.5 text-left text-[10.5px] font-extrabold leading-none tracking-[0.03em]",
         "transition-[transform,background-color,border-color,color,box-shadow] duration-200 ease-out hover:-translate-y-px",
         meta.chip,
         selected && "shadow-[0_0_0_1px_rgba(34,211,238,0.18),0_8px_24px_-16px_rgba(34,211,238,0.9)]",
       )}
     >
-      <Icon className={cn("size-3.5 shrink-0 transition-transform duration-200 ease-out group-hover/phase:rotate-3", meta.iconClass)} />
+      <Icon className={cn("size-3 shrink-0 transition-transform duration-200 ease-out group-hover/phase:rotate-3", meta.iconClass)} />
       <span className="min-w-0 truncate">{meta.watchLabel}</span>
     </span>
   )
@@ -576,7 +591,7 @@ function MultiTimeframeStructure({ studies }: { studies: WyckoffChartStudy[] }) 
 
 function WatchlistPhaseCell({ phase, timeframe, selected = false }: { phase: string; timeframe: "1H" | "1D" | "1W"; selected?: boolean }) {
   return (
-    <div className={cn("flex min-w-0 items-center justify-center border-l border-white/[0.065] px-2 py-1.5 transition-colors duration-200", WATCHLIST_COLUMN_BG[timeframe])}>
+    <div className={cn("flex min-w-0 items-center justify-center border-l border-white/[0.065] px-1 py-1 transition-colors duration-200", WATCHLIST_COLUMN_BG[timeframe])}>
       <PhaseChip phase={phase} selected={selected} />
     </div>
   )
@@ -603,7 +618,7 @@ function WatchlistRow({
       href={href}
       onClick={(event) => onSelectTicker(event, stock.ticker)}
       className={cn(
-        "group/row grid min-h-[68px] items-stretch border-b border-white/[0.04] px-0 [contain-intrinsic-size:68px] [content-visibility:auto]",
+        "group/row grid min-h-[56px] items-stretch border-b border-white/[0.04] px-0 [contain-intrinsic-size:56px] [content-visibility:auto]",
         "transition-[background-color,border-color,transform,box-shadow] duration-200 ease-out hover:translate-x-0.5 active:scale-[0.995]",
         WATCHLIST_GRID_CLASS,
         isActive
@@ -615,7 +630,7 @@ function WatchlistRow({
       aria-current={isActive ? "page" : undefined}
       aria-busy={isPending || undefined}
     >
-      <div className={cn("flex items-center px-3 text-[15px] font-extrabold tracking-tight transition-[background-color,color] duration-200", WATCHLIST_COLUMN_BG.ticker, isActive || isPending ? "text-cyan-200" : "text-white")}>{stock.ticker}</div>
+      <div className={cn("flex items-center px-2.5 text-[14px] font-extrabold tracking-tight transition-[background-color,color] duration-200", WATCHLIST_COLUMN_BG.ticker, isActive || isPending ? "text-cyan-200" : "text-white")}>{stock.ticker}</div>
       <WatchlistPhaseCell timeframe="1H" phase={phaseFor(stock, "1H")} selected={isActive} />
       <WatchlistPhaseCell timeframe="1D" phase={phaseFor(stock, "1D")} selected={isActive} />
       <WatchlistPhaseCell timeframe="1W" phase={phaseFor(stock, "1W")} selected={isActive} />
@@ -634,20 +649,20 @@ function WatchlistExplainPanel({ stock }: { stock: WatchlistStock | undefined })
     return { timeframe, meta, Icon }
   })
   return (
-    <div key={stock.ticker} className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.018] p-3 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+    <div key={stock.ticker} className="mt-2.5 rounded-xl border border-white/[0.07] bg-white/[0.018] p-2.5 animate-in fade-in-0 slide-in-from-top-1 duration-200">
       <div className="flex items-center justify-between gap-2">
-        <div className={cn(TYPE.meta, "text-slate-300")}><strong className="text-white">{stock.ticker}</strong> · đọc nhanh Phase</div>
-        <span className="text-xs font-semibold text-slate-600">So sánh 1H → 1D → 1W</span>
+        <div className="text-[11.5px] font-semibold leading-4 text-slate-300"><strong className="text-white">{stock.ticker}</strong> · đọc nhanh Phase</div>
+        <span className="text-[11.5px] font-semibold leading-4 text-slate-600">So sánh 1H → 1D → 1W</span>
       </div>
       <div className="mt-2 grid grid-cols-3 divide-x divide-white/[0.06] overflow-hidden rounded-lg border border-white/[0.055] bg-[#060a10]">
         {cells.map(({ timeframe, meta, Icon }) => (
-          <div key={timeframe} className={cn("min-w-0 px-2 py-2.5", WATCHLIST_COLUMN_BG[timeframe])}>
+          <div key={timeframe} className={cn("min-w-0 px-2 py-2", WATCHLIST_COLUMN_BG[timeframe])}>
             <div className="flex items-center gap-1.5">
-              <Icon className={cn("size-3.5 shrink-0", meta.iconClass)} />
-              <span className="text-xs font-extrabold text-white">{timeframe}</span>
+              <Icon className={cn("size-3 shrink-0", meta.iconClass)} />
+              <span className="text-[11.5px] font-extrabold text-white">{timeframe}</span>
             </div>
-            <div className={cn(TYPE.meta, "mt-1.5 break-words text-slate-300")}>{meta.label}</div>
-            <p className="mt-1 text-xs font-medium leading-4 text-slate-600">{meta.shortVi}</p>
+            <div className="mt-1.5 break-words text-[11.5px] font-semibold leading-4 text-slate-300">{meta.label}</div>
+            <p className="mt-1 text-[11.5px] font-medium leading-4 text-slate-600">{meta.shortVi}</p>
           </div>
         ))}
       </div>
@@ -679,6 +694,7 @@ export function WyckoffInfographicDashboard(props: {
   const [pendingTicker, setPendingTicker] = useState("")
   const [switchError, setSwitchError] = useState("")
   const [suppressValueMotion, setSuppressValueMotion] = useState(false)
+  const [collapsedSectorGroups, setCollapsedSectorGroups] = useState<Set<string>>(() => new Set())
   const switchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const switchAbortRef = useRef<AbortController | null>(null)
   const switchSequenceRef = useRef(0)
@@ -730,6 +746,29 @@ export function WyckoffInfographicDashboard(props: {
       items: filteredStocks.filter((stock) => boardSectorGroupForSector(stock.sector).key === group.key),
     }))
     .filter((group) => group.items.length > 0), [filteredStocks])
+
+  const allVisibleGroupsCollapsed = groupedStocks.length > 0 && groupedStocks.every((group) => collapsedSectorGroups.has(group.key))
+
+  const toggleSectorGroup = useCallback((key: string) => {
+    setCollapsedSectorGroups((previous) => {
+      const next = new Set(previous)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  const toggleVisibleGroups = useCallback(() => {
+    setCollapsedSectorGroups((previous) => {
+      const next = new Set(previous)
+      const shouldExpand = groupedStocks.length > 0 && groupedStocks.every((group) => next.has(group.key))
+      for (const group of groupedStocks) {
+        if (shouldExpand) next.delete(group.key)
+        else next.add(group.key)
+      }
+      return next
+    })
+  }, [groupedStocks])
 
   const releaseValueMotion = useCallback(() => {
     cancelAnimationFrame(motionReleaseFrameRef.current)
@@ -815,7 +854,7 @@ export function WyckoffInfographicDashboard(props: {
     <div className="min-h-screen bg-[#05080d] font-ticker text-slate-100">
       <TopNav />
       <main className="mx-auto max-w-[2000px] px-3 py-4 sm:px-4 lg:px-5 xl:px-6">
-        <div className="grid gap-4 xl:grid-cols-[540px_minmax(0,1fr)] 2xl:grid-cols-[580px_minmax(0,1fr)]">
+        <div className="grid gap-4 xl:grid-cols-[500px_minmax(0,1fr)] 2xl:grid-cols-[520px_minmax(0,1fr)]">
           <div className={cn("min-w-0 space-y-4 xl:order-2 transition-opacity duration-200 ease-out", pendingTicker && "opacity-80")}>
             <Card className="gap-0 rounded-2xl border border-white/[0.08] bg-[#0a1017] py-0 ring-0">
               <CardContent className="p-4 sm:p-5">
@@ -882,45 +921,58 @@ export function WyckoffInfographicDashboard(props: {
           </div>
 
           <Card className="hidden h-[680px] gap-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#090e15] py-0 ring-0 xl:order-1 xl:sticky xl:top-3.5 xl:flex xl:h-[calc(100vh-76px)] xl:min-h-[660px]">
-            <div className="border-b border-white/[0.07] bg-[#080d14] p-4">
+            <div className="border-b border-white/[0.07] bg-[#080d14] p-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="grid size-9 place-items-center rounded-xl border border-cyan-400/15 bg-cyan-400/[0.06] text-cyan-300"><Radar className="size-4" /></div>
-                  <div><CardTitle className={cn(TYPE.section, "text-white")}>Wyckoff Watchlist</CardTitle><div className={cn(TYPE.meta, "text-slate-500")}>1H · 1D · 1W Phase overview</div></div>
+                  <div className="grid size-8 place-items-center rounded-xl border border-cyan-400/15 bg-cyan-400/[0.06] text-cyan-300"><Radar className="size-4" /></div>
+                  <div><CardTitle className={cn(TYPE.section, "text-white")}>Wyckoff Watchlist</CardTitle><div className="text-[11.5px] font-semibold leading-4 text-slate-500">1H · 1D · 1W Phase overview</div></div>
                 </div>
-                <Badge variant="outline" className="h-7 border-cyan-400/18 bg-cyan-400/[0.05] px-2.5 text-xs font-bold tabular-nums text-cyan-300">{filteredStocks.length}</Badge>
+                <div className="flex items-center gap-1.5">
+                  <Button type="button" variant="ghost" size="sm" disabled={!groupedStocks.length} onClick={toggleVisibleGroups} className="h-7 rounded-lg px-2 text-[11.5px] font-bold text-slate-500 hover:bg-white/[0.035] hover:text-slate-300"><ChevronsUpDown className="size-3.5" />{allVisibleGroupsCollapsed ? "Mở tất cả" : "Thu gọn"}</Button>
+                  <Badge variant="outline" className="h-7 border-cyan-400/18 bg-cyan-400/[0.05] px-2.5 text-xs font-bold tabular-nums text-cyan-300">{filteredStocks.length}</Badge>
+                </div>
               </div>
 
               {switchError ? <div className={cn(TYPE.meta, "mt-3 rounded-lg border border-rose-400/18 bg-rose-400/[0.05] px-3 py-2 text-rose-300")} role="alert">{switchError}</div> : null}
 
-              <div className="relative mt-4">
+              <div className="relative mt-3">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-600" />
-                <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã hoặc Phase..." className="h-10 rounded-xl border-white/[0.08] bg-[#05080e] pl-9 pr-9 text-sm font-semibold text-white placeholder:text-slate-600 focus-visible:border-cyan-400/40" />
+                <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã hoặc Phase..." className="h-9 rounded-xl border-white/[0.08] bg-[#05080e] pl-9 pr-9 text-[13px] font-semibold text-white placeholder:text-slate-600 focus-visible:border-cyan-400/40" />
                 {query ? <Button type="button" variant="ghost" size="icon-sm" onClick={() => setQuery("")} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 transition-colors duration-200 hover:text-white" aria-label="Xóa tìm kiếm"><X className="size-3.5" /></Button> : null}
               </div>
 
-              <div className="mt-3 grid grid-cols-3 gap-1" role="tablist" aria-label="Lọc watchlist Wyckoff theo Phase 1D">
-                {WATCHLIST_TABS.map((tab) => <Button key={tab.id} type="button" variant="ghost" size="sm" role="tab" aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id)} className={cn("h-9 rounded-lg px-1 text-xs font-bold transition-[background-color,color,transform,box-shadow] duration-200 ease-out active:scale-[0.98]", activeTab === tab.id ? "bg-cyan-400/[0.1] text-cyan-300 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.10)]" : "text-slate-500 hover:bg-white/[0.035] hover:text-slate-300")}>{tab.label}</Button>)}
+              <div className="mt-2.5 grid grid-cols-3 gap-1" role="tablist" aria-label="Lọc watchlist Wyckoff theo Phase 1D">
+                {WATCHLIST_TABS.map((tab) => <Button key={tab.id} type="button" variant="ghost" size="sm" role="tab" aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id)} className={cn("h-8 rounded-lg px-1 text-[11.5px] font-bold transition-[background-color,color,transform,box-shadow] duration-200 ease-out active:scale-[0.98]", activeTab === tab.id ? "bg-cyan-400/[0.1] text-cyan-300 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.10)]" : "text-slate-500 hover:bg-white/[0.035] hover:text-slate-300")}>{tab.label}</Button>)}
               </div>
-              <p className={cn(TYPE.meta, "mt-2 text-slate-600")}>Filter dùng Phase 1D; 1H và 1W giúp nhìn alignment / conflict giữa các timeframe.</p>
+              <p className="mt-1.5 text-[11.5px] font-semibold leading-4 text-slate-600">Filter dùng Phase 1D; 1H và 1W giúp nhìn alignment / conflict giữa các timeframe.</p>
 
               <WatchlistExplainPanel stock={selectedStock} />
             </div>
 
-            <div className={cn("grid items-center border-b border-white/[0.05] px-0 py-0 text-xs font-bold uppercase tracking-[0.06em] text-slate-500", WATCHLIST_GRID_CLASS)}>
-              <div className={cn("px-3 py-3", WATCHLIST_HEADER_BG.ticker)}>Mã</div>
-              <div className={cn("border-l border-white/[0.065] px-2 py-3 text-center", WATCHLIST_HEADER_BG["1H"])}>1H</div>
-              <div className={cn("border-l border-white/[0.065] px-2 py-3 text-center", WATCHLIST_HEADER_BG["1D"])}>1D</div>
-              <div className={cn("border-l border-white/[0.065] px-2 py-3 text-center", WATCHLIST_HEADER_BG["1W"])}>1W</div>
+            <div className={cn("grid items-center border-b border-white/[0.05] px-0 py-0 text-[11.5px] font-bold uppercase tracking-[0.05em] text-slate-500", WATCHLIST_GRID_CLASS)}>
+              <div className={cn("px-2.5 py-2.5", WATCHLIST_HEADER_BG.ticker)}>Mã</div>
+              <div className={cn("border-l border-white/[0.065] px-1.5 py-2.5 text-center", WATCHLIST_HEADER_BG["1H"])}>1H</div>
+              <div className={cn("border-l border-white/[0.065] px-1.5 py-2.5 text-center", WATCHLIST_HEADER_BG["1D"])}>1D</div>
+              <div className={cn("border-l border-white/[0.065] px-1.5 py-2.5 text-center", WATCHLIST_HEADER_BG["1W"])}>1W</div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              {groupedStocks.map((group) => (
-                <section key={group.key} aria-label={group.label}>
-                  <div className={cn(TYPE.meta, "flex items-center justify-between border-b border-white/[0.04] bg-[#0a1119] px-3 py-2 uppercase tracking-[0.06em] text-slate-500")}><span>{group.label}</span><span className="tabular-nums text-slate-600">{group.items.length}</span></div>
-                  {group.items.map((stock) => <MemoWatchlistRow key={stock.ticker} stock={stock} activeTicker={activeTicker} pendingTicker={pendingTicker} activeTimeframe={activeTimeframe} onSelectTicker={selectTicker} />)}
-                </section>
-              ))}
+              {groupedStocks.map((group) => {
+                const SectorIcon = WATCHLIST_SECTOR_ICON[group.key] ?? Layers3
+                const collapsed = collapsedSectorGroups.has(group.key)
+                return (
+                  <section key={group.key} aria-label={group.label}>
+                    <button type="button" aria-expanded={!collapsed} onClick={() => toggleSectorGroup(group.key)} className="flex w-full items-center justify-between border-b border-white/[0.04] bg-[#0a1119] px-2.5 py-1.5 text-left transition-colors duration-200 hover:bg-white/[0.035]">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="grid size-6 shrink-0 place-items-center rounded-md border border-white/[0.07] bg-white/[0.025] text-cyan-300"><SectorIcon className="size-3.5" /></span>
+                        <span className="truncate text-[11.5px] font-extrabold tracking-[0.03em] text-slate-400">{group.label}</span>
+                      </span>
+                      <span className="flex items-center gap-1.5 text-slate-600"><span className="text-[11.5px] font-semibold tabular-nums">{group.items.length}</span><ChevronRight className={cn("size-3.5 transition-transform duration-200", !collapsed && "rotate-90")} /></span>
+                    </button>
+                    {collapsed ? null : group.items.map((stock) => <MemoWatchlistRow key={stock.ticker} stock={stock} activeTicker={activeTicker} pendingTicker={pendingTicker} activeTimeframe={activeTimeframe} onSelectTicker={selectTicker} />)}
+                  </section>
+                )
+              })}
               {!filteredStocks.length ? <div className={cn(TYPE.body, "p-8 text-center text-slate-500")}>Không tìm thấy mã phù hợp</div> : null}
             </div>
           </Card>
