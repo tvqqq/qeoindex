@@ -61,7 +61,7 @@ test("top navigation exposes direct Insights, Wyckoff chart and one research hub
   const nav = source("components/top-nav.tsx")
 
   assert.match(nav, /label: "Insights", href: "\/insights"/)
-  assert.match(nav, /label: "Chart Wyckoff"/)
+  assert.match(nav, /label: "Phân tích chart Wyckoff"/)
   assert.match(nav, /href: "\/insights\/wyckoff"/)
   assert.match(nav, /label: "Nghiên cứu",\s*href: "\/research"/)
   assert.equal(nav.includes("ChevronDown"), false, "Insights must be a direct link, not a dropdown")
