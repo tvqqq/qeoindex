@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import type { WyckoffListItem } from "@/components/insights/wyckoff-chart-dashboard"
+import { getWyckoffCompanyMetadata } from "@/lib/wyckoff-company-metadata"
 import type { OhlcvBar } from "@/lib/technical-indicators"
 import { buildWyckoffChartStudies, type WyckoffChartTimeframe } from "@/lib/wyckoff-chart-model"
 import type { WyckoffScanResult } from "@/lib/wyckoff-engine"
@@ -66,10 +67,18 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
 
   const ticker = memberships.some((row) => row.ticker === requestedTicker) ? requestedTicker : memberships[0].ticker
   const tickers = memberships.map((row) => row.ticker)
-  const [{ data: dailyRows, error: dailyError }, { data: selectedRows, error: selectedError }, { data: seriesRows, error: seriesError }] = await Promise.all([
+  const metadataPromise = getWyckoffCompanyMetadata(supabase, tickers)
+
+  const [
+    { data: dailyRows, error: dailyError },
+    { data: selectedRows, error: selectedError },
+    { data: seriesRows, error: seriesError },
+    companyMetadata,
+  ] = await Promise.all([
     supabase.from("wyckoff_latest_by_timeframe").select("*").eq("timeframe", "1D").in("ticker", tickers),
     supabase.from("wyckoff_latest_by_timeframe").select("*").eq("ticker", ticker),
     supabase.from("wyckoff_chart_series").select("*").eq("ticker", ticker).in("timeframe", ["1H", "1D"]),
+    metadataPromise,
   ])
   if (dailyError || selectedError || seriesError || !selectedRows?.length || !seriesRows?.length) return null
 
@@ -77,6 +86,7 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
   const dailySeries = seriesRows.find((row) => row.timeframe === "1D")
   const hourlySeries = seriesRows.find((row) => row.timeframe === "1H")
   if (!dailySeries || !hourlySeries) return null
+
   const studies = buildWyckoffChartStudies({
     dailyBars: dailySeries.bars as OhlcvBar[],
     hourlyBars: hourlySeries.bars as OhlcvBar[],
@@ -86,13 +96,17 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
     hourlyDetail: hourlySeries.provider_detail,
     analysisOverrides: analyses,
   })
+
   const dailyByTicker = new Map((dailyRows as SnapshotRow[]).map((row) => [row.ticker, row]))
   const stocks: WyckoffListItem[] = memberships.map((membership) => {
     const row = dailyByTicker.get(membership.ticker)
+    const metadata = companyMetadata.get(membership.ticker)
     return {
       ticker: membership.ticker,
+      companyName: metadata?.companyName ?? membership.ticker,
+      exchange: metadata?.exchange ?? "HOSE",
       rank: membership.rank,
-      sector: membership.sector,
+      sector: membership.sector || metadata?.sector || "",
       price: row?.technical.price ?? null,
       changePct: row?.technical.changePct ?? null,
       phase: row?.phase ?? "",
@@ -102,5 +116,6 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
       date: row?.bar_closed_at?.slice(0, 10) ?? "",
     }
   })
+
   return { ticker, studies, stocks, generatedAt: selectedRows[0].published_at as string }
 }
