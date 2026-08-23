@@ -252,7 +252,6 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
     ticker,
     companyName: selectedMetadata?.companyName ?? ticker,
     exchange: selectedMetadata?.exchange ?? "HOSE",
-    sector: selectedMetadata?.sector,
     studies,
     stocks,
     generatedAt: selectedRows[0].published_at as string,
@@ -302,7 +301,6 @@ export async function getUnifiedWyckoffTickerData(supabase: SupabaseClient, requ
     ticker,
     companyName: selectedMetadata?.companyName ?? ticker,
     exchange: selectedMetadata?.exchange ?? "HOSE",
-    sector: selectedMetadata?.sector,
     studies,
     generatedAt: selectedRows[0].published_at as string,
   }
