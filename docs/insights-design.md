@@ -13,9 +13,9 @@ Insights uses the information density of a Vietnamese market board without sacri
 
 | Column | Width | Semantic treatment |
 | --- | ---: | --- |
-| Cổ phiếu / Ngành | 20% | Identity, rank/count, company/sector metadata, chevron + sector icon in expandable view |
-| Giá / Vốn hóa | 8% | Giá và thay đổi ngày ở dòng cổ phiếu; tổng vốn hóa ở dòng ngành (không hiển thị giá trung bình ngành) |
-| CANSLIM | 8% | Emerald/green score pill with glow & progress/target icon |
+| Cổ phiếu / Ngành | 20% | Identity, rank/count, logo, ticker, sector with sector icon (company name removed in table row), chevron + sector icon in expandable view |
+| Giá / Biến động | 8% | Giá và thay đổi ngày ở dòng cổ phiếu theo style bảng điện; `MarketChangePill` compact; không hiển thị giá trung bình ngành ở dòng cha |
+| CANSLIM | 8% | Emerald/green score pill with glow & target icon |
 | 4M | 7% | Amber/yellow score pill with glow & bolt icon |
 | Tiềm năng giá | 9% | Direction text/icon |
 | RSs | 6% | Cyan/neon score pill with zap icon and accessible tooltip |
@@ -30,7 +30,7 @@ The first column receives the most space because identity and context are more i
 ## Responsive behavior
 
 - Desktop (1440px / 1563px and 1920px) is the primary target; all 11 columns fit without horizontal scroll.
-- Typography scale: headers use `text-xs font-extrabold uppercase`, stock ticker uses `text-sm sm:text-base font-extrabold`, price uses `text-sm font-black`, and metadata/company name use `text-xs text-muted-2`.
+- Typography scale: headers use `text-xs font-extrabold uppercase`, stock ticker uses `font-ticker text-[16px] font-extrabold`, price uses `font-mono text-[14px] font-bold`, and sector tag uses `text-[11px] font-bold uppercase`.
 - Numeric values use monospace/tabular figures for stable column alignment.
 - A sector group view normally has about 31 rows; Top 100 has 100 rows. Child stock rows expand smoothly under their parent sector.
 
@@ -56,11 +56,17 @@ The first column receives the most space because identity and context are more i
 ### Detail dialog
 
 - Maximum visual width is approximately 1,440px on large screens and remains within the viewport height without overflowing the screen.
-- Compact header: symbol logo, company name, ticker, exchange, sector, Top 100 badge, and rating score badge.
-- Top-level navigation tabs directly under the compact header:
-  1. **Tổng quan & Động lượng**: Compact multi-column layout fitting standard desktop viewports (~800–900px) without excessive vertical scroll. Contains 4 quick stat boxes, QeoIndex heuristic state banner, 4 score progress cards (CANSLIM, 4M, RSs, RSm), and the five-axis QeoIndex state radar (BULL, ACC, RISK, HEAT, SUST) with 1D/7D/30D snapshot overlay and 5 dimension delta cards.
-  2. **9 Nhóm chỉ số KFSP**: Full catalog of nine metric groups with clean category selector, metric labels, descriptions, and values.
-  3. **Lịch sử Rating**: Dedicated real snapshot history line chart and historical snapshot timeline table.
+- **Header styled like Orderbook popup**: `StockLogo` (size 36) → Mã cổ phiếu (`font-ticker text-2xl font-extrabold italic bg-gradient-to-br`) → Tên công ty (`text-sm font-medium text-slate-300`) → Exchange tag (`HOSE` in rounded glass pill) → Top 100 badge. Right-side score badge is removed for clean minimalism.
+- **3 Top priority summary cards**:
+  1. **Sức mạnh dòng tiền (RS)**: RSs & RSm, RRG state, 7D/30D deltas (cyan neon glow).
+  2. **Mô hình CANSLIM & 4M**: CANSLIM & 4M scores, P/E, P/B, Vốn hóa (emerald/amber glow).
+  3. **Rating tổng hợp & Trạng thái**: Composite rating /100, Heuristic market state, Tiềm năng, RSI, Beta (violet glow).
+- **Liquid glass navigation tabs**: Menu navbar style with backdrop blur, active gradient glow, and smooth animations.
+- **3 Top-level navigation tabs**:
+  1. **Tổng quan & Động lượng**: Git-commit history style **Accumulation & Market State Heatmap** (5 dimensions × snapshot dates with color intensity blocks and trend curve), 4 score progress cards (CANSLIM, 4M, RSs, RSm), 5-axis state radar (BULL, ACC, RISK, HEAT, SUST), and 5 dimension delta cards.
+  2. **Chỉ số cổ phiếu**: Sub-tabs with top border active indicators (`border-t border-fuchsia-400 shadow-[inset_0_2px_0_rgba(217,70,239,.8)]`) and distinct icons for all 9 KFSP groups (`Gauge`, `Building2`, `BadgePercent`, `FileText`, `Activity`, `Maximize2`, `Droplets`, `LineChart`, `Sparkles`).
+  3. **Lịch sử Rating**: Snapshot history line chart and historical snapshot timeline table.
+- **Stable modal container**: Modal body utilizes a stable height (`min-h-[580px] max-h-[75vh]`) so toggling between tabs preserves vertical cursor stability without jumpy layout resizing.
 - Compact footer: transparent QeoIndex disclaimer and direct link to research module.
 
 ## Color and icon system
