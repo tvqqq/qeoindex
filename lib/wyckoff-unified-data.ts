@@ -67,7 +67,6 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
 
   const ticker = memberships.some((row) => row.ticker === requestedTicker) ? requestedTicker : memberships[0].ticker
   const tickers = memberships.map((row) => row.ticker)
-  const metadataPromise = getWyckoffCompanyMetadata(supabase, tickers)
 
   const [
     { data: dailyRows, error: dailyError },
@@ -78,7 +77,7 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
     supabase.from("wyckoff_latest_by_timeframe").select("*").eq("timeframe", "1D").in("ticker", tickers),
     supabase.from("wyckoff_latest_by_timeframe").select("*").eq("ticker", ticker),
     supabase.from("wyckoff_chart_series").select("*").eq("ticker", ticker).in("timeframe", ["1H", "1D"]),
-    metadataPromise,
+    getWyckoffCompanyMetadata(supabase, [ticker]),
   ])
   if (dailyError || selectedError || seriesError || !selectedRows?.length || !seriesRows?.length) return null
 
@@ -100,13 +99,10 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
   const dailyByTicker = new Map((dailyRows as SnapshotRow[]).map((row) => [row.ticker, row]))
   const stocks: WyckoffListItem[] = memberships.map((membership) => {
     const row = dailyByTicker.get(membership.ticker)
-    const metadata = companyMetadata.get(membership.ticker)
     return {
       ticker: membership.ticker,
-      companyName: metadata?.companyName ?? membership.ticker,
-      exchange: metadata?.exchange ?? "HOSE",
       rank: membership.rank,
-      sector: membership.sector || metadata?.sector || "",
+      sector: membership.sector || "",
       price: row?.technical.price ?? null,
       changePct: row?.technical.changePct ?? null,
       phase: row?.phase ?? "",
@@ -117,5 +113,13 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
     }
   })
 
-  return { ticker, studies, stocks, generatedAt: selectedRows[0].published_at as string }
+  const selectedMetadata = companyMetadata.get(ticker)
+  return {
+    ticker,
+    companyName: selectedMetadata?.companyName ?? ticker,
+    exchange: selectedMetadata?.exchange ?? "HOSE",
+    studies,
+    stocks,
+    generatedAt: selectedRows[0].published_at as string,
+  }
 }
