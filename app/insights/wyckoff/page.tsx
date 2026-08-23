@@ -59,7 +59,7 @@ export default async function WyckoffChartPage({
     console.error("[QeoIndex Wyckoff chart] unified read failed; using compatibility fallback", error)
   }
   if (unified) {
-    return <WyckoffChartDashboard key={unified.ticker} {...unified} initialTimeframe={initialTimeframe} dataSource="Supabase unified" />
+    return <WyckoffChartDashboard {...unified} initialTimeframe={initialTimeframe} dataSource="Supabase unified" />
   }
 
   let scanner: Awaited<ReturnType<typeof getScannerData>>
@@ -73,7 +73,7 @@ export default async function WyckoffChartPage({
   const selectedStock = scanner.universe.find((stock) => stock.ticker === requestedTicker) ?? scanner.universe[0]
   const ticker = selectedStock.ticker
   const dailyScan = scanner.latestScans[ticker]
-  const metadataPromise = getWyckoffCompanyMetadata(auth.supabase, scanner.universe.map((stock) => stock.ticker))
+  const metadataPromise = getWyckoffCompanyMetadata(auth.supabase, [ticker])
 
   const [dailyResult, hourlyResult] = await Promise.allSettled([
     getCachedLongDailyHistory(ticker),
@@ -107,15 +107,13 @@ export default async function WyckoffChartPage({
   })
 
   const companyMetadata = await metadataPromise
+  const selectedMetadata = companyMetadata.get(ticker)
   const stocks: WyckoffListItem[] = scanner.universe.map((stock) => {
     const scan = scanner.latestScans[stock.ticker]
-    const metadata = companyMetadata.get(stock.ticker)
     return {
       ticker: stock.ticker,
-      companyName: metadata?.companyName ?? stock.ticker,
-      exchange: metadata?.exchange ?? "HOSE",
       rank: stock.rank,
-      sector: stock.sector || metadata?.sector || "",
+      sector: stock.sector,
       price: scan?.price ?? null,
       changePct: scan?.changePct ?? null,
       phase: scan?.phase ?? "",
@@ -128,8 +126,9 @@ export default async function WyckoffChartPage({
 
   return (
     <WyckoffChartDashboard
-      key={ticker}
       ticker={ticker}
+      companyName={selectedMetadata?.companyName ?? ticker}
+      exchange={selectedMetadata?.exchange ?? "HOSE"}
       studies={studies}
       initialTimeframe={initialTimeframe}
       stocks={stocks}
