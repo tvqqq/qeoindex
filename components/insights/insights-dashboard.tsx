@@ -920,9 +920,11 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                 </div>
               </div>
 
-              <div className="grid items-stretch gap-4 xl:grid-cols-12">
-                <div className="grid gap-4 xl:col-span-5 xl:grid-rows-2">
-                  <div className="flex min-h-[360px] flex-col rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+              <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,37%)_minmax(0,63%)]">
+                {/* CỘT TRÁI (37% width) */}
+                <div className="space-y-4">
+                  {/* 1. FA quick read */}
+                  <div className="flex flex-col rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
                     <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10">
                         <BadgePercent className="size-4 text-emerald-300" />
@@ -932,11 +934,13 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                         <p className="mt-0.5 text-xs text-muted-2">Growth, profitability và valuation quan trọng.</p>
                       </div>
                     </div>
-                    <div className="grid flex-1 content-stretch gap-2 sm:grid-cols-2">
+                    <div className="grid content-stretch gap-2 sm:grid-cols-2">
                       {["net_revenue_growth_pct", "net_income_growth_pct", "roe_ttm_pct", "net_margin_ttm_pct", "pe_ttm", "pb_ttm"].map((key) => metricTile(key, "h-full"))}
                     </div>
                   </div>
-                  <div className="flex min-h-[360px] flex-col rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+
+                  {/* 2. TA quick read */}
+                  <div className="flex flex-col rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
                     <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-cyan-500/20 bg-cyan-500/10">
                         <LineChart className="size-4 text-cyan-300" />
@@ -946,27 +950,12 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                         <p className="mt-0.5 text-xs text-muted-2">Trend, oscillator và trạng thái kỹ thuật.</p>
                       </div>
                     </div>
-                    <div className="grid flex-1 content-stretch gap-2 sm:grid-cols-2">
+                    <div className="grid content-stretch gap-2 sm:grid-cols-2">
                       {["price_vs_sma20_pct", "price_vs_sma50_pct", "price_vs_sma200_pct", "rsi_14", "macd_vs_signal", "position_in_bollinger_band"].map((key) => metricTile(key, "h-full"))}
                     </div>
                   </div>
-                </div>
-                <div className="space-y-4 xl:col-span-7">
-                  <RatingRadar row={row} />
-                  <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
-                    <div className="mb-4 flex items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
-                      <div className="flex items-start gap-2.5 min-w-0">
-                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10">
-                          <Activity className="size-4 text-emerald-300" />
-                        </span>
-                        <div className="min-w-0">
-                          <h4 className="text-base font-extrabold text-white">Hiệu suất giá</h4>
-                          <p className="mt-0.5 text-xs text-muted-2">Động lượng 1D → 1Y qua các khung thời gian.</p>
-                        </div>
-                      </div>
-                    </div>
-                    {renderPerformanceBars()}
-                  </div>
+
+                  {/* 3. Range & thanh khoản (Chuyển sang cột trái) */}
                   <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
                     <div className="mb-4 flex items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
                       <div className="flex items-start gap-2.5 min-w-0">
@@ -988,11 +977,34 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                     <div className="mt-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5 text-[11px] font-semibold text-muted-2">KLGD TB 50P <strong className="font-mono text-white">{compactVolume(row.volume)}</strong> · Vốn hóa <strong className="font-mono text-white">{row.marketCapBillion == null ? "—" : formatMarketCapBillion(row.marketCapBillion)}</strong></div>
                   </div>
                 </div>
-              </div>
 
-              <div className="grid gap-4 xl:grid-cols-2">
-                <AccumulationHeatmap row={row} />
-                <RatingHistoryChart row={row} />
+                {/* CỘT PHẢI (63% width) */}
+                <div className="space-y-4">
+                  {/* 1. QeoIndex state radar */}
+                  <RatingRadar row={row} />
+
+                  {/* 2. Ma trận tích lũy & Trạng thái thị trường (Dưới State Radar) */}
+                  <AccumulationHeatmap row={row} />
+
+                  {/* 3. Hiệu suất giá */}
+                  <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                    <div className="mb-4 flex items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10">
+                          <Activity className="size-4 text-emerald-300" />
+                        </span>
+                        <div className="min-w-0">
+                          <h4 className="text-base font-extrabold text-white">Hiệu suất giá</h4>
+                          <p className="mt-0.5 text-xs text-muted-2">Động lượng 1D → 1Y qua các khung thời gian.</p>
+                        </div>
+                      </div>
+                    </div>
+                    {renderPerformanceBars()}
+                  </div>
+
+                  {/* 4. Xu hướng Composite Rating qua các phiên (Dưới cùng cột phải) */}
+                  <RatingHistoryChart row={row} />
+                </div>
               </div>
             </section>
           )}
