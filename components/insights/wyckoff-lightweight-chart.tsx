@@ -128,7 +128,17 @@ function applyStudy(controller: ChartController, study: WyckoffChartStudy) {
   controller.chart.timeScale().setVisibleLogicalRange({ from: Math.max(-0.5, last - visible + 1), to: last + 8 })
 }
 
-export function WyckoffLightweightChart({ ticker, study, loading = false }: { ticker: string; study: WyckoffChartStudy; loading?: boolean }) {
+export function WyckoffLightweightChart({
+  ticker,
+  study,
+  loading = false,
+  embedded = false,
+}: {
+  ticker: string
+  study: WyckoffChartStudy
+  loading?: boolean
+  embedded?: boolean
+}) {
   const hostRef = useRef<HTMLDivElement>(null)
   const controllerRef = useRef<ChartController | null>(null)
   const updateFrameRef = useRef(0)
@@ -176,24 +186,28 @@ export function WyckoffLightweightChart({ ticker, study, loading = false }: { ti
             vertLine: { color: "rgba(148,163,184,0.35)", labelBackgroundColor: "#334155" },
             horzLine: { color: "rgba(148,163,184,0.35)", labelBackgroundColor: "#334155" },
           },
-          handleScroll: {
-            mouseWheel: false,
-            pressedMouseMove: true,
-            horzTouchDrag: true,
-            vertTouchDrag: false,
-          },
-          handleScale: {
-            mouseWheel: false,
-            pinch: true,
-            axisPressedMouseMove: {
-              time: true,
-              price: true,
-            },
-            axisDoubleClickReset: {
-              time: true,
-              price: true,
-            },
-          },
+          handleScroll: embedded
+            ? {
+                mouseWheel: false,
+                pressedMouseMove: true,
+                horzTouchDrag: true,
+                vertTouchDrag: false,
+              }
+            : true,
+          handleScale: embedded
+            ? {
+                mouseWheel: false,
+                pinch: true,
+                axisPressedMouseMove: {
+                  time: true,
+                  price: true,
+                },
+                axisDoubleClickReset: {
+                  time: true,
+                  price: true,
+                },
+              }
+            : true,
         })
         const candles = chart.addSeries(lwc.CandlestickSeries, { upColor: "#22c98a", downColor: "#ff4757", wickUpColor: "#22c98a", wickDownColor: "#ff4757", borderVisible: false, priceLineVisible: true, lastValueVisible: true }, 0)
         const volume = chart.addSeries(lwc.HistogramSeries, { priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false }, 1)

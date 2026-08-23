@@ -389,7 +389,7 @@ export function WyckoffStockWorkspace({
         </div>
 
         <div className="relative">
-          {current ? <WyckoffLightweightChart ticker={ticker} study={current} loading={isLoading} /> : null}
+          {current ? <WyckoffLightweightChart ticker={ticker} study={current} loading={isLoading} embedded={embedded} /> : null}
           <div className="pointer-events-none absolute left-3 top-3 z-[3] max-w-[min(480px,calc(100%-1.5rem))] rounded-lg border border-white/[0.09] bg-[#080d15]/92 px-3 py-2 font-ticker sm:left-4 sm:top-4">
             <div className="flex min-w-0 items-center gap-2">
               <span className="shrink-0 rounded border border-purple-400/20 bg-purple-400/[0.08] px-1.5 py-0.5 text-[9.5px] font-extrabold uppercase tracking-wide text-purple-200">{current?.timeframe}</span>
