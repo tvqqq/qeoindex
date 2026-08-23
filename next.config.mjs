@@ -26,6 +26,12 @@ const SECURITY_HEADERS = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Next 16.3 can delegate project type-checking to the local TypeScript CLI.
+  // This lets builds use TypeScript 7's native Go compiler while JS-API tools
+  // (notably typescript-eslint) continue resolving the TypeScript 6 compat API.
+  experimental: {
+    useTypeScriptCli: true,
+  },
   // Keep production builds type-safe. Do not hide TypeScript failures on Vercel.
   env: {
     NEXT_PUBLIC_GIT_COMMIT_SHA: commitHash || "",
