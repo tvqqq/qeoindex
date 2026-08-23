@@ -701,10 +701,23 @@ function WyckoffTabPanel({ ticker }: { ticker: string }) {
 
     fetch(`/api/insights/wyckoff?ticker=${encodeURIComponent(ticker)}&timeframe=1D`)
       .then((res) => res.json())
-      .then((res: WyckoffApiResponse) => {
+      .then((res: { ok?: boolean; data?: WyckoffApiResponse; error?: string } & Partial<WyckoffApiResponse>) => {
         if (!isMounted) return
-        if (res.ok && res.studies) {
-          setFetchState({ status: "success", payload: res, error: null })
+        const studies = res.data?.studies || res.studies
+        if (res.ok && studies?.length) {
+          const payload: WyckoffApiResponse = {
+            ok: true,
+            ticker: res.data?.ticker || res.ticker || ticker,
+            companyName: res.data?.companyName || res.companyName,
+            exchange: res.data?.exchange || res.exchange,
+            sector: res.data?.sector || res.sector,
+            studies,
+            initialTimeframe: res.data?.initialTimeframe || res.initialTimeframe || "1D",
+            stocks: res.data?.stocks || res.stocks || [],
+            generatedAt: res.data?.generatedAt || res.generatedAt || "",
+            dataSource: res.data?.dataSource || res.dataSource || "Supabase unified",
+          }
+          setFetchState({ status: "success", payload, error: null })
         } else {
           setFetchState({ status: "error", payload: null, error: res.error || "Không tải được dữ liệu Wyckoff." })
         }
@@ -765,7 +778,7 @@ function WyckoffTabPanel({ ticker }: { ticker: string }) {
 }
 
 function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; onOpenChange: (open: boolean) => void }) {
-  type StockDetailTab = "overview" | "wyckoff" | "info" | "ta" | "ttai"
+  type StockDetailTab = "overview" | "info" | "ta" | "ttai" | "wyckoff"
   const [topTab, setTopTab] = useState<StockDetailTab>("overview")
   if (!row) return null
 
@@ -852,10 +865,10 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
 
   const tabItems: Array<{ key: StockDetailTab; label: string; icon: typeof Gauge }> = [
     { key: "overview", label: "Tổng quan", icon: Gauge },
-    { key: "wyckoff", label: "Chart Wyckoff", icon: BarChart3 },
     { key: "info", label: "Thông tin doanh nghiệp", icon: Building2 },
     { key: "ta", label: "Phân tích TA", icon: LineChart },
     { key: "ttai", label: "TTAI", icon: Sparkles },
+    { key: "wyckoff", label: "Chart Wyckoff", icon: BarChart3 },
   ]
 
   const renderPerformanceBars = () => (
@@ -978,17 +991,6 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                 )
               })}
             </nav>
-            <aside className="sticky right-0 shrink-0 border-l border-white/10 bg-[#080d19] pl-4" aria-label="Công cụ phân tích chuyên sâu">
-              <Link
-                href={`/insights/wyckoff?ticker=${row.ticker}&timeframe=1D`}
-                aria-label={`Phân tích chart Wyckoff ${row.ticker}`}
-                title="Phân tích chart Wyckoff"
-                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-cyan-400/35 bg-cyan-500/10 px-3 py-2 font-ticker text-xs font-bold text-cyan-300 transition-colors hover:border-cyan-400/60 hover:bg-cyan-500/20"
-              >
-                <BarChart3 className="size-3.5" />
-                <span>Phân tích Wyckoff</span>
-              </Link>
-            </aside>
           </div>
         </div>
 
@@ -1106,8 +1108,6 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
               </div>
             </section>
           )}
-
-          {topTab === "wyckoff" && <WyckoffTabPanel ticker={row.ticker} />}
 
           {topTab === "info" && (
             <section id="rating-panel-info" role="tabpanel" aria-labelledby="rating-tab-info" className="space-y-4">
@@ -1349,6 +1349,7 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
           )}
 
           {topTab === "ttai" && <TtaiDashboard row={row} />}
+          {topTab === "wyckoff" && <WyckoffTabPanel ticker={row.ticker} />}
         </div>
 
       </DialogContent>

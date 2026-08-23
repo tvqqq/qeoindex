@@ -53,11 +53,11 @@ test("rating table exposes keyboard modal, grouped dashboard tabs, history, and 
   assert.match(insightsDashboard, /role="tab"/)
   assert.match(insightsDashboard, /role="tablist"/)
   assert.match(ttaiDashboard, /role="tabpanel"/)
-  assert.match(insightsDashboard, /type StockDetailTab = "overview" \| "wyckoff" \| "info" \| "ta" \| "ttai"/)
-  for (const tab of ["Tổng quan", "Chart Wyckoff", "Thông tin doanh nghiệp", "Phân tích TA", "TTAI"]) {
+  assert.match(insightsDashboard, /type StockDetailTab = "overview" \| "info" \| "ta" \| "ttai" \| "wyckoff"/)
+  for (const tab of ["Tổng quan", "Thông tin doanh nghiệp", "Phân tích TA", "TTAI", "Chart Wyckoff"]) {
     assert.match(insightsDashboard, new RegExp(`label: "${tab}"`))
   }
-  for (const panel of ["overview", "wyckoff", "info", "ta", "ttai"]) {
+  for (const panel of ["overview", "info", "ta", "ttai", "wyckoff"]) {
     assert.match(insightsDashboard + ttaiDashboard, new RegExp(`rating-panel-${panel}`))
   }
   assert.doesNotMatch(insightsDashboard, /rating-panel-fa|rating-tab-fa|topTab === "fa"/)
@@ -73,7 +73,6 @@ test("rating table exposes keyboard modal, grouped dashboard tabs, history, and 
   assert.match(insightsDashboard, /TA quick read/)
   assert.match(insightsDashboard, /Thông tin doanh nghiệp/)
   assert.match(insightsDashboard, /Chỉ số tài chính & định giá/)
-  assert.match(insightsDashboard, /aria-label="Công cụ phân tích chuyên sâu"/)
   assert.doesNotMatch(insightsDashboard, /Dữ liệu snapshot từ KFSP\/Supabase/)
   assert.match(insightsDashboard, /net_revenue_growth_pct/)
   assert.match(insightsDashboard, /price_vs_sma200_pct/)
