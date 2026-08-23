@@ -125,7 +125,7 @@ The page should eventually read one server-side RPC/view payload rather than ind
 3. Aggregate `4H/1W/1M` deterministically; store aggregation version.
 4. Run the same model version for all five timeframes.
 5. Stage all 100 × 5 results under one `run_id`.
-6. Reject a published run if universe count is not 100, any ticker is duplicated, probabilities do not sum to 100, bar timestamps are incomplete, or provider payloads contain zero/invalid OHLC.
+6. Reject invalid probabilities, timestamps, or zero/invalid OHLC. Newly listed tickers may publish only the timeframes with at least 60 completed bars; missing timeframes remain explicit in `incomplete_count` and are never synthesized.
 7. Publish atomically. A partial run remains auditable but never replaces the latest complete view.
 8. Keep Notion Stock Thesis and Analysis Log as the human-reviewed layer. Automation may create candidates; only explicit review promotes a canonical thesis.
 

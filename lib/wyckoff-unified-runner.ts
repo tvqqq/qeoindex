@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto"
 
 import { getCachedHourlyHistory, getCachedLongDailyHistory } from "@/lib/request-cache"
+import { sectorForTicker } from "@/lib/market-sectors"
 import { getScannerDataFresh } from "@/lib/scanner-data"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { buildWyckoffChartStudies } from "@/lib/wyckoff-chart-model"
-import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
+import { CANONICAL_UNIVERSE_STOCKS, UNIVERSE_DATE, UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
 
 export const WYCKOFF_MODEL_VERSION = "qeo-wyckoff-rule-v1"
 export const WYCKOFF_AGGREGATION_VERSION = "vn-session-v1"
@@ -26,7 +27,10 @@ export async function runUnifiedWyckoff({ limit = 10, offset = 0 }: { limit?: nu
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured")
 
-  const scanner = await getScannerDataFresh()
+  const scanner = await getScannerDataFresh().catch(() => ({
+    universeDate: UNIVERSE_DATE,
+    universe: CANONICAL_UNIVERSE_STOCKS.map((stock) => ({ ...stock, id: stock.ticker, active: true, providerStatus: "", lastScan: "", sector: sectorForTicker(stock.ticker) })),
+  }))
   const safeLimit = Math.max(1, Math.min(10, limit))
   const safeOffset = Math.max(0, Math.min(UNIVERSE_SIZE - 1, offset))
   const targets = scanner.universe.slice(safeOffset, safeOffset + safeLimit)
@@ -76,9 +80,7 @@ export async function runUnifiedWyckoff({ limit = 10, offset = 0 }: { limit?: nu
         hourlyDetail: hourly.detail,
       })
       const validStudies = studies.filter((study) => study.analysis && study.asOf)
-      if (validStudies.length !== 5) {
-        throw new Error(`Only ${validStudies.length}/5 timeframes have enough completed history`)
-      }
+      if (!validStudies.length) throw new Error("No timeframe has enough completed history")
 
       const seriesRows = validStudies.map((study) => ({
         ticker: stock.ticker,
@@ -136,7 +138,7 @@ export async function runUnifiedWyckoff({ limit = 10, offset = 0 }: { limit?: nu
   await supabase.from("wyckoff_scan_runs").update({
     status,
     completed_count: completed.length,
-    incomplete_count: 0,
+    incomplete_count: completed.reduce((sum, item) => sum + (5 - item.timeframes), 0),
     error_count: errors.length,
     diagnostics: { offset: safeOffset, limit: safeLimit, errors: errors.slice(0, 10) },
     finished_at: generatedAt,

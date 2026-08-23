@@ -21,7 +21,7 @@ Mỗi thứ Hai đến thứ Sáu lúc 07:05 theo múi giờ Asia/Ho_Chi_Minh, h
    - mỗi ticker chỉ xuất hiện một lần trong toàn bộ completed + errors;
    - tổng completed + errors = 100;
    - errors = 0;
-   - mọi completed item có timeframes = 5;
+   - mọi completed item có timeframes từ 1 đến 5; ít hơn 5 phải được báo là thiếu lịch sử, tuyệt đối không tự điền;
    - không có giá/OHLC bằng 0 hoặc xác suất giả do ChatGPT tự điền.
 
 4. Nếu có lỗi:
@@ -33,7 +33,7 @@ Mỗi thứ Hai đến thứ Sáu lúc 07:05 theo múi giờ Asia/Ho_Chi_Minh, h
 5. Nếu thành công, trả báo cáo tiếng Việt ngắn gọn:
    - thời gian generatedAt;
    - requested/completed/errors và 10 runId để audit;
-   - xác nhận đủ 500 snapshot timeframe (100 mã × 5 khung) từ completed[].timeframes;
+   - báo tổng snapshot timeframe thực từ completed[].timeframes và số timeframe thiếu lịch sử;
    - provider breakdown Daily/1H từ completed[];
    - tối đa 10 mã có event Spring, UT/UTAD, SOS hoặc SOW nếu Action cung cấp latest snapshot; nếu Action không trả field này, ghi rõ “không có trong response”, tuyệt đối không đoán;
    - link mở page: https://qeoindex.qeoqeo.com/insights/wyckoff?ticker=<TICKER>&timeframe=1D
