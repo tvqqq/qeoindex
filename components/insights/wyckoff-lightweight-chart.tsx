@@ -66,7 +66,7 @@ function applyStudy(controller: ChartController, study: WyckoffChartStudy) {
   controller.volume.setData(study.bars.map((bar) => ({
     time: bar.time,
     value: bar.volume,
-    color: bar.close >= bar.open ? "rgba(34,201,138,0.38)" : "rgba(255,71,87,0.38)",
+    color: bar.close >= bar.open ? "rgba(34,201,138,0.34)" : "rgba(255,71,87,0.34)",
   })))
   controller.chart.panes()[1]?.setHeight(108)
   controller.markers?.setMarkers(study.markers.map((marker) => ({
@@ -80,28 +80,30 @@ function applyStudy(controller: ChartController, study: WyckoffChartStudy) {
 
   clearPriceLines(controller)
   if (study.analysis) {
-    numericLevels(study.analysis.support).slice(0, 3).forEach((price, index) => {
+    // Keep only the primary support/resistance guides. Dense 1px dashed guides
+    // can form unstable high-frequency raster patterns on macOS scaled 4K displays.
+    for (const price of numericLevels(study.analysis.support).slice(0, 1)) {
       const line = controller.candles.createPriceLine?.({
         price,
-        color: index === 0 ? "rgba(34,201,138,0.78)" : "rgba(34,184,207,0.42)",
-        lineWidth: 1,
-        lineStyle: 2,
-        axisLabelVisible: index === 0,
-        title: index === 0 ? "Hỗ trợ" : "",
+        color: "rgba(34,201,138,0.82)",
+        lineWidth: 2,
+        lineStyle: 0,
+        axisLabelVisible: true,
+        title: "Hỗ trợ",
       })
       if (line) controller.priceLines.push(line)
-    })
-    numericLevels(study.analysis.resistance).slice(0, 3).forEach((price, index) => {
+    }
+    for (const price of numericLevels(study.analysis.resistance).slice(0, 1)) {
       const line = controller.candles.createPriceLine?.({
         price,
-        color: index === 0 ? "rgba(255,71,87,0.78)" : "rgba(176,124,255,0.42)",
-        lineWidth: 1,
-        lineStyle: 2,
-        axisLabelVisible: index === 0,
-        title: index === 0 ? "Kháng cự" : "",
+        color: "rgba(255,71,87,0.82)",
+        lineWidth: 2,
+        lineStyle: 0,
+        axisLabelVisible: true,
+        title: "Kháng cự",
       })
       if (line) controller.priceLines.push(line)
-    })
+    }
   }
 
   for (const series of Object.values(controller.scenarioSeries)) series.setData([])
@@ -112,7 +114,7 @@ function applyStudy(controller: ChartController, study: WyckoffChartStudy) {
     series.applyOptions({
       color: scenario.color,
       lineWidth: key === "base" ? 2 : 3,
-      lineStyle: key === "base" ? 2 : 0,
+      lineStyle: 0,
       lineType: 2,
       crosshairMarkerVisible: false,
       priceLineVisible: false,
@@ -178,13 +180,18 @@ export function WyckoffLightweightChart({
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
             panes: { separatorColor: "rgba(255,255,255,0.07)", separatorHoverColor: "rgba(34,201,138,0.28)", enableResize: true },
           },
-          grid: { vertLines: { color: "rgba(255,255,255,0.025)" }, horzLines: { color: "rgba(255,255,255,0.035)" } },
+          // Raster-safe mode: the dense chart grid was isolated as the visual
+          // trigger for Chromium flicker on a 4K panel scaled to 2560x1440.
+          grid: {
+            vertLines: { visible: false },
+            horzLines: { visible: false },
+          },
           rightPriceScale: { borderColor: "rgba(255,255,255,0.08)", scaleMargins: { top: 0.08, bottom: 0.1 } },
           timeScale: { borderColor: "rgba(255,255,255,0.08)", secondsVisible: false, rightOffset: 8, minBarSpacing: 2 },
           localization: { locale: "vi-VN" },
           crosshair: {
-            vertLine: { color: "rgba(148,163,184,0.35)", labelBackgroundColor: "#334155" },
-            horzLine: { color: "rgba(148,163,184,0.35)", labelBackgroundColor: "#334155" },
+            vertLine: { color: "rgba(148,163,184,0.28)", labelBackgroundColor: "#334155" },
+            horzLine: { color: "rgba(148,163,184,0.28)", labelBackgroundColor: "#334155" },
           },
           handleScroll: embedded
             ? {
@@ -209,7 +216,15 @@ export function WyckoffLightweightChart({
               }
             : true,
         })
-        const candles = chart.addSeries(lwc.CandlestickSeries, { upColor: "#22c98a", downColor: "#ff4757", wickUpColor: "#22c98a", wickDownColor: "#ff4757", borderVisible: false, priceLineVisible: true, lastValueVisible: true }, 0)
+        const candles = chart.addSeries(lwc.CandlestickSeries, {
+          upColor: "#22c98a",
+          downColor: "#ff4757",
+          wickUpColor: "#22c98a",
+          wickDownColor: "#ff4757",
+          borderVisible: false,
+          priceLineVisible: false,
+          lastValueVisible: true,
+        }, 0)
         const volume = chart.addSeries(lwc.HistogramSeries, { priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false }, 1)
         const markers = lwc.createSeriesMarkers?.(candles, []) ?? null
         const scenarioSeries = {
