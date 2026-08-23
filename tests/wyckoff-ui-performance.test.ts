@@ -33,11 +33,24 @@ test("Wyckoff watchlist is ticker-first, larger, and strips company exchange sec
   assert.match(dashboard, />Mã<\/div>/)
   assert.match(dashboard, /placeholder="Tìm mã\.\.\."/)
   assert.match(rowSource, /text-\[15px\]/)
-  assert.match(rowSource, /scroll=\{false\}/)
-  assert.match(rowSource, /prefetch=\{false\}/)
   assert.match(rowSource, /content-visibility:auto/)
+  assert.match(rowSource, /<a[\s\S]*href=\{href\}/)
   assert.doesNotMatch(rowSource, /companyName|exchange|stock\.sector|StockLogo/)
+  assert.doesNotMatch(rowSource, /<Link|prefetch=/)
   assert.doesNotMatch(dashboard, /Mã · Công ty \/ Ngành|Tìm mã, công ty hoặc ngành/)
+})
+
+test("Wyckoff ticker switching bypasses the route loading boundary and refreshes in place", () => {
+  assert.match(dashboard, /import \{ useRouter \} from "next\/navigation"/)
+  assert.match(dashboard, /event\.preventDefault\(\)/)
+  assert.match(dashboard, /window\.history\.pushState\(window\.history\.state, "", url\)/)
+  assert.match(dashboard, /router\.refresh\(\)/)
+  assert.match(dashboard, /onSelectTicker=\{selectTicker\}/)
+
+  const selectStart = dashboard.indexOf("const selectTicker")
+  const selectEnd = dashboard.indexOf("function chooseTimeframe", selectStart)
+  const selectSource = dashboard.slice(selectStart, selectEnd)
+  assert.doesNotMatch(selectSource, /router\.(push|replace)\(/)
 })
 
 test("Wyckoff timeframe uses bounded SmoothUI AnimatedTabs inside chart toolbar", () => {
@@ -52,13 +65,15 @@ test("Wyckoff timeframe uses bounded SmoothUI AnimatedTabs inside chart toolbar"
 
 test("chart loading uses bounded SmoothUI AI loader with stable canvas geometry", () => {
   assert.match(chart, /import \{ AiLoader \}/)
-  assert.match(chart, /isLoading/)
+  assert.match(chart, /isInitialLoading/)
   assert.match(chart, /<AiLoader label=/)
+  assert.match(chart, /compact/)
   assert.match(chart, /h-\[520px\]/)
   assert.match(chart, /xl:h-\[660px\]/)
   assert.match(chart, /\[contain:layout_paint\]/)
   assert.match(aiLoader, /role="status"/)
   assert.match(aiLoader, /useReducedMotion/)
+  assert.match(aiLoader, /compact = false/)
   assert.doesNotMatch(aiLoader, /backdrop-blur|backdrop-filter|filter:/)
 })
 
@@ -75,13 +90,27 @@ test("price motion uses SmoothUI PriceFlow only on bounded focal numbers", () =>
   assert.doesNotMatch(dashboard.slice(rowStart, rowEnd), /PriceFlow/)
 })
 
+test("Wyckoff chart double-buffers canvas swaps instead of tearing down the visible chart first", () => {
+  assert.match(chart, /activeSlotRef/)
+  assert.match(chart, /pendingSlotRef/)
+  assert.match(chart, /layer\.style\.visibility = "hidden"/)
+  assert.match(chart, /await nextPaint\(\)/)
+  assert.match(chart, /layer\.style\.visibility = "visible"/)
+  assert.match(chart, /const previousSlot = activeSlotRef\.current/)
+  assert.match(chart, /removeSlot\(previousSlot\)/)
+  assert.match(chart, /activeSlotRef\.current\?\.key === renderKey/)
+  assert.doesNotMatch(chart, /chartRef\.current\?\.remove\(\)/)
+  assert.doesNotMatch(chart, /\}, \[loadKey, study, ticker\]\)/)
+})
+
 test("Wyckoff navigation and chart lifecycle avoid full workspace remount and resize churn", () => {
   assert.doesNotMatch(page, /<WyckoffChartDashboard\s+key=/)
   assert.doesNotMatch(page, /key=\{ticker\}/)
   assert.doesNotMatch(page, /key=\{unified\.ticker\}/)
   assert.match(chart, /new ResizeObserver/)
   assert.match(chart, /requestAnimationFrame/)
-  assert.match(chart, /chart\.applyOptions\(\{ width, height \}\)/)
+  assert.match(chart, /activeSlotRef\.current\?\.chart\.applyOptions\(\{ width, height \}\)/)
+  assert.match(chart, /pendingSlotRef\.current\?\.chart\.applyOptions\(\{ width, height \}\)/)
   assert.doesNotMatch(chart, /autoSize:\s*true/)
   assert.match(chartRuntime, /applyOptions\(options: Record<string, unknown>\)/)
 })
