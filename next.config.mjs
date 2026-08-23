@@ -26,13 +26,17 @@ const SECURITY_HEADERS = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Next 16.3 can delegate project type-checking to the local TypeScript CLI.
-  // This lets builds use TypeScript 7's native Go compiler while JS-API tools
-  // (notably typescript-eslint) continue resolving the TypeScript 6 compat API.
+  // QeoIndex runs the TypeScript 7 native CLI as an explicit build gate.
+  // Next 16.3 still has an open compatibility bug when its CLI backend sees the
+  // official TS6/TS7 side-by-side alias layout, so keep Next on the TS6 API
+  // bridge and skip its duplicate checker. CI and `pnpm build` both run TS7
+  // before `next build`, preserving type safety while avoiding the JS checker.
   experimental: {
-    useTypeScriptCli: true,
+    useTypeScriptCli: false,
   },
-  // Keep production builds type-safe. Do not hide TypeScript failures on Vercel.
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   env: {
     NEXT_PUBLIC_GIT_COMMIT_SHA: commitHash || "",
     NEXT_PUBLIC_GIT_COMMIT_DATE: commitDate || "",
