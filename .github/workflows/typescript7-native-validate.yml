@@ -1,0 +1,75 @@
+name: TypeScript 7 Native Validation
+
+on:
+  push:
+    branches:
+      - chore/typescript-7-native
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: chore/typescript-7-native
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install and refresh lockfile
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Confirm compiler split
+        run: |
+          echo "Native compiler:"
+          pnpm exec tsc --version
+          echo "Compatibility compiler:"
+          pnpm exec tsc6 --version
+
+      - name: Benchmark cold TypeScript checks
+        run: |
+          rm -f .next/cache/typescript/tsconfig.tsbuildinfo
+          /usr/bin/time -f 'TS6_ELAPSED=%e TS6_MAX_RSS_KB=%M' pnpm exec tsc6 --noEmit
+          rm -f .next/cache/typescript/tsconfig.tsbuildinfo
+          /usr/bin/time -f 'TS7_ELAPSED=%e TS7_MAX_RSS_KB=%M' pnpm exec tsc --noEmit
+
+      - name: Core regression suite
+        run: pnpm test:core
+
+      - name: Touched lint
+        run: pnpm lint:touched
+
+      - name: Secret scan
+        run: pnpm scan:secrets
+
+      - name: Native TypeScript gate
+        run: pnpm typecheck
+
+      - name: Production build with Next TypeScript CLI backend
+        run: pnpm exec next build
+
+      - name: Commit refreshed lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore(tooling): refresh lockfile for TypeScript 7"
+          git push origin HEAD:chore/typescript-7-native
