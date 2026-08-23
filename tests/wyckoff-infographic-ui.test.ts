@@ -25,7 +25,7 @@ test("Wyckoff structure lab uses Plus Jakarta and shadcn primitives", () => {
   assert.match(infographic, /@\/components\/ui\/badge/)
   assert.match(infographic, /@\/components\/ui\/button/)
   assert.match(infographic, /@\/components\/ui\/input/)
-  assert.match(infographic, /@\/components\/ui\/tooltip/)
+  assert.doesNotMatch(infographic, /@\/components\/ui\/tooltip/)
   assert.doesNotMatch(infographic, /font-mono/)
   assert.doesNotMatch(infographic, /text-\[(?:9|10|11)px\]/)
   assert.match(chart, /--font-plus-jakarta-sans/)
@@ -68,8 +68,14 @@ test("multi-timeframe module replaces forecast cards with Wyckoff structure alig
   assert.doesNotMatch(infographic, /outlooks\.map|dominantScenario|probabilitySegments/)
 })
 
-test("Wyckoff watchlist shows phase chips, explanations, vertical dividers and 1H 1D 1W columns", () => {
-  assert.match(infographic, /WATCHLIST_GRID_CLASS = "grid-cols-\[64px_repeat\(3,minmax\(0,1fr\)\)\]"/)
+test("Wyckoff watchlist is wider, left-aligned, column-tinted and tooltip-free", () => {
+  assert.match(infographic, /WATCHLIST_GRID_CLASS = "grid-cols-\[76px_repeat\(3,minmax\(0,1fr\)\)\]"/)
+  assert.match(infographic, /WATCHLIST_COLUMN_BG/)
+  assert.match(infographic, /WATCHLIST_HEADER_BG/)
+  assert.match(infographic, /xl:grid-cols-\[540px_minmax\(0,1fr\)\]/)
+  assert.match(infographic, /2xl:grid-cols-\[580px_minmax\(0,1fr\)\]/)
+  assert.match(infographic, /xl:order-1/)
+  assert.match(infographic, /xl:order-2/)
   assert.match(infographic, /1H · 1D · 1W Phase overview/)
   assert.match(infographic, /const PHASE_META:/)
   assert.match(infographic, /label: "Accumulation"/)
@@ -81,7 +87,8 @@ test("Wyckoff watchlist shows phase chips, explanations, vertical dividers and 1
   assert.match(infographic, /label: "Unclassified"/)
   assert.match(infographic, /function PhaseChip/)
   assert.match(infographic, /function WatchlistExplainPanel/)
-  assert.match(infographic, /TooltipContent/)
+  assert.match(infographic, /So sánh 1H → 1D → 1W/)
+  assert.doesNotMatch(infographic, /TooltipContent|TooltipTrigger|<Tooltip>/)
   assert.match(infographic, /border-l border-white\/\[0\.065\]/)
   assert.match(infographic, /1D Accumulation/)
   assert.match(infographic, /1D Distribution/)
@@ -97,10 +104,12 @@ test("Wyckoff watchlist shows phase chips, explanations, vertical dividers and 1
   assert.match(unified, /phase1W: row1W\?\.phase/)
 })
 
-test("watchlist restores lightweight pre-redesign transition language without chart motion ancestors", () => {
-  assert.match(infographic, /transition-\[background-color,border-color,transform\] duration-200 ease-out/)
+test("watchlist keeps lightweight hover and ticker-selection transitions without chart motion ancestors", () => {
+  assert.match(infographic, /transition-\[background-color,border-color,transform,box-shadow\] duration-200 ease-out/)
+  assert.match(infographic, /hover:translate-x-0\.5/)
   assert.match(infographic, /hover:-translate-y-px/)
   assert.match(infographic, /animate-in fade-in-0 slide-in-from-top-1 duration-200/)
+  assert.match(infographic, /transition-opacity duration-200 ease-out/)
   assert.match(infographic, /active:scale-\[0\.98\]/)
   assert.doesNotMatch(infographic, /LazyMotion|AnimatePresence|motion\/react/)
   assert.doesNotMatch(infographic, /backdrop-blur|backdrop-filter/)
