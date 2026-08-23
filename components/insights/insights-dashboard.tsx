@@ -513,37 +513,14 @@ function RatingRadar({ row }: { row: InsightsRatingRow }) {
 function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
   const history = [...row.scoreHistory].sort((a, b) => a.asOfDate.localeCompare(b.asOfDate))
   
-  // Synthesize multi-period date columns (real history when available, or standard windows)
+  // Use only published snapshots. Never synthesize historical periods in analytical UI.
   const columns = useMemo(() => {
-    if (history.length >= 6) {
-      return history.map((item) => ({
-        date: item.asOfDate.slice(5),
-        fullDate: item.asOfDate,
-        model: snapshotModel(item),
-        rating: item.ratingScore ?? 50,
-      }))
-    }
-    // Generate recent snapshot points from base row
-    const baseModel = calculateRatingModel(row)
-    const deltas = [-30, -21, -14, -7, -3, -1, 0]
-    return deltas.map((dayOffset) => {
-      const d = new Date(`${row.asOfDate || "2026-08-23"}T00:00:00Z`)
-      d.setUTCDate(d.getUTCDate() + dayOffset)
-      const dateStr = d.toISOString().slice(5, 10)
-      const factor = 1 + (dayOffset / 100) * ((row.changePercent ?? 1) >= 0 ? 0.3 : -0.3)
-      return {
-        date: dateStr,
-        fullDate: d.toISOString().slice(0, 10),
-        model: {
-          dimensions: baseModel.dimensions.map((dim) => ({
-            ...dim,
-            score: Math.max(10, Math.min(98, Math.round(dim.score * factor))),
-          })),
-          state: baseModel.state,
-        },
-        rating: Math.max(10, Math.min(99, Math.round(row.ratingScore * factor))),
-      }
-    })
+    const source = history.length ? history : [toHistorySnapshot(row)]
+    return source.map((item) => ({
+      date: item.asOfDate ? item.asOfDate.slice(5) : "—",
+      fullDate: item.asOfDate || row.asOfDate || "—",
+      model: snapshotModel(item),
+    }))
   }, [history, row])
 
   const dimensionsList: Array<{ key: RatingDimension["key"]; label: string; icon: typeof Bolt; color: string }> = [
@@ -563,13 +540,6 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
     return "bg-white/[0.04] text-slate-500 border border-white/[0.06]"
   }
 
-  const chartWidth = 720
-  const chartHeight = 60
-  const polyPoints = columns.map((col, idx) => {
-    const x = 30 + idx * (chartWidth - 60) / Math.max(1, columns.length - 1)
-    const y = chartHeight - 10 - (col.rating / 100) * (chartHeight - 20)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  })
 
   return (
     <div className="rounded-xl border border-white/[0.08] bg-[#07111f] p-4 sm:p-5">
