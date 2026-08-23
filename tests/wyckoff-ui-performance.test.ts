@@ -12,25 +12,30 @@ const metadata = readFileSync("lib/wyckoff-company-metadata.ts", "utf8")
 const animatedTabs = readFileSync("components/smoothui/animated-tabs/index.tsx", "utf8")
 const aiLoader = readFileSync("components/smoothui/ai-loader/index.tsx", "utf8")
 const priceFlow = readFileSync("components/smoothui/price-flow/index.tsx", "utf8")
+const marketSectors = readFileSync("lib/market-sectors.ts", "utf8")
 
-test("Wyckoff header keeps company identity while Rating is isolated in its own row", () => {
+test("Wyckoff header keeps company identity and removes the Rating back row", () => {
   assert.match(dashboard, /companyName\?: string/)
   assert.match(dashboard, /function SymbolIdentity/)
-  assert.match(dashboard, /data-wyckoff-back-row/)
-  assert.match(dashboard, /Quay lại Rating/)
-
-  const headerStart = dashboard.indexOf("<header")
-  const headerEnd = dashboard.indexOf("</header>", headerStart)
-  const headerSource = dashboard.slice(headerStart, headerEnd)
-  assert.doesNotMatch(headerSource, /ArrowLeft|>\s*Rating\s*</)
-  assert.doesNotMatch(headerSource, /studies\.map/)
+  assert.doesNotMatch(dashboard, /data-wyckoff-back-row|Quay lại Rating|>\s*Rating\s*</)
+  assert.doesNotMatch(dashboard, /ArrowLeft/)
 })
 
-test("Wyckoff watchlist is ticker-first, larger, and strips company exchange sector decoration", () => {
+test("Wyckoff watchlist stays ticker-first and groups rows by the market-board sector taxonomy", () => {
   const rowStart = dashboard.indexOf("const WatchlistRow")
   const rowEnd = dashboard.indexOf("export function WyckoffChartDashboard", rowStart)
   const rowSource = dashboard.slice(rowStart, rowEnd)
 
+  assert.match(dashboard, /BOARD_SECTOR_GROUPS/)
+  assert.match(dashboard, /boardSectorGroupForSector/)
+  assert.match(dashboard, /groupedStocks\.map/)
+  assert.match(marketSectors, /BOARD_SECTOR_GROUPS/)
+  assert.match(marketSectors, /key: "bank"/)
+  assert.match(marketSectors, /key: "securities"/)
+  assert.match(marketSectors, /key: "consumer"/)
+  assert.match(marketSectors, /key: "real-estate"/)
+  assert.match(marketSectors, /key: "industrial-tech"/)
+  assert.match(marketSectors, /key: "other"/)
   assert.match(dashboard, />Mã<\/div>/)
   assert.match(dashboard, /placeholder="Tìm mã\.\.\."/)
   assert.match(rowSource, /text-\[15px\]/)
@@ -38,10 +43,9 @@ test("Wyckoff watchlist is ticker-first, larger, and strips company exchange sec
   assert.match(rowSource, /<a[\s\S]*href=\{href\}/)
   assert.doesNotMatch(rowSource, /companyName|exchange|stock\.sector|StockLogo/)
   assert.doesNotMatch(rowSource, /<Link|prefetch=/)
-  assert.doesNotMatch(dashboard, /Mã · Công ty \/ Ngành|Tìm mã, công ty hoặc ngành/)
 })
 
-test("Wyckoff ticker switching is cancellable and latest-click-wins", () => {
+test("Wyckoff ticker switching remains cancellable and latest-click-wins", () => {
   assert.match(dashboard, /TICKER_SWITCH_DEBOUNCE_MS = 60/)
   assert.match(dashboard, /new AbortController\(\)/)
   assert.match(dashboard, /switchAbortRef\.current\?\.abort\(\)/)
@@ -52,9 +56,7 @@ test("Wyckoff ticker switching is cancellable and latest-click-wins", () => {
   assert.match(dashboard, /startTransition\(\(\) => setTickerData\(nextData\)\)/)
   assert.match(dashboard, /TICKER_CACHE_LIMIT = 8/)
   assert.match(dashboard, /onSelectTicker=\{selectTicker\}/)
-  assert.doesNotMatch(dashboard, /router\.refresh\(\)/)
-  assert.doesNotMatch(dashboard, /window\.history\.pushState/)
-  assert.doesNotMatch(dashboard, /useRouter/)
+  assert.doesNotMatch(dashboard, /router\.refresh\(\)|window\.history\.pushState|useRouter/)
 })
 
 test("Wyckoff ticker endpoint is authenticated and reads only the selected ticker payload", () => {
@@ -62,7 +64,6 @@ test("Wyckoff ticker endpoint is authenticated and reads only the selected ticke
   assert.match(tickerApi, /getUnifiedWyckoffTickerData/)
   assert.match(tickerApi, /Cache-Control/)
   assert.match(unifiedData, /export async function getUnifiedWyckoffTickerData/)
-
   const selectedStart = unifiedData.indexOf("export async function getUnifiedWyckoffTickerData")
   const selectedSource = unifiedData.slice(selectedStart)
   assert.match(selectedSource, /\.eq\("ticker", ticker\)/)
@@ -70,79 +71,72 @@ test("Wyckoff ticker endpoint is authenticated and reads only the selected ticke
   assert.doesNotMatch(selectedSource, /\.in\("ticker", tickers\)/)
 })
 
-test("Wyckoff timeframe uses bounded SmoothUI AnimatedTabs inside chart toolbar", () => {
+test("Wyckoff timeframe keeps bounded SmoothUI AnimatedTabs inside the chart toolbar", () => {
   assert.match(dashboard, /import \{ AnimatedTabs \}/)
   assert.match(dashboard, /data-wyckoff-chart-toolbar/)
   assert.match(dashboard, /<AnimatedTabs[\s\S]*ariaLabel="Khung thời gian biểu đồ"/)
   assert.match(animatedTabs, /layoutId=/)
   assert.match(animatedTabs, /useReducedMotion/)
-  assert.match(animatedTabs, /ArrowRight|ArrowLeft/)
   assert.doesNotMatch(animatedTabs, /transition-all|backdrop-blur|backdrop-filter|filter:/)
 })
 
-test("chart loading uses bounded SmoothUI AI loader with stable canvas geometry", () => {
-  assert.match(chart, /import \{ AiLoader \}/)
-  assert.match(chart, /isInitialLoading/)
-  assert.match(chart, /<AiLoader label=/)
-  assert.match(chart, /compact/)
+test("chart loading is visual-only inside chart content and compositor-safe", () => {
+  assert.match(chart, /loading = false/)
+  assert.match(chart, /<AiLoader/)
+  assert.match(chart, /showLabel=\{false\}/)
+  assert.match(chart, /compositorSafe/)
   assert.match(chart, /h-\[520px\]/)
   assert.match(chart, /xl:h-\[660px\]/)
   assert.match(chart, /\[contain:layout_paint\]/)
-  assert.match(aiLoader, /role="status"/)
-  assert.match(aiLoader, /useReducedMotion/)
-  assert.match(aiLoader, /compact = false/)
+  assert.match(aiLoader, /showLabel = true/)
+  assert.match(aiLoader, /compositorSafe = false/)
+  assert.match(aiLoader, /opacity: \[0\.25, 1, 0\.25\]/)
+  assert.doesNotMatch(dashboard, /Đang tải \{pendingTicker\}/)
   assert.doesNotMatch(aiLoader, /backdrop-blur|backdrop-filter|filter:/)
 })
 
-test("price motion uses SmoothUI PriceFlow only on bounded focal numbers", () => {
-  assert.match(dashboard, /import \{ PriceFlow \}/)
-  assert.match(dashboard, /<PriceFlow value=\{latest\?\.close/)
-  assert.match(dashboard, /<PriceFlow value=\{latest\.open\}/)
-  assert.match(dashboard, /<PriceFlow value=\{scenario\.probability\}/)
-  assert.match(priceFlow, /useReducedMotion/)
-  assert.match(priceFlow, /tabular-nums/)
+test("Price Flow is suppressed during ticker commits to avoid simultaneous compositor work", () => {
+  assert.match(dashboard, /suppressValueMotion/)
+  assert.match(dashboard, /setSuppressValueMotion\(true\)/)
+  assert.match(dashboard, /const priceMotion = !suppressValueMotion/)
+  assert.match(dashboard, /animate=\{priceMotion\}/)
+  assert.match(priceFlow, /animate = true/)
+  assert.match(priceFlow, /const shouldAnimate = animate && !reducedMotion/)
 
   const rowStart = dashboard.indexOf("const WatchlistRow")
   const rowEnd = dashboard.indexOf("export function WyckoffChartDashboard", rowStart)
   assert.doesNotMatch(dashboard.slice(rowStart, rowEnd), /PriceFlow/)
 })
 
-test("Wyckoff chart double-buffers canvas swaps instead of tearing down the visible chart first", () => {
-  assert.match(chart, /activeSlotRef/)
-  assert.match(chart, /pendingSlotRef/)
-  assert.match(chart, /layer\.style\.visibility = "hidden"/)
-  assert.match(chart, /await nextPaint\(\)/)
-  assert.match(chart, /layer\.style\.visibility = "visible"/)
-  assert.match(chart, /const previousSlot = activeSlotRef\.current/)
-  assert.match(chart, /removeSlot\(previousSlot\)/)
-  assert.match(chart, /activeSlotRef\.current\?\.key === renderKey/)
-  assert.doesNotMatch(chart, /chartRef\.current\?\.remove\(\)/)
-  assert.doesNotMatch(chart, /\}, \[loadKey, study, ticker\]\)/)
+test("Wyckoff chart keeps one persistent canvas surface and updates series in place", () => {
+  assert.match(chart, /controllerRef/)
+  assert.match(chart, /function applyStudy/)
+  assert.match(chart, /controller\.candles\.setData/)
+  assert.match(chart, /controller\.volume\.setData/)
+  assert.match(chart, /controller\.markers\?\.setMarkers/)
+  assert.match(chart, /series\.applyOptions/)
+  assert.match(chart, /series\.setData/)
+  assert.match(chart, /removePriceLine/)
+  assert.match(chart, /\}, \[\]\)/)
+  assert.doesNotMatch(chart, /activeSlotRef|pendingSlotRef|visibility = "hidden"|nextPaint|removeSlot/)
+  assert.doesNotMatch(chart, /document\.createElement\("div"\)/)
 })
 
-test("Wyckoff navigation and chart lifecycle avoid full workspace remount and resize churn", () => {
-  assert.doesNotMatch(page, /<WyckoffChartDashboard\s+key=/)
-  assert.doesNotMatch(page, /key=\{ticker\}/)
-  assert.doesNotMatch(page, /key=\{unified\.ticker\}/)
+test("Wyckoff chart resize remains rAF-batched without autoSize or full-surface swapping", () => {
+  assert.doesNotMatch(page, /<WyckoffChartDashboard\s+key=|key=\{ticker\}|key=\{unified\.ticker\}/)
   assert.match(chart, /new ResizeObserver/)
   assert.match(chart, /requestAnimationFrame/)
-  assert.match(chart, /activeSlotRef\.current\?\.chart\.applyOptions\(\{ width, height \}\)/)
-  assert.match(chart, /pendingSlotRef\.current\?\.chart\.applyOptions\(\{ width, height \}\)/)
+  assert.match(chart, /currentChart\.applyOptions/)
   assert.doesNotMatch(chart, /autoSize:\s*true/)
   assert.match(chartRuntime, /applyOptions\(options: Record<string, unknown>\)/)
+  assert.match(chartRuntime, /removePriceLine\?/)
 })
 
-test("Wyckoff motion stays bounded away from the chart canvas", () => {
-  assert.match(dashboard, /LazyMotion/)
-  assert.match(dashboard, /duration: 0\.16/)
-  assert.doesNotMatch(dashboard, /AnimatePresence/)
-  assert.doesNotMatch(dashboard, /transition-all/)
-  assert.doesNotMatch(dashboard, /backdrop-blur|backdrop-filter|drop-shadow/)
+test("Wyckoff dashboard avoids large ticker-switch motion ancestors", () => {
+  assert.doesNotMatch(dashboard, /LazyMotion|AnimatePresence|motion\/react/)
+  assert.doesNotMatch(dashboard, /transition-all|backdrop-blur|backdrop-filter|drop-shadow/)
   assert.doesNotMatch(dashboard, /filter:\s*/)
-
-  const symbolMotionEnd = dashboard.indexOf("const WatchlistRow")
-  const chartIndex = dashboard.indexOf("<WyckoffLightweightChart")
-  assert.ok(symbolMotionEnd > 0 && chartIndex > symbolMotionEnd, "chart must stay outside the bounded symbol motion component")
+  assert.match(dashboard, /<WyckoffLightweightChart ticker=\{activeTicker\} study=\{current\} loading=\{Boolean\(pendingTicker\)\}/)
 })
 
 test("company metadata is selected-ticker only and remains fail-open", () => {
