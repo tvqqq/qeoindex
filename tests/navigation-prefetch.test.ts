@@ -11,8 +11,6 @@ test("dense ticker lists do not auto-prefetch every dynamic research route", () 
   assert.match(helper, /prefetch=\{false\}/)
   assert.match(helper, /router\.prefetch\(href\)/)
 
-  // Keep this check compatible with the repository TypeScript target. Do not use
-  // the RegExp dotAll (`s`) flag here; it requires ES2018 and breaks Vercel typecheck.
   const forbiddenDynamicResearchHref = "href={`/research/${"
 
   for (const path of [
@@ -24,11 +22,7 @@ test("dense ticker lists do not auto-prefetch every dynamic research route", () 
   ]) {
     const file = source(path)
     assert.match(file, /TickerResearchLink/, `${path} should use intent-prefetch ticker links`)
-    assert.equal(
-      file.includes(forbiddenDynamicResearchHref),
-      false,
-      `${path} must not auto-prefetch dynamic ticker routes`,
-    )
+    assert.equal(file.includes(forbiddenDynamicResearchHref), false, `${path} must not auto-prefetch dynamic ticker routes`)
   }
 })
 
@@ -38,23 +32,16 @@ test("Wyckoff chart shell avoids eager route work and compositor-heavy navigatio
   assert.equal(file.includes("backdrop-blur-2xl"), false, "Wyckoff workspace must not use backdrop-filter blur")
   assert.equal(file.includes("drop-shadow-["), false, "Wyckoff workspace must not add CSS filter drop-shadows around the chart canvas")
   assert.equal(file.includes("transition-all"), false, "Wyckoff interactions should transition only paint-safe properties")
+  assert.equal(file.includes("data-wyckoff-back-row"), false, "Wyckoff should not reserve a separate Rating navigation row")
+  assert.equal(file.includes("Quay lại Rating"), false, "Wyckoff should not restore the removed Rating control")
+  assert.equal(file.includes("<Link"), false, "Wyckoff dense shell should avoid heavyweight Next Link navigation")
 
-  const backRowStart = file.indexOf("data-wyckoff-back-row")
-  const headerStart = file.indexOf("<header", backRowStart)
-  assert.notEqual(backRowStart, -1, "Wyckoff Rating navigation should live in its own row")
-  assert.notEqual(headerStart, -1)
-
-  const backRow = file.slice(backRowStart, headerStart)
-  const links = backRow.match(/<Link[\s\S]*?<\/Link>/g) ?? []
-  assert.ok(links.length >= 1, "Wyckoff back row should keep its Rating navigation link")
-  for (const link of links) {
-    assert.match(link, /prefetch=\{false\}/, "Wyckoff navigation must not prefetch the heavy dynamic route while the chart mounts")
-  }
-
+  const headerStart = file.indexOf("<header")
   const headerEnd = file.indexOf("</header>", headerStart)
+  assert.notEqual(headerStart, -1)
   assert.notEqual(headerEnd, -1)
   const header = file.slice(headerStart, headerEnd)
-  assert.doesNotMatch(header, /<Link/, "Rating navigation must stay outside the stock identity header")
+  assert.doesNotMatch(header, /<Link/)
 })
 
 test("top navigation restores Insights as a styled parent menu with three child pages", () => {
