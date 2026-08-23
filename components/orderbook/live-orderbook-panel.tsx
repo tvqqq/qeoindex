@@ -17,6 +17,7 @@ import {
   PieChart,
   RefreshCw,
   RotateCcw,
+  Sparkles,
   TrendingDown,
   TrendingUp,
   X,
@@ -1785,15 +1786,16 @@ function ForeignRealtimeCard({
   const isNetValPos = netVal > 0
   const isNetValNeg = netVal < 0
 
+  const foreignUpdatedAt = foreign?.updatedAt
   const displayTime = useMemo(() => {
     if (latestTradeTime) {
       return timeLabel(latestTradeTime)
     }
-    if (foreign?.updatedAt && !foreign.updatedAt.includes("09:15:00")) {
-      return timeLabel(foreign.updatedAt)
+    if (foreignUpdatedAt && !foreignUpdatedAt.includes("09:15:00")) {
+      return timeLabel(foreignUpdatedAt)
     }
     return new Date().toLocaleTimeString("vi-VN", { hour12: false })
-  }, [latestTradeTime, foreign?.updatedAt])
+  }, [latestTradeTime, foreignUpdatedAt])
 
   return (
     <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-3 font-mono text-xs space-y-2.5">
@@ -2496,11 +2498,13 @@ export function LiveOrderBookPanel({
     }
   }, [stream.trades, quotePrice])
 
+  const quoteCeiling = quote?.ceiling
+  const quoteFloor = quote?.floor
   const tone = useMemo(() => {
     if (!activePrice) return "ref"
     const price = activePrice
-    const ceil = quote?.ceiling ? normalizeMarketPrice(quote.ceiling, price) ?? quote.ceiling : (reference ? Math.round(reference * 1.07 * 100) / 100 : undefined)
-    const flr = quote?.floor ? normalizeMarketPrice(quote.floor, price) ?? quote.floor : (reference ? Math.round(reference * 0.93 * 100) / 100 : undefined)
+    const ceil = quoteCeiling ? normalizeMarketPrice(quoteCeiling, price) ?? quoteCeiling : (reference ? Math.round(reference * 1.07 * 100) / 100 : undefined)
+    const flr = quoteFloor ? normalizeMarketPrice(quoteFloor, price) ?? quoteFloor : (reference ? Math.round(reference * 0.93 * 100) / 100 : undefined)
 
     const baseTone = marketToneFromPrice({
       price,
@@ -2515,7 +2519,7 @@ export function LiveOrderBookPanel({
     if (changePercent >= 6.85) return "ceiling"
     if (changePercent <= -6.85) return "floor"
     return baseTone
-  }, [activePrice, reference, quote?.ceiling, quote?.floor, changePercent])
+  }, [activePrice, reference, quoteCeiling, quoteFloor, changePercent])
   const color = activePrice ? marketToneText(tone) : "text-muted-2"
   const headerPriceFlash = usePriceFlashAnimation(activePrice, reference)
 
@@ -2608,8 +2612,30 @@ export function LiveOrderBookPanel({
             {activePrice ? <MarketChangePill value={changePercent} tone={tone} compact decimals={2} /> : null}
           </div>
 
-          {/* Action Controls (3 clean icons) */}
+          {/* Action Controls (clean unified icons) */}
           <div className="flex items-center gap-0.5 border-l border-white/10 pl-1.5 ml-0.5">
+            <a
+              data-orderbook-action
+              href={`/insights?ticker=${symbol}`}
+              aria-label={`Hồ sơ rating Insights ${symbol}`}
+              title="Hồ sơ rating Insights"
+              onClick={(event) => event.stopPropagation()}
+              className="rounded p-1.5 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+            </a>
+
+            <a
+              data-orderbook-action
+              href={`/insights/wyckoff?ticker=${symbol}&timeframe=1D`}
+              aria-label={`Phân tích chart Wyckoff ${symbol}`}
+              title="Phân tích chart Wyckoff"
+              onClick={(event) => event.stopPropagation()}
+              className="rounded p-1.5 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+            </a>
+
             <a
               data-orderbook-action
               href={`/research/${symbol.toLowerCase()}`}

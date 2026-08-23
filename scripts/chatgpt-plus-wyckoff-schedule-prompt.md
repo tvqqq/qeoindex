@@ -1,50 +1,93 @@
-# ChatGPT Plus schedule prompt — QeoIndex Wyckoff scan
+# ChatGPT Web prompt — Wyckoff Top 100 → Notion unified staging
 
-Copy the block below into a ChatGPT Plus scheduled task after configuring a private QeoIndex Custom GPT Action. Put `SCANNER_RUN_SECRET` in the Action bearer-auth setting, never in this prompt or chat history.
+Contract version: `notion-unified-v1` (2026-08-23).
 
-Recommended schedule: `07:05 Asia/Ho_Chi_Minh, Monday–Friday` (after completed Daily data is available; adjust only after provider timing is verified).
+- [Notion contract page](https://app.notion.com/p/3c52172825508193a861e662379530db)
+- Universe: `collection://210c502d-0c32-4fdd-9d69-7ef18e2be7d5`
+- Runs: `collection://4efe8131-196a-4b4e-8a9c-dea48c51a554`
+- Snapshots: `collection://f9d84b24-965a-4008-a339-5a62db409ecf`
+- Schedule ChatGPT Web: Monday–Friday after completed EOD data and before the 17:00 ICT ingestion cron.
+
+Copy the complete block below into a ChatGPT Web task/conversation that can access the QeoIndex Notion workspace.
 
 ```text
-Tên task: QeoIndex — quét Wyckoff Top 100 mỗi ngày
+Tên tác vụ: QeoIndex — Wyckoff Top 100 → Notion unified staging
 
-Mỗi thứ Hai đến thứ Sáu lúc 07:05 theo múi giờ Asia/Ho_Chi_Minh, hãy chạy quy trình sau bằng QeoIndex Scanner Action đã kết nối. Không scrape TradingView, không tự tạo OHLCV, không suy diễn kết quả từ lần chạy cũ và không ghi secret vào nội dung trả lời.
+MỤC TIÊU
+Quét đúng 100 cổ phiếu Active trong “Wyckoff Universe — Top 100 HOSE”, phân tích 1H/4H/1D/1W/1M khi có đủ dữ liệu, rồi ghi staging facts vào Notion unified. Không gọi endpoint QeoIndex, không dùng/yêu cầu SCANNER_RUN_SECRET và không ghi vào Daily Wyckoff Scan cũ.
 
-1. Gọi POST /api/wyckoff/run theo đúng 10 batch tuần tự, mỗi batch 10 mã:
-   - ?offset=0&limit=10
-   - tiếp tục offset 10, 20, 30, 40, 50, 60, 70, 80, 90 với limit=10
-   Chỉ bắt đầu batch kế tiếp sau khi batch hiện tại trả kết quả. Không retry quá 1 lần cho cùng batch.
+NOTION IDS
+- Universe: collection://210c502d-0c32-4fdd-9d69-7ef18e2be7d5
+- Runs: collection://4efe8131-196a-4b4e-8a9c-dea48c51a554
+- Snapshots: collection://f9d84b24-965a-4008-a339-5a62db409ecf
+- Contract: https://app.notion.com/p/3c52172825508193a861e662379530db
 
-2. Với từng response, lưu và kiểm tra các field thật: ok, requested, completed[], skipped[], errors[], generatedAt, universeDate. HTTP 200 không tự động có nghĩa là scan thành công.
+VERSION CỐ ĐỊNH
+- Prompt Version = notion-unified-v1
+- Model Version = qeo-wyckoff-rule-v1
+- Aggregation Version = vn-session-v1
+- Universe Key = hose_top100
+- Run Key = WYCKOFF-<YYYY-MM-DD>-EOD-v1, dùng ngày completed Daily bar mới nhất theo Asia/Ho_Chi_Minh.
 
-3. Chấp nhận run đầy đủ khi và chỉ khi:
-   - tổng requested = 100;
-   - mỗi ticker chỉ xuất hiện một lần trong toàn bộ completed + errors;
-   - tổng completed + errors = 100;
-   - errors = 0;
-   - mọi completed item có timeframes từ 1 đến 5; ít hơn 5 phải được báo là thiếu lịch sử, tuyệt đối không tự điền;
-   - không có giá/OHLC bằng 0 hoặc xác suất giả do ChatGPT tự điền.
+DATA RULES
+1. Chỉ dùng OHLCV/indicator có nguồn URL và timestamp kiểm chứng được. Không đọc giá từ screenshot, không tự tạo OHLCV, volume, indicator, phase hay xác suất.
+2. Chỉ dùng completed bars. 4H aggregate theo phiên Việt Nam; 1W/1M aggregate từ Daily. Không trộn incomplete live bar.
+3. Mỗi timeframe cần tối thiểu 60 completed bars. Nếu thiếu vẫn tạo row, đặt History Status = Incomplete và Validation Status = Valid; để trống analysis/probabilities/levels/scenarios. Evidence JSON phải có missingReason và completedBars thật.
+4. Record Complete phải có Bull + Base + Bear = đúng 100. Đây là conditional rule-engine output, không phải dự báo chắc chắn hay khuyến nghị đầu tư.
+5. Spring/UTAD chỉ là candidate tới khi có Test/follow-through. Phase D cần Hold → Test → Follow-through; một breakout candle không đủ.
 
-4. Nếu có lỗi:
-   - không gọi run thành công;
-   - liệt kê batch, ticker và error nguyên ý nhưng rút gọn, không lộ header/secret;
-   - không tự sửa Notion và không tạo record thay thế;
-   - đề nghị operator kiểm tra provider/Notion rồi chạy lại đúng batch lỗi.
+A. UNIVERSE
+- Query đúng 100 row Active, sort Rank 1→100.
+- Xác minh ticker unique, rank unique 1–100, Exchange = HOSE.
+- Nếu lỗi: tạo run Status = Error, ghi Error Summary rồi dừng; không tạo data giả.
 
-5. Nếu thành công, trả báo cáo tiếng Việt ngắn gọn:
-   - thời gian generatedAt;
-   - requested/completed/errors và 10 runId để audit;
-   - báo tổng snapshot timeframe thực từ completed[].timeframes và số timeframe thiếu lịch sử;
-   - provider breakdown Daily/1H từ completed[];
-   - tối đa 10 mã có event Spring, UT/UTAD, SOS hoặc SOW nếu Action cung cấp latest snapshot; nếu Action không trả field này, ghi rõ “không có trong response”, tuyệt đối không đoán;
-   - link mở page: https://qeoindex.qeoqeo.com/insights/wyckoff?ticker=<TICKER>&timeframe=1D
+B. RUN MANIFEST
+- Tìm Run Key hiện tại. Nếu Ingested thì dừng. Nếu Writing thì resume, không duplicate.
+- Nếu chưa có, tạo Runs record với đúng field:
+  Run và Run Key = <Run Key>; Scan Date; Status = Writing; Universe Key = hose_top100;
+  Universe Count = 100; Snapshot Expected = 500; Snapshot Complete = 0;
+  Snapshot Incomplete = 0; Error Count = 0; Model Version; Aggregation Version;
+  Started At = current ISO datetime; Prompt Version = notion-unified-v1.
 
-6. Nhắc rằng Bull/Base/Bear là xác suất từ rule-engine và các đường projection là kịch bản có điều kiện, không phải dự báo chắc chắn hay khuyến nghị đầu tư.
+C. SNAPSHOTS
+- Xử lý theo Rank, batch tối đa 10 ticker. Sau mỗi batch đếm lại row.
+- Mỗi ticker phải có đúng 5 Snapshot Key: <Run Key>|<Ticker>|<1H|4H|1D|1W|1M>.
+- Query Snapshot Key trước khi write; update row có sẵn, không tạo duplicate.
+- Field mapping bắt buộc:
+  Snapshot = <Ticker> · <Timeframe> · <Scan Date>; Snapshot Key; Run Key; Ticker; Rank;
+  Exchange; Sector; Timeframe; Bar Closed At; History Bar Count; History Status;
+  Provider; Provider Detail; Source URL; Fetched At; Model Version; Aggregation Version;
+  Phase; Wyckoff State; TA Bias; Confidence; Bull/Base/Bear Probability;
+  Support; Resistance; Confirmation; Invalidation; What Changed;
+  Technical JSON; Evidence JSON; Markers JSON; Scenarios JSON;
+  Validation Status = Valid hoặc Invalid; Validation Error để trống khi Valid.
+
+JSON CONTRACT
+- JSON phải parse được, English camelCase keys, không dùng Markdown code fence trong property.
+- Technical JSON: price, changePct, volume, ma20, ma50, ma200, rsi14, macd, macdSignal, atr14, relVolume.
+- Evidence JSON: provider, providerDetail, sourceUrl, fetchedAt, firstBarAt, lastBarAt, completedBars, derived, rulesTriggered, missingReason.
+- Markers JSON: array của time, label, tone, detail.
+- Scenarios JSON: array của key, label, probability, target, description, path; path points có time/value.
+- Mỗi JSON phải nằm trong giới hạn text của Notion. Rút gọn rules trước; không bao giờ cắt thành JSON invalid.
+
+D. FINAL VALIDATION
+- Universe Count = 100; đúng 500 Snapshot Key unique; mỗi ticker đủ 5 timeframe enum.
+- Complete + Incomplete = 500; Rejected/Invalid = 0.
+- Complete: Bar Closed At có giá trị, Provider không rỗng, History Bar Count >= 60, Technical JSON.price > 0, probability sum = 100.
+- Incomplete: Evidence JSON.missingReason có giá trị và không chứa analysis/probability tự điền.
+- Model/Aggregation/Prompt versions đồng nhất.
+
+E. CLOSE RUN
+- Nếu đạt: Status = Ready; ghi Snapshot Complete/Incomplete thật; Error Count = 0;
+  Completed At; Provider Summary; Validation Hash = SHA-256 của danh sách đã sort gồm Snapshot Key + Bar Closed At + History Status.
+- Nếu không đạt: Status = Partial hoặc Error; ghi Error Count/Error Summary thật. Không đặt Ready để thử cron.
+
+BÁO CÁO CUỐI
+Trả tiếng Việt gồm Run Key, Scan Date, ticker count, Complete/Incomplete/Invalid counts,
+provider breakdown, tối đa 10 event Spring/UTAD/SOS/SOW có evidence, link contract page,
+và câu: “Notion chỉ là staging; cron 17:00 sẽ validate lại trước khi publish Supabase.”
 ```
 
-## Action requirements
+## 17:00 ingestion contract
 
-- Base URL: `https://qeoindex.qeoqeo.com`.
-- Operation: `POST /api/wyckoff/run` with integer query parameters `offset` and `limit` (`limit` tối đa 10).
-- Authentication: HTTP bearer stored privately in the Custom GPT Action configuration.
-- The Action must allow a long-running response or the schedule must use smaller batches. Do not make the endpoint public to accommodate ChatGPT Tasks.
-- ChatGPT Plus Tasks are an orchestrator here, not the source of market data or the system of record. The QeoIndex server performs provider fetch, Wyckoff rules, and canonical persistence.
+The server cron uses a Notion integration token, never a ChatGPT secret. It queries the newest `Ready` run, atomically claims it as `Ingesting`, validates all 500 keys, publishes facts to Supabase, optionally caches the published payload in Redis, then marks the run `Ingested`. Redis is disposable; Supabase remains the operational source of truth.

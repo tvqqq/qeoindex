@@ -13,9 +13,15 @@ export const metadata: Metadata = {
   alternates: { canonical: "/insights" },
 }
 
-export default async function InsightsPage() {
+export default async function InsightsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ ticker?: string | string[]; rating?: string | string[] }>
+}) {
   const auth = await getServerAuthContext()
   if (!auth) return <LandingLogin />
+  const query = searchParams ? await searchParams : {}
+  const requestedTicker = (Array.isArray(query.ticker) ? query.ticker[0] : query.ticker || (Array.isArray(query.rating) ? query.rating[0] : query.rating) || "").trim().toUpperCase()
   const data = await getInsightsDashboardData(auth.supabase)
-  return <InsightsDashboard data={data} />
+  return <InsightsDashboard data={data} initialTicker={requestedTicker} />
 }

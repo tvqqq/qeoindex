@@ -2,7 +2,20 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { Activity, AlertTriangle, BarChart3, Database, HelpCircle, Search, ShieldCheck, Sparkles, Target, TrendingDown, TrendingUp } from "lucide-react"
+import {
+  AlertTriangle,
+  ArrowLeft,
+  BarChart3,
+  ExternalLink,
+  GripVertical,
+  HelpCircle,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react"
 
 import { WyckoffLightweightChart } from "@/components/insights/wyckoff-lightweight-chart"
 import { StockLogo } from "@/components/stock-logo"
@@ -88,31 +101,81 @@ export function WyckoffChartDashboard({
   }
 
   return (
-    <div className="min-h-screen bg-[#05080d] text-slate-100">
+    <div className="min-h-screen bg-[#05080d] text-slate-100 font-ticker">
       <TopNav />
 
       <main className="mx-auto max-w-[1920px] px-3 py-4 sm:px-4 lg:px-5">
-        <div className="mb-4 flex flex-col justify-between gap-4 border-b border-white/[0.07] pb-4 xl:flex-row xl:items-end">
-          <div>
-            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-300/80">
-              <Sparkles className="h-4 w-4" /> Insights / Phân tích chart Wyckoff
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <StockLogo symbol={ticker} size={42} className="rounded-xl" />
-              <h1 className="font-ticker text-3xl font-extrabold italic tracking-tight text-white">{ticker}</h1>
-              <span className="font-mono text-2xl font-bold text-white">{number(latest?.close ?? selected?.price)}</span>
-              <span className={`font-mono text-sm font-bold ${(change ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{percent(change)}</span>
-              <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${biasTone(current?.analysis?.taBias ?? selected?.bias ?? "")}`}>{current?.analysis?.taBias ?? selected?.bias ?? "Pending"}</span>
-            </div>
-            <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
-              Đọc trực tiếp Structure → Volume → Wyckoff event → Confirmation → 3 kịch bản tiếp theo trên cùng một màn hình.
-            </p>
+        {/* ORDERBOOK-STYLED HEADER WITH BACK BUTTON TO INSIGHTS DETAIL POPUP */}
+        <header className="mb-4 flex select-none items-center justify-between gap-2.5 border border-white/[0.10] bg-gradient-to-r from-[#121820]/95 via-[#182330]/95 to-[#121820]/95 px-4 py-2.5 rounded-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_4px_16px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
+          {/* Left: Back Button, Grip, Logo, Ticker & Bias */}
+          <div className="flex items-center gap-2.5 min-w-0 shrink">
+            <Link
+              href={`/insights?ticker=${ticker}`}
+              aria-label={`Quay lại Insights & mở popup chi tiết ${ticker}`}
+              title={`Quay lại Insights & mở popup chi tiết ${ticker}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 font-ticker text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 hover:border-cyan-400/50 transition-all shadow-[0_0_12px_rgba(34,211,238,0.2)] shrink-0"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Chi tiết rating</span>
+            </Link>
+
+            <GripVertical className="h-4 w-4 text-white/30 hover:text-white/60 shrink-0 transition-colors hidden sm:block" />
+            
+            <StockLogo
+              symbol={ticker}
+              size={32}
+              className="shrink-0 rounded-full border-white/40 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+            />
+            
+            <span className="font-ticker text-xl sm:text-2xl font-extrabold italic bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent pr-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.2)] tracking-tight shrink-0 select-none">
+              {ticker}
+            </span>
+            
+            {selected?.sector ? (
+              <span className="hidden md:inline-flex rounded-full bg-white/[0.08] border border-white/[0.12] px-2 py-0.5 font-ticker text-[9.5px] font-bold text-white/70 uppercase tracking-wider shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">
+                {selected.sector}
+              </span>
+            ) : null}
+
+            <span className={`rounded-full border px-2 py-0.5 font-ticker text-[10px] font-bold shrink-0 ${biasTone(current?.analysis?.taBias ?? selected?.bias ?? "")}`}>
+              {current?.analysis?.taBias ?? selected?.bias ?? "Pending"}
+            </span>
           </div>
-          <div className="flex flex-wrap gap-2 text-xs text-slate-400">
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2"><Database className="h-3.5 w-3.5 text-cyan-300" /> Scan · {dataSource}</span>
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2"><Activity className="h-3.5 w-3.5 text-emerald-300" /> OHLCV · {current?.provider}</span>
+
+          {/* Right: Live Price & Change Pill, Divider, Action Controls */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            {/* Price & Change Pill */}
+            <div className="flex items-center gap-2">
+              <span className={`font-mono text-lg sm:text-xl font-black tracking-tight rounded px-1 transition-colors drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] ${(change ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                {number(latest?.close ?? selected?.price)}
+              </span>
+              <span className={`inline-flex shrink-0 items-center justify-center font-mono text-xs font-bold px-1.5 py-0.5 rounded leading-none ${(change ?? 0) >= 0 ? "text-emerald-300 bg-emerald-500/10 border border-emerald-500/20" : "text-rose-300 bg-rose-500/10 border border-rose-500/20"}`}>
+                {percent(change)}
+              </span>
+            </div>
+
+            {/* Action Controls */}
+            <div className="flex items-center gap-0.5 border-l border-white/10 pl-1.5 ml-0.5">
+              <Link
+                href={`/insights?ticker=${ticker}`}
+                aria-label={`Mở popup chi tiết rating ${ticker}`}
+                title="Hồ sơ rating Insights"
+                className="rounded p-1.5 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+              </Link>
+
+              <Link
+                href={`/research/${ticker.toLowerCase()}`}
+                aria-label={`Mở phân tích chuyên sâu ${ticker}`}
+                title="Mở phân tích chuyên sâu"
+                className="rounded p-1.5 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </div>
-        </div>
+        </header>
 
         <div className="grid min-h-[760px] overflow-hidden rounded-2xl border border-white/[0.09] bg-[#080c12] shadow-[0_25px_90px_-45px_rgba(0,0,0,.95)] xl:grid-cols-[minmax(0,1fr)_370px]">
           <section className="min-w-0 border-b border-white/[0.08] xl:border-b-0 xl:border-r">
@@ -133,6 +196,8 @@ export function WyckoffChartDashboard({
                 <span>{current?.bars.length ?? 0} nến hoàn tất</span>
                 <span>·</span>
                 <span>{current?.detail}</span>
+                <span>·</span>
+                <span>Nguồn: {dataSource}</span>
               </div>
             </div>
 

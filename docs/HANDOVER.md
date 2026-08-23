@@ -251,6 +251,8 @@ Supabase DB migrations are different: approved DDL/function changes apply immedi
 
 ## Known/deferred constraints
 
+- ChatGPT Web Wyckoff staging uses the contract in `scripts/chatgpt-plus-wyckoff-schedule-prompt.md`. Notion run data source: `4efe8131-196a-4b4e-8a9c-dea48c51a554`; snapshot data source: `f9d84b24-965a-4008-a339-5a62db409ecf`. The 17:00 ingestion cron remains a separate implementation phase and must only publish a `Ready` run after validating all 500 snapshot keys.
+
 - Hosted Auth leaked-password protection still needs to be enabled in Supabase settings.
 - CSP remains deferred pending a tested WebSocket/external-source policy.
 - Further board throttling should be evidence-driven from authenticated live-session browser profiling; the 250ms quote / 1s ordering split is now the default contract.

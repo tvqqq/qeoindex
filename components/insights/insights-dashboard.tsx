@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Fragment, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 import {
   Activity,
   ArrowDown,
@@ -29,6 +29,7 @@ import {
   Flame,
   FlaskConical,
   Gauge,
+  GripVertical,
   HeartPulse,
   Info,
   Landmark,
@@ -47,6 +48,7 @@ import {
   Truck,
   Target,
   Utensils,
+  X,
   Zap,
 } from "lucide-react"
 
@@ -59,7 +61,7 @@ import { TopNav } from "@/components/top-nav"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -772,33 +774,90 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[94vh] flex-col overflow-hidden border border-cyan-300/20 bg-[#060c16] p-0 font-ticker shadow-[0_40px_120px_-20px_rgba(0,0,0,.98),0_0_70px_-35px_rgba(103,232,249,.6)] sm:max-w-[min(1440px,calc(100vw-2rem))]">
-        <DialogHeader className="shrink-0 border-b border-white/[0.10] bg-gradient-to-r from-[#121820]/95 via-[#182330]/95 to-[#121820]/95 px-5 py-3.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_4px_16px_rgba(0,0,0,0.4)]">
-          <div className="flex flex-wrap items-center gap-3">
-            <StockLogo symbol={row.ticker} size={38} className="shrink-0 rounded-full border-white/40 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]" />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-baseline gap-2.5">
-                <DialogTitle className="font-ticker text-2xl font-extrabold italic tracking-tight text-white">{row.ticker}</DialogTitle>
-                <span className="max-w-lg truncate text-sm font-semibold text-slate-300">{row.companyName}</span>
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-bold text-muted-2">
-                <span>{row.exchange || "—"}</span><span>·</span><span>{row.sector}</span><span>·</span><span>Snapshot {row.asOfDate || "—"}</span>
-              </div>
+      <DialogContent showCloseButton={false} className="flex max-h-[94vh] flex-col overflow-hidden border border-cyan-300/20 bg-[#060c16] p-0 font-ticker shadow-[0_40px_120px_-20px_rgba(0,0,0,.98),0_0_70px_-35px_rgba(103,232,249,.6)] sm:max-w-[min(1440px,calc(100vw-2rem))]">
+        {/* HEADER / ORDERBOOK POPUP EXACT STYLE */}
+        <header className="flex cursor-grab select-none items-center justify-between gap-2.5 border-b border-white/[0.10] bg-gradient-to-r from-[#121820]/95 via-[#182330]/95 to-[#121820]/95 px-4 py-2.5 active:cursor-grabbing touch-none backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_4px_16px_rgba(0,0,0,0.4)]">
+          {/* Left Ticker, Logo & Exchange */}
+          <div className="flex items-center gap-2.5 min-w-0 shrink">
+            <GripVertical className="h-4 w-4 text-white/30 hover:text-white/60 shrink-0 transition-colors" />
+            <StockLogo
+              symbol={row.ticker}
+              size={32}
+              className="shrink-0 rounded-full border-white/40 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+            />
+            <DialogTitle className="font-ticker text-xl sm:text-2xl font-extrabold italic bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent pr-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.2)] tracking-tight shrink-0 select-none m-0">
+              {row.ticker}
+            </DialogTitle>
+            <span className="hidden sm:inline-block font-ticker text-xs font-semibold text-slate-300 truncate max-w-xs">
+              {row.companyName}
+            </span>
+            {row.exchange ? (
+              <span className="hidden md:inline-flex rounded-full bg-white/[0.08] border border-white/[0.12] px-2 py-0.5 font-ticker text-[9.5px] font-bold text-white/70 uppercase tracking-wider shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">
+                {row.exchange}
+              </span>
+            ) : null}
+            {row.isTop100 && (
+              <Badge variant="outline" className="border-amber-400/40 bg-amber-400/10 text-amber-300 font-ticker text-[10px] font-bold shrink-0 hidden lg:inline-flex">
+                <Crown className="size-3" /> Top 100{row.top100Rank ? ` · #${row.top100Rank}` : ""}
+              </Badge>
+            )}
+          </div>
+
+          {/* Center / Right Price & Action Controls */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            {/* Live Price & Change Pill */}
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "font-mono text-lg sm:text-xl font-black tracking-tight rounded px-1 transition-colors drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)]",
+                  (row.changePercent ?? 0) > 0 ? "text-up" : (row.changePercent ?? 0) < 0 ? "text-down" : "text-ref"
+                )}
+              >
+                {formatPrice(row.price)}
+              </span>
+              {row.price != null && (
+                <MarketChangePill
+                  value={row.changePercent}
+                  tone={(row.changePercent ?? 0) > 0 ? "up" : (row.changePercent ?? 0) < 0 ? "down" : "ref"}
+                  compact
+                  decimals={2}
+                />
+              )}
             </div>
-            <div className="ml-auto flex flex-wrap items-center gap-3 pr-8">
-              <div className="text-right">
-                <div className="font-mono text-xl font-black text-white">{formatPrice(row.price)}</div>
-                <div className={cn("font-mono text-xs font-black", (row.changePercent ?? 0) >= 0 ? "text-up" : "text-down")}>{formatPercent(row.changePercent)}</div>
-              </div>
-              <div className="rounded-xl border border-violet-300/25 bg-violet-400/10 px-3 py-2 text-center shadow-[0_0_20px_-10px_rgba(167,139,250,.8)]">
-                <div className="text-[10px] font-extrabold uppercase tracking-widest text-violet-200/70">Rating</div>
-                <div className="font-mono text-xl font-black text-violet-200">{row.ratingScore}/100</div>
-              </div>
-              {row.isTop100 && <Badge variant="outline" className="border-amber-300/30 bg-amber-300/10 text-amber-200"><Crown className="size-3" /> Top 100{row.top100Rank ? ` · #${row.top100Rank}` : ""}</Badge>}
+
+            {/* Action Controls (3 clean icons) */}
+            <div className="flex items-center gap-0.5 border-l border-white/10 pl-1.5 ml-0.5">
+              <Link
+                href={`/insights/wyckoff?ticker=${row.ticker}&timeframe=1D`}
+                aria-label={`Phân tích chart Wyckoff ${row.ticker}`}
+                title="Phân tích chart Wyckoff"
+                className="rounded p-1.5 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+              </Link>
+
+              <Link
+                href={`/research/${row.ticker.toLowerCase()}`}
+                aria-label={`Mở phân tích chuyên sâu ${row.ticker}`}
+                title="Mở phân tích chuyên sâu"
+                className="rounded p-1.5 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+
+              <button
+                type="button"
+                aria-label="Đóng"
+                title="Đóng"
+                onClick={() => onOpenChange(false)}
+                className="rounded p-1.5 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           </div>
-          <DialogDescription className="sr-only">Dashboard chi tiết cổ phiếu {row.ticker}</DialogDescription>
-        </DialogHeader>
+          <DialogDescription className="sr-only">Hồ sơ chi tiết cổ phiếu {row.ticker}</DialogDescription>
+        </header>
 
         <div className="shrink-0 overflow-x-auto border-b border-white/[0.08] bg-[#080d19] px-5 py-3">
           <nav className="inline-flex min-w-max items-center gap-1.5 rounded-full border border-white/[0.1] bg-[#080c10]/90 p-1 shadow-[0_0_24px_-4px_rgba(176,124,255,0.18),0_0_24px_-4px_rgba(34,201,138,0.18)]" role="tablist" aria-label="Điều hướng hồ sơ cổ phiếu">
@@ -950,21 +1009,54 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
           {topTab === "ttai" && <TtaiDashboard row={row} />}
         </div>
 
-        <div className="shrink-0 flex flex-col gap-2 border-t border-white/[0.07] bg-[#08111f] px-5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2 text-muted-2"><Info className="mt-0.5 size-3.5 shrink-0 text-ref" /><span>Dữ liệu snapshot từ KFSP/Supabase. TTAI hiển thị lịch sử provider và không tái tính phương pháp chấm điểm KFSP.</span></div>
-          <Link href={`/research/${row.ticker.toLowerCase()}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/10 px-3.5 py-2 font-bold text-brand transition-colors hover:bg-brand/15">Mở nghiên cứu <ExternalLink className="size-3.5" /></Link>
+        <div className="shrink-0 flex flex-col gap-2 border-t border-white/[0.07] bg-[#08111f] px-5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between font-ticker">
+          <div className="flex items-start gap-2 text-muted-2 leading-relaxed">
+            <Info className="mt-0.5 size-3.5 shrink-0 text-ref" />
+            <span>Dữ liệu snapshot từ KFSP/Supabase. State radar là heuristic QeoIndex minh bạch, không phải khuyến nghị đầu tư.</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href={`/insights/wyckoff?ticker=${row.ticker}&timeframe=1D`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 font-bold text-cyan-300 transition-colors hover:bg-cyan-400/20"
+            >
+              <BarChart3 className="size-3.5" /> Chart Wyckoff
+            </Link>
+            <Link
+              href={`/research/${row.ticker.toLowerCase()}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/10 px-3 py-1.5 font-bold text-brand transition-colors hover:bg-brand/15"
+            >
+              Nghiên cứu <ExternalLink className="size-3.5" />
+            </Link>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   )
 }
-export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
+export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashboardData; initialTicker?: string }) {
   const [universeFilter, setUniverseFilter] = useState<"top100" | "all">("top100")
   const [sectorFilter, setSectorFilter] = useState("all")
   const [query, setQuery] = useState("")
   const [sort, setSort] = useState<{ key: RatingSortKey; direction: SortDirection }>({ key: "ratingScore", direction: "desc" })
-  const [selectedRating, setSelectedRating] = useState<InsightsRatingRow | null>(null)
+  const [selectedRating, setSelectedRating] = useState<InsightsRatingRow | null>(() => {
+    if (!initialTicker) return null
+    return data.ratings.find((r) => r.ticker.toUpperCase() === initialTicker.toUpperCase()) || null
+  })
   const [expandedSectors, setExpandedSectors] = useState<Set<string>>(new Set())
+
+  // Auto-sync ticker from URL query if user navigated client-side (popstate / back-forward)
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search)
+      const tickerParam = (params.get("ticker") || params.get("rating") || "").toUpperCase()
+      if (tickerParam) {
+        const found = data.ratings.find((r) => r.ticker.toUpperCase() === tickerParam)
+        if (found) setSelectedRating(found)
+      }
+    }
+    window.addEventListener("popstate", handlePopState)
+    return () => window.removeEventListener("popstate", handlePopState)
+  }, [data.ratings])
 
   const quote = data.vnindex
   const positive = (quote?.changePercent ?? 0) >= 0
