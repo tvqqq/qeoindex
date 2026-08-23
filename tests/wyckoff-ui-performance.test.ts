@@ -122,6 +122,19 @@ test("Wyckoff chart keeps one persistent canvas surface and updates series in pl
   assert.doesNotMatch(chart, /document\.createElement\("div"\)/)
 })
 
+test("Wyckoff chart uses raster-safe visual primitives on scaled 4K displays", () => {
+  assert.match(chart, /vertLines:\s*\{\s*visible:\s*false\s*\}/)
+  assert.match(chart, /horzLines:\s*\{\s*visible:\s*false\s*\}/)
+  assert.match(chart, /study\.analysis\.support\)\.slice\(0, 1\)/)
+  assert.match(chart, /study\.analysis\.resistance\)\.slice\(0, 1\)/)
+  assert.match(chart, /lineWidth:\s*2/)
+  assert.match(chart, /lineStyle:\s*0/)
+  assert.match(chart, /priceLineVisible:\s*false/)
+  assert.doesNotMatch(chart, /lineStyle:\s*2/)
+  assert.doesNotMatch(chart, /vertLines:\s*\{\s*color:/)
+  assert.doesNotMatch(chart, /horzLines:\s*\{\s*color:/)
+})
+
 test("Wyckoff chart resize remains rAF-batched without autoSize or full-surface swapping", () => {
   assert.doesNotMatch(page, /<WyckoffChartDashboard\s+key=|key=\{ticker\}|key=\{unified\.ticker\}/)
   assert.match(chart, /new ResizeObserver/)
