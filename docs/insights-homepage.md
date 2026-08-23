@@ -1,5 +1,12 @@
 # Insights homepage
 
+This is the architecture overview. Supporting documents:
+
+- Delivery status, limits, and roadmap: `docs/insights-plan.md`
+- Exact formulas and state thresholds: `docs/insights-rating-model.md`
+- UX, visual language, responsive and accessibility contract: `docs/insights-design.md`
+- Engineering and operations runbook: `docs/insights-handover.md`
+
 `/insights` is the market-intelligence landing page for every signed-in user. It requires Supabase Auth but no separate feature entitlement. Anonymous users remain behind the existing login gate; the feature does not weaken the auth boundary of `/`, `/research/*`, or any write/operational API.
 
 ## Data ownership
@@ -11,7 +18,7 @@
 
 ## Rating UX
 
-- The desktop table uses an 11-column, full-width market-board layout that fits without a forced horizontal minimum width. It defaults to Top 100; selecting `Tất cả` shows a sector read-model with stock count, Top 100 count, summed capitalization, averaged scores/returns, and dominant sector RRG. Clicking a sector drills into its stock rows.
+- The desktop table uses an 11-column, full-width market-board layout that fits without a forced horizontal minimum width. It defaults to Top 100; selecting `Tất cả` shows a sector read-model with stock count, Top 100 count, summed capitalization, averaged scores/returns, and dominant sector RRG. Sector aggregates use the full current snapshot; clicking a sector filters the ranked detailed read-model, currently capped at the top 500 composite rows plus the exact Top 100. See the plan for the full-sector drill-down follow-up.
 - Visible stock metrics are price, CANSLIM, 4M, price potential, RSs, RSm, stock RRG, weekly/monthly change, and composite rating. Every visible column remains sortable; icon/color semantics are shared with the detail dialog.
 - Hovering a stock opens an accessible profile tooltip. Hovering a metric label or score explains its definition and provenance.
 - Clicking or keyboard-activating a row opens a shadcn dialog. Its QeoIndex state radar scores five documented dimensions (trend, accumulation, risk, heat, sustainability) from published KFSP fields; it is a heuristic comparison aid, not proprietary KFSP logic or an investment signal. The dialog also retains the nine raw-data groups matching the observed KFSP contract.
@@ -27,7 +34,7 @@
 - **Heat:** weekly/monthly momentum, RSI, RSs, and price potential.
 - **Sustainability:** CANSLIM, 4M, composite rating, RSm, sector RRG, and inverse risk.
 
-The state label follows explicit thresholds in that module. Changes to weights or thresholds require updating its unit tests and this section.
+The state label follows explicit thresholds in that module. Exact formulas, normalization, missing-value behavior, aggregation, and state precedence are documented in `docs/insights-rating-model.md`. Changes require updating its unit tests and that document.
 
 ## Daily ingestion pipeline
 
@@ -79,6 +86,6 @@ Then invoke one authenticated machine sync and confirm `published_count`, latest
 - Partial/invalid snapshot: the run is marked failed, staging is not published, and the previous good date remains readable.
 - The signed-in UI reads only the latest published `source = 'kfsp'` date and never mixes dates.
 
-## Rollout status (2026-08-22)
+## Rollout status (2026-08-23)
 
-Migration `20260822112420_kfsp_rating_pipeline.sql`, the Edge Function, the nine-group catalog, and the interactive UI are live in production. The 2026-08-22 initialization published 1,752 distinct tickers, including exactly 100 canonical Top 100 rows; the daily 07:00 ICT cron remains enabled. Future releases should re-check both the sync-run counts and representative rendered values because a successful provider request alone does not prove field aliases or units are correct.
+Migration `20260822112420_kfsp_rating_pipeline.sql`, the Edge Function, the nine-group catalog, and the interactive UI are live in production. Both 2026-08-22 and 2026-08-23 published 1,752 distinct tickers across 31 sectors, including exactly 100 canonical Top 100 rows. The daily 07:00 ICT cron remains enabled. This count is a time-specific baseline, not a permanent invariant; future releases must re-query sync counts and representative rendered values because a successful provider request alone does not prove field aliases or units are correct.

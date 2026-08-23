@@ -12,6 +12,7 @@ You are continuing work on QeoIndex in `/Users/quyentat/_www/qeoindex`.
 2. `docs/HANDOVER.md`
 3. `docs/market-board.md`
 4. `docs/security.md`
+5. For Insights work: `docs/insights-homepage.md`, then `docs/insights-handover.md`
 
 Do not discard, reset, or overwrite unrelated work. The Top 100/EOD/index-fallback/six-group market-board release is already consolidated on `main`; the scanner-policy and board-regression improvements live on `codex/next-agent-improvements` until merged.
 
@@ -31,6 +32,7 @@ Do not discard, reset, or overwrite unrelated work. The Top 100/EOD/index-fallba
 - Same-date scanner persistence is monotonic: `Incomplete` may upgrade to `Complete`, but an existing `Complete` result is never automatically downgraded because a provider later returns less history.
 - `pnpm build` runs `test:core`, targeted lint for the touched scanner/UI files, explicit TypeScript, and the tracked-source secret scan before Next.js compilation.
 - Production deployment is Git-driven: only `main` is deployment-enabled and Vercel Git Integration is the normal production deployment mechanism.
+- `/insights` is authenticated for all signed-in users. Its daily KFSP-derived snapshots, five-axis heuristic, design contract, current limitations, and operations runbook are indexed from `docs/insights-homepage.md`.
 
 ## Priority status
 
