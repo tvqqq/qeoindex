@@ -8,6 +8,8 @@ const authGate = readFileSync("components/auth/app-auth-gate.tsx", "utf8")
 const insightsData = readFileSync("lib/insights-data.ts", "utf8")
 const insightsDashboard = readFileSync("components/insights/insights-dashboard.tsx", "utf8")
 const ttaiDashboard = readFileSync("components/insights/ttai-dashboard.tsx", "utf8")
+const chartPrimitive = readFileSync("components/ui/chart.tsx", "utf8")
+const globalsCss = readFileSync("app/globals.css", "utf8")
 const stockHistoryApi = readFileSync("app/api/insights/stock-history/route.ts", "utf8")
 const pipelineMigration = readFileSync("supabase/migrations/20260822112420_kfsp_rating_pipeline.sql", "utf8")
 const ttaiMigration = readFileSync("supabase/migrations/20260823104000_kfsp_ttai_history.sql", "utf8")
@@ -67,6 +69,8 @@ test("rating table exposes keyboard modal, grouped dashboard tabs, history, and 
   assert.doesNotMatch(insightsDashboard, /<details className="rounded-2xl[\s\S]*Ma trận trạng thái & tích lũy/)
   assert.match(insightsDashboard, /<AccumulationHeatmap row=\{row\} \/>/)
   assert.match(insightsDashboard, /<RatingHistoryChart row=\{row\} \/>/)
+  assert.match(globalsCss, /#rating-panel-overview > :nth-child\(2\) > :first-child[\s\S]*grid-column: 1 \/ span 8/)
+  assert.match(globalsCss, /#rating-panel-overview > :nth-child\(4\)[\s\S]*grid-column: 1 \/ span 8;[\s\S]*grid-row: 3/)
   assert.match(insightsDashboard, /FA quick read/)
   assert.match(insightsDashboard, /TA quick read/)
   assert.match(insightsDashboard, /Thông tin doanh nghiệp/)
@@ -85,6 +89,24 @@ test("rating table exposes keyboard modal, grouped dashboard tabs, history, and 
   assert.match(insightsData, /kfsp_stock_rrg_state,kfsp_sector_rrg_state/)
   assert.match(insightsData, /loadHistoryDates/)
   assert.match(insightsData, /buildSectorSummaries/)
+})
+
+test("TTAI charts use shadcn Recharts composition and keep the KPI strip first", () => {
+  assert.match(chartPrimitive, /function ChartContainer/)
+  assert.match(chartPrimitive, /const ChartTooltip = RechartsPrimitive\.Tooltip/)
+  assert.match(chartPrimitive, /function ChartTooltipContent/)
+  assert.match(ttaiDashboard, /ChartContainer/)
+  assert.match(ttaiDashboard, /ChartTooltipContent/)
+  assert.match(ttaiDashboard, /AreaChart/)
+  assert.match(ttaiDashboard, /RadarChart/)
+  assert.match(ttaiDashboard, /indicator="line"/)
+  for (const label of ["4M hiện tại", "CANSLIM hiện tại", "RS-S cổ phiếu", "RS-S ngành"]) {
+    assert.match(ttaiDashboard, new RegExp(label))
+  }
+  const kpiIndex = ttaiDashboard.indexOf("4M hiện tại")
+  const loadingIndex = ttaiDashboard.indexOf("{loading &&")
+  assert.ok(kpiIndex >= 0 && loadingIndex > kpiIndex, "TTAI KPI strip should render before loading/history content")
+  assert.doesNotMatch(ttaiDashboard, /Lịch sử RS-S, RRG, 4M và CANSLIM\. Dữ liệu provider được chuẩn hóa vào Supabase/)
 })
 
 test("TTAI history UI compares RS-S, exposes RRG history, and renders 4M/CANSLIM quarterly charts", () => {
