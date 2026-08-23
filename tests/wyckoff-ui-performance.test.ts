@@ -146,6 +146,20 @@ test("Wyckoff chart caps the physical raster viewport before large-window flicke
   assert.match(chart, /rgba\(255,71,87,0\.28\)/)
 })
 
+test("Wyckoff standalone zoom batches wheel gestures instead of continuously redrawing the canvas", () => {
+  assert.match(chart, /ZOOM_SETTLE_MS = 110/)
+  assert.match(chart, /function applyDiscreteZoom/)
+  assert.match(chart, /pendingWheelDelta \+= event\.deltaY/)
+  assert.match(chart, /window\.setTimeout\([\s\S]*ZOOM_SETTLE_MS/)
+  assert.match(chart, /host\.addEventListener\("wheel", handleWheel, \{ passive: false \}\)/)
+  assert.match(chart, /event\.preventDefault\(\)/)
+  assert.match(chart, /subscribeVisibleLogicalRangeChange/)
+  assert.match(chart, /setVisibleLogicalRange\(nextRange\)/)
+  assert.match(chart, /mouseWheel:\s*false/)
+  assert.match(chart, /pinch:\s*embedded/)
+  assert.doesNotMatch(chart, /handleScroll:\s*true|handleScale:\s*true/)
+})
+
 test("Wyckoff chart resize remains rAF-batched without autoSize or full-surface swapping", () => {
   assert.doesNotMatch(page, /<WyckoffChartDashboard\s+key=|key=\{ticker\}|key=\{unified\.ticker\}/)
   assert.match(chart, /new ResizeObserver/)
