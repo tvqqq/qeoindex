@@ -1,9 +1,13 @@
 "use client"
 
+export interface LightweightPriceLineApi {}
+
 export interface LightweightSeriesApi {
   setData(data: ReadonlyArray<Record<string, unknown>>): void
   update(data: Record<string, unknown>): void
-  createPriceLine?(options: Record<string, unknown>): unknown
+  applyOptions(options: Record<string, unknown>): void
+  createPriceLine?(options: Record<string, unknown>): LightweightPriceLineApi
+  removePriceLine?(line: LightweightPriceLineApi): void
 }
 
 export interface LightweightSeriesMarkersApi {
