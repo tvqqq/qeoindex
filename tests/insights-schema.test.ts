@@ -38,7 +38,9 @@ test("rating table exposes keyboard modal and hover tooltip interactions", () =>
   assert.match(insightsDashboard, /function RatingDialog/)
   assert.match(insightsDashboard, /aria-label={`Mở hồ sơ rating \$\{row\.ticker\}`}/)
   assert.match(insightsDashboard, /event\.key === "Enter" \|\| event\.key === " "/)
-  assert.match(insightsDashboard, /Hồ sơ điểm hiện tại/)
+  assert.match(insightsDashboard, /QeoIndex state radar/)
+  assert.match(insightsDashboard, /RatingHistoryChart/)
+  assert.match(insightsDashboard, /showSectorGroups/)
   assert.match(insightsDashboard, /KFSP_GROUPS\.map/)
   assert.match(insightsDashboard, /Top 100/)
   assert.match(insightsDashboard, /MetricLabel/)
@@ -47,8 +49,10 @@ test("rating table exposes keyboard modal and hover tooltip interactions", () =>
   assert.match(insightsDashboard, /SelectTrigger aria-label="Lọc theo ngành"/)
   assert.match(insightsDashboard, /function SortableHead/)
   assert.match(insightsDashboard, /sortKey="stockRrgState"/)
-  assert.match(insightsDashboard, /sortKey="sectorRrgState"/)
+  assert.match(insightsDashboard, /RRG_FIELD_DEFINITIONS\.sectorRrgState/)
   assert.match(insightsData, /kfsp_stock_rrg_state,kfsp_sector_rrg_state/)
+  assert.match(insightsData, /loadHistoryDates/)
+  assert.match(insightsData, /buildSectorSummaries/)
 })
 
 test("KFSP contract maps all nine provider groups without leaking provider credentials", () => {

@@ -11,9 +11,10 @@ import {
   Bolt,
   BrainCircuit,
   CalendarDays,
+  CalendarRange,
   ChevronsUpDown,
   ChartNoAxesCombined,
-  CircleDollarSign,
+  CircleAlert,
   Crown,
   Database,
   ExternalLink,
@@ -22,11 +23,14 @@ import {
   Layers3,
   LineChart,
   Radar,
+  RefreshCw,
+  Rocket,
   Search,
   ShieldCheck,
   Sparkles,
   TrendingDown,
   TrendingUp,
+  Target,
   Zap,
 } from "lucide-react"
 
@@ -42,7 +46,8 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import type { InsightsDashboardData, InsightsModuleSummary, InsightsRatingRow, KfspMetricValue } from "@/lib/insights-data"
+import type { InsightsDashboardData, InsightsModuleSummary, InsightsRatingRow, InsightsSectorSummary, KfspMetricValue } from "@/lib/insights-data"
+import { calculateRatingModel, historyDelta, type RatingDimension, type RatingModelSnapshot } from "@/lib/insights-rating-model"
 import { cn } from "@/lib/utils"
 import {
   KFSP_FIELD_CATALOG,
@@ -264,9 +269,8 @@ const RRG_FIELD_DEFINITIONS = {
 } satisfies Record<string, KfspFieldDefinition>
 
 type RatingSortKey = keyof Pick<InsightsRatingRow,
-  "ticker" | "sector" | "exchange" | "price" | "canslimScore" | "score4m" | "pricePotential" |
-  "volume" | "marketCapBillion" | "rsShort" | "rsMedium" | "stockRrgState" | "sectorRrgState" |
-  "rsi14" | "weeklyChangePercent" | "monthlyChangePercent" | "beta" | "peTtm" | "pbTtm" | "ratingScore"
+  "ticker" | "price" | "canslimScore" | "score4m" | "pricePotential" | "rsShort" | "rsMedium" |
+  "stockRrgState" | "weeklyChangePercent" | "monthlyChangePercent" | "ratingScore"
 >
 type SortDirection = "asc" | "desc"
 
@@ -281,12 +285,13 @@ function compareRatingValues(left: string | number | null, right: string | numbe
 }
 
 function RrgBadge({ value }: { value: string | null }) {
+  const Icon = value === "Dẫn dắt" ? Rocket : value === "Phục hồi" ? RefreshCw : value === "Suy yếu" ? TrendingDown : value === "Đội sổ" ? CircleAlert : Radar
   const tone = value === "Dẫn dắt" ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-300"
     : value === "Phục hồi" ? "border-sky-300/30 bg-sky-400/15 text-sky-300"
       : value === "Suy yếu" ? "border-amber-300/30 bg-amber-400/15 text-amber-300"
         : value === "Đội sổ" ? "border-rose-300/30 bg-rose-400/15 text-rose-300"
           : "border-white/10 bg-white/[0.03] text-muted-2"
-  return <Badge variant="outline" className={cn("min-w-24 justify-center font-bold", tone)}>{value || "—"}</Badge>
+  return <Badge variant="outline" className={cn("min-w-20 justify-center gap-1 px-1.5 font-bold", tone)}><Icon className="size-3" />{value || "—"}</Badge>
 }
 
 function SortableHead({ sortKey, activeKey, direction, onSort, definition, label, className }: {
@@ -310,11 +315,11 @@ function SortableHead({ sortKey, activeKey, direction, onSort, definition, label
   )
 }
 
-function ScorePill({ value, tone, label, description }: { value: number; tone: ScoreTone; label: string; description?: string }) {
+function ScorePill({ value, tone, label, description, icon: Icon = Bolt }: { value: number; tone: ScoreTone; label: string; description?: string; icon?: typeof Bolt }) {
   return (
     <Tooltip>
       <TooltipTrigger render={<span className={cn("inline-flex h-8 min-w-14 cursor-help items-center justify-center gap-1 rounded-md border px-2 font-mono text-sm font-black", SCORE_TONE[tone])} />}>
-        <Bolt className="size-3.5" /> {value}
+        <Icon className="size-3.5" /> {Math.round(value)}
       </TooltipTrigger>
       <TooltipContent className="border border-white/10 bg-[#090e19] px-3 py-2 font-ticker text-white shadow-2xl">
         <div>{label}: <strong className="text-brand">{value}/100</strong></div>
@@ -322,6 +327,23 @@ function ScorePill({ value, tone, label, description }: { value: number; tone: S
       </TooltipContent>
     </Tooltip>
   )
+}
+
+function sectorSortValue(row: InsightsSectorSummary, key: RatingSortKey): string | number | null {
+  const mapping: Record<RatingSortKey, string | number | null> = {
+    ticker: row.sector,
+    price: row.averagePrice,
+    canslimScore: row.averageCanslimScore,
+    score4m: row.averageScore4m,
+    pricePotential: row.stockCount ? row.pricePotentialUpCount / row.stockCount * 100 : null,
+    rsShort: row.averageRsShort,
+    rsMedium: row.averageRsMedium,
+    stockRrgState: row.dominantRrgState,
+    weeklyChangePercent: row.averageWeeklyChangePercent,
+    monthlyChangePercent: row.averageMonthlyChangePercent,
+    ratingScore: row.averageRatingScore,
+  }
+  return mapping[key]
 }
 
 function RatingTooltip({ row, children }: { row: InsightsRatingRow; children: React.ReactElement }) {
@@ -352,42 +374,76 @@ function RatingTooltip({ row, children }: { row: InsightsRatingRow; children: Re
   )
 }
 
-function ScoreProfileChart({ row }: { row: InsightsRatingRow }) {
-  const metrics = [
-    ["4M", row.score4m],
-    ["RS-S CK", row.scoreComponents.momentum],
-    ["RS-S ngành", row.scoreComponents.moneyFlow],
-    ["CANSLIM", row.canslimScore],
-    ["Tổng hợp", row.ratingScore],
-  ] as const
-  const width = 880
-  const height = 300
-  const points = metrics.map(([, value], index) => {
-    const x = 52 + index * ((width - 104) / (metrics.length - 1))
-    const y = height - 52 - value / 100 * (height - 92)
-    return `${x},${y}`
+const DIMENSION_STYLE: Record<RatingDimension["key"], { color: string; icon: typeof Bolt }> = {
+  bullish: { color: "#34d399", icon: TrendingUp },
+  accumulation: { color: "#22d3ee", icon: Layers3 },
+  risk: { color: "#fb923c", icon: ShieldCheck },
+  heat: { color: "#fb7185", icon: Activity },
+  sustainable: { color: "#a78bfa", icon: ShieldCheck },
+}
+
+function snapshotModel(snapshot: RatingModelSnapshot) {
+  return calculateRatingModel(snapshot)
+}
+
+function radarPoints(dimensions: RatingDimension[], radius: number, center = 160) {
+  return dimensions.map((dimension, index) => {
+    const angle = -Math.PI / 2 + index * Math.PI * 2 / dimensions.length
+    const length = radius * dimension.score / 100
+    return `${(center + Math.cos(angle) * length).toFixed(1)},${(center + Math.sin(angle) * length).toFixed(1)}`
+  }).join(" ")
+}
+
+function RatingRadar({ row }: { row: InsightsRatingRow }) {
+  const history = row.scoreHistory.length ? row.scoreHistory : [row]
+  const series = [
+    { label: "30D trước", days: 30, color: "#64748b", dash: "3 6" },
+    { label: "7D trước", days: 7, color: "#fbbf24", dash: "6 5" },
+    { label: "1D trước", days: 1, color: "#60a5fa", dash: "8 5" },
+  ].flatMap((definition) => {
+    const currentDate = new Date(`${row.asOfDate}T00:00:00Z`)
+    currentDate.setUTCDate(currentDate.getUTCDate() - definition.days)
+    const snapshot = history.filter((item) => item.asOfDate <= currentDate.toISOString().slice(0, 10)).sort((a, b) => b.asOfDate.localeCompare(a.asOfDate))[0]
+    return snapshot ? [{ ...definition, model: snapshotModel(snapshot) }] : []
   })
+  const model = calculateRatingModel(row)
   return (
-    <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h3 className="font-extrabold text-white">Hồ sơ điểm hiện tại</h3><p className="mt-1 text-xs text-muted-2">So sánh 4 trụ cột với rating tổng hợp</p></div>
-        <Badge variant="outline" className="border-violet-400/25 bg-violet-400/10 text-violet-300">{row.provider}</Badge>
+    <div className="rounded-2xl border border-cyan-300/10 bg-[#07111f] p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><h3 className="font-extrabold text-white">QeoIndex state radar</h3><p className="mt-1 max-w-xl text-xs leading-5 text-muted-2">Heuristic minh bạch từ CANSLIM, 4M, RS, RRG, biến động, RSI và beta; không phải mô hình độc quyền KFSP.</p></div>
+        <div className="flex flex-wrap gap-3 text-[11px] font-bold text-muted-2">{series.map((item) => <span key={item.label} className="flex items-center gap-1.5"><i className="h-px w-5" style={{ background: item.color }} />{item.label}</span>)}<span className="flex items-center gap-1.5 text-white"><i className="h-0.5 w-5 bg-violet-300" />Hiện tại</span></div>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="mt-4 h-[250px] w-full" role="img" aria-label={`Hồ sơ rating ${row.ticker}`}>
-        <defs><linearGradient id={`rating-${row.ticker}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8b7cff" stopOpacity=".42" /><stop offset="100%" stopColor="#22c98a" stopOpacity=".02" /></linearGradient></defs>
-        {[25, 50, 75, 100].map((level) => {
-          const y = height - 52 - level / 100 * (height - 92)
-          return <g key={level}><line x1="42" x2={width - 42} y1={y} y2={y} stroke="rgba(148,163,184,.13)" strokeDasharray="5 8" /><text x="6" y={y + 4} fill="#62727d" fontSize="12">{level}</text></g>
-        })}
-        <polygon points={`${points[0].split(",")[0]},${height - 52} ${points.join(" ")} ${points.at(-1)?.split(",")[0]},${height - 52}`} fill={`url(#rating-${row.ticker})`} />
-        <polyline points={points.join(" ")} fill="none" stroke="#8b7cff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-        {metrics.map(([label, value], index) => {
-          const [x, y] = points[index].split(",").map(Number)
-          return <g key={label}><circle cx={x} cy={y} r="6" fill="#22c98a" stroke="#07111f" strokeWidth="4" /><text x={x} y={y - 15} textAnchor="middle" fill="#e1e7ec" fontSize="15" fontWeight="800">{value}</text><text x={x} y={height - 18} textAnchor="middle" fill="#8a9ba7" fontSize="13" fontWeight="700">{label}</text></g>
-        })}
-      </svg>
+      <div className="mt-2 grid items-center gap-5 lg:grid-cols-[420px_1fr]">
+        <svg viewBox="0 0 320 320" className="mx-auto aspect-square w-full max-w-[390px]" role="img" aria-label={`Radar trạng thái ${row.ticker}`}>
+          {[25, 50, 75, 100].map((level) => <polygon key={level} points={radarPoints(model.dimensions.map((item) => ({ ...item, score: level })), 116)} fill="none" stroke="rgba(148,163,184,.13)" />)}
+          {model.dimensions.map((dimension, index) => {
+            const angle = -Math.PI / 2 + index * Math.PI * 2 / model.dimensions.length
+            const x = 160 + Math.cos(angle) * 144
+            const y = 160 + Math.sin(angle) * 144
+            return <g key={dimension.key}><line x1="160" y1="160" x2={160 + Math.cos(angle) * 116} y2={160 + Math.sin(angle) * 116} stroke="rgba(148,163,184,.12)" /><text x={x} y={y} textAnchor="middle" dominantBaseline="middle" fill={DIMENSION_STYLE[dimension.key].color} fontSize="12" fontWeight="800">{dimension.shortLabel} {dimension.score}</text></g>
+          })}
+          {series.map((item) => <polygon key={item.label} points={radarPoints(item.model.dimensions, 116)} fill="none" stroke={item.color} strokeWidth="1.5" strokeDasharray={item.dash} opacity=".8" />)}
+          <polygon points={radarPoints(model.dimensions, 116)} fill="rgba(167,139,250,.17)" stroke="#a78bfa" strokeWidth="3" />
+        </svg>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {model.dimensions.map((dimension) => {
+            const style = DIMENSION_STYLE[dimension.key]
+            const Icon = style.icon
+            const deltas = [1, 7, 30].map((days) => historyDelta(dimension.score, history, days, (snapshot) => snapshotModel(snapshot).dimensions.find((item) => item.key === dimension.key)?.score ?? null))
+            return <div key={dimension.key} className="rounded-xl border border-white/[0.07] bg-[#0a1422] p-3.5"><div className="flex items-center gap-2"><Icon className="size-4" style={{ color: style.color }} /><span className="text-sm font-extrabold text-white">{dimension.label}</span><strong className="ml-auto font-mono text-lg" style={{ color: style.color }}>{dimension.score}</strong></div><div className="mt-2 h-1 overflow-hidden rounded bg-white/10"><div className="h-full rounded" style={{ width: `${dimension.score}%`, background: style.color }} /></div><div className="mt-2 flex gap-3 font-mono text-[10px] text-muted-2">{[1, 7, 30].map((days, index) => <span key={days}>{days}D <b className={cn(deltas[index] == null ? "text-muted" : deltas[index]! >= 0 ? "text-up" : "text-down")}>{deltas[index] == null ? "—" : `${deltas[index]! >= 0 ? "+" : ""}${deltas[index]}`}</b></span>)}</div></div>
+          })}
+        </div>
+      </div>
     </div>
   )
+}
+
+function RatingHistoryChart({ row }: { row: InsightsRatingRow }) {
+  const history = [...row.scoreHistory].sort((a, b) => a.asOfDate.localeCompare(b.asOfDate)).filter((item) => item.ratingScore != null)
+  if (history.length < 2) return <div className="rounded-xl border border-white/[0.07] bg-[#091321] p-4 text-sm text-muted-2"><LineChart className="mr-2 inline size-4 text-violet-300" />Lịch sử sẽ tự mở rộng sau các snapshot cron tiếp theo; hiện chưa đủ 2 mốc để vẽ đường điểm.</div>
+  const width = 960
+  const points = history.map((item, index) => `${40 + index * (width - 80) / Math.max(1, history.length - 1)},${190 - (item.ratingScore || 0) * 1.45}`)
+  return <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4"><div className="flex items-center justify-between"><h3 className="font-extrabold text-white">Rating theo thời gian</h3><span className="text-xs text-muted-2">{history.length} snapshot thực</span></div><svg viewBox={`0 0 ${width} 220`} className="mt-3 h-48 w-full" role="img" aria-label={`Lịch sử rating ${row.ticker}`}><line x1="36" x2={width - 36} y1="190" y2="190" stroke="rgba(148,163,184,.2)" /><polyline points={points.join(" ")} fill="none" stroke="#a78bfa" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />{history.map((item, index) => { const [x, y] = points[index].split(",").map(Number); return <g key={item.asOfDate}><circle cx={x} cy={y} r="5" fill="#34d399" stroke="#07111f" strokeWidth="3" /><text x={x} y="210" textAnchor="middle" fill="#71818e" fontSize="11">{item.asOfDate.slice(5)}</text></g> })}</svg></div>
 }
 
 function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; onOpenChange: (open: boolean) => void }) {
@@ -396,11 +452,12 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
   const positive = (row.changePercent ?? 0) >= 0
   const activeGroupDefinition = KFSP_GROUPS.find((group) => group.key === activeGroup) ?? KFSP_GROUPS[0]
   const activeFields = KFSP_FIELD_CATALOG.filter((field) => field.group === activeGroup)
+  const ratingModel = calculateRatingModel(row)
   const scoreCards = [
-    { label: "Điểm 4M", value: row.score4m, tone: "amber" as const, icon: Activity, description: "Điểm mô hình 4M do KFSP cung cấp." },
-    { label: "RS-S cổ phiếu", value: row.scoreComponents.momentum, tone: "violet" as const, icon: Bolt, description: "Sức mạnh tương đối của cổ phiếu trong mô hình KFSP." },
-    { label: "RS-S ngành", value: row.scoreComponents.moneyFlow, tone: "cyan" as const, icon: CircleDollarSign, description: "Sức mạnh tương đối của ngành trong mô hình KFSP." },
-    { label: "CANSLIM", value: row.canslimScore, tone: "emerald" as const, icon: Layers3, description: "Điểm sàng lọc CANSLIM do KFSP cung cấp." },
+    { label: "CANSLIM", value: row.canslimScore, tone: "emerald" as const, icon: Target, description: "Điểm sàng lọc CANSLIM do KFSP cung cấp." },
+    { label: "Điểm 4M", value: row.score4m, tone: "amber" as const, icon: Bolt, description: "Điểm mô hình 4M do KFSP cung cấp." },
+    { label: "RSs", value: row.rsShort ?? row.scoreComponents.momentum, tone: "cyan" as const, icon: Zap, description: "Sức mạnh tương đối ngắn hạn của cổ phiếu." },
+    { label: "RSm", value: row.rsMedium ?? row.scoreComponents.moneyFlow, tone: "violet" as const, icon: Radar, description: "Sức mạnh tương đối trung hạn của cổ phiếu." },
   ]
   return (
     <Dialog open onOpenChange={onOpenChange}>
@@ -434,6 +491,11 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
             {row.asOfDate && <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-muted-2">Snapshot {row.asOfDate}</Badge>}
           </div>
 
+          <div className="rounded-xl border border-violet-400/20 bg-violet-400/[0.07] p-4 sm:flex sm:items-center sm:gap-4">
+            <span className="inline-flex size-11 items-center justify-center rounded-xl border border-cyan-300/25 bg-cyan-300/10 text-cyan-300"><Radar className="size-5" /></span>
+            <div className="mt-3 sm:mt-0"><div className="text-xs font-extrabold uppercase tracking-[0.16em] text-violet-300">Market state · QeoIndex heuristic</div><div className="mt-1 text-xl font-extrabold text-white">{ratingModel.state}</div><p className="mt-1 text-sm text-muted-2">{ratingModel.summary}</p></div>
+          </div>
+
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {scoreCards.map(({ label, value, tone, icon: Icon, description }) => (
               <div key={label} className="rounded-xl border border-white/[0.07] bg-[#091321] p-4">
@@ -443,7 +505,8 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
             ))}
           </div>
 
-          <ScoreProfileChart row={row} />
+          <RatingRadar row={row} />
+          <RatingHistoryChart row={row} />
 
           <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07101a]">
             <div className="overflow-x-auto border-b border-white/[0.08] bg-[#0a1320]">
@@ -491,7 +554,7 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
           </section>
 
           <div className="flex flex-col gap-3 border-t border-white/[0.07] pt-5 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-2 text-muted-2"><Info className="mt-0.5 size-4 shrink-0 text-ref" /><span>Dữ liệu snapshot từ KFSP/Supabase phục vụ phân tích, không phải khuyến nghị đầu tư. Chỉ số nhà cung cấp chưa trả về được hiển thị “—”.</span></div>
+            <div className="flex items-start gap-2 text-muted-2"><Info className="mt-0.5 size-4 shrink-0 text-ref" /><span>Dữ liệu snapshot từ KFSP/Supabase phục vụ phân tích, không phải khuyến nghị đầu tư. State radar là heuristic QeoIndex công khai, không đại diện mô hình độc quyền của nhà cung cấp.</span></div>
             <Link href={`/research/${row.ticker.toLowerCase()}`} className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-brand/30 bg-brand/10 px-4 py-2 font-bold text-brand transition-colors hover:bg-brand/15">Mở nghiên cứu <ExternalLink className="size-4" /></Link>
           </div>
         </div>
@@ -509,7 +572,7 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
   const quote = data.vnindex
   const positive = (quote?.changePercent ?? 0) >= 0
   const breadthTotal = (quote?.advances ?? 0) + (quote?.declines ?? 0)
-  const sectors = useMemo(() => [...new Set(data.ratings.map((row) => row.sector))].sort((a, b) => a.localeCompare(b, "vi")), [data.ratings])
+  const sectors = useMemo(() => data.sectorSummaries.map((row) => row.sector).sort((a, b) => a.localeCompare(b, "vi")), [data.sectorSummaries])
   const filteredRatings = useMemo(() => {
     const normalized = query.trim().toUpperCase()
     return data.ratings
@@ -520,6 +583,9 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
       })
       .sort((left, right) => compareRatingValues(left[sort.key], right[sort.key], sort.direction) || left.ticker.localeCompare(right.ticker))
   }, [data.ratings, query, sectorFilter, sort, universeFilter])
+  const showSectorGroups = universeFilter === "all" && sectorFilter === "all" && !query.trim()
+  const sortedSectorSummaries = useMemo(() => [...data.sectorSummaries]
+    .sort((left, right) => compareRatingValues(sectorSortValue(left, sort.key), sectorSortValue(right, sort.key), sort.direction) || left.sector.localeCompare(right.sector, "vi")), [data.sectorSummaries, sort])
   const handleSort = (key: RatingSortKey) => {
     setSort((current) => current.key === key
       ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
@@ -529,7 +595,7 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
   return (
     <div className="min-h-screen bg-background font-ticker text-foreground">
       <TopNav />
-      <main className="mx-auto w-full max-w-[1520px] px-4 pb-16 pt-8 sm:px-6 lg:px-8">
+      <main className="mx-auto w-full max-w-[1880px] px-3 pb-16 pt-8 sm:px-5 lg:px-6">
         <section className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-muted-2">
@@ -645,31 +711,40 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <Table className="min-w-[2260px] font-ticker">
+              <Table className="w-full table-fixed font-ticker">
+                <colgroup><col className="w-[20%]" /><col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[7%]" /><col className="w-[9%]" /><col className="w-[6%]" /><col className="w-[6%]" /><col className="w-[10%]" /><col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[10%]" /></colgroup>
                 <TableHeader className="sticky top-0 z-20 bg-[#05090f]">
                   <TableRow className="border-white/[0.08] hover:bg-transparent">
-                    <SortableHead sortKey="ticker" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="# · Cổ phiếu / Ngành" className="sticky left-0 z-30 h-16 min-w-80 bg-[#05090f] px-4 text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
-                    <SortableHead sortKey="price" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("price")} className="min-w-28 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
-                    <SortableHead sortKey="canslimScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_canslim_score")} className="min-w-28 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-emerald-300" />
-                    <SortableHead sortKey="score4m" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_score_4m")} className="min-w-24 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-amber-300" />
-                    <SortableHead sortKey="pricePotential" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_price_potential")} className="min-w-32 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-ref" />
-                    <SortableHead sortKey="volume" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("average_volume_50_sessions")} className="min-w-36 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
-                    <SortableHead sortKey="marketCapBillion" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("market_cap_billion")} className="min-w-32 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
-                    <SortableHead sortKey="rsShort" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_short")} className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-cyan-300" />
-                    <SortableHead sortKey="rsMedium" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_medium")} className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-violet-300" />
-                    <SortableHead sortKey="stockRrgState" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={RRG_FIELD_DEFINITIONS.stockRrgState} className="min-w-32 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-cyan-300" />
-                    <SortableHead sortKey="sectorRrgState" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={RRG_FIELD_DEFINITIONS.sectorRrgState} className="min-w-32 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-emerald-300" />
-                    <SortableHead sortKey="rsi14" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rsi_14")} className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-cyan-200" />
-                    <SortableHead sortKey="weeklyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("weekly_change_pct")} className="min-w-28 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
-                    <SortableHead sortKey="monthlyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("monthly_change_pct")} className="min-w-28 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
-                    <SortableHead sortKey="beta" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("beta")} className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
-                    <SortableHead sortKey="peTtm" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("pe_ttm")} className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
-                    <SortableHead sortKey="pbTtm" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("pb_ttm")} className="min-w-20 text-center text-xs font-extrabold uppercase tracking-[0.1em] text-muted-2" />
-                    <SortableHead sortKey="ratingScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="Rating tổng hợp" className="min-w-40 px-4 text-right text-xs font-extrabold uppercase tracking-[0.1em] text-brand" />
+                    <SortableHead sortKey="ticker" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="# · Cổ phiếu / Ngành" className="h-16 px-2 text-[10px] font-extrabold uppercase text-muted-2" />
+                    <SortableHead sortKey="price" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("price")} className="px-1 text-[10px] font-extrabold uppercase text-muted-2" />
+                    <SortableHead sortKey="canslimScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_canslim_score")} className="px-1 text-[10px] font-extrabold uppercase text-emerald-300" />
+                    <SortableHead sortKey="score4m" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_score_4m")} className="px-1 text-[10px] font-extrabold uppercase text-amber-300" />
+                    <SortableHead sortKey="pricePotential" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_price_potential")} className="px-1 text-[10px] font-extrabold uppercase text-ref" />
+                    <SortableHead sortKey="rsShort" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_short")} className="px-1 text-[10px] font-extrabold uppercase text-emerald-300" />
+                    <SortableHead sortKey="rsMedium" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_medium")} className="px-1 text-[10px] font-extrabold uppercase text-violet-300" />
+                    <SortableHead sortKey="stockRrgState" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={showSectorGroups ? RRG_FIELD_DEFINITIONS.sectorRrgState : RRG_FIELD_DEFINITIONS.stockRrgState} className="px-1 text-[10px] font-extrabold uppercase text-cyan-300" />
+                    <SortableHead sortKey="weeklyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("weekly_change_pct")} className="px-1 text-[10px] font-extrabold uppercase text-cyan-200" />
+                    <SortableHead sortKey="monthlyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("monthly_change_pct")} className="px-1 text-[10px] font-extrabold uppercase text-violet-200" />
+                    <SortableHead sortKey="ratingScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="Rating tổng hợp" className="px-1 text-[10px] font-extrabold uppercase text-brand" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRatings.map((row, index) => (
+                  {showSectorGroups && sortedSectorSummaries.map((row, index) => (
+                    <TableRow key={row.sector} tabIndex={0} role="button" aria-label={`Mở ngành ${row.sector}`} onClick={() => setSectorFilter(row.sector)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSectorFilter(row.sector) } }} className="group cursor-pointer border-white/[0.065] bg-[#07101a]/35 outline-none transition-colors hover:bg-cyan-300/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50">
+                      <TableCell className="px-2 py-4"><div className="flex items-center gap-2"><span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-cyan-300/15 bg-cyan-300/[0.06] font-mono text-[11px] font-bold text-cyan-300">{String(index + 1).padStart(2, "0")}</span><span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-violet-300/20 bg-violet-300/10 text-violet-300"><Layers3 className="size-4" /></span><div className="min-w-0"><div className="truncate text-sm font-extrabold uppercase text-white">{row.sector}</div><div className="mt-1 truncate text-[10px] text-muted-2">Σ {row.stockCount} mã · Top100 {row.top100Count} · Vốn hóa Σ {compactVolume(row.totalMarketCapBillion)} tỷ</div></div></div></TableCell>
+                      <TableCell className="px-1 text-center font-mono text-xs font-black text-white"><span className="block text-[9px] text-muted">AVG</span>{formatPrice(row.averagePrice)}</TableCell>
+                      <TableCell className="px-1 text-center">{row.averageCanslimScore == null ? "—" : <ScorePill value={row.averageCanslimScore} tone="emerald" icon={Target} label="CANSLIM trung bình ngành" />}</TableCell>
+                      <TableCell className="px-1 text-center">{row.averageScore4m == null ? "—" : <ScorePill value={row.averageScore4m} tone="amber" label="4M trung bình ngành" />}</TableCell>
+                      <TableCell className="px-1 text-center"><Badge variant="outline" className="gap-1 border-up/25 bg-up/[0.08] px-1.5 text-[10px] font-bold text-up"><TrendingUp className="size-3" />{Math.round(row.pricePotentialUpCount / Math.max(1, row.stockCount) * 100)}% tăng</Badge></TableCell>
+                      <TableCell className="px-1 text-center"><span className="inline-flex items-center gap-1 font-mono text-xs font-black text-emerald-300"><Zap className="size-3" />{formatNumber(row.averageRsShort)}</span></TableCell>
+                      <TableCell className="px-1 text-center"><span className="inline-flex items-center gap-1 font-mono text-xs font-black text-violet-300"><Radar className="size-3" />{formatNumber(row.averageRsMedium)}</span></TableCell>
+                      <TableCell className="px-1 text-center"><RrgBadge value={row.dominantRrgState} /></TableCell>
+                      <TableCell className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-bold", (row.averageWeeklyChangePercent || 0) >= 0 ? "text-up" : "text-down")}><CalendarDays className="size-3" />{formatPercent(row.averageWeeklyChangePercent)}</span></TableCell>
+                      <TableCell className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-bold", (row.averageMonthlyChangePercent || 0) >= 0 ? "text-up" : "text-down")}><CalendarRange className="size-3" />{formatPercent(row.averageMonthlyChangePercent)}</span></TableCell>
+                      <TableCell className="px-1 text-center"><strong className={cn("inline-flex size-10 items-center justify-center rounded-lg border font-mono text-base", (row.averageRatingScore || 0) >= 70 ? "border-up/30 bg-up/10 text-up" : "border-ref/30 bg-ref/10 text-ref")}>{row.averageRatingScore == null ? "—" : Math.round(row.averageRatingScore)}</strong></TableCell>
+                    </TableRow>
+                  ))}
+                  {!showSectorGroups && filteredRatings.map((row, index) => (
                     <TableRow
                       key={`${row.ticker}-${row.asOfDate}`}
                       tabIndex={0}
@@ -684,42 +759,33 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
                       }}
                       className="group cursor-pointer border-white/[0.065] bg-[#07101a]/35 outline-none transition-all hover:bg-cyan-300/[0.035] hover:shadow-[inset_3px_0_0_rgba(103,232,249,.7),0_0_24px_-16px_rgba(103,232,249,.7)] focus-visible:bg-cyan-300/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50"
                     >
-                      <TableCell className="sticky left-0 z-10 bg-[#07101a] px-4 py-3.5 group-hover:bg-[#071720]">
+                      <TableCell className="px-2 py-3.5">
                         <RatingTooltip row={row}>
-                          <div className="flex min-w-72 items-center gap-3">
-                            <span className="flex h-8 w-9 items-center justify-center rounded-md border border-white/[0.07] bg-white/[0.025] font-mono text-xs font-bold text-muted">{String(index + 1).padStart(2, "0")}</span>
-                            <StockLogo symbol={row.ticker} size={38} className="rounded-full group-hover:shadow-[0_0_20px_-5px_rgba(103,232,249,.75)]" />
-                            <div className="min-w-0"><div className="flex items-center gap-2 text-base font-extrabold text-white group-hover:text-cyan-200">{row.ticker}{row.isTop100 && <Crown className="size-3.5 text-amber-300" />}</div><div className="mt-0.5 max-w-48 truncate text-xs font-medium text-muted-2">{row.companyName}</div><div className="mt-0.5 text-[11px] font-bold uppercase tracking-wide text-cyan-300/75">{row.sector}</div></div>
+                          <div className="flex items-center gap-2">
+                            <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-white/[0.07] bg-white/[0.025] font-mono text-[11px] font-bold text-muted">{String(index + 1).padStart(2, "0")}</span>
+                            <StockLogo symbol={row.ticker} size={36} className="shrink-0 rounded-full group-hover:shadow-[0_0_20px_-5px_rgba(103,232,249,.75)]" />
+                            <div className="min-w-0"><div className="flex items-center gap-1.5 text-sm font-extrabold text-white group-hover:text-cyan-200">{row.ticker}{row.isTop100 && <Crown className="size-3 text-amber-300" />}</div><div className="mt-0.5 truncate text-[10px] font-medium text-muted-2">{row.companyName}</div><div className="mt-0.5 truncate text-[9px] font-bold uppercase text-cyan-300/75">{row.sector}</div></div>
                           </div>
                         </RatingTooltip>
                       </TableCell>
-                      <TableCell className="text-right"><div className="font-mono text-base font-black text-white">{formatPrice(row.price)}</div><div className={cn("mt-1 font-mono text-xs font-extrabold", (row.changePercent ?? 0) >= 0 ? "text-up" : "text-down")}>{formatPercent(row.changePercent)}</div></TableCell>
-                      <TableCell className="text-center"><ScorePill value={row.canslimScore} tone="emerald" label="Điểm CANSLIM" description={overviewField("kfsp_canslim_score").description} /></TableCell>
-                      <TableCell className="text-center"><ScorePill value={row.score4m} tone="amber" label="Điểm 4M" description={overviewField("kfsp_score_4m").description} /></TableCell>
-                      <TableCell className="text-center"><Badge variant="outline" className={cn("border-white/10 bg-white/[0.03] font-bold", row.pricePotential?.startsWith("Tăng") ? "text-up" : row.pricePotential?.startsWith("Giảm") ? "text-down" : "text-ref")}>{row.pricePotential || "—"}</Badge></TableCell>
-                      <TableCell className="text-right font-mono text-sm font-semibold text-muted-2">{compactVolume(row.volume)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm font-semibold text-muted-2">{row.marketCapBillion == null ? "—" : formatNumber(row.marketCapBillion)}</TableCell>
-                      <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.rsShort, overviewField("rs_short")))}>{formatNumber(row.rsShort)}</TableCell>
-                      <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.rsMedium, overviewField("rs_medium")))}>{formatNumber(row.rsMedium)}</TableCell>
-                      <TableCell className="text-center"><RrgBadge value={row.stockRrgState} /></TableCell>
-                      <TableCell className="text-center"><RrgBadge value={row.sectorRrgState} /></TableCell>
-                      <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.rsi14, overviewField("rsi_14")))}>{typeof row.rsi14 === "number" ? formatNumber(row.rsi14) : row.rsi14 || "—"}</TableCell>
-                      <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.weeklyChangePercent, overviewField("weekly_change_pct")))}>{formatPercent(row.weeklyChangePercent)}</TableCell>
-                      <TableCell className={cn("text-center font-mono text-sm font-bold", metricTone(row.monthlyChangePercent, overviewField("monthly_change_pct")))}>{formatPercent(row.monthlyChangePercent)}</TableCell>
-                      <TableCell className="text-center font-mono text-sm font-semibold text-white">{formatNumber(row.beta)}</TableCell>
-                      <TableCell className="text-center font-mono text-sm font-semibold text-white">{formatNumber(row.peTtm)}</TableCell>
-                      <TableCell className="text-center font-mono text-sm font-semibold text-white">{formatNumber(row.pbTtm)}</TableCell>
-                      <TableCell className="px-4">
-                        <div className="flex items-center justify-end gap-3"><div className="hidden w-20 sm:block"><AnimatedProgressBar value={row.ratingScore} color={row.ratingScore >= 80 ? "#22c98a" : row.ratingScore >= 65 ? "#e2b93b" : "#ff4757"} /></div><strong className={cn("flex size-11 items-center justify-center rounded-lg border font-mono text-lg", row.ratingScore >= 80 ? "border-up/35 bg-up/10 text-up" : row.ratingScore >= 65 ? "border-ref/35 bg-ref/10 text-ref" : "border-down/35 bg-down/10 text-down")}>{row.ratingScore}</strong><ArrowRight className="size-4 text-muted transition-transform group-hover:translate-x-1 group-hover:text-cyan-300" /></div>
-                      </TableCell>
+                      <TableCell className="px-1 text-center"><div className="font-mono text-xs font-black text-white">{formatPrice(row.price)}</div><div className={cn("mt-1 font-mono text-[10px] font-extrabold", (row.changePercent ?? 0) >= 0 ? "text-up" : "text-down")}>{formatPercent(row.changePercent)}</div></TableCell>
+                      <TableCell className="px-1 text-center"><ScorePill value={row.canslimScore} tone="emerald" icon={Target} label="Điểm CANSLIM" description={overviewField("kfsp_canslim_score").description} /></TableCell>
+                      <TableCell className="px-1 text-center"><ScorePill value={row.score4m} tone="amber" label="Điểm 4M" description={overviewField("kfsp_score_4m").description} /></TableCell>
+                      <TableCell className="px-1 text-center"><Badge variant="outline" className={cn("gap-1 border-white/10 bg-white/[0.03] px-1.5 text-[10px] font-bold", row.pricePotential?.startsWith("Tăng") ? "text-up" : row.pricePotential?.startsWith("Giảm") ? "text-down" : "text-ref")}>{row.pricePotential?.startsWith("Giảm") ? <TrendingDown className="size-3" /> : <TrendingUp className="size-3" />}{row.pricePotential || "—"}</Badge></TableCell>
+                      <TableCell className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-black", metricTone(row.rsShort, overviewField("rs_short")))}><Zap className="size-3" />{formatNumber(row.rsShort)}</span></TableCell>
+                      <TableCell className="px-1 text-center"><span className="inline-flex items-center gap-1 font-mono text-xs font-black text-violet-300"><Radar className="size-3" />{formatNumber(row.rsMedium)}</span></TableCell>
+                      <TableCell className="px-1 text-center"><RrgBadge value={row.stockRrgState} /></TableCell>
+                      <TableCell className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-bold", metricTone(row.weeklyChangePercent, overviewField("weekly_change_pct")))}><CalendarDays className="size-3" />{formatPercent(row.weeklyChangePercent)}</span></TableCell>
+                      <TableCell className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-bold", metricTone(row.monthlyChangePercent, overviewField("monthly_change_pct")))}><CalendarRange className="size-3" />{formatPercent(row.monthlyChangePercent)}</span></TableCell>
+                      <TableCell className="px-1 text-center"><div className="flex items-center justify-center gap-1"><strong className={cn("flex size-10 items-center justify-center rounded-lg border font-mono text-base", row.ratingScore >= 80 ? "border-up/35 bg-up/10 text-up" : row.ratingScore >= 65 ? "border-ref/35 bg-ref/10 text-ref" : "border-down/35 bg-down/10 text-down")}>{row.ratingScore}</strong><ArrowRight className="size-3 text-muted transition-transform group-hover:translate-x-1 group-hover:text-cyan-300" /></div></TableCell>
                     </TableRow>
                   ))}
-                  {!filteredRatings.length && <TableRow><TableCell colSpan={18} className="h-32 text-center text-sm text-muted-2">Không có mã phù hợp với bộ lọc.</TableCell></TableRow>}
+                  {!showSectorGroups && !filteredRatings.length && <TableRow><TableCell colSpan={11} className="h-32 text-center text-sm text-muted-2">Không có mã phù hợp với bộ lọc.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </CardContent>
             <div className="flex flex-col gap-2 border-t border-white/[0.06] px-4 py-4 text-xs font-medium text-muted-2 sm:flex-row sm:items-center sm:justify-between">
-              <span>Hiển thị <strong className="text-white">{filteredRatings.length}</strong> / {data.ratings.length} mã</span>
+              <span>{showSectorGroups ? <>Hiển thị <strong className="text-white">{sortedSectorSummaries.length}</strong> nhóm ngành · click để drill-down</> : <>Hiển thị <strong className="text-white">{filteredRatings.length}</strong> / {data.ratings.length} mã</>}</span>
               <span>{data.ratingMessage}</span>
             </div>
           </Card>

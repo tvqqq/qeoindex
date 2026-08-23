@@ -9,6 +9,7 @@ import { getScannerData } from "@/lib/scanner-data"
 import { getSignalUiData } from "@/lib/signal-data"
 import { buildRecommendationPerformance } from "@/lib/signal-performance"
 import { fetchTradingViewIndexes, type MarketIndexQuote } from "@/lib/tradingview-index"
+import type { RatingModelSnapshot } from "@/lib/insights-rating-model"
 import { KFSP_GROUPS, type KfspGroupKey } from "@/supabase/functions/_shared/kfsp-catalog"
 
 export type KfspMetricValue = string | number | boolean | null
@@ -49,6 +50,24 @@ export interface InsightsRatingRow {
     moneyFlow: number
     fundamental: number
   }
+  scoreHistory: RatingModelSnapshot[]
+}
+
+export interface InsightsSectorSummary {
+  sector: string
+  stockCount: number
+  top100Count: number
+  averagePrice: number | null
+  totalMarketCapBillion: number
+  averageCanslimScore: number | null
+  averageScore4m: number | null
+  pricePotentialUpCount: number
+  averageRsShort: number | null
+  averageRsMedium: number | null
+  dominantRrgState: string | null
+  averageWeeklyChangePercent: number | null
+  averageMonthlyChangePercent: number | null
+  averageRatingScore: number | null
 }
 
 export interface InsightsModuleSummary {
@@ -65,6 +84,7 @@ export interface InsightsDashboardData {
   vnindex: MarketIndexQuote | null
   vnindexSeries: number[]
   ratings: InsightsRatingRow[]
+  sectorSummaries: InsightsSectorSummary[]
   ratingMode: "supabase" | "preview"
   ratingMessage: string
   marketPulse: {
@@ -112,6 +132,112 @@ type RatingDatabaseRow = {
   source: string
 }
 
+type SectorDatabaseRow = Pick<RatingDatabaseRow,
+  "ticker" | "sector" | "is_top100" | "price" | "market_cap_billion" |
+  "kfsp_composite_score" | "kfsp_score_4m" | "kfsp_canslim_score" | "kfsp_price_potential" |
+  "rs_short" | "rs_medium" | "kfsp_sector_rrg_state" | "weekly_change_pct" | "monthly_change_pct"
+>
+
+function nullableNumber(value: unknown) {
+  if (value == null || value === "") return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function average(values: Array<number | null>) {
+  const valid = values.filter((value): value is number => value != null)
+  return valid.length ? valid.reduce((total, value) => total + value, 0) / valid.length : null
+}
+
+function dominant(values: Array<string | null>) {
+  const counts = new Map<string, number>()
+  values.forEach((value) => { if (value) counts.set(value, (counts.get(value) || 0) + 1) })
+  return [...counts].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], "vi"))[0]?.[0] ?? null
+}
+
+function buildSectorSummaries(source: unknown[]): InsightsSectorSummary[] {
+  const groups = new Map<string, SectorDatabaseRow[]>()
+  for (const candidate of source as SectorDatabaseRow[]) {
+    const sector = candidate.sector || "Chưa phân ngành"
+    groups.set(sector, [...(groups.get(sector) || []), candidate])
+  }
+  return [...groups].map(([sector, rows]) => ({
+    sector,
+    stockCount: rows.length,
+    top100Count: rows.filter((row) => row.is_top100).length,
+    averagePrice: average(rows.map((row) => nullableNumber(row.price))),
+    totalMarketCapBillion: rows.reduce((total, row) => total + (nullableNumber(row.market_cap_billion) || 0), 0),
+    averageCanslimScore: average(rows.map((row) => nullableNumber(row.kfsp_canslim_score))),
+    averageScore4m: average(rows.map((row) => nullableNumber(row.kfsp_score_4m))),
+    pricePotentialUpCount: rows.filter((row) => row.kfsp_price_potential?.startsWith("Tăng")).length,
+    averageRsShort: average(rows.map((row) => nullableNumber(row.rs_short))),
+    averageRsMedium: average(rows.map((row) => nullableNumber(row.rs_medium))),
+    dominantRrgState: dominant(rows.map((row) => row.kfsp_sector_rrg_state)),
+    averageWeeklyChangePercent: average(rows.map((row) => nullableNumber(row.weekly_change_pct))),
+    averageMonthlyChangePercent: average(rows.map((row) => nullableNumber(row.monthly_change_pct))),
+    averageRatingScore: average(rows.map((row) => nullableNumber(row.kfsp_composite_score))),
+  })).sort((left, right) => (right.averageRatingScore || 0) - (left.averageRatingScore || 0))
+}
+
+function toHistorySnapshot(row: InsightsRatingRow): RatingModelSnapshot {
+  return {
+    asOfDate: row.asOfDate, ratingScore: row.ratingScore, score4m: row.score4m,
+    canslimScore: row.canslimScore, pricePotential: row.pricePotential,
+    rsShort: row.rsShort, rsMedium: row.rsMedium, stockRrgState: row.stockRrgState,
+    sectorRrgState: row.sectorRrgState, rsi14: row.rsi14,
+    weeklyChangePercent: row.weeklyChangePercent, monthlyChangePercent: row.monthlyChangePercent,
+    beta: row.beta,
+  }
+}
+
+async function loadHistoryDates(supabase: SupabaseClient, latestDate: string) {
+  const current = new Date(`${latestDate}T00:00:00Z`)
+  const targets = [1, 7, 30].map((days) => {
+    const date = new Date(current)
+    date.setUTCDate(date.getUTCDate() - days)
+    return date.toISOString().slice(0, 10)
+  })
+  const results = await Promise.all(targets.map((target) => supabase
+    .from("insights_stock_ratings")
+    .select("as_of_date")
+    .eq("is_published", true)
+    .eq("source", "kfsp")
+    .lte("as_of_date", target)
+    .order("as_of_date", { ascending: false })
+    .limit(1)
+    .maybeSingle()))
+  return [...new Set(results.flatMap((result) => result.data?.as_of_date ? [result.data.as_of_date] : []))]
+}
+
+async function loadRatingHistory(supabase: SupabaseClient, tickers: string[], dates: string[]) {
+  const selection = "ticker,as_of_date,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,rs_short,rs_medium,kfsp_stock_rrg_state,kfsp_sector_rrg_state,rsi_14,weekly_change_pct,monthly_change_pct,beta"
+  const chunks = Array.from({ length: Math.ceil(tickers.length / 100) }, (_, index) => tickers.slice(index * 100, index * 100 + 100))
+  const responses = await Promise.all(dates.flatMap((date) => chunks.map((chunk) => supabase
+    .from("insights_stock_ratings")
+    .select(selection)
+    .eq("is_published", true)
+    .eq("source", "kfsp")
+    .eq("as_of_date", date)
+    .in("ticker", chunk))))
+  const history = new Map<string, RatingModelSnapshot[]>()
+  for (const response of responses) {
+    if (response.error) continue
+    for (const row of response.data || []) {
+      const snapshot: RatingModelSnapshot = {
+        asOfDate: row.as_of_date,
+        ratingScore: nullableNumber(row.kfsp_composite_score), score4m: nullableNumber(row.kfsp_score_4m),
+        canslimScore: nullableNumber(row.kfsp_canslim_score), pricePotential: row.kfsp_price_potential,
+        rsShort: nullableNumber(row.rs_short), rsMedium: nullableNumber(row.rs_medium),
+        stockRrgState: row.kfsp_stock_rrg_state, sectorRrgState: row.kfsp_sector_rrg_state,
+        rsi14: nullableNumber(row.rsi_14), weeklyChangePercent: nullableNumber(row.weekly_change_pct),
+        monthlyChangePercent: nullableNumber(row.monthly_change_pct), beta: nullableNumber(row.beta),
+      }
+      history.set(row.ticker, [...(history.get(row.ticker) || []), snapshot])
+    }
+  }
+  return history
+}
+
 const RATING_PREVIEW: InsightsRatingRow[] = [
   makePreviewRating("FPT", "FPT Corporation", "Công nghệ", 94, 128.4, 2.8, 2_840_000, 96, 93, 92, 95),
   makePreviewRating("MWG", "Thế Giới Di Động", "Bán lẻ", 91, 64.8, 1.9, 5_170_000, 92, 94, 89, 88),
@@ -131,6 +257,7 @@ function makePreviewRating(ticker: string, companyName: string, sector: string, 
     rsi14: null, weeklyChangePercent: null, monthlyChangePercent: null,
     beta: null, peTtm: null, pbTtm: null, asOfDate: "", provider: "UI preview", metricGroups: {},
     scoreComponents: { technical, momentum, moneyFlow, fundamental },
+    scoreHistory: [],
   }
 }
 
@@ -140,7 +267,7 @@ function componentScore(value: unknown, fallback: number) {
   return Number.isFinite(parsed) ? Math.round(Math.max(0, Math.min(100, parsed))) : fallback
 }
 
-async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRatingRow[]; message: string }> {
+async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRatingRow[]; sectorSummaries: InsightsSectorSummary[]; message: string }> {
   const latest = await supabase
     .from("insights_stock_ratings")
     .select("as_of_date")
@@ -150,8 +277,8 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
     .limit(1)
     .maybeSingle()
 
-  if (latest.error) return { rows: [], message: `Supabase rating chưa sẵn sàng: ${latest.error.message}` }
-  if (!latest.data?.as_of_date) return { rows: [], message: "Chưa có snapshot rating được cron công bố." }
+  if (latest.error) return { rows: [], sectorSummaries: [], message: `Supabase rating chưa sẵn sàng: ${latest.error.message}` }
+  if (!latest.data?.as_of_date) return { rows: [], sectorSummaries: [], message: "Chưa có snapshot rating được cron công bố." }
   const latestDate = latest.data.as_of_date
 
   const selection = "ticker,company_name,sector,industry_group,exchange,is_top100,top100_rank,price,price_change_pct,average_volume_50_sessions,market_cap_billion,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,kfsp_stock_rrg_state,kfsp_sector_rrg_state,rs_short,rs_medium,rsi_14,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics,as_of_date,source"
@@ -164,12 +291,25 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
     .order("kfsp_composite_score", { ascending: false, nullsFirst: false })
     .order("ticker", { ascending: true })
 
-  const [topRatings, top100] = await Promise.all([
+  const leanSelection = "ticker,sector,is_top100,price,market_cap_billion,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,rs_short,rs_medium,kfsp_sector_rrg_state,weekly_change_pct,monthly_change_pct"
+  const leanQuery = (from: number, to: number) => supabase
+    .from("insights_stock_ratings")
+    .select(leanSelection)
+    .eq("is_published", true)
+    .eq("as_of_date", latestDate)
+    .eq("source", "kfsp")
+    .order("ticker", { ascending: true })
+    .range(from, to)
+
+  const [topRatings, top100, leanPageOne, leanPageTwo] = await Promise.all([
     baseQuery().limit(500),
     baseQuery().eq("is_top100", true).limit(100),
+    leanQuery(0, 999),
+    leanQuery(1000, 1999),
   ])
-  if (topRatings.error) return { rows: [], message: `Không đọc được rating: ${topRatings.error.message}` }
-  if (top100.error) return { rows: [], message: `Không đọc được Top 100: ${top100.error.message}` }
+  if (topRatings.error) return { rows: [], sectorSummaries: [], message: `Không đọc được rating: ${topRatings.error.message}` }
+  if (top100.error) return { rows: [], sectorSummaries: [], message: `Không đọc được Top 100: ${top100.error.message}` }
+  if (leanPageOne.error || leanPageTwo.error) return { rows: [], sectorSummaries: [], message: `Không đọc được thống kê ngành: ${(leanPageOne.error || leanPageTwo.error)?.message}` }
 
   const databaseRows = [...new Map(
     ([...(topRatings.data || []), ...(top100.data || [])] as RatingDatabaseRow[])
@@ -179,7 +319,7 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
       || left.ticker.localeCompare(right.ticker),
   )
 
-  const rows = databaseRows.flatMap((row) => {
+  let rows: InsightsRatingRow[] = databaseRows.flatMap((row) => {
     if (row.kfsp_composite_score == null) return []
     const ratingScore = componentScore(row.kfsp_composite_score, 0)
     const technical = componentScore(row.kfsp_score_4m, ratingScore)
@@ -225,9 +365,25 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
         moneyFlow,
         fundamental,
       },
+      scoreHistory: [],
     }]
   })
-  return { rows, message: `${rows.length} mã · snapshot ${latestDate}` }
+
+  const historyDates = await loadHistoryDates(supabase, latestDate)
+  if (historyDates.length) {
+    const historyByTicker = await loadRatingHistory(supabase, rows.map((row) => row.ticker), historyDates)
+    rows = rows.map((row) => ({
+      ...row,
+      scoreHistory: [toHistorySnapshot(row), ...(historyByTicker.get(row.ticker) || [])]
+        .filter((item, index, list) => list.findIndex((candidate) => candidate.asOfDate === item.asOfDate) === index)
+        .sort((left, right) => right.asOfDate.localeCompare(left.asOfDate)),
+    }))
+  } else {
+    rows = rows.map((row) => ({ ...row, scoreHistory: [toHistorySnapshot(row)] }))
+  }
+
+  const sectorSummaries = buildSectorSummaries([...(leanPageOne.data || []), ...(leanPageTwo.data || [])])
+  return { rows, message: `${rows.length} mã chi tiết · ${sectorSummaries.length} ngành · snapshot ${latestDate}`, sectorSummaries }
 }
 
 function parseMetricGroups(value: unknown): KfspMetricGroups {
@@ -246,6 +402,25 @@ function parseMetricGroups(value: unknown): KfspMetricGroups {
 
 function settledValue<T>(result: PromiseSettledResult<T>): T | null {
   return result.status === "fulfilled" ? result.value : null
+}
+
+function summarizePreviewRows(rows: InsightsRatingRow[]): InsightsSectorSummary[] {
+  return [...new Set(rows.map((row) => row.sector))].map((sector) => {
+    const items = rows.filter((row) => row.sector === sector)
+    return {
+      sector, stockCount: items.length, top100Count: items.filter((row) => row.isTop100).length,
+      averagePrice: average(items.map((row) => row.price)),
+      totalMarketCapBillion: items.reduce((total, row) => total + (row.marketCapBillion || 0), 0),
+      averageCanslimScore: average(items.map((row) => row.canslimScore)),
+      averageScore4m: average(items.map((row) => row.score4m)),
+      pricePotentialUpCount: items.filter((row) => row.pricePotential?.startsWith("Tăng")).length,
+      averageRsShort: average(items.map((row) => row.rsShort)), averageRsMedium: average(items.map((row) => row.rsMedium)),
+      dominantRrgState: dominant(items.map((row) => row.sectorRrgState)),
+      averageWeeklyChangePercent: average(items.map((row) => row.weeklyChangePercent)),
+      averageMonthlyChangePercent: average(items.map((row) => row.monthlyChangePercent)),
+      averageRatingScore: average(items.map((row) => row.ratingScore)),
+    }
+  })
 }
 
 function riskScore(quote: MarketIndexQuote | null) {
@@ -274,6 +449,7 @@ export async function getInsightsDashboardData(supabase: SupabaseClient): Promis
   const research = settledValue(settled[5])
   const vnindex = indexes?.VNINDEX ?? null
   const ratings = ratingResult?.rows.length ? ratingResult.rows : RATING_PREVIEW
+  const sectorSummaries = ratingResult?.sectorSummaries.length ? ratingResult.sectorSummaries : summarizePreviewRows(ratings)
   const preview = !ratingResult?.rows.length
   const scans = scanner ? Object.values(scanner.latestScans) : []
   const completedScans = scans.filter((row) => row.status === "Complete").length
@@ -291,6 +467,7 @@ export async function getInsightsDashboardData(supabase: SupabaseClient): Promis
     vnindex,
     vnindexSeries: candleHistory?.bars.map((bar) => bar.close).slice(-64) ?? [],
     ratings,
+    sectorSummaries,
     ratingMode: preview ? "preview" : "supabase",
     ratingMessage: preview
       ? `${ratingResult?.message ?? "Rating backend chưa có dữ liệu."} Đang hiển thị dữ liệu mẫu UI; không phải khuyến nghị đầu tư.`

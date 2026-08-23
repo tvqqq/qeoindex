@@ -11,11 +11,23 @@
 
 ## Rating UX
 
-- The desktop table uses a dense market-board layout with horizontal scrolling and a sticky stock column. It defaults to the Top 100 universe, exposes sectors through a compact dropdown, and supports ascending/descending sorting on every visible column.
-- Visible metrics include price, 4M, CANSLIM, price potential, liquidity, capitalization, RS/RSI, both stock and sector RRG states, price changes, valuation, and composite rating.
+- The desktop table uses an 11-column, full-width market-board layout that fits without a forced horizontal minimum width. It defaults to Top 100; selecting `Tất cả` shows a sector read-model with stock count, Top 100 count, summed capitalization, averaged scores/returns, and dominant sector RRG. Clicking a sector drills into its stock rows.
+- Visible stock metrics are price, CANSLIM, 4M, price potential, RSs, RSm, stock RRG, weekly/monthly change, and composite rating. Every visible column remains sortable; icon/color semantics are shared with the detail dialog.
 - Hovering a stock opens an accessible profile tooltip. Hovering a metric label or score explains its definition and provenance.
-- Clicking or keyboard-activating a row opens a shadcn dialog. The dialog exposes nine groups matching the observed KFSP contract: Tổng quát, Thông tin chung, Định giá, Cơ bản, Biến động giá, Phạm vi giá, Thanh khoản, Chỉ báo kỹ thuật, and KFSP.
-- Missing provider fields display `—`; the pipeline never fabricates live values. The chart is a current score profile, not a historical time series.
+- Clicking or keyboard-activating a row opens a shadcn dialog. Its QeoIndex state radar scores five documented dimensions (trend, accumulation, risk, heat, sustainability) from published KFSP fields; it is a heuristic comparison aid, not proprietary KFSP logic or an investment signal. The dialog also retains the nine raw-data groups matching the observed KFSP contract.
+- Daily snapshots are retained. The read-model selects the latest real snapshot on or before 1D, 7D, and 30D targets; missing history displays `—` and is never interpolated. Radar overlays, per-dimension deltas, and the rating timeline expand automatically as cron history accumulates.
+
+## QeoIndex state model
+
+`lib/insights-rating-model.ts` owns the pure, tested calculation. All outputs are clamped to 0–100:
+
+- **Trend:** RSs/RSm, weekly/monthly returns, price potential, and stock RRG.
+- **Accumulation:** CANSLIM/4M quality, RS/RRG support, and a preference for controlled rather than extreme heat.
+- **Risk:** beta, downside returns, weak composite score, and adverse stock/sector RRG.
+- **Heat:** weekly/monthly momentum, RSI, RSs, and price potential.
+- **Sustainability:** CANSLIM, 4M, composite rating, RSm, sector RRG, and inverse risk.
+
+The state label follows explicit thresholds in that module. Changes to weights or thresholds require updating its unit tests and this section.
 
 ## Daily ingestion pipeline
 
