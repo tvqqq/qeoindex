@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "next dev",
     "prebuild": "pnpm verify:build",
-    "build": "next build",
+    "build": "pnpm typecheck && next build",
     "start": "next start",
     "verify:build": "pnpm test:core && pnpm lint:touched && pnpm scan:secrets",
     "lint": "eslint .",
