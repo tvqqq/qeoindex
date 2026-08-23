@@ -1,0 +1,53 @@
+name: Apply Insights stock detail refactor
+
+on:
+  push:
+    branches:
+      - feat/insights-stock-detail-dashboard
+    paths:
+      - scripts/rating-dialog-replacement.txt
+      - .github/workflows/apply-insights-stock-detail-refactor.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/insights-stock-detail-dashboard
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Replace RatingDialog implementation
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const sourcePath = 'components/insights/insights-dashboard.tsx'
+          const replacementPath = 'scripts/rating-dialog-replacement.txt'
+          const source = fs.readFileSync(sourcePath, 'utf8')
+          const replacement = fs.readFileSync(replacementPath, 'utf8').trimEnd()
+          const start = source.indexOf('function RatingDialog(')
+          const end = source.indexOf('\nexport function InsightsDashboard', start)
+          if (start < 0 || end < 0) throw new Error('RatingDialog replacement markers not found')
+          if (source.includes('type StockDetailTab = "overview" | "info" | "fa" | "ta" | "kfsp"')) {
+            console.log('Stock detail dashboard already applied')
+            process.exit(0)
+          }
+          const next = source.slice(0, start) + replacement + source.slice(end)
+          fs.writeFileSync(sourcePath, next)
+          NODE
+      - name: Commit generated source
+        run: |
+          if git diff --quiet -- components/insights/insights-dashboard.tsx; then
+            echo "No source changes required"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/insights/insights-dashboard.tsx
+          git commit -m "feat(insights): reorganize stock detail dashboard"
+          git push origin HEAD:feat/insights-stock-detail-dashboard
