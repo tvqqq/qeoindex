@@ -37,10 +37,10 @@ Insights uses the information density of a Vietnamese market board without sacri
 
 ## Stock detail dialog — grouped dashboard IA
 
-The detail popup uses **one navigation level only**. The former `Tổng quan & Động lượng → Chỉ số cổ phiếu → 9 sub-tabs → Lịch sử Rating` hierarchy is replaced by five semantic tabs:
+The detail popup uses **one navigation level only**. Company reference data and FA metrics share one coherent business-information surface, leaving four semantic tabs:
 
 ```text
-Tổng quan | Thông tin | Chỉ số FA | Phân tích TA | TTAI
+Tổng quan | Thông tin doanh nghiệp | Phân tích TA | TTAI
 ```
 
 `TTAI` is the product-facing name for the provider analytical layer. Storage/provider names such as `KFSP_GROUPS`, `kfsp_*` columns, Supabase payloads, and ingestion contracts remain unchanged.
@@ -54,6 +54,8 @@ The header stays compact and always visible:
 - current price and daily change;
 - Composite Rating;
 - Top 100 badge when applicable.
+
+The Wyckoff deep-analysis action is not part of the draggable header or a footer. It occupies a dedicated action area on the right side of the modal navigation row.
 
 The former three persistent summary cards above the tabs are removed. Their useful information is promoted into the `Tổng quan` dashboard so content is not duplicated and the popup spends less vertical space before analysis begins.
 
@@ -70,19 +72,16 @@ Primary KPI row:
 
 Dashboard modules:
 
-- **QeoIndex state radar**: primary analytical module in the larger upper-left column.
-- **Hiệu suất giá**: compact diverging bars for 1D, 1W, 2W, 1M, 3M, YTD, 1Y in the narrower right column.
-- **Range & thanh khoản**: compact 52W/liquidity block stacked under performance in the right column.
-- **FA quick read**: revenue/profit growth, ROE, net margin, P/E, P/B.
-- **TA quick read**: price vs SMA20/50/200, RSI, MACD, Bollinger state.
+- **Left column**: vertically balanced, equal-height **FA quick read** and **TA quick read** widgets.
+- **Right column**: QeoIndex state radar, compact performance bars, and range/liquidity context.
 - **Accumulation/state matrix**: always visible; no dropdown/progressive-disclosure wrapper.
-- **Rating theo thời gian**: real snapshot history embedded under the state matrix. It replaces the previous duplicate mini Composite trend.
+- **Rating theo thời gian**: a standalone sibling module beside the accumulation/state matrix, never nested inside it.
 
 Historical analytical UI must use published snapshots only. Do not synthesize fake dates/scores when history is sparse. Missing provider fields remain `—`.
 
-### 2. Thông tin
+### 2. Thông tin doanh nghiệp
 
-This tab contains company/reference data only:
+This tab combines company/reference data and FA analysis:
 
 - company name;
 - charter capital;
@@ -92,9 +91,14 @@ This tab contains company/reference data only:
 - Free Float;
 - foreign ownership room remaining.
 
-`GDNN ròng` and `GDTD ròng` are intentionally **not** treated as company metadata even though the provider currently places them in the `general` group. They are displayed under TA as trading-flow information.
+FA groups in the same tab:
 
-### 3. Chỉ số FA
+- valuation and per-share metrics;
+- latest financial snapshot;
+- growth drivers;
+- profitability.
+
+`GDNN ròng` and `GDTD ròng` are intentionally **not** treated as company metadata even though the provider currently places them in the `general` group. They are displayed under TA as trading-flow information.
 
 FA is grouped by analytical purpose instead of raw provider sub-tabs.
 
@@ -126,7 +130,7 @@ FA is grouped by analytical purpose instead of raw provider sub-tabs.
 
 Provider-derived fair value / price-potential semantics must not be relabeled as an independent QeoIndex intrinsic valuation model.
 
-### 4. Phân tích TA
+### 3. Phân tích TA
 
 TA combines the former price volatility, price range, liquidity, technical, and trading-flow views.
 
@@ -161,7 +165,7 @@ Do not infer a graphical position from a provider text label when the underlying
 - net proprietary trading;
 - Beta as risk/volatility context.
 
-### 5. TTAI
+### 4. TTAI
 
 TTAI preserves KFSP provider semantics while presenting the data as history-oriented dashboards:
 
@@ -184,10 +188,10 @@ See `docs/insights-ttai-history.md` for storage, parsing, sync trigger, and RLS 
 | Provider/storage group | Presentation |
 | --- | --- |
 | `overview` | Selected first-pass metrics in Tổng quan |
-| `general` company/reference fields | Thông tin |
+| `general` company/reference fields | Thông tin doanh nghiệp |
 | `general` trading-flow fields | Phân tích TA |
-| `valuation` | Chỉ số FA |
-| `fundamentals` | Chỉ số FA |
+| `valuation` | Thông tin doanh nghiệp |
+| `fundamentals` | Thông tin doanh nghiệp |
 | `price_volatility` | Phân tích TA |
 | `price_range` | Phân tích TA |
 | `liquidity` | Phân tích TA |
@@ -240,7 +244,7 @@ For changes to the table or detail dialog, verify at minimum:
 3. Positive, negative, zero, and missing values.
 4. All RRG states and long Vietnamese labels.
 5. Detail dialog with one snapshot and multiple snapshots.
-6. All five detail tabs with no nested metric-tab navigation.
+6. All four detail tabs with no nested metric-tab navigation.
 7. TTAI daily history with one/many points and quarterly history with one/many periods.
 8. Keyboard open/close, focus restoration, tooltip alternatives, reduced motion.
 9. Viewports near 390, 768, 1440, 1920; record horizontal overflow.

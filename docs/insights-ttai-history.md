@@ -16,11 +16,10 @@ TTAI contains:
 The Overview tab is decision-first:
 
 1. top KPI strip;
-2. QeoIndex state radar in the larger left column;
-3. compact Performance + Range/Liquidity stack in the smaller right column;
-4. FA/TA quick reads;
-5. accumulation/state matrix always visible;
-6. `Rating theo thời gian` is embedded under that matrix and replaces the duplicate mini Composite trend.
+2. equal-height FA/TA quick reads in the left column;
+3. QeoIndex state radar plus compact Performance + Range/Liquidity in the right column;
+4. accumulation/state matrix always visible;
+5. `Rating theo thời gian` is a standalone sibling module beside that matrix and replaces the duplicate mini Composite trend.
 
 ## KFSP fourm/canslim response normalization
 
