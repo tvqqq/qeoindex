@@ -66,9 +66,9 @@ function applyStudy(controller: ChartController, study: WyckoffChartStudy) {
   controller.volume.setData(study.bars.map((bar) => ({
     time: bar.time,
     value: bar.volume,
-    color: bar.close >= bar.open ? "rgba(34,201,138,0.34)" : "rgba(255,71,87,0.34)",
+    color: bar.close >= bar.open ? "rgba(34,201,138,0.28)" : "rgba(255,71,87,0.28)",
   })))
-  controller.chart.panes()[1]?.setHeight(108)
+  controller.chart.panes()[1]?.setHeight(84)
   controller.markers?.setMarkers(study.markers.map((marker) => ({
     time: marker.time,
     position: marker.tone === "bullish" ? "belowBar" : "aboveBar",
@@ -80,8 +80,6 @@ function applyStudy(controller: ChartController, study: WyckoffChartStudy) {
 
   clearPriceLines(controller)
   if (study.analysis) {
-    // Keep only the primary support/resistance guides. Dense 1px dashed guides
-    // can form unstable high-frequency raster patterns on macOS scaled 4K displays.
     for (const price of numericLevels(study.analysis.support).slice(0, 1)) {
       const line = controller.candles.createPriceLine?.({
         price,
@@ -180,8 +178,6 @@ export function WyckoffLightweightChart({
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
             panes: { separatorColor: "rgba(255,255,255,0.07)", separatorHoverColor: "rgba(34,201,138,0.28)", enableResize: true },
           },
-          // Raster-safe mode: the dense chart grid was isolated as the visual
-          // trigger for Chromium flicker on a 4K panel scaled to 2560x1440.
           grid: {
             vertLines: { visible: false },
             horzLines: { visible: false },
@@ -219,8 +215,8 @@ export function WyckoffLightweightChart({
         const candles = chart.addSeries(lwc.CandlestickSeries, {
           upColor: "#22c98a",
           downColor: "#ff4757",
-          wickUpColor: "#22c98a",
-          wickDownColor: "#ff4757",
+          wickUpColor: "rgba(34,201,138,0.68)",
+          wickDownColor: "rgba(255,71,87,0.68)",
           borderVisible: false,
           priceLineVisible: false,
           lastValueVisible: true,
@@ -285,9 +281,14 @@ export function WyckoffLightweightChart({
 
   return (
     <div data-wyckoff-chart-canvas className="relative h-[520px] w-full overflow-hidden bg-[#070b11] [contain:layout_paint] xl:h-[660px]">
-      <div ref={hostRef} className="absolute inset-0" aria-label={`Biểu đồ Wyckoff ${ticker} ${study.timeframe}`} />
-      {!study.bars.length ? <div className="absolute inset-0 z-[6] grid place-items-center bg-[#070b11] text-sm text-slate-500">Không có OHLCV hoàn tất cho {ticker} · {study.timeframe}.</div> : null}
-      {isUpdating && study.bars.length ? <div className="pointer-events-none absolute inset-0 z-[7] grid place-items-center"><AiLoader label={`Đang cập nhật biểu đồ ${ticker}`} showLabel={false} compositorSafe className="border-cyan-400/15 bg-[#081019]/88 px-3 py-2" /></div> : null}
+      <div
+        data-wyckoff-chart-raster-viewport
+        className="relative mx-auto h-full w-full max-w-[1360px] overflow-hidden bg-[#070b11] [contain:paint]"
+      >
+        <div ref={hostRef} className="absolute inset-0" aria-label={`Biểu đồ Wyckoff ${ticker} ${study.timeframe}`} />
+        {!study.bars.length ? <div className="absolute inset-0 z-[6] grid place-items-center bg-[#070b11] text-sm text-slate-500">Không có OHLCV hoàn tất cho {ticker} · {study.timeframe}.</div> : null}
+        {isUpdating && study.bars.length ? <div className="pointer-events-none absolute inset-0 z-[7] grid place-items-center"><AiLoader label={`Đang cập nhật biểu đồ ${ticker}`} showLabel={false} compositorSafe className="border-cyan-400/15 bg-[#081019]/88 px-3 py-2" /></div> : null}
+      </div>
       {runtimeError ? <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-lg border border-rose-500/25 bg-[#120b10] px-3 py-2 text-center text-xs leading-relaxed text-rose-300 shadow-sm">{runtimeError}</div> : null}
     </div>
   )
