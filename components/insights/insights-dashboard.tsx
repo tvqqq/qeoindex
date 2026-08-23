@@ -94,6 +94,10 @@ function formatNumber(value: number | null, maximumFractionDigits = 2) {
   return value.toLocaleString("vi-VN", { maximumFractionDigits })
 }
 
+function formatMarketCapBillion(value: number) {
+  return `${value.toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tỷ`
+}
+
 function metricValue(row: InsightsRatingRow, key: string): KfspMetricValue | undefined {
   for (const group of KFSP_GROUPS) {
     const value = row.metricGroups[group.key]?.[key]
@@ -731,7 +735,7 @@ export function InsightsDashboard({ data }: { data: InsightsDashboardData }) {
                 <TableBody>
                   {showSectorGroups && sortedSectorSummaries.map((row, index) => (
                     <TableRow key={row.sector} tabIndex={0} role="button" aria-label={`Mở ngành ${row.sector}`} onClick={() => setSectorFilter(row.sector)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSectorFilter(row.sector) } }} className="group cursor-pointer border-white/[0.065] bg-[#07101a]/35 outline-none transition-colors hover:bg-cyan-300/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50">
-                      <TableCell className="px-2 py-4"><div className="flex items-center gap-2"><span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-cyan-300/15 bg-cyan-300/[0.06] font-mono text-[11px] font-bold text-cyan-300">{String(index + 1).padStart(2, "0")}</span><span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-violet-300/20 bg-violet-300/10 text-violet-300"><Layers3 className="size-4" /></span><div className="min-w-0"><div className="truncate text-sm font-extrabold uppercase text-white">{row.sector}</div><div className="mt-1 truncate text-[10px] text-muted-2">Σ {row.stockCount} mã · Top100 {row.top100Count} · Vốn hóa Σ {compactVolume(row.totalMarketCapBillion)} tỷ</div></div></div></TableCell>
+                      <TableCell className="px-2 py-4"><div className="flex items-center gap-2"><span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-cyan-300/15 bg-cyan-300/[0.06] font-mono text-[11px] font-bold text-cyan-300">{String(index + 1).padStart(2, "0")}</span><span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-violet-300/20 bg-violet-300/10 text-violet-300"><Layers3 className="size-4" /></span><div className="min-w-0"><div className="truncate text-sm font-extrabold uppercase text-white">{row.sector}</div><div className="mt-1 truncate text-[10px] text-muted-2">Σ {row.stockCount} mã · Top100 {row.top100Count} · Vốn hóa Σ {formatMarketCapBillion(row.totalMarketCapBillion)}</div></div></div></TableCell>
                       <TableCell className="px-1 text-center font-mono text-xs font-black text-white"><span className="block text-[9px] text-muted">AVG</span>{formatPrice(row.averagePrice)}</TableCell>
                       <TableCell className="px-1 text-center">{row.averageCanslimScore == null ? "—" : <ScorePill value={row.averageCanslimScore} tone="emerald" icon={Target} label="CANSLIM trung bình ngành" />}</TableCell>
                       <TableCell className="px-1 text-center">{row.averageScore4m == null ? "—" : <ScorePill value={row.averageScore4m} tone="amber" label="4M trung bình ngành" />}</TableCell>
