@@ -72,6 +72,7 @@ type WatchlistColumn = "ticker" | "1H" | "1D" | "1W"
 
 type PhaseMeta = {
   label: string
+  watchLabel: string
   shortVi: string
   explanationVi: string
   icon: ComponentType<{ className?: string }>
@@ -120,6 +121,7 @@ const TONE: Record<Tone, { border: string; soft: string; text: string }> = {
 const PHASE_META: Record<PhaseKey, PhaseMeta> = {
   accumulation: {
     label: "Accumulation",
+    watchLabel: "ACC",
     shortVi: "Đang xây nền",
     explanationVi: "Giá đang tạo Trading Range và hấp thụ Supply. Chưa mặc định là sắp tăng; cần nhìn Spring, Test, SOS hoặc cách giá phản ứng quanh Support.",
     icon: Layers3,
@@ -128,6 +130,7 @@ const PHASE_META: Record<PhaseKey, PhaseMeta> = {
   },
   reaccumulation: {
     label: "Reaccumulation",
+    watchLabel: "RE-ACC",
     shortVi: "Nghỉ trong xu hướng tăng",
     explanationVi: "Giá đang tích lũy lại sau một nhịp Markup. Cấu trúc tích cực hơn nếu Support giữ được và xuất hiện Test, LPS hoặc SOS với Demand tốt.",
     icon: RefreshCw,
@@ -136,6 +139,7 @@ const PHASE_META: Record<PhaseKey, PhaseMeta> = {
   },
   distribution: {
     label: "Distribution",
+    watchLabel: "DIST",
     shortVi: "Đang tạo vùng phân phối",
     explanationVi: "Giá đang tạo Trading Range ở vùng cao. Cần nhìn UT/UTAD, SOW, LPSY và phản ứng quanh Resistance trước khi kết luận Supply đã chiếm ưu thế.",
     icon: CircleDot,
@@ -144,6 +148,7 @@ const PHASE_META: Record<PhaseKey, PhaseMeta> = {
   },
   redistribution: {
     label: "Redistribution",
+    watchLabel: "RE-DIST",
     shortVi: "Nghỉ trong xu hướng giảm",
     explanationVi: "Giá đang đi ngang hoặc hồi trong một cấu trúc Markdown. Nếu Demand yếu, không Reclaim được Resistance và có SOW/LPSY, xu hướng giảm có thể tiếp tục.",
     icon: Repeat2,
@@ -152,6 +157,7 @@ const PHASE_META: Record<PhaseKey, PhaseMeta> = {
   },
   markup: {
     label: "Markup",
+    watchLabel: "MARKUP",
     shortVi: "Đang trong nhịp tăng",
     explanationVi: "Giá đang rời Trading Range theo hướng lên. Ưu tiên quan sát các pullback về Support, LPS và khả năng tạo Follow-through.",
     icon: TrendingUp,
@@ -160,6 +166,7 @@ const PHASE_META: Record<PhaseKey, PhaseMeta> = {
   },
   markdown: {
     label: "Markdown",
+    watchLabel: "MARKDN",
     shortVi: "Đang trong nhịp giảm",
     explanationVi: "Giá đang rời Trading Range theo hướng xuống. Các rally chỉ cải thiện cấu trúc khi giá có thể Reclaim và Hold lại những vùng Resistance quan trọng.",
     icon: TrendingDown,
@@ -168,6 +175,7 @@ const PHASE_META: Record<PhaseKey, PhaseMeta> = {
   },
   unclassified: {
     label: "Unclassified",
+    watchLabel: "UNCLASS",
     shortVi: "Chưa đủ evidence",
     explanationVi: "Dữ liệu hiện tại chưa đủ rõ để gắn một Wyckoff Phase đáng tin. Tốt hơn là giữ Unclassified thay vì ép nhãn khi Price × Volume còn mâu thuẫn.",
     icon: CircleDashed,
@@ -415,15 +423,16 @@ function PhaseChip({ phase, selected = false }: { phase: string; selected?: bool
   const Icon = meta.icon
   return (
     <span
+      aria-label={meta.label}
       className={cn(
-        "group/phase inline-flex min-h-8 w-full min-w-0 items-center justify-center gap-1 rounded-lg border px-1.5 py-1 text-center text-xs font-bold leading-tight",
+        "group/phase mx-auto grid min-h-8 w-[104px] grid-cols-[16px_minmax(0,1fr)] items-center gap-1.5 rounded-lg border px-2 py-1 text-left text-xs font-extrabold leading-none tracking-[0.04em]",
         "transition-[transform,background-color,border-color,color,box-shadow] duration-200 ease-out hover:-translate-y-px",
         meta.chip,
         selected && "shadow-[0_0_0_1px_rgba(34,211,238,0.18),0_8px_24px_-16px_rgba(34,211,238,0.9)]",
       )}
     >
       <Icon className={cn("size-3.5 shrink-0 transition-transform duration-200 ease-out group-hover/phase:rotate-3", meta.iconClass)} />
-      <span className="min-w-0 break-words">{meta.label}</span>
+      <span className="min-w-0 truncate">{meta.watchLabel}</span>
     </span>
   )
 }
@@ -567,7 +576,7 @@ function MultiTimeframeStructure({ studies }: { studies: WyckoffChartStudy[] }) 
 
 function WatchlistPhaseCell({ phase, timeframe, selected = false }: { phase: string; timeframe: "1H" | "1D" | "1W"; selected?: boolean }) {
   return (
-    <div className={cn("min-w-0 border-l border-white/[0.065] px-2 py-1.5 transition-colors duration-200", WATCHLIST_COLUMN_BG[timeframe])}>
+    <div className={cn("flex min-w-0 items-center justify-center border-l border-white/[0.065] px-2 py-1.5 transition-colors duration-200", WATCHLIST_COLUMN_BG[timeframe])}>
       <PhaseChip phase={phase} selected={selected} />
     </div>
   )
@@ -594,7 +603,7 @@ function WatchlistRow({
       href={href}
       onClick={(event) => onSelectTicker(event, stock.ticker)}
       className={cn(
-        "group/row grid min-h-[74px] items-stretch border-b border-white/[0.04] px-0 [contain-intrinsic-size:74px] [content-visibility:auto]",
+        "group/row grid min-h-[68px] items-stretch border-b border-white/[0.04] px-0 [contain-intrinsic-size:68px] [content-visibility:auto]",
         "transition-[background-color,border-color,transform,box-shadow] duration-200 ease-out hover:translate-x-0.5 active:scale-[0.995]",
         WATCHLIST_GRID_CLASS,
         isActive
@@ -707,7 +716,7 @@ export function WyckoffInfographicDashboard(props: {
         .map((timeframe) => {
           const phase = phaseFor(stock, timeframe)
           const meta = PHASE_META[phaseKey(phase)]
-          return `${phase} ${meta.label} ${meta.shortVi}`
+          return `${phase} ${meta.label} ${meta.watchLabel} ${meta.shortVi}`
         })
         .join(" ")
       return `${stock.ticker} ${phaseText} ${stock.sector}`.toUpperCase().includes(normalized)
