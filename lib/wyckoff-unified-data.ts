@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { WyckoffListItem } from "@/components/insights/wyckoff-chart-dashboard"
 import { getWyckoffCompanyMetadata } from "@/lib/wyckoff-company-metadata"
 import type { OhlcvBar } from "@/lib/technical-indicators"
 import {
@@ -92,15 +91,6 @@ function normalizeMarker(value: unknown): WyckoffEventMarker | null {
     tone,
     detail: typeof value.detail === "string" ? value.detail.trim() : "",
   }
-}
-
-function latestSnapshotEvent(row: SnapshotRow | undefined) {
-  if (!row) return ""
-  const marker = Array.isArray(row.markers)
-    ? row.markers.map(normalizeMarker).filter((item): item is WyckoffEventMarker => item !== null).at(-1)
-    : null
-  if (marker?.label) return marker.label
-  return strings(row.evidence?.rulesTriggered)[0] || ""
 }
 
 function normalizeScenario(value: unknown, timeframe: WyckoffChartTimeframe): WyckoffScenario | null {
@@ -214,36 +204,42 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
   const tickers = memberships.map((row) => row.ticker)
 
   const [
-    { data: dailyRows, error: dailyError },
+    { data: watchlistRows, error: watchlistError },
     { data: selectedRows, error: selectedError },
     { data: seriesRows, error: seriesError },
     companyMetadata,
   ] = await Promise.all([
-    supabase.from("wyckoff_latest_by_timeframe").select("*").eq("timeframe", "1D").in("ticker", tickers),
+    supabase.from("wyckoff_latest_by_timeframe").select("*").in("timeframe", ["1H", "1D", "1W"]).in("ticker", tickers),
     supabase.from("wyckoff_latest_by_timeframe").select("*").eq("ticker", ticker),
     supabase.from("wyckoff_chart_series").select("*").eq("ticker", ticker).in("timeframe", ["1H", "1D"]),
     getWyckoffCompanyMetadata(supabase, [ticker]),
   ])
-  if (dailyError || selectedError || seriesError || !selectedRows?.length || !seriesRows?.length) return null
+  if (watchlistError || selectedError || seriesError || !selectedRows?.length || !seriesRows?.length) return null
 
   const studies = buildStudies(selectedRows as SnapshotRow[], seriesRows as Array<{ timeframe: WyckoffChartTimeframe; bars: OhlcvBar[]; provider: string; provider_detail: string }>)
   if (!studies) return null
 
-  const dailyByTicker = new Map((dailyRows as SnapshotRow[]).map((row) => [row.ticker, row]))
-  const stocks: WyckoffListItem[] = memberships.map((membership) => {
-    const row = dailyByTicker.get(membership.ticker)
+  const snapshotByTickerTimeframe = new Map(
+    (watchlistRows as SnapshotRow[]).map((row) => [`${row.ticker}|${row.timeframe}`, row] as const),
+  )
+  const stocks = memberships.map((membership) => {
+    const row1H = snapshotByTickerTimeframe.get(`${membership.ticker}|1H`)
+    const row1D = snapshotByTickerTimeframe.get(`${membership.ticker}|1D`)
+    const row1W = snapshotByTickerTimeframe.get(`${membership.ticker}|1W`)
     return {
       ticker: membership.ticker,
       rank: membership.rank,
       sector: membership.sector || "",
-      price: row?.technical.price ?? null,
-      changePct: row?.technical.changePct ?? null,
-      phase: row?.phase ?? "",
-      bias: row?.ta_bias ?? "",
-      confidence: row?.confidence ?? "",
-      status: row ? "Complete" : "Pending",
-      date: row?.bar_closed_at?.slice(0, 10) ?? "",
-      latestEvent: latestSnapshotEvent(row),
+      price: row1D?.technical.price ?? null,
+      changePct: row1D?.technical.changePct ?? null,
+      phase: row1D?.phase ?? "",
+      phase1H: row1H?.phase ?? "",
+      phase1D: row1D?.phase ?? "",
+      phase1W: row1W?.phase ?? "",
+      bias: row1D?.ta_bias ?? "",
+      confidence: row1D?.confidence ?? "",
+      status: row1D ? "Complete" : "Pending",
+      date: row1D?.bar_closed_at?.slice(0, 10) ?? "",
     }
   })
 
@@ -301,6 +297,7 @@ export async function getUnifiedWyckoffTickerData(supabase: SupabaseClient, requ
     ticker,
     companyName: selectedMetadata?.companyName ?? ticker,
     exchange: selectedMetadata?.exchange ?? "HOSE",
+    sector: selectedMetadata?.sector,
     studies,
     generatedAt: selectedRows[0].published_at as string,
   }
