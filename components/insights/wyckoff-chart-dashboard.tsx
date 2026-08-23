@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { memo, useDeferredValue, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { memo, useCallback, useDeferredValue, useMemo, useState, type MouseEvent } from "react"
 import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react"
 import {
   AlertTriangle,
@@ -42,6 +43,7 @@ export interface WyckoffListItem {
 }
 
 type WatchlistFilterTab = "all" | "accumulation" | "distribution" | "top100"
+type TickerSelectHandler = (event: MouseEvent<HTMLAnchorElement>, ticker: string) => void
 
 const WATCHLIST_TABS: Array<{ id: WatchlistFilterTab; label: string }> = [
   { id: "all", label: "Tất cả" },
@@ -156,16 +158,19 @@ const WatchlistRow = memo(function WatchlistRow({
   stock,
   isActive,
   activeTimeframe,
+  onSelectTicker,
 }: {
   stock: WyckoffListItem
   isActive: boolean
   activeTimeframe: WyckoffChartTimeframe
+  onSelectTicker: TickerSelectHandler
 }) {
+  const href = `/insights/wyckoff?ticker=${encodeURIComponent(stock.ticker)}&timeframe=${activeTimeframe}`
+
   return (
-    <Link
-      href={`/insights/wyckoff?ticker=${encodeURIComponent(stock.ticker)}&timeframe=${activeTimeframe}`}
-      prefetch={false}
-      scroll={false}
+    <a
+      href={href}
+      onClick={(event) => onSelectTicker(event, stock.ticker)}
       className={cn(
         "grid min-h-12 grid-cols-[minmax(70px,1fr)_76px_72px_88px] items-center gap-1 border-b border-white/[0.035] px-3 py-2 transition-colors [contain-intrinsic-size:48px] [content-visibility:auto]",
         isActive ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.08]" : "hover:bg-white/[0.035]",
@@ -178,7 +183,7 @@ const WatchlistRow = memo(function WatchlistRow({
       <div className="text-right">
         <span className={cn("inline-flex max-w-full justify-center whitespace-nowrap rounded border px-1.5 py-0.5 text-[10.5px] font-bold", biasBadgeStyle(stock.bias, stock.phase))}>{phaseShortBadge(stock.phase)}</span>
       </div>
-    </Link>
+    </a>
   )
 })
 
@@ -201,6 +206,7 @@ export function WyckoffChartDashboard({
   generatedAt: string
   dataSource?: string
 }) {
+  const router = useRouter()
   const [activeTimeframe, setActiveTimeframe] = useState(initialTimeframe)
   const [query, setQuery] = useState("")
   const [activeTab, setActiveTab] = useState<WatchlistFilterTab>("all")
@@ -230,6 +236,22 @@ export function WyckoffChartDashboard({
     if (!normalized) return list
     return list.filter((stock) => `${stock.ticker} ${stock.phase} ${stock.bias}`.toUpperCase().includes(normalized))
   }, [activeTab, deferredQuery, stocks])
+
+  const selectTicker = useCallback<TickerSelectHandler>((event, nextTicker) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    if (nextTicker === ticker) return
+
+    const url = new URL(window.location.href)
+    url.searchParams.set("ticker", nextTicker)
+    url.searchParams.set("timeframe", activeTimeframe)
+
+    // Native history + refresh keeps the current client workspace visible while
+    // the force-dynamic RSC payload is fetched. A normal Next Link navigation
+    // enters app/insights/loading.tsx and visibly replaces the entire screen.
+    window.history.pushState(window.history.state, "", url)
+    router.refresh()
+  }, [activeTimeframe, router, ticker])
 
   function chooseTimeframe(timeframe: WyckoffChartTimeframe) {
     if (timeframe === activeTimeframe) return
@@ -463,7 +485,13 @@ export function WyckoffChartDashboard({
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {filteredStocks.map((stock) => (
-                <WatchlistRow key={stock.ticker} stock={stock} isActive={stock.ticker === ticker} activeTimeframe={activeTimeframe} />
+                <WatchlistRow
+                  key={stock.ticker}
+                  stock={stock}
+                  isActive={stock.ticker === ticker}
+                  activeTimeframe={activeTimeframe}
+                  onSelectTicker={selectTicker}
+                />
               ))}
               {!filteredStocks.length ? <div className="p-8 text-center text-sm text-slate-500">Không tìm thấy mã phù hợp</div> : null}
             </div>
