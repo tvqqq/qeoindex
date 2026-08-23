@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import Link from "next/link"
 
 import { TopNav } from "@/components/top-nav"
@@ -42,7 +43,7 @@ function Unavailable({ title, detail }: { title: string; detail: string }) {
   )
 }
 
-function EmbeddedResearch({ children, hideResearchHeader = false }: { children: React.ReactNode; hideResearchHeader?: boolean }) {
+function EmbeddedResearch({ children, hideResearchHeader = false }: { children: ReactNode; hideResearchHeader?: boolean }) {
   return (
     <div
       className={[
@@ -63,7 +64,7 @@ export default async function ResearchPage({
   const query = await searchParams
   const view = researchView(first(query.view))
   const cursor = first(query.cursor)
-  let content: React.ReactNode
+  let content: ReactNode
   let showFinhayControl = false
 
   if (view === "overview") {
@@ -118,17 +119,19 @@ export default async function ResearchPage({
     )
   } else if (view === "scanner") {
     showFinhayControl = true
+    let data: Awaited<ReturnType<typeof getScannerData>> | null = null
     try {
-      const data = await getScannerData()
-      content = (
-        <EmbeddedResearch>
-          <ScannerApp data={data} />
-        </EmbeddedResearch>
-      )
+      data = await getScannerData()
     } catch (error) {
       console.error("[QeoIndex research hub] scanner read failed", error)
-      content = <Unavailable title="Wyckoff Scanner" detail="Không đọc được Universe / Daily Scan từ Notion." />
     }
+    content = data ? (
+      <EmbeddedResearch>
+        <ScannerApp data={data} />
+      </EmbeddedResearch>
+    ) : (
+      <Unavailable title="Wyckoff Scanner" detail="Không đọc được Universe / Daily Scan từ Notion." />
+    )
   } else if (view === "signals") {
     let recommendations = [] as Awaited<ReturnType<typeof getSignalUiData>>["recommendations"]
     let events = [] as Awaited<ReturnType<typeof getSignalUiData>>["events"]
