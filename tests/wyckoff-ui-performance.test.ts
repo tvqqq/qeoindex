@@ -135,6 +135,17 @@ test("Wyckoff chart uses raster-safe visual primitives on scaled 4K displays", (
   assert.doesNotMatch(chart, /horzLines:\s*\{\s*color:/)
 })
 
+test("Wyckoff chart caps the physical raster viewport before large-window flicker threshold", () => {
+  assert.match(chart, /data-wyckoff-chart-raster-viewport/)
+  assert.match(chart, /max-w-\[1360px\]/)
+  assert.match(chart, /\[contain:paint\]/)
+  assert.match(chart, /setHeight\(84\)/)
+  assert.match(chart, /wickUpColor:\s*"rgba\(34,201,138,0\.68\)"/)
+  assert.match(chart, /wickDownColor:\s*"rgba\(255,71,87,0\.68\)"/)
+  assert.match(chart, /rgba\(34,201,138,0\.28\)/)
+  assert.match(chart, /rgba\(255,71,87,0\.28\)/)
+})
+
 test("Wyckoff chart resize remains rAF-batched without autoSize or full-surface swapping", () => {
   assert.doesNotMatch(page, /<WyckoffChartDashboard\s+key=|key=\{ticker\}|key=\{unified\.ticker\}/)
   assert.match(chart, /new ResizeObserver/)
