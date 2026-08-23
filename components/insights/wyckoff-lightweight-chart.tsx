@@ -19,37 +19,135 @@ function numericLevels(value: string) {
     .filter((item) => Number.isFinite(item) && item > 0)
 }
 
+type ChartSlot = {
+  key: string
+  chart: LightweightChartApi
+  layer: HTMLDivElement
+}
+
+function removeSlot(slot: ChartSlot | null) {
+  if (!slot) return
+  try {
+    slot.chart.remove()
+  } catch {
+    // Lightweight Charts can already be detached during rapid navigation.
+  }
+  slot.layer.remove()
+}
+
+function nextPaint() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  })
+}
+
 export function WyckoffLightweightChart({ ticker, study }: { ticker: string; study: WyckoffChartStudy }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<LightweightChartApi | null>(null)
+  const hostRef = useRef<HTMLDivElement>(null)
+  const activeSlotRef = useRef<ChartSlot | null>(null)
+  const pendingSlotRef = useRef<ChartSlot | null>(null)
+  const studyRef = useRef(study)
+  const tickerRef = useRef(ticker)
   const [readyKey, setReadyKey] = useState("")
   const [runtimeError, setRuntimeError] = useState<{ key: string; message: string } | null>(null)
-  const lastBarTime = study.bars.at(-1)?.time ?? 0
-  const loadKey = `${ticker}:${study.timeframe}:${lastBarTime}:${study.bars.length}`
-  const activeError = runtimeError?.key === loadKey ? runtimeError.message : ""
-  const isLoading = study.bars.length > 0 && readyKey !== loadKey && !activeError
+
+  const firstBar = study.bars[0]
+  const lastBar = study.bars.at(-1)
+  const analysis = study.analysis
+  const scenarioSignature = study.scenarios
+    .map((scenario) => `${scenario.key}:${scenario.probability}:${scenario.path.at(-1)?.value ?? ""}`)
+    .join(",")
+  const renderKey = [
+    ticker,
+    study.timeframe,
+    study.bars.length,
+    firstBar?.time ?? 0,
+    lastBar?.time ?? 0,
+    lastBar?.open ?? 0,
+    lastBar?.high ?? 0,
+    lastBar?.low ?? 0,
+    lastBar?.close ?? 0,
+    lastBar?.volume ?? 0,
+    analysis?.support ?? "",
+    analysis?.resistance ?? "",
+    analysis?.bullProbability ?? 0,
+    analysis?.baseProbability ?? 0,
+    analysis?.bearProbability ?? 0,
+    study.markers.length,
+    scenarioSignature,
+  ].join("|")
+
+  const activeError = runtimeError?.key === renderKey ? runtimeError.message : ""
+  const isLoading = study.bars.length > 0 && readyKey !== renderKey && !activeError
+  const isInitialLoading = isLoading && readyKey === ""
 
   useEffect(() => {
-    const container = containerRef.current
-    if (!container || !study.bars.length) return
+    studyRef.current = study
+    tickerRef.current = ticker
+  }, [study, ticker])
 
-    let disposed = false
-    let chart: LightweightChartApi | null = null
-    let resizeObserver: ResizeObserver | null = null
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+
     let resizeFrame = 0
+    const applySize = () => {
+      const width = Math.max(1, Math.floor(host.clientWidth))
+      const height = Math.max(1, Math.floor(host.clientHeight))
+      activeSlotRef.current?.chart.applyOptions({ width, height })
+      pendingSlotRef.current?.chart.applyOptions({ width, height })
+    }
+
+    applySize()
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(() => {
+          cancelAnimationFrame(resizeFrame)
+          resizeFrame = requestAnimationFrame(applySize)
+        })
+
+    resizeObserver?.observe(host)
+
+    return () => {
+      resizeObserver?.disconnect()
+      cancelAnimationFrame(resizeFrame)
+      removeSlot(pendingSlotRef.current)
+      removeSlot(activeSlotRef.current)
+      pendingSlotRef.current = null
+      activeSlotRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const host = hostRef.current
+    const nextStudy = studyRef.current
+    const nextTicker = tickerRef.current
+    if (!host || !nextStudy.bars.length) return
+    if (activeSlotRef.current?.key === renderKey) return
+
+    let cancelled = false
+    let localSlot: ChartSlot | null = null
 
     void (async () => {
       try {
         const lwc = await loadLightweightCharts()
-        if (disposed || !containerRef.current) return
+        if (cancelled || !hostRef.current) return
 
-        const latest = study.bars.at(-1)!
+        const layer = document.createElement("div")
+        layer.dataset.wyckoffChartLayer = renderKey
+        layer.style.position = "absolute"
+        layer.style.inset = "0"
+        layer.style.visibility = "hidden"
+        layer.style.pointerEvents = "none"
+        layer.style.background = "#070b11"
+        host.appendChild(layer)
+
+        const latest = nextStudy.bars.at(-1)!
         const format = pricePrecision(latest.close)
-        const intraday = study.timeframe === "1H" || study.timeframe === "4H"
-        const initialWidth = Math.max(1, Math.floor(container.clientWidth))
-        const initialHeight = Math.max(1, Math.floor(container.clientHeight))
+        const intraday = nextStudy.timeframe === "1H" || nextStudy.timeframe === "4H"
+        const initialWidth = Math.max(1, Math.floor(host.clientWidth))
+        const initialHeight = Math.max(1, Math.floor(host.clientHeight))
 
-        chart = lwc.createChart(container, {
+        const chart = lwc.createChart(layer, {
           width: initialWidth,
           height: initialHeight,
           layout: {
@@ -88,6 +186,9 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
           handleScale: true,
         })
 
+        localSlot = { key: renderKey, chart, layer }
+        pendingSlotRef.current = localSlot
+
         const candles = chart.addSeries(lwc.CandlestickSeries, {
           upColor: "#22c98a",
           downColor: "#ff4757",
@@ -98,7 +199,7 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
           priceLineVisible: true,
           lastValueVisible: true,
         }, 0)
-        candles.setData(study.bars.map((bar) => ({
+        candles.setData(nextStudy.bars.map((bar) => ({
           time: bar.time,
           open: bar.open,
           high: bar.high,
@@ -111,15 +212,15 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
           priceLineVisible: false,
           lastValueVisible: false,
         }, 1)
-        volume.setData(study.bars.map((bar) => ({
+        volume.setData(nextStudy.bars.map((bar) => ({
           time: bar.time,
           value: bar.volume,
           color: bar.close >= bar.open ? "rgba(34,201,138,0.38)" : "rgba(255,71,87,0.38)",
         })))
         chart.panes()[1]?.setHeight(108)
 
-        if (lwc.createSeriesMarkers && study.markers.length) {
-          lwc.createSeriesMarkers(candles, study.markers.map((marker) => ({
+        if (lwc.createSeriesMarkers && nextStudy.markers.length) {
+          lwc.createSeriesMarkers(candles, nextStudy.markers.map((marker) => ({
             time: marker.time,
             position: marker.tone === "bullish" ? "belowBar" : "aboveBar",
             color: marker.tone === "bullish" ? "#22c98a" : "#ff477c",
@@ -129,8 +230,8 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
           })))
         }
 
-        if (candles.createPriceLine && study.analysis) {
-          numericLevels(study.analysis.support).slice(0, 3).forEach((price, index) => candles.createPriceLine?.({
+        if (candles.createPriceLine && nextStudy.analysis) {
+          numericLevels(nextStudy.analysis.support).slice(0, 3).forEach((price, index) => candles.createPriceLine?.({
             price,
             color: index === 0 ? "rgba(34,201,138,0.78)" : "rgba(34,184,207,0.42)",
             lineWidth: 1,
@@ -138,7 +239,7 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
             axisLabelVisible: index === 0,
             title: index === 0 ? "Hỗ trợ" : "",
           }))
-          numericLevels(study.analysis.resistance).slice(0, 3).forEach((price, index) => candles.createPriceLine?.({
+          numericLevels(nextStudy.analysis.resistance).slice(0, 3).forEach((price, index) => candles.createPriceLine?.({
             price,
             color: index === 0 ? "rgba(255,71,87,0.78)" : "rgba(176,124,255,0.42)",
             lineWidth: 1,
@@ -149,8 +250,8 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
         }
 
         if (lwc.LineSeries) {
-          study.scenarios.forEach((scenario) => {
-            const series = chart!.addSeries(lwc.LineSeries, {
+          nextStudy.scenarios.forEach((scenario) => {
+            const series = chart.addSeries(lwc.LineSeries, {
               color: scenario.color,
               lineWidth: scenario.key === "base" ? 2 : 3,
               lineStyle: scenario.key === "base" ? 2 : 0,
@@ -165,60 +266,76 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
           })
         }
 
-        const visible = study.timeframe === "1M" ? 84 : study.timeframe === "1W" ? 150 : 180
-        const last = study.bars.length - 1
+        const visible = nextStudy.timeframe === "1M" ? 84 : nextStudy.timeframe === "1W" ? 150 : 180
+        const last = nextStudy.bars.length - 1
         chart.timeScale().setVisibleLogicalRange({
           from: Math.max(-0.5, last - visible + 1),
           to: last + 8,
         })
 
-        if (typeof ResizeObserver !== "undefined") {
-          resizeObserver = new ResizeObserver((entries) => {
-            const entry = entries[0]
-            if (!entry || disposed || !chart) return
-            const width = Math.max(1, Math.floor(entry.contentRect.width))
-            const height = Math.max(1, Math.floor(entry.contentRect.height))
-            cancelAnimationFrame(resizeFrame)
-            resizeFrame = requestAnimationFrame(() => {
-              if (!disposed && chart) chart.applyOptions({ width, height })
-            })
-          })
-          resizeObserver.observe(container)
+        await nextPaint()
+        if (cancelled || pendingSlotRef.current !== localSlot) {
+          removeSlot(localSlot)
+          return
         }
 
-        chartRef.current = chart
-        setReadyKey(loadKey)
+        const previousSlot = activeSlotRef.current
+        layer.style.visibility = "visible"
+        layer.style.pointerEvents = "auto"
+        activeSlotRef.current = localSlot
+        pendingSlotRef.current = null
+        removeSlot(previousSlot)
+
+        setRuntimeError((current) => current?.key === renderKey ? null : current)
+        setReadyKey(renderKey)
       } catch (error) {
-        if (!disposed) {
-          setRuntimeError({ key: loadKey, message: error instanceof Error ? error.message : "Không thể khởi tạo biểu đồ" })
+        if (localSlot && pendingSlotRef.current === localSlot) {
+          pendingSlotRef.current = null
+          removeSlot(localSlot)
+        }
+        if (!cancelled) {
+          setRuntimeError({
+            key: renderKey,
+            message: error instanceof Error ? error.message : `Không thể khởi tạo biểu đồ ${nextTicker}`,
+          })
         }
       }
     })()
 
     return () => {
-      disposed = true
-      resizeObserver?.disconnect()
-      cancelAnimationFrame(resizeFrame)
-      if (chartRef.current === chart) chartRef.current = null
-      chart?.remove()
+      cancelled = true
+      if (localSlot && pendingSlotRef.current === localSlot) {
+        pendingSlotRef.current = null
+        removeSlot(localSlot)
+      }
     }
-  }, [loadKey, study, ticker])
-
-  if (!study.bars.length) {
-    return <div className="grid h-[520px] place-items-center bg-[#070b11] text-sm text-slate-500 xl:h-[660px]">Không có OHLCV hoàn tất cho {ticker} · {study.timeframe}.</div>
-  }
+  }, [renderKey])
 
   return (
-    <div data-wyckoff-chart-canvas className="relative h-[520px] w-full bg-[#070b11] [contain:layout_paint] xl:h-[660px]">
-      <div ref={containerRef} className="absolute inset-0" aria-label={`Biểu đồ Wyckoff ${ticker} ${study.timeframe}`} />
-      {isLoading ? (
+    <div data-wyckoff-chart-canvas className="relative h-[520px] w-full overflow-hidden bg-[#070b11] [contain:layout_paint] xl:h-[660px]">
+      <div ref={hostRef} className="absolute inset-0" aria-label={`Biểu đồ Wyckoff ${ticker} ${study.timeframe}`} />
+
+      {!study.bars.length ? (
+        <div className="absolute inset-0 z-[6] grid place-items-center bg-[#070b11] text-sm text-slate-500">
+          Không có OHLCV hoàn tất cho {ticker} · {study.timeframe}.
+        </div>
+      ) : null}
+
+      {isInitialLoading ? (
         <div className="pointer-events-none absolute inset-0 z-[5] grid place-items-center bg-[#070b11]">
           <AiLoader label={`Đang dựng biểu đồ ${ticker} · ${study.timeframe}`} />
         </div>
       ) : null}
+
+      {isLoading && !isInitialLoading ? (
+        <div className="pointer-events-none absolute right-3 top-3 z-[7] rounded-lg border border-white/[0.09] bg-[#090e15] px-2.5 py-1.5 shadow-sm">
+          <AiLoader label={`Đang cập nhật ${ticker} · ${study.timeframe}`} compact />
+        </div>
+      ) : null}
+
       {activeError ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-[#070b11] p-6 text-center">
-          <div className="max-w-sm rounded-xl border border-rose-500/25 bg-rose-500/5 px-4 py-3 text-xs leading-relaxed text-rose-300">{activeError}</div>
+        <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-lg border border-rose-500/25 bg-[#120b10] px-3 py-2 text-center text-xs leading-relaxed text-rose-300 shadow-sm">
+          {activeError}
         </div>
       ) : null}
     </div>
