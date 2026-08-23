@@ -115,10 +115,17 @@ function RrgHistoryChart({ title, history, stateKey }: { title: string; history:
   } satisfies ChartConfig
 
   return (
-    <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div><h4 className="font-extrabold text-white">{title}</h4><p className="mt-1 text-xs text-muted-2">20 snapshot gần nhất · projection theo trạng thái KFSP.</p></div>
-        <Radar className="size-5 text-violet-300" />
+    <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-violet-500/20 bg-violet-500/10">
+            <Radar className="size-4 text-violet-300" />
+          </span>
+          <div className="min-w-0">
+            <h4 className="text-base font-extrabold text-white">{title}</h4>
+            <p className="mt-0.5 text-xs text-muted-2">Lịch sử chuyển dịch góc phần tư RRG (Dẫn dắt, Suy yếu, Đội sổ, Phục hồi).</p>
+          </div>
+        </div>
       </div>
       <ChartContainer config={chartConfig} className="h-[330px] w-full aspect-auto">
         <ComposedChart accessibilityLayer data={points} margin={{ top: 12, right: 12, bottom: 12, left: 12 }}>
@@ -151,7 +158,7 @@ function RrgHistoryChart({ title, history, stateKey }: { title: string; history:
           <Line type="monotone" dataKey="y" stroke="var(--color-state)" strokeWidth={2.25} dot={{ r: 3, fill: "#93c5fd", strokeWidth: 0 }} activeDot={{ r: 5, fill: "#6ee7b7", stroke: "#07111f", strokeWidth: 2 }} />
         </ComposedChart>
       </ChartContainer>
-      <p className="mt-2 text-[11px] leading-5 text-muted-2">Biểu đồ chỉ thể hiện lịch sử <strong className="text-slate-300">trạng thái quadrant</strong>. KFSP snapshot hiện không cung cấp tọa độ RRG gốc nên QeoIndex không tự suy diễn RS-Ratio/RS-Momentum.</p>
+      <p className="mt-2 text-[11px] leading-5 text-muted-2 font-ticker">Biểu đồ chỉ thể hiện lịch sử <strong className="text-slate-300">trạng thái quadrant</strong>. KFSP snapshot hiện không cung cấp tọa độ RRG gốc nên QeoIndex không tự suy diễn RS-Ratio/RS-Momentum.</p>
     </div>
   )
 }
@@ -167,9 +174,17 @@ function RsHistoryChart({ history }: { history: DailyHistoryPoint[] }) {
   } satisfies ChartConfig
 
   return (
-    <div className="rounded-2xl border border-cyan-300/10 bg-[#07111f] p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h4 className="font-extrabold text-white">RS-S cổ phiếu vs RS-S ngành</h4><p className="mt-1 text-xs text-muted-2">Tối đa 90 snapshot daily từ Supabase.</p></div>
+    <div className="rounded-2xl border border-cyan-300/10 bg-[#07111f] p-4 sm:p-5 font-ticker">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-cyan-500/20 bg-cyan-500/10">
+            <Zap className="size-4 text-cyan-300" />
+          </span>
+          <div className="min-w-0">
+            <h4 className="text-base font-extrabold text-white">RS-S cổ phiếu vs RS-S ngành</h4>
+            <p className="mt-0.5 text-xs text-muted-2">Lịch sử tương quan sức mạnh giá tối đa 90 snapshot daily từ Supabase.</p>
+          </div>
+        </div>
       </div>
       <ChartContainer config={chartConfig} className="mt-4 h-[280px] w-full aspect-auto">
         <AreaChart accessibilityLayer data={data} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
@@ -200,10 +215,21 @@ function ScoreHistoryChart({ title, history, scoreKey, fallbackScore, tone }: {
   const chartConfig = { score: { label: title, color: accent } } satisfies ChartConfig
 
   return (
-    <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-3"><div><h4 className="text-xl font-extrabold text-white">{title}</h4><p className="mt-1 text-xs text-muted-2">Điểm 0–100 do KFSP cung cấp.</p></div><span className={cn("rounded-lg px-3 py-1.5 font-mono text-xl font-black", tone === "amber" ? "bg-amber-400/15 text-amber-300" : "bg-emerald-400/15 text-emerald-300")}>{formatScore(score)}</span></div>
+    <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg border", tone === "amber" ? "border-amber-500/20 bg-amber-500/10" : "border-emerald-500/20 bg-emerald-500/10")}>
+            {tone === "amber" ? <Bolt className="size-4 text-amber-300" /> : <Target className="size-4 text-emerald-300" />}
+          </span>
+          <div className="min-w-0">
+            <h4 className="text-base font-extrabold text-white">{title}</h4>
+            <p className="mt-0.5 text-xs text-muted-2">Lịch sử điểm số 0–100 do mô hình KFSP cung cấp theo từng quý.</p>
+          </div>
+        </div>
+        <span className={cn("rounded-lg px-3 py-1 font-mono text-lg font-black", tone === "amber" ? "bg-amber-400/15 text-amber-300" : "bg-emerald-400/15 text-emerald-300")}>{formatScore(score)}</span>
+      </div>
       <Tooltip>
-        <TooltipTrigger render={<div className="mt-4 flex cursor-help items-center gap-2 text-xs font-bold text-muted-2" />}><Info className="size-3.5" /> Cách đọc điểm</TooltipTrigger>
+        <TooltipTrigger render={<div className="mt-2 flex cursor-help items-center gap-2 text-xs font-bold text-muted-2" />}><Info className="size-3.5" /> Cách đọc điểm</TooltipTrigger>
         <TooltipContent className="max-w-80 border border-white/10 bg-[#090e19] p-3 text-xs leading-5 text-white">Điểm và lịch sử lấy trực tiếp từ KFSP. Response cung cấp điểm 0–100 nhưng không công bố công thức trọng số đầy đủ; QeoIndex không tái tính điểm.</TooltipContent>
       </Tooltip>
       <div className="relative mt-4 h-3 overflow-hidden rounded-full"><div className="absolute inset-y-0 left-0 w-2/5 bg-rose-500" /><div className="absolute inset-y-0 left-[40%] w-1/5 bg-amber-400" /><div className="absolute inset-y-0 right-0 w-2/5 bg-emerald-500" /><span className="absolute -top-1 h-5 w-1 rounded bg-white shadow-[0_0_10px_white]" style={{ left: `${Math.max(0, Math.min(100, Number(score) || 0))}%` }} /></div>
@@ -247,8 +273,18 @@ function ComponentRadar({ title, components, tone }: { title: string; components
   const chartConfig = { score: { label: "Điểm", color: accent } } satisfies ChartConfig
 
   return (
-    <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-3"><div><h4 className="text-xl font-extrabold text-white">{title}</h4><p className="mt-1 text-xs text-muted-2">Radar thành phần của quý mới nhất.</p></div><Target className={cn("size-5", tone === "amber" ? "text-amber-300" : "text-emerald-300")} /></div>
+    <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg border", tone === "amber" ? "border-amber-500/20 bg-amber-500/10" : "border-emerald-500/20 bg-emerald-500/10")}>
+            <Radar className={cn("size-4", tone === "amber" ? "text-amber-300" : "text-emerald-300")} />
+          </span>
+          <div className="min-w-0">
+            <h4 className="text-base font-extrabold text-white">{title}</h4>
+            <p className="mt-0.5 text-xs text-muted-2">Radar phân bổ chi tiết các chỉ số thành phần của quý mới nhất.</p>
+          </div>
+        </div>
+      </div>
       <ChartContainer config={chartConfig} className="mx-auto mt-3 h-[360px] w-full max-w-[560px] aspect-auto">
         <RadarChart accessibilityLayer data={data} outerRadius="72%">
           <PolarGrid gridType="polygon" stroke="rgba(203,213,225,.22)" />

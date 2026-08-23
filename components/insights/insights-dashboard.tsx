@@ -36,6 +36,7 @@ import {
   Layers3,
   LineChart,
   Maximize2,
+  PieChart,
   Radar,
   RefreshCw,
   Rocket,
@@ -452,13 +453,18 @@ function RatingRadar({ row }: { row: InsightsRatingRow }) {
   })
   const model = calculateRatingModel(row)
   return (
-    <div className="rounded-xl border border-cyan-300/10 bg-[#07111f] p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h4 className="text-base font-extrabold text-white">QeoIndex state radar</h4>
-          <p className="mt-0.5 max-w-md text-xs leading-relaxed text-muted-2">Heuristic minh bạch từ CANSLIM, 4M, RS, RRG, biến động, RSI, beta.</p>
+    <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-violet-500/20 bg-violet-500/10">
+            <Radar className="size-4 text-violet-300" />
+          </span>
+          <div className="min-w-0">
+            <h4 className="text-base font-extrabold text-white">QeoIndex state radar</h4>
+            <p className="mt-0.5 text-xs text-muted-2">Heuristic minh bạch từ CANSLIM, 4M, RS, RRG, biến động, RSI, beta.</p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2.5 text-xs font-bold text-muted-2">
+        <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold text-muted-2">
           {series.map((item) => <span key={item.label} className="flex items-center gap-1.5"><i className="h-px w-4" style={{ background: item.color }} />{item.label}</span>)}
           <span className="flex items-center gap-1.5 text-white"><i className="h-0.5 w-4 bg-violet-300" />Hiện tại</span>
         </div>
@@ -543,15 +549,17 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
     return "bg-white/[0.04] text-slate-500 border border-white/[0.06]"
   }
 
-
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-[#07111f] p-4 sm:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] pb-3 mb-4">
-        <div className="flex items-center gap-2">
-          <Activity className="size-4 text-cyan-300" />
-          <h4 className="font-ticker text-sm sm:text-base font-extrabold italic text-white tracking-tight">
-            Ma trận tích lũy & Trạng thái thị trường · {row.ticker}
-          </h4>
+    <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-cyan-500/20 bg-cyan-500/10">
+            <Layers3 className="size-4 text-cyan-300" />
+          </span>
+          <div className="min-w-0">
+            <h4 className="text-base font-extrabold text-white">Ma trận tích lũy & Trạng thái thị trường</h4>
+            <p className="mt-0.5 text-xs text-muted-2">Lịch sử chuỗi snapshot trạng thái tích lũy, rủi ro và nhiệt lượng.</p>
+          </div>
         </div>
         <div className="flex items-center gap-2 font-ticker text-xs text-muted-2">
           <span>Thấp</span>
@@ -625,14 +633,22 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
 
 function RatingHistoryChart({ row }: { row: InsightsRatingRow }) {
   const history = [...row.scoreHistory].sort((a, b) => a.asOfDate.localeCompare(b.asOfDate)).filter((item) => item.ratingScore != null)
-  if (history.length < 2) return <div className="rounded-xl border border-white/[0.07] bg-[#091321] p-4 font-ticker text-xs text-muted-2"><LineChart className="mr-2 inline size-4 text-violet-300" />Lịch sử sẽ tự mở rộng sau các snapshot cron tiếp theo; hiện chưa đủ 2 mốc để vẽ đường điểm.</div>
+  if (history.length < 2) return <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 font-ticker text-xs text-muted-2"><LineChart className="mr-2 inline size-4 text-violet-300" />Lịch sử sẽ tự mở rộng sau các snapshot cron tiếp theo; hiện chưa đủ 2 mốc để vẽ đường điểm.</div>
   const width = 960
   const points = history.map((item, index) => `${40 + index * (width - 80) / Math.max(1, history.length - 1)},${190 - (item.ratingScore || 0) * 1.45}`)
   return (
-    <div className="rounded-xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
-      <div className="flex items-center justify-between">
-        <h4 className="font-ticker font-extrabold italic text-white text-base">Rating theo thời gian</h4>
-        <span className="font-ticker text-xs font-semibold text-muted-2">{history.length} snapshot thực từ DB</span>
+    <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-violet-500/20 bg-violet-500/10">
+            <LineChart className="size-4 text-violet-300" />
+          </span>
+          <div className="min-w-0">
+            <h4 className="text-base font-extrabold text-white">Xu hướng Composite Rating qua các phiên</h4>
+            <p className="mt-0.5 text-xs text-muted-2">Lịch sử biến động điểm số tổng hợp từ cơ sở dữ liệu.</p>
+          </div>
+        </div>
+        <span className="text-xs font-semibold text-muted-2">{history.length} snapshot thực từ DB</span>
       </div>
       <svg viewBox={`0 0 ${width} 220`} className="mt-3 h-44 w-full" role="img" aria-label={`Lịch sử rating ${row.ticker}`}>
         <line x1="36" x2={width - 36} y1="190" y2="190" stroke="rgba(148,163,184,.2)" />
@@ -906,14 +922,30 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
 
               <div className="grid items-stretch gap-4 xl:grid-cols-12">
                 <div className="grid gap-4 xl:col-span-5 xl:grid-rows-2">
-                  <div className="flex min-h-[360px] flex-col rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
-                    <div className="mb-4 flex items-center gap-2"><BadgePercent className="size-5 text-emerald-300" /><div><h4 className="font-extrabold text-white">FA quick read</h4><p className="text-xs text-muted-2">Growth, profitability và valuation quan trọng.</p></div></div>
+                  <div className="flex min-h-[360px] flex-col rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                    <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10">
+                        <BadgePercent className="size-4 text-emerald-300" />
+                      </span>
+                      <div className="min-w-0">
+                        <h4 className="text-base font-extrabold text-white">FA quick read</h4>
+                        <p className="mt-0.5 text-xs text-muted-2">Growth, profitability và valuation quan trọng.</p>
+                      </div>
+                    </div>
                     <div className="grid flex-1 content-stretch gap-2 sm:grid-cols-2">
                       {["net_revenue_growth_pct", "net_income_growth_pct", "roe_ttm_pct", "net_margin_ttm_pct", "pe_ttm", "pb_ttm"].map((key) => metricTile(key, "h-full"))}
                     </div>
                   </div>
-                  <div className="flex min-h-[360px] flex-col rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5">
-                    <div className="mb-4 flex items-center gap-2"><LineChart className="size-5 text-cyan-300" /><div><h4 className="font-extrabold text-white">TA quick read</h4><p className="text-xs text-muted-2">Trend, oscillator và trạng thái kỹ thuật.</p></div></div>
+                  <div className="flex min-h-[360px] flex-col rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                    <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-cyan-500/20 bg-cyan-500/10">
+                        <LineChart className="size-4 text-cyan-300" />
+                      </span>
+                      <div className="min-w-0">
+                        <h4 className="text-base font-extrabold text-white">TA quick read</h4>
+                        <p className="mt-0.5 text-xs text-muted-2">Trend, oscillator và trạng thái kỹ thuật.</p>
+                      </div>
+                    </div>
                     <div className="grid flex-1 content-stretch gap-2 sm:grid-cols-2">
                       {["price_vs_sma20_pct", "price_vs_sma50_pct", "price_vs_sma200_pct", "rsi_14", "macd_vs_signal", "position_in_bollinger_band"].map((key) => metricTile(key, "h-full"))}
                     </div>
@@ -921,19 +953,39 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                 </div>
                 <div className="space-y-4 xl:col-span-7">
                   <RatingRadar row={row} />
-                  <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4">
-                    <div className="mb-4 flex items-center justify-between"><div><h4 className="text-base font-extrabold text-white">Hiệu suất giá</h4><p className="mt-1 text-xs text-muted-2">Động lượng 1D → 1Y.</p></div><Activity className="size-5 text-emerald-300" /></div>
+                  <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                    <div className="mb-4 flex items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10">
+                          <Activity className="size-4 text-emerald-300" />
+                        </span>
+                        <div className="min-w-0">
+                          <h4 className="text-base font-extrabold text-white">Hiệu suất giá</h4>
+                          <p className="mt-0.5 text-xs text-muted-2">Động lượng 1D → 1Y qua các khung thời gian.</p>
+                        </div>
+                      </div>
+                    </div>
                     {renderPerformanceBars()}
                   </div>
-                  <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4">
-                    <div className="mb-4 flex items-center justify-between"><div><h4 className="text-base font-extrabold text-white">Range & thanh khoản</h4><p className="mt-1 text-xs text-muted-2">Vị thế giá và cường độ giao dịch.</p></div><Droplets className="size-5 text-cyan-300" /></div>
+                  <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                    <div className="mb-4 flex items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-cyan-500/20 bg-cyan-500/10">
+                          <Droplets className="size-4 text-cyan-300" />
+                        </span>
+                        <div className="min-w-0">
+                          <h4 className="text-base font-extrabold text-white">Range & thanh khoản</h4>
+                          <p className="mt-0.5 text-xs text-muted-2">Vị thế giá 52 tuần và cường độ giao dịch.</p>
+                        </div>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-[11px] font-bold text-muted-2">Cách đỉnh 52W</span><div className="mt-1.5 font-mono text-base font-black text-white">{metricDisplay("distance_to_52w_high_pct")}</div></div>
                       <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-[11px] font-bold text-muted-2">Cách đáy 52W</span><div className="mt-1.5 font-mono text-base font-black text-white">{metricDisplay("distance_to_52w_low_pct")}</div></div>
                       <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-[11px] font-bold text-muted-2">Volume vs trước</span><div className="mt-1.5 font-mono text-base font-black text-white">{metricDisplay("volume_vs_previous_session_pct")}</div></div>
                       <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-[11px] font-bold text-muted-2">GTGD vs trước</span><div className="mt-1.5 font-mono text-base font-black text-white">{metricDisplay("traded_value_vs_previous_session_pct")}</div></div>
                     </div>
-                    <div className="mt-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5 text-[11px] font-semibold text-muted-2">KLGD TB 50P <strong className="font-mono text-white">{compactVolume(row.volume)}</strong> · Vốn hóa <strong className="font-mono text-white">{row.marketCapBillion == null ? "—" : formatMarketCapBillion(row.marketCapBillion)}</strong></div>
+                    <div className="mt-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5 text-[11px] font-semibold text-muted-2">KLGD TB 50P <strong className="font-mono text-white">{compactVolume(row.volume)}</strong> · Vốn hóa <strong className="font-mono text-white">{row.marketCapBillion == null ? "—" : formatMarketCapBillion(row.marketCapBillion)}</strong></div>
                   </div>
                 </div>
               </div>
@@ -947,26 +999,93 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
 
           {topTab === "info" && (
             <section id="rating-panel-info" role="tabpanel" aria-labelledby="rating-tab-info" className="space-y-4">
-              <div className="flex items-start gap-3 rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-cyan-300/20 bg-cyan-300/10"><Building2 className="size-5 text-cyan-200" /></span><div><h3 className="text-lg font-extrabold text-white">Thông tin doanh nghiệp</h3><p className="mt-1 text-sm text-muted-2">Hồ sơ, quy mô và cấu trúc cổ phiếu. Dữ liệu dòng tiền giao dịch được chuyển sang tab TA.</p></div></div>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{["company_name", "charter_capital_billion", "market_cap_billion", "shares_outstanding", "website"].map((key) => metricTile(key))}</div>
-              <div className="grid gap-4 lg:grid-cols-2">
-                {[{ label: "Free float", value: freeFloat, display: metricDisplay("free_float_pct") }, { label: "Room nước ngoài còn lại", value: foreignRoom, display: metricDisplay("foreign_room_remaining_pct") }].map((item) => (
-                  <div key={item.label} className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5">
-                    <div className="flex items-center justify-between"><span className="text-sm font-bold text-muted-2">{item.label}</span><span className="font-mono text-lg font-black text-white">{item.display}</span></div>
-                    <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400" style={{ width: `${Math.max(0, Math.min(100, item.value ?? 0))}%` }} /></div>
+              <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-300/10">
+                    <Building2 className="size-4 text-cyan-200" />
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="text-base font-extrabold text-white">Thông tin doanh nghiệp</h3>
+                    <p className="mt-0.5 text-xs text-muted-2">Hồ sơ, quy mô vốn điều lệ và vốn hóa thị trường.</p>
                   </div>
-                ))}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{["company_name", "charter_capital_billion", "market_cap_billion", "shares_outstanding", "website"].map((key) => metricTile(key))}</div>
               </div>
-              <div className="border-t border-white/[0.07] pt-4">
-                <div className="mb-4 flex items-center gap-2"><BadgePercent className="size-5 text-emerald-300" /><div><h3 className="font-extrabold text-white">Chỉ số tài chính & định giá</h3><p className="text-xs text-muted-2">Các chỉ số FA nằm cùng hồ sơ doanh nghiệp để đọc liền mạch.</p></div></div>
+
+              <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10">
+                    <PieChart className="size-4 text-emerald-300" />
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="text-base font-extrabold text-white">Cơ cấu sở hữu & Room nước ngoài</h3>
+                    <p className="mt-0.5 text-xs text-muted-2">Tỷ lệ cổ phiếu lưu hành tự do và room khối ngoại còn lại.</p>
+                  </div>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {[{ label: "Free float", value: freeFloat, display: metricDisplay("free_float_pct") }, { label: "Room nước ngoài còn lại", value: foreignRoom, display: metricDisplay("foreign_room_remaining_pct") }].map((item) => (
+                    <div key={item.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                      <div className="flex items-center justify-between"><span className="text-sm font-bold text-muted-2">{item.label}</span><span className="font-mono text-lg font-black text-white">{item.display}</span></div>
+                      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400" style={{ width: `${Math.max(0, Math.min(100, item.value ?? 0))}%` }} /></div>
+                    </div>
+                  ))}
+                </div>
               </div>
+
               <div className="grid gap-4 xl:grid-cols-2">
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center gap-2"><BadgePercent className="size-5 text-emerald-300" /><div><h3 className="font-extrabold text-white">Định giá</h3><p className="text-xs text-muted-2">Multiple và dữ liệu trên mỗi cổ phiếu.</p></div></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{["eps_ttm_vnd", "pe_ttm", "bvps_ttm_vnd", "pb_ttm", "eps_ttm_growth_pct", "bvps_ttm_growth_pct"].map((key) => metricTile(key))}</div></div>
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center gap-2"><FileText className="size-5 text-amber-300" /><div><h3 className="font-extrabold text-white">Financial snapshot</h3><p className="text-xs text-muted-2">Kỳ BCTC gần nhất và quy mô TTM.</p></div></div><div className="grid gap-2 sm:grid-cols-2">{["financial_period", "net_revenue_ttm_billion", "net_income_ttm_billion"].map((key) => metricTile(key))}</div></div>
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                  <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10">
+                      <BadgePercent className="size-4 text-emerald-300" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-base font-extrabold text-white">Chỉ số tài chính & định giá</h3>
+                      <p className="mt-0.5 text-xs text-muted-2">Multiple P/E, P/B và dữ liệu trên mỗi cổ phiếu.</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{["eps_ttm_vnd", "pe_ttm", "bvps_ttm_vnd", "pb_ttm", "eps_ttm_growth_pct", "bvps_ttm_growth_pct"].map((key) => metricTile(key))}</div>
+                </div>
+
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                  <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-amber-500/20 bg-amber-500/10">
+                      <FileText className="size-4 text-amber-300" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-base font-extrabold text-white">Financial snapshot</h3>
+                      <p className="mt-0.5 text-xs text-muted-2">Kỳ BCTC gần nhất và quy mô TTM.</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">{["financial_period", "net_revenue_ttm_billion", "net_income_ttm_billion"].map((key) => metricTile(key))}</div>
+                </div>
               </div>
+
               <div className="grid gap-4 xl:grid-cols-2">
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><h3 className="font-extrabold text-white">Tăng trưởng</h3><p className="mt-1 text-xs text-muted-2">So sánh tốc độ tăng trưởng của các driver chính.</p><div className="mt-5 space-y-4">{[{ label: "Doanh thu", key: "net_revenue_growth_pct" }, { label: "LN sau thuế", key: "net_income_growth_pct" }, { label: "EPS", key: "eps_ttm_growth_pct" }, { label: "BVPS", key: "bvps_ttm_growth_pct" }].map((item) => { const value = metricNumber(item.key); const width = value == null ? 0 : Math.min(100, Math.abs(value)); return <div key={item.key}><div className="mb-1.5 flex items-center justify-between text-xs font-bold"><span className="text-muted-2">{item.label}</span><span className={value == null ? "text-muted-2" : value >= 0 ? "text-up" : "text-down"}>{value == null ? "—" : formatPercent(value)}</span></div><div className="h-2 rounded-full bg-white/[0.05]"><div className={cn("h-full rounded-full", (value ?? 0) >= 0 ? "bg-emerald-400" : "bg-rose-400")} style={{ width: `${width}%` }} /></div></div> })}</div></div>
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><h3 className="font-extrabold text-white">Khả năng sinh lời</h3><p className="mt-1 text-xs text-muted-2">Margin, hiệu quả tài sản và vốn chủ sở hữu.</p><div className="mt-4 grid gap-3 sm:grid-cols-3">{["net_margin_ttm_pct", "roa_ttm_pct", "roe_ttm_pct"].map((key) => metricTile(key))}</div></div>
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                  <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-cyan-500/20 bg-cyan-500/10">
+                      <TrendingUp className="size-4 text-cyan-300" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-base font-extrabold text-white">Tăng trưởng tài chính</h3>
+                      <p className="mt-0.5 text-xs text-muted-2">So sánh tốc độ tăng trưởng của các driver chính.</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-3.5">{[{ label: "Doanh thu", key: "net_revenue_growth_pct" }, { label: "LN sau thuế", key: "net_income_growth_pct" }, { label: "EPS", key: "eps_ttm_growth_pct" }, { label: "BVPS", key: "bvps_ttm_growth_pct" }].map((item) => { const value = metricNumber(item.key); const width = value == null ? 0 : Math.min(100, Math.abs(value)); return <div key={item.key}><div className="mb-1.5 flex items-center justify-between text-xs font-bold"><span className="text-muted-2">{item.label}</span><span className={value == null ? "text-muted-2" : value >= 0 ? "text-up" : "text-down"}>{value == null ? "—" : formatPercent(value)}</span></div><div className="h-2 rounded-full bg-white/[0.05]"><div className={cn("h-full rounded-full", (value ?? 0) >= 0 ? "bg-emerald-400" : "bg-rose-400")} style={{ width: `${width}%` }} /></div></div> })}</div>
+                </div>
+
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                  <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-purple-500/20 bg-purple-500/10">
+                      <Target className="size-4 text-purple-300" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-base font-extrabold text-white">Khả năng sinh lời</h3>
+                      <p className="mt-0.5 text-xs text-muted-2">Margin, hiệu quả tài sản (ROA) và vốn chủ sở hữu (ROE).</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">{["net_margin_ttm_pct", "roa_ttm_pct", "roe_ttm_pct"].map((key) => metricTile(key))}</div>
+                </div>
               </div>
             </section>
           )}
@@ -974,24 +1093,146 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
           {topTab === "ta" && (
             <section id="rating-panel-ta" role="tabpanel" aria-labelledby="rating-tab-ta" className="space-y-4">
               <div className="grid gap-4 xl:grid-cols-2">
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center justify-between"><div><h3 className="font-extrabold text-white">Momentum đa khung</h3><p className="text-xs text-muted-2">1D → 1Y, màu xanh/đỏ theo hướng biến động.</p></div><Activity className="size-5 text-emerald-300" /></div>{renderPerformanceBars()}</div>
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center justify-between"><div><h3 className="font-extrabold text-white">Trend so với SMA</h3><p className="text-xs text-muted-2">Giá hiện trên {smaAboveCount}/5 đường SMA.</p></div><TrendingUp className="size-5 text-cyan-300" /></div><div className="space-y-3">{smaDistance.map((item) => { const width = item.value == null ? 0 : Math.min(50, Math.abs(item.value) / smaScale * 50); return <div key={item.label} className="grid grid-cols-[60px_1fr_70px] items-center gap-3"><span className="text-xs font-extrabold text-muted-2">{item.label}</span><div className="relative h-2.5 rounded-full bg-white/[0.05]"><span className="absolute left-1/2 top-0 h-full w-px bg-white/20" />{item.value != null && <span className={cn("absolute top-0 h-full rounded-full", item.value >= 0 ? "left-1/2 bg-cyan-400" : "right-1/2 bg-rose-400")} style={{ width: `${width}%` }} />}</div><span className={cn("text-right font-mono text-xs font-black", item.value == null ? "text-muted-2" : item.value >= 0 ? "text-up" : "text-down")}>{formatPercent(item.value)}</span></div> })}</div></div>
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                  <div className="mb-4 flex items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10">
+                        <Activity className="size-4 text-emerald-300" />
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="text-base font-extrabold text-white">Momentum đa khung</h3>
+                        <p className="mt-0.5 text-xs text-muted-2">Biến động giá từ 1D → 1Y theo hướng tăng/giảm.</p>
+                      </div>
+                    </div>
+                  </div>
+                  {renderPerformanceBars()}
+                </div>
+
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                  <div className="mb-4 flex items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-cyan-500/20 bg-cyan-500/10">
+                        <TrendingUp className="size-4 text-cyan-300" />
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="text-base font-extrabold text-white">Trend so với SMA</h3>
+                        <p className="mt-0.5 text-xs text-muted-2">Giá hiện trên {smaAboveCount}/5 đường trung bình SMA.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">{smaDistance.map((item) => { const width = item.value == null ? 0 : Math.min(50, Math.abs(item.value) / smaScale * 50); return <div key={item.label} className="grid grid-cols-[60px_1fr_70px] items-center gap-3"><span className="text-xs font-extrabold text-muted-2">{item.label}</span><div className="relative h-2.5 rounded-full bg-white/[0.05]"><span className="absolute left-1/2 top-0 h-full w-px bg-white/20" />{item.value != null && <span className={cn("absolute top-0 h-full rounded-full", item.value >= 0 ? "left-1/2 bg-cyan-400" : "right-1/2 bg-rose-400")} style={{ width: `${width}%` }} />}</div><span className={cn("text-right font-mono text-xs font-black", item.value == null ? "text-muted-2" : item.value >= 0 ? "text-up" : "text-down")}>{formatPercent(item.value)}</span></div> })}</div>
+                </div>
               </div>
 
               <div className="grid gap-4 xl:grid-cols-3">
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><h3 className="font-extrabold text-white">RSI (14)</h3><div className="mt-5 flex items-center justify-between text-xs font-bold text-muted-2"><span>0</span><span>30</span><span>70</span><span>100</span></div><div className="relative mt-2 h-3 rounded-full bg-gradient-to-r from-cyan-500/35 via-white/10 to-rose-500/35"><span className="absolute top-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#07111f] bg-white shadow-[0_0_14px_rgba(255,255,255,.5)]" style={{ left: `${Math.max(0, Math.min(100, rsi ?? 50))}%` }} /></div><div className="mt-4 font-mono text-2xl font-black text-white">{rsi ?? "—"}</div><p className="mt-1 text-xs text-muted-2">{rsi == null ? "Không có dữ liệu" : rsi < 30 ? "Vùng quá bán" : rsi > 70 ? "Vùng quá mua" : "Vùng trung tính"}</p></div>
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><h3 className="font-extrabold text-white">MACD</h3><div className="mt-5 text-xl font-black text-white">{metricDisplay("macd_vs_signal")}</div><p className="mt-2 text-xs text-muted-2">Vị trí MACD so với đường Signal.</p></div>
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><h3 className="font-extrabold text-white">Bollinger Band</h3><div className="mt-5 text-xl font-black text-white">{metricDisplay("position_in_bollinger_band")}</div><p className="mt-2 text-xs text-muted-2">Vị trí giá trong/ngoài dải Bollinger.</p></div>
+                {/* RSI (14) */}
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                  <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-cyan-500/20 bg-cyan-500/10">
+                      <Activity className="size-4 text-cyan-300" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-base font-extrabold text-white">RSI (14)</h3>
+                      <p className="mt-0.5 text-xs text-muted-2">Sức mạnh tương đối & vùng quá mua/bán.</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-xs font-bold text-muted-2"><span>0</span><span>30</span><span>70</span><span>100</span></div>
+                  <div className="relative mt-2 h-3 rounded-full bg-gradient-to-r from-cyan-500/35 via-white/10 to-rose-500/35"><span className="absolute top-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#07111f] bg-white shadow-[0_0_14px_rgba(255,255,255,.5)]" style={{ left: `${Math.max(0, Math.min(100, rsi ?? 50))}%` }} /></div>
+                  <div className="mt-4 font-mono text-2xl font-black text-white">{rsi ?? "—"}</div>
+                  <p className="mt-1 text-xs text-muted-2">{rsi == null ? "Không có dữ liệu" : rsi < 30 ? "Vùng quá bán" : rsi > 70 ? "Vùng quá mua" : "Vùng trung tính"}</p>
+                </div>
+
+                {/* MACD */}
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                  <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-violet-500/20 bg-violet-500/10">
+                      <LineChart className="size-4 text-violet-300" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-base font-extrabold text-white">MACD</h3>
+                      <p className="mt-0.5 text-xs text-muted-2">Vị trí MACD so với đường Signal.</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 text-xl font-black text-white">{metricDisplay("macd_vs_signal")}</div>
+                  <p className="mt-2 text-xs text-muted-2">Tín hiệu giao cắt và phân kỳ động lượng.</p>
+                </div>
+
+                {/* Bollinger Band */}
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                  <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-amber-500/20 bg-amber-500/10">
+                      <Layers3 className="size-4 text-amber-300" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-base font-extrabold text-white">Bollinger Band</h3>
+                      <p className="mt-0.5 text-xs text-muted-2">Vị trí giá trong/ngoài dải biên độ.</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 text-xl font-black text-white">{metricDisplay("position_in_bollinger_band")}</div>
+                  <p className="mt-2 text-xs text-muted-2">Mức độ co thắt dải và ranh giới biến động.</p>
+                </div>
               </div>
 
-              <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center gap-2"><Maximize2 className="size-5 text-violet-300" /><div><h3 className="font-extrabold text-white">Phạm vi giá</h3><p className="text-xs text-muted-2">Không suy diễn vị trí nếu provider chỉ trả nhãn text.</p></div></div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="text-xs uppercase tracking-wider text-muted-2"><tr className="border-b border-white/10"><th className="pb-3">Khung</th><th className="pb-3">Độ rộng</th><th className="pb-3">Vị trí</th><th className="pb-3">Khoảng cách đặc biệt</th></tr></thead><tbody className="divide-y divide-white/[0.06] text-white">{[{ label: "10D", width: "range_width_10d_pct", position: "position_in_10d_range", distance: null }, { label: "20D", width: "range_width_20d_pct", position: "position_in_20d_range", distance: null }, { label: "50D", width: "range_width_50d_pct", position: "position_in_50d_range", distance: null }, { label: "52W", width: "range_width_52w_pct", position: "position_in_52w_range", distance: "distance_to_52w_high_pct" }].map((item) => <tr key={item.label}><td className="py-3 font-extrabold">{item.label}</td><td className="py-3 font-mono">{metricDisplay(item.width)}</td><td className="py-3 font-semibold">{metricDisplay(item.position)}</td><td className="py-3 font-mono text-muted-2">{item.distance ? `Đỉnh: ${metricDisplay(item.distance)} · Đáy: ${metricDisplay("distance_to_52w_low_pct")}` : "—"}</td></tr>)}</tbody></table></div></div>
+              <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-violet-500/20 bg-violet-500/10">
+                    <Maximize2 className="size-4 text-violet-300" />
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="text-base font-extrabold text-white">Phạm vi giá & Biên độ kỹ thuật</h3>
+                    <p className="mt-0.5 text-xs text-muted-2">Độ rộng biên độ và vị trí giá theo các mốc 10D, 20D, 50D, 52W.</p>
+                  </div>
+                </div>
+                <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="text-xs uppercase tracking-wider text-muted-2"><tr className="border-b border-white/10"><th className="pb-3">Khung</th><th className="pb-3">Độ rộng</th><th className="pb-3">Vị trí</th><th className="pb-3">Khoảng cách đặc biệt</th></tr></thead><tbody className="divide-y divide-white/[0.06] text-white">{[{ label: "10D", width: "range_width_10d_pct", position: "position_in_10d_range", distance: null }, { label: "20D", width: "range_width_20d_pct", position: "position_in_20d_range", distance: null }, { label: "50D", width: "range_width_50d_pct", position: "position_in_50d_range", distance: null }, { label: "52W", width: "range_width_52w_pct", position: "position_in_52w_range", distance: "distance_to_52w_high_pct" }].map((item) => <tr key={item.label}><td className="py-3 font-extrabold">{item.label}</td><td className="py-3 font-mono">{metricDisplay(item.width)}</td><td className="py-3 font-semibold">{metricDisplay(item.position)}</td><td className="py-3 font-mono text-muted-2">{item.distance ? `Đỉnh: ${metricDisplay(item.distance)} · Đáy: ${metricDisplay("distance_to_52w_low_pct")}` : "—"}</td></tr>)}</tbody></table></div>
+              </div>
 
               <div className="grid gap-4 xl:grid-cols-2">
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center justify-between"><div><h3 className="font-extrabold text-white">Khối lượng</h3><p className="text-xs text-muted-2">Hôm nay so với trung bình 10/20/50 phiên.</p></div><Droplets className="size-5 text-cyan-300" /></div><div className="space-y-3">{volumeSeries.map((item) => <div key={item.label} className="grid grid-cols-[72px_1fr_90px] items-center gap-3"><span className="text-xs font-bold text-muted-2">{item.label}</span><div className="h-2.5 rounded-full bg-white/[0.05]"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, (item.value ?? 0) / volumeScale * 100)}%` }} /></div><span className="text-right font-mono text-xs font-black text-white">{item.value == null ? "—" : compactVolume(item.value)}</span></div>)}</div></div>
-                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-5"><div className="mb-4 flex items-center justify-between"><div><h3 className="font-extrabold text-white">Giá trị giao dịch</h3><p className="text-xs text-muted-2">Đơn vị tỷ đồng.</p></div><BarChart3 className="size-5 text-amber-300" /></div><div className="space-y-3">{tradedValueSeries.map((item) => <div key={item.label} className="grid grid-cols-[72px_1fr_90px] items-center gap-3"><span className="text-xs font-bold text-muted-2">{item.label}</span><div className="h-2.5 rounded-full bg-white/[0.05]"><div className="h-full rounded-full bg-amber-400" style={{ width: `${Math.min(100, (item.value ?? 0) / tradedValueScale * 100)}%` }} /></div><span className="text-right font-mono text-xs font-black text-white">{item.value == null ? "—" : `${formatNumber(item.value)} tỷ`}</span></div>)}</div></div>
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                  <div className="mb-4 flex items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-cyan-500/20 bg-cyan-500/10">
+                        <Droplets className="size-4 text-cyan-300" />
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="text-base font-extrabold text-white">Khối lượng</h3>
+                        <p className="mt-0.5 text-xs text-muted-2">Hôm nay so với trung bình 10/20/50 phiên.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">{volumeSeries.map((item) => <div key={item.label} className="grid grid-cols-[72px_1fr_90px] items-center gap-3"><span className="text-xs font-bold text-muted-2">{item.label}</span><div className="h-2.5 rounded-full bg-white/[0.05]"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, (item.value ?? 0) / volumeScale * 100)}%` }} /></div><span className="text-right font-mono text-xs font-black text-white">{item.value == null ? "—" : compactVolume(item.value)}</span></div>)}</div>
+                </div>
+
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                  <div className="mb-4 flex items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-amber-500/20 bg-amber-500/10">
+                        <BarChart3 className="size-4 text-amber-300" />
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="text-base font-extrabold text-white">Giá trị giao dịch</h3>
+                        <p className="mt-0.5 text-xs text-muted-2">Đơn vị tính bằng tỷ đồng.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">{tradedValueSeries.map((item) => <div key={item.label} className="grid grid-cols-[72px_1fr_90px] items-center gap-3"><span className="text-xs font-bold text-muted-2">{item.label}</span><div className="h-2.5 rounded-full bg-white/[0.05]"><div className="h-full rounded-full bg-amber-400" style={{ width: `${Math.min(100, (item.value ?? 0) / tradedValueScale * 100)}%` }} /></div><span className="text-right font-mono text-xs font-black text-white">{item.value == null ? "—" : `${formatNumber(item.value)} tỷ`}</span></div>)}</div>
+                </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{["volume_vs_previous_session_pct", "traded_value_vs_previous_session_pct", "net_foreign_trading_billion", "net_proprietary_trading_billion"].map((key) => metricTile(key))}{metricTile("beta")}</div>
+              <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
+                <div className="mb-4 flex items-start gap-2.5 border-b border-white/[0.06] pb-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10">
+                    <Zap className="size-4 text-emerald-300" />
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="text-base font-extrabold text-white">Giao dịch khối ngoại & Tự doanh</h3>
+                    <p className="mt-0.5 text-xs text-muted-2">Giá trị mua bán ròng của khối ngoại, tự doanh và hệ số Beta.</p>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  {["volume_vs_previous_session_pct", "traded_value_vs_previous_session_pct", "net_foreign_trading_billion", "net_proprietary_trading_billion"].map((key) => metricTile(key))}
+                  {metricTile("beta")}
+                </div>
+              </div>
             </section>
           )}
 
