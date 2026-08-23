@@ -32,24 +32,29 @@ test("dense ticker lists do not auto-prefetch every dynamic research route", () 
   }
 })
 
-test("Wyckoff chart shell avoids eager route work and compositor-heavy header filters", () => {
+test("Wyckoff chart shell avoids eager route work and compositor-heavy navigation effects", () => {
   const file = source("components/insights/wyckoff-chart-dashboard.tsx")
 
-  assert.equal(file.includes("backdrop-blur-2xl"), false, "full-width Wyckoff header must not use backdrop-filter blur")
-  assert.equal(file.includes("drop-shadow-["), false, "Wyckoff header must not add CSS filter drop-shadows around the chart canvas")
-  assert.equal(file.includes("transition-all"), false, "Wyckoff header interactions should transition only paint-safe properties")
+  assert.equal(file.includes("backdrop-blur-2xl"), false, "Wyckoff workspace must not use backdrop-filter blur")
+  assert.equal(file.includes("drop-shadow-["), false, "Wyckoff workspace must not add CSS filter drop-shadows around the chart canvas")
+  assert.equal(file.includes("transition-all"), false, "Wyckoff interactions should transition only paint-safe properties")
 
-  const headerStart = file.indexOf("<header")
-  const headerEnd = file.indexOf("</header>", headerStart)
+  const backRowStart = file.indexOf("data-wyckoff-back-row")
+  const headerStart = file.indexOf("<header", backRowStart)
+  assert.notEqual(backRowStart, -1, "Wyckoff Rating navigation should live in its own row")
   assert.notEqual(headerStart, -1)
-  assert.notEqual(headerEnd, -1)
 
-  const header = file.slice(headerStart, headerEnd)
-  const links = header.match(/<Link[\s\S]*?<\/Link>/g) ?? []
-  assert.ok(links.length >= 1, "Wyckoff header should keep its navigation link")
+  const backRow = file.slice(backRowStart, headerStart)
+  const links = backRow.match(/<Link[\s\S]*?<\/Link>/g) ?? []
+  assert.ok(links.length >= 1, "Wyckoff back row should keep its Rating navigation link")
   for (const link of links) {
-    assert.match(link, /prefetch=\{false\}/, "Wyckoff header links must not prefetch heavy dynamic routes while the chart mounts")
+    assert.match(link, /prefetch=\{false\}/, "Wyckoff navigation must not prefetch the heavy dynamic route while the chart mounts")
   }
+
+  const headerEnd = file.indexOf("</header>", headerStart)
+  assert.notEqual(headerEnd, -1)
+  const header = file.slice(headerStart, headerEnd)
+  assert.doesNotMatch(header, /<Link/, "Rating navigation must stay outside the stock identity header")
 })
 
 test("research routes have an immediate loading boundary", () => {
