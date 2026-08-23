@@ -1,0 +1,42 @@
+name: Cleanup TTAI overview history model
+
+on:
+  push:
+    branches:
+      - feat/insights-ttai-history-dashboard
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/insights-ttai-history-dashboard
+      - name: Keep heatmap history factual and remove dead chart vars
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p = Path('components/insights/insights-dashboard.tsx')
+          s = p.read_text()
+          old = re.compile(r'''  // Synthesize multi-period date columns \(real history when available, or standard windows\)\n  const columns = useMemo\(\(\) => \{.*?\n  \}, \[history, row\]\)''', re.S)
+          new = '''  // Use only published snapshots. Never synthesize historical periods in analytical UI.\n  const columns = useMemo(() => {\n    const source = history.length ? history : [toHistorySnapshot(row)]\n    return source.map((item) => ({\n      date: item.asOfDate ? item.asOfDate.slice(5) : "—",\n      fullDate: item.asOfDate || row.asOfDate || "—",\n      model: snapshotModel(item),\n    }))\n  }, [history, row])'''
+          s, count = old.subn(new, s, count=1)
+          if count != 1:
+              raise SystemExit(f'columns replacement count={count}')
+          dead = re.compile(r'''\n  const chartWidth = 720\n  const chartHeight = 60\n  const polyPoints = columns\.map\(\(col, idx\) => \{.*?\n  \}\)\n''', re.S)
+          s, dead_count = dead.subn('\n', s, count=1)
+          if dead_count != 1:
+              raise SystemExit(f'dead vars replacement count={dead_count}')
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/insights/insights-dashboard.tsx
+          git commit -m "fix(insights): keep state history factual"
+          git push origin HEAD:feat/insights-ttai-history-dashboard
