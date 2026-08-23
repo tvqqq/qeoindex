@@ -6,6 +6,7 @@ const dashboard = readFileSync("components/insights/wyckoff-chart-dashboard.tsx"
 const chart = readFileSync("components/insights/wyckoff-lightweight-chart.tsx", "utf8")
 const chartRuntime = readFileSync("lib/lightweight-charts-runtime.ts", "utf8")
 const page = readFileSync("app/insights/wyckoff/page.tsx", "utf8")
+const tickerApi = readFileSync("app/api/insights/wyckoff/route.ts", "utf8")
 const unifiedData = readFileSync("lib/wyckoff-unified-data.ts", "utf8")
 const metadata = readFileSync("lib/wyckoff-company-metadata.ts", "utf8")
 const animatedTabs = readFileSync("components/smoothui/animated-tabs/index.tsx", "utf8")
@@ -40,17 +41,33 @@ test("Wyckoff watchlist is ticker-first, larger, and strips company exchange sec
   assert.doesNotMatch(dashboard, /Mã · Công ty \/ Ngành|Tìm mã, công ty hoặc ngành/)
 })
 
-test("Wyckoff ticker switching bypasses the route loading boundary and refreshes in place", () => {
-  assert.match(dashboard, /import \{ useRouter \} from "next\/navigation"/)
-  assert.match(dashboard, /event\.preventDefault\(\)/)
-  assert.match(dashboard, /window\.history\.pushState\(window\.history\.state, "", url\)/)
-  assert.match(dashboard, /router\.refresh\(\)/)
+test("Wyckoff ticker switching is cancellable and latest-click-wins", () => {
+  assert.match(dashboard, /TICKER_SWITCH_DEBOUNCE_MS = 60/)
+  assert.match(dashboard, /new AbortController\(\)/)
+  assert.match(dashboard, /switchAbortRef\.current\?\.abort\(\)/)
+  assert.match(dashboard, /switchSequenceRef\.current/)
+  assert.match(dashboard, /sequence !== switchSequenceRef\.current/)
+  assert.match(dashboard, /fetch\(`\/api\/insights\/wyckoff\?ticker=/)
+  assert.match(dashboard, /window\.history\.replaceState\(window\.history\.state, "", url\)/)
+  assert.match(dashboard, /startTransition\(\(\) => setTickerData\(nextData\)\)/)
+  assert.match(dashboard, /TICKER_CACHE_LIMIT = 8/)
   assert.match(dashboard, /onSelectTicker=\{selectTicker\}/)
+  assert.doesNotMatch(dashboard, /router\.refresh\(\)/)
+  assert.doesNotMatch(dashboard, /window\.history\.pushState/)
+  assert.doesNotMatch(dashboard, /useRouter/)
+})
 
-  const selectStart = dashboard.indexOf("const selectTicker")
-  const selectEnd = dashboard.indexOf("function chooseTimeframe", selectStart)
-  const selectSource = dashboard.slice(selectStart, selectEnd)
-  assert.doesNotMatch(selectSource, /router\.(push|replace)\(/)
+test("Wyckoff ticker endpoint is authenticated and reads only the selected ticker payload", () => {
+  assert.match(tickerApi, /requireApiUser/)
+  assert.match(tickerApi, /getUnifiedWyckoffTickerData/)
+  assert.match(tickerApi, /Cache-Control/)
+  assert.match(unifiedData, /export async function getUnifiedWyckoffTickerData/)
+
+  const selectedStart = unifiedData.indexOf("export async function getUnifiedWyckoffTickerData")
+  const selectedSource = unifiedData.slice(selectedStart)
+  assert.match(selectedSource, /\.eq\("ticker", ticker\)/)
+  assert.match(selectedSource, /getWyckoffCompanyMetadata\(supabase, \[ticker\]\)/)
+  assert.doesNotMatch(selectedSource, /\.in\("ticker", tickers\)/)
 })
 
 test("Wyckoff timeframe uses bounded SmoothUI AnimatedTabs inside chart toolbar", () => {
