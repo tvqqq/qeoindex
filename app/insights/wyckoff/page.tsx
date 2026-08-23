@@ -7,6 +7,7 @@ import { getServerAuthContext } from "@/lib/auth/server"
 import { getCachedDailyHistory, getCachedHourlyHistory, getCachedLongDailyHistory } from "@/lib/request-cache"
 import { getScannerData, rowToPreviousResult } from "@/lib/scanner-data"
 import type { OhlcvBar } from "@/lib/technical-indicators"
+import { getWyckoffCompanyMetadata } from "@/lib/wyckoff-company-metadata"
 import { buildWyckoffChartStudies, isWyckoffChartTimeframe, type WyckoffChartTimeframe } from "@/lib/wyckoff-chart-model"
 import { getUnifiedWyckoffData } from "@/lib/wyckoff-unified-data"
 
@@ -72,6 +73,7 @@ export default async function WyckoffChartPage({
   const selectedStock = scanner.universe.find((stock) => stock.ticker === requestedTicker) ?? scanner.universe[0]
   const ticker = selectedStock.ticker
   const dailyScan = scanner.latestScans[ticker]
+  const metadataPromise = getWyckoffCompanyMetadata(auth.supabase, scanner.universe.map((stock) => stock.ticker))
 
   const [dailyResult, hourlyResult] = await Promise.allSettled([
     getCachedLongDailyHistory(ticker),
@@ -104,12 +106,16 @@ export default async function WyckoffChartPage({
     dailyAnalysis: rowToPreviousResult(dailyScan),
   })
 
+  const companyMetadata = await metadataPromise
   const stocks: WyckoffListItem[] = scanner.universe.map((stock) => {
     const scan = scanner.latestScans[stock.ticker]
+    const metadata = companyMetadata.get(stock.ticker)
     return {
       ticker: stock.ticker,
+      companyName: metadata?.companyName ?? stock.ticker,
+      exchange: metadata?.exchange ?? "HOSE",
       rank: stock.rank,
-      sector: stock.sector,
+      sector: stock.sector || metadata?.sector || "",
       price: scan?.price ?? null,
       changePct: scan?.changePct ?? null,
       phase: scan?.phase ?? "",
