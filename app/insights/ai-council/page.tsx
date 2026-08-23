@@ -1,9 +1,11 @@
 import type { Metadata } from "next"
+import Link from "next/link"
+import { BarChart3 } from "lucide-react"
 
 import { LandingLogin } from "@/components/auth/landing-login"
 import { AiCouncilDashboard } from "@/components/insights/ai-council-dashboard"
-import { getAiCouncilData } from "@/lib/ai-council-data"
 import { getServerAuthContext } from "@/lib/auth/server"
+import { getAiCouncilRuntimeData } from "@/lib/ai-council-runtime"
 
 export const dynamic = "force-dynamic"
 
@@ -26,6 +28,17 @@ export default async function AiCouncilPage({
   if (!auth) return <LandingLogin />
   const query = searchParams ? await searchParams : {}
   const initialTicker = (first(query.ticker) || "").trim().toUpperCase()
-  const data = await getAiCouncilData(auth.supabase)
-  return <AiCouncilDashboard data={data} initialTicker={initialTicker} />
+  const runtime = await getAiCouncilRuntimeData(auth.supabase)
+  return (
+    <>
+      <AiCouncilDashboard data={runtime.data} initialTicker={initialTicker} />
+      <Link
+        href="/insights/ai-council/performance"
+        className="fixed bottom-5 right-5 z-50 inline-flex items-center gap-2 rounded-xl border border-violet-400/25 bg-[#0b1017]/95 px-3.5 py-2.5 text-[10px] font-black text-violet-200 shadow-2xl backdrop-blur hover:border-violet-300/45 hover:text-white"
+      >
+        <BarChart3 className="size-4" />
+        Performance Lab
+      </Link>
+    </>
+  )
 }

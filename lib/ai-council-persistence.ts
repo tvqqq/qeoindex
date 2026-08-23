@@ -3,14 +3,20 @@ import "server-only"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import type { AiCouncilData, AiCouncilStockSnapshot } from "@/lib/ai-council-data"
+import { staticCouncilWeightProfile, type CouncilMarketRegime, type CouncilWeightProfile } from "@/lib/ai-council-calibration"
 
-export const AI_COUNCIL_POLICY_VERSION = "council-policy-v1"
-export const AI_COUNCIL_ENGINE = "deterministic-evidence-v1"
+export const AI_COUNCIL_POLICY_VERSION = "council-policy-v2"
+export const AI_COUNCIL_ENGINE = "deterministic-evidence-v2"
 
 type PersistedRunIdentity = {
   id: string
   ticker: string
   evidence_hash: string
+}
+
+export interface AiCouncilPersistContext {
+  marketRegime?: CouncilMarketRegime
+  weightProfile?: CouncilWeightProfile
 }
 
 export interface AiCouncilPersistResult {
@@ -19,13 +25,21 @@ export interface AiCouncilPersistResult {
   materializedRuns: number
   persistedVotes: number
   refreshedOutcomes: number
+  policyVersion: string
+  calibrationVersion: string
 }
 
 function runKey(ticker: string, evidenceHash: string) {
   return `${ticker}|${evidenceHash}`
 }
 
-function runRow(stock: AiCouncilStockSnapshot, ratingDate: string, mode: AiCouncilData["mode"]) {
+function runRow(
+  stock: AiCouncilStockSnapshot,
+  ratingDate: string,
+  mode: AiCouncilData["mode"],
+  marketRegime: CouncilMarketRegime,
+  weightProfile: CouncilWeightProfile,
+) {
   return {
     as_of_date: ratingDate,
     ticker: stock.ticker,
@@ -53,6 +67,9 @@ function runRow(stock: AiCouncilStockSnapshot, ratingDate: string, mode: AiCounc
     bear_case: stock.bearCase,
     dissent: stock.dissent,
     what_changes_decision: stock.whatChangesDecision,
+    market_regime: marketRegime,
+    weight_profile: weightProfile,
+    calibration_version: weightProfile.calibrationVersion,
     decision_payload: stock,
   }
 }
@@ -60,12 +77,15 @@ function runRow(stock: AiCouncilStockSnapshot, ratingDate: string, mode: AiCounc
 export async function persistAiCouncilData(
   supabase: SupabaseClient,
   data: AiCouncilData,
+  context: AiCouncilPersistContext = {},
 ): Promise<AiCouncilPersistResult> {
   if (!data.ratingDate) throw new Error("AI Council cannot persist without a ratingDate")
   if (!data.stocks.length) throw new Error("AI Council cannot persist an empty stock set")
 
   const ratingDate = data.ratingDate
-  const rows = data.stocks.map((stock) => runRow(stock, ratingDate, data.mode))
+  const marketRegime = context.marketRegime ?? "UNKNOWN"
+  const weightProfile = context.weightProfile ?? staticCouncilWeightProfile(marketRegime)
+  const rows = data.stocks.map((stock) => runRow(stock, ratingDate, data.mode, marketRegime, weightProfile))
   const inserted = await supabase
     .from("ai_council_runs")
     .upsert(rows, {
@@ -146,5 +166,7 @@ export async function persistAiCouncilData(
     materializedRuns: outcomeSeeds.length,
     persistedVotes: votes.length,
     refreshedOutcomes: Number(refresh.data || 0),
+    policyVersion: AI_COUNCIL_POLICY_VERSION,
+    calibrationVersion: weightProfile.calibrationVersion,
   }
 }
