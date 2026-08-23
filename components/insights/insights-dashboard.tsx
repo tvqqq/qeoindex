@@ -825,24 +825,16 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
               )}
             </div>
 
-            {/* Action Controls (3 clean icons) */}
-            <div className="flex items-center gap-0.5 border-l border-white/10 pl-1.5 ml-0.5">
+            {/* Action Controls */}
+            <div className="flex items-center gap-2 border-l border-white/10 pl-2 ml-0.5">
               <Link
                 href={`/insights/wyckoff?ticker=${row.ticker}&timeframe=1D`}
                 aria-label={`Phân tích chart Wyckoff ${row.ticker}`}
                 title="Phân tích chart Wyckoff"
-                className="rounded p-1.5 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/35 bg-cyan-500/10 px-2.5 py-1 font-ticker text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 hover:border-cyan-400/60 transition-all shadow-[0_0_12px_rgba(34,211,238,0.2)]"
               >
-                <BarChart3 className="h-3.5 w-3.5" />
-              </Link>
-
-              <Link
-                href={`/research/${row.ticker.toLowerCase()}`}
-                aria-label={`Mở phân tích chuyên sâu ${row.ticker}`}
-                title="Mở phân tích chuyên sâu"
-                className="rounded p-1.5 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
+                <BarChart3 className="size-3.5" />
+                <span>Phân tích Wyckoff</span>
               </Link>
 
               <button
@@ -850,7 +842,7 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                 aria-label="Đóng"
                 title="Đóng"
                 onClick={() => onOpenChange(false)}
-                className="rounded p-1.5 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"
+                className="rounded p-1 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1017,15 +1009,9 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
           <div className="flex items-center gap-2 shrink-0">
             <Link
               href={`/insights/wyckoff?ticker=${row.ticker}&timeframe=1D`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 font-bold text-cyan-300 transition-colors hover:bg-cyan-400/20"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/35 bg-cyan-400/10 px-3.5 py-1.5 font-bold text-cyan-300 transition-all hover:bg-cyan-400/20 shadow-[0_0_12px_rgba(34,211,238,0.15)]"
             >
-              <BarChart3 className="size-3.5" /> Chart Wyckoff
-            </Link>
-            <Link
-              href={`/research/${row.ticker.toLowerCase()}`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/10 px-3 py-1.5 font-bold text-brand transition-colors hover:bg-brand/15"
-            >
-              Nghiên cứu <ExternalLink className="size-3.5" />
+              <BarChart3 className="size-3.5" /> Mở phân tích Wyckoff
             </Link>
           </div>
         </div>

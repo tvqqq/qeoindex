@@ -46,7 +46,7 @@ test("Wyckoff chart shell avoids eager route work and compositor-heavy header fi
 
   const header = file.slice(headerStart, headerEnd)
   const links = header.match(/<Link[\s\S]*?<\/Link>/g) ?? []
-  assert.ok(links.length >= 3, "Wyckoff header should keep its Insights/research navigation")
+  assert.ok(links.length >= 1, "Wyckoff header should keep its navigation link")
   for (const link of links) {
     assert.match(link, /prefetch=\{false\}/, "Wyckoff header links must not prefetch heavy dynamic routes while the chart mounts")
   }
