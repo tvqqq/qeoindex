@@ -282,40 +282,42 @@ export function WyckoffStockWorkspace({
 
   return (
     <div className="min-w-0 space-y-3 font-ticker">
-      <header className="rounded-xl border border-white/[0.09] bg-[#0b1119] px-3 py-2.5 shadow-sm sm:px-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <StockLogo symbol={ticker} size={36} className="shrink-0 rounded-full border-white/30" />
-            <SymbolIdentity
-              ticker={ticker}
-              companyName={headerCompanyName}
-              exchange={headerExchange}
-              sector={headerSector}
-            />
-          </div>
+      {!embedded && (
+        <header className="rounded-xl border border-white/[0.09] bg-[#0b1119] px-3 py-2.5 shadow-sm sm:px-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <StockLogo symbol={ticker} size={36} className="shrink-0 rounded-full border-white/30" />
+              <SymbolIdentity
+                ticker={ticker}
+                companyName={headerCompanyName}
+                exchange={headerExchange}
+                sector={headerSector}
+              />
+            </div>
 
-          <div className="shrink-0 text-right">
-            <PriceFlow animate={priceMotion} value={latest?.close ?? selected?.price} digits={2} className="font-mono text-2xl font-black tracking-tight text-white sm:text-[28px]" />
-            <div className="mt-0.5 flex justify-end">
-              <span className={cn("rounded border px-2 py-0.5", changePillTone(change))}>
-                <PriceFlow animate={priceMotion} value={change} digits={2} suffix="%" showSign className="font-mono text-[11px] font-bold" />
-              </span>
+            <div className="shrink-0 text-right">
+              <PriceFlow animate={priceMotion} value={latest?.close ?? selected?.price} digits={2} className="font-mono text-2xl font-black tracking-tight text-white sm:text-[28px]" />
+              <div className="mt-0.5 flex justify-end">
+                <span className={cn("rounded border px-2 py-0.5", changePillTone(change))}>
+                  <PriceFlow animate={priceMotion} value={change} digits={2} suffix="%" showSign className="font-mono text-[11px] font-bold" />
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-12">
-          <span className={cn("rounded-full border px-2 py-0.5 font-ticker text-[9.5px] font-bold uppercase tracking-wide", biasTone(current?.analysis?.taBias ?? selected?.bias ?? ""))}>
-            {current?.analysis?.taBias ?? selected?.bias ?? "Pending"}
-          </span>
-          {selected?.rank ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 font-ticker text-[9.5px] font-bold text-amber-300">
-              <Crown className="size-2.5" /> Top 100 · #{selected.rank}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-12">
+            <span className={cn("rounded-full border px-2 py-0.5 font-ticker text-[9.5px] font-bold uppercase tracking-wide", biasTone(current?.analysis?.taBias ?? selected?.bias ?? ""))}>
+              {current?.analysis?.taBias ?? selected?.bias ?? "Pending"}
             </span>
-          ) : null}
-          <span className="rounded-full border border-white/[0.08] bg-white/[0.035] px-2 py-0.5 text-[9.5px] font-semibold text-slate-400">{current?.provider || dataSource}</span>
-        </div>
-      </header>
+            {selected?.rank ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 font-ticker text-[9.5px] font-bold text-amber-300">
+                <Crown className="size-2.5" /> Top 100 · #{selected.rank}
+              </span>
+            ) : null}
+            <span className="rounded-full border border-white/[0.08] bg-white/[0.035] px-2 py-0.5 text-[9.5px] font-semibold text-slate-400">{current?.provider || dataSource}</span>
+          </div>
+        </header>
+      )}
 
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard tone="emerald" icon={<TrendingUp className="size-3.5" />} title={`Giá & Động lượng ${activeTimeframe}`}>

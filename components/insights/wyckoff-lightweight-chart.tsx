@@ -176,8 +176,24 @@ export function WyckoffLightweightChart({ ticker, study, loading = false }: { ti
             vertLine: { color: "rgba(148,163,184,0.35)", labelBackgroundColor: "#334155" },
             horzLine: { color: "rgba(148,163,184,0.35)", labelBackgroundColor: "#334155" },
           },
-          handleScroll: true,
-          handleScale: true,
+          handleScroll: {
+            mouseWheel: false,
+            pressedMouseMove: true,
+            horzTouchDrag: true,
+            vertTouchDrag: false,
+          },
+          handleScale: {
+            mouseWheel: false,
+            pinch: true,
+            axisPressedMouseMove: {
+              time: true,
+              price: true,
+            },
+            axisDoubleClickReset: {
+              time: true,
+              price: true,
+            },
+          },
         })
         const candles = chart.addSeries(lwc.CandlestickSeries, { upColor: "#22c98a", downColor: "#ff4757", wickUpColor: "#22c98a", wickDownColor: "#ff4757", borderVisible: false, priceLineVisible: true, lastValueVisible: true }, 0)
         const volume = chart.addSeries(lwc.HistogramSeries, { priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false }, 1)
