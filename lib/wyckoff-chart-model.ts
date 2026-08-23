@@ -3,11 +3,13 @@ import { scanWyckoff, type WyckoffScanResult } from "./wyckoff-engine.ts"
 
 export const WYCKOFF_CHART_TIMEFRAMES = ["1H", "4H", "1D", "1W", "1M"] as const
 export type WyckoffChartTimeframe = (typeof WYCKOFF_CHART_TIMEFRAMES)[number]
+export type WyckoffScenarioHorizon = "intraday" | "swing" | "week" | "month" | "long_term"
+export type WyckoffEventLabel = "SPR" | "UT" | "SOS" | "SOW" | "TEST" | "LPS" | "LPSY"
 
 export interface WyckoffEventMarker {
   time: number
-  label: "SPR" | "UT" | "SOS" | "SOW"
-  tone: "bullish" | "bearish"
+  label: WyckoffEventLabel
+  tone: "bullish" | "bearish" | "neutral"
   detail: string
 }
 
@@ -24,6 +26,11 @@ export interface WyckoffScenario {
   target: number
   path: WyckoffScenarioPoint[]
   description: string
+  horizon?: WyckoffScenarioHorizon
+  trigger?: string
+  confirmation?: string
+  invalidation?: string
+  evidence?: string[]
 }
 
 export interface WyckoffPhaseGuide {
@@ -31,6 +38,16 @@ export interface WyckoffPhaseGuide {
   now: string
   next: string
   risk: string
+}
+
+export interface WyckoffForecastHorizon {
+  key: "week" | "month" | "long_term"
+  label: string
+  sourceTimeframe: "1D" | "1W" | "1M"
+  phase: string
+  bias: WyckoffScanResult["taBias"] | null
+  confidence: WyckoffScanResult["confidence"] | null
+  scenarios: WyckoffScenario[]
 }
 
 export interface WyckoffChartStudy {
@@ -45,6 +62,7 @@ export interface WyckoffChartStudy {
   phaseGuide: WyckoffPhaseGuide
   markers: WyckoffEventMarker[]
   scenarios: WyckoffScenario[]
+  outlooks: WyckoffForecastHorizon[]
   error?: string
 }
 
@@ -199,7 +217,15 @@ function scenarioPath(startTime: number, step: number, values: number[]) {
   return values.map((value, index) => ({ time: startTime + step * index, value: Math.max(0.01, value) }))
 }
 
-function scenarios(bars: OhlcvBar[], analysis: WyckoffScanResult | null): WyckoffScenario[] {
+function horizonForTimeframe(timeframe: WyckoffChartTimeframe): WyckoffScenarioHorizon {
+  if (timeframe === "1H") return "intraday"
+  if (timeframe === "4H") return "swing"
+  if (timeframe === "1D") return "week"
+  if (timeframe === "1W") return "month"
+  return "long_term"
+}
+
+function scenarios(bars: OhlcvBar[], analysis: WyckoffScanResult | null, timeframe: WyckoffChartTimeframe): WyckoffScenario[] {
   if (!bars.length || !analysis) return []
   const latest = bars.at(-1)!
   const atr = analysis.technical.atr14 || bars.slice(-14).reduce((sum, bar) => sum + bar.high - bar.low, 0) / Math.max(1, bars.slice(-14).length) || latest.close * 0.025
@@ -209,6 +235,7 @@ function scenarios(bars: OhlcvBar[], analysis: WyckoffScanResult | null): Wyckof
   const bearTarget = Math.min(support || Number.POSITIVE_INFINITY, latest.close - atr * 2.4)
   const baseTarget = latest.close + (analysis.bullProbability - analysis.bearProbability) / 100 * atr
   const step = medianInterval(bars)
+  const horizon = horizonForTimeframe(timeframe)
   return [
     {
       key: "bull",
@@ -218,6 +245,9 @@ function scenarios(bars: OhlcvBar[], analysis: WyckoffScanResult | null): Wyckof
       target: bullTarget,
       path: scenarioPath(latest.time, step, [latest.close, latest.close - atr * 0.18, latest.close + atr * 0.35, latest.close + atr * 0.2, bullTarget * 0.985, bullTarget]),
       description: `Giữ vùng xác nhận, Test thành công rồi mở rộng demand về ${bullTarget.toFixed(2)}.`,
+      horizon,
+      confirmation: analysis.confirmation,
+      invalidation: analysis.invalidation,
     },
     {
       key: "base",
@@ -227,6 +257,9 @@ function scenarios(bars: OhlcvBar[], analysis: WyckoffScanResult | null): Wyckof
       target: baseTarget,
       path: scenarioPath(latest.time, step, [latest.close, latest.close + atr * 0.1, latest.close - atr * 0.14, latest.close + atr * 0.08, baseTarget - atr * 0.08, baseTarget]),
       description: `Giá tiếp tục kiểm định range quanh ${baseTarget.toFixed(2)} trước khi có event mới.`,
+      horizon,
+      confirmation: analysis.confirmation,
+      invalidation: analysis.invalidation,
     },
     {
       key: "bear",
@@ -236,6 +269,9 @@ function scenarios(bars: OhlcvBar[], analysis: WyckoffScanResult | null): Wyckof
       target: Math.max(0.01, bearTarget),
       path: scenarioPath(latest.time, step, [latest.close, latest.close + atr * 0.18, latest.close - atr * 0.3, latest.close - atr * 0.18, bearTarget * 1.012, bearTarget]),
       description: `Mất invalidation/support và supply mở rộng về ${Math.max(0.01, bearTarget).toFixed(2)}.`,
+      horizon,
+      confirmation: analysis.confirmation,
+      invalidation: analysis.invalidation,
     },
   ]
 }
@@ -248,6 +284,8 @@ function buildStudy(args: {
   detail: string
   derived: boolean
   analysisOverride?: WyckoffScanResult | null
+  markerOverride?: WyckoffEventMarker[]
+  scenarioOverride?: WyckoffScenario[]
 }) {
   let analysis = args.analysisOverride ?? null
   let error: string | undefined
@@ -260,14 +298,15 @@ function buildStudy(args: {
   } else if (!analysis) {
     error = `Chỉ có ${args.bars.length} bars hoàn tất; cần tối thiểu 60 để gắn nhãn Wyckoff.`
   }
-  let markers: WyckoffEventMarker[] = []
-  if (args.bars.length >= 60) {
+  let markers = args.markerOverride?.length ? args.markerOverride : []
+  if (!markers.length && args.bars.length >= 60) {
     try {
       markers = eventMarkers(args.bars)
     } catch {
       markers = []
     }
   }
+  const scenarioOverride = args.scenarioOverride?.length === 3 ? args.scenarioOverride : null
   return {
     timeframe: args.timeframe,
     label: args.label,
@@ -279,7 +318,8 @@ function buildStudy(args: {
     analysis,
     phaseGuide: phaseGuide(analysis),
     markers,
-    scenarios: scenarios(args.bars, analysis),
+    scenarios: scenarioOverride ?? scenarios(args.bars, analysis, args.timeframe),
+    outlooks: [],
     error,
   } satisfies WyckoffChartStudy
 }
@@ -293,17 +333,36 @@ export function buildWyckoffChartStudies(args: {
   hourlyDetail: string
   dailyAnalysis?: WyckoffScanResult | null
   analysisOverrides?: Partial<Record<WyckoffChartTimeframe, WyckoffScanResult | null>>
+  markerOverrides?: Partial<Record<WyckoffChartTimeframe, WyckoffEventMarker[]>>
+  scenarioOverrides?: Partial<Record<WyckoffChartTimeframe, WyckoffScenario[]>>
 }) {
   const fourHour = aggregateFourHour(args.hourlyBars)
   const weekly = aggregateWeekly(args.dailyBars)
   const monthly = aggregateMonthly(args.dailyBars)
-  return [
-    buildStudy({ timeframe: "1H", label: "1 giờ", bars: args.hourlyBars, provider: args.hourlyProvider, detail: args.hourlyDetail, derived: false, analysisOverride: args.analysisOverrides?.["1H"] }),
-    buildStudy({ timeframe: "4H", label: "4 giờ", bars: fourHour, provider: args.hourlyProvider, detail: `${args.hourlyDetail} → 4H session buckets`, derived: true, analysisOverride: args.analysisOverrides?.["4H"] }),
-    buildStudy({ timeframe: "1D", label: "Ngày", bars: args.dailyBars, provider: args.dailyProvider, detail: args.dailyDetail, derived: false, analysisOverride: args.analysisOverrides?.["1D"] ?? args.dailyAnalysis }),
-    buildStudy({ timeframe: "1W", label: "Tuần", bars: weekly, provider: args.dailyProvider, detail: `${args.dailyDetail} → Weekly aggregate`, derived: true, analysisOverride: args.analysisOverrides?.["1W"] }),
-    buildStudy({ timeframe: "1M", label: "Tháng", bars: monthly, provider: args.dailyProvider, detail: `${args.dailyDetail} → Monthly aggregate`, derived: true, analysisOverride: args.analysisOverrides?.["1M"] }),
+  const studies = [
+    buildStudy({ timeframe: "1H", label: "1 giờ", bars: args.hourlyBars, provider: args.hourlyProvider, detail: args.hourlyDetail, derived: false, analysisOverride: args.analysisOverrides?.["1H"], markerOverride: args.markerOverrides?.["1H"], scenarioOverride: args.scenarioOverrides?.["1H"] }),
+    buildStudy({ timeframe: "4H", label: "4 giờ", bars: fourHour, provider: args.hourlyProvider, detail: `${args.hourlyDetail} → 4H session buckets`, derived: true, analysisOverride: args.analysisOverrides?.["4H"], markerOverride: args.markerOverrides?.["4H"], scenarioOverride: args.scenarioOverrides?.["4H"] }),
+    buildStudy({ timeframe: "1D", label: "Ngày", bars: args.dailyBars, provider: args.dailyProvider, detail: args.dailyDetail, derived: false, analysisOverride: args.analysisOverrides?.["1D"] ?? args.dailyAnalysis, markerOverride: args.markerOverrides?.["1D"], scenarioOverride: args.scenarioOverrides?.["1D"] }),
+    buildStudy({ timeframe: "1W", label: "Tuần", bars: weekly, provider: args.dailyProvider, detail: `${args.dailyDetail} → Weekly aggregate`, derived: true, analysisOverride: args.analysisOverrides?.["1W"], markerOverride: args.markerOverrides?.["1W"], scenarioOverride: args.scenarioOverrides?.["1W"] }),
+    buildStudy({ timeframe: "1M", label: "Tháng", bars: monthly, provider: args.dailyProvider, detail: `${args.dailyDetail} → Monthly aggregate`, derived: true, analysisOverride: args.analysisOverrides?.["1M"], markerOverride: args.markerOverrides?.["1M"], scenarioOverride: args.scenarioOverrides?.["1M"] }),
   ]
+  const byTimeframe = new Map(studies.map((study) => [study.timeframe, study]))
+  const outlookConfigs = [
+    { key: "week" as const, label: "Trong tuần", sourceTimeframe: "1D" as const },
+    { key: "month" as const, label: "Trong tháng", sourceTimeframe: "1W" as const },
+    { key: "long_term" as const, label: "Dài hạn", sourceTimeframe: "1M" as const },
+  ]
+  const outlooks = outlookConfigs.map((config): WyckoffForecastHorizon => {
+    const source = byTimeframe.get(config.sourceTimeframe)
+    return {
+      ...config,
+      phase: source?.analysis?.phase ?? "Chưa đủ dữ liệu",
+      bias: source?.analysis?.taBias ?? null,
+      confidence: source?.analysis?.confidence ?? null,
+      scenarios: source?.scenarios ?? [],
+    }
+  })
+  return studies.map((study) => ({ ...study, outlooks }))
 }
 
 export function isWyckoffChartTimeframe(value: unknown): value is WyckoffChartTimeframe {
