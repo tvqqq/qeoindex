@@ -1,20 +1,18 @@
 "use client"
 
-import { useMemo, useState } from "react"
 import Link from "next/link"
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { memo, useDeferredValue, useMemo, useState } from "react"
+import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react"
 import {
   Activity,
   AlertTriangle,
   ArrowLeft,
   BarChart3,
   Crown,
-  GripVertical,
   HelpCircle,
   Layers,
   Search,
   ShieldCheck,
-  Sparkles,
   Target,
   TrendingDown,
   TrendingUp,
@@ -32,6 +30,8 @@ import { cn } from "@/lib/utils"
 
 export interface WyckoffListItem {
   ticker: string
+  companyName?: string
+  exchange?: string | null
   rank: number
   sector: string
   price: number | null
@@ -45,9 +45,27 @@ export interface WyckoffListItem {
 
 type WatchlistFilterTab = "all" | "accumulation" | "distribution" | "top100"
 
+const WATCHLIST_TABS: Array<{ id: WatchlistFilterTab; label: string }> = [
+  { id: "all", label: "Tất cả" },
+  { id: "accumulation", label: "Tích lũy" },
+  { id: "distribution", label: "Phân phối" },
+  { id: "top100", label: "Top 100" },
+]
+
 function number(value: number | null | undefined, digits = 2) {
   if (value == null || !Number.isFinite(value)) return "—"
   return value.toLocaleString("en-US", { maximumFractionDigits: digits })
+}
+
+function signedPercent(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—"
+  return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`
+}
+
+function changeTone(value: number | null | undefined) {
+  if ((value ?? 0) > 0) return "text-emerald-300"
+  if ((value ?? 0) < 0) return "text-rose-300"
+  return "text-amber-200"
 }
 
 function biasTone(bias: string) {
@@ -80,12 +98,12 @@ function phaseShortBadge(phase: string | undefined) {
 
 function biasBadgeStyle(bias: string, phase: string) {
   if (bias === "Bullish" || /Spring|SOS|Markup/i.test(phase)) {
-    return "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+    return "border-emerald-500/30 bg-emerald-500/12 text-emerald-300"
   }
   if (bias === "Bearish" || /UTAD|SOW|Markdown/i.test(phase)) {
-    return "bg-rose-500/15 text-rose-300 border border-rose-500/30"
+    return "border-rose-500/30 bg-rose-500/12 text-rose-300"
   }
-  return "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+  return "border-amber-500/30 bg-amber-500/12 text-amber-300"
 }
 
 function updateTimeframeQuery(timeframe: WyckoffChartTimeframe) {
@@ -93,6 +111,96 @@ function updateTimeframeQuery(timeframe: WyckoffChartTimeframe) {
   url.searchParams.set("timeframe", timeframe)
   window.history.replaceState(window.history.state, "", url)
 }
+
+function SymbolIdentity({
+  ticker,
+  companyName,
+  exchange,
+  sector,
+  reduceMotion,
+}: {
+  ticker: string
+  companyName: string
+  exchange: string
+  sector: string
+  reduceMotion: boolean
+}) {
+  return (
+    <LazyMotion features={domAnimation} strict>
+      <m.div
+        key={ticker}
+        initial={reduceMotion ? false : { opacity: 0, x: 10 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+        className="min-w-0"
+      >
+        <div className="flex min-w-0 items-baseline gap-2.5">
+          <span className="shrink-0 font-ticker text-2xl font-extrabold italic tracking-tight text-white sm:text-[28px]">
+            {ticker}
+          </span>
+          <span className="min-w-0 truncate font-ticker text-sm font-bold text-slate-200 sm:text-base" title={companyName}>
+            {companyName}
+          </span>
+        </div>
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-slate-500">
+          <span className="shrink-0">{exchange}</span>
+          <span aria-hidden="true">·</span>
+          <span className="min-w-0 truncate">{sector || "Chưa phân ngành"}</span>
+        </div>
+      </m.div>
+    </LazyMotion>
+  )
+}
+
+const WatchlistRow = memo(function WatchlistRow({
+  stock,
+  isActive,
+  activeTimeframe,
+}: {
+  stock: WyckoffListItem
+  isActive: boolean
+  activeTimeframe: WyckoffChartTimeframe
+}) {
+  const companyName = stock.companyName?.trim() || stock.ticker
+  const exchange = stock.exchange?.trim() || "HOSE"
+
+  return (
+    <Link
+      href={`/insights/wyckoff?ticker=${encodeURIComponent(stock.ticker)}&timeframe=${activeTimeframe}`}
+      prefetch={false}
+      className={cn(
+        "grid min-h-[60px] grid-cols-[minmax(0,1fr)_66px_64px_82px] items-center gap-1 border-b border-white/[0.035] px-2.5 py-2 text-xs transition-colors [contain-intrinsic-size:60px] [content-visibility:auto]",
+        isActive ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.08]" : "hover:bg-white/[0.035]",
+      )}
+      aria-current={isActive ? "page" : undefined}
+    >
+      <div className="flex min-w-0 items-start gap-2 pr-1">
+        <StockLogo symbol={stock.ticker} size={24} className="mt-0.5 shrink-0 rounded" />
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <span className={cn("shrink-0 font-ticker text-[13px] font-extrabold", isActive ? "text-cyan-300" : "text-slate-100")}>{stock.ticker}</span>
+            <span className="min-w-0 text-[10.5px] font-semibold leading-4 text-slate-300" title={companyName}>
+              {companyName}
+            </span>
+          </div>
+          <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[10px] leading-4 text-slate-500">
+            <span className="shrink-0">{exchange}</span>
+            <span aria-hidden="true">·</span>
+            <span className="min-w-0 truncate" title={stock.sector}>{stock.sector || "Chưa phân ngành"}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="text-right font-mono text-[12px] font-bold text-slate-100">{number(stock.price)}</div>
+      <div className={cn("text-right font-mono text-[11px] font-bold tabular-nums", changeTone(stock.changePct))}>{signedPercent(stock.changePct)}</div>
+      <div className="text-right">
+        <span className={cn("inline-flex max-w-full justify-center whitespace-nowrap rounded border px-1.5 py-0.5 text-[9.5px] font-bold", biasBadgeStyle(stock.bias, stock.phase))}>
+          {phaseShortBadge(stock.phase)}
+        </span>
+      </div>
+    </Link>
+  )
+})
 
 export function WyckoffChartDashboard({
   ticker,
@@ -112,29 +220,34 @@ export function WyckoffChartDashboard({
   const [activeTimeframe, setActiveTimeframe] = useState(initialTimeframe)
   const [query, setQuery] = useState("")
   const [activeTab, setActiveTab] = useState<WatchlistFilterTab>("all")
-  const shouldReduceMotion = useReducedMotion()
+  const deferredQuery = useDeferredValue(query)
+  const shouldReduceMotion = useReducedMotion() ?? false
 
-  const current = studies.find((study) => study.timeframe === activeTimeframe) ?? studies[0]
-  const selected = stocks.find((stock) => stock.ticker === ticker)
+  const stockByTicker = useMemo(() => new Map(stocks.map((stock) => [stock.ticker, stock])), [stocks])
+  const selected = stockByTicker.get(ticker)
+  const current = useMemo(() => studies.find((study) => study.timeframe === activeTimeframe) ?? studies[0], [activeTimeframe, studies])
   const latest = current?.bars.at(-1)
   const change = current?.analysis?.technical.changePct ?? selected?.changePct ?? null
+  const companyName = selected?.companyName?.trim() || ticker
+  const exchange = selected?.exchange?.trim() || "HOSE"
 
   const filteredStocks = useMemo(() => {
     let list = stocks
     if (activeTab === "accumulation") {
-      list = list.filter((s) => s.bias === "Bullish" || /Spring|SOS|Markup/i.test(s.phase))
+      list = list.filter((stock) => stock.bias === "Bullish" || /Spring|SOS|Markup/i.test(stock.phase))
     } else if (activeTab === "distribution") {
-      list = list.filter((s) => s.bias === "Bearish" || /UTAD|SOW|Markdown/i.test(s.phase))
+      list = list.filter((stock) => stock.bias === "Bearish" || /UTAD|SOW|Markdown/i.test(stock.phase))
     } else if (activeTab === "top100") {
-      list = list.filter((s) => s.rank && s.rank <= 100)
+      list = list.filter((stock) => stock.rank > 0 && stock.rank <= 100)
     }
 
-    const normalized = query.trim().toUpperCase()
+    const normalized = deferredQuery.trim().toUpperCase()
     if (!normalized) return list
-    return list.filter((stock) => `${stock.ticker} ${stock.sector} ${stock.phase} ${stock.bias}`.toUpperCase().includes(normalized))
-  }, [query, activeTab, stocks])
+    return list.filter((stock) => `${stock.ticker} ${stock.companyName ?? ""} ${stock.sector} ${stock.phase} ${stock.bias}`.toUpperCase().includes(normalized))
+  }, [activeTab, deferredQuery, stocks])
 
   function chooseTimeframe(timeframe: WyckoffChartTimeframe) {
+    if (timeframe === activeTimeframe) return
     setActiveTimeframe(timeframe)
     updateTimeframeQuery(timeframe)
   }
@@ -144,297 +257,226 @@ export function WyckoffChartDashboard({
       <TopNav />
 
       <main className="mx-auto max-w-[1920px] px-3 py-3 sm:px-4 lg:px-5">
-        {/* TWO-COLUMN WORKSPACE: LEFT CHART WORKSPACE + RIGHT STANDALONE WATCHLIST */}
-        <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_420px]">
-          {/* LEFT: MAIN CHART & ANALYTICS WORKSPACE */}
+        <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_460px]">
           <div className="min-w-0 space-y-3.5">
-            {/* Stock Header / Navigation Bar */}
-            <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.10] bg-gradient-to-r from-[#121820] via-[#182330] to-[#121820] px-4 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.10),0_4px_16px_rgba(0,0,0,0.32)]">
-              {/* Left: Back Button, Logo, Ticker, Badges */}
-              <div className="flex flex-wrap items-center gap-2.5 min-w-0">
-                <Link
-                  href={`/insights?ticker=${ticker}`}
-                  prefetch={false}
-                  aria-label={`Quay lại Insights & mở popup chi tiết ${ticker}`}
-                  title={`Quay lại Insights & mở popup chi tiết ${ticker}`}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-purple-400/30 bg-purple-500/10 px-2.5 py-1 font-ticker text-xs font-bold text-purple-300 hover:bg-purple-500/20 hover:border-purple-400/50 transition-colors shrink-0"
-                >
-                  <ArrowLeft className="size-3.5" />
-                  <span>Rating</span>
-                </Link>
+            <header className="rounded-xl border border-white/[0.09] bg-[#0b1119] px-3 py-2.5 shadow-sm sm:px-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <Link
+                    href={`/insights?ticker=${ticker}`}
+                    prefetch={false}
+                    aria-label={`Quay lại Insights & mở popup chi tiết ${ticker}`}
+                    title={`Quay lại Insights & mở popup chi tiết ${ticker}`}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-purple-400/25 bg-purple-500/[0.08] px-2 py-1 font-ticker text-[11px] font-bold text-purple-300 transition-colors hover:border-purple-400/45 hover:bg-purple-500/15"
+                  >
+                    <ArrowLeft className="size-3.5" />
+                    Rating
+                  </Link>
 
-                <GripVertical className="h-4 w-4 text-white/30 hover:text-white/60 shrink-0 transition-colors hidden sm:block" />
-
-                <StockLogo
-                  symbol={ticker}
-                  size={34}
-                  className="shrink-0 rounded-full border-white/40"
-                />
-
-                <span className="shrink-0 select-none bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text pr-1 font-ticker text-2xl font-extrabold italic tracking-tight text-transparent">
-                  {ticker}
-                </span>
-
-                {selected?.sector ? (
-                  <span className="hidden sm:inline-flex shrink-0 rounded-full border border-white/[0.12] bg-white/[0.08] px-2.5 py-0.5 font-ticker text-[10px] font-bold uppercase tracking-wider text-white/80 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">
-                    {selected.sector}
-                  </span>
-                ) : null}
-
-                <span className={cn("shrink-0 rounded-full border px-2.5 py-0.5 font-ticker text-[10px] font-bold uppercase tracking-wider", biasTone(current?.analysis?.taBias ?? selected?.bias ?? ""))}>
-                  {current?.analysis?.taBias ?? selected?.bias ?? "Pending"}
-                </span>
-
-                {selected?.rank ? (
-                  <span className="hidden md:inline-flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-0.5 font-ticker text-[10px] font-bold text-amber-300">
-                    <Crown className="size-3" /> Top 100 · #{selected.rank}
-                  </span>
-                ) : null}
-              </div>
-
-              {/* Right: Live Price + Timeframe Navigation Tabs */}
-              <div className="flex items-center gap-3 shrink-0">
-                {/* Live Price & Change */}
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xl sm:text-2xl font-black text-white tracking-tight">
-                    {number(latest?.close ?? selected?.price)}
-                  </span>
-                  <MarketChangePill
-                    value={change}
-                    tone={(change ?? 0) > 0 ? "up" : (change ?? 0) < 0 ? "down" : "ref"}
-                    decimals={2}
+                  <StockLogo symbol={ticker} size={36} className="shrink-0 rounded-full border-white/30" />
+                  <SymbolIdentity
+                    ticker={ticker}
+                    companyName={companyName}
+                    exchange={exchange}
+                    sector={selected?.sector || ""}
+                    reduceMotion={shouldReduceMotion}
                   />
                 </div>
 
-                <div className="hidden sm:block h-5 w-px bg-white/10" />
-
-                {/* Timeframe selector pills */}
-                <nav className="inline-flex items-center gap-1 p-0.5 rounded-lg bg-[#080c10] border border-white/[0.08]" role="tablist" aria-label="Khung thời gian">
-                  {studies.map((study) => (
-                    <button
-                      key={study.timeframe}
-                      type="button"
-                      onClick={() => chooseTimeframe(study.timeframe)}
-                      className={cn(
-                        "px-2.5 py-1 text-xs font-extrabold rounded-md transition-colors select-none",
-                        activeTimeframe === study.timeframe
-                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-black"
-                          : "text-slate-400 hover:text-white hover:bg-white/[0.05] border border-transparent"
-                      )}
-                    >
-                      {study.timeframe}
-                    </button>
-                  ))}
-                </nav>
-              </div>
-            </header>
-
-            {/* SmoothUI Animated Transition Container for Metric Cards & Chart */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={`${ticker}-${activeTimeframe}`}
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                className="space-y-3.5"
-              >
-                {/* Top 4 Rich Metric Cards */}
-                <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-                  {/* Card 1: Giá đóng cửa & Biến động */}
-                  <div className="rounded-xl border border-emerald-400/20 bg-gradient-to-b from-[#0a1622] to-[#070e17] p-3 shadow-[0_0_20px_-8px_rgba(52,211,153,0.2)] flex flex-col justify-between">
-                    <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-emerald-300/80 font-ticker">
-                      <span className="flex items-center gap-1.5"><TrendingUp className="size-3.5 text-emerald-400" /> Giá & Động lượng {activeTimeframe}</span>
-                      <Activity className="size-3.5 text-emerald-400/70" />
-                    </div>
-                    <div className="mt-1.5 flex items-baseline gap-2">
-                      <span className="font-mono text-2xl font-black text-white">
-                        {number(latest?.close ?? selected?.price)}
-                      </span>
+                <div className="flex shrink-0 items-center gap-2.5">
+                  <div className="text-right">
+                    <div className="font-mono text-2xl font-black tracking-tight text-white sm:text-[28px]">{number(latest?.close ?? selected?.price)}</div>
+                    <div className="mt-0.5 flex justify-end">
                       <MarketChangePill
                         value={change}
                         tone={(change ?? 0) > 0 ? "up" : (change ?? 0) < 0 ? "down" : "ref"}
                         decimals={2}
                       />
                     </div>
-                    <div className="mt-1.5 text-[10.5px] font-medium text-slate-400 truncate font-ticker">
-                      {current?.bars.length ?? 0} nến hoàn tất · {current?.detail || `Khung ${activeTimeframe}`}
-                    </div>
                   </div>
-
-                  {/* Card 2: Pha Wyckoff & Xác suất */}
-                  <div className="rounded-xl border border-cyan-400/20 bg-gradient-to-b from-[#081524] to-[#070e17] p-3 shadow-[0_0_20px_-8px_rgba(34,211,238,0.2)] flex flex-col justify-between">
-                    <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-cyan-300/80 font-ticker">
-                      <span className="flex items-center gap-1.5"><Layers className="size-3.5 text-cyan-400" /> Pha Wyckoff hiện tại</span>
-                      <Sparkles className="size-3.5 text-cyan-400/70" />
-                    </div>
-                    <div className="mt-1.5 font-ticker text-lg font-black text-cyan-300 truncate">
-                      {current?.phaseGuide.title || phaseShort(selected?.phase)}
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-1.5 text-[10.5px] font-mono text-slate-400">
-                      <span>Bull <strong className="text-emerald-300 font-bold">{current?.analysis?.bullProbability ?? 0}%</strong></span>
-                      <span>·</span>
-                      <span>Base <strong className="text-amber-300 font-bold">{current?.analysis?.baseProbability ?? 0}%</strong></span>
-                      <span>·</span>
-                      <span>Bear <strong className="text-rose-300 font-bold">{current?.analysis?.bearProbability ?? 0}%</strong></span>
-                    </div>
-                  </div>
-
-                  {/* Card 3: Vùng Hỗ trợ / Kháng cự */}
-                  <div className="rounded-xl border border-amber-400/20 bg-gradient-to-b from-[#16140b] to-[#070e17] p-3 shadow-[0_0_20px_-8px_rgba(251,191,36,0.2)] flex flex-col justify-between">
-                    <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-amber-300/80 font-ticker">
-                      <span className="flex items-center gap-1.5"><Target className="size-3.5 text-amber-400" /> Vùng giá Then chốt</span>
-                      <ShieldCheck className="size-3.5 text-amber-400/70" />
-                    </div>
-                    <div className="mt-1.5 font-mono text-lg font-black text-amber-300 truncate">
-                      {current?.analysis?.support || "—"} <span className="text-sm text-slate-500 font-normal">/</span> {current?.analysis?.resistance || "—"}
-                    </div>
-                    <div className="mt-1.5 text-[10.5px] font-medium text-slate-400 truncate font-ticker">
-                      {current?.analysis?.confirmation || "Theo dõi phản ứng giá tại hỗ trợ / kháng cự"}
-                    </div>
-                  </div>
-
-                  {/* Card 4: Tín hiệu & Hành vi Volume */}
-                  <div className="rounded-xl border border-purple-400/20 bg-gradient-to-b from-[#150f24] to-[#070e17] p-3 shadow-[0_0_20px_-8px_rgba(168,85,247,0.2)] flex flex-col justify-between">
-                    <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-purple-300/80 font-ticker">
-                      <span className="flex items-center gap-1.5"><Zap className="size-3.5 text-purple-400" /> Cấu trúc & Tín hiệu</span>
-                      <Activity className="size-3.5 text-purple-400/70" />
-                    </div>
-                    <div className="mt-1.5 font-ticker text-lg font-black text-purple-200 truncate">
-                      {current?.analysis?.taBias === "Bullish" ? "TÍCH LŨY MẠNH" : current?.analysis?.taBias === "Bearish" ? "PHÂN PHỐI / SOW" : current?.analysis?.taBias === "Mixed" ? "TÍCH LŨY BIÊN ĐỘ" : "TRUNG LẬP"}
-                    </div>
-                    <div className="mt-1.5 text-[10.5px] font-medium text-slate-400 truncate font-ticker">
-                      {current?.analysis?.whatChanged || "Biến động volume và cấu trúc nến đồng thuận"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Main Chart Card */}
-                <div className="overflow-hidden rounded-2xl border border-white/[0.09] bg-[#080c12] shadow-[0_20px_70px_-35px_rgba(0,0,0,.95)]">
-                  <div className="flex flex-col gap-2 border-b border-white/[0.08] bg-[#0b1018] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4 font-ticker">
-                    <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-                      <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-mono text-emerald-300">{activeTimeframe}</span>
-                      <span>Biểu đồ kỹ thuật & Vùng giá cấu trúc Wyckoff</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                      <span>{current?.bars.length ?? 0} nến hoàn tất</span>
-                      <span>·</span>
-                      <span>{current?.detail}</span>
-                      <span>·</span>
-                      <span>Nguồn: {dataSource}</span>
-                    </div>
-                  </div>
-
-                  <div className="relative">
-                    {current ? <WyckoffLightweightChart ticker={ticker} study={current} /> : null}
-                    <div className="pointer-events-none absolute left-3 top-3 z-[3] max-w-[min(520px,calc(100%-1.5rem))] rounded-xl border border-white/10 bg-[#080d15]/90 px-3 py-2.5 shadow-2xl sm:left-4 sm:top-4 font-ticker">
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-md border border-purple-400/25 bg-purple-400/10 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider text-purple-200">{current?.timeframe}</span>
-                        <span className="truncate text-xs font-bold text-white">{current?.phaseGuide.title}</span>
-                        <Tooltip>
-                          <TooltipTrigger render={<button type="button" className="pointer-events-auto rounded-full p-1 text-slate-400 hover:bg-white/10 hover:text-white" aria-label="Giải thích pha Wyckoff"><HelpCircle className="h-4 w-4" /></button>} />
-                          <TooltipContent side="bottom" align="start" className="block max-w-sm border border-white/10 bg-[#0b111b] p-3 text-left text-xs leading-5 text-slate-200 shadow-2xl">
-                            <div className="font-bold text-emerald-300">Hiện tại</div>
-                            <p className="mt-1">{current?.phaseGuide.now}</p>
-                            <div className="mt-2 font-bold text-cyan-300">Cần quan sát tiếp</div>
-                            <p className="mt-1">{current?.phaseGuide.next}</p>
-                            <div className="mt-2 font-bold text-rose-300">Rủi ro / phủ định</div>
-                            <p className="mt-1">{current?.phaseGuide.risk}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-slate-400">{current?.analysis?.wyckoffState ?? current?.error}</p>
-                    </div>
-                  </div>
-
-                  {/* Scenarios Projection Footer */}
-                  <div className="border-t border-white/[0.08] bg-[#080d14] p-3 sm:p-4 font-ticker">
-                    <div className="grid gap-3 lg:grid-cols-3">
-                      {current?.scenarios.map((scenario) => {
-                        const Icon = scenario.key === "bull" ? TrendingUp : scenario.key === "bear" ? TrendingDown : Target
-                        return (
-                          <article key={scenario.key} className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider" style={{ color: scenario.color }}><Icon className="h-4 w-4" />{scenario.label}</span>
-                              <span className="font-mono text-base font-black text-white">{scenario.probability}%</span>
-                            </div>
-                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full" style={{ width: `${scenario.probability}%`, backgroundColor: scenario.color }} /></div>
-                            <p className="mt-2 text-xs leading-5 text-slate-400">{scenario.description}</p>
-                          </article>
-                        )
-                      })}
-                    </div>
-                    <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                      <div className="flex items-start gap-2 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.04] px-3 py-2 text-slate-400"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" /><span><strong className="text-slate-200">Xác nhận:</strong> {current?.analysis?.confirmation ?? "Chưa đủ dữ liệu."}</span></div>
-                      <div className="flex items-start gap-2 rounded-lg border border-rose-400/15 bg-rose-400/[0.04] px-3 py-2 text-slate-400"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-300" /><span><strong className="text-slate-200">Phủ định:</strong> {current?.analysis?.invalidation ?? "Chưa đủ dữ liệu."}</span></div>
-                    </div>
-                    <p className="mt-2.5 text-[10.5px] leading-relaxed text-slate-500">
-                      Các đường phía trước là projection định lượng từ cấu trúc pha, ATR và xác suất; không phải dữ liệu giá tương lai hay khuyến nghị mua bán.
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-
-          {/* RIGHT: DEDICATED TRADINGVIEW-STYLE WATCHLIST WIDGET (Plus Jakarta Sans & Bảng điện typography) */}
-          <aside className="flex flex-col h-[calc(100vh-76px)] rounded-2xl border border-white/[0.09] bg-[#090e15] shadow-xl overflow-hidden sticky top-3.5 font-ticker">
-            {/* Watchlist Header */}
-            <div className="border-b border-white/[0.08] p-3 space-y-2.5 bg-[#080d14]">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm sm:text-[15px] font-extrabold tracking-wide uppercase text-white flex items-center gap-1.5">
-                    <BarChart3 className="size-4 text-emerald-400" />
-                    Watchlist Wyckoff
-                  </h2>
-                  <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 font-mono text-xs font-bold text-emerald-300">
-                    {filteredStocks.length}
-                  </span>
-                </div>
-                <div className="text-xs text-slate-400 font-mono">
-                  {generatedAt.slice(0, 10)}
                 </div>
               </div>
 
-              {/* Compact Search Box */}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-[104px] sm:pl-[110px]">
+                <span className={cn("rounded-full border px-2 py-0.5 font-ticker text-[9.5px] font-bold uppercase tracking-wide", biasTone(current?.analysis?.taBias ?? selected?.bias ?? ""))}>
+                  {current?.analysis?.taBias ?? selected?.bias ?? "Pending"}
+                </span>
+                {selected?.rank ? (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 font-ticker text-[9.5px] font-bold text-amber-300">
+                    <Crown className="size-2.5" /> Top 100 · #{selected.rank}
+                  </span>
+                ) : null}
+                <span className="rounded-full border border-white/[0.08] bg-white/[0.035] px-2 py-0.5 text-[9.5px] font-semibold text-slate-400">
+                  {current?.provider || dataSource}
+                </span>
+              </div>
+            </header>
+
+            <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard tone="emerald" icon={<TrendingUp className="size-3.5" />} title={`Giá & Động lượng ${activeTimeframe}`}>
+                <div className="mt-1.5 flex items-baseline gap-2">
+                  <span className="font-mono text-xl font-black text-white">{number(latest?.close ?? selected?.price)}</span>
+                  <span className={cn("font-mono text-xs font-bold", changeTone(change))}>{signedPercent(change)}</span>
+                </div>
+                <div className="mt-1 text-[10.5px] text-slate-500">{current?.bars.length ?? 0} nến hoàn tất</div>
+              </MetricCard>
+
+              <MetricCard tone="cyan" icon={<Layers className="size-3.5" />} title="Pha Wyckoff hiện tại">
+                <div className="mt-1.5 truncate font-ticker text-[15px] font-extrabold text-cyan-300" title={current?.phaseGuide.title}>{current?.phaseGuide.title || phaseShort(selected?.phase)}</div>
+                <div className="mt-1 flex items-center gap-2 font-mono text-[10.5px] text-slate-500">
+                  <span>Bull <strong className="text-emerald-300">{current?.analysis?.bullProbability ?? 0}%</strong></span>
+                  <span>Base <strong className="text-amber-300">{current?.analysis?.baseProbability ?? 0}%</strong></span>
+                  <span>Bear <strong className="text-rose-300">{current?.analysis?.bearProbability ?? 0}%</strong></span>
+                </div>
+              </MetricCard>
+
+              <MetricCard tone="amber" icon={<Target className="size-3.5" />} title="Vùng giá then chốt">
+                <div className="mt-1.5 truncate font-mono text-[15px] font-black text-amber-300" title={`${current?.analysis?.support || "—"} / ${current?.analysis?.resistance || "—"}`}>
+                  {current?.analysis?.support || "—"} <span className="text-slate-600">/</span> {current?.analysis?.resistance || "—"}
+                </div>
+                <div className="mt-1 truncate text-[10.5px] text-slate-500" title={current?.analysis?.confirmation}>{current?.analysis?.confirmation || "Chờ confirmation ở vùng quyết định"}</div>
+              </MetricCard>
+
+              <MetricCard tone="purple" icon={<Zap className="size-3.5" />} title="Cấu trúc & tín hiệu">
+                <div className="mt-1.5 truncate font-ticker text-[15px] font-extrabold text-purple-200">
+                  {current?.analysis?.taBias === "Bullish" ? "TÍCH LŨY MẠNH" : current?.analysis?.taBias === "Bearish" ? "PHÂN PHỐI / SOW" : current?.analysis?.taBias === "Mixed" ? "TÍCH LŨY BIÊN ĐỘ" : "TRUNG LẬP"}
+                </div>
+                <div className="mt-1 truncate text-[10.5px] text-slate-500" title={current?.analysis?.whatChanged}>{current?.analysis?.whatChanged || "Theo dõi price-volume behavior"}</div>
+              </MetricCard>
+            </div>
+
+            <section className="overflow-hidden rounded-xl border border-white/[0.09] bg-[#080c12] shadow-sm">
+              <div data-wyckoff-chart-toolbar className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] bg-[#0b1018] px-2.5 py-1.5 sm:px-3">
+                <nav className="flex min-w-0 items-center gap-0.5 overflow-x-auto" role="tablist" aria-label="Khung thời gian biểu đồ">
+                  {studies.map((study) => (
+                    <button
+                      key={study.timeframe}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTimeframe === study.timeframe}
+                      onClick={() => chooseTimeframe(study.timeframe)}
+                      className={cn(
+                        "shrink-0 rounded px-2.5 py-1.5 font-mono text-[11px] font-bold transition-colors",
+                        activeTimeframe === study.timeframe
+                          ? "bg-cyan-500/18 text-cyan-300"
+                          : "text-slate-400 hover:bg-white/[0.045] hover:text-slate-100",
+                      )}
+                    >
+                      {study.timeframe}
+                    </button>
+                  ))}
+                </nav>
+
+                <div className="flex items-center gap-2 text-[10.5px] text-slate-500">
+                  <span className="hidden items-center gap-1.5 sm:inline-flex"><Layers className="size-3" /> Wyckoff structure</span>
+                  <span className="rounded border border-white/[0.08] bg-white/[0.035] px-2 py-1 font-mono text-slate-400">{current?.bars.length ?? 0} bars</span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] bg-[#080d14] px-3 py-2 text-[10.5px]">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-slate-400">
+                  <strong className="font-ticker text-[12px] text-slate-100">{ticker} · {activeTimeframe} · {exchange}</strong>
+                  {latest ? (
+                    <>
+                      <span>O <b className="text-slate-300">{number(latest.open)}</b></span>
+                      <span>H <b className="text-emerald-300">{number(latest.high)}</b></span>
+                      <span>L <b className="text-rose-300">{number(latest.low)}</b></span>
+                      <span>C <b className="text-slate-100">{number(latest.close)}</b></span>
+                    </>
+                  ) : null}
+                </div>
+                <div className="flex min-w-0 items-center gap-2 text-slate-600">
+                  <span className="max-w-[320px] truncate" title={current?.detail}>{current?.detail}</span>
+                  <span>·</span>
+                  <span className="shrink-0">{dataSource}</span>
+                </div>
+              </div>
+
+              <div className="relative">
+                {current ? <WyckoffLightweightChart ticker={ticker} study={current} /> : null}
+                <div className="pointer-events-none absolute left-3 top-3 z-[3] max-w-[min(480px,calc(100%-1.5rem))] rounded-lg border border-white/[0.09] bg-[#080d15]/92 px-3 py-2 font-ticker sm:left-4 sm:top-4">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="shrink-0 rounded border border-purple-400/20 bg-purple-400/[0.08] px-1.5 py-0.5 text-[9.5px] font-extrabold uppercase tracking-wide text-purple-200">{current?.timeframe}</span>
+                    <span className="min-w-0 truncate text-[11px] font-bold text-white">{current?.phaseGuide.title}</span>
+                    <Tooltip>
+                      <TooltipTrigger render={<button type="button" className="pointer-events-auto shrink-0 rounded p-1 text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-white" aria-label="Giải thích pha Wyckoff"><HelpCircle className="h-3.5 w-3.5" /></button>} />
+                      <TooltipContent side="bottom" align="start" className="block max-w-sm border border-white/10 bg-[#0b111b] p-3 text-left text-xs leading-5 text-slate-200 shadow-lg">
+                        <div className="font-bold text-emerald-300">Hiện tại</div>
+                        <p className="mt-1">{current?.phaseGuide.now}</p>
+                        <div className="mt-2 font-bold text-cyan-300">Cần quan sát tiếp</div>
+                        <p className="mt-1">{current?.phaseGuide.next}</p>
+                        <div className="mt-2 font-bold text-rose-300">Rủi ro / phủ định</div>
+                        <p className="mt-1">{current?.phaseGuide.risk}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-[10.5px] leading-4 text-slate-500">{current?.analysis?.wyckoffState ?? current?.error}</p>
+                </div>
+              </div>
+
+              <div className="border-t border-white/[0.08] bg-[#080d14] p-3 font-ticker sm:p-4">
+                <div className="grid gap-2.5 lg:grid-cols-3">
+                  {current?.scenarios.map((scenario) => {
+                    const Icon = scenario.key === "bull" ? TrendingUp : scenario.key === "bear" ? TrendingDown : Target
+                    return (
+                      <article key={scenario.key} className="rounded-lg border border-white/[0.07] bg-white/[0.022] p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wide" style={{ color: scenario.color }}><Icon className="h-3.5 w-3.5" />{scenario.label}</span>
+                          <span className="font-mono text-sm font-black text-white">{scenario.probability}%</span>
+                        </div>
+                        <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full" style={{ width: `${scenario.probability}%`, backgroundColor: scenario.color }} /></div>
+                        <p className="mt-2 text-[11px] leading-5 text-slate-500">{scenario.description}</p>
+                      </article>
+                    )
+                  })}
+                </div>
+                <div className="mt-2.5 grid gap-2 text-[11px] sm:grid-cols-2">
+                  <div className="flex items-start gap-2 rounded-lg border border-emerald-400/12 bg-emerald-400/[0.03] px-3 py-2 text-slate-500"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" /><span><strong className="text-slate-300">Xác nhận:</strong> {current?.analysis?.confirmation ?? "Chưa đủ dữ liệu."}</span></div>
+                  <div className="flex items-start gap-2 rounded-lg border border-rose-400/12 bg-rose-400/[0.03] px-3 py-2 text-slate-500"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-300" /><span><strong className="text-slate-300">Phủ định:</strong> {current?.analysis?.invalidation ?? "Chưa đủ dữ liệu."}</span></div>
+                </div>
+                <p className="mt-2 text-[10px] leading-relaxed text-slate-600">Projection định lượng từ cấu trúc pha, ATR và xác suất; không phải dữ liệu giá tương lai hay khuyến nghị mua bán.</p>
+              </div>
+            </section>
+          </div>
+
+          <aside className="sticky top-3.5 flex h-[calc(100vh-76px)] min-h-[620px] flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-[#090e15] shadow-sm">
+            <div className="space-y-2.5 border-b border-white/[0.08] bg-[#080d14] p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <BarChart3 className="size-4 shrink-0 text-cyan-400" />
+                  <h2 className="truncate font-ticker text-[13px] font-extrabold uppercase tracking-wide text-white">Watchlist Wyckoff</h2>
+                  <span className="shrink-0 rounded-full border border-cyan-500/25 bg-cyan-500/[0.08] px-1.5 py-0.5 font-mono text-[10px] font-bold text-cyan-300">{filteredStocks.length}</span>
+                </div>
+                <span className="shrink-0 font-mono text-[9.5px] text-slate-600">{generatedAt.slice(0, 10)}</span>
+              </div>
+
               <div className="relative flex items-center">
-                <Search className="absolute left-2.5 size-3.5 text-slate-500 pointer-events-none" />
+                <Search className="pointer-events-none absolute left-2.5 size-3.5 text-slate-600" />
                 <input
-                  type="text"
+                  type="search"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Tìm mã hoặc ngành..."
-                  className="w-full rounded-lg border border-white/10 bg-[#05080e] pl-8 pr-7 py-2 text-xs font-medium text-white placeholder:text-slate-500 outline-none focus:border-cyan-400/50 transition-colors"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Tìm mã, công ty hoặc ngành..."
+                  className="w-full rounded-md border border-white/[0.09] bg-[#05080e] py-2 pl-8 pr-8 text-[11px] font-medium text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-400/45"
                 />
                 {query ? (
-                  <button
-                    type="button"
-                    onClick={() => setQuery("")}
-                    className="absolute right-2 text-slate-500 hover:text-white p-0.5 transition-colors"
-                    aria-label="Xóa tìm kiếm"
-                  >
+                  <button type="button" onClick={() => setQuery("")} className="absolute right-2 rounded p-1 text-slate-600 transition-colors hover:bg-white/[0.05] hover:text-white" aria-label="Xóa tìm kiếm">
                     <X className="size-3.5" />
                   </button>
                 ) : null}
               </div>
 
-              {/* Filter Tabs (TradingView-style) */}
-              <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-                {[
-                  { id: "all", label: "Tất cả" },
-                  { id: "accumulation", label: "Tích lũy" },
-                  { id: "distribution", label: "Phân phối" },
-                  { id: "top100", label: "Top 100" },
-                ].map((tab) => (
+              <div className="flex items-center gap-0.5 overflow-x-auto" role="tablist" aria-label="Lọc watchlist Wyckoff">
+                {WATCHLIST_TABS.map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setActiveTab(tab.id as WatchlistFilterTab)}
+                    role="tab"
+                    aria-selected={activeTab === tab.id}
+                    onClick={() => setActiveTab(tab.id)}
                     className={cn(
-                      "px-2.5 py-1 rounded-md text-xs font-bold whitespace-nowrap transition-colors",
-                      activeTab === tab.id
-                        ? "bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 font-extrabold"
-                        : "text-slate-400 hover:text-white hover:bg-white/[0.04] border border-transparent"
+                      "shrink-0 rounded px-2.5 py-1.5 text-[10.5px] font-bold transition-colors",
+                      activeTab === tab.id ? "bg-cyan-500/16 text-cyan-300" : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200",
                     )}
                   >
                     {tab.label}
@@ -443,75 +485,51 @@ export function WyckoffChartDashboard({
               </div>
             </div>
 
-            {/* TradingView Column Headers */}
-            <div className="grid grid-cols-[1fr_68px_68px_76px] items-center px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-white/[0.06] bg-[#070b10]">
-              <div>Mã / Ngành</div>
+            <div className="grid grid-cols-[minmax(0,1fr)_66px_64px_82px] items-center gap-1 border-b border-white/[0.06] bg-[#070b10] px-2.5 py-2 font-ticker text-[9.5px] font-bold uppercase tracking-wide text-slate-600">
+              <div>Mã · Công ty / Ngành</div>
               <div className="text-right">Giá</div>
               <div className="text-right">+/- %</div>
               <div className="text-right">Pha</div>
             </div>
 
-            {/* Watchlist Rows (Scrollable with Bảng điện Plus Jakarta Sans font & sizing) */}
-            <div className="flex-1 overflow-y-auto divide-y divide-white/[0.03]">
-              {filteredStocks.map((stock) => {
-                const isActive = stock.ticker === ticker
-                return (
-                  <Link
-                    key={stock.ticker}
-                    href={`/insights/wyckoff?ticker=${encodeURIComponent(stock.ticker)}&timeframe=${activeTimeframe}`}
-                    prefetch={false}
-                    className={cn(
-                      "grid grid-cols-[1fr_68px_68px_76px] items-center px-3 py-2.5 text-xs transition-colors",
-                      isActive
-                        ? "bg-gradient-to-r from-emerald-500/15 via-cyan-500/10 to-transparent border-l-2 border-emerald-400 font-bold"
-                        : "hover:bg-white/[0.04]"
-                    )}
-                  >
-                    {/* Symbol + Sector */}
-                    <div className="flex items-center gap-2 min-w-0 pr-1">
-                      <StockLogo symbol={stock.ticker} size={22} className="rounded shrink-0" />
-                      <div className="min-w-0">
-                        <div className={cn("font-ticker text-sm sm:text-[15px] font-bold truncate leading-tight", isActive ? "text-cyan-300" : "text-white")}>
-                          {stock.ticker}
-                        </div>
-                        <div className="text-xs text-slate-400 truncate leading-none mt-0.5 font-medium">
-                          {stock.sector || "HOSE"}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Price */}
-                    <div className="text-right font-mono text-sm sm:text-[14px] font-bold text-slate-100">
-                      {number(stock.price)}
-                    </div>
-
-                    {/* % Change (MarketChangePill) */}
-                    <div className="text-right flex justify-end">
-                      <MarketChangePill
-                        value={stock.changePct}
-                        tone={(stock.changePct ?? 0) > 0 ? "up" : (stock.changePct ?? 0) < 0 ? "down" : "ref"}
-                        decimals={2}
-                      />
-                    </div>
-
-                    {/* Phase Badge */}
-                    <div className="text-right pl-1">
-                      <span className={cn("inline-block rounded px-2 py-0.5 text-xs font-bold truncate max-w-full font-ticker", biasBadgeStyle(stock.bias, stock.phase))}>
-                        {phaseShortBadge(stock.phase)}
-                      </span>
-                    </div>
-                  </Link>
-                )
-              })}
-              {!filteredStocks.length ? (
-                <div className="p-8 text-center text-xs text-slate-400 font-medium">
-                  Không tìm thấy mã phù hợp
-                </div>
-              ) : null}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {filteredStocks.map((stock) => (
+                <WatchlistRow key={stock.ticker} stock={stock} isActive={stock.ticker === ticker} activeTimeframe={activeTimeframe} />
+              ))}
+              {!filteredStocks.length ? <div className="p-8 text-center text-xs text-slate-500">Không tìm thấy mã phù hợp</div> : null}
             </div>
           </aside>
         </div>
       </main>
+    </div>
+  )
+}
+
+function MetricCard({
+  tone,
+  icon,
+  title,
+  children,
+}: {
+  tone: "emerald" | "cyan" | "amber" | "purple"
+  icon: React.ReactNode
+  title: string
+  children: React.ReactNode
+}) {
+  const toneClass = {
+    emerald: "border-emerald-400/16 text-emerald-300",
+    cyan: "border-cyan-400/16 text-cyan-300",
+    amber: "border-amber-400/16 text-amber-300",
+    purple: "border-purple-400/16 text-purple-300",
+  }[tone]
+
+  return (
+    <div className={cn("min-w-0 rounded-lg border bg-[#081019] p-3 shadow-sm", toneClass)}>
+      <div className="flex items-center gap-1.5 font-ticker text-[10.5px] font-bold uppercase tracking-wide">
+        {icon}
+        <span className="truncate">{title}</span>
+      </div>
+      {children}
     </div>
   )
 }
