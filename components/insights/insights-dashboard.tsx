@@ -70,7 +70,6 @@ import {
   KFSP_FIELD_CATALOG,
   KFSP_GROUPS,
   type KfspFieldDefinition,
-  type KfspGroupKey,
 } from "@/supabase/functions/_shared/kfsp-catalog"
 
 const MODULE_ICONS = {
@@ -79,18 +78,6 @@ const MODULE_ICONS = {
   fa: BarChart3,
   research: BrainCircuit,
 } as const
-
-const KFSP_GROUP_ICONS: Record<KfspGroupKey, typeof Gauge> = {
-  overview: Gauge,
-  general: Building2,
-  valuation: BadgePercent,
-  fundamentals: FileText,
-  price_volatility: Activity,
-  price_range: Maximize2,
-  liquidity: Droplets,
-  technical: LineChart,
-  kfsp: Sparkles,
-}
 
 const DATE_FORMAT = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
@@ -791,7 +778,8 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
   ]
   const tradedValueScale = Math.max(1, ...tradedValueSeries.map((item) => item.value ?? 0))
 
-  const rsi = metricNumber("rsi_14") ?? row.rsi14
+  const rowRsi = typeof row.rsi14 === "number" ? row.rsi14 : Number(row.rsi14)
+  const rsi = metricNumber("rsi_14") ?? (Number.isFinite(rowRsi) ? rowRsi : null)
   const freeFloat = metricNumber("free_float_pct")
   const foreignRoom = metricNumber("foreign_room_remaining_pct")
 
