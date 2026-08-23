@@ -55,6 +55,7 @@ test("machine endpoints share constant-time bearer authorization", () => {
     ["app/api/signals/daily/route.ts", /CRON_SECRET/],
     ["app/api/signals/monitor/route.ts", /SIGNAL_MONITOR_SECRET/],
     ["app/api/scanner/run/route.ts", /SCANNER_RUN_SECRET/],
+    ["app/api/wyckoff/ingest/route.ts", /CRON_SECRET/],
     ["app/api/market/cache/invalidate/route.ts", /MARKET_CACHE_ADMIN_SECRET/],
     ["app/api/market/sync-universe/route.ts", /MARKET_SYNC_SECRET/],
   ]

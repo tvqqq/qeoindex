@@ -147,7 +147,8 @@ See `docs/market-board.md` and `docs/perf-market-board-state-buffer.md` for the 
 - The sidebar reads canonical Notion universe/latest Daily scans. The selected chart reads completed provider bars; `4H`, `1W`, and `1M` are deterministic aggregates. Daily bars are aligned to the canonical scan date.
 - Future lines are conditional Bull/Base/Bear projections from phase, ATR, levels, and rule-engine probabilities. Do not label them as predicted prices.
 - `docs/wyckoff-chart-unified-data.md` documents the Supabase unified schema. `/api/wyckoff/run` writes five timeframe snapshots plus bounded chart series; the page reads this model first and keeps a Notion/provider compatibility fallback during cutover.
-- `scripts/chatgpt-plus-wyckoff-schedule-prompt.md` is the copy-ready scheduled-task prompt. Its bearer credential belongs in private Custom GPT Action auth, never in the prompt.
+- `scripts/chatgpt-plus-wyckoff-schedule-prompt.md` is the copy-ready ChatGPT Work scheduled-task prompt. It writes only to Notion staging and needs no QeoIndex bearer secret.
+- Vercel calls `/api/wyckoff/ingest` at 17:00 ICT on weekdays. The machine-authenticated route claims the newest `Ready` Notion run, validates all 500 keys, publishes complete snapshots to Supabase, and marks the manifest `Ingested`; invalid runs fail closed.
 
 ### Authenticated Insights homepage
 
@@ -251,7 +252,7 @@ Supabase DB migrations are different: approved DDL/function changes apply immedi
 
 ## Known/deferred constraints
 
-- ChatGPT Web Wyckoff staging uses the contract in `scripts/chatgpt-plus-wyckoff-schedule-prompt.md`. Notion run data source: `4efe8131-196a-4b4e-8a9c-dea48c51a554`; snapshot data source: `f9d84b24-965a-4008-a339-5a62db409ecf`. The 17:00 ingestion cron remains a separate implementation phase and must only publish a `Ready` run after validating all 500 snapshot keys.
+- ChatGPT Web Wyckoff staging uses the contract in `scripts/chatgpt-plus-wyckoff-schedule-prompt.md`. Notion run data source: `4efe8131-196a-4b4e-8a9c-dea48c51a554`; snapshot data source: `f9d84b24-965a-4008-a339-5a62db409ecf`. The production 17:00 ICT weekday cron validates all 500 snapshot keys and publishes only a `Ready` run. Chart OHLC series remain provider-backed because Notion stores analysis facts, not long bar arrays.
 
 - Hosted Auth leaked-password protection still needs to be enabled in Supabase settings.
 - CSP remains deferred pending a tested WebSocket/external-source policy.

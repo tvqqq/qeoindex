@@ -6,7 +6,7 @@ Contract version: `notion-unified-v1` (2026-08-23).
 - Universe: `collection://210c502d-0c32-4fdd-9d69-7ef18e2be7d5`
 - Runs: `collection://4efe8131-196a-4b4e-8a9c-dea48c51a554`
 - Snapshots: `collection://f9d84b24-965a-4008-a339-5a62db409ecf`
-- Schedule ChatGPT Web: Monday–Friday after completed EOD data and before the 17:00 ICT ingestion cron.
+- Schedule ChatGPT Work: 14:30 Asia/Ho_Chi_Minh, Monday–Friday, giving the scan 2.5 hours before the 17:00 ingestion cron.
 
 Copy the complete block below into a ChatGPT Web task/conversation that can access the QeoIndex Notion workspace.
 
@@ -15,6 +15,15 @@ Tên tác vụ: QeoIndex — Wyckoff Top 100 → Notion unified staging
 
 MỤC TIÊU
 Quét đúng 100 cổ phiếu Active trong “Wyckoff Universe — Top 100 HOSE”, phân tích 1H/4H/1D/1W/1M khi có đủ dữ liệu, rồi ghi staging facts vào Notion unified. Không gọi endpoint QeoIndex, không dùng/yêu cầu SCANNER_RUN_SECRET và không ghi vào Daily Wyckoff Scan cũ.
+
+LỊCH CHẠY
+- Chạy lúc 14:30 Asia/Ho_Chi_Minh, thứ Hai đến thứ Sáu.
+- Đây là tác vụ ghi dữ liệu thật vào Notion, không chỉ tạo báo cáo trong chat.
+
+PREFLIGHT GHI NOTION — BẮT BUỘC
+- Trước khi scan, xác nhận có quyền query Universe, Runs và Snapshots.
+- Tạo hoặc update Run manifest ở trạng thái Writing, sau đó query lại đúng Run Key để xác minh record tồn tại.
+- Nếu không thể ghi hoặc không thể đọc lại record vừa ghi: dừng ngay, trả `NOTION_WRITE_UNAVAILABLE` kèm lỗi thật. Tuyệt đối không nói scan thành công và không tiếp tục phân tích chỉ trong chat.
 
 NOTION IDS
 - Universe: collection://210c502d-0c32-4fdd-9d69-7ef18e2be7d5
