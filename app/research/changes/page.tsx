@@ -1,11 +1,5 @@
-import { NotionUnavailable } from "@/components/notion-unavailable"
-import { ResearchApp } from "@/components/research/research-app"
-import { getResearchChangesData } from "@/lib/research-data"
+import { redirect } from "next/navigation"
 
-export const dynamic = "force-dynamic"
-
-export default async function ResearchChangesPage() {
-  const data = await getResearchChangesData()
-  if (!data.connection.notionLive) return <NotionUnavailable section="Thay đổi luận điểm" detail={data.connection.message} />
-  return <ResearchApp data={data} mode="changes" />
+export default function ResearchChangesPage() {
+  redirect("/research?view=changes")
 }
