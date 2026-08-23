@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef } from "react"
+import { useMemo } from "react"
 import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react"
 
 import { cn } from "@/lib/utils"
@@ -23,14 +23,7 @@ export function PriceFlow({
   className?: string
 }) {
   const reducedMotion = useReducedMotion() ?? false
-  const previousRef = useRef<number | null>(null)
   const finiteValue = value != null && Number.isFinite(value) ? value : null
-  const previous = previousRef.current
-  const direction = finiteValue == null || previous == null || finiteValue === previous ? 0 : finiteValue > previous ? 1 : -1
-
-  useEffect(() => {
-    previousRef.current = finiteValue
-  }, [finiteValue])
 
   const formatted = useMemo(() => {
     if (finiteValue == null) return "—"
@@ -42,10 +35,10 @@ export function PriceFlow({
 
   return (
     <LazyMotion features={domAnimation} strict>
-      <span className={cn("inline-flex tabular-nums", className)} aria-label={label}>
+      <span className={cn("inline-flex overflow-hidden tabular-nums", className)} aria-label={label}>
         <m.span
           key={label}
-          initial={reducedMotion || direction === 0 ? false : { opacity: 0.45, y: direction * 6 }}
+          initial={reducedMotion ? false : { opacity: 0.45, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={reducedMotion ? { duration: 0 } : { duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
         >
