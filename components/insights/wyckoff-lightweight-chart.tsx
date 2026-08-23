@@ -6,11 +6,16 @@ import { AiLoader } from "@/components/smoothui/ai-loader"
 import {
   loadLightweightCharts,
   type LightweightChartApi,
+  type LightweightLogicalRange,
   type LightweightPriceLineApi,
   type LightweightSeriesApi,
   type LightweightSeriesMarkersApi,
 } from "@/lib/lightweight-charts-runtime"
 import type { WyckoffChartStudy } from "@/lib/wyckoff-chart-model"
+
+const ZOOM_SETTLE_MS = 110
+const ZOOM_STEP = 0.14
+const MIN_VISIBLE_BARS = 36
 
 function pricePrecision(value: number) {
   if (value >= 1000) return { precision: 0, minMove: 1 }
@@ -34,6 +39,8 @@ type ChartController = {
   markers: LightweightSeriesMarkersApi | null
   scenarioSeries: Record<ScenarioKey, LightweightSeriesApi>
   priceLines: LightweightPriceLineApi[]
+  visibleRange: LightweightLogicalRange | null
+  barCount: number
 }
 
 function scenarioKey(value: string): ScenarioKey | null {
@@ -46,12 +53,48 @@ function clearPriceLines(controller: ChartController) {
   controller.priceLines = []
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function applyDiscreteZoom(controller: ChartController, wheelDelta: number, anchorRatio: number) {
+  const current = controller.visibleRange
+  if (!current || !Number.isFinite(wheelDelta) || wheelDelta === 0) return
+
+  const span = Math.max(1, current.to - current.from)
+  const steps = clamp(Math.round(Math.abs(wheelDelta) / 120), 1, 3)
+  const scale = wheelDelta > 0 ? 1 + ZOOM_STEP * steps : 1 / (1 + ZOOM_STEP * steps)
+  const maxTo = Math.max(8, controller.barCount - 1 + 8)
+  const maxSpan = Math.max(MIN_VISIBLE_BARS, maxTo + 0.5)
+  const nextSpan = clamp(span * scale, MIN_VISIBLE_BARS, maxSpan)
+  const safeAnchor = clamp(anchorRatio, 0, 1)
+  const anchor = current.from + span * safeAnchor
+
+  let from = anchor - nextSpan * safeAnchor
+  let to = from + nextSpan
+  const minFrom = -0.5
+
+  if (from < minFrom) {
+    to += minFrom - from
+    from = minFrom
+  }
+  if (to > maxTo) {
+    from -= to - maxTo
+    to = maxTo
+  }
+
+  const nextRange = { from, to }
+  controller.visibleRange = nextRange
+  controller.chart.timeScale().setVisibleLogicalRange(nextRange)
+}
+
 function applyStudy(controller: ChartController, study: WyckoffChartStudy) {
   const latest = study.bars.at(-1)
   if (!latest) return
   const format = pricePrecision(latest.close)
   const intraday = study.timeframe === "1H" || study.timeframe === "4H"
 
+  controller.barCount = study.bars.length
   controller.chart.applyOptions({
     timeScale: {
       timeVisible: intraday,
@@ -125,7 +168,9 @@ function applyStudy(controller: ChartController, study: WyckoffChartStudy) {
 
   const visible = study.timeframe === "1M" ? 84 : study.timeframe === "1W" ? 150 : 180
   const last = study.bars.length - 1
-  controller.chart.timeScale().setVisibleLogicalRange({ from: Math.max(-0.5, last - visible + 1), to: last + 8 })
+  const visibleRange = { from: Math.max(-0.5, last - visible + 1), to: last + 8 }
+  controller.visibleRange = visibleRange
+  controller.chart.timeScale().setVisibleLogicalRange(visibleRange)
 }
 
 export function WyckoffLightweightChart({
@@ -159,8 +204,27 @@ export function WyckoffLightweightChart({
     if (!host) return
     let cancelled = false
     let resizeFrame = 0
+    let zoomTimer = 0
+    let pendingWheelDelta = 0
+    let pendingAnchorRatio = 0.5
     let chart: LightweightChartApi | null = null
     let resizeObserver: ResizeObserver | null = null
+    let visibleRangeHandler: ((range: LightweightLogicalRange | null) => void) | null = null
+
+    const handleWheel = (event: WheelEvent) => {
+      if (embedded || Math.abs(event.deltaY) < 0.1) return
+      event.preventDefault()
+      pendingWheelDelta += event.deltaY
+      const rect = host.getBoundingClientRect()
+      pendingAnchorRatio = rect.width > 0 ? clamp((event.clientX - rect.left) / rect.width, 0, 1) : 0.5
+      window.clearTimeout(zoomTimer)
+      zoomTimer = window.setTimeout(() => {
+        const controller = controllerRef.current
+        const delta = pendingWheelDelta
+        pendingWheelDelta = 0
+        if (controller) applyDiscreteZoom(controller, delta, pendingAnchorRatio)
+      }, ZOOM_SETTLE_MS)
+    }
 
     void (async () => {
       try {
@@ -189,28 +253,24 @@ export function WyckoffLightweightChart({
             vertLine: { color: "rgba(148,163,184,0.28)", labelBackgroundColor: "#334155" },
             horzLine: { color: "rgba(148,163,184,0.28)", labelBackgroundColor: "#334155" },
           },
-          handleScroll: embedded
-            ? {
-                mouseWheel: false,
-                pressedMouseMove: true,
-                horzTouchDrag: true,
-                vertTouchDrag: false,
-              }
-            : true,
-          handleScale: embedded
-            ? {
-                mouseWheel: false,
-                pinch: true,
-                axisPressedMouseMove: {
-                  time: true,
-                  price: true,
-                },
-                axisDoubleClickReset: {
-                  time: true,
-                  price: true,
-                },
-              }
-            : true,
+          handleScroll: {
+            mouseWheel: false,
+            pressedMouseMove: true,
+            horzTouchDrag: true,
+            vertTouchDrag: false,
+          },
+          handleScale: {
+            mouseWheel: false,
+            pinch: embedded,
+            axisPressedMouseMove: {
+              time: true,
+              price: true,
+            },
+            axisDoubleClickReset: {
+              time: true,
+              price: true,
+            },
+          },
         })
         const candles = chart.addSeries(lwc.CandlestickSeries, {
           upColor: "#22c98a",
@@ -228,7 +288,23 @@ export function WyckoffLightweightChart({
           base: chart.addSeries(lwc.LineSeries, { priceLineVisible: false, crosshairMarkerVisible: false }, 0),
           bear: chart.addSeries(lwc.LineSeries, { priceLineVisible: false, crosshairMarkerVisible: false }, 0),
         }
-        controllerRef.current = { chart, candles, volume, markers, scenarioSeries, priceLines: [] }
+        const controller: ChartController = {
+          chart,
+          candles,
+          volume,
+          markers,
+          scenarioSeries,
+          priceLines: [],
+          visibleRange: null,
+          barCount: 0,
+        }
+        controllerRef.current = controller
+        visibleRangeHandler = (range) => {
+          if (controllerRef.current === controller) controller.visibleRange = range
+        }
+        chart.timeScale().subscribeVisibleLogicalRangeChange(visibleRangeHandler)
+        if (!embedded) host.addEventListener("wheel", handleWheel, { passive: false })
+
         resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
           cancelAnimationFrame(resizeFrame)
           resizeFrame = requestAnimationFrame(() => {
@@ -248,6 +324,9 @@ export function WyckoffLightweightChart({
     return () => {
       cancelled = true
       resizeObserver?.disconnect()
+      window.clearTimeout(zoomTimer)
+      host.removeEventListener("wheel", handleWheel)
+      if (chart && visibleRangeHandler) chart.timeScale().unsubscribeVisibleLogicalRangeChange(visibleRangeHandler)
       cancelAnimationFrame(resizeFrame)
       cancelAnimationFrame(updateFrameRef.current)
       cancelAnimationFrame(settleFrameRef.current)
