@@ -1,0 +1,66 @@
+name: Apply TTAI dashboard refactor
+
+on:
+  push:
+    branches:
+      - feat/insights-ttai-history-dashboard
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/insights-ttai-history-dashboard
+          fetch-depth: 0
+      - name: Patch Insights dialog
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path("components/insights/insights-dashboard.tsx")
+          source = path.read_text()
+
+          marker = 'import { MarketChangePill } from "@/components/market-change-pill"\n'
+          if 'TtaiDashboard' not in source:
+              source = source.replace(marker, marker + 'import { TtaiDashboard } from "@/components/insights/ttai-dashboard"\n', 1)
+
+          source = source.replace('type StockDetailTab = "overview" | "info" | "fa" | "ta" | "kfsp"', 'type StockDetailTab = "overview" | "info" | "fa" | "ta" | "ttai"')
+          source = source.replace('{ key: "kfsp", label: "KFSP", icon: Sparkles },', '{ key: "ttai", label: "TTAI", icon: Sparkles },')
+
+          mini_pattern = re.compile(r'''\n      \{\/\* Mini Trendline Overlay \(Curve in Hình 4\) \*\/\}.*?\n      <div className="mt-2 h-14 w-full overflow-hidden rounded-lg bg-\[#050c17\] p-1">.*?\n      </div>''', re.S)
+          mini_replacement = '''\n      <div className="mt-4 border-t border-white/[0.06] pt-4">\n        <RatingHistoryChart row={row} />\n      </div>'''
+          source, mini_count = mini_pattern.subn(mini_replacement, source, count=1)
+          if mini_count != 1:
+              raise SystemExit(f"mini trend replacement count={mini_count}")
+
+          perf_start = source.index('              <div className="grid gap-4 xl:grid-cols-12">', source.index('{topTab === "overview"'))
+          quick_start = source.index('              <div className="grid gap-4 xl:grid-cols-2">', perf_start)
+          new_top_layout = '''              <div className="grid gap-4 xl:grid-cols-12">\n                <div className="xl:col-span-8">\n                  <RatingRadar row={row} />\n                </div>\n                <div className="space-y-4 xl:col-span-4">\n                  <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4">\n                    <div className="mb-4 flex items-center justify-between"><div><h4 className="text-base font-extrabold text-white">Hiệu suất giá</h4><p className="mt-1 text-xs text-muted-2">Động lượng 1D → 1Y.</p></div><Activity className="size-5 text-emerald-300" /></div>\n                    {renderPerformanceBars()}\n                  </div>\n                  <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4">\n                    <div className="mb-4 flex items-center justify-between"><div><h4 className="text-base font-extrabold text-white">Range & thanh khoản</h4><p className="mt-1 text-xs text-muted-2">Vị thế giá và cường độ giao dịch.</p></div><Droplets className="size-5 text-cyan-300" /></div>\n                    <div className="grid grid-cols-2 gap-2">\n                      <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-[11px] font-bold text-muted-2">Cách đỉnh 52W</span><div className="mt-1.5 font-mono text-base font-black text-white">{metricDisplay("distance_to_52w_high_pct")}</div></div>\n                      <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-[11px] font-bold text-muted-2">Cách đáy 52W</span><div className="mt-1.5 font-mono text-base font-black text-white">{metricDisplay("distance_to_52w_low_pct")}</div></div>\n                      <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-[11px] font-bold text-muted-2">Volume vs trước</span><div className="mt-1.5 font-mono text-base font-black text-white">{metricDisplay("volume_vs_previous_session_pct")}</div></div>\n                      <div className="rounded-xl bg-white/[0.03] p-3"><span className="text-[11px] font-bold text-muted-2">GTGD vs trước</span><div className="mt-1.5 font-mono text-base font-black text-white">{metricDisplay("traded_value_vs_previous_session_pct")}</div></div>\n                    </div>\n                    <div className="mt-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5 text-[11px] font-semibold text-muted-2">KLGD TB 50P <strong className="font-mono text-white">{compactVolume(row.volume)}</strong> · Vốn hóa <strong className="font-mono text-white">{row.marketCapBillion == null ? "—" : formatMarketCapBillion(row.marketCapBillion)}</strong></div>\n                  </div>\n                </div>\n              </div>\n\n'''
+          source = source[:perf_start] + new_top_layout + source[quick_start:]
+
+          redundant = re.compile(r'''\n              <div className="grid gap-4 xl:grid-cols-2"><RatingHistoryChart row=\{row\} /><RatingRadar row=\{row\} /></div>\n              <details className="rounded-2xl border border-white/\[0\.07\] bg-\[#07111f\] p-4">\n                <summary className="cursor-pointer select-none text-sm font-extrabold text-white">Ma trận trạng thái & tích lũy</summary>\n                <div className="mt-4"><AccumulationHeatmap row=\{row\} /></div>\n              </details>''')
+          source, redundant_count = redundant.subn('\n              <AccumulationHeatmap row={row} />', source, count=1)
+          if redundant_count != 1:
+              raise SystemExit(f"overview matrix replacement count={redundant_count}")
+
+          ttai_pattern = re.compile(r'''\n          \{topTab === "kfsp" && \(\n            <section id="rating-panel-kfsp".*?\n            </section>\n          \)\}''', re.S)
+          source, ttai_count = ttai_pattern.subn('\n          {topTab === "ttai" && <TtaiDashboard row={row} />}', source, count=1)
+          if ttai_count != 1:
+              raise SystemExit(f"TTAI panel replacement count={ttai_count}")
+
+          source = source.replace('Dữ liệu snapshot từ KFSP/Supabase. Dashboard chỉ tổ chức lại presentation; không thay đổi dữ liệu gốc hay phương pháp KFSP.', 'Dữ liệu snapshot từ KFSP/Supabase. TTAI hiển thị lịch sử provider và không tái tính phương pháp chấm điểm KFSP.')
+          path.write_text(source)
+      - name: Commit generated patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/insights/insights-dashboard.tsx
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "feat(insights): reshape overview and add TTAI tab"
+          git push origin HEAD:feat/insights-ttai-history-dashboard
