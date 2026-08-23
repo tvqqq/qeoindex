@@ -55,10 +55,7 @@ import {
 
 import AnimatedProgressBar from "@/components/smoothui/animated-progress-bar"
 import SoftBlurIn from "@/components/smoothui/soft-blur-in"
-import { AiLoader } from "@/components/smoothui/ai-loader"
 import InsightsTransition from "@/components/smoothui/insights-transition"
-import { WyckoffStockWorkspace, type WyckoffListItem } from "@/components/insights/wyckoff-chart-dashboard"
-import type { WyckoffChartStudy, WyckoffChartTimeframe } from "@/lib/wyckoff-chart-model"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { TtaiDashboard } from "@/components/insights/ttai-dashboard"
 import { StockLogo } from "@/components/stock-logo"
@@ -671,114 +668,8 @@ function RatingHistoryChart({ row }: { row: InsightsRatingRow }) {
   )
 }
 
-interface WyckoffApiResponse {
-  ok: boolean
-  ticker: string
-  companyName?: string
-  exchange?: string
-  sector?: string
-  studies: WyckoffChartStudy[]
-  initialTimeframe: WyckoffChartTimeframe
-  stocks: WyckoffListItem[]
-  generatedAt: string
-  dataSource?: string
-  error?: string
-}
-
-function WyckoffTabPanel({ ticker }: { ticker: string }) {
-  const [fetchState, setFetchState] = useState<{
-    status: "loading" | "success" | "error"
-    payload: WyckoffApiResponse | null
-    error: string | null
-  }>({
-    status: "loading",
-    payload: null,
-    error: null,
-  })
-
-  useEffect(() => {
-    let isMounted = true
-
-    fetch(`/api/insights/wyckoff?ticker=${encodeURIComponent(ticker)}&timeframe=1D`)
-      .then((res) => res.json())
-      .then((res: { ok?: boolean; data?: WyckoffApiResponse; error?: string } & Partial<WyckoffApiResponse>) => {
-        if (!isMounted) return
-        const studies = res.data?.studies || res.studies
-        if (res.ok && studies?.length) {
-          const payload: WyckoffApiResponse = {
-            ok: true,
-            ticker: res.data?.ticker || res.ticker || ticker,
-            companyName: res.data?.companyName || res.companyName,
-            exchange: res.data?.exchange || res.exchange,
-            sector: res.data?.sector || res.sector,
-            studies,
-            initialTimeframe: res.data?.initialTimeframe || res.initialTimeframe || "1D",
-            stocks: res.data?.stocks || res.stocks || [],
-            generatedAt: res.data?.generatedAt || res.generatedAt || "",
-            dataSource: res.data?.dataSource || res.dataSource || "Supabase unified",
-          }
-          setFetchState({ status: "success", payload, error: null })
-        } else {
-          setFetchState({ status: "error", payload: null, error: res.error || "Không tải được dữ liệu Wyckoff." })
-        }
-      })
-      .catch((err: unknown) => {
-        if (!isMounted) return
-        const message = err instanceof Error ? err.message : "Lỗi tải dữ liệu Wyckoff."
-        setFetchState({ status: "error", payload: null, error: message })
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [ticker])
-
-  if (fetchState.status === "loading") {
-    return (
-      <div id="rating-panel-wyckoff" role="tabpanel" aria-labelledby="rating-tab-wyckoff" className="flex min-h-[560px] flex-col items-center justify-center rounded-2xl border border-white/[0.07] bg-[#07111f] p-8 text-center font-ticker">
-        <AiLoader label={`Đang tải chart Wyckoff ${ticker}...`} />
-      </div>
-    )
-  }
-
-  if (fetchState.status === "error" || !fetchState.payload) {
-    return (
-      <div id="rating-panel-wyckoff" role="tabpanel" aria-labelledby="rating-tab-wyckoff" className="flex min-h-[400px] flex-col items-center justify-center rounded-2xl border border-white/[0.07] bg-[#07111f] p-8 text-center font-ticker">
-        <p className="text-sm font-semibold text-rose-300">{fetchState.error || "Chưa có dữ liệu Wyckoff cho mã này."}</p>
-        <Link
-          href={`/insights/wyckoff?ticker=${ticker}&timeframe=1D`}
-          prefetch={false}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-2 font-ticker text-xs font-bold text-cyan-300 transition-colors hover:bg-cyan-500/20"
-        >
-          <BarChart3 className="size-3.5" />
-          <span>Mở trang Wyckoff chuyên sâu</span>
-        </Link>
-      </div>
-    )
-  }
-
-  const payload = fetchState.payload
-
-  return (
-    <section id="rating-panel-wyckoff" role="tabpanel" aria-labelledby="rating-tab-wyckoff" className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-3 font-ticker sm:p-4">
-      <WyckoffStockWorkspace
-        ticker={payload.ticker || ticker}
-        companyName={payload.companyName}
-        exchange={payload.exchange}
-        sector={payload.sector}
-        studies={payload.studies}
-        initialTimeframe={payload.initialTimeframe || "1D"}
-        stocks={payload.stocks || []}
-        generatedAt={payload.generatedAt || ""}
-        dataSource={payload.dataSource || "Supabase unified"}
-        embedded={true}
-      />
-    </section>
-  )
-}
-
 function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; onOpenChange: (open: boolean) => void }) {
-  type StockDetailTab = "overview" | "info" | "ta" | "ttai" | "wyckoff"
+  type StockDetailTab = "overview" | "info" | "ta" | "ttai"
   const [topTab, setTopTab] = useState<StockDetailTab>("overview")
   if (!row) return null
 
@@ -868,7 +759,6 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
     { key: "info", label: "Thông tin doanh nghiệp", icon: Building2 },
     { key: "ta", label: "Phân tích TA", icon: LineChart },
     { key: "ttai", label: "TTAI", icon: Sparkles },
-    { key: "wyckoff", label: "Chart Wyckoff", icon: BarChart3 },
   ]
 
   const renderPerformanceBars = () => (
@@ -991,6 +881,18 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                 )
               })}
             </nav>
+            <aside className="sticky right-0 shrink-0 border-l border-white/10 bg-[#080d19] pl-4" aria-label="Công cụ phân tích chuyên sâu">
+              <Link
+                href={`/insights/wyckoff?ticker=${row.ticker}&timeframe=1D`}
+                prefetch={false}
+                aria-label={`Phân tích chart Wyckoff ${row.ticker}`}
+                title="Phân tích chart Wyckoff"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-cyan-400/35 bg-cyan-500/10 px-3 py-2 font-ticker text-xs font-bold text-cyan-300 transition-colors hover:border-cyan-400/60 hover:bg-cyan-500/20"
+              >
+                <BarChart3 className="size-3.5" />
+                <span>Phân tích Wyckoff</span>
+              </Link>
+            </aside>
           </div>
         </div>
 
@@ -1349,7 +1251,6 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
           )}
 
           {topTab === "ttai" && <TtaiDashboard row={row} />}
-          {topTab === "wyckoff" && <WyckoffTabPanel ticker={row.ticker} />}
         </div>
 
       </DialogContent>

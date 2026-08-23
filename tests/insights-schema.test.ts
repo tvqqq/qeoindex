@@ -39,7 +39,7 @@ test("insights has no public auth bypass and reads with the user-scoped client",
   assert.match(insightsData, /new Map\(/)
 })
 
-test("rating table exposes keyboard modal, grouped dashboard tabs, history, and sector interactions", () => {
+test("rating table exposes keyboard modal, grouped dashboard tabs, standalone Wyckoff action, history, and sector interactions", () => {
   assert.match(insightsDashboard, /function RatingTooltip/)
   assert.match(insightsDashboard, /function RatingDialog/)
   assert.match(insightsDashboard, /aria-label={`Mở hồ sơ rating \$\{row\.ticker\}`}/)
@@ -53,13 +53,21 @@ test("rating table exposes keyboard modal, grouped dashboard tabs, history, and 
   assert.match(insightsDashboard, /role="tab"/)
   assert.match(insightsDashboard, /role="tablist"/)
   assert.match(ttaiDashboard, /role="tabpanel"/)
-  assert.match(insightsDashboard, /type StockDetailTab = "overview" \| "info" \| "ta" \| "ttai" \| "wyckoff"/)
-  for (const tab of ["Tổng quan", "Thông tin doanh nghiệp", "Phân tích TA", "TTAI", "Chart Wyckoff"]) {
+  assert.match(insightsDashboard, /type StockDetailTab = "overview" \| "info" \| "ta" \| "ttai"/)
+  for (const tab of ["Tổng quan", "Thông tin doanh nghiệp", "Phân tích TA", "TTAI"]) {
     assert.match(insightsDashboard, new RegExp(`label: "${tab}"`))
   }
-  for (const panel of ["overview", "info", "ta", "ttai", "wyckoff"]) {
+  for (const panel of ["overview", "info", "ta", "ttai"]) {
     assert.match(insightsDashboard + ttaiDashboard, new RegExp(`rating-panel-${panel}`))
   }
+  assert.match(insightsDashboard, /aria-label="Công cụ phân tích chuyên sâu"/)
+  assert.match(insightsDashboard, /href=\{`\/insights\/wyckoff\?ticker=\$\{row\.ticker\}&timeframe=1D`\}/)
+  assert.match(insightsDashboard, /aria-label=\{`Phân tích chart Wyckoff \$\{row\.ticker\}`\}/)
+  assert.match(insightsDashboard, /<span>Phân tích Wyckoff<\/span>/)
+  assert.match(insightsDashboard, /prefetch=\{false\}/)
+  assert.doesNotMatch(insightsDashboard, /Chart Wyckoff|WyckoffTabPanel|WyckoffStockWorkspace|rating-panel-wyckoff|rating-tab-wyckoff|topTab === "wyckoff"/)
+  assert.doesNotMatch(insightsDashboard, /@\/components\/insights\/wyckoff-chart-dashboard|@\/lib\/wyckoff-chart-model/)
+  assert.doesNotMatch(insightsDashboard, /fetch\(`\/api\/insights\/wyckoff\?ticker=/)
   assert.doesNotMatch(insightsDashboard, /rating-panel-fa|rating-tab-fa|topTab === "fa"/)
   assert.doesNotMatch(insightsDashboard, /topTab === "metrics"/)
   assert.doesNotMatch(insightsDashboard, /topTab === "history"/)
