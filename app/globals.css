@@ -266,6 +266,48 @@ body::after {
   z-index: 20;
 }
 
+/* Insights overview desktop placement: keep the heatmap directly under the
+ * QeoIndex state radar while the compact performance/range stack stays right. */
+@media (min-width: 1280px) {
+  #rating-panel-overview {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  #rating-panel-overview > * {
+    margin-top: 0;
+  }
+
+  #rating-panel-overview > :nth-child(1) {
+    grid-column: 1 / -1;
+  }
+
+  #rating-panel-overview > :nth-child(2) {
+    display: contents;
+  }
+
+  #rating-panel-overview > :nth-child(2) > :first-child {
+    grid-column: 1 / span 8;
+    grid-row: 2;
+  }
+
+  #rating-panel-overview > :nth-child(2) > :last-child {
+    grid-column: 9 / -1;
+    grid-row: 2 / span 2;
+  }
+
+  #rating-panel-overview > :nth-child(4) {
+    grid-column: 1 / span 8;
+    grid-row: 3;
+  }
+
+  #rating-panel-overview > :nth-child(3) {
+    grid-column: 1 / -1;
+    grid-row: 4;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flash-up,
   .flash-down,
