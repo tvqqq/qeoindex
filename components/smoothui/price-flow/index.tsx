@@ -12,6 +12,7 @@ export function PriceFlow({
   suffix = "",
   showSign = false,
   locale = "en-US",
+  animate = true,
   className,
 }: {
   value: number | null | undefined
@@ -20,6 +21,7 @@ export function PriceFlow({
   suffix?: string
   showSign?: boolean
   locale?: string
+  animate?: boolean
   className?: string
 }) {
   const reducedMotion = useReducedMotion() ?? false
@@ -32,15 +34,16 @@ export function PriceFlow({
 
   const sign = finiteValue != null && showSign && finiteValue > 0 ? "+" : ""
   const label = `${prefix}${sign}${formatted}${suffix}`
+  const shouldAnimate = animate && !reducedMotion
 
   return (
     <LazyMotion features={domAnimation} strict>
       <span className={cn("inline-flex overflow-hidden tabular-nums", className)} aria-label={label}>
         <m.span
           key={label}
-          initial={reducedMotion ? false : { opacity: 0.45, y: 4 }}
+          initial={shouldAnimate ? { opacity: 0.45, y: 4 } : false}
           animate={{ opacity: 1, y: 0 }}
-          transition={reducedMotion ? { duration: 0 } : { duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          transition={shouldAnimate ? { duration: 0.16, ease: [0.22, 1, 0.36, 1] } : { duration: 0 }}
         >
           {label}
         </m.span>
