@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentType,
   type MouseEvent,
   type ReactNode,
 } from "react"
@@ -16,8 +17,12 @@ import {
   AlertTriangle,
   BarChart3,
   CheckCircle2,
+  CircleDashed,
+  CircleDot,
   Layers3,
   Radar,
+  RefreshCw,
+  Repeat2,
   Search,
   ShieldCheck,
   Target,
@@ -37,6 +42,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { BOARD_SECTOR_GROUPS, boardSectorGroupForSector } from "@/lib/market-sectors"
 import type { WyckoffChartStudy, WyckoffChartTimeframe, WyckoffEventLabel } from "@/lib/wyckoff-chart-model"
 import { cn } from "@/lib/utils"
@@ -55,16 +61,33 @@ type WatchlistStock = WyckoffListItem & {
   phase1D?: string
   phase1W?: string
 }
+type PhaseKey =
+  | "accumulation"
+  | "reaccumulation"
+  | "distribution"
+  | "redistribution"
+  | "markup"
+  | "markdown"
+  | "unclassified"
+
+type PhaseMeta = {
+  label: string
+  shortVi: string
+  explanationVi: string
+  icon: ComponentType<{ className?: string }>
+  chip: string
+  iconClass: string
+}
 
 const WATCHLIST_TABS: Array<{ id: WatchlistFilterTab; label: string }> = [
   { id: "all", label: "Tất cả" },
-  { id: "accumulation", label: "1D Tích lũy" },
-  { id: "distribution", label: "1D Phân phối" },
+  { id: "accumulation", label: "1D Accumulation" },
+  { id: "distribution", label: "1D Distribution" },
 ]
 
 const TICKER_SWITCH_DEBOUNCE_MS = 60
 const TICKER_CACHE_LIMIT = 8
-const WATCHLIST_GRID_CLASS = "grid-cols-[54px_repeat(3,minmax(0,1fr))]"
+const WATCHLIST_GRID_CLASS = "grid-cols-[64px_repeat(3,minmax(0,1fr))]"
 
 const TYPE = {
   display: "text-2xl font-extrabold leading-tight tracking-[-0.03em]",
@@ -82,47 +105,106 @@ const TONE: Record<Tone, { border: string; soft: string; text: string }> = {
   slate: { border: "border-white/[0.08]", soft: "bg-white/[0.025]", text: "text-slate-300" },
 }
 
+const PHASE_META: Record<PhaseKey, PhaseMeta> = {
+  accumulation: {
+    label: "Accumulation",
+    shortVi: "Đang xây nền",
+    explanationVi: "Giá đang tạo Trading Range và hấp thụ Supply. Chưa mặc định là sắp tăng; cần nhìn Spring, Test, SOS hoặc cách giá phản ứng quanh Support.",
+    icon: Layers3,
+    chip: "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-200 hover:border-emerald-300/45 hover:bg-emerald-400/[0.12]",
+    iconClass: "text-emerald-300",
+  },
+  reaccumulation: {
+    label: "Reaccumulation",
+    shortVi: "Nghỉ trong xu hướng tăng",
+    explanationVi: "Giá đang tích lũy lại sau một nhịp Markup. Cấu trúc tích cực hơn nếu Support giữ được và xuất hiện Test, LPS hoặc SOS với Demand tốt.",
+    icon: RefreshCw,
+    chip: "border-cyan-400/25 bg-cyan-400/[0.08] text-cyan-100 hover:border-cyan-300/45 hover:bg-cyan-400/[0.12]",
+    iconClass: "text-cyan-300",
+  },
+  distribution: {
+    label: "Distribution",
+    shortVi: "Đang tạo vùng phân phối",
+    explanationVi: "Giá đang tạo Trading Range ở vùng cao. Cần nhìn UT/UTAD, SOW, LPSY và phản ứng quanh Resistance trước khi kết luận Supply đã chiếm ưu thế.",
+    icon: CircleDot,
+    chip: "border-fuchsia-400/25 bg-fuchsia-400/[0.08] text-fuchsia-100 hover:border-fuchsia-300/45 hover:bg-fuchsia-400/[0.12]",
+    iconClass: "text-fuchsia-300",
+  },
+  redistribution: {
+    label: "Redistribution",
+    shortVi: "Nghỉ trong xu hướng giảm",
+    explanationVi: "Giá đang đi ngang hoặc hồi trong một cấu trúc Markdown. Nếu Demand yếu, không Reclaim được Resistance và có SOW/LPSY, xu hướng giảm có thể tiếp tục.",
+    icon: Repeat2,
+    chip: "border-amber-400/25 bg-amber-400/[0.08] text-amber-100 hover:border-amber-300/45 hover:bg-amber-400/[0.12]",
+    iconClass: "text-amber-300",
+  },
+  markup: {
+    label: "Markup",
+    shortVi: "Đang trong nhịp tăng",
+    explanationVi: "Giá đang rời Trading Range theo hướng lên. Ưu tiên quan sát các pullback về Support, LPS và khả năng tạo Follow-through.",
+    icon: TrendingUp,
+    chip: "border-lime-400/25 bg-lime-400/[0.08] text-lime-100 hover:border-lime-300/45 hover:bg-lime-400/[0.12]",
+    iconClass: "text-lime-300",
+  },
+  markdown: {
+    label: "Markdown",
+    shortVi: "Đang trong nhịp giảm",
+    explanationVi: "Giá đang rời Trading Range theo hướng xuống. Các rally chỉ cải thiện cấu trúc khi giá có thể Reclaim và Hold lại những vùng Resistance quan trọng.",
+    icon: TrendingDown,
+    chip: "border-red-400/25 bg-red-400/[0.08] text-red-100 hover:border-red-300/45 hover:bg-red-400/[0.12]",
+    iconClass: "text-red-300",
+  },
+  unclassified: {
+    label: "Unclassified",
+    shortVi: "Chưa đủ evidence",
+    explanationVi: "Dữ liệu hiện tại chưa đủ rõ để gắn một Wyckoff Phase đáng tin. Tốt hơn là giữ Unclassified thay vì ép nhãn khi Price × Volume còn mâu thuẫn.",
+    icon: CircleDashed,
+    chip: "border-slate-400/20 bg-slate-400/[0.055] text-slate-300 hover:border-slate-300/35 hover:bg-slate-400/[0.09]",
+    iconClass: "text-slate-400",
+  },
+}
+
 const EVENT_GUIDE: Record<WyckoffEventLabel, { name: string; meaning: string; next: string; tone: Tone }> = {
   SPR: {
-    name: "Spring · thủng đáy rồi kéo ngược",
-    meaning: "Giá chọc xuống dưới vùng hỗ trợ nhưng không ở dưới đó lâu, sau đó kéo ngược lên. Hiểu đơn giản: bên bán dọa thủng đáy nhưng chưa giữ được giá thấp.",
-    next: "Chờ giá quay lại kiểm tra vùng đáy. Nếu nhịp giảm nhẹ hơn và khối lượng nhỏ lại, Spring đáng tin hơn.",
+    name: "Spring",
+    meaning: "Giá chọc xuống dưới Support rồi nhanh chóng quay lại Trading Range. Hiểu đơn giản: bên bán đã thử ép xuống nhưng chưa giữ được mức giá thấp.",
+    next: "Chờ Test. Nếu spread hẹp hơn, Volume nhỏ lại và giá vẫn giữ được Support, Spring đáng tin hơn.",
     tone: "emerald",
   },
   TEST: {
-    name: "Test · quay lại kiểm tra",
-    meaning: "Giá quay lại vùng vừa giữ hoặc vừa vượt để xem bên bán còn mạnh không. Đây là bước kiểm tra, chưa phải tín hiệu mua tự động.",
-    next: "Tốt hơn khi giá không rơi sâu, biên độ hẹp lại và khối lượng giảm so với nhịp bán trước.",
+    name: "Test",
+    meaning: "Giá quay lại kiểm tra vùng vừa xảy ra event để xem Supply còn mạnh hay không. Đây là bước kiểm tra, chưa phải tín hiệu mua tự động.",
+    next: "Tốt hơn khi giá không rơi sâu, spread hẹp lại và Volume giảm so với nhịp bán trước.",
     tone: "emerald",
   },
   SOS: {
-    name: "SOS · đang thử bứt lên",
-    meaning: "Giá đang cố thoát khỏi vùng đi ngang theo hướng lên với lực mua tốt hơn. Một cây tăng mạnh chưa đủ để kết luận đã vào xu hướng tăng.",
-    next: "Cần đứng được phía trên vùng vừa vượt, quay lại kiểm tra mà không bị bán mạnh, rồi mới đi tiếp.",
+    name: "SOS — Sign of Strength",
+    meaning: "Giá đang cố thoát khỏi Trading Range theo hướng lên với Demand tốt hơn. Một Breakout mạnh chưa đủ để kết luận Phase D đã hoàn chỉnh.",
+    next: "Cần Hold phía trên vùng Breakout, sau đó Retest mà Supply co lại và có Follow-through.",
     tone: "emerald",
   },
   LPS: {
-    name: "LPS · lùi lại nhưng vẫn giữ nền",
-    meaning: "Sau nhịp tăng, giá lùi lại nhưng vẫn giữ được vùng hỗ trợ. Đây là chỗ quan sát xem bên bán còn đủ sức kéo giá xuống hay không.",
-    next: "Tốt hơn khi nhịp lùi nhẹ, khối lượng co lại và giá sau đó bật lên khỏi đỉnh gần nhất.",
+    name: "LPS — Last Point of Support",
+    meaning: "Sau SOS, giá pullback về Support nhưng chưa cho thấy Supply đủ mạnh để phá cấu trúc tăng.",
+    next: "Tốt hơn khi nhịp pullback nhẹ, Volume co lại và giá sau đó tạo Follow-through lên trên đỉnh gần nhất.",
     tone: "emerald",
   },
   UT: {
-    name: "UT / UTAD · vượt đỉnh nhưng không giữ được",
-    meaning: "Giá chọc lên trên vùng kháng cự rồi bị đẩy xuống. Hiểu đơn giản: cú vượt đỉnh bị từ chối, cho thấy bên bán đang phản ứng.",
-    next: "Chờ nhịp hồi sau đó. Nếu hồi yếu, không lấy lại được vùng cản và tiếp tục mất hỗ trợ thì tín hiệu xấu rõ hơn.",
+    name: "UT / UTAD",
+    meaning: "Giá vượt Resistance nhưng không Hold được phía trên và bị bán trở lại. Đây là dấu hiệu Supply phản ứng, chưa phải xác nhận Markdown.",
+    next: "Chờ nhịp rally sau đó. Nếu Demand yếu, không Reclaim được Resistance và tiếp tục mất Support, tín hiệu xấu rõ hơn.",
     tone: "rose",
   },
   SOW: {
-    name: "SOW · đang thử rơi khỏi nền",
-    meaning: "Giá đang rơi khỏi vùng hỗ trợ với lực bán rõ hơn. Một cú thủng hỗ trợ đơn lẻ vẫn có thể là nhiễu.",
-    next: "Nếu giá hồi lên yếu, không lấy lại được hỗ trợ cũ rồi tiếp tục giảm, cấu trúc xấu đáng tin hơn.",
+    name: "SOW — Sign of Weakness",
+    meaning: "Supply đủ mạnh để đẩy giá xuống dưới Support của Trading Range. Một Breakdown đơn lẻ vẫn có thể là nhiễu.",
+    next: "Nếu giá Retest yếu, không Reclaim được Support cũ rồi tiếp tục giảm, cấu trúc yếu đáng tin hơn.",
     tone: "rose",
   },
   LPSY: {
-    name: "LPSY · hồi yếu dưới vùng cản",
-    meaning: "Sau nhịp giảm, giá hồi lên nhưng không lấy lại được vùng kháng cự. Hiểu đơn giản: bên mua cố kéo lên nhưng lực chưa đủ.",
-    next: "Nếu nhịp hồi có khối lượng yếu rồi giá lại mất đáy gần nhất, bên bán vẫn đang chiếm ưu thế.",
+    name: "LPSY — Last Point of Supply",
+    meaning: "Sau SOW, giá rally nhưng không Reclaim được Resistance. Hiểu đơn giản: Demand phản ứng nhưng chưa đủ khỏe.",
+    next: "Nếu rally có Volume yếu rồi giá lại mất đáy gần nhất, Supply vẫn đang chiếm ưu thế.",
     tone: "rose",
   },
 }
@@ -138,22 +220,26 @@ function changeTone(value: number | null | undefined) {
   return "text-amber-200"
 }
 
+function phaseKey(phase: string | null | undefined): PhaseKey {
+  if (!phase) return "unclassified"
+  const normalized = phase.toLowerCase().replace(/[^a-z]/g, "")
+  if (normalized.includes("reaccum")) return "reaccumulation"
+  if (normalized.includes("redistrib") || normalized.includes("redist")) return "redistribution"
+  if (normalized.includes("accum")) return "accumulation"
+  if (normalized.includes("distrib") || normalized.includes("dist")) return "distribution"
+  if (normalized.includes("markup")) return "markup"
+  if (normalized.includes("markdown")) return "markdown"
+  return "unclassified"
+}
+
 function phaseBrief(phase: string | null | undefined) {
-  if (!phase) return "—"
-  const normalized = phase.toLowerCase().replaceAll("-", "")
-  if (/re\s*accum|reaccum/.test(normalized)) return "Tích lũy lại"
-  if (/re\s*distrib|redistrib/.test(normalized)) return "Phân phối lại"
-  if (normalized.includes("accum")) return "Tích lũy"
-  if (normalized.includes("distrib")) return "Phân phối"
-  if (normalized.includes("markup")) return "Tăng"
-  if (normalized.includes("markdown")) return "Giảm"
-  if (normalized.includes("unclass")) return "Chưa rõ"
-  return phase.length > 18 ? `${phase.slice(0, 17)}…` : phase
+  return PHASE_META[phaseKey(phase)].label
 }
 
 function phaseTone(phase: string | null | undefined): Tone {
-  if (/accum|markup|spring|sos|lps/i.test(phase || "")) return "emerald"
-  if (/distrib|markdown|utad|sow|lpsy/i.test(phase || "")) return "rose"
+  const key = phaseKey(phase)
+  if (key === "accumulation" || key === "reaccumulation" || key === "markup") return "emerald"
+  if (key === "distribution" || key === "redistribution" || key === "markdown") return "rose"
   return "slate"
 }
 
@@ -186,77 +272,63 @@ function latestStudyEvent(study: WyckoffChartStudy | null | undefined) {
 function plainSentence(value: string | null | undefined) {
   if (!value) return "Chưa đủ dữ liệu để kết luận."
   return value
-    .replace(/trading range/gi, "vùng đi ngang")
-    .replace(/\brange\b/gi, "vùng đi ngang")
-    .replace(/\bdemand\b/gi, "lực mua")
-    .replace(/\bsupply\b/gi, "lực bán")
-    .replace(/breakout/gi, "cú vượt vùng")
-    .replace(/retest/gi, "quay lại kiểm tra")
-    .replace(/\btest\b/gi, "kiểm tra lại")
-    .replace(/follow-through/gi, "đi tiếp rõ ràng")
-    .replace(/\bhold\b/gi, "đứng vững")
-    .replace(/reclaim/gi, "lấy lại")
-    .replace(/acceptance/gi, "đứng vững")
-    .replace(/markup/gi, "nhịp tăng")
-    .replace(/markdown/gi, "nhịp giảm")
-    .replace(/candidate/gi, "dấu hiệu ban đầu")
 }
 
 function friendlyPhaseGuide(study: WyckoffChartStudy) {
   const phase = study.analysis?.phase ?? "Unclassified"
   if (/Accumulation\/Reaccumulation Phase C/i.test(phase)) {
     return {
-      title: "Phase C · Đang thử rũ bỏ bên bán (Spring)",
-      now: "Giá đang thử chọc xuống dưới đáy vùng đi ngang rồi kéo ngược lên. Chưa thể gọi là Spring hoàn chỉnh chỉ vì có một cú rút chân.",
-      next: "Cần xem lần quay lại đáy có nhẹ hơn không. Nếu giá giữ được đáy, khối lượng giảm và sau đó bật lên, tín hiệu mới đáng tin hơn.",
-      risk: "Nếu giá nằm luôn dưới đáy cũ và lực bán tăng mạnh, ý tưởng Spring coi như sai.",
+      title: "Accumulation / Reaccumulation · Phase C · Spring candidate",
+      now: "Giá đang thử chọc xuống dưới Support rồi quay lại Trading Range. Chưa thể gọi là Spring hoàn chỉnh chỉ vì có một cú rút chân.",
+      next: "Cần nhìn Test: giá giữ Support, spread hẹp hơn và Volume giảm thì Supply có thể đang co lại.",
+      risk: "Nếu giá nằm luôn dưới Support và Supply mở rộng, Spring thesis coi như sai.",
     }
   }
   if (/Distribution\/Redistribution Phase C/i.test(phase)) {
     return {
-      title: "Phase C · Đang thử vượt đỉnh nhưng bị bán xuống (UT)",
-      now: "Giá đang chọc lên trên vùng cản nhưng chưa giữ được phía trên. Đây mới là cảnh báo bên bán xuất hiện, chưa phải xác nhận giảm.",
-      next: "Quan sát nhịp hồi kế tiếp. Nếu giá hồi yếu, không lấy lại vùng cản rồi mất hỗ trợ, cấu trúc xấu rõ hơn.",
-      risk: "Nếu giá quay lại đứng vững trên vùng cản với lực mua tốt, tín hiệu UT không còn đáng tin.",
+      title: "Distribution / Redistribution · Phase C · UT candidate",
+      now: "Giá đang thử vượt Resistance nhưng chưa Hold được phía trên. Đây là cảnh báo Supply xuất hiện, chưa phải xác nhận Markdown.",
+      next: "Quan sát rally kế tiếp. Nếu Demand yếu, không Reclaim được Resistance rồi mất Support, cấu trúc xấu rõ hơn.",
+      risk: "Nếu giá Reclaim và Hold trên Resistance với Demand tốt, UT thesis không còn đáng tin.",
     }
   }
   if (/Accumulation\/Reaccumulation Phase D/i.test(phase)) {
     return {
-      title: "Phase D · Đang thử bứt lên (SOS)",
-      now: "Giá vừa cố thoát khỏi vùng đi ngang theo hướng lên. Một cú vượt mạnh vẫn chưa đủ; quan trọng là giá có đứng được phía trên vùng vừa vượt hay không.",
-      next: "Nếu giá quay lại kiểm tra mà không bị bán mạnh, giữ được vùng vừa vượt rồi tiếp tục đi lên, cấu trúc tăng sẽ đáng tin hơn.",
-      risk: "Nếu giá rơi trở lại sâu vào vùng đi ngang, cú bứt lên này xem như chưa thành công.",
+      title: "Accumulation / Reaccumulation · Phase D · SOS candidate",
+      now: "Giá đang thử rời Trading Range theo hướng lên. Một Breakout mạnh chưa đủ; quan trọng là giá có Hold được phía trên vùng vừa vượt hay không.",
+      next: "Nếu Retest diễn ra với Supply co lại, giá vẫn giữ Support và sau đó có Follow-through, SOS đáng tin hơn.",
+      risk: "Nếu giá rơi trở lại sâu vào Trading Range và không Reclaim được vùng Breakout, SOS thesis bị suy yếu.",
     }
   }
   if (/Distribution\/Redistribution Phase D/i.test(phase)) {
     return {
-      title: "Phase D · Đang thử rơi khỏi nền (SOW)",
-      now: "Giá đang cố rời vùng đi ngang theo hướng xuống. Cần xem giá có thật sự nằm dưới hỗ trợ hay chỉ thủng rồi kéo ngược lên.",
-      next: "Nếu giá hồi lên yếu, không lấy lại hỗ trợ cũ rồi tiếp tục mất đáy, bên bán vẫn chiếm ưu thế.",
-      risk: "Nếu giá lấy lại hỗ trợ cũ và đứng vững phía trên với lực mua tốt, kịch bản giảm bị suy yếu.",
+      title: "Distribution / Redistribution · Phase D · SOW candidate",
+      now: "Giá đang thử rời Trading Range theo hướng xuống. Cần xem Breakdown có Hold dưới Support hay chỉ thủng rồi Reclaim lại.",
+      next: "Nếu Retest yếu, không Reclaim được Support cũ rồi tiếp tục mất đáy, SOW đáng tin hơn.",
+      risk: "Nếu giá Reclaim và Hold lại trên Support với Demand tốt, SOW thesis bị suy yếu.",
     }
   }
   if (/Markup|Reaccumulation/i.test(phase)) {
     return {
-      title: "Đang trong nhịp tăng / tích lũy lại",
-      now: "Xu hướng chính vẫn nghiêng lên, nhưng giá có thể đang nghỉ và gom lại trước khi đi tiếp.",
-      next: "Quan sát các nhịp lùi: tốt nhất là giá giữ hỗ trợ, giảm nhẹ với khối lượng thấp rồi bật lại.",
-      risk: "Nếu mất hỗ trợ quan trọng kèm lực bán tăng mạnh, nhịp tăng hiện tại cần được đánh giá lại.",
+      title: "Markup / Reaccumulation",
+      now: "Xu hướng chính vẫn nghiêng lên, nhưng giá có thể đang nghỉ trong Reaccumulation trước khi quyết định nhịp tiếp theo.",
+      next: "Quan sát pullback về Support: tốt hơn khi spread thu hẹp, Volume giảm và sau đó có LPS / SOS.",
+      risk: "Nếu mất Support quan trọng kèm Supply mở rộng, Markup thesis cần được đánh giá lại.",
     }
   }
   if (/Markdown|Redistribution/i.test(phase)) {
     return {
-      title: "Đang trong nhịp giảm / phân phối lại",
-      now: "Xu hướng chính vẫn yếu. Các nhịp hồi hiện tại chưa đủ cho thấy bên mua đã lấy lại quyền chủ động.",
-      next: "Nếu giá hồi yếu rồi lại mất hỗ trợ, xu hướng giảm còn tiếp diễn. Muốn cải thiện cần lấy lại vùng cản quan trọng.",
-      risk: "Nếu giá vượt và đứng vững trên vùng cản với lực mua tăng, cấu trúc giảm hiện tại không còn mạnh như trước.",
+      title: "Markdown / Redistribution",
+      now: "Xu hướng chính vẫn yếu. Các rally hiện tại chưa đủ cho thấy Demand đã lấy lại quyền chủ động.",
+      next: "Nếu rally yếu rồi lại mất Support, Markdown còn hiệu lực. Muốn cải thiện cần Reclaim và Hold trên Resistance quan trọng.",
+      risk: "Nếu giá Reclaim Resistance với Demand mở rộng, Markdown thesis bị suy yếu.",
     }
   }
   return {
-    title: "Đang đi ngang · Chưa đủ dữ liệu để gắn pha",
-    now: "Giá đang nằm trong vùng chưa có bên mua hay bên bán thắng rõ. Gắn nhãn Phase lúc này dễ gây hiểu lầm.",
-    next: "Chờ một hành vi rõ hơn ở mép vùng giá: thủng đáy rồi kéo lại, vượt đỉnh bị từ chối, hoặc bứt ra và đứng vững.",
-    risk: "Không dùng một nhãn đơn lẻ để ra quyết định. Cần nhìn thêm vị trí giá, khối lượng và phản ứng sau đó.",
+    title: "Unclassified",
+    now: "Price × Volume hiện chưa cho một Wyckoff Phase đủ rõ. Giữ Unclassified tốt hơn là ép nhãn khi evidence còn mâu thuẫn.",
+    next: "Chờ hành vi rõ hơn ở biên Trading Range: Spring/Test, UT/UTAD, SOS hoặc SOW.",
+    risk: "Không dùng một nhãn đơn lẻ để ra quyết định. Cần nhìn vị trí giá, Volume và phản ứng tiếp theo.",
   }
 }
 
@@ -270,27 +342,26 @@ function rangePosition(study: WyckoffChartStudy) {
   const close = study.bars.at(-1)?.close
   const support = numericLevels(study.analysis?.support).sort((a, b) => a - b)[0]
   const resistance = numericLevels(study.analysis?.resistance).sort((a, b) => b - a)[0]
-  if (close == null || support == null || resistance == null || resistance <= support) return "Chưa rõ vị trí trong vùng"
-  if (close > resistance) return "Đang ở trên vùng cản"
-  if (close < support) return "Đang ở dưới vùng đỡ"
+  if (close == null || support == null || resistance == null || resistance <= support) return "Chưa rõ vị trí trong Trading Range"
+  if (close > resistance) return "Đang ở trên Resistance"
+  if (close < support) return "Đang ở dưới Support"
   const ratio = (close - support) / (resistance - support)
-  if (ratio >= 0.66) return "Đang ở nửa trên vùng đi ngang"
-  if (ratio <= 0.34) return "Đang ở nửa dưới vùng đi ngang"
-  return "Đang ở giữa vùng đi ngang"
+  if (ratio >= 0.66) return "Đang ở nửa trên Trading Range"
+  if (ratio <= 0.34) return "Đang ở nửa dưới Trading Range"
+  return "Đang ở giữa Trading Range"
 }
 
 function relativeVolumeText(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return "Chưa có dữ liệu khối lượng tương đối."
-  if (value >= 1.5) return "Khối lượng đang cao hơn khá rõ so với mức bình thường gần đây."
-  if (value <= 0.75) return "Khối lượng đang thấp hơn bình thường; lực theo sau chưa mạnh."
-  return "Khối lượng đang quanh mức bình thường gần đây."
+  if (value == null || !Number.isFinite(value)) return "Chưa có dữ liệu Relative Volume."
+  if (value >= 1.5) return "Volume đang cao hơn khá rõ so với mức trung bình 20 bars trước."
+  if (value <= 0.75) return "Volume đang thấp hơn bình thường; cần đọc cùng Price và vị trí trong cấu trúc."
+  return "Volume đang quanh mức trung bình 20 bars trước."
 }
 
 function friendlyReading(study: WyckoffChartStudy) {
   const event = latestStudyEvent(study)
   if (event) return EVENT_GUIDE[event].meaning
-  const guide = friendlyPhaseGuide(study)
-  return guide.now
+  return friendlyPhaseGuide(study).now
 }
 
 function phaseFor(stock: WatchlistStock, timeframe: "1H" | "1D" | "1W") {
@@ -324,6 +395,38 @@ function SectionHeader({ icon, title, note }: { icon: ReactNode; title: string; 
         {note ? <p className={cn(TYPE.meta, "mt-0.5 text-slate-500")}>{note}</p> : null}
       </div>
     </div>
+  )
+}
+
+function PhaseChip({ phase, selected = false }: { phase: string; selected?: boolean }) {
+  const meta = PHASE_META[phaseKey(phase)]
+  const Icon = meta.icon
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            className={cn(
+              "group/phase inline-flex min-h-8 w-full min-w-0 items-center justify-center gap-1 rounded-lg border px-1.5 py-1 text-center text-xs font-bold leading-tight",
+              "transition-[transform,background-color,border-color,color,box-shadow] duration-200 ease-out hover:-translate-y-px",
+              meta.chip,
+              selected && "shadow-[0_0_0_1px_rgba(34,211,238,0.18),0_8px_24px_-16px_rgba(34,211,238,0.9)]",
+            )}
+          >
+            <Icon className={cn("size-3.5 shrink-0 transition-transform duration-200 ease-out group-hover/phase:rotate-3", meta.iconClass)} />
+            <span className="min-w-0 break-words">{meta.label}</span>
+          </span>
+        }
+      />
+      <TooltipContent side="left" sideOffset={10} className="max-w-[320px] border-white/[0.1] bg-[#0b1119] p-3 text-left font-ticker shadow-2xl">
+        <div className="flex items-center gap-2">
+          <Icon className={cn("size-4", meta.iconClass)} />
+          <strong className="text-sm text-white">{meta.label}</strong>
+        </div>
+        <p className="mt-1 text-xs font-bold text-slate-300">{meta.shortVi}</p>
+        <p className="mt-1.5 text-xs font-medium leading-5 text-slate-400">{meta.explanationVi}</p>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -365,26 +468,26 @@ function DecisionZones({ study }: { study: WyckoffChartStudy }) {
   return (
     <Card className="gap-0 rounded-2xl border border-amber-400/15 bg-[#0a1017] py-0 ring-0">
       <CardHeader className="border-b border-white/[0.06] px-4 py-4 sm:px-5">
-        <SectionHeader icon={<Target className="size-4" />} title="Vùng giá then chốt" note="Nơi cần nhìn phản ứng giá, không phải điểm mua bán tự động" />
+        <SectionHeader icon={<Target className="size-4" />} title="Key Wyckoff levels" note="Support / Resistance và điều kiện xác nhận cấu trúc" />
       </CardHeader>
       <CardContent className="space-y-3 p-4 sm:p-5">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-emerald-400/18 bg-emerald-400/[0.045] p-4">
-            <div className={cn(TYPE.meta, "flex items-center gap-2 uppercase tracking-[0.08em] text-emerald-300")}><TrendingUp className="size-4" />Vùng đỡ giá</div>
+            <div className={cn(TYPE.meta, "flex items-center gap-2 uppercase tracking-[0.08em] text-emerald-300")}><TrendingUp className="size-4" />Support</div>
             <div className={cn(TYPE.value, "mt-2 break-words tabular-nums text-white")}>{analysis?.support || "—"}</div>
-            <p className={cn(TYPE.meta, "mt-1 text-slate-500")}>Giá về đây mà bán yếu dần thì vùng đỡ có ý nghĩa hơn.</p>
+            <p className={cn(TYPE.meta, "mt-1 text-slate-500")}>Giá quay về đây mà Supply co lại thì Support có ý nghĩa hơn.</p>
           </div>
           <div className="rounded-xl border border-rose-400/18 bg-rose-400/[0.045] p-4">
-            <div className={cn(TYPE.meta, "flex items-center gap-2 uppercase tracking-[0.08em] text-rose-300")}><TrendingDown className="size-4" />Vùng cản giá</div>
+            <div className={cn(TYPE.meta, "flex items-center gap-2 uppercase tracking-[0.08em] text-rose-300")}><TrendingDown className="size-4" />Resistance</div>
             <div className={cn(TYPE.value, "mt-2 break-words tabular-nums text-white")}>{analysis?.resistance || "—"}</div>
-            <p className={cn(TYPE.meta, "mt-1 text-slate-500")}>Vượt vùng cản chưa đủ; cần đứng được phía trên rồi mới tính là bứt phá khỏe.</p>
+            <p className={cn(TYPE.meta, "mt-1 text-slate-500")}>Breakout chưa đủ; cần Hold phía trên rồi Retest thành công.</p>
           </div>
         </div>
         <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
-          <div className={cn(TYPE.meta, "text-amber-300")}>Hiểu đơn giản: Phá vùng → Đứng được → Quay lại thử → Đi tiếp</div>
+          <div className={cn(TYPE.meta, "text-amber-300")}>Breakout → Hold → Retest → Follow-through</div>
           <div className="mt-3 grid gap-3 lg:grid-cols-2">
-            <p className={cn(TYPE.body, "text-slate-300")}><strong className="text-emerald-300">Đáng tin hơn khi:</strong> {plainSentence(analysis?.confirmation)}</p>
-            <p className={cn(TYPE.body, "text-slate-400")}><strong className="text-rose-300">Coi như sai khi:</strong> {plainSentence(analysis?.invalidation)}</p>
+            <p className={cn(TYPE.body, "text-slate-300")}><strong className="text-emerald-300">Confirmation:</strong> {plainSentence(analysis?.confirmation)}</p>
+            <p className={cn(TYPE.body, "text-slate-400")}><strong className="text-rose-300">Invalidation:</strong> {plainSentence(analysis?.invalidation)}</p>
           </div>
         </div>
       </CardContent>
@@ -398,7 +501,7 @@ function WyckoffEvents({ study }: { study: WyckoffChartStudy }) {
   return (
     <Card className="gap-0 rounded-2xl border border-cyan-400/15 bg-[#0a1017] py-0 ring-0">
       <CardHeader className="border-b border-white/[0.06] px-4 py-4 sm:px-5">
-        <SectionHeader icon={<Zap className="size-4" />} title="Event Wyckoff — hiểu nhanh" note="Giữ tên chuẩn Wyckoff, nhưng giải thích bằng tiếng Việt đời thường" />
+        <SectionHeader icon={<Zap className="size-4" />} title="Wyckoff Events" note="Giữ terminology chuẩn; phần diễn giải viết tiếng Việt dễ hiểu" />
       </CardHeader>
       <CardContent className="space-y-3 p-4 sm:p-5">
         {events.length ? events.map((event) => {
@@ -407,7 +510,7 @@ function WyckoffEvents({ study }: { study: WyckoffChartStudy }) {
           return (
             <div key={event} className={cn("rounded-xl border p-4", tone.border, tone.soft)}>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className={cn(TYPE.value, tone.text)}>{event} · {guide.name}</div>
+                <div className={cn(TYPE.value, tone.text)}>{guide.name}</div>
                 <Badge variant="outline" className={cn("h-7 px-2.5 text-xs font-bold", tone.border, tone.soft, tone.text)}>{event}</Badge>
               </div>
               <p className={cn(TYPE.body, "mt-2 text-slate-300")}>{guide.meaning}</p>
@@ -416,13 +519,13 @@ function WyckoffEvents({ study }: { study: WyckoffChartStudy }) {
           )
         }) : (
           <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
-            <p className={cn(TYPE.body, "text-slate-300")}>Chưa có event Wyckoff đủ rõ để gắn nhãn.</p>
-            <p className={cn(TYPE.meta, "mt-1 text-slate-500")}>Điều này không có nghĩa là “không có tín hiệu”; chỉ là dữ liệu hiện tại chưa đủ chuẩn để gọi là Spring, SOS, UT, SOW, Test, LPS hay LPSY.</p>
+            <p className={cn(TYPE.body, "text-slate-300")}>Chưa có Wyckoff Event đủ rõ để gắn nhãn.</p>
+            <p className={cn(TYPE.meta, "mt-1 text-slate-500")}>Điều này không có nghĩa là “không có tín hiệu”; evidence hiện tại chưa đủ chuẩn để gọi Spring, SOS, UT/UTAD, SOW, Test, LPS hay LPSY.</p>
           </div>
         )}
         <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className={cn(TYPE.meta, "uppercase tracking-[0.08em] text-slate-500")}>Đọc nhanh giá × khối lượng</div>
+            <div className={cn(TYPE.meta, "uppercase tracking-[0.08em] text-slate-500")}>Price × Volume reading</div>
             <Badge variant="outline" className="border-white/[0.08] bg-white/[0.025] text-xs font-semibold text-slate-300">RelVol {relVolume == null ? "—" : `${formatNumber(relVolume, 2)}×`}</Badge>
           </div>
           <p className={cn(TYPE.body, "mt-2 text-slate-300")}>{friendlyReading(study)}</p>
@@ -437,7 +540,7 @@ function MultiTimeframeStructure({ studies }: { studies: WyckoffChartStudy[] }) 
   return (
     <Card className="gap-0 rounded-2xl border border-white/[0.08] bg-[#0a1017] py-0 ring-0">
       <CardHeader className="border-b border-white/[0.06] px-4 py-4 sm:px-5">
-        <SectionHeader icon={<Layers3 className="size-4" />} title="Cấu trúc Wyckoff theo nhiều khung" note="Mỗi ô là một khung riêng; khi mâu thuẫn, ưu tiên 1D và 1W hơn 1H" />
+        <SectionHeader icon={<Layers3 className="size-4" />} title="Multi-timeframe Wyckoff structure" note="Mỗi timeframe là một cấu trúc riêng; khi mâu thuẫn, ưu tiên 1D và 1W hơn 1H" />
       </CardHeader>
       <CardContent className="grid gap-2 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-5">
         {studies.map((study) => {
@@ -464,9 +567,12 @@ function MultiTimeframeStructure({ studies }: { studies: WyckoffChartStudy[] }) 
   )
 }
 
-function WatchlistPhaseCell({ phase }: { phase: string }) {
-  const tone = TONE[phaseTone(phase)]
-  return <div className={cn("min-w-0 text-center text-xs font-bold leading-tight", tone.text)} title={phase || "Chưa có snapshot"}>{phaseBrief(phase)}</div>
+function WatchlistPhaseCell({ phase, selected = false }: { phase: string; selected?: boolean }) {
+  return (
+    <div className="min-w-0 border-l border-white/[0.065] px-1.5 py-1">
+      <PhaseChip phase={phase} selected={selected} />
+    </div>
+  )
 }
 
 function WatchlistRow({
@@ -490,20 +596,57 @@ function WatchlistRow({
       href={href}
       onClick={(event) => onSelectTicker(event, stock.ticker)}
       className={cn(
-        "grid min-h-16 items-center gap-1 border-b border-white/[0.04] px-3 py-2.5 [contain-intrinsic-size:64px] [content-visibility:auto]",
+        "group grid min-h-[72px] items-stretch border-b border-white/[0.04] px-0 [contain-intrinsic-size:72px] [content-visibility:auto]",
+        "transition-[background-color,border-color,transform] duration-200 ease-out active:scale-[0.995]",
         WATCHLIST_GRID_CLASS,
-        isActive ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.07]" : isPending ? "border-l-2 border-l-cyan-400/50 bg-cyan-400/[0.035]" : "hover:bg-white/[0.025]",
+        isActive
+          ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.075] shadow-[inset_10px_0_30px_-26px_rgba(34,211,238,0.9)]"
+          : isPending
+            ? "border-l-2 border-l-cyan-400/50 bg-cyan-400/[0.035]"
+            : "hover:bg-white/[0.028]",
       )}
+      aria-current={isActive ? "page" : undefined}
+      aria-busy={isPending || undefined}
     >
-      <div className="text-[15px] font-extrabold tracking-tight text-white">{stock.ticker}</div>
-      <WatchlistPhaseCell phase={phaseFor(stock, "1H")} />
-      <WatchlistPhaseCell phase={phaseFor(stock, "1D")} />
-      <WatchlistPhaseCell phase={phaseFor(stock, "1W")} />
+      <div className={cn("flex items-center px-3 text-[15px] font-extrabold tracking-tight transition-colors duration-200", isActive || isPending ? "text-cyan-200" : "text-white")}>{stock.ticker}</div>
+      <WatchlistPhaseCell phase={phaseFor(stock, "1H")} selected={isActive} />
+      <WatchlistPhaseCell phase={phaseFor(stock, "1D")} selected={isActive} />
+      <WatchlistPhaseCell phase={phaseFor(stock, "1W")} selected={isActive} />
     </a>
   )
 }
 
 const MemoWatchlistRow = memo(WatchlistRow)
+
+function WatchlistExplainPanel({ stock }: { stock: WatchlistStock | undefined }) {
+  if (!stock) return null
+  const cells = (["1H", "1D", "1W"] as const).map((timeframe) => {
+    const phase = phaseFor(stock, timeframe)
+    const meta = PHASE_META[phaseKey(phase)]
+    const Icon = meta.icon
+    return { timeframe, meta, Icon }
+  })
+  return (
+    <div key={stock.ticker} className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.018] p-3 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+      <div className="flex items-center justify-between gap-2">
+        <div className={cn(TYPE.meta, "text-slate-300")}><strong className="text-white">{stock.ticker}</strong> · đọc nhanh Phase</div>
+        <span className="text-xs font-semibold text-slate-600">hover Phase để xem chi tiết</span>
+      </div>
+      <div className="mt-2 grid grid-cols-3 divide-x divide-white/[0.06] rounded-lg border border-white/[0.055] bg-[#060a10]">
+        {cells.map(({ timeframe, meta, Icon }) => (
+          <div key={timeframe} className="min-w-0 px-2 py-2.5">
+            <div className="flex items-center gap-1.5">
+              <Icon className={cn("size-3.5 shrink-0", meta.iconClass)} />
+              <span className="text-xs font-extrabold text-white">{timeframe}</span>
+            </div>
+            <div className={cn(TYPE.meta, "mt-1.5 break-words text-slate-300")}>{meta.label}</div>
+            <p className="mt-1 text-xs font-medium leading-4 text-slate-600">{meta.shortVi}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function WyckoffInfographicDashboard(props: {
   ticker: string
@@ -547,12 +690,30 @@ export function WyckoffInfographicDashboard(props: {
 
   const filteredStocks = useMemo(() => {
     let list = props.stocks
-    if (activeTab === "accumulation") list = list.filter((stock) => /Accum|Reaccum|Markup|Spring|SOS|LPS/i.test(phaseFor(stock, "1D")))
-    else if (activeTab === "distribution") list = list.filter((stock) => /Distrib|Redistrib|Markdown|UT|SOW|LPSY/i.test(phaseFor(stock, "1D")))
+    if (activeTab === "accumulation") {
+      list = list.filter((stock) => {
+        const key = phaseKey(phaseFor(stock, "1D"))
+        return key === "accumulation" || key === "reaccumulation" || key === "markup"
+      })
+    } else if (activeTab === "distribution") {
+      list = list.filter((stock) => {
+        const key = phaseKey(phaseFor(stock, "1D"))
+        return key === "distribution" || key === "redistribution" || key === "markdown"
+      })
+    }
 
     const normalized = deferredQuery.trim().toUpperCase()
     if (!normalized) return list
-    return list.filter((stock) => `${stock.ticker} ${phaseFor(stock, "1H")} ${phaseFor(stock, "1D")} ${phaseFor(stock, "1W")} ${stock.sector}`.toUpperCase().includes(normalized))
+    return list.filter((stock) => {
+      const phaseText = (["1H", "1D", "1W"] as const)
+        .map((timeframe) => {
+          const phase = phaseFor(stock, timeframe)
+          const meta = PHASE_META[phaseKey(phase)]
+          return `${phase} ${meta.label} ${meta.shortVi}`
+        })
+        .join(" ")
+      return `${stock.ticker} ${phaseText} ${stock.sector}`.toUpperCase().includes(normalized)
+    })
   }, [activeTab, deferredQuery, props.stocks])
 
   const groupedStocks = useMemo(() => BOARD_SECTOR_GROUPS
@@ -647,7 +808,7 @@ export function WyckoffInfographicDashboard(props: {
     <div className="min-h-screen bg-[#05080d] font-ticker text-slate-100">
       <TopNav />
       <main className="mx-auto max-w-[2000px] px-3 py-4 sm:px-4 lg:px-5 xl:px-6">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_390px]">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_430px]">
           <div className="min-w-0 space-y-4">
             <Card className="gap-0 rounded-2xl border border-white/[0.08] bg-[#0a1017] py-0 ring-0">
               <CardContent className="p-4 sm:p-5">
@@ -666,7 +827,7 @@ export function WyckoffInfographicDashboard(props: {
                         <PriceFlow animate={priceMotion} value={change} digits={2} suffix="%" showSign className={cn("text-sm font-bold tabular-nums", changeTone(change))} />
                       </div>
                     </div>
-                    <a href={`/insights/ai-council?ticker=${encodeURIComponent(activeTicker)}`} className="rounded-xl border border-violet-400/18 bg-violet-400/[0.045] px-3 py-2 text-xs font-bold text-violet-200 hover:border-violet-300/35 hover:text-white">AI Council →</a>
+                    <a href={`/insights/ai-council?ticker=${encodeURIComponent(activeTicker)}`} className="rounded-xl border border-violet-400/18 bg-violet-400/[0.045] px-3 py-2 text-xs font-bold text-violet-200 transition-colors duration-200 hover:border-violet-300/35 hover:text-white">AI Council →</a>
                   </div>
                 </div>
               </CardContent>
@@ -677,9 +838,9 @@ export function WyckoffInfographicDashboard(props: {
                 <span className={cn(TYPE.meta, "uppercase tracking-[0.08em] text-cyan-300")}>Wyckoff snapshot</span>
                 <span className="text-slate-700">•</span>
                 <strong className={cn(TYPE.body, "text-white")}>{currentGuide.title}</strong>
-                {latestEvent ? <><span className="text-slate-700">•</span><Badge variant="outline" className={cn("h-7 px-2.5 text-xs font-bold", TONE[EVENT_GUIDE[latestEvent].tone].border, TONE[EVENT_GUIDE[latestEvent].tone].soft, TONE[EVENT_GUIDE[latestEvent].tone].text)}>{latestEvent} · {EVENT_GUIDE[latestEvent].name.split(" · ")[1]}</Badge></> : null}
-                <span className={cn(TYPE.meta, "text-slate-500")}>Đỡ {current.analysis?.support || "—"}</span>
-                <span className={cn(TYPE.meta, "text-slate-500")}>Cản {current.analysis?.resistance || "—"}</span>
+                {latestEvent ? <><span className="text-slate-700">•</span><Badge variant="outline" className={cn("h-7 px-2.5 text-xs font-bold", TONE[EVENT_GUIDE[latestEvent].tone].border, TONE[EVENT_GUIDE[latestEvent].tone].soft, TONE[EVENT_GUIDE[latestEvent].tone].text)}>{EVENT_GUIDE[latestEvent].name}</Badge></> : null}
+                <span className={cn(TYPE.meta, "text-slate-500")}>Support {current.analysis?.support || "—"}</span>
+                <span className={cn(TYPE.meta, "text-slate-500")}>Resistance {current.analysis?.resistance || "—"}</span>
                 <span className={cn(TYPE.meta, "text-slate-500")}>RelVol {current.analysis?.technical.relVolume == null ? "—" : `${formatNumber(current.analysis.technical.relVolume, 2)}×`}</span>
               </div>
             ) : null}
@@ -688,7 +849,7 @@ export function WyckoffInfographicDashboard(props: {
               <Card className="gap-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080c12] py-0 ring-0">
                 <CardHeader data-wyckoff-chart-toolbar className="border-b border-white/[0.06] px-4 py-4 sm:px-5">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <SectionHeader icon={<BarChart3 className="size-4" />} title="Giá × Khối lượng × Event Wyckoff" note="Chart là dữ liệu chính; không vẽ probability hay đường giá tương lai" />
+                    <SectionHeader icon={<BarChart3 className="size-4" />} title="Price × Volume × Wyckoff Events" note="Chart là dữ liệu chính; không vẽ probability hay đường giá tương lai" />
                     <AnimatedTabs tabs={timeframeTabs} value={activeTimeframe} onValueChange={chooseTimeframe} ariaLabel="Khung thời gian biểu đồ" variant="segment" tabClassName="min-w-12 text-xs font-extrabold" />
                   </div>
                 </CardHeader>
@@ -708,8 +869,8 @@ export function WyckoffInfographicDashboard(props: {
             <MultiTimeframeStructure studies={activeStudies} />
 
             <div className={cn(TYPE.meta, "flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-slate-500")}>
-              <span className="inline-flex items-center gap-2"><ShieldCheck className="size-4 text-cyan-400" />Trang này chỉ đọc cấu trúc Wyckoff, event và hành vi giá - khối lượng.</span>
-              <a href={`/insights/ai-council?ticker=${encodeURIComponent(activeTicker)}`} className="font-bold text-violet-300 hover:text-violet-200">Quyết định / xác suất → AI Council</a>
+              <span className="inline-flex items-center gap-2"><ShieldCheck className="size-4 text-cyan-400" />Trang này chỉ đọc Wyckoff structure, Events và Price × Volume behavior.</span>
+              <a href={`/insights/ai-council?ticker=${encodeURIComponent(activeTicker)}`} className="font-bold text-violet-300 transition-colors duration-200 hover:text-violet-200">Quyết định / xác suất → AI Council</a>
             </div>
           </div>
 
@@ -718,7 +879,7 @@ export function WyckoffInfographicDashboard(props: {
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <div className="grid size-9 place-items-center rounded-xl border border-cyan-400/15 bg-cyan-400/[0.06] text-cyan-300"><Radar className="size-4" /></div>
-                  <div><CardTitle className={cn(TYPE.section, "text-white")}>Wyckoff Watchlist</CardTitle><div className={cn(TYPE.meta, "text-slate-500")}>Phase riêng cho 1H · 1D · 1W</div></div>
+                  <div><CardTitle className={cn(TYPE.section, "text-white")}>Wyckoff Watchlist</CardTitle><div className={cn(TYPE.meta, "text-slate-500")}>1H · 1D · 1W Phase overview</div></div>
                 </div>
                 <Badge variant="outline" className="h-7 border-cyan-400/18 bg-cyan-400/[0.05] px-2.5 text-xs font-bold tabular-nums text-cyan-300">{filteredStocks.length}</Badge>
               </div>
@@ -727,18 +888,23 @@ export function WyckoffInfographicDashboard(props: {
 
               <div className="relative mt-4">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-600" />
-                <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã hoặc phase..." className="h-10 rounded-xl border-white/[0.08] bg-[#05080e] pl-9 pr-9 text-sm font-semibold text-white placeholder:text-slate-600 focus-visible:border-cyan-400/40" />
-                {query ? <Button type="button" variant="ghost" size="icon-sm" onClick={() => setQuery("")} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white" aria-label="Xóa tìm kiếm"><X className="size-3.5" /></Button> : null}
+                <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã hoặc Phase..." className="h-10 rounded-xl border-white/[0.08] bg-[#05080e] pl-9 pr-9 text-sm font-semibold text-white placeholder:text-slate-600 focus-visible:border-cyan-400/40" />
+                {query ? <Button type="button" variant="ghost" size="icon-sm" onClick={() => setQuery("")} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 transition-colors duration-200 hover:text-white" aria-label="Xóa tìm kiếm"><X className="size-3.5" /></Button> : null}
               </div>
 
-              <div className="mt-3 grid grid-cols-3 gap-1" role="tablist" aria-label="Lọc watchlist Wyckoff theo phase 1D">
-                {WATCHLIST_TABS.map((tab) => <Button key={tab.id} type="button" variant="ghost" size="sm" role="tab" aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id)} className={cn("h-8 rounded-lg px-1 text-xs font-bold", activeTab === tab.id ? "bg-cyan-400/[0.1] text-cyan-300" : "text-slate-500")}>{tab.label}</Button>)}
+              <div className="mt-3 grid grid-cols-3 gap-1" role="tablist" aria-label="Lọc watchlist Wyckoff theo Phase 1D">
+                {WATCHLIST_TABS.map((tab) => <Button key={tab.id} type="button" variant="ghost" size="sm" role="tab" aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id)} className={cn("h-9 rounded-lg px-1 text-xs font-bold transition-[background-color,color,transform,box-shadow] duration-200 ease-out active:scale-[0.98]", activeTab === tab.id ? "bg-cyan-400/[0.1] text-cyan-300 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.10)]" : "text-slate-500 hover:bg-white/[0.035] hover:text-slate-300")}>{tab.label}</Button>)}
               </div>
-              <p className={cn(TYPE.meta, "mt-2 text-slate-600")}>Bộ lọc Tích lũy / Phân phối dùng Phase 1D để tránh trộn tín hiệu giữa các khung.</p>
+              <p className={cn(TYPE.meta, "mt-2 text-slate-600")}>Filter dùng Phase 1D; 1H và 1W giúp nhìn alignment / conflict giữa các timeframe.</p>
+
+              <WatchlistExplainPanel stock={selectedStock} />
             </div>
 
-            <div className={cn("grid items-center gap-1 border-b border-white/[0.05] bg-[#070b10] px-3 py-2.5 text-xs font-bold uppercase tracking-[0.06em] text-slate-600", WATCHLIST_GRID_CLASS)}>
-              <div>Mã</div><div className="text-center">1H</div><div className="text-center text-cyan-400">1D</div><div className="text-center">1W</div>
+            <div className={cn("grid items-center border-b border-white/[0.05] bg-[#070b10] px-0 py-0 text-xs font-bold uppercase tracking-[0.06em] text-slate-600", WATCHLIST_GRID_CLASS)}>
+              <div className="px-3 py-3">Mã</div>
+              <div className="border-l border-white/[0.065] px-2 py-3 text-center">1H</div>
+              <div className="border-l border-white/[0.065] px-2 py-3 text-center text-cyan-400">1D</div>
+              <div className="border-l border-white/[0.065] px-2 py-3 text-center">1W</div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
