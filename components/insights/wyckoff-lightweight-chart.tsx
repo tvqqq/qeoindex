@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 
+import { AiLoader } from "@/components/smoothui/ai-loader"
 import { loadLightweightCharts, type LightweightChartApi } from "@/lib/lightweight-charts-runtime"
 import type { WyckoffChartStudy } from "@/lib/wyckoff-chart-model"
 
@@ -21,22 +22,36 @@ function numericLevels(value: string) {
 export function WyckoffLightweightChart({ ticker, study }: { ticker: string; study: WyckoffChartStudy }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<LightweightChartApi | null>(null)
-  const [runtimeError, setRuntimeError] = useState("")
+  const [readyKey, setReadyKey] = useState("")
+  const [runtimeError, setRuntimeError] = useState<{ key: string; message: string } | null>(null)
+  const lastBarTime = study.bars.at(-1)?.time ?? 0
+  const loadKey = `${ticker}:${study.timeframe}:${lastBarTime}:${study.bars.length}`
+  const activeError = runtimeError?.key === loadKey ? runtimeError.message : ""
+  const isLoading = study.bars.length > 0 && readyKey !== loadKey && !activeError
 
   useEffect(() => {
     const container = containerRef.current
     if (!container || !study.bars.length) return
+
     let disposed = false
+    let chart: LightweightChartApi | null = null
+    let resizeObserver: ResizeObserver | null = null
+    let resizeFrame = 0
 
     void (async () => {
       try {
         const lwc = await loadLightweightCharts()
         if (disposed || !containerRef.current) return
+
         const latest = study.bars.at(-1)!
         const format = pricePrecision(latest.close)
         const intraday = study.timeframe === "1H" || study.timeframe === "4H"
-        const chart = lwc.createChart(containerRef.current, {
-          autoSize: true,
+        const initialWidth = Math.max(1, Math.floor(container.clientWidth))
+        const initialHeight = Math.max(1, Math.floor(container.clientHeight))
+
+        chart = lwc.createChart(container, {
+          width: initialWidth,
+          height: initialHeight,
           layout: {
             attributionLogo: true,
             background: { type: lwc.ColorType.Solid, color: "#070b11" },
@@ -72,6 +87,7 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
           handleScroll: true,
           handleScale: true,
         })
+
         const candles = chart.addSeries(lwc.CandlestickSeries, {
           upColor: "#22c98a",
           downColor: "#ff4757",
@@ -134,7 +150,7 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
 
         if (lwc.LineSeries) {
           study.scenarios.forEach((scenario) => {
-            const series = chart.addSeries(lwc.LineSeries, {
+            const series = chart!.addSeries(lwc.LineSeries, {
               color: scenario.color,
               lineWidth: scenario.key === "base" ? 2 : 3,
               lineStyle: scenario.key === "base" ? 2 : 0,
@@ -155,30 +171,54 @@ export function WyckoffLightweightChart({ ticker, study }: { ticker: string; stu
           from: Math.max(-0.5, last - visible + 1),
           to: last + 8,
         })
+
+        if (typeof ResizeObserver !== "undefined") {
+          resizeObserver = new ResizeObserver((entries) => {
+            const entry = entries[0]
+            if (!entry || disposed || !chart) return
+            const width = Math.max(1, Math.floor(entry.contentRect.width))
+            const height = Math.max(1, Math.floor(entry.contentRect.height))
+            cancelAnimationFrame(resizeFrame)
+            resizeFrame = requestAnimationFrame(() => {
+              if (!disposed && chart) chart.applyOptions({ width, height })
+            })
+          })
+          resizeObserver.observe(container)
+        }
+
         chartRef.current = chart
-        setRuntimeError("")
+        setReadyKey(loadKey)
       } catch (error) {
-        if (!disposed) setRuntimeError(error instanceof Error ? error.message : "Không thể khởi tạo biểu đồ")
+        if (!disposed) {
+          setRuntimeError({ key: loadKey, message: error instanceof Error ? error.message : "Không thể khởi tạo biểu đồ" })
+        }
       }
     })()
 
     return () => {
       disposed = true
-      chartRef.current?.remove()
-      chartRef.current = null
+      resizeObserver?.disconnect()
+      cancelAnimationFrame(resizeFrame)
+      if (chartRef.current === chart) chartRef.current = null
+      chart?.remove()
     }
-  }, [study, ticker])
+  }, [loadKey, study, ticker])
 
   if (!study.bars.length) {
-    return <div className="grid h-full min-h-[520px] place-items-center bg-[#070b11] text-sm text-slate-500">Không có OHLCV hoàn tất cho {ticker} · {study.timeframe}.</div>
+    return <div className="grid h-[520px] place-items-center bg-[#070b11] text-sm text-slate-500 xl:h-[660px]">Không có OHLCV hoàn tất cho {ticker} · {study.timeframe}.</div>
   }
 
   return (
-    <div className="relative h-full min-h-[520px] w-full bg-[#070b11] xl:min-h-[660px]">
+    <div data-wyckoff-chart-canvas className="relative h-[520px] w-full bg-[#070b11] [contain:layout_paint] xl:h-[660px]">
       <div ref={containerRef} className="absolute inset-0" aria-label={`Biểu đồ Wyckoff ${ticker} ${study.timeframe}`} />
-      {runtimeError ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-[#070b11]/95 p-6 text-center">
-          <div className="max-w-sm rounded-xl border border-rose-500/25 bg-rose-500/5 px-4 py-3 text-xs leading-relaxed text-rose-300">{runtimeError}</div>
+      {isLoading ? (
+        <div className="pointer-events-none absolute inset-0 z-[5] grid place-items-center bg-[#070b11]">
+          <AiLoader label={`Đang dựng biểu đồ ${ticker} · ${study.timeframe}`} />
+        </div>
+      ) : null}
+      {activeError ? (
+        <div className="absolute inset-0 z-10 grid place-items-center bg-[#070b11] p-6 text-center">
+          <div className="max-w-sm rounded-xl border border-rose-500/25 bg-rose-500/5 px-4 py-3 text-xs leading-relaxed text-rose-300">{activeError}</div>
         </div>
       ) : null}
     </div>

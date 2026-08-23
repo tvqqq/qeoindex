@@ -29,6 +29,7 @@ export interface LightweightPaneApi {
 
 export interface LightweightChartApi {
   addSeries(definition: unknown, options?: Record<string, unknown>, paneIndex?: number): LightweightSeriesApi
+  applyOptions(options: Record<string, unknown>): void
   timeScale(): LightweightTimeScaleApi
   panes(): LightweightPaneApi[]
   remove(): void
