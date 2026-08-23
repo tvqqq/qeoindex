@@ -278,7 +278,7 @@ function buildContext(params: {
     metrics: selectProviderMetrics(rating.kfsp_metrics),
   } : null
 
-  const timeframeRank = new Map(WYCKOFF_TIMEFRAMES.map((timeframe, index) => [timeframe, index]))
+  const timeframeRank = new Map<string, number>(WYCKOFF_TIMEFRAMES.map((timeframe, index) => [timeframe, index]))
   return {
     contextVersion: AI_COUNCIL_LLM_EVIDENCE_VERSION,
     ratingDate,
