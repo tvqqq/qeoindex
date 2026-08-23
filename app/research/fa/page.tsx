@@ -1,5 +1,5 @@
-import { FaScreenApp } from "@/components/research/fa-screen-app"
+import { redirect } from "next/navigation"
 
 export default function FaScreenPage() {
-  return <FaScreenApp />
+  redirect("/research?view=fa")
 }
