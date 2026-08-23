@@ -1,0 +1,47 @@
+name: Fix TTAI typecheck
+
+on:
+  push:
+    branches:
+      - feat/insights-ttai-history-dashboard
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/insights-ttai-history-dashboard
+      - name: Fix stock-detail history fallback and effect warnings
+        shell: python
+        run: |
+          from pathlib import Path
+
+          insights = Path('components/insights/insights-dashboard.tsx')
+          s = insights.read_text()
+          if '[toHistorySnapshot(row)]' not in s:
+              raise SystemExit('missing history fallback')
+          s = s.replace('[toHistorySnapshot(row)]', '[row]', 1)
+          insights.write_text(s)
+
+          ttai = Path('components/insights/ttai-dashboard.tsx')
+          t = ttai.read_text()
+          t = t.replace('import { useEffect, useMemo, useState } from "react"', 'import { useEffect, useState } from "react"', 1)
+          t = t.replace('    setLoading(true)\n    setError(null)\n', '', 1)
+          old = '''  const daily = data?.dailyHistory || []\n  const quarterly = data?.quarterlyHistory || []\n  const currentSummary = useMemo(() => ({\n    stockRs: daily.at(-1)?.stockRs ?? row.rsShort,\n    sectorRs: daily.at(-1)?.sectorRs ?? null,\n    stockRrg: daily.at(-1)?.stockRrgState ?? row.stockRrgState,\n    sectorRrg: daily.at(-1)?.sectorRrgState ?? row.sectorRrgState,\n  }), [daily, row.rsShort, row.sectorRrgState, row.stockRrgState])'''
+          new = '''  const daily = data?.dailyHistory ?? []\n  const quarterly = data?.quarterlyHistory ?? []\n  const currentSummary = {\n    stockRs: daily.at(-1)?.stockRs ?? row.rsShort,\n    sectorRs: daily.at(-1)?.sectorRs ?? null,\n    stockRrg: daily.at(-1)?.stockRrgState ?? row.stockRrgState,\n    sectorRrg: daily.at(-1)?.sectorRrgState ?? row.sectorRrgState,\n  }'''
+          if old not in t:
+              raise SystemExit('missing current summary block')
+          t = t.replace(old, new, 1)
+          ttai.write_text(t)
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/insights/insights-dashboard.tsx components/insights/ttai-dashboard.tsx
+          git commit -m "fix(insights): resolve TTAI typecheck and effect churn"
+          git push origin HEAD:feat/insights-ttai-history-dashboard
