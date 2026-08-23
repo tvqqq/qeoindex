@@ -5,6 +5,9 @@ import test from "node:test"
 const dashboard = readFileSync("components/insights/wyckoff-chart-dashboard.tsx", "utf8")
 const chart = readFileSync("components/insights/wyckoff-lightweight-chart.tsx", "utf8")
 const chartRuntime = readFileSync("lib/lightweight-charts-runtime.ts", "utf8")
+const stockIdentity = readFileSync("components/stock-identity.tsx", "utf8")
+const insightsDashboard = readFileSync("components/insights/insights-dashboard.tsx", "utf8")
+const orderbook = readFileSync("components/orderbook/live-orderbook-panel.tsx", "utf8")
 const page = readFileSync("app/insights/wyckoff/page.tsx", "utf8")
 const tickerApi = readFileSync("app/api/insights/wyckoff/route.ts", "utf8")
 const unifiedData = readFileSync("lib/wyckoff-unified-data.ts", "utf8")
@@ -14,11 +17,31 @@ const aiLoader = readFileSync("components/smoothui/ai-loader/index.tsx", "utf8")
 const priceFlow = readFileSync("components/smoothui/price-flow/index.tsx", "utf8")
 const marketSectors = readFileSync("lib/market-sectors.ts", "utf8")
 
-test("Wyckoff header keeps company identity and removes the Rating back row", () => {
+test("Wyckoff header uses the canonical stock identity and removes the Rating back row", () => {
   assert.match(dashboard, /companyName\?: string/)
-  assert.match(dashboard, /function SymbolIdentity/)
+  assert.match(dashboard, /import \{ StockIdentity \}/)
+  assert.match(dashboard, /<StockIdentity[\s\S]*ticker=\{ticker\}/)
+  assert.doesNotMatch(dashboard, /function SymbolIdentity/)
   assert.doesNotMatch(dashboard, /data-wyckoff-back-row|Quay lại Rating|>\s*Rating\s*</)
   assert.doesNotMatch(dashboard, /ArrowLeft/)
+})
+
+test("stock identity convention matches stock detail and orderbook popup styling", () => {
+  const tickerGradient = "bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent"
+  const logoGlow = "drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+  const tickerGlow = "drop-shadow-[0_0_15px_rgba(34,211,238,0.2)]"
+
+  assert.match(stockIdentity, /export const STOCK_IDENTITY_LOGO_CLASS/)
+  assert.match(stockIdentity, /export const STOCK_IDENTITY_TICKER_CLASS/)
+  assert.ok(stockIdentity.includes(tickerGradient))
+  assert.ok(stockIdentity.includes(logoGlow))
+  assert.ok(stockIdentity.includes(tickerGlow))
+  assert.ok(insightsDashboard.includes(tickerGradient))
+  assert.ok(insightsDashboard.includes(logoGlow))
+  assert.ok(insightsDashboard.includes(tickerGlow))
+  assert.ok(orderbook.includes(tickerGradient))
+  assert.ok(orderbook.includes(logoGlow))
+  assert.ok(orderbook.includes(tickerGlow))
 })
 
 test("Wyckoff watchlist stays ticker-first and groups rows by the market-board sector taxonomy", () => {
@@ -43,6 +66,23 @@ test("Wyckoff watchlist stays ticker-first and groups rows by the market-board s
   assert.match(rowSource, /<a[\s\S]*href=\{href\}/)
   assert.doesNotMatch(rowSource, /companyName|exchange|stock\.sector|StockLogo/)
   assert.doesNotMatch(rowSource, /<Link|prefetch=/)
+})
+
+test("Wyckoff phase column uses compact badges that cannot overlap price-change text", () => {
+  const rowStart = dashboard.indexOf("const WatchlistRow")
+  const rowEnd = dashboard.indexOf("export function WyckoffStockWorkspace", rowStart)
+  const rowSource = dashboard.slice(rowStart, rowEnd)
+
+  assert.match(dashboard, /WATCHLIST_GRID_CLASS = "grid-cols-\[64px_74px_64px_minmax\(0,1fr\)\]"/)
+  assert.match(dashboard, /function phaseCompactLabel/)
+  assert.match(dashboard, /return "RE-ACC"/)
+  assert.match(dashboard, /return "RE-DIST"/)
+  assert.match(dashboard, /return "MARKUP"/)
+  assert.match(dashboard, /return "MARKDOWN"/)
+  assert.match(rowSource, /overflow-hidden text-ellipsis whitespace-nowrap/)
+  assert.match(rowSource, /title=\{fullPhase\}/)
+  assert.match(rowSource, /phaseCompactLabel\(stock\.phase\)/)
+  assert.doesNotMatch(rowSource, /grid-cols-\[minmax\(70px,1fr\)_76px_72px_88px\]/)
 })
 
 test("Wyckoff ticker switching remains cancellable and latest-click-wins", () => {
@@ -146,18 +186,14 @@ test("Wyckoff chart caps the physical raster viewport before large-window flicke
   assert.match(chart, /rgba\(255,71,87,0\.28\)/)
 })
 
-test("Wyckoff standalone zoom batches wheel gestures instead of continuously redrawing the canvas", () => {
-  assert.match(chart, /ZOOM_SETTLE_MS = 110/)
-  assert.match(chart, /function applyDiscreteZoom/)
-  assert.match(chart, /pendingWheelDelta \+= event\.deltaY/)
-  assert.match(chart, /window\.setTimeout\([\s\S]*ZOOM_SETTLE_MS/)
-  assert.match(chart, /host\.addEventListener\("wheel", handleWheel, \{ passive: false \}\)/)
-  assert.match(chart, /event\.preventDefault\(\)/)
-  assert.match(chart, /subscribeVisibleLogicalRangeChange/)
-  assert.match(chart, /setVisibleLogicalRange\(nextRange\)/)
-  assert.match(chart, /mouseWheel:\s*false/)
-  assert.match(chart, /pinch:\s*embedded/)
-  assert.doesNotMatch(chart, /handleScroll:\s*true|handleScale:\s*true/)
+test("Wyckoff chart disables every zoom path while preserving drag panning", () => {
+  assert.match(chart, /handleScroll:\s*\{[\s\S]*mouseWheel:\s*false[\s\S]*pressedMouseMove:\s*true/)
+  assert.match(chart, /handleScale:\s*false/)
+  assert.doesNotMatch(chart, /ZOOM_SETTLE_MS|ZOOM_STEP|MIN_VISIBLE_BARS/)
+  assert.doesNotMatch(chart, /applyDiscreteZoom|pendingWheelDelta|pendingAnchorRatio/)
+  assert.doesNotMatch(chart, /addEventListener\("wheel"|removeEventListener\("wheel"/)
+  assert.doesNotMatch(chart, /subscribeVisibleLogicalRangeChange|unsubscribeVisibleLogicalRangeChange/)
+  assert.doesNotMatch(chart, /pinch:\s*true|pinch:\s*embedded/)
 })
 
 test("Wyckoff chart resize remains rAF-batched without autoSize or full-surface swapping", () => {

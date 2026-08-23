@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 
 import { WyckoffLightweightChart } from "@/components/insights/wyckoff-lightweight-chart"
-import { StockLogo } from "@/components/stock-logo"
+import { StockIdentity } from "@/components/stock-identity"
 import { AnimatedTabs } from "@/components/smoothui/animated-tabs"
 import { PriceFlow } from "@/components/smoothui/price-flow"
 import { TopNav } from "@/components/top-nav"
@@ -66,6 +66,7 @@ const WATCHLIST_TABS: Array<{ id: WatchlistFilterTab; label: string }> = [
 
 const TICKER_SWITCH_DEBOUNCE_MS = 60
 const TICKER_CACHE_LIMIT = 8
+const WATCHLIST_GRID_CLASS = "grid-cols-[64px_74px_64px_minmax(0,1fr)]"
 
 function number(value: number | null | undefined, digits = 2) {
   if (value == null || !Number.isFinite(value)) return "—"
@@ -107,6 +108,20 @@ function phaseShortBadge(phase: string | null | undefined) {
     .replace(/^Distribution\s*-\s*/i, "DIST · ")
     .replace(/^Re-accumulation\s*-\s*/i, "RE-ACC · ")
     .replace(/^Re-distribution\s*-\s*/i, "RE-DIST · ")
+}
+
+function phaseCompactLabel(phase: string | null | undefined) {
+  if (!phase) return "—"
+  const normalized = phase.toLowerCase().replaceAll("-", "")
+  if (/re\s*accum|reaccum/.test(normalized)) return "RE-ACC"
+  if (/re\s*distrib|redistrib/.test(normalized)) return "RE-DIST"
+  if (normalized.includes("accum")) return "ACC"
+  if (normalized.includes("distrib")) return "DIST"
+  if (normalized.includes("markup")) return "MARKUP"
+  if (normalized.includes("markdown")) return "MARKDOWN"
+  if (normalized.includes("unclass")) return "UNCLASS"
+  const compact = phase.trim().toUpperCase()
+  return compact.length > 12 ? `${compact.slice(0, 11)}…` : compact
 }
 
 function biasBadgeStyle(bias: string, phase: string) {
@@ -164,32 +179,6 @@ function MetricCard({
   )
 }
 
-function SymbolIdentity({
-  ticker,
-  companyName,
-  exchange,
-  sector,
-}: {
-  ticker: string
-  companyName: string
-  exchange: string
-  sector?: string
-}) {
-  return (
-    <div className="min-w-0">
-      <div className="flex min-w-0 items-baseline gap-2.5">
-        <span className="shrink-0 font-ticker text-2xl font-extrabold italic tracking-tight text-white sm:text-[28px]">{ticker}</span>
-        <span className="min-w-0 truncate font-ticker text-sm font-bold text-slate-200 sm:text-base" title={companyName}>{companyName}</span>
-      </div>
-      <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-slate-500">
-        <span className="shrink-0">{exchange}</span>
-        <span aria-hidden="true">·</span>
-        <span className="min-w-0 truncate">{sector || "Chưa phân ngành"}</span>
-      </div>
-    </div>
-  )
-}
-
 const WatchlistRow = memo(function WatchlistRow({
   stock,
   isActive,
@@ -204,13 +193,15 @@ const WatchlistRow = memo(function WatchlistRow({
   onSelectTicker: TickerSelectHandler
 }) {
   const href = `/insights/wyckoff?ticker=${encodeURIComponent(stock.ticker)}&timeframe=${activeTimeframe}`
+  const fullPhase = phaseShortBadge(stock.phase)
 
   return (
     <a
       href={href}
       onClick={(event) => onSelectTicker(event, stock.ticker)}
       className={cn(
-        "grid min-h-12 grid-cols-[minmax(70px,1fr)_76px_72px_88px] items-center gap-1 border-b border-white/[0.035] px-3 py-2 [contain-intrinsic-size:48px] [content-visibility:auto]",
+        "grid min-h-12 items-center gap-1 border-b border-white/[0.035] px-3 py-2 [contain-intrinsic-size:48px] [content-visibility:auto]",
+        WATCHLIST_GRID_CLASS,
         isActive
           ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.08]"
           : isPending
@@ -223,8 +214,16 @@ const WatchlistRow = memo(function WatchlistRow({
       <div className={cn("font-ticker text-[15px] font-extrabold tracking-wide sm:text-base", isActive || isPending ? "text-cyan-300" : "text-slate-100")}>{stock.ticker}</div>
       <div className="text-right font-mono text-[14px] font-bold tabular-nums text-slate-100">{number(stock.price)}</div>
       <div className={cn("text-right font-mono text-[12.5px] font-bold tabular-nums", changeTone(stock.changePct))}>{signedPercent(stock.changePct)}</div>
-      <div className="text-right">
-        <span className={cn("inline-flex max-w-full justify-center whitespace-nowrap rounded border px-1.5 py-0.5 text-[10.5px] font-bold", biasBadgeStyle(stock.bias, stock.phase))}>{phaseShortBadge(stock.phase)}</span>
+      <div className="min-w-0 text-right">
+        <span
+          title={fullPhase}
+          className={cn(
+            "inline-flex max-w-full justify-center overflow-hidden text-ellipsis whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-bold",
+            biasBadgeStyle(stock.bias, stock.phase),
+          )}
+        >
+          {phaseCompactLabel(stock.phase)}
+        </span>
       </div>
     </a>
   )
@@ -285,15 +284,14 @@ export function WyckoffStockWorkspace({
       {!embedded && (
         <header className="rounded-xl border border-white/[0.09] bg-[#0b1119] px-3 py-2.5 shadow-sm sm:px-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <StockLogo symbol={ticker} size={36} className="shrink-0 rounded-full border-white/30" />
-              <SymbolIdentity
-                ticker={ticker}
-                companyName={headerCompanyName}
-                exchange={headerExchange}
-                sector={headerSector}
-              />
-            </div>
+            <StockIdentity
+              ticker={ticker}
+              companyName={headerCompanyName}
+              exchange={headerExchange}
+              detail={headerSector || "Chưa phân ngành"}
+              logoSize={36}
+              className="min-w-0 flex-1"
+            />
 
             <div className="shrink-0 text-right">
               <PriceFlow animate={priceMotion} value={latest?.close ?? selected?.price} digits={2} className="font-mono text-2xl font-black tracking-tight text-white sm:text-[28px]" />
@@ -609,7 +607,7 @@ export function WyckoffChartDashboard(props: {
               <div className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-slate-600" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã..." className="w-full rounded-md border border-white/[0.09] bg-[#05080e] py-2.5 pl-9 pr-8 text-[13px] font-medium text-white outline-none placeholder:text-slate-600 focus:border-cyan-400/45" />{query ? <button type="button" onClick={() => setQuery("")} className="absolute right-2 rounded p-1 text-slate-600 hover:bg-white/[0.05] hover:text-white" aria-label="Xóa tìm kiếm"><X className="size-3.5" /></button> : null}</div>
               <div className="flex items-center gap-0.5 overflow-x-auto" role="tablist" aria-label="Lọc watchlist Wyckoff">{WATCHLIST_TABS.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id)} className={cn("shrink-0 rounded px-2.5 py-1.5 text-[11px] font-bold", activeTab === tab.id ? "bg-cyan-500/16 text-cyan-300" : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200")}>{tab.label}</button>)}</div>
             </div>
-            <div className="grid grid-cols-[minmax(70px,1fr)_76px_72px_88px] items-center gap-1 border-b border-white/[0.06] bg-[#070b10] px-3 py-2 font-ticker text-[10.5px] font-bold uppercase tracking-wide text-slate-600"><div>Mã</div><div className="text-right">Giá</div><div className="text-right">+/- %</div><div className="text-right">Pha</div></div>
+            <div className={cn("grid items-center gap-1 border-b border-white/[0.06] bg-[#070b10] px-3 py-2 font-ticker text-[10.5px] font-bold uppercase tracking-wide text-slate-600", WATCHLIST_GRID_CLASS)}><div>Mã</div><div className="text-right">Giá</div><div className="text-right">+/- %</div><div className="text-right">Pha</div></div>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {groupedStocks.map((group) => <section key={group.key} aria-label={group.label}><div className="flex items-center justify-between border-b border-white/[0.05] bg-[#0a1119] px-3 py-1.5 font-ticker text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-500"><span>{group.label}</span><span className="font-mono text-[10px] text-slate-600">{group.items.length}</span></div>{group.items.map((stock) => <WatchlistRow key={stock.ticker} stock={stock} isActive={stock.ticker === activeTicker} isPending={stock.ticker === pendingTicker} activeTimeframe={activeTimeframe} onSelectTicker={selectTicker} />)}</section>)}
               {!filteredStocks.length ? <div className="p-8 text-center text-sm text-slate-500">Không tìm thấy mã phù hợp</div> : null}
