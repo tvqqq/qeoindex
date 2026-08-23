@@ -28,15 +28,12 @@ test("P1 UI reads use Runtime Cache with optional shared Redis", () => {
   assert.match(research, /getResearchDataFresh/)
   assert.match(research, /invalidateResearchDataCache/)
 
-  const overviewRoute = source("app/research/page.tsx")
-  const changesRoute = source("app/research/changes/page.tsx")
-  const logRoute = source("app/research/log/page.tsx")
-  const reviewRoute = source("app/research/review/page.tsx")
-  assert.match(overviewRoute, /getResearchOverviewData/)
-  assert.match(changesRoute, /getResearchChangesData/)
-  assert.match(logRoute, /getResearchLogData/)
-  assert.match(logRoute, /pagination\.nextCursor/)
-  assert.match(reviewRoute, /getResearchReviewData/)
+  const researchRoute = source("app/research/page.tsx")
+  assert.match(researchRoute, /getResearchOverviewData/)
+  assert.match(researchRoute, /getResearchChangesData/)
+  assert.match(researchRoute, /getResearchLogData/)
+  assert.match(researchRoute, /pagination\.nextCursor/)
+  assert.match(researchRoute, /getResearchReviewData/)
 })
 
 test("P1.1 scanner and market history miss paths are bounded", () => {
@@ -69,8 +66,8 @@ test("P1.1 signal UI cache is isolated from fresh operational decisions", () => 
   assert.match(signalData, /filter: \{ property: "Status", select: \{ equals: "Open" \} \}/)
   assert.match(signalData, /invalidateSignalDataCache/)
 
-  const signalsPage = source("app/research/signals/page.tsx")
-  assert.match(signalsPage, /getSignalUiData/)
+  const researchRoute = source("app/research/page.tsx")
+  assert.match(researchRoute, /getSignalUiData/)
 
   const monitor = source("lib/signal-monitor.ts")
   assert.match(monitor, /getScannerDataFresh/)
