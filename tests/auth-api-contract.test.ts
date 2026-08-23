@@ -31,12 +31,16 @@ test("browser-facing API routes enforce server auth and feature access", () => {
   }
 })
 
-test("per-user account and watchlist APIs derive user from server auth", () => {
+test("per-user account, watchlist, and insights APIs derive access from server auth", () => {
   for (const path of ["app/api/me/route.ts", "app/api/watchlist/route.ts"]) {
     const code = source(path)
     assert.match(code, /requireApiUser/)
     assert.match(code, /auth\.context\.user\.id/)
   }
+
+  const wyckoff = source("app/api/insights/wyckoff/route.ts")
+  assert.match(wyckoff, /requireApiUser/)
+  assert.match(wyckoff, /auth\.context\.supabase/)
 })
 
 test("server-rendered app surfaces verify the server session", () => {

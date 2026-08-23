@@ -1,8 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { memo, useCallback, useDeferredValue, useMemo, useState, type MouseEvent } from "react"
+import { memo, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react"
 import {
   AlertTriangle,
@@ -45,12 +44,39 @@ export interface WyckoffListItem {
 type WatchlistFilterTab = "all" | "accumulation" | "distribution" | "top100"
 type TickerSelectHandler = (event: MouseEvent<HTMLAnchorElement>, ticker: string) => void
 
+type WyckoffTickerPayload = {
+  ticker: string
+  companyName: string
+  exchange: string | null
+  studies: WyckoffChartStudy[]
+  generatedAt: string
+}
+
+type WyckoffTickerApiResponse = {
+  ok: boolean
+  data?: WyckoffTickerPayload
+  error?: string
+}
+
 const WATCHLIST_TABS: Array<{ id: WatchlistFilterTab; label: string }> = [
   { id: "all", label: "Tất cả" },
   { id: "accumulation", label: "Tích lũy" },
   { id: "distribution", label: "Phân phối" },
   { id: "top100", label: "Top 100" },
 ]
+
+const TICKER_SWITCH_DEBOUNCE_MS = 60
+const TICKER_CACHE_LIMIT = 8
+
+function rememberTickerData(cache: Map<string, WyckoffTickerPayload>, data: WyckoffTickerPayload) {
+  cache.delete(data.ticker)
+  cache.set(data.ticker, data)
+  while (cache.size > TICKER_CACHE_LIMIT) {
+    const oldest = cache.keys().next().value as string | undefined
+    if (!oldest) break
+    cache.delete(oldest)
+  }
+}
 
 function number(value: number | null | undefined, digits = 2) {
   if (value == null || !Number.isFinite(value)) return "—"
@@ -157,11 +183,13 @@ function SymbolIdentity({
 const WatchlistRow = memo(function WatchlistRow({
   stock,
   isActive,
+  isPending,
   activeTimeframe,
   onSelectTicker,
 }: {
   stock: WyckoffListItem
   isActive: boolean
+  isPending: boolean
   activeTimeframe: WyckoffChartTimeframe
   onSelectTicker: TickerSelectHandler
 }) {
@@ -173,11 +201,16 @@ const WatchlistRow = memo(function WatchlistRow({
       onClick={(event) => onSelectTicker(event, stock.ticker)}
       className={cn(
         "grid min-h-12 grid-cols-[minmax(70px,1fr)_76px_72px_88px] items-center gap-1 border-b border-white/[0.035] px-3 py-2 transition-colors [contain-intrinsic-size:48px] [content-visibility:auto]",
-        isActive ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.08]" : "hover:bg-white/[0.035]",
+        isActive
+          ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.08]"
+          : isPending
+            ? "border-l-2 border-l-cyan-400/50 bg-cyan-400/[0.04]"
+            : "hover:bg-white/[0.035]",
       )}
       aria-current={isActive ? "page" : undefined}
+      aria-busy={isPending || undefined}
     >
-      <div className={cn("font-ticker text-[15px] font-extrabold tracking-wide sm:text-base", isActive ? "text-cyan-300" : "text-slate-100")}>{stock.ticker}</div>
+      <div className={cn("font-ticker text-[15px] font-extrabold tracking-wide sm:text-base", isActive || isPending ? "text-cyan-300" : "text-slate-100")}>{stock.ticker}</div>
       <div className="text-right font-mono text-[14px] font-bold tabular-nums text-slate-100">{number(stock.price)}</div>
       <div className={cn("text-right font-mono text-[12.5px] font-bold tabular-nums", changeTone(stock.changePct))}>{signedPercent(stock.changePct)}</div>
       <div className="text-right">
@@ -206,21 +239,36 @@ export function WyckoffChartDashboard({
   generatedAt: string
   dataSource?: string
 }) {
-  const router = useRouter()
+  const initialTickerData: WyckoffTickerPayload = {
+    ticker,
+    companyName: companyName?.trim() || ticker,
+    exchange: exchange?.trim() || "HOSE",
+    studies,
+    generatedAt,
+  }
+  const [tickerData, setTickerData] = useState<WyckoffTickerPayload>(() => initialTickerData)
   const [activeTimeframe, setActiveTimeframe] = useState(initialTimeframe)
   const [query, setQuery] = useState("")
   const [activeTab, setActiveTab] = useState<WatchlistFilterTab>("all")
+  const [pendingTicker, setPendingTicker] = useState("")
+  const [switchError, setSwitchError] = useState("")
+  const switchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const switchAbortRef = useRef<AbortController | null>(null)
+  const switchSequenceRef = useRef(0)
+  const tickerCacheRef = useRef<Map<string, WyckoffTickerPayload>>(new Map([[ticker, initialTickerData]]))
   const deferredQuery = useDeferredValue(query)
   const shouldReduceMotion = useReducedMotion() ?? false
 
+  const activeTicker = tickerData.ticker
+  const activeStudies = tickerData.studies
   const stockByTicker = useMemo(() => new Map(stocks.map((stock) => [stock.ticker, stock])), [stocks])
-  const selected = stockByTicker.get(ticker)
-  const current = useMemo(() => studies.find((study) => study.timeframe === activeTimeframe) ?? studies[0], [activeTimeframe, studies])
-  const timeframeTabs = useMemo(() => studies.map((study) => ({ value: study.timeframe, label: study.timeframe })), [studies])
+  const selected = stockByTicker.get(activeTicker)
+  const current = useMemo(() => activeStudies.find((study) => study.timeframe === activeTimeframe) ?? activeStudies[0], [activeTimeframe, activeStudies])
+  const timeframeTabs = useMemo(() => activeStudies.map((study) => ({ value: study.timeframe, label: study.timeframe })), [activeStudies])
   const latest = current?.bars.at(-1)
   const change = current?.analysis?.technical.changePct ?? selected?.changePct ?? null
-  const headerCompanyName = companyName?.trim() || ticker
-  const headerExchange = exchange?.trim() || "HOSE"
+  const headerCompanyName = tickerData.companyName
+  const headerExchange = tickerData.exchange?.trim() || "HOSE"
 
   const filteredStocks = useMemo(() => {
     let list = stocks
@@ -237,21 +285,83 @@ export function WyckoffChartDashboard({
     return list.filter((stock) => `${stock.ticker} ${stock.phase} ${stock.bias}`.toUpperCase().includes(normalized))
   }, [activeTab, deferredQuery, stocks])
 
-  const selectTicker = useCallback<TickerSelectHandler>((event, nextTicker) => {
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    event.preventDefault()
-    if (nextTicker === ticker) return
+  const commitTickerData = useCallback((nextData: WyckoffTickerPayload) => {
+    rememberTickerData(tickerCacheRef.current, nextData)
+    startTransition(() => setTickerData(nextData))
 
     const url = new URL(window.location.href)
-    url.searchParams.set("ticker", nextTicker)
-    url.searchParams.set("timeframe", activeTimeframe)
+    url.searchParams.set("ticker", nextData.ticker)
+    window.history.replaceState(window.history.state, "", url)
+    setPendingTicker("")
+    setSwitchError("")
+  }, [])
 
-    // Native history + refresh keeps the current client workspace visible while
-    // the force-dynamic RSC payload is fetched. A normal Next Link navigation
-    // enters app/insights/loading.tsx and visibly replaces the entire screen.
-    window.history.pushState(window.history.state, "", url)
-    router.refresh()
-  }, [activeTimeframe, router, ticker])
+  const scheduleTickerLoad = useCallback((nextTicker: string) => {
+    const sequence = ++switchSequenceRef.current
+    if (switchTimerRef.current) clearTimeout(switchTimerRef.current)
+    switchAbortRef.current?.abort()
+    switchAbortRef.current = null
+
+    if (nextTicker === activeTicker) {
+      setPendingTicker("")
+      setSwitchError("")
+      return
+    }
+
+    setPendingTicker(nextTicker)
+    setSwitchError("")
+
+    switchTimerRef.current = setTimeout(() => {
+      if (sequence !== switchSequenceRef.current) return
+
+      const cached = tickerCacheRef.current.get(nextTicker)
+      if (cached) {
+        commitTickerData(cached)
+        return
+      }
+
+      const controller = new AbortController()
+      switchAbortRef.current = controller
+
+      void (async () => {
+        try {
+          const response = await fetch(`/api/insights/wyckoff?ticker=${encodeURIComponent(nextTicker)}`, {
+            signal: controller.signal,
+            headers: { Accept: "application/json" },
+          })
+          const payload = await response.json() as WyckoffTickerApiResponse
+          if (!response.ok || !payload.ok || !payload.data) {
+            throw new Error(payload.error || `Không tải được dữ liệu ${nextTicker}`)
+          }
+          if (controller.signal.aborted || sequence !== switchSequenceRef.current) return
+          commitTickerData(payload.data)
+        } catch (error) {
+          if (controller.signal.aborted || sequence !== switchSequenceRef.current) return
+          setPendingTicker("")
+          setSwitchError(error instanceof Error ? error.message : `Không tải được dữ liệu ${nextTicker}`)
+        } finally {
+          if (switchAbortRef.current === controller) switchAbortRef.current = null
+        }
+      })()
+    }, TICKER_SWITCH_DEBOUNCE_MS)
+  }, [activeTicker, commitTickerData])
+
+  useEffect(() => () => {
+    switchSequenceRef.current += 1
+    if (switchTimerRef.current) clearTimeout(switchTimerRef.current)
+    switchAbortRef.current?.abort()
+  }, [])
+
+  const selectTicker = useCallback<TickerSelectHandler>((event, nextTicker) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+
+    // The compatibility path still uses a normal navigation because the small
+    // client switch endpoint intentionally serves only the Supabase unified model.
+    if (dataSource !== "Supabase unified") return
+
+    event.preventDefault()
+    scheduleTickerLoad(nextTicker)
+  }, [dataSource, scheduleTickerLoad])
 
   function chooseTimeframe(timeframe: WyckoffChartTimeframe) {
     if (timeframe === activeTimeframe) return
@@ -268,10 +378,10 @@ export function WyckoffChartDashboard({
           <div className="min-w-0 space-y-3">
             <div data-wyckoff-back-row className="flex min-h-8 items-center">
               <Link
-                href={`/insights?ticker=${ticker}`}
+                href={`/insights?ticker=${activeTicker}`}
                 prefetch={false}
                 className="inline-flex items-center gap-1.5 rounded-md border border-purple-400/20 bg-purple-500/[0.06] px-2.5 py-1.5 font-ticker text-[11px] font-bold text-purple-300 transition-colors hover:border-purple-400/40 hover:bg-purple-500/[0.12]"
-                aria-label={`Quay lại Rating ${ticker}`}
+                aria-label={`Quay lại Rating ${activeTicker}`}
               >
                 <ArrowLeft className="size-3.5" />
                 Rating
@@ -281,9 +391,9 @@ export function WyckoffChartDashboard({
             <header className="rounded-xl border border-white/[0.09] bg-[#0b1119] px-3 py-2.5 shadow-sm sm:px-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <StockLogo symbol={ticker} size={36} className="shrink-0 rounded-full border-white/30" />
+                  <StockLogo symbol={activeTicker} size={36} className="shrink-0 rounded-full border-white/30" />
                   <SymbolIdentity
-                    ticker={ticker}
+                    ticker={activeTicker}
                     companyName={headerCompanyName}
                     exchange={headerExchange}
                     sector={selected?.sector || ""}
@@ -366,7 +476,7 @@ export function WyckoffChartDashboard({
 
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] bg-[#080d14] px-3 py-2 text-[10.5px]">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-slate-400">
-                  <strong className="font-ticker text-[12px] text-slate-100">{ticker} · {activeTimeframe} · {headerExchange}</strong>
+                  <strong className="font-ticker text-[12px] text-slate-100">{activeTicker} · {activeTimeframe} · {headerExchange}</strong>
                   {latest ? (
                     <>
                       <span className="inline-flex items-center gap-1">O <PriceFlow value={latest.open} digits={2} className="font-bold text-slate-300" /></span>
@@ -384,7 +494,7 @@ export function WyckoffChartDashboard({
               </div>
 
               <div className="relative">
-                {current ? <WyckoffLightweightChart ticker={ticker} study={current} /> : null}
+                {current ? <WyckoffLightweightChart ticker={activeTicker} study={current} /> : null}
                 <div className="pointer-events-none absolute left-3 top-3 z-[3] max-w-[min(480px,calc(100%-1.5rem))] rounded-lg border border-white/[0.09] bg-[#080d15]/92 px-3 py-2 font-ticker sm:left-4 sm:top-4">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="shrink-0 rounded border border-purple-400/20 bg-purple-400/[0.08] px-1.5 py-0.5 text-[9.5px] font-extrabold uppercase tracking-wide text-purple-200">{current?.timeframe}</span>
@@ -438,8 +548,14 @@ export function WyckoffChartDashboard({
                   <h2 className="truncate font-ticker text-[14px] font-extrabold uppercase tracking-wide text-white">Watchlist Wyckoff</h2>
                   <span className="shrink-0 rounded-full border border-cyan-500/25 bg-cyan-500/[0.08] px-1.5 py-0.5 font-mono text-[11px] font-bold text-cyan-300">{filteredStocks.length}</span>
                 </div>
-                <span className="shrink-0 font-mono text-[10px] text-slate-600">{generatedAt.slice(0, 10)}</span>
+                <span className="shrink-0 font-mono text-[10px] text-slate-600">{tickerData.generatedAt.slice(0, 10)}</span>
               </div>
+
+              {pendingTicker ? (
+                <div className="font-mono text-[10.5px] text-cyan-400" role="status">Đang tải {pendingTicker}…</div>
+              ) : switchError ? (
+                <div className="line-clamp-2 text-[10.5px] text-rose-400" role="alert">{switchError}</div>
+              ) : null}
 
               <div className="relative flex items-center">
                 <Search className="pointer-events-none absolute left-2.5 size-4 text-slate-600" />
@@ -488,7 +604,8 @@ export function WyckoffChartDashboard({
                 <WatchlistRow
                   key={stock.ticker}
                   stock={stock}
-                  isActive={stock.ticker === ticker}
+                  isActive={stock.ticker === activeTicker}
+                  isPending={stock.ticker === pendingTicker}
                   activeTimeframe={activeTimeframe}
                   onSelectTicker={selectTicker}
                 />
