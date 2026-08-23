@@ -33,7 +33,7 @@ test("insights has no public auth bypass and reads with the user-scoped client",
   assert.match(insightsData, /new Map\(/)
 })
 
-test("rating table exposes keyboard modal and hover tooltip interactions", () => {
+test("rating table exposes keyboard modal, hover tooltip, expandable sectors, score pills, and compact dialog tabs", () => {
   assert.match(insightsDashboard, /function RatingTooltip/)
   assert.match(insightsDashboard, /function RatingDialog/)
   assert.match(insightsDashboard, /aria-label={`Mở hồ sơ rating \$\{row\.ticker\}`}/)
@@ -50,6 +50,18 @@ test("rating table exposes keyboard modal and hover tooltip interactions", () =>
   assert.match(insightsDashboard, /function SortableHead/)
   assert.match(insightsDashboard, /sortKey="stockRrgState"/)
   assert.match(insightsDashboard, /RRG_FIELD_DEFINITIONS\.sectorRrgState/)
+  assert.match(insightsDashboard, /getSectorIcon/)
+  assert.match(insightsDashboard, /expandedSectors/)
+  assert.match(insightsDashboard, /aria-expanded=\{isExpanded\}/)
+  assert.match(insightsDashboard, /aria-controls=\{`sector-children-\$\{index\}`\}/)
+  assert.match(insightsDashboard, /tone="cyan"/)
+  assert.match(insightsDashboard, /tone="violet"/)
+  assert.match(insightsDashboard, /role="tablist"/)
+  assert.match(insightsDashboard, /aria-controls=\{`rating-panel-\$\{tab\.key\}`\}/)
+  assert.match(insightsDashboard, /role="tabpanel"/)
+  assert.match(insightsDashboard, /topTab === "overview"/)
+  assert.match(insightsDashboard, /topTab === "metrics"/)
+  assert.match(insightsDashboard, /topTab === "history"/)
   assert.match(insightsData, /kfsp_stock_rrg_state,kfsp_sector_rrg_state/)
   assert.match(insightsData, /loadHistoryDates/)
   assert.match(insightsData, /buildSectorSummaries/)

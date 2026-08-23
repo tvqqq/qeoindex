@@ -13,13 +13,13 @@ Insights uses the information density of a Vietnamese market board without sacri
 
 | Column | Width | Semantic treatment |
 | --- | ---: | --- |
-| Cổ phiếu / Ngành | 20% | Identity, rank/count, company/sector metadata |
-| Giá | 8% | Price and daily change |
-| CANSLIM | 8% | Emerald/green quality badge |
-| 4M | 7% | Amber/yellow quality badge |
+| Cổ phiếu / Ngành | 20% | Identity, rank/count, company/sector metadata, chevron + sector icon in expandable view |
+| Giá / Vốn hóa | 8% | Giá và thay đổi ngày ở dòng cổ phiếu; tổng vốn hóa ở dòng ngành (không hiển thị giá trung bình ngành) |
+| CANSLIM | 8% | Emerald/green score pill with glow & progress/target icon |
+| 4M | 7% | Amber/yellow score pill with glow & bolt icon |
 | Tiềm năng giá | 9% | Direction text/icon |
-| RSs | 6% | Cyan/neon short relative strength |
-| RSm | 6% | Violet medium relative strength |
+| RSs | 6% | Cyan/neon score pill with zap icon and accessible tooltip |
+| RSm | 6% | Violet score pill with radar icon and accessible tooltip |
 | RRG cổ phiếu/ngành | 10% | State badge with icon and label |
 | Biến động tuần | 8% | Signed green/red percent |
 | Biến động tháng | 8% | Signed green/red percent |
@@ -29,37 +29,39 @@ The first column receives the most space because identity and context are more i
 
 ## Responsive behavior
 
-- Desktop is the primary target; all 11 columns fit without a forced `min-width` or horizontal scroll.
-- Header and cell labels use compact typography; numbers use tabular/monospace treatment.
-- At narrow widths the table currently compresses. Future responsive work should prioritize identity, price, rating, and RRG, then expose secondary columns through row expansion. Do not silently remove data without an accessible alternative.
-- A sector group view normally has about 31 rows; Top 100 has 100 rows. Virtualization is unnecessary at current sizes but should be reconsidered for a full-sector detailed endpoint.
+- Desktop (1440px / 1563px and 1920px) is the primary target; all 11 columns fit without horizontal scroll.
+- Typography scale: headers use `text-xs font-extrabold uppercase`, stock ticker uses `text-sm sm:text-base font-extrabold`, price uses `text-sm font-black`, and metadata/company name use `text-xs text-muted-2`.
+- Numeric values use monospace/tabular figures for stable column alignment.
+- A sector group view normally has about 31 rows; Top 100 has 100 rows. Child stock rows expand smoothly under their parent sector.
 
 ## Interaction contract
 
-### Filters and sorting
+### Filters, sector grouping, and sorting
 
 - Default universe is **Top 100**.
-- **Tất cả** shows sector groups only when sector is “Tất cả ngành” and search is blank.
-- Selecting a sector or searching switches to detailed stock rows.
+- **Tất cả** shows expandable sector parent rows when sector is “Tất cả ngành” and search is blank.
+- Each sector parent row features an expand/collapse chevron, sector-specific icon, summary metadata, aggregates for CANSLIM, 4M, RSs, RSm, RRG, weekly/monthly changes, and composite rating. Average price is removed (`—`) on sector parent rows.
+- Expanding a sector row renders its child stock rows directly underneath with indentation and connector line styling. Sorting configuration is preserved across parent sectors and child stock rows.
+- Detail read-model notes: the children represent currently loaded detailed rows (top 500 composite + Top 100 canonical), not an exhaustive full-exchange roster.
+- Selecting an individual sector in the dropdown or entering a search query switches to the flat detailed stock row view.
 - Every visible column is sortable; the active direction is visible and keyboard-operable.
-- Sector-group sorting uses the corresponding aggregate: sum for market cap, average for numeric signals, dominant value for RRG, and count/share where explicitly labeled.
 
 ### Hover and click
 
 - Stock identity hover opens an accessible summary tooltip with company, sector, capitalization, volume, and market classification context.
 - Metric info affordances explain definition and provenance.
-- Clicking a stock row opens the detail dialog. Enter and Space must perform the same action.
-- Clicking a sector group applies that sector filter; the footer must describe this as a drill-down into the currently loaded detailed universe until the full-sector endpoint exists.
+- Clicking a stock row opens the detail dialog. Enter and Space perform the same action.
+- Clicking a sector parent row or chevron toggles its expand/collapse state with `aria-expanded` and keyboard navigation.
 
 ### Detail dialog
 
-- Maximum visual width is approximately 1,500px on large screens and remains within the viewport.
-- Header: identity, latest date/provider, price/change, and composite rating.
-- State panel: explicit QeoIndex heuristic label, state, and plain-language explanation.
-- Radar: BULL, ACC, RISK, HEAT, SUST; current snapshot is visually primary and 1D/7D/30D are secondary overlays when available.
-- Dimension cards: score, progress, 1D/7D/30D deltas, icon, and description.
-- History chart: only renders when at least two real snapshots exist.
-- Raw data: nine provider-aligned tabs/groups remain available so the derived model never hides source observations.
+- Maximum visual width is approximately 1,440px on large screens and remains within the viewport height without overflowing the screen.
+- Compact header: symbol logo, company name, ticker, exchange, sector, Top 100 badge, and rating score badge.
+- Top-level navigation tabs directly under the compact header:
+  1. **Tổng quan & Động lượng**: Compact multi-column layout fitting standard desktop viewports (~800–900px) without excessive vertical scroll. Contains 4 quick stat boxes, QeoIndex heuristic state banner, 4 score progress cards (CANSLIM, 4M, RSs, RSm), and the five-axis QeoIndex state radar (BULL, ACC, RISK, HEAT, SUST) with 1D/7D/30D snapshot overlay and 5 dimension delta cards.
+  2. **9 Nhóm chỉ số KFSP**: Full catalog of nine metric groups with clean category selector, metric labels, descriptions, and values.
+  3. **Lịch sử Rating**: Dedicated real snapshot history line chart and historical snapshot timeline table.
+- Compact footer: transparent QeoIndex disclaimer and direct link to research module.
 
 ## Color and icon system
 
@@ -125,4 +127,3 @@ For changes to the table or dialog, verify at minimum:
 6. Keyboard open/close, focus restoration, tooltip alternatives, reduced motion.
 7. Viewports near 390, 768, 1440, 1920; explicitly record any horizontal overflow.
 8. Browser console and network errors.
-
