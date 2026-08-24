@@ -7,6 +7,7 @@ import {
 import { enrichCouncilStocksForDebate } from "@/lib/ai-council-pre-market-evidence"
 import { configuredCouncilResearchTickers } from "@/lib/ai-council-research-context"
 import { getAiCouncilRuntimeData } from "@/lib/ai-council-runtime"
+import { getAiCouncilRuntimeConfig } from "@/lib/admin/settings"
 import { isMachineRequestAuthorized } from "@/lib/auth/machine"
 import { notifyOpsError } from "@/lib/ops-alerts"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
@@ -15,8 +16,11 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
 
-function firstValidationTicker(stocks: Awaited<ReturnType<typeof getAiCouncilRuntimeData>>["data"]["stocks"]) {
-  const researchPilots = configuredCouncilResearchTickers()
+function firstValidationTicker(
+  stocks: Awaited<ReturnType<typeof getAiCouncilRuntimeData>>["data"]["stocks"],
+  researchTickers?: string[],
+) {
+  const researchPilots = configuredCouncilResearchTickers(researchTickers)
   const researchPilot = [...stocks]
     .filter((stock) => researchPilots.has(stock.ticker))
     .sort((left, right) => (left.rank ?? 999) - (right.rank ?? 999) || left.ticker.localeCompare(right.ticker))[0]?.ticker
@@ -43,6 +47,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const runtimeConfig = await getAiCouncilRuntimeConfig()
     const runtimeData = await getAiCouncilRuntimeData(supabase, { includeHistory: false, includePromptEvidence: true })
     // Freeze raw provider/Wyckoff evidence first, then attach bounded Notion research as explicit
     // first-class packet fields. Deterministic scoring and signal authority remain unchanged.
@@ -66,6 +71,7 @@ export async function GET(request: NextRequest) {
       stocks: debateStocks,
       benchmark: runtimeData.benchmark,
       weightProfile: runtimeData.weightProfile,
+      runtimeConfig,
     })
 
     let result = await run()
@@ -79,9 +85,10 @@ export async function GET(request: NextRequest) {
       result.enabled
       && result.selected === 0
       && (priorDebates.count || 0) === 0
+      && !runtimeConfig.tickers.length
       && !process.env.AI_COUNCIL_LLM_TICKERS?.trim()
     ) {
-      validationTicker = firstValidationTicker(debateStocks)
+      validationTicker = firstValidationTicker(debateStocks, runtimeConfig.researchTickers)
       if (validationTicker) {
         const originalTickers = process.env.AI_COUNCIL_LLM_TICKERS
         const originalMaxTickers = process.env.AI_COUNCIL_LLM_MAX_TICKERS
@@ -115,7 +122,7 @@ export async function GET(request: NextRequest) {
       },
       researchContext: {
         contextVersion: evidenceFidelity.researchContextVersion,
-        pilotTickers: [...configuredCouncilResearchTickers()],
+        pilotTickers: [...configuredCouncilResearchTickers(runtimeConfig.researchTickers)],
         ready: evidenceFidelity.researchReady,
         unavailable: evidenceFidelity.researchUnavailable,
         reused: evidenceFidelity.researchReused,

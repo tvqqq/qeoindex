@@ -1,0 +1,95 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+
+import type { AdminJobDefinition } from "../lib/admin/types.ts"
+import { buildAdminJobViews, deriveAdminJobStatus } from "../lib/admin/job-health.ts"
+
+const definition: AdminJobDefinition = {
+  key: "wyckoff.ingest",
+  provider: "vercel_cron",
+  label: "Wyckoff Snapshot Ingest",
+  description: "Test job",
+  group: "wyckoff",
+  scheduleUtc: "0 10 * * 1-5",
+  scheduleIct: "17:00 T2-T6",
+  manualPolicy: "confirm",
+  freshnessMinutes: 26 * 60,
+  maxDurationMinutes: 5,
+}
+
+test("job health is derived from result and freshness", () => {
+  const now = new Date("2026-08-24T12:00:00Z")
+
+  // No run -> unknown
+  assert.equal(deriveAdminJobStatus(definition, null, now), "unknown")
+
+  // Failed run -> failing
+  assert.equal(
+    deriveAdminJobStatus(definition, { status: "failed", startedAt: "2026-08-24T10:00:00Z", finishedAt: "2026-08-24T10:01:00Z" }, now),
+    "failing",
+  )
+
+  // Running longer than maxDurationMinutes (10 min ago vs 5 min max) -> stale
+  assert.equal(
+    deriveAdminJobStatus(definition, { status: "running", startedAt: "2026-08-24T11:50:00Z", finishedAt: null }, now),
+    "stale",
+  )
+
+  // Running within maxDurationMinutes (2 min ago vs 5 min max) -> healthy
+  assert.equal(
+    deriveAdminJobStatus(definition, { status: "running", startedAt: "2026-08-24T11:58:00Z", finishedAt: null }, now),
+    "healthy",
+  )
+
+  // Skipped -> degraded
+  assert.equal(
+    deriveAdminJobStatus(definition, { status: "skipped", startedAt: "2026-08-24T10:00:00Z", finishedAt: "2026-08-24T10:01:00Z" }, now),
+    "degraded",
+  )
+
+  // Succeeded and within freshnessMinutes (2 hours ago vs 26 hours max) -> healthy
+  assert.equal(
+    deriveAdminJobStatus(definition, { status: "succeeded", startedAt: "2026-08-24T10:00:00Z", finishedAt: "2026-08-24T10:01:00Z" }, now),
+    "healthy",
+  )
+
+  // Succeeded but older than freshnessMinutes (4 days ago vs 26 hours max) -> stale
+  assert.equal(
+    deriveAdminJobStatus(definition, { status: "succeeded", startedAt: "2026-08-20T10:00:00Z", finishedAt: "2026-08-20T10:01:00Z" }, now),
+    "stale",
+  )
+})
+
+test("buildAdminJobViews aggregates catalog jobs with latest runs and calculates counts", () => {
+  const now = new Date("2026-08-24T12:00:00Z")
+  const { jobs, counts } = buildAdminJobViews(
+    [
+      definition,
+      { ...definition, key: "signals.daily", freshnessMinutes: 120 },
+    ],
+    [
+      {
+        id: "run-1",
+        job_key: "wyckoff.ingest",
+        trigger: "cron",
+        status: "succeeded",
+        started_at: "2026-08-24T11:00:00Z",
+        finished_at: "2026-08-24T11:01:00Z",
+      },
+    ],
+    [],
+    now,
+  )
+
+  assert.equal(jobs.length, 2)
+  assert.equal(jobs[0].key, "wyckoff.ingest")
+  assert.equal(jobs[0].status, "healthy")
+  assert.equal(jobs[1].key, "signals.daily")
+  assert.equal(jobs[1].status, "unknown")
+
+  assert.equal(counts.total, 2)
+  assert.equal(counts.healthy, 1)
+  assert.equal(counts.unknown, 1)
+  assert.equal(counts.failing, 0)
+})
+

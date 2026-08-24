@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { BrainCircuit, CandlestickChart, ChevronDown, Compass, GitCommit, LayoutDashboard, Sparkles } from "lucide-react"
+import { BrainCircuit, CandlestickChart, ChevronDown, Compass, GitCommit, LayoutDashboard, Sparkles, Terminal } from "lucide-react"
 
 import { BRAND } from "@/lib/brand"
 
@@ -57,11 +57,13 @@ function insightItemActive(pathname: string, href: string) {
 export function TopNav() {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
+  const [isRootUser, setIsRootUser] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isBoardActive = pathname === "/"
   const isInsightsActive = pathname.startsWith("/insights") || pathname.startsWith("/research")
+  const isAdminActive = pathname.startsWith("/admin")
 
   function openMenu() {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
@@ -71,6 +73,15 @@ export function TopNav() {
   function scheduleClose() {
     closeTimerRef.current = setTimeout(() => setIsOpen(false), 160)
   }
+
+  useEffect(() => {
+    fetch("/api/me", { cache: "no-store", credentials: "same-origin" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.isRoot) setIsRootUser(true)
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -215,6 +226,22 @@ export function TopNav() {
               </div>
             ) : null}
           </div>
+
+          {(isRootUser || isAdminActive) ? (
+            <Link
+              href="/admin"
+              prefetch={false}
+              className={[
+                "group flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-200",
+                isAdminActive
+                  ? "border-emerald-400/50 bg-gradient-to-r from-emerald-500/25 via-purple-500/20 to-emerald-500/25 font-bold text-emerald-300 shadow-[0_0_16px_rgba(176,124,255,0.28),0_0_10px_rgba(34,201,138,0.32),inset_0_1px_0_0_rgba(255,255,255,0.22)]"
+                  : "border-transparent text-slate-300 hover:border-emerald-500/30 hover:bg-gradient-to-r hover:from-emerald-500/10 hover:to-transparent hover:text-white",
+              ].join(" ")}
+            >
+              <Terminal className={`h-3.5 w-3.5 ${isAdminActive ? "text-emerald-300" : "text-emerald-400 group-hover:text-emerald-300"}`} />
+              <span>Quản trị</span>
+            </Link>
+          ) : null}
         </nav>
       </div>
 

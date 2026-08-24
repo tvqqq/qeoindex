@@ -88,8 +88,86 @@ The two destructive market maintenance routes are POST-only. Do not restore unau
 | Shared board cache | Vercel Runtime Cache + optional Upstash Redis | Cache failure fails open to the bounded provider path. |
 | Orderbook persistence | Supabase Postgres | Browser access is authenticated + `market_board` RLS-gated; server ingestion uses service role. |
 | Optional Finhay adapter | Finhay MCP OAuth | Tokens remain secure server cookies; browser routes require `finhay_live`. |
+| Root Admin Control Plane | Supabase Postgres + Server Auth | Restricted strictly to server-side `ROOT_ADMIN_USER_IDS` allowlist; service-role private tables. |
 
-## Market-board lifecycle
+## Root Admin Control Plane
+
+The QeoIndex Root Admin Control Plane provides a low-overhead, private operational cockpit for monitoring system health, telemetry, environment inventory, and safely tuning allowlisted runtime parameters without code changes or redeployments.
+
+### Authorization boundary & security model
+
+- **Root Authority**: Restricted exclusively to the server-side environment variable `ROOT_ADMIN_USER_IDS` containing comma-separated canonical Supabase user UUIDs.
+- **Fails Closed**: If `ROOT_ADMIN_USER_IDS` is unset, empty, or contains invalid UUIDs, root access is completely disabled. Email addresses, client-supplied flags, database roles, or `user_features` are never used for root authorization.
+- **Response Headers**: All root admin routes and APIs emit `Cache-Control: private, no-store, no-cache, max-age=0, must-revalidate` to prevent intermediary caching of sensitive operational data.
+- **CSRF & Mutation Protection**: All state-modifying requests (POST/DELETE) enforce strict same-origin checks (`validateAdminMutationRequest`) and require a mandatory change reason (`validateChangeReason`, 8–240 characters).
+
+### Control Plane persistence & database architecture
+
+Applied migration: `20260824120000_root_admin_control_plane.sql`
+
+1. **`public.system_settings`**: Stores runtime parameter overrides with optimistic locking (`version`), validated JSON values, and service-role-only access.
+2. **`public.system_job_runs`**: High-performance telemetry table tracking execution lifecycles (`started`, `succeeded`, `failed`, `running`), trigger sources (`cron`, `manual`, `startup`), durations, actor IDs, error codes, and sanitized summaries.
+3. **`public.system_audit_log`**: Immutable audit ledger recording all runtime setting mutations and manual job dispatches with before/after state snapshots and change reasons.
+4. **Atomic RPCs**:
+   - `public.qeo_admin_set_system_setting`: Atomic compare-and-swap (CAS) upsert with concurrent version check and audit logging in the same database transaction.
+   - `public.qeo_admin_reset_system_setting`: Atomic CAS delete reverting a setting to code/environment default with audit logging.
+   - `public.qeo_admin_cron_snapshot`: Security-definer RPC exposing `pg_cron` schedule status while strictly redacting shell commands, vault secrets, request headers, and return messages.
+
+### Safe runtime settings vs Read-only inventory
+
+The catalog defines 7 editable runtime-safe keys. All other system parameters (universe caps, URLs, secret keys) are strictly read-only:
+
+| Setting Key | Type | Default | Bounds / Allowed Values | Description |
+| --- | --- | --- | --- | --- |
+| `ai_council.llm_enabled` | `boolean` | `true` | `true` \| `false` | Bật/tắt gọi LLM thực tế trong AI Council daily debate |
+| `ai_council.llm_max_tickers` | `integer` | `3` | `1` – `10` | Số lượng cổ phiếu tối đa đưa vào debate thực tế mỗi ngày |
+| `ai_council.llm_tickers` | `ticker_list` | `[]` | VN uppercase symbols | Danh sách mã cổ phiếu ưu tiên debate |
+| `ai_council.research_tickers` | `ticker_list` | `["MSN"]` | VN uppercase symbols | Danh sách mã cổ phiếu trích xuất ngữ cảnh nghiên cứu |
+| `market.intraday_5m_cache_ttl_seconds` | `integer` | `180` | `15` – `1800` (giây) | Thời gian cache dữ liệu nến intraday 5m |
+| `scanner.manual_run_limit` | `integer` | `100` | `1` – `100` | Số lượng mã tối đa quét trong 1 lần chạy thủ công |
+| `admin.refresh_interval_seconds` | `integer` | `30` | `5` – `300` (giây) | Chu kỳ tự động làm mới giao diện Control Plane |
+
+**Resolution Order**: `Runtime Database Override` > `Environment Variable` > `Code Default`.
+
+### Job health state machine & Manual dispatch
+
+The system inventories 13 background and cron jobs. 4 jobs are allowlisted for safe manual dispatch from the Control Plane:
+
+- `market.sync_universe`: Đồng bộ danh mục cổ phiếu Top 100 từ VPS market feed.
+- `market.intraday_5m`: Làm mới snapshot dữ liệu nến 5m cho Top 100.
+- `scanner.run`: Kích hoạt bộ lọc quét tín hiệu thị trường.
+- `signals.daily`: Kích hoạt quy trình phân tích tín hiệu kỹ thuật & Wyckoff hàng ngày.
+
+**Health Status Derivation**:
+- `healthy`: Lần chạy gần nhất thành công và trong ngưỡng độ tươi (`freshnessMinutes`).
+- `degraded`: Lần chạy gần nhất có cảnh báo hoặc thời lượng thực thi vượt ngưỡng tối đa.
+- `failing`: Lần chạy gần nhất thất bại hoặc kết thúc với mã lỗi.
+- `stale`: Quá thời hạn kiểm tra độ tươi mà không có lượt chạy mới thành công.
+- `unknown`: Chưa ghi nhận lần chạy nào trong hệ thống telemetry.
+
+### Admin endpoints & Navigation
+
+| Route / API | Method | Access | Description |
+| --- | --- | --- | --- |
+| `/admin` | `GET` | Server Root Auth | Bảng điều khiển tổng quan hệ thống, nguồn dữ liệu, telemetry và audit trail. |
+| `/admin/settings` | `GET` | Server Root Auth | Quản lý cài đặt runtime, hỗ trợ chỉnh sửa in-place với optimistic locking và lý do thay đổi. |
+| `/admin/jobs` | `GET` | Server Root Auth | Giám sát 13 tác vụ, trạng thái sức khỏe, lịch cron và kích hoạt chạy thủ công. |
+| `/admin/jobs/[key]` | `GET` | Server Root Auth | Lịch sử chi tiết 50 lần chạy gần nhất của từng tác vụ cụ thể. |
+| `/admin/environment` | `GET` | Server Root Auth | Kiểm tra trạng thái cấu hình của tất cả các biến môi trường; bí mật được ẩn hoàn toàn. |
+| `/admin/audit` | `GET` | Server Root Auth | Lịch sử audit log đầy đủ với bộ lọc hành động, đối tượng và người thực hiện. |
+| `/api/admin/overview` | `GET` | `requireApiRoot` | Trả về JSON tổng quan hệ thống phục vụ polling/refresh. |
+| `/api/admin/settings` | `GET`, `POST` | `requireApiRoot` | Lấy danh sách cài đặt hoặc cập nhật ghi đè runtime (yêu cầu CSRF origin & reason). |
+| `/api/admin/settings/[key]` | `DELETE` | `requireApiRoot` | Khôi phục cài đặt về mặc định (yêu cầu CSRF origin & reason). |
+| `/api/admin/jobs` | `GET` | `requireApiRoot` | Lấy snapshot tình trạng tác vụ và lịch sử thực thi gần đây. |
+| `/api/admin/jobs/[key]/run` | `POST` | `requireApiRoot` | Kích hoạt thực thi thủ công tác vụ thuộc allowlist (yêu cầu CSRF origin & reason). |
+
+### UI performance compliance
+
+In accordance with `docs/UI_LESSONS_LEARNED.md`, the Root Admin Control Plane UI strictly adheres to:
+- No `transition-all` declarations anywhere in admin components.
+- Zero `backdrop-filter` or `backdrop-blur-*` surfaces.
+- All navigation links specify `prefetch={false}`.
+- Lightweight, dimensionally stable modal dialogs without nested scroll-traps or layout shift.
 
 1. `app/page.tsx` verifies the server session before any protected board load.
 2. SSR assembles snapshots, batch quotes, and the shared 5-minute history snapshot in parallel.

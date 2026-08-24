@@ -411,9 +411,16 @@ export function aiCouncilLlmModelRouteLabel(route = getAiCouncilLlmModelRoute())
   return `Bull/Bear ${route.bull.model}/${route.bear.model} · Risk ${route.risk.model} · Chair ${route.chair.model} · Escalation ${route.escalation.model}`
 }
 
-function configuredTickers(): Set<string> {
+function configuredTickers(raw?: string | string[]): Set<string> {
+  if (Array.isArray(raw)) {
+    return new Set<string>(
+      raw
+        .map((value) => String(value).trim().toUpperCase())
+        .filter((value) => /^[A-Z0-9]{2,12}$/.test(value)),
+    )
+  }
   return new Set<string>(
-    (process.env.AI_COUNCIL_LLM_TICKERS || "")
+    ((typeof raw === "string" ? raw : process.env.AI_COUNCIL_LLM_TICKERS) || "")
       .split(",")
       .map((value) => value.trim().toUpperCase())
       .filter((value) => /^[A-Z0-9]{2,12}$/.test(value)),
@@ -745,6 +752,7 @@ async function selectDebates(
   supabase: SupabaseClient,
   stocks: AiCouncilStockSnapshot[],
   ratingDate: string,
+  runtimeConfig?: AiCouncilRuntimeConfig,
 ) {
   if (!stocks.length) return { selections: [] as SelectedDebate[], skippedExisting: 0 }
   const tickers = stocks.map((stock) => stock.ticker)
@@ -782,7 +790,9 @@ async function selectDebates(
   if (existing.error) throw new Error(`Load existing LLM debates failed: ${existing.error.message}`)
   const existingByRun = new Map(((existing.data || []) as ExistingDebateRow[]).map((row) => [row.run_id, row.status]))
 
-  const explicit = configuredTickers()
+  const explicit = runtimeConfig?.tickers
+    ? configuredTickers(runtimeConfig.tickers)
+    : configuredTickers()
   let skippedExisting = 0
   const candidates: SelectedDebate[] = []
   for (const stock of stocks) {
@@ -805,7 +815,9 @@ async function selectDebates(
     })
   }
 
-  const maxTickers = integerEnv("AI_COUNCIL_LLM_MAX_TICKERS", DEFAULT_MAX_TICKERS, 1, HARD_MAX_TICKERS)
+  const maxTickers = runtimeConfig?.maxTickers !== undefined
+    ? Math.min(HARD_MAX_TICKERS, Math.max(1, runtimeConfig.maxTickers))
+    : integerEnv("AI_COUNCIL_LLM_MAX_TICKERS", DEFAULT_MAX_TICKERS, 1, HARD_MAX_TICKERS)
   candidates.sort((left, right) => right.priority - left.priority || (left.stock.rank ?? 999) - (right.stock.rank ?? 999) || left.stock.ticker.localeCompare(right.stock.ticker))
   return { selections: candidates.slice(0, maxTickers), skippedExisting }
 }
@@ -1012,6 +1024,13 @@ async function runOneDebate(
   }
 }
 
+export interface AiCouncilRuntimeConfig {
+  llmEnabled: boolean
+  maxTickers: number
+  tickers: string[]
+  researchTickers: string[]
+}
+
 export async function runSelectedAiCouncilLlmDebates(
   supabase: SupabaseClient,
   params: {
@@ -1019,6 +1038,7 @@ export async function runSelectedAiCouncilLlmDebates(
     stocks: AiCouncilStockSnapshot[]
     benchmark: CouncilBenchmarkContext
     weightProfile: CouncilWeightProfile
+    runtimeConfig?: AiCouncilRuntimeConfig
   },
 ): Promise<RunAiCouncilLlmDebatesResult> {
   const modelRoute = getAiCouncilLlmModelRoute()
@@ -1039,12 +1059,16 @@ export async function runSelectedAiCouncilLlmDebates(
     reasons: reasonCounts([]),
   }
 
-  if (!enabled()) {
+  const isEnabled = params.runtimeConfig?.llmEnabled !== undefined
+    ? params.runtimeConfig.llmEnabled && Boolean(process.env.OPENAI_API_KEY)
+    : enabled()
+
+  if (!isEnabled) {
     return {
       enabled: false,
       ...emptyResult,
       detail: process.env.OPENAI_API_KEY
-        ? "AI Council LLM debate is disabled by AI_COUNCIL_LLM_ENABLED."
+        ? "AI Council LLM debate is disabled."
         : "AI Council LLM debate is disabled because OPENAI_API_KEY is not configured.",
     }
   }
@@ -1056,7 +1080,12 @@ export async function runSelectedAiCouncilLlmDebates(
     }
   }
 
-  const { selections, skippedExisting } = await selectDebates(supabase, params.stocks, params.ratingDate)
+  const { selections, skippedExisting } = await selectDebates(
+    supabase,
+    params.stocks,
+    params.ratingDate,
+    params.runtimeConfig,
+  )
   let completed = 0
   let partial = 0
   let failed = 0

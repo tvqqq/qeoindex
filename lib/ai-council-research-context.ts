@@ -201,17 +201,24 @@ function sha256(value: unknown) {
     .digest("hex")
 }
 
-export function configuredCouncilResearchTickers() {
+export function configuredCouncilResearchTickers(raw?: string | string[]) {
+  if (Array.isArray(raw)) {
+    return new Set(
+      raw
+        .map((ticker) => String(ticker).trim().toUpperCase())
+        .filter((ticker) => /^[A-Z0-9]{2,12}$/.test(ticker)),
+    )
+  }
   return new Set(
-    (process.env.AI_COUNCIL_RESEARCH_TICKERS || DEFAULT_PILOT_TICKERS)
+    ((typeof raw === "string" ? raw : process.env.AI_COUNCIL_RESEARCH_TICKERS) || DEFAULT_PILOT_TICKERS)
       .split(",")
       .map((ticker) => ticker.trim().toUpperCase())
       .filter((ticker) => /^[A-Z0-9]{2,12}$/.test(ticker)),
   )
 }
 
-export function isCouncilResearchTickerEnabled(ticker: string) {
-  return configuredCouncilResearchTickers().has(ticker.toUpperCase())
+export function isCouncilResearchTickerEnabled(ticker: string, raw?: string | string[]) {
+  return configuredCouncilResearchTickers(raw).has(ticker.toUpperCase())
 }
 
 function sourceTypeRank(value: string) {

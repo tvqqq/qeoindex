@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { isConfiguredRootUserId } from "@/lib/auth/root"
 import { requireApiUser, type ServerAuthContext } from "@/lib/auth/server"
 
 export const runtime = "nodejs"
@@ -34,6 +35,7 @@ async function loadAccount(context: ServerAuthContext) {
 
   return {
     user: { id: context.user.id, email: context.user.email ?? null },
+    isRoot: isConfiguredRootUserId(context.user.id),
     profile: profileResult.data,
     preferences: preferencesResult.data,
     features: Object.fromEntries((featuresResult.data ?? []).map((row) => [row.feature_key, {
