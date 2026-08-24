@@ -5,6 +5,7 @@ import {
   Activity,
   BarChart3,
   BrainCircuit,
+  ChevronDown,
   CircleAlert,
   Crown,
   Database,
@@ -21,24 +22,13 @@ import {
   Zap,
 } from "lucide-react"
 
-import { StockIdentity } from "@/components/stock-identity"
+import { AiCouncilInvestorReport } from "@/components/insights/ai-council-investor-report"
 import { TopNav } from "@/components/top-nav"
 import type { AiCouncilData, AiCouncilHistoryEntry } from "@/lib/ai-council-data"
 import type { AiCouncilStock, CouncilAgentOpinion, CouncilSignal } from "@/lib/ai-council-model"
 import { cn } from "@/lib/utils"
 
 const AGENT_ICON = { wyckoff: Radar, momentum: LineChart, fundamental: BarChart3, flow: Activity, market: Gauge, risk: ShieldCheck } as const
-const SIGNAL_TONE: Record<CouncilSignal, string> = {
-  BUY: "border-emerald-400/35 bg-emerald-400/10 text-emerald-300",
-  BUY_ON_CONFIRMATION: "border-cyan-400/35 bg-cyan-400/10 text-cyan-200",
-  WAIT: "border-slate-400/25 bg-slate-400/[0.08] text-slate-200",
-  REDUCE: "border-amber-400/35 bg-amber-400/10 text-amber-300",
-  SELL: "border-rose-400/35 bg-rose-400/10 text-rose-300",
-}
-
-function price(value: number | null) {
-  return value == null ? "—" : value.toLocaleString("vi-VN", { minimumFractionDigits: 1, maximumFractionDigits: 2 })
-}
 
 function pct(value: number | null) {
   return value == null ? "—" : `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`
@@ -120,19 +110,25 @@ function HistoryPanel({ rows, message }: { rows: AiCouncilHistoryEntry[]; messag
 function CouncilWorkspace({ stock, history, historyMessage }: { stock: AiCouncilStock; history: AiCouncilHistoryEntry[]; historyMessage: string }) {
   return (
     <div className="min-w-0 space-y-4">
-      <section className="rounded-3xl border border-white/[0.09] bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,.13),transparent_34%),linear-gradient(145deg,#0b1119,#070b10)]">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.06] px-5 py-4"><StockIdentity ticker={stock.ticker} companyName={stock.companyName} exchange={stock.exchange} detail={stock.sector} logoSize={40} className="min-w-0 flex-1"/><div className="text-right"><div className="font-mono text-2xl font-black">{price(stock.price)}</div><div className={cn("font-mono text-sm font-bold", (stock.changePct ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300")}>{pct(stock.changePct)}</div></div></div>
-        <div className="grid gap-5 px-5 py-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,.65fr)]">
-          <div><div className="flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-wider"><span className="text-violet-300">Council verdict</span>{stock.confirmationPending ? <span className="rounded-full border border-cyan-400/20 px-2 py-0.5 text-cyan-300">Confirmation pending</span> : null}<span className="rounded-full border border-white/10 px-2 py-0.5 text-slate-400">Data {stock.dataQuality}</span></div><div className={cn("mt-3 inline-flex rounded-2xl border px-4 py-2.5 font-ticker text-xl font-black sm:text-2xl", SIGNAL_TONE[stock.signal])}>{stock.signalLabel}</div><p className="mt-4 max-w-3xl text-[12px] leading-5 text-slate-300">{stock.dissent}</p></div>
-          <div className="grid grid-cols-3 gap-2"><div className="rounded-xl border border-white/[0.07] bg-black/10 p-3 text-center"><div className="text-[9px] uppercase text-slate-600">Score</div><div className="mt-1 font-mono text-xl font-black text-white">{stock.councilScore}</div></div><div className="rounded-xl border border-white/[0.07] bg-black/10 p-3 text-center"><div className="text-[9px] uppercase text-slate-600">Consensus</div><div className="mt-1 font-mono text-xl font-black text-violet-300">{stock.consensus}%</div></div><div className="rounded-xl border border-white/[0.07] bg-black/10 p-3 text-center"><div className="text-[9px] uppercase text-slate-600">Confidence</div><div className="mt-1 font-mono text-xl font-black text-cyan-300">{stock.confidence}%</div></div><div className="col-span-3 rounded-xl border border-white/[0.07] bg-black/10 px-3 py-2 text-center text-[10px] text-slate-400"><span className="text-emerald-300">{stock.bullVotes} Bull</span> · {stock.neutralVotes} Neutral · <span className="text-rose-300">{stock.bearVotes} Bear</span> · Risk <span className={stock.riskStatus === "approve" ? "text-emerald-300" : stock.riskStatus === "veto" ? "text-rose-300" : "text-amber-300"}>{stock.riskStatus.toUpperCase()}</span></div></div>
-        </div>
-      </section>
+      <AiCouncilInvestorReport stock={stock} />
 
-      <section><div className="mb-2 flex items-center gap-2"><BrainCircuit className="size-4 text-violet-300"/><h2 className="text-sm font-extrabold">Independent specialist opinions</h2></div><div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">{stock.agents.map((agent) => <AgentCard key={agent.key} agent={agent}/>)}</div></section>
-      <section className="grid gap-3 lg:grid-cols-2"><Debate title="Bull Researcher" items={stock.bullCase} bull/><Debate title="Bear Researcher" items={stock.bearCase} bull={false}/></section>
-      <section className="grid gap-3 lg:grid-cols-[.8fr_1.2fr]"><div className="rounded-2xl border border-amber-400/15 bg-amber-400/[0.03] p-4"><h3 className="flex items-center gap-2 text-sm font-extrabold text-amber-300"><CircleAlert className="size-4"/>Minority / Risk view</h3><p className="mt-3 text-[11px] leading-5 text-slate-300">{stock.dissent}</p></div><div className="rounded-2xl border border-white/[0.08] bg-[#080d13] p-4"><h3 className="flex items-center gap-2 text-sm font-extrabold"><Target className="size-4 text-cyan-300"/>Decision levels</h3><div className="mt-3 grid gap-2 sm:grid-cols-2"><Level label="Support" value={stock.support} tone="text-emerald-300"/><Level label="Resistance" value={stock.resistance} tone="text-amber-300"/><Level label="Confirmation" value={stock.confirmation} tone="text-cyan-300"/><Level label="Invalidation" value={stock.invalidation} tone="text-rose-300"/></div></div></section>
-      <section className="rounded-2xl border border-white/[0.08] bg-[#080d13] p-4"><h3 className="flex items-center gap-2 text-sm font-extrabold"><Zap className="size-4 text-cyan-300"/>What changes the decision?</h3><div className="mt-3 grid gap-2 md:grid-cols-3">{stock.whatChangesDecision.map((item, index) => <p key={index} className="rounded-xl border border-white/[0.06] bg-black/10 p-3 text-[10px] leading-5 text-slate-300">{item}</p>)}</div><p className="mt-3 border-t border-white/[0.06] pt-3 text-[9px] leading-4 text-slate-600">{stock.dataQualityDetail}</p></section>
-      <HistoryPanel rows={history} message={historyMessage}/>
+      <details className="group overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13]">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3.5 marker:hidden">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-extrabold text-slate-200"><BrainCircuit className="size-4 text-violet-300" />Phân tích chuyên sâu</div>
+            <p className="mt-1 text-[10px] text-slate-600">Specialist Council · Bull/Bear · Risk · Decision levels · Historical audit</p>
+          </div>
+          <ChevronDown className="size-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
+        </summary>
+
+        <div className="space-y-4 border-t border-white/[0.06] p-4">
+          <section><div className="mb-2 flex items-center gap-2"><BrainCircuit className="size-4 text-violet-300"/><h2 className="text-sm font-extrabold">Independent specialist opinions</h2></div><div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">{stock.agents.map((agent) => <AgentCard key={agent.key} agent={agent}/>)}</div></section>
+          <section className="grid gap-3 lg:grid-cols-2"><Debate title="Bull Researcher" items={stock.bullCase} bull/><Debate title="Bear Researcher" items={stock.bearCase} bull={false}/></section>
+          <section className="grid gap-3 lg:grid-cols-[.8fr_1.2fr]"><div className="rounded-2xl border border-amber-400/15 bg-amber-400/[0.03] p-4"><h3 className="flex items-center gap-2 text-sm font-extrabold text-amber-300"><CircleAlert className="size-4"/>Minority / Risk view</h3><p className="mt-3 text-[11px] leading-5 text-slate-300">{stock.dissent}</p></div><div className="rounded-2xl border border-white/[0.08] bg-[#080d13] p-4"><h3 className="flex items-center gap-2 text-sm font-extrabold"><Target className="size-4 text-cyan-300"/>Decision levels</h3><div className="mt-3 grid gap-2 sm:grid-cols-2"><Level label="Support" value={stock.support} tone="text-emerald-300"/><Level label="Resistance" value={stock.resistance} tone="text-amber-300"/><Level label="Confirmation" value={stock.confirmation} tone="text-cyan-300"/><Level label="Invalidation" value={stock.invalidation} tone="text-rose-300"/></div></div></section>
+          <section className="rounded-2xl border border-white/[0.08] bg-[#080d13] p-4"><h3 className="flex items-center gap-2 text-sm font-extrabold"><Zap className="size-4 text-cyan-300"/>What changes the decision?</h3><div className="mt-3 grid gap-2 md:grid-cols-3">{stock.whatChangesDecision.map((item, index) => <p key={index} className="rounded-xl border border-white/[0.06] bg-black/10 p-3 text-[10px] leading-5 text-slate-300">{item}</p>)}</div><p className="mt-3 border-t border-white/[0.06] pt-3 text-[9px] leading-4 text-slate-600">{stock.dataQualityDetail}</p></section>
+          <HistoryPanel rows={history} message={historyMessage}/>
+        </div>
+      </details>
     </div>
   )
 }
@@ -162,9 +158,9 @@ export function AiCouncilDashboard({ data, initialTicker = "" }: { data: AiCounc
 
   return (
     <div className="min-h-screen bg-[#06090d] text-white"><TopNav/><main className="mx-auto max-w-[1720px] px-3 py-4 sm:px-5 lg:px-6">
-      <header className="mb-4 flex flex-wrap items-end justify-between gap-4"><div className="flex items-center gap-2"><span className="flex size-9 items-center justify-center rounded-xl border border-violet-400/25 bg-violet-400/[0.09] text-violet-300"><BrainCircuit className="size-[18px]"/></span><div><div className="flex items-center gap-2"><h1 className="font-ticker text-xl font-black sm:text-2xl">AI Council</h1><span className="rounded-full border border-violet-400/20 bg-violet-400/[0.08] px-2 py-0.5 text-[9px] font-black text-violet-300">P2 AUDIT</span></div><p className="text-[10px] text-slate-500">Independent evidence agents → Bull/Bear debate → Risk audit → deterministic signal → immutable outcome tracking.</p></div></div><div className="flex flex-wrap gap-2 text-[9px] text-slate-500"><span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] px-2.5 py-1.5"><Database className="size-3.5 text-cyan-400"/>Rating {data.ratingDate || "—"}</span><span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] px-2.5 py-1.5"><Crown className="size-3.5 text-violet-400"/>Evidence Ensemble V1</span><span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] px-2.5 py-1.5"><History className="size-3.5 text-emerald-400"/>Audit {data.history.length}</span></div></header>
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-4"><div className="flex items-center gap-2"><span className="flex size-9 items-center justify-center rounded-xl border border-violet-400/25 bg-violet-400/[0.09] text-violet-300"><BrainCircuit className="size-[18px]"/></span><div><div className="flex items-center gap-2"><h1 className="font-ticker text-xl font-black sm:text-2xl">AI Council</h1><span className="rounded-full border border-violet-400/20 bg-violet-400/[0.08] px-2 py-0.5 text-[9px] font-black text-violet-300">INVESTOR VIEW</span></div><p className="text-[10px] text-slate-500">Khuyến nghị đơn giản trước; specialist reasoning, Bull/Bear, Risk và audit được giữ ở lớp phân tích chuyên sâu.</p></div></div><div className="flex flex-wrap gap-2 text-[9px] text-slate-500"><span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] px-2.5 py-1.5"><Database className="size-3.5 text-cyan-400"/>Rating {data.ratingDate || "—"}</span><span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] px-2.5 py-1.5"><Crown className="size-3.5 text-violet-400"/>Evidence Ensemble V1</span><span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] px-2.5 py-1.5"><History className="size-3.5 text-emerald-400"/>Audit {data.history.length}</span></div></header>
       {data.stocks.length && active ? <div className="grid gap-4 xl:grid-cols-[290px_minmax(0,1fr)]"><aside className="xl:sticky xl:top-[72px] xl:h-[calc(100vh-88px)]"><div className="flex h-full min-h-[520px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13]"><div className="border-b border-white/[0.06] p-3"><div className="relative"><Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-600"/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã / công ty..." className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-2.5 pl-9 pr-8 text-xs outline-none focus:border-violet-400/35"/>{query ? <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600"><X className="size-3.5"/></button> : null}</div><div className="mt-2 flex gap-1">{([['all','Tất cả'],['bull','Bull'],['wait','Wait'],['risk','Risk']] as const).map(([value, label]) => <button key={value} onClick={() => setFilter(value)} className={cn("rounded-lg px-2.5 py-1.5 text-[9px] font-bold", filter === value ? "bg-violet-400/15 text-violet-300" : "text-slate-500")}>{label}</button>)}</div></div><div className="min-h-0 flex-1 overflow-y-auto">{filtered.map((stock) => <button key={stock.ticker} onClick={() => selectTicker(stock.ticker)} className={cn("grid w-full grid-cols-[44px_1fr_74px] items-center border-b border-white/[0.04] px-3 py-2.5 text-left", stock.ticker === activeTicker ? "border-l-2 border-l-violet-400 bg-violet-400/[0.08]" : "hover:bg-white/[0.03]")}><span className="font-mono text-[9px] text-slate-600">#{stock.rank ?? "—"}</span><span><b className="font-ticker text-sm">{stock.ticker}</b><small className="block text-[9px] text-slate-600">Score {stock.councilScore} · {pct(stock.changePct)}</small></span><span className={cn("truncate text-right text-[8px] font-black", signalTone(stock.signal))}>{compactSignal(stock.signal)}</span></button>)}</div></div></aside><CouncilWorkspace stock={active} history={activeHistory} historyMessage={data.historyMessage}/></div> : <section className="rounded-2xl border border-rose-400/15 bg-rose-400/[0.04] p-6 text-sm text-rose-200"><CircleAlert className="mr-2 inline size-4"/>AI Council chưa có dữ liệu. <span className="text-slate-400">{data.message}</span></section>}
-      <footer className="mt-4 rounded-2xl border border-white/[0.06] bg-[#080d13] px-4 py-3 text-[9px] leading-5 text-slate-600"><b className="text-slate-400">Methodology:</b> V1 không để LLM tự tính indicator hoặc tự fetch dữ liệu. Specialist đọc cùng point-in-time evidence nhưng chấm độc lập; Risk có quyền CAUTION/VETO; Chair dùng policy cố định. P2 lưu immutable decision revisions + specialist votes; D+1/D+5/D+20 được refresh từ published KFSP sessions để tránh rewrite history.</footer>
+      <footer className="mt-4 rounded-2xl border border-white/[0.06] bg-[#080d13] px-4 py-3 text-[9px] leading-5 text-slate-600"><b className="text-slate-400">Methodology:</b> Investor View chỉ trình bày lại deterministic Council theo ngôn ngữ dễ đọc. V1 không để LLM tự tính indicator hoặc tự fetch dữ liệu; specialist đọc cùng point-in-time evidence nhưng chấm độc lập, Risk có quyền CAUTION/VETO, và historical revisions vẫn immutable.</footer>
     </main></div>
   )
 }
