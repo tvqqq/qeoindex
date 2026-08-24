@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -6,6 +7,10 @@ import {
   getManualJobCapabilities,
   isManualJobAllowed,
 } from "../lib/admin/jobs.ts"
+
+function source(path: string) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+}
 
 test("only the 4 allowlisted jobs are manual-safe", () => {
   assert.deepEqual([...ALLOWLISTED_MANUAL_JOB_KEYS].sort(), [
@@ -62,4 +67,22 @@ test("dispatchManualAdminJob rejects short change reason", async () => {
 
   assert.equal(result.ok, false)
   assert.match(result.error || "", /8 đến 240 ký tự/)
+})
+
+test("AI Council daily and debate routes hard-stop on stale EOD upstream evidence", () => {
+  const daily = source("app/api/ai-council/daily/route.ts")
+  const debate = source("app/api/ai-council/debate-daily/route.ts")
+
+  assert.match(daily, /assertAiCouncilEodFreshness/)
+  assert.match(daily, /UPSTREAM_STALE/)
+  assert.match(debate, /assertAiCouncilEodFreshness/)
+  assert.match(debate, /UPSTREAM_STALE/)
+
+  const dailyGuard = daily.indexOf("assertAiCouncilEodFreshness")
+  const dailyPersist = daily.indexOf("persistAiCouncilData")
+  assert.ok(dailyGuard >= 0 && dailyGuard < dailyPersist, "daily freshness gate must run before persistence")
+
+  const debateGuard = debate.indexOf("assertAiCouncilEodFreshness")
+  const debateEnrichment = debate.indexOf("enrichCouncilStocksForDebate")
+  assert.ok(debateGuard >= 0 && debateGuard < debateEnrichment, "debate freshness gate must run before evidence freeze or OpenAI work")
 })
