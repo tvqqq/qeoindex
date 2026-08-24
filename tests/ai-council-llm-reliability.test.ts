@@ -1,5 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 
 import {
   inspectOpenAiResponseEnvelope,
@@ -113,4 +114,15 @@ test("evidenceRef still rejects a second metric smuggled into one observedValue"
   const result = validateCouncilEvidenceRefs("risk", refs, packet)
   assert.equal(result.valid, false)
   assert.ok(result.errors.some((error) => error.includes("does not match observed")))
+})
+
+test("LLM runtime inspects incomplete_details and retries max-output truncation once before fallback", () => {
+  const code = readFileSync(new URL("../lib/ai-council-llm.ts", import.meta.url), "utf8")
+  assert.match(code, /inspectOpenAiResponseEnvelope/)
+  assert.match(code, /nextMaxOutputTokensAfterIncomplete/)
+  assert.match(code, /callModelWithOutputRetry/)
+  assert.match(code, /shouldRetryWithMoreOutput/)
+  assert.match(code, /maxOutputTokens: 1400/)
+  assert.match(code, /maxOutputTokens: 1600/)
+  assert.match(code, /maxOutputTokens: 2000/)
 })
