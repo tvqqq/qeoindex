@@ -20,6 +20,10 @@ test("only the 4 allowlisted jobs are manual-safe", () => {
     "wyckoff.ingest",
   ])
 
+  assert.equal(isManualJobAllowed("market.sync_universe"), true)
+  assert.equal(isManualJobAllowed("scanner.run"), true)
+  assert.equal(isManualJobAllowed("signals.monitor"), true)
+  assert.equal(isManualJobAllowed("wyckoff.ingest"), true)
   assert.equal(isManualJobAllowed("ai_council.daily"), false)
   assert.equal(isManualJobAllowed("ai_council.debate_daily"), false)
   assert.equal(isManualJobAllowed("signals.daily"), false)
