@@ -16,16 +16,8 @@
       "schedule": "0 0 * * 1-5"
     },
     {
-      "path": "/api/wyckoff/ingest",
+      "path": "/api/ai-council/eod",
       "schedule": "0 10 * * 1-5"
-    },
-    {
-      "path": "/api/ai-council/daily",
-      "schedule": "15 10 * * 1-5"
-    },
-    {
-      "path": "/api/ai-council/debate-daily",
-      "schedule": "25 10 * * 1-5"
     }
   ]
 }

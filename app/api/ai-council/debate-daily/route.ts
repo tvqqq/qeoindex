@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { AiCouncilUpstreamStaleError, assertAiCouncilEodFreshness } from "@/lib/ai-council-freshness"
-import {
-  AI_COUNCIL_LLM_PROMPT_VERSION,
-  runSelectedAiCouncilLlmDebates,
-} from "@/lib/ai-council-llm"
-import { enrichCouncilStocksForDebate } from "@/lib/ai-council-pre-market-evidence"
-import { configuredCouncilResearchTickers } from "@/lib/ai-council-research-context"
-import { getAiCouncilRuntimeData } from "@/lib/ai-council-runtime"
-import { getAiCouncilRuntimeConfig } from "@/lib/admin/settings"
+import { runAiCouncilDebateOperation } from "@/lib/ai-council-operations"
 import { isMachineRequestAuthorized } from "@/lib/auth/machine"
 import { notifyOpsError } from "@/lib/ops-alerts"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
@@ -16,22 +8,6 @@ import { getSupabaseServerClient } from "@/lib/supabase/server"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
-
-function firstValidationTicker(
-  stocks: Awaited<ReturnType<typeof getAiCouncilRuntimeData>>["data"]["stocks"],
-  researchTickers?: string[],
-) {
-  const researchPilots = configuredCouncilResearchTickers(researchTickers)
-  const researchPilot = [...stocks]
-    .filter((stock) => researchPilots.has(stock.ticker))
-    .sort((left, right) => (left.rank ?? 999) - (right.rank ?? 999) || left.ticker.localeCompare(right.ticker))[0]?.ticker
-
-  if (researchPilot) return researchPilot
-
-  return [...stocks]
-    .filter((stock) => Boolean(stock.ticker))
-    .sort((left, right) => (left.rank ?? 999) - (right.rank ?? 999) || left.ticker.localeCompare(right.ticker))[0]?.ticker || null
-}
 
 export async function GET(request: NextRequest) {
   if (!isMachineRequestAuthorized(
@@ -48,128 +24,23 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const runtimeConfig = await getAiCouncilRuntimeConfig()
-    const runtimeData = await getAiCouncilRuntimeData(supabase, {
-      includeHistory: false,
-      includePromptEvidence: true,
-      includeEodMarketOverlay: true,
-    })
-
-    let freshness
-    try {
-      freshness = await assertAiCouncilEodFreshness(supabase, {
-        ratingDate: runtimeData.data.ratingDate,
-        tickers: runtimeData.data.stocks.map((stock) => stock.ticker),
-        benchmarkSessionDate: runtimeData.benchmark.sessionDate,
-      })
-    } catch (error) {
-      if (error instanceof AiCouncilUpstreamStaleError) {
-        await notifyOpsError({
-          source: "api/ai-council/debate-daily",
-          message: error.message,
-          path: request.nextUrl.pathname,
-          method: request.method,
-          status: 424,
-        }).catch(() => undefined)
-        return NextResponse.json({
-          ok: false,
-          status: "skipped",
-          reason: "UPSTREAM_STALE",
-          ratingDate: runtimeData.data.ratingDate,
-          freshness: error.report,
-          finalAuthority: "deterministic",
-          detail: "LLM evidence freeze and OpenAI calls were skipped because the deterministic upstream evidence is not aligned to one completed EOD session.",
-        }, { status: 424 })
-      }
-      throw error
-    }
-
-    // Freeze raw provider/Wyckoff evidence first, then attach bounded Notion research as explicit
-    // first-class packet fields. Deterministic scoring and signal authority remain unchanged.
-    const evidenceFidelity = await enrichCouncilStocksForDebate(supabase, {
-      ratingDate: runtimeData.data.ratingDate,
-      stocks: runtimeData.data.stocks,
-      promptVersion: AI_COUNCIL_LLM_PROMPT_VERSION,
-    })
-    const debateStocks = evidenceFidelity.stocks
-
-    const priorDebates = await supabase
-      .from("ai_council_llm_debates")
-      .select("id", { count: "exact", head: true })
-
-    if (priorDebates.error) {
-      throw new Error(`Load prior LLM debate count failed: ${priorDebates.error.message}`)
-    }
-
-    const run = () => runSelectedAiCouncilLlmDebates(supabase, {
-      ratingDate: runtimeData.data.ratingDate,
-      stocks: debateStocks,
-      benchmark: runtimeData.benchmark,
-      weightProfile: runtimeData.weightProfile,
-      runtimeConfig,
-    })
-
-    let result = await run()
-    let validationBootstrap = false
-    let validationTicker: string | null = null
-
-    // First-live-run guardrail: if the event selector has never produced a debate,
-    // prefer a research-context pilot ticker (MSN by default) so the first bounded
-    // production call validates both market evidence and curated Notion context.
-    if (
-      result.enabled
-      && result.selected === 0
-      && (priorDebates.count || 0) === 0
-      && !runtimeConfig.tickers.length
-      && !process.env.AI_COUNCIL_LLM_TICKERS?.trim()
-    ) {
-      validationTicker = firstValidationTicker(debateStocks, runtimeConfig.researchTickers)
-      if (validationTicker) {
-        const originalTickers = process.env.AI_COUNCIL_LLM_TICKERS
-        const originalMaxTickers = process.env.AI_COUNCIL_LLM_MAX_TICKERS
-        try {
-          process.env.AI_COUNCIL_LLM_TICKERS = validationTicker
-          process.env.AI_COUNCIL_LLM_MAX_TICKERS = "1"
-          result = await run()
-          validationBootstrap = result.selected > 0
-        } finally {
-          if (originalTickers == null) delete process.env.AI_COUNCIL_LLM_TICKERS
-          else process.env.AI_COUNCIL_LLM_TICKERS = originalTickers
-          if (originalMaxTickers == null) delete process.env.AI_COUNCIL_LLM_MAX_TICKERS
-          else process.env.AI_COUNCIL_LLM_MAX_TICKERS = originalMaxTickers
-        }
-      }
+    const result = await runAiCouncilDebateOperation(supabase)
+    if (!result.ok) {
+      const status = result.reason === "UPSTREAM_STALE" ? 424 : 409
+      await notifyOpsError({
+        source: "api/ai-council/debate-daily",
+        message: result.detail,
+        path: request.nextUrl.pathname,
+        method: request.method,
+        status,
+      }).catch(() => undefined)
+      return NextResponse.json(result, { status })
     }
 
     return NextResponse.json({
-      ok: true,
-      status: result.enabled ? "completed" : "disabled",
       ...result,
-      freshness,
-      evidenceFidelity: {
-        contextVersion: evidenceFidelity.contextVersion,
-        contextsBuilt: evidenceFidelity.contextsBuilt,
-        contextsReused: evidenceFidelity.contextsReused,
-        contextsPersisted: evidenceFidelity.contextsPersisted,
-        missingRunIdentities: evidenceFidelity.missingRunIdentities,
-        ttaiRowsLoaded: evidenceFidelity.ttaiRowsLoaded,
-        wyckoffRowsLoaded: evidenceFidelity.wyckoffRowsLoaded,
-        detail: evidenceFidelity.detail,
-      },
-      researchContext: {
-        contextVersion: evidenceFidelity.researchContextVersion,
-        pilotTickers: [...configuredCouncilResearchTickers(runtimeConfig.researchTickers)],
-        ready: evidenceFidelity.researchReady,
-        unavailable: evidenceFidelity.researchUnavailable,
-        reused: evidenceFidelity.researchReused,
-        persisted: evidenceFidelity.researchPersisted,
-        missingRunIdentities: evidenceFidelity.researchMissingRunIdentities,
-      },
-      validationBootstrap,
-      validationTicker: validationBootstrap ? validationTicker : null,
       schedule: "17:25 Asia/Ho_Chi_Minh on trading weekdays",
-      finalAuthority: "deterministic",
-      behavior: "Require same-session final market + 1D Wyckoff + VNINDEX freshness before any LLM evidence freeze. Then freeze the EOD-rebuilt current KFSP/TTAI evidence + quarterly 4M/CANSLIM trajectory + raw Wyckoff MTF context, attach bounded point-in-time Notion Research Context as first-class Packet V2 evidence, and route OpenAI prompt caching by the combined prompt identity. Event-selected runs use Luna Bull/Bear -> Terra Risk/Chair -> Sol severe-conflict Chair. Deterministic scoring and signal authority never change.",
+      behavior: "Operational endpoint for the advisory LLM stage. Production scheduling is owned by the dependency-driven EOD workflow and deterministic authority remains final.",
     })
   } catch (error) {
     console.error("AI Council P4.3 LLM debate failed", error)
