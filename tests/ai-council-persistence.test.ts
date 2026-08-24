@@ -153,15 +153,16 @@ test("P4.1 routes roles to Luna/Terra/Sol with bounded fallback and reasoning ef
 
 test("P4.1 uses Responses Structured Outputs, stable prompt-cache keys, and token telemetry", () => {
   const llm = source("lib/ai-council-llm.ts")
+  const responseEnvelope = source("lib/ai-council-openai-response.ts")
   const migration = source("supabase/migrations/20260823195500_ai_council_llm_router_telemetry.sql")
 
   assert.match(llm, /https:\/\/api\.openai\.com\/v1\/responses/)
   assert.match(llm, /type: "json_schema"/)
   assert.match(llm, /strict: true/)
   assert.match(llm, /prompt_cache_key: params\.cacheKey/)
-  assert.match(llm, /input_tokens_details/)
-  assert.match(llm, /cached_tokens/)
-  assert.match(llm, /reasoning_tokens/)
+  assert.match(responseEnvelope, /input_tokens_details/)
+  assert.match(responseEnvelope, /cached_tokens/)
+  assert.match(responseEnvelope, /reasoning_tokens/)
   assert.match(llm, /store: false/)
   assert.match(llm, /tools: \[\]/)
   assert.match(llm, /OPENAI_API_KEY is not configured/)
