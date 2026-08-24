@@ -22,40 +22,27 @@ const definition: AdminJobDefinition = {
 test("job health is derived from result and freshness", () => {
   const now = new Date("2026-08-24T12:00:00Z")
 
-  // No run -> unknown
   assert.equal(deriveAdminJobStatus(definition, null, now), "unknown")
-
-  // Failed run -> failing
   assert.equal(
     deriveAdminJobStatus(definition, { status: "failed", startedAt: "2026-08-24T10:00:00Z", finishedAt: "2026-08-24T10:01:00Z" }, now),
     "failing",
   )
-
-  // Running longer than maxDurationMinutes (10 min ago vs 5 min max) -> stale
   assert.equal(
     deriveAdminJobStatus(definition, { status: "running", startedAt: "2026-08-24T11:50:00Z", finishedAt: null }, now),
     "stale",
   )
-
-  // Running within maxDurationMinutes (2 min ago vs 5 min max) -> healthy
   assert.equal(
     deriveAdminJobStatus(definition, { status: "running", startedAt: "2026-08-24T11:58:00Z", finishedAt: null }, now),
     "healthy",
   )
-
-  // Skipped -> degraded
   assert.equal(
     deriveAdminJobStatus(definition, { status: "skipped", startedAt: "2026-08-24T10:00:00Z", finishedAt: "2026-08-24T10:01:00Z" }, now),
     "degraded",
   )
-
-  // Succeeded and within freshnessMinutes (2 hours ago vs 26 hours max) -> healthy
   assert.equal(
     deriveAdminJobStatus(definition, { status: "succeeded", startedAt: "2026-08-24T10:00:00Z", finishedAt: "2026-08-24T10:01:00Z" }, now),
     "healthy",
   )
-
-  // Succeeded but older than freshnessMinutes (4 days ago vs 26 hours max) -> stale
   assert.equal(
     deriveAdminJobStatus(definition, { status: "succeeded", startedAt: "2026-08-20T10:00:00Z", finishedAt: "2026-08-20T10:01:00Z" }, now),
     "stale",
@@ -65,10 +52,7 @@ test("job health is derived from result and freshness", () => {
 test("buildAdminJobViews aggregates catalog jobs with latest runs and calculates counts", () => {
   const now = new Date("2026-08-24T12:00:00Z")
   const { jobs, counts } = buildAdminJobViews(
-    [
-      definition,
-      { ...definition, key: "signals.daily", freshnessMinutes: 120 },
-    ],
+    [definition, { ...definition, key: "signals.daily", freshnessMinutes: 120 }],
     [
       {
         id: "run-1",
@@ -88,7 +72,6 @@ test("buildAdminJobViews aggregates catalog jobs with latest runs and calculates
   assert.equal(jobs[0].status, "healthy")
   assert.equal(jobs[1].key, "signals.daily")
   assert.equal(jobs[1].status, "unknown")
-
   assert.equal(counts.total, 2)
   assert.equal(counts.healthy, 1)
   assert.equal(counts.unknown, 1)
@@ -117,4 +100,16 @@ test("Admin Jobs mirrors the single dependency-driven AI Council production cron
   assert.equal(legacyWyckoff.provider, "machine")
   assert.equal(legacyWyckoff.scheduleUtc, undefined)
   assert.equal(legacyWyckoff.scheduleIct, undefined)
+})
+
+test("AI Council EOD workflow records system_job_runs telemetry for Admin Jobs", () => {
+  const steps = readFileSync(new URL("../lib/ai-council-eod-workflow-steps.ts", import.meta.url), "utf8")
+  const workflow = readFileSync(new URL("../workflows/ai-council-eod-workflow.ts", import.meta.url), "utf8")
+
+  assert.match(steps, /AI_COUNCIL_EOD_JOB_KEY = "ai_council\.eod"/)
+  assert.match(steps, /from\("system_job_runs"\)/)
+  assert.match(steps, /startAiCouncilEodTelemetryStep/)
+  assert.match(steps, /finishAiCouncilEodTelemetryStep/)
+  assert.match(workflow, /startAiCouncilEodTelemetryStep/)
+  assert.match(workflow, /finishAiCouncilEodTelemetryStep/)
 })
