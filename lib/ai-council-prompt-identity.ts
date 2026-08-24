@@ -45,13 +45,15 @@ export function resolveAiCouncilPromptIdentityHash(
   },
   promptVersion: string,
 ) {
-  const persistedResearchIdentity = hashString(stock.researchContext?.promptIdentityHash)
-  if (persistedResearchIdentity) return persistedResearchIdentity
-
-  return buildAiCouncilPromptIdentityHash({
+  const computedIdentity = buildAiCouncilPromptIdentityHash({
     deterministicEvidenceHash: stock.evidenceHash,
     rawContextHash: hashString(stock.llmEvidence?.contextHash),
     researchContextHash: hashString(stock.researchContext?.contextHash),
     promptVersion,
   })
+  const persistedResearchIdentity = hashString(stock.researchContext?.promptIdentityHash)
+
+  // Reuse the frozen audit identity only when it was created for the same prompt version.
+  // Failed/partial runs may be retried after a prompt bump while retaining immutable source contexts.
+  return persistedResearchIdentity === computedIdentity ? persistedResearchIdentity : computedIdentity
 }

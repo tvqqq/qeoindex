@@ -131,6 +131,7 @@ function normalize(
 ): AiCouncilLlmDebateRecord {
   const status = row.status === "completed" || row.status === "partial" || row.status === "failed" ? row.status : "pending"
   const firstClassContext = row.prompt_version === "llm-debate-v3-first-class-context"
+  const semanticPacket = firstClassContext || row.prompt_version === "llm-debate-v2-semantic-grounding"
   const promptIdentityHash = firstClassContext
     ? resolveAiCouncilPromptIdentityHash({
         evidenceHash: row.evidence_hash,
@@ -152,8 +153,8 @@ function normalize(
     asOfDate: row.as_of_date,
     evidenceHash: row.evidence_hash,
     evidenceProvenance: {
-      packetVersion: AI_COUNCIL_EVIDENCE_PACKET_VERSION,
-      semanticGuideVersion: INSIGHTS_METRIC_GUIDE_VERSION,
+      packetVersion: semanticPacket ? AI_COUNCIL_EVIDENCE_PACKET_VERSION : "legacy-council-packet",
+      semanticGuideVersion: semanticPacket ? INSIGHTS_METRIC_GUIDE_VERSION : "legacy",
       deterministicEvidenceHash: row.evidence_hash,
       rawContextVersion: rawEvidence?.context_version || null,
       rawContextHash: rawEvidence?.context_hash || null,

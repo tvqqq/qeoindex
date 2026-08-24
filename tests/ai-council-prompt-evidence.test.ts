@@ -429,3 +429,31 @@ test("first-class raw/research context is explicit and prompt identity is stable
   )
   assert.equal(buildAiCouncilPromptCacheKey(promptIdentityHash), `qeo-council-${promptIdentityHash.slice(0, 48)}`)
 })
+
+
+test("prompt identity recomputes when immutable research context predates the current prompt version", () => {
+  const rawContextHash = "c".repeat(64)
+  const researchContextHash = "d".repeat(64)
+  const staleIdentity = buildAiCouncilPromptIdentityHash({
+    deterministicEvidenceHash: mockStock.evidenceHash,
+    rawContextHash,
+    researchContextHash,
+    promptVersion: "llm-debate-v2-semantic-grounding",
+  })
+  const currentIdentity = buildAiCouncilPromptIdentityHash({
+    deterministicEvidenceHash: mockStock.evidenceHash,
+    rawContextHash,
+    researchContextHash,
+    promptVersion: "llm-debate-v3-first-class-context",
+  })
+
+  assert.notEqual(staleIdentity, currentIdentity)
+  assert.equal(
+    resolveAiCouncilPromptIdentityHash({
+      evidenceHash: mockStock.evidenceHash,
+      llmEvidence: { contextHash: rawContextHash },
+      researchContext: { contextHash: researchContextHash, promptIdentityHash: staleIdentity },
+    }, "llm-debate-v3-first-class-context"),
+    currentIdentity,
+  )
+})

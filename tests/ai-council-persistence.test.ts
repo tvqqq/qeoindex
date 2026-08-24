@@ -182,6 +182,7 @@ test("P4.1 severe-conflict gate reserves Sol escalation for compound disagreemen
 test("P4.3 freezes raw KFSP, TTAI history and Wyckoff context without changing deterministic authority", () => {
   const evidence = source("lib/ai-council-llm-evidence.ts")
   const migration = source("supabase/migrations/20260823214500_ai_council_llm_evidence_fidelity.sql")
+  const preMarket = source("lib/ai-council-pre-market-evidence.ts")
   const route = source("app/api/ai-council/debate-daily/route.ts")
 
   assert.match(evidence, /AI_COUNCIL_LLM_EVIDENCE_VERSION = "llm-evidence-fidelity-v1"/)
@@ -206,7 +207,8 @@ test("P4.3 freezes raw KFSP, TTAI history and Wyckoff context without changing d
   assert.match(migration, /before update on public\.ai_council_llm_evidence/)
   assert.match(migration, /grant select on table public\.ai_council_llm_evidence to authenticated/)
 
-  assert.match(route, /enrichCouncilStocksWithLlmEvidence/)
+  assert.match(preMarket, /enrichCouncilStocksWithLlmEvidence/)
+  assert.match(route, /enrichCouncilStocksForDebate/)
   assert.match(route, /stocks: debateStocks/)
   assert.match(route, /finalAuthority: "deterministic"/)
   assert.match(route, /evidenceFidelity:/)

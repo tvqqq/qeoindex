@@ -113,7 +113,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
         "Falling index with elevated volume indicates broad selling/distribution pressure; participant identity is not observable from aggregate volume alone.",
       ],
       forbiddenInferences: [
-        "Do not equate high liquidity solely with buying or institutional accumulation.",
+        "Do not equate high liquidity solely with buying or infer the identity/class of market participants.",
         "Do not ignore price spread and breadth when interpreting liquidity spikes.",
       ],
     },
@@ -873,7 +873,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
     ai: {
       meaning: "20-day average trading volume baseline.",
       interpretationRules: ["Volume > 1.5x 20-day average denotes elevated market participation/activity; participant identity is unknown from aggregate volume alone."],
-      forbiddenInferences: ["Do not treat baseline average as institutional intention."],
+      forbiddenInferences: ["Do not treat baseline average as evidence of any participant class intent."],
     },
     provenanceNote: "KFSP liquidity metric.",
   },
