@@ -63,3 +63,9 @@ test("admin layout strictly enforces root user authorization with a concealed 40
   assert.match(layout, /notFound\(\)/)
   assert.doesNotMatch(layout, /ROOT_ADMIN_USER_IDS/)
 })
+
+test("admin job detail resolves the effective operational catalog", () => {
+  const page = source("app/admin/jobs/[key]/page.tsx")
+  assert.match(page, /getEffectiveAdminJobDefinition/)
+  assert.doesNotMatch(page, /getAdminJobDefinition/)
+})

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 
 import { AdminJobHistoryTable } from "@/components/admin/admin-job-history-table"
-import { getAdminJobDefinition } from "@/lib/admin/catalog"
+import { getEffectiveAdminJobDefinition } from "@/lib/admin/effective-job-catalog"
 import { deriveAdminJobStatus, loadAdminJobHistory } from "@/lib/admin/job-health"
 
 export const dynamic = "force-dynamic"
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
 export default async function AdminJobDetailPage(props: { params: Promise<{ key: string }> }) {
   const { key } = await props.params
   const decodedKey = decodeURIComponent(key)
-  const jobDefinition = getAdminJobDefinition(decodedKey)
+  const jobDefinition = getEffectiveAdminJobDefinition(decodedKey)
 
   if (!jobDefinition) {
     notFound()
