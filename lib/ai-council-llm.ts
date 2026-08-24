@@ -5,6 +5,11 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { CouncilWeightProfile } from "@/lib/ai-council-calibration"
 import type { AiCouncilStockSnapshot } from "@/lib/ai-council-data"
 import type { CouncilBenchmarkContext } from "@/lib/ai-council-market"
+import {
+  inspectOpenAiResponseEnvelope,
+  nextMaxOutputTokensAfterIncomplete,
+  type OpenAiResponseEnvelopeInspection,
+} from "@/lib/ai-council-openai-response"
 import { AI_COUNCIL_POLICY_VERSION } from "@/lib/ai-council-persistence"
 import { buildAiCouncilPromptCacheKey, resolveAiCouncilPromptIdentityHash } from "@/lib/ai-council-prompt-identity"
 import {
@@ -237,6 +242,20 @@ class OpenAiRequestError extends Error {
     super(message)
     this.name = "OpenAiRequestError"
     this.status = status
+  }
+}
+
+class OpenAiIncompleteResponseError extends OpenAiRequestError {
+  inspection: OpenAiResponseEnvelopeInspection
+  maxOutputTokens: number
+  latencyMs: number
+
+  constructor(inspection: OpenAiResponseEnvelopeInspection, maxOutputTokens: number, latencyMs: number) {
+    super(`OpenAI response incomplete: ${inspection.incompleteReason || "unknown"} (max_output_tokens=${maxOutputTokens})`)
+    this.name = "OpenAiIncompleteResponseError"
+    this.inspection = inspection
+    this.maxOutputTokens = maxOutputTokens
+    this.latencyMs = latencyMs
   }
 }
 
@@ -539,9 +558,16 @@ async function callOpenAiStructuredOnce<T>(params: {
   }
 
   const root = record(raw)
-  if (root.status === "failed" || root.status === "incomplete") {
-    throw new OpenAiRequestError(`OpenAI response status ${String(root.status)}`)
+  const inspection = inspectOpenAiResponseEnvelope(raw)
+  if (inspection.status === "failed") {
+    const apiError = record(root.error)
+    const message = typeof apiError.message === "string" ? apiError.message : "unknown"
+    throw new OpenAiRequestError(`OpenAI response status failed: ${message.slice(0, 300)}`)
   }
+  if (inspection.status === "incomplete") {
+    throw new OpenAiIncompleteResponseError(inspection, params.maxOutputTokens, Date.now() - startedAt)
+  }
+
   const text = extractResponseText(raw)
   let payload: T
   try {
@@ -550,28 +576,24 @@ async function callOpenAiStructuredOnce<T>(params: {
     throw new OpenAiRequestError("OpenAI structured output was not valid JSON")
   }
 
-  const usage = record(root.usage)
-  const inputTokens = Number(usage.input_tokens || 0)
-  const outputTokens = Number(usage.output_tokens || 0)
-  const totalTokens = Number(usage.total_tokens || 0)
-  const inputDetails = record(usage.input_tokens_details)
-  const outputDetails = record(usage.output_tokens_details)
-  const cachedInputTokens = Number(inputDetails.cached_tokens || 0)
-  const reasoningTokens = Number(outputDetails.reasoning_tokens || 0)
-  const responseModel = typeof root.model === "string" ? root.model : params.model
-
+  const responseModel = inspection.responseModel || params.model
   return {
     payload,
-    responseId: typeof root.id === "string" ? root.id : "",
+    responseId: inspection.responseId || "",
     responseModel,
     reasoningEffort: params.reasoningEffort,
-    inputTokens,
-    cachedInputTokens,
-    outputTokens,
-    reasoningTokens,
-    totalTokens,
+    inputTokens: inspection.inputTokens,
+    cachedInputTokens: inspection.cachedInputTokens,
+    outputTokens: inspection.outputTokens,
+    reasoningTokens: inspection.reasoningTokens,
+    totalTokens: inspection.totalTokens,
     latencyMs: Date.now() - startedAt,
-    estimatedCostUsd: estimateListCostUsd(responseModel, inputTokens, cachedInputTokens, outputTokens),
+    estimatedCostUsd: estimateListCostUsd(
+      responseModel,
+      inspection.inputTokens,
+      inspection.cachedInputTokens,
+      inspection.outputTokens,
+    ),
   }
 }
 
@@ -580,6 +602,28 @@ function recoverableForFallback(error: unknown) {
     return error.status == null || [400, 404, 409, 429, 500, 502, 503, 504].includes(error.status)
   }
   return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+}
+
+async function callModelWithOutputRetry<T>(params: {
+  model: string
+  schemaName: string
+  schema: unknown
+  input: string
+  maxOutputTokens: number
+  reasoningEffort: CouncilReasoningEffort
+  cacheKey: string
+}) {
+  try {
+    return await callOpenAiStructuredOnce<T>(params)
+  } catch (error) {
+    if (error instanceof OpenAiIncompleteResponseError && error.inspection.shouldRetryWithMoreOutput) {
+      const retryBudget = nextMaxOutputTokensAfterIncomplete(params.maxOutputTokens)
+      if (retryBudget != null) {
+        return callOpenAiStructuredOnce<T>({ ...params, maxOutputTokens: retryBudget })
+      }
+    }
+    throw error
+  }
 }
 
 async function callOpenAiStructured<T>(params: {
@@ -595,7 +639,7 @@ async function callOpenAiStructured<T>(params: {
   const startedAt = Date.now()
   const attemptedModels = [params.model]
   try {
-    const result = await callOpenAiStructuredOnce<T>(params)
+    const result = await callModelWithOutputRetry<T>(params)
     return {
       ...result,
       requestedModel: params.model,
@@ -654,22 +698,27 @@ function auditSuccess(role: CouncilLlmRole, result: OpenAiCallResult<unknown>): 
 }
 
 function auditFailure(role: CouncilLlmRole, config: CouncilLlmModelConfig, error: unknown): RoleCallAudit {
+  const incomplete = error instanceof OpenAiIncompleteResponseError ? error : null
+  const inspection = incomplete?.inspection
+  const responseModel = inspection?.responseModel || null
   return {
     role,
     ok: false,
     requestedModel: config.model,
-    responseModel: null,
+    responseModel,
     reasoningEffort: config.reasoningEffort,
     fallbackUsed: false,
     attemptedModels: [config.model],
-    responseId: null,
-    inputTokens: 0,
-    cachedInputTokens: 0,
-    outputTokens: 0,
-    reasoningTokens: 0,
-    totalTokens: 0,
-    latencyMs: 0,
-    estimatedCostUsd: null,
+    responseId: inspection?.responseId || null,
+    inputTokens: inspection?.inputTokens || 0,
+    cachedInputTokens: inspection?.cachedInputTokens || 0,
+    outputTokens: inspection?.outputTokens || 0,
+    reasoningTokens: inspection?.reasoningTokens || 0,
+    totalTokens: inspection?.totalTokens || 0,
+    latencyMs: incomplete?.latencyMs || 0,
+    estimatedCostUsd: inspection && responseModel
+      ? estimateListCostUsd(responseModel, inspection.inputTokens, inspection.cachedInputTokens, inspection.outputTokens)
+      : null,
     error: errorMessage(error),
   }
 }
@@ -687,12 +736,14 @@ async function settleRole<T extends { evidenceRefs?: LlmEvidenceRef[] }>(
     if (!validation.valid) {
       const audit = auditFailure(role, config, new Error(`Validation failed: ${validation.errors.join("; ")}`))
       audit.attemptedModels = fallbackModel && fallbackModel !== config.model ? [config.model, fallbackModel] : [config.model]
+      audit.fallbackUsed = audit.attemptedModels.length > 1
       return { payload: null, audit }
     }
     return { payload: result.payload, audit: auditSuccess(role, result as OpenAiCallResult<unknown>) }
   } catch (error) {
     const audit = auditFailure(role, config, error)
     audit.attemptedModels = fallbackModel && fallbackModel !== config.model ? [config.model, fallbackModel] : [config.model]
+    audit.fallbackUsed = audit.attemptedModels.length > 1
     return { payload: null, audit }
   }
 }
@@ -866,6 +917,9 @@ async function runOneDebate(
     updated_at: new Date().toISOString(),
   })
 
+  // Responses API max_output_tokens includes visible output and reasoning tokens.
+  // Give structured reasoning roles enough headroom, then retry a primary model once
+  // with a bounded larger budget only when incomplete_details says max_output_tokens.
   const [bullResult, bearResult, riskResult] = await Promise.all([
     settleRole("bull", route.bull, route.fallbackModel, packet, () => callOpenAiStructured<LlmBullBearPayload>({
       model: route.bull.model,
@@ -873,7 +927,7 @@ async function runOneDebate(
       schemaName: "qeoindex_bull_case",
       schema: BULL_BEAR_SCHEMA,
       input: buildRoleInput(packet, BULL_TASK),
-      maxOutputTokens: 650,
+      maxOutputTokens: 1400,
       reasoningEffort: route.bull.reasoningEffort,
       cacheKey,
     })),
@@ -883,7 +937,7 @@ async function runOneDebate(
       schemaName: "qeoindex_bear_case",
       schema: BULL_BEAR_SCHEMA,
       input: buildRoleInput(packet, BEAR_TASK),
-      maxOutputTokens: 650,
+      maxOutputTokens: 1400,
       reasoningEffort: route.bear.reasoningEffort,
       cacheKey,
     })),
@@ -893,7 +947,7 @@ async function runOneDebate(
       schemaName: "qeoindex_risk_critic",
       schema: RISK_SCHEMA,
       input: buildRoleInput(packet, RISK_TASK),
-      maxOutputTokens: 650,
+      maxOutputTokens: 1400,
       reasoningEffort: route.risk.reasoningEffort,
       cacheKey,
     })),
@@ -916,7 +970,7 @@ async function runOneDebate(
         schemaName: "qeoindex_llm_chair",
         schema: CHAIR_SCHEMA,
         input: buildRoleInput(packet, CHAIR_TASK, participants),
-        maxOutputTokens: 800,
+        maxOutputTokens: 1600,
         reasoningEffort: route.chair.reasoningEffort,
         cacheKey,
       })
@@ -947,7 +1001,7 @@ async function runOneDebate(
         schemaName: "qeoindex_llm_escalation_chair",
         schema: CHAIR_SCHEMA,
         input: buildRoleInput(packet, ESCALATION_TASK, { ...participants, initialChair: chair, escalationReason }),
-        maxOutputTokens: 900,
+        maxOutputTokens: 2000,
         reasoningEffort: route.escalation.reasoningEffort,
         cacheKey,
       })
