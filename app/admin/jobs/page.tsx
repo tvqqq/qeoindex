@@ -11,7 +11,7 @@ export default async function AdminJobsPage() {
       <div>
         <h2 className="text-base font-bold text-white">Tác vụ & Lịch Cron Hệ thống</h2>
         <p className="text-xs text-slate-400">
-          Giám sát trạng thái 13 tác vụ, chu kỳ làm mới, thời lượng thực thi và kích hoạt thủ công các tác vụ an toàn.
+          Giám sát trạng thái {snapshot.counts.total} tác vụ, chu kỳ làm mới, thời lượng thực thi và kích hoạt thủ công các tác vụ an toàn.
         </p>
       </div>
 
