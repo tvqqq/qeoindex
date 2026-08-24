@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
 import type { AdminJobDefinition } from "../lib/admin/types.ts"
 import { buildAdminJobViews, deriveAdminJobStatus } from "../lib/admin/job-health.ts"
 
@@ -93,3 +95,26 @@ test("buildAdminJobViews aggregates catalog jobs with latest runs and calculates
   assert.equal(counts.failing, 0)
 })
 
+test("Admin Jobs mirrors the single dependency-driven AI Council production cron", () => {
+  const vercel = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as {
+    crons: Array<{ path: string; schedule: string }>
+  }
+  const aiCouncilCrons = vercel.crons.filter((cron) => cron.path.startsWith("/api/ai-council/"))
+  assert.deepEqual(aiCouncilCrons, [{ path: "/api/ai-council/eod", schedule: "0 10 * * 1-5" }])
+
+  const eod = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "ai_council.eod")
+  assert.ok(eod)
+  assert.equal(eod.provider, "vercel_cron_workflow")
+  assert.equal(eod.scheduleUtc, "0 10 * * 1-5")
+  assert.equal(eod.scheduleIct, "17:00 T2-T6")
+  assert.equal(eod.group, "ai_council")
+
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.some((job) => job.key === "ai_council.daily"), false)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.some((job) => job.key === "ai_council.debate_daily"), false)
+
+  const legacyWyckoff = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "wyckoff.ingest")
+  assert.ok(legacyWyckoff)
+  assert.equal(legacyWyckoff.provider, "machine")
+  assert.equal(legacyWyckoff.scheduleUtc, undefined)
+  assert.equal(legacyWyckoff.scheduleIct, undefined)
+})
