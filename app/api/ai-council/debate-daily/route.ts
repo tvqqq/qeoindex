@@ -44,6 +44,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const runtimeData = await getAiCouncilRuntimeData(supabase, { includeHistory: false })
+    // The wrapper preserves the existing enrichCouncilStocksWithLlmEvidence raw-evidence stage,
+    // then layers the bounded Notion research context without changing deterministic scoring.
     const evidenceFidelity = await enrichCouncilStocksForDebate(supabase, {
       ratingDate: runtimeData.data.ratingDate,
       stocks: runtimeData.data.stocks,
