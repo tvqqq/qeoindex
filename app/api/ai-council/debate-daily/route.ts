@@ -49,7 +49,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const runtimeConfig = await getAiCouncilRuntimeConfig()
-    const runtimeData = await getAiCouncilRuntimeData(supabase, { includeHistory: false, includePromptEvidence: true })
+    const runtimeData = await getAiCouncilRuntimeData(supabase, {
+      includeHistory: false,
+      includePromptEvidence: true,
+      includeEodMarketOverlay: true,
+    })
 
     let freshness
     try {
@@ -165,7 +169,7 @@ export async function GET(request: NextRequest) {
       validationTicker: validationBootstrap ? validationTicker : null,
       schedule: "17:25 Asia/Ho_Chi_Minh on trading weekdays",
       finalAuthority: "deterministic",
-      behavior: "Require same-session final market + 1D Wyckoff + VNINDEX freshness before any LLM evidence freeze. Then freeze raw current KFSP/TTAI metrics + quarterly 4M/CANSLIM trajectory + raw Wyckoff MTF context, attach bounded point-in-time Notion Research Context as first-class Packet V2 evidence, and route OpenAI prompt caching by the combined prompt identity. Event-selected runs use Luna Bull/Bear -> Terra Risk/Chair -> Sol severe-conflict Chair. Deterministic scoring and signal authority never change.",
+      behavior: "Require same-session final market + 1D Wyckoff + VNINDEX freshness before any LLM evidence freeze. Then freeze the EOD-rebuilt current KFSP/TTAI evidence + quarterly 4M/CANSLIM trajectory + raw Wyckoff MTF context, attach bounded point-in-time Notion Research Context as first-class Packet V2 evidence, and route OpenAI prompt caching by the combined prompt identity. Event-selected runs use Luna Bull/Bear -> Terra Risk/Chair -> Sol severe-conflict Chair. Deterministic scoring and signal authority never change.",
     })
   } catch (error) {
     console.error("AI Council P4.3 LLM debate failed", error)

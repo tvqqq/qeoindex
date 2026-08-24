@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { applyCouncilWeightProfile } from "@/lib/ai-council-calibration"
-import { getAiCouncilData } from "@/lib/ai-council-data"
 import { AiCouncilUpstreamStaleError, assertAiCouncilEodFreshness } from "@/lib/ai-council-freshness"
 import { loadCouncilWeightProfile, refreshAiCouncilLearningState } from "@/lib/ai-council-learning"
-import { loadAiCouncilBenchmarkContext, syncAiCouncilMarketBenchmark } from "@/lib/ai-council-market"
+import { syncAiCouncilMarketBenchmark } from "@/lib/ai-council-market"
 import { persistAiCouncilData } from "@/lib/ai-council-persistence"
+import { getAiCouncilRuntimeData } from "@/lib/ai-council-runtime"
 import { isMachineRequestAuthorized } from "@/lib/auth/machine"
 import { notifyOpsError } from "@/lib/ops-alerts"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
@@ -30,16 +30,6 @@ export async function GET(request: NextRequest) {
 
   try {
     const now = new Date()
-    const data = await getAiCouncilData(supabase, { includeHistory: false })
-    if (!data.ratingDate || !data.stocks.length) {
-      return NextResponse.json({
-        ok: true,
-        status: "skipped",
-        ratingDate: data.ratingDate,
-        stockCount: data.stocks.length,
-        detail: data.message,
-      })
-    }
 
     let benchmarkSyncError = ""
     let benchmarkRows = 0
@@ -51,7 +41,22 @@ export async function GET(request: NextRequest) {
       console.warn("AI Council VNINDEX benchmark sync degraded", benchmarkSyncError)
     }
 
-    const benchmark = await loadAiCouncilBenchmarkContext(supabase, data.ratingDate)
+    const runtimeData = await getAiCouncilRuntimeData(supabase, {
+      includeHistory: false,
+      includeEodMarketOverlay: true,
+    })
+    const data = runtimeData.data
+    if (!data.ratingDate || !data.stocks.length) {
+      return NextResponse.json({
+        ok: true,
+        status: "skipped",
+        ratingDate: data.ratingDate,
+        stockCount: data.stocks.length,
+        detail: data.message,
+      })
+    }
+
+    const benchmark = runtimeData.benchmark
     let freshness
     try {
       freshness = await assertAiCouncilEodFreshness(supabase, {
@@ -115,7 +120,7 @@ export async function GET(request: NextRequest) {
       learningBefore,
       learningAfter,
       schedule: "17:15 Asia/Ho_Chi_Minh on trading weekdays",
-      behavior: "Sync VNINDEX benchmark -> require same-session final market + 1D Wyckoff freshness -> mature prior outcomes/confirmations -> calibrate bounded agent weights -> persist immutable Council v2 -> refresh alpha, confirmation outcomes and leaderboard stats.",
+      behavior: "Sync VNINDEX benchmark -> rebuild final-session EOD market evidence -> require same-session final market + 1D Wyckoff freshness -> mature prior outcomes/confirmations -> calibrate bounded agent weights -> persist immutable Council v2 -> refresh alpha, confirmation outcomes and leaderboard stats.",
     })
   } catch (error) {
     console.error("AI Council daily persistence failed", error)
