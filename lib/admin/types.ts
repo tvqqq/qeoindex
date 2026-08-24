@@ -69,6 +69,37 @@ export type ResolvedAdminSetting = {
   changeReason: string | null
 }
 
+export type PersistedSettingRow = {
+  key: string
+  value: unknown
+  version: number
+  updated_by?: string | null
+  change_reason?: string | null
+  updated_at?: string | null
+}
+
+export type AdminSettingsSnapshot = {
+  settings: ResolvedAdminSetting[]
+  byKey: Record<string, ResolvedAdminSetting>
+  degraded: boolean
+  error?: string
+}
+
+export type AdminSettingMutationResult = {
+  ok: boolean
+  conflict?: boolean
+  current?: ResolvedAdminSetting | null
+  record?: unknown
+  error?: string
+}
+
+export type AiCouncilRuntimeConfig = {
+  llmEnabled: boolean
+  maxTickers: number
+  tickers: string[]
+  researchTickers: string[]
+}
+
 export type AdminEnvironmentItem = {
   key: string
   group: AdminSettingGroup

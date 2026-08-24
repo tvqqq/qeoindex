@@ -124,3 +124,11 @@ test("pre-market wrapper combines frozen raw evidence with immutable Notion rese
   assert.match(route, /prefer a research-context pilot ticker/)
   assert.match(route, /finalAuthority: "deterministic"/)
 })
+
+test("configuredCouncilResearchTickers accepts explicit runtime lists without mutating env", () => {
+  const code = source("lib/ai-council-research-context.ts")
+  assert.match(code, /export function configuredCouncilResearchTickers\(raw\?: string \| string\[\]\)/)
+  assert.match(code, /Array\.isArray\(raw\)/)
+  assert.match(code, /isCouncilResearchTickerEnabled\(ticker: string, raw\?: string \| string\[\]\)/)
+})
+

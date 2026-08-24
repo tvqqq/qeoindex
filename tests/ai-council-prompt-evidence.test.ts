@@ -1,5 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 
 import {
   buildAiCouncilEvidencePacketV2,
@@ -457,3 +458,13 @@ test("prompt identity recomputes when immutable research context predates the cu
     currentIdentity,
   )
 })
+
+test("AI Council LLM router respects runtimeConfig overrides without mutating env", () => {
+  const code = readFileSync(new URL("../lib/ai-council-llm.ts", import.meta.url), "utf8")
+  assert.match(code, /runtimeConfig\?: AiCouncilRuntimeConfig/)
+  assert.match(code, /params\.runtimeConfig\?\.llmEnabled/)
+  assert.match(code, /runtimeConfig\?\.tickers/)
+  assert.match(code, /runtimeConfig\?\.maxTickers/)
+})
+
+
