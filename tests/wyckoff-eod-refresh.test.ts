@@ -133,3 +133,17 @@ test("Council EOD overlay refuses stale or pre-final snapshots", () => {
   assert.equal(staleDate.rating.price, 69.8)
   assert.equal(tooEarly.rating.liquidity.volume1d, 1_000_000)
 })
+
+test("operational Council routes explicitly request the final EOD market overlay", () => {
+  const data = source("lib/ai-council-data.ts")
+  const runtime = source("lib/ai-council-runtime.ts")
+  const daily = source("app/api/ai-council/daily/route.ts")
+  const debate = source("app/api/ai-council/debate-daily/route.ts")
+
+  assert.match(data, /includeEodMarketOverlay/)
+  assert.match(data, /stock_orderbook_snapshots/)
+  assert.match(data, /overlayCouncilRatingWithEodSnapshot/)
+  assert.match(runtime, /includeEodMarketOverlay/)
+  assert.match(daily, /includeEodMarketOverlay:\s*true/)
+  assert.match(debate, /includeEodMarketOverlay:\s*true/)
+})
