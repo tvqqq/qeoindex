@@ -148,3 +148,49 @@ test("operational Council routes request the rebuilt final EOD evidence ensemble
   assert.match(daily, /includeEodMarketOverlay:\s*true/)
   assert.match(debate, /includeEodMarketOverlay:\s*true/)
 })
+
+test("EOD Council orchestration is one durable dependency workflow", () => {
+  const workflow = source("workflows/ai-council-eod-workflow.ts")
+  const operations = source("lib/ai-council-operations.ts")
+  const route = source("app/api/ai-council/eod/route.ts")
+
+  assert.match(workflow, /"use workflow"/)
+  assert.match(workflow, /"use step"/)
+  assert.match(workflow, /buildWyckoffEodBatchOffsets/)
+  assert.match(workflow, /runUnifiedWyckoff/)
+  assert.match(workflow, /runAiCouncilDailyOperation/)
+  assert.match(workflow, /runAiCouncilDebateOperation/)
+  assert.match(operations, /export async function runAiCouncilDailyOperation/)
+  assert.match(operations, /export async function runAiCouncilDebateOperation/)
+  assert.match(route, /start\(aiCouncilEodWorkflow/)
+  assert.match(route, /isMachineRequestAuthorized/)
+})
+
+test("EOD workflow is fail-closed and orders market -> Wyckoff -> deterministic -> LLM", () => {
+  const workflow = source("workflows/ai-council-eod-workflow.ts")
+  const market = workflow.indexOf("assertFinalEodMarketReadyStep")
+  const wyckoff = workflow.indexOf("runWyckoffBatchStep")
+  const validation = workflow.indexOf("validateWyckoffTop100Step")
+  const deterministic = workflow.indexOf("runDeterministicCouncilStep")
+  const debate = workflow.indexOf("runLlmDebateStep")
+
+  assert.ok(market >= 0)
+  assert.ok(wyckoff > market)
+  assert.ok(validation > wyckoff)
+  assert.ok(deterministic > validation)
+  assert.ok(debate > deterministic)
+  assert.match(workflow, /if \(!market\.ok\).*return/s)
+  assert.match(workflow, /if \(!wyckoffValidation\.ok\).*return/s)
+  assert.match(workflow, /if \(!deterministic\.ok\).*return/s)
+})
+
+test("Vercel schedules only one EOD Council dependency cron", () => {
+  const config = JSON.parse(source("vercel.json")) as { crons?: Array<{ path: string; schedule: string }> }
+  const crons = config.crons || []
+  const eod = crons.filter((cron) => cron.path === "/api/ai-council/eod")
+
+  assert.deepEqual(eod, [{ path: "/api/ai-council/eod", schedule: "0 10 * * 1-5" }])
+  assert.equal(crons.some((cron) => cron.path === "/api/wyckoff/ingest"), false)
+  assert.equal(crons.some((cron) => cron.path === "/api/ai-council/daily"), false)
+  assert.equal(crons.some((cron) => cron.path === "/api/ai-council/debate-daily"), false)
+})
