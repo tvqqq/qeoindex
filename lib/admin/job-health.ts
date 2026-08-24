@@ -1,4 +1,4 @@
-import { ADMIN_JOB_CATALOG } from "./catalog.ts"
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "./effective-job-catalog.ts"
 import { sanitizeAdminValue } from "./redact.ts"
 import type { AdminJobDefinition, AdminJobStatus, AdminJobView, AdminSystemOverview } from "./types.ts"
 
@@ -188,7 +188,7 @@ export function buildAdminJobViews(
 export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; counts: AdminSystemOverview["jobCounts"] }> {
   const supabase = await getSupabase()
   if (!supabase) {
-    return buildAdminJobViews(ADMIN_JOB_CATALOG, [])
+    return buildAdminJobViews(EFFECTIVE_ADMIN_JOB_CATALOG, [])
   }
 
   let runs: SystemJobRunRow[] = []
@@ -217,7 +217,7 @@ export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; c
     // pg_cron snapshot RPC may be unavailable or empty, degrade gracefully
   }
 
-  return buildAdminJobViews(ADMIN_JOB_CATALOG, runs, cronSnapshots)
+  return buildAdminJobViews(EFFECTIVE_ADMIN_JOB_CATALOG, runs, cronSnapshots)
 }
 
 export async function loadAdminJobHistory(jobKey?: string, limit = 50): Promise<SystemJobRunRow[]> {

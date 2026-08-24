@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import { getCachedHourlyHistory, getCachedLongDailyHistory } from "@/lib/request-cache"
+import { fetchHourlyMarketHistory, fetchLongDailyMarketHistory } from "@/lib/market-history"
 import { sectorForTicker } from "@/lib/market-sectors"
 import { getScannerDataFresh } from "@/lib/scanner-data"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
@@ -66,9 +66,12 @@ export async function runUnifiedWyckoff({ limit = 10, offset = 0 }: { limit?: nu
   const errors: UnifiedWyckoffRunSummary["errors"] = []
   for (const stock of targets) {
     try {
+      // Operational EOD decisions must bypass UI cross-request caches. React/UI callers keep
+      // their own cached wrappers, while this path asks providers for the latest completed bars.
+      const now = new Date()
       const [daily, hourly] = await Promise.all([
-        getCachedLongDailyHistory(stock.ticker),
-        getCachedHourlyHistory(stock.ticker),
+        fetchLongDailyMarketHistory(stock.ticker, now),
+        fetchHourlyMarketHistory(stock.ticker, now),
       ])
       if (!daily?.bars.length || !hourly?.bars.length) throw new Error("Provider returned no Daily or 1H bars")
       const studies = buildWyckoffChartStudies({
