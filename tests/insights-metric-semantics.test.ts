@@ -195,3 +195,12 @@ test("insights dashboard follows accessibility and deep-link contract for ScoreP
   assert.ok(!content.includes("backdrop-blur"), "insights-dashboard must not use heavy backdrop-blur near dense tables")
   assert.ok(!content.includes("transition-all"), "insights-dashboard must not use transition-all in performance-sensitive UI")
 })
+
+test("aggregate volume semantics avoid unsupported institutional attribution", () => {
+  for (const key of ["market_liquidity", "average_volume_20d"]) {
+    const semantic = getMetricSemantic(key)
+    assert.ok(semantic)
+    const aiText = [...semantic.ai.interpretationRules, ...semantic.ai.forbiddenInferences].join(" ").toLowerCase()
+    assert.ok(!aiText.includes("institutional"), `${key} should not infer institutional participation from aggregate volume`)
+  }
+})

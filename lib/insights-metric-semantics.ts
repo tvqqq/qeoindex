@@ -110,7 +110,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
       meaning: "Aggregate traded value on HOSE in billion VND and percentage change versus previous trading session.",
       interpretationRules: [
         "Rising index with rising volume confirms broad buying demand.",
-        "Falling index with elevated volume indicates institutional distribution pressure.",
+        "Falling index with elevated volume indicates broad selling/distribution pressure; participant identity is not observable from aggregate volume alone.",
       ],
       forbiddenInferences: [
         "Do not equate high liquidity solely with buying or institutional accumulation.",
@@ -721,7 +721,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
     direction: "higher_is_supportive",
     beginner: {
       what: "Khoảng cách phần trăm giữa giá hiện tại và đường trung bình động 50 phiên.",
-      read: "Đường SMA50 là ranh giới xu hướng trung hạn; giá nằm trên SMA50 cho thấy tổ chức bảo vệ giá.",
+      read: "Đường SMA50 là ranh giới xu hướng trung hạn; giá nằm trên SMA50 cho thấy xu hướng trung hạn tích cực và SMA50 thường được theo dõi như hỗ trợ động.",
       combineWith: ["price_vs_sma20_pct", "price_vs_sma200_pct", "rs_medium"],
       notMeaning: "Khoảng cách quá xa (> 15-20% trên SMA50) cảnh báo rủi ro điều chỉnh kỹ thuật.",
     },
@@ -872,7 +872,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
     },
     ai: {
       meaning: "20-day average trading volume baseline.",
-      interpretationRules: ["Volume > 1.5x 20-day average denotes high institutional participation."],
+      interpretationRules: ["Volume > 1.5x 20-day average denotes elevated market participation/activity; participant identity is unknown from aggregate volume alone."],
       forbiddenInferences: ["Do not treat baseline average as institutional intention."],
     },
     provenanceNote: "KFSP liquidity metric.",

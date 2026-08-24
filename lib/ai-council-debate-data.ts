@@ -12,6 +12,9 @@ import {
   type LlmChairPayload,
   type LlmRiskPayload,
 } from "@/lib/ai-council-llm"
+import { resolveAiCouncilPromptIdentityHash } from "@/lib/ai-council-prompt-identity"
+import { AI_COUNCIL_EVIDENCE_PACKET_VERSION } from "@/lib/ai-council-prompt-evidence"
+import { INSIGHTS_METRIC_GUIDE_VERSION } from "@/lib/insights-metric-semantics"
 
 interface DebateRow {
   id: string
@@ -23,6 +26,7 @@ interface DebateRow {
   model: string
   model_route: unknown
   prompt_version: string
+  evidence_hash: string
   deterministic_signal: string
   deterministic_score: number
   deterministic_risk_status: string
@@ -44,6 +48,25 @@ interface DebateRow {
   error: string
   created_at: string
   completed_at: string | null
+}
+
+interface RawEvidenceAuditRow {
+  run_id: string
+  context_version: string
+  context_hash: string
+  captured_at: string
+}
+
+interface ResearchContextAuditRow {
+  run_id: string
+  context_version: string
+  context_hash: string
+  raw_context_hash: string
+  prompt_identity_hash: string
+  mode: string
+  status: string
+  source_page_ids: unknown
+  captured_at: string
 }
 
 export interface AiCouncilDebateDashboardData {
@@ -101,13 +124,49 @@ function nullableNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function normalize(row: DebateRow): AiCouncilLlmDebateRecord {
+function normalize(
+  row: DebateRow,
+  rawEvidence: RawEvidenceAuditRow | undefined,
+  researchContext: ResearchContextAuditRow | undefined,
+): AiCouncilLlmDebateRecord {
   const status = row.status === "completed" || row.status === "partial" || row.status === "failed" ? row.status : "pending"
+  const firstClassContext = row.prompt_version === "llm-debate-v3-first-class-context"
+  const promptIdentityHash = firstClassContext
+    ? resolveAiCouncilPromptIdentityHash({
+        evidenceHash: row.evidence_hash,
+        ...(rawEvidence ? { llmEvidence: { contextHash: rawEvidence.context_hash } } : {}),
+        ...(researchContext ? {
+          researchContext: {
+            contextHash: researchContext.context_hash,
+            promptIdentityHash: researchContext.prompt_identity_hash,
+          },
+        } : {}),
+      }, row.prompt_version)
+    : row.evidence_hash
+  const sourcePageIds = Array.isArray(researchContext?.source_page_ids) ? researchContext.source_page_ids : []
+
   return {
     id: row.id,
     runId: row.run_id,
     ticker: row.ticker,
     asOfDate: row.as_of_date,
+    evidenceHash: row.evidence_hash,
+    evidenceProvenance: {
+      packetVersion: AI_COUNCIL_EVIDENCE_PACKET_VERSION,
+      semanticGuideVersion: INSIGHTS_METRIC_GUIDE_VERSION,
+      deterministicEvidenceHash: row.evidence_hash,
+      rawContextVersion: rawEvidence?.context_version || null,
+      rawContextHash: rawEvidence?.context_hash || null,
+      rawCapturedAt: rawEvidence?.captured_at || null,
+      researchContextVersion: researchContext?.context_version || null,
+      researchContextHash: researchContext?.context_hash || null,
+      researchStatus: researchContext?.status || null,
+      researchMode: researchContext?.mode || null,
+      researchSourceCount: sourcePageIds.length,
+      researchCapturedAt: researchContext?.captured_at || null,
+      promptIdentityHash,
+      cacheIdentityMode: firstClassContext ? "prompt-identity-v1" : "legacy-evidence-hash",
+    },
     selectionReasons: debateReasons(row.selection_reasons),
     status,
     model: row.model,
@@ -146,7 +205,7 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
 
   const result = await supabase
     .from("ai_council_llm_debates")
-    .select("id,run_id,ticker,as_of_date,selection_reasons,status,model,model_route,prompt_version,deterministic_signal,deterministic_score,deterministic_risk_status,bull_payload,bear_payload,risk_payload,chair_payload,call_audit,input_tokens,cached_input_tokens,output_tokens,reasoning_tokens,total_tokens,latency_ms,estimated_cost_usd,escalated,escalation_reason,fallback_used,error,created_at,completed_at")
+    .select("id,run_id,ticker,as_of_date,selection_reasons,status,model,model_route,prompt_version,evidence_hash,deterministic_signal,deterministic_score,deterministic_risk_status,bull_payload,bear_payload,risk_payload,chair_payload,call_audit,input_tokens,cached_input_tokens,output_tokens,reasoning_tokens,total_tokens,latency_ms,estimated_cost_usd,escalated,escalation_reason,fallback_used,error,created_at,completed_at")
     .order("as_of_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(80)
@@ -171,7 +230,32 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
     }
   }
 
-  const rows = ((result.data || []) as DebateRow[]).map(normalize)
+  const debateRows = (result.data || []) as DebateRow[]
+  const runIds = debateRows.map((row) => row.run_id)
+  const rawEvidenceByRun = new Map<string, RawEvidenceAuditRow>()
+  const researchContextByRun = new Map<string, ResearchContextAuditRow>()
+
+  if (runIds.length) {
+    const [rawEvidenceResult, researchContextResult] = await Promise.all([
+      supabase
+        .from("ai_council_llm_evidence")
+        .select("run_id,context_version,context_hash,captured_at")
+        .in("run_id", runIds),
+      supabase
+        .from("ai_council_llm_research_contexts")
+        .select("run_id,context_version,context_hash,raw_context_hash,prompt_identity_hash,mode,status,source_page_ids,captured_at")
+        .in("run_id", runIds),
+    ])
+
+    if (!rawEvidenceResult.error) {
+      for (const row of (rawEvidenceResult.data || []) as RawEvidenceAuditRow[]) rawEvidenceByRun.set(row.run_id, row)
+    }
+    if (!researchContextResult.error) {
+      for (const row of (researchContextResult.data || []) as ResearchContextAuditRow[]) researchContextByRun.set(row.run_id, row)
+    }
+  }
+
+  const rows = debateRows.map((row) => normalize(row, rawEvidenceByRun.get(row.run_id), researchContextByRun.get(row.run_id)))
   const latestDate = rows[0]?.asOfDate || null
   const latestRows = latestDate ? rows.filter((row) => row.asOfDate === latestDate) : []
   const costRows = latestRows.filter((row) => row.estimatedCostUsd != null)
@@ -194,7 +278,7 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
       ? Number(costRows.reduce((sum, row) => sum + (row.estimatedCostUsd || 0), 0).toFixed(6))
       : null,
     message: rows.length
-      ? "P4.1 uses role-based GPT-5.6 routing with prompt-cache telemetry and severe-conflict Sol escalation. Debates remain immutable per deterministic run and advisory-only."
+      ? "P4.3 uses first-class raw/research evidence, semantic grounding, prompt-identity cache telemetry and severe-conflict Sol escalation. Debates remain immutable per deterministic run and advisory-only."
       : enabledByConfiguration
         ? "Runtime đã nhận OPENAI_API_KEY. Chưa có P4 debate vì cron chỉ chạy khi deterministic Council có event đáng tranh luận."
         : "P4 code đã sẵn sàng nhưng OPENAI_API_KEY chưa được cấu hình hoặc AI_COUNCIL_LLM_ENABLED đang tắt.",

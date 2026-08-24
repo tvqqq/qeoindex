@@ -372,14 +372,15 @@ async function loadPersistedContexts(supabase: SupabaseClient, runIds: string[])
 }
 
 function contextCarrier(stock: AiCouncilStockSnapshot, hash: string, context: CouncilLlmEvidenceContext) {
-  const payload = JSON.stringify({
-    purpose: "P4.3 context-only raw evidence. Do not reinterpret this as deterministic score input.",
-    contextHash: hash,
-    context,
-  })
   return {
     ...stock,
-    dataQualityDetail: `${stock.dataQualityDetail}\n[P4.3_EVIDENCE_FIDELITY_CONTEXT] ${payload}`,
+    llmEvidence: {
+      purpose: "P4.3 context-only raw evidence. Do not reinterpret this as deterministic score input.",
+      contextVersion: AI_COUNCIL_LLM_EVIDENCE_VERSION,
+      contextHash: hash,
+      rawEvidence: context,
+      wyckoffContext: context.wyckoffMtf,
+    },
   }
 }
 
