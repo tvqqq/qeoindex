@@ -158,8 +158,8 @@ The job catalog normalizes these sources:
 
 - `signals.daily` — `0 0 * * 1-5` UTC / 07:00 ICT weekdays; manual run disabled because duplicate workflows are unsafe.
 - `wyckoff.ingest` — `0 10 * * 1-5` UTC / 17:00 ICT weekdays; manual run requires confirmation.
-- `ai_council.daily` — `15 10 * * 1-5` UTC / 17:15 ICT weekdays; manual run requires confirmation.
-- `ai_council.debate_daily` — `25 10 * * 1-5` UTC / 17:25 ICT weekdays; manual run requires confirmation and cost warning.
+- `ai_council.daily` — `15 10 * * 1-5` UTC / 17:15 ICT weekdays; manual run disabled in MVP to avoid duplicate publication.
+- `ai_council.debate_daily` — `25 10 * * 1-5` UTC / 17:25 ICT weekdays; manual run disabled in MVP because it is duplicate-prone and cost-bearing.
 
 ### Supabase `pg_cron`
 
