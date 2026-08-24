@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { AiCouncilUpstreamStaleError, assertAiCouncilEodFreshness } from "@/lib/ai-council-freshness"
 import {
   AI_COUNCIL_LLM_PROMPT_VERSION,
   runSelectedAiCouncilLlmDebates,
@@ -49,6 +50,36 @@ export async function GET(request: NextRequest) {
   try {
     const runtimeConfig = await getAiCouncilRuntimeConfig()
     const runtimeData = await getAiCouncilRuntimeData(supabase, { includeHistory: false, includePromptEvidence: true })
+
+    let freshness
+    try {
+      freshness = await assertAiCouncilEodFreshness(supabase, {
+        ratingDate: runtimeData.data.ratingDate,
+        tickers: runtimeData.data.stocks.map((stock) => stock.ticker),
+        benchmarkSessionDate: runtimeData.benchmark.sessionDate,
+      })
+    } catch (error) {
+      if (error instanceof AiCouncilUpstreamStaleError) {
+        await notifyOpsError({
+          source: "api/ai-council/debate-daily",
+          message: error.message,
+          path: request.nextUrl.pathname,
+          method: request.method,
+          status: 424,
+        }).catch(() => undefined)
+        return NextResponse.json({
+          ok: false,
+          status: "skipped",
+          reason: "UPSTREAM_STALE",
+          ratingDate: runtimeData.data.ratingDate,
+          freshness: error.report,
+          finalAuthority: "deterministic",
+          detail: "LLM evidence freeze and OpenAI calls were skipped because the deterministic upstream evidence is not aligned to one completed EOD session.",
+        }, { status: 424 })
+      }
+      throw error
+    }
+
     // Freeze raw provider/Wyckoff evidence first, then attach bounded Notion research as explicit
     // first-class packet fields. Deterministic scoring and signal authority remain unchanged.
     const evidenceFidelity = await enrichCouncilStocksForDebate(supabase, {
@@ -110,6 +141,7 @@ export async function GET(request: NextRequest) {
       ok: true,
       status: result.enabled ? "completed" : "disabled",
       ...result,
+      freshness,
       evidenceFidelity: {
         contextVersion: evidenceFidelity.contextVersion,
         contextsBuilt: evidenceFidelity.contextsBuilt,
@@ -133,7 +165,7 @@ export async function GET(request: NextRequest) {
       validationTicker: validationBootstrap ? validationTicker : null,
       schedule: "17:25 Asia/Ho_Chi_Minh on trading weekdays",
       finalAuthority: "deterministic",
-      behavior: "Freeze raw current KFSP/TTAI metrics + quarterly 4M/CANSLIM trajectory + raw Wyckoff MTF context, attach bounded point-in-time Notion Research Context as first-class Packet V2 evidence, and route OpenAI prompt caching by the combined prompt identity. Event-selected runs use Luna Bull/Bear -> Terra Risk/Chair -> Sol severe-conflict Chair. Deterministic scoring and signal authority never change.",
+      behavior: "Require same-session final market + 1D Wyckoff + VNINDEX freshness before any LLM evidence freeze. Then freeze raw current KFSP/TTAI metrics + quarterly 4M/CANSLIM trajectory + raw Wyckoff MTF context, attach bounded point-in-time Notion Research Context as first-class Packet V2 evidence, and route OpenAI prompt caching by the combined prompt identity. Event-selected runs use Luna Bull/Bear -> Terra Risk/Chair -> Sol severe-conflict Chair. Deterministic scoring and signal authority never change.",
     })
   } catch (error) {
     console.error("AI Council P4.3 LLM debate failed", error)
