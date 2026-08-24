@@ -291,6 +291,14 @@ export function buildAiCouncilEvidencePacketV2(params: {
   }
 }
 
+function normalizeEvidenceValueForComparison(value: string, unit: string) {
+  let normalized = value.trim().toLowerCase()
+  if (unit === "score_0_100") {
+    normalized = normalized.replace(/\s*\/\s*100\s*$/, "")
+  }
+  return normalized.replace(/[,%\s_]/g, "")
+}
+
 /**
  * Validates that structured evidence references strictly align with observed values in Packet V2.
  */
@@ -361,12 +369,13 @@ export function validateCouncilEvidenceRefs(
         )
       }
 
-      // Exact normalized equality: strip standard harmless formatting characters (, % _ spaces)
+      // Preserve exact numeric equality while tolerating harmless display formatting.
+      // A score may carry a trailing /100 because the semantic unit explicitly defines
+      // a 0-100 scale. Additional labels, metrics, or numbers remain invalid.
       const rawActualStr = String(observed.value).trim()
       const rawCitedStr = ref.observedValue.trim()
-
-      const normActual = rawActualStr.toLowerCase().replace(/[,%\s_]/g, "")
-      const normCited = rawCitedStr.toLowerCase().replace(/[,%\s_]/g, "")
+      const normActual = normalizeEvidenceValueForComparison(rawActualStr, observed.unit)
+      const normCited = normalizeEvidenceValueForComparison(rawCitedStr, observed.unit)
 
       const numActual = Number(normActual)
       const numCited = Number(normCited)
