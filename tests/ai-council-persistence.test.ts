@@ -61,6 +61,7 @@ test("daily Council P3 operation is machine-authorized and runs benchmark -> lea
   const route = source("app/api/ai-council/daily/route.ts")
   const operations = source("lib/ai-council-operations.ts")
   const workflow = source("workflows/ai-council-eod-workflow.ts")
+  const steps = source("lib/ai-council-eod-workflow-steps.ts")
   const vercel = JSON.parse(source("vercel.json")) as { crons: Array<{ path: string; schedule: string }> }
   const eodCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/eod")
 
@@ -72,8 +73,10 @@ test("daily Council P3 operation is machine-authorized and runs benchmark -> lea
   assert.match(operations, /loadCouncilWeightProfile/)
   assert.match(operations, /applyCouncilWeightProfile/)
   assert.match(operations, /persistAiCouncilData/)
-  assert.match(workflow, /runAiCouncilDailyOperation/)
-  assert.match(workflow, /runAiCouncilDebateOperation/)
+  assert.match(workflow, /runDeterministicCouncilStep/)
+  assert.match(workflow, /runLlmDebateStep/)
+  assert.match(steps, /runAiCouncilDailyOperation/)
+  assert.match(steps, /runAiCouncilDebateOperation/)
   assert.equal(eodCron?.schedule, "0 10 * * 1-5")
 })
 
@@ -223,6 +226,7 @@ test("P4 debate stage is isolated behind an authenticated endpoint and the depen
   const route = source("app/api/ai-council/debate-daily/route.ts")
   const operations = source("lib/ai-council-operations.ts")
   const workflow = source("workflows/ai-council-eod-workflow.ts")
+  const steps = source("lib/ai-council-eod-workflow-steps.ts")
   const page = source("app/insights/ai-council/debates/page.tsx")
   const councilPage = source("app/insights/ai-council/page.tsx")
   const vercel = JSON.parse(source("vercel.json")) as { crons: Array<{ path: string; schedule: string }> }
@@ -233,8 +237,10 @@ test("P4 debate stage is isolated behind an authenticated endpoint and the depen
   assert.match(route, /runAiCouncilDebateOperation/)
   assert.match(operations, /runSelectedAiCouncilLlmDebates/)
   assert.match(operations, /finalAuthority: "deterministic"/)
-  assert.match(workflow, /runAiCouncilDailyOperation/)
-  assert.match(workflow, /runAiCouncilDebateOperation/)
+  assert.match(workflow, /runDeterministicCouncilStep/)
+  assert.match(workflow, /runLlmDebateStep/)
+  assert.match(steps, /runAiCouncilDailyOperation/)
+  assert.match(steps, /runAiCouncilDebateOperation/)
   assert.equal(eodCron?.schedule, "0 10 * * 1-5")
   assert.equal(legacyDebateCron, undefined)
   assert.match(page, /getServerAuthContext/)
