@@ -134,9 +134,10 @@ test("Council EOD overlay refuses stale or pre-final snapshots", () => {
   assert.equal(tooEarly.rating.liquidity.volume1d, 1_000_000)
 })
 
-test("operational Council routes request the rebuilt final EOD evidence ensemble", () => {
+test("operational Council operations request the rebuilt final EOD evidence ensemble", () => {
   const eodData = source("lib/ai-council-eod-data.ts")
   const runtime = source("lib/ai-council-runtime.ts")
+  const operations = source("lib/ai-council-operations.ts")
   const daily = source("app/api/ai-council/daily/route.ts")
   const debate = source("app/api/ai-council/debate-daily/route.ts")
 
@@ -145,8 +146,9 @@ test("operational Council routes request the rebuilt final EOD evidence ensemble
   assert.match(eodData, /buildCouncilStock/)
   assert.match(eodData, /eodMarketOverlay/)
   assert.match(runtime, /includeEodMarketOverlay/)
-  assert.match(daily, /includeEodMarketOverlay:\s*true/)
-  assert.match(debate, /includeEodMarketOverlay:\s*true/)
+  assert.match(daily, /runAiCouncilDailyOperation/)
+  assert.match(debate, /runAiCouncilDebateOperation/)
+  assert.equal((operations.match(/includeEodMarketOverlay:\s*true/g) || []).length, 2)
 })
 
 test("EOD Council orchestration is one durable dependency workflow", () => {
