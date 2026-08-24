@@ -569,3 +569,15 @@ export const ADMIN_ENVIRONMENT_INVENTORY: AdminEnvironmentItem[] = [
   { key: "NEXT_PUBLIC_GIT_COMMIT_DATE", group: "system", label: "Public Git Commit Date", description: "Ngày commit công khai hiển thị trên UI", sensitivity: "public", isConfigured: false },
   { key: "NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA", group: "system", label: "Public Vercel Commit SHA", description: "Mã commit Vercel công khai", sensitivity: "public", isConfigured: false },
 ]
+
+export function getAdminEnvironmentInventory(env: Record<string, string | undefined> = process.env): AdminEnvironmentItem[] {
+  return ADMIN_ENVIRONMENT_INVENTORY.map((item) => {
+    const rawVal = env[item.key]
+    const isConfigured = rawVal !== undefined && rawVal !== ""
+    return {
+      ...item,
+      isConfigured,
+      value: item.sensitivity === "secret" ? undefined : (isConfigured ? rawVal : undefined),
+    }
+  })
+}

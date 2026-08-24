@@ -305,3 +305,35 @@ export async function getScannerRuntimeConfig(): Promise<{ manualRunLimit: numbe
     manualRunLimit: (snapshot.byKey["scanner.manual_run_limit"]?.value as number) ?? 100,
   }
 }
+
+export async function loadRecentAuditLogs(limit = 20): Promise<import("./types.ts").AdminAuditView[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  try {
+    const { data, error } = await supabase
+      .from("system_audit_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(Math.min(100, Math.max(1, limit)))
+
+    if (error || !data) return []
+
+    return (data as Array<Record<string, unknown>>).map((r) => ({
+      id: Number(r.id),
+      actorUserId: r.actor_user_id ? String(r.actor_user_id) : null,
+      action: String(r.action),
+      targetType: String(r.target_type),
+      targetKey: String(r.target_key),
+      beforeValue: sanitizeAdminValue(r.before_value),
+      afterValue: sanitizeAdminValue(r.after_value),
+      reason: String(r.reason),
+      requestId: String(r.request_id),
+      success: Boolean(r.success),
+      errorMessage: r.error_message ? String(r.error_message) : null,
+      createdAt: String(r.created_at),
+    }))
+  } catch {
+    return []
+  }
+}
