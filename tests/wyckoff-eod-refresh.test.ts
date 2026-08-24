@@ -181,9 +181,9 @@ test("EOD workflow is fail-closed and orders market -> Wyckoff -> deterministic 
   assert.ok(validation > wyckoff)
   assert.ok(deterministic > validation)
   assert.ok(debate > deterministic)
-  assert.match(workflow, /if \(!market\.ok\).*return/s)
-  assert.match(workflow, /if \(!wyckoffValidation\.ok\).*return/s)
-  assert.match(workflow, /if \(!deterministic\.ok\).*return/s)
+  assert.match(workflow, /if \(!market\.ok\)[\s\S]*return/)
+  assert.match(workflow, /if \(!wyckoffValidation\.ok\)[\s\S]*return/)
+  assert.match(workflow, /if \(!deterministic\.ok\)[\s\S]*return/)
 })
 
 test("Vercel schedules only one EOD Council dependency cron", () => {
