@@ -229,3 +229,29 @@ test("P4 debate cron is isolated after deterministic Council and exposes an auth
   assert.match(page, /Sol severe-conflict escalation/)
   assert.match(councilPage, /\/insights\/ai-council\/debates/)
 })
+
+test("P2 AI Council V2 applies semantic grounding, Packet V2 and structured evidenceRefs validation", () => {
+  const llm = source("lib/ai-council-llm.ts")
+  const promptEvidence = source("lib/ai-council-prompt-evidence.ts")
+  const data = source("lib/ai-council-data.ts")
+  const route = source("app/api/ai-council/debate-daily/route.ts")
+
+  assert.match(llm, /AI_COUNCIL_LLM_PROMPT_VERSION = "llm-debate-v2-semantic-grounding"/)
+  assert.match(llm, /evidenceRefs/)
+  assert.match(llm, /validateCouncilEvidenceRefs/)
+  assert.match(llm, /buildAiCouncilEvidencePacketV2/)
+  assert.match(llm, /indicatorDictionary/)
+  assert.match(llm, /Do not confuse RSs\/RSm.*with RRG RS\/RM/i)
+  assert.match(llm, /Missing or null indicators represent unknown information/i)
+
+  assert.match(promptEvidence, /packetVersion: "ai-council-evidence-v2"/)
+  assert.match(promptEvidence, /INSIGHTS_METRIC_GUIDE_VERSION/)
+  assert.match(promptEvidence, /observedIndicators/)
+  assert.match(promptEvidence, /missingIndicators/)
+  assert.match(promptEvidence, /indicatorDictionary/)
+  assert.match(promptEvidence, /validateCouncilEvidenceRefs/)
+
+  assert.match(data, /includePromptEvidence\?: boolean/)
+  assert.match(data, /promptEvidence\?: AiCouncilPromptStockSnapshot/)
+  assert.match(route, /includePromptEvidence: true/)
+})

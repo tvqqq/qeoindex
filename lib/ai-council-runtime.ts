@@ -15,7 +15,7 @@ export interface AiCouncilRuntimeData {
 
 export async function getAiCouncilRuntimeData(
   supabase: SupabaseClient,
-  options: { includeHistory?: boolean } = {},
+  options: { includeHistory?: boolean; includePromptEvidence?: boolean } = {},
 ): Promise<AiCouncilRuntimeData> {
   const data = await getAiCouncilData(supabase, options)
   if (!data.ratingDate || !data.stocks.length) {

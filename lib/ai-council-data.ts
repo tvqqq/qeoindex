@@ -12,9 +12,13 @@ import {
   type CouncilTimeframe,
   type CouncilWyckoffEvidence,
 } from "@/lib/ai-council-model"
+import type { AiCouncilPromptStockSnapshot } from "@/lib/ai-council-prompt-evidence"
+
+export type { AiCouncilPromptStockSnapshot }
 
 export type AiCouncilStockSnapshot = AiCouncilStock & {
   evidenceHash: string
+  promptEvidence?: AiCouncilPromptStockSnapshot
 }
 
 export interface AiCouncilOutcomeHistory {
@@ -348,7 +352,7 @@ async function loadCouncilHistory(supabase: SupabaseClient, tickers: string[]) {
 
 export async function getAiCouncilData(
   supabase: SupabaseClient,
-  options: { includeHistory?: boolean } = {},
+  options: { includeHistory?: boolean; includePromptEvidence?: boolean } = {},
 ): Promise<AiCouncilData> {
   const generatedAt = new Date().toISOString()
   const latest = await supabase
@@ -423,9 +427,21 @@ export async function getAiCouncilData(
     .map((row) => {
       const rating = normalizeRating(row)
       const snapshots = wyckoffByTicker.get(row.ticker) || []
+      const evidenceHash = buildEvidenceHash(rating, snapshots)
+      const baseStock = buildCouncilStock(rating, snapshots)
+      const promptEvidence: AiCouncilPromptStockSnapshot | undefined = options.includePromptEvidence
+        ? {
+            rating,
+            snapshots,
+            ratingDate,
+            evidenceHash,
+          }
+        : undefined
+
       return {
-        ...buildCouncilStock(rating, snapshots),
+        ...baseStock,
         evidenceHash: buildEvidenceHash(rating, snapshots),
+        ...(promptEvidence ? { promptEvidence } : {}),
       }
     })
     .sort((left, right) => (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER) || right.councilScore - left.councilScore || left.ticker.localeCompare(right.ticker))

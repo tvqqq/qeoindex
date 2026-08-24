@@ -18,11 +18,15 @@ Read in this order:
 | Route/authenticated layout | `app/insights/page.tsx`, `app/insights/layout.tsx` |
 | Server read-model | `lib/insights-data.ts` |
 | Pure rating/state model | `lib/insights-rating-model.ts` |
+| Pure metric semantics registry | `lib/insights-metric-semantics.ts` (`INSIGHTS_METRIC_GUIDE_VERSION`) |
+| Metric explainability UI | `components/insights/metric-guide-dialog.tsx` |
 | Main UI | `components/insights/insights-dashboard.tsx` |
+| AI Council Semantic Grounding V2 | `lib/ai-council-prompt-evidence.ts`, `lib/ai-council-llm.ts` |
 | Provider field catalog | `supabase/functions/_shared/kfsp-catalog.ts` |
 | Daily ingestion | `supabase/functions/kfsp-rating-sync/index.ts` |
 | Schema/auth/publish/cron | Insights migrations under `supabase/migrations/` |
-| Model tests | `tests/insights-rating-model.test.ts` |
+| Model tests | `tests/insights-rating-model.test.ts`, `tests/insights-metric-semantics.test.ts` |
+| Council & evidence tests | `tests/ai-council-prompt-evidence.test.ts`, `tests/ai-council-persistence.test.ts` |
 | Security/UI/schema contracts | `tests/insights-schema.test.ts` |
 
 ## Source-of-truth boundaries

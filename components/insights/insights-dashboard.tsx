@@ -10,6 +10,7 @@ import {
   BadgePercent,
   BarChart3,
   Bolt,
+  BookOpen,
   BrainCircuit,
   Building2,
   CalendarDays,
@@ -31,6 +32,7 @@ import {
   Gauge,
   GripVertical,
   HeartPulse,
+  HelpCircle,
   Info,
   Landmark,
   Layers3,
@@ -57,6 +59,7 @@ import AnimatedProgressBar from "@/components/smoothui/animated-progress-bar"
 import SoftBlurIn from "@/components/smoothui/soft-blur-in"
 import InsightsTransition from "@/components/smoothui/insights-transition"
 import { MarketChangePill } from "@/components/market-change-pill"
+import { MetricGuideDialog } from "@/components/insights/metric-guide-dialog"
 import { TtaiDashboard } from "@/components/insights/ttai-dashboard"
 import { StockLogo } from "@/components/stock-logo"
 import { TopNav } from "@/components/top-nav"
@@ -69,6 +72,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { InsightsDashboardData, InsightsModuleSummary, InsightsRatingRow, InsightsSectorSummary, KfspMetricValue } from "@/lib/insights-data"
+import { getMetricSemantic } from "@/lib/insights-metric-semantics"
 import { calculateRatingModel, historyDelta, type RatingDimension, type RatingModelSnapshot } from "@/lib/insights-rating-model"
 import { cn } from "@/lib/utils"
 import {
@@ -190,14 +194,45 @@ function metricTone(value: KfspMetricValue | undefined, definition: KfspFieldDef
   return numeric > 0 ? "text-up" : numeric < 0 ? "text-down" : "text-ref"
 }
 
-function MetricLabel({ definition, className }: { definition: KfspFieldDefinition; className?: string }) {
+function MetricLabel({
+  definition,
+  metricKey,
+  label,
+  className,
+}: {
+  definition?: KfspFieldDefinition
+  metricKey?: string
+  label?: string
+  className?: string
+}) {
+  const effectiveKey = metricKey || definition?.key || ""
+  const semantic = getMetricSemantic(effectiveKey)
+  const displayLabel = label || definition?.label || semantic?.label || effectiveKey
+  const description = semantic?.beginner.what || definition?.description || ""
+  const notMeaning = semantic?.beginner.notMeaning
+
   return (
     <Tooltip>
-      <TooltipTrigger render={<span className={cn("inline-flex cursor-help items-center gap-1", className)} />}>
-        {definition.label}<Info className="size-3.5 opacity-55" />
+      <TooltipTrigger
+        render={
+          <span
+            tabIndex={0}
+            aria-label={`Giải thích chỉ số ${displayLabel}`}
+            className={cn("inline-flex cursor-help items-center gap-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/50 rounded", className)}
+          />
+        }
+      >
+        {displayLabel}
+        <Info className="size-3.5 opacity-55 hover:opacity-100 transition-opacity" />
       </TooltipTrigger>
-      <TooltipContent className="max-w-72 border border-white/10 bg-[#090e19] px-3 py-2 text-sm leading-5 text-white shadow-2xl">
-        {definition.description}
+      <TooltipContent className="max-w-80 border border-white/10 bg-[#090e19] px-3.5 py-2.5 text-xs leading-5 text-white shadow-2xl space-y-2 pointer-events-none">
+        <div className="font-bold text-cyan-300">{displayLabel}</div>
+        <div className="text-muted-2">{description}</div>
+        {notMeaning && (
+          <div className="rounded border border-rose-500/20 bg-rose-500/[0.08] p-1.5 text-[11px] text-rose-200 leading-4">
+            <strong>Không có nghĩa là:</strong> {notMeaning}
+          </div>
+        )}
       </TooltipContent>
     </Tooltip>
   )
@@ -238,18 +273,40 @@ function LineSparkline({ values, positive }: { values: number[]; positive: boole
   )
 }
 
-function MetricCard({ icon: Icon, label, value, detail, tone = "neutral" }: {
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone = "neutral",
+  metricKey,
+  onOpenGuide,
+}: {
   icon: typeof Activity
   label: string
   value: string
   detail: string
   tone?: "up" | "down" | "neutral"
+  metricKey?: string
+  onOpenGuide?: (key: string) => void
 }) {
   return (
     <Card className="border border-white/[0.07] bg-panel/90 py-0 ring-0">
       <CardContent className="p-5">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-semibold text-muted-2">{label}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-semibold text-muted-2">{label}</span>
+            {metricKey && onOpenGuide && (
+              <button
+                type="button"
+                onClick={() => onOpenGuide(metricKey)}
+                aria-label={`Mở hướng dẫn chỉ số ${label}`}
+                className="text-muted hover:text-brand transition-colors p-0.5 rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/50"
+              >
+                <HelpCircle className="size-3.5" />
+              </button>
+            )}
+          </div>
           <Icon className={cn("size-5", tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-cyan-300")} />
         </div>
         <div className={cn("mt-4 text-2xl font-extrabold tracking-tight", tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-white")}>{value}</div>
@@ -337,38 +394,151 @@ function RrgBadge({ value }: { value: string | null }) {
   return <Badge variant="outline" className={cn("min-w-20 justify-center gap-1 px-1.5 text-xs font-bold", tone)}><Icon className="size-3.5" />{value || "—"}</Badge>
 }
 
-function SortableHead({ sortKey, activeKey, direction, onSort, definition, label, className }: {
+function SortableHead({
+  sortKey,
+  activeKey,
+  direction,
+  onSort,
+  definition,
+  metricKey,
+  label,
+  className,
+  onOpenGuide,
+}: {
   sortKey: RatingSortKey
   activeKey: RatingSortKey
   direction: SortDirection
   onSort: (key: RatingSortKey) => void
   definition?: KfspFieldDefinition
+  metricKey?: string
   label?: string
   className?: string
+  onOpenGuide?: (key: string) => void
 }) {
   const active = sortKey === activeKey
-  const Icon = active ? direction === "asc" ? ArrowUp : ArrowDown : ChevronsUpDown
+  const Icon = active ? (direction === "asc" ? ArrowUp : ArrowDown) : ChevronsUpDown
+  const effectiveKey = metricKey || definition?.key || ""
+  const semantic = effectiveKey ? getMetricSemantic(effectiveKey) : null
+  const displayLabel = label || definition?.label || semantic?.label || effectiveKey || sortKey
+  const description = semantic?.beginner.what || definition?.description || ""
+  const notMeaning = semantic?.beginner.notMeaning
+
   return (
-    <TableHead aria-sort={active ? direction === "asc" ? "ascending" : "descending" : "none"} className={className}>
-      <button type="button" onClick={() => onSort(sortKey)} className="inline-flex w-full items-center justify-center gap-1 rounded-md outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50">
-        {definition ? <MetricLabel definition={definition} /> : label}
-        <Icon className={cn("size-3.5 shrink-0", active ? "text-brand" : "text-muted")} />
-      </button>
+    <TableHead aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : "none"} className={className}>
+      <div className="inline-flex w-full items-center justify-center gap-1">
+        <button
+          type="button"
+          onClick={() => onSort(sortKey)}
+          aria-label={`Sắp xếp theo ${displayLabel}`}
+          className="inline-flex items-center gap-1 rounded-md py-0.5 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+        >
+          <span>{displayLabel}</span>
+          <Icon className={cn("size-3.5 shrink-0", active ? "text-brand" : "text-muted")} />
+        </button>
+
+        {effectiveKey && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenGuide?.(effectiveKey)
+                  }}
+                  aria-label={`Xem giải thích chỉ số ${displayLabel}`}
+                  className="inline-flex size-4.5 items-center justify-center rounded text-muted-2 hover:bg-white/10 hover:text-cyan-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/50 transition-colors"
+                />
+              }
+            >
+              <Info className="size-3 opacity-60 hover:opacity-100" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-72 border border-white/10 bg-[#090e19] px-3 py-2 text-xs leading-5 text-white shadow-2xl space-y-1.5 pointer-events-none">
+              <div className="font-bold text-cyan-300">{displayLabel}</div>
+              <div className="text-muted-2">{description}</div>
+              {notMeaning && (
+                <div className="rounded border border-rose-500/20 bg-rose-500/[0.08] p-1 text-[11px] text-rose-200 leading-4">
+                  <strong>Không có nghĩa là:</strong> {notMeaning}
+                </div>
+              )}
+              {onOpenGuide && (
+                <div className="text-[10.5px] text-brand font-medium pt-0.5">Nhấp để mở hướng dẫn chi tiết</div>
+              )}
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
     </TableHead>
   )
 }
 
-function ScorePill({ value, tone, label, description, icon: Icon = Bolt }: { value: number | null | undefined; tone: ScoreTone; label: string; description?: string; icon?: typeof Bolt }) {
+function ScorePill({
+  value,
+  tone,
+  label,
+  description,
+  metricKey,
+  icon: Icon = Bolt,
+  onOpenGuide,
+}: {
+  value: number | null | undefined
+  tone: ScoreTone
+  label: string
+  description?: string
+  metricKey?: string
+  icon?: typeof Bolt
+  onOpenGuide?: (key: string) => void
+}) {
   if (value == null) return <span className="font-mono text-xs text-muted-2">—</span>
   const rounded = Math.round(value)
+  const semantic = metricKey ? getMetricSemantic(metricKey) : null
+  const displayDesc = description || semantic?.beginner.what || ""
+  const hasGuide = Boolean(metricKey && onOpenGuide)
+
   return (
     <Tooltip>
-      <TooltipTrigger render={<span className={cn("inline-flex h-8 min-w-13 cursor-help items-center justify-center gap-1 rounded-md border px-1.5 font-mono text-xs sm:text-sm font-black", SCORE_TONE[tone])} />}>
+      <TooltipTrigger
+        render={
+          hasGuide ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenGuide?.(metricKey!)
+              }}
+              aria-label={`${label}: ${rounded}/100. Nhấp để xem giải thích chỉ số`}
+              className={cn(
+                "inline-flex h-8 min-w-13 cursor-pointer items-center justify-center gap-1 rounded-md border px-1.5 font-mono text-xs sm:text-sm font-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 transition-colors hover:border-white/40 hover:bg-white/[0.14]",
+                SCORE_TONE[tone],
+              )}
+            />
+          ) : (
+            <span
+              tabIndex={0}
+              aria-label={`${label}: ${rounded}/100`}
+              className={cn(
+                "inline-flex h-8 min-w-13 cursor-help items-center justify-center gap-1 rounded-md border px-1.5 font-mono text-xs sm:text-sm font-black focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/50",
+                SCORE_TONE[tone],
+              )}
+            />
+          )
+        }
+      >
         <Icon className="size-3 sm:size-3.5 shrink-0" /> {rounded}
       </TooltipTrigger>
-      <TooltipContent className="border border-white/10 bg-[#090e19] px-3 py-2 font-ticker text-white shadow-2xl">
-        <div>{label}: <strong className="text-brand">{rounded}/100</strong></div>
-        {description && <div className="mt-1 max-w-64 text-xs leading-5 text-muted-2">{description}</div>}
+      <TooltipContent className="max-w-72 border border-white/10 bg-[#090e19] px-3 py-2 font-ticker text-xs text-white shadow-2xl space-y-1.5 pointer-events-none">
+        <div>
+          {label}: <strong className="text-brand font-mono">{rounded}/100</strong>
+        </div>
+        {displayDesc && <div className="text-muted-2 leading-4.5">{displayDesc}</div>}
+        {semantic?.beginner.notMeaning && (
+          <div className="rounded border border-rose-500/20 bg-rose-500/[0.08] p-1.5 text-[10.5px] text-rose-200 leading-3.5">
+            <strong>Lưu ý:</strong> {semantic.beginner.notMeaning}
+          </div>
+        )}
+        {hasGuide && (
+          <div className="text-[10.5px] text-brand font-medium pt-0.5">Nhấp để mở hướng dẫn chi tiết</div>
+        )}
       </TooltipContent>
     </Tooltip>
   )
@@ -789,7 +959,7 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false} className="flex max-h-[94vh] flex-col overflow-hidden border border-cyan-300/20 bg-[#060c16] p-0 font-ticker shadow-[0_40px_120px_-20px_rgba(0,0,0,.98),0_0_70px_-35px_rgba(103,232,249,.6)] sm:max-w-[min(1440px,calc(100vw-2rem))]">
         {/* HEADER / ORDERBOOK POPUP EXACT STYLE */}
-        <header className="flex cursor-grab select-none items-center justify-between gap-2.5 border-b border-white/[0.10] bg-gradient-to-r from-[#121820]/95 via-[#182330]/95 to-[#121820]/95 px-4 py-2.5 active:cursor-grabbing touch-none backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_4px_16px_rgba(0,0,0,0.4)]">
+        <header className="flex cursor-grab select-none items-center justify-between gap-2.5 border-b border-white/[0.10] bg-gradient-to-r from-[#121820] via-[#182330] to-[#121820] px-4 py-2.5 active:cursor-grabbing touch-none shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_4px_16px_rgba(0,0,0,0.4)]">
           {/* Left Ticker, Logo & Exchange */}
           <div className="flex items-center gap-2.5 min-w-0 shrink">
             <GripVertical className="h-4 w-4 text-white/30 hover:text-white/60 shrink-0 transition-colors" />
@@ -1267,6 +1437,13 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
     return data.ratings.find((r) => r.ticker.toUpperCase() === initialTicker.toUpperCase()) || null
   })
   const [expandedSectors, setExpandedSectors] = useState<Set<string>>(new Set())
+  const [guideOpen, setGuideOpen] = useState(false)
+  const [guideMetricKey, setGuideMetricKey] = useState<string | null>(null)
+
+  const openGuide = (key?: string | null) => {
+    setGuideMetricKey(key || null)
+    setGuideOpen(true)
+  }
 
   // Auto-sync ticker from URL query if user navigated client-side (popstate / back-forward)
   useEffect(() => {
@@ -1403,10 +1580,38 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
         </section>
 
         <section aria-label="Chỉ số thị trường" className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard icon={ChartNoAxesCombined} label="Độ rộng thị trường" value={breadthTotal ? `${quote?.advances ?? 0} / ${quote?.declines ?? 0}` : "—"} detail="Mã tăng / mã giảm trên HOSE" tone={positive ? "up" : "down"} />
-          <MetricCard icon={Activity} label="Thanh khoản" value={formatTradedValue(quote?.valueTraded)} detail={quote?.valueChangePercent == null ? "So sánh phiên trước đang cập nhật" : `${formatPercent(quote.valueChangePercent)} so với phiên trước`} />
-          <MetricCard icon={Gauge} label="Risk score" value={`${data.marketPulse.riskScore} / 100`} detail={data.marketPulse.riskScore <= 35 ? "Thấp · xu hướng ổn định" : data.marketPulse.riskScore <= 60 ? "Trung bình · cần chọn lọc" : "Cao · ưu tiên phòng thủ"} tone={data.marketPulse.riskScore > 60 ? "down" : "up"} />
-          <MetricCard icon={ShieldCheck} label="Nguồn dữ liệu" value="3 lớp" detail="Supabase · Notion · market providers" />
+          <MetricCard
+            icon={ChartNoAxesCombined}
+            label="Độ rộng thị trường"
+            value={breadthTotal ? `${quote?.advances ?? 0} / ${quote?.declines ?? 0}` : "—"}
+            detail="Mã tăng / mã giảm trên HOSE"
+            tone={positive ? "up" : "down"}
+            metricKey="market_breadth"
+            onOpenGuide={openGuide}
+          />
+          <MetricCard
+            icon={Activity}
+            label="Thanh khoản"
+            value={formatTradedValue(quote?.valueTraded)}
+            detail={quote?.valueChangePercent == null ? "So sánh phiên trước đang cập nhật" : `${formatPercent(quote.valueChangePercent)} so với phiên trước`}
+            metricKey="market_liquidity"
+            onOpenGuide={openGuide}
+          />
+          <MetricCard
+            icon={Gauge}
+            label="Risk score"
+            value={`${data.marketPulse.riskScore} / 100`}
+            detail={data.marketPulse.riskScore <= 35 ? "Thấp · xu hướng ổn định" : data.marketPulse.riskScore <= 60 ? "Trung bình · cần chọn lọc" : "Cao · ưu tiên phòng thủ"}
+            tone={data.marketPulse.riskScore > 60 ? "down" : "up"}
+            metricKey="market_risk_score"
+            onOpenGuide={openGuide}
+          />
+          <MetricCard
+            icon={ShieldCheck}
+            label="Nguồn dữ liệu"
+            value="3 lớp"
+            detail="Supabase · Notion · market providers"
+          />
         </section>
 
         <section className="mt-10">
@@ -1414,11 +1619,24 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
             <div>
               <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Signal ranking</div>
               <h2 className="mt-2 text-2xl font-extrabold text-white sm:text-3xl">Top cổ phiếu rating score</h2>
-              <p className="mt-2 text-sm font-medium text-muted-2">Điểm tổng hợp từ giá, dòng tiền, kỹ thuật và cơ bản.</p>
+              <p className="mt-1.5 text-xs sm:text-sm font-medium text-muted-2">
+                Đọc theo thứ tự: thị trường → ngành → cổ phiếu. Điểm cao giúp so sánh, không phải lệnh mua.
+              </p>
             </div>
-            <Badge variant="outline" className={cn("h-7 px-3", data.ratingMode === "supabase" ? "border-up/30 bg-up/10 text-up" : "border-ref/30 bg-ref/10 text-ref")}>
-              {data.ratingMode === "supabase" ? "Supabase live" : "Dữ liệu mẫu UI"}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => openGuide(null)}
+                className="h-7 gap-1.5 border-white/10 bg-white/[0.04] text-xs font-bold text-white hover:bg-white/10 hover:text-white"
+              >
+                <BookOpen className="size-3.5 text-brand" /> Hiểu các chỉ số
+              </Button>
+              <Badge variant="outline" className={cn("h-7 px-3", data.ratingMode === "supabase" ? "border-up/30 bg-up/10 text-up" : "border-ref/30 bg-ref/10 text-ref")}>
+                {data.ratingMode === "supabase" ? "Supabase live" : "Dữ liệu mẫu UI"}
+              </Badge>
+            </div>
           </div>
 
           <Card className="mt-5 border border-white/[0.07] bg-panel/95 py-0 ring-0">
@@ -1455,16 +1673,16 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                 <TableHeader className="sticky top-0 z-20 bg-[#05090f]">
                   <TableRow className="border-white/[0.08] hover:bg-transparent">
                     <SortableHead sortKey="ticker" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="# · Cổ phiếu / Ngành" className="h-14 px-2 text-xs font-extrabold uppercase text-muted-2" />
-                    <SortableHead sortKey="price" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("price")} className="px-1 text-xs font-extrabold uppercase text-muted-2" />
-                    <SortableHead sortKey="canslimScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_canslim_score")} className="px-1 text-xs font-extrabold uppercase text-emerald-300" />
-                    <SortableHead sortKey="score4m" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_score_4m")} className="px-1 text-xs font-extrabold uppercase text-amber-300" />
-                    <SortableHead sortKey="pricePotential" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_price_potential")} className="px-1 text-xs font-extrabold uppercase text-ref" />
-                    <SortableHead sortKey="rsShort" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_short")} className="px-1 text-xs font-extrabold uppercase text-cyan-300" />
-                    <SortableHead sortKey="rsMedium" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_medium")} className="px-1 text-xs font-extrabold uppercase text-violet-300" />
-                    <SortableHead sortKey="stockRrgState" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={showSectorGroups ? RRG_FIELD_DEFINITIONS.sectorRrgState : RRG_FIELD_DEFINITIONS.stockRrgState} className="px-1 text-xs font-extrabold uppercase text-cyan-300" />
-                    <SortableHead sortKey="weeklyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("weekly_change_pct")} className="px-1 text-xs font-extrabold uppercase text-cyan-200" />
-                    <SortableHead sortKey="monthlyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("monthly_change_pct")} className="px-1 text-xs font-extrabold uppercase text-violet-200" />
-                    <SortableHead sortKey="ratingScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="Rating tổng hợp" className="px-1 text-xs font-extrabold uppercase text-brand" />
+                    <SortableHead sortKey="price" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("price")} metricKey="price" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-muted-2" />
+                    <SortableHead sortKey="canslimScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_canslim_score")} metricKey="kfsp_canslim_score" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-emerald-300" />
+                    <SortableHead sortKey="score4m" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_score_4m")} metricKey="kfsp_score_4m" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-amber-300" />
+                    <SortableHead sortKey="pricePotential" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_price_potential")} metricKey="kfsp_price_potential" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-ref" />
+                    <SortableHead sortKey="rsShort" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_short")} metricKey="rs_short" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-cyan-300" />
+                    <SortableHead sortKey="rsMedium" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("rs_medium")} metricKey="rs_medium" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-violet-300" />
+                    <SortableHead sortKey="stockRrgState" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={showSectorGroups ? RRG_FIELD_DEFINITIONS.sectorRrgState : RRG_FIELD_DEFINITIONS.stockRrgState} metricKey={showSectorGroups ? "kfsp_sector_rrg_state" : "kfsp_stock_rrg_state"} onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-cyan-300" />
+                    <SortableHead sortKey="weeklyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("weekly_change_pct")} metricKey="weekly_change_pct" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-cyan-200" />
+                    <SortableHead sortKey="monthlyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("monthly_change_pct")} metricKey="monthly_change_pct" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-violet-200" />
+                    <SortableHead sortKey="ratingScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="Rating tổng hợp" metricKey="kfsp_composite_score" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-brand" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1514,13 +1732,12 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                               </div>
                             </div>
                           </TableCell>
-                          {/* Bỏ hẳn Giá trung bình khỏi sector parent */}
                           <TableCell className="px-1 text-center font-mono text-xs text-muted-2 font-bold">—</TableCell>
                           <TableCell className="px-1 text-center">
-                            <ScorePill value={sectorSummary.averageCanslimScore} tone="emerald" icon={Target} label="CANSLIM TB ngành" description="Điểm CANSLIM trung bình của ngành" />
+                            <ScorePill value={sectorSummary.averageCanslimScore} tone="emerald" icon={Target} label="CANSLIM TB ngành" description="Điểm CANSLIM trung bình của ngành" metricKey="kfsp_canslim_score" onOpenGuide={openGuide} />
                           </TableCell>
                           <TableCell className="px-1 text-center">
-                            <ScorePill value={sectorSummary.averageScore4m} tone="amber" icon={Bolt} label="4M TB ngành" description="Điểm 4M trung bình của ngành" />
+                            <ScorePill value={sectorSummary.averageScore4m} tone="amber" icon={Bolt} label="4M TB ngành" description="Điểm 4M trung bình của ngành" metricKey="kfsp_score_4m" onOpenGuide={openGuide} />
                           </TableCell>
                           <TableCell className="px-1 text-center">
                             <Badge variant="outline" className="gap-1 border-up/25 bg-up/[0.08] px-1.5 text-xs font-bold text-up">
@@ -1528,10 +1745,10 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                             </Badge>
                           </TableCell>
                           <TableCell className="px-1 text-center">
-                            <ScorePill value={sectorSummary.averageRsShort} tone="cyan" icon={Zap} label="RSs TB ngành" description={overviewField("rs_short").description} />
+                            <ScorePill value={sectorSummary.averageRsShort} tone="cyan" icon={Zap} label="RSs TB ngành" description={overviewField("rs_short").description} metricKey="rs_short" onOpenGuide={openGuide} />
                           </TableCell>
                           <TableCell className="px-1 text-center">
-                            <ScorePill value={sectorSummary.averageRsMedium} tone="violet" icon={Radar} label="RSm TB ngành" description={overviewField("rs_medium").description} />
+                            <ScorePill value={sectorSummary.averageRsMedium} tone="violet" icon={Radar} label="RSm TB ngành" description={overviewField("rs_medium").description} metricKey="rs_medium" onOpenGuide={openGuide} />
                           </TableCell>
                           <TableCell className="px-1 text-center"><RrgBadge value={sectorSummary.dominantRrgState} /></TableCell>
                           <TableCell className="px-1 text-center">
@@ -1551,7 +1768,6 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                           </TableCell>
                         </TableRow>
 
-                        {/* Child Rows when expanded */}
                         {isExpanded && childRows.length === 0 && (
                           <TableRow className="border-white/[0.04] bg-[#050b14]/50">
                             <TableCell colSpan={11} className="py-3 pl-12 text-xs italic text-muted-2">
@@ -1577,12 +1793,11 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                                   setSelectedRating(child)
                                 }
                               }}
-                              className="group cursor-pointer border-white/[0.045] bg-[#040810]/70 outline-none transition-all hover:bg-cyan-300/[0.04] hover:shadow-[inset_3px_0_0_rgba(103,232,249,.7),0_0_24px_-16px_rgba(103,232,249,.7)] focus-visible:bg-cyan-300/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50"
+                              className="group cursor-pointer border-white/[0.045] bg-[#040810]/70 outline-none transition-colors hover:bg-cyan-300/[0.04] hover:shadow-[inset_3px_0_0_rgba(103,232,249,.7),0_0_24px_-16px_rgba(103,232,249,.7)] focus-visible:bg-cyan-300/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50"
                             >
                               <TableCell className="px-2 py-3 pl-7 sm:pl-9">
                                 <RatingTooltip row={child}>
                                   <div className="relative flex items-center gap-2">
-                                    {/* Connector Line */}
                                     <div className="pointer-events-none absolute -left-4 top-1/2 -mt-2.5 h-5 w-3 rounded-bl-sm border-b-2 border-l-2 border-cyan-500/30" />
                                     <StockLogo symbol={child.ticker} size={34} className="shrink-0 rounded-full group-hover:shadow-[0_0_18px_-4px_rgba(103,232,249,.75)]" />
                                     <div className="min-w-0">
@@ -1606,10 +1821,10 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                                 </div>
                               </TableCell>
                               <TableCell className="px-1 text-center">
-                                <ScorePill value={child.canslimScore} tone="emerald" icon={Target} label="Điểm CANSLIM" description={overviewField("kfsp_canslim_score").description} />
+                                <ScorePill value={child.canslimScore} tone="emerald" icon={Target} label="Điểm CANSLIM" description={overviewField("kfsp_canslim_score").description} metricKey="kfsp_canslim_score" onOpenGuide={openGuide} />
                               </TableCell>
                               <TableCell className="px-1 text-center">
-                                <ScorePill value={child.score4m} tone="amber" icon={Bolt} label="Điểm 4M" description={overviewField("kfsp_score_4m").description} />
+                                <ScorePill value={child.score4m} tone="amber" icon={Bolt} label="Điểm 4M" description={overviewField("kfsp_score_4m").description} metricKey="kfsp_score_4m" onOpenGuide={openGuide} />
                               </TableCell>
                               <TableCell className="px-1 text-center">
                                 <Badge variant="outline" className={cn("gap-1 border-white/10 bg-white/[0.03] px-1.5 text-xs font-bold", child.pricePotential?.startsWith("Tăng") ? "text-up" : child.pricePotential?.startsWith("Giảm") ? "text-down" : "text-ref")}>
@@ -1617,10 +1832,10 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                                 </Badge>
                               </TableCell>
                               <TableCell className="px-1 text-center">
-                                <ScorePill value={child.rsShort ?? child.scoreComponents.momentum} tone="cyan" icon={Zap} label="RSs" description={overviewField("rs_short").description} />
+                                <ScorePill value={child.rsShort ?? child.scoreComponents.momentum} tone="cyan" icon={Zap} label="RSs" description={overviewField("rs_short").description} metricKey="rs_short" onOpenGuide={openGuide} />
                               </TableCell>
                               <TableCell className="px-1 text-center">
-                                <ScorePill value={child.rsMedium ?? child.scoreComponents.moneyFlow} tone="violet" icon={Radar} label="RSm" description={overviewField("rs_medium").description} />
+                                <ScorePill value={child.rsMedium ?? child.scoreComponents.moneyFlow} tone="violet" icon={Radar} label="RSm" description={overviewField("rs_medium").description} metricKey="rs_medium" onOpenGuide={openGuide} />
                               </TableCell>
                               <TableCell className="px-1 text-center"><RrgBadge value={child.stockRrgState} /></TableCell>
                               <TableCell className="px-1 text-center">
@@ -1664,7 +1879,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                             setSelectedRating(row)
                           }
                         }}
-                        className="group cursor-pointer border-white/[0.065] bg-[#07101a]/35 outline-none transition-all hover:bg-cyan-300/[0.035] hover:shadow-[inset_3px_0_0_rgba(103,232,249,.7),0_0_24px_-16px_rgba(103,232,249,.7)] focus-visible:bg-cyan-300/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50"
+                        className="group cursor-pointer border-white/[0.065] bg-[#07101a]/35 outline-none transition-colors hover:bg-cyan-300/[0.035] hover:shadow-[inset_3px_0_0_rgba(103,232,249,.7),0_0_24px_-16px_rgba(103,232,249,.7)] focus-visible:bg-cyan-300/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50"
                       >
                         <TableCell className="px-2 py-3.5">
                           <RatingTooltip row={row}>
@@ -1692,10 +1907,10 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                           </div>
                         </TableCell>
                         <TableCell className="px-1 text-center">
-                          <ScorePill value={row.canslimScore} tone="emerald" icon={Target} label="Điểm CANSLIM" description={overviewField("kfsp_canslim_score").description} />
+                          <ScorePill value={row.canslimScore} tone="emerald" icon={Target} label="Điểm CANSLIM" description={overviewField("kfsp_canslim_score").description} metricKey="kfsp_canslim_score" onOpenGuide={openGuide} />
                         </TableCell>
                         <TableCell className="px-1 text-center">
-                          <ScorePill value={row.score4m} tone="amber" icon={Bolt} label="Điểm 4M" description={overviewField("kfsp_score_4m").description} />
+                          <ScorePill value={row.score4m} tone="amber" icon={Bolt} label="Điểm 4M" description={overviewField("kfsp_score_4m").description} metricKey="kfsp_score_4m" onOpenGuide={openGuide} />
                         </TableCell>
                         <TableCell className="px-1 text-center">
                           <Badge variant="outline" className={cn("gap-1 border-white/10 bg-white/[0.03] px-1.5 text-xs font-bold", row.pricePotential?.startsWith("Tăng") ? "text-up" : row.pricePotential?.startsWith("Giảm") ? "text-down" : "text-ref")}>
@@ -1703,10 +1918,10 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                           </Badge>
                         </TableCell>
                         <TableCell className="px-1 text-center">
-                          <ScorePill value={row.rsShort ?? row.scoreComponents.momentum} tone="cyan" icon={Zap} label="RSs" description={overviewField("rs_short").description} />
+                          <ScorePill value={row.rsShort ?? row.scoreComponents.momentum} tone="cyan" icon={Zap} label="RSs" description={overviewField("rs_short").description} metricKey="rs_short" onOpenGuide={openGuide} />
                         </TableCell>
                         <TableCell className="px-1 text-center">
-                          <ScorePill value={row.rsMedium ?? row.scoreComponents.moneyFlow} tone="violet" icon={Radar} label="RSm" description={overviewField("rs_medium").description} />
+                          <ScorePill value={row.rsMedium ?? row.scoreComponents.moneyFlow} tone="violet" icon={Radar} label="RSm" description={overviewField("rs_medium").description} metricKey="rs_medium" onOpenGuide={openGuide} />
                         </TableCell>
                         <TableCell className="px-1 text-center"><RrgBadge value={row.stockRrgState} /></TableCell>
                         <TableCell className="px-1 text-center">
@@ -1756,6 +1971,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
       </main>
       </InsightsTransition>
       <RatingDialog key={selectedRating?.ticker ?? "closed"} row={selectedRating} onOpenChange={(open) => { if (!open) setSelectedRating(null) }} />
+      <MetricGuideDialog open={guideOpen} onOpenChange={setGuideOpen} initialMetricKey={guideMetricKey} />
     </div>
   )
 }

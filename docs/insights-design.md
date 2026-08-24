@@ -25,7 +25,7 @@ Insights uses the information density of a Vietnamese market board without sacri
 | Biến động tháng | 8% | Signed green/red percent |
 | Rating tổng hợp | 10% | Strong score badge and detail affordance |
 
-## Rating table interaction
+## Rating table interaction & Metric Explainability
 
 - Default universe is **Top 100**.
 - **Tất cả** shows expandable sector parent rows when sector is “Tất cả ngành” and search is blank.
@@ -34,6 +34,11 @@ Insights uses the information density of a Vietnamese market board without sacri
 - Every visible column is sortable; active direction is visible and keyboard-operable.
 - Stock identity hover opens an accessible summary tooltip.
 - Clicking a stock row opens the detail dialog. Enter and Space perform the same action.
+- **Metric Guide Dialog (`Hiểu các chỉ số`)**:
+  - Entry points: Primary header button `Hiểu các chỉ số`, pulse card info buttons, column header info icons, and `ScorePill` tooltip action `Xem hướng dẫn chi tiết`.
+  - Progressive disclosure: "Bắt đầu trong 60 giây" highlights the 4-step quick read. 4 categorized tabs ("Tất cả", "Chất lượng DN", "Sức mạnh & Luân chuyển", "Rủi ro & Định giá").
+  - Deep-linking & smooth scroll: Opening the dialog with a `metricKey` automatically switches to the matching tab, smoothly scrolls the target metric card into view, and highlights it with a cyan pulsing ring for 2 seconds.
+  - Semantic tooltips: All metric labels and score pills render instant tooltip definitions with purpose, typical ranges, and explicit anti-meanings (e.g. RSs != RSI != RRG).
 
 ## Stock detail dialog — grouped dashboard IA
 

@@ -6,6 +6,7 @@ This is the architecture overview. Supporting documents:
 - Exact formulas and state thresholds: `docs/insights-rating-model.md`
 - UX, visual language, responsive and accessibility contract: `docs/insights-design.md`
 - Engineering and operations runbook: `docs/insights-handover.md`
+- Planned metric explainability and AI Council semantic-grounding handoff: `docs/insights-explainability-ai-council-handoff.md`
 
 `/insights` is the market-intelligence landing page for every signed-in user. It requires Supabase Auth but no separate feature entitlement. Anonymous users remain behind the existing login gate; the feature does not weaken the auth boundary of `/`, `/research/*`, or any write/operational API.
 
@@ -16,12 +17,12 @@ This is the architecture overview. Supporting documents:
 - Research context: existing Notion read-models remain canonical for theses, Scanner, Signals, FA, and research summaries. KFSP high-frequency snapshots are intentionally not duplicated into Notion.
 - Until the first complete provider snapshot is published, the UI shows an explicitly labelled preview dataset.
 
-## Rating UX
+## Rating UX & Metric Explainability
 
 - The desktop table uses an 11-column, full-width market-board layout that fits without a forced horizontal minimum width. It defaults to Top 100; selecting `Tất cả` shows a sector read-model with stock count, Top 100 count, summed capitalization, averaged scores/returns, and dominant sector RRG. Sector aggregates use the full current snapshot; clicking a sector filters the ranked detailed read-model, currently capped at the top 500 composite rows plus the exact Top 100. See the plan for the full-sector drill-down follow-up.
 - Visible stock metrics are price, CANSLIM, 4M, price potential, RSs, RSm, stock RRG, weekly/monthly change, and composite rating. Every visible column remains sortable; icon/color semantics are shared with the detail dialog.
-- Hovering a stock opens an accessible profile tooltip. Hovering a metric label or score explains its definition and provenance.
-- Clicking or keyboard-activating a row opens a shadcn dialog. Its QeoIndex state radar scores five documented dimensions (trend, accumulation, risk, heat, sustainability) from published KFSP fields; it is a heuristic comparison aid, not proprietary KFSP logic or an investment signal. The dialog also retains the nine raw-data groups matching the observed KFSP contract.
+- **Progressive Disclosure & Semantic Guide**: The page header exposes a `Hiểu các chỉ số` action and reading order guide (`Đọc theo thứ tự: thị trường → ngành → cổ phiếu. Điểm cao giúp so sánh, không phải lệnh mua.`). Clicking any market card, column header, or score pill deep-links directly into the `MetricGuideDialog` with search, category filtering, 60s learning path, and anti-confusion warnings (e.g. RSs vs RSI vs RRG).
+- **AI Council Semantic Grounding V2**: AI Council LLM debates consume point-in-time Packet V2 (`INSIGHTS_METRIC_GUIDE_VERSION = "metric-guide-v1"`), structured metric dictionary, 10 mandatory grounding rules, and validate 1–4 structured `evidenceRefs` against actual observed packet values. Raw evidence is opt-in server-only and not leaked into client page bundles.
 - Daily snapshots are retained. The read-model selects the latest real snapshot on or before 1D, 7D, and 30D targets; missing history displays `—` and is never interpolated. Radar overlays, per-dimension deltas, and the rating timeline expand automatically as cron history accumulates.
 
 ## QeoIndex state model
