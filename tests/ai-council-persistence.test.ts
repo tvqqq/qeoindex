@@ -57,21 +57,24 @@ test("P3 outcome refresh computes VNINDEX alpha and calibration stays sample-gat
   assert.match(migration, /w\.raw_weight \/ sum\(w\.raw_weight\) over \(partition by w\.market_regime\)/)
 })
 
-test("daily Council P3 pipeline is machine-authorized and runs benchmark -> learning -> calibrated persistence", () => {
+test("daily Council P3 operation is machine-authorized and runs benchmark -> learning -> calibrated persistence", () => {
   const route = source("app/api/ai-council/daily/route.ts")
+  const operations = source("lib/ai-council-operations.ts")
+  const workflow = source("workflows/ai-council-eod-workflow.ts")
   const vercel = JSON.parse(source("vercel.json")) as { crons: Array<{ path: string; schedule: string }> }
-  const councilCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/daily")
-  const wyckoffCron = vercel.crons.find((cron) => cron.path === "/api/wyckoff/ingest")
+  const eodCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/eod")
 
   assert.match(route, /isMachineRequestAuthorized/)
   assert.match(route, /process\.env\.AI_COUNCIL_RUN_SECRET/)
-  assert.match(route, /syncAiCouncilMarketBenchmark/)
-  assert.match(route, /refreshAiCouncilLearningState/)
-  assert.match(route, /loadCouncilWeightProfile/)
-  assert.match(route, /applyCouncilWeightProfile/)
-  assert.match(route, /persistAiCouncilData/)
-  assert.equal(wyckoffCron?.schedule, "0 10 * * 1-5")
-  assert.equal(councilCron?.schedule, "15 10 * * 1-5")
+  assert.match(route, /runAiCouncilDailyOperation/)
+  assert.match(operations, /syncAiCouncilMarketBenchmark/)
+  assert.match(operations, /refreshAiCouncilLearningState/)
+  assert.match(operations, /loadCouncilWeightProfile/)
+  assert.match(operations, /applyCouncilWeightProfile/)
+  assert.match(operations, /persistAiCouncilData/)
+  assert.match(workflow, /runAiCouncilDailyOperation/)
+  assert.match(workflow, /runAiCouncilDebateOperation/)
+  assert.equal(eodCron?.schedule, "0 10 * * 1-5")
 })
 
 test("Council v2 keeps deterministic evidence hashes and exposes bounded adaptive calibration", () => {
@@ -184,6 +187,7 @@ test("P4.3 freezes raw KFSP, TTAI history and Wyckoff context without changing d
   const migration = source("supabase/migrations/20260823214500_ai_council_llm_evidence_fidelity.sql")
   const preMarket = source("lib/ai-council-pre-market-evidence.ts")
   const route = source("app/api/ai-council/debate-daily/route.ts")
+  const operations = source("lib/ai-council-operations.ts")
 
   assert.match(evidence, /AI_COUNCIL_LLM_EVIDENCE_VERSION = "llm-evidence-fidelity-v1"/)
   assert.match(evidence, /"price_volatility"/)
@@ -208,23 +212,31 @@ test("P4.3 freezes raw KFSP, TTAI history and Wyckoff context without changing d
   assert.match(migration, /grant select on table public\.ai_council_llm_evidence to authenticated/)
 
   assert.match(preMarket, /enrichCouncilStocksWithLlmEvidence/)
-  assert.match(route, /enrichCouncilStocksForDebate/)
-  assert.match(route, /stocks: debateStocks/)
-  assert.match(route, /finalAuthority: "deterministic"/)
-  assert.match(route, /evidenceFidelity:/)
+  assert.match(route, /runAiCouncilDebateOperation/)
+  assert.match(operations, /enrichCouncilStocksForDebate/)
+  assert.match(operations, /stocks: debateStocks/)
+  assert.match(operations, /finalAuthority: "deterministic"/)
+  assert.match(operations, /evidenceFidelity:/)
 })
 
-test("P4 debate cron is isolated after deterministic Council and exposes an authenticated audit page", () => {
+test("P4 debate stage is isolated behind an authenticated endpoint and the dependency-driven EOD workflow", () => {
   const route = source("app/api/ai-council/debate-daily/route.ts")
+  const operations = source("lib/ai-council-operations.ts")
+  const workflow = source("workflows/ai-council-eod-workflow.ts")
   const page = source("app/insights/ai-council/debates/page.tsx")
   const councilPage = source("app/insights/ai-council/page.tsx")
   const vercel = JSON.parse(source("vercel.json")) as { crons: Array<{ path: string; schedule: string }> }
-  const debateCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/debate-daily")
+  const eodCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/eod")
+  const legacyDebateCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/debate-daily")
 
   assert.match(route, /isMachineRequestAuthorized/)
-  assert.match(route, /runSelectedAiCouncilLlmDebates/)
-  assert.match(route, /finalAuthority: "deterministic"/)
-  assert.equal(debateCron?.schedule, "25 10 * * 1-5")
+  assert.match(route, /runAiCouncilDebateOperation/)
+  assert.match(operations, /runSelectedAiCouncilLlmDebates/)
+  assert.match(operations, /finalAuthority: "deterministic"/)
+  assert.match(workflow, /runAiCouncilDailyOperation/)
+  assert.match(workflow, /runAiCouncilDebateOperation/)
+  assert.equal(eodCron?.schedule, "0 10 * * 1-5")
+  assert.equal(legacyDebateCron, undefined)
   assert.match(page, /getServerAuthContext/)
   assert.match(page, /LLM Debate Lab/)
   assert.match(page, /Luna Bull\/Bear/)
@@ -237,6 +249,7 @@ test("P2 AI Council V2 applies semantic grounding, Packet V2 and structured evid
   const promptEvidence = source("lib/ai-council-prompt-evidence.ts")
   const data = source("lib/ai-council-data.ts")
   const route = source("app/api/ai-council/debate-daily/route.ts")
+  const operations = source("lib/ai-council-operations.ts")
 
   assert.match(llm, /AI_COUNCIL_LLM_PROMPT_VERSION = "llm-debate-v3-first-class-context"/)
   assert.match(llm, /evidenceRefs/)
@@ -262,5 +275,6 @@ test("P2 AI Council V2 applies semantic grounding, Packet V2 and structured evid
 
   assert.match(data, /includePromptEvidence\?: boolean/)
   assert.match(data, /promptEvidence\?: AiCouncilPromptStockSnapshot/)
-  assert.match(route, /includePromptEvidence: true/)
+  assert.match(route, /runAiCouncilDebateOperation/)
+  assert.match(operations, /includePromptEvidence: true/)
 })
