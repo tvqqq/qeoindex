@@ -475,6 +475,10 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
   },
 ]
 
+export function getAdminJobDefinition(key: string): AdminJobDefinition | undefined {
+  return ADMIN_JOB_CATALOG.find((j) => j.key === key)
+}
+
 export const ADMIN_ENVIRONMENT_INVENTORY: AdminEnvironmentItem[] = [
   // Notion
   { key: "NOTION_API_KEY", group: "provider", label: "Notion API Key", description: "API Key chính xác thực với Notion workspace", sensitivity: "secret", isConfigured: false },

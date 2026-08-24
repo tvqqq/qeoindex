@@ -10,6 +10,8 @@ export type AdminSettingGroup =
   | "ui"
   | "integration"
 
+export type AdminJobGroup = AdminSettingGroup
+
 export type AdminSettingKind =
   | "boolean"
   | "integer"
