@@ -6,6 +6,8 @@ import {
 } from "@/lib/wyckoff-eod-refresh"
 import { runUnifiedWyckoff } from "@/lib/wyckoff-unified-runner"
 
+export const AI_COUNCIL_EOD_JOB_KEY = "ai_council.eod"
+
 function vietnamDateKey(iso: string) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Ho_Chi_Minh",
@@ -13,6 +15,70 @@ function vietnamDateKey(iso: string) {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(iso))
+}
+
+export async function startAiCouncilEodTelemetryStep(startedAtIso: string) {
+  "use step"
+
+  const supabase = getSupabaseServerClient()
+  if (!supabase) throw new Error("Supabase service role is not configured")
+
+  const { data, error } = await supabase
+    .from("system_job_runs")
+    .insert({
+      job_key: AI_COUNCIL_EOD_JOB_KEY,
+      provider: "vercel_cron_workflow",
+      trigger: "workflow",
+      status: "running",
+      started_at: startedAtIso,
+    })
+    .select("id")
+    .single()
+
+  if (error || !data?.id) {
+    throw new Error(`AI Council EOD telemetry start failed: ${error?.message || "missing run id"}`)
+  }
+
+  return String(data.id)
+}
+
+export async function finishAiCouncilEodTelemetryStep(
+  runId: string,
+  startedAtIso: string,
+  status: "succeeded" | "skipped" | "failed",
+  summary: Record<string, unknown>,
+  errorMessage?: string,
+) {
+  "use step"
+
+  const supabase = getSupabaseServerClient()
+  if (!supabase) throw new Error("Supabase service role is not configured")
+
+  const finishedAt = new Date()
+  const startedAt = new Date(startedAtIso).getTime()
+  const durationMs = Number.isFinite(startedAt)
+    ? Math.max(0, finishedAt.getTime() - startedAt)
+    : null
+
+  const payload: Record<string, unknown> = {
+    status,
+    finished_at: finishedAt.toISOString(),
+    duration_ms: durationMs,
+    summary,
+    error_code: status === "failed" ? "AI_COUNCIL_EOD_FAILED" : null,
+    error_message: status === "failed" && errorMessage ? errorMessage.slice(0, 1000) : null,
+  }
+
+  const { error } = await supabase
+    .from("system_job_runs")
+    .update(payload)
+    .eq("id", runId)
+
+  if (error) {
+    throw new Error(`AI Council EOD telemetry finish failed: ${error.message}`)
+  }
+
+  return { ok: true as const, runId, status }
 }
 
 export async function assertFinalEodMarketReadyStep(startedAtIso: string) {
