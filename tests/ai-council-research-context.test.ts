@@ -95,6 +95,7 @@ test("pre-market Research Context is MSN-pilot, point-in-time filtered, source-r
 test("pre-market wrapper combines frozen raw evidence with immutable Notion research audit identity", () => {
   const wrapper = source("lib/ai-council-pre-market-evidence.ts")
   const migration = source("supabase/migrations/20260824080500_ai_council_llm_research_context.sql")
+  const operations = source("lib/ai-council-operations.ts")
   const route = source("app/api/ai-council/debate-daily/route.ts")
 
   assert.match(wrapper, /enrichCouncilStocksWithLlmEvidence/)
@@ -117,12 +118,14 @@ test("pre-market wrapper combines frozen raw evidence with immutable Notion rese
   assert.match(migration, /before update on public\.ai_council_llm_research_contexts/)
   assert.match(migration, /grant select on table public\.ai_council_llm_research_contexts to authenticated/)
 
-  assert.match(route, /enrichCouncilStocksForDebate/)
-  assert.match(route, /promptVersion: AI_COUNCIL_LLM_PROMPT_VERSION/)
-  assert.match(route, /configuredCouncilResearchTickers/)
-  assert.match(route, /researchContext:/)
-  assert.match(route, /prefer a research-context pilot ticker/)
-  assert.match(route, /finalAuthority: "deterministic"/)
+  assert.match(route, /runAiCouncilDebateOperation/)
+  assert.match(route, /isMachineRequestAuthorized/)
+  assert.match(operations, /enrichCouncilStocksForDebate/)
+  assert.match(operations, /promptVersion: AI_COUNCIL_LLM_PROMPT_VERSION/)
+  assert.match(operations, /configuredCouncilResearchTickers/)
+  assert.match(operations, /researchContext:/)
+  assert.match(operations, /firstValidationTicker/)
+  assert.match(operations, /finalAuthority: "deterministic"/)
 })
 
 test("configuredCouncilResearchTickers accepts explicit runtime lists without mutating env", () => {
