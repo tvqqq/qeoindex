@@ -1,11 +1,8 @@
-import { runAiCouncilDailyOperation, runAiCouncilDebateOperation } from "@/lib/ai-council-operations"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
 import {
   WYCKOFF_EOD_BATCH_SIZE,
   buildWyckoffEodBatchOffsets,
   validateWyckoffEodDailyRows,
 } from "@/lib/wyckoff-eod-refresh"
-import { runUnifiedWyckoff } from "@/lib/wyckoff-unified-runner"
 
 function vietnamDateKey(iso: string) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -19,6 +16,7 @@ function vietnamDateKey(iso: string) {
 export async function assertFinalEodMarketReadyStep(startedAtIso: string) {
   "use step"
 
+  const { getSupabaseServerClient } = await import("@/lib/supabase/server")
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured")
 
@@ -94,12 +92,15 @@ export async function assertFinalEodMarketReadyStep(startedAtIso: string) {
 
 export async function runWyckoffBatchStep(offset: number) {
   "use step"
+
+  const { runUnifiedWyckoff } = await import("@/lib/wyckoff-unified-runner")
   return runUnifiedWyckoff({ limit: WYCKOFF_EOD_BATCH_SIZE, offset })
 }
 
 export async function validateWyckoffTop100Step(expectedSessionDate: string, tickers: string[]) {
   "use step"
 
+  const { getSupabaseServerClient } = await import("@/lib/supabase/server")
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured")
   const result = await supabase
@@ -122,6 +123,11 @@ export async function validateWyckoffTop100Step(expectedSessionDate: string, tic
 
 export async function runDeterministicCouncilStep() {
   "use step"
+
+  const [{ getSupabaseServerClient }, { runAiCouncilDailyOperation }] = await Promise.all([
+    import("@/lib/supabase/server"),
+    import("@/lib/ai-council-operations"),
+  ])
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured")
   return runAiCouncilDailyOperation(supabase, new Date())
@@ -129,6 +135,11 @@ export async function runDeterministicCouncilStep() {
 
 export async function runLlmDebateStep() {
   "use step"
+
+  const [{ getSupabaseServerClient }, { runAiCouncilDebateOperation }] = await Promise.all([
+    import("@/lib/supabase/server"),
+    import("@/lib/ai-council-operations"),
+  ])
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured")
   return runAiCouncilDebateOperation(supabase)
