@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { applyCouncilWeightProfile } from "@/lib/ai-council-calibration"
 import { getAiCouncilData } from "@/lib/ai-council-data"
+import { AiCouncilUpstreamStaleError, assertAiCouncilEodFreshness } from "@/lib/ai-council-freshness"
 import { loadCouncilWeightProfile, refreshAiCouncilLearningState } from "@/lib/ai-council-learning"
 import { loadAiCouncilBenchmarkContext, syncAiCouncilMarketBenchmark } from "@/lib/ai-council-market"
 import { persistAiCouncilData } from "@/lib/ai-council-persistence"
@@ -51,6 +52,34 @@ export async function GET(request: NextRequest) {
     }
 
     const benchmark = await loadAiCouncilBenchmarkContext(supabase, data.ratingDate)
+    let freshness
+    try {
+      freshness = await assertAiCouncilEodFreshness(supabase, {
+        ratingDate: data.ratingDate,
+        tickers: data.stocks.map((stock) => stock.ticker),
+        benchmarkSessionDate: benchmark.sessionDate,
+      })
+    } catch (error) {
+      if (error instanceof AiCouncilUpstreamStaleError) {
+        await notifyOpsError({
+          source: "api/ai-council/daily",
+          message: error.message,
+          path: request.nextUrl.pathname,
+          method: request.method,
+          status: 424,
+        }).catch(() => undefined)
+        return NextResponse.json({
+          ok: false,
+          status: "skipped",
+          reason: "UPSTREAM_STALE",
+          ratingDate: data.ratingDate,
+          freshness: error.report,
+          detail: "Deterministic Council was not persisted because EOD market/Wyckoff/VNINDEX evidence is not aligned to the same completed session.",
+        }, { status: 424 })
+      }
+      throw error
+    }
+
     const learningBefore = await refreshAiCouncilLearningState(supabase, data.ratingDate)
     const weightProfile = await loadCouncilWeightProfile(supabase, data.ratingDate, benchmark.regime)
     const calibratedData = {
@@ -68,6 +97,7 @@ export async function GET(request: NextRequest) {
       ok: true,
       status: "completed",
       ...result,
+      freshness,
       benchmark: {
         symbol: benchmark.symbol,
         sessionDate: benchmark.sessionDate,
@@ -85,7 +115,7 @@ export async function GET(request: NextRequest) {
       learningBefore,
       learningAfter,
       schedule: "17:15 Asia/Ho_Chi_Minh on trading weekdays",
-      behavior: "Sync VNINDEX benchmark -> mature prior outcomes/confirmations -> calibrate bounded agent weights -> persist immutable Council v2 -> refresh alpha, confirmation outcomes and leaderboard stats.",
+      behavior: "Sync VNINDEX benchmark -> require same-session final market + 1D Wyckoff freshness -> mature prior outcomes/confirmations -> calibrate bounded agent weights -> persist immutable Council v2 -> refresh alpha, confirmation outcomes and leaderboard stats.",
     })
   } catch (error) {
     console.error("AI Council daily persistence failed", error)
