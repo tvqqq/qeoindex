@@ -14,6 +14,13 @@ export interface NotionPage {
   [key: string]: unknown
 }
 
+export interface NotionBlock {
+  id: string
+  type: string
+  has_children?: boolean
+  [key: string]: unknown
+}
+
 export interface NotionQueryOptions {
   filter?: Record<string, unknown>
   sorts?: ReadonlyArray<Record<string, unknown>>
@@ -27,6 +34,20 @@ export interface NotionQueryOptions {
 
 export interface NotionQueryResult {
   results: NotionPage[]
+  hasMore: boolean
+  nextCursor: string | null
+}
+
+export interface NotionBlockChildrenOptions {
+  pageSize?: number
+  startCursor?: string
+  maxPages?: number
+  errorContext?: string
+  timeoutMs?: number
+}
+
+export interface NotionBlockChildrenResult {
+  results: NotionBlock[]
   hasMore: boolean
   nextCursor: string | null
 }
@@ -85,6 +106,23 @@ async function requestNotion<T>(path: string, options: NotionRequestOptions): Pr
   return payload
 }
 
+async function requestNotionGet<T>(
+  path: string,
+  options: { errorContext: string; timeoutMs?: number },
+): Promise<T> {
+  const response = await fetch(`${NOTION_API_BASE}${path}`, {
+    method: "GET",
+    headers: notionHeaders(),
+    cache: "no-store",
+    ...(options.timeoutMs ? { signal: timeoutSignal(options.timeoutMs) } : {}),
+  })
+  const payload = await response.json() as T
+  if (!response.ok) {
+    throw new Error(`${options.errorContext} failed (${response.status}): ${errorPayload(payload)}`)
+  }
+  return payload
+}
+
 function boundedPageSize(pageSize?: number) {
   return Math.max(1, Math.min(MAX_PAGE_SIZE, pageSize ?? MAX_PAGE_SIZE))
 }
@@ -114,6 +152,39 @@ export async function queryDataSource(dataSourceId: string, options: NotionQuery
         ...(options.sorts ? { sorts: options.sorts } : {}),
         ...(startCursor ? { start_cursor: startCursor } : {}),
       },
+    })
+
+    results.push(...(payload.results ?? []))
+    hasMore = Boolean(payload.has_more && payload.next_cursor)
+    nextCursor = hasMore ? payload.next_cursor ?? null : null
+    if (!hasMore || !nextCursor) break
+    startCursor = nextCursor
+  }
+
+  return { results, hasMore, nextCursor }
+}
+
+export async function retrieveBlockChildren(
+  blockId: string,
+  options: NotionBlockChildrenOptions = {},
+): Promise<NotionBlockChildrenResult> {
+  const results: NotionBlock[] = []
+  let startCursor = options.startCursor
+  let hasMore = false
+  let nextCursor: string | null = null
+  const maxPages = Math.max(1, options.maxPages ?? 1)
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const query = new URLSearchParams({ page_size: String(boundedPageSize(options.pageSize)) })
+    if (startCursor) query.set("start_cursor", startCursor)
+
+    const payload = await requestNotionGet<{
+      results?: NotionBlock[]
+      has_more?: boolean
+      next_cursor?: string | null
+    }>(`/blocks/${blockId}/children?${query.toString()}`, {
+      errorContext: options.errorContext ?? "Notion block children",
+      timeoutMs: options.timeoutMs ?? DEFAULT_QUERY_TIMEOUT_MS,
     })
 
     results.push(...(payload.results ?? []))
