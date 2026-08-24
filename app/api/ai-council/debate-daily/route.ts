@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { runSelectedAiCouncilLlmDebates } from "@/lib/ai-council-llm"
-import { enrichCouncilStocksWithLlmEvidence } from "@/lib/ai-council-llm-evidence"
+import {
+  AI_COUNCIL_LLM_PROMPT_VERSION,
+  runSelectedAiCouncilLlmDebates,
+} from "@/lib/ai-council-llm"
+import { enrichCouncilStocksForDebate } from "@/lib/ai-council-pre-market-evidence"
+import { configuredCouncilResearchTickers } from "@/lib/ai-council-research-context"
 import { getAiCouncilRuntimeData } from "@/lib/ai-council-runtime"
 import { isMachineRequestAuthorized } from "@/lib/auth/machine"
 import { notifyOpsError } from "@/lib/ops-alerts"
@@ -12,6 +16,13 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 120
 
 function firstValidationTicker(stocks: Awaited<ReturnType<typeof getAiCouncilRuntimeData>>["data"]["stocks"]) {
+  const researchPilots = configuredCouncilResearchTickers()
+  const researchPilot = [...stocks]
+    .filter((stock) => researchPilots.has(stock.ticker))
+    .sort((left, right) => (left.rank ?? 999) - (right.rank ?? 999) || left.ticker.localeCompare(right.ticker))[0]?.ticker
+
+  if (researchPilot) return researchPilot
+
   return [...stocks]
     .filter((stock) => Boolean(stock.ticker))
     .sort((left, right) => (left.rank ?? 999) - (right.rank ?? 999) || left.ticker.localeCompare(right.ticker))[0]?.ticker || null
@@ -33,9 +44,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const runtimeData = await getAiCouncilRuntimeData(supabase, { includeHistory: false })
-    const evidenceFidelity = await enrichCouncilStocksWithLlmEvidence(supabase, {
+    const evidenceFidelity = await enrichCouncilStocksForDebate(supabase, {
       ratingDate: runtimeData.data.ratingDate,
       stocks: runtimeData.data.stocks,
+      promptVersion: AI_COUNCIL_LLM_PROMPT_VERSION,
     })
     const debateStocks = evidenceFidelity.stocks
 
@@ -58,10 +70,9 @@ export async function GET(request: NextRequest) {
     let validationBootstrap = false
     let validationTicker: string | null = null
 
-    // P4.2 first-live-run guardrail: if the event selector has never produced a debate yet,
-    // run exactly one high-quality deterministic stock through the advisory LLM path.
-    // This guarantees one real Luna/Terra production audit without permanently changing
-    // the event-selection policy or consuming the normal 3-ticker budget on future days.
+    // First-live-run guardrail: if the event selector has never produced a debate,
+    // prefer a research-context pilot ticker (MSN by default) so the first bounded
+    // production call validates both market evidence and curated Notion context.
     if (
       result.enabled
       && result.selected === 0
@@ -100,11 +111,20 @@ export async function GET(request: NextRequest) {
         wyckoffRowsLoaded: evidenceFidelity.wyckoffRowsLoaded,
         detail: evidenceFidelity.detail,
       },
+      researchContext: {
+        contextVersion: evidenceFidelity.researchContextVersion,
+        pilotTickers: [...configuredCouncilResearchTickers()],
+        ready: evidenceFidelity.researchReady,
+        unavailable: evidenceFidelity.researchUnavailable,
+        reused: evidenceFidelity.researchReused,
+        persisted: evidenceFidelity.researchPersisted,
+        missingRunIdentities: evidenceFidelity.researchMissingRunIdentities,
+      },
       validationBootstrap,
       validationTicker: validationBootstrap ? validationTicker : null,
       schedule: "17:25 Asia/Ho_Chi_Minh on trading weekdays",
       finalAuthority: "deterministic",
-      behavior: "Freeze raw current KFSP/TTAI metrics + quarterly 4M/CANSLIM trajectory + raw Wyckoff MTF context -> event-select deterministic Council runs -> Luna Bull/Bear -> Terra Risk/Chair -> Sol Chair only on severe conflict -> immutable cost/cache audit. The evidence-fidelity context is advisory-only and never changes deterministic scoring or signal authority.",
+      behavior: "Freeze raw current KFSP/TTAI metrics + quarterly 4M/CANSLIM trajectory + raw Wyckoff MTF context, then add a bounded point-in-time Notion Research Context for enabled pilot tickers before the advisory LLM debate. Event-selected runs use Luna Bull/Bear -> Terra Risk/Chair -> Sol severe-conflict Chair. Deterministic scoring and signal authority never change.",
     })
   } catch (error) {
     console.error("AI Council P4.3 LLM debate failed", error)
