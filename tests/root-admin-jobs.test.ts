@@ -69,20 +69,23 @@ test("dispatchManualAdminJob rejects short change reason", async () => {
   assert.match(result.error || "", /8 đến 240 ký tự/)
 })
 
-test("AI Council daily and debate routes hard-stop on stale EOD upstream evidence", () => {
+test("AI Council operations hard-stop on stale EOD upstream evidence before persistence or LLM freeze", () => {
   const daily = source("app/api/ai-council/daily/route.ts")
   const debate = source("app/api/ai-council/debate-daily/route.ts")
+  const operations = source("lib/ai-council-operations.ts")
 
-  assert.match(daily, /assertAiCouncilEodFreshness/)
-  assert.match(daily, /UPSTREAM_STALE/)
-  assert.match(debate, /assertAiCouncilEodFreshness/)
-  assert.match(debate, /UPSTREAM_STALE/)
+  assert.match(daily, /runAiCouncilDailyOperation/)
+  assert.match(debate, /runAiCouncilDebateOperation/)
+  assert.match(daily, /isMachineRequestAuthorized/)
+  assert.match(debate, /isMachineRequestAuthorized/)
+  assert.match(operations, /assertAiCouncilEodFreshness/)
+  assert.match(operations, /UPSTREAM_STALE/)
 
-  const dailyGuard = daily.indexOf("assertAiCouncilEodFreshness")
-  const dailyPersist = daily.indexOf("persistAiCouncilData")
+  const dailyGuard = operations.indexOf("assertAiCouncilEodFreshness")
+  const dailyPersist = operations.indexOf("persistAiCouncilData")
   assert.ok(dailyGuard >= 0 && dailyGuard < dailyPersist, "daily freshness gate must run before persistence")
 
-  const debateGuard = debate.indexOf("assertAiCouncilEodFreshness")
-  const debateEnrichment = debate.indexOf("enrichCouncilStocksForDebate")
+  const debateGuard = operations.lastIndexOf("assertAiCouncilEodFreshness")
+  const debateEnrichment = operations.indexOf("enrichCouncilStocksForDebate")
   assert.ok(debateGuard >= 0 && debateGuard < debateEnrichment, "debate freshness gate must run before evidence freeze or OpenAI work")
 })
