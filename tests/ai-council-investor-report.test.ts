@@ -119,11 +119,11 @@ async function loadReportModule() {
 }
 
 test("investor report presents the deterministic Council in investor-facing Vietnamese", async () => {
-  const module = await loadReportModule()
-  assert.ok(module, "lib/ai-council-investor-report.ts should exist")
-  if (!module) return
+  const reportModule = await loadReportModule()
+  assert.ok(reportModule, "lib/ai-council-investor-report.ts should exist")
+  if (!reportModule) return
 
-  const report = module.buildInvestorCouncilReport(stock)
+  const report = reportModule.buildInvestorCouncilReport(stock)
 
   assert.equal(report.recommendation, "MUA KHI XÁC NHẬN")
   assert.equal(report.confidenceLabel, "Trung bình")
@@ -136,11 +136,11 @@ test("investor report presents the deterministic Council in investor-facing Viet
 })
 
 test("investor report projects the six specialist scores into five readable pillars without changing the Council score", async () => {
-  const module = await loadReportModule()
-  assert.ok(module, "lib/ai-council-investor-report.ts should exist")
-  if (!module) return
+  const reportModule = await loadReportModule()
+  assert.ok(reportModule, "lib/ai-council-investor-report.ts should exist")
+  if (!reportModule) return
 
-  const report = module.buildInvestorCouncilReport(stock)
+  const report = reportModule.buildInvestorCouncilReport(stock)
   assert.equal(report.councilScore, 62)
   assert.deepEqual(report.pillars.map((pillar: { key: string; label: string; score: number }) => [pillar.key, pillar.label, pillar.score]), [
     ["fundamental", "Cơ bản", 78],
@@ -152,11 +152,11 @@ test("investor report projects the six specialist scores into five readable pill
 })
 
 test("investor report keeps evidence concise and removes internal agent prefixes from the simple narrative", async () => {
-  const module = await loadReportModule()
-  assert.ok(module, "lib/ai-council-investor-report.ts should exist")
-  if (!module) return
+  const reportModule = await loadReportModule()
+  assert.ok(reportModule, "lib/ai-council-investor-report.ts should exist")
+  if (!reportModule) return
 
-  const report = module.buildInvestorCouncilReport(stock)
+  const report = reportModule.buildInvestorCouncilReport(stock)
   assert.ok(report.whyInteresting.length >= 1 && report.whyInteresting.length <= 3)
   assert.ok(report.whyInteresting.some((item: string) => item.includes("Doanh thu TTM +12.0%")))
   for (const item of report.whyInteresting) {
@@ -165,9 +165,9 @@ test("investor report keeps evidence concise and removes internal agent prefixes
 })
 
 test("investor recommendation labels remain deterministic across all Council signals", async () => {
-  const module = await loadReportModule()
-  assert.ok(module, "lib/ai-council-investor-report.ts should exist")
-  if (!module) return
+  const reportModule = await loadReportModule()
+  assert.ok(reportModule, "lib/ai-council-investor-report.ts should exist")
+  if (!reportModule) return
 
   const expected = {
     BUY: "MUA",
@@ -178,7 +178,7 @@ test("investor recommendation labels remain deterministic across all Council sig
   } as const
 
   for (const [signal, recommendation] of Object.entries(expected)) {
-    const report = module.buildInvestorCouncilReport({ ...stock, signal: signal as AiCouncilStock["signal"] })
+    const report = reportModule.buildInvestorCouncilReport({ ...stock, signal: signal as AiCouncilStock["signal"] })
     assert.equal(report.recommendation, recommendation)
   }
 })
