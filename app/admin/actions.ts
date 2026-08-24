@@ -122,6 +122,7 @@ export async function runJobAction(
 
   const key = String(formData.get("key") || "").trim()
   const reason = String(formData.get("reason") || "").trim()
+  const confirmed = formData.get("confirmed") === "true"
 
   if (!key) {
     return { ok: false, error: "Key tác vụ không được để trống." }
@@ -133,6 +134,7 @@ export async function runJobAction(
     actorUserId: context.user.id,
     reason,
     requestId,
+    confirmed,
   })
 
   if (!result.ok) {

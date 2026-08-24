@@ -60,6 +60,7 @@ export function AdminManualJobModal({ job, onClose }: AdminManualJobModalProps) 
 
         <form action={formAction} className="mt-4 space-y-4">
           <input type="hidden" name="key" value={job.key} />
+          <input type="hidden" name="confirmed" value={job.manualPolicy === "confirm" ? "true" : "false"} />
 
           <div>
             <p className="text-xs text-slate-300">{job.description}</p>
@@ -68,6 +69,12 @@ export function AdminManualJobModal({ job, onClose }: AdminManualJobModalProps) 
               <div className="mt-1">Nhà cung cấp: <span className="font-mono text-slate-300">{job.provider}</span></div>
             </div>
           </div>
+
+          {job.manualPolicy === "confirm" ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+              Thao tác này có tác động vận hành. Gửi biểu mẫu đồng nghĩa bạn xác nhận chạy ngay.
+            </div>
+          ) : null}
 
           <div>
             <label className="block text-xs font-medium text-slate-300">

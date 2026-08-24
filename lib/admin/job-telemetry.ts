@@ -1,4 +1,5 @@
 import { sanitizeAdminValue } from "./redact.ts"
+import { getAdminJobDefinition } from "./catalog.ts"
 
 async function getSupabase() {
   const { getSupabaseServerClient } = await import("../supabase/server.ts")
@@ -7,9 +8,9 @@ async function getSupabase() {
 
 export interface ExecuteSystemJobInput<T> {
   jobKey: string
-  trigger: "cron" | "manual" | "startup"
+  trigger: "schedule" | "manual" | "workflow" | "external"
   actorUserId?: string | null
-  requestId?: string
+  telemetry?: "best_effort" | "required"
   fn: (runId: string | null) => Promise<T>
   extractSummary?: (result: T) => Record<string, unknown>
 }
@@ -18,6 +19,11 @@ export async function executeSystemJob<T>(input: ExecuteSystemJobInput<T>): Prom
   const startedAt = new Date()
   let runId: string | null = null
   const supabase = await getSupabase()
+  const provider = getAdminJobDefinition(input.jobKey)?.provider
+
+  if (!provider && input.telemetry === "required") {
+    throw new Error(`Unknown job definition: ${input.jobKey}`)
+  }
 
   if (supabase) {
     try {
@@ -25,21 +31,27 @@ export async function executeSystemJob<T>(input: ExecuteSystemJobInput<T>): Prom
         .from("system_job_runs")
         .insert({
           job_key: input.jobKey,
+          provider: provider ?? "unknown",
           trigger: input.trigger,
           actor_user_id: input.actorUserId ?? null,
-          request_id: input.requestId ?? null,
           status: "running",
           started_at: startedAt.toISOString(),
         })
         .select("id")
         .single()
 
-      if (!error && data?.id) {
+      if (error) throw error
+      if (data?.id) {
         runId = String(data.id)
       }
     } catch (err: unknown) {
       console.warn(`Failed to record job start telemetry for ${input.jobKey}:`, err)
+      if (input.telemetry === "required") throw new Error("Không thể khởi tạo telemetry an toàn cho tác vụ.")
     }
+  }
+
+  if ((!supabase || !runId) && input.telemetry === "required") {
+    throw new Error("Telemetry storage is not available; tác vụ chưa được chạy.")
   }
 
   try {
@@ -58,7 +70,7 @@ export async function executeSystemJob<T>(input: ExecuteSystemJobInput<T>): Prom
           }
         }
 
-        await supabase
+        const { error } = await supabase
           .from("system_job_runs")
           .update({
             status: "succeeded",
@@ -67,6 +79,7 @@ export async function executeSystemJob<T>(input: ExecuteSystemJobInput<T>): Prom
             summary: summary as Record<string, unknown> | null,
           })
           .eq("id", runId)
+        if (error) throw error
       } catch (err: unknown) {
         console.warn(`Failed to record job success telemetry for ${input.jobKey}:`, err)
       }
@@ -81,7 +94,7 @@ export async function executeSystemJob<T>(input: ExecuteSystemJobInput<T>): Prom
 
     if (supabase && runId) {
       try {
-        await supabase
+        const { error: updateError } = await supabase
           .from("system_job_runs")
           .update({
             status: "failed",
@@ -91,6 +104,7 @@ export async function executeSystemJob<T>(input: ExecuteSystemJobInput<T>): Prom
             error_message: String(errorMessage).slice(0, 1000),
           })
           .eq("id", runId)
+        if (updateError) throw updateError
       } catch (err: unknown) {
         console.warn(`Failed to record job failure telemetry for ${input.jobKey}:`, err)
       }

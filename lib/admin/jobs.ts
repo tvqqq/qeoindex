@@ -6,9 +6,9 @@ import type { AdminJobGroup, AdminManualPolicy } from "./types.ts"
 
 export const ALLOWLISTED_MANUAL_JOB_KEYS = [
   "market.sync_universe",
-  "market.intraday_5m",
   "scanner.run",
-  "signals.daily",
+  "signals.monitor",
+  "wyckoff.ingest",
 ] as const
 
 export type AllowlistedManualJobKey = (typeof ALLOWLISTED_MANUAL_JOB_KEYS)[number]
@@ -26,6 +26,8 @@ export interface DispatchManualAdminJobInput {
   actorUserId: string
   reason: string
   requestId: string
+  confirmed?: boolean
+  params?: { limit?: number; offset?: number }
 }
 
 export interface AdminJobExecutionResult {
@@ -88,101 +90,15 @@ async function writeAuditLog(entry: {
   }
 }
 
-async function runMarketSyncJob(): Promise<Record<string, unknown>> {
-  const { CANONICAL_UNIVERSE_TICKERS } = await import("../wyckoff-universe.ts")
-  const { getSupabaseServerClient } = await import("../supabase/server.ts")
-  const supabase = getSupabaseServerClient()
-  if (!supabase) throw new Error("Supabase service role not available")
-
-  const feedUrl = `https://bgapidatafeed.vps.com.vn/getliststockdata/${CANONICAL_UNIVERSE_TICKERS.join(",")}`
-  const response = await fetch(feedUrl, {
-    headers: { "User-Agent": "Mozilla/5.0 QeoIndex/1.0" },
-    signal: AbortSignal.timeout(10_000),
-  })
-
-  if (!response.ok) {
-    throw new Error(`Market data provider returned HTTP ${response.status}`)
-  }
-
-  const feedData = await response.json()
-  if (!Array.isArray(feedData) || feedData.length === 0) {
-    throw new Error("Market data provider returned no rows")
-  }
-
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date())
-
-  const records: Array<Record<string, unknown>> = []
-  for (const rawItem of feedData) {
-    const item = (rawItem && typeof rawItem === "object" ? rawItem : {}) as Record<string, unknown>
-    const symbol = String(item.sym || "").toUpperCase()
-    if (!symbol) continue
-    const price = Number(item.lastPrice ?? 0)
-    const reference = Number(item.r ?? 0)
-    const change = Number(item.ot ?? (price > 0 && reference > 0 ? price - reference : 0))
-    const changePercent = Number(item.changePc ?? (reference > 0 ? (change / reference) * 100 : 0))
-    const totalVolume = Number(item.lot ?? 0)
-    const totalValue = Number(item.totalValue ?? 0)
-
-    records.push({
-      symbol,
-      date: today,
-      price,
-      reference,
-      change,
-      change_percent: changePercent,
-      total_volume: totalVolume,
-      total_value: totalValue,
-      updated_at: new Date().toISOString(),
-    })
-  }
-
-  if (records.length) {
-    const { error } = await supabase.from("market_universe_daily").upsert(records, { onConflict: "symbol,date" })
-    if (error) throw new Error(`Market universe upsert failed: ${error.message}`)
-  }
-
-  return {
-    date: today,
-    symbolsSynced: records.length,
-    timestamp: new Date().toISOString(),
-  }
-}
-
-async function runIntraday5mJob(): Promise<Record<string, unknown>> {
-  const { CANONICAL_UNIVERSE_TICKERS } = await import("../wyckoff-universe.ts")
-  const { getIntraday5mSnapshot } = await import("../intraday-5m-service.ts")
-  const snapshot = await getIntraday5mSnapshot(CANONICAL_UNIVERSE_TICKERS.slice(0, 100))
-  return {
-    rowsLoaded: snapshot.rows.length,
-    generatedAt: snapshot.generatedAt,
-  }
-}
-
-async function runScannerJob(): Promise<Record<string, unknown>> {
+async function runScannerJob(params?: { limit?: number; offset?: number }): Promise<Record<string, unknown>> {
   const { runScannerUniverse } = await import("../scanner-runner.ts")
-  const result = await runScannerUniverse()
+  const result = await runScannerUniverse(params)
   return {
     ok: result.ok,
     universeDate: result.universeDate,
     completed: result.completed.length,
     skipped: result.skipped.length,
     errors: result.errors.length,
-  }
-}
-
-async function runSignalsDailyJob(): Promise<Record<string, unknown>> {
-  const { start } = await import("workflow/api")
-  const { dailySignalWorkflow } = await import("../../workflows/daily-signal-workflow.ts")
-  const startedAt = new Date().toISOString()
-  const run = await start(dailySignalWorkflow, [startedAt])
-  return {
-    runId: run.runId,
-    startedAt,
   }
 }
 
@@ -210,28 +126,36 @@ export async function dispatchManualAdminJob(input: DispatchManualAdminJobInput)
     }
   }
 
+  const definition = getAdminJobDefinition(input.key)
+  if (definition?.manualPolicy === "confirm" && input.confirmed !== true) {
+    return { ok: false, jobKey: input.key, runId: null, durationMs: 0, error: "Tác vụ yêu cầu xác nhận rõ ràng trước khi chạy." }
+  }
+
   try {
     const { runId, result } = await executeSystemJob({
       jobKey: input.key,
       trigger: "manual",
       actorUserId: input.actorUserId,
-      requestId: input.requestId,
+      telemetry: "required",
       fn: async () => {
         if (input.key === "market.sync_universe") {
-          return await runMarketSyncJob()
-        }
-        if (input.key === "market.intraday_5m") {
-          return await runIntraday5mJob()
+          const { runMarketUniverseSync } = await import("../market-sync-universe.ts")
+          return await runMarketUniverseSync()
         }
         if (input.key === "scanner.run") {
-          return await runScannerJob()
+          return await runScannerJob(input.params)
         }
-        if (input.key === "signals.daily") {
-          return await runSignalsDailyJob()
+        if (input.key === "signals.monitor") {
+          const { runSignalMonitor } = await import("../signal-monitor.ts")
+          return await runSignalMonitor({ force: true })
+        }
+        if (input.key === "wyckoff.ingest") {
+          const { ingestLatestReadyWyckoffRun } = await import("../wyckoff-notion-ingest.ts")
+          return await ingestLatestReadyWyckoffRun()
         }
         throw new Error(`Unhandled job: ${input.key}`)
       },
-      extractSummary: (res) => (typeof res === "object" && res !== null ? res : { result: res }),
+      extractSummary: (res) => sanitizeAdminValue(res) as Record<string, unknown>,
     })
 
     const sanitizedSummary = sanitizeAdminValue(result) as Record<string, unknown>

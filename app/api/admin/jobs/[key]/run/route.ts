@@ -39,7 +39,7 @@ export async function POST(
       body = {}
     }
 
-    const { reason } = body ?? {}
+    const { reason, confirmed, params } = body ?? {}
     const requestId = crypto.randomUUID()
 
     const result = await dispatchManualAdminJob({
@@ -47,6 +47,8 @@ export async function POST(
       actorUserId: auth.context.user.id,
       reason: String(reason || ""),
       requestId,
+      confirmed: confirmed === true,
+      params: params && typeof params === "object" ? params as { limit?: number; offset?: number } : undefined,
     })
 
     if (!result.ok) {

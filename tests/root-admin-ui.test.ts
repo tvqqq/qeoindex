@@ -57,9 +57,9 @@ test("admin navigation links use prefetch={false}", () => {
   }
 })
 
-test("admin layout strictly enforces root user authorization and 403 fallback", () => {
+test("admin layout strictly enforces root user authorization with a concealed 404", () => {
   const layout = source("app/admin/layout.tsx")
   assert.match(layout, /getRootPageContext/)
-  assert.match(layout, /403 — Quyền truy cập bị từ chối/)
-  assert.match(layout, /ROOT_ADMIN_USER_IDS/)
+  assert.match(layout, /notFound\(\)/)
+  assert.doesNotMatch(layout, /ROOT_ADMIN_USER_IDS/)
 })
