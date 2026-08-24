@@ -44,8 +44,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const runtimeData = await getAiCouncilRuntimeData(supabase, { includeHistory: false, includePromptEvidence: true })
-    // The wrapper preserves the existing enrichCouncilStocksWithLlmEvidence raw-evidence stage,
-    // then layers the bounded Notion research context without changing deterministic scoring.
+    // Freeze raw provider/Wyckoff evidence first, then attach bounded Notion research as explicit
+    // first-class packet fields. Deterministic scoring and signal authority remain unchanged.
     const evidenceFidelity = await enrichCouncilStocksForDebate(supabase, {
       ratingDate: runtimeData.data.ratingDate,
       stocks: runtimeData.data.stocks,
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       validationTicker: validationBootstrap ? validationTicker : null,
       schedule: "17:25 Asia/Ho_Chi_Minh on trading weekdays",
       finalAuthority: "deterministic",
-      behavior: "Freeze raw current KFSP/TTAI metrics + quarterly 4M/CANSLIM trajectory + raw Wyckoff MTF context, then add a bounded point-in-time Notion Research Context for enabled pilot tickers before the advisory LLM debate. Event-selected runs use Luna Bull/Bear -> Terra Risk/Chair -> Sol severe-conflict Chair. Deterministic scoring and signal authority never change.",
+      behavior: "Freeze raw current KFSP/TTAI metrics + quarterly 4M/CANSLIM trajectory + raw Wyckoff MTF context, attach bounded point-in-time Notion Research Context as first-class Packet V2 evidence, and route OpenAI prompt caching by the combined prompt identity. Event-selected runs use Luna Bull/Bear -> Terra Risk/Chair -> Sol severe-conflict Chair. Deterministic scoring and signal authority never change.",
     })
   } catch (error) {
     console.error("AI Council P4.3 LLM debate failed", error)

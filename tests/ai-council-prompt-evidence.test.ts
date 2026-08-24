@@ -9,6 +9,7 @@ import {
 import { INSIGHTS_METRIC_GUIDE_VERSION } from "../lib/insights-metric-semantics.ts"
 import type { CouncilBenchmarkContext } from "../lib/ai-council-market"
 import type { CouncilWeightProfile } from "../lib/ai-council-calibration"
+import { buildAiCouncilPromptCacheKey, buildAiCouncilPromptIdentityHash, resolveAiCouncilPromptIdentityHash } from "../lib/ai-council-prompt-identity.ts"
 
 const mockBenchmark: CouncilBenchmarkContext = {
   symbol: "VNINDEX",
@@ -385,4 +386,74 @@ test("validateCouncilEvidenceRefs enforces exact numeric equality (rejecting eve
   ]
   const validResult = validateCouncilEvidenceRefs("bull", exactFormattedRefs, packet)
   assert.equal(validResult.valid, true)
+})
+
+test("first-class raw/research context is explicit and prompt identity is stable", () => {
+  const rawContextHash = "a".repeat(64)
+  const researchContextHash = "b".repeat(64)
+  const promptIdentityHash = buildAiCouncilPromptIdentityHash({
+    deterministicEvidenceHash: mockStock.evidenceHash,
+    rawContextHash,
+    researchContextHash,
+    promptVersion: "llm-debate-v3-first-class-context",
+  })
+  const contextualStock = {
+    ...mockStock,
+    llmEvidence: {
+      contextVersion: "llm-evidence-fidelity-v1",
+      contextHash: rawContextHash,
+      rawEvidence: { providerSnapshot: { score4m: 85 }, ttaiQuarterlyHistory: [], wyckoffMtf: [] },
+      wyckoffContext: [],
+    },
+    researchContext: {
+      contextVersion: "notion-research-context-v1",
+      contextHash: researchContextHash,
+      rawContextHash,
+      promptIdentityHash,
+      context: { status: "ready", sourceHierarchy: "S>A>B>C>D" },
+    },
+  }
+
+  const packet = buildAiCouncilEvidencePacketV2({
+    stock: contextualStock,
+    benchmark: mockBenchmark,
+    weightProfile: mockWeightProfile,
+    previousSignal: "BUY",
+  })
+
+  assert.equal((packet.rawEvidence as { contextHash: string }).contextHash, rawContextHash)
+  assert.equal((packet.researchContext as { promptIdentityHash: string }).promptIdentityHash, promptIdentityHash)
+  assert.equal(
+    resolveAiCouncilPromptIdentityHash(contextualStock, "llm-debate-v3-first-class-context"),
+    promptIdentityHash,
+  )
+  assert.equal(buildAiCouncilPromptCacheKey(promptIdentityHash), `qeo-council-${promptIdentityHash.slice(0, 48)}`)
+})
+
+
+test("prompt identity recomputes when immutable research context predates the current prompt version", () => {
+  const rawContextHash = "c".repeat(64)
+  const researchContextHash = "d".repeat(64)
+  const staleIdentity = buildAiCouncilPromptIdentityHash({
+    deterministicEvidenceHash: mockStock.evidenceHash,
+    rawContextHash,
+    researchContextHash,
+    promptVersion: "llm-debate-v2-semantic-grounding",
+  })
+  const currentIdentity = buildAiCouncilPromptIdentityHash({
+    deterministicEvidenceHash: mockStock.evidenceHash,
+    rawContextHash,
+    researchContextHash,
+    promptVersion: "llm-debate-v3-first-class-context",
+  })
+
+  assert.notEqual(staleIdentity, currentIdentity)
+  assert.equal(
+    resolveAiCouncilPromptIdentityHash({
+      evidenceHash: mockStock.evidenceHash,
+      llmEvidence: { contextHash: rawContextHash },
+      researchContext: { contextHash: researchContextHash, promptIdentityHash: staleIdentity },
+    }, "llm-debate-v3-first-class-context"),
+    currentIdentity,
+  )
 })

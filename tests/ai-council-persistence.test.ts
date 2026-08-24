@@ -182,6 +182,7 @@ test("P4.1 severe-conflict gate reserves Sol escalation for compound disagreemen
 test("P4.3 freezes raw KFSP, TTAI history and Wyckoff context without changing deterministic authority", () => {
   const evidence = source("lib/ai-council-llm-evidence.ts")
   const migration = source("supabase/migrations/20260823214500_ai_council_llm_evidence_fidelity.sql")
+  const preMarket = source("lib/ai-council-pre-market-evidence.ts")
   const route = source("app/api/ai-council/debate-daily/route.ts")
 
   assert.match(evidence, /AI_COUNCIL_LLM_EVIDENCE_VERSION = "llm-evidence-fidelity-v1"/)
@@ -206,7 +207,8 @@ test("P4.3 freezes raw KFSP, TTAI history and Wyckoff context without changing d
   assert.match(migration, /before update on public\.ai_council_llm_evidence/)
   assert.match(migration, /grant select on table public\.ai_council_llm_evidence to authenticated/)
 
-  assert.match(route, /enrichCouncilStocksWithLlmEvidence/)
+  assert.match(preMarket, /enrichCouncilStocksWithLlmEvidence/)
+  assert.match(route, /enrichCouncilStocksForDebate/)
   assert.match(route, /stocks: debateStocks/)
   assert.match(route, /finalAuthority: "deterministic"/)
   assert.match(route, /evidenceFidelity:/)
@@ -236,7 +238,7 @@ test("P2 AI Council V2 applies semantic grounding, Packet V2 and structured evid
   const data = source("lib/ai-council-data.ts")
   const route = source("app/api/ai-council/debate-daily/route.ts")
 
-  assert.match(llm, /AI_COUNCIL_LLM_PROMPT_VERSION = "llm-debate-v2-semantic-grounding"/)
+  assert.match(llm, /AI_COUNCIL_LLM_PROMPT_VERSION = "llm-debate-v3-first-class-context"/)
   assert.match(llm, /evidenceRefs/)
   assert.match(llm, /validateCouncilEvidenceRefs/)
   assert.match(llm, /buildAiCouncilEvidencePacketV2/)
@@ -249,7 +251,14 @@ test("P2 AI Council V2 applies semantic grounding, Packet V2 and structured evid
   assert.match(promptEvidence, /observedIndicators/)
   assert.match(promptEvidence, /missingIndicators/)
   assert.match(promptEvidence, /indicatorDictionary/)
+  assert.match(promptEvidence, /rawEvidence/)
+  assert.match(promptEvidence, /researchContext/)
   assert.match(promptEvidence, /validateCouncilEvidenceRefs/)
+  assert.match(llm, /resolveAiCouncilPromptIdentityHash/)
+  assert.match(llm, /buildAiCouncilPromptCacheKey/)
+  const debatePage = source("app/insights/ai-council/debates/page.tsx")
+  assert.match(debatePage, /Evidence Provenance/)
+  assert.match(debatePage, /OpenAI cache identity/)
 
   assert.match(data, /includePromptEvidence\?: boolean/)
   assert.match(data, /promptEvidence\?: AiCouncilPromptStockSnapshot/)

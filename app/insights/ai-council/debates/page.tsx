@@ -45,6 +45,10 @@ function money(value: number | null) {
   return `$${value.toFixed(3)}`
 }
 
+function shortHash(value: string | null | undefined) {
+  return value ? `${value.slice(0, 10)}…${value.slice(-6)}` : "—"
+}
+
 function RolePanel({
   title,
   tone,
@@ -95,6 +99,22 @@ function DebateCard({ row }: { row: AiCouncilLlmDebateRecord }) {
           <div className="mt-1 flex items-center justify-end gap-2"><span className="font-mono text-sm font-black text-cyan-300">{row.deterministicSignal}</span><span className="font-mono text-[10px] text-slate-500">{row.deterministicScore}/100 · Risk {row.deterministicRiskStatus.toUpperCase()}</span></div>
         </div>
       </header>
+
+      {row.evidenceProvenance ? (
+        <section className="mx-4 mt-4 rounded-2xl border border-cyan-400/10 bg-cyan-400/[0.025] p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[9px] font-black uppercase tracking-wider text-cyan-300">Evidence Provenance</div>
+            <div className="font-mono text-[8px] text-slate-600">{row.evidenceProvenance.cacheIdentityMode}</div>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="rounded-xl border border-white/[0.06] bg-black/15 p-2.5"><div className="text-[8px] font-black uppercase text-slate-600">Semantic packet</div><p className="mt-1 font-mono text-[9px] text-slate-400">{row.evidenceProvenance.packetVersion}</p><p className="mt-0.5 text-[8px] text-slate-600">{row.evidenceProvenance.semanticGuideVersion}</p></div>
+            <div className="rounded-xl border border-white/[0.06] bg-black/15 p-2.5"><div className="text-[8px] font-black uppercase text-slate-600">Deterministic evidence</div><p className="mt-1 font-mono text-[9px] text-slate-400">{shortHash(row.evidenceProvenance.deterministicEvidenceHash)}</p></div>
+            <div className="rounded-xl border border-white/[0.06] bg-black/15 p-2.5"><div className="text-[8px] font-black uppercase text-slate-600">Raw KFSP/TTAI/Wyckoff</div><p className="mt-1 font-mono text-[9px] text-slate-400">{shortHash(row.evidenceProvenance.rawContextHash)}</p><p className="mt-0.5 text-[8px] text-slate-600">{row.evidenceProvenance.rawContextVersion || "not frozen"}</p></div>
+            <div className="rounded-xl border border-white/[0.06] bg-black/15 p-2.5"><div className="text-[8px] font-black uppercase text-slate-600">Notion research</div><p className="mt-1 font-mono text-[9px] text-slate-400">{shortHash(row.evidenceProvenance.researchContextHash)}</p><p className="mt-0.5 text-[8px] text-slate-600">{row.evidenceProvenance.researchStatus ? `${row.evidenceProvenance.researchStatus} · ${row.evidenceProvenance.researchSourceCount} pages` : "not enabled"}</p></div>
+            <div className="rounded-xl border border-white/[0.06] bg-black/15 p-2.5"><div className="text-[8px] font-black uppercase text-slate-600">OpenAI cache identity</div><p className="mt-1 font-mono text-[9px] text-cyan-300">{shortHash(row.evidenceProvenance.promptIdentityHash)}</p><p className="mt-0.5 text-[8px] text-slate-600">deterministic + raw + research + prompt</p></div>
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid gap-3 p-4 lg:grid-cols-3">
         <RolePanel

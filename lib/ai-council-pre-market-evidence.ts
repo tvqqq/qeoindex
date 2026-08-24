@@ -11,8 +11,6 @@ import {
   isCouncilResearchTickerEnabled,
 } from "@/lib/ai-council-research-context"
 
-const RESEARCH_CONTEXT_MARKER = "[P4.3_NOTION_RESEARCH_CONTEXT]"
-
 type CouncilRunIdentityRow = {
   id: string
   ticker: string
@@ -82,16 +80,16 @@ function attachResearchContext(
   stock: AiCouncilStockSnapshot,
   frozen: Awaited<ReturnType<typeof freezeCouncilResearchContext>>,
 ) {
-  const payload = JSON.stringify({
-    purpose: "Curated Notion research evidence for advisory LLM reasoning only. Broker forecasts/targets are opinions, not verified company facts.",
-    researchContextHash: frozen.contextHash,
-    rawContextHash: frozen.rawContextHash,
-    promptIdentityHash: frozen.promptIdentityHash,
-    context: frozen.context,
-  })
   return {
     ...stock,
-    dataQualityDetail: `${stock.dataQualityDetail}\n${RESEARCH_CONTEXT_MARKER} ${payload}`,
+    researchContext: {
+      purpose: "Curated Notion research evidence for advisory LLM reasoning only. Broker forecasts/targets are opinions, not verified company facts.",
+      contextVersion: AI_COUNCIL_RESEARCH_CONTEXT_VERSION,
+      contextHash: frozen.contextHash,
+      rawContextHash: frozen.rawContextHash,
+      promptIdentityHash: frozen.promptIdentityHash,
+      context: frozen.context,
+    },
   }
 }
 

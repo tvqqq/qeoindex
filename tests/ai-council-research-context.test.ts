@@ -100,7 +100,11 @@ test("pre-market wrapper combines frozen raw evidence with immutable Notion rese
   assert.match(wrapper, /enrichCouncilStocksWithLlmEvidence/)
   assert.match(wrapper, /freezeCouncilResearchContext/)
   assert.match(wrapper, /ai_council_llm_evidence/)
-  assert.match(wrapper, /\[P4\.3_NOTION_RESEARCH_CONTEXT\]/)
+  assert.doesNotMatch(wrapper, /\[P4\.3_NOTION_RESEARCH_CONTEXT\]/)
+  assert.match(wrapper, /researchContext: \{/)
+  const rawEvidence = source("lib/ai-council-llm-evidence.ts")
+  assert.match(rawEvidence, /llmEvidence: \{/)
+  assert.doesNotMatch(rawEvidence, /P4\.3_EVIDENCE_FIDELITY_CONTEXT/)
   assert.match(wrapper, /promptIdentityHash/)
   assert.match(wrapper, /isCouncilResearchTickerEnabled/)
 

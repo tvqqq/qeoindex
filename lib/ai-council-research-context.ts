@@ -3,6 +3,7 @@ import "server-only"
 import { createHash } from "node:crypto"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { buildAiCouncilPromptIdentityHash } from "@/lib/ai-council-prompt-identity"
 import {
   isNotionConfigured,
   queryDataSource,
@@ -584,7 +585,7 @@ export async function freezeCouncilResearchContext(
 
   const context = await buildCouncilResearchContext(params.ticker, params.asOfDate)
   const contextHash = sha256(context)
-  const promptIdentityHash = sha256({
+  const promptIdentityHash = buildAiCouncilPromptIdentityHash({
     deterministicEvidenceHash: params.deterministicEvidenceHash,
     rawContextHash: params.rawContextHash,
     researchContextHash: contextHash,
