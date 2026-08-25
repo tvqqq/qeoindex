@@ -1,0 +1,40 @@
+name: admin-phase-ci
+
+on:
+  push:
+    branches:
+      - feat/eod-pipeline-admin-phases
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Core tests
+        run: pnpm test:core
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint touched admin phase files
+        run: >-
+          pnpm exec eslint
+          lib/admin/effective-job-catalog.ts
+          lib/admin/job-phases.ts
+          lib/admin/job-phase-data.ts
+          components/admin/admin-job-phase-timeline.tsx
+          'app/admin/jobs/[key]/page.tsx'
+          tests/root-admin-job-health.test.ts
+          tests/root-admin-schema.test.ts
+          tests/root-admin-ui.test.ts
+      - name: Secret scan
+        run: pnpm scan:secrets
