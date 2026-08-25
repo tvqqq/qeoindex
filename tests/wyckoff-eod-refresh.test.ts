@@ -151,52 +151,57 @@ test("operational Council operations request the rebuilt final EOD evidence ense
   assert.equal((operations.match(/includeEodMarketOverlay:\s*true/g) || []).length, 2)
 })
 
-test("EOD Council orchestration is one durable dependency workflow", () => {
-  const workflow = source("workflows/ai-council-eod-workflow.ts")
-  const steps = source("lib/ai-council-eod-workflow-steps.ts")
+test("EOD orchestration is one durable unified dependency workflow", () => {
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
   const operations = source("lib/ai-council-operations.ts")
-  const route = source("app/api/ai-council/eod/route.ts")
+  const route = source("app/api/qeoindex/eod/route.ts")
 
   assert.match(workflow, /"use workflow"/)
   assert.doesNotMatch(workflow, /"use step"/)
-  assert.match(workflow, /WYCKOFF_EOD_BATCH_OFFSETS/)
   assert.match(steps, /"use step"/)
-  assert.match(steps, /runUnifiedWyckoff/)
+  assert.match(steps, /refreshOhlcvHistoryUniverse/)
+  assert.match(steps, /buildWyckoffV2TickerSnapshots/)
   assert.match(steps, /runAiCouncilDailyOperation/)
   assert.match(steps, /runAiCouncilDebateOperation/)
   assert.match(operations, /export async function runAiCouncilDailyOperation/)
   assert.match(operations, /export async function runAiCouncilDebateOperation/)
-  assert.match(route, /start\(aiCouncilEodWorkflow/)
+  assert.match(route, /start\(qeoindexEodPipeline/)
   assert.match(route, /isMachineRequestAuthorized/)
 })
 
-test("EOD workflow is fail-closed and orders market -> Wyckoff -> deterministic -> LLM", () => {
-  const workflow = source("workflows/ai-council-eod-workflow.ts")
-  const bodyStart = workflow.indexOf("export async function aiCouncilEodWorkflow")
+test("unified EOD workflow is fail-closed and orders readiness -> history -> Wyckoff -> publish -> deterministic -> LLM", () => {
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const bodyStart = workflow.indexOf("export async function qeoindexEodPipeline")
   const body = workflow.slice(bodyStart)
-  const market = body.indexOf("assertFinalEodMarketReadyStep")
-  const wyckoff = body.indexOf("runWyckoffBatchStep")
-  const validation = body.indexOf("validateWyckoffTop100Step")
+  const market = body.indexOf("runEodReadyStep")
+  const history = body.indexOf("runHistoryRefreshStep")
+  const wyckoff = body.indexOf("runWyckoffBuildStep")
+  const validation = body.indexOf("runNotionValidateStep")
+  const publish = body.indexOf("runSupabasePublishStep")
   const deterministic = body.indexOf("runDeterministicCouncilStep")
   const debate = body.indexOf("runLlmDebateStep")
 
   assert.ok(bodyStart >= 0)
   assert.ok(market >= 0)
-  assert.ok(wyckoff > market)
+  assert.ok(history > market)
+  assert.ok(wyckoff > history)
   assert.ok(validation > wyckoff)
-  assert.ok(deterministic > validation)
+  assert.ok(publish > validation)
+  assert.ok(deterministic > publish)
   assert.ok(debate > deterministic)
-  assert.match(body, /if \(!market\.ok\)[\s\S]*return/)
-  assert.match(body, /if \(!wyckoffValidation\.ok\)[\s\S]*return/)
-  assert.match(body, /if \(!deterministic\.ok\)[\s\S]*return/)
+  assert.match(body, /published && deterministic\.ok/)
+  assert.match(body, /failQeoIndexEodRunStep/)
 })
 
-test("Vercel schedules only one EOD Council dependency cron", () => {
+test("production has one Supabase-triggered EOD chain and no legacy Vercel EOD cron", () => {
   const config = JSON.parse(source("vercel.json")) as { crons?: Array<{ path: string; schedule: string }> }
   const crons = config.crons || []
-  const eod = crons.filter((cron) => cron.path === "/api/ai-council/eod")
+  const scheduler = source("supabase/migrations/20260825174500_qeoindex_eod_pipeline_cron.sql")
 
-  assert.deepEqual(eod, [{ path: "/api/ai-council/eod", schedule: "0 10 * * 1-5" }])
+  assert.match(scheduler, /'15 8 \* \* 1-5'/)
+  assert.match(scheduler, /\/api\/qeoindex\/eod/)
+  assert.equal(crons.some((cron) => cron.path === "/api/ai-council/eod"), false)
   assert.equal(crons.some((cron) => cron.path === "/api/wyckoff/ingest"), false)
   assert.equal(crons.some((cron) => cron.path === "/api/ai-council/daily"), false)
   assert.equal(crons.some((cron) => cron.path === "/api/ai-council/debate-daily"), false)
