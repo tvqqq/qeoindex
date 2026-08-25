@@ -43,7 +43,8 @@ test("Wyckoff v2 migration makes rank anomalies warning-only and genuine Incompl
     assert.match(v2, new RegExp(`alter column ${column} drop not null`, "i"), `${column} must be nullable for genuine Incomplete rows`)
   }
 
-  assert.match(v2, /history_status = 'complete'[\s\S]*bull_probability \+ base_probability \+ bear_probability = 100/i)
-  assert.match(v2, /history_status = 'incomplete'[\s\S]*bull_probability is null[\s\S]*base_probability is null[\s\S]*bear_probability is null/i)
+  assert.match(v2, /history_status <> 'complete'[\s\S]*bull_probability \+ base_probability \+ bear_probability = 100/i)
+  assert.match(v2, /history_status <> 'incomplete'[\s\S]*bull_probability is null[\s\S]*base_probability is null[\s\S]*bear_probability is null/i)
   assert.match(v2, /jsonb_array_length\(scenarios\) = 0/i)
+  assert.match(v2, /evidence->>'missingReason'/i)
 })
