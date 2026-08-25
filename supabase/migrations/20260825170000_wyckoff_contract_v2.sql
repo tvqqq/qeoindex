@@ -88,7 +88,8 @@ alter table public.wyckoff_analysis_snapshots
   add constraint wyckoff_incomplete_contract check (
     history_status <> 'incomplete'
     or (
-      phase is null
+      history_bar_count < 60
+      and phase is null
       and wyckoff_state is null
       and ta_bias is null
       and confidence is null
@@ -117,6 +118,6 @@ comment on column public.wyckoff_analysis_snapshots.prompt_version is
   'Staging contract identity. Included in operational uniqueness so same-bar v1 and v2 evidence remain separately auditable.';
 
 comment on table public.wyckoff_analysis_snapshots is
-  'notion-unified-v2 operational Wyckoff evidence. Complete rows require >=60 bars and full analysis; genuine Incomplete rows carry missingReason and no fabricated analysis.';
+  'notion-unified-v2 operational Wyckoff evidence. Complete rows require >=60 bars and full analysis; genuine Incomplete rows require <60 bars, missingReason, and no fabricated analysis.';
 
 commit;
