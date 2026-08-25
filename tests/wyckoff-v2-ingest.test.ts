@@ -74,6 +74,7 @@ test("v2 Supabase payload preserves all 500 snapshots including genuine Incomple
   assert.equal(payload.complete, 499)
   assert.equal(payload.incomplete, 1)
   assert.equal(payload.source, "qeoindex-notion-v2")
+  assert.ok(payload.snapshots.every((row) => row.prompt_version === "notion-unified-v2"))
   const incomplete = payload.snapshots.find((row) => row.ticker === "T100" && row.timeframe === "1M")!
   assert.equal(incomplete.history_status, "incomplete")
   assert.equal(incomplete.phase, null)
