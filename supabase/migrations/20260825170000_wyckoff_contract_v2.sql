@@ -40,6 +40,7 @@ alter table public.wyckoff_analysis_snapshots
   unique (ticker, timeframe, bar_closed_at, model_version, aggregation_version, prompt_version);
 
 -- Genuine Incomplete snapshots must be representable without fabricated analysis.
+-- Strict v2 checks are version-scoped so legacy v1 rows remain immutable/auditable.
 alter table public.wyckoff_analysis_snapshots
   drop constraint if exists wyckoff_probability_sum;
 
@@ -63,7 +64,8 @@ alter table public.wyckoff_analysis_snapshots
 
 alter table public.wyckoff_analysis_snapshots
   add constraint wyckoff_complete_contract check (
-    history_status <> 'complete'
+    prompt_version <> 'notion-unified-v2'
+    or history_status <> 'complete'
     or (
       history_bar_count >= 60
       and phase is not null
@@ -86,7 +88,8 @@ alter table public.wyckoff_analysis_snapshots
     )
   ),
   add constraint wyckoff_incomplete_contract check (
-    history_status <> 'incomplete'
+    prompt_version <> 'notion-unified-v2'
+    or history_status <> 'incomplete'
     or (
       history_bar_count < 60
       and phase is null
@@ -118,6 +121,6 @@ comment on column public.wyckoff_analysis_snapshots.prompt_version is
   'Staging contract identity. Included in operational uniqueness so same-bar v1 and v2 evidence remain separately auditable.';
 
 comment on table public.wyckoff_analysis_snapshots is
-  'notion-unified-v2 operational Wyckoff evidence. Complete rows require >=60 bars and full analysis; genuine Incomplete rows require <60 bars, missingReason, and no fabricated analysis.';
+  'Versioned Wyckoff operational evidence. notion-unified-v2 Complete rows require >=60 bars and full analysis; v2 genuine Incomplete rows require <60 bars, missingReason, and no fabricated analysis. Legacy v1 rows retain their historical contract.';
 
 commit;
