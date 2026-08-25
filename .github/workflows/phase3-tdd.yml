@@ -17,5 +17,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Wyckoff v2 schema contract
-        run: node --test tests/wyckoff-unified-schema.test.ts
+      - name: Wyckoff v2 targeted contracts
+        run: node --test tests/wyckoff-unified-schema.test.ts tests/wyckoff-v2-staging.test.ts
