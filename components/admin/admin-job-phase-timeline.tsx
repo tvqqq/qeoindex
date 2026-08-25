@@ -52,6 +52,10 @@ function formatDuration(durationMs: number | null) {
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`
 }
 
+function formatStartedAt(value: string) {
+  return new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })
+}
+
 function formatSummaryValue(value: unknown) {
   if (value === null || value === undefined) return "—"
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value)
@@ -103,7 +107,7 @@ export function AdminJobPhaseTimeline({ rows }: AdminJobPhaseTimelineProps) {
                   <p className="mt-0.5 text-[11px] leading-5 text-slate-400">{phase.description}</p>
                   <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-slate-500">
                     <span>Duration: {formatDuration(phase.durationMs)}</span>
-                    {phase.startedAt ? <span>Start: {new Date(phase.startedAt).toLocaleString("vi-VN")}</span> : null}
+                    {phase.startedAt ? <span>Start: {formatStartedAt(phase.startedAt)}</span> : null}
                   </div>
                 </div>
 
