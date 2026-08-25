@@ -1,18 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import {
-  fetchDailyMarketHistoryWindow,
-  fetchHourlyMarketHistoryWindow,
-} from "@/lib/market-history"
-import {
   DAILY_BACKFILL_DAYS,
   DAILY_DELTA_DAYS,
   HOURLY_BACKFILL_DAYS,
   HOURLY_DELTA_DAYS,
   type HistoricalProvider,
   type RawHistoryTimeframe,
-} from "@/lib/market-history-contract"
-import type { OhlcvBar } from "@/lib/technical-indicators"
+} from "./market-history-contract.ts"
+import type { OhlcvBar } from "./technical-indicators.ts"
 
 export const OHLCV_BATCH_SIZE = 10
 export const OHLCV_PROVIDER_CONCURRENCY = 4
@@ -95,6 +91,17 @@ type StoredOhlcvRow = {
   source_url?: unknown
   fetched_at?: unknown
 }
+
+type TickerRefreshSuccess = {
+  ticker: string
+  dailyFetchedBars: number
+  hourlyFetchedBars: number
+  plans: OhlcvRefreshPlan[]
+}
+
+type TickerRefreshOutcome =
+  | { ok: true; result: TickerRefreshSuccess }
+  | { ok: false; error: OhlcvRefreshError }
 
 function finite(value: unknown) {
   const num = Number(value)
@@ -236,9 +243,10 @@ async function refreshTicker(
   ticker: string,
   coverage: Map<string, OhlcvCoverage>,
   now: Date,
-) {
+): Promise<TickerRefreshSuccess> {
   const dailyPlan = buildOhlcvRefreshPlan(coverage.get(coverageKey(ticker, "1D")) ?? null, "1D")
   const hourlyPlan = buildOhlcvRefreshPlan(coverage.get(coverageKey(ticker, "1H")) ?? null, "1H")
+  const { fetchDailyMarketHistoryWindow, fetchHourlyMarketHistoryWindow } = await import("./market-history.ts")
 
   const daily = await fetchDailyMarketHistoryWindow(ticker, dailyPlan.lookbackDays, now)
   const dailyRows = toStoredRows({ ticker, timeframe: "1D", ...daily })
@@ -295,18 +303,25 @@ export async function refreshOhlcvHistoryBatch(
 ): Promise<OhlcvUniverseRefreshResult> {
   const tickers = normalizeOhlcvTickers(inputTickers, OHLCV_BATCH_SIZE)
   const coverage = await loadCoverageMap(supabase, tickers)
-  const successes: Awaited<ReturnType<typeof refreshTicker>>[] = []
-  const errors: OhlcvRefreshError[] = []
 
-  await mapWithConcurrency(tickers, OHLCV_PROVIDER_CONCURRENCY, async (ticker) => {
-    try {
-      const result = await refreshTicker(supabase, ticker, coverage, now)
-      successes.push(result)
-    } catch (error) {
-      errors.push({ ticker, error: error instanceof Error ? error.message : String(error) })
-    }
-  })
+  const outcomes = await mapWithConcurrency<string, TickerRefreshOutcome>(
+    tickers,
+    OHLCV_PROVIDER_CONCURRENCY,
+    async (ticker) => {
+      try {
+        return { ok: true, result: await refreshTicker(supabase, ticker, coverage, now) }
+      } catch (error) {
+        return { ok: false, error: { ticker, error: error instanceof Error ? error.message : String(error) } }
+      }
+    },
+  )
 
+  const successes = outcomes
+    .filter((outcome): outcome is Extract<TickerRefreshOutcome, { ok: true }> => outcome.ok)
+    .map((outcome) => outcome.result)
+  const errors = outcomes
+    .filter((outcome): outcome is Extract<TickerRefreshOutcome, { ok: false }> => !outcome.ok)
+    .map((outcome) => outcome.error)
   const successfulTickers = successes.map((item) => item.ticker)
   const postCoverage = successfulTickers.length
     ? await loadCoverageMap(supabase, successfulTickers)
@@ -399,7 +414,7 @@ export async function loadCachedOhlcvHistory(
 
   const bars = rows.map(storedRowToBar).filter((bar): bar is OhlcvBar => Boolean(bar))
   if (!bars.length) throw new Error(`OHLCV cache has no usable ${timeframe} bars for ${ticker}`)
-  const latest = rows.at(-1) || {}
+  const latest: StoredOhlcvRow = rows.at(-1) ?? {}
 
   return {
     ticker,
