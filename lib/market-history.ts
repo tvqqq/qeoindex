@@ -2,14 +2,16 @@ import type { OhlcvBar } from "@/lib/technical-indicators"
 import { fetchDailyOhlcv as fetchDnseDailyOhlcv, fetchHourlyOhlcv as fetchDnseHourlyOhlcv } from "@/lib/dnse-history"
 import { fetchYahooDailyOhlcv, fetchYahooHourlyOhlcv } from "@/lib/yahoo-history"
 import { readThroughUiCache } from "@/lib/ui-data-cache"
+import {
+  buildHistoricalSourceUrl,
+  DAILY_BACKFILL_DAYS,
+  HOURLY_BACKFILL_DAYS,
+  type HistoricalBarsResult,
+  type HistoricalProvider,
+  type RawHistoryTimeframe,
+} from "@/lib/market-history-contract"
 
-export type HistoricalProvider = "DNSE" | "Fallback"
-
-export interface HistoricalBarsResult {
-  bars: OhlcvBar[]
-  provider: HistoricalProvider
-  detail: string
-}
+export type { HistoricalBarsResult, HistoricalProvider, RawHistoryTimeframe } from "@/lib/market-history-contract"
 
 let dnseUnavailableUntil = 0
 
@@ -32,6 +34,87 @@ function isHistoricalBarsResult(value: unknown): value is HistoricalBarsResult {
     && result.bars.length > 0
     && (result.provider === "DNSE" || result.provider === "Fallback")
     && typeof result.detail === "string"
+    && typeof result.sourceUrl === "string"
+    && typeof result.fetchedAt === "string"
+}
+
+function historicalResult(input: {
+  bars: OhlcvBar[]
+  provider: HistoricalProvider
+  detail: string
+  symbol: string
+  timeframe: RawHistoryTimeframe
+  lookbackDays: number
+  now: Date
+}): HistoricalBarsResult {
+  return {
+    bars: input.bars,
+    provider: input.provider,
+    detail: input.detail,
+    sourceUrl: buildHistoricalSourceUrl(
+      input.provider,
+      input.symbol,
+      input.timeframe,
+      input.lookbackDays,
+      input.now,
+      { dnseBaseUrl: process.env.DNSE_API_BASE_URL },
+    ),
+    fetchedAt: new Date().toISOString(),
+  }
+}
+
+export async function fetchDailyMarketHistoryWindow(
+  symbol: string,
+  lookbackDays: number,
+  now = new Date(),
+): Promise<HistoricalBarsResult> {
+  const errors: string[] = []
+  if (shouldTryDnse()) {
+    try {
+      const bars = await fetchDnseDailyOhlcv(symbol, now, lookbackDays)
+      return historicalResult({ bars, provider: "DNSE", detail: `DNSE OpenAPI · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
+    } catch (error) {
+      errors.push(`DNSE: ${markDnseUnavailable(error)}`)
+    }
+  } else {
+    errors.push("DNSE: temporarily bypassed after network failure")
+  }
+
+  try {
+    const bars = await fetchYahooDailyOhlcv(symbol, now, lookbackDays)
+    return historicalResult({ bars, provider: "Fallback", detail: `Yahoo Finance .VN fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
+  } catch (error) {
+    errors.push(`Yahoo: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  throw new Error(errors.join(" | ").slice(0, 520))
+}
+
+export async function fetchHourlyMarketHistoryWindow(
+  symbol: string,
+  lookbackDays: number,
+  now = new Date(),
+): Promise<HistoricalBarsResult> {
+  const errors: string[] = []
+  if (shouldTryDnse()) {
+    try {
+      const bars = await fetchDnseHourlyOhlcv(symbol, now, lookbackDays)
+      return historicalResult({ bars, provider: "DNSE", detail: `DNSE OpenAPI · 1H · ${lookbackDays}d window`, symbol, timeframe: "1H", lookbackDays, now })
+    } catch (error) {
+      errors.push(`DNSE: ${markDnseUnavailable(error)}`)
+    }
+  } else {
+    errors.push("DNSE: temporarily bypassed after network failure")
+  }
+
+  try {
+    const bars = await fetchYahooHourlyOhlcv(symbol, now, lookbackDays)
+    return historicalResult({ bars, provider: "Fallback", detail: `Yahoo Finance .VN fallback · 60m · ${lookbackDays}d window`, symbol, timeframe: "1H", lookbackDays, now })
+  } catch (error) {
+    errors.push(`Yahoo: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  throw new Error(errors.join(" | ").slice(0, 520))
 }
 
 export async function fetchDailyMarketHistory(symbol: string, now = new Date()): Promise<HistoricalBarsResult> {
@@ -39,7 +122,7 @@ export async function fetchDailyMarketHistory(symbol: string, now = new Date()):
   if (shouldTryDnse()) {
     try {
       const bars = await fetchDnseDailyOhlcv(symbol, now)
-      return { bars, provider: "DNSE", detail: "DNSE OpenAPI · 1D" }
+      return historicalResult({ bars, provider: "DNSE", detail: "DNSE OpenAPI · 1D", symbol, timeframe: "1D", lookbackDays: 520, now })
     } catch (error) {
       errors.push(`DNSE: ${markDnseUnavailable(error)}`)
     }
@@ -49,7 +132,7 @@ export async function fetchDailyMarketHistory(symbol: string, now = new Date()):
 
   try {
     const bars = await fetchYahooDailyOhlcv(symbol, now)
-    return { bars, provider: "Fallback", detail: "Yahoo Finance .VN fallback · 1D" }
+    return historicalResult({ bars, provider: "Fallback", detail: "Yahoo Finance .VN fallback · 1D", symbol, timeframe: "1D", lookbackDays: 620, now })
   } catch (error) {
     errors.push(`Yahoo: ${error instanceof Error ? error.message : String(error)}`)
   }
@@ -57,53 +140,25 @@ export async function fetchDailyMarketHistory(symbol: string, now = new Date()):
   throw new Error(errors.join(" | ").slice(0, 520))
 }
 
-const WYCKOFF_LONG_LOOKBACK_DAYS = 8 * 366
-
-/** Selected-ticker chart path only. Scanner fan-out keeps the bounded default lookback above. */
+/** Selected-ticker chart path and initial persistent-cache backfill. */
 export async function fetchLongDailyMarketHistory(symbol: string, now = new Date()): Promise<HistoricalBarsResult> {
-  const errors: string[] = []
-  if (shouldTryDnse()) {
-    try {
-      const bars = await fetchDnseDailyOhlcv(symbol, now, WYCKOFF_LONG_LOOKBACK_DAYS)
-      return { bars, provider: "DNSE", detail: "DNSE OpenAPI · 1D · 8-year Wyckoff window" }
-    } catch (error) {
-      errors.push(`DNSE: ${markDnseUnavailable(error)}`)
-    }
-  } else {
-    errors.push("DNSE: temporarily bypassed after network failure")
+  const result = await fetchDailyMarketHistoryWindow(symbol, DAILY_BACKFILL_DAYS, now)
+  return {
+    ...result,
+    detail: result.provider === "DNSE"
+      ? "DNSE OpenAPI · 1D · 8-year Wyckoff window"
+      : "Yahoo Finance .VN fallback · 1D · 8-year Wyckoff window",
   }
-
-  try {
-    const bars = await fetchYahooDailyOhlcv(symbol, now, WYCKOFF_LONG_LOOKBACK_DAYS)
-    return { bars, provider: "Fallback", detail: "Yahoo Finance .VN fallback · 1D · 8-year Wyckoff window" }
-  } catch (error) {
-    errors.push(`Yahoo: ${error instanceof Error ? error.message : String(error)}`)
-  }
-
-  throw new Error(errors.join(" | ").slice(0, 520))
 }
 
 export async function fetchHourlyMarketHistory(symbol: string, now = new Date()): Promise<HistoricalBarsResult> {
-  const errors: string[] = []
-  if (shouldTryDnse()) {
-    try {
-      const bars = await fetchDnseHourlyOhlcv(symbol, now)
-      return { bars, provider: "DNSE", detail: "DNSE OpenAPI · 1H completed bars" }
-    } catch (error) {
-      errors.push(`DNSE: ${markDnseUnavailable(error)}`)
-    }
-  } else {
-    errors.push("DNSE: temporarily bypassed after network failure")
+  const result = await fetchHourlyMarketHistoryWindow(symbol, HOURLY_BACKFILL_DAYS, now)
+  return {
+    ...result,
+    detail: result.provider === "DNSE"
+      ? "DNSE OpenAPI · 1H completed bars"
+      : "Yahoo Finance .VN fallback · 60m completed bars",
   }
-
-  try {
-    const bars = await fetchYahooHourlyOhlcv(symbol, now)
-    return { bars, provider: "Fallback", detail: "Yahoo Finance .VN fallback · 60m completed bars" }
-  } catch (error) {
-    errors.push(`Yahoo: ${error instanceof Error ? error.message : String(error)}`)
-  }
-
-  throw new Error(errors.join(" | ").slice(0, 520))
 }
 
 /** UI-only cross-request history caches. Scanner/signal paths keep using fresh functions above. */
