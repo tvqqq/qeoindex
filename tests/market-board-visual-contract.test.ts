@@ -143,13 +143,13 @@ test("SmoothUI entrance visibly staggers indexes and sector columns only once on
   assert.doesNotMatch(perfCssSource, /will-change\s*:/)
 })
 
-test("sparklines redraw when the latest 5m candle changes", () => {
+test("sparklines keep the pre-regression 5m history and live fallback pipeline", () => {
   assert.match(sparklineSource, /function sparklinePropsEqual/)
-  assert.match(sparklineSource, /index < a\.length/)
-  assert.doesNotMatch(sparklineSource, /a\.length - 1/)
+  assert.match(sparklineSource, /const stableLength = Math\.max\(0, a\.length - 1\)/)
   assert.match(sparklineSource, /memo\(function Sparkline[\s\S]*sparklinePropsEqual\)/)
-  assert.match(stockSource, /const chart = showChart \? sparkData\(history\) : \[\]/)
-  assert.doesNotMatch(stockSource, /sparkData\(history, quote\?\.price\)/)
+  assert.match(stockSource, /const chart = showChart \? sparkData\(history, quote\?\.price\) : \[\]/)
+  assert.match(boardSource, /nextHistory\[symbol\] = points\.slice\(-90\)/)
+  assert.match(boardSource, /out\[ticker\] = pts\.map\(\(p\) => p\.close\)/)
 })
 
 test("intraday API prefers today's cached snapshot before expensive provider fan-out", () => {
@@ -172,7 +172,7 @@ test("09:00 session reset clears board and every open orderbook atomically", () 
 test("ATO hides mini charts and DNSE OHLC updates only one 5-minute bucket", () => {
   assert.match(boardSource, /showChart=\{marketUiPhase !== "ATO"\}/)
   assert.match(boardSource, /shouldAcceptRealtimeMiniChart\(timestampSeconds\)/)
-  assert.match(stockSource, /const chart = showChart \? sparkData\(history\) : \[\]/)
+  assert.match(stockSource, /const chart = showChart \? sparkData\(history, quote\?\.price\) : \[\]/)
   assert.match(orderbookSource, /const bucket = Math\.floor\(timestamp \/ 300\) \* 300/)
   assert.match(orderbookSource, /lastMiniChartBucket\.current === bucket/)
 })
