@@ -15,6 +15,7 @@ test("admin UI adheres strictly to UI performance invariants", () => {
     "components/admin/admin-settings-table.tsx",
     "components/admin/admin-jobs-table.tsx",
     "components/admin/admin-job-history-table.tsx",
+    "components/admin/admin-job-phase-timeline.tsx",
     "components/admin/admin-manual-job-modal.tsx",
     "components/admin/admin-environment-table.tsx",
     "components/admin/admin-audit-table.tsx",
@@ -75,16 +76,11 @@ test("admin job detail renders phase telemetry for the unified EOD pipeline", ()
   assert.match(page, /AdminJobPhaseTimeline/)
   assert.match(page, /loadAdminJobPhases/)
   assert.match(page, /latestRun\?\.id/)
+  assert.match(page, /QEOINDEX_EOD_JOB_KEY/)
 
   const timeline = source("components/admin/admin-job-phase-timeline.tsx")
-  assert.match(timeline, /EOD_READY/)
-  assert.match(timeline, /HISTORY_REFRESH/)
-  assert.match(timeline, /WYCKOFF_BUILD/)
-  assert.match(timeline, /NOTION_STAGING/)
-  assert.match(timeline, /NOTION_VALIDATE/)
-  assert.match(timeline, /INGEST/)
-  assert.match(timeline, /SUPABASE_PUBLISH/)
-  assert.match(timeline, /AI_COUNCIL_DETERMINISTIC/)
-  assert.match(timeline, /AI_COUNCIL_LLM/)
-  assert.match(timeline, /COMPLETE/)
+  assert.match(timeline, /buildAdminJobPhaseTimeline/)
+  assert.match(timeline, /phase\.key/)
+  assert.match(timeline, /phase\.status/)
+  assert.match(timeline, /phase\.summary/)
 })
