@@ -11,7 +11,7 @@ permissions:
 jobs:
   targeted:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,6 +22,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Wyckoff v2 targeted contracts
-        run: node --test tests/wyckoff-unified-schema.test.ts tests/wyckoff-v2-staging.test.ts tests/wyckoff-v2-notion-staging.test.ts tests/wyckoff-v2-notion-io.test.ts tests/wyckoff-v2-ingest.test.ts tests/wyckoff-v2-runtime-data.test.ts tests/wyckoff-v2-chart-series.test.ts tests/qeoindex-eod-phase-telemetry.test.ts tests/qeoindex-eod-pipeline.test.ts tests/qeoindex-eod-scheduler.test.ts tests/qeoindex-eod-build-gate.test.ts
+        run: pnpm test:eod-v2
+      - name: Full production verification
+        run: pnpm verify:build
       - name: Typecheck
         run: pnpm typecheck
