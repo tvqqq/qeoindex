@@ -36,12 +36,18 @@ const requiredLintFiles = [
   "app/api/qeoindex/eod/route.ts",
 ]
 
-test("production prebuild test:core includes all notion-unified-v2 EOD contracts", () => {
-  const script = pkg.scripts["test:core"] || ""
-  for (const path of requiredCoreTests) assert.match(script, new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), path)
+function escaped(path: string) {
+  return new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+}
+
+test("production prebuild test:core includes the notion-unified-v2 EOD contract suite", () => {
+  const core = pkg.scripts["test:core"] || ""
+  const eod = pkg.scripts["test:eod-v2"] || ""
+  assert.match(core, /pnpm test:eod-v2/)
+  for (const path of requiredCoreTests) assert.match(eod, escaped(path), path)
 })
 
 test("production lint:touched includes all new QeoIndex EOD runtime surfaces", () => {
   const script = pkg.scripts["lint:touched"] || ""
-  for (const path of requiredLintFiles) assert.match(script, new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), path)
+  for (const path of requiredLintFiles) assert.match(script, escaped(path), path)
 })
