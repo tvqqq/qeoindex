@@ -1,0 +1,21 @@
+name: phase3-tdd
+
+on:
+  push:
+    branches:
+      - feat/eod-pipeline-admin-phases
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Wyckoff v2 schema contract
+        run: node --test tests/wyckoff-unified-schema.test.ts
