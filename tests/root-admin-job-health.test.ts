@@ -92,6 +92,42 @@ test("Admin Jobs models the notion-unified-v2 EOD chain as one parent job", () =
   }
 })
 
+test("EOD phase model preserves canonical dependency order and fills missing phases as pending", async () => {
+  const { buildAdminJobPhaseTimeline } = await import("../lib/admin/job-phases.ts")
+  const timeline = buildAdminJobPhaseTimeline([
+    {
+      id: "phase-1",
+      run_id: "run-1",
+      job_key: "qeoindex.eod_pipeline",
+      phase_key: "EOD_READY",
+      phase_order: 1,
+      status: "succeeded",
+      started_at: "2026-08-25T08:15:00.000Z",
+      finished_at: "2026-08-25T08:15:12.000Z",
+      duration_ms: 12_000,
+      summary: { sessionDate: "2026-08-25" },
+      error_code: null,
+      error_message: null,
+    },
+  ])
+
+  assert.deepEqual(timeline.map((phase) => phase.key), [
+    "EOD_READY",
+    "HISTORY_REFRESH",
+    "WYCKOFF_BUILD",
+    "NOTION_STAGING",
+    "NOTION_VALIDATE",
+    "INGEST",
+    "SUPABASE_PUBLISH",
+    "AI_COUNCIL_DETERMINISTIC",
+    "AI_COUNCIL_LLM",
+    "COMPLETE",
+  ])
+  assert.equal(timeline[0].status, "succeeded")
+  assert.equal(timeline[1].status, "pending")
+  assert.deepEqual(timeline[0].summary, { sessionDate: "2026-08-25" })
+})
+
 test("AI Council EOD workflow records system_job_runs telemetry for Admin Jobs", () => {
   const steps = readFileSync(new URL("../lib/ai-council-eod-workflow-steps.ts", import.meta.url), "utf8")
   const workflow = readFileSync(new URL("../workflows/ai-council-eod-workflow.ts", import.meta.url), "utf8")
