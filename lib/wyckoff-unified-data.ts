@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { getWyckoffCompanyMetadata } from "@/lib/wyckoff-company-metadata"
-import type { OhlcvBar, TechnicalSnapshot } from "@/lib/technical-indicators"
+import type { OhlcvBar } from "@/lib/technical-indicators"
 import {
   buildWyckoffChartStudies,
   type WyckoffChartTimeframe,
@@ -14,7 +14,6 @@ import type { WyckoffScanResult } from "@/lib/wyckoff-engine"
 
 type SnapshotEvidence = {
   rulesTriggered?: unknown
-  missingReason?: unknown
   [key: string]: unknown
 }
 
@@ -22,7 +21,7 @@ type SnapshotRow = {
   ticker: string
   timeframe: WyckoffChartTimeframe
   bar_closed_at: string
-  history_status: "complete" | "incomplete"
+  history_status?: string | null
   phase: string | null
   wyckoff_state: string | null
   ta_bias: WyckoffScanResult["taBias"] | null
@@ -35,7 +34,7 @@ type SnapshotRow = {
   confirmation: string | null
   invalidation: string | null
   what_changed: string | null
-  technical: Partial<TechnicalSnapshot>
+  technical: Partial<WyckoffScanResult["technical"]> | null
   evidence?: SnapshotEvidence | null
   markers?: unknown
   scenarios?: unknown
@@ -130,7 +129,9 @@ function normalizeScenario(value: unknown, timeframe: WyckoffChartTimeframe): Wy
 
 function toAnalysis(row: SnapshotRow): WyckoffScanResult | null {
   if (
-    row.history_status !== "complete"
+    row.history_status === "incomplete"
+    || !row.technical
+    || typeof row.technical.price !== "number"
     || !row.phase
     || !row.wyckoff_state
     || !row.ta_bias
@@ -138,15 +139,15 @@ function toAnalysis(row: SnapshotRow): WyckoffScanResult | null {
     || row.bull_probability == null
     || row.base_probability == null
     || row.bear_probability == null
-    || !row.support
-    || !row.resistance
-    || !row.confirmation
-    || !row.invalidation
-    || !row.what_changed
-    || typeof row.technical.price !== "number"
+    || row.support == null
+    || row.resistance == null
+    || row.confirmation == null
+    || row.invalidation == null
+    || row.what_changed == null
   ) return null
+
   return {
-    technical: row.technical as TechnicalSnapshot,
+    technical: row.technical as WyckoffScanResult["technical"],
     wyckoffState: row.wyckoff_state,
     phase: row.phase,
     taBias: row.ta_bias,
@@ -172,16 +173,15 @@ function buildStudies(
     provider_detail: string
   }>,
 ) {
-  const completeRows = selectedRows.flatMap((row) => {
+  const analyses = Object.fromEntries(selectedRows.flatMap((row) => {
     const analysis = toAnalysis(row)
-    return analysis ? [{ row, analysis }] : []
-  })
-  const analyses = Object.fromEntries(completeRows.map(({ row, analysis }) => [row.timeframe, analysis])) as Partial<Record<WyckoffChartTimeframe, WyckoffScanResult>>
-  const markerOverrides = Object.fromEntries(completeRows.map(({ row }) => [
+    return analysis ? [[row.timeframe, analysis] as const] : []
+  })) as Partial<Record<WyckoffChartTimeframe, WyckoffScanResult>>
+  const markerOverrides = Object.fromEntries(selectedRows.map((row) => [
     row.timeframe,
     Array.isArray(row.markers) ? row.markers.map(normalizeMarker).filter((marker): marker is WyckoffEventMarker => marker !== null) : [],
   ])) as Partial<Record<WyckoffChartTimeframe, WyckoffEventMarker[]>>
-  const scenarioOverrides = Object.fromEntries(completeRows.map(({ row }) => [
+  const scenarioOverrides = Object.fromEntries(selectedRows.map((row) => [
     row.timeframe,
     Array.isArray(row.scenarios) ? row.scenarios.map((scenario) => normalizeScenario(scenario, row.timeframe)).filter((scenario): scenario is WyckoffScenario => scenario !== null) : [],
   ])) as Partial<Record<WyckoffChartTimeframe, WyckoffScenario[]>>
@@ -219,8 +219,7 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
     .eq("universe_key", "hose_top100")
     .eq("effective_date", latestMembership.effective_date)
     .eq("active", true)
-    .order("rank", { ascending: true, nullsFirst: false })
-    .order("ticker", { ascending: true })
+    .order("rank")
   if (membershipsError || !memberships?.length) return null
 
   const ticker = memberships.some((row) => row.ticker === requestedTicker) ? requestedTicker : memberships[0].ticker
@@ -294,6 +293,7 @@ export async function getUnifiedWyckoffTickerData(supabase: SupabaseClient, requ
     ticker,
     companyName: selectedMetadata?.companyName ?? ticker,
     exchange: selectedMetadata?.exchange ?? "HOSE",
+    sector: selectedMetadata?.sector,
     studies,
     generatedAt: selectedRows[0].published_at as string,
   }
