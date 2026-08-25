@@ -11,11 +11,17 @@ permissions:
 jobs:
   targeted:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
       - name: Wyckoff v2 targeted contracts
         run: node --test tests/wyckoff-unified-schema.test.ts tests/wyckoff-v2-staging.test.ts tests/wyckoff-v2-notion-staging.test.ts tests/wyckoff-v2-notion-io.test.ts tests/wyckoff-v2-ingest.test.ts
+      - name: Typecheck
+        run: pnpm typecheck
