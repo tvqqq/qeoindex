@@ -9,6 +9,7 @@ import {
   WYCKOFF_V2_PROMPT_VERSION,
   type WyckoffV2Snapshot,
 } from "@/lib/wyckoff-v2-builder"
+import { loadWyckoffV2ChartSeriesRows } from "@/lib/wyckoff-v2-chart-series"
 import { computeWyckoffV2ValidationHash, validateWyckoffV2SnapshotSet } from "@/lib/wyckoff-v2-contract"
 import { buildWyckoffV2SupabasePayload, WYCKOFF_V2_OPERATIONAL_SOURCE } from "@/lib/wyckoff-v2-ingest"
 import { WYCKOFF_V2_RUNS_DATA_SOURCE_ID, WYCKOFF_V2_SNAPSHOTS_DATA_SOURCE_ID } from "@/lib/wyckoff-v2-notion-staging"
@@ -232,6 +233,10 @@ export async function publishIngestingWyckoffV2Run(runKey: string, expectedSupab
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured")
   const payload = buildWyckoffV2SupabasePayload({ snapshots: validated.snapshots, runId: expectedSupabaseRunId, scanDate, runKey })
+  const tickers = payload.memberships.map((row) => row.ticker)
+  const chartSeries = await loadWyckoffV2ChartSeriesRows(supabase, tickers, expectedSupabaseRunId)
+  if (chartSeries.length !== 200) throw new Error(`Expected 200 Wyckoff chart series; received ${chartSeries.length}`)
+
   const runState = await ensureOperationalRun(supabase, {
     runId: expectedSupabaseRunId,
     runKey,
@@ -257,13 +262,35 @@ export async function publishIngestingWyckoffV2Run(runKey: string, expectedSupab
       if (error) throw new Error(`Supabase snapshot upsert failed: ${error.message}`)
     }
 
+    const { error: chartSeriesError } = await supabase
+      .from("wyckoff_chart_series")
+      .upsert(chartSeries, { onConflict: "ticker,timeframe" })
+    if (chartSeriesError) throw new Error(`Supabase chart-series upsert failed: ${chartSeriesError.message}`)
+
+    const { data: publishedSeries, error: chartSeriesVerifyError } = await supabase
+      .from("wyckoff_chart_series")
+      .select("ticker,timeframe")
+      .eq("run_id", expectedSupabaseRunId)
+      .in("ticker", tickers)
+      .in("timeframe", ["1H", "1D"])
+    if (chartSeriesVerifyError) throw new Error(`Supabase chart-series verification failed: ${chartSeriesVerifyError.message}`)
+    const publishedSeriesKeys = new Set((publishedSeries || []).map((row) => `${row.ticker}|${row.timeframe}`))
+    if (publishedSeriesKeys.size !== 200) throw new Error(`Expected 200 persisted Wyckoff chart series; received ${publishedSeriesKeys.size}`)
+
     const finishedAt = new Date().toISOString()
     const { error: finishError } = await supabase.from("wyckoff_scan_runs").update({
       status: "published",
       completed_count: 100,
       incomplete_count: payload.incomplete,
       error_count: 0,
-      diagnostics: { source: payload.source, runKey, completeSnapshots: payload.complete, incompleteSnapshots: payload.incomplete, validationHash: validated.validationHash },
+      diagnostics: {
+        source: payload.source,
+        runKey,
+        completeSnapshots: payload.complete,
+        incompleteSnapshots: payload.incomplete,
+        validationHash: validated.validationHash,
+        chartSeriesCount: chartSeries.length,
+      },
       finished_at: finishedAt,
     }).eq("id", expectedSupabaseRunId).eq("status", "running")
     if (finishError) throw new Error(`Supabase run publish failed: ${finishError.message}`)
@@ -282,7 +309,15 @@ export async function publishIngestingWyckoffV2Run(runKey: string, expectedSupab
     throw new Error(`Notion Ingested read-back failed for ${runKey}`)
   }
 
-  return { ok: true as const, status: "ingested" as const, runKey, supabaseRunId: expectedSupabaseRunId, complete: payload.complete, incomplete: payload.incomplete }
+  return {
+    ok: true as const,
+    status: "ingested" as const,
+    runKey,
+    supabaseRunId: expectedSupabaseRunId,
+    complete: payload.complete,
+    incomplete: payload.incomplete,
+    chartSeriesCount: chartSeries.length,
+  }
 }
 
 export async function ingestLatestReadyWyckoffRun() {
