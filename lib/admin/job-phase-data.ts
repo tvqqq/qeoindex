@@ -23,7 +23,7 @@ export async function loadAdminJobPhases(runId: string): Promise<SystemJobPhaseR
 
     return (data as SystemJobPhaseRow[]).map((row) => ({
       ...row,
-      summary: sanitizeAdminValue(row.summary) as Record<string, unknown> | null,
+      summary: (sanitizeAdminValue(row.summary) as Record<string, unknown> | null | undefined) ?? null,
       error_code: row.error_code ? String(row.error_code).slice(0, 100) : null,
       error_message: row.error_message ? String(row.error_message).slice(0, 1000) : null,
     }))
