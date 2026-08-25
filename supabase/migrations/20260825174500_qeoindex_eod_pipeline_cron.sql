@@ -1,5 +1,39 @@
 begin;
 
+create or replace function public.qeo_verify_eod_scheduler_secret(p_secret text)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_cron_secret text;
+begin
+  if nullif(btrim(coalesce(p_secret, '')), '') is null then
+    return false;
+  end if;
+
+  select s.decrypted_secret
+  into v_cron_secret
+  from vault.decrypted_secrets s
+  where s.name = 'qeoindex_cron_secret'
+  limit 1;
+
+  if nullif(btrim(coalesce(v_cron_secret, '')), '') is null then
+    return false;
+  end if;
+
+  return v_cron_secret = p_secret;
+end;
+$$;
+
+revoke all on function public.qeo_verify_eod_scheduler_secret(text) from public, anon, authenticated;
+grant execute on function public.qeo_verify_eod_scheduler_secret(text) to service_role;
+
+comment on function public.qeo_verify_eod_scheduler_secret(text) is
+  'Service-role-only verification boundary for the Supabase Vault scheduler credential. Returns only a boolean and never exposes the decrypted secret.';
+
 create or replace function public.qeo_trigger_eod_pipeline()
 returns bigint
 language plpgsql
