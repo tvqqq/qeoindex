@@ -160,9 +160,9 @@ export async function fetchDailyOhlcv(symbol: string, now = new Date(), lookback
   throw new Error(errors.join(" | "))
 }
 
-export async function fetchHourlyOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
+export async function fetchHourlyOhlcv(symbol: string, now = new Date(), lookbackDays = DEFAULT_INTRADAY_LOOKBACK_DAYS): Promise<OhlcvBar[]> {
   const to = Math.floor(now.getTime() / 1000)
-  const from = to - DEFAULT_INTRADAY_LOOKBACK_DAYS * 86400
+  const from = to - lookbackDays * 86400
   const errors: string[] = []
   for (const resolution of ["1H", "60"]) {
     try {
