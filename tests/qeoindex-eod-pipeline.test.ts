@@ -9,6 +9,7 @@ function source(path: string) {
 const stepsUrl = new URL("../lib/qeoindex-eod-workflow-steps.ts", import.meta.url)
 const workflowUrl = new URL("../workflows/qeoindex-eod-pipeline.ts", import.meta.url)
 const routeUrl = new URL("../app/api/qeoindex/eod/route.ts", import.meta.url)
+const ingestUrl = new URL("../lib/wyckoff-notion-ingest.ts", import.meta.url)
 
 test("unified QeoIndex EOD workflow owns the full v2 pipeline in canonical phase order", () => {
   assert.equal(existsSync(stepsUrl), true, "qeoindex-eod-workflow-steps.ts must exist")
@@ -62,6 +63,22 @@ test("workflow steps use v2 persistent-cache, Notion staging and split claim/pub
   assert.doesNotMatch(code, /runUnifiedWyckoff/)
   assert.match(code, /failedTickers[\s\S]*throw/i)
   assert.match(code, /snapshots\.length !== 500|Expected 500/i)
+})
+
+test("v2 Supabase publisher refreshes and verifies 200 1H/1D chart read models before published/Ingested", () => {
+  assert.equal(existsSync(ingestUrl), true, "wyckoff-notion-ingest.ts must exist")
+  const code = source("lib/wyckoff-notion-ingest.ts")
+  const loadIndex = code.indexOf("loadWyckoffV2ChartSeriesRows")
+  const seriesWriteIndex = code.indexOf('from("wyckoff_chart_series")')
+  const runPublishedIndex = code.indexOf('status: "published"', seriesWriteIndex)
+  const notionIngestedIndex = code.indexOf('selectProperty("Ingested")', runPublishedIndex)
+
+  assert.ok(loadIndex >= 0, "publisher must load fresh chart read models from persistent OHLCV cache")
+  assert.ok(seriesWriteIndex > loadIndex, "chart series must be written after recent OHLCV load")
+  assert.ok(runPublishedIndex > seriesWriteIndex, "operational run must not become published before chart-series write")
+  assert.ok(notionIngestedIndex > runPublishedIndex, "Notion must not become Ingested before operational publish succeeds")
+  assert.match(code, /chartSeriesCount:\s*chartSeries\.length/)
+  assert.match(code, /chartSeries\.length\s*!==\s*200|expected 200/i)
 })
 
 test("new QeoIndex EOD route starts only the unified durable workflow behind machine auth", () => {
