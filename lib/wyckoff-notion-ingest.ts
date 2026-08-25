@@ -85,7 +85,7 @@ function parseSnapshotPage(page: NotionPage): WyckoffV2Snapshot {
   const evidenceText = richText(props["Evidence JSON"])
   const markersText = richText(props["Markers JSON"])
   const scenariosText = richText(props["Scenarios JSON"])
-  const evidence = parseObject(evidenceText, `${snapshotKey} Evidence JSON`) as WyckoffV2Snapshot["evidence"]
+  const evidence = parseObject(evidenceText, `${snapshotKey} Evidence JSON`) as unknown as WyckoffV2Snapshot["evidence"]
 
   return {
     snapshot: String((props.Snapshot as { title?: Array<{ plain_text?: string }> })?.title?.map((item) => item.plain_text ?? "").join("") ?? ""),
