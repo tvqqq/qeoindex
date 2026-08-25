@@ -52,6 +52,7 @@ export function buildWyckoffV2SupabasePayload(input: {
       bar_closed_at: row.barClosedAt,
       model_version: row.modelVersion,
       aggregation_version: row.aggregationVersion,
+      prompt_version: row.promptVersion,
       history_bar_count: row.historyBarCount,
       history_status: row.historyStatus.toLowerCase() as "complete" | "incomplete",
       phase: row.phase,
