@@ -1,0 +1,21 @@
+name: phase2-red-ci
+
+on:
+  push:
+    branches:
+      - feat/eod-pipeline-admin-phases
+
+permissions:
+  contents: read
+
+jobs:
+  schema-red:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify schema test is red before implementation
+        run: node --test tests/root-admin-schema.test.ts
