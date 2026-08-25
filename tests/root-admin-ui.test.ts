@@ -69,3 +69,22 @@ test("admin job detail resolves the effective operational catalog", () => {
   assert.match(page, /getEffectiveAdminJobDefinition/)
   assert.doesNotMatch(page, /getAdminJobDefinition/)
 })
+
+test("admin job detail renders phase telemetry for the unified EOD pipeline", () => {
+  const page = source("app/admin/jobs/[key]/page.tsx")
+  assert.match(page, /AdminJobPhaseTimeline/)
+  assert.match(page, /loadAdminJobPhases/)
+  assert.match(page, /latestRun\?\.id/)
+
+  const timeline = source("components/admin/admin-job-phase-timeline.tsx")
+  assert.match(timeline, /EOD_READY/)
+  assert.match(timeline, /HISTORY_REFRESH/)
+  assert.match(timeline, /WYCKOFF_BUILD/)
+  assert.match(timeline, /NOTION_STAGING/)
+  assert.match(timeline, /NOTION_VALIDATE/)
+  assert.match(timeline, /INGEST/)
+  assert.match(timeline, /SUPABASE_PUBLISH/)
+  assert.match(timeline, /AI_COUNCIL_DETERMINISTIC/)
+  assert.match(timeline, /AI_COUNCIL_LLM/)
+  assert.match(timeline, /COMPLETE/)
+})
