@@ -11,11 +11,30 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
       - name: Targeted OHLCV contract tests
         run: node --test tests/root-admin-schema.test.ts tests/ohlcv-history-store.test.ts
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint touched history files
+        run: >-
+          pnpm exec eslint
+          lib/market-history-contract.ts
+          lib/market-history.ts
+          lib/dnse-history.ts
+          lib/yahoo-history.ts
+          lib/ohlcv-history-store.ts
+          lib/eod-history-refresh.ts
+          tests/ohlcv-history-store.test.ts
+          tests/root-admin-schema.test.ts
+      - name: Secret scan
+        run: pnpm scan:secrets
