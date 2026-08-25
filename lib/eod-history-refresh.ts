@@ -3,9 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import {
   refreshOhlcvHistoryUniverse,
   type OhlcvUniverseRefreshResult,
-} from "@/lib/ohlcv-history-store"
+} from "./ohlcv-history-store.ts"
 
-export type { OhlcvUniverseRefreshResult } from "@/lib/ohlcv-history-store"
+export type { OhlcvUniverseRefreshResult } from "./ohlcv-history-store.ts"
 
 export interface EodHistoryRefreshSummary {
   ok: true
