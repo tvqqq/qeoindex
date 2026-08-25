@@ -8,6 +8,37 @@ alter table public.wyckoff_universe_memberships
 alter table public.wyckoff_universe_memberships
   alter column rank drop not null;
 
+-- Persist the staging contract identity so v2 rows cannot be shadowed by same-bar v1 rows.
+alter table public.wyckoff_scan_runs
+  add column if not exists prompt_version text not null default 'notion-unified-v1';
+
+alter table public.wyckoff_analysis_snapshots
+  add column if not exists prompt_version text not null default 'notion-unified-v1';
+
+do $$
+declare
+  constraint_name text;
+begin
+  select c.conname into constraint_name
+  from pg_constraint c
+  where c.conrelid = 'public.wyckoff_analysis_snapshots'::regclass
+    and c.contype = 'u'
+    and pg_get_constraintdef(c.oid) ilike '%ticker%timeframe%bar_closed_at%model_version%aggregation_version%'
+    and pg_get_constraintdef(c.oid) not ilike '%prompt_version%'
+  limit 1;
+
+  if constraint_name is not null then
+    execute format('alter table public.wyckoff_analysis_snapshots drop constraint %I', constraint_name);
+  end if;
+end $$;
+
+alter table public.wyckoff_analysis_snapshots
+  drop constraint if exists wyckoff_snapshot_version_identity;
+
+alter table public.wyckoff_analysis_snapshots
+  add constraint wyckoff_snapshot_version_identity
+  unique (ticker, timeframe, bar_closed_at, model_version, aggregation_version, prompt_version);
+
 -- Genuine Incomplete snapshots must be representable without fabricated analysis.
 alter table public.wyckoff_analysis_snapshots
   drop constraint if exists wyckoff_probability_sum;
@@ -81,6 +112,9 @@ alter table public.wyckoff_analysis_snapshots
 
 comment on column public.wyckoff_universe_memberships.rank is
   'Source rank from the canonical universe. notion-unified-v2 permits null, duplicate, or out-of-range source ranks as warnings; ticker identity remains authoritative.';
+
+comment on column public.wyckoff_analysis_snapshots.prompt_version is
+  'Staging contract identity. Included in operational uniqueness so same-bar v1 and v2 evidence remain separately auditable.';
 
 comment on table public.wyckoff_analysis_snapshots is
   'notion-unified-v2 operational Wyckoff evidence. Complete rows require >=60 bars and full analysis; genuine Incomplete rows carry missingReason and no fabricated analysis.';
