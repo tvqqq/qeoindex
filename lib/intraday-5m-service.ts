@@ -4,7 +4,8 @@ import { getCache } from "@vercel/functions"
 import { intradaySnapshot, type IntradayPoint } from "@/lib/intraday-5m"
 import { fetchYahooFiveMinuteSnapshot } from "@/lib/yahoo-history"
 import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
-import { isLunchBreak, getMarketSessionStatus } from "@/lib/session-countdown"
+import { getMarketSessionStatus, getVnTimeSeconds } from "@/lib/session-countdown"
+import { sessionTimestampSeconds, shouldAcceptRealtimeMiniChart } from "@/lib/market-session-ui"
 import { fetchLiveBatchQuotes } from "@/lib/broker-live-quotes"
 
 export const FETCH_CONCURRENCY = 12
@@ -79,6 +80,15 @@ export function isIntradaySnapshot(value: unknown, symbols: string[] | readonly 
   if (!Array.isArray(snapshot.rows) || snapshot.rows.length === 0) return false
   const validCount = snapshot.rows.filter(isIntradayRow).length
   return validCount >= Math.min(symbols.length * 0.5, 40)
+}
+
+export function isUsableCachedIntradaySnapshot(value: unknown, symbols: string[] | readonly string[], now: Date): value is IntradaySnapshot {
+  if (!isIntradaySnapshot(value, symbols)) return false
+  const { dayOfWeek, totalSeconds } = getVnTimeSeconds(now)
+  if (dayOfWeek < 1 || dayOfWeek > 5 || totalSeconds < 14 * 3600 + 46 * 60) return true
+  const finalBarAt = sessionTimestampSeconds(now, 14 * 3600 + 45 * 60)
+  const finalRows = value.rows.filter((row) => isIntradayRow(row) && (row.lastBarAt ?? row.points.at(-1)?.time ?? 0) >= finalBarAt)
+  return finalRows.length >= Math.min(symbols.length * 0.5, 40)
 }
 
 export async function mapWithConcurrency<T, R>(items: T[] | readonly T[], concurrency: number, worker: (item: T) => Promise<R>) {
@@ -195,7 +205,7 @@ export async function fetchSnapshot(symbols: string[] | readonly string[], now: 
     const changePercent = live.changePercent ?? (reference > 0 ? ((price - reference) / reference) * 100 : 0)
 
     let points = row.points
-    if (points.length > 0 && price > 0 && !isLunchBreak(now)) {
+    if (points.length > 0 && price > 0 && shouldAcceptRealtimeMiniChart(Math.floor(now.getTime() / 1000))) {
       const nowSec = Math.floor(now.getTime() / 1000)
       const lastPoint = points[points.length - 1]
       if (lastPoint && Math.abs(nowSec - lastPoint.time) < 300) {
@@ -226,7 +236,7 @@ export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly s
   // 1. Exact bucket from Runtime Cache
   try {
     const cached = await cache.get(bucketKey)
-    if (isIntradaySnapshot(cached, symbols)) return cached
+    if (isUsableCachedIntradaySnapshot(cached, symbols, now)) return cached
   } catch { /* Runtime Cache fail open */ }
 
   const redisClient = getRedis()
@@ -234,20 +244,20 @@ export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly s
     // 2. Exact bucket from Redis
     try {
       const cached = await redisClient.get<IntradaySnapshot>(bucketKey)
-      if (isIntradaySnapshot(cached, symbols)) return cached
+      if (isUsableCachedIntradaySnapshot(cached, symbols, now)) return cached
     } catch { /* Redis fail open */ }
 
     // 3. Fallback to latest available snapshot of today from Redis
     try {
       const cachedLatest = await redisClient.get<IntradaySnapshot>(latestKey)
-      if (isIntradaySnapshot(cachedLatest, symbols)) return cachedLatest
+      if (isUsableCachedIntradaySnapshot(cachedLatest, symbols, now)) return cachedLatest
     } catch { /* Redis fail open */ }
   }
 
   // 4. Fallback to latest snapshot from Runtime Cache
   try {
     const cachedLatest = await cache.get(latestKey)
-    if (isIntradaySnapshot(cachedLatest, symbols)) return cachedLatest
+    if (isUsableCachedIntradaySnapshot(cachedLatest, symbols, now)) return cachedLatest
   } catch { /* Runtime Cache fail open */ }
 
   return null

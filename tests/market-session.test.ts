@@ -2,6 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 
 import { isTradingSessionOpen, isLunchBreak, getMarketSessionStatus, getVnTimeSeconds } from "../lib/session-countdown.ts"
+import { getMarketUiPhase, miniChartPointsForDisplay, newSessionReferencePoint, shouldAcceptRealtimeMiniChart } from "../lib/market-session-ui.ts"
 
 test("isTradingSessionOpen returns true during active trading hours (09:00 - 14:46 on weekdays)", () => {
   // Tuesday at 10:30 AM ICT (UTC 03:30)
@@ -113,3 +114,33 @@ test("getMarketSessionStatus returns accurate session phase, live flag, and cach
   assert.ok(weekendStatus.ttlSeconds > 86400)
 })
 
+test("market UI phases enforce ATO, mini-chart, closing, and EOD boundaries", () => {
+  assert.equal(getMarketUiPhase(new Date("2026-08-18T01:59:59Z")), "PRE_MARKET")
+  assert.equal(getMarketUiPhase(new Date("2026-08-18T02:00:00Z")), "ATO")
+  assert.equal(getMarketUiPhase(new Date("2026-08-18T02:15:00Z")), "CONTINUOUS")
+  assert.equal(getMarketUiPhase(new Date("2026-08-18T07:30:00Z")), "CLOSING_AUCTION")
+  assert.equal(getMarketUiPhase(new Date("2026-08-18T07:46:00Z")), "EOD")
+})
+
+test("mini chart is hidden in ATO, live only from 09:15 to 14:30, then adds one final EOD point", () => {
+  const points = [
+    { time: Date.parse("2026-08-18T02:00:00Z") / 1000, close: 10 },
+    { time: Date.parse("2026-08-18T02:15:00Z") / 1000, close: 10.1 },
+    { time: Date.parse("2026-08-18T07:30:00Z") / 1000, close: 10.4 },
+    { time: Date.parse("2026-08-18T07:45:00Z") / 1000, close: 10.5 },
+  ]
+  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T02:05:00Z")), [])
+  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T03:00:00Z")), [points[1]])
+  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T07:35:00Z")), [points[1], points[2]])
+  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T07:50:00Z")), [points[1], points[2], points[3]])
+  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-22T03:00:00Z")), points)
+  assert.equal(shouldAcceptRealtimeMiniChart(points[1].time), true)
+  assert.equal(shouldAcceptRealtimeMiniChart(points[0].time), false)
+  assert.equal(shouldAcceptRealtimeMiniChart(points[2].time), false)
+})
+
+test("new session reference history starts at 09:15 ICT", () => {
+  assert.deepEqual(newSessionReferencePoint(58.5, new Date("2026-08-18T02:00:00Z")), [
+    { time: Date.parse("2026-08-18T02:15:00Z") / 1000, close: 58.5 },
+  ])
+})

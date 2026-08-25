@@ -33,7 +33,15 @@ import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/lib/intraday-5m"
-import { isTradingSessionOpen, isLunchBreak, getVnTimeSeconds } from "@/lib/session-countdown"
+import { isTradingSessionOpen, isLunchBreak } from "@/lib/session-countdown"
+import {
+  getMarketUiPhase,
+  MARKET_SESSION_RESET_EVENT,
+  miniChartPointsForDisplay,
+  newSessionReferencePoint,
+  shouldAcceptRealtimeMiniChart,
+  type MarketUiPhase,
+} from "@/lib/market-session-ui"
 import { setSoundEnabled, playWhaleSound } from "@/lib/sound-engine"
 import { publishDnseMarketFrame } from "@/lib/dnse-market-stream"
 import { captureMarketBoardScreenshot, copyBlobToClipboard } from "@/lib/screenshot"
@@ -183,13 +191,6 @@ function compareByPerformance(a: BoardUniverseStock, b: BoardUniverseStock, quot
   return a.rank - b.rank
 }
 
-function currentSessionIdentifier(date = new Date()) {
-  const { dayOfWeek, totalSeconds } = getVnTimeSeconds(date)
-  const isTradingDay = dayOfWeek >= 1 && dayOfWeek <= 5
-  const isPastOpen = totalSeconds >= 32400
-  return `${vietnamSessionDay(date)}:${isTradingDay && isPastOpen ? "OPEN" : "PRE"}`
-}
-
 const WatchlistSection = memo(function WatchlistSection({
   watchedStocks,
   quotes,
@@ -197,6 +198,7 @@ const WatchlistSection = memo(function WatchlistSection({
   whaleAlerts,
   onToggleWatch,
   onOpen,
+  showCharts,
 }: {
   watchedStocks: BoardUniverseStock[]
   quotes: Record<string, LiveStockQuote | IndexQuote | undefined>
@@ -204,6 +206,7 @@ const WatchlistSection = memo(function WatchlistSection({
   whaleAlerts: Record<string, boolean>
   onToggleWatch: (ticker: string) => void
   onOpen: (ticker: string) => void
+  showCharts: boolean
 }) {
   if (watchedStocks.length === 0) return null
   return (
@@ -222,6 +225,7 @@ const WatchlistSection = memo(function WatchlistSection({
               stock={stock}
               quote={quotes[stock.ticker] as LiveStockQuote | undefined}
               history={priceHistoryCloses[stock.ticker] ?? EMPTY_HISTORY}
+              showChart={showCharts}
               onOpen={() => onOpen(stock.ticker)}
               isWatched
               isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
@@ -605,6 +609,8 @@ export function LiveMarketBoardV2({
   const [lastMessageAt, setLastMessageAt] = useState("")
   const [reconnectKey, setReconnectKey] = useState(0)
   const [historyReloadKey, setHistoryReloadKey] = useState(0)
+  const [marketUiPhase, setMarketUiPhase] = useState<MarketUiPhase>(() => getMarketUiPhase())
+  const [showSessionOpenAlert, setShowSessionOpenAlert] = useState(false)
   const [query, setQuery] = useState("")
   const [mode, setMode] = useState<BoardMode>("sector")
   const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>(() => initialHistories ? { ...initialHistories } : {})
@@ -670,7 +676,10 @@ export function LiveMarketBoardV2({
   const whaleTimeouts = useRef<Record<string, NodeJS.Timeout>>({})
   const dailyReferences = useRef<Record<string, number>>(extractInitialRefs(initialQuotes))
   const indexReferences = useRef<Record<string, number>>({})
-  const sessionIdentifier = useRef(currentSessionIdentifier())
+  const marketUiPhaseRef = useRef<MarketUiPhase>(marketUiPhase)
+  const sessionOpenAlertTimer = useRef<number | null>(null)
+  const eodReloadTimers = useRef<number[]>([])
+  const didResetCurrentAto = useRef(false)
   const lastFrameAt = useRef(0)
 
   const scheduleMarketOrderingRefresh = useCallback((snapshot: Record<string, LiveStockQuote | IndexQuote>) => {
@@ -744,6 +753,74 @@ export function LiveMarketBoardV2({
     scheduleMarketUiCommit()
   }, [scheduleMarketUiCommit])
 
+  const resetForNewTradingSession = useCallback((now = new Date(), notify = true) => {
+    didResetCurrentAto.current = true
+    const resetQuotes: Record<string, LiveStockQuote | IndexQuote> = {}
+    for (const [symbol, current] of Object.entries(quotesRef.current)) {
+      if ("value" in current) {
+        const reference = indexReferences.current[symbol] || current.value - (current.change ?? 0)
+        resetQuotes[symbol] = {
+          ...current,
+          value: reference > 0 ? reference : current.value,
+          change: 0,
+          changePercent: 0,
+          volume: 0,
+          valueTraded: 0,
+          advances: 0,
+          declines: 0,
+          unchanged: 0,
+          updatedAt: now.toISOString(),
+        }
+        continue
+      }
+      const fallback = universe.find((stock) => stock.ticker === symbol)?.lastClose
+      const reference = dailyReferences.current[symbol] || current.reference || fallback || current.price
+      if (reference > 0) dailyReferences.current[symbol] = reference
+      resetQuotes[symbol] = {
+        ...current,
+        price: reference,
+        reference,
+        change: 0,
+        changePercent: 0,
+        volume: 0,
+        foreignBuyVolume: 0,
+        foreignSellVolume: 0,
+        foreignBuyValue: 0,
+        foreignSellValue: 0,
+        foreignNetValue: 0,
+        updatedAt: now.toISOString(),
+      }
+    }
+
+    const resetHistory: Record<string, IntradayPoint[]> = {}
+    for (const stock of universe) {
+      const reference = dailyReferences.current[stock.ticker] || stock.lastClose || 0
+      resetHistory[stock.ticker] = newSessionReferencePoint(reference, now)
+    }
+    quotesRef.current = resetQuotes
+    latestCommittedQuotesRef.current = resetQuotes
+    priceHistoryRef.current = resetHistory
+    quotesDirtyRef.current = false
+    historyDirtyRef.current = false
+    setQuotes(resetQuotes)
+    setOrderingQuotes(resetQuotes)
+    setPriceHistory(resetHistory)
+    setWhaleAlerts({})
+    setLastMessageAt("")
+    lastMessageAtRef.current = ""
+    window.dispatchEvent(new CustomEvent(MARKET_SESSION_RESET_EVENT, {
+      detail: { sessionDate: vietnamSessionDay(now) },
+    }))
+    setReconnectKey((key) => key + 1)
+    for (const timer of eodReloadTimers.current) window.clearTimeout(timer)
+    eodReloadTimers.current = []
+    if (notify) {
+      setShowSessionOpenAlert(true)
+      if (sessionOpenAlertTimer.current !== null) window.clearTimeout(sessionOpenAlertTimer.current)
+      sessionOpenAlertTimer.current = window.setTimeout(() => setShowSessionOpenAlert(false), 8_000)
+    }
+  }, [universe])
+
   useEffect(() => {
     return () => {
       if (marketUiCommitTimer.current !== null) {
@@ -754,6 +831,9 @@ export function LiveMarketBoardV2({
         window.clearTimeout(marketOrderingTimer.current)
         marketOrderingTimer.current = null
       }
+      if (sessionOpenAlertTimer.current !== null) window.clearTimeout(sessionOpenAlertTimer.current)
+      for (const timer of eodReloadTimers.current) window.clearTimeout(timer)
+      eodReloadTimers.current = []
     }
   }, [])
 
@@ -815,6 +895,7 @@ export function LiveMarketBoardV2({
 
   useEffect(() => {
     if (!symbolList.length) return
+    if (marketUiPhase === "ATO") return
     if (historyReloadKey === 0 && hasSufficientSsrHistory) return
 
     const controller = new AbortController()
@@ -828,13 +909,13 @@ export function LiveMarketBoardV2({
           signal: controller.signal,
         })
         const payload = await response.json() as IntradayHistoryResponse
-        if (disposed || !payload.histories) return
+        if (disposed || !payload.histories || getMarketUiPhase() === "ATO") return
         const receivedAt = new Date().toISOString()
         const nextHistory: Record<string, IntradayPoint[]> = { ...priceHistoryRef.current }
         for (const symbol of symbolList) {
           const points = payload.histories?.[symbol]?.points?.filter((point) => Number.isFinite(point.time) && point.time > 0 && Number.isFinite(point.close) && point.close > 0) ?? []
           if (points.length) {
-            nextHistory[symbol] = points.slice(-90)
+            nextHistory[symbol] = miniChartPointsForDisplay(points.slice(-90), new Date())
           }
         }
         priceHistoryRef.current = { ...nextHistory }
@@ -891,15 +972,16 @@ export function LiveMarketBoardV2({
       disposed = true
       controller.abort()
     }
-  }, [symbolKey, historyReloadKey, symbolList, sessionOpen, hasSufficientSsrHistory])
+  }, [symbolKey, historyReloadKey, symbolList, sessionOpen, hasSufficientSsrHistory, marketUiPhase])
 
   useEffect(() => {
+    if (marketUiPhase === "ATO") return
     const controller = new AbortController()
     void (async () => {
       try {
         const response = await fetch("/api/market/indexes", { cache: "no-store", signal: controller.signal })
         const payload = await response.json() as IndexHistoryResponse
-        if (!payload.quotes) return
+        if (!payload.quotes || getMarketUiPhase() === "ATO") return
         const current = quotesRef.current
         const next = { ...current }
         for (const [symbol, quote] of Object.entries(payload.quotes ?? {})) {
@@ -927,10 +1009,10 @@ export function LiveMarketBoardV2({
       }
     })()
     return () => controller.abort()
-  }, [historyReloadKey])
+  }, [historyReloadKey, marketUiPhase])
 
   const pushFiveMinuteClose = useCallback((ticker: string, close: number, timestampSeconds: number) => {
-    if (isLunchBreak(new Date(timestampSeconds * 1000))) return
+    if (!shouldAcceptRealtimeMiniChart(timestampSeconds) || isLunchBreak(new Date(timestampSeconds * 1000))) return
     updateLiveHistory(ticker, (current) => {
       const normalizedClose = normalizeMarketPrice(close, current.at(-1)?.close)
       if (!normalizedClose) return current
@@ -946,17 +1028,46 @@ export function LiveMarketBoardV2({
       setSessionOpen((prev) => (prev !== isOpen ? isOpen : prev))
       setIsLunch((prev) => (prev !== lunch ? lunch : prev))
 
-      const nextSession = currentSessionIdentifier(now)
-      if (sessionIdentifier.current !== nextSession) {
-        sessionIdentifier.current = nextSession
-        setHistoryReloadKey((key) => key + 1)
-        setReconnectKey((key) => key + 1)
+      const nextPhase = getMarketUiPhase(now)
+      if (marketUiPhaseRef.current !== nextPhase) {
+        const previousPhase = marketUiPhaseRef.current
+        marketUiPhaseRef.current = nextPhase
+        setMarketUiPhase(nextPhase)
+        if (nextPhase === "ATO") {
+          resetForNewTradingSession(now)
+        } else if (nextPhase === "CONTINUOUS" || nextPhase === "EOD") {
+          setHistoryReloadKey((key) => key + 1)
+          if (nextPhase === "EOD") {
+            for (const timer of eodReloadTimers.current) window.clearTimeout(timer)
+            eodReloadTimers.current = [4 * 60_000, 14 * 60_000].map((delay) => window.setTimeout(() => {
+              setHistoryReloadKey((key) => key + 1)
+            }, delay))
+          }
+          if (previousPhase === "PRE_MARKET") setReconnectKey((key) => key + 1)
+        } else if (nextPhase === "PRE_MARKET") {
+          didResetCurrentAto.current = false
+        }
       }
     }
 
+    checkSession()
     const timer = window.setInterval(checkSession, 1000)
-    return () => window.clearInterval(timer)
-  }, [])
+    const handleVisibility = () => { if (document.visibilityState === "visible") checkSession() }
+    document.addEventListener("visibilitychange", handleVisibility)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener("visibilitychange", handleVisibility)
+    }
+  }, [resetForNewTradingSession])
+
+  useEffect(() => {
+    if (marketUiPhase !== "ATO" || didResetCurrentAto.current) return
+    const mountReset = marketUiPhase === "ATO"
+      ? window.setTimeout(() => resetForNewTradingSession(new Date(), false), 0)
+      : null
+    // Mount-only guard: a user entering during ATO must never hydrate yesterday's snapshot.
+    return () => { if (mountReset !== null) window.clearTimeout(mountReset) }
+  }, [marketUiPhase, resetForNewTradingSession])
 
   useEffect(() => {
     let disposed = false
@@ -1023,12 +1134,6 @@ export function LiveMarketBoardV2({
         const now = new Date()
         const receivedAt = now.toISOString()
         lastMessageAtRef.current = receivedAt
-        const currentSession = currentSessionIdentifier(now)
-        if (sessionIdentifier.current !== currentSession) {
-          sessionIdentifier.current = currentSession
-          setHistoryReloadKey((key) => key + 1)
-        }
-
         publishDnseMarketFrame(data)
 
         // Pause market data processing during lunch break (11:30 - 13:00)
@@ -1336,11 +1441,13 @@ export function LiveMarketBoardV2({
 
   const priceHistoryCloses = useMemo(() => {
     const out: Record<string, number[]> = {}
+    const now = new Date()
+    void marketUiPhase
     for (const [ticker, pts] of Object.entries(priceHistory)) {
-      out[ticker] = pts.map((p) => p.close)
+      out[ticker] = miniChartPointsForDisplay(pts, now).map((p) => p.close)
     }
     return out
-  }, [priceHistory])
+  }, [priceHistory, marketUiPhase])
 
   const watchedStocks = useMemo(() => {
     if (watchlist.size === 0) return []
@@ -1627,6 +1734,7 @@ export function LiveMarketBoardV2({
             whaleAlerts={whaleAlerts}
             onToggleWatch={toggleWatch}
             onOpen={openBook}
+            showCharts={marketUiPhase !== "ATO"}
           />
         )}
         {mode === "sector" ? (
@@ -1688,6 +1796,7 @@ export function LiveMarketBoardV2({
                         stock={stock}
                         quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined}
                         history={priceHistoryCloses[stock.ticker] ?? EMPTY_HISTORY}
+                        showChart={marketUiPhase !== "ATO"}
                         onOpen={() => openBook(stock.ticker)}
                         isWatched={watchlist.has(stock.ticker)}
                         isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
@@ -1712,6 +1821,7 @@ export function LiveMarketBoardV2({
                 stock={stock}
                 quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined}
                 history={priceHistoryCloses[stock.ticker] ?? EMPTY_HISTORY}
+                showChart={marketUiPhase !== "ATO"}
                 onOpen={() => openBook(stock.ticker)}
                 isWatched={watchlist.has(stock.ticker)}
                 isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
@@ -1724,6 +1834,17 @@ export function LiveMarketBoardV2({
           </div>
         )}
       </div>
+
+      {showSessionOpenAlert ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed left-1/2 top-20 z-50 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-emerald-400/40 bg-[#0b1713] px-4 py-3 text-sm font-semibold text-emerald-200 shadow-[0_10px_30px_rgba(0,0,0,0.45)] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2"
+        >
+          <CircleAlert className="h-4 w-4 shrink-0 text-emerald-400" />
+          Phiên giao dịch mới đã bắt đầu — dữ liệu bảng điện vừa được reset.
+        </div>
+      ) : null}
 
       <FloatingMarketStatus
         streamState={streamState}

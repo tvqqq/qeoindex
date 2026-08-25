@@ -320,6 +320,7 @@ Supabase DB migrations are different: approved DDL/function changes apply immedi
 | Symptom | First checks |
 | --- | --- |
 | Board is hot/laggy | Chrome/Safari Performance + Layers; inspect actual React commit frequency, row paint cost, aggregate/header recomputation, and open order-book windows. |
+| Yesterday's chart/orderbook reappears after 09:00 | Verify `MARKET_SESSION_RESET_EVENT`, ATO hydration guards, and the Vietnam-time phase timer before inspecting providers. |
 | `/api/market/intraday` is slow | Inspect Runtime Cache/Redis hit path and whether SSR history reuse suppressed redundant client bootstrap; compare Vercel timeout logs. |
 | Charts exist but prices are `—` | Inspect SSR quote/reference selection and intraday cache validity. |
 | Prices disappear after close | Verify latest-session history and Supabase snapshot fallback. |

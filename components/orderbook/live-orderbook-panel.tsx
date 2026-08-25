@@ -24,7 +24,8 @@ import {
 } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { marketToneFromPrice, marketToneHex, marketToneText } from "@/lib/market-tone"
-import { normalizeMarketPrice } from "@/lib/intraday-5m"
+import { normalizeEpochSeconds, normalizeMarketPrice } from "@/lib/intraday-5m"
+import { getMarketUiPhase, MARKET_SESSION_RESET_EVENT, shouldAcceptRealtimeMiniChart } from "@/lib/market-session-ui"
 import { useFlashAnimation, usePriceFlashAnimation } from "@/lib/use-flash-animation"
 import { useWhaleConfetti, ConfettiOverlay } from "@/components/orderbook/confetti"
 import { playWhaleSound, unlockAudioContext } from "@/lib/sound-engine"
@@ -491,7 +492,7 @@ function mergeTrades(incoming: StreamTrade[], current: StreamTrade[]) {
 }
 
 function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMeta?: StockInitialMeta) {
-  const cachedInitial = sessionOrderBookCache.get(symbol)
+  const cachedInitial = getMarketUiPhase() === "ATO" ? undefined : sessionOrderBookCache.get(symbol)
   const [state, setState] = useState<StreamState>("CONNECTING")
   const [bids, setBids] = useState<DepthLevel[]>(() => cachedInitial?.bids ?? [])
   const [asks, setAsks] = useState<DepthLevel[]>(() => cachedInitial?.asks ?? [])
@@ -554,9 +555,56 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   const depthRef = useRef<{ bids: DepthLevel[]; asks: DepthLevel[] }>({ bids: cachedInitial?.bids ?? [], asks: cachedInitial?.asks ?? [] })
   const lastFrameAt = useRef(0)
   const lastForeignEventKey = useRef<string>("")
+  const lastMiniChartBucket = useRef<number | null>(null)
+
+  useEffect(() => {
+    const resetSession = () => {
+      sessionOrderBookCache.clear()
+      depthRef.current = { bids: [], asks: [] }
+      lastMiniChartBucket.current = null
+      lastForeignEventKey.current = ""
+      seenPutThroughIdsRef.current.clear()
+      setBids([])
+      setAsks([])
+      setTrades([])
+      setPriceHistory([])
+      setForeign(null)
+      setForeignEvents([])
+      setForeignTimeline([])
+      setPutThroughDeals([])
+      setLatestPtAlert(null)
+      setUpdatedAt("")
+      setError("")
+      setHistoryState("READY")
+      setHistoryMessage("Phiên mới 09:00 · đang chờ dữ liệu ATO.")
+      setQuote((current) => {
+        const reference = current?.reference || initialMeta?.reference || initialMeta?.price || 0
+        if (!reference) return null
+        return {
+          symbol,
+          price: reference,
+          reference,
+          ceiling: current?.ceiling || initialMeta?.ceiling,
+          floor: current?.floor || initialMeta?.floor,
+          change: 0,
+          changePercent: 0,
+          totalVolume: 0,
+          volume: 0,
+          updatedAt: new Date().toISOString(),
+        }
+      })
+    }
+    window.addEventListener(MARKET_SESSION_RESET_EVENT, resetSession)
+    const mountReset = getMarketUiPhase() === "ATO" ? window.setTimeout(resetSession, 0) : null
+    return () => {
+      window.removeEventListener(MARKET_SESSION_RESET_EVENT, resetSession)
+      if (mountReset !== null) window.clearTimeout(mountReset)
+    }
+  }, [symbol, initialMeta])
 
   // Hydrate from initial metadata if symbol changes
   useEffect(() => {
+    if (getMarketUiPhase() === "ATO") return
     const cached = sessionOrderBookCache.get(symbol)
     if (cached) {
       setBids(cached.bids)
@@ -642,11 +690,12 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
 
   // Fast-path instant hydration from Supabase (sub-20ms)
   useEffect(() => {
+    if (getMarketUiPhase() === "ATO") return
     let disposed = false
     void (async () => {
       try {
         const direct = await fetchOrderbookFromSupabaseDirect(symbol)
-        if (direct && !disposed) {
+        if (direct && !disposed && getMarketUiPhase() !== "ATO") {
           const directPrices = (direct.prices ?? []).map((point: any) => number(point.close)).filter((v: number) => v > 0)
           if (directPrices.length > 0) setPriceHistory(directPrices)
           if (direct.trades?.length) {
@@ -692,6 +741,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
 
   // Fetch REST session history + initial hydration with smart cache (SWR)
   useEffect(() => {
+    if (getMarketUiPhase() === "ATO") return
     const controller = new AbortController()
     let disposed = false
     const cached = sessionOrderBookCache.get(symbol)
@@ -710,7 +760,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
         })
         const payload = (await response.json()) as SessionHistoryResponse
         if (!response.ok || !payload.ok) throw new Error(payload.message ?? `Session history ${response.status}`)
-        if (disposed) return
+        if (disposed || getMarketUiPhase() === "ATO") return
 
         const prices = (payload.prices ?? []).map((point) => number(point.close)).filter((value) => value > 0)
         if (prices.length > 0) {
@@ -833,7 +883,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
         // Fallback directly to Supabase client from browser
         try {
           const direct = await fetchOrderbookFromSupabaseDirect(symbol)
-          if (direct && !disposed) {
+          if (direct && !disposed && getMarketUiPhase() !== "ATO") {
             const directPrices = (direct.prices ?? []).map((point: any) => number(point.close)).filter((v: number) => v > 0)
             if (directPrices.length > 0) setPriceHistory(directPrices)
             if (direct.trades?.length) {
@@ -884,6 +934,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   useEffect(() => {
     const unsubscribe = subscribeToOrderbookRealtime(symbol, (snapshot) => {
       if (!snapshot) return
+      if (getMarketUiPhase() === "ATO") return
       const snapshotPrices = (snapshot.prices ?? []).map((point: any) => number(point.close)).filter((v: number) => v > 0)
       if (snapshotPrices.length > 0) setPriceHistory(snapshotPrices)
       if (snapshot.trades?.length) {
@@ -1113,13 +1164,19 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           const ticker = String(data?.symbol ?? "").toUpperCase()
           if (ticker !== symbol) return
 
-          // OHLC 1 minute update
+          // DNSE emits 1-minute OHLC; retain one closing value per 5-minute bucket.
           if (data?.T === "b") {
             const close = firstPositive(data, ["close", "c", "closePrice"])
-            if (close > 0) {
+            const timestamp = normalizeEpochSeconds(data?.time ?? data?.t ?? data?.timestamp ?? data?.ts, Date.now() / 1000)
+            if (close > 0 && shouldAcceptRealtimeMiniChart(timestamp)) {
+              const bucket = Math.floor(timestamp / 300) * 300
               setPriceHistory((current) => {
-                if (current.at(-1) === close) return current
-                return [...current, close].slice(-360)
+                if (lastMiniChartBucket.current === bucket && current.length > 0) {
+                  if (current.at(-1) === close) return current
+                  return [...current.slice(0, -1), close]
+                }
+                lastMiniChartBucket.current = bucket
+                return [...current, close].slice(-90)
               })
             }
             return

@@ -84,6 +84,8 @@ A screen can jitter with no obvious React render loop. When investigating UI per
 
 Do not conclude that a regression is "the chart library" until the surrounding CSS and route behavior have been compared against the last known-good commit.
 
+For realtime session boundaries, clearing only visible React state is insufficient. Clear ref-backed stores and client caches too, then guard every in-flight hydration callback so an older REST/Supabase response cannot repopulate stale data after the reset.
+
 ### 9. Visual fidelity never overrides interaction stability
 
 If a mockup uses blur, glow, filter stacks, oversized shadows, animated gradients, or other expensive decoration, reproduce the **visual hierarchy and intent**, not necessarily the exact rendering primitive.
