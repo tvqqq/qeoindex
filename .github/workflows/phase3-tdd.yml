@@ -22,6 +22,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Wyckoff v2 targeted contracts
-        run: node --test tests/wyckoff-unified-schema.test.ts tests/wyckoff-v2-staging.test.ts tests/wyckoff-v2-notion-staging.test.ts tests/wyckoff-v2-notion-io.test.ts tests/wyckoff-v2-ingest.test.ts tests/wyckoff-v2-runtime-data.test.ts tests/qeoindex-eod-phase-telemetry.test.ts tests/qeoindex-eod-pipeline.test.ts tests/qeoindex-eod-scheduler.test.ts
+        run: node --test tests/wyckoff-unified-schema.test.ts tests/wyckoff-v2-staging.test.ts tests/wyckoff-v2-notion-staging.test.ts tests/wyckoff-v2-notion-io.test.ts tests/wyckoff-v2-ingest.test.ts tests/wyckoff-v2-runtime-data.test.ts tests/wyckoff-v2-chart-series.test.ts tests/qeoindex-eod-phase-telemetry.test.ts tests/qeoindex-eod-pipeline.test.ts tests/qeoindex-eod-scheduler.test.ts
       - name: Typecheck
         run: pnpm typecheck
