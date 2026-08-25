@@ -17,7 +17,7 @@ test("Wyckoff unified migration creates versioned read and history tables", () =
   assert.doesNotMatch(sql, /grant (insert|update|delete|all).*authenticated/i)
 })
 
-test("Wyckoff v2 migration makes rank anomalies warning-only and genuine Incomplete representable", () => {
+test("Wyckoff v2 migration makes rank anomalies warning-only, versions operational identity and represents genuine Incomplete", () => {
   assert.equal(existsSync(v2Url), true, "wyckoff_contract_v2 migration must exist")
   if (!existsSync(v2Url)) return
   const v2 = readFileSync(v2Url, "utf8")
@@ -25,6 +25,10 @@ test("Wyckoff v2 migration makes rank anomalies warning-only and genuine Incompl
   assert.match(v2, /drop constraint if exists wyckoff_universe_memberships_universe_key_rank_effective_date_key/i)
   assert.match(v2, /drop constraint if exists wyckoff_universe_memberships_rank_check/i)
   assert.match(v2, /alter column rank drop not null/i)
+
+  assert.match(v2, /wyckoff_scan_runs[\s\S]*add column if not exists prompt_version text not null default 'notion-unified-v1'/i)
+  assert.match(v2, /wyckoff_analysis_snapshots[\s\S]*add column if not exists prompt_version text not null default 'notion-unified-v1'/i)
+  assert.match(v2, /unique \(ticker, timeframe, bar_closed_at, model_version, aggregation_version, prompt_version\)/i)
 
   for (const column of [
     "phase",
