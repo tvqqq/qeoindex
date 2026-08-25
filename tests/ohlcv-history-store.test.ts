@@ -1,0 +1,123 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+
+import {
+  buildHistoricalSourceUrl,
+  DAILY_BACKFILL_DAYS,
+  DAILY_DELTA_DAYS,
+  HOURLY_BACKFILL_DAYS,
+  HOURLY_DELTA_DAYS,
+} from "../lib/market-history-contract.ts"
+import {
+  buildOhlcvRefreshPlan,
+  normalizeOhlcvTickers,
+  type OhlcvCoverage,
+} from "../lib/ohlcv-history-store.ts"
+import {
+  buildEodHistoryRefreshSummary,
+  EodHistoryRefreshError,
+  type OhlcvUniverseRefreshResult,
+} from "../lib/eod-history-refresh.ts"
+
+const NOW = new Date("2026-08-25T08:35:00.000Z")
+
+test("historical source URLs are deterministic and contain no credentials", () => {
+  const dnse = buildHistoricalSourceUrl("DNSE", "msn", "1D", 14, NOW)
+  assert.match(dnse, /^https:\/\/openapi\.dnse\.com\.vn\/price\/ohlc\?/)
+  assert.match(dnse, /symbol=MSN/)
+  assert.match(dnse, /resolution=1D/)
+  assert.match(dnse, /type=STOCK/)
+  assert.doesNotMatch(dnse, /api[_-]?key|signature|secret|token/i)
+
+  const yahoo = buildHistoricalSourceUrl("Fallback", "hpg", "1H", 7, NOW)
+  assert.match(yahoo, /^https:\/\/query1\.finance\.yahoo\.com\/v8\/finance\/chart\/HPG\.VN\?/)
+  assert.match(yahoo, /interval=60m/)
+  assert.doesNotMatch(yahoo, /cookie|authorization|token/i)
+})
+
+test("refresh planner backfills insufficient coverage then switches to bounded deltas", () => {
+  const emptyDaily = buildOhlcvRefreshPlan(null, "1D")
+  assert.deepEqual(emptyDaily, { mode: "backfill", timeframe: "1D", lookbackDays: DAILY_BACKFILL_DAYS })
+
+  const shortDaily: OhlcvCoverage = {
+    ticker: "MSN",
+    timeframe: "1D",
+    rowCount: 1200,
+    firstBarTime: "2021-10-01T00:00:00.000Z",
+    lastBarTime: "2026-08-24T00:00:00.000Z",
+    distinctMonths: 59,
+  }
+  assert.equal(buildOhlcvRefreshPlan(shortDaily, "1D").mode, "backfill")
+
+  const completeDaily = { ...shortDaily, distinctMonths: 60, rowCount: 1500 }
+  assert.deepEqual(buildOhlcvRefreshPlan(completeDaily, "1D"), {
+    mode: "delta",
+    timeframe: "1D",
+    lookbackDays: DAILY_DELTA_DAYS,
+  })
+
+  const shortHourly: OhlcvCoverage = {
+    ticker: "MSN",
+    timeframe: "1H",
+    rowCount: 239,
+    firstBarTime: "2026-06-01T02:00:00.000Z",
+    lastBarTime: "2026-08-24T07:00:00.000Z",
+    distinctMonths: 0,
+  }
+  assert.deepEqual(buildOhlcvRefreshPlan(shortHourly, "1H"), {
+    mode: "backfill",
+    timeframe: "1H",
+    lookbackDays: HOURLY_BACKFILL_DAYS,
+  })
+
+  assert.deepEqual(buildOhlcvRefreshPlan({ ...shortHourly, rowCount: 240 }, "1H"), {
+    mode: "delta",
+    timeframe: "1H",
+    lookbackDays: HOURLY_DELTA_DAYS,
+  })
+})
+
+test("ticker normalization preserves deterministic universe order and rejects invalid symbols", () => {
+  assert.deepEqual(normalizeOhlcvTickers([" msn ", "HPG", "msn", "VIC"]), ["MSN", "HPG", "VIC"])
+  assert.throws(() => normalizeOhlcvTickers(["MSN", "bad symbol"]), /Invalid ticker/)
+  assert.throws(() => normalizeOhlcvTickers([]), /at least one ticker/)
+})
+
+test("EOD HISTORY_REFRESH summary is compact and fail-closed on provider/runtime errors", () => {
+  const successful: OhlcvUniverseRefreshResult = {
+    requestedTickers: 2,
+    completedTickers: 2,
+    failedTickers: 0,
+    dailyFetchedBars: 20,
+    hourlyFetchedBars: 80,
+    backfillOperations: 1,
+    deltaOperations: 3,
+    limitedCoverage: [{ ticker: "NEW", timeframe: "1D", actual: 22, required: 60, metric: "distinctMonths" }],
+    errors: [],
+  }
+  assert.deepEqual(buildEodHistoryRefreshSummary(successful), {
+    ok: true,
+    requestedTickers: 2,
+    completedTickers: 2,
+    failedTickers: 0,
+    dailyFetchedBars: 20,
+    hourlyFetchedBars: 80,
+    backfillOperations: 1,
+    deltaOperations: 3,
+    limitedCoverageCount: 1,
+    limitedCoverage: successful.limitedCoverage,
+  })
+
+  const failed: OhlcvUniverseRefreshResult = {
+    ...successful,
+    completedTickers: 1,
+    failedTickers: 1,
+    errors: [{ ticker: "HPG", error: "provider timeout" }],
+  }
+  assert.throws(() => buildEodHistoryRefreshSummary(failed), (error: unknown) => {
+    assert.ok(error instanceof EodHistoryRefreshError)
+    assert.equal(error.code, "EOD_HISTORY_REFRESH_FAILED")
+    assert.match(error.message, /1\/2/)
+    return true
+  })
+})
