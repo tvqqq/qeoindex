@@ -6,6 +6,8 @@ import {
   beginWyckoffV2NotionRun,
   stageWyckoffV2Snapshots,
   validateAndFinalizeWyckoffV2NotionRun,
+  WYCKOFF_V2_RUNS_DATA_SOURCE_ID,
+  WYCKOFF_V2_SNAPSHOTS_DATA_SOURCE_ID,
   type WyckoffV2NotionIo,
 } from "../lib/wyckoff-v2-notion-staging.ts"
 import type { WyckoffV2Snapshot } from "../lib/wyckoff-v2-builder.ts"
@@ -54,16 +56,20 @@ class MemoryNotion implements WyckoffV2NotionIo {
   updates = 0
   private sequence = 1
 
+  private rows(dataSourceId: string) {
+    if (dataSourceId === WYCKOFF_V2_RUNS_DATA_SOURCE_ID) return this.runs
+    if (dataSourceId === WYCKOFF_V2_SNAPSHOTS_DATA_SOURCE_ID) return this.snapshots
+    throw new Error(`unknown data source ${dataSourceId}`)
+  }
+
   async queryDataSource(dataSourceId: string, _options: NotionQueryOptions = {}): Promise<NotionQueryResult> {
-    const rows = dataSourceId.includes("runs") ? this.runs : this.snapshots
-    return { results: rows, hasMore: false, nextCursor: null }
+    return { results: this.rows(dataSourceId), hasMore: false, nextCursor: null }
   }
 
   async createDataSourcePage(dataSourceId: string, properties: NotionProperties): Promise<NotionPage> {
     this.creates += 1
     const page = { id: `p${this.sequence++}`, properties }
-    if (dataSourceId.includes("runs")) this.runs.push(page)
-    else this.snapshots.push(page)
+    this.rows(dataSourceId).push(page)
     return page
   }
 
