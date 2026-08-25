@@ -37,7 +37,6 @@ import { isTradingSessionOpen, isLunchBreak } from "@/lib/session-countdown"
 import {
   getMarketUiPhase,
   MARKET_SESSION_RESET_EVENT,
-  miniChartPointsForDisplay,
   newSessionReferencePoint,
   shouldAcceptRealtimeMiniChart,
   type MarketUiPhase,
@@ -915,7 +914,7 @@ export function LiveMarketBoardV2({
         for (const symbol of symbolList) {
           const points = payload.histories?.[symbol]?.points?.filter((point) => Number.isFinite(point.time) && point.time > 0 && Number.isFinite(point.close) && point.close > 0) ?? []
           if (points.length) {
-            nextHistory[symbol] = miniChartPointsForDisplay(points.slice(-90), new Date())
+            nextHistory[symbol] = points.slice(-90)
           }
         }
         priceHistoryRef.current = { ...nextHistory }
@@ -1441,10 +1440,9 @@ export function LiveMarketBoardV2({
 
   const priceHistoryCloses = useMemo(() => {
     const out: Record<string, number[]> = {}
-    const now = new Date()
     void marketUiPhase
     for (const [ticker, pts] of Object.entries(priceHistory)) {
-      out[ticker] = miniChartPointsForDisplay(pts, now).map((p) => p.close)
+      out[ticker] = pts.map((p) => p.close)
     }
     return out
   }, [priceHistory, marketUiPhase])

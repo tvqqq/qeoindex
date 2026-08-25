@@ -86,7 +86,7 @@ Do not conclude that a regression is "the chart library" until the surrounding C
 
 For realtime session boundaries, clearing only visible React state is insufficient. Clear ref-backed stores and client caches too, then guard every in-flight hydration callback so an older REST/Supabase response cannot repopulate stale data after the reset.
 
-Do not ignore the final sparkline datum in a memo comparator unless the component can prove that datum is a disposable tick. For a two-point session chart, the final datum contains the entire visible movement; ignoring it freezes the reference line even though new candle data arrived.
+Mini-chart session policy and history hydration must stay separate. Hide the chart at the component boundary during ATO; do not apply a second time-window filter while copying an already normalized provider snapshot, because a timestamp mismatch or partial provider response can blank the whole board after refresh. Preserve the live-price fallback for late symbols.
 
 ### 9. Visual fidelity never overrides interaction stability
 

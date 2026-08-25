@@ -37,7 +37,7 @@ Vercel runtime audit on 2026-08-21 found three 20-second timeouts across `/api/m
 - Sector and Top Movers ordering use a separate quote snapshot refreshed at most once per second (`MARKET_ORDERING_REFRESH_MS`). Price paint therefore does not force ranking/group sorting on every React commit.
 - History updates replace only the affected ticker inside the ref-backed store and clone the outer history map at the next bounded UI commit.
 - `LiveStockRow` and `LiveMoverCard` are memoized and only redraw when their visible quote/history/watch state changes.
-- Mini-chart SVGs are memoized separately and receive only 5-minute candle closes, never the transient tick price. The memo comparator includes the latest candle so the first post-ATO movement cannot remain frozen at the reference line.
+- Mini-chart SVGs use the pre-regression pipeline: raw 5-minute history is hydrated without a second client-side time filter, while the current live price remains a fallback endpoint for symbols whose history provider is late. The ATO visibility gate remains separate and hides the entire chart until 09:15.
 - Chart history stays bounded to the most recent display points.
 
 The 250ms cadence is a UI paint policy, not a data-ingestion throttle. DNSE frames continue to be processed as they arrive; the browser merely publishes a bounded snapshot into React.

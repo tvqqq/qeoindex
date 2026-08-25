@@ -30,10 +30,10 @@ function sparklinePropsEqual(previous: SparklineProps, next: SparklineProps) {
   if (a === b) return true
   if (a.length !== b.length) return false
 
-  // Every item is a completed/current 5-minute candle. The final item must be
-  // compared too: with only two points, ignoring it leaves the chart frozen at
-  // the 09:00 reference line even after the first live candle arrives.
-  for (let index = 0; index < a.length; index += 1) {
+  // The final point is the transient live-price fallback. Stable 5-minute
+  // history changes still invalidate this comparison through length or values.
+  const stableLength = Math.max(0, a.length - 1)
+  for (let index = 0; index < stableLength; index += 1) {
     if (Math.abs(a[index] - b[index]) > SPARK_EPSILON) return false
   }
   return true

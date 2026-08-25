@@ -95,12 +95,20 @@ function formatChangePercent(value?: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`
 }
 
-function sparkData(history: number[]) {
+function sparkData(history: number[], livePrice?: number | null) {
   const valid = history.filter((value) => Number.isFinite(value) && value > 0)
-  if (!valid.length) return []
+  if (!valid.length && (!livePrice || !Number.isFinite(livePrice) || livePrice <= 0)) return []
+  if (!valid.length && livePrice) return [livePrice, livePrice]
 
   const anchor = valid.at(-1)!
   const normalized = valid.slice(-MAX_BOARD_SPARK_POINTS).map((price) => normalizeMarketPrice(price, anchor) ?? price)
+
+  if (livePrice && Number.isFinite(livePrice) && livePrice > 0) {
+    const liveNormalized = normalizeMarketPrice(livePrice, anchor)
+    if (liveNormalized && liveNormalized > 0 && Math.abs(liveNormalized - normalized.at(-1)!) > 1e-4) {
+      return [...normalized, liveNormalized]
+    }
+  }
 
   if (normalized.length === 1) {
     return [normalized[0], normalized[0]]
@@ -195,7 +203,7 @@ export const LiveStockRow = memo(function LiveStockRow({
 }: LiveStockRowProps) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
-  const chart = showChart ? sparkData(history) : []
+  const chart = showChart ? sparkData(history, quote?.price) : []
   const chartReference = sparkReference(chart, quote?.reference, stock.lastClose)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
   const { rowClass, tickerClass } = getGainerStyles(quote, tone)
@@ -301,7 +309,7 @@ export const LiveMoverCard = memo(function LiveMoverCard({
 }: LiveStockRowProps) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
-  const chart = showChart ? sparkData(history) : []
+  const chart = showChart ? sparkData(history, quote?.price) : []
   const chartReference = sparkReference(chart, quote?.reference, stock.lastClose)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
   const { cardClass, tickerClass } = getGainerStyles(quote, tone)
