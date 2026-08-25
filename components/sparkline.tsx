@@ -30,12 +30,10 @@ function sparklinePropsEqual(previous: SparklineProps, next: SparklineProps) {
   if (a === b) return true
   if (a.length !== b.length) return false
 
-  // The dense board appends the current live price as the final point. Ignore
-  // changes to that transient endpoint so an SVG path is not rebuilt on every
-  // trade tick. A new 5m candle shifts/appends historical points and therefore
-  // still invalidates this memo comparison.
-  const stableLength = Math.max(0, a.length - 1)
-  for (let index = 0; index < stableLength; index += 1) {
+  // Every item is a completed/current 5-minute candle. The final item must be
+  // compared too: with only two points, ignoring it leaves the chart frozen at
+  // the 09:00 reference line even after the first live candle arrives.
+  for (let index = 0; index < a.length; index += 1) {
     if (Math.abs(a[index] - b[index]) > SPARK_EPSILON) return false
   }
   return true
