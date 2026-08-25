@@ -15,6 +15,7 @@ test("admin UI adheres strictly to UI performance invariants", () => {
     "components/admin/admin-settings-table.tsx",
     "components/admin/admin-jobs-table.tsx",
     "components/admin/admin-job-history-table.tsx",
+    "components/admin/admin-job-phase-timeline.tsx",
     "components/admin/admin-manual-job-modal.tsx",
     "components/admin/admin-environment-table.tsx",
     "components/admin/admin-audit-table.tsx",
@@ -68,4 +69,18 @@ test("admin job detail resolves the effective operational catalog", () => {
   const page = source("app/admin/jobs/[key]/page.tsx")
   assert.match(page, /getEffectiveAdminJobDefinition/)
   assert.doesNotMatch(page, /getAdminJobDefinition/)
+})
+
+test("admin job detail renders phase telemetry for the unified EOD pipeline", () => {
+  const page = source("app/admin/jobs/[key]/page.tsx")
+  assert.match(page, /AdminJobPhaseTimeline/)
+  assert.match(page, /loadAdminJobPhases/)
+  assert.match(page, /latestRun\?\.id/)
+  assert.match(page, /QEOINDEX_EOD_JOB_KEY/)
+
+  const timeline = source("components/admin/admin-job-phase-timeline.tsx")
+  assert.match(timeline, /buildAdminJobPhaseTimeline/)
+  assert.match(timeline, /phase\.key/)
+  assert.match(timeline, /phase\.status/)
+  assert.match(timeline, /phase\.summary/)
 })

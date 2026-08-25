@@ -3,7 +3,10 @@ import { notFound } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 
 import { AdminJobHistoryTable } from "@/components/admin/admin-job-history-table"
+import { AdminJobPhaseTimeline } from "@/components/admin/admin-job-phase-timeline"
 import { getEffectiveAdminJobDefinition } from "@/lib/admin/effective-job-catalog"
+import { loadAdminJobPhases } from "@/lib/admin/job-phase-data"
+import { QEOINDEX_EOD_JOB_KEY } from "@/lib/admin/job-phases"
 import { deriveAdminJobStatus, loadAdminJobHistory } from "@/lib/admin/job-health"
 
 export const dynamic = "force-dynamic"
@@ -19,6 +22,9 @@ export default async function AdminJobDetailPage(props: { params: Promise<{ key:
 
   const history = await loadAdminJobHistory(decodedKey, 50)
   const latestRun = history[0]
+  const phases = decodedKey === QEOINDEX_EOD_JOB_KEY && latestRun?.id
+    ? await loadAdminJobPhases(latestRun.id)
+    : []
   const status = deriveAdminJobStatus(jobDefinition, latestRun ? { status: latestRun.status, startedAt: latestRun.started_at, finishedAt: latestRun.finished_at } : null)
 
   return (
@@ -59,6 +65,8 @@ export default async function AdminJobDetailPage(props: { params: Promise<{ key:
         <h3 className="font-semibold text-white">Mô tả tác vụ</h3>
         <p className="mt-1 text-slate-400">{jobDefinition.description}</p>
       </div>
+
+      {decodedKey === QEOINDEX_EOD_JOB_KEY ? <AdminJobPhaseTimeline rows={phases} /> : null}
 
       <div className="space-y-3">
         <h3 className="text-sm font-bold text-white">Lịch sử Thực thi (50 lần gần nhất)</h3>

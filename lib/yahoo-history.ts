@@ -146,8 +146,6 @@ export async function fetchYahooFiveMinuteSnapshot(symbol: string, now = new Dat
   const session = selectLatestSession(raw.bars, today, dateOf)
   if (!session?.items.length) throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned no usable recent 5m session`)
 
-  // At 9:00 AM on a trading day, a new session starts. If Yahoo does not yet have bars for today,
-  // reset to yesterday's EOD close as today's reference price and start with a flat reference baseline.
   if (isTradingSessionActiveOrPastOpen(now) && session.date < today) {
     const yesterdayClose = session.items.at(-1)?.close ?? raw.previousClose
     if (yesterdayClose && yesterdayClose > 0) {
@@ -187,8 +185,8 @@ export async function fetchYahooDailyOhlcv(symbol: string, now = new Date(), loo
   return bars
 }
 
-export async function fetchYahooHourlyOhlcv(symbol: string, now = new Date()): Promise<OhlcvBar[]> {
-  let bars = await fetchYahooOhlcv(symbol, "60m", DEFAULT_HOURLY_LOOKBACK_DAYS, now)
+export async function fetchYahooHourlyOhlcv(symbol: string, now = new Date(), lookbackDays = DEFAULT_HOURLY_LOOKBACK_DAYS): Promise<OhlcvBar[]> {
+  let bars = await fetchYahooOhlcv(symbol, "60m", lookbackDays, now)
   const nowSeconds = Math.floor(now.getTime() / 1000)
   bars = bars.filter((bar, index) => index !== bars.length - 1 || bar.time + 3600 <= nowSeconds)
   if (bars.length < 2) throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN returned insufficient completed hourly bars`)

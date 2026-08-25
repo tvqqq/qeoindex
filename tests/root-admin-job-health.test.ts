@@ -78,28 +78,54 @@ test("buildAdminJobViews aggregates catalog jobs with latest runs and calculates
   assert.equal(counts.failing, 0)
 })
 
-test("Admin Jobs mirrors the single dependency-driven AI Council production cron", () => {
-  const vercel = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as {
-    crons: Array<{ path: string; schedule: string }>
+test("Admin Jobs models the notion-unified-v2 EOD chain as one parent job", () => {
+  const pipeline = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "qeoindex.eod_pipeline")
+  assert.ok(pipeline)
+  assert.equal(pipeline.provider, "supabase_pg_cron_workflow")
+  assert.equal(pipeline.scheduleUtc, "15 8 * * 1-5")
+  assert.equal(pipeline.scheduleIct, "15:15 T2-T6")
+  assert.equal(pipeline.group, "system")
+  assert.equal(pipeline.manualPolicy, "disabled")
+
+  for (const legacyKey of ["ai_council.eod", "ai_council.daily", "ai_council.debate_daily", "wyckoff.ingest"]) {
+    assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.some((job) => job.key === legacyKey), false, `${legacyKey} must not appear as an independent production job`)
   }
-  const aiCouncilCrons = vercel.crons.filter((cron) => cron.path.startsWith("/api/ai-council/"))
-  assert.deepEqual(aiCouncilCrons, [{ path: "/api/ai-council/eod", schedule: "0 10 * * 1-5" }])
+})
 
-  const eod = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "ai_council.eod")
-  assert.ok(eod)
-  assert.equal(eod.provider, "vercel_cron_workflow")
-  assert.equal(eod.scheduleUtc, "0 10 * * 1-5")
-  assert.equal(eod.scheduleIct, "17:00 T2-T6")
-  assert.equal(eod.group, "ai_council")
+test("EOD phase model preserves canonical dependency order and fills missing phases as pending", async () => {
+  const { buildAdminJobPhaseTimeline } = await import("../lib/admin/job-phases.ts")
+  const timeline = buildAdminJobPhaseTimeline([
+    {
+      id: "phase-1",
+      run_id: "run-1",
+      job_key: "qeoindex.eod_pipeline",
+      phase_key: "EOD_READY",
+      phase_order: 1,
+      status: "succeeded",
+      started_at: "2026-08-25T08:15:00.000Z",
+      finished_at: "2026-08-25T08:15:12.000Z",
+      duration_ms: 12_000,
+      summary: { sessionDate: "2026-08-25" },
+      error_code: null,
+      error_message: null,
+    },
+  ])
 
-  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.some((job) => job.key === "ai_council.daily"), false)
-  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.some((job) => job.key === "ai_council.debate_daily"), false)
-
-  const legacyWyckoff = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "wyckoff.ingest")
-  assert.ok(legacyWyckoff)
-  assert.equal(legacyWyckoff.provider, "machine")
-  assert.equal(legacyWyckoff.scheduleUtc, undefined)
-  assert.equal(legacyWyckoff.scheduleIct, undefined)
+  assert.deepEqual(timeline.map((phase) => phase.key), [
+    "EOD_READY",
+    "HISTORY_REFRESH",
+    "WYCKOFF_BUILD",
+    "NOTION_STAGING",
+    "NOTION_VALIDATE",
+    "INGEST",
+    "SUPABASE_PUBLISH",
+    "AI_COUNCIL_DETERMINISTIC",
+    "AI_COUNCIL_LLM",
+    "COMPLETE",
+  ])
+  assert.equal(timeline[0].status, "succeeded")
+  assert.equal(timeline[1].status, "pending")
+  assert.deepEqual(timeline[0].summary, { sessionDate: "2026-08-25" })
 })
 
 test("AI Council EOD workflow records system_job_runs telemetry for Admin Jobs", () => {

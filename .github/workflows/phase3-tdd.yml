@@ -1,0 +1,29 @@
+name: phase3-tdd
+
+on:
+  push:
+    branches:
+      - feat/eod-pipeline-admin-phases
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Wyckoff v2 targeted contracts
+        run: pnpm test:eod-v2
+      - name: Full production verification
+        run: pnpm verify:build
+      - name: Typecheck
+        run: pnpm typecheck

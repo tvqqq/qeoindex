@@ -79,7 +79,7 @@ export const ADMIN_SETTING_CATALOG: AdminSettingDefinition[] = [
       const parsed = parseInteger(val, 20, 200)
       return parsed !== null
         ? { ok: true, value: parsed }
-        : { ok: false, error: "Giới hạn lịch sử job phải là số nguyên từ 20 đến 200" }
+        : { ok: false, error: "Giới hạn lịch sử job phải là số nguyên từ 20 đến 200 giây" }
     },
   },
   {
@@ -327,6 +327,18 @@ export function validateAdminSetting(key: string, value: unknown): AdminValidati
 }
 
 export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
+  {
+    key: "qeoindex.eod_pipeline",
+    provider: "supabase_pg_cron",
+    label: "QeoIndex Unified EOD Pipeline",
+    description: "Unified EOD chain: market readiness → OHLCV refresh → Wyckoff v2 → Notion staging/validation → Supabase publish → AI Council.",
+    group: "wyckoff",
+    scheduleUtc: "15 8 * * 1-5",
+    scheduleIct: "15:15 T2-T6",
+    manualPolicy: "confirm",
+    freshnessMinutes: 26 * 60,
+    maxDurationMinutes: 90,
+  },
   {
     key: "signals.daily",
     provider: "vercel_cron_workflow",

@@ -57,13 +57,14 @@ test("P3 outcome refresh computes VNINDEX alpha and calibration stays sample-gat
   assert.match(migration, /w\.raw_weight \/ sum\(w\.raw_weight\) over \(partition by w\.market_regime\)/)
 })
 
-test("daily Council P3 operation is machine-authorized and runs benchmark -> learning -> calibrated persistence", () => {
+test("daily Council P3 operation is machine-authorized and runs inside the unified EOD dependency chain", () => {
   const route = source("app/api/ai-council/daily/route.ts")
   const operations = source("lib/ai-council-operations.ts")
-  const workflow = source("workflows/ai-council-eod-workflow.ts")
-  const steps = source("lib/ai-council-eod-workflow-steps.ts")
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const scheduler = source("supabase/migrations/20260825174500_qeoindex_eod_pipeline_cron.sql")
   const vercel = JSON.parse(source("vercel.json")) as { crons: Array<{ path: string; schedule: string }> }
-  const eodCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/eod")
+  const legacyEodCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/eod")
 
   assert.match(route, /isMachineRequestAuthorized/)
   assert.match(route, /process\.env\.AI_COUNCIL_RUN_SECRET/)
@@ -77,7 +78,8 @@ test("daily Council P3 operation is machine-authorized and runs benchmark -> lea
   assert.match(workflow, /runLlmDebateStep/)
   assert.match(steps, /runAiCouncilDailyOperation/)
   assert.match(steps, /runAiCouncilDebateOperation/)
-  assert.equal(eodCron?.schedule, "0 10 * * 1-5")
+  assert.match(scheduler, /'15 8 \* \* 1-5'/)
+  assert.equal(legacyEodCron, undefined)
 })
 
 test("Council v2 keeps deterministic evidence hashes and exposes bounded adaptive calibration", () => {
@@ -223,15 +225,16 @@ test("P4.3 freezes raw KFSP, TTAI history and Wyckoff context without changing d
   assert.match(operations, /evidenceFidelity:/)
 })
 
-test("P4 debate stage is isolated behind an authenticated endpoint and the dependency-driven EOD workflow", () => {
+test("P4 debate stage is isolated behind an authenticated endpoint and the unified dependency-driven EOD workflow", () => {
   const route = source("app/api/ai-council/debate-daily/route.ts")
   const operations = source("lib/ai-council-operations.ts")
-  const workflow = source("workflows/ai-council-eod-workflow.ts")
-  const steps = source("lib/ai-council-eod-workflow-steps.ts")
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const scheduler = source("supabase/migrations/20260825174500_qeoindex_eod_pipeline_cron.sql")
   const page = source("app/insights/ai-council/debates/page.tsx")
   const councilPage = source("app/insights/ai-council/page.tsx")
   const vercel = JSON.parse(source("vercel.json")) as { crons: Array<{ path: string; schedule: string }> }
-  const eodCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/eod")
+  const legacyEodCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/eod")
   const legacyDebateCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/debate-daily")
 
   assert.match(route, /isMachineRequestAuthorized/)
@@ -242,7 +245,8 @@ test("P4 debate stage is isolated behind an authenticated endpoint and the depen
   assert.match(workflow, /runLlmDebateStep/)
   assert.match(steps, /runAiCouncilDailyOperation/)
   assert.match(steps, /runAiCouncilDebateOperation/)
-  assert.equal(eodCron?.schedule, "0 10 * * 1-5")
+  assert.match(scheduler, /'15 8 \* \* 1-5'/)
+  assert.equal(legacyEodCron, undefined)
   assert.equal(legacyDebateCron, undefined)
   assert.match(page, /getServerAuthContext/)
   assert.match(page, /LLM Debate Lab/)

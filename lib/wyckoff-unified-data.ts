@@ -21,19 +21,20 @@ type SnapshotRow = {
   ticker: string
   timeframe: WyckoffChartTimeframe
   bar_closed_at: string
-  phase: string
-  wyckoff_state: string
-  ta_bias: WyckoffScanResult["taBias"]
-  confidence: WyckoffScanResult["confidence"]
-  bull_probability: number
-  base_probability: number
-  bear_probability: number
-  support: string
-  resistance: string
-  confirmation: string
-  invalidation: string
-  what_changed: string
-  technical: WyckoffScanResult["technical"]
+  history_status?: string | null
+  phase: string | null
+  wyckoff_state: string | null
+  ta_bias: WyckoffScanResult["taBias"] | null
+  confidence: WyckoffScanResult["confidence"] | null
+  bull_probability: number | null
+  base_probability: number | null
+  bear_probability: number | null
+  support: string | null
+  resistance: string | null
+  confirmation: string | null
+  invalidation: string | null
+  what_changed: string | null
+  technical: Partial<WyckoffScanResult["technical"]> | null
   evidence?: SnapshotEvidence | null
   markers?: unknown
   scenarios?: unknown
@@ -126,9 +127,27 @@ function normalizeScenario(value: unknown, timeframe: WyckoffChartTimeframe): Wy
   }
 }
 
-function toAnalysis(row: SnapshotRow): WyckoffScanResult {
+function toAnalysis(row: SnapshotRow): WyckoffScanResult | null {
+  if (
+    row.history_status === "incomplete"
+    || !row.technical
+    || typeof row.technical.price !== "number"
+    || !row.phase
+    || !row.wyckoff_state
+    || !row.ta_bias
+    || !row.confidence
+    || row.bull_probability == null
+    || row.base_probability == null
+    || row.bear_probability == null
+    || row.support == null
+    || row.resistance == null
+    || row.confirmation == null
+    || row.invalidation == null
+    || row.what_changed == null
+  ) return null
+
   return {
-    technical: row.technical,
+    technical: row.technical as WyckoffScanResult["technical"],
     wyckoffState: row.wyckoff_state,
     phase: row.phase,
     taBias: row.ta_bias,
@@ -154,7 +173,10 @@ function buildStudies(
     provider_detail: string
   }>,
 ) {
-  const analyses = Object.fromEntries(selectedRows.map((row) => [row.timeframe, toAnalysis(row)])) as Partial<Record<WyckoffChartTimeframe, WyckoffScanResult>>
+  const analyses = Object.fromEntries(selectedRows.flatMap((row) => {
+    const analysis = toAnalysis(row)
+    return analysis ? [[row.timeframe, analysis] as const] : []
+  })) as Partial<Record<WyckoffChartTimeframe, WyckoffScanResult>>
   const markerOverrides = Object.fromEntries(selectedRows.map((row) => [
     row.timeframe,
     Array.isArray(row.markers) ? row.markers.map(normalizeMarker).filter((marker): marker is WyckoffEventMarker => marker !== null) : [],
@@ -230,15 +252,15 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
       ticker: membership.ticker,
       rank: membership.rank,
       sector: membership.sector || "",
-      price: row1D?.technical.price ?? null,
-      changePct: row1D?.technical.changePct ?? null,
+      price: typeof row1D?.technical?.price === "number" ? row1D.technical.price : null,
+      changePct: typeof row1D?.technical?.changePct === "number" ? row1D.technical.changePct : null,
       phase: row1D?.phase ?? "",
       phase1H: row1H?.phase ?? "",
       phase1D: row1D?.phase ?? "",
       phase1W: row1W?.phase ?? "",
       bias: row1D?.ta_bias ?? "",
       confidence: row1D?.confidence ?? "",
-      status: row1D ? "Complete" : "Pending",
+      status: row1D ? (row1D.history_status === "complete" ? "Complete" : "Incomplete") : "Pending",
       date: row1D?.bar_closed_at?.slice(0, 10) ?? "",
     }
   })
@@ -258,40 +280,14 @@ export async function getUnifiedWyckoffTickerData(supabase: SupabaseClient, requ
   const ticker = requestedTicker.trim().toUpperCase()
   if (!ticker) return null
 
-  const { data: latestMembership, error: membershipDateError } = await supabase
-    .from("wyckoff_universe_memberships")
-    .select("effective_date")
-    .eq("universe_key", "hose_top100")
-    .eq("active", true)
-    .order("effective_date", { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (membershipDateError || !latestMembership?.effective_date) return null
-
-  const { data: membership, error: membershipError } = await supabase
-    .from("wyckoff_universe_memberships")
-    .select("ticker")
-    .eq("universe_key", "hose_top100")
-    .eq("effective_date", latestMembership.effective_date)
-    .eq("active", true)
-    .eq("ticker", ticker)
-    .maybeSingle()
-  if (membershipError || !membership?.ticker) return null
-
-  const [
-    { data: selectedRows, error: selectedError },
-    { data: seriesRows, error: seriesError },
-    companyMetadata,
-  ] = await Promise.all([
+  const [{ data: selectedRows, error: selectedError }, { data: seriesRows, error: seriesError }, companyMetadata] = await Promise.all([
     supabase.from("wyckoff_latest_by_timeframe").select("*").eq("ticker", ticker),
     supabase.from("wyckoff_chart_series").select("*").eq("ticker", ticker).in("timeframe", ["1H", "1D"]),
     getWyckoffCompanyMetadata(supabase, [ticker]),
   ])
   if (selectedError || seriesError || !selectedRows?.length || !seriesRows?.length) return null
-
   const studies = buildStudies(selectedRows as SnapshotRow[], seriesRows as Array<{ timeframe: WyckoffChartTimeframe; bars: OhlcvBar[]; provider: string; provider_detail: string }>)
   if (!studies) return null
-
   const selectedMetadata = companyMetadata.get(ticker)
   return {
     ticker,

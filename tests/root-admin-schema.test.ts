@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 const sql = readFileSync(new URL("../supabase/migrations/20260824120000_root_admin_control_plane.sql", import.meta.url), "utf8")
+const phasesSql = readFileSync(new URL("../supabase/migrations/20260825160000_system_job_phases.sql", import.meta.url), "utf8")
+const ohlcvMigrationUrl = new URL("../supabase/migrations/20260825163000_market_ohlcv_history.sql", import.meta.url)
 
 test("control-plane tables are private service-role data", () => {
   for (const table of ["system_settings", "system_job_runs", "system_audit_log"]) {
@@ -11,6 +13,34 @@ test("control-plane tables are private service-role data", () => {
     assert.match(sql, new RegExp(`revoke all privileges on table public\\.${table} from anon, authenticated`))
     assert.match(sql, new RegExp(`grant all privileges on table public\\.${table} to service_role`))
   }
+})
+
+test("job phase telemetry is private, ordered and bound to its parent run", () => {
+  assert.match(phasesSql, /create table if not exists public\.system_job_phases/)
+  assert.match(phasesSql, /references public\.system_job_runs\(id\) on delete cascade/)
+  assert.match(phasesSql, /unique \(run_id, phase_key\)/)
+  assert.match(phasesSql, /system_job_phases_run_order_idx/)
+  assert.match(phasesSql, /alter table public\.system_job_phases enable row level security/)
+  assert.match(phasesSql, /revoke all privileges on table public\.system_job_phases from anon, authenticated/)
+  assert.match(phasesSql, /grant all privileges on table public\.system_job_phases to service_role/)
+})
+
+test("raw OHLCV history is private, idempotent and exposes service-role coverage only", () => {
+  assert.equal(existsSync(ohlcvMigrationUrl), true, "market_ohlcv_history migration must exist")
+  if (!existsSync(ohlcvMigrationUrl)) return
+  const ohlcvSql = readFileSync(ohlcvMigrationUrl, "utf8")
+
+  assert.match(ohlcvSql, /create table if not exists public\.market_ohlcv_history/)
+  assert.match(ohlcvSql, /primary key \(ticker, timeframe, bar_time\)/)
+  assert.match(ohlcvSql, /timeframe text not null check \(timeframe in \('1D','1H'\)\)/)
+  assert.match(ohlcvSql, /market_ohlcv_history_lookup_idx/)
+  assert.match(ohlcvSql, /create or replace function public\.qeo_market_ohlcv_coverage\(p_tickers text\[\]\)/)
+  assert.match(ohlcvSql, /count\(distinct date_trunc\('month'/)
+  assert.match(ohlcvSql, /alter table public\.market_ohlcv_history enable row level security/)
+  assert.match(ohlcvSql, /revoke all privileges on table public\.market_ohlcv_history from anon, authenticated/)
+  assert.match(ohlcvSql, /grant all privileges on table public\.market_ohlcv_history to service_role/)
+  assert.match(ohlcvSql, /grant execute on function public\.qeo_market_ohlcv_coverage\(text\[\]\) to service_role/)
+  assert.doesNotMatch(ohlcvSql, /grant execute[\s\S]*qeo_market_ohlcv_coverage[\s\S]*to authenticated/)
 })
 
 test("setting mutation RPCs are atomic and service-role only", () => {
