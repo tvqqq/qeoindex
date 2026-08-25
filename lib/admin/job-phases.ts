@@ -17,7 +17,7 @@ export const QEOINDEX_EOD_PHASES = [
     key: "WYCKOFF_BUILD",
     order: 3,
     label: "Wyckoff Build",
-    description: "Build 1H/4H/1D/1W/1M và tạo tối đa 500 snapshot theo contract.",
+    description: "Build 1H/4H/1D/1W/1M và tạo đúng 500 Snapshot Keys theo contract.",
   },
   {
     key: "NOTION_STAGING",
