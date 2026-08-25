@@ -61,6 +61,15 @@ Do **not** reintroduce `content-visibility` or naive row virtualization without 
 - Price-unit normalization prevents feeds expressed in thousands from flattening VND-scaled histories.
 - After close, cached intraday history and persisted snapshots keep prices/charts visible without labeling them as a live WebSocket tick.
 
+## Trading-day UI lifecycle
+
+- The browser evaluates session boundaries in `Asia/Ho_Chi_Minh`, including while the tab was opened before the session or temporarily hidden.
+- At 09:00 on weekdays, the board atomically restores stocks and indexes to their reference values, clears session volume/foreign flow and chart state, reconnects DNSE, and broadcasts a reset event to every open orderbook.
+- Open orderbooks clear cached depth, matched trades, foreign flow, put-through rows, and chart history at the same boundary. In-flight Supabase/REST snapshots are ignored during ATO so yesterday's data cannot race back into the UI.
+- Mini charts are deliberately blank from 09:00 through 09:14:59. DNSE 1-minute OHLC frames are accepted only from 09:15 through 14:29:59 and collapsed into one close per 5-minute bucket.
+- From 14:30 the live mini chart is frozen. At EOD availability (14:46 onward), the intraday snapshot is reloaded and may add the final 14:45 point once.
+- The 09:00 notification is a bounded, opaque status alert with reduced-motion support; it does not add persistent blur or compositor-heavy animation.
+
 ## Layout contract
 
 - Six sector groups render in a responsive 1 / 2 / 3 / 6 column grid.

@@ -169,6 +169,7 @@ export interface LiveStockRowProps {
   stock: LiveBoardStock
   quote?: LiveStockQuote
   history: number[]
+  showChart?: boolean
   onOpen: () => void
   isWatched?: boolean
   isWhaleActive?: boolean
@@ -179,6 +180,7 @@ function areStockPropsEqual(prev: LiveStockRowProps, next: LiveStockRowProps) {
   if (prev.stock.ticker !== next.stock.ticker) return false
   if (prev.isWatched !== next.isWatched) return false
   if (prev.isWhaleActive !== next.isWhaleActive) return false
+  if (prev.showChart !== next.showChart) return false
   if (prev.quote?.price !== next.quote?.price) return false
   if (prev.quote?.changePercent !== next.quote?.changePercent) return false
   if (prev.quote?.foreignNetValue !== next.quote?.foreignNetValue) return false
@@ -193,6 +195,7 @@ export const LiveStockRow = memo(function LiveStockRow({
   stock,
   quote,
   history,
+  showChart = true,
   onOpen,
   isWatched,
   isWhaleActive,
@@ -200,7 +203,7 @@ export const LiveStockRow = memo(function LiveStockRow({
 }: LiveStockRowProps) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
-  const chart = sparkData(history, quote?.price)
+  const chart = showChart ? sparkData(history, quote?.price) : []
   const chartReference = sparkReference(chart, quote?.reference, stock.lastClose)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
   const { rowClass, tickerClass } = getGainerStyles(quote, tone)
@@ -298,6 +301,7 @@ export const LiveMoverCard = memo(function LiveMoverCard({
   stock,
   quote,
   history,
+  showChart = true,
   onOpen,
   isWatched,
   isWhaleActive,
@@ -305,7 +309,7 @@ export const LiveMoverCard = memo(function LiveMoverCard({
 }: LiveStockRowProps) {
   const tone = quoteTone(quote)
   const text = quote ? marketToneText(tone) : "text-muted-2"
-  const chart = sparkData(history, quote?.price)
+  const chart = showChart ? sparkData(history, quote?.price) : []
   const chartReference = sparkReference(chart, quote?.reference, stock.lastClose)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
   const { cardClass, tickerClass } = getGainerStyles(quote, tone)

@@ -11,6 +11,7 @@ const perfCssSource = readFileSync(new URL("../app/market-board-performance.modu
 const cssSource = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")
 const intradayRouteSource = readFileSync(new URL("../app/api/market/intraday/route.ts", import.meta.url), "utf8")
 const boardTransitionSource = readFileSync(new URL("../components/smoothui/market-board-transition/index.tsx", import.meta.url), "utf8")
+const orderbookSource = readFileSync(new URL("../components/orderbook/live-orderbook-panel.tsx", import.meta.url), "utf8")
 
 function boardColumnsAt(width: number) {
   if (width >= 1280) return 6
@@ -153,4 +154,22 @@ test("intraday API prefers today's cached snapshot before expensive provider fan
   assert.match(intradayRouteSource, /cacheLayer = snapshot \? "cache" : "provider"/)
   assert.match(intradayRouteSource, /getIntraday5mSnapshot/)
   assert.doesNotMatch(intradayRouteSource, /fetchSnapshot/)
+})
+
+test("09:00 session reset clears board and every open orderbook atomically", () => {
+  assert.match(boardSource, /const resetForNewTradingSession = useCallback/)
+  assert.match(boardSource, /window\.dispatchEvent\(new CustomEvent\(MARKET_SESSION_RESET_EVENT/)
+  assert.match(boardSource, /priceHistoryRef\.current = resetHistory/)
+  assert.match(orderbookSource, /window\.addEventListener\(MARKET_SESSION_RESET_EVENT, resetSession\)/)
+  assert.match(orderbookSource, /sessionOrderBookCache\.clear\(\)/)
+  assert.match(orderbookSource, /depthRef\.current = \{ bids: \[\], asks: \[\] \}/)
+  assert.match(orderbookSource, /setTrades\(\[\]\)/)
+})
+
+test("ATO hides mini charts and DNSE OHLC updates only one 5-minute bucket", () => {
+  assert.match(boardSource, /showChart=\{marketUiPhase !== "ATO"\}/)
+  assert.match(boardSource, /shouldAcceptRealtimeMiniChart\(timestampSeconds\)/)
+  assert.match(stockSource, /const chart = showChart \? sparkData\(history, quote\?\.price\) : \[\]/)
+  assert.match(orderbookSource, /const bucket = Math\.floor\(timestamp \/ 300\) \* 300/)
+  assert.match(orderbookSource, /lastMiniChartBucket\.current === bucket/)
 })
