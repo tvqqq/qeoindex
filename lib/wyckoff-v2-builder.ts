@@ -1,11 +1,18 @@
 import type { CachedOhlcvHistory } from "./ohlcv-history-store.ts"
-import type { TechnicalSnapshot } from "./technical-indicators.ts"
-import type { WyckoffEventMarker, WyckoffScenario, WyckoffChartTimeframe } from "./wyckoff-chart-model.ts"
+import { aggregateWeekly, type OhlcvBar, type TechnicalSnapshot } from "./technical-indicators.ts"
+import {
+  buildWyckoffChartStudies,
+  type WyckoffEventMarker,
+  type WyckoffScenario,
+  type WyckoffChartTimeframe,
+} from "./wyckoff-chart-model.ts"
+import type { WyckoffScanResult } from "./wyckoff-engine.ts"
 import type { WyckoffV2UniverseRow } from "./wyckoff-v2-universe.ts"
 
 export const WYCKOFF_V2_PROMPT_VERSION = "notion-unified-v2"
 export const WYCKOFF_V2_MODEL_VERSION = "qeo-wyckoff-rule-v1"
 export const WYCKOFF_V2_AGGREGATION_VERSION = "vn-session-v1"
+export const WYCKOFF_V2_MIN_BARS = 60
 
 export interface WyckoffV2Evidence {
   provider: string
@@ -51,7 +58,7 @@ export interface WyckoffV2Snapshot {
   confirmation: string | null
   invalidation: string | null
   whatChanged: string | null
-  technical: TechnicalSnapshot | Record<string, never>
+  technical: Partial<TechnicalSnapshot>
   evidence: WyckoffV2Evidence
   markers: WyckoffEventMarker[]
   scenarios: WyckoffScenario[]
@@ -59,12 +66,240 @@ export interface WyckoffV2Snapshot {
   validationError: string
 }
 
-export function buildWyckoffV2TickerSnapshots(_args: {
+function localParts(timestamp: number) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(timestamp * 1000))
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ""
+  return { date: `${get("year")}-${get("month")}-${get("day")}`, hour: Number(get("hour")) }
+}
+
+function aggregateFourHourVnSession(hourly: OhlcvBar[]) {
+  const buckets = new Map<string, OhlcvBar[]>()
+  for (const bar of hourly) {
+    const local = localParts(bar.time)
+    const blockHour = Math.floor(local.hour / 4) * 4
+    const key = `${local.date}-${String(blockHour).padStart(2, "0")}`
+    const bucket = buckets.get(key) ?? []
+    bucket.push(bar)
+    buckets.set(key, bucket)
+  }
+  return [...buckets.values()]
+    .map((bucket) => ({
+      time: bucket[0].time,
+      open: bucket[0].open,
+      high: Math.max(...bucket.map((bar) => bar.high)),
+      low: Math.min(...bucket.map((bar) => bar.low)),
+      close: bucket.at(-1)!.close,
+      volume: bucket.reduce((sum, bar) => sum + bar.volume, 0),
+    }))
+    .sort((a, b) => a.time - b.time)
+}
+
+function aggregateMonthly(bars: OhlcvBar[]) {
+  const buckets = new Map<string, OhlcvBar[]>()
+  for (const bar of bars) {
+    const key = localParts(bar.time).date.slice(0, 7)
+    const bucket = buckets.get(key) ?? []
+    bucket.push(bar)
+    buckets.set(key, bucket)
+  }
+  return [...buckets.values()]
+    .map((bucket) => ({
+      time: bucket[0].time,
+      open: bucket[0].open,
+      high: Math.max(...bucket.map((bar) => bar.high)),
+      low: Math.min(...bucket.map((bar) => bar.low)),
+      close: bucket.at(-1)!.close,
+      volume: bucket.reduce((sum, bar) => sum + bar.volume, 0),
+    }))
+    .sort((a, b) => a.time - b.time)
+}
+
+function horizonFor(timeframe: WyckoffChartTimeframe) {
+  if (timeframe === "1H") return "intraday" as const
+  if (timeframe === "4H") return "swing" as const
+  if (timeframe === "1D") return "week" as const
+  if (timeframe === "1W") return "month" as const
+  return "long_term" as const
+}
+
+function isoFromSeconds(value: number) {
+  return new Date(value * 1000).toISOString()
+}
+
+function normalizeRules(analysis: WyckoffScanResult, markers: WyckoffEventMarker[]) {
+  return [...new Set([
+    ...analysis.tags,
+    ...markers.map((marker) => marker.label),
+  ])].slice(0, 24)
+}
+
+function normalizeScenarios(
+  scenarios: WyckoffScenario[],
+  analysis: WyckoffScanResult,
+  timeframe: WyckoffChartTimeframe,
+): WyckoffScenario[] {
+  const horizon = horizonFor(timeframe)
+  const evidence = [
+    `Phase=${analysis.phase}`,
+    `TA Bias=${analysis.taBias}`,
+    `Price=${analysis.technical.price.toFixed(2)}`,
+    `Relative Volume=${analysis.technical.relVolume == null ? "n/a" : analysis.technical.relVolume.toFixed(2)}`,
+    ...analysis.tags,
+  ].slice(0, 8)
+
+  return scenarios.map((scenario) => {
+    let trigger = scenario.trigger
+    let confirmation = scenario.confirmation
+    let invalidation = scenario.invalidation
+    if (!trigger && scenario.key === "bull") trigger = `Giá Hold trên Support ${analysis.support} và Breakout/Reclaim Resistance ${analysis.resistance}.`
+    if (!trigger && scenario.key === "base") trigger = `Giá tiếp tục dao động giữa Support ${analysis.support} và Resistance ${analysis.resistance} mà chưa có Follow-through.`
+    if (!trigger && scenario.key === "bear") trigger = `Giá Breakdown dưới Support ${analysis.support} và không Reclaim được vùng vừa mất.`
+    if (!confirmation && scenario.key === "bull") confirmation = analysis.confirmation
+    if (!confirmation && scenario.key === "base") confirmation = "Biên độ và Volume tiếp tục co lại trong Trading Range; chưa xuất hiện Breakout/Breakdown có Hold."
+    if (!confirmation && scenario.key === "bear") confirmation = analysis.confirmation
+    if (!invalidation && scenario.key === "bull") invalidation = `Acceptance dưới Support ${analysis.support} làm suy yếu Bull case.`
+    if (!invalidation && scenario.key === "base") invalidation = "Breakout hoặc Breakdown có Hold, Retest và Follow-through làm Base case không còn là kịch bản ít giả định nhất."
+    if (!invalidation && scenario.key === "bear") invalidation = `Acceptance trên Resistance ${analysis.resistance} làm suy yếu Bear case.`
+
+    return {
+      ...scenario,
+      horizon,
+      trigger,
+      confirmation,
+      invalidation,
+      evidence: scenario.evidence?.length ? scenario.evidence : evidence,
+    }
+  })
+}
+
+function basisFor(
+  timeframe: WyckoffChartTimeframe,
+  daily: CachedOhlcvHistory,
+  hourly: CachedOhlcvHistory,
+) {
+  return timeframe === "1H" || timeframe === "4H" ? hourly : daily
+}
+
+export function buildWyckoffV2TickerSnapshots(args: {
   stock: WyckoffV2UniverseRow
   daily: CachedOhlcvHistory
   hourly: CachedOhlcvHistory
   runKey: string
   scanDate: string
 }): WyckoffV2Snapshot[] {
-  throw new Error("Wyckoff v2 cached snapshot builder is not implemented")
+  if (args.daily.ticker !== args.stock.ticker || args.hourly.ticker !== args.stock.ticker) {
+    throw new Error(`WYCKOFF_BUILD_CACHE_MISMATCH: ${args.stock.ticker}`)
+  }
+  if (!args.daily.bars.length || !args.hourly.bars.length) {
+    throw new Error(`WYCKOFF_BUILD_CACHE_EMPTY: ${args.stock.ticker}`)
+  }
+
+  const fullBars = new Map<WyckoffChartTimeframe, OhlcvBar[]>([
+    ["1H", args.hourly.bars],
+    ["4H", aggregateFourHourVnSession(args.hourly.bars)],
+    ["1D", args.daily.bars],
+    ["1W", aggregateWeekly(args.daily.bars)],
+    ["1M", aggregateMonthly(args.daily.bars)],
+  ])
+
+  const studies = buildWyckoffChartStudies({
+    dailyBars: args.daily.bars,
+    hourlyBars: args.hourly.bars,
+    dailyProvider: args.daily.provider,
+    dailyDetail: args.daily.detail,
+    hourlyProvider: args.hourly.provider,
+    hourlyDetail: args.hourly.detail,
+  })
+
+  return studies.map((study): WyckoffV2Snapshot => {
+    const bars = fullBars.get(study.timeframe) ?? []
+    const historyBarCount = bars.length
+    const historyStatus = historyBarCount >= WYCKOFF_V2_MIN_BARS ? "Complete" : "Incomplete"
+    const basis = basisFor(study.timeframe, args.daily, args.hourly)
+    const firstBarAt = bars[0] ? isoFromSeconds(bars[0].time) : basis.firstBarAt ?? ""
+    const lastBarAt = bars.at(-1) ? isoFromSeconds(bars.at(-1)!.time) : basis.lastBarAt ?? ""
+    const missingReason = historyStatus === "Incomplete"
+      ? `Only ${historyBarCount} completed bars; minimum ${WYCKOFF_V2_MIN_BARS} completed bars required for ${study.timeframe}.`
+      : ""
+
+    if (historyStatus === "Complete" && !study.analysis) {
+      throw new Error(`WYCKOFF_BUILD_ANALYSIS_FAILED: ${args.stock.ticker} ${study.timeframe}: ${study.error || "analysis unavailable"}`)
+    }
+
+    const analysis = historyStatus === "Complete" ? study.analysis! : null
+    const markers = analysis ? study.markers.slice(0, 24) : []
+    const scenarios = analysis ? normalizeScenarios(study.scenarios, analysis, study.timeframe) : []
+    if (analysis) {
+      const probabilitySum = analysis.bullProbability + analysis.baseProbability + analysis.bearProbability
+      if (probabilitySum !== 100 || scenarios.length !== 3) {
+        throw new Error(`WYCKOFF_BUILD_SCENARIO_INVALID: ${args.stock.ticker} ${study.timeframe}`)
+      }
+      const probabilities = scenarios.map((scenario) => scenario.probability)
+      if (
+        probabilities[0] !== analysis.bullProbability
+        || probabilities[1] !== analysis.baseProbability
+        || probabilities[2] !== analysis.bearProbability
+      ) {
+        throw new Error(`WYCKOFF_BUILD_PROBABILITY_MISMATCH: ${args.stock.ticker} ${study.timeframe}`)
+      }
+    }
+
+    const snapshotKey = `${args.runKey}|${args.stock.ticker}|${study.timeframe}`
+    return {
+      snapshot: `${args.stock.ticker} · ${study.timeframe} · ${args.scanDate}`,
+      snapshotKey,
+      runKey: args.runKey,
+      ticker: args.stock.ticker,
+      rank: args.stock.rank,
+      exchange: args.stock.exchange,
+      sector: args.stock.sector,
+      timeframe: study.timeframe,
+      barClosedAt: bars.at(-1) ? isoFromSeconds(bars.at(-1)!.time) : null,
+      historyBarCount,
+      historyStatus,
+      provider: basis.provider,
+      providerDetail: study.detail,
+      sourceUrl: basis.sourceUrl,
+      fetchedAt: basis.fetchedAt,
+      modelVersion: WYCKOFF_V2_MODEL_VERSION,
+      aggregationVersion: WYCKOFF_V2_AGGREGATION_VERSION,
+      promptVersion: WYCKOFF_V2_PROMPT_VERSION,
+      phase: analysis?.phase ?? null,
+      wyckoffState: analysis?.wyckoffState ?? null,
+      taBias: analysis?.taBias ?? null,
+      confidence: analysis?.confidence ?? null,
+      bullProbability: analysis?.bullProbability ?? null,
+      baseProbability: analysis?.baseProbability ?? null,
+      bearProbability: analysis?.bearProbability ?? null,
+      support: analysis?.support ?? null,
+      resistance: analysis?.resistance ?? null,
+      confirmation: analysis?.confirmation ?? null,
+      invalidation: analysis?.invalidation ?? null,
+      whatChanged: analysis?.whatChanged ?? null,
+      technical: analysis?.technical ?? {},
+      evidence: {
+        provider: basis.provider,
+        providerDetail: study.detail,
+        sourceUrl: basis.sourceUrl,
+        fetchedAt: basis.fetchedAt,
+        firstBarAt,
+        lastBarAt,
+        completedBars: historyBarCount,
+        derived: study.derived,
+        rulesTriggered: analysis ? normalizeRules(analysis, markers) : [],
+        missingReason,
+      },
+      markers,
+      scenarios,
+      validationStatus: "Valid",
+      validationError: "",
+    }
+  })
 }
