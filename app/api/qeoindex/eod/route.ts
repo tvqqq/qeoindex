@@ -3,14 +3,33 @@ import { start } from "workflow/api"
 
 import { isMachineRequestAuthorized } from "@/lib/auth/machine"
 import { notifyOpsError } from "@/lib/ops-alerts"
+import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { qeoindexEodPipeline } from "@/workflows/qeoindex-eod-pipeline"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
+function bearerToken(request: Request) {
+  const authorization = request.headers.get("authorization") ?? ""
+  if (!authorization.startsWith("Bearer ")) return ""
+  return authorization.slice("Bearer ".length).trim()
+}
+
+async function isQeoIndexSchedulerAuthorized(request: Request) {
+  if (isMachineRequestAuthorized(request, [process.env.CRON_SECRET], { allowUnconfiguredInDevelopment: true })) return true
+
+  const token = bearerToken(request)
+  if (!token) return false
+  const supabase = getSupabaseServerClient()
+  if (!supabase) return false
+
+  const { data, error } = await supabase.rpc("qeo_verify_eod_scheduler_secret", { p_secret: token })
+  return !error && data === true
+}
+
 async function trigger(request: NextRequest) {
-  if (!isMachineRequestAuthorized(request, [process.env.CRON_SECRET], { allowUnconfiguredInDevelopment: true })) {
+  if (!(await isQeoIndexSchedulerAuthorized(request))) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
   }
 
