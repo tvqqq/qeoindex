@@ -1,4 +1,4 @@
-name: phase2-red-ci
+name: phase2-ci
 
 on:
   push:
@@ -9,13 +9,13 @@ permissions:
   contents: read
 
 jobs:
-  schema-red:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Verify schema test is red before implementation
-        run: node --test tests/root-admin-schema.test.ts
+      - name: Targeted OHLCV contract tests
+        run: node --test tests/root-admin-schema.test.ts tests/ohlcv-history-store.test.ts
