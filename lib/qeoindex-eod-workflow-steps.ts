@@ -7,7 +7,7 @@ import { buildWyckoffV2TickerSnapshots, type WyckoffV2Snapshot } from "@/lib/wyc
 import { loadWyckoffV2CachedTickerHistory } from "@/lib/wyckoff-v2-cache-read"
 import { validateWyckoffV2SnapshotSet } from "@/lib/wyckoff-v2-contract"
 import { loadWyckoffV2Universe } from "@/lib/wyckoff-v2-universe-source"
-import { selectWyckoffV2Universe, type WyckoffV2UniverseRow } from "@/lib/wyckoff-v2-universe"
+import type { WyckoffV2UniverseRow } from "@/lib/wyckoff-v2-universe"
 import {
   beginWyckoffV2NotionRun,
   stageWyckoffV2Snapshots,
@@ -135,7 +135,7 @@ export async function runEodReadyStep(runId: string, startedAtIso: string) {
     phaseKey: "EOD_READY",
     fn: async () => {
       const market = await assertFinalEodMarketReady(startedAtIso)
-      const selection = selectWyckoffV2Universe(await loadWyckoffV2Universe())
+      const selection = await loadWyckoffV2Universe()
       const scanDate = market.expectedSessionDate
       const runKey = `WYCKOFF-${scanDate}-EOD-v2`
       const notion = await beginWyckoffV2NotionRun({
