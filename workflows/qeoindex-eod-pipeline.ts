@@ -1,0 +1,93 @@
+import { sleep } from "workflow"
+
+import {
+  runEodReadyStep,
+  runHistoryRefreshStep,
+  runWyckoffBuildStep,
+  runNotionStagingStep,
+  runNotionValidateStep,
+  runIngestStep,
+  runSupabasePublishStep,
+  runDeterministicCouncilStep,
+  runLlmDebateStep,
+  runCompleteStep,
+  failQeoIndexEodRunStep,
+  startQeoIndexEodRunStep,
+} from "@/lib/qeoindex-eod-workflow-steps"
+
+function retryAt(startedAtIso: string, attempt: number) {
+  const startedAt = new Date(startedAtIso).getTime()
+  return new Date(startedAt + attempt * 5 * 60_000)
+}
+
+function isEodNotReady(error: unknown) {
+  return (error as { code?: unknown } | null)?.code === "EOD_NOT_READY"
+}
+
+export async function qeoindexEodPipeline(startedAtIso: string) {
+  "use workflow"
+
+  const runId = await startQeoIndexEodRunStep(startedAtIso)
+  try {
+    let ready: Awaited<ReturnType<typeof runEodReadyStep>> | null = null
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      try {
+        ready = await runEodReadyStep(runId, startedAtIso)
+        break
+      } catch (error) {
+        if (!isEodNotReady(error) || attempt === 4) throw error
+        await sleep(retryAt(startedAtIso, attempt))
+      }
+    }
+    if (!ready) throw new Error("EOD_READY did not produce a pipeline context")
+
+    const shouldBuild = ready.notionAction === "write"
+    const shouldPublish = ready.notionAction !== "stop"
+
+    const history = await runHistoryRefreshStep(runId, ready.stocks, startedAtIso, shouldBuild)
+    const build = await runWyckoffBuildStep(runId, ready.stocks, ready.runKey, ready.scanDate, shouldBuild)
+    const staging = await runNotionStagingStep(runId, ready.stocks, ready.runKey, ready.scanDate, shouldBuild)
+    const providerSummary = staging.providers.length
+      ? `Persistent OHLCV cache providers: ${staging.providers.join(", ")}; 100 tickers; 500 snapshot contract.`
+      : build.providers.length
+        ? `Persistent OHLCV cache providers: ${build.providers.join(", ")}; 100 tickers; 500 snapshot contract.`
+        : "Existing notion-unified-v2 Ready run."
+    const validation = await runNotionValidateStep(runId, ready.runKey, ready.scanDate, startedAtIso, providerSummary, shouldBuild)
+    const ingest = await runIngestStep(runId, ready.runKey, shouldPublish)
+    const claimId = ingest.status === "claimed" ? ingest.supabaseRunId : ""
+    const publish = await runSupabasePublishStep(runId, ready.runKey, claimId, shouldPublish && Boolean(claimId))
+    const published = shouldPublish && publish.status !== "skipped"
+    const deterministic = await runDeterministicCouncilStep(runId, published)
+    const llm = await runLlmDebateStep(runId, published && deterministic.ok)
+    const complete = await runCompleteStep(runId, {
+      runKey: ready.runKey,
+      scanDate: ready.scanDate,
+      notionAction: ready.notionAction,
+      rankWarnings: ready.rankWarnings.slice(0, 10),
+      history,
+      build,
+      staging,
+      validation,
+      ingestStatus: ingest.status,
+      publishStatus: publish.status,
+      deterministicStatus: deterministic.status,
+      llmStatus: llm.status,
+    }, !shouldPublish)
+
+    return {
+      ok: true as const,
+      runId,
+      runKey: ready.runKey,
+      scanDate: ready.scanDate,
+      notionAction: ready.notionAction,
+      publishStatus: publish.status,
+      deterministicStatus: deterministic.status,
+      llmStatus: llm.status,
+      complete,
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await failQeoIndexEodRunStep(runId, message)
+    throw error
+  }
+}
