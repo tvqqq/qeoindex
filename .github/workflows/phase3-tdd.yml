@@ -18,4 +18,4 @@ jobs:
         with:
           node-version: 22
       - name: Wyckoff v2 targeted contracts
-        run: node --test tests/wyckoff-unified-schema.test.ts tests/wyckoff-v2-staging.test.ts tests/wyckoff-v2-notion-staging.test.ts tests/wyckoff-v2-notion-io.test.ts
+        run: node --test tests/wyckoff-unified-schema.test.ts tests/wyckoff-v2-staging.test.ts tests/wyckoff-v2-notion-staging.test.ts tests/wyckoff-v2-notion-io.test.ts tests/wyckoff-v2-ingest.test.ts
