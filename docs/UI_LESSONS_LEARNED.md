@@ -86,6 +86,8 @@ Do not conclude that a regression is "the chart library" until the surrounding C
 
 For realtime session boundaries, clearing only visible React state is insufficient. Clear ref-backed stores and client caches too, then guard every in-flight hydration callback so an older REST/Supabase response cannot repopulate stale data after the reset.
 
+Do not ignore the final sparkline datum in a memo comparator unless the component can prove that datum is a disposable tick. For a two-point session chart, the final datum contains the entire visible movement; ignoring it freezes the reference line even though new candle data arrived.
+
 ### 9. Visual fidelity never overrides interaction stability
 
 If a mockup uses blur, glow, filter stacks, oversized shadows, animated gradients, or other expensive decoration, reproduce the **visual hierarchy and intent**, not necessarily the exact rendering primitive.
