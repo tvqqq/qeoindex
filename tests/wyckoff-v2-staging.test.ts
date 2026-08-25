@@ -17,8 +17,6 @@ test("v2 universe keeps 100 Active HOSE tickers and moves duplicate-rank anomaly
   const rows = universe()
   rows[20] = { ...rows[20], ticker: "DMX", rank: 21 }
   rows[21] = { ...rows[21], ticker: "TCX", rank: 21 }
-  // Remove rank 100 so the input still mirrors the current 99-unique-rank shape.
-  rows[99] = { ...rows[99], rank: 99 }
 
   const result = selectWyckoffV2Universe(rows)
   assert.equal(result.stocks.length, 100)
