@@ -16,6 +16,7 @@ const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
 }
 
 const LEGACY_EOD_JOB_KEYS = new Set([
+  "qeoindex.eod_pipeline",
   "wyckoff.ingest",
   "ai_council.daily",
   "ai_council.debate_daily",
@@ -24,23 +25,15 @@ const LEGACY_EOD_JOB_KEYS = new Set([
 /**
  * Operational Admin Jobs catalog for the notion-unified-v2 target architecture.
  *
- * The base catalog still contains legacy endpoint-level jobs. The effective
- * catalog collapses those entries into one dependency-driven parent pipeline so
- * /admin/jobs presents the system as one EOD chain rather than independent
- * fixed-time jobs. The branch carrying this adapter must not be deployed until
- * the matching 15:15 orchestration trigger is enabled.
+ * Base endpoint-level definitions are retained for compatibility, but the
+ * effective catalog always exposes exactly one canonical parent pipeline. This
+ * prevents duplicate/raw definitions from leaking into /admin/jobs while the
+ * actual trigger remains Supabase pg_cron and execution remains Vercel Workflow.
  */
-export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = ADMIN_JOB_CATALOG.flatMap((job) => {
-  if (job.key === "ai_council.daily") {
-    return [QEOINDEX_EOD_PIPELINE_JOB]
-  }
-
-  if (LEGACY_EOD_JOB_KEYS.has(job.key)) {
-    return []
-  }
-
-  return [job]
-})
+export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
+  QEOINDEX_EOD_PIPELINE_JOB,
+  ...ADMIN_JOB_CATALOG.filter((job) => !LEGACY_EOD_JOB_KEYS.has(job.key)),
+]
 
 export function getEffectiveAdminJobDefinition(key: string): AdminJobDefinition | undefined {
   return EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === key)
