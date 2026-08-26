@@ -1168,8 +1168,9 @@ export function LiveMarketBoardV2({
           const floor = firstPositive(data, ["floorPrice", "floor"])
           updateLiveQuote(ticker, (currentQuote) => {
             const previous = currentQuote as LiveStockQuote | undefined
-            const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
-            const reference = normalizeMarketPrice(rawReference, price) ?? rawReference
+            const rawRef = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
+            const rawReference = rawRef > 1000 ? rawRef / 1000 : rawRef
+            const reference = normalizeMarketPrice(rawReference, price) ?? (rawReference > 1000 ? rawReference / 1000 : rawReference)
             if (reference > 0) dailyReferences.current[ticker] = reference
             const change = reference > 0 ? price - reference : previous?.change
             const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : previous?.changePercent ?? 0
@@ -1178,8 +1179,8 @@ export function LiveMarketBoardV2({
               symbol: ticker,
               price,
               reference: reference || undefined,
-              ceiling: ceiling || previous?.ceiling,
-              floor: floor || previous?.floor,
+              ceiling: ceiling ? (ceiling > 1000 ? ceiling / 1000 : ceiling) : previous?.ceiling,
+              floor: floor ? (floor > 1000 ? floor / 1000 : floor) : previous?.floor,
               change,
               changePercent,
               volume: totalVolume || previous?.volume,
@@ -1198,18 +1199,19 @@ export function LiveMarketBoardV2({
           const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
           updateLiveQuote(ticker, (currentQuote) => {
             const previous = currentQuote as LiveStockQuote | undefined
-            const livePrice = price || previous?.price
+            const livePrice = price ? (price > 1000 ? price / 1000 : price) : previous?.price
             if (!livePrice) return previous
-            const rawReference = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
-            const reference = normalizeMarketPrice(rawReference, livePrice) ?? rawReference
+            const rawRef = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
+            const rawReference = rawRef > 1000 ? rawRef / 1000 : rawRef
+            const reference = normalizeMarketPrice(rawReference, livePrice) ?? (rawReference > 1000 ? rawReference / 1000 : rawReference)
             if (reference > 0) dailyReferences.current[ticker] = reference
             return {
               ...previous,
               symbol: ticker,
               price: livePrice,
               reference: reference || undefined,
-              ceiling: ceiling || previous?.ceiling,
-              floor: floor || previous?.floor,
+              ceiling: ceiling ? (ceiling > 1000 ? ceiling / 1000 : ceiling) : previous?.ceiling,
+              floor: floor ? (floor > 1000 ? floor / 1000 : floor) : previous?.floor,
               change: reference > 0 ? livePrice - reference : previous?.change,
               changePercent: reference > 0 ? ((livePrice - reference) / reference) * 100 : previous?.changePercent ?? 0,
               volume: previous?.volume,
@@ -1507,12 +1509,20 @@ export function LiveMarketBoardV2({
       const q = displayQuotes[ticker] as LiveStockQuote | undefined
       const s = universe.find((st) => st.ticker === ticker)
       const h = priceHistoryCloses[ticker] ?? EMPTY_HISTORY
+      const rawRef = dailyReferences.current[ticker] || q?.reference || s?.lastClose
+      const ref = rawRef ? (rawRef > 1000 ? rawRef / 1000 : rawRef) : undefined
+      const rawPrice = q?.price || ref
+      const price = rawPrice ? (rawPrice > 1000 ? rawPrice / 1000 : rawPrice) : undefined
+      const rawCeil = q?.ceiling
+      const ceiling = rawCeil ? (rawCeil > 1000 ? rawCeil / 1000 : rawCeil) : (ref ? Math.round(ref * 1.07 * 100) / 100 : undefined)
+      const rawFloor = q?.floor
+      const floor = rawFloor ? (rawFloor > 1000 ? rawFloor / 1000 : rawFloor) : (ref ? Math.round(ref * 0.93 * 100) / 100 : undefined)
       openOrderBook(`board:${ticker}`, ticker, {
         sector: s?.sector,
-        price: q?.price,
-        reference: q?.reference,
-        ceiling: q?.ceiling,
-        floor: q?.floor,
+        price,
+        reference: ref,
+        ceiling,
+        floor,
         changePercent: q?.changePercent,
         volume: q?.volume,
         foreignBuyVolume: q?.foreignBuyVolume,

@@ -217,10 +217,13 @@ function formatCompactVolume(value?: number | null) {
 function normalizeDepth(rows: unknown): DepthLevel[] {
   if (!Array.isArray(rows)) return []
   return rows
-    .map((row: any) => ({
-      price: number(row?.price),
-      volume: number(row?.qtty ?? row?.quantity ?? row?.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
-    }))
+    .map((row: any) => {
+      const rawPrice = number(row?.price)
+      const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
+      const rawVol = number(row?.qtty ?? row?.quantity ?? row?.volume ?? row?.vol)
+      const volume = rawVol * ORDERBOOK_VOLUME_MULTIPLIER
+      return { price, volume }
+    })
     .filter((row) => row.price > 0 && row.volume >= 0)
 }
 
@@ -401,45 +404,52 @@ function sidePillMeta(side: TradeSide) {
 }
 
 function nextQuote(symbol: string, data: Record<string, unknown>, current: StockQuote | null): StockQuote | null {
-  const explicitRef = firstPositive(data, ["referencePrice", "refPrice", "reference", "r"])
+  const explicitRef = firstPositive(data, ["referencePrice", "refPrice", "reference", "r", "basicPrice", "priorClosePrice"])
   const explicitCeil = firstPositive(data, ["ceilingPrice", "ceiling", "c"])
   const explicitFloor = firstPositive(data, ["floorPrice", "floor", "f"])
 
+  // If explicit reference is provided, normalize to kilo scale (e.g. 69500 -> 69.5)
+  let rawReference = explicitRef ? (explicitRef > 1000 ? explicitRef / 1000 : explicitRef) : 0
+
   // If explicit reference is missing or equal to price (which happens on bad feeds for gap-up stocks), protect current reference
-  let rawReference = explicitRef
   if (!rawReference || (rawReference === current?.price && current?.reference && current.reference !== rawReference)) {
-    rawReference = current?.reference || 0
+    rawReference = current?.reference ? (current.reference > 1000 ? current.reference / 1000 : current.reference) : 0
   }
   if (!rawReference && explicitCeil && explicitFloor) {
-    rawReference = (explicitCeil + explicitFloor) / 2
+    const c = explicitCeil > 1000 ? explicitCeil / 1000 : explicitCeil
+    const f = explicitFloor > 1000 ? explicitFloor / 1000 : explicitFloor
+    rawReference = Math.round(((c + f) / 2) * 100) / 100
   } else if (!rawReference && explicitCeil) {
-    rawReference = explicitCeil / 1.07
+    const c = explicitCeil > 1000 ? explicitCeil / 1000 : explicitCeil
+    rawReference = Math.round((c / 1.07) * 100) / 100
   }
 
   const explicitPrice = firstPositive(data, ["matchPrice", "price", "lastPrice", "matchedPrice", "expectedMatchedPrice", "expectedPrice"])
-  const rawPrice = explicitPrice || current?.price || rawReference || 0
+  let rawPrice = explicitPrice
+    ? (explicitPrice > 1000 ? explicitPrice / 1000 : explicitPrice)
+    : (current?.price ? (current.price > 1000 ? current.price / 1000 : current.price) : rawReference || 0)
   if (rawPrice <= 0 && rawReference <= 0) return current
 
-  const reference = rawReference > 0 ? normalizeMarketPrice(rawReference) ?? rawReference : current?.reference
-  const price = rawPrice > 0 ? normalizeMarketPrice(rawPrice, reference) ?? rawPrice : (reference ?? current?.price ?? 0)
+  const reference = rawReference > 0 ? (rawReference > 1000 ? rawReference / 1000 : rawReference) : current?.reference
+  const price = rawPrice > 0 ? (rawPrice > 1000 ? rawPrice / 1000 : rawPrice) : (reference ?? current?.price ?? 0)
   if (price <= 0) return current
 
   const ceiling = explicitCeil
-    ? normalizeMarketPrice(explicitCeil, reference || price) ?? explicitCeil
-    : current?.ceiling ?? (reference ? Math.round(reference * 1.07 * 100) / 100 : undefined)
+    ? (explicitCeil > 1000 ? explicitCeil / 1000 : explicitCeil)
+    : current?.ceiling ? (current.ceiling > 1000 ? current.ceiling / 1000 : current.ceiling) : (reference ? Math.round(reference * 1.07 * 100) / 100 : undefined)
 
   const floor = explicitFloor
-    ? normalizeMarketPrice(explicitFloor, reference || price) ?? explicitFloor
-    : current?.floor ?? (reference ? Math.round(reference * 0.93 * 100) / 100 : undefined)
+    ? (explicitFloor > 1000 ? explicitFloor / 1000 : explicitFloor)
+    : current?.floor ? (current.floor > 1000 ? current.floor / 1000 : current.floor) : (reference ? Math.round(reference * 0.93 * 100) / 100 : undefined)
 
   const rawHigh = firstPositive(data, ["highPrice", "high", "highest"]) || (current?.high ? Math.max(current.high, price) : price)
-  const high = rawHigh ? normalizeMarketPrice(rawHigh, reference || price) ?? rawHigh : price
+  const high = rawHigh ? (rawHigh > 1000 ? rawHigh / 1000 : rawHigh) : price
 
   const rawLow = firstPositive(data, ["lowPrice", "low", "lowest"]) || (current?.low ? Math.min(current.low, price) : price)
-  const low = rawLow ? normalizeMarketPrice(rawLow, reference || price) ?? rawLow : price
+  const low = rawLow ? (rawLow > 1000 ? rawLow / 1000 : rawLow) : price
 
   const rawAvg = firstPositive(data, ["avgPrice", "averagePrice", "avePrice"]) || current?.avgPrice
-  const avgPrice = rawAvg ? normalizeMarketPrice(rawAvg, reference || price) ?? rawAvg : undefined
+  const avgPrice = rawAvg ? (rawAvg > 1000 ? rawAvg / 1000 : rawAvg) : undefined
   
   const rawLot = Number(data?.lot)
   const lotVolume = Number.isFinite(rawLot) && rawLot > 0 ? rawLot * 10 : 0
@@ -578,14 +588,19 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       setHistoryState("READY")
       setHistoryMessage("Phiên mới 09:00 · đang chờ dữ liệu ATO.")
       setQuote((current) => {
-        const reference = current?.reference || initialMeta?.reference || initialMeta?.price || 0
+        const rawRef = current?.reference || initialMeta?.reference || initialMeta?.price || 0
+        const reference = rawRef > 1000 ? rawRef / 1000 : rawRef
         if (!reference) return null
+        const rawCeil = current?.ceiling || initialMeta?.ceiling
+        const ceiling = rawCeil ? (rawCeil > 1000 ? rawCeil / 1000 : rawCeil) : Math.round(reference * 1.07 * 100) / 100
+        const rawFloor = current?.floor || initialMeta?.floor
+        const floor = rawFloor ? (rawFloor > 1000 ? rawFloor / 1000 : rawFloor) : Math.round(reference * 0.93 * 100) / 100
         return {
           symbol,
           price: reference,
           reference,
-          ceiling: current?.ceiling || initialMeta?.ceiling,
-          floor: current?.floor || initialMeta?.floor,
+          ceiling,
+          floor,
           change: 0,
           changePercent: 0,
           totalVolume: 0,
@@ -604,8 +619,8 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
 
   // Hydrate from initial metadata if symbol changes
   useEffect(() => {
-    if (getMarketUiPhase() === "ATO") return
-    const cached = sessionOrderBookCache.get(symbol)
+    const isAto = getMarketUiPhase() === "ATO"
+    const cached = isAto ? null : sessionOrderBookCache.get(symbol)
     if (cached) {
       setBids(cached.bids)
       setAsks(cached.asks)
@@ -620,16 +635,20 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       setHistoryMessage("Đã tải từ bộ nhớ đệm.")
     } else if (initialMeta) {
       if (initialMeta.price || initialMeta.reference) {
-        const reference = initialMeta.reference ? normalizeMarketPrice(initialMeta.reference) ?? initialMeta.reference : undefined
-        const price = initialMeta.price ? normalizeMarketPrice(initialMeta.price, reference) ?? initialMeta.price : (reference ?? 0)
-        const ceiling = initialMeta.ceiling ? normalizeMarketPrice(initialMeta.ceiling, reference || price) ?? initialMeta.ceiling : undefined
-        const floor = initialMeta.floor ? normalizeMarketPrice(initialMeta.floor, reference || price) ?? initialMeta.floor : undefined
+        const rawRef = initialMeta.reference ?? initialMeta.price ?? 0
+        const reference = rawRef > 1000 ? rawRef / 1000 : rawRef
+        const rawPrice = initialMeta.price ?? reference
+        const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
+        const rawCeil = initialMeta.ceiling
+        const ceiling = rawCeil ? (rawCeil > 1000 ? rawCeil / 1000 : rawCeil) : (reference ? Math.round(reference * 1.07 * 100) / 100 : undefined)
+        const rawFloor = initialMeta.floor
+        const floor = rawFloor ? (rawFloor > 1000 ? rawFloor / 1000 : rawFloor) : (reference ? Math.round(reference * 0.93 * 100) / 100 : undefined)
         const change = reference && price ? price - reference : 0
         const changePercent = reference && reference > 0 ? (change / reference) * 100 : (initialMeta.changePercent ?? 0)
         setQuote({
           symbol,
           price,
-          reference,
+          reference: reference || undefined,
           ceiling,
           floor,
           change,
@@ -741,10 +760,10 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
 
   // Fetch REST session history + initial hydration with smart cache (SWR)
   useEffect(() => {
-    if (getMarketUiPhase() === "ATO") return
     const controller = new AbortController()
     let disposed = false
-    const cached = sessionOrderBookCache.get(symbol)
+    const isAto = getMarketUiPhase() === "ATO"
+    const cached = isAto ? null : sessionOrderBookCache.get(symbol)
 
     if (!cached) {
       setHistoryState("LOADING")
@@ -760,11 +779,13 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
         })
         const payload = (await response.json()) as SessionHistoryResponse
         if (!response.ok || !payload.ok) throw new Error(payload.message ?? `Session history ${response.status}`)
-        if (disposed || getMarketUiPhase() === "ATO") return
+        if (disposed) return
 
-        const prices = (payload.prices ?? []).map((point) => number(point.close)).filter((value) => value > 0)
+        const prices = isAto ? [] : (payload.prices ?? []).map((point) => number(point.close)).filter((value) => value > 0)
         if (prices.length > 0) {
           setPriceHistory(prices)
+        } else if (isAto) {
+          setPriceHistory([])
         }
 
         let nextCompany: CompanyInfo | null = null
@@ -841,7 +862,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           })
         }
 
-        const historicalTrades: StreamTrade[] = parseRawTrades(payload.trades)
+        const historicalTrades: StreamTrade[] = isAto ? [] : parseRawTrades(payload.trades)
 
         let mergedTradesList = historicalTrades
         if (historicalTrades.length > 0) {
@@ -849,9 +870,14 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
             mergedTradesList = mergeTrades(historicalTrades, current)
             return mergedTradesList
           })
+        } else if (isAto) {
+          setTrades([])
         }
 
-        if (payload.tradesTruncated) {
+        if (isAto) {
+          setHistoryState("READY")
+          setHistoryMessage("Phiên mới 09:00 · Đang chờ khớp lệnh ATO.")
+        } else if (payload.tradesTruncated) {
           setHistoryState("PARTIAL")
           setHistoryMessage(`Đã tải ${historicalTrades.length.toLocaleString("vi-VN")} giao dịch (giới hạn thanh khoản).`)
         } else {

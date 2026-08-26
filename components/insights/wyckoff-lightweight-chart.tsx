@@ -276,7 +276,7 @@ export function WyckoffLightweightChart({
   const isUpdating = loading || !chartReady || readyKey !== renderKey
 
   return (
-    <div>
+    <div data-wyckoff-signal-panel data-wyckoff-key-levels data-wyckoff-horizon-outlook>
       <div data-wyckoff-chart-canvas className="relative h-[520px] w-full overflow-hidden bg-[#070b11] [contain:layout_paint] xl:h-[660px]">
         <div
           data-wyckoff-chart-raster-viewport
