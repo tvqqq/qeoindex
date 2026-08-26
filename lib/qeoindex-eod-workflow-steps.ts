@@ -1,7 +1,10 @@
 import { runAiCouncilDailyOperation, runAiCouncilDebateOperation } from "@/lib/ai-council-operations"
 import { markQeoIndexEodPhaseSkipped, runQeoIndexEodPhase } from "@/lib/admin/job-phase-telemetry"
 import { QEOINDEX_EOD_JOB_KEY } from "@/lib/admin/job-phases"
-import { refreshOhlcvHistoryUniverse } from "@/lib/ohlcv-history-store"
+import {
+  refreshOhlcvHistoryBatch,
+  type OhlcvUniverseRefreshResult,
+} from "@/lib/ohlcv-history-store"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { buildWyckoffV2TickerSnapshots, type WyckoffV2Snapshot } from "@/lib/wyckoff-v2-builder"
 import { loadWyckoffV2CachedTickerHistory } from "@/lib/wyckoff-v2-cache-read"
@@ -176,8 +179,16 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
     runId,
     phaseKey: "MARKET_CLOSE_COLLECT",
     fn: async () => {
+      const supabase = requiredSupabase()
       const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "https://glwhhrmejlonhyorvtzm.supabase.co"
-      const syncSecret = process.env.KFSP_SYNC_SECRET || process.env.CRON_SECRET || ""
+      const secretResult = await supabase.rpc("qeo_get_market_close_sync_secret")
+      const syncSecret = typeof secretResult.data === "string" ? secretResult.data.trim() : ""
+      if (secretResult.error || !syncSecret) {
+        throw Object.assign(
+          new Error(`MARKET_CLOSE_COLLECT failed to load dedicated sync secret: ${secretResult.error?.message || "missing secret"}`),
+          { code: "MARKET_CLOSE_COLLECT_FAILED" },
+        )
+      }
       const cleanUrl = supabaseUrl.endsWith("/") ? supabaseUrl.slice(0, -1) : supabaseUrl
       const endpoint = `${cleanUrl}/functions/v1/market-insight-eod-sync`
       const sessionDate = vietnamDateKey(startedAtIso)
@@ -236,14 +247,12 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
 
       const payload = await response.json().catch(() => ({})) as Record<string, unknown>
       if (!response.ok || payload.ok === false) {
-        const errCode = String(payload.error || `HTTP_${response.status}`)
-        return {
-          ok: false,
-          status: "degraded" as const,
-          error: errCode,
-          sessionDate: String(payload.session_date || sessionDate),
-        }
-      }
+      const errCode = String(payload.error || `HTTP_${response.status}`)
+      throw Object.assign(
+        new Error(`MARKET_CLOSE_COLLECT failed: ${errCode}`),
+        { code: "MARKET_CLOSE_COLLECT_FAILED" },
+      )
+    }
 
       return {
         ok: true,
@@ -263,28 +272,58 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
   })
 }
 
-export async function runHistoryRefreshStep(runId: string, stocks: WyckoffV2UniverseRow[], startedAtIso: string, enabled = true) {
+function mergeHistoryRefreshProgress(
+  previous: OhlcvUniverseRefreshResult,
+  current: OhlcvUniverseRefreshResult,
+): OhlcvUniverseRefreshResult {
+  return {
+    requestedTickers: previous.requestedTickers + current.requestedTickers,
+    completedTickers: previous.completedTickers + current.completedTickers,
+    failedTickers: previous.failedTickers + current.failedTickers,
+    dailyFetchedBars: previous.dailyFetchedBars + current.dailyFetchedBars,
+    hourlyFetchedBars: previous.hourlyFetchedBars + current.hourlyFetchedBars,
+    backfillOperations: previous.backfillOperations + current.backfillOperations,
+    deltaOperations: previous.deltaOperations + current.deltaOperations,
+    limitedCoverage: [...previous.limitedCoverage, ...current.limitedCoverage],
+    errors: [...previous.errors, ...current.errors],
+  }
+}
+
+export async function runHistoryRefreshBatchStep(
+  runId: string,
+  stocks: WyckoffV2UniverseRow[],
+  startedAtIso: string,
+  progress: OhlcvUniverseRefreshResult,
+  enabled = true,
+) {
   "use step"
   if (!enabled) {
     await markQeoIndexEodPhaseSkipped({ runId, phaseKey: "HISTORY_REFRESH", reason: "Existing Notion run does not require history refresh." })
-    return { skipped: true as const, failedTickers: 0, limitedCoverage: [] as unknown[] }
+    return progress
   }
   return runQeoIndexEodPhase({
     runId,
     phaseKey: "HISTORY_REFRESH",
     fn: async () => {
-      const result = await refreshOhlcvHistoryUniverse(requiredSupabase(), stocks.map((stock) => stock.ticker), new Date(startedAtIso))
+      if (stocks.length < 1 || stocks.length > 10) {
+        throw Object.assign(new Error(`HISTORY_REFRESH batch must contain 1-10 tickers; received ${stocks.length}`), { code: "HISTORY_REFRESH_FAILED" })
+      }
+      const result = await refreshOhlcvHistoryBatch(requiredSupabase(), stocks.map((stock) => stock.ticker), new Date(startedAtIso))
       if (result.failedTickers > 0) {
         throw Object.assign(new Error(`HISTORY_REFRESH failed for ${result.failedTickers} ticker(s): ${result.errors.slice(0, 5).map((item) => `${item.ticker}: ${item.error}`).join(" | ")}`), { code: "HISTORY_REFRESH_FAILED" })
       }
-      if (result.completedTickers !== 100) throw new Error(`HISTORY_REFRESH completed ${result.completedTickers}/100 tickers`)
-      return result
+      if (result.completedTickers !== result.requestedTickers) {
+        throw Object.assign(new Error(`HISTORY_REFRESH batch completed ${result.completedTickers}/${result.requestedTickers} tickers`), { code: "HISTORY_REFRESH_FAILED" })
+      }
+      return mergeHistoryRefreshProgress(progress, result)
     },
     summarize: (result) => ({
       requestedTickers: result.requestedTickers,
       completedTickers: result.completedTickers,
       dailyFetchedBars: result.dailyFetchedBars,
       hourlyFetchedBars: result.hourlyFetchedBars,
+      backfillOperations: result.backfillOperations,
+      deltaOperations: result.deltaOperations,
       limitedCoverageCount: result.limitedCoverage.length,
     }),
   })
