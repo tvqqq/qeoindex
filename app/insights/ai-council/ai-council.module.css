@@ -1,107 +1,107 @@
-.readable {
+.readable main {
   font-family: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif;
   font-optical-sizing: auto;
   font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
   text-rendering: optimizeLegibility;
 }
 
-.readable :global(.font-ticker),
-.readable :global(.font-mono) {
+.readable main :global(.font-ticker),
+.readable main :global(.font-mono) {
   font-family: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif !important;
 }
 
-.readable :global(.font-mono) {
+.readable main :global(.font-mono) {
   font-variant-numeric: tabular-nums lining-nums;
   letter-spacing: -0.018em;
 }
 
-.readable :global(.font-black) {
+.readable main :global(.font-black) {
   font-weight: 800 !important;
 }
 
 /* Council screens carry dense financial metadata; lift the tiny utility scale
    without changing the rest of QeoIndex. */
-.readable [class*="text-[8px]"] {
+.readable main [class*="text-[8px]"] {
   font-size: 0.6875rem !important;
   line-height: 1rem !important;
 }
 
-.readable [class*="text-[9px]"] {
+.readable main [class*="text-[9px]"] {
   font-size: 0.75rem !important;
   line-height: 1.1rem !important;
 }
 
-.readable [class*="text-[10px]"] {
+.readable main [class*="text-[10px]"] {
   font-size: 0.8125rem !important;
   line-height: 1.25rem !important;
 }
 
-.readable [class*="text-[11px]"] {
+.readable main [class*="text-[11px]"] {
   font-size: 0.875rem !important;
   line-height: 1.4rem !important;
 }
 
-.readable [class*="text-[12px]"] {
+.readable main [class*="text-[12px]"] {
   font-size: 0.9375rem !important;
   line-height: 1.5rem !important;
 }
 
-.readable :global(.text-xs) {
+.readable main :global(.text-xs) {
   font-size: 0.875rem !important;
   line-height: 1.35rem !important;
 }
 
-.readable :global(.text-sm) {
+.readable main :global(.text-sm) {
   font-size: 1rem !important;
   line-height: 1.55rem !important;
 }
 
 /* Numbers are decision-critical, so they get a stronger hierarchy than prose. */
-.readable :global(.font-mono.text-sm) {
+.readable main :global(.font-mono.text-sm) {
   font-size: 1.0625rem !important;
   line-height: 1.45rem !important;
 }
 
-.readable :global(.font-mono.text-lg) {
+.readable main :global(.font-mono.text-lg) {
   font-size: 1.375rem !important;
   line-height: 1.75rem !important;
 }
 
-.readable :global(.font-mono.text-xl) {
+.readable main :global(.font-mono.text-xl) {
   font-size: 1.75rem !important;
   line-height: 2.05rem !important;
 }
 
-.readable :global(.font-mono.text-2xl) {
+.readable main :global(.font-mono.text-2xl) {
   font-size: 2rem !important;
   line-height: 2.3rem !important;
 }
 
-.readable :global(.font-mono.text-3xl) {
+.readable main :global(.font-mono.text-3xl) {
   font-size: 2.5rem !important;
   line-height: 2.8rem !important;
 }
 
-.readable h1,
-.readable h2,
-.readable h3 {
+.readable main h1,
+.readable main h2,
+.readable main h3 {
   letter-spacing: -0.025em;
 }
 
-.readable h1 {
+.readable main h1 {
   line-height: 1.15;
 }
 
 /* Raise secondary-copy contrast; slate-600 was too faint on the dark Council UI. */
-.readable :global(.text-slate-600) {
+.readable main :global(.text-slate-600) {
   color: #8593a8 !important;
 }
 
-.readable :global(.text-slate-500) {
+.readable main :global(.text-slate-500) {
   color: #9aa8ba !important;
 }
 
-.readable :global(.text-slate-400) {
+.readable main :global(.text-slate-400) {
   color: #b6c0cf !important;
 }
 
@@ -117,50 +117,50 @@
   margin-bottom: 1.75rem !important;
 }
 
-.readable :global(.gap-2) {
+.readable main :global(.gap-2) {
   gap: 0.75rem !important;
 }
 
-.readable :global(.gap-3) {
+.readable main :global(.gap-3) {
   gap: 1rem !important;
 }
 
-.readable :global(.gap-4) {
+.readable main :global(.gap-4) {
   gap: 1.5rem !important;
 }
 
-.readable :global(.gap-5) {
+.readable main :global(.gap-5) {
   gap: 1.75rem !important;
 }
 
-.readable :global(.space-y-4) > :not(:last-child) {
+.readable main :global(.space-y-4) > :not(:last-child) {
   margin-block-end: 1.5rem !important;
 }
 
-.readable article[class*="rounded-2xl"][class*="p-4"],
-.readable section[class*="rounded-2xl"][class*="p-4"] {
+.readable main article[class*="rounded-2xl"][class*="p-4"],
+.readable main section[class*="rounded-2xl"][class*="p-4"] {
   padding: 1.25rem !important;
 }
 
-.readable section[class*="rounded-2xl"][class*="p-3.5"] {
+.readable main section[class*="rounded-2xl"][class*="p-3.5"] {
   padding: 1.125rem !important;
 }
 
-.readable section[class*="grid"] > div[class*="rounded-2xl"][class*="p-4"] {
+.readable main section[class*="grid"] > div[class*="rounded-2xl"][class*="p-4"] {
   padding: 1.25rem !important;
 }
 
-.readable aside button[class*="grid"] {
+.readable main aside button[class*="grid"] {
   padding-top: 0.8rem !important;
   padding-bottom: 0.8rem !important;
 }
 
-.readable table th {
+.readable main table th {
   padding-top: 0.75rem !important;
   padding-bottom: 0.75rem !important;
 }
 
-.readable table td {
+.readable main table td {
   padding-top: 0.875rem !important;
   padding-bottom: 0.875rem !important;
 }
@@ -171,7 +171,7 @@
     padding-bottom: 2rem !important;
   }
 
-  .readable :global(.font-mono.text-3xl) {
+  .readable main :global(.font-mono.text-3xl) {
     font-size: 2rem !important;
     line-height: 2.35rem !important;
   }

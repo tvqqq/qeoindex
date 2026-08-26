@@ -1526,9 +1526,15 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
               {DATE_FORMAT.format(new Date(data.generatedAt))}
               <Badge variant="outline" className="border-up/25 bg-up/10 text-up">Authenticated insights</Badge>
             </div>
-            <h1 className="mt-4 text-4xl font-extrabold tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
-              <SoftBlurIn stagger={18}>Insights thị trường</SoftBlurIn>
-            </h1>
+            <div className="mt-4 flex items-center gap-3.5 sm:gap-4.5">
+              <div className="relative flex size-11 sm:size-13 md:size-14 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/20 via-cyan-500/15 to-purple-500/20 shadow-[0_0_24px_-4px_rgba(34,201,138,0.45),inset_0_1px_0_rgba(255,255,255,0.22)] transition-transform duration-300 hover:scale-105">
+                <div className="absolute inset-0 rounded-2xl bg-emerald-400/10 animate-pulse" />
+                <img src="/brand/stockos-mark.svg" alt="QeoIndex Logo" className="relative size-6 sm:size-7 md:size-8 drop-shadow-[0_0_10px_rgba(34,201,138,0.55)] animate-[pulse_3s_ease-in-out_infinite]" />
+              </div>
+              <h1 className="text-4xl font-extrabold tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
+                <SoftBlurIn stagger={18}>Insights thị trường</SoftBlurIn>
+              </h1>
+            </div>
             <p className="mt-4 max-w-3xl text-base font-medium leading-7 text-muted-2 sm:text-lg">
               Tín hiệu đủ rõ để hành động, trước khi bảng giá đổi màu.
             </p>

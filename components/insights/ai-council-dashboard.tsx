@@ -5,6 +5,7 @@ import {
   Activity,
   BarChart3,
   BrainCircuit,
+  CalendarDays,
   ChevronDown,
   CircleAlert,
   Crown,
@@ -157,8 +158,38 @@ export function AiCouncilDashboard({ data, initialTicker = "" }: { data: AiCounc
   }
 
   return (
-    <div className="min-h-screen bg-[#06090d] text-white"><TopNav/><main className="mx-auto max-w-[1720px] px-3 py-4 sm:px-5 lg:px-6">
-      <header className="mb-4 flex flex-wrap items-end justify-between gap-4"><div className="flex items-center gap-2"><span className="flex size-9 items-center justify-center rounded-xl border border-violet-400/25 bg-violet-400/[0.09] text-violet-300"><BrainCircuit className="size-[18px]"/></span><div><div className="flex items-center gap-2"><h1 className="font-ticker text-xl font-black sm:text-2xl">AI Council</h1><span className="rounded-full border border-violet-400/20 bg-violet-400/[0.08] px-2 py-0.5 text-[9px] font-black text-violet-300">INVESTOR VIEW</span></div><p className="text-[10px] text-slate-500">Khuyến nghị đơn giản trước; specialist reasoning, Bull/Bear, Risk và audit được giữ ở lớp phân tích chuyên sâu.</p></div></div><div className="flex flex-wrap gap-2 text-[9px] text-slate-500"><span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] px-2.5 py-1.5"><Database className="size-3.5 text-cyan-400"/>Rating {data.ratingDate || "—"}</span><span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] px-2.5 py-1.5"><Crown className="size-3.5 text-violet-400"/>Evidence Ensemble V1</span><span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] px-2.5 py-1.5"><History className="size-3.5 text-emerald-400"/>Audit {data.history.length}</span></div></header>
+    <div className="min-h-screen bg-[#06090d] text-white">
+      <TopNav />
+      <main className="mx-auto max-w-[1720px] px-3 py-4 sm:px-5 lg:px-6">
+        <header className="mb-6 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+              <CalendarDays className="size-4 text-violet-400" />
+              {data.ratingDate ? `RATING ${data.ratingDate}` : "AI COUNCIL"}
+              <span className="rounded-full border border-violet-400/25 bg-violet-400/10 px-2 py-0.5 text-[10px] font-black text-violet-300">INVESTOR VIEW</span>
+            </div>
+            <div className="mt-4 flex items-center gap-3.5 sm:gap-4.5">
+              <div className="relative flex size-11 sm:size-13 md:size-14 shrink-0 items-center justify-center rounded-2xl border border-violet-400/30 bg-gradient-to-br from-violet-500/20 via-purple-500/15 to-cyan-500/20 shadow-[0_0_24px_-4px_rgba(168,85,247,0.45),inset_0_1px_0_rgba(255,255,255,0.22)] transition-transform duration-300 hover:scale-105">
+                <div className="absolute inset-0 rounded-2xl bg-violet-400/10 animate-pulse" />
+                <BrainCircuit className="relative size-6 sm:size-7 md:size-8 text-violet-300 drop-shadow-[0_0_10px_rgba(168,85,247,0.55)] animate-[pulse_3s_ease-in-out_infinite]" />
+              </div>
+              <h1 className="text-4xl font-extrabold tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
+                AI Council
+              </h1>
+            </div>
+            <p className="mt-4 max-w-3xl text-base font-medium leading-7 text-slate-400 sm:text-lg">
+              Khuyến nghị đơn giản trước; specialist reasoning, Bull/Bear, Risk và audit được giữ ở lớp phân tích chuyên sâu.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-white/[0.08] bg-[#080d13] px-4 py-3 text-sm text-slate-400">
+            <span className="inline-flex items-center gap-1.5"><Database className="size-4 text-cyan-400" />Rating {data.ratingDate || "—"}</span>
+            <span className="text-white/20">·</span>
+            <span className="inline-flex items-center gap-1.5"><Crown className="size-4 text-violet-400" />Evidence Ensemble V1</span>
+            <span className="text-white/20">·</span>
+            <span className="inline-flex items-center gap-1.5"><History className="size-4 text-emerald-400" />Audit {data.history.length}</span>
+          </div>
+        </header>
       {data.stocks.length && active ? <div className="grid gap-4 xl:grid-cols-[290px_minmax(0,1fr)]"><aside className="xl:sticky xl:top-[72px] xl:h-[calc(100vh-88px)]"><div className="flex h-full min-h-[520px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13]"><div className="border-b border-white/[0.06] p-3"><div className="relative"><Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-600"/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã / công ty..." className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-2.5 pl-9 pr-8 text-xs outline-none focus:border-violet-400/35"/>{query ? <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600"><X className="size-3.5"/></button> : null}</div><div className="mt-2 flex gap-1">{([['all','Tất cả'],['bull','Bull'],['wait','Wait'],['risk','Risk']] as const).map(([value, label]) => <button key={value} onClick={() => setFilter(value)} className={cn("rounded-lg px-2.5 py-1.5 text-[9px] font-bold", filter === value ? "bg-violet-400/15 text-violet-300" : "text-slate-500")}>{label}</button>)}</div></div><div className="min-h-0 flex-1 overflow-y-auto">{filtered.map((stock) => <button key={stock.ticker} onClick={() => selectTicker(stock.ticker)} className={cn("grid w-full grid-cols-[44px_1fr_74px] items-center border-b border-white/[0.04] px-3 py-2.5 text-left", stock.ticker === activeTicker ? "border-l-2 border-l-violet-400 bg-violet-400/[0.08]" : "hover:bg-white/[0.03]")}><span className="font-mono text-[9px] text-slate-600">#{stock.rank ?? "—"}</span><span><b className="font-ticker text-sm">{stock.ticker}</b><small className="block text-[9px] text-slate-600">Score {stock.councilScore} · {pct(stock.changePct)}</small></span><span className={cn("truncate text-right text-[8px] font-black", signalTone(stock.signal))}>{compactSignal(stock.signal)}</span></button>)}</div></div></aside><CouncilWorkspace stock={active} history={activeHistory} historyMessage={data.historyMessage}/></div> : <section className="rounded-2xl border border-rose-400/15 bg-rose-400/[0.04] p-6 text-sm text-rose-200"><CircleAlert className="mr-2 inline size-4"/>AI Council chưa có dữ liệu. <span className="text-slate-400">{data.message}</span></section>}
       <footer className="mt-4 rounded-2xl border border-white/[0.06] bg-[#080d13] px-4 py-3 text-[9px] leading-5 text-slate-600"><b className="text-slate-400">Methodology:</b> Investor View chỉ trình bày lại deterministic Council theo ngôn ngữ dễ đọc. V1 không để LLM tự tính indicator hoặc tự fetch dữ liệu; specialist đọc cùng point-in-time evidence nhưng chấm độc lập, Risk có quyền CAUTION/VETO, và historical revisions vẫn immutable.</footer>
     </main></div>
