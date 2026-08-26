@@ -11,6 +11,8 @@ export const PG_CRON_NAME_TO_JOB_KEY: Readonly<Record<string, string>> = Object.
   "kfsp-rating-daily-7am-ict": "kfsp.rating_daily",
   "kfsp-ttai-history-daily-1am-ict": "kfsp.ttai_history",
   "sync-universe-5m": "market.sync_5m",
+  "sync-universe-5m-afternoon": "market.sync_5m",
+  "sync-universe-eod-1445": "market.sync_eod",
   "sync-universe-eod-1450": "market.sync_eod",
 })
 
@@ -19,7 +21,7 @@ export const JOB_KEY_TO_PG_CRON_NAME: Readonly<Record<string, string>> = Object.
   "kfsp.rating_daily": "kfsp-rating-daily-7am-ict",
   "kfsp.ttai_history": "kfsp-ttai-history-daily-1am-ict",
   "market.sync_5m": "sync-universe-5m",
-  "market.sync_eod": "sync-universe-eod-1450",
+  "market.sync_eod": "sync-universe-eod-1445",
 })
 
 export function getJobKeyForPgCron(jobName: string): string | undefined {
@@ -53,30 +55,35 @@ export interface ScheduleConflict {
 
 /**
  * Statically detects known operational schedule overlaps from job metadata.
- * Specifically detects the 14:50 ICT overlap between sync-universe-5m and sync-universe-eod-1450.
+ * Detects if 5m sync and EOD sync fire at the same time (e.g. at 14:50 ICT).
  */
 export function findScheduleConflicts(jobs: (AdminJobDefinition | AdminJobView)[]): ScheduleConflict[] {
   const conflicts: ScheduleConflict[] = []
-  const has5m = jobs.some((j) => j.key === "market.sync_5m")
-  const hasEod1450 = jobs.some((j) => j.key === "market.sync_eod")
+  const job5m = jobs.find((j) => j.key === "market.sync_5m")
+  const jobEod = jobs.find((j) => j.key === "market.sync_eod")
 
-  if (has5m && hasEod1450) {
-    conflicts.push({
-      jobKey: "market.sync_5m",
-      conflictWithKey: "market.sync_eod",
-      timeIct: "14:50",
-      days: "T2-T6 (Weekdays)",
-      reason: "Trùng lịch chạy 14:50 ICT với Market EOD Sync (gây gọi kép orderbook-sync)",
-      impact: "warning",
-    })
-    conflicts.push({
-      jobKey: "market.sync_eod",
-      conflictWithKey: "market.sync_5m",
-      timeIct: "14:50",
-      days: "T2-T6 (Weekdays)",
-      reason: "Trùng lịch chạy 14:50 ICT với Market 5-Minute Sync (gây gọi kép orderbook-sync)",
-      impact: "warning",
-    })
+  if (job5m && jobEod) {
+    const is5mOverlapping = job5m.windowEndIct && job5m.windowEndIct >= "14:50"
+    const isEodAt1450 = jobEod.scheduleUtc === "50 7 * * 1-5" || jobEod.schedulerName === "sync-universe-eod-1450"
+
+    if (is5mOverlapping && isEodAt1450) {
+      conflicts.push({
+        jobKey: "market.sync_5m",
+        conflictWithKey: "market.sync_eod",
+        timeIct: "14:50",
+        days: "T2-T6 (Weekdays)",
+        reason: "Trùng lịch chạy 14:50 ICT với Market EOD Sync (gây gọi kép orderbook-sync)",
+        impact: "warning",
+      })
+      conflicts.push({
+        jobKey: "market.sync_eod",
+        conflictWithKey: "market.sync_5m",
+        timeIct: "14:50",
+        days: "T2-T6 (Weekdays)",
+        reason: "Trùng lịch chạy 14:50 ICT với Market 5-Minute Sync (gây gọi kép orderbook-sync)",
+        impact: "warning",
+      })
+    }
   }
 
   return conflicts

@@ -157,13 +157,13 @@ A critical invariant of the Control Plane is the strict separation between:
 | `signals.daily` | `vercel_cron_workflow` | Vercel Cron | `0 0 * * 1-5` | 07:00 T2-T6 | `system_job_runs` |
 | `kfsp.rating_daily` | `supabase_pg_cron` | `kfsp-rating-daily-7am-ict` | `0 0 * * *` | 07:00 Hàng ngày | `kfsp_rating_sync_runs` |
 | `kfsp.ttai_history` | `supabase_pg_cron` | `kfsp-ttai-history-daily-1am-ict` | `0 18 * * *` | 01:00 Hàng ngày | `kfsp_ttai_sync_runs` |
-| `market.sync_5m` | `supabase_pg_cron` | `sync-universe-5m` | `*/5 2-7 * * 1-5` | 09:00-14:55 T2-T6 | `stock_orderbook_snapshots` |
-| `market.sync_eod` | `supabase_pg_cron` | `sync-universe-eod-1450` | `50 7 * * 1-5` | 14:50 T2-T6 | `stock_orderbook_snapshots` |
+| `market.sync_5m` | `supabase_pg_cron` | `sync-universe-5m` | `*/5 2-6 * * 1-5; 0-40/5 7 * * 1-5` | 09:00-14:40 T2-T6 | `stock_orderbook_snapshots` |
+| `market.sync_eod` | `supabase_pg_cron` | `sync-universe-eod-1445` | `45 7 * * 1-5` | 14:45 T2-T6 | `stock_orderbook_snapshots` |
 
-#### Operational Findings & Known Warnings
+#### Operational Findings & Resolution
 
-1. **KFSP TTAI Provider Failure**: Edge Function returns HTTP 207 with `0/12` processed and `12/12` failed due to upstream provider changes. Displayed truthfully as `FAILING` on `/admin/jobs`.
-2. **14:50 ICT Market Sync Overlap**: `sync-universe-5m` and `sync-universe-eod-1450` both fire at 14:50 ICT on weekdays, triggering duplicate concurrent calls to `orderbook-sync`. Displayed as an operational efficiency warning.
+1. **Orderbook Sync Schedule (Resolved)**: `sync-universe-5m` runs every 5 minutes during active market hours up to 14:40 ICT (`*/5 2-6 * * 1-5` and `0-40/5 7 * * 1-5`), and `sync-universe-eod-1445` captures the post-ATC market close snapshot at 14:45 ICT (`45 7 * * 1-5`). Zero overlap exists between intraday and closing syncs.
+2. **KFSP TTAI Provider Failure**: Edge Function returns HTTP 207 with `0/12` processed and `12/12` failed due to upstream provider changes. Displayed truthfully as `FAILING` on `/admin/jobs`.
 3. **QeoIndex EOD First Run**: Remains `UNKNOWN` (Pending First Run) until actual execution telemetry is recorded in `system_job_runs`.
 4. **Signals Daily Telemetry**: Workflow start, finish, and failure are durably persisted to `system_job_runs` via step telemetry.
 

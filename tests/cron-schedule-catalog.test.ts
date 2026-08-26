@@ -36,32 +36,34 @@ test("catalog matches vercel.json cron schedules exactly", () => {
 })
 
 test("catalog matches Supabase pg_cron migrations exactly", () => {
-  // 1. sync-universe-5m in 20260818195100_fix_cron_hours.sql
-  const sync5mMigration = readTextFile("supabase/migrations/20260818195100_fix_cron_hours.sql")
-  assert.match(sync5mMigration, /'sync-universe-5m'/)
-  assert.match(sync5mMigration, /'\*\/5 2-7 \* \* 1-5'/)
+  // 1. sync-universe-5m and sync-universe-eod-1445 in 20260826085500_fix_orderbook_cron_1445.sql
+  const syncOrderbookMigration = readTextFile("supabase/migrations/20260826085500_fix_orderbook_cron_1445.sql")
+  assert.match(syncOrderbookMigration, /'sync-universe-5m'/)
+  assert.match(syncOrderbookMigration, /'\*\/5 2-6 \* \* 1-5'/)
+  assert.match(syncOrderbookMigration, /'sync-universe-5m-afternoon'/)
+  assert.match(syncOrderbookMigration, /'0,5,10,15,20,25,30,35,40 7 \* \* 1-5'/)
+  assert.match(syncOrderbookMigration, /'sync-universe-eod-1445'/)
+  assert.match(syncOrderbookMigration, /'45 7 \* \* 1-5'/)
 
   const sync5mDef = ADMIN_JOB_CATALOG.find((j) => j.key === "market.sync_5m")
   assert.ok(sync5mDef)
   assert.equal(sync5mDef.schedulerName, "sync-universe-5m")
-  assert.equal(sync5mDef.scheduleUtc, "*/5 2-7 * * 1-5")
+  assert.equal(sync5mDef.scheduleUtc, "*/5 2-6 * * 1-5; 0-40/5 7 * * 1-5")
+  assert.equal(sync5mDef.scheduleIct, "Mỗi 5p (09:00-14:40 T2-T6)")
   assert.equal(sync5mDef.scheduleKind, "interval")
   assert.equal(sync5mDef.windowStartIct, "09:00")
-  assert.equal(sync5mDef.windowEndIct, "14:55")
-
-  // 2. sync-universe-eod-1450 in 20260818194500_pg_cron_orderbook_sync.sql
-  const syncEodMigration = readTextFile("supabase/migrations/20260818194500_pg_cron_orderbook_sync.sql")
-  assert.match(syncEodMigration, /'sync-universe-eod-1450'/)
-  assert.match(syncEodMigration, /'50 7 \* \* 1-5'/)
+  assert.equal(sync5mDef.windowEndIct, "14:40")
 
   const syncEodDef = ADMIN_JOB_CATALOG.find((j) => j.key === "market.sync_eod")
   assert.ok(syncEodDef)
-  assert.equal(syncEodDef.schedulerName, "sync-universe-eod-1450")
-  assert.equal(syncEodDef.scheduleUtc, "50 7 * * 1-5")
-  assert.equal(syncEodDef.scheduleIct, "14:50 T2-T6")
+  assert.equal(syncEodDef.schedulerName, "sync-universe-eod-1445")
+  assert.equal(syncEodDef.scheduleUtc, "45 7 * * 1-5")
+  assert.equal(syncEodDef.scheduleIct, "14:45 T2-T6")
   assert.equal(syncEodDef.scheduleKind, "point")
+  assert.equal(syncEodDef.windowStartIct, "14:45")
+  assert.equal(syncEodDef.windowEndIct, "14:45")
 
-  // 3. kfsp-rating-daily-7am-ict in 20260822112420_kfsp_rating_pipeline.sql
+  // 2. kfsp-rating-daily-7am-ict in 20260822112420_kfsp_rating_pipeline.sql
   const kfspRatingMigration = readTextFile("supabase/migrations/20260822112420_kfsp_rating_pipeline.sql")
   assert.match(kfspRatingMigration, /'kfsp-rating-daily-7am-ict'/)
   assert.match(kfspRatingMigration, /'0 0 \* \* \*'/)
@@ -73,7 +75,7 @@ test("catalog matches Supabase pg_cron migrations exactly", () => {
   assert.equal(ratingDef.scheduleDays, "daily")
   assert.equal(ratingDef.scheduleKind, "point")
 
-  // 4. TTAI history rescheduled to daily 01:00 ICT in the latest migration
+  // 3. TTAI history rescheduled to daily 01:00 ICT in the latest migration
   const ttaiMigration = readTextFile("supabase/migrations/20260826013742_reschedule_kfsp_ttai_daily_0100_ict.sql")
   assert.match(ttaiMigration, /cron\.unschedule\('kfsp-ttai-history-hourly'\)/)
   assert.match(ttaiMigration, /'kfsp-ttai-history-daily-1am-ict'/)
@@ -88,7 +90,7 @@ test("catalog matches Supabase pg_cron migrations exactly", () => {
   assert.equal(ttaiDef.intervalMinutes, undefined)
   assert.equal(ttaiDef.scheduleKind, "point")
 
-  // 5. qeoindex-eod-pipeline-1515-ict in 20260825174500_qeoindex_eod_pipeline_cron.sql
+  // 4. qeoindex-eod-pipeline-1515-ict in 20260825174500_qeoindex_eod_pipeline_cron.sql
   const eodPipelineMigration = readTextFile("supabase/migrations/20260825174500_qeoindex_eod_pipeline_cron.sql")
   assert.match(eodPipelineMigration, /'qeoindex-eod-pipeline-1515-ict'/)
   assert.match(eodPipelineMigration, /'15 8 \* \* 1-5'/)
@@ -107,12 +109,17 @@ test("exact pg_cron name mapping dictionary matches production", () => {
     "kfsp-rating-daily-7am-ict": "kfsp.rating_daily",
     "kfsp-ttai-history-daily-1am-ict": "kfsp.ttai_history",
     "sync-universe-5m": "market.sync_5m",
+    "sync-universe-5m-afternoon": "market.sync_5m",
+    "sync-universe-eod-1445": "market.sync_eod",
     "sync-universe-eod-1450": "market.sync_eod",
   })
 
   assert.equal(getJobKeyForPgCron("sync-universe-5m"), "market.sync_5m")
+  assert.equal(getJobKeyForPgCron("sync-universe-5m-afternoon"), "market.sync_5m")
+  assert.equal(getJobKeyForPgCron("sync-universe-eod-1445"), "market.sync_eod")
   assert.equal(getJobKeyForPgCron("kfsp-rating-daily-7am-ict"), "kfsp.rating_daily")
   assert.equal(getPgCronNameForJobKey("qeoindex.eod_pipeline"), "qeoindex-eod-pipeline-1515-ict")
+  assert.equal(getPgCronNameForJobKey("market.sync_eod"), "sync-universe-eod-1445")
   assert.equal(getPgCronNameForJobKey("signals.daily"), undefined)
 })
 
@@ -127,17 +134,34 @@ test("manual jobs are distinguished from scheduled jobs", () => {
   }
 })
 
-test("detects 14:50 ICT overlap conflict between 5m sync and EOD sync", () => {
+test("resolves 14:45 non-overlapping schedule without conflicts", () => {
   const conflicts = findScheduleConflicts(EFFECTIVE_ADMIN_JOB_CATALOG)
-  assert.ok(conflicts.length >= 2)
+  assert.equal(conflicts.length, 0, "Non-overlapping 14:45 EOD schedule must produce 0 conflicts")
+})
 
-  const sync5mConflict = conflicts.find((c) => c.jobKey === "market.sync_5m")
-  assert.ok(sync5mConflict)
-  assert.equal(sync5mConflict.conflictWithKey, "market.sync_eod")
-  assert.equal(sync5mConflict.timeIct, "14:50")
-  assert.match(sync5mConflict.reason, /14:50 ICT/)
+test("detects legacy 14:50 ICT overlap conflict when 5m runs past 14:40 and EOD is 14:50", () => {
+  const legacyCatalog = [
+    {
+      key: "market.sync_5m",
+      label: "Market 5-Minute Sync",
+      provider: "supabase_pg_cron",
+      windowStartIct: "09:00",
+      windowEndIct: "14:55",
+      scheduleUtc: "*/5 2-7 * * 1-5",
+    },
+    {
+      key: "market.sync_eod",
+      label: "Market EOD Sync",
+      provider: "supabase_pg_cron",
+      schedulerName: "sync-universe-eod-1450",
+      scheduleUtc: "50 7 * * 1-5",
+      windowStartIct: "14:50",
+      windowEndIct: "14:50",
+    },
+  ] as unknown as Parameters<typeof findScheduleConflicts>[0]
 
-  const syncEodConflict = conflicts.find((c) => c.jobKey === "market.sync_eod")
-  assert.ok(syncEodConflict)
-  assert.equal(syncEodConflict.conflictWithKey, "market.sync_5m")
+  const conflicts = findScheduleConflicts(legacyCatalog)
+  assert.equal(conflicts.length, 2)
+  assert.equal(conflicts[0].timeIct, "14:50")
+  assert.match(conflicts[0].reason, /14:50 ICT/)
 })

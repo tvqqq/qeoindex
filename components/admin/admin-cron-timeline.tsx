@@ -164,22 +164,22 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
           <span>09:00 (Mở phiên)</span>
           <span>11:30 (Nghỉ trưa)</span>
           <span>13:00 (Chiều)</span>
-          <span className="text-amber-400/90 font-bold">14:50 (EOD Sync)</span>
+          <span className="text-emerald-400/90 font-bold">14:45 (ATC & EOD Sync)</span>
           <span className="text-sky-400/90 font-bold">15:15 (EOD Chain)</span>
           <span>24:00</span>
         </div>
         <div className="relative mt-2 h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
-          {/* Market hours band: 09:00 to 15:00 = 37.5% to 62.5% */}
+          {/* Market hours band: 09:00 to 14:45 = 37.5% to 61.46% */}
           <div
             className="absolute top-0 bottom-0 bg-emerald-500/20"
-            style={{ left: "37.5%", width: "25%" }}
-            title="Khung giờ giao dịch thị trường HOSE (09:00 - 15:00 ICT)"
+            style={{ left: "37.5%", width: "23.96%" }}
+            title="Khung giờ giao dịch thị trường HOSE (09:00 - 14:45 ICT)"
           />
-          {/* Overlap point at 14:50: ~61.8% */}
+          {/* EOD sync point at 14:45: ~61.46% */}
           <div
-            className="absolute top-0 bottom-0 w-1 bg-amber-400"
-            style={{ left: "61.8%" }}
-            title="14:50 ICT: Trùng lặp sync-universe-5m và sync-universe-eod-1450"
+            className="absolute top-0 bottom-0 w-1 bg-emerald-400"
+            style={{ left: "61.46%" }}
+            title="14:45 ICT: Market EOD Closing Orderbook Sync (ATC Close)"
           />
           {/* EOD Pipeline point at 15:15: ~63.5% */}
           <div

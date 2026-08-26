@@ -357,8 +357,7 @@ test("buildAdminJobViews calculates counts and sets conflict warning on views", 
 
   const sync5m = jobs.find((j) => j.key === "market.sync_5m")!
   assert.ok(sync5m)
-  assert.ok(sync5m.conflictWarning, "sync-universe-5m must have conflict warning")
-  assert.match(sync5m.conflictWarning, /14:50 ICT/)
+  assert.equal(sync5m.conflictWarning, null, "Resolved 14:45 schedule must have zero conflict warning")
 
   const ttai = jobs.find((j) => j.key === "kfsp.ttai_history")!
   assert.ok(ttai)

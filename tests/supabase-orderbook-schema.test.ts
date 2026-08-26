@@ -41,3 +41,15 @@ test("supabase pg_cron migration schedules market sync every 5 minutes and 14:50
   assert.match(cronMigrationSql, /'50 7 \* \* 1-5'/)
   assert.match(cronMigrationSql, /orderbook-sync/)
 })
+
+test("supabase pg_cron migration reschedules orderbook syncs to 14:45 without overlap", () => {
+  const fixMigrationSql = readFileSync(new URL("../supabase/migrations/20260826085500_fix_orderbook_cron_1445.sql", import.meta.url), "utf8")
+  assert.match(fixMigrationSql, /cron\.unschedule\('sync-universe-eod-1450'\)/)
+  assert.match(fixMigrationSql, /cron\.unschedule\('sync-universe-5m'\)/)
+  assert.match(fixMigrationSql, /'sync-universe-5m'/)
+  assert.match(fixMigrationSql, /'\*\/5 2-6 \* \* 1-5'/)
+  assert.match(fixMigrationSql, /'sync-universe-5m-afternoon'/)
+  assert.match(fixMigrationSql, /'0,5,10,15,20,25,30,35,40 7 \* \* 1-5'/)
+  assert.match(fixMigrationSql, /'sync-universe-eod-1445'/)
+  assert.match(fixMigrationSql, /'45 7 \* \* 1-5'/)
+})

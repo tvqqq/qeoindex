@@ -117,18 +117,18 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
     } else if (job.key === "market.sync_5m") {
       lane = "pg_cron"
       displayType = "interval"
-      timeIctLabel = "09:00 – 14:55 (mỗi 5p)"
+      timeIctLabel = "09:00 – 14:40 (mỗi 5p)"
       daysLabel = "T2-T6"
       startMinuteOfDay = timeToMinuteOfDay("09:00")
-      endMinuteOfDay = timeToMinuteOfDay("14:55")
+      endMinuteOfDay = timeToMinuteOfDay("14:40")
       startPercent = minuteToPercent(startMinuteOfDay)
       endPercent = minuteToPercent(endMinuteOfDay)
     } else if (job.key === "market.sync_eod") {
       lane = "pg_cron"
       displayType = "point"
-      timeIctLabel = "14:50 ICT"
+      timeIctLabel = "14:45 ICT"
       daysLabel = "T2-T6"
-      startMinuteOfDay = timeToMinuteOfDay("14:50")
+      startMinuteOfDay = timeToMinuteOfDay("14:45")
       startPercent = minuteToPercent(startMinuteOfDay)
     } else {
       lane = "manual"

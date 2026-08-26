@@ -59,7 +59,12 @@ test("buildCronTimelineModel categorizes jobs into 3 lanes and models EOD depend
   const sync5m = timeline.lanes[1].jobs.find((j) => j.key === "market.sync_5m")
   assert.ok(sync5m)
   assert.equal(sync5m.displayType, "interval")
-  assert.match(sync5m.timeIctLabel, /09:00.*14:55/)
+  assert.match(sync5m.timeIctLabel, /09:00.*14:40/)
+
+  const syncEod = timeline.lanes[1].jobs.find((j) => j.key === "market.sync_eod")
+  assert.ok(syncEod)
+  assert.equal(syncEod.displayType, "point")
+  assert.equal(syncEod.timeIctLabel, "14:45 ICT")
 
   const ttai = timeline.lanes[1].jobs.find((j) => j.key === "kfsp.ttai_history")
   assert.ok(ttai)
