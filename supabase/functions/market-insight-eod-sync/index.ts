@@ -13,9 +13,9 @@ const PROVIDER_TIMEOUT_MS = 8_000
 const SOCKET_TIMEOUT_MS = 6_000
 const TOKEN_EXPIRY_SKEW_MS = 5 * 60 * 1_000
 const LOGIN_URL = Deno.env.get("KFSP_LOGIN_URL") || "https://api.kfsp.vn/api/login"
-const MARKET_PULSE_URL = Deno.env.get("KFSP_MARKET_PULSE_URL") || "https://api2.kfsp.vn/api/stocks/market_pulse/getContent?is_get_style=true&version=v3"
+const MARKET_PULSE_URL = Deno.env.get("KFSP_MARKET_PULSE_URL") || "https://api.kfsp.vn/api/stocks/market_pulse/getContent?is_get_style=true&version=v3"
 const CASH_FLOWS_URL = Deno.env.get("KFSP_CASH_FLOWS_URL") || "https://api2.kfsp.vn/api/stocks/dashboard/get-data-cash-flows?san=HOSE"
-const TOP_VOLATILITY_URL = Deno.env.get("KFSP_TOP_VOLATILITY_URL") || "https://api2.kfsp.vn/api/stocks/dashboard/get-list-mack-market-volatility?type=volume_desc&board=1&limit=10"
+const TOP_VOLATILITY_URL = Deno.env.get("KFSP_TOP_VOLATILITY_URL") || "https://api.kfsp.vn/api/stocks/dashboard/get-list-mack-market-volatility?type=volume_desc&board=1&limit=10"
 const CONTRACT_VERSION = 1
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
@@ -86,7 +86,7 @@ async function loginAndCacheToken(supabase: SupabaseClient) {
   const { response, payload } = await fetchJson(LOGIN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ username, password, persist_login: false }),
+    body: JSON.stringify({ username, password, persist_login: true }),
   })
   if (!response.ok) throw new Error(`PROVIDER_LOGIN_HTTP_${response.status}`)
 
@@ -377,7 +377,7 @@ Deno.serve(async (req: Request) => {
     }
 
     let pulse = await fetchJson(MARKET_PULSE_URL, { method: "GET", headers: currentHeaders })
-    if (pulse.response.status === 401 || pulse.response.status === 403) {
+    if (pulse.response.status === 401 || pulse.response.status === 403 || pulse.response.status === 423) {
       auth = await getProviderToken(supabase, true)
       currentHeaders = {
         Accept: "application/json",
