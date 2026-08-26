@@ -41,10 +41,10 @@ jobs:
           elif 'refreshOhlcvHistoryBatch' not in steps:
               raise SystemExit('OHLCV import shape not found')
 
-          old_secret = '''      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "https://glwhhrmejlonhyorvtzm.supabase.co"
-                const syncSecret = process.env.KFSP_SYNC_SECRET || process.env.CRON_SECRET || ""
-                const cleanUrl = supabaseUrl.endsWith("/") ? supabaseUrl.slice(0, -1) : supabaseUrl'''
-          new_secret = '''      const supabase = requiredSupabase()
+          secret_start = steps.find('      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL')
+          secret_end = steps.find('\n      const endpoint =', secret_start)
+          if secret_start >= 0 and secret_end > secret_start and 'qeo_get_market_close_sync_secret' not in steps[secret_start:secret_end]:
+              secret_block = '''      const supabase = requiredSupabase()
                 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "https://glwhhrmejlonhyorvtzm.supabase.co"
                 const secretResult = await supabase.rpc("qeo_get_market_close_sync_secret")
                 const syncSecret = typeof secretResult.data === "string" ? secretResult.data.trim() : ""
@@ -55,30 +55,22 @@ jobs:
                   )
                 }
                 const cleanUrl = supabaseUrl.endsWith("/") ? supabaseUrl.slice(0, -1) : supabaseUrl'''
-          if old_secret in steps:
-              steps = steps.replace(old_secret, new_secret, 1)
+              steps = steps[:secret_start] + secret_block + steps[secret_end:]
           elif 'qeo_get_market_close_sync_secret' not in steps:
               raise SystemExit('market close secret block not found')
 
-          old_fail_open = '''      if (!response.ok || payload.ok === false) {
-                const errCode = String(payload.error || `HTTP_${response.status}`)
-                return {
-                  ok: false,
-                  status: "degraded" as const,
-                  error: errCode,
-                  sessionDate: String(payload.session_date || sessionDate),
-                }
-              }'''
-          new_fail_closed = '''      if (!response.ok || payload.ok === false) {
+          fail_start = steps.find('      if (!response.ok || payload.ok === false) {')
+          fail_end = steps.find('\n\n      return {\n        ok: true,', fail_start)
+          if fail_start >= 0 and fail_end > fail_start and 'MARKET_CLOSE_COLLECT failed: ${errCode}' not in steps[fail_start:fail_end]:
+              fail_block = '''      if (!response.ok || payload.ok === false) {
                 const errCode = String(payload.error || `HTTP_${response.status}`)
                 throw Object.assign(
                   new Error(`MARKET_CLOSE_COLLECT failed: ${errCode}`),
                   { code: "MARKET_CLOSE_COLLECT_FAILED" },
                 )
               }'''
-          if old_fail_open in steps:
-              steps = steps.replace(old_fail_open, new_fail_closed, 1)
-          elif 'new Error(`MARKET_CLOSE_COLLECT failed: ${errCode}`)' not in steps:
+              steps = steps[:fail_start] + fail_block + steps[fail_end:]
+          elif 'MARKET_CLOSE_COLLECT failed: ${errCode}' not in steps:
               raise SystemExit('market close fail-open block not found')
 
           start = steps.find('export async function runHistoryRefreshStep(')
