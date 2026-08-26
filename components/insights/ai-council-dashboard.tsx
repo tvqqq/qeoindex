@@ -29,6 +29,16 @@ import type { AiCouncilData, AiCouncilHistoryEntry } from "@/lib/ai-council-data
 import type { AiCouncilStock, CouncilAgentOpinion, CouncilSignal } from "@/lib/ai-council-model"
 import { cn } from "@/lib/utils"
 
+const DATE_FORMAT = new Intl.DateTimeFormat("vi-VN", {
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+})
+
 const AGENT_ICON = { wyckoff: Radar, momentum: LineChart, fundamental: BarChart3, flow: Activity, market: Gauge, risk: ShieldCheck } as const
 
 function pct(value: number | null) {
@@ -150,6 +160,17 @@ export function AiCouncilDashboard({ data, initialTicker = "" }: { data: AiCounc
   const active = data.stocks.find((stock) => stock.ticker === activeTicker) || data.stocks[0]
   const activeHistory = active ? data.history.filter((entry) => entry.ticker === active.ticker) : []
 
+  const formattedDate = useMemo(() => {
+    if (data.ratingDate) {
+      const [y, m, d] = data.ratingDate.split("-").map(Number)
+      if (y && m && d) {
+        const dt = new Date(y, m - 1, d, 9, 0, 0)
+        return DATE_FORMAT.format(dt)
+      }
+    }
+    return DATE_FORMAT.format(new Date())
+  }, [data.ratingDate])
+
   function selectTicker(ticker: string) {
     setActiveTicker(ticker)
     const next = new URL(window.location.href)
@@ -180,7 +201,7 @@ export function AiCouncilDashboard({ data, initialTicker = "" }: { data: AiCounc
           <div className="flex flex-col items-start gap-2.5 sm:items-end">
             <div className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wider text-slate-400">
               <CalendarDays className="size-4 text-violet-400" />
-              <span>{data.ratingDate ? `RATING ${data.ratingDate}` : "AI COUNCIL"}</span>
+              <span>{formattedDate}</span>
             </div>
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.08] bg-[#080d13] px-3.5 py-2 text-xs text-slate-400">
               <span className="inline-flex items-center gap-1.5"><Database className="size-3.5 text-cyan-400" />Rating {data.ratingDate || "—"}</span>
