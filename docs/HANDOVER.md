@@ -89,6 +89,34 @@ The two destructive market maintenance routes are POST-only. Do not restore unau
 | Orderbook persistence | Supabase Postgres | Browser access is authenticated + `market_board` RLS-gated; server ingestion uses service role. |
 | Optional Finhay adapter | Finhay MCP OAuth | Tokens remain secure server cookies; browser routes require `finhay_live`. |
 | Root Admin Control Plane | Supabase Postgres + Server Auth | Restricted strictly to server-side `ROOT_ADMIN_USER_IDS` allowlist; service-role private tables. |
+| Market Close Insights | Edge Function + Supabase Postgres | Fail-closed multi-feed collector (REST + Socket.IO) + atomic publish RPC; public read / service-role write. |
+
+## Market Close Insights ("Insight thị trường sau phiên")
+
+The Market Close Insights subsystem provides an automated, factual post-market briefing after 15:15 ICT every trading session.
+
+### Core Architecture & Boundaries
+
+1. **Pipeline Phase**: `MARKET_CLOSE_COLLECT` executes as Phase 2 in `workflows/qeoindex-eod-pipeline.ts`. It extracts 4 canonical indexes (`VNINDEX`, `VN30`, `HNX`, `UPCOM`) scaled to billion VND (`1e9`) from TradingView and passes them in the sync payload.
+2. **Collector Edge Function (`market-insight-eod-sync`)**:
+   - Bounded Socket.IO & REST aggregator with 6,000ms client timeouts.
+   - Extracts Pulse content (`distribution_count`), MA breadth (MA10, MA20, MA50, MA200), Risk & Psychology scores, Foreign & Proprietary cash flows, Sector performance/breadth, and Top Volume leaders.
+   - Stages items with compound keys `(run_id, staging_key)` into `market_insight_snapshot_staging`.
+   - Never injects synthetic/fallback index numbers; missing feeds produce `quality_status = 'failing'`.
+3. **Database Schema & Read Models**:
+   - `market_insight_sync_runs`: run tracking with `status in ('running', 'completed', 'failed', 'skipped')`.
+   - `market_insight_daily`: daily regime, sentiment, risk, distribution days, MA breadth, and institutional flows.
+   - `market_insight_indexes`: OHLCV, PE, breadth, and foreign trading across 4 major indexes.
+   - `market_insight_sectors`: sector performance, rotation states, VSA effort/result, and breadth.
+   - `market_insight_leaders`: top volume and index contributor leaders.
+4. **Strict Fail-Closed Publish RPC (`publish_market_insight_snapshot`)**:
+   - Requires all **8 P0 coverage keys** to be `true` (`canonical_indexes`, `market_pulse_content`, `ma_breadth`, `risk_indicator`, `psychology_indicator`, `cash_flows`, `sector_pulse`, `sector_breadth`).
+   - Requires 4 canonical index rows with non-null positive values and at least 1 sector row.
+   - Atomically replaces old records for the session date and marks the sync run `completed`.
+5. **Live Verification**:
+   - Run authenticated EOD pipeline via admin or machine route (`/api/qeoindex/eod` or manual runner).
+   - Verify `market_insight_sync_runs.status = 'completed'` and `endpoint_coverage`.
+   - Smoke-test UI at `https://qeoindex.qeoqeo.com/insights` checking the 4 tabs: Tổng quan, Nhóm ngành, Dẫn dắt & Khối lượng, Lịch sử phiên.
 
 ## Root Admin Control Plane
 
