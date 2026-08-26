@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+// Focused TDD regression; the permanent assertion also lives in qeoindex-eod-pipeline.test.ts.
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
