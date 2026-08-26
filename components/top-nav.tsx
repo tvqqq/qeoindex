@@ -16,20 +16,26 @@ const INSIGHTS_ITEMS = [
     href: "/insights",
     icon: Sparkles,
     iconBg: "border-emerald-500/30 bg-emerald-500/15 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]",
+    activeRow: "border-emerald-500/30 bg-gradient-to-r from-emerald-500/15 via-emerald-500/5 to-transparent",
+    activeText: "text-emerald-300",
     description: "VNIndex, rating score và research pulse",
   },
   {
     label: "Phân tích chart Wyckoff",
     href: "/insights/wyckoff",
     icon: CandlestickChart,
-    iconBg: "border-purple-500/30 bg-purple-500/15 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.2)]",
+    iconBg: "border-cyan-500/30 bg-cyan-500/15 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.2)]",
+    activeRow: "border-cyan-500/30 bg-gradient-to-r from-cyan-500/15 via-cyan-500/5 to-transparent",
+    activeText: "text-cyan-300",
     description: "Chart 1H–1M, phase và kịch bản tiếp theo",
   },
   {
     label: "AI Council",
     href: "/insights/ai-council",
     icon: BrainCircuit,
-    iconBg: "border-cyan-500/30 bg-cyan-500/15 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.2)]",
+    iconBg: "border-violet-500/30 bg-violet-500/15 text-violet-300 shadow-[0_0_12px_rgba(168,85,247,0.2)]",
+    activeRow: "border-violet-500/30 bg-gradient-to-r from-violet-500/15 via-violet-500/5 to-transparent",
+    activeText: "text-violet-300",
     description: "5 specialist agents, Bull/Bear debate và Risk audit",
   },
   {
@@ -37,6 +43,8 @@ const INSIGHTS_ITEMS = [
     href: "/research",
     icon: Compass,
     iconBg: "border-amber-500/30 bg-amber-500/15 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.2)]",
+    activeRow: "border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent",
+    activeText: "text-amber-300",
     description: "Scanner, tín hiệu, FA, luận điểm, nhật ký & hậu kiểm",
   },
 ] as const
@@ -44,6 +52,34 @@ const INSIGHTS_ITEMS = [
 function insightItemActive(pathname: string, href: string) {
   if (href === "/insights") return pathname === "/insights"
   return pathname.startsWith(href)
+}
+
+function getInsightsActiveStyle(pathname: string) {
+  if (pathname.startsWith("/insights/wyckoff")) {
+    return {
+      pill: "border-cyan-400/50 bg-gradient-to-r from-cyan-500/25 via-blue-500/20 to-cyan-500/25 text-cyan-300 shadow-[0_0_16px_rgba(6,182,212,0.28),0_0_10px_rgba(59,130,246,0.32),inset_0_1px_0_0_rgba(255,255,255,0.22)]",
+      icon: "text-cyan-300",
+    }
+  }
+  if (pathname.startsWith("/insights/ai-council")) {
+    return {
+      pill: "border-violet-400/50 bg-gradient-to-r from-violet-500/25 via-purple-500/20 to-violet-500/25 text-violet-300 shadow-[0_0_16px_rgba(168,85,247,0.28),0_0_10px_rgba(139,92,246,0.32),inset_0_1px_0_0_rgba(255,255,255,0.22)]",
+      icon: "text-violet-300",
+    }
+  }
+  if (pathname.startsWith("/research")) {
+    return {
+      pill: "border-amber-400/50 bg-gradient-to-r from-amber-500/25 via-orange-500/20 to-amber-500/25 text-amber-300 shadow-[0_0_16px_rgba(245,158,11,0.28),0_0_10px_rgba(251,146,60,0.32),inset_0_1px_0_0_rgba(255,255,255,0.22)]",
+      icon: "text-amber-300",
+    }
+  }
+  if (pathname.startsWith("/insights")) {
+    return {
+      pill: "border-emerald-400/50 bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-emerald-500/25 text-emerald-300 shadow-[0_0_16px_rgba(16,185,129,0.28),0_0_10px_rgba(20,184,166,0.32),inset_0_1px_0_0_rgba(255,255,255,0.22)]",
+      icon: "text-emerald-300",
+    }
+  }
+  return null
 }
 
 export function TopNav() {
@@ -56,6 +92,7 @@ export function TopNav() {
   const isBoardActive = pathname === "/"
   const isInsightsActive = pathname.startsWith("/insights") || pathname.startsWith("/research")
   const isAdminActive = pathname.startsWith("/admin")
+  const insightsActiveStyle = getInsightsActiveStyle(pathname)
 
   function openMenu() {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
@@ -132,8 +169,8 @@ export function TopNav() {
             <div
               className={[
                 "group flex items-center rounded-full border transition-colors duration-200",
-                isInsightsActive
-                  ? "border-emerald-400/50 bg-gradient-to-r from-emerald-500/25 via-purple-500/20 to-emerald-500/25 text-emerald-300 shadow-[0_0_16px_rgba(176,124,255,0.28),0_0_10px_rgba(34,201,138,0.32),inset_0_1px_0_0_rgba(255,255,255,0.22)]"
+                insightsActiveStyle
+                  ? insightsActiveStyle.pill
                   : isOpen
                     ? "border-white/20 bg-white/[0.08] text-white"
                     : "border-transparent text-slate-300 hover:border-purple-500/30 hover:bg-gradient-to-r hover:from-emerald-500/10 hover:via-purple-500/10 hover:to-transparent hover:text-white",
@@ -145,8 +182,8 @@ export function TopNav() {
                 onClick={() => setIsOpen(false)}
                 className="flex items-center gap-1.5 whitespace-nowrap py-1.5 pl-3.5 pr-1 text-xs font-medium"
               >
-                <Sparkles className={`h-3.5 w-3.5 ${isInsightsActive ? "text-emerald-300" : "text-amber-400 group-hover:text-amber-300"}`} />
-                <span className={isInsightsActive ? "font-bold" : ""}>Insights</span>
+                <Sparkles className={`h-3.5 w-3.5 ${insightsActiveStyle ? insightsActiveStyle.icon : "text-amber-400 group-hover:text-amber-300"}`} />
+                <span className={insightsActiveStyle ? "font-bold" : ""}>Insights</span>
               </Link>
               <button
                 type="button"
@@ -187,7 +224,7 @@ export function TopNav() {
                           className={[
                             "group flex items-center gap-3 rounded-xl border p-2.5 transition-colors duration-150",
                             active
-                              ? "border-emerald-500/30 bg-gradient-to-r from-emerald-500/15 via-purple-500/10 to-transparent"
+                              ? item.activeRow
                               : "border-transparent hover:border-white/[0.08] hover:bg-white/[0.05]",
                           ].join(" ")}
                         >
@@ -195,7 +232,7 @@ export function TopNav() {
                             <Icon className="h-4 w-4" />
                           </div>
                           <div className="flex min-w-0 flex-1 flex-col">
-                            <span className={`text-xs font-bold transition-colors ${active ? "text-emerald-300" : "text-foreground group-hover:text-emerald-300"}`}>
+                            <span className={`text-xs font-bold transition-colors ${active ? item.activeText : "text-foreground group-hover:text-white"}`}>
                               {item.label}
                             </span>
                             <span className="mt-0.5 line-clamp-1 text-[11px] font-normal leading-snug text-muted-2 transition-colors group-hover:text-slate-300">
