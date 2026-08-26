@@ -13,6 +13,7 @@ import {
   stageWyckoffV2Snapshots,
   validateAndFinalizeWyckoffV2NotionRun,
 } from "@/lib/wyckoff-v2-notion-staging"
+import { fetchTradingViewIndexes } from "@/lib/tradingview-index"
 import { claimReadyWyckoffV2Run, publishIngestingWyckoffV2Run } from "@/lib/wyckoff-notion-ingest"
 
 function requiredSupabase() {
@@ -161,6 +162,103 @@ export async function runEodReadyStep(runId: string, startedAtIso: string) {
       rankWarnings: result.rankWarnings.slice(0, 10),
       notionAction: result.notionAction,
       freshMarketCount: result.market.freshMarketCount,
+    }),
+  })
+}
+
+export async function runMarketCloseCollectStep(runId: string, startedAtIso: string, enabled = true) {
+  "use step"
+  if (!enabled) {
+    await markQeoIndexEodPhaseSkipped({ runId, phaseKey: "MARKET_CLOSE_COLLECT", reason: "Market close collection skipped for this invocation." })
+    return { skipped: true as const, status: "skipped" as const, sessionDate: vietnamDateKey(startedAtIso) }
+  }
+  return runQeoIndexEodPhase({
+    runId,
+    phaseKey: "MARKET_CLOSE_COLLECT",
+    fn: async () => {
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "https://glwhhrmejlonhyorvtzm.supabase.co"
+      const syncSecret = process.env.KFSP_SYNC_SECRET || process.env.CRON_SECRET || ""
+      const cleanUrl = supabaseUrl.endsWith("/") ? supabaseUrl.slice(0, -1) : supabaseUrl
+      const endpoint = `${cleanUrl}/functions/v1/market-insight-eod-sync`
+      const sessionDate = vietnamDateKey(startedAtIso)
+
+      const quotes = await fetchTradingViewIndexes().catch(() => null)
+      const canonicalCodes = [
+        { code: "VNINDEX" as const, quote: quotes?.VNINDEX },
+        { code: "VN30" as const, quote: quotes?.VN30 },
+        { code: "HNX" as const, quote: quotes?.HNXINDEX },
+        { code: "UPCOM" as const, quote: quotes?.UPCOMINDEX },
+      ]
+      const canonicalIndexes = canonicalCodes.map(({ code, quote }) => ({
+        session_date: sessionDate,
+        index_code: code,
+        value: quote?.value != null ? Number(quote.value) : null,
+        change: quote?.change != null ? Number(quote.change) : null,
+        change_pct: quote?.changePercent != null ? Number(quote.changePercent) : null,
+        reference: null,
+        open: null,
+        high: null,
+        low: null,
+        matched_volume: quote?.volume != null ? Number(quote.volume) : null,
+        traded_value: quote?.valueTraded != null ? Number((quote.valueTraded / 1e9).toFixed(2)) : null,
+        previous_value_change_pct: quote?.valueChangePercent != null ? Number(quote.valueChangePercent) : null,
+        advances: Number(quote?.advances || 0),
+        unchanged: Number(quote?.unchanged || 0),
+        declines: Number(quote?.declines || 0),
+        ceilings: 0,
+        floors: 0,
+        market_pe: null,
+        foreign_buy_value: null,
+        foreign_sell_value: null,
+        foreign_net_value: null,
+        quality_status: quote?.value != null ? "healthy" : "degraded",
+        missing_fields: quote?.value == null ? ["value"] : [],
+        evidence_refs: [
+          { field: "value", source_class: "canonical_market_feed", observed_at: startedAtIso, unit: "points" },
+        ],
+        source_timestamp: quote?.updatedAt || startedAtIso,
+        as_of: startedAtIso,
+      }))
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${syncSecret}`,
+        },
+        body: JSON.stringify({
+          startedAt: startedAtIso,
+          trigger: "qeoindex_eod_pipeline",
+          canonicalIndexes,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      }).catch((err) => ({ ok: false, status: 500, json: async () => ({ error: err instanceof Error ? err.message : String(err) }) } as unknown as Response))
+
+      const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+      if (!response.ok || payload.ok === false) {
+        const errCode = String(payload.error || `HTTP_${response.status}`)
+        return {
+          ok: false,
+          status: "degraded" as const,
+          error: errCode,
+          sessionDate: String(payload.session_date || sessionDate),
+        }
+      }
+
+      return {
+        ok: true,
+        status: "succeeded" as const,
+        syncRunId: String(payload.sync_run_id || ""),
+        sessionDate: String(payload.session_date || sessionDate),
+        qualityStatus: String(payload.quality_status || "healthy"),
+        published: payload.published,
+      }
+    },
+    summarize: (result) => ({
+      status: result.status,
+      sessionDate: result.sessionDate,
+      qualityStatus: "qualityStatus" in result ? result.qualityStatus : "degraded",
+      error: "error" in result ? result.error : undefined,
     }),
   })
 }

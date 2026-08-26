@@ -2,6 +2,7 @@ import { sleep } from "workflow"
 
 import {
   runEodReadyStep,
+  runMarketCloseCollectStep,
   runHistoryRefreshStep,
   runWyckoffBuildStep,
   runNotionStagingStep,
@@ -44,6 +45,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
     const shouldBuild = ready.notionAction === "write"
     const shouldPublish = ready.notionAction !== "stop"
 
+    const marketClose = await runMarketCloseCollectStep(runId, startedAtIso, true)
     const history = await runHistoryRefreshStep(runId, ready.stocks, startedAtIso, shouldBuild)
     const build = await runWyckoffBuildStep(runId, ready.stocks, ready.runKey, ready.scanDate, shouldBuild)
     const staging = await runNotionStagingStep(runId, ready.stocks, ready.runKey, ready.scanDate, shouldBuild)
@@ -64,6 +66,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       scanDate: ready.scanDate,
       notionAction: ready.notionAction,
       rankWarnings: ready.rankWarnings.slice(0, 10),
+      marketCloseStatus: marketClose.status,
       history,
       build,
       staging,
