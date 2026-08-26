@@ -20,6 +20,7 @@ test("unified QeoIndex EOD workflow owns the full v2 pipeline in canonical phase
   assert.match(code, /"use workflow"/)
   const orderedCalls = [
     "runEodReadyStep",
+    "runMarketCloseCollectStep",
     "runHistoryRefreshStep",
     "runWyckoffBuildStep",
     "runNotionStagingStep",

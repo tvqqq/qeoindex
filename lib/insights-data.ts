@@ -9,6 +9,7 @@ import { getScannerData } from "@/lib/scanner-data"
 import { getSignalUiData } from "@/lib/signal-data"
 import { buildRecommendationPerformance } from "@/lib/signal-performance"
 import { fetchTradingViewIndexes, type MarketIndexQuote } from "@/lib/tradingview-index"
+import { getMarketCloseInsightData, type MarketCloseDashboardData } from "@/lib/market-insight-data"
 import type { RatingModelSnapshot } from "@/lib/insights-rating-model"
 import { KFSP_GROUPS, type KfspGroupKey } from "@/supabase/functions/_shared/kfsp-catalog"
 
@@ -97,6 +98,7 @@ export interface InsightsDashboardData {
   }
   modules: InsightsModuleSummary[]
   faSnapshotDate: string
+  marketClose?: MarketCloseDashboardData | null
 }
 
 type RatingDatabaseRow = {
@@ -439,6 +441,7 @@ export async function getInsightsDashboardData(supabase: SupabaseClient): Promis
     getScannerData(),
     getSignalUiData(),
     getResearchOverviewData(),
+    getMarketCloseInsightData(supabase),
   ] as const)
 
   const indexes = settledValue(settled[0])
@@ -447,6 +450,7 @@ export async function getInsightsDashboardData(supabase: SupabaseClient): Promis
   const scanner = settledValue(settled[3])
   const signals = settledValue(settled[4])
   const research = settledValue(settled[5])
+  const marketClose = settledValue(settled[6])
   const vnindex = indexes?.VNINDEX ?? null
   const ratings = ratingResult?.rows.length ? ratingResult.rows : RATING_PREVIEW
   const sectorSummaries = ratingResult?.sectorSummaries.length ? ratingResult.sectorSummaries : summarizePreviewRows(ratings)
@@ -517,5 +521,6 @@ export async function getInsightsDashboardData(supabase: SupabaseClient): Promis
       },
     ],
     faSnapshotDate: FA_SCREEN_SNAPSHOT_DATE,
+    marketClose,
   }
 }

@@ -113,6 +113,7 @@ test("EOD phase model preserves canonical dependency order and fills missing pha
 
   assert.deepEqual(timeline.map((phase) => phase.key), [
     "EOD_READY",
+    "MARKET_CLOSE_COLLECT",
     "HISTORY_REFRESH",
     "WYCKOFF_BUILD",
     "NOTION_STAGING",

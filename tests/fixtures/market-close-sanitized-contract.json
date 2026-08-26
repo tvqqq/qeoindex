@@ -1,0 +1,167 @@
+{
+  "_meta": {
+    "provenance": "Verified contract structure per production dashboard bundle chunk-67783f30.e58bf241.js",
+    "synthetic": true,
+    "description": "Scrubbed fixture for parser validation and regression testing"
+  },
+  "market_pulse_get_content": {
+    "code": 200,
+    "message": "success",
+    "content": "{\"list_main_content\":[{\"title\":\"Tổng quan thị trường chung\",\"value\":\"Xu hướng tăng được xác nhận, thị trường duy trì đà phân hóa tích cực.\"},{\"title\":\"Ngày phân phối\",\"distribution_date\":\"2\"},{\"title\":\"Ngành nghề nổi bật\",\"value\":\"Bất động sản, Chứng khoán\"}]}"
+  },
+  "socket_ma_breadth": {
+    "name": ["MA10", "MA20", "MA50", "MA200"],
+    "above": [280, 267, 183, 189],
+    "under": [115, 128, 212, 206]
+  },
+  "socket_risk_index": [
+    {
+      "risk": 0.63,
+      "tradingdate": "2026-08-26"
+    }
+  ],
+  "socket_psychology": [
+    {
+      "value": 56,
+      "tradingdate": "2026-08-26"
+    }
+  ],
+  "socket_sector_pulse": {
+    "name": ["Bất động sản", "Ngân hàng", "Dịch vụ tài chính"],
+    "percent": [2.35, 0.75, 1.85],
+    "totalval": [4520.3, 5120.0, 3200.5],
+    "totalvalbefore": [3800.0, 4900.0, 2600.0]
+  },
+  "socket_sector_breadth": [
+    {
+      "nganh": "Bất động sản",
+      "count_advances": 42,
+      "count_declines": 10,
+      "count_nochange": 12
+    },
+    {
+      "nganh": "Ngân hàng",
+      "count_advances": 18,
+      "count_declines": 4,
+      "count_nochange": 6
+    },
+    {
+      "nganh": "Dịch vụ tài chính",
+      "count_advances": 25,
+      "count_declines": 2,
+      "count_nochange": 3
+    }
+  ],
+  "rest_cash_flows": {
+    "tradingdate": ["2026-08-25", "2026-08-26"],
+    "nuocngoairong": [-120.5, -145.2],
+    "tudoanh": [80.2, 92.5],
+    "cntckhacrong": [40.3, 52.7],
+    "closeindex": [1273.3, 1284.55]
+  },
+  "rest_top_volatility_tickers": [
+    "SSI",
+    "VIX",
+    "DIG",
+    "FPT",
+    "VCB"
+  ],
+  "socket_getlive": {
+    "stockcode": ["SSI", "VIX", "DIG", "FPT", "VCB"],
+    "lastprice": [36800, 18500, 24200, 138500, 92500],
+    "change": [1200, 600, 800, 2800, 1600],
+    "perchange": [3.37, 3.35, 3.42, 2.06, 1.76],
+    "totalvol": [36500000, 28400000, 19200000, 5200000, 3100000],
+    "totalval": [1343.2, 525.4, 464.6, 720.2, 286.7]
+  },
+  "canonical_qeoindex_indexes": [
+    {
+      "index_code": "VNINDEX",
+      "value": 1284.55,
+      "change": 11.25,
+      "change_pct": 0.88,
+      "reference": 1273.30,
+      "open": 1276.10,
+      "high": 1286.20,
+      "low": 1275.40,
+      "matched_volume": 780450000,
+      "traded_value": 19850.4,
+      "previous_value_change_pct": 12.5,
+      "advances": 274,
+      "unchanged": 68,
+      "declines": 122,
+      "ceilings": 9,
+      "floors": 1,
+      "market_pe": 14.35,
+      "foreign_buy_value": 1350.2,
+      "foreign_sell_value": 1495.4,
+      "foreign_net_value": -145.2
+    },
+    {
+      "index_code": "VN30",
+      "value": 1318.40,
+      "change": 14.10,
+      "change_pct": 1.08,
+      "reference": 1304.30,
+      "open": 1307.50,
+      "high": 1320.00,
+      "low": 1306.80,
+      "matched_volume": 310200000,
+      "traded_value": 10450.2,
+      "previous_value_change_pct": 15.0,
+      "advances": 21,
+      "unchanged": 4,
+      "declines": 5,
+      "ceilings": 1,
+      "floors": 0,
+      "market_pe": 13.6,
+      "foreign_buy_value": 820.5,
+      "foreign_sell_value": 870.5,
+      "foreign_net_value": -50.0
+    },
+    {
+      "index_code": "HNX",
+      "value": 244.80,
+      "change": 1.45,
+      "change_pct": 0.60,
+      "reference": 243.35,
+      "open": 243.80,
+      "high": 245.20,
+      "low": 243.50,
+      "matched_volume": 84500000,
+      "traded_value": 1580.6,
+      "previous_value_change_pct": -2.0,
+      "advances": 92,
+      "unchanged": 51,
+      "declines": 63,
+      "ceilings": 4,
+      "floors": 0,
+      "market_pe": 15.1,
+      "foreign_buy_value": 42.1,
+      "foreign_sell_value": 38.5,
+      "foreign_net_value": 3.6
+    },
+    {
+      "index_code": "UPCOM",
+      "value": 94.15,
+      "change": 0.28,
+      "change_pct": 0.30,
+      "reference": 93.87,
+      "open": 93.90,
+      "high": 94.40,
+      "low": 93.80,
+      "matched_volume": 52300000,
+      "traded_value": 520.3,
+      "previous_value_change_pct": 1.5,
+      "advances": 118,
+      "unchanged": 94,
+      "declines": 82,
+      "ceilings": 7,
+      "floors": 2,
+      "market_pe": null,
+      "foreign_buy_value": 12.4,
+      "foreign_sell_value": 10.1,
+      "foreign_net_value": 2.3
+    }
+  ]
+}

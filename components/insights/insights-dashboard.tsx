@@ -60,6 +60,7 @@ import SoftBlurIn from "@/components/smoothui/soft-blur-in"
 import InsightsTransition from "@/components/smoothui/insights-transition"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { MetricGuideDialog } from "@/components/insights/metric-guide-dialog"
+import { MarketCloseDashboard } from "@/components/insights/market-close-dashboard"
 import { TtaiDashboard } from "@/components/insights/ttai-dashboard"
 import { StockLogo } from "@/components/stock-logo"
 import { TopNav } from "@/components/top-nav"
@@ -1435,6 +1436,7 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
   )
 }
 export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashboardData; initialTicker?: string }) {
+  const [mainTab, setMainTab] = useState<"market_close" | "ratings" | "research">(initialTicker ? "ratings" : "market_close")
   const [universeFilter, setUniverseFilter] = useState<"top100" | "all">("top100")
   const [sectorFilter, setSectorFilter] = useState("all")
   const [query, setQuery] = useState("")
@@ -1450,6 +1452,13 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
   const openGuide = (key?: string | null) => {
     setGuideMetricKey(key || null)
     setGuideOpen(true)
+  }
+
+  const handleOpenStockDetail = (ticker: string) => {
+    const found = data.ratings.find((r) => r.ticker.toUpperCase() === ticker.toUpperCase())
+    if (found) {
+      setSelectedRating(found)
+    }
   }
 
   // Auto-sync ticker from URL query if user navigated client-side (popstate / back-forward)
@@ -1546,7 +1555,62 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
           </div>
         </section>
 
-        <section className="mt-8 grid gap-4 xl:grid-cols-[1.65fr_1fr]">
+        {/* Primary Tab Navigation */}
+        <div className="mt-6 border-b border-white/[0.08] pb-3">
+          <div className="flex items-center gap-2 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setMainTab("market_close")}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-colors cursor-pointer",
+                mainTab === "market_close"
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-[0_0_15px_-3px_rgba(34,201,138,0.3)]"
+                  : "text-muted-2 hover:bg-white/[0.05] hover:text-white border border-transparent"
+              )}
+            >
+              <Activity className="size-4 text-emerald-400" />
+              <span>Insight sau phiên</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMainTab("ratings")}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-colors cursor-pointer",
+                mainTab === "ratings"
+                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shadow-[0_0_15px_-3px_rgba(6,182,212,0.3)]"
+                  : "text-muted-2 hover:bg-white/[0.05] hover:text-white border border-transparent"
+              )}
+            >
+              <BarChart3 className="size-4 text-cyan-400" />
+              <span>Xếp hạng Top 100</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMainTab("research")}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-colors cursor-pointer",
+                mainTab === "research"
+                  ? "bg-purple-500/20 text-purple-300 border border-purple-500/30 shadow-[0_0_15px_-3px_rgba(168,85,247,0.3)]"
+                  : "text-muted-2 hover:bg-white/[0.05] hover:text-white border border-transparent"
+              )}
+            >
+              <BrainCircuit className="size-4 text-purple-400" />
+              <span>Nghiên cứu chuyên sâu</span>
+            </button>
+          </div>
+        </div>
+
+        {mainTab === "market_close" && (
+          <div className="mt-6">
+            <MarketCloseDashboard data={data.marketClose || null} onOpenStockDetail={handleOpenStockDetail} />
+          </div>
+        )}
+
+        {mainTab === "ratings" && (
+          <div className="mt-6 space-y-8">
+            <section className="grid gap-4 xl:grid-cols-[1.65fr_1fr]">
           <Card className="border border-white/[0.07] bg-panel/95 py-0 ring-0">
             <CardHeader className="flex-row items-start justify-between border-b border-white/[0.06] p-6">
               <div>
@@ -1965,12 +2029,15 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
             </CardContent>
             <div className="flex flex-col gap-2 border-t border-white/[0.06] px-4 py-4 text-xs font-medium text-muted-2 sm:flex-row sm:items-center sm:justify-between">
               <span>{showSectorGroups ? <>Hiển thị <strong className="text-white">{sortedSectorSummaries.length}</strong> nhóm ngành · click dòng hoặc icon mở rộng để xem chi tiết mã</> : <>Hiển thị <strong className="text-white">{filteredRatings.length}</strong> / {data.ratings.length} mã</>}</span>
-              <span>{data.ratingMessage}</span>
             </div>
           </Card>
         </section>
+      </div>
+    )}
 
-        <section className="mt-10">
+    {mainTab === "research" && (
+      <div className="mt-6 space-y-8">
+        <section>
           <div className="flex items-end justify-between gap-4">
             <div>
               <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-300">Research workspace</div>
@@ -1982,7 +2049,9 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
             {data.modules.map((module) => <ModuleCard key={module.key} module={module} />)}
           </div>
         </section>
-      </main>
+      </div>
+    )}
+  </main>
       </InsightsTransition>
       <RatingDialog key={selectedRating?.ticker ?? "closed"} row={selectedRating} onOpenChange={(open) => { if (!open) setSelectedRating(null) }} />
       <MetricGuideDialog open={guideOpen} onOpenChange={setGuideOpen} initialMetricKey={guideMetricKey} />

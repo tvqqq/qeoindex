@@ -7,6 +7,7 @@ This is the architecture overview. Supporting documents:
 - UX, visual language, responsive and accessibility contract: `docs/insights-design.md`
 - Engineering and operations runbook: `docs/insights-handover.md`
 - Planned metric explainability and AI Council semantic-grounding handoff: `docs/insights-explainability-ai-council-handoff.md`
+- Researched end-of-day market snapshot, collection, and complete UI plan: `docs/insights-market-close-plan.md`
 
 `/insights` is the market-intelligence landing page for every signed-in user. It requires Supabase Auth but no separate feature entitlement. Anonymous users remain behind the existing login gate; the feature does not weaken the auth boundary of `/`, `/research/*`, or any write/operational API.
 
