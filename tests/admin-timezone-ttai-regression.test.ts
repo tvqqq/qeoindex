@@ -32,6 +32,22 @@ test("admin timestamps are formatted in Vietnam time independent of runtime time
   assert.match(formatted, /26\/08\/2026/)
 })
 
+test("admin timestamp surfaces use the single shared Vietnam timezone formatter", () => {
+  const timestampSurfaces = [
+    "components/admin/admin-overview-dashboard.tsx",
+    "components/admin/admin-jobs-table.tsx",
+    "components/admin/admin-job-history-table.tsx",
+    "components/admin/admin-job-phase-timeline.tsx",
+    "components/admin/admin-audit-table.tsx",
+  ]
+
+  for (const path of timestampSurfaces) {
+    const code = readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+    assert.doesNotMatch(code, /\.toLocale(?:String|TimeString|DateString)\(/, `${path} must not use runtime-local timezone formatting`)
+    assert.doesNotMatch(code, /timeZone:\s*["']Asia\/Ho_Chi_Minh["']/, `${path} must not hardcode the timezone outside lib/admin/time.ts`)
+  }
+})
+
 test("TTAI normalization treats provider score sentinels outside 0-100 as missing", async () => {
   assert.equal(existsSync(ttaiNormalizeUrl), true, "TTAI normalization must live in a testable pure module")
   const { normalizeTtaiHistory } = await import(ttaiNormalizeUrl.href)
