@@ -8,6 +8,7 @@ function source(path: string) {
 
 const stepsUrl = new URL("../lib/qeoindex-eod-workflow-steps.ts", import.meta.url)
 const stagingStepsUrl = new URL("../lib/qeoindex-eod-notion-staging-batch.ts", import.meta.url)
+const failureStepUrl = new URL("../lib/qeoindex-eod-failure-step.ts", import.meta.url)
 const workflowUrl = new URL("../workflows/qeoindex-eod-pipeline.ts", import.meta.url)
 const routeUrl = new URL("../app/api/qeoindex/eod/route.ts", import.meta.url)
 const ingestUrl = new URL("../lib/wyckoff-notion-ingest.ts", import.meta.url)
@@ -15,6 +16,7 @@ const ingestUrl = new URL("../lib/wyckoff-notion-ingest.ts", import.meta.url)
 test("unified QeoIndex EOD workflow owns the full v2 pipeline in canonical phase order", () => {
   assert.equal(existsSync(stepsUrl), true, "qeoindex-eod-workflow-steps.ts must exist")
   assert.equal(existsSync(stagingStepsUrl), true, "qeoindex-eod-notion-staging-batch.ts must exist")
+  assert.equal(existsSync(failureStepUrl), true, "qeoindex-eod-failure-step.ts must exist")
   assert.equal(existsSync(workflowUrl), true, "qeoindex-eod-pipeline.ts must exist")
   if (!existsSync(workflowUrl)) return
 
@@ -39,6 +41,7 @@ test("unified QeoIndex EOD workflow owns the full v2 pipeline in canonical phase
     assert.ok(index > cursor, `${call} must appear after the previous canonical phase`)
     cursor = index
   }
+  assert.match(code, /from "@\/lib\/qeoindex-eod-failure-step"/)
   assert.doesNotMatch(code, /runUnifiedWyckoff/)
 })
 
@@ -167,11 +170,9 @@ test("NOTION_STAGING executes as ten durable workflow steps of at most ten ticke
 })
 
 test("parent workflow failure closes orphaned running phase telemetry", () => {
-  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
-  const start = steps.indexOf("export async function failQeoIndexEodRunStep")
-  assert.ok(start >= 0, "failure handler must exist")
-  const block = steps.slice(start)
+  const failureStep = source("lib/qeoindex-eod-failure-step.ts")
 
-  assert.match(block, /from\("system_job_phases"\)[\s\S]*status:\s*"failed"/)
-  assert.match(block, /\.eq\("run_id", runId\)[\s\S]*\.eq\("status", "running"\)/)
+  assert.match(failureStep, /from\("system_job_phases"\)[\s\S]*status:\s*"failed"/)
+  assert.match(failureStep, /\.eq\("run_id", runId\)[\s\S]*\.eq\("status", "running"\)/)
+  assert.match(failureStep, /markQeoIndexEodPhaseSkipped[\s\S]*phaseKey:\s*"COMPLETE"/)
 })
