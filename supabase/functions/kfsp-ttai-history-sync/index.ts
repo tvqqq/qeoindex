@@ -2,6 +2,9 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2"
 import { isTtaiNoHistoryError, normalizeTtaiHistory } from "./normalize.ts"
 
+// normalize.ts owns provider-shape parsing and keeps the established contracts:
+// periods.length - values.length right-alignment across fourm_option_history_chart,
+// canslim_option_history_chart, data_table_4m, and data_table_canslim.
 type JsonObject = Record<string, unknown>
 
 const PROVIDER_TIMEOUT_MS = 8_000
