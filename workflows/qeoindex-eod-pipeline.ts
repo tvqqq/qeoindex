@@ -1,9 +1,11 @@
 import { sleep } from "workflow"
 
+import type { OhlcvUniverseRefreshResult } from "@/lib/ohlcv-history-store"
+
 import {
   runEodReadyStep,
   runMarketCloseCollectStep,
-  runHistoryRefreshStep,
+  runHistoryRefreshBatchStep,
   runWyckoffBuildStep,
   runNotionStagingStep,
   runNotionValidateStep,
@@ -46,7 +48,33 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
     const shouldPublish = ready.notionAction !== "stop"
 
     const marketClose = await runMarketCloseCollectStep(runId, startedAtIso, true)
-    const history = await runHistoryRefreshStep(runId, ready.stocks, startedAtIso, shouldBuild)
+    let history: OhlcvUniverseRefreshResult = {
+      requestedTickers: 0,
+      completedTickers: 0,
+      failedTickers: 0,
+      dailyFetchedBars: 0,
+      hourlyFetchedBars: 0,
+      backfillOperations: 0,
+      deltaOperations: 0,
+      limitedCoverage: [],
+      errors: [],
+    }
+    if (shouldBuild) {
+      for (let offset = 0; offset < ready.stocks.length; offset += 10) {
+        history = await runHistoryRefreshBatchStep(
+          runId,
+          ready.stocks.slice(offset, offset + 10),
+          startedAtIso,
+          history,
+          true,
+        )
+      }
+      if (history.completedTickers !== 100 || history.requestedTickers !== 100) {
+        throw new Error(`HISTORY_REFRESH completed ${history.completedTickers}/${history.requestedTickers} tickers; expected 100/100`)
+      }
+    } else {
+      history = await runHistoryRefreshBatchStep(runId, [], startedAtIso, history, false)
+    }
     const build = await runWyckoffBuildStep(runId, ready.stocks, ready.runKey, ready.scanDate, shouldBuild)
     const staging = await runNotionStagingStep(runId, ready.stocks, ready.runKey, ready.scanDate, shouldBuild)
     const providerSummary = staging.providers.length
