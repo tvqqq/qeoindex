@@ -1,0 +1,25 @@
+name: notion-staging-tdd-temp
+
+on:
+  push:
+    branches:
+      - fix/notion-staging-durable-batches
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: QeoIndex EOD v2 tests
+        run: pnpm test:eod-v2
