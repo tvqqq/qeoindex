@@ -74,7 +74,7 @@ async function assertFinalEodMarketReady(startedAtIso: string) {
     .in("symbol", tickers)
   if (snapshots.error) throw new Error(`Load final EOD market snapshots failed: ${snapshots.error.message}`)
 
-  const cutoff = new Date(`${expectedSessionDate}T07:50:00.000Z`).getTime()
+  const cutoff = new Date(`${expectedSessionDate}T07:45:00.000Z`).getTime()
   const fresh = new Set(
     (snapshots.data || [])
       .filter((row) => {
