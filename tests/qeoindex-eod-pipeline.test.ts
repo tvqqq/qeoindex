@@ -21,7 +21,7 @@ test("unified QeoIndex EOD workflow owns the full v2 pipeline in canonical phase
   const orderedCalls = [
     "runEodReadyStep",
     "runMarketCloseCollectStep",
-    "runHistoryRefreshStep",
+    "runHistoryRefreshBatchStep",
     "runWyckoffBuildStep",
     "runNotionStagingStep",
     "runNotionValidateStep",
@@ -47,7 +47,7 @@ test("workflow steps use v2 persistent-cache, Notion staging and split claim/pub
 
   for (const required of [
     "loadWyckoffV2Universe",
-    "refreshOhlcvHistoryUniverse",
+    "refreshOhlcvHistoryBatch",
     "loadWyckoffV2CachedTickerHistory",
     "buildWyckoffV2TickerSnapshots",
     "beginWyckoffV2NotionRun",
@@ -61,6 +61,7 @@ test("workflow steps use v2 persistent-cache, Notion staging and split claim/pub
   ]) {
     assert.match(code, new RegExp(required), `steps must use ${required}`)
   }
+  assert.doesNotMatch(code, /refreshOhlcvHistoryUniverse/)
   assert.doesNotMatch(code, /runUnifiedWyckoff/)
   assert.match(code, /failedTickers[\s\S]*throw/i)
   assert.match(code, /snapshots\.length !== 500|Expected 500/i)
@@ -116,13 +117,29 @@ test("EOD_READY freshness cutoff matches the canonical 14:45 ICT closing sync", 
   assert.doesNotMatch(steps, /T07:50:00\.000Z/)
 })
 
-test("market-close Edge auth accepts the existing Vault-backed QeoIndex cron secret fallback", () => {
+test("market-close collection uses only the dedicated Vault secret and fails closed", () => {
   const steps = source("lib/qeoindex-eod-workflow-steps.ts")
-  const edge = source("supabase/functions/market-insight-eod-sync/index.ts")
+  const migration = source("supabase/migrations/20260826105000_market_close_sync_secret_rpc.sql")
 
-  assert.match(steps, /KFSP_SYNC_SECRET\s*\|\|\s*process\.env\.CRON_SECRET/)
-  assert.match(edge, /qeo_verify_eod_scheduler_secret/)
-  assert.match(edge, /p_secret:\s*token/)
-  assert.match(edge, /data\s*===\s*true/)
-  assert.doesNotMatch(edge, /if \(!constantTimeEqual\(syncSecret, token\)\) return jsonResponse\(\{ ok: false, error: "UNAUTHORIZED" \}, 401\)/)
+  assert.match(migration, /qeo_get_market_close_sync_secret/)
+  assert.match(migration, /kfsp_sync_secret/)
+  assert.match(migration, /revoke all on function public\.qeo_get_market_close_sync_secret\(\) from public, anon, authenticated/i)
+  assert.match(migration, /grant execute on function public\.qeo_get_market_close_sync_secret\(\) to service_role/i)
+  assert.match(steps, /rpc\("qeo_get_market_close_sync_secret"\)/)
+  assert.doesNotMatch(steps, /process\.env\.KFSP_SYNC_SECRET\s*\|\|\s*process\.env\.CRON_SECRET/)
+  assert.match(steps, /MARKET_CLOSE_COLLECT_FAILED/)
+  assert.doesNotMatch(steps, /status:\s*"degraded"\s+as const/)
+})
+
+test("HISTORY_REFRESH executes as ten durable workflow steps of at most ten tickers", () => {
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+
+  assert.match(workflow, /for \(let offset = 0; offset < ready\.stocks\.length; offset \+= 10\)/)
+  assert.match(workflow, /ready\.stocks\.slice\(offset, offset \+ 10\)/)
+  assert.match(workflow, /runHistoryRefreshBatchStep/)
+  assert.doesNotMatch(workflow, /runHistoryRefreshStep\(runId, ready\.stocks/)
+  assert.match(steps, /refreshOhlcvHistoryBatch/)
+  assert.doesNotMatch(steps, /refreshOhlcvHistoryUniverse/)
+  assert.match(steps, /completedTickers[\s\S]*requestedTickers/)
 })
