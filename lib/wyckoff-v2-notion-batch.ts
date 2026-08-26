@@ -7,7 +7,7 @@ import {
   type NotionQueryOptions,
   type NotionQueryResult,
 } from "./notion/client.ts"
-import { pageProperties } from "./notion/properties.ts"
+import { dateText, numberValue, pageProperties, selectText, urlText } from "./notion/properties.ts"
 import type { WyckoffV2Snapshot } from "./wyckoff-v2-builder.ts"
 import {
   buildWyckoffV2SnapshotProperties,
@@ -42,6 +42,25 @@ function propertyText(property: unknown, kind: "rich_text" | "title" = "rich_tex
 
 function snapshotPageKey(page: NotionPage) {
   return propertyText(pageProperties(page)["Snapshot Key"])
+}
+
+function snapshotPageMatches(page: NotionPage, row: WyckoffV2Snapshot) {
+  const props = pageProperties(page)
+  return snapshotPageKey(page) === row.snapshotKey
+    && dateText(props["Bar Closed At"]) === (row.barClosedAt ?? "")
+    && numberValue(props["History Bar Count"]) === row.historyBarCount
+    && selectText(props["History Status"]) === row.historyStatus
+    && propertyText(props.Provider) === row.provider
+    && urlText(props["Source URL"]) === row.sourceUrl
+    && dateText(props["Fetched At"]) === row.fetchedAt
+    && propertyText(props["Model Version"]) === row.modelVersion
+    && propertyText(props["Aggregation Version"]) === row.aggregationVersion
+    && propertyText(props["Prompt Version"]) === row.promptVersion
+    && selectText(props["Validation Status"]) === row.validationStatus
+    && propertyText(props["Technical JSON"]) === JSON.stringify(row.technical)
+    && propertyText(props["Evidence JSON"]) === JSON.stringify(row.evidence)
+    && propertyText(props["Markers JSON"]) === JSON.stringify(row.markers)
+    && propertyText(props["Scenarios JSON"]) === JSON.stringify(row.scenarios)
 }
 
 function sleep(ms: number) {
@@ -119,16 +138,22 @@ export async function stageWyckoffV2SnapshotBatch(
 
   let created = 0
   let updated = 0
+  let skipped = 0
   let lastWriteStartedAt = 0
   const interval = Math.max(0, input.minWriteIntervalMs ?? DEFAULT_WRITE_INTERVAL_MS)
 
   for (const row of input.snapshots) {
+    const existing = existingByKey.get(row.snapshotKey)
+    if (existing && snapshotPageMatches(existing, row)) {
+      skipped += 1
+      continue
+    }
+
     const waitMs = interval - (Date.now() - lastWriteStartedAt)
     if (waitMs > 0) await sleep(waitMs)
     lastWriteStartedAt = Date.now()
 
     const properties = buildWyckoffV2SnapshotProperties(row) as NotionProperties
-    const existing = existingByKey.get(row.snapshotKey)
     if (existing) {
       await withRateLimitRetry(() => io.updatePageProperties(existing.id, properties, { errorContext: `Notion Wyckoff v2 batch update ${row.snapshotKey}` }))
       updated += 1
@@ -138,7 +163,7 @@ export async function stageWyckoffV2SnapshotBatch(
     }
   }
 
-  return { created, updated, skipped: 0, total: input.snapshots.length }
+  return { created, updated, skipped, total: input.snapshots.length }
 }
 
 export type { NotionPage, NotionProperties, NotionQueryOptions, NotionQueryResult }
