@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/eod-pipeline-admin-phases
+      - fix/eod-ready-1445-cutoff
 
 permissions:
   contents: read
