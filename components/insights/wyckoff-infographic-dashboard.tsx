@@ -923,13 +923,21 @@ export function WyckoffInfographicDashboard(props: {
           <Card className="hidden h-[680px] gap-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#090e15] py-0 ring-0 xl:order-1 xl:sticky xl:top-3.5 xl:flex xl:h-[calc(100vh-76px)] xl:min-h-[660px]">
             <div className="border-b border-white/[0.07] bg-[#080d14] p-3.5">
               <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="grid size-8 place-items-center rounded-xl border border-cyan-400/15 bg-cyan-400/[0.06] text-cyan-300"><Radar className="size-4" /></div>
-                  <div><CardTitle className={cn(TYPE.section, "text-white")}>Wyckoff Watchlist</CardTitle><div className="text-[11.5px] font-semibold leading-4 text-slate-500">1H · 1D · 1W Phase overview</div></div>
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="relative flex size-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/20 via-blue-500/15 to-purple-500/20 shadow-[0_0_18px_-4px_rgba(34,211,238,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] transition-transform duration-300 hover:scale-105">
+                    <div className="absolute inset-0 rounded-xl bg-cyan-400/10 animate-pulse" />
+                    <Radar className="relative size-5 text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.55)] animate-[spin_12s_linear_infinite]" />
+                  </div>
+                  <div>
+                    <CardTitle className="font-ticker text-base font-extrabold italic tracking-[-0.02em] text-white sm:text-lg">
+                      Wyckoff Watchlist
+                    </CardTitle>
+                    <div className="text-[11.5px] font-medium leading-4 text-slate-400">1H · 1D · 1W Phase overview</div>
+                  </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Button type="button" variant="ghost" size="sm" disabled={!groupedStocks.length} onClick={toggleVisibleGroups} className="h-7 rounded-lg px-2 text-[11.5px] font-bold text-slate-500 hover:bg-white/[0.035] hover:text-slate-300"><ChevronsUpDown className="size-3.5" />{allVisibleGroupsCollapsed ? "Mở tất cả" : "Thu gọn"}</Button>
-                  <Badge variant="outline" className="h-7 border-cyan-400/18 bg-cyan-400/[0.05] px-2.5 text-xs font-bold tabular-nums text-cyan-300">{filteredStocks.length}</Badge>
+                  <Button type="button" variant="ghost" size="sm" disabled={!groupedStocks.length} onClick={toggleVisibleGroups} className="h-7 rounded-lg px-2 text-[11.5px] font-bold text-slate-400 hover:bg-white/[0.035] hover:text-slate-200"><ChevronsUpDown className="size-3.5" />{allVisibleGroupsCollapsed ? "Mở tất cả" : "Thu gọn"}</Button>
+                  <Badge variant="outline" className="h-7 border-cyan-400/20 bg-cyan-400/[0.08] px-2.5 text-xs font-bold tabular-nums text-cyan-300">{filteredStocks.length}</Badge>
                 </div>
               </div>
 

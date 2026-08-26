@@ -15,36 +15,28 @@ const INSIGHTS_ITEMS = [
     label: "Tổng quan Insights",
     href: "/insights",
     icon: Sparkles,
-    badge: "SIGNED IN",
-    badgeColor: "border-cyan-500/30 bg-cyan-500/15 text-cyan-300",
-    iconBg: "border-emerald-500/25 bg-emerald-500/10 text-emerald-400",
+    iconBg: "border-emerald-500/30 bg-emerald-500/15 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]",
     description: "VNIndex, rating score và research pulse",
   },
   {
     label: "Phân tích chart Wyckoff",
     href: "/insights/wyckoff",
     icon: CandlestickChart,
-    badge: "NEW",
-    badgeColor: "border-purple-500/30 bg-purple-500/15 text-purple-300",
-    iconBg: "border-purple-500/25 bg-purple-500/10 text-purple-300",
+    iconBg: "border-purple-500/30 bg-purple-500/15 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.2)]",
     description: "Chart 1H–1M, phase và kịch bản tiếp theo",
   },
   {
     label: "AI Council",
     href: "/insights/ai-council",
     icon: BrainCircuit,
-    badge: "BETA",
-    badgeColor: "border-violet-500/30 bg-violet-500/15 text-violet-300",
-    iconBg: "border-violet-500/25 bg-violet-500/10 text-violet-300",
+    iconBg: "border-cyan-500/30 bg-cyan-500/15 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.2)]",
     description: "5 specialist agents, Bull/Bear debate và Risk audit",
   },
   {
     label: "Nghiên cứu",
     href: "/research",
     icon: Compass,
-    badge: "HUB",
-    badgeColor: "border-amber-500/30 bg-amber-500/15 text-amber-300",
-    iconBg: "border-amber-500/25 bg-amber-500/10 text-amber-300",
+    iconBg: "border-amber-500/30 bg-amber-500/15 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.2)]",
     description: "Scanner, tín hiệu, FA, luận điểm, nhật ký & hậu kiểm",
   },
 ] as const
@@ -171,7 +163,7 @@ export function TopNav() {
             {isOpen ? (
               <div className="absolute left-0 top-full z-50 pt-2">
                 <div className="w-[360px] select-none rounded-2xl border border-white/[0.12] bg-[#0c1015] p-2 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.95),0_0_30px_rgba(34,201,138,0.12)] sm:w-[390px]">
-                  <div className="mb-1.5 flex items-center justify-between border-b border-white/[0.08] px-3.5 py-2.5">
+                  <div className="mb-1.5 border-b border-white/[0.08] px-3.5 py-2.5">
                     <div className="flex flex-col">
                       <span className="flex items-center gap-1.5 text-sm font-bold tracking-tight text-foreground">
                         Insights
@@ -179,9 +171,6 @@ export function TopNav() {
                       </span>
                       <span className="mt-0.5 text-[11px] font-normal text-muted-2">Phân tích thị trường chuyên sâu</span>
                     </div>
-                    <span className="rounded-md border border-amber-500/35 bg-amber-500/15 px-1.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.18)]">
-                      ULTRA
-                    </span>
                   </div>
 
                   <div className="space-y-1" role="menu" aria-label="Các trang Insights">
@@ -206,14 +195,9 @@ export function TopNav() {
                             <Icon className="h-4 w-4" />
                           </div>
                           <div className="flex min-w-0 flex-1 flex-col">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`text-xs font-bold transition-colors ${active ? "text-emerald-300" : "text-foreground group-hover:text-emerald-300"}`}>
-                                {item.label}
-                              </span>
-                              <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${item.badgeColor}`}>
-                                {item.badge}
-                              </span>
-                            </div>
+                            <span className={`text-xs font-bold transition-colors ${active ? "text-emerald-300" : "text-foreground group-hover:text-emerald-300"}`}>
+                              {item.label}
+                            </span>
                             <span className="mt-0.5 line-clamp-1 text-[11px] font-normal leading-snug text-muted-2 transition-colors group-hover:text-slate-300">
                               {item.description}
                             </span>
