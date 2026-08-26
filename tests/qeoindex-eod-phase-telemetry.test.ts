@@ -28,7 +28,7 @@ test("QeoIndex EOD phase telemetry persists running then succeeded with canonica
   assert.deepEqual(writes.map((row) => row.status), ["running", "succeeded"])
   assert.equal(writes[0].job_key, "qeoindex.eod_pipeline")
   assert.equal(writes[0].phase_key, "WYCKOFF_BUILD")
-  assert.equal(writes[0].phase_order, 3)
+  assert.equal(writes[0].phase_order, 4)
   assert.deepEqual(writes[1].summary, { snapshots: 500 })
   assert.equal(typeof writes[1].finished_at, "string")
   assert.equal(typeof writes[1].duration_ms, "number")
@@ -58,7 +58,7 @@ test("QeoIndex EOD phase telemetry records failure and rethrows the original err
   assert.deepEqual(writes.map((row) => row.status), ["running", "failed"])
   assert.equal(writes[1].error_code, "UPSTREAM_STALE")
   assert.equal(writes[1].error_message, "provider failed")
-  assert.equal(writes[1].phase_order, 2)
+  assert.equal(writes[1].phase_order, 3)
 })
 
 test("QeoIndex EOD phase telemetry can mark skipped phases without executing work", async () => {
@@ -78,7 +78,7 @@ test("QeoIndex EOD phase telemetry can mark skipped phases without executing wor
 
   assert.equal(writes.length, 1)
   assert.equal(writes[0].status, "skipped")
-  assert.equal(writes[0].phase_order, 9)
+  assert.equal(writes[0].phase_order, 10)
   assert.deepEqual(writes[0].summary, { reason: "deterministic gate did not pass" })
 })
 
