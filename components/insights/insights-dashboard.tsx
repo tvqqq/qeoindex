@@ -329,7 +329,7 @@ function ModuleCard({ module }: { module: InsightsModuleSummary }) {
         <h3 className="mt-5 text-lg font-bold text-white">{module.label}</h3>
         <p className="mt-2 text-2xl font-extrabold tracking-tight text-brand">{module.value}</p>
         <p className="mt-2 min-h-10 text-sm leading-5 text-muted-2">{module.detail}</p>
-        <Link href={module.href} className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-foreground transition-colors group-hover:text-brand">
+        <Link href={module.href} prefetch={false} className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-foreground transition-colors group-hover:text-brand">
           Mở module <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
         </Link>
       </CardContent>
@@ -1434,7 +1434,6 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
   )
 }
 export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashboardData; initialTicker?: string }) {
-  const [mainTab, setMainTab] = useState<"market_close" | "ratings" | "research">(initialTicker ? "ratings" : "market_close")
   const [universeFilter, setUniverseFilter] = useState<"top100" | "all">("top100")
   const [sectorFilter, setSectorFilter] = useState("all")
   const [query, setQuery] = useState("")
@@ -1551,61 +1550,35 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
           </div>
         </section>
 
-        {/* Primary Tab Navigation */}
-        <div className="mt-6 border-b border-white/[0.08] pb-3">
-          <div className="flex items-center gap-2 overflow-x-auto">
-            <button
-              type="button"
-              onClick={() => setMainTab("market_close")}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-colors cursor-pointer",
-                mainTab === "market_close"
-                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-[0_0_15px_-3px_rgba(34,201,138,0.3)]"
-                  : "text-muted-2 hover:bg-white/[0.05] hover:text-white border border-transparent"
-              )}
-            >
+        <nav aria-label="Điều hướng dashboard Insights" className="sticky top-14 z-30 mt-6 border-y border-white/[0.08] bg-background/95 py-3">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <a href="#sau-phien" className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-xs font-bold text-emerald-300 transition-colors hover:border-emerald-400/45 hover:bg-emerald-500/15 sm:text-sm">
               <Activity className="size-4 text-emerald-400" />
-              <span>Insight sau phiên</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainTab("ratings")}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-colors cursor-pointer",
-                mainTab === "ratings"
-                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shadow-[0_0_15px_-3px_rgba(6,182,212,0.3)]"
-                  : "text-muted-2 hover:bg-white/[0.05] hover:text-white border border-transparent"
-              )}
-            >
+              <span>1. Insight sau phiên</span>
+            </a>
+            <a href="#top-100" className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.07] px-4 py-3 text-xs font-bold text-cyan-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-500/12 sm:text-sm">
               <BarChart3 className="size-4 text-cyan-400" />
-              <span>Xếp hạng Top 100</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainTab("research")}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-colors cursor-pointer",
-                mainTab === "research"
-                  ? "bg-purple-500/20 text-purple-300 border border-purple-500/30 shadow-[0_0_15px_-3px_rgba(168,85,247,0.3)]"
-                  : "text-muted-2 hover:bg-white/[0.05] hover:text-white border border-transparent"
-              )}
-            >
+              <span>2. Xếp hạng Top 100</span>
+            </a>
+            <a href="#nghien-cuu" className="inline-flex items-center gap-2 rounded-xl border border-purple-500/20 bg-purple-500/[0.07] px-4 py-3 text-xs font-bold text-purple-300 transition-colors hover:border-purple-400/40 hover:bg-purple-500/12 sm:text-sm">
               <BrainCircuit className="size-4 text-purple-400" />
-              <span>Nghiên cứu chuyên sâu</span>
-            </button>
+              <span>3. Nghiên cứu chuyên sâu</span>
+            </a>
           </div>
-        </div>
+        </nav>
 
-        {mainTab === "market_close" && (
-          <div className="mt-6">
+        <section id="sau-phien" aria-labelledby="sau-phien-title" className="scroll-mt-32 pt-6">
+          <h2 id="sau-phien-title" className="sr-only">Insight sau phiên</h2>
             <MarketCloseDashboard data={data.marketClose || null} onOpenStockDetail={handleOpenStockDetail} />
-          </div>
-        )}
+        </section>
 
-        {mainTab === "ratings" && (
-          <div className="mt-6 space-y-8">
+        <section id="top-100" aria-labelledby="top-100-title" className="scroll-mt-32 pt-12">
+          <div className="mb-5 border-l-2 border-cyan-400 pl-4">
+            <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-300">Bước 2 · Sàng lọc cơ hội</div>
+            <h2 id="top-100-title" className="mt-1 text-2xl font-extrabold text-white sm:text-3xl">Xếp hạng Top 100</h2>
+            <p className="mt-1 text-sm text-muted-2">Đi từ bối cảnh thị trường xuống nhóm ngành và cổ phiếu nổi bật.</p>
+          </div>
+          <div className="space-y-8">
             <section className="grid gap-4 xl:grid-cols-[1.65fr_1fr]">
           <Card className="border border-white/[0.07] bg-panel/95 py-0 ring-0">
             <CardHeader className="flex-row items-start justify-between border-b border-white/[0.06] p-6">
@@ -2028,16 +2001,16 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
             </div>
           </Card>
         </section>
-      </div>
-    )}
+          </div>
+        </section>
 
-    {mainTab === "research" && (
-      <div className="mt-6 space-y-8">
+        <section id="nghien-cuu" aria-labelledby="nghien-cuu-title" className="scroll-mt-32 pt-12">
+          <div className="space-y-8">
         <section>
           <div className="flex items-end justify-between gap-4">
             <div>
               <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-300">Research workspace</div>
-              <h2 className="mt-2 text-2xl font-extrabold text-white sm:text-3xl">Khám phá Insights chuyên sâu</h2>
+              <h2 id="nghien-cuu-title" className="mt-2 text-2xl font-extrabold text-white sm:text-3xl">Khám phá Insights chuyên sâu</h2>
               <p className="mt-2 text-sm font-medium text-muted-2">Tổng hợp trực tiếp từ các read-model hiện có của `/research`.</p>
             </div>
           </div>
@@ -2045,8 +2018,8 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
             {data.modules.map((module) => <ModuleCard key={module.key} module={module} />)}
           </div>
         </section>
-      </div>
-    )}
+          </div>
+        </section>
       </main>
       <RatingDialog key={selectedRating?.ticker ?? "closed"} row={selectedRating} onOpenChange={(open) => { if (!open) setSelectedRating(null) }} />
       <MetricGuideDialog open={guideOpen} onOpenChange={setGuideOpen} initialMetricKey={guideMetricKey} />
