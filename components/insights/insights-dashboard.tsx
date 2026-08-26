@@ -56,8 +56,6 @@ import {
 } from "lucide-react"
 
 import AnimatedProgressBar from "@/components/smoothui/animated-progress-bar"
-import SoftBlurIn from "@/components/smoothui/soft-blur-in"
-import InsightsTransition from "@/components/smoothui/insights-transition"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { MetricGuideDialog } from "@/components/insights/metric-guide-dialog"
 import { MarketCloseDashboard } from "@/components/insights/market-close-dashboard"
@@ -1524,19 +1522,17 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
   }
 
   return (
-    <div className="min-h-screen bg-background font-ticker text-foreground">
+    <div className="min-h-screen bg-background text-foreground">
       <TopNav />
-      <InsightsTransition>
-        <main className="mx-auto w-full max-w-[1880px] px-3 pb-16 pt-8 sm:px-5 lg:px-6">
+      <main className="mx-auto w-full max-w-[1880px] px-3 pb-16 pt-8 sm:px-5 lg:px-6">
         <section className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div>
             <div className="flex items-center gap-3.5 sm:gap-4">
               <div className="relative flex size-10 sm:size-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/20 via-cyan-500/15 to-purple-500/20 shadow-[0_0_24px_-4px_rgba(34,201,138,0.45),inset_0_1px_0_rgba(255,255,255,0.22)] transition-transform duration-300 hover:scale-105">
-                <div className="absolute inset-0 rounded-2xl bg-emerald-400/10 animate-pulse" />
-                <Sparkles className="relative size-5 sm:size-6 text-emerald-300 drop-shadow-[0_0_10px_rgba(34,201,138,0.6)] animate-[spin_10s_linear_infinite]" />
+                <Sparkles className="relative size-5 sm:size-6 text-emerald-300" />
               </div>
               <h1 className="font-ticker text-3xl font-extrabold italic tracking-[-0.03em] text-white sm:text-4xl lg:text-5xl">
-                <SoftBlurIn stagger={18}>Insights thị trường</SoftBlurIn>
+                Insights thị trường
               </h1>
             </div>
             <p className="mt-2.5 max-w-3xl text-sm font-medium leading-6 text-muted-2 sm:text-base">
@@ -2051,8 +2047,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
         </section>
       </div>
     )}
-  </main>
-      </InsightsTransition>
+      </main>
       <RatingDialog key={selectedRating?.ticker ?? "closed"} row={selectedRating} onOpenChange={(open) => { if (!open) setSelectedRating(null) }} />
       <MetricGuideDialog open={guideOpen} onOpenChange={setGuideOpen} initialMetricKey={guideMetricKey} />
     </div>

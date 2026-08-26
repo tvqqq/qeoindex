@@ -34,3 +34,24 @@ test("UI performance invariants: market-close dashboard adheres strictly to UI_L
     }
   }
 })
+
+test("Insights shell stays visible across server render and hydration", () => {
+  const componentPath = path.resolve("components/insights/insights-dashboard.tsx")
+  const content = fs.readFileSync(componentPath, "utf8")
+
+  assert.doesNotMatch(
+    content,
+    /<InsightsTransition\b|data-insights-transition/,
+    "the page shell must not fade from SSR content to opacity 0 during hydration"
+  )
+  assert.doesNotMatch(
+    content,
+    /<SoftBlurIn\b|animate-pulse|animate-\[spin_/,
+    "the Insights hero must not use blur or continuous entrance animations"
+  )
+  assert.doesNotMatch(
+    content,
+    /min-h-screen[^"\n]*font-ticker/,
+    "decorative ticker typography must stay scoped instead of affecting the page root"
+  )
+})
