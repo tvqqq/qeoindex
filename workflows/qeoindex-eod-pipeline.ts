@@ -1,5 +1,6 @@
 import { sleep } from "workflow"
 
+import { failQeoIndexEodRunStep } from "@/lib/qeoindex-eod-failure-step"
 import {
   runNotionStagingBatchStep,
   type NotionStagingProgress,
@@ -17,7 +18,6 @@ import {
   runDeterministicCouncilStep,
   runLlmDebateStep,
   runCompleteStep,
-  failQeoIndexEodRunStep,
   startQeoIndexEodRunStep,
 } from "@/lib/qeoindex-eod-workflow-steps"
 
