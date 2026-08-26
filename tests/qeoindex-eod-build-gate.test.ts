@@ -32,6 +32,7 @@ const requiredLintFiles = [
   "lib/wyckoff-v2-universe.ts",
   "lib/wyckoff-v2-universe-source.ts",
   "lib/wyckoff-notion-ingest.ts",
+  "lib/qeoindex-eod-failure-step.ts",
   "lib/qeoindex-eod-notion-staging-batch.ts",
   "lib/qeoindex-eod-workflow-steps.ts",
   "workflows/qeoindex-eod-pipeline.ts",
