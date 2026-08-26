@@ -14,7 +14,7 @@ const SOCKET_TIMEOUT_MS = 6_000
 const TOKEN_EXPIRY_SKEW_MS = 5 * 60 * 1_000
 const LOGIN_URL = Deno.env.get("KFSP_LOGIN_URL") || "https://api.kfsp.vn/api/login"
 const MARKET_PULSE_URL = Deno.env.get("KFSP_MARKET_PULSE_URL") || "https://api.kfsp.vn/api/stocks/market_pulse/getContent?is_get_style=true&version=v3"
-const CASH_FLOWS_URL = Deno.env.get("KFSP_CASH_FLOWS_URL") || "https://api2.kfsp.vn/api/stocks/dashboard/get-data-cash-flows?san=HOSE"
+const CASH_FLOWS_URL = Deno.env.get("KFSP_CASH_FLOWS_URL") || "https://api2.kfsp.vn/api/stocks/dashboard/get-data-cash-flows"
 const TOP_VOLATILITY_URL = Deno.env.get("KFSP_TOP_VOLATILITY_URL") || "https://api.kfsp.vn/api/stocks/dashboard/get-list-mack-market-volatility?type=volume_desc&board=1&limit=10"
 const CONTRACT_VERSION = 1
 
@@ -376,7 +376,8 @@ Deno.serve(async (req: Request) => {
       Referer: "https://kfsp.vn/",
     }
 
-    let pulse = await fetchJson(MARKET_PULSE_URL, { method: "GET", headers: currentHeaders })
+    let pulseUrl = `${MARKET_PULSE_URL}&token=${encodeURIComponent(auth.token)}`
+    let pulse = await fetchJson(pulseUrl, { method: "GET", headers: currentHeaders })
     if (pulse.response.status === 401 || pulse.response.status === 403 || pulse.response.status === 423) {
       auth = await getProviderToken(supabase, true)
       currentHeaders = {
@@ -385,12 +386,14 @@ Deno.serve(async (req: Request) => {
         Origin: "https://kfsp.vn",
         Referer: "https://kfsp.vn/",
       }
-      pulse = await fetchJson(MARKET_PULSE_URL, { method: "GET", headers: currentHeaders })
+      pulseUrl = `${MARKET_PULSE_URL}&token=${encodeURIComponent(auth.token)}`
+      pulse = await fetchJson(pulseUrl, { method: "GET", headers: currentHeaders })
     }
 
+    const volatilityUrl = `${TOP_VOLATILITY_URL}&token=${encodeURIComponent(auth.token)}`
     const [cashFlows, topVolatility] = await Promise.all([
       fetchJson(CASH_FLOWS_URL, { method: "GET", headers: currentHeaders }).catch(() => ({ response: { ok: false } as Response, payload: null })),
-      fetchJson(TOP_VOLATILITY_URL, { method: "GET", headers: currentHeaders }).catch(() => ({ response: { ok: false } as Response, payload: null })),
+      fetchJson(volatilityUrl, { method: "GET", headers: currentHeaders }).catch(() => ({ response: { ok: false } as Response, payload: null })),
     ])
 
     const topTickers = Array.isArray(topVolatility.payload)
@@ -439,7 +442,10 @@ Deno.serve(async (req: Request) => {
     }
 
     if (normalized.quality_status === "failing") {
-      throw new Error("VALIDATION_FAILED: Critical P0 coverage missing; quality_status is failing")
+      const missingKeys = Object.entries(normalized.endpoint_coverage)
+        .filter(([, v]) => !v)
+        .map(([k]) => k)
+      throw new Error(`VALIDATION_FAILED: Critical P0 coverage missing: [${missingKeys.join(", ")}]; quality_status is failing`)
     }
 
     // Stage items
