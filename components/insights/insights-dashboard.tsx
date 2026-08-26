@@ -1521,27 +1521,28 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
         <main className="mx-auto w-full max-w-[1880px] px-3 pb-16 pt-8 sm:px-5 lg:px-6">
         <section className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div>
-            <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-muted-2">
-              <CalendarDays className="size-4 text-brand" />
-              {DATE_FORMAT.format(new Date(data.generatedAt))}
-              <Badge variant="outline" className="border-up/25 bg-up/10 text-up">Authenticated insights</Badge>
-            </div>
-            <div className="mt-4 flex items-center gap-3.5 sm:gap-4.5">
-              <div className="relative flex size-11 sm:size-13 md:size-14 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/20 via-cyan-500/15 to-purple-500/20 shadow-[0_0_24px_-4px_rgba(34,201,138,0.45),inset_0_1px_0_rgba(255,255,255,0.22)] transition-transform duration-300 hover:scale-105">
+            <div className="flex items-center gap-3.5 sm:gap-4">
+              <div className="relative flex size-10 sm:size-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/20 via-cyan-500/15 to-purple-500/20 shadow-[0_0_24px_-4px_rgba(34,201,138,0.45),inset_0_1px_0_rgba(255,255,255,0.22)] transition-transform duration-300 hover:scale-105">
                 <div className="absolute inset-0 rounded-2xl bg-emerald-400/10 animate-pulse" />
-                <img src="/brand/stockos-mark.svg" alt="QeoIndex Logo" className="relative size-6 sm:size-7 md:size-8 drop-shadow-[0_0_10px_rgba(34,201,138,0.55)] animate-[pulse_3s_ease-in-out_infinite]" />
+                <Sparkles className="relative size-5 sm:size-6 text-emerald-300 drop-shadow-[0_0_10px_rgba(34,201,138,0.6)] animate-[spin_10s_linear_infinite]" />
               </div>
-              <h1 className="text-4xl font-extrabold tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
+              <h1 className="font-ticker text-3xl font-extrabold italic tracking-[-0.03em] text-white sm:text-4xl lg:text-5xl">
                 <SoftBlurIn stagger={18}>Insights thị trường</SoftBlurIn>
               </h1>
             </div>
-            <p className="mt-4 max-w-3xl text-base font-medium leading-7 text-muted-2 sm:text-lg">
+            <p className="mt-2.5 max-w-3xl text-sm font-medium leading-6 text-muted-2 sm:text-base">
               Tín hiệu đủ rõ để hành động, trước khi bảng giá đổi màu.
             </p>
           </div>
-          <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-panel px-4 py-3 text-sm text-muted-2">
-            <Database className="size-4 text-brand" />
-            Supabase ratings · Notion research · Market feeds
+          <div className="flex flex-col items-start gap-2.5 sm:items-end">
+            <div className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wider text-muted-2">
+              <CalendarDays className="size-4 text-emerald-400" />
+              <span>{DATE_FORMAT.format(new Date(data.generatedAt))}</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-panel px-3.5 py-2 text-xs text-muted-2">
+              <Database className="size-3.5 text-brand" />
+              <span>Supabase ratings · Notion research · Market feeds</span>
+            </div>
           </div>
         </section>
 
