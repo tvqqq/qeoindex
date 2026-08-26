@@ -163,8 +163,8 @@ export function isAtcTradeTime(timeStr?: string): boolean {
 
 const DEFAULT_WIDTH = 780
 const MIN_WIDTH = 700
-const MIN_HEIGHT = 640
-const DEFAULT_HEIGHT = 820
+const MIN_HEIGHT = 600
+const DEFAULT_HEIGHT = 740
 
 function number(value: unknown) {
   const result = typeof value === "number" ? value : Number(value)
@@ -3050,18 +3050,18 @@ export function LiveOrderBookPanel({
               <>
                 {/* TAB CONTENT: KHỚP LỆNH (TAPE) */}
                 {activityTab === "trades" && (
-                  <div className="flex flex-col flex-1 space-y-2.5 min-h-0">
+                  <div className="flex flex-col flex-1 space-y-2.5">
                     {/* Split 2-Panel Layout: Left = Tape (Khớp lệnh), Right = Khối ngoại NN + Lực mua/bán & Thông số */}
-                    <div className="grid grid-cols-[1.18fr_1fr] gap-3 flex-1 min-h-0 items-stretch">
-                      {/* Left: Tape Table with full-height match */}
+                    <div className="grid grid-cols-[1.18fr_1fr] gap-2 flex-1 min-h-0">
+                      {/* Left: Tape Table with increased font size */}
                       {visibleTrades.length ? (
-                        <div className="flex-1 rounded-xl border border-white/[0.08] bg-[#0c1015]/90 overflow-hidden flex flex-col h-full min-h-0 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]">
-                          <div className="shrink-0 grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 border-b border-white/[0.08] bg-[#11161d] px-3.5 py-2.5 text-xs font-bold text-slate-400">
+                        <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col min-h-0">
+                          <div className="grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 border-b border-border/60 bg-[#171819] px-3 py-2 text-xs font-bold text-muted-2">
                             <span>Thời gian</span>
                             <span className="text-right">Khối lượng</span>
                             <span className="text-right">Giá</span>
                           </div>
-                          <div className="flex-1 overflow-y-auto min-h-0 px-3.5 divide-y divide-white/[0.04]">
+                          <div className="flex-1 overflow-y-auto max-h-[480px] px-3 divide-y divide-border/15">
                             {visibleTrades.map((trade) => {
                               const isAto = isAtoTradeTime(trade.time)
                               const isAtc = isAtcTradeTime(trade.time)
@@ -3097,17 +3097,17 @@ export function LiveOrderBookPanel({
                               return (
                                 <div
                                   key={trade.id}
-                                  className={`grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 py-1.5 font-mono text-xs hover:bg-white/[0.04] transition-colors ${
+                                  className={`grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 py-1.5 font-mono text-xs hover:bg-panel-2/50 ${
                                     isWhale || isLarge || isAto || isAtc
-                                      ? `${sideBgClass} font-bold -mx-3.5 px-3.5`
+                                      ? `${sideBgClass} font-bold -mx-3 px-3`
                                       : "text-foreground"
                                   }`}
                                 >
                                   <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="text-slate-400 text-xs font-medium">{timeLabel(trade.time)}</span>
+                                    <span className="text-muted-2 text-xs font-medium">{timeLabel(trade.time)}</span>
                                     {trade.count > 1 && (
                                       <span
-                                        className="rounded bg-white/[0.08] border border-white/[0.1] px-1 py-0.2 text-[10px] text-slate-300 font-mono font-bold shrink-0"
+                                        className="rounded bg-[#202223] border border-border/80 px-1 py-0.2 text-[10px] text-muted-2 font-mono font-bold shrink-0"
                                         title={`Gộp ${trade.count} lệnh khớp liên tiếp cùng chiều trong ≤1s`}
                                       >
                                         x{trade.count}
@@ -3160,7 +3160,7 @@ export function LiveOrderBookPanel({
                           </div>
                         </div>
                       ) : (
-                        <div className="flex-1 rounded-xl border border-white/[0.08] bg-[#0c1015]/90 px-4 py-8 text-center text-xs text-slate-400 flex items-center justify-center h-full min-h-0 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]">
+                        <div className="flex-1 rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2 flex items-center justify-center">
                           {stream.historyState === "LOADING"
                             ? "Đang tải dữ liệu khớp lệnh..."
                             : tradeFilter !== "all"
@@ -3169,8 +3169,8 @@ export function LiveOrderBookPanel({
                         </div>
                       )}
 
-                      {/* Right: Stack of 2 Widgets with equal height stretch */}
-                      <div className="flex flex-col gap-3 justify-between h-full min-h-0">
+                      {/* Right: Stack of 2 Widgets */}
+                      <div className="flex flex-col gap-2.5">
                         {/* Widget 1: Realtime Khối Ngoại NN */}
                         <ForeignRealtimeCard
                           foreign={stream.foreign}
