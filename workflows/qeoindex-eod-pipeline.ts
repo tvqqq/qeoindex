@@ -1,5 +1,9 @@
 import { sleep } from "workflow"
 
+import {
+  runNotionStagingBatchStep,
+  type NotionStagingProgress,
+} from "@/lib/qeoindex-eod-notion-staging-batch"
 import type { OhlcvUniverseRefreshResult } from "@/lib/ohlcv-history-store"
 
 import {
@@ -7,7 +11,6 @@ import {
   runMarketCloseCollectStep,
   runHistoryRefreshBatchStep,
   runWyckoffBuildStep,
-  runNotionStagingStep,
   runNotionValidateStep,
   runIngestStep,
   runSupabasePublishStep,
@@ -75,8 +78,33 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
     } else {
       history = await runHistoryRefreshBatchStep(runId, [], startedAtIso, history, false)
     }
+
     const build = await runWyckoffBuildStep(runId, ready.stocks, ready.runKey, ready.scanDate, shouldBuild)
-    const staging = await runNotionStagingStep(runId, ready.stocks, ready.runKey, ready.scanDate, shouldBuild)
+    let staging: NotionStagingProgress = {
+      created: 0,
+      updated: 0,
+      skippedRows: 0,
+      total: 0,
+      providers: [],
+    }
+    if (shouldBuild) {
+      for (let offset = 0; offset < ready.stocks.length; offset += 10) {
+        staging = await runNotionStagingBatchStep(
+          runId,
+          ready.stocks.slice(offset, offset + 10),
+          ready.runKey,
+          ready.scanDate,
+          staging,
+          true,
+        )
+      }
+      if (staging.total !== 500) {
+        throw new Error(`NOTION_STAGING completed ${staging.total}/500 snapshots`)
+      }
+    } else {
+      staging = await runNotionStagingBatchStep(runId, [], ready.runKey, ready.scanDate, staging, false)
+    }
+
     const providerSummary = staging.providers.length
       ? `Persistent OHLCV cache providers: ${staging.providers.join(", ")}; 100 tickers; 500 snapshot contract.`
       : build.providers.length
