@@ -2656,18 +2656,18 @@ export function LiveOrderBookPanel({
 
       {/* HEADER / DRAG HANDLE */}
       <header
-        className="flex cursor-grab select-none items-center justify-between gap-2.5 border-b border-white/[0.10] bg-gradient-to-r from-[#121820]/95 via-[#182330]/95 to-[#121820]/95 px-4 py-2.5 active:cursor-grabbing touch-none backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_4px_16px_rgba(0,0,0,0.4)]"
+        className="relative flex cursor-grab select-none items-center justify-between gap-3 overflow-hidden border-b border-white/[0.14] bg-gradient-to-b from-[#182330]/95 via-[#101824]/90 to-[#0c121b]/95 px-4 py-2.5 active:cursor-grabbing touch-none backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),inset_0_-1px_0_0_rgba(0,0,0,0.4),0_6px_24px_-4px_rgba(0,0,0,0.6)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-white/35 before:to-transparent"
         onPointerDown={onHeaderPointerDown}
       >
-        {/* Left Ticker, Logo & Exchange */}
-        <div className="flex items-center gap-2.5 min-w-0 shrink">
+        {/* Left: Ticker, Logo, Exchange, Price & Change */}
+        <div className="flex items-center gap-2.5 min-w-0 flex-wrap sm:flex-nowrap">
           <GripVertical className="h-4 w-4 text-white/30 hover:text-white/60 shrink-0 transition-colors" />
           <StockLogo
             symbol={symbol}
             size={32}
             className="shrink-0 rounded-full border-white/40 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
           />
-          <span className="font-ticker text-xl sm:text-2xl font-extrabold italic bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent pr-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.2)] tracking-tight shrink-0 select-none">
+          <span className="font-ticker text-xl sm:text-2xl font-extrabold italic bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent pr-1 drop-shadow-[0_0_15px_rgba(34,211,238,0.2)] tracking-tight shrink-0 select-none">
             {symbol}
           </span>
           {stream.company?.exchange ? (
@@ -2675,12 +2675,9 @@ export function LiveOrderBookPanel({
               {stream.company.exchange}
             </span>
           ) : null}
-        </div>
 
-        {/* Center / Right Price & Action Controls */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          {/* Live Price & Change Pill */}
-          <div className="flex items-center gap-2">
+          {/* Live Price & Change Pill right beside ticker */}
+          <div className="flex items-center gap-1.5 shrink-0 ml-1">
             <span
               className={`font-mono text-lg sm:text-xl font-black tracking-tight rounded px-1 transition-colors drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] ${color} ${
                 headerPriceFlash === "up"
@@ -2696,59 +2693,50 @@ export function LiveOrderBookPanel({
             </span>
             {activePrice ? <MarketChangePill value={changePercent} tone={tone} compact decimals={2} /> : null}
           </div>
+        </div>
 
-          {/* Action Controls (clean unified pills) */}
-          <div className="flex items-center gap-1.5 border-l border-white/10 pl-2 ml-0.5">
-            <a
-              data-orderbook-action
-              href={`/insights?ticker=${symbol}`}
-              aria-label={`Hồ sơ rating Insights ${symbol}`}
-              title="Hồ sơ rating Insights"
-              onClick={(event) => event.stopPropagation()}
-              className="inline-flex items-center gap-1 rounded-md border border-purple-400/30 bg-purple-500/10 px-2 py-0.5 font-ticker text-[11px] font-bold text-purple-300 hover:bg-purple-500/20 hover:border-purple-400/50 transition-all shadow-[0_0_8px_rgba(168,85,247,0.15)]"
-            >
-              <Sparkles className="h-3 w-3" />
-              <span>Rating</span>
-            </a>
+        {/* Right: Insight Action & Window Controls */}
+        <div className="flex items-center gap-2 shrink-0">
+          <a
+            data-orderbook-action
+            href={`/insights?ticker=${symbol}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Mở phân tích Insight ${symbol} (tab mới)`}
+            title="Mở phân tích Insight trong tab mới"
+            onClick={(event) => event.stopPropagation()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/35 bg-emerald-500/15 px-2.5 py-1 font-ticker text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-400/60 hover:text-emerald-200 transition-all shadow-[0_0_10px_rgba(34,201,138,0.2),inset_0_1px_0_rgba(255,255,255,0.15)] group"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+            <span>Insight</span>
+            <ExternalLink className="h-3 w-3 text-emerald-400/80 group-hover:text-emerald-300 transition-colors" />
+          </a>
 
-            <a
-              data-orderbook-action
-              href={`/insights/wyckoff?ticker=${symbol}&timeframe=1D`}
-              aria-label={`Phân tích chart Wyckoff ${symbol}`}
-              title="Phân tích chart Wyckoff"
-              onClick={(event) => event.stopPropagation()}
-              className="inline-flex items-center gap-1 rounded-md border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 font-ticker text-[11px] font-bold text-cyan-300 hover:bg-cyan-500/20 hover:border-cyan-400/50 transition-all shadow-[0_0_8px_rgba(34,211,238,0.15)]"
-            >
-              <BarChart3 className="h-3 w-3" />
-              <span>Wyckoff</span>
-            </a>
+          <button
+            data-orderbook-action
+            type="button"
+            aria-label={isMaximized ? "Khôi phục cửa sổ" : "Phóng to toàn màn hình"}
+            title={isMaximized ? "Khôi phục kích thước" : "Phóng to"}
+            onClick={(event) => {
+              event.stopPropagation()
+              setIsMaximized((v) => !v)
+            }}
+            className="rounded p-1 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
+          >
+            {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          </button>
 
-            <button
-              data-orderbook-action
-              type="button"
-              aria-label={isMaximized ? "Khôi phục cửa sổ" : "Phóng to toàn màn hình"}
-              title={isMaximized ? "Khôi phục kích thước" : "Phóng to"}
-              onClick={(event) => {
-                event.stopPropagation()
-                setIsMaximized((v) => !v)
-              }}
-              className="rounded p-1 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
-            >
-              {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-            </button>
-
-            <button
-              data-orderbook-action
-              type="button"
-              aria-label="Đóng sổ lệnh"
-              title="Đóng"
-              onPointerDown={closeOnPointerDown}
-              onClick={closeOnClick}
-              className="rounded p-1 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+          <button
+            data-orderbook-action
+            type="button"
+            aria-label="Đóng sổ lệnh"
+            title="Đóng"
+            onPointerDown={closeOnPointerDown}
+            onClick={closeOnClick}
+            className="rounded p-1 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       </header>
 
