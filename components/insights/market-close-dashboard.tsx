@@ -30,6 +30,17 @@ import type {
   MarketSectorRow,
 } from "@/lib/market-insight-data"
 import { MetricGuideDialog } from "@/components/insights/metric-guide-dialog"
+import {
+  IndexBreadthChart,
+  IndexPerformanceChart,
+  InstitutionalFlowChart,
+  LiquidityLeadersChart,
+  MaBreadthChart,
+  MarketHistoryChart,
+  MarketHistoryFlowChart,
+  SectorBreadthChart,
+  SectorPerformanceChart,
+} from "@/components/insights/market-close-charts"
 import { cn } from "@/lib/utils"
 
 interface MarketCloseDashboardProps {
@@ -113,7 +124,7 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
       )}
 
       {/* Top Banner / Summary Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-border/50 bg-card p-4 sm:p-5">
+      <div className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-gradient-to-r from-card via-card to-primary/[0.035] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex items-center gap-3">
           <div className={cn(
             "flex size-12 items-center justify-center rounded-xl font-bold font-mono text-lg",
@@ -162,7 +173,7 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
 
       {/* Local shadcn Tabs */}
       <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as typeof activeTab)} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 max-w-xl bg-muted/70 p-1">
+        <TabsList className="grid h-auto w-full max-w-3xl grid-cols-2 gap-1 bg-muted/70 p-1 sm:grid-cols-4">
           <TabsTrigger value="overview" className="text-xs sm:text-sm font-semibold gap-1.5 cursor-pointer">
             <Compass className="size-3.5" />
             <span>Tổng quan</span>
@@ -280,6 +291,37 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
                   <span className="text-muted-foreground">Rủi ro: <strong className="text-foreground">{dailySummary?.riskLabel ?? "—"}</strong></span>
                 </div>
               </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2" data-market-close-chart-grid>
+            <Card className="border-border/60 bg-card py-0">
+              <CardHeader className="border-b border-border/50 px-5 py-4">
+                <CardTitle className="text-base">Hiệu suất & thanh khoản chỉ số</CardTitle>
+                <CardDescription>So sánh biến động điểm số với giá trị giao dịch của bốn thị trường chính.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4"><IndexPerformanceChart indexes={indexes} /></CardContent>
+            </Card>
+            <Card className="border-border/60 bg-card py-0">
+              <CardHeader className="border-b border-border/50 px-5 py-4">
+                <CardTitle className="text-base">Độ rộng theo chỉ số</CardTitle>
+                <CardDescription>Tỷ trọng mã tăng, đứng giá và giảm giúp kiểm tra độ lan tỏa của phiên.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4"><IndexBreadthChart indexes={indexes} /></CardContent>
+            </Card>
+            <Card className="border-border/60 bg-card py-0">
+              <CardHeader className="border-b border-border/50 px-5 py-4">
+                <CardTitle className="text-base">Sức khỏe xu hướng qua MA</CardTitle>
+                <CardDescription>Mốc 50% phân biệt độ rộng khỏe và độ rộng còn yếu.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4"><MaBreadthChart daily={dailySummary} /></CardContent>
+            </Card>
+            <Card className="border-border/60 bg-card py-0">
+              <CardHeader className="border-b border-border/50 px-5 py-4">
+                <CardTitle className="text-base">Dòng tiền tổ chức</CardTitle>
+                <CardDescription>Giá trị mua/bán ròng trong phiên, đơn vị tỷ đồng.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4"><InstitutionalFlowChart daily={dailySummary} /></CardContent>
             </Card>
           </div>
 
@@ -461,6 +503,22 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
 
         {/* Tab 2: Nhóm ngành */}
         <TabsContent value="sectors" className="mt-6 space-y-4">
+          <div className="grid gap-4 xl:grid-cols-2" data-market-close-chart-grid>
+            <Card className="border-border/60 bg-card py-0">
+              <CardHeader className="border-b border-border/50 px-5 py-4">
+                <CardTitle className="text-base">Bản đồ hiệu suất ngành</CardTitle>
+                <CardDescription>12 nhóm ngành có dữ liệu 1D, xếp từ mạnh tới yếu.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4"><SectorPerformanceChart sectors={sectors} /></CardContent>
+            </Card>
+            <Card className="border-border/60 bg-card py-0">
+              <CardHeader className="border-b border-border/50 px-5 py-4">
+                <CardTitle className="text-base">Độ rộng nhóm ngành</CardTitle>
+                <CardDescription>So sánh số mã tăng, đứng giá và giảm trong các nhóm lớn.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4"><SectorBreadthChart sectors={sectors} /></CardContent>
+            </Card>
+          </div>
           <Card className="border-border/60 bg-card">
             <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
               <div>
@@ -563,6 +621,13 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
 
         {/* Tab 3: Dẫn dắt & Thanh khoản */}
         <TabsContent value="leaders" className="mt-6 space-y-6">
+          <Card className="border-border/60 bg-card py-0" data-market-close-chart-grid>
+            <CardHeader className="border-b border-border/50 px-5 py-4">
+              <CardTitle className="text-base">Xếp hạng thanh khoản cổ phiếu</CardTitle>
+              <CardDescription>Khối lượng khớp của các mã dẫn đầu, hiển thị theo triệu cổ phiếu.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-4"><LiquidityLeadersChart leaders={leaders} /></CardContent>
+          </Card>
           {/* Top Volume Leaders */}
           <Card className="border-border/60 bg-card">
             <CardHeader className="p-4 pb-3">
@@ -670,6 +735,22 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
 
         {/* Tab 4: Lịch sử phiên */}
         <TabsContent value="history" className="mt-6 space-y-4">
+          <div className="grid gap-4" data-market-close-chart-grid>
+            <Card className="border-border/60 bg-card py-0">
+              <CardHeader className="border-b border-border/50 px-5 py-4">
+                <CardTitle className="text-base">Tâm lý, rủi ro & độ rộng MA20</CardTitle>
+                <CardDescription>Ba trục sức khỏe thị trường trên lịch sử tối đa 20 phiên.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4"><MarketHistoryChart history={history} /></CardContent>
+            </Card>
+            <Card className="border-border/60 bg-card py-0">
+              <CardHeader className="border-b border-border/50 px-5 py-4">
+                <CardTitle className="text-base">Dòng tiền theo phiên</CardTitle>
+                <CardDescription>Đối chiếu dòng tiền nước ngoài và tự doanh quanh trục trung tính.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4"><MarketHistoryFlowChart history={history} /></CardContent>
+            </Card>
+          </div>
           <Card className="border-border/60 bg-card">
             <CardHeader className="p-4 pb-3">
               <CardTitle className="text-base font-bold flex items-center gap-2">

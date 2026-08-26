@@ -55,3 +55,28 @@ test("Insights shell stays visible across server render and hydration", () => {
     "decorative ticker typography must stay scoped instead of affecting the page root"
   )
 })
+
+test("Market Close dashboard uses stable accessible shadcn chart composition", () => {
+  const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
+  const charts = fs.readFileSync(path.resolve("components/insights/market-close-charts.tsx"), "utf8")
+
+  for (const component of [
+    "IndexPerformanceChart",
+    "IndexBreadthChart",
+    "MaBreadthChart",
+    "InstitutionalFlowChart",
+    "SectorPerformanceChart",
+    "SectorBreadthChart",
+    "LiquidityLeadersChart",
+    "MarketHistoryChart",
+    "MarketHistoryFlowChart",
+  ]) {
+    assert.match(dashboard, new RegExp(`<${component}\\b`), `${component} must be rendered in the dashboard`)
+  }
+
+  assert.match(charts, /ChartContainer/)
+  assert.match(charts, /ChartTooltipContent/)
+  assert.ok((charts.match(/accessibilityLayer/g) || []).length >= 8, "charts must expose Recharts accessibility layers")
+  assert.ok((charts.match(/initialDimension=/g) || []).length >= 8, "charts must have stable initial dimensions")
+  assert.doesNotMatch(charts, /backdrop-blur|backdrop-filter|transition-all|filter:/i)
+})
