@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import type { NotionPage, NotionProperties, NotionQueryOptions, NotionQueryResult } from "../lib/notion/client.ts"
+import { stageWyckoffV2SnapshotBatch } from "../lib/wyckoff-v2-notion-batch.ts"
 import {
   beginWyckoffV2NotionRun,
   stageWyckoffV2Snapshots,
@@ -118,6 +119,20 @@ test("v2 Notion writer creates Writing run, stages 500 rows idempotently, valida
   assert.match(finalized.validationHash, /^[a-f0-9]{64}$/)
   assert.equal((io.runs[0].properties as any).Status.select.name, "Ready")
   assert.equal(rich((io.runs[0].properties as any)["Validation Hash"]), finalized.validationHash)
+})
+
+test("durable Notion batch writer skips an unchanged 50-snapshot retry", async () => {
+  const io = new MemoryNotion()
+  const runKey = "WYCKOFF-2026-08-25-EOD-v2"
+  const batch = fullSet().slice(0, 50)
+
+  const first = await stageWyckoffV2SnapshotBatch({ runKey, snapshots: batch, minWriteIntervalMs: 0 }, io)
+  assert.deepEqual(first, { created: 50, updated: 0, skipped: 0, total: 50 })
+  const writesAfterFirst = io.creates + io.updates
+
+  const retry = await stageWyckoffV2SnapshotBatch({ runKey, snapshots: batch, minWriteIntervalMs: 0 }, io)
+  assert.deepEqual(retry, { created: 0, updated: 0, skipped: 50, total: 50 })
+  assert.equal(io.creates + io.updates, writesAfterFirst)
 })
 
 test("begin stops rather than rewrites a run already Ingested", async () => {
