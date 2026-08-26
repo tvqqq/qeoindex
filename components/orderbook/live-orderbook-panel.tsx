@@ -3050,18 +3050,18 @@ export function LiveOrderBookPanel({
               <>
                 {/* TAB CONTENT: KHỚP LỆNH (TAPE) */}
                 {activityTab === "trades" && (
-                  <div className="flex flex-col flex-1 space-y-2.5">
+                  <div className="flex flex-col space-y-2.5">
                     {/* Split 2-Panel Layout: Left = Tape (Khớp lệnh), Right = Khối ngoại NN + Lực mua/bán & Thông số */}
-                    <div className="grid grid-cols-[1.18fr_1fr] gap-2 flex-1 min-h-0">
-                      {/* Left: Tape Table with increased font size */}
+                    <div className="grid grid-cols-[1.18fr_1fr] gap-2.5 items-start">
+                      {/* Left: Tape Table with height matching right column */}
                       {visibleTrades.length ? (
-                        <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col min-h-0">
-                          <div className="grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 border-b border-border/60 bg-[#171819] px-3 py-2 text-xs font-bold text-muted-2">
+                        <div className="flex flex-col rounded-xl border border-white/[0.08] bg-[#0c1015]/90 overflow-hidden shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]">
+                          <div className="shrink-0 grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 border-b border-white/[0.08] bg-[#11161d] px-3.5 py-2.5 text-xs font-bold text-slate-400">
                             <span>Thời gian</span>
                             <span className="text-right">Khối lượng</span>
                             <span className="text-right">Giá</span>
                           </div>
-                          <div className="flex-1 overflow-y-auto max-h-[480px] px-3 divide-y divide-border/15">
+                          <div className="overflow-y-auto px-3.5 divide-y divide-white/[0.04] max-h-[555px] min-h-[555px]">
                             {visibleTrades.map((trade) => {
                               const isAto = isAtoTradeTime(trade.time)
                               const isAtc = isAtcTradeTime(trade.time)
@@ -3097,17 +3097,17 @@ export function LiveOrderBookPanel({
                               return (
                                 <div
                                   key={trade.id}
-                                  className={`grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 py-1.5 font-mono text-xs hover:bg-panel-2/50 ${
+                                  className={`grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 py-1.5 font-mono text-xs hover:bg-white/[0.04] transition-colors ${
                                     isWhale || isLarge || isAto || isAtc
-                                      ? `${sideBgClass} font-bold -mx-3 px-3`
+                                      ? `${sideBgClass} font-bold -mx-3.5 px-3.5`
                                       : "text-foreground"
                                   }`}
                                 >
                                   <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="text-muted-2 text-xs font-medium">{timeLabel(trade.time)}</span>
+                                    <span className="text-slate-400 text-xs font-medium">{timeLabel(trade.time)}</span>
                                     {trade.count > 1 && (
                                       <span
-                                        className="rounded bg-[#202223] border border-border/80 px-1 py-0.2 text-[10px] text-muted-2 font-mono font-bold shrink-0"
+                                        className="rounded bg-white/[0.08] border border-white/[0.1] px-1 py-0.2 text-[10px] text-slate-300 font-mono font-bold shrink-0"
                                         title={`Gộp ${trade.count} lệnh khớp liên tiếp cùng chiều trong ≤1s`}
                                       >
                                         x{trade.count}
@@ -3160,7 +3160,7 @@ export function LiveOrderBookPanel({
                           </div>
                         </div>
                       ) : (
-                        <div className="flex-1 rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2 flex items-center justify-center">
+                        <div className="rounded-xl border border-white/[0.08] bg-[#0c1015]/90 px-4 py-8 text-center text-xs text-slate-400 flex items-center justify-center max-h-[555px] min-h-[555px] shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]">
                           {stream.historyState === "LOADING"
                             ? "Đang tải dữ liệu khớp lệnh..."
                             : tradeFilter !== "all"
