@@ -1,6 +1,6 @@
 "use client"
 
-import { type ReactNode, useEffect, useState } from "react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { BRAND } from "@/lib/brand"
 import { syncServerSession } from "@/lib/auth/client-session"
@@ -36,8 +36,10 @@ export function AppAuthGate({
 }) {
   const router = useRouter()
   const [status, setStatus] = useState<AuthStatus>(() =>
-    isSupabaseConfigured() ? "checking" : "unconfigured"
+    serverSessionPresent ? "authenticated" : isSupabaseConfigured() ? "checking" : "unconfigured"
   )
+  const authenticatedRef = useRef(serverSessionPresent)
+  const syncGenerationRef = useRef(0)
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient()
@@ -49,15 +51,34 @@ export function AppAuthGate({
     let active = true
 
     async function applySession(session: Parameters<typeof syncServerSession>[0]) {
+      const generation = ++syncGenerationRef.current
       const synced = await syncServerSession(session)
-      if (!active) return
+      if (!active || generation !== syncGenerationRef.current) return
 
-      const authenticated = Boolean(session && synced)
-      setStatus(authenticated ? "authenticated" : "anonymous")
+      if (session) {
+        if (synced) {
+          authenticatedRef.current = true
+          setStatus("authenticated")
+          if (!serverSessionPresent) router.refresh()
+          return
+        }
 
-      if ((authenticated && !serverSessionPresent) || (!authenticated && serverSessionPresent)) {
-        router.refresh()
+        // A token-refresh sync can fail transiently while the current server
+        // session is still valid. Keep the verified screen mounted instead of
+        // flashing the anonymous/login UI; a real SIGNED_OUT/null session still
+        // takes the explicit branch below.
+        if (authenticatedRef.current || serverSessionPresent) {
+          setStatus("authenticated")
+          return
+        }
+
+        setStatus("anonymous")
+        return
       }
+
+      authenticatedRef.current = false
+      setStatus("anonymous")
+      if (serverSessionPresent) router.refresh()
     }
 
     void supabase.auth.getSession().then(({ data, error }) => {

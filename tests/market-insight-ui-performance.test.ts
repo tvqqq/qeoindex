@@ -56,6 +56,24 @@ test("Insights shell stays visible across server render and hydration", () => {
   )
 })
 
+test("Insights is one dashboard with stable section navigation instead of remounting primary tabs", () => {
+  const content = fs.readFileSync(path.resolve("components/insights/insights-dashboard.tsx"), "utf8")
+
+  assert.doesNotMatch(content, /mainTab|setMainTab/, "primary dashboard sections must not be conditionally remounted")
+  for (const sectionId of ["sau-phien", "top-100", "nghien-cuu"]) {
+    assert.match(content, new RegExp(`id="${sectionId}"`), `${sectionId} must exist on the unified dashboard`)
+    assert.match(content, new RegExp(`href="#${sectionId}"`), `${sectionId} must be reachable from the dashboard navigator`)
+  }
+})
+
+test("authenticated shell survives transient token refresh sync failures", () => {
+  const content = fs.readFileSync(path.resolve("components/auth/app-auth-gate.tsx"), "utf8")
+
+  assert.match(content, /serverSessionPresent \? "authenticated"/, "server-verified content must remain visible during hydration")
+  assert.match(content, /authenticatedRef\.current \|\| serverSessionPresent/, "transient sync failures must preserve a verified session")
+  assert.match(content, /generation !== syncGenerationRef\.current/, "stale overlapping session syncs must be ignored")
+})
+
 test("Market Close dashboard uses stable accessible shadcn chart composition", () => {
   const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
   const charts = fs.readFileSync(path.resolve("components/insights/market-close-charts.tsx"), "utf8")

@@ -14,6 +14,12 @@ Commit `ef28dd6abf53582db2e419df74b25312b628d83f` refreshed the `/insights/wycko
 
 The fix kept the visual hierarchy but removed the compositor-heavy effects, restored scoped typography, disabled eager prefetch for the new dynamic links, and narrowed transitions.
 
+## Incident: Insights flicker during long-lived authenticated sessions
+
+The `/insights` shell could briefly disappear when Supabase refreshed a token. The global auth callback treated a transient server-session synchronization failure as an immediate anonymous state, replacing the complete dashboard with the login screen even though the server-verified session was still valid. Overlapping sync responses could also arrive out of order.
+
+The fix keeps server-verified content mounted during hydration and transient token-refresh failures, ignores stale overlapping sync responses, and only leaves the authenticated shell when the browser session is actually absent. Auth refresh is a background consistency operation; it must not become a page-level loading transition.
+
 ## Mandatory UI performance rules
 
 ### 1. Treat realtime, chart, canvas, and dense-table screens as performance-sensitive by default
