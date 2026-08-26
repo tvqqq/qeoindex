@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Search } from "lucide-react"
 
+import { formatAdminDateTime } from "@/lib/admin/time"
 import type { AdminAuditView } from "@/lib/admin/types"
 
 export interface AdminAuditTableProps {
@@ -23,7 +24,6 @@ export function AdminAuditTable({ logs }: AdminAuditTableProps) {
 
   return (
     <div className="space-y-4">
-      {/* Search */}
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
         <input
@@ -35,7 +35,6 @@ export function AdminAuditTable({ logs }: AdminAuditTableProps) {
         />
       </div>
 
-      {/* Table */}
       <div className="rounded-xl border border-white/[0.08] bg-[#0c1016] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -45,16 +44,14 @@ export function AdminAuditTable({ logs }: AdminAuditTableProps) {
                 <th className="px-4 py-3 font-medium">Lý do thay đổi</th>
                 <th className="px-4 py-3 font-medium">Trước / Sau</th>
                 <th className="px-4 py-3 font-medium">Người thực hiện</th>
-                <th className="px-4 py-3 font-medium">Thời gian</th>
+                <th className="px-4 py-3 font-medium">Thời gian (ICT)</th>
                 <th className="px-4 py-3 text-right font-medium">Kết quả</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.04]">
               {filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-xs text-slate-400">
-                    Không có bản ghi audit nào phù hợp.
-                  </td>
+                  <td colSpan={6} className="py-8 text-center text-xs text-slate-400">Không có bản ghi audit nào phù hợp.</td>
                 </tr>
               ) : (
                 filteredLogs.map((log) => (
@@ -63,37 +60,16 @@ export function AdminAuditTable({ logs }: AdminAuditTableProps) {
                       <div className="font-mono font-bold text-emerald-400">{log.action}</div>
                       <div className="text-[11px] font-medium text-white">{log.targetKey}</div>
                     </td>
-
-                    <td className="max-w-xs px-4 py-3.5 text-slate-300">
-                      <p className="line-clamp-2" title={log.reason}>{log.reason}</p>
-                    </td>
-
+                    <td className="max-w-xs px-4 py-3.5 text-slate-300"><p className="line-clamp-2" title={log.reason}>{log.reason}</p></td>
                     <td className="px-4 py-3.5 font-mono text-[11px]">
-                      {log.beforeValue !== undefined && log.beforeValue !== null ? (
-                        <div className="text-slate-400">Trước: {JSON.stringify(log.beforeValue).slice(0, 40)}</div>
-                      ) : null}
-                      {log.afterValue !== undefined && log.afterValue !== null ? (
-                        <div className="text-slate-200">Sau: {JSON.stringify(log.afterValue).slice(0, 40)}</div>
-                      ) : null}
+                      {log.beforeValue !== undefined && log.beforeValue !== null ? <div className="text-slate-400">Trước: {JSON.stringify(log.beforeValue).slice(0, 40)}</div> : null}
+                      {log.afterValue !== undefined && log.afterValue !== null ? <div className="text-slate-200">Sau: {JSON.stringify(log.afterValue).slice(0, 40)}</div> : null}
                       {!log.beforeValue && !log.afterValue ? <span className="text-slate-400">—</span> : null}
                     </td>
-
-                    <td className="px-4 py-3.5 font-mono text-[11px] text-slate-400">
-                      {log.actorUserId ? `${log.actorUserId.slice(0, 8)}...` : "System"}
-                    </td>
-
-                    <td className="px-4 py-3.5 font-mono text-[11px] text-slate-400">
-                      {new Date(log.createdAt).toLocaleString("vi-VN")}
-                    </td>
-
+                    <td className="px-4 py-3.5 font-mono text-[11px] text-slate-400">{log.actorUserId ? `${log.actorUserId.slice(0, 8)}...` : "System"}</td>
+                    <td className="px-4 py-3.5 font-mono text-[11px] text-slate-400">{formatAdminDateTime(log.createdAt)}</td>
                     <td className="px-4 py-3.5 text-right">
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
-                          log.success
-                            ? "bg-emerald-500/10 text-emerald-400"
-                            : "bg-rose-500/10 text-rose-400"
-                        }`}
-                      >
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${log.success ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"}`}>
                         {log.success ? "THÀNH CÔNG" : "THẤT BẠI"}
                       </span>
                     </td>
