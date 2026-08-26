@@ -230,7 +230,7 @@ function ScoreHistoryChart({ title, history, scoreKey, fallbackScore, tone }: {
       </div>
       <Tooltip>
         <TooltipTrigger render={<div className="mt-2 flex cursor-help items-center gap-2 text-xs font-bold text-muted-2" />}><Info className="size-3.5" /> Cách đọc điểm</TooltipTrigger>
-        <TooltipContent className="max-w-80 border border-white/10 bg-[#090e19] p-3 text-xs leading-5 text-white">Điểm và lịch sử lấy trực tiếp từ KFSP. Response cung cấp điểm 0–100 nhưng không công bố công thức trọng số đầy đủ; QeoIndex không tái tính điểm.</TooltipContent>
+        <TooltipContent className="w-80 max-w-sm border border-white/10 bg-[#090e19] p-3 text-xs leading-relaxed text-white shadow-2xl">Điểm và lịch sử lấy trực tiếp từ KFSP. Response cung cấp điểm 0–100 nhưng không công bố công thức trọng số đầy đủ; QeoIndex không tái tính điểm.</TooltipContent>
       </Tooltip>
       <div className="relative mt-4 h-3 overflow-hidden rounded-full"><div className="absolute inset-y-0 left-0 w-2/5 bg-rose-500" /><div className="absolute inset-y-0 left-[40%] w-1/5 bg-amber-400" /><div className="absolute inset-y-0 right-0 w-2/5 bg-emerald-500" /><span className="absolute -top-1 h-5 w-1 rounded bg-white shadow-[0_0_10px_white]" style={{ left: `${Math.max(0, Math.min(100, Number(score) || 0))}%` }} /></div>
       {source.length >= 2 ? (
@@ -311,7 +311,19 @@ function ComponentRadar({ title, components, tone }: { title: string; components
           <RechartsRadar dataKey="score" fill="var(--color-score)" fillOpacity={0.20} stroke="var(--color-score)" strokeWidth={2.25} dot={{ r: 3, fill: accent, stroke: "#fff", strokeWidth: 1 }} />
         </RadarChart>
       </ChartContainer>
-      <div className="mt-3 flex flex-wrap gap-2">{entries.map(([label, value]) => <Tooltip key={label}><TooltipTrigger render={<span className="inline-flex cursor-help items-center gap-1 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] font-bold text-slate-300" />}>{componentShortLabel(label)} <b className={tone === "amber" ? "text-amber-300" : "text-emerald-300"}>{formatScore(value)}</b></TooltipTrigger><TooltipContent className="max-w-72 border border-white/10 bg-[#090e19] p-3 text-xs leading-5 text-white"><strong>{label}</strong><div className="mt-1 text-slate-300">{COMPONENT_HELP[label] || "Điểm thành phần 0–100 do KFSP cung cấp; response không mô tả công thức chi tiết."}</div></TooltipContent></Tooltip>)}</div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {entries.map(([label, value]) => (
+          <Tooltip key={label}>
+            <TooltipTrigger render={<span className="inline-flex cursor-help items-center gap-1 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] font-bold text-slate-300" />}>
+              {componentShortLabel(label)} <b className={tone === "amber" ? "text-amber-300" : "text-emerald-300"}>{formatScore(value)}</b>
+            </TooltipTrigger>
+            <TooltipContent className="w-80 max-w-sm border border-white/10 bg-[#090e19] p-3 text-xs leading-relaxed text-white shadow-2xl space-y-1.5 pointer-events-none">
+              <div className="font-bold text-cyan-300 border-b border-white/10 pb-1">{label}</div>
+              <div className="text-slate-300 leading-relaxed">{COMPONENT_HELP[label] || "Điểm thành phần 0–100 do KFSP cung cấp; response không mô tả công thức chi tiết."}</div>
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
     </div>
   )
 }

@@ -453,16 +453,19 @@ function SortableHead({
             >
               <Info className="size-3 opacity-60 hover:opacity-100" />
             </TooltipTrigger>
-            <TooltipContent className="max-w-72 border border-white/10 bg-[#090e19] px-3 py-2 text-xs leading-5 text-white shadow-2xl space-y-1.5 pointer-events-none">
-              <div className="font-bold text-cyan-300">{displayLabel}</div>
-              <div className="text-muted-2">{description}</div>
+            <TooltipContent className="w-80 max-w-sm border border-white/10 bg-[#090e19] p-3 text-xs leading-relaxed text-white shadow-2xl space-y-2 pointer-events-none">
+              <div className="font-bold text-cyan-300 border-b border-white/10 pb-1">{displayLabel}</div>
+              <div className="text-slate-300 leading-relaxed">{description}</div>
               {notMeaning && (
-                <div className="rounded border border-rose-500/20 bg-rose-500/[0.08] p-1 text-[11px] text-rose-200 leading-4">
-                  <strong>Không có nghĩa là:</strong> {notMeaning}
+                <div className="rounded-md border border-rose-500/20 bg-rose-500/[0.08] p-2 text-[11px] text-rose-200 leading-relaxed">
+                  <strong className="text-rose-300">Không có nghĩa là:</strong> {notMeaning}
                 </div>
               )}
               {onOpenGuide && (
-                <div className="text-[10.5px] text-brand font-medium pt-0.5">Nhấp để mở hướng dẫn chi tiết</div>
+                <div className="text-[11px] text-brand font-medium pt-0.5 flex items-center gap-1">
+                  <span>Nhấp để mở hướng dẫn chi tiết</span>
+                  <span>→</span>
+                </div>
               )}
             </TooltipContent>
           </Tooltip>
@@ -526,18 +529,22 @@ function ScorePill({
       >
         <Icon className="size-3 sm:size-3.5 shrink-0" /> {rounded}
       </TooltipTrigger>
-      <TooltipContent className="max-w-72 border border-white/10 bg-[#090e19] px-3 py-2 font-ticker text-xs text-white shadow-2xl space-y-1.5 pointer-events-none">
-        <div>
-          {label}: <strong className="text-brand font-mono">{rounded}/100</strong>
+      <TooltipContent className="w-80 max-w-sm border border-white/10 bg-[#090e19] p-3 font-ticker text-xs text-white shadow-2xl space-y-2 pointer-events-none">
+        <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5">
+          <span className="font-bold text-slate-200">{label}</span>
+          <span className="font-mono font-bold text-brand">{rounded}/100</span>
         </div>
-        {displayDesc && <div className="text-muted-2 leading-4.5">{displayDesc}</div>}
+        {displayDesc && <div className="text-slate-300 leading-relaxed">{displayDesc}</div>}
         {semantic?.beginner.notMeaning && (
-          <div className="rounded border border-rose-500/20 bg-rose-500/[0.08] p-1.5 text-[10.5px] text-rose-200 leading-3.5">
-            <strong>Lưu ý:</strong> {semantic.beginner.notMeaning}
+          <div className="rounded-md border border-rose-500/20 bg-rose-500/[0.08] p-2 text-[11px] text-rose-200 leading-relaxed">
+            <strong className="text-rose-300">Lưu ý:</strong> {semantic.beginner.notMeaning}
           </div>
         )}
         {hasGuide && (
-          <div className="text-[10.5px] text-brand font-medium pt-0.5">Nhấp để mở hướng dẫn chi tiết</div>
+          <div className="text-[11px] text-brand font-medium pt-0.5 flex items-center gap-1">
+            <span>Nhấp để mở hướng dẫn chi tiết</span>
+            <span>→</span>
+          </div>
         )}
       </TooltipContent>
     </Tooltip>
@@ -771,10 +778,10 @@ function AccumulationHeatmap({ row }: { row: InsightsRatingRow }) {
                             </div>
                           }
                         />
-                        <TooltipContent className="border border-white/10 bg-[#090e19] px-3 py-2 text-xs font-ticker text-white shadow-2xl">
-                          <div className="font-bold text-brand">{dim.label}</div>
-                          <div>Snapshot: <strong className="font-mono">{col.fullDate}</strong></div>
-                          <div>Điểm: <strong className="font-mono text-emerald-300">{score}/100</strong></div>
+                        <TooltipContent className="w-56 border border-white/10 bg-[#090e19] p-3 text-xs font-ticker text-white shadow-2xl space-y-1">
+                          <div className="font-bold text-cyan-300 border-b border-white/10 pb-1">{dim.label}</div>
+                          <div className="flex justify-between text-slate-300"><span>Snapshot:</span> <strong className="font-mono text-white">{col.fullDate}</strong></div>
+                          <div className="flex justify-between text-slate-300"><span>Điểm:</span> <strong className="font-mono text-emerald-300">{score}/100</strong></div>
                         </TooltipContent>
                       </Tooltip>
                     )
