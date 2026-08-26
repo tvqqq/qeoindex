@@ -7,6 +7,7 @@ import {
   BarChart3,
   Clock,
   ExternalLink,
+  Globe,
   GripVertical,
   Handshake,
   Layers,
@@ -1837,6 +1838,45 @@ function TapeLoadingSkeleton() {
   )
 }
 
+function WidgetSectionHeader({
+  icon: Icon,
+  title,
+  subtitle,
+  iconTheme = "cyan",
+  rightSlot,
+}: {
+  icon: React.ElementType
+  title: string
+  subtitle?: string
+  iconTheme?: "cyan" | "emerald" | "violet" | "amber" | "blue"
+  rightSlot?: React.ReactNode
+}) {
+  const themeStyles = {
+    cyan: "border-cyan-400/30 bg-cyan-500/15 text-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.2)]",
+    emerald: "border-emerald-400/30 bg-emerald-500/15 text-emerald-300 shadow-[0_0_10px_rgba(34,201,138,0.2)]",
+    violet: "border-violet-400/30 bg-violet-500/15 text-violet-300 shadow-[0_0_10px_rgba(168,85,247,0.2)]",
+    amber: "border-amber-400/30 bg-amber-500/15 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]",
+    blue: "border-blue-400/30 bg-blue-500/15 text-blue-300 shadow-[0_0_10px_rgba(59,130,246,0.2)]",
+  }[iconTheme]
+
+  return (
+    <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+      <div className="flex items-center gap-2">
+        <div className={`flex size-6 shrink-0 items-center justify-center rounded-lg border ${themeStyles}`}>
+          <Icon className="size-3.5" />
+        </div>
+        <div className="flex flex-col">
+          <span className="font-ticker text-xs sm:text-[12.5px] font-black uppercase tracking-wide text-white">
+            {title}
+          </span>
+          {subtitle ? <span className="text-[10px] text-slate-400 font-medium">{subtitle}</span> : null}
+        </div>
+      </div>
+      {rightSlot}
+    </div>
+  )
+}
+
 function ForeignRealtimeCard({
   foreign,
   quotePrice,
@@ -1845,7 +1885,13 @@ function ForeignRealtimeCard({
   roomPercentage,
   latestTradeTime,
 }: {
-  foreign: ForeignSnapshot | null
+  foreign?: {
+    totalBuyVolume?: number
+    totalSellVolume?: number
+    totalBuyValue?: number
+    totalSellValue?: number
+    updatedAt?: string
+  } | null
   quotePrice?: number | null
   foreignNetVolume?: number | null
   foreignNetValue?: number | null
@@ -1883,34 +1929,31 @@ function ForeignRealtimeCard({
   }, [latestTradeTime, foreignUpdatedAt])
 
   return (
-    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-3 font-mono text-xs space-y-2.5">
+    <div className="flex flex-col rounded-xl border border-white/[0.08] bg-[#0c1015]/90 p-3 font-mono text-xs space-y-2.5 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]">
       {/* Title Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
-          </span>
-          <span className="font-sans text-xs sm:text-[13px] font-extrabold uppercase tracking-wide text-foreground">
-            GIAO DỊCH NĐTNN
-          </span>
-        </div>
-        <span className="text-[10.5px] text-muted font-mono font-medium">
-          {displayTime}
-        </span>
-      </div>
+      <WidgetSectionHeader
+        icon={Globe}
+        title="GIAO DỊCH NĐTNN"
+        iconTheme="blue"
+        rightSlot={
+          <div className="flex items-center gap-1.5 font-mono text-[10.5px] font-medium text-slate-400">
+            <Clock className="size-3 text-slate-500" />
+            <span>{displayTime}</span>
+          </div>
+        }
+      />
 
       {/* Grid Table */}
-      <div className="rounded-lg border border-border/60 bg-[#161718] overflow-hidden text-[11px] sm:text-xs">
+      <div className="rounded-xl border border-white/[0.08] bg-[#11161d] overflow-hidden text-[11px] sm:text-xs shadow-inner">
         {/* Row 1: Khối Lượng Header */}
-        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center bg-[#1c1e1f] px-3 py-1.5 text-[10.5px] font-bold text-muted-2 border-b border-border/40">
+        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center bg-white/[0.03] px-3 py-1.5 text-[10.5px] font-bold text-slate-400 border-b border-white/[0.06]">
           <span>KL Mua</span>
           <span className="text-center">KL Bán</span>
           <span className="text-right">KL Mua-Bán</span>
         </div>
 
         {/* Row 1: Khối Lượng Values */}
-        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center px-3 py-2 text-xs sm:text-[13px] font-bold border-b border-border/40 whitespace-nowrap">
+        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center px-3 py-2 text-xs sm:text-[13px] font-bold border-b border-white/[0.06] whitespace-nowrap">
           <span
             className={`text-up transition-colors ${
               buyVolFlash === "up" ? "flash-up font-black" : buyVolFlash === "down" ? "flash-down font-black" : ""
@@ -1939,7 +1982,7 @@ function ForeignRealtimeCard({
         </div>
 
         {/* Row 2: Giá Trị Header */}
-        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center bg-[#1c1e1f] px-3 py-1.5 text-[10.5px] font-bold text-muted-2 border-b border-border/40">
+        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center bg-white/[0.03] px-3 py-1.5 text-[10.5px] font-bold text-slate-400 border-b border-white/[0.06]">
           <span>GT Mua</span>
           <span className="text-center">GT Bán</span>
           <span className="text-right">GT Mua-Bán</span>
@@ -1947,21 +1990,20 @@ function ForeignRealtimeCard({
 
         {/* Row 2: Giá Trị Values with GT Mua-Bán in a label pill */}
         <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center px-3 py-2 text-xs sm:text-[13px] font-bold whitespace-nowrap">
-          <span className="text-up">
+          <span className="text-up font-semibold">
             {buyVal ? formatMarketValue(buyVal) : "—"}
           </span>
-          <span className="text-center text-down">
+          <span className="text-center text-down font-semibold">
             {sellVal ? formatMarketValue(sellVal) : "—"}
           </span>
-          {/* Highlighted prominent GT Mua-Bán inside a label pill */}
           <div className="flex justify-end items-center">
             <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-md font-bold text-xs sm:text-[12.5px] border whitespace-nowrap shrink-0 leading-tight ${
+              className={`inline-flex items-center px-2 py-0.5 rounded-md font-bold text-xs sm:text-[12px] border whitespace-nowrap shrink-0 leading-tight transition-all duration-200 ${
                 isNetValPos
-                  ? "bg-up/15 text-up border-up/40 shadow-sm"
+                  ? "bg-up/15 text-up border-up/40 shadow-[0_0_8px_rgba(34,201,138,0.2)]"
                   : isNetValNeg
-                    ? "bg-down/15 text-down border-down/40 shadow-sm"
-                    : "bg-panel-2 text-ref border-border"
+                    ? "bg-down/15 text-down border-down/40 shadow-[0_0_8px_rgba(244,63,94,0.2)]"
+                    : "bg-white/[0.05] text-ref border-white/10"
               } ${
                 netVolFlash === "up" ? "flash-up font-black" : netVolFlash === "down" ? "flash-down font-black" : ""
               }`}
@@ -1998,102 +2040,113 @@ function TradeInitiativeAndMarketStatsCard({
   const totalVolume = Math.max(quote?.totalVolume ?? 0, tradeStats.totalTraded)
 
   return (
-    <div className="flex flex-col rounded-lg border border-border/80 bg-[#121313] p-3 font-mono text-xs space-y-2.5">
-      {/* 1. 4 Records replacing the bar */}
-      <div className="rounded-lg border border-border/60 bg-[#161718] divide-y divide-border/40 overflow-hidden text-[11px] sm:text-xs">
-        {/* Row 1: Tổng KL khớp */}
-        <div className="flex items-center justify-between px-3 py-2 bg-[#1c1e1f]/60">
-          <span className="text-foreground/90 font-medium font-sans">
-            Tổng KL khớp {symbol}
-          </span>
-          <span className="font-bold text-foreground sm:text-xs whitespace-nowrap">
-            {formatVolume(totalVolume)}
-          </span>
-        </div>
-
-        {/* Row 2: KL MUA chủ động */}
-        <div className="flex items-center justify-between px-3 py-2">
-          <span className="text-muted-2 flex items-center gap-1 font-sans">
-            KL MUA chủ động
-          </span>
-          <span className="flex items-center gap-1.5 font-bold text-up sm:text-xs whitespace-nowrap">
-            <span>{formatVolume(tradeStats.buyVol)}</span>
-            <span className="rounded px-1.5 py-0.2 text-[8px] font-bold border border-up/40 bg-up/15 text-up leading-none">
-              M
+    <div className="flex flex-col rounded-xl border border-white/[0.08] bg-[#0c1015]/90 p-3 font-mono text-xs space-y-4 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]">
+      {/* 1. Tổng KL khớp Symbol */}
+      <div className="space-y-2.5">
+        <WidgetSectionHeader
+          icon={Activity}
+          title={`Tổng KL khớp ${symbol}`}
+          iconTheme="emerald"
+          rightSlot={
+            <span className="font-mono text-xs sm:text-[13px] font-black text-white">
+              {formatVolume(totalVolume)}
             </span>
-          </span>
-        </div>
+          }
+        />
 
-        {/* Row 3: KL BÁN chủ động */}
-        <div className="flex items-center justify-between px-3 py-2">
-          <span className="text-muted-2 flex items-center gap-1 font-sans">
-            KL BÁN chủ động
-          </span>
-          <span className="flex items-center gap-1.5 font-bold text-down sm:text-xs whitespace-nowrap">
-            <span>{formatVolume(tradeStats.sellVol)}</span>
-            <span className="rounded px-1.5 py-0.2 text-[8px] font-bold border border-down/40 bg-down/15 text-down leading-none">
-              B
+        <div className="rounded-xl border border-white/[0.08] bg-[#11161d] divide-y divide-white/[0.06] overflow-hidden text-[11.5px] sm:text-xs shadow-inner">
+          {/* Row 1: KL MUA chủ động */}
+          <div className="flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.02] transition-colors">
+            <span className="text-slate-300 font-sans font-medium">
+              KL MUA chủ động
             </span>
-          </span>
-        </div>
+            <span className="flex items-center gap-2 font-bold text-up sm:text-xs whitespace-nowrap">
+              <span>{formatVolume(tradeStats.buyVol)}</span>
+              <span className="rounded px-1.5 py-0.5 text-[9px] font-black border border-up/40 bg-up/15 text-up leading-none shadow-sm">
+                M
+              </span>
+            </span>
+          </div>
 
-        {/* Row 4: KL KHÔNG XÁC ĐỊNH */}
-        <div className="flex items-center justify-between px-3 py-2 bg-[#1c1e1f]/40">
-          <span className="text-muted-2 font-sans">
-            KL KHÔNG XÁC ĐỊNH
-          </span>
-          <span className="font-bold text-foreground sm:text-xs whitespace-nowrap">
-            {formatVolume(tradeStats.unkVol)}
-          </span>
+          {/* Row 2: KL BÁN chủ động */}
+          <div className="flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.02] transition-colors">
+            <span className="text-slate-300 font-sans font-medium">
+              KL BÁN chủ động
+            </span>
+            <span className="flex items-center gap-2 font-bold text-down sm:text-xs whitespace-nowrap">
+              <span>{formatVolume(tradeStats.sellVol)}</span>
+              <span className="rounded px-1.5 py-0.5 text-[9px] font-black border border-down/40 bg-down/15 text-down leading-none shadow-sm">
+                B
+              </span>
+            </span>
+          </div>
+
+          {/* Row 3: KL KHÔNG XÁC ĐỊNH */}
+          <div className="flex items-center justify-between px-3 py-2.5 bg-white/[0.02]">
+            <span className="text-slate-400 font-sans font-medium">
+              KL KHÔNG XÁC ĐỊNH
+            </span>
+            <span className="font-bold text-slate-200 sm:text-xs whitespace-nowrap">
+              {formatVolume(tradeStats.unkVol)}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* 2. Thông số phiên */}
-      <div className="border-t border-border/50 pt-2">
-        <div className="text-[10px] uppercase tracking-wider text-muted-2 font-bold mb-1.5 flex items-center justify-between">
-          <span>THÔNG SỐ PHIÊN</span>
-        </div>
+      <div className="space-y-2.5 pt-1">
+        <WidgetSectionHeader
+          icon={Layers}
+          title="THÔNG SỐ PHIÊN"
+          iconTheme="violet"
+          rightSlot={
+            <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[9.5px] font-bold text-slate-400">
+              Snapshot
+            </span>
+          }
+        />
+
         <div className="grid grid-cols-3 gap-1.5 text-center">
           {/* Row 1: Sàn - TC - Trần */}
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[9px] text-muted-2 uppercase font-semibold">Sàn</div>
-            <div className="text-xs sm:text-[13px] font-bold text-[#22b8cf] whitespace-nowrap">{formatPrice(quote?.floor)}</div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-cyan-400/30 transition-colors">
+            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Sàn</div>
+            <div className="text-xs sm:text-[13px] font-black text-[#22b8cf] whitespace-nowrap mt-0.5">{formatPrice(quote?.floor)}</div>
           </div>
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[9px] text-muted-2 uppercase font-semibold">TC</div>
-            <div className="text-xs sm:text-[13px] font-bold text-ref whitespace-nowrap">{formatPrice(quote?.reference)}</div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-amber-400/30 transition-colors">
+            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">TC</div>
+            <div className="text-xs sm:text-[13px] font-black text-ref whitespace-nowrap mt-0.5">{formatPrice(quote?.reference)}</div>
           </div>
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[9px] text-muted-2 uppercase font-semibold">Trần</div>
-            <div className="text-xs sm:text-[13px] font-bold text-ceiling whitespace-nowrap">{formatPrice(quote?.ceiling)}</div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-purple-400/30 transition-colors">
+            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Trần</div>
+            <div className="text-xs sm:text-[13px] font-black text-ceiling whitespace-nowrap mt-0.5">{formatPrice(quote?.ceiling)}</div>
           </div>
 
           {/* Row 2: Thấp - TB - Cao */}
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[9px] text-muted-2 uppercase font-semibold">Thấp</div>
-            <div className="text-xs sm:text-[13px] font-bold text-foreground whitespace-nowrap">{formatPrice(quote?.low)}</div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors">
+            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Thấp</div>
+            <div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{formatPrice(quote?.low)}</div>
           </div>
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[9px] text-muted-2 uppercase font-semibold">TB</div>
-            <div className="text-xs sm:text-[13px] font-bold text-foreground whitespace-nowrap">{formatPrice(quote?.avgPrice)}</div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors">
+            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">TB</div>
+            <div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{formatPrice(quote?.avgPrice)}</div>
           </div>
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[9px] text-muted-2 uppercase font-semibold">Cao</div>
-            <div className="text-xs sm:text-[13px] font-bold text-foreground whitespace-nowrap">{formatPrice(quote?.high)}</div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors">
+            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Cao</div>
+            <div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{formatPrice(quote?.high)}</div>
           </div>
 
           {/* Row 3: Spread - Tổng KL - Tổng GT */}
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[9px] text-muted-2 uppercase font-semibold">Spread</div>
-            <div className="text-xs sm:text-[13px] font-bold text-foreground whitespace-nowrap">{spread !== null && spread !== undefined && spread > 0 ? formatPrice(spread) : "—"}</div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors">
+            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Spread</div>
+            <div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{spread !== null && spread !== undefined && spread > 0 ? formatPrice(spread) : "—"}</div>
           </div>
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[9px] text-muted-2 uppercase font-semibold">Tổng KL</div>
-            <div className="text-xs sm:text-[13px] font-bold text-foreground whitespace-nowrap">{formatCompactVolume(totalVolume)}</div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors">
+            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Tổng KL</div>
+            <div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{formatCompactVolume(totalVolume)}</div>
           </div>
-          <div className="rounded-lg border border-border/60 bg-[#161718] p-1.5 flex flex-col justify-center">
-            <div className="text-[9px] text-muted-2 uppercase font-semibold">Tổng GT</div>
-            <div className="text-xs sm:text-[13px] font-bold text-foreground whitespace-nowrap">
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors">
+            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Tổng GT</div>
+            <div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">
               {(() => {
                 const rawP = quote?.price ? (quote.price >= 500 ? quote.price : quote.price * 1000) : 0
                 if (quote?.totalValue) return formatMarketValue(quote.totalValue)
@@ -2861,14 +2914,16 @@ export function LiveOrderBookPanel({
           {/* SECTION 2: TABBED ACTIVITY VIEWS */}
           <div className="px-4 py-3 flex-1 flex flex-col">
             {/* Tabs Header */}
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2.5">
-              <div className="flex items-center gap-1 bg-[#181919] p-1 rounded-lg border border-border/80">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] pb-2.5">
+              <div className="flex items-center gap-1 bg-[#0c1015]/90 p-1 rounded-xl border border-white/[0.08] shadow-[0_2px_10px_rgba(0,0,0,0.4)]">
                 <button
                   type="button"
                   disabled={!isWsReady}
                   onClick={() => setActivityTab("trades")}
-                  className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors ${
-                    activityTab === "trades" ? "bg-brand/20 text-brand shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
+                    activityTab === "trades"
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shadow-[0_0_10px_rgba(34,201,138,0.15)]"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"
                   } ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
                 >
                   <BarChart3 className="h-3.5 w-3.5" />
@@ -2879,8 +2934,10 @@ export function LiveOrderBookPanel({
                   type="button"
                   disabled={!isWsReady}
                   onClick={() => setActivityTab("foreign")}
-                  className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors ${
-                    activityTab === "foreign" ? "bg-blue-500/20 text-blue-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
+                    activityTab === "foreign"
+                      ? "bg-blue-500/20 text-blue-300 border border-blue-400/30 shadow-[0_0_10px_rgba(59,130,246,0.15)]"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"
                   } ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
                 >
                   <PieChart className="h-3.5 w-3.5" />
@@ -2891,8 +2948,10 @@ export function LiveOrderBookPanel({
                   type="button"
                   disabled={!isWsReady}
                   onClick={() => setActivityTab("profile")}
-                  className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors ${
-                    activityTab === "profile" ? "bg-purple-500/20 text-purple-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
+                    activityTab === "profile"
+                      ? "bg-purple-500/20 text-purple-300 border border-purple-400/30 shadow-[0_0_10px_rgba(168,85,247,0.15)]"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"
                   } ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
                 >
                   <Layers className="h-3.5 w-3.5" />
@@ -2903,8 +2962,10 @@ export function LiveOrderBookPanel({
                   type="button"
                   disabled={!isWsReady}
                   onClick={() => setActivityTab("putthrough")}
-                  className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors ${
-                    activityTab === "putthrough" ? "bg-amber-500/20 text-amber-400 shadow-sm" : "text-muted-2 hover:bg-panel-2 hover:text-foreground"
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
+                    activityTab === "putthrough"
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-400/30 shadow-[0_0_10px_rgba(245,158,11,0.15)]"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"
                   } ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
                 >
                   <Handshake className="h-3.5 w-3.5" />
@@ -2919,13 +2980,15 @@ export function LiveOrderBookPanel({
 
               {/* Tape Sub-filters */}
               {activityTab === "trades" && (
-                <div className={`flex items-center gap-1.5 text-xs ${!isWsReady ? "opacity-50 pointer-events-none" : ""}`}>
+                <div className={`flex items-center gap-1 bg-[#0c1015]/90 p-1 rounded-xl border border-white/[0.08] text-xs shadow-[0_2px_10px_rgba(0,0,0,0.4)] ${!isWsReady ? "opacity-50 pointer-events-none" : ""}`}>
                   <button
                     type="button"
                     disabled={!isWsReady}
                     onClick={() => setTradeFilter("all")}
-                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-semibold transition-colors ${
-                      tradeFilter === "all" ? "bg-panel-2 text-foreground font-bold border border-border shadow-sm" : "text-muted hover:text-muted-2"
+                    className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all duration-150 ${
+                      tradeFilter === "all"
+                        ? "bg-white/[0.12] text-white shadow-sm border border-white/[0.15]"
+                        : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"
                     }`}
                     title={stream.trades.length > clusteredTrades.length ? `Gốc: ${stream.trades.length.toLocaleString("vi-VN")} lệnh` : undefined}
                   >
@@ -2936,25 +2999,29 @@ export function LiveOrderBookPanel({
                     type="button"
                     disabled={!isWsReady}
                     onClick={() => setTradeFilter("large")}
-                    className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-semibold transition-colors ${
-                      tradeFilter === "large" ? "border-ref/50 bg-ref/15 text-ref font-bold shadow-sm" : "border-border text-muted-2 hover:text-foreground"
+                    className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition-all duration-150 ${
+                      tradeFilter === "large"
+                        ? "border-amber-400/40 bg-amber-500/20 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                        : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
                     }`}
                   >
                     <SmallFishIcon className="h-3.5 w-3.5" />
                     <span>Cá con ≥10K</span>
-                    {isWsReady && largeTradeCount > 0 && <span className="rounded bg-ref/25 px-1 text-[10px] font-bold">{largeTradeCount}</span>}
+                    {isWsReady && largeTradeCount > 0 && <span className="rounded-full bg-amber-400/30 px-1.5 py-0.2 text-[10px] font-black text-amber-300">{largeTradeCount}</span>}
                   </button>
                   <button
                     type="button"
                     disabled={!isWsReady}
                     onClick={() => setTradeFilter("whale")}
-                    className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-semibold transition-colors ${
-                      tradeFilter === "whale" ? "border-up/50 bg-up/15 text-up font-bold shadow-sm" : "border-border text-muted-2 hover:text-foreground"
+                    className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition-all duration-150 ${
+                      tradeFilter === "whale"
+                        ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-300 shadow-[0_0_12px_rgba(34,201,138,0.2)]"
+                        : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
                     }`}
                   >
                     <SharkIcon className="h-3.5 w-3.5" />
                     <span>Cá mập {whaleLabel}</span>
-                    {isWsReady && whaleTradeCount > 0 && <span className="rounded bg-up/25 px-1 text-[10px] font-bold">{whaleTradeCount}</span>}
+                    {isWsReady && whaleTradeCount > 0 && <span className="rounded-full bg-emerald-400/30 px-1.5 py-0.2 text-[10px] font-black text-emerald-300">{whaleTradeCount}</span>}
                   </button>
                 </div>
               )}
