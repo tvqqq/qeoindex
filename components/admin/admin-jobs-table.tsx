@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { ExternalLink, Play, Search } from "lucide-react"
 
+import { formatAdminDate, formatAdminTime } from "@/lib/admin/time"
 import type { AdminJobView } from "@/lib/admin/types"
 import { AdminManualJobModal } from "./admin-manual-job-modal"
 
@@ -37,7 +38,6 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
 
   return (
     <div className="space-y-4">
-      {/* Search and Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -68,7 +68,6 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
         </div>
       </div>
 
-      {/* Table */}
       <div className="rounded-xl border border-white/[0.08] bg-[#0c1016] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -77,7 +76,7 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                 <th className="px-4 py-3 font-medium">Tác vụ & Mô tả</th>
                 <th className="px-4 py-3 font-medium">Lịch chạy (ICT)</th>
                 <th className="px-4 py-3 font-medium">Trạng thái</th>
-                <th className="px-4 py-3 font-medium">Lần chạy cuối</th>
+                <th className="px-4 py-3 font-medium">Lần chạy cuối (ICT)</th>
                 <th className="px-4 py-3 font-medium">Thời lượng</th>
                 <th className="px-4 py-3 text-right font-medium">Hành động</th>
               </tr>
@@ -86,31 +85,20 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
               {filteredJobs.map((job) => {
                 const isManualAllowed = job.manualPolicy !== "disabled"
                 const badgeStyle = STATUS_BADGE_STYLES[job.status] || STATUS_BADGE_STYLES.unknown
+                const lastRunAt = job.lastFinishedAt || job.lastStartedAt
 
                 return (
                   <tr key={job.key} className="text-slate-300 hover:bg-white/[0.02]">
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2">
-                        <Link
-                          href={`/admin/jobs/${job.key}`}
-                          prefetch={false}
-                          className="font-mono font-bold text-white hover:text-emerald-400"
-                        >
+                        <Link href={`/admin/jobs/${job.key}`} prefetch={false} className="font-mono font-bold text-white hover:text-emerald-400">
                           {job.label}
                         </Link>
-                        <span className="rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.2 text-[9px] font-mono text-slate-400">
-                          {job.provider}
-                        </span>
+                        <span className="rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.2 text-[9px] font-mono text-slate-400">{job.provider}</span>
                       </div>
                       <p className="mt-0.5 text-[11px] text-slate-400">{job.description}</p>
-                      {job.healthReason ? (
-                        <p className="mt-1 text-[11px] text-slate-300 font-medium">{job.healthReason}</p>
-                      ) : null}
-                      {job.conflictWarning ? (
-                        <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-400 font-medium">
-                          <span>⚠️ {job.conflictWarning}</span>
-                        </div>
-                      ) : null}
+                      {job.healthReason ? <p className="mt-1 text-[11px] text-slate-300 font-medium">{job.healthReason}</p> : null}
+                      {job.conflictWarning ? <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-400 font-medium"><span>⚠️ {job.conflictWarning}</span></div> : null}
                     </td>
 
                     <td className="px-4 py-3.5 font-mono text-slate-300">
@@ -122,26 +110,18 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                       ) : null}
                     </td>
 
-                    <td className="px-4 py-3.5">
-                      <span className={`inline-block rounded border px-2 py-0.5 text-[10px] font-bold uppercase ${badgeStyle}`}>
-                        {job.status}
-                      </span>
-                    </td>
+                    <td className="px-4 py-3.5"><span className={`inline-block rounded border px-2 py-0.5 text-[10px] font-bold uppercase ${badgeStyle}`}>{job.status}</span></td>
 
                     <td className="px-4 py-3.5 font-mono text-[11px] text-slate-400">
-                      {job.lastFinishedAt || job.lastStartedAt ? (
+                      {lastRunAt ? (
                         <div>
-                          <div>{new Date(job.lastFinishedAt || job.lastStartedAt!).toLocaleTimeString("vi-VN")}</div>
-                          <div className="text-[10px] text-slate-400">{new Date(job.lastFinishedAt || job.lastStartedAt!).toLocaleDateString("vi-VN")}</div>
+                          <div>{formatAdminTime(lastRunAt)}</div>
+                          <div className="text-[10px] text-slate-400">{formatAdminDate(lastRunAt)}</div>
                         </div>
-                      ) : (
-                        "—"
-                      )}
+                      ) : "—"}
                     </td>
 
-                    <td className="px-4 py-3.5 font-mono text-slate-400">
-                      {job.lastDurationMs ? `${job.lastDurationMs}ms` : "—"}
-                    </td>
+                    <td className="px-4 py-3.5 font-mono text-slate-400">{job.lastDurationMs ? `${job.lastDurationMs}ms` : "—"}</td>
 
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
@@ -175,10 +155,7 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
         </div>
       </div>
 
-      {/* Manual Job Trigger Modal */}
-      {runningJob ? (
-        <AdminManualJobModal job={runningJob} onClose={() => setRunningJob(null)} />
-      ) : null}
+      {runningJob ? <AdminManualJobModal job={runningJob} onClose={() => setRunningJob(null)} /> : null}
     </div>
   )
 }
