@@ -11,6 +11,7 @@ import {
   type AdminJobPhaseStatus,
   type SystemJobPhaseRow,
 } from "@/lib/admin/job-phases"
+import { formatAdminDateTime } from "@/lib/admin/time"
 
 export interface AdminJobPhaseTimelineProps {
   rows: SystemJobPhaseRow[]
@@ -50,10 +51,6 @@ function formatDuration(durationMs: number | null) {
   const minutes = Math.floor(seconds / 60)
   const remainder = seconds % 60
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`
-}
-
-function formatStartedAt(value: string) {
-  return new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })
 }
 
 function formatSummaryValue(value: unknown) {
@@ -107,7 +104,7 @@ export function AdminJobPhaseTimeline({ rows }: AdminJobPhaseTimelineProps) {
                   <p className="mt-0.5 text-[11px] leading-5 text-slate-400">{phase.description}</p>
                   <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-slate-500">
                     <span>Duration: {formatDuration(phase.durationMs)}</span>
-                    {phase.startedAt ? <span>Start: {formatStartedAt(phase.startedAt)}</span> : null}
+                    {phase.startedAt ? <span>Start (ICT): {formatAdminDateTime(phase.startedAt)}</span> : null}
                   </div>
                 </div>
 
