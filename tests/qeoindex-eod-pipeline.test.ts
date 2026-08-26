@@ -105,3 +105,13 @@ test("admin catalog exposes one unified 15:15 ICT EOD pipeline definition", () =
   assert.match(block, /scheduleIct:\s*"15:15 T2-T6"/)
   assert.match(block, /provider:\s*"supabase_pg_cron"/)
 })
+
+test("EOD_READY freshness cutoff matches the canonical 14:45 ICT closing sync", () => {
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const cron = source("supabase/migrations/20260826085500_fix_orderbook_cron_1445.sql")
+
+  assert.match(cron, /sync-universe-eod-1445/)
+  assert.match(cron, /'45 7 \* \* 1-5'/)
+  assert.match(steps, /T07:45:00\.000Z/)
+  assert.doesNotMatch(steps, /T07:50:00\.000Z/)
+})
