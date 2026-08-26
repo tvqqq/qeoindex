@@ -129,21 +129,50 @@ The catalog defines 7 editable runtime-safe keys. All other system parameters (u
 
 **Resolution Order**: `Runtime Database Override` > `Environment Variable` > `Code Default`.
 
-### Job health state machine & Manual dispatch
+### Job health state machine, evidence boundaries & Manual dispatch
 
-The system inventories 13 background and cron jobs. 4 jobs are allowlisted for safe manual dispatch from the Control Plane:
+The system inventories scheduled background and on-demand jobs across Vercel Workflow, Supabase pg_cron, and machine endpoints. 4 jobs are allowlisted for safe manual dispatch from the Control Plane:
 
 - `market.sync_universe`: Đồng bộ danh mục cổ phiếu Top 100 từ VPS market feed.
-- `market.intraday_5m`: Làm mới snapshot dữ liệu nến 5m cho Top 100.
 - `scanner.run`: Kích hoạt bộ lọc quét tín hiệu thị trường.
-- `signals.daily`: Kích hoạt quy trình phân tích tín hiệu kỹ thuật & Wyckoff hàng ngày.
+- `signals.monitor`: Kiểm tra tình trạng dữ liệu và hoạt động của engine tín hiệu.
+- `wyckoff.ingest`: Nhập 500 snapshot phân tích Wyckoff từ Notion staging vào Supabase.
+
+#### Scheduler Dispatch Health vs Actual Execution Evidence
+
+A critical invariant of the Control Plane is the strict separation between:
+1. **Scheduler Dispatch Health**: Indicates whether pg_cron or Vercel Cron triggered the HTTP request. `cron.job_run_details.status = 'succeeded'` means only that the asynchronous HTTP request was queued into `pg_net`. It is NOT execution success.
+2. **Execution Evidence**: The actual domain outcome and freshness derived from canonical data stores:
+   - `qeoindex.eod_pipeline` & manual jobs: `system_job_runs` and `system_job_phases`.
+   - `kfsp.rating_daily`: `kfsp_rating_sync_runs` (verifying published row count, e.g. 1,752 rows).
+   - `kfsp.ttai_history`: `kfsp_ttai_sync_runs` (verifying candidate vs processed count).
+   - `market.sync_5m` & `market.sync_eod`: `stock_orderbook_snapshots` coverage and session freshness.
+   - `signals.daily`: `system_job_runs` workflow completion telemetry.
+
+#### Active Production Schedules & Scheduler Names
+
+| Job Key | Provider | Scheduler Name | Schedule (UTC) | Schedule (ICT) | Evidence Source |
+| --- | --- | --- | --- | --- | --- |
+| `qeoindex.eod_pipeline` | `supabase_pg_cron_workflow` | `qeoindex-eod-pipeline-1515-ict` | `15 8 * * 1-5` | 15:15 T2-T6 | `system_job_runs` / `system_job_phases` |
+| `signals.daily` | `vercel_cron_workflow` | Vercel Cron | `0 0 * * 1-5` | 07:00 T2-T6 | `system_job_runs` |
+| `kfsp.rating_daily` | `supabase_pg_cron` | `kfsp-rating-daily-7am-ict` | `0 0 * * *` | 07:00 Hàng ngày | `kfsp_rating_sync_runs` |
+| `kfsp.ttai_history` | `supabase_pg_cron` | `kfsp-ttai-history-daily-1am-ict` | `0 18 * * *` | 01:00 Hàng ngày | `kfsp_ttai_sync_runs` |
+| `market.sync_5m` | `supabase_pg_cron` | `sync-universe-5m` | `*/5 2-7 * * 1-5` | 09:00-14:55 T2-T6 | `stock_orderbook_snapshots` |
+| `market.sync_eod` | `supabase_pg_cron` | `sync-universe-eod-1450` | `50 7 * * 1-5` | 14:50 T2-T6 | `stock_orderbook_snapshots` |
+
+#### Operational Findings & Known Warnings
+
+1. **KFSP TTAI Provider Failure**: Edge Function returns HTTP 207 with `0/12` processed and `12/12` failed due to upstream provider changes. Displayed truthfully as `FAILING` on `/admin/jobs`.
+2. **14:50 ICT Market Sync Overlap**: `sync-universe-5m` and `sync-universe-eod-1450` both fire at 14:50 ICT on weekdays, triggering duplicate concurrent calls to `orderbook-sync`. Displayed as an operational efficiency warning.
+3. **QeoIndex EOD First Run**: Remains `UNKNOWN` (Pending First Run) until actual execution telemetry is recorded in `system_job_runs`.
+4. **Signals Daily Telemetry**: Workflow start, finish, and failure are durably persisted to `system_job_runs` via step telemetry.
 
 **Health Status Derivation**:
-- `healthy`: Lần chạy gần nhất thành công và trong ngưỡng độ tươi (`freshnessMinutes`).
+- `healthy`: Bằng chứng thực thi gần nhất thành công và trong ngưỡng độ tươi (`freshnessMinutes`).
 - `degraded`: Lần chạy gần nhất có cảnh báo hoặc thời lượng thực thi vượt ngưỡng tối đa.
-- `failing`: Lần chạy gần nhất thất bại hoặc kết thúc với mã lỗi.
+- `failing`: Lần chạy gần nhất thất bại hoặc kết thúc với mã lỗi / HTTP 207 provider failure.
 - `stale`: Quá thời hạn kiểm tra độ tươi mà không có lượt chạy mới thành công.
-- `unknown`: Chưa ghi nhận lần chạy nào trong hệ thống telemetry.
+- `unknown`: Chưa ghi nhận lần chạy nào trong hệ thống telemetry hoặc đang chờ lượt chạy đầu tiên.
 
 ### Admin endpoints & Navigation
 

@@ -2,6 +2,11 @@ import { sleep } from "workflow"
 
 import { runScannerUniverse } from "@/lib/scanner-runner"
 import { runSignalMonitor } from "@/lib/signal-monitor"
+import {
+  failSignalsDailyRunStep,
+  finishSignalsDailyRunStep,
+  startSignalsDailyRunStep,
+} from "@/lib/signals-daily-telemetry"
 
 async function refreshDailyScannerStep() {
   "use step"
@@ -49,38 +54,58 @@ async function monitorWindow(dateKey: string, startMinutes: number, endMinutes: 
 export async function dailySignalWorkflow(startedAtIso: string) {
   "use workflow"
 
-  const dateKey = vietnamDateKey(startedAtIso)
-  const scanner = await refreshDailyScannerStep()
+  const runId = await startSignalsDailyRunStep(startedAtIso)
 
-  // HOSE ATO is 09:00-09:15. Trade ticks are only treated as actionable once
-  // the opening print is available, avoiding a fake fill from the previous close.
-  await sleep(atVietnamTime(dateKey, 9, 15, 5))
-  let opening = await monitorSignalStep()
+  try {
+    const dateKey = vietnamDateKey(startedAtIso)
+    const scanner = await refreshDailyScannerStep()
 
-  // Retry the opening action a few times when the first DNSE snapshot has not
-  // produced all opening ticks yet.
-  for (const minute of [16, 17, 18]) {
-    if ((opening.missingQuotes?.length ?? 0) === 0) break
-    await sleep(atVietnamTime(dateKey, 9, minute, 5))
-    opening = await monitorSignalStep()
-  }
+    // HOSE ATO is 09:00-09:15. Trade ticks are only treated as actionable once
+    // the opening print is available, avoiding a fake fill from the previous close.
+    await sleep(atVietnamTime(dateKey, 9, 15, 5))
+    let opening = await monitorSignalStep()
 
-  let openCount = opening.openAfter ?? opening.openBefore ?? 0
-  openCount = await monitorWindow(dateKey, 9 * 60 + 20, 11 * 60 + 30, openCount)
-  openCount = await monitorWindow(dateKey, 13 * 60, 14 * 60 + 30, openCount)
+    // Retry the opening action a few times when the first DNSE snapshot has not
+    // produced all opening ticks yet.
+    for (const minute of [16, 17, 18]) {
+      if ((opening.missingQuotes?.length ?? 0) === 0) break
+      await sleep(atVietnamTime(dateKey, 9, minute, 5))
+      opening = await monitorSignalStep()
+    }
 
-  // Capture the ATC closing print so end-of-day alpha and exits are not based
-  // on the last continuous-auction tick.
-  await sleep(atVietnamTime(dateKey, 14, 45, 5))
-  const closing = await monitorSignalStep()
-  openCount = closing.openAfter ?? openCount
+    let openCount = opening.openAfter ?? opening.openBefore ?? 0
+    openCount = await monitorWindow(dateKey, 9 * 60 + 20, 11 * 60 + 30, openCount)
+    openCount = await monitorWindow(dateKey, 13 * 60, 14 * 60 + 30, openCount)
 
-  return {
-    dateKey,
-    scanner,
-    opening,
-    closing,
-    openAtClose: openCount,
-    completedAt: new Date().toISOString(),
+    // Capture the ATC closing print so end-of-day alpha and exits are not based
+    // on the last continuous-auction tick.
+    await sleep(atVietnamTime(dateKey, 14, 45, 5))
+    const closing = await monitorSignalStep()
+    openCount = closing.openAfter ?? openCount
+
+    const result = {
+      dateKey,
+      scanner: {
+        completed: scanner.completed.length,
+        skipped: scanner.skipped.length,
+        errors: scanner.errors.length,
+      },
+      opening: {
+        openAfter: opening.openAfter,
+      },
+      closing: {
+        openAfter: closing.openAfter,
+      },
+      openAtClose: openCount,
+      completedAt: new Date().toISOString(),
+    }
+
+    await finishSignalsDailyRunStep(runId, startedAtIso, result)
+
+    return result
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await failSignalsDailyRunStep(runId, startedAtIso, message)
+    throw error
   }
 }

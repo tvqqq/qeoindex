@@ -113,6 +113,17 @@ export type AdminEnvironmentItem = {
   note?: string
 }
 
+export type AdminScheduleKind = "point" | "interval" | "manual" | "workflow"
+
+export type AdminJobEvidenceSource =
+  | "system_job_runs"
+  | "kfsp_rating_sync_runs"
+  | "kfsp_ttai_sync_runs"
+  | "stock_orderbook_snapshots"
+  | "none"
+
+export type AdminSchedulerStatus = "active" | "inactive" | "unscheduled" | "unknown"
+
 export type AdminJobDefinition = {
   key: string
   provider: string
@@ -121,6 +132,14 @@ export type AdminJobDefinition = {
   group: AdminSettingGroup
   scheduleUtc?: string
   scheduleIct?: string
+  scheduleKind?: AdminScheduleKind
+  schedulerName?: string
+  scheduleDays?: "weekdays" | "daily"
+  windowStartIct?: string
+  windowEndIct?: string
+  intervalMinutes?: number
+  dependencies?: string[]
+  evidenceSource?: AdminJobEvidenceSource
   manualPolicy: AdminManualPolicy
   freshnessMinutes: number
   maxDurationMinutes: number
@@ -134,8 +153,23 @@ export type AdminJobView = {
   group: AdminSettingGroup
   scheduleUtc?: string
   scheduleIct?: string
+  scheduleKind?: AdminScheduleKind
+  schedulerName?: string
+  scheduleDays?: "weekdays" | "daily"
+  windowStartIct?: string
+  windowEndIct?: string
+  intervalMinutes?: number
+  dependencies?: string[]
   manualPolicy: AdminManualPolicy
   status: AdminJobStatus
+  schedulerStatus?: AdminSchedulerStatus
+  schedulerLastStatus?: string | null
+  schedulerLastStartedAt?: string | null
+  schedulerLastFinishedAt?: string | null
+  executionStatus?: AdminJobStatus
+  evidenceSource?: AdminJobEvidenceSource
+  healthReason?: string
+  conflictWarning?: string | null
   lastRunId?: string | null
   lastTrigger?: string | null
   lastStartedAt?: string | null

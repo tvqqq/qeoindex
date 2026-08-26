@@ -103,10 +103,23 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                         </span>
                       </div>
                       <p className="mt-0.5 text-[11px] text-slate-400">{job.description}</p>
+                      {job.healthReason ? (
+                        <p className="mt-1 text-[11px] text-slate-300 font-medium">{job.healthReason}</p>
+                      ) : null}
+                      {job.conflictWarning ? (
+                        <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-400 font-medium">
+                          <span>⚠️ {job.conflictWarning}</span>
+                        </div>
+                      ) : null}
                     </td>
 
                     <td className="px-4 py-3.5 font-mono text-slate-300">
-                      {job.scheduleIct || "Thủ công / Theo luồng"}
+                      <div>{job.scheduleIct || "Thủ công"}</div>
+                      {job.schedulerStatus && job.schedulerStatus !== "unscheduled" ? (
+                        <div className="mt-0.5 text-[10px] text-slate-400">
+                          Scheduler: <span className={job.schedulerStatus === "active" ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}>{job.schedulerStatus}</span>
+                        </div>
+                      ) : null}
                     </td>
 
                     <td className="px-4 py-3.5">

@@ -56,16 +56,16 @@ The provider's explicit history chart arrays are authoritative for quarterly agg
 
 ## Sync trigger
 
-`kfsp-ttai-history-sync` runs from pg_cron hourly at minute 17, but it does **not** call the provider every hour for every stock.
+`kfsp-ttai-history-sync` runs from pg_cron daily at 01:00 ICT (`0 18 * * *` UTC), but it does **not** call the provider for every stock on every run.
 
 The worker compares the latest `kfsp_metrics.fundamentals.financial_period` from the daily rating snapshot with `kfsp_ttai_sync_state.financial_period`. Only tickers whose financial period changed, or which have never been backfilled, are provider-call candidates.
 
-Why hourly instead of a hard-coded quarterly date:
+Why daily instead of hourly or a hard-coded quarterly date:
 
 - Vietnamese issuers publish financial statements on different dates;
 - a fixed calendar date would either miss early releases or lag late releases;
 - the daily rating pipeline already provides the observed financial period;
-- an hourly lightweight database check lets history update shortly after the new report appears while actual provider calls remain quarterly per ticker.
+- a daily lightweight database check is sufficient for financial-statement data while avoiding 24 redundant scheduler dispatches per day; actual provider calls remain quarterly per ticker.
 
 Backfill is throttled with `KFSP_TTAI_MAX_PER_RUN` (default 12) and bounded concurrency to avoid a provider burst after first deployment.
 
