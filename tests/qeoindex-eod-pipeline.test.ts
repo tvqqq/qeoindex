@@ -23,7 +23,7 @@ test("unified QeoIndex EOD workflow owns the full v2 pipeline in canonical phase
     "runMarketCloseCollectStep",
     "runHistoryRefreshBatchStep",
     "runWyckoffBuildStep",
-    "runNotionStagingStep",
+    "runNotionStagingBatchStep",
     "runNotionValidateStep",
     "runIngestStep",
     "runSupabasePublishStep",
@@ -51,7 +51,7 @@ test("workflow steps use v2 persistent-cache, Notion staging and split claim/pub
     "loadWyckoffV2CachedTickerHistory",
     "buildWyckoffV2TickerSnapshots",
     "beginWyckoffV2NotionRun",
-    "stageWyckoffV2Snapshots",
+    "stageWyckoffV2SnapshotBatch",
     "validateAndFinalizeWyckoffV2NotionRun",
     "claimReadyWyckoffV2Run",
     "publishIngestingWyckoffV2Run",
@@ -142,4 +142,16 @@ test("HISTORY_REFRESH executes as ten durable workflow steps of at most ten tick
   assert.match(steps, /refreshOhlcvHistoryBatch/)
   assert.doesNotMatch(steps, /refreshOhlcvHistoryUniverse/)
   assert.match(steps, /completedTickers[\s\S]*requestedTickers/)
+})
+
+test("NOTION_STAGING executes as ten durable workflow steps of at most ten tickers", () => {
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+
+  assert.match(workflow, /for \(let offset = 0; offset < ready\.stocks\.length; offset \+= 10\)[\s\S]*runNotionStagingBatchStep/)
+  assert.match(workflow, /ready\.stocks\.slice\(offset, offset \+ 10\)/)
+  assert.doesNotMatch(workflow, /runNotionStagingStep\(runId, ready\.stocks/)
+  assert.match(steps, /stageWyckoffV2SnapshotBatch/)
+  assert.match(steps, /NOTION_STAGING batch must contain 1-10 tickers/)
+  assert.match(steps, /total[\s\S]*500/)
 })
