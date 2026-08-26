@@ -165,3 +165,13 @@ test("NOTION_STAGING executes as ten durable workflow steps of at most ten ticke
   assert.match(stagingSteps, /NOTION_STAGING batch must contain 1-10 tickers/)
   assert.match(workflow, /staging\.total !== 500/)
 })
+
+test("parent workflow failure closes orphaned running phase telemetry", () => {
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const start = steps.indexOf("export async function failQeoIndexEodRunStep")
+  assert.ok(start >= 0, "failure handler must exist")
+  const block = steps.slice(start)
+
+  assert.match(block, /from\("system_job_phases"\)[\s\S]*status:\s*"failed"/)
+  assert.match(block, /\.eq\("run_id", runId\)[\s\S]*\.eq\("status", "running"\)/)
+})
