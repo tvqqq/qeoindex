@@ -115,3 +115,14 @@ test("EOD_READY freshness cutoff matches the canonical 14:45 ICT closing sync", 
   assert.match(steps, /T07:45:00\.000Z/)
   assert.doesNotMatch(steps, /T07:50:00\.000Z/)
 })
+
+test("market-close Edge auth accepts the existing Vault-backed QeoIndex cron secret fallback", () => {
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const edge = source("supabase/functions/market-insight-eod-sync/index.ts")
+
+  assert.match(steps, /KFSP_SYNC_SECRET\s*\|\|\s*process\.env\.CRON_SECRET/)
+  assert.match(edge, /qeo_verify_eod_scheduler_secret/)
+  assert.match(edge, /p_secret:\s*token/)
+  assert.match(edge, /data\s*===\s*true/)
+  assert.doesNotMatch(edge, /if \(!constantTimeEqual\(syncSecret, token\)\) return jsonResponse\(\{ ok: false, error: "UNAUTHORIZED" \}, 401\)/)
+})
