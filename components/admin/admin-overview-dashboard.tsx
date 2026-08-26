@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { Activity, CheckCircle, FileText, KeyRound, Server, Settings, ShieldAlert, XCircle } from "lucide-react"
 
+import { formatAdminDateTime, formatAdminTime } from "@/lib/admin/time"
 import type { AdminSystemOverview } from "@/lib/admin/types"
 import { AdminStatCard } from "./admin-stat-card"
 
@@ -39,7 +40,7 @@ export function AdminOverviewDashboard({ overview }: AdminOverviewDashboardProps
           </div>
         </div>
         <div className="text-[11px] text-slate-400">
-          Làm mới lúc: <span className="font-mono text-slate-300">{new Date(overview.refreshedAt).toLocaleTimeString("vi-VN")}</span>
+          Làm mới lúc (ICT): <span className="font-mono text-slate-300">{formatAdminTime(overview.refreshedAt)}</span>
         </div>
       </div>
 
@@ -208,7 +209,7 @@ export function AdminOverviewDashboard({ overview }: AdminOverviewDashboardProps
                   <th className="pb-2 font-medium">Hành động</th>
                   <th className="pb-2 font-medium">Đối tượng</th>
                   <th className="pb-2 font-medium">Lý do</th>
-                  <th className="pb-2 font-medium">Thời gian</th>
+                  <th className="pb-2 font-medium">Thời gian (ICT)</th>
                   <th className="pb-2 text-right font-medium">Kết quả</th>
                 </tr>
               </thead>
@@ -223,7 +224,7 @@ export function AdminOverviewDashboard({ overview }: AdminOverviewDashboardProps
                       {log.reason}
                     </td>
                     <td className="py-2.5 font-mono text-[11px] text-slate-400">
-                      {new Date(log.createdAt).toLocaleString("vi-VN")}
+                      {formatAdminDateTime(log.createdAt)}
                     </td>
                     <td className="py-2.5 text-right">
                       <span
