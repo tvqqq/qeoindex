@@ -32,11 +32,15 @@ import type {
 
 const GRID = "rgba(148,163,184,0.10)"
 const AXIS = "rgba(148,163,184,0.62)"
+const POSITIVE = "#34d399"
+const NEGATIVE = "#fb7185"
+const NEUTRAL = "#94a3b8"
+const ACCENT = "#38bdf8"
 
 const breadthConfig = {
-  advances: { label: "Tăng", color: "#22c98a" },
-  unchanged: { label: "Đứng giá", color: "#f4b84b" },
-  declines: { label: "Giảm", color: "#ff5b6e" },
+  advances: { label: "Tăng", color: POSITIVE },
+  unchanged: { label: "Đứng giá", color: NEUTRAL },
+  declines: { label: "Giảm", color: NEGATIVE },
 } satisfies ChartConfig
 
 export function IndexBreadthChart({ indexes }: { indexes: MarketIndexCard[] }) {
@@ -64,8 +68,8 @@ export function IndexBreadthChart({ indexes }: { indexes: MarketIndexCard[] }) {
 }
 
 const indexConfig = {
-  changePct: { label: "Biến động", color: "#22c98a" },
-  tradedValue: { label: "GTGD (tỷ)", color: "#38bdf8" },
+  changePct: { label: "Biến động", color: POSITIVE },
+  tradedValue: { label: "GTGD (tỷ)", color: ACCENT },
 } satisfies ChartConfig
 
 export function IndexPerformanceChart({ indexes }: { indexes: MarketIndexCard[] }) {
@@ -92,7 +96,7 @@ export function IndexPerformanceChart({ indexes }: { indexes: MarketIndexCard[] 
 }
 
 const maConfig = {
-  value: { label: "Tỷ lệ cổ phiếu trên MA", color: "#22c98a" },
+  value: { label: "Tỷ lệ cổ phiếu trên MA", color: POSITIVE },
 } satisfies ChartConfig
 
 export function MaBreadthChart({ daily }: { daily: MarketCloseDashboardData["dailySummary"] }) {
@@ -109,10 +113,10 @@ export function MaBreadthChart({ daily }: { daily: MarketCloseDashboardData["dai
         <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 11, fontWeight: 700 }} />
         <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 10 }} tickFormatter={(value) => `${value}%`} />
-        <ReferenceLine y={50} stroke="rgba(244,184,75,.5)" strokeDasharray="4 5" />
+        <ReferenceLine y={50} stroke="rgba(148,163,184,.45)" strokeDasharray="4 5" />
         <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
         <Bar dataKey="value" radius={[7, 7, 0, 0]}>
-          {data.map((item) => <Cell key={item.name} fill={(item.value ?? 0) >= 50 ? "#22c98a" : "#f4b84b"} />)}
+          {data.map((item) => <Cell key={item.name} fill={(item.value ?? 0) >= 50 ? POSITIVE : NEUTRAL} />)}
         </Bar>
       </BarChart>
     </ChartContainer>
@@ -120,7 +124,7 @@ export function MaBreadthChart({ daily }: { daily: MarketCloseDashboardData["dai
 }
 
 const flowConfig = {
-  value: { label: "Giá trị ròng (tỷ)", color: "#38bdf8" },
+  value: { label: "Giá trị ròng (tỷ)", color: ACCENT },
 } satisfies ChartConfig
 
 export function InstitutionalFlowChart({ daily }: { daily: MarketCloseDashboardData["dailySummary"] }) {
@@ -141,7 +145,7 @@ export function InstitutionalFlowChart({ daily }: { daily: MarketCloseDashboardD
         <ReferenceLine y={0} stroke="rgba(148,163,184,.38)" />
         <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
         <Bar dataKey="value" radius={[7, 7, 3, 3]}>
-          {data.map((item) => <Cell key={item.name} fill={(item.value ?? 0) >= 0 ? "#22c98a" : "#ff5b6e"} />)}
+          {data.map((item) => <Cell key={item.name} fill={(item.value ?? 0) >= 0 ? POSITIVE : NEGATIVE} />)}
         </Bar>
       </BarChart>
     </ChartContainer>
@@ -149,7 +153,7 @@ export function InstitutionalFlowChart({ daily }: { daily: MarketCloseDashboardD
 }
 
 const sectorConfig = {
-  change: { label: "Biến động TB (%)", color: "#22c98a" },
+  change: { label: "Biến động TB (%)", color: POSITIVE },
 } satisfies ChartConfig
 
 export function SectorPerformanceChart({ sectors }: { sectors: MarketSectorRow[] }) {
@@ -170,7 +174,7 @@ export function SectorPerformanceChart({ sectors }: { sectors: MarketSectorRow[]
         <ReferenceLine x={0} stroke="rgba(148,163,184,.38)" />
         <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
         <Bar dataKey="change" radius={[0, 6, 6, 0]}>
-          {data.map((item) => <Cell key={item.name} fill={(item.change ?? 0) >= 0 ? "#22c98a" : "#ff5b6e"} />)}
+          {data.map((item) => <Cell key={item.name} fill={(item.change ?? 0) >= 0 ? POSITIVE : NEGATIVE} />)}
         </Bar>
       </BarChart>
     </ChartContainer>
@@ -203,7 +207,7 @@ export function SectorBreadthChart({ sectors }: { sectors: MarketSectorRow[] }) 
 }
 
 const leaderConfig = {
-  volume: { label: "Khối lượng", color: "#38bdf8" },
+  volume: { label: "Khối lượng", color: ACCENT },
 } satisfies ChartConfig
 
 export function LiquidityLeadersChart({ leaders }: { leaders: MarketLeaderItem[] }) {
@@ -229,9 +233,9 @@ export function LiquidityLeadersChart({ leaders }: { leaders: MarketLeaderItem[]
 }
 
 const historyConfig = {
-  sentimentScore: { label: "Tâm lý", color: "#38bdf8" },
-  riskScore: { label: "Rủi ro", color: "#ff5b6e" },
-  aboveMa20Pct: { label: "Trên MA20", color: "#22c98a" },
+  sentimentScore: { label: "Tâm lý", color: ACCENT },
+  riskScore: { label: "Rủi ro", color: NEGATIVE },
+  aboveMa20Pct: { label: "Trên MA20", color: POSITIVE },
 } satisfies ChartConfig
 
 function shortDate(value: string) {
@@ -245,19 +249,13 @@ export function MarketHistoryChart({ history }: { history: MarketHistoryPoint[] 
   return (
     <ChartContainer config={historyConfig} className="h-[330px] w-full" initialDimension={{ width: 980, height: 330 }}>
       <AreaChart accessibilityLayer data={history} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
-        <defs>
-          <linearGradient id="sentiment-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-sentimentScore)" stopOpacity={0.35} />
-            <stop offset="100%" stopColor="var(--color-sentimentScore)" stopOpacity={0.02} />
-          </linearGradient>
-        </defs>
         <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis dataKey="sessionDate" axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 10 }} tickFormatter={shortDate} />
         <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 10 }} />
-        <ReferenceLine y={50} stroke="rgba(244,184,75,.45)" strokeDasharray="4 5" />
+        <ReferenceLine y={50} stroke="rgba(148,163,184,.45)" strokeDasharray="4 5" />
         <ChartTooltip content={<ChartTooltipContent indicator="line" labelFormatter={(value) => shortDate(String(value))} />} />
         <ChartLegend content={<ChartLegendContent />} />
-        <Area dataKey="sentimentScore" type="monotone" fill="url(#sentiment-fill)" stroke="var(--color-sentimentScore)" strokeWidth={2.4} connectNulls />
+        <Area dataKey="sentimentScore" type="monotone" fill="var(--color-sentimentScore)" fillOpacity={0.08} stroke="var(--color-sentimentScore)" strokeWidth={2.2} connectNulls />
         <Line dataKey="riskScore" type="monotone" stroke="var(--color-riskScore)" strokeWidth={2} dot={false} connectNulls />
         <Line dataKey="aboveMa20Pct" type="monotone" stroke="var(--color-aboveMa20Pct)" strokeWidth={2} dot={false} connectNulls />
       </AreaChart>
@@ -266,8 +264,8 @@ export function MarketHistoryChart({ history }: { history: MarketHistoryPoint[] 
 }
 
 const historyFlowConfig = {
-  foreignNetValue: { label: "Khối ngoại", color: "#38bdf8" },
-  proprietaryNetValue: { label: "Tự doanh", color: "#a78bfa" },
+  foreignNetValue: { label: "Khối ngoại", color: ACCENT },
+  proprietaryNetValue: { label: "Tự doanh", color: NEUTRAL },
 } satisfies ChartConfig
 
 export function MarketHistoryFlowChart({ history }: { history: MarketHistoryPoint[] }) {
