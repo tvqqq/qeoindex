@@ -293,9 +293,21 @@ export function buildAiCouncilEvidencePacketV2(params: {
 
 function normalizeEvidenceValueForComparison(value: string, unit: string) {
   let normalized = value.trim().toLowerCase()
+
   if (unit === "score_0_100") {
-    normalized = normalized.replace(/\s*\/\s*100\s*$/, "")
+    normalized = normalized.replace(/\s*(?:\/\s*100|score_0_100)\s*$/, "")
+  } else if (unit === "percent") {
+    normalized = normalized.replace(/\s*(?:percent|%)\s*$/, "")
+  } else if (unit === "billion_vnd") {
+    normalized = normalized.replace(/\s*billion_vnd\s*$/, "")
+  } else if (unit === "volume") {
+    normalized = normalized.replace(/\s*volume\s*$/, "")
+  } else if (unit === "ratio") {
+    normalized = normalized.replace(/\s*x\s*$/, "")
+  } else if (unit === "price_thousand_vnd") {
+    normalized = normalized.replace(/\s*price_thousand_vnd\s*$/, "")
   }
+
   return normalized.replace(/[,%\s_]/g, "")
 }
 
@@ -369,9 +381,9 @@ export function validateCouncilEvidenceRefs(
         )
       }
 
-      // Preserve exact numeric equality while tolerating harmless display formatting.
-      // A score may carry a trailing /100 because the semantic unit explicitly defines
-      // a 0-100 scale. Additional labels, metrics, or numbers remain invalid.
+      // Preserve exact numeric equality while tolerating only a canonical display unit
+      // belonging to the cited metric itself. Additional labels, metrics, numbers, or
+      // a unit belonging to another semantic remain invalid.
       const rawActualStr = String(observed.value).trim()
       const rawCitedStr = ref.observedValue.trim()
       const normActual = normalizeEvidenceValueForComparison(rawActualStr, observed.unit)
