@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/eod-publish-resume-20260826
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
