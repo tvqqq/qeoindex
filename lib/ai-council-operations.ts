@@ -68,6 +68,7 @@ export async function runAiCouncilDailyOperation(supabase: SupabaseClient, now =
       ratingDate: data.ratingDate,
       tickers: data.stocks.map((stock) => stock.ticker),
       benchmarkSessionDate: benchmark.sessionDate,
+      marketSource: ratingDate ? "persistent_ohlcv" : "live_snapshot",
     })
   } catch (error) {
     if (error instanceof AiCouncilUpstreamStaleError) {
@@ -146,6 +147,7 @@ export async function runAiCouncilDebateOperation(supabase: SupabaseClient, rati
       ratingDate: runtimeData.data.ratingDate,
       tickers: runtimeData.data.stocks.map((stock) => stock.ticker),
       benchmarkSessionDate: runtimeData.benchmark.sessionDate,
+      marketSource: ratingDate ? "persistent_ohlcv" : "live_snapshot",
     })
   } catch (error) {
     if (error instanceof AiCouncilUpstreamStaleError) {
