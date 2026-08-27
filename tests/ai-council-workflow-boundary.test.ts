@@ -96,3 +96,11 @@ test("Council evidence refs tolerate only the observed metric's harmless display
   }], packet)
   assert.equal(wrongUnit.valid, false)
 })
+
+test("severe-conflict escalation has the normal fallback model after a primary timeout", () => {
+  const llm = source("lib/ai-council-llm.ts")
+  const escalation = llm.indexOf('schemaName: "qeoindex_llm_escalation_chair"')
+  assert.ok(escalation >= 0)
+  const block = llm.slice(Math.max(0, escalation - 260), escalation + 420)
+  assert.match(block, /fallbackModel:\s*route\.fallbackModel/)
+})
