@@ -12,7 +12,7 @@ import {
   type LlmEvidenceRef,
 } from "../lib/ai-council-prompt-evidence.ts"
 
-function packetWithIndicator(key: string, value: number, unit: string): AiCouncilEvidencePacketV2 {
+function packetWithIndicator(key: string, value: number | string, unit: string): AiCouncilEvidencePacketV2 {
   return {
     packetVersion: "ai-council-evidence-v2",
     semanticGuideVersion: "test",
@@ -102,6 +102,25 @@ test("score evidenceRef accepts harmless /100 unit suffix while preserving exact
   assert.equal(result.valid, true, result.errors.join(" | "))
 })
 
+test("text evidenceRef accepts only its harmless semantic unit suffix", () => {
+  const packet = packetWithIndicator("macd_vs_signal", "Trên", "text")
+  const valid = validateCouncilEvidenceRefs("bear", [{
+    metricKey: "macd_vs_signal",
+    observedValue: "Trên text",
+    asOf: "2026-08-24",
+    interpretation: "MACD đang trên signal.",
+  }], packet)
+  assert.equal(valid.valid, true, valid.errors.join(" | "))
+
+  const wrong = validateCouncilEvidenceRefs("bear", [{
+    metricKey: "macd_vs_signal",
+    observedValue: "Dưới text",
+    asOf: "2026-08-24",
+    interpretation: "Sai giá trị phải bị chặn.",
+  }], packet)
+  assert.equal(wrong.valid, false)
+})
+
 test("evidenceRef still rejects a second metric smuggled into one observedValue", () => {
   const packet = packetWithIndicator("volume_1d", 7_435_200, "shares")
   const refs: LlmEvidenceRef[] = [{
@@ -125,4 +144,29 @@ test("LLM runtime inspects incomplete_details and retries max-output truncation 
   assert.match(code, /maxOutputTokens: 1400/)
   assert.match(code, /maxOutputTokens: 1600/)
   assert.match(code, /maxOutputTokens: 2000/)
+})
+
+test("specialist validation failure gets one bounded evidenceRef repair retry", () => {
+  const code = readFileSync(new URL("../lib/ai-council-llm.ts", import.meta.url), "utf8")
+  const start = code.indexOf("async function settleRole")
+  const end = code.indexOf("function reasonCounts", start)
+  assert.ok(start >= 0 && end > start)
+  const block = code.slice(start, end)
+
+  assert.match(block, /VALIDATION_REPAIR/)
+  assert.match(block, /execute\(validationRepair/)
+  assert.match(block, /validateCouncilEvidenceRefs\(role, repairedResult\.payload\.evidenceRefs, packet\)/)
+  assert.match(code, /observedValue must contain ONLY the value for metricKey/i)
+  assert.match(code, /comparisons belong in interpretation/i)
+})
+
+test("invalid escalation never erases a previously validated initial Chair", () => {
+  const code = readFileSync(new URL("../lib/ai-council-llm.ts", import.meta.url), "utf8")
+  const start = code.indexOf('schemaName: "qeoindex_llm_escalation_chair"')
+  const end = code.indexOf("const audits =", start)
+  assert.ok(start >= 0 && end > start)
+  const block = code.slice(start, end)
+
+  assert.doesNotMatch(block, /if \(!validation\.valid\) \{[\s\S]{0,220}chair\s*=\s*null/)
+  assert.match(block, /chair = escalationResult\.payload/)
 })
