@@ -23,8 +23,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Supabase service role is not configured" }, { status: 503 })
   }
 
+  const ratingDate = request.nextUrl.searchParams.get("ratingDate")?.trim() || undefined
+  const operationDate = ratingDate ? new Date(`${ratingDate}T08:15:00.000Z`) : new Date()
+  if (ratingDate && (!/^\d{4}-\d{2}-\d{2}$/.test(ratingDate) || !Number.isFinite(operationDate.getTime()))) {
+    return NextResponse.json({ ok: false, error: "INVALID_RATING_DATE" }, { status: 400 })
+  }
+
   try {
-    const result = await runAiCouncilDailyOperation(supabase, new Date())
+    const result = await runAiCouncilDailyOperation(supabase, operationDate, ratingDate)
     if (!result.ok) {
       const status = result.reason === "UPSTREAM_STALE" ? 424 : 409
       await notifyOpsError({
