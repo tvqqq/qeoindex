@@ -122,15 +122,20 @@ export async function loadWyckoffV2ChartSeriesRows(
 ) {
   const tickers = normalizeTickers(inputTickers)
   const rows: WyckoffV2RecentOhlcvRow[] = []
+
   for (let offset = 0; offset < tickers.length; offset += 10) {
     const batch = tickers.slice(offset, offset + 10)
-    const { data, error } = await supabase.rpc("qeo_market_ohlcv_recent", {
-      p_tickers: batch,
-      p_limit: 260,
-    })
-    if (error) throw new Error(`Load recent OHLCV chart series failed for batch ${offset / 10 + 1}: ${error.message}`)
-    rows.push(...((data || []) as WyckoffV2RecentOhlcvRow[]))
+    const results = await Promise.all(batch.map(async (ticker) => {
+      const { data, error } = await supabase.rpc("qeo_market_ohlcv_recent", {
+        p_tickers: [ticker],
+        p_limit: 260,
+      })
+      if (error) throw new Error(`Load recent OHLCV chart series failed for ${ticker}: ${error.message}`)
+      return (data || []) as WyckoffV2RecentOhlcvRow[]
+    }))
+    rows.push(...results.flat())
   }
+
   const series = buildWyckoffV2ChartSeriesRows({ tickers, rows, runId })
   assertWyckoffV2ChartSeriesCoverage(tickers, series)
   return series
