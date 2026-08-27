@@ -44,13 +44,14 @@ function eodEvidenceHash(baseEvidenceHash: string, overlay: {
 
 export async function getAiCouncilEodData(
   supabase: SupabaseClient,
-  options: { includeHistory?: boolean; includePromptEvidence?: boolean } = {},
+  options: { includeHistory?: boolean; includePromptEvidence?: boolean; ratingDate?: string } = {},
 ): Promise<AiCouncilData> {
   // Operational EOD rebuild always needs the normalized rating + Wyckoff inputs so the
   // deterministic agents can be recomputed after replacing final-session price direction/volume.
   const base = await getAiCouncilData(supabase, {
     includeHistory: options.includeHistory,
     includePromptEvidence: true,
+    ratingDate: options.ratingDate,
   })
   if (!base.ratingDate || !base.stocks.length) return base
 

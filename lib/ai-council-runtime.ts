@@ -18,6 +18,7 @@ export interface AiCouncilRuntimeOptions {
   includeHistory?: boolean
   includePromptEvidence?: boolean
   includeEodMarketOverlay?: boolean
+  ratingDate?: string
 }
 
 export async function getAiCouncilRuntimeData(
@@ -27,13 +28,14 @@ export async function getAiCouncilRuntimeData(
   const dataOptions = {
     includeHistory: options.includeHistory,
     includePromptEvidence: options.includePromptEvidence,
+    ratingDate: options.ratingDate,
   }
   const data = options.includeEodMarketOverlay
     ? await getAiCouncilEodData(supabase, dataOptions)
     : await getAiCouncilData(supabase, dataOptions)
 
   if (!data.ratingDate || !data.stocks.length) {
-    const benchmark = await loadAiCouncilBenchmarkContext(supabase, new Date().toISOString().slice(0, 10))
+    const benchmark = await loadAiCouncilBenchmarkContext(supabase, options.ratingDate || new Date().toISOString().slice(0, 10))
     return { data, benchmark, weightProfile: staticCouncilWeightProfile(benchmark.regime) }
   }
 

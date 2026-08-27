@@ -81,6 +81,7 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
         rankWarnings: selection.warnings,
         notionAction: notion.action,
         notionStatus: notion.status,
+        notionSupabaseRunId: "supabaseRunId" in notion ? notion.supabaseRunId : "",
         market: {
           expectedSessionDate,
           ratingDate: expectedSessionDate,

@@ -155,6 +155,7 @@ export async function runEodReadyStep(runId: string, startedAtIso: string) {
         rankWarnings: selection.warnings,
         notionAction: notion.action,
         notionStatus: notion.status,
+        notionSupabaseRunId: "supabaseRunId" in notion ? notion.supabaseRunId : "",
         market,
       }
     },
@@ -247,12 +248,12 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
 
       const payload = await response.json().catch(() => ({})) as Record<string, unknown>
       if (!response.ok || payload.ok === false) {
-      const errCode = String(payload.error || `HTTP_${response.status}`)
-      throw Object.assign(
-        new Error(`MARKET_CLOSE_COLLECT failed: ${errCode}`),
-        { code: "MARKET_CLOSE_COLLECT_FAILED" },
-      )
-    }
+        const errCode = String(payload.error || `HTTP_${response.status}`)
+        throw Object.assign(
+          new Error(`MARKET_CLOSE_COLLECT failed: ${errCode}`),
+          { code: "MARKET_CLOSE_COLLECT_FAILED" },
+        )
+      }
 
       return {
         ok: true,
@@ -384,16 +385,27 @@ export async function runNotionValidateStep(runId: string, runKey: string, scanD
   })
 }
 
-export async function runIngestStep(runId: string, runKey: string, enabled = true) {
+export async function runIngestStep(runId: string, runKey: string, enabled = true, resumeSupabaseRunId = "") {
   "use step"
   if (!enabled) {
-    await markQeoIndexEodPhaseSkipped({ runId, phaseKey: "INGEST", reason: "Run already Ingested/Ingesting; no new claim." })
-    return { ok: true as const, status: "idle" as const, runKey, supabaseRunId: "" }
+    await markQeoIndexEodPhaseSkipped({ runId, phaseKey: "INGEST", reason: "Run already Ingested; no new claim." })
+    return { ok: true as const, status: "idle" as const, runKey, supabaseRunId: "", complete: 0, incomplete: 0, validationHash: "" }
   }
   return runQeoIndexEodPhase({
     runId,
     phaseKey: "INGEST",
     fn: async () => {
+      if (resumeSupabaseRunId) {
+        return {
+          ok: true as const,
+          status: "resumed" as const,
+          runKey,
+          supabaseRunId: resumeSupabaseRunId,
+          complete: 0,
+          incomplete: 0,
+          validationHash: "",
+        }
+      }
       const result = await claimReadyWyckoffV2Run(runKey)
       if (result.status !== "claimed") throw new Error(`INGEST could not claim ${runKey}: ${result.message || result.status}`)
       return result
@@ -416,21 +428,22 @@ export async function runSupabasePublishStep(runId: string, runKey: string, supa
   })
 }
 
-export async function runDeterministicCouncilStep(runId: string, enabled = true) {
+export async function runDeterministicCouncilStep(runId: string, enabled = true, ratingDate?: string) {
   "use step"
   if (!enabled) {
     await markQeoIndexEodPhaseSkipped({ runId, phaseKey: "AI_COUNCIL_DETERMINISTIC", reason: "No new Supabase publish in this pipeline invocation." })
     return { ok: false as const, status: "skipped" as const, reason: "PIPELINE_SKIPPED" as const }
   }
+  const operationDate = ratingDate ? new Date(`${ratingDate}T08:15:00.000Z`) : new Date()
   return runQeoIndexEodPhase({
     runId,
     phaseKey: "AI_COUNCIL_DETERMINISTIC",
-    fn: () => runAiCouncilDailyOperation(requiredSupabase(), new Date()),
+    fn: () => runAiCouncilDailyOperation(requiredSupabase(), operationDate, ratingDate),
     summarize: (result) => ({ ok: result.ok, status: result.status, ratingDate: result.ratingDate, reason: "reason" in result ? result.reason : undefined }),
   })
 }
 
-export async function runLlmDebateStep(runId: string, enabled = true) {
+export async function runLlmDebateStep(runId: string, enabled = true, ratingDate?: string) {
   "use step"
   if (!enabled) {
     await markQeoIndexEodPhaseSkipped({ runId, phaseKey: "AI_COUNCIL_LLM", reason: "Deterministic Council did not complete; LLM debate skipped." })
@@ -439,7 +452,7 @@ export async function runLlmDebateStep(runId: string, enabled = true) {
   return runQeoIndexEodPhase({
     runId,
     phaseKey: "AI_COUNCIL_LLM",
-    fn: () => runAiCouncilDebateOperation(requiredSupabase()),
+    fn: () => runAiCouncilDebateOperation(requiredSupabase(), ratingDate),
     summarize: (result) => ({ ok: result.ok, status: result.status, ratingDate: result.ratingDate, reason: "reason" in result ? result.reason : undefined }),
   })
 }

@@ -176,3 +176,26 @@ test("parent workflow failure closes orphaned running phase telemetry", () => {
   assert.match(failureStep, /\.eq\("run_id", runId\)[\s\S]*\.eq\("status", "running"\)/)
   assert.match(failureStep, /markQeoIndexEodPhaseSkipped[\s\S]*phaseKey:\s*"COMPLETE"/)
 })
+
+test("historical Ingesting runs resume the existing claim and keep the scan date through both Council phases", () => {
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const backfill = source("lib/qeoindex-eod-backfill-ready-step.ts")
+
+  assert.match(backfill, /notionSupabaseRunId/)
+  assert.match(workflow, /ready\.notionAction === "resume"/)
+  assert.match(workflow, /ingest\.status === "claimed" \|\| ingest\.status === "resumed"/)
+  assert.match(workflow, /runDeterministicCouncilStep\(runId, published, ready\.scanDate\)/)
+  assert.match(workflow, /runLlmDebateStep\(runId, published && deterministic\.ok, ready\.scanDate\)/)
+  assert.match(steps, /status: "resumed" as const/)
+  assert.match(steps, /runAiCouncilDailyOperation\(requiredSupabase\(\),[\s\S]*ratingDate/)
+  assert.match(steps, /runAiCouncilDebateOperation\(requiredSupabase\(\), ratingDate\)/)
+})
+
+test("admin job history orders by invocation creation time so a historical backfill is shown as latest", () => {
+  const admin = source("lib/admin/job-health.ts")
+  const start = admin.indexOf("export async function loadAdminJobHistory")
+  assert.ok(start >= 0)
+  const block = admin.slice(start, start + 700)
+  assert.match(block, /order\("created_at", \{ ascending: false \}\)/)
+})
