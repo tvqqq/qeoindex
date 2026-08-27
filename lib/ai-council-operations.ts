@@ -32,7 +32,7 @@ function firstValidationTicker(
     .sort((left, right) => (left.rank ?? 999) - (right.rank ?? 999) || left.ticker.localeCompare(right.ticker))[0]?.ticker || null
 }
 
-export async function runAiCouncilDailyOperation(supabase: SupabaseClient, now = new Date()) {
+export async function runAiCouncilDailyOperation(supabase: SupabaseClient, now = new Date(), ratingDate?: string) {
   let benchmarkSyncError = ""
   let benchmarkRows = 0
   try {
@@ -46,6 +46,7 @@ export async function runAiCouncilDailyOperation(supabase: SupabaseClient, now =
   const runtimeData = await getAiCouncilRuntimeData(supabase, {
     includeHistory: false,
     includeEodMarketOverlay: true,
+    ratingDate,
   })
   const data = runtimeData.data
   const benchmark = runtimeData.benchmark
@@ -119,12 +120,13 @@ export async function runAiCouncilDailyOperation(supabase: SupabaseClient, now =
   }
 }
 
-export async function runAiCouncilDebateOperation(supabase: SupabaseClient) {
+export async function runAiCouncilDebateOperation(supabase: SupabaseClient, ratingDate?: string) {
   const runtimeConfig = await getAiCouncilRuntimeConfig()
   const runtimeData = await getAiCouncilRuntimeData(supabase, {
     includeHistory: false,
     includePromptEvidence: true,
     includeEodMarketOverlay: true,
+    ratingDate,
   })
 
   if (!runtimeData.data.ratingDate || !runtimeData.data.stocks.length) {
