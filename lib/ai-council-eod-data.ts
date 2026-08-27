@@ -10,6 +10,7 @@ import {
 } from "@/lib/ai-council-data"
 import {
   AI_COUNCIL_EOD_MARKET_VERSION,
+  loadPersistentCouncilEodSnapshots,
   overlayCouncilRatingWithEodSnapshot,
   type AiCouncilEodMarketSnapshot,
 } from "@/lib/ai-council-eod-market"
@@ -56,19 +57,28 @@ export async function getAiCouncilEodData(
   if (!base.ratingDate || !base.stocks.length) return base
 
   const tickers = base.stocks.map((stock) => stock.ticker)
-  const marketResult = await supabase
-    .from("stock_orderbook_snapshots")
-    .select("symbol,session_date,reference_price,latest_price,total_volume,updated_at")
-    .eq("session_date", base.ratingDate)
-    .in("symbol", tickers)
+  let marketRows: AiCouncilEodMarketSnapshot[] = []
+  let marketSource = "live_snapshot"
 
-  if (marketResult.error) {
-    throw new Error(`Load Council EOD market overlay failed: ${marketResult.error.message}`)
+  if (options.ratingDate) {
+    const persistent = await loadPersistentCouncilEodSnapshots(supabase, tickers, base.ratingDate)
+    marketRows = persistent.snapshots
+    marketSource = "persistent_ohlcv"
+  } else {
+    const marketResult = await supabase
+      .from("stock_orderbook_snapshots")
+      .select("symbol,session_date,reference_price,latest_price,total_volume,updated_at")
+      .eq("session_date", base.ratingDate)
+      .in("symbol", tickers)
+
+    if (marketResult.error) {
+      throw new Error(`Load Council EOD market overlay failed: ${marketResult.error.message}`)
+    }
+    marketRows = (marketResult.data || []) as AiCouncilEodMarketSnapshot[]
   }
 
   const marketByTicker = new Map(
-    ((marketResult.data || []) as AiCouncilEodMarketSnapshot[])
-      .map((row) => [row.symbol.trim().toUpperCase(), row] as const),
+    marketRows.map((row) => [row.symbol.trim().toUpperCase(), row] as const),
   )
   let appliedCount = 0
 
@@ -111,6 +121,6 @@ export async function getAiCouncilEodData(
   return {
     ...base,
     stocks,
-    message: `${base.message} EOD market overlay ${AI_COUNCIL_EOD_MARKET_VERSION}: ${appliedCount}/${base.stocks.length} final-session stocks rebuilt; TTAI/KFSP proprietary scores and non-EOD metrics remain provider observations.`,
+    message: `${base.message} EOD market overlay ${AI_COUNCIL_EOD_MARKET_VERSION} (${marketSource}): ${appliedCount}/${base.stocks.length} final-session stocks rebuilt; TTAI/KFSP proprietary scores and non-EOD metrics remain provider observations.`,
   }
 }
