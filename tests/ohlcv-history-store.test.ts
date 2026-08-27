@@ -10,6 +10,7 @@ import {
 } from "../lib/market-history-contract.ts"
 import {
   buildOhlcvRefreshPlan,
+  buildVerifiedNoTradeDailyBar,
   normalizeOhlcvTickers,
   type OhlcvCoverage,
 } from "../lib/ohlcv-history-store.ts"
@@ -81,6 +82,41 @@ test("ticker normalization preserves deterministic universe order and rejects in
   assert.deepEqual(normalizeOhlcvTickers([" msn ", "HPG", "msn", "VIC"]), ["MSN", "HPG", "VIC"])
   assert.throws(() => normalizeOhlcvTickers(["MSN", "bad symbol"]), /Invalid ticker/)
   assert.throws(() => normalizeOhlcvTickers([]), /at least one ticker/)
+})
+
+test("verified final no-trade snapshot repairs a missing completed Daily bar", () => {
+  const bar = buildVerifiedNoTradeDailyBar("CRV", "2026-08-27", {
+    symbol: "CRV",
+    session_date: "2026-08-27",
+    reference_price: 23.5,
+    latest_price: 23.5,
+    total_volume: 0,
+    updated_at: "2026-08-27T07:50:01.000Z",
+  })
+
+  assert.deepEqual(bar, {
+    time: Math.floor(new Date("2026-08-27T02:00:00.000Z").getTime() / 1000),
+    open: 23.5,
+    high: 23.5,
+    low: 23.5,
+    close: 23.5,
+    volume: 0,
+  })
+})
+
+test("no-trade repair rejects stale, traded, or price-drift snapshots", () => {
+  const base = {
+    symbol: "LGC",
+    session_date: "2026-08-27",
+    reference_price: 64.8,
+    latest_price: 64.8,
+    total_volume: 0,
+    updated_at: "2026-08-27T07:50:01.000Z",
+  }
+
+  assert.equal(buildVerifiedNoTradeDailyBar("LGC", "2026-08-27", { ...base, total_volume: 100 }), null)
+  assert.equal(buildVerifiedNoTradeDailyBar("LGC", "2026-08-27", { ...base, latest_price: 65 }), null)
+  assert.equal(buildVerifiedNoTradeDailyBar("LGC", "2026-08-27", { ...base, updated_at: "2026-08-27T07:44:59.000Z" }), null)
 })
 
 test("EOD HISTORY_REFRESH summary is compact and fail-closed on provider/runtime errors", () => {
