@@ -78,7 +78,7 @@ test("catalog matches Supabase pg_cron migrations exactly", () => {
   assert.match(ttaiMigration, /'kfsp-ttai-history-daily-0710-ict'/)
   assert.match(ttaiMigration, /'10 0 \* \* \*'/)
 
-  const ttaiDef = ADMIN_JOB_CATALOG.find((j) => j.key === "kfsp.ttai_history")
+  const ttaiDef = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "kfsp.ttai_history")
   assert.ok(ttaiDef)
   assert.equal(ttaiDef.schedulerName, "kfsp-ttai-history-daily-0710-ict")
   assert.equal(ttaiDef.scheduleUtc, "10 0 * * *")
