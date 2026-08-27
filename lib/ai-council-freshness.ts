@@ -2,17 +2,16 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import {
+  isFinalCouncilEodSnapshot,
+  loadPersistentCouncilEodSnapshots,
+  type AiCouncilEodMarketSnapshot,
+} from "@/lib/ai-council-eod-market"
+
 export const AI_COUNCIL_EOD_FRESHNESS_VERSION = "eod-freshness-v1"
 export const AI_COUNCIL_EXPECTED_STOCKS = 100
 
-const VIETNAM_EOD_SYNC_HOUR_UTC = 7
-const VIETNAM_EOD_SYNC_MINUTE_UTC = 50
-
-interface MarketSnapshotRow {
-  symbol: string
-  session_date: string
-  updated_at: string | null
-}
+export type AiCouncilEodMarketSource = "live_snapshot" | "persistent_ohlcv"
 
 interface WyckoffDailyRow {
   ticker: string
@@ -28,6 +27,7 @@ export interface AiCouncilEodFreshnessReport {
   requestedStocks: number
   benchmarkSessionDate: string | null
   market: {
+    source: AiCouncilEodMarketSource
     sessionDate: string | null
     freshCount: number
     staleOrMissingTickers: string[]
@@ -37,6 +37,7 @@ export interface AiCouncilEodFreshnessReport {
     sessionDate: string | null
     freshCount: number
     staleOrMissingTickers: string[]
+    carryForwardTickers: string[]
     latestBarClosedAt: string | null
   }
   issues: string[]
@@ -64,16 +65,24 @@ function isoDate(value: string | null | undefined) {
   return parsed.toISOString().slice(0, 10)
 }
 
-function eodCutoffUtc(sessionDate: string) {
-  return new Date(`${sessionDate}T00:00:00.000Z`).getTime()
-    + VIETNAM_EOD_SYNC_HOUR_UTC * 60 * 60 * 1000
-    + VIETNAM_EOD_SYNC_MINUTE_UTC * 60 * 1000
+function finiteNumber(value: unknown) {
+  if (value == null || value === "") return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
-function isFinalMarketSnapshot(row: MarketSnapshotRow, ratingDate: string) {
-  if (row.session_date !== ratingDate || !row.updated_at) return false
-  const updatedAt = new Date(row.updated_at).getTime()
-  return Number.isFinite(updatedAt) && updatedAt >= eodCutoffUtc(ratingDate)
+export function isPersistentNoTradeCarryForward(
+  market: AiCouncilEodMarketSnapshot,
+  wyckoffBarClosedAt: string | null,
+  ratingDate: string,
+) {
+  const wyckoffDate = isoDate(wyckoffBarClosedAt)
+  if (!wyckoffDate || wyckoffDate >= ratingDate) return false
+  if (Number(market.total_volume) !== 0) return false
+  const latestPrice = finiteNumber(market.latest_price)
+  const referencePrice = finiteNumber(market.reference_price)
+  if (latestPrice == null || referencePrice == null) return false
+  return Math.abs(latestPrice - referencePrice) < 1e-9
 }
 
 export async function assertAiCouncilEodFreshness(
@@ -82,10 +91,12 @@ export async function assertAiCouncilEodFreshness(
     ratingDate: string | null
     tickers: string[]
     benchmarkSessionDate: string | null
+    marketSource?: AiCouncilEodMarketSource
   },
 ): Promise<AiCouncilEodFreshnessReport> {
   const tickers = uniqueTickers(input.tickers)
   const issues: string[] = []
+  const marketSource = input.marketSource ?? "live_snapshot"
 
   if (!input.ratingDate) {
     const report: AiCouncilEodFreshnessReport = {
@@ -95,8 +106,8 @@ export async function assertAiCouncilEodFreshness(
       expectedStocks: AI_COUNCIL_EXPECTED_STOCKS,
       requestedStocks: tickers.length,
       benchmarkSessionDate: input.benchmarkSessionDate,
-      market: { sessionDate: null, freshCount: 0, staleOrMissingTickers: tickers, latestUpdatedAt: null },
-      wyckoff1d: { sessionDate: null, freshCount: 0, staleOrMissingTickers: tickers, latestBarClosedAt: null },
+      market: { source: marketSource, sessionDate: null, freshCount: 0, staleOrMissingTickers: tickers, latestUpdatedAt: null },
+      wyckoff1d: { sessionDate: null, freshCount: 0, staleOrMissingTickers: tickers, carryForwardTickers: [], latestBarClosedAt: null },
       issues: ["ratingDate is missing"],
     }
     throw new AiCouncilUpstreamStaleError(report)
@@ -106,40 +117,55 @@ export async function assertAiCouncilEodFreshness(
     issues.push(`Top100 universe incomplete: ${tickers.length}/${AI_COUNCIL_EXPECTED_STOCKS}`)
   }
 
-  const [marketResult, wyckoffResult] = await Promise.all([
-    supabase
-      .from("stock_orderbook_snapshots")
-      .select("symbol,session_date,updated_at")
-      .eq("session_date", input.ratingDate)
-      .in("symbol", tickers),
-    supabase
-      .from("wyckoff_latest_by_timeframe")
-      .select("ticker,timeframe,bar_closed_at")
-      .eq("timeframe", "1D")
-      .in("ticker", tickers),
-  ])
+  let marketRows: AiCouncilEodMarketSnapshot[] = []
+  let latestMarketUpdatedAt: string | null = null
 
-  if (marketResult.error) throw new Error(`Load EOD market freshness failed: ${marketResult.error.message}`)
+  if (marketSource === "persistent_ohlcv") {
+    const persistent = await loadPersistentCouncilEodSnapshots(supabase, tickers, input.ratingDate)
+    marketRows = persistent.snapshots
+    latestMarketUpdatedAt = persistent.latestUpdatedAt
+  } else {
+    const marketResult = await supabase
+      .from("stock_orderbook_snapshots")
+      .select("symbol,session_date,reference_price,latest_price,total_volume,updated_at")
+      .eq("session_date", input.ratingDate)
+      .in("symbol", tickers)
+    if (marketResult.error) throw new Error(`Load EOD market freshness failed: ${marketResult.error.message}`)
+    marketRows = (marketResult.data || []) as AiCouncilEodMarketSnapshot[]
+    latestMarketUpdatedAt = marketRows
+      .map((row) => row.updated_at)
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) || null
+  }
+
+  const wyckoffResult = await supabase
+    .from("wyckoff_latest_by_timeframe")
+    .select("ticker,timeframe,bar_closed_at")
+    .eq("timeframe", "1D")
+    .in("ticker", tickers)
   if (wyckoffResult.error) throw new Error(`Load Wyckoff freshness failed: ${wyckoffResult.error.message}`)
 
-  const marketRows = (marketResult.data || []) as MarketSnapshotRow[]
   const marketByTicker = new Map(marketRows.map((row) => [row.symbol.toUpperCase(), row]))
   const marketFreshTickers = tickers.filter((ticker) => {
     const row = marketByTicker.get(ticker)
-    return row ? isFinalMarketSnapshot(row, input.ratingDate!) : false
+    return row ? isFinalCouncilEodSnapshot(row, input.ratingDate!) : false
   })
   const marketMissing = tickers.filter((ticker) => !marketFreshTickers.includes(ticker))
-  const latestMarketUpdatedAt = marketRows
-    .map((row) => row.updated_at)
-    .filter((value): value is string => Boolean(value))
-    .sort()
-    .at(-1) || null
 
   const wyckoffRows = (wyckoffResult.data || []) as WyckoffDailyRow[]
   const wyckoffByTicker = new Map(wyckoffRows.map((row) => [row.ticker.toUpperCase(), row]))
+  const carryForwardTickers: string[] = []
   const wyckoffFreshTickers = tickers.filter((ticker) => {
     const row = wyckoffByTicker.get(ticker)
-    return isoDate(row?.bar_closed_at) === input.ratingDate
+    const wyckoffBarClosedAt = row?.bar_closed_at || null
+    if (isoDate(wyckoffBarClosedAt) === input.ratingDate) return true
+    const marketRow = marketByTicker.get(ticker)
+    const canCarryForward = marketSource === "persistent_ohlcv"
+      && Boolean(marketRow)
+      && isPersistentNoTradeCarryForward(marketRow!, wyckoffBarClosedAt, input.ratingDate!)
+    if (canCarryForward) carryForwardTickers.push(ticker)
+    return canCarryForward
   })
   const wyckoffMissing = tickers.filter((ticker) => !wyckoffFreshTickers.includes(ticker))
   const latestWyckoffBar = wyckoffRows
@@ -166,6 +192,7 @@ export async function assertAiCouncilEodFreshness(
     requestedStocks: tickers.length,
     benchmarkSessionDate: input.benchmarkSessionDate,
     market: {
+      source: marketSource,
       sessionDate: input.ratingDate,
       freshCount: marketFreshTickers.length,
       staleOrMissingTickers: marketMissing,
@@ -175,6 +202,7 @@ export async function assertAiCouncilEodFreshness(
       sessionDate: input.ratingDate,
       freshCount: wyckoffFreshTickers.length,
       staleOrMissingTickers: wyckoffMissing,
+      carryForwardTickers,
       latestBarClosedAt: latestWyckoffBar,
     },
     issues,
