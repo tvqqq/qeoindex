@@ -165,6 +165,20 @@ async function collectSocketData(token: string, topTickers: string[]): Promise<{
       }
     }
 
+    const needsLive = topTickers.length > 0
+    const maybeResolve = () => {
+      if (
+        results.maBreadth &&
+        results.risk &&
+        results.psychology &&
+        results.sectorPulse &&
+        results.sectorBreadth &&
+        (!needsLive || results.getLive)
+      ) {
+        cleanupAndResolve()
+      }
+    }
+
     const timer = setTimeout(cleanupAndResolve, SOCKET_TIMEOUT_MS)
 
     try {
@@ -179,22 +193,27 @@ async function collectSocketData(token: string, topTickers: string[]): Promise<{
       socket.on("connect", () => {
         socket?.emit("getmarketpulsemabyindex", "VNINDEX", (res: unknown) => {
           results.maBreadth = res
+          maybeResolve()
         })
 
         socket?.emit("getdatariskindex", "VNINDEX", 1, (res: unknown) => {
           results.risk = res
+          maybeResolve()
         })
 
         socket?.emit("getpsychologyindicator", "VNINDEX", 1, (res: unknown) => {
           results.psychology = res
+          maybeResolve()
         })
 
         socket?.emit("getmarketpulse", "nganh", "1", (res: unknown) => {
           results.sectorPulse = res
+          maybeResolve()
           const sectorNames = (res as any)?.name
           if (Array.isArray(sectorNames) && sectorNames.length > 0) {
             socket?.emit("getincreasesdecreasesnganh", sectorNames, (bRes: unknown) => {
               results.sectorBreadth = bRes
+              maybeResolve()
             })
           }
         })
@@ -202,10 +221,9 @@ async function collectSocketData(token: string, topTickers: string[]): Promise<{
         if (topTickers.length > 0) {
           socket?.emit("getlive", topTickers, (res: unknown) => {
             results.getLive = res
+            maybeResolve()
           })
         }
-
-        setTimeout(cleanupAndResolve, 3000)
       })
 
       socket.on("connect_error", cleanupAndResolve)
@@ -436,6 +454,14 @@ Deno.serve(async (req: Request) => {
       canonicalIndexes,
     })
 
+    // Persist collection diagnostics before the fail-closed gate so provider drift is observable.
+    await supabase.from("market_insight_sync_runs").update({
+      source_observed_at: asOfIso,
+      endpoint_coverage: normalized.endpoint_coverage,
+      staged_counts: normalized.staged_counts,
+      quality_status: normalized.quality_status,
+    }).eq("id", syncRunId)
+
     const validation = validateMarketCloseSnapshot(normalized)
     if (!validation.valid) {
       throw new Error(`VALIDATION_FAILED: ${validation.errors.join("; ")}`)
@@ -465,14 +491,6 @@ Deno.serve(async (req: Request) => {
         throw new Error(`STAGING_INSERT_FAILED: ${stageRes.error.message}`)
       }
     }
-
-    // Persist pre-publish sync run metadata (coverage, staged counts, quality)
-    await supabase.from("market_insight_sync_runs").update({
-      source_observed_at: asOfIso,
-      endpoint_coverage: normalized.endpoint_coverage,
-      staged_counts: normalized.staged_counts,
-      quality_status: normalized.quality_status,
-    }).eq("id", syncRunId)
 
     // Atomic publish RPC
     const publishRes = await supabase.rpc("publish_market_insight_snapshot", {
