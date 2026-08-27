@@ -37,6 +37,13 @@ function responseModels(callAudit: unknown) {
     .filter(Boolean)
 }
 
+export function formatAdminModelLabel(model: string) {
+  const compact = model.match(/^gpt-5\.6-(luna|terra|sol)$/i)?.[1]
+  if (compact) return compact.charAt(0).toUpperCase() + compact.slice(1).toLowerCase()
+  if (model.toLowerCase() === "gpt-5-mini") return "GPT-5 mini"
+  return model
+}
+
 export function aggregateAiCouncilUsage(rows: AiCouncilLlmUsageRow[]): Record<string, AdminAiUsage> {
   const result: Record<string, AdminAiUsage> = {}
 
