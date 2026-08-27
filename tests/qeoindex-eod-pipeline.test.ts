@@ -7,12 +7,16 @@ function source(path: string) {
 }
 
 const stepsUrl = new URL("../lib/qeoindex-eod-workflow-steps.ts", import.meta.url)
+const stagingStepsUrl = new URL("../lib/qeoindex-eod-notion-staging-batch.ts", import.meta.url)
+const failureStepUrl = new URL("../lib/qeoindex-eod-failure-step.ts", import.meta.url)
 const workflowUrl = new URL("../workflows/qeoindex-eod-pipeline.ts", import.meta.url)
 const routeUrl = new URL("../app/api/qeoindex/eod/route.ts", import.meta.url)
 const ingestUrl = new URL("../lib/wyckoff-notion-ingest.ts", import.meta.url)
 
 test("unified QeoIndex EOD workflow owns the full v2 pipeline in canonical phase order", () => {
   assert.equal(existsSync(stepsUrl), true, "qeoindex-eod-workflow-steps.ts must exist")
+  assert.equal(existsSync(stagingStepsUrl), true, "qeoindex-eod-notion-staging-batch.ts must exist")
+  assert.equal(existsSync(failureStepUrl), true, "qeoindex-eod-failure-step.ts must exist")
   assert.equal(existsSync(workflowUrl), true, "qeoindex-eod-pipeline.ts must exist")
   if (!existsSync(workflowUrl)) return
 
@@ -23,7 +27,7 @@ test("unified QeoIndex EOD workflow owns the full v2 pipeline in canonical phase
     "runMarketCloseCollectStep",
     "runHistoryRefreshBatchStep",
     "runWyckoffBuildStep",
-    "runNotionStagingStep",
+    "runNotionStagingBatchStep",
     "runNotionValidateStep",
     "runIngestStep",
     "runSupabasePublishStep",
@@ -37,13 +41,16 @@ test("unified QeoIndex EOD workflow owns the full v2 pipeline in canonical phase
     assert.ok(index > cursor, `${call} must appear after the previous canonical phase`)
     cursor = index
   }
+  assert.match(code, /from "@\/lib\/qeoindex-eod-failure-step"/)
   assert.doesNotMatch(code, /runUnifiedWyckoff/)
 })
 
 test("workflow steps use v2 persistent-cache, Notion staging and split claim/publish boundaries", () => {
   assert.equal(existsSync(stepsUrl), true, "qeoindex-eod-workflow-steps.ts must exist")
-  if (!existsSync(stepsUrl)) return
+  assert.equal(existsSync(stagingStepsUrl), true, "qeoindex-eod-notion-staging-batch.ts must exist")
+  if (!existsSync(stepsUrl) || !existsSync(stagingStepsUrl)) return
   const code = source("lib/qeoindex-eod-workflow-steps.ts")
+  const stagingCode = source("lib/qeoindex-eod-notion-staging-batch.ts")
 
   for (const required of [
     "loadWyckoffV2Universe",
@@ -51,7 +58,6 @@ test("workflow steps use v2 persistent-cache, Notion staging and split claim/pub
     "loadWyckoffV2CachedTickerHistory",
     "buildWyckoffV2TickerSnapshots",
     "beginWyckoffV2NotionRun",
-    "stageWyckoffV2Snapshots",
     "validateAndFinalizeWyckoffV2NotionRun",
     "claimReadyWyckoffV2Run",
     "publishIngestingWyckoffV2Run",
@@ -61,6 +67,9 @@ test("workflow steps use v2 persistent-cache, Notion staging and split claim/pub
   ]) {
     assert.match(code, new RegExp(required), `steps must use ${required}`)
   }
+  assert.match(stagingCode, /stageWyckoffV2SnapshotBatch/)
+  assert.match(stagingCode, /loadWyckoffV2CachedTickerHistory/)
+  assert.match(stagingCode, /buildWyckoffV2TickerSnapshots/)
   assert.doesNotMatch(code, /refreshOhlcvHistoryUniverse/)
   assert.doesNotMatch(code, /runUnifiedWyckoff/)
   assert.match(code, /failedTickers[\s\S]*throw/i)
@@ -142,4 +151,28 @@ test("HISTORY_REFRESH executes as ten durable workflow steps of at most ten tick
   assert.match(steps, /refreshOhlcvHistoryBatch/)
   assert.doesNotMatch(steps, /refreshOhlcvHistoryUniverse/)
   assert.match(steps, /completedTickers[\s\S]*requestedTickers/)
+})
+
+test("NOTION_STAGING executes as ten durable workflow steps of at most ten tickers", () => {
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const stagingSteps = source("lib/qeoindex-eod-notion-staging-batch.ts")
+
+  const buildIndex = workflow.indexOf("runWyckoffBuildStep")
+  const stagingLoopIndex = workflow.indexOf("for (let offset = 0; offset < ready.stocks.length; offset += 10)", buildIndex)
+  const stagingCallIndex = workflow.indexOf("runNotionStagingBatchStep", stagingLoopIndex)
+  assert.ok(stagingLoopIndex > buildIndex, "Notion staging must use its own durable batch loop after Wyckoff build")
+  assert.ok(stagingCallIndex > stagingLoopIndex, "Notion staging batch step must execute inside the durable loop")
+  assert.match(workflow, /ready\.stocks\.slice\(offset, offset \+ 10\)/)
+  assert.doesNotMatch(workflow, /runNotionStagingStep\(runId, ready\.stocks/)
+  assert.match(stagingSteps, /stageWyckoffV2SnapshotBatch/)
+  assert.match(stagingSteps, /NOTION_STAGING batch must contain 1-10 tickers/)
+  assert.match(workflow, /staging\.total !== 500/)
+})
+
+test("parent workflow failure closes orphaned running phase telemetry", () => {
+  const failureStep = source("lib/qeoindex-eod-failure-step.ts")
+
+  assert.match(failureStep, /from\("system_job_phases"\)[\s\S]*status:\s*"failed"/)
+  assert.match(failureStep, /\.eq\("run_id", runId\)[\s\S]*\.eq\("status", "running"\)/)
+  assert.match(failureStep, /markQeoIndexEodPhaseSkipped[\s\S]*phaseKey:\s*"COMPLETE"/)
 })
