@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { runAiCouncilDebateOperation } from "@/lib/ai-council-operations"
 import { isMachineRequestAuthorized } from "@/lib/auth/machine"
@@ -9,18 +10,33 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
 
-export async function GET(request: NextRequest) {
-  if (!isMachineRequestAuthorized(
+function bearerToken(request: Request) {
+  const authorization = request.headers.get("authorization") ?? ""
+  if (!authorization.startsWith("Bearer ")) return ""
+  return authorization.slice("Bearer ".length).trim()
+}
+
+async function isCouncilRecoveryAuthorized(request: Request, supabase: SupabaseClient) {
+  if (isMachineRequestAuthorized(
     request,
     [process.env.AI_COUNCIL_RUN_SECRET, process.env.CRON_SECRET],
     { allowUnconfiguredInDevelopment: true },
-  )) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
-  }
+  )) return true
 
+  const token = bearerToken(request)
+  if (!token) return false
+  const { data, error } = await supabase.rpc("qeo_verify_eod_scheduler_secret", { p_secret: token })
+  return !error && data === true
+}
+
+export async function GET(request: NextRequest) {
   const supabase = getSupabaseServerClient()
   if (!supabase) {
     return NextResponse.json({ ok: false, error: "Supabase service role is not configured" }, { status: 503 })
+  }
+
+  if (!(await isCouncilRecoveryAuthorized(request, supabase))) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
   }
 
   const ratingDate = request.nextUrl.searchParams.get("ratingDate")?.trim() || undefined

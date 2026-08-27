@@ -40,6 +40,8 @@ test("operational AI Council routes accept an explicit ratingDate for same-sessi
     assert.match(route, /searchParams\.get\("ratingDate"\)/)
     assert.match(route, /\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$/)
     assert.match(route, /INVALID_RATING_DATE/)
+    assert.match(route, /qeo_verify_eod_scheduler_secret/)
+    assert.match(route, /data === true/)
   }
 
   assert.match(daily, /runAiCouncilDailyOperation\(supabase, operationDate, ratingDate\)/)
