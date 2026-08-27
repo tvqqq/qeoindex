@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   BarChart3,
   CheckCircle2,
-  Compass,
   DollarSign,
   HelpCircle,
   History,
@@ -23,7 +22,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type {
   MarketCloseDashboardData,
   MarketHistoryPoint,
@@ -78,7 +76,6 @@ function formatTime(iso: string): string {
 }
 
 export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDashboardProps) {
-  const [activeTab, setActiveTab] = React.useState<"overview" | "sectors" | "leaders" | "history">("overview")
   const [selectedSector, setSelectedSector] = React.useState<MarketSectorRow | null>(null)
   const [guideOpen, setGuideOpen] = React.useState(false)
   const [guideInitialKey, setGuideInitialKey] = React.useState<string | undefined>()
@@ -171,29 +168,12 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
         </div>
       </div>
 
-      {/* Local shadcn Tabs */}
-      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as typeof activeTab)} className="w-full">
-        <TabsList className="grid h-auto w-full max-w-3xl grid-cols-2 gap-1 bg-muted/70 p-1 sm:grid-cols-4">
-          <TabsTrigger value="overview" className="text-xs sm:text-sm font-semibold gap-1.5 cursor-pointer">
-            <Compass className="size-3.5" />
-            <span>Tổng quan</span>
-          </TabsTrigger>
-          <TabsTrigger value="sectors" className="text-xs sm:text-sm font-semibold gap-1.5 cursor-pointer">
-            <Layers className="size-3.5" />
-            <span>Nhóm ngành</span>
-          </TabsTrigger>
-          <TabsTrigger value="leaders" className="text-xs sm:text-sm font-semibold gap-1.5 cursor-pointer">
-            <Zap className="size-3.5" />
-            <span>Dẫn dắt & Khối lượng</span>
-          </TabsTrigger>
-          <TabsTrigger value="history" className="text-xs sm:text-sm font-semibold gap-1.5 cursor-pointer">
-            <History className="size-3.5" />
-            <span>Lịch sử phiên</span>
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Tab 1: Tổng quan */}
-        <TabsContent value="overview" className="mt-6 space-y-6">
+      <section aria-labelledby="market-overview-title" className="space-y-6">
+        <div className="border-l-2 border-emerald-400 pl-4">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-400">Toàn cảnh</p>
+          <h3 id="market-overview-title" className="mt-1 text-xl font-bold text-foreground">Chỉ số, độ rộng và dòng tiền</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Các tín hiệu chính của phiên được đặt cạnh nhau để đọc trong một lượt.</p>
+        </div>
           {/* 4-step reading rail */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {/* Step 1: Index */}
@@ -499,10 +479,14 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+      </section>
 
-        {/* Tab 2: Nhóm ngành */}
-        <TabsContent value="sectors" className="mt-6 space-y-4">
+      <section aria-labelledby="market-sectors-title" className="space-y-4 border-t border-border/60 pt-8">
+        <div className="border-l-2 border-cyan-400 pl-4">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-400">Lan tỏa</p>
+          <h3 id="market-sectors-title" className="mt-1 text-xl font-bold text-foreground">Sức mạnh nhóm ngành</h3>
+          <p className="mt-1 text-sm text-muted-foreground">So sánh hiệu suất, độ rộng và thanh khoản giữa các ngành.</p>
+        </div>
           <div className="grid gap-4 xl:grid-cols-2" data-market-close-chart-grid>
             <Card className="border-border/60 bg-card py-0">
               <CardHeader className="border-b border-border/50 px-5 py-4">
@@ -617,10 +601,14 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
+      </section>
 
-        {/* Tab 3: Dẫn dắt & Thanh khoản */}
-        <TabsContent value="leaders" className="mt-6 space-y-6">
+      <section aria-labelledby="market-leaders-title" className="space-y-6 border-t border-border/60 pt-8">
+        <div className="border-l-2 border-amber-400 pl-4">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-400">Dòng tiền</p>
+          <h3 id="market-leaders-title" className="mt-1 text-xl font-bold text-foreground">Dẫn dắt và thanh khoản</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Những cổ phiếu tập trung thanh khoản và ảnh hưởng tới chỉ số.</p>
+        </div>
           <Card className="border-border/60 bg-card py-0" data-market-close-chart-grid>
             <CardHeader className="border-b border-border/50 px-5 py-4">
               <CardTitle className="text-base">Xếp hạng thanh khoản cổ phiếu</CardTitle>
@@ -731,10 +719,14 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
               </CardContent>
             </Card>
           )}
-        </TabsContent>
+      </section>
 
-        {/* Tab 4: Lịch sử phiên */}
-        <TabsContent value="history" className="mt-6 space-y-4">
+      <section aria-labelledby="market-history-title" className="space-y-4 border-t border-border/60 pt-8">
+        <div className="border-l-2 border-slate-400 pl-4">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Bối cảnh</p>
+          <h3 id="market-history-title" className="mt-1 text-xl font-bold text-foreground">Lịch sử các phiên</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Đặt phiên hiện tại trong xu hướng tâm lý, rủi ro và dòng tiền gần nhất.</p>
+        </div>
           <div className="grid gap-4" data-market-close-chart-grid>
             <Card className="border-border/60 bg-card py-0">
               <CardHeader className="border-b border-border/50 px-5 py-4">
@@ -812,8 +804,7 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+      </section>
 
       {/* Sector Detail Dialog */}
       <Dialog open={Boolean(selectedSector)} onOpenChange={(open) => { if (!open) setSelectedSector(null) }}>

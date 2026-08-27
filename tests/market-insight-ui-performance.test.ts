@@ -98,3 +98,22 @@ test("Market Close dashboard uses stable accessible shadcn chart composition", (
   assert.ok((charts.match(/initialDimension=/g) || []).length >= 8, "charts must have stable initial dimensions")
   assert.doesNotMatch(charts, /backdrop-blur|backdrop-filter|transition-all|filter:/i)
 })
+
+test("Market Close presents every insight section on one tab-free dashboard", () => {
+  const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
+
+  assert.doesNotMatch(dashboard, /Tabs(Content|List|Trigger)?|activeTab|setActiveTab/, "market-close indicators must not be hidden behind tabs")
+  for (const sectionId of ["market-overview-title", "market-sectors-title", "market-leaders-title", "market-history-title"]) {
+    assert.match(dashboard, new RegExp(`id="${sectionId}"`), `${sectionId} must be visible in the continuous dashboard`)
+  }
+})
+
+test("Market Close charts use a minimal semantic palette without SVG gradients", () => {
+  const charts = fs.readFileSync(path.resolve("components/insights/market-close-charts.tsx"), "utf8")
+
+  assert.match(charts, /const POSITIVE/)
+  assert.match(charts, /const NEGATIVE/)
+  assert.match(charts, /const NEUTRAL/)
+  assert.match(charts, /const ACCENT/)
+  assert.doesNotMatch(charts, /linearGradient|url\(#/, "chart fills must remain flat and minimal")
+})

@@ -226,7 +226,7 @@ In accordance with `docs/UI_LESSONS_LEARNED.md`, the Root Admin Control Plane UI
 - All navigation links specify `prefetch={false}`.
 - Lightweight, dimensionally stable modal dialogs without nested scroll-traps or layout shift.
 
-The `/insights` landing page is a single scrollable dashboard: post-session market context, Top 100 ranking, and research modules are persistent sections reached through anchor navigation rather than mutually exclusive primary tabs. The global auth gate preserves server-verified content across transient Supabase token-refresh synchronization failures and rejects stale overlapping sync responses, preventing long-lived sessions from flashing the login shell.
+The `/insights` landing page is a single scrollable dashboard: post-session market context, Top 100 ranking, and research modules are persistent sections reached through anchor navigation rather than mutually exclusive primary tabs. Inside the post-session section, overview, sectors, leaders, and history are also rendered continuously with no local tabs; charts share a restrained flat semantic palette and avoid SVG gradients. The global auth gate preserves server-verified content across transient Supabase token-refresh synchronization failures and rejects stale overlapping sync responses, preventing long-lived sessions from flashing the login shell.
 
 1. `app/page.tsx` verifies the server session before any protected board load.
 2. SSR assembles snapshots, batch quotes, and the shared 5-minute history snapshot in parallel.
