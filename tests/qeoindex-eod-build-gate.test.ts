@@ -6,6 +6,10 @@ const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url),
   scripts: Record<string, string>
 }
 
+function source(path: string) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+}
+
 const requiredCoreTests = [
   "tests/wyckoff-unified-schema.test.ts",
   "tests/wyckoff-v2-staging.test.ts",
@@ -53,4 +57,20 @@ test("production prebuild test:core includes the notion-unified-v2 EOD contract 
 test("production lint:touched includes all new QeoIndex EOD runtime surfaces", () => {
   const script = pkg.scripts["lint:touched"] || ""
   for (const path of requiredLintFiles) assert.match(script, escaped(path), path)
+})
+
+test("historical EOD recovery uses persistent 1D OHLCV instead of mutable latest orderbook snapshots", () => {
+  const backfill = source("lib/qeoindex-eod-backfill-ready-step.ts")
+  const eodMarket = source("lib/ai-council-eod-market.ts")
+  const eodData = source("lib/ai-council-eod-data.ts")
+  const freshness = source("lib/ai-council-freshness.ts")
+  const operations = source("lib/ai-council-operations.ts")
+
+  assert.match(backfill, /market_ohlcv_history/)
+  assert.doesNotMatch(backfill, /stock_orderbook_snapshots/)
+  assert.match(eodMarket, /loadPersistentCouncilEodSnapshots/)
+  assert.match(eodData, /loadPersistentCouncilEodSnapshots/)
+  assert.match(freshness, /persistent_ohlcv/)
+  assert.match(freshness, /loadPersistentCouncilEodSnapshots/)
+  assert.match(operations, /persistent_ohlcv/)
 })
