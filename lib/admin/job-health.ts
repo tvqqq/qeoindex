@@ -141,6 +141,7 @@ export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; c
     supabase
       .from("system_job_runs")
       .select("*")
+      .order("created_at", { ascending: false })
       .order("started_at", { ascending: false })
       .limit(150),
     supabase.rpc("qeo_admin_cron_snapshot"),
@@ -199,6 +200,7 @@ export async function loadAdminJobHistory(jobKey?: string, limit = 50): Promise<
     let query = supabase
       .from("system_job_runs")
       .select("*")
+      .order("created_at", { ascending: false })
       .order("started_at", { ascending: false })
       .limit(maxLimit)
 
