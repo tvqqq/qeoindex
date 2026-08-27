@@ -56,14 +56,19 @@ test("Insights shell stays visible across server render and hydration", () => {
   )
 })
 
-test("Insights is one dashboard with stable section navigation instead of remounting primary tabs", () => {
+test("Insights is one continuous dashboard without primary tabs or a sticky section navigator", () => {
   const content = fs.readFileSync(path.resolve("components/insights/insights-dashboard.tsx"), "utf8")
 
   assert.doesNotMatch(content, /mainTab|setMainTab/, "primary dashboard sections must not be conditionally remounted")
   for (const sectionId of ["sau-phien", "top-100", "nghien-cuu"]) {
     assert.match(content, new RegExp(`id="${sectionId}"`), `${sectionId} must exist on the unified dashboard`)
-    assert.match(content, new RegExp(`href="#${sectionId}"`), `${sectionId} must be reachable from the dashboard navigator`)
   }
+  assert.doesNotMatch(content, /Điều hướng dashboard Insights|href="#sau-phien"/, "the removed section navigator must stay removed")
+  assert.match(content, /<details[^>]*className="group[^"]*"/)
+  assert.match(content, /Top cổ phiếu rating score/)
+  assert.doesNotMatch(content, /Tổng quan VNIndex|Market pulse/, "duplicate Top 100 market summary must stay removed")
+  assert.match(content, /data\.marketClose\?\.isStale/)
+  assert.match(content, /Dữ liệu thị trường cũ \(Stale\)/)
 })
 
 test("authenticated shell survives transient token refresh sync failures", () => {
@@ -97,4 +102,26 @@ test("Market Close dashboard uses stable accessible shadcn chart composition", (
   assert.ok((charts.match(/accessibilityLayer/g) || []).length >= 8, "charts must expose Recharts accessibility layers")
   assert.ok((charts.match(/initialDimension=/g) || []).length >= 8, "charts must have stable initial dimensions")
   assert.doesNotMatch(charts, /backdrop-blur|backdrop-filter|transition-all|filter:/i)
+})
+
+test("Market Close presents every insight section on one tab-free dashboard", () => {
+  const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
+
+  assert.doesNotMatch(dashboard, /Tabs(Content|List|Trigger)?|activeTab|setActiveTab/, "market-close indicators must not be hidden behind tabs")
+  for (const sectionId of ["market-overview-title", "market-sectors-title", "market-leaders-title", "market-history-title"]) {
+    assert.match(dashboard, new RegExp(`id="${sectionId}"`), `${sectionId} must be visible in the continuous dashboard`)
+  }
+  assert.match(dashboard, /2xl:grid-cols-4/, "overview charts should use four columns on wide screens")
+  assert.match(dashboard, /2xl:grid-cols-3/, "leader cards should use three columns on wide screens")
+  assert.doesNotMatch(dashboard, /Dữ liệu thị trường cũ \(Stale\)/, "stale status belongs in the page header, not inside the market dashboard")
+})
+
+test("Market Close charts use a minimal semantic palette without SVG gradients", () => {
+  const charts = fs.readFileSync(path.resolve("components/insights/market-close-charts.tsx"), "utf8")
+
+  assert.match(charts, /const POSITIVE/)
+  assert.match(charts, /const NEGATIVE/)
+  assert.match(charts, /const NEUTRAL/)
+  assert.match(charts, /const ACCENT/)
+  assert.doesNotMatch(charts, /linearGradient|url\(#/, "chart fills must remain flat and minimal")
 })
