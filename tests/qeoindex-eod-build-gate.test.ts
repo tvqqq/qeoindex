@@ -74,3 +74,13 @@ test("historical EOD recovery uses persistent 1D OHLCV instead of mutable latest
   assert.match(freshness, /loadPersistentCouncilEodSnapshots/)
   assert.match(operations, /persistent_ohlcv/)
 })
+
+test("persistent freshness carries Wyckoff forward only for a verified zero-volume unchanged session", () => {
+  const freshness = source("lib/ai-council-freshness.ts")
+
+  assert.match(freshness, /isPersistentNoTradeCarryForward/)
+  assert.match(freshness, /total_volume[^\n]*===?\s*0|Number\([^\n]*total_volume[^\n]*\)\s*===\s*0/)
+  assert.match(freshness, /latest_price/)
+  assert.match(freshness, /reference_price/)
+  assert.match(freshness, /wyckoff.*bar_closed_at|bar_closed_at.*wyckoff/i)
+})
