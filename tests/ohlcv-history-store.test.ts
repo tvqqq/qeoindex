@@ -10,10 +10,10 @@ import {
 } from "../lib/market-history-contract.ts"
 import {
   buildOhlcvRefreshPlan,
-  buildVerifiedNoTradeDailyBar,
   normalizeOhlcvTickers,
   type OhlcvCoverage,
 } from "../lib/ohlcv-history-store.ts"
+import { buildVerifiedNoTradeDailyBar } from "../lib/qeoindex-eod-no-trade-repair-step.ts"
 import {
   buildEodHistoryRefreshSummary,
   EodHistoryRefreshError,
@@ -91,7 +91,7 @@ test("verified final no-trade snapshot repairs a missing completed Daily bar", (
     reference_price: 23.5,
     latest_price: 23.5,
     total_volume: 0,
-    updated_at: "2026-08-27T07:50:01.000Z",
+    updated_at: "2026-08-27T07:45:01.000Z",
   })
 
   assert.deepEqual(bar, {
@@ -111,7 +111,7 @@ test("no-trade repair rejects stale, traded, or price-drift snapshots", () => {
     reference_price: 64.8,
     latest_price: 64.8,
     total_volume: 0,
-    updated_at: "2026-08-27T07:50:01.000Z",
+    updated_at: "2026-08-27T07:45:01.000Z",
   }
 
   assert.equal(buildVerifiedNoTradeDailyBar("LGC", "2026-08-27", { ...base, total_volume: 100 }), null)
