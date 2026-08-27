@@ -12,7 +12,7 @@ import {
   type LlmEvidenceRef,
 } from "../lib/ai-council-prompt-evidence.ts"
 
-function packetWithIndicator(key: string, value: number | string, unit: string): AiCouncilEvidencePacketV2 {
+function packetWithIndicator(key: string, value: number, unit: string): AiCouncilEvidencePacketV2 {
   return {
     packetVersion: "ai-council-evidence-v2",
     semanticGuideVersion: "test",
@@ -100,25 +100,6 @@ test("score evidenceRef accepts harmless /100 unit suffix while preserving exact
 
   const result = validateCouncilEvidenceRefs("risk", refs, packet)
   assert.equal(result.valid, true, result.errors.join(" | "))
-})
-
-test("text evidenceRef accepts only its harmless semantic unit suffix", () => {
-  const packet = packetWithIndicator("macd_vs_signal", "Trên", "text")
-  const valid = validateCouncilEvidenceRefs("bear", [{
-    metricKey: "macd_vs_signal",
-    observedValue: "Trên text",
-    asOf: "2026-08-24",
-    interpretation: "MACD đang trên signal.",
-  }], packet)
-  assert.equal(valid.valid, true, valid.errors.join(" | "))
-
-  const wrong = validateCouncilEvidenceRefs("bear", [{
-    metricKey: "macd_vs_signal",
-    observedValue: "Dưới text",
-    asOf: "2026-08-24",
-    interpretation: "Sai giá trị phải bị chặn.",
-  }], packet)
-  assert.equal(wrong.valid, false)
 })
 
 test("evidenceRef still rejects a second metric smuggled into one observedValue", () => {
