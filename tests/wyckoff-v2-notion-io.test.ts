@@ -146,3 +146,20 @@ test("begin stops rather than rewrites a run already Ingested", async () => {
   assert.equal(result.action, "stop")
   assert.equal(io.updates, 0)
 })
+
+test("begin resumes an Ingesting run with its existing Supabase claim instead of stopping", async () => {
+  const io = new MemoryNotion()
+  const supabaseRunId = "28a406cd-7c96-4076-8031-149d07741a26"
+  io.runs.push({ id: "r1", properties: {
+    "Run Key": { rich_text: [{ type: "text", text: { content: "WYCKOFF-2026-08-25-EOD-v2" } }] },
+    Status: { select: { name: "Ingesting" } },
+    "Supabase Run ID": { rich_text: [{ type: "text", text: { content: supabaseRunId } }] },
+  } })
+
+  const result = await beginWyckoffV2NotionRun({ runKey: "WYCKOFF-2026-08-25-EOD-v2", scanDate: "2026-08-25", startedAt: "2026-08-25T08:15:00.000Z", providerSummary: "cache" }, io)
+
+  assert.equal(result.status, "Ingesting")
+  assert.equal(result.action, "resume")
+  assert.equal(result.supabaseRunId, supabaseRunId)
+  assert.equal(io.updates, 0)
+})
