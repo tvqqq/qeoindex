@@ -1,3 +1,5 @@
+import type { AdminAiUsage } from "./job-ai-usage.ts"
+
 export type AdminSettingGroup =
   | "system"
   | "provider"
@@ -178,6 +180,7 @@ export type AdminJobView = {
   lastSummary?: Record<string, unknown> | null
   lastErrorCode?: string | null
   lastErrorMessage?: string | null
+  aiUsage?: AdminAiUsage | null
 }
 
 export type AdminAuditView = {
