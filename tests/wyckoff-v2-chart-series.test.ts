@@ -1,9 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
 import {
   assertWyckoffV2ChartSeriesCoverage,
   buildWyckoffV2ChartSeriesRows,
+  loadWyckoffV2ChartSeriesRows,
   type WyckoffV2RecentOhlcvRow,
 } from "../lib/wyckoff-v2-chart-series.ts"
 
@@ -73,4 +75,25 @@ test("v2 chart-series coverage fails closed when any ticker is missing 1H or 1D 
     () => assertWyckoffV2ChartSeriesCoverage(["AAA", "BBB"], rows),
     /BBB\|1H/,
   )
+})
+
+test("chart-series loader keeps every RPC response below the row cap by loading one ticker per request", async () => {
+  const tickers = Array.from({ length: 100 }, (_, index) => `T${String(index + 1).padStart(3, "0")}`)
+  const calls: string[][] = []
+  const supabase = {
+    rpc: async (_name: string, args: { p_tickers: string[] }) => {
+      calls.push(args.p_tickers)
+      const complete = completeRows(args.p_tickers)
+      return {
+        data: args.p_tickers.length > 1 ? complete.slice(0, 12) : complete,
+        error: null,
+      }
+    },
+  } as unknown as SupabaseClient
+
+  const rows = await loadWyckoffV2ChartSeriesRows(supabase, tickers, RUN_ID)
+
+  assert.equal(rows.length, 200)
+  assert.equal(calls.length, 100)
+  assert.ok(calls.every((call) => call.length === 1))
 })
