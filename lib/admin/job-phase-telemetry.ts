@@ -128,3 +128,58 @@ export async function markQeoIndexEodPhaseSkipped(input: {
     error_message: null,
   })
 }
+
+export async function markQeoIndexEodPhaseRetryingStep(input: {
+  runId: string
+  phaseKey: QeoIndexEodPhaseKey
+  attemptsUsed: number
+  nextAttemptAt: string
+  lastError: string
+}) {
+  "use step"
+  if (!input.runId) throw new Error("QeoIndex EOD phase telemetry requires runId")
+  const definition = phaseDefinition(input.phaseKey)
+  const io = await getDefaultIo()
+  const now = new Date().toISOString()
+
+  await io.upsertPhase({
+    run_id: input.runId,
+    job_key: QEOINDEX_EOD_JOB_KEY,
+    phase_key: definition.key,
+    phase_order: definition.order,
+    status: "running",
+    started_at: now,
+    finished_at: null,
+    duration_ms: null,
+    summary: sanitizedSummary({
+      attemptsUsed: input.attemptsUsed,
+      nextAttemptAt: input.nextAttemptAt,
+      lastError: input.lastError.slice(0, 500),
+      retrying: true,
+    }),
+    error_code: null,
+    error_message: null,
+  })
+
+  return { ok: true as const, status: "running" as const, attemptsUsed: input.attemptsUsed }
+}
+
+export async function annotateQeoIndexEodPhaseSummaryStep(input: {
+  runId: string
+  phaseKey: QeoIndexEodPhaseKey
+  summary: Record<string, unknown>
+}) {
+  "use step"
+  const { getSupabaseServerClient } = await import("../supabase/server.ts")
+  const supabase = getSupabaseServerClient()
+  if (!supabase) throw new Error("Supabase service role is not configured for phase telemetry")
+
+  const { error } = await supabase
+    .from("system_job_phases")
+    .update({ summary: sanitizedSummary(input.summary) })
+    .eq("run_id", input.runId)
+    .eq("phase_key", input.phaseKey)
+
+  if (error) throw new Error(`QeoIndex EOD phase telemetry summary update failed: ${error.message}`)
+  return { ok: true as const, attemptsUsed: Number(input.summary.attemptsUsed || 0) }
+}

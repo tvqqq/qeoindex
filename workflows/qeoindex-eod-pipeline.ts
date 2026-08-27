@@ -1,5 +1,9 @@
 import { sleep } from "workflow"
 
+import {
+  annotateQeoIndexEodPhaseSummaryStep,
+  markQeoIndexEodPhaseRetryingStep,
+} from "@/lib/admin/job-phase-telemetry"
 import { runEodBackfillReadyStep } from "@/lib/qeoindex-eod-backfill-ready-step"
 import { failQeoIndexEodRunStep } from "@/lib/qeoindex-eod-failure-step"
 import { runEodNoTradeDailyRepairStep } from "@/lib/qeoindex-eod-no-trade-repair-step"
@@ -23,13 +27,59 @@ import {
   startQeoIndexEodRunStep,
 } from "@/lib/qeoindex-eod-workflow-steps"
 
+const MARKET_CLOSE_MAX_ATTEMPTS = 3
+const MARKET_CLOSE_RETRY_INTERVAL_MS = 5 * 60_000
+
 function retryAt(startedAtIso: string, attempt: number) {
   const startedAt = new Date(startedAtIso).getTime()
   return new Date(startedAt + attempt * 5 * 60_000)
 }
 
+function marketCloseRetryAt(startedAtIso: string, attempt: number) {
+  const startedAt = new Date(startedAtIso).getTime()
+  return new Date(startedAt + attempt * MARKET_CLOSE_RETRY_INTERVAL_MS)
+}
+
 function isEodNotReady(error: unknown) {
   return (error as { code?: unknown } | null)?.code === "EOD_NOT_READY"
+}
+
+function marketCloseErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function isRetryableMarketCloseFailure(error: unknown) {
+  const message = marketCloseErrorMessage(error)
+  const normalized = message.toUpperCase()
+
+  if (message.includes("failed to load dedicated sync secret")) return false
+  if (/UNAUTHORIZED|FORBIDDEN|INVALID_SECRET|MISSING_SECRET/.test(normalized)) return false
+
+  const statusFromError = Number((error as { status?: unknown } | null)?.status)
+  const statusFromMessage = Number(normalized.match(/\bHTTP_(\d{3})\b/)?.[1])
+  const httpStatus = Number.isFinite(statusFromError) && statusFromError > 0
+    ? statusFromError
+    : statusFromMessage
+
+  if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500) return true
+
+  return [
+    "VALIDATION_FAILED",
+    "P0_INCOMPLETE",
+    "SOCKET",
+    "TIMEOUT",
+    "TIMED OUT",
+    "NETWORK",
+    "CONNECTION",
+    "ECONN",
+    "FETCH FAILED",
+    "ABORT",
+    "RATE_LIMIT",
+    "TOO_MANY_REQUESTS",
+    "SERVICE_UNAVAILABLE",
+    "BAD_GATEWAY",
+    "GATEWAY_TIMEOUT",
+  ].some((token) => normalized.includes(token))
 }
 
 function vietnamDateKey(iso: string) {
@@ -71,7 +121,60 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
     const shouldPublish = ready.notionAction !== "stop"
     const resumeSupabaseRunId = ready.notionAction === "resume" ? ready.notionSupabaseRunId : ""
 
-    const marketClose = await runMarketCloseCollectStep(runId, startedAtIso, !historicalBackfill)
+    let marketClose: Awaited<ReturnType<typeof runMarketCloseCollectStep>> | null = null
+    if (historicalBackfill) {
+      marketClose = await runMarketCloseCollectStep(runId, startedAtIso, false)
+    } else {
+      for (let attempt = 1; attempt <= MARKET_CLOSE_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          marketClose = await runMarketCloseCollectStep(runId, startedAtIso, true)
+          await annotateQeoIndexEodPhaseSummaryStep({
+            runId,
+            phaseKey: "MARKET_CLOSE_COLLECT",
+            summary: {
+              attemptsUsed: attempt,
+              status: marketClose.status,
+              sessionDate: marketClose.sessionDate,
+              qualityStatus: "qualityStatus" in marketClose ? marketClose.qualityStatus : undefined,
+              syncRunId: "syncRunId" in marketClose ? marketClose.syncRunId : undefined,
+              retrying: false,
+            },
+          })
+          break
+        } catch (error) {
+          const retryable = isRetryableMarketCloseFailure(error)
+          if (!retryable || attempt === MARKET_CLOSE_MAX_ATTEMPTS) {
+            try {
+              await annotateQeoIndexEodPhaseSummaryStep({
+                runId,
+                phaseKey: "MARKET_CLOSE_COLLECT",
+                summary: {
+                  attemptsUsed: attempt,
+                  retrying: false,
+                  terminal: true,
+                  lastError: marketCloseErrorMessage(error).slice(0, 500),
+                },
+              })
+            } catch {
+              // Preserve the collector failure as the canonical pipeline error.
+            }
+            throw error
+          }
+
+          const nextAttemptAt = marketCloseRetryAt(startedAtIso, attempt)
+          await markQeoIndexEodPhaseRetryingStep({
+            runId,
+            phaseKey: "MARKET_CLOSE_COLLECT",
+            attemptsUsed: attempt,
+            nextAttemptAt: nextAttemptAt.toISOString(),
+            lastError: marketCloseErrorMessage(error),
+          })
+          await sleep(marketCloseRetryAt(startedAtIso, attempt))
+        }
+      }
+    }
+    if (!marketClose) throw new Error("MARKET_CLOSE_COLLECT did not produce a pipeline context")
+
     let history: OhlcvUniverseRefreshResult = {
       requestedTickers: 0,
       completedTickers: 0,
