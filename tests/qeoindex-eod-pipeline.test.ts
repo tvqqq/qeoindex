@@ -26,6 +26,7 @@ test("unified QeoIndex EOD workflow owns the full v2 pipeline in canonical phase
     "runEodReadyStep",
     "runMarketCloseCollectStep",
     "runHistoryRefreshBatchStep",
+    "runEodNoTradeDailyRepairStep",
     "runWyckoffBuildStep",
     "runNotionStagingBatchStep",
     "runNotionValidateStep",
@@ -42,6 +43,7 @@ test("unified QeoIndex EOD workflow owns the full v2 pipeline in canonical phase
     cursor = index
   }
   assert.match(code, /from "@\/lib\/qeoindex-eod-failure-step"/)
+  assert.match(code, /from "@\/lib\/qeoindex-eod-no-trade-repair-step"/)
   assert.doesNotMatch(code, /runUnifiedWyckoff/)
 })
 
@@ -140,17 +142,23 @@ test("market-close collection uses only the dedicated Vault secret and fails clo
   assert.doesNotMatch(steps, /status:\s*"degraded"\s+as const/)
 })
 
-test("HISTORY_REFRESH executes as ten durable workflow steps of at most ten tickers", () => {
+test("HISTORY_REFRESH executes as ten durable workflow steps of at most ten tickers and repairs only verified no-trade Daily gaps", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const repair = source("lib/qeoindex-eod-no-trade-repair-step.ts")
 
   assert.match(workflow, /for \(let offset = 0; offset < ready\.stocks\.length; offset \+= 10\)/)
   assert.match(workflow, /ready\.stocks\.slice\(offset, offset \+ 10\)/)
   assert.match(workflow, /runHistoryRefreshBatchStep/)
+  assert.match(workflow, /runEodNoTradeDailyRepairStep/)
   assert.doesNotMatch(workflow, /runHistoryRefreshStep\(runId, ready\.stocks/)
   assert.match(steps, /refreshOhlcvHistoryBatch/)
   assert.doesNotMatch(steps, /refreshOhlcvHistoryUniverse/)
   assert.match(steps, /completedTickers[\s\S]*requestedTickers/)
+  assert.match(repair, /stock_orderbook_snapshots/)
+  assert.match(repair, /volume !== 0/)
+  assert.match(repair, /Math\.abs\(latestPrice - referencePrice\)/)
+  assert.match(repair, /Exact EOD Daily bars incomplete after verified no-trade repair/)
 })
 
 test("NOTION_STAGING executes as ten durable workflow steps of at most ten tickers", () => {

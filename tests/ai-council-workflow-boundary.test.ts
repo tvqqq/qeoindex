@@ -31,3 +31,17 @@ test("EOD workflow keeps Node-only Council and Wyckoff work behind cross-file st
   assert.match(steps, /from "@\/lib\/wyckoff-unified-runner"/)
   assert.match(steps, /from "@\/lib\/supabase\/server"/)
 })
+
+test("operational AI Council routes accept an explicit ratingDate for same-session recovery", () => {
+  const daily = source("app/api/ai-council/daily/route.ts")
+  const debate = source("app/api/ai-council/debate-daily/route.ts")
+
+  for (const route of [daily, debate]) {
+    assert.match(route, /searchParams\.get\("ratingDate"\)/)
+    assert.match(route, /\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$/)
+    assert.match(route, /INVALID_RATING_DATE/)
+  }
+
+  assert.match(daily, /runAiCouncilDailyOperation\(supabase, operationDate, ratingDate\)/)
+  assert.match(debate, /runAiCouncilDebateOperation\(supabase, ratingDate\)/)
+})
