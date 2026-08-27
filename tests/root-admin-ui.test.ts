@@ -31,11 +31,8 @@ test("admin UI adheres strictly to UI performance invariants", () => {
 
   for (const file of adminFiles) {
     const code = source(file)
-    // Invariant: no transition-all
     assert.doesNotMatch(code, /\btransition-all\b/, `${file} must not use transition-all`)
-    // Invariant: no backdrop-blur
     assert.doesNotMatch(code, /\bbackdrop-blur\b/, `${file} must not use backdrop-blur`)
-    // Invariant: no drop-shadow filters
     assert.doesNotMatch(code, /\bdrop-shadow\b/, `${file} must not use drop-shadow`)
   }
 })
@@ -84,4 +81,15 @@ test("admin job detail renders phase telemetry for the unified EOD pipeline", ()
   assert.match(timeline, /phase\.key/)
   assert.match(timeline, /phase\.status/)
   assert.match(timeline, /phase\.summary/)
+})
+
+test("Admin Jobs table renders AI usage and human-readable workflow durations", () => {
+  const table = source("components/admin/admin-jobs-table.tsx")
+  const time = source("lib/admin/time.ts")
+  assert.match(table, />AI Usage</)
+  assert.match(table, /job\.aiUsage/)
+  assert.match(table, /formatAdminDuration\(job\.lastDurationMs\)/)
+  assert.match(table, /formatAdminTokenCount\(job\.aiUsage\.totalTokens\)/)
+  assert.match(time, /export function formatAdminDuration/)
+  assert.match(time, /export function formatAdminTokenCount/)
 })
