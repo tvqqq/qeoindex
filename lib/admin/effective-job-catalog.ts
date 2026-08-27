@@ -38,17 +38,38 @@ const LEGACY_EOD_JOB_KEYS = new Set([
   "ai_council.debate_daily",
 ])
 
+function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition {
+  if (job.key === "signals.daily") {
+    return {
+      ...job,
+      maxDurationMinutes: 8 * 60,
+    }
+  }
+
+  if (job.key === "kfsp.ttai_history") {
+    return {
+      ...job,
+      description: "Kiểm tra và cập nhật lịch sử TTAI lúc 07:10 ICT khi kỳ báo cáo tài chính thay đổi.",
+      scheduleUtc: "10 0 * * *",
+      scheduleIct: "07:10 hàng ngày",
+      schedulerName: "kfsp-ttai-history-daily-0710-ict",
+    }
+  }
+
+  return job
+}
+
 /**
  * Operational Admin Jobs catalog for the notion-unified-v2 target architecture.
  *
- * Base endpoint-level definitions are retained for compatibility, but the
- * effective catalog always exposes exactly one canonical parent pipeline. This
- * prevents duplicate/raw definitions from leaking into /admin/jobs while the
- * actual trigger remains Supabase pg_cron and execution remains Vercel Workflow.
+ * Base endpoint-level definitions are retained for compatibility, while this
+ * effective catalog mirrors the actual production scheduler and workflow shape.
  */
 export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
   QEOINDEX_EOD_PIPELINE_JOB,
-  ...ADMIN_JOB_CATALOG.filter((job) => !LEGACY_EOD_JOB_KEYS.has(job.key)),
+  ...ADMIN_JOB_CATALOG
+    .filter((job) => !LEGACY_EOD_JOB_KEYS.has(job.key))
+    .map(applyOperationalOverrides),
 ]
 
 export function getEffectiveAdminJobDefinition(key: string): AdminJobDefinition | undefined {

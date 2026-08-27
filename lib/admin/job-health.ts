@@ -1,3 +1,4 @@
+import { aggregateAiCouncilUsage, type AiCouncilLlmUsageRow } from "./job-ai-usage.ts"
 import { EFFECTIVE_ADMIN_JOB_CATALOG } from "./effective-job-catalog.ts"
 import { sanitizeAdminValue } from "./redact.ts"
 import { findScheduleConflicts, getScheduleConflictWarning } from "./job-schedule.ts"
@@ -61,12 +62,14 @@ export function buildAdminJobViews(
       kfspRatingRuns: [],
       kfspTtaiRuns: [],
       orderbookStats: null,
+      aiCouncilLlmDebates: [],
     }
   } else {
     rawEvidence = evidenceOrRuns
   }
 
   const conflicts = findScheduleConflicts(catalog)
+  const aiUsageByDate = aggregateAiCouncilUsage(rawEvidence.aiCouncilLlmDebates ?? [])
 
   const counts: AdminSystemOverview["jobCounts"] = {
     total: catalog.length,
@@ -81,6 +84,8 @@ export function buildAdminJobViews(
     const resolved = resolveJobEvidence(def, rawEvidence, now)
     const conflictWarning = getScheduleConflictWarning(def.key, conflicts)
     const status = resolved.executionStatus
+    const scanDate = typeof resolved.lastSummary?.scanDate === "string" ? resolved.lastSummary.scanDate : null
+    const aiUsage = def.key === "qeoindex.eod_pipeline" && scanDate ? aiUsageByDate[scanDate] ?? null : null
 
     counts[status] += 1
 
@@ -117,6 +122,7 @@ export function buildAdminJobViews(
       lastSummary: resolved.lastSummary,
       lastErrorCode: resolved.lastErrorCode,
       lastErrorMessage: resolved.lastErrorMessage,
+      aiUsage,
     }
   })
 
@@ -135,9 +141,10 @@ export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; c
     kfspRatingRuns: [],
     kfspTtaiRuns: [],
     orderbookStats: null,
+    aiCouncilLlmDebates: [],
   }
 
-  const [runsResult, cronResult, ratingResult, ttaiResult, orderbookResult] = await Promise.allSettled([
+  const [runsResult, cronResult, ratingResult, ttaiResult, orderbookResult, aiUsageResult] = await Promise.allSettled([
     supabase
       .from("system_job_runs")
       .select("*")
@@ -161,6 +168,12 @@ export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; c
       .order("session_date", { ascending: false })
       .order("updated_at", { ascending: false })
       .limit(100),
+    supabase
+      .from("ai_council_llm_debates")
+      .select("as_of_date, ticker, call_audit, input_tokens, output_tokens, total_tokens, cached_input_tokens, reasoning_tokens, estimated_cost_usd")
+      .order("as_of_date", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .limit(30),
   ])
 
   if (runsResult.status === "fulfilled" && runsResult.value.data) {
@@ -185,6 +198,9 @@ export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; c
       totalSnapshots: dateRows.length,
       latestUpdatedAt: latestUpdated ? String(latestUpdated) : null,
     }
+  }
+  if (aiUsageResult.status === "fulfilled" && Array.isArray(aiUsageResult.value.data)) {
+    rawEvidence.aiCouncilLlmDebates = aiUsageResult.value.data as AiCouncilLlmUsageRow[]
   }
 
   return buildAdminJobViews(EFFECTIVE_ADMIN_JOB_CATALOG, rawEvidence)
@@ -216,7 +232,6 @@ export async function loadAdminJobHistory(jobKey?: string, limit = 50): Promise<
       }))
     }
 
-    // Secondary Adapter: Provide domain sync run history when system_job_runs has no entries
     if (jobKey === "kfsp.rating_daily") {
       const { data: ratingData } = await supabase
         .from("kfsp_rating_sync_runs")

@@ -36,7 +36,6 @@ test("catalog matches vercel.json cron schedules exactly", () => {
 })
 
 test("catalog matches Supabase pg_cron migrations exactly", () => {
-  // 1. sync-universe-5m and sync-universe-eod-1445 in 20260826085500_fix_orderbook_cron_1445.sql
   const syncOrderbookMigration = readTextFile("supabase/migrations/20260826085500_fix_orderbook_cron_1445.sql")
   assert.match(syncOrderbookMigration, /'sync-universe-5m'/)
   assert.match(syncOrderbookMigration, /'\*\/5 2-6 \* \* 1-5'/)
@@ -63,7 +62,6 @@ test("catalog matches Supabase pg_cron migrations exactly", () => {
   assert.equal(syncEodDef.windowStartIct, "14:45")
   assert.equal(syncEodDef.windowEndIct, "14:45")
 
-  // 2. kfsp-rating-daily-7am-ict in 20260822112420_kfsp_rating_pipeline.sql
   const kfspRatingMigration = readTextFile("supabase/migrations/20260822112420_kfsp_rating_pipeline.sql")
   assert.match(kfspRatingMigration, /'kfsp-rating-daily-7am-ict'/)
   assert.match(kfspRatingMigration, /'0 0 \* \* \*'/)
@@ -75,22 +73,20 @@ test("catalog matches Supabase pg_cron migrations exactly", () => {
   assert.equal(ratingDef.scheduleDays, "daily")
   assert.equal(ratingDef.scheduleKind, "point")
 
-  // 3. TTAI history rescheduled to daily 01:00 ICT in the latest migration
-  const ttaiMigration = readTextFile("supabase/migrations/20260826013742_reschedule_kfsp_ttai_daily_0100_ict.sql")
-  assert.match(ttaiMigration, /cron\.unschedule\('kfsp-ttai-history-hourly'\)/)
-  assert.match(ttaiMigration, /'kfsp-ttai-history-daily-1am-ict'/)
-  assert.match(ttaiMigration, /'0 18 \* \* \*'/)
+  const ttaiMigration = readTextFile("supabase/migrations/20260827135500_reschedule_kfsp_ttai_daily_0710_ict.sql")
+  assert.match(ttaiMigration, /cron\.unschedule\('kfsp-ttai-history-daily-1am-ict'\)/)
+  assert.match(ttaiMigration, /'kfsp-ttai-history-daily-0710-ict'/)
+  assert.match(ttaiMigration, /'10 0 \* \* \*'/)
 
-  const ttaiDef = ADMIN_JOB_CATALOG.find((j) => j.key === "kfsp.ttai_history")
+  const ttaiDef = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "kfsp.ttai_history")
   assert.ok(ttaiDef)
-  assert.equal(ttaiDef.schedulerName, "kfsp-ttai-history-daily-1am-ict")
-  assert.equal(ttaiDef.scheduleUtc, "0 18 * * *")
-  assert.equal(ttaiDef.scheduleIct, "01:00 hàng ngày")
+  assert.equal(ttaiDef.schedulerName, "kfsp-ttai-history-daily-0710-ict")
+  assert.equal(ttaiDef.scheduleUtc, "10 0 * * *")
+  assert.equal(ttaiDef.scheduleIct, "07:10 hàng ngày")
   assert.equal(ttaiDef.scheduleDays, "daily")
   assert.equal(ttaiDef.intervalMinutes, undefined)
   assert.equal(ttaiDef.scheduleKind, "point")
 
-  // 4. qeoindex-eod-pipeline-1515-ict in 20260825174500_qeoindex_eod_pipeline_cron.sql
   const eodPipelineMigration = readTextFile("supabase/migrations/20260825174500_qeoindex_eod_pipeline_cron.sql")
   assert.match(eodPipelineMigration, /'qeoindex-eod-pipeline-1515-ict'/)
   assert.match(eodPipelineMigration, /'15 8 \* \* 1-5'/)
@@ -108,6 +104,7 @@ test("exact pg_cron name mapping dictionary matches production", () => {
     "qeoindex-eod-pipeline-1515-ict": "qeoindex.eod_pipeline",
     "kfsp-rating-daily-7am-ict": "kfsp.rating_daily",
     "kfsp-ttai-history-daily-1am-ict": "kfsp.ttai_history",
+    "kfsp-ttai-history-daily-0710-ict": "kfsp.ttai_history",
     "sync-universe-5m": "market.sync_5m",
     "sync-universe-5m-afternoon": "market.sync_5m",
     "sync-universe-eod-1445": "market.sync_eod",
@@ -118,6 +115,7 @@ test("exact pg_cron name mapping dictionary matches production", () => {
   assert.equal(getJobKeyForPgCron("sync-universe-5m-afternoon"), "market.sync_5m")
   assert.equal(getJobKeyForPgCron("sync-universe-eod-1445"), "market.sync_eod")
   assert.equal(getJobKeyForPgCron("kfsp-rating-daily-7am-ict"), "kfsp.rating_daily")
+  assert.equal(getJobKeyForPgCron("kfsp-ttai-history-daily-0710-ict"), "kfsp.ttai_history")
   assert.equal(getPgCronNameForJobKey("qeoindex.eod_pipeline"), "qeoindex-eod-pipeline-1515-ict")
   assert.equal(getPgCronNameForJobKey("market.sync_eod"), "sync-universe-eod-1445")
   assert.equal(getPgCronNameForJobKey("signals.daily"), undefined)

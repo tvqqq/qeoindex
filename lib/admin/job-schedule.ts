@@ -10,6 +10,7 @@ export const PG_CRON_NAME_TO_JOB_KEY: Readonly<Record<string, string>> = Object.
   "qeoindex-eod-pipeline-1515-ict": "qeoindex.eod_pipeline",
   "kfsp-rating-daily-7am-ict": "kfsp.rating_daily",
   "kfsp-ttai-history-daily-1am-ict": "kfsp.ttai_history",
+  "kfsp-ttai-history-daily-0710-ict": "kfsp.ttai_history",
   "sync-universe-5m": "market.sync_5m",
   "sync-universe-5m-afternoon": "market.sync_5m",
   "sync-universe-eod-1445": "market.sync_eod",
@@ -19,7 +20,7 @@ export const PG_CRON_NAME_TO_JOB_KEY: Readonly<Record<string, string>> = Object.
 export const JOB_KEY_TO_PG_CRON_NAME: Readonly<Record<string, string>> = Object.freeze({
   "qeoindex.eod_pipeline": "qeoindex-eod-pipeline-1515-ict",
   "kfsp.rating_daily": "kfsp-rating-daily-7am-ict",
-  "kfsp.ttai_history": "kfsp-ttai-history-daily-1am-ict",
+  "kfsp.ttai_history": "kfsp-ttai-history-daily-0710-ict",
   "market.sync_5m": "sync-universe-5m",
   "market.sync_eod": "sync-universe-eod-1445",
 })

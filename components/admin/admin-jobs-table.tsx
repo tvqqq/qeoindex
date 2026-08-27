@@ -4,7 +4,8 @@ import { useState } from "react"
 import Link from "next/link"
 import { ExternalLink, Play, Search } from "lucide-react"
 
-import { formatAdminDate, formatAdminTime } from "@/lib/admin/time"
+import { formatAdminModelLabel } from "@/lib/admin/job-ai-usage"
+import { formatAdminDate, formatAdminDuration, formatAdminTime, formatAdminTokenCount } from "@/lib/admin/time"
 import type { AdminJobView } from "@/lib/admin/types"
 import { AdminManualJobModal } from "./admin-manual-job-modal"
 
@@ -18,6 +19,11 @@ const STATUS_BADGE_STYLES = {
   failing: "border-rose-500/30 bg-rose-500/10 text-rose-400",
   stale: "border-orange-500/30 bg-orange-500/10 text-orange-400",
   unknown: "border-white/[0.08] bg-white/[0.04] text-slate-400",
+}
+
+function formatDateKey(value: string) {
+  const [year, month, day] = value.split("-")
+  return year && month && day ? `${day}/${month}` : value
 }
 
 export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
@@ -78,6 +84,7 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                 <th className="px-4 py-3 font-medium">Trạng thái</th>
                 <th className="px-4 py-3 font-medium">Lần chạy cuối (ICT)</th>
                 <th className="px-4 py-3 font-medium">Thời lượng</th>
+                <th className="px-4 py-3 font-medium">AI Usage</th>
                 <th className="px-4 py-3 text-right font-medium">Hành động</th>
               </tr>
             </thead>
@@ -121,7 +128,20 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                       ) : "—"}
                     </td>
 
-                    <td className="px-4 py-3.5 font-mono text-slate-400">{job.lastDurationMs ? `${job.lastDurationMs}ms` : "—"}</td>
+                    <td className="px-4 py-3.5 font-mono text-slate-400">{formatAdminDuration(job.lastDurationMs)}</td>
+
+                    <td className="min-w-[145px] px-4 py-3.5">
+                      {job.aiUsage ? (
+                        <div
+                          className="space-y-0.5"
+                          title={`${job.aiUsage.models.join(" · ")} | input ${job.aiUsage.inputTokens}, output ${job.aiUsage.outputTokens}, reasoning ${job.aiUsage.reasoningTokens}, cost $${job.aiUsage.estimatedCostUsd.toFixed(6)}`}
+                        >
+                          <div className="font-mono font-semibold text-slate-200">{formatAdminTokenCount(job.aiUsage.totalTokens)} tokens</div>
+                          <div className="text-[10px] text-slate-400">{job.aiUsage.models.map(formatAdminModelLabel).join(" · ") || "Model chưa ghi nhận"}</div>
+                          <div className="text-[9px] text-slate-500">{job.aiUsage.debates} debates · {formatDateKey(job.aiUsage.asOfDate)}</div>
+                        </div>
+                      ) : "—"}
+                    </td>
 
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
