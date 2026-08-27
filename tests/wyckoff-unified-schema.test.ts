@@ -4,6 +4,7 @@ import test from "node:test"
 
 const sql = readFileSync(new URL("../supabase/migrations/20260823143000_wyckoff_unified_data.sql", import.meta.url), "utf8")
 const v2Url = new URL("../supabase/migrations/20260825170000_wyckoff_contract_v2.sql", import.meta.url)
+const rankRepairUrl = new URL("../supabase/migrations/20260827025000_wyckoff_rank_constraint_repair.sql", import.meta.url)
 
 test("Wyckoff unified migration creates versioned read and history tables", () => {
   for (const table of ["wyckoff_universe_memberships", "wyckoff_scan_runs", "wyckoff_analysis_snapshots", "wyckoff_chart_series"]) {
@@ -51,4 +52,16 @@ test("Wyckoff v2 migration makes rank anomalies warning-only, versions operation
   assert.match(v2, /prompt_version <> 'notion-unified-v2'[\s\S]*history_status <> 'incomplete'[\s\S]*history_bar_count < 60[\s\S]*bull_probability is null[\s\S]*base_probability is null[\s\S]*bear_probability is null/i)
   assert.match(v2, /jsonb_array_length\(scenarios\) = 0/i)
   assert.match(v2, /evidence->>'missingReason'/i)
+})
+
+test("rank warning contract repairs generated unique-constraint name drift by inspecting the constraint definition", () => {
+  assert.equal(existsSync(rankRepairUrl), true, "rank constraint repair migration must exist")
+  if (!existsSync(rankRepairUrl)) return
+  const repair = readFileSync(rankRepairUrl, "utf8")
+
+  assert.match(repair, /pg_constraint/i)
+  assert.match(repair, /pg_get_constraintdef/i)
+  assert.match(repair, /UNIQUE\s*\(universe_key, rank, effective_date\)/i)
+  assert.match(repair, /execute format\('alter table public\.wyckoff_universe_memberships drop constraint %I'/i)
+  assert.doesNotMatch(repair, /update[\s\S]+rank\s*=/i, "repair must not renumber source ranks")
 })
