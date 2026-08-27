@@ -207,8 +207,13 @@ export async function beginWyckoffV2NotionRun(
   let page = uniqueRunPage(input.runKey, queried.results)
   const currentStatus = page ? selectText(pageProperties(page).Status) : ""
 
-  if (currentStatus === "Ingested" || currentStatus === "Ingesting") {
-    return { action: "stop" as const, status: currentStatus as "Ingested" | "Ingesting", pageId: page!.id }
+  if (currentStatus === "Ingested") {
+    return { action: "stop" as const, status: "Ingested" as const, pageId: page!.id }
+  }
+  if (currentStatus === "Ingesting") {
+    const supabaseRunId = propertyText(pageProperties(page!)["Supabase Run ID"])
+    if (!supabaseRunId) throw new Error(`NOTION_INGEST_CLAIM_MISSING: ${input.runKey} is Ingesting without Supabase Run ID`)
+    return { action: "resume" as const, status: "Ingesting" as const, pageId: page!.id, supabaseRunId }
   }
   if (currentStatus === "Ready") {
     return { action: "ready" as const, status: "Ready" as const, pageId: page!.id }
