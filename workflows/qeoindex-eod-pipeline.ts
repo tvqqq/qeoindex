@@ -68,6 +68,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
 
     const shouldBuild = ready.notionAction === "write"
     const shouldPublish = ready.notionAction !== "stop"
+    const resumeSupabaseRunId = ready.notionAction === "resume" ? ready.notionSupabaseRunId : ""
 
     const marketClose = await runMarketCloseCollectStep(runId, startedAtIso, !historicalBackfill)
     let history: OhlcvUniverseRefreshResult = {
@@ -130,12 +131,12 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
         ? `Persistent OHLCV cache providers: ${build.providers.join(", ")}; 100 tickers; 500 snapshot contract.`
         : "Existing notion-unified-v2 Ready run."
     const validation = await runNotionValidateStep(runId, ready.runKey, ready.scanDate, startedAtIso, providerSummary, shouldBuild)
-    const ingest = await runIngestStep(runId, ready.runKey, shouldPublish)
-    const claimId = ingest.status === "claimed" ? ingest.supabaseRunId : ""
+    const ingest = await runIngestStep(runId, ready.runKey, shouldPublish, resumeSupabaseRunId)
+    const claimId = ingest.status === "claimed" || ingest.status === "resumed" ? ingest.supabaseRunId : ""
     const publish = await runSupabasePublishStep(runId, ready.runKey, claimId, shouldPublish && Boolean(claimId))
     const published = shouldPublish && publish.status !== "skipped"
-    const deterministic = await runDeterministicCouncilStep(runId, published)
-    const llm = await runLlmDebateStep(runId, published && deterministic.ok)
+    const deterministic = await runDeterministicCouncilStep(runId, published, ready.scanDate)
+    const llm = await runLlmDebateStep(runId, published && deterministic.ok, ready.scanDate)
     const complete = await runCompleteStep(runId, {
       runKey: ready.runKey,
       scanDate: ready.scanDate,
