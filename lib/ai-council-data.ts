@@ -352,32 +352,37 @@ async function loadCouncilHistory(supabase: SupabaseClient, tickers: string[]) {
 
 export async function getAiCouncilData(
   supabase: SupabaseClient,
-  options: { includeHistory?: boolean; includePromptEvidence?: boolean } = {},
+  options: { includeHistory?: boolean; includePromptEvidence?: boolean; ratingDate?: string } = {},
 ): Promise<AiCouncilData> {
   const generatedAt = new Date().toISOString()
-  const latest = await supabase
-    .from("insights_stock_ratings")
-    .select("as_of_date")
-    .eq("is_published", true)
-    .eq("source", "kfsp")
-    .eq("is_top100", true)
-    .order("as_of_date", { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  let ratingDate = options.ratingDate?.trim() || ""
 
-  if (latest.error || !latest.data?.as_of_date) {
-    return {
-      generatedAt,
-      ratingDate: null,
-      mode: "evidence-ensemble-v1",
-      message: latest.error ? `Không đọc được rating snapshot: ${latest.error.message}` : "Chưa có Top 100 rating snapshot được publish.",
-      historyMessage: "",
-      stocks: [],
-      history: [],
+  if (!ratingDate) {
+    const latest = await supabase
+      .from("insights_stock_ratings")
+      .select("as_of_date")
+      .eq("is_published", true)
+      .eq("source", "kfsp")
+      .eq("is_top100", true)
+      .order("as_of_date", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (latest.error || !latest.data?.as_of_date) {
+      return {
+        generatedAt,
+        ratingDate: null,
+        mode: "evidence-ensemble-v1",
+        message: latest.error ? `Không đọc được rating snapshot: ${latest.error.message}` : "Chưa có Top 100 rating snapshot được publish.",
+        historyMessage: "",
+        stocks: [],
+        history: [],
+      }
     }
+
+    ratingDate = latest.data.as_of_date as string
   }
 
-  const ratingDate = latest.data.as_of_date as string
   const ratingsResult = await supabase
     .from("insights_stock_ratings")
     .select("ticker,company_name,sector,exchange,top100_rank,price,price_change_pct,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,rs_short,rs_medium,kfsp_stock_rrg_state,kfsp_sector_rrg_state,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics")
