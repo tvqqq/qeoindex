@@ -16,6 +16,29 @@ function bearerToken(request: Request) {
   return authorization.slice("Bearer ".length).trim()
 }
 
+function vietnamDateKey(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date)
+}
+
+function historicalStartedAt(sessionDate: string, now: Date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+    throw new Error("sessionDate must use YYYY-MM-DD")
+  }
+  const parsed = new Date(`${sessionDate}T08:15:00.000Z`)
+  if (Number.isNaN(parsed.getTime()) || vietnamDateKey(parsed) !== sessionDate) {
+    throw new Error("sessionDate is not a valid calendar date")
+  }
+  if (sessionDate >= vietnamDateKey(now)) {
+    throw new Error("sessionDate backfill must be earlier than today in Asia/Ho_Chi_Minh")
+  }
+  return parsed.toISOString()
+}
+
 async function isQeoIndexSchedulerAuthorized(request: Request) {
   if (isMachineRequestAuthorized(request, [process.env.CRON_SECRET], { allowUnconfiguredInDevelopment: true })) return true
 
@@ -33,10 +56,26 @@ async function trigger(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
   }
 
-  const startedAt = new Date().toISOString()
+  const now = new Date()
+  const sessionDate = request.nextUrl.searchParams.get("sessionDate")?.trim() || ""
+  let startedAt = now.toISOString()
+  if (sessionDate) {
+    try {
+      startedAt = historicalStartedAt(sessionDate, now)
+    } catch (error) {
+      return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 400 })
+    }
+  }
+
   try {
     const run = await start(qeoindexEodPipeline, [startedAt])
-    return NextResponse.json({ ok: true, workflowRunId: run.runId, startedAt }, { status: 202 })
+    return NextResponse.json({
+      ok: true,
+      workflowRunId: run.runId,
+      startedAt,
+      sessionDate: sessionDate || vietnamDateKey(now),
+      historicalBackfill: Boolean(sessionDate),
+    }, { status: 202 })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     await notifyOpsError({ source: "qeoindex-eod-pipeline", message, path: request.nextUrl.pathname, method: request.method, status: 500 })

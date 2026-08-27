@@ -30,6 +30,15 @@ function isEodNotReady(error: unknown) {
   return (error as { code?: unknown } | null)?.code === "EOD_NOT_READY"
 }
 
+function vietnamDateKey(iso: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso))
+}
+
 export async function qeoindexEodPipeline(startedAtIso: string) {
   "use workflow"
 
@@ -49,8 +58,9 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
 
     const shouldBuild = ready.notionAction === "write"
     const shouldPublish = ready.notionAction !== "stop"
+    const historicalBackfill = vietnamDateKey(startedAtIso) !== vietnamDateKey(new Date().toISOString())
 
-    const marketClose = await runMarketCloseCollectStep(runId, startedAtIso, true)
+    const marketClose = await runMarketCloseCollectStep(runId, startedAtIso, !historicalBackfill)
     let history: OhlcvUniverseRefreshResult = {
       requestedTickers: 0,
       completedTickers: 0,
@@ -121,6 +131,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       runKey: ready.runKey,
       scanDate: ready.scanDate,
       notionAction: ready.notionAction,
+      historicalBackfill,
       rankWarnings: ready.rankWarnings.slice(0, 10),
       marketCloseStatus: marketClose.status,
       history,
@@ -139,6 +150,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       runKey: ready.runKey,
       scanDate: ready.scanDate,
       notionAction: ready.notionAction,
+      historicalBackfill,
       publishStatus: publish.status,
       deterministicStatus: deterministic.status,
       llmStatus: llm.status,
