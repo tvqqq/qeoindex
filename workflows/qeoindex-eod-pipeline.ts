@@ -2,6 +2,7 @@ import { sleep } from "workflow"
 
 import { runEodBackfillReadyStep } from "@/lib/qeoindex-eod-backfill-ready-step"
 import { failQeoIndexEodRunStep } from "@/lib/qeoindex-eod-failure-step"
+import { runEodNoTradeDailyRepairStep } from "@/lib/qeoindex-eod-no-trade-repair-step"
 import {
   runNotionStagingBatchStep,
   type NotionStagingProgress,
@@ -99,6 +100,12 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       history = await runHistoryRefreshBatchStep(runId, [], startedAtIso, history, false)
     }
 
+    const noTradeRepair = await runEodNoTradeDailyRepairStep(
+      ready.stocks.map((stock) => stock.ticker),
+      ready.scanDate,
+      shouldBuild && !historicalBackfill,
+    )
+
     const build = await runWyckoffBuildStep(runId, ready.stocks, ready.runKey, ready.scanDate, shouldBuild)
     let staging: NotionStagingProgress = {
       created: 0,
@@ -145,6 +152,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       rankWarnings: ready.rankWarnings.slice(0, 10),
       marketCloseStatus: marketClose.status,
       history,
+      noTradeRepair,
       build,
       staging,
       validation,
