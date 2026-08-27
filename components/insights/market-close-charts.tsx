@@ -52,7 +52,7 @@ export function IndexBreadthChart({ indexes }: { indexes: MarketIndexCard[] }) {
   }))
 
   return (
-    <ChartContainer config={breadthConfig} className="h-[260px] w-full" initialDimension={{ width: 720, height: 260 }}>
+    <ChartContainer config={breadthConfig} className="h-[220px] w-full" initialDimension={{ width: 420, height: 220 }}>
       <BarChart accessibilityLayer data={data} layout="vertical" margin={{ left: 4, right: 10 }}>
         <CartesianGrid horizontal={false} stroke={GRID} />
         <XAxis type="number" hide />
@@ -80,7 +80,7 @@ export function IndexPerformanceChart({ indexes }: { indexes: MarketIndexCard[] 
   }))
 
   return (
-    <ChartContainer config={indexConfig} className="h-[260px] w-full" initialDimension={{ width: 720, height: 260 }}>
+    <ChartContainer config={indexConfig} className="h-[220px] w-full" initialDimension={{ width: 420, height: 220 }}>
       <ComposedChart accessibilityLayer data={data} margin={{ top: 8, right: 6, left: -18, bottom: 0 }}>
         <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 11, fontWeight: 700 }} />
@@ -108,7 +108,7 @@ export function MaBreadthChart({ daily }: { daily: MarketCloseDashboardData["dai
   ]
 
   return (
-    <ChartContainer config={maConfig} className="h-[250px] w-full" initialDimension={{ width: 720, height: 250 }}>
+    <ChartContainer config={maConfig} className="h-[220px] w-full" initialDimension={{ width: 420, height: 220 }}>
       <BarChart accessibilityLayer data={data} margin={{ top: 8, right: 6, left: -18, bottom: 0 }}>
         <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 11, fontWeight: 700 }} />
@@ -137,7 +137,7 @@ export function InstitutionalFlowChart({ daily }: { daily: MarketCloseDashboardD
   if (!data.length) return <EmptyChart message="Chưa có dữ liệu dòng tiền tổ chức." />
 
   return (
-    <ChartContainer config={flowConfig} className="h-[250px] w-full" initialDimension={{ width: 720, height: 250 }}>
+    <ChartContainer config={flowConfig} className="h-[220px] w-full" initialDimension={{ width: 420, height: 220 }}>
       <BarChart accessibilityLayer data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
         <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 11, fontWeight: 700 }} />
@@ -166,7 +166,7 @@ export function SectorPerformanceChart({ sectors }: { sectors: MarketSectorRow[]
   if (!data.length) return <EmptyChart message="Chưa có hiệu suất ngành hợp lệ." />
 
   return (
-    <ChartContainer config={sectorConfig} className="h-[390px] w-full" initialDimension={{ width: 760, height: 390 }}>
+    <ChartContainer config={sectorConfig} className="h-[310px] w-full" initialDimension={{ width: 680, height: 310 }}>
       <BarChart accessibilityLayer data={data} layout="vertical" margin={{ left: 18, right: 12 }}>
         <CartesianGrid horizontal={false} stroke={GRID} />
         <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 10 }} tickFormatter={(value) => `${value}%`} />
@@ -191,7 +191,7 @@ export function SectorBreadthChart({ sectors }: { sectors: MarketSectorRow[] }) 
   if (!data.length) return <EmptyChart message="Chưa có breadth ngành hợp lệ." />
 
   return (
-    <ChartContainer config={breadthConfig} className="h-[390px] w-full" initialDimension={{ width: 760, height: 390 }}>
+    <ChartContainer config={breadthConfig} className="h-[310px] w-full" initialDimension={{ width: 680, height: 310 }}>
       <BarChart accessibilityLayer data={data} layout="vertical" margin={{ left: 18, right: 12 }}>
         <CartesianGrid horizontal={false} stroke={GRID} />
         <XAxis type="number" hide />
@@ -220,7 +220,7 @@ export function LiquidityLeadersChart({ leaders }: { leaders: MarketLeaderItem[]
   if (!data.length) return <EmptyChart message="Chưa có dữ liệu thanh khoản cổ phiếu." />
 
   return (
-    <ChartContainer config={leaderConfig} className="h-[360px] w-full" initialDimension={{ width: 760, height: 360 }}>
+    <ChartContainer config={leaderConfig} className="h-[300px] w-full" initialDimension={{ width: 560, height: 300 }}>
       <BarChart accessibilityLayer data={data} layout="vertical" margin={{ left: 2, right: 12 }}>
         <CartesianGrid horizontal={false} stroke={GRID} />
         <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 10 }} tickFormatter={(value) => `${Math.round(value / 1_000_000)}M`} />
@@ -247,7 +247,7 @@ export function MarketHistoryChart({ history }: { history: MarketHistoryPoint[] 
   if (!history.length) return <EmptyChart message="Lịch sử sẽ được tích lũy sau mỗi phiên đóng cửa." />
 
   return (
-    <ChartContainer config={historyConfig} className="h-[330px] w-full" initialDimension={{ width: 980, height: 330 }}>
+    <ChartContainer config={historyConfig} className="h-[280px] w-full" initialDimension={{ width: 720, height: 280 }}>
       <AreaChart accessibilityLayer data={history} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
         <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis dataKey="sessionDate" axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 10 }} tickFormatter={shortDate} />
@@ -272,7 +272,7 @@ export function MarketHistoryFlowChart({ history }: { history: MarketHistoryPoin
   if (!history.length) return <EmptyChart message="Chưa có lịch sử dòng tiền." />
 
   return (
-    <ChartContainer config={historyFlowConfig} className="h-[300px] w-full" initialDimension={{ width: 980, height: 300 }}>
+    <ChartContainer config={historyFlowConfig} className="h-[280px] w-full" initialDimension={{ width: 720, height: 280 }}>
       <BarChart accessibilityLayer data={history} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
         <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis dataKey="sessionDate" axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 10 }} tickFormatter={shortDate} />

@@ -3,7 +3,6 @@
 import * as React from "react"
 import {
   Activity,
-  AlertTriangle,
   BarChart3,
   CheckCircle2,
   DollarSign,
@@ -16,7 +15,6 @@ import {
   Zap,
 } from "lucide-react"
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -99,7 +97,7 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
     )
   }
 
-  const { sessionDate, marketRegime, asOf, dailySummary, indexes, sectors, leaders, observations, history, isStale } = data
+  const { sessionDate, marketRegime, asOf, dailySummary, indexes, sectors, leaders, observations, history } = data
 
   const vnindex = indexes.find((i) => i.indexCode === "VNINDEX")
   const isPositive = (vnindex?.changePct ?? 0) >= 0
@@ -109,17 +107,6 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
 
   return (
     <div className="space-y-6">
-      {/* Stale or Quality Warning */}
-      {isStale && (
-        <Alert variant="destructive" className="border-amber-500/30 bg-amber-500/10 text-amber-300">
-          <AlertTriangle className="h-4 w-4 text-amber-400" />
-          <AlertTitle className="text-amber-200">Dữ liệu thị trường cũ (Stale)</AlertTitle>
-          <AlertDescription className="text-xs text-amber-300/80">
-            Snapshot này được cập nhật từ phiên trước ({sessionDate}). Dữ liệu phiên mới sẽ sẵn sàng sau 15:15.
-          </AlertDescription>
-        </Alert>
-      )}
-
       {/* Top Banner / Summary Header */}
       <div className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-gradient-to-r from-card via-card to-primary/[0.035] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex items-center gap-3">
@@ -274,7 +261,7 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
             </Card>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-2" data-market-close-chart-grid>
+          <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-4" data-market-close-chart-grid>
             <Card className="border-border/60 bg-card py-0">
               <CardHeader className="border-b border-border/50 px-5 py-4">
                 <CardTitle className="text-base">Hiệu suất & thanh khoản chỉ số</CardTitle>
@@ -609,7 +596,8 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
           <h3 id="market-leaders-title" className="mt-1 text-xl font-bold text-foreground">Dẫn dắt và thanh khoản</h3>
           <p className="mt-1 text-sm text-muted-foreground">Những cổ phiếu tập trung thanh khoản và ảnh hưởng tới chỉ số.</p>
         </div>
-          <Card className="border-border/60 bg-card py-0" data-market-close-chart-grid>
+          <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3" data-market-close-chart-grid>
+          <Card className="border-border/60 bg-card py-0">
             <CardHeader className="border-b border-border/50 px-5 py-4">
               <CardTitle className="text-base">Xếp hạng thanh khoản cổ phiếu</CardTitle>
               <CardDescription>Khối lượng khớp của các mã dẫn đầu, hiển thị theo triệu cổ phiếu.</CardDescription>
@@ -719,6 +707,7 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
               </CardContent>
             </Card>
           )}
+          </div>
       </section>
 
       <section aria-labelledby="market-history-title" className="space-y-4 border-t border-border/60 pt-8">
@@ -727,7 +716,7 @@ export function MarketCloseDashboard({ data, onOpenStockDetail }: MarketCloseDas
           <h3 id="market-history-title" className="mt-1 text-xl font-bold text-foreground">Lịch sử các phiên</h3>
           <p className="mt-1 text-sm text-muted-foreground">Đặt phiên hiện tại trong xu hướng tâm lý, rủi ro và dòng tiền gần nhất.</p>
         </div>
-          <div className="grid gap-4" data-market-close-chart-grid>
+          <div className="grid gap-4 xl:grid-cols-2" data-market-close-chart-grid>
             <Card className="border-border/60 bg-card py-0">
               <CardHeader className="border-b border-border/50 px-5 py-4">
                 <CardTitle className="text-base">Tâm lý, rủi ro & độ rộng MA20</CardTitle>

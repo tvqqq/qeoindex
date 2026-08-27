@@ -18,7 +18,6 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronsUpDown,
-  ChartNoAxesCombined,
   CircleAlert,
   Compass,
   Cpu,
@@ -32,7 +31,6 @@ import {
   Gauge,
   GripVertical,
   HeartPulse,
-  HelpCircle,
   Info,
   Landmark,
   Layers3,
@@ -63,7 +61,7 @@ import { TtaiDashboard } from "@/components/insights/ttai-dashboard"
 import { StockLogo } from "@/components/stock-logo"
 import { TopNav } from "@/components/top-nav"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -234,84 +232,6 @@ function MetricLabel({
         )}
       </TooltipContent>
     </Tooltip>
-  )
-}
-
-function formatTradedValue(value?: number) {
-  if (!value) return "—"
-  return `${(value / 1_000_000_000_000).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} nghìn tỷ`
-}
-
-function LineSparkline({ values, positive }: { values: number[]; positive: boolean }) {
-  const width = 900
-  const height = 230
-  const source = values.length > 1 ? values : [0, 0.2, 0.12, 0.48, 0.42, 0.72, 0.64, 1]
-  const min = Math.min(...source)
-  const max = Math.max(...source)
-  const range = max - min || 1
-  const points = source.map((value, index) => {
-    const x = index / Math.max(1, source.length - 1) * width
-    const y = height - 18 - (value - min) / range * (height - 42)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  })
-  const id = positive ? "insights-up-gradient" : "insights-down-gradient"
-  const stroke = positive ? "#22c98a" : "#ff4757"
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-[230px] w-full" role="img" aria-label="Diễn biến VNIndex gần nhất">
-      <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={stroke} stopOpacity="0.35" />
-          <stop offset="100%" stopColor={stroke} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      {[0.25, 0.5, 0.75].map((ratio) => <line key={ratio} x1="0" x2={width} y1={height * ratio} y2={height * ratio} stroke="rgba(148,163,184,.12)" strokeDasharray="5 8" />)}
-      <polygon points={`0,${height} ${points.join(" ")} ${width},${height}`} fill={`url(#${id})`} />
-      <polyline points={points.join(" ")} fill="none" stroke={stroke} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={points.at(-1)?.split(",")[0]} cy={points.at(-1)?.split(",")[1]} r="7" fill={stroke} stroke="#08110e" strokeWidth="4" />
-    </svg>
-  )
-}
-
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  tone = "neutral",
-  metricKey,
-  onOpenGuide,
-}: {
-  icon: typeof Activity
-  label: string
-  value: string
-  detail: string
-  tone?: "up" | "down" | "neutral"
-  metricKey?: string
-  onOpenGuide?: (key: string) => void
-}) {
-  return (
-    <Card className="border border-white/[0.07] bg-panel/90 py-0 ring-0">
-      <CardContent className="p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm font-semibold text-muted-2">{label}</span>
-            {metricKey && onOpenGuide && (
-              <button
-                type="button"
-                onClick={() => onOpenGuide(metricKey)}
-                aria-label={`Mở hướng dẫn chỉ số ${label}`}
-                className="text-muted hover:text-brand transition-colors p-0.5 rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/50"
-              >
-                <HelpCircle className="size-3.5" />
-              </button>
-            )}
-          </div>
-          <Icon className={cn("size-5", tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-cyan-300")} />
-        </div>
-        <div className={cn("mt-4 text-2xl font-extrabold tracking-tight", tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-white")}>{value}</div>
-        <p className="mt-2 text-sm leading-5 text-muted-2">{detail}</p>
-      </CardContent>
-    </Card>
   )
 }
 
@@ -1472,9 +1392,6 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
     return () => window.removeEventListener("popstate", handlePopState)
   }, [data.ratings])
 
-  const quote = data.vnindex
-  const positive = (quote?.changePercent ?? 0) >= 0
-  const breadthTotal = (quote?.advances ?? 0) + (quote?.declines ?? 0)
   const sectors = useMemo(() => data.sectorSummaries.map((row) => row.sector).sort((a, b) => a.localeCompare(b, "vi")), [data.sectorSummaries])
 
   const filteredRatings = useMemo(() => {
@@ -1550,127 +1467,38 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
           </div>
         </section>
 
-        <nav aria-label="Điều hướng dashboard Insights" className="sticky top-14 z-30 mt-6 border-y border-white/[0.08] bg-background/95 py-3">
-          <div className="grid gap-2 sm:grid-cols-3">
-            <a href="#sau-phien" className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-xs font-bold text-emerald-300 transition-colors hover:border-emerald-400/45 hover:bg-emerald-500/15 sm:text-sm">
-              <Activity className="size-4 text-emerald-400" />
-              <span>1. Insight sau phiên</span>
-            </a>
-            <a href="#top-100" className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.07] px-4 py-3 text-xs font-bold text-cyan-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-500/12 sm:text-sm">
-              <BarChart3 className="size-4 text-cyan-400" />
-              <span>2. Xếp hạng Top 100</span>
-            </a>
-            <a href="#nghien-cuu" className="inline-flex items-center gap-2 rounded-xl border border-purple-500/20 bg-purple-500/[0.07] px-4 py-3 text-xs font-bold text-purple-300 transition-colors hover:border-purple-400/40 hover:bg-purple-500/12 sm:text-sm">
-              <BrainCircuit className="size-4 text-purple-400" />
-              <span>3. Nghiên cứu chuyên sâu</span>
-            </a>
+        {data.marketClose?.isStale && (
+          <div role="status" className="mt-5 flex items-start gap-3 rounded-xl border border-amber-400/30 bg-amber-400/[0.08] px-4 py-3 text-amber-100">
+            <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-400" />
+            <div>
+              <div className="text-sm font-bold">Dữ liệu thị trường cũ (Stale)</div>
+              <p className="mt-0.5 text-xs text-amber-200/75">Snapshot gần nhất thuộc phiên {data.marketClose.sessionDate}. Dữ liệu phiên mới sẽ sẵn sàng sau 15:15.</p>
+            </div>
           </div>
-        </nav>
+        )}
 
-        <section id="sau-phien" aria-labelledby="sau-phien-title" className="scroll-mt-32 pt-6">
+        <section id="sau-phien" aria-labelledby="sau-phien-title" className="pt-6">
           <h2 id="sau-phien-title" className="sr-only">Insight sau phiên</h2>
             <MarketCloseDashboard data={data.marketClose || null} onOpenStockDetail={handleOpenStockDetail} />
         </section>
 
-        <section id="top-100" aria-labelledby="top-100-title" className="scroll-mt-32 pt-12">
-          <div className="mb-5 border-l-2 border-cyan-400 pl-4">
-            <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-300">Bước 2 · Sàng lọc cơ hội</div>
-            <h2 id="top-100-title" className="mt-1 text-2xl font-extrabold text-white sm:text-3xl">Xếp hạng Top 100</h2>
-            <p className="mt-1 text-sm text-muted-2">Đi từ bối cảnh thị trường xuống nhóm ngành và cổ phiếu nổi bật.</p>
-          </div>
-          <div className="space-y-8">
-            <section className="grid gap-4 xl:grid-cols-[1.65fr_1fr]">
-          <Card className="border border-white/[0.07] bg-panel/95 py-0 ring-0">
-            <CardHeader className="flex-row items-start justify-between border-b border-white/[0.06] p-6">
+        <section id="top-100" aria-labelledby="top-100-title" className="pt-8">
+          <details className="group rounded-2xl border border-white/[0.08] bg-panel/70 p-4 open:bg-panel/90">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
               <div>
-                <CardTitle className="flex items-center gap-2 text-xl font-extrabold text-white"><LineChart className="size-5 text-brand" /> Tổng quan VNIndex</CardTitle>
-                <CardDescription className="mt-1 text-sm text-muted-2">Chỉ số thị trường · HOSE</CardDescription>
+                <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Signal ranking</div>
+                <h2 id="top-100-title" className="mt-1 text-xl font-extrabold text-white sm:text-2xl">Top cổ phiếu rating score</h2>
+                <p className="mt-1 text-xs font-medium text-muted-2">Bấm để mở bảng xếp hạng và bộ lọc cổ phiếu.</p>
               </div>
-              <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-muted-2">5 phút</Badge>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-                <span className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl">{quote ? quote.value.toLocaleString("vi-VN", { minimumFractionDigits: 2 }) : "—"}</span>
-                <span className={cn("mb-1 flex items-center gap-1 text-lg font-extrabold", positive ? "text-up" : "text-down")}>
-                  {positive ? <TrendingUp className="size-5" /> : <TrendingDown className="size-5" />}
-                  {quote ? `${quote.change >= 0 ? "+" : ""}${quote.change.toFixed(2)} (${formatPercent(quote.changePercent)})` : "Đang cập nhật"}
-                </span>
-              </div>
-              <div className="mt-5 overflow-hidden rounded-xl border border-white/[0.06] bg-cell/70 px-3 pt-3">
-                <LineSparkline values={data.vnindexSeries} positive={positive} />
-                <div className="flex justify-between px-2 pb-3 text-xs font-semibold text-muted">09:00 <span>10:00</span><span>11:30</span><span>13:00</span>14:45</div>
-              </div>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
-                <span className="text-muted-2">GTGD <strong className="ml-2 text-base text-white">{formatTradedValue(quote?.valueTraded)}</strong></span>
-                <span className="text-muted-2">Nguồn: TradingView snapshot + DNSE/VPS</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-white/[0.07] bg-panel/95 py-0 ring-0">
-            <CardHeader className="border-b border-white/[0.06] p-6">
-              <CardTitle className="flex items-center gap-2 text-xl font-extrabold text-white"><Sparkles className="size-5 text-cyan-300" /> Market pulse</CardTitle>
-              <CardDescription className="text-muted-2">Kết hợp market feed và luận điểm Notion</CardDescription>
-            </CardHeader>
-            <CardContent className="flex h-full flex-col p-6">
-              <Badge variant="outline" className={cn("h-7 px-3", positive ? "border-up/30 bg-up/10 text-up" : "border-down/30 bg-down/10 text-down")}>{data.marketPulse.label}</Badge>
-              <h2 className="mt-5 text-2xl font-extrabold leading-8 text-white">{data.marketPulse.headline}</h2>
-              <p className="mt-4 text-sm font-medium leading-6 text-muted-2">{data.marketPulse.detail}</p>
-              <dl className="mt-6 grid gap-3 text-sm">
-                <div className="flex items-center justify-between gap-4 border-b border-white/[0.06] pb-3"><dt className="text-muted-2">Vùng hỗ trợ</dt><dd className="font-bold text-up">{data.marketPulse.support}</dd></div>
-                <div className="flex items-center justify-between gap-4 border-b border-white/[0.06] pb-3"><dt className="text-muted-2">Kháng cự</dt><dd className="font-bold text-ref">{data.marketPulse.resistance}</dd></div>
-                <div className="flex items-center justify-between gap-4"><dt className="text-muted-2">Risk score</dt><dd className="font-bold text-white">{data.marketPulse.riskScore} / 100</dd></div>
-              </dl>
-              <div className="mt-3"><AnimatedProgressBar value={data.marketPulse.riskScore} color={data.marketPulse.riskScore > 55 ? "#ff4757" : "#22c98a"} barClassName="shadow-[0_0_18px_currentColor]" /></div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section aria-label="Chỉ số thị trường" className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard
-            icon={ChartNoAxesCombined}
-            label="Độ rộng thị trường"
-            value={breadthTotal ? `${quote?.advances ?? 0} / ${quote?.declines ?? 0}` : "—"}
-            detail="Mã tăng / mã giảm trên HOSE"
-            tone={positive ? "up" : "down"}
-            metricKey="market_breadth"
-            onOpenGuide={openGuide}
-          />
-          <MetricCard
-            icon={Activity}
-            label="Thanh khoản"
-            value={formatTradedValue(quote?.valueTraded)}
-            detail={quote?.valueChangePercent == null ? "So sánh phiên trước đang cập nhật" : `${formatPercent(quote.valueChangePercent)} so với phiên trước`}
-            metricKey="market_liquidity"
-            onOpenGuide={openGuide}
-          />
-          <MetricCard
-            icon={Gauge}
-            label="Risk score"
-            value={`${data.marketPulse.riskScore} / 100`}
-            detail={data.marketPulse.riskScore <= 35 ? "Thấp · xu hướng ổn định" : data.marketPulse.riskScore <= 60 ? "Trung bình · cần chọn lọc" : "Cao · ưu tiên phòng thủ"}
-            tone={data.marketPulse.riskScore > 60 ? "down" : "up"}
-            metricKey="market_risk_score"
-            onOpenGuide={openGuide}
-          />
-          <MetricCard
-            icon={ShieldCheck}
-            label="Nguồn dữ liệu"
-            value="3 lớp"
-            detail="Supabase · Notion · market providers"
-          />
-        </section>
-
-        <section className="mt-10">
-          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-            <div>
-              <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Signal ranking</div>
-              <h2 className="mt-2 text-2xl font-extrabold text-white sm:text-3xl">Top cổ phiếu rating score</h2>
-              <p className="mt-1.5 text-xs sm:text-sm font-medium text-muted-2">
-                Đọc theo thứ tự: thị trường → ngành → cổ phiếu. Điểm cao giúp so sánh, không phải lệnh mua.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
+              <span className="flex shrink-0 items-center gap-2 text-xs font-bold text-brand">
+                {data.ratings.length} mã
+                <ChevronDown className="size-5 transition-transform duration-200 group-open:rotate-180" />
+              </span>
+            </summary>
+            <div className="mt-5 border-t border-white/[0.07] pt-4">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs font-medium text-muted-2">Điểm cao hỗ trợ so sánh, không phải lệnh mua.</p>
+                <div className="flex items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -1683,8 +1511,9 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
               <Badge variant="outline" className={cn("h-7 px-3", data.ratingMode === "supabase" ? "border-up/30 bg-up/10 text-up" : "border-ref/30 bg-ref/10 text-ref")}>
                 {data.ratingMode === "supabase" ? "Supabase live" : "Dữ liệu mẫu UI"}
               </Badge>
+                </div>
+              </div>
             </div>
-          </div>
 
           <Card className="mt-5 border border-white/[0.07] bg-panel/95 py-0 ring-0">
             <CardHeader className="flex-col gap-4 border-b border-white/[0.06] p-4 xl:flex-row xl:items-center xl:justify-between">
@@ -2000,8 +1829,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
               <span>{showSectorGroups ? <>Hiển thị <strong className="text-white">{sortedSectorSummaries.length}</strong> nhóm ngành · click dòng hoặc icon mở rộng để xem chi tiết mã</> : <>Hiển thị <strong className="text-white">{filteredRatings.length}</strong> / {data.ratings.length} mã</>}</span>
             </div>
           </Card>
-        </section>
-          </div>
+          </details>
         </section>
 
         <section id="nghien-cuu" aria-labelledby="nghien-cuu-title" className="scroll-mt-32 pt-12">
