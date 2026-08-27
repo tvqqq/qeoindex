@@ -1,3 +1,4 @@
+import type { AiCouncilLlmUsageRow } from "./job-ai-usage.ts"
 import { sanitizeAdminValue } from "./redact.ts"
 import { getJobKeyForPgCron } from "./job-schedule.ts"
 import type {
@@ -69,6 +70,7 @@ export interface RawEvidenceSnapshot {
   kfspRatingRuns: KfspRatingRunEvidence[]
   kfspTtaiRuns: KfspTtaiRunEvidence[]
   orderbookStats: OrderbookStatsEvidence | null
+  aiCouncilLlmDebates?: AiCouncilLlmUsageRow[]
 }
 
 export interface ResolvedJobEvidence {
@@ -133,9 +135,9 @@ export function deriveBasicJobStatus(
 }
 
 export interface VietnamMarketSessionState {
-  dateKey: string // YYYY-MM-DD
+  dateKey: string
   isWeekday: boolean
-  isOpen: boolean // true if Mon-Fri between 09:00 and 15:00 ICT
+  isOpen: boolean
   minutesSinceMidnight: number
 }
 
@@ -159,7 +161,6 @@ export function getVietnamMarketSessionState(now: Date): VietnamMarketSessionSta
   const minutesSinceMidnight = hour * 60 + minute
 
   const isWeekday = weekday !== "Sat" && weekday !== "Sun"
-  // Market active trading session: 09:00 to 15:00 ICT (540 to 900 minutes)
   const isOpen = isWeekday && minutesSinceMidnight >= 9 * 60 && minutesSinceMidnight <= 15 * 60
 
   return {
@@ -170,6 +171,37 @@ export function getVietnamMarketSessionState(now: Date): VietnamMarketSessionSta
   }
 }
 
+function cronTimestamp(row: CronSnapshotRow) {
+  const value = row.lastStartedAt || row.lastFinishedAt
+  if (!value) return Number.NEGATIVE_INFINITY
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY
+}
+
+function latestMatchingCron(def: AdminJobDefinition, rows: CronSnapshotRow[]) {
+  const targetSchedulerName = def.schedulerName || def.key
+  return rows
+    .filter((row) => row.jobName === targetSchedulerName || getJobKeyForPgCron(row.jobName) === def.key)
+    .sort((a, b) => cronTimestamp(b) - cronTimestamp(a))[0]
+}
+
+function elapsedDurationMs(startedAt: string | null, finishedAt: string | null) {
+  if (!startedAt || !finishedAt) return null
+  const started = new Date(startedAt).getTime()
+  const finished = new Date(finishedAt).getTime()
+  if (!Number.isFinite(started) || !Number.isFinite(finished) || finished < started) return null
+  return finished - started
+}
+
+function summaryObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function summaryNumber(value: unknown) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : 0
+}
+
 export function resolveJobEvidence(
   def: AdminJobDefinition,
   raw: RawEvidenceSnapshot,
@@ -177,7 +209,6 @@ export function resolveJobEvidence(
 ): ResolvedJobEvidence {
   const currentTime = now.getTime()
 
-  // 1. Resolve Scheduler Status
   let schedulerStatus: AdminSchedulerStatus = "unknown"
   let schedulerLastStatus: string | null = null
   let schedulerLastStartedAt: string | null = null
@@ -189,10 +220,7 @@ export function resolveJobEvidence(
     schedulerStatus = "active"
   }
 
-  const targetSchedulerName = def.schedulerName || def.key
-  const matchedCron = raw.cronSnapshots.find(
-    (c) => c.jobName === targetSchedulerName || getJobKeyForPgCron(c.jobName) === def.key,
-  )
+  const matchedCron = latestMatchingCron(def, raw.cronSnapshots)
 
   if (matchedCron) {
     schedulerStatus = matchedCron.active ? "active" : "inactive"
@@ -201,7 +229,6 @@ export function resolveJobEvidence(
     schedulerLastFinishedAt = matchedCron.lastFinishedAt
   }
 
-  // 2. Resolve Execution Health from Canonical Evidence
   let executionStatus: AdminJobStatus = "unknown"
   let healthReason = "Chưa ghi nhận dữ liệu thực thi"
   let lastRunId: string | null = null
@@ -213,7 +240,6 @@ export function resolveJobEvidence(
   let lastErrorCode: string | null = null
   let lastErrorMessage: string | null = null
 
-  // Special Adapter: KFSP Rating Daily Sync
   if (def.key === "kfsp.rating_daily" && raw.kfspRatingRuns.length > 0) {
     const run = raw.kfspRatingRuns[0]
     lastRunId = run.id
@@ -274,7 +300,6 @@ export function resolveJobEvidence(
     }
   }
 
-  // Special Adapter: KFSP TTAI History Daily
   if (def.key === "kfsp.ttai_history" && raw.kfspTtaiRuns.length > 0) {
     const run = raw.kfspTtaiRuns[0]
     lastRunId = run.id
@@ -327,15 +352,15 @@ export function resolveJobEvidence(
     }
   }
 
-  // Special Adapter: Market 5m Sync / Market EOD Sync
   if ((def.key === "market.sync_5m" || def.key === "market.sync_eod") && raw.orderbookStats && raw.orderbookStats.totalSnapshots > 0) {
     const stats = raw.orderbookStats
-    lastStartedAt = stats.latestUpdatedAt
-    lastFinishedAt = stats.latestUpdatedAt
-    lastTrigger = "cron"
+    lastStartedAt = matchedCron?.lastStartedAt ?? stats.latestUpdatedAt
+    lastFinishedAt = matchedCron?.lastFinishedAt ?? stats.latestUpdatedAt
+    lastTrigger = matchedCron ? "cron" : "evidence"
     lastSummary = sanitizeAdminValue({
       session_date: stats.latestSessionDate,
       total_snapshots: stats.totalSnapshots,
+      evidence_updated_at: stats.latestUpdatedAt,
     }) as Record<string, unknown>
 
     const sessionState = getVietnamMarketSessionState(now)
@@ -355,7 +380,6 @@ export function resolveJobEvidence(
 
         if (def.key === "market.sync_5m") {
           if (sessionState.isOpen) {
-            // Market is actively trading (09:00-15:00 ICT Mon-Fri)
             if (stats.latestSessionDate !== sessionState.dateKey) {
               executionStatus = "stale"
               healthReason = `Chưa có snapshot cho phiên đang mở (${sessionState.dateKey}), dữ liệu từ ${stats.latestSessionDate}`
@@ -370,8 +394,6 @@ export function resolveJobEvidence(
               healthReason = `${stats.totalSnapshots}/100 snapshot sổ lệnh cho phiên ${stats.latestSessionDate}`
             }
           } else {
-            // Market is closed (evening, night, weekend)
-            // Off-session freshness allowance: 74 hours over weekend, 26 hours on weekdays
             const offSessionMaxAgeMs = !sessionState.isWeekday ? 74 * 3600_000 : 26 * 3600_000
             if (ageMs > offSessionMaxAgeMs) {
               executionStatus = "stale"
@@ -385,7 +407,6 @@ export function resolveJobEvidence(
             }
           }
         } else {
-          // market.sync_eod (14:50 ICT Mon-Fri, freshness 26h / 74h weekend)
           const eodMaxAgeMs = !sessionState.isWeekday ? 74 * 3600_000 : def.freshnessMinutes * 60_000
           if (sessionState.isWeekday && sessionState.minutesSinceMidnight >= 14 * 60 + 55 && stats.latestSessionDate !== sessionState.dateKey) {
             executionStatus = "stale"
@@ -422,7 +443,6 @@ export function resolveJobEvidence(
     }
   }
 
-  // Standard Adapter: System Job Runs (EOD Pipeline, Signals Daily, Manual Jobs)
   const matchingRun = raw.systemJobRuns.find((r) => r.job_key === def.key)
 
   if (matchingRun) {
@@ -439,15 +459,41 @@ export function resolveJobEvidence(
     lastTrigger = matchingRun.trigger
     lastStartedAt = matchingRun.started_at
     lastFinishedAt = matchingRun.finished_at ?? null
-    lastDurationMs = matchingRun.duration_ms ?? null
+    lastDurationMs = matchingRun.duration_ms ?? elapsedDurationMs(lastStartedAt, lastFinishedAt)
     lastSummary = sanitizeAdminValue(matchingRun.summary) as Record<string, unknown> | null
     lastErrorCode = matchingRun.error_code ?? null
     lastErrorMessage = matchingRun.error_message ?? null
 
-    if (matchingRun.status === "succeeded") {
+    const isIdempotentEodNoop = def.key === "qeoindex.eod_pipeline"
+      && matchingRun.status === "skipped"
+      && lastSummary?.notionAction === "stop"
+      && lastSummary?.marketCloseStatus === "succeeded"
+
+    if (isIdempotentEodNoop) {
+      executionStatus = deriveBasicJobStatus(
+        def,
+        { status: "succeeded", startedAt: lastStartedAt, finishedAt: lastFinishedAt },
+        now,
+      )
+      const scanDate = typeof lastSummary?.scanDate === "string" ? lastSummary.scanDate : null
       healthReason = executionStatus === "stale"
-        ? `Lần chạy thành công gần nhất đã quá hạn độ tươi`
-        : "Lần chạy gần nhất hoàn tất thành công"
+        ? "Phiên đã hoàn tất nhưng invocation no-op gần nhất đã quá hạn độ tươi"
+        : `Phiên${scanDate ? ` ${scanDate}` : ""} đã hoàn tất; invocation cuối là no-op idempotent`
+    } else if (matchingRun.status === "succeeded") {
+      const scanner = summaryObject(lastSummary?.scanner)
+      const scannerErrors = scanner ? summaryNumber(scanner.errors) : 0
+      const scannerCompleted = scanner ? summaryNumber(scanner.completed) : 0
+      const scannerSkipped = scanner ? summaryNumber(scanner.skipped) : 0
+      const scannerTotal = scannerCompleted + scannerSkipped + scannerErrors
+
+      if (def.key === "signals.daily" && executionStatus === "healthy" && scannerErrors > 0) {
+        executionStatus = "degraded"
+        healthReason = `${scannerCompleted}/${scannerTotal || scannerCompleted + scannerErrors} mã scanner hoàn tất, ${scannerErrors} lỗi`
+      } else {
+        healthReason = executionStatus === "stale"
+          ? "Lần chạy thành công gần nhất đã quá hạn độ tươi"
+          : "Lần chạy gần nhất hoàn tất thành công"
+      }
     } else if (matchingRun.status === "failed") {
       healthReason = `Thất bại: ${matchingRun.error_message || matchingRun.error_code || "Lỗi thực thi"}`
     } else if (matchingRun.status === "running") {
