@@ -1,4 +1,5 @@
 import { runQeoIndexEodPhase } from "@/lib/admin/job-phase-telemetry"
+import { loadPersistentCouncilEodSnapshots } from "@/lib/ai-council-eod-market"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { beginWyckoffV2NotionRun } from "@/lib/wyckoff-v2-notion-staging"
 import { loadWyckoffV2Universe } from "@/lib/wyckoff-v2-universe-source"
@@ -43,25 +44,12 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
         throw Object.assign(new Error(`Historical Top100 rating universe incomplete for ${expectedSessionDate}: ${tickers.length}/100`), { code: "EOD_NOT_READY" })
       }
 
-      const snapshots = await supabase
-        .from("stock_orderbook_snapshots")
-        .select("symbol,session_date,updated_at")
-        .eq("session_date", expectedSessionDate)
-        .in("symbol", tickers)
-      if (snapshots.error) throw new Error(`Load historical final EOD market snapshots failed: ${snapshots.error.message}`)
-
-      const cutoff = new Date(`${expectedSessionDate}T07:45:00.000Z`).getTime()
-      const fresh = new Set(
-        (snapshots.data || [])
-          .filter((row) => {
-            if (String(row.session_date || "") !== expectedSessionDate || !row.updated_at) return false
-            const updatedAt = new Date(String(row.updated_at)).getTime()
-            return Number.isFinite(updatedAt) && updatedAt >= cutoff
-          })
-          .map((row) => String(row.symbol || "").trim().toUpperCase()),
-      )
-      if (fresh.size !== tickers.length) {
-        throw Object.assign(new Error(`Historical final EOD market snapshots incomplete for ${expectedSessionDate}: ${fresh.size}/${tickers.length}`), { code: "EOD_NOT_READY" })
+      const persistentMarket = await loadPersistentCouncilEodSnapshots(supabase, tickers, expectedSessionDate)
+      if (persistentMarket.snapshots.length !== tickers.length) {
+        throw Object.assign(
+          new Error(`Historical market_ohlcv_history incomplete for ${expectedSessionDate}: ${persistentMarket.snapshots.length}/${tickers.length}; missing=${persistentMarket.missingTickers.join(",") || "none"}`),
+          { code: "EOD_NOT_READY" },
+        )
       }
 
       const selection = await loadWyckoffV2Universe()
@@ -71,7 +59,7 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
         runKey,
         scanDate,
         startedAt: startedAtIso,
-        providerSummary: "QeoIndex historical EOD v2 preflight; persistent OHLCV refresh pending.",
+        providerSummary: "QeoIndex historical EOD v2 preflight; persistent OHLCV recovery source verified.",
       })
 
       return {
@@ -86,7 +74,9 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
           expectedSessionDate,
           ratingDate: expectedSessionDate,
           ratingTickers: tickers,
-          freshMarketCount: fresh.size,
+          freshMarketCount: persistentMarket.snapshots.length,
+          latestMarketUpdatedAt: persistentMarket.latestUpdatedAt,
+          source: "persistent_ohlcv" as const,
         },
       }
     },
@@ -97,6 +87,7 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
       rankWarnings: result.rankWarnings.slice(0, 10),
       notionAction: result.notionAction,
       freshMarketCount: result.market.freshMarketCount,
+      marketSource: result.market.source,
       historicalBackfill: true,
     }),
   })
