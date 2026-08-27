@@ -1,5 +1,6 @@
 import { sleep } from "workflow"
 
+import { runEodBackfillReadyStep } from "@/lib/qeoindex-eod-backfill-ready-step"
 import { failQeoIndexEodRunStep } from "@/lib/qeoindex-eod-failure-step"
 import {
   runNotionStagingBatchStep,
@@ -44,21 +45,29 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
 
   const runId = await startQeoIndexEodRunStep(startedAtIso)
   try {
-    let ready: Awaited<ReturnType<typeof runEodReadyStep>> | null = null
-    for (let attempt = 1; attempt <= 4; attempt += 1) {
-      try {
-        ready = await runEodReadyStep(runId, startedAtIso)
-        break
-      } catch (error) {
-        if (!isEodNotReady(error) || attempt === 4) throw error
-        await sleep(retryAt(startedAtIso, attempt))
+    const historicalBackfill = vietnamDateKey(startedAtIso) !== vietnamDateKey(new Date().toISOString())
+    let ready:
+      | Awaited<ReturnType<typeof runEodReadyStep>>
+      | Awaited<ReturnType<typeof runEodBackfillReadyStep>>
+      | null = null
+
+    if (historicalBackfill) {
+      ready = await runEodBackfillReadyStep(runId, startedAtIso)
+    } else {
+      for (let attempt = 1; attempt <= 4; attempt += 1) {
+        try {
+          ready = await runEodReadyStep(runId, startedAtIso)
+          break
+        } catch (error) {
+          if (!isEodNotReady(error) || attempt === 4) throw error
+          await sleep(retryAt(startedAtIso, attempt))
+        }
       }
     }
     if (!ready) throw new Error("EOD_READY did not produce a pipeline context")
 
     const shouldBuild = ready.notionAction === "write"
     const shouldPublish = ready.notionAction !== "stop"
-    const historicalBackfill = vietnamDateKey(startedAtIso) !== vietnamDateKey(new Date().toISOString())
 
     const marketClose = await runMarketCloseCollectStep(runId, startedAtIso, !historicalBackfill)
     let history: OhlcvUniverseRefreshResult = {
