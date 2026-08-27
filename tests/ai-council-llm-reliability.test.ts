@@ -126,3 +126,28 @@ test("LLM runtime inspects incomplete_details and retries max-output truncation 
   assert.match(code, /maxOutputTokens: 1600/)
   assert.match(code, /maxOutputTokens: 2000/)
 })
+
+test("specialist validation failure gets one bounded evidenceRef repair retry", () => {
+  const code = readFileSync(new URL("../lib/ai-council-llm.ts", import.meta.url), "utf8")
+  const start = code.indexOf("async function settleRole")
+  const end = code.indexOf("function reasonCounts", start)
+  assert.ok(start >= 0 && end > start)
+  const block = code.slice(start, end)
+
+  assert.match(block, /VALIDATION_REPAIR/)
+  assert.match(block, /execute\(validationRepair/)
+  assert.match(block, /validateCouncilEvidenceRefs\(role, repairedResult\.payload\.evidenceRefs, packet\)/)
+  assert.match(code, /observedValue must contain ONLY the value for metricKey/i)
+  assert.match(code, /comparisons belong in interpretation/i)
+})
+
+test("invalid escalation never erases a previously validated initial Chair", () => {
+  const code = readFileSync(new URL("../lib/ai-council-llm.ts", import.meta.url), "utf8")
+  const start = code.indexOf('schemaName: "qeoindex_llm_escalation_chair"')
+  const end = code.indexOf("const audits =", start)
+  assert.ok(start >= 0 && end > start)
+  const block = code.slice(start, end)
+
+  assert.doesNotMatch(block, /if \(!validation\.valid\) \{[\s\S]{0,220}chair\s*=\s*null/)
+  assert.match(block, /chair = escalationResult\.payload/)
+})

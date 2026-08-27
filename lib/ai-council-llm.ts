@@ -365,6 +365,7 @@ const COMMON_INSTRUCTIONS = [
   "High liquidity or net flow does not prove institutional accumulation without price-volume confirmation.",
   "Missing or null indicators represent unknown information, not 0, 50, or neutral.",
   "Every quantitative claim must reference exact observed values in the packet with matching asOf via structured evidenceRefs (1-4 refs).",
+  "For each evidenceRef, observedValue must contain ONLY the value for metricKey, optionally followed by that metric's own display unit. Never include a second metric, comparison, commentary, semicolon, or labels such as vs/versus/so với in observedValue; comparisons belong in interpretation and require separate evidenceRefs.",
   "Separate observable evidence from inference; avoid unwarranted causal claims.",
   "Do not browse, invent facts, or inject external news, macro, corporate, or sector facts outside the packet.",
   "Do not reveal chain-of-thought. Return only concise conclusions strictly conforming to the requested schema.",
@@ -723,21 +724,90 @@ function auditFailure(role: CouncilLlmRole, config: CouncilLlmModelConfig, error
   }
 }
 
+function auditValidationFailure(
+  role: CouncilLlmRole,
+  result: OpenAiCallResult<unknown>,
+  error: unknown,
+) {
+  const audit = auditSuccess(role, result)
+  audit.ok = false
+  audit.error = errorMessage(error)
+  return audit
+}
+
+function addPriorCallUsage(audit: RoleCallAudit, prior: OpenAiCallResult<unknown>) {
+  audit.attemptedModels = [...prior.attemptedModels, ...audit.attemptedModels]
+  audit.fallbackUsed = prior.fallbackUsed || audit.fallbackUsed
+  audit.inputTokens += prior.inputTokens
+  audit.cachedInputTokens += prior.cachedInputTokens
+  audit.outputTokens += prior.outputTokens
+  audit.reasoningTokens += prior.reasoningTokens
+  audit.totalTokens += prior.totalTokens
+  audit.latencyMs += prior.latencyMs
+  audit.estimatedCostUsd = prior.estimatedCostUsd != null && audit.estimatedCostUsd != null
+    ? Number((prior.estimatedCostUsd + audit.estimatedCostUsd).toFixed(6))
+    : null
+  return audit
+}
+
+function validationRepairInstruction(role: CouncilLlmRole, errors: string[]) {
+  return [
+    `The previous ${role} payload failed strict evidenceRef validation: ${errors.join(" | ").slice(0, 1000)}`,
+    "Regenerate the full payload under the same schema and evidence only.",
+    "For each evidenceRef, metricKey must exist in observedIndicators and observedValue must contain ONLY the exact value for metricKey, optionally its own display unit.",
+    "Never put a second metric, comparison, commentary, semicolon, vs, versus, or so với inside observedValue; comparisons belong in interpretation and require separate evidenceRefs.",
+    "Use the exact matching asOf from the cited observed indicator. Do not invent new metric keys.",
+  ].join(" ")
+}
+
 async function settleRole<T extends { evidenceRefs?: LlmEvidenceRef[] }>(
   role: "bull" | "bear" | "risk",
   config: CouncilLlmModelConfig,
   fallbackModel: string,
   packet: AiCouncilEvidencePacketV2,
-  execute: () => Promise<OpenAiCallResult<T>>,
+  execute: (validationRepair?: string) => Promise<OpenAiCallResult<T>>,
 ): Promise<{ payload: T | null; audit: RoleCallAudit }> {
   try {
     const result = await execute()
     const validation = validateCouncilEvidenceRefs(role, result.payload.evidenceRefs, packet)
     if (!validation.valid) {
-      const audit = auditFailure(role, config, new Error(`Validation failed: ${validation.errors.join("; ")}`))
-      audit.attemptedModels = fallbackModel && fallbackModel !== config.model ? [config.model, fallbackModel] : [config.model]
-      audit.fallbackUsed = audit.attemptedModels.length > 1
-      return { payload: null, audit }
+      const validationRepair = `VALIDATION_REPAIR: ${validationRepairInstruction(role, validation.errors)}`
+      try {
+        const repairedResult = await execute(validationRepair)
+        const repairedValidation = validateCouncilEvidenceRefs(role, repairedResult.payload.evidenceRefs, packet)
+        if (!repairedValidation.valid) {
+          const audit = auditValidationFailure(
+            role,
+            repairedResult as OpenAiCallResult<unknown>,
+            new Error(`Validation failed after repair: ${repairedValidation.errors.join("; ")}`),
+          )
+          return {
+            payload: null,
+            audit: addPriorCallUsage(audit, result as OpenAiCallResult<unknown>),
+          }
+        }
+        const audit = auditSuccess(role, repairedResult as OpenAiCallResult<unknown>)
+        return {
+          payload: repairedResult.payload,
+          audit: addPriorCallUsage(audit, result as OpenAiCallResult<unknown>),
+        }
+      } catch (repairError) {
+        const audit = auditFailure(role, config, repairError)
+        audit.attemptedModels = fallbackModel && fallbackModel !== config.model
+          ? [...result.attemptedModels, config.model, fallbackModel]
+          : [...result.attemptedModels, config.model]
+        audit.fallbackUsed = result.fallbackUsed || audit.attemptedModels.length > result.attemptedModels.length + 1
+        audit.inputTokens += result.inputTokens
+        audit.cachedInputTokens += result.cachedInputTokens
+        audit.outputTokens += result.outputTokens
+        audit.reasoningTokens += result.reasoningTokens
+        audit.totalTokens += result.totalTokens
+        audit.latencyMs += result.latencyMs
+        audit.estimatedCostUsd = result.estimatedCostUsd != null && audit.estimatedCostUsd != null
+          ? Number((result.estimatedCostUsd + audit.estimatedCostUsd).toFixed(6))
+          : null
+        return { payload: null, audit }
+      }
     }
     return { payload: result.payload, audit: auditSuccess(role, result as OpenAiCallResult<unknown>) }
   } catch (error) {
@@ -921,32 +991,32 @@ async function runOneDebate(
   // Give structured reasoning roles enough headroom, then retry a primary model once
   // with a bounded larger budget only when incomplete_details says max_output_tokens.
   const [bullResult, bearResult, riskResult] = await Promise.all([
-    settleRole("bull", route.bull, route.fallbackModel, packet, () => callOpenAiStructured<LlmBullBearPayload>({
+    settleRole("bull", route.bull, route.fallbackModel, packet, (validationRepair) => callOpenAiStructured<LlmBullBearPayload>({
       model: route.bull.model,
       fallbackModel: route.fallbackModel,
       schemaName: "qeoindex_bull_case",
       schema: BULL_BEAR_SCHEMA,
-      input: buildRoleInput(packet, BULL_TASK),
+      input: buildRoleInput(packet, validationRepair ? `${BULL_TASK}\n${validationRepair}` : BULL_TASK),
       maxOutputTokens: 1400,
       reasoningEffort: route.bull.reasoningEffort,
       cacheKey,
     })),
-    settleRole("bear", route.bear, route.fallbackModel, packet, () => callOpenAiStructured<LlmBullBearPayload>({
+    settleRole("bear", route.bear, route.fallbackModel, packet, (validationRepair) => callOpenAiStructured<LlmBullBearPayload>({
       model: route.bear.model,
       fallbackModel: route.fallbackModel,
       schemaName: "qeoindex_bear_case",
       schema: BULL_BEAR_SCHEMA,
-      input: buildRoleInput(packet, BEAR_TASK),
+      input: buildRoleInput(packet, validationRepair ? `${BEAR_TASK}\n${validationRepair}` : BEAR_TASK),
       maxOutputTokens: 1400,
       reasoningEffort: route.bear.reasoningEffort,
       cacheKey,
     })),
-    settleRole("risk", route.risk, route.fallbackModel, packet, () => callOpenAiStructured<LlmRiskPayload>({
+    settleRole("risk", route.risk, route.fallbackModel, packet, (validationRepair) => callOpenAiStructured<LlmRiskPayload>({
       model: route.risk.model,
       fallbackModel: route.fallbackModel,
       schemaName: "qeoindex_risk_critic",
       schema: RISK_SCHEMA,
-      input: buildRoleInput(packet, RISK_TASK),
+      input: buildRoleInput(packet, validationRepair ? `${RISK_TASK}\n${validationRepair}` : RISK_TASK),
       maxOutputTokens: 1400,
       reasoningEffort: route.risk.reasoningEffort,
       cacheKey,
@@ -964,7 +1034,7 @@ async function runOneDebate(
 
   if (participantCount >= 2) {
     try {
-      const chairResult = await callOpenAiStructured<LlmChairPayload>({
+      let chairResult = await callOpenAiStructured<LlmChairPayload>({
         model: route.chair.model,
         fallbackModel: route.fallbackModel,
         schemaName: "qeoindex_llm_chair",
@@ -974,13 +1044,36 @@ async function runOneDebate(
         reasoningEffort: route.chair.reasoningEffort,
         cacheKey,
       })
-      const validation = validateCouncilEvidenceRefs("chair", chairResult.payload.evidenceRefs, packet)
+      let validation = validateCouncilEvidenceRefs("chair", chairResult.payload.evidenceRefs, packet)
+      let priorChairResult: OpenAiCallResult<LlmChairPayload> | null = null
+      if (!validation.valid) {
+        priorChairResult = chairResult
+        const repair = `VALIDATION_REPAIR: ${validationRepairInstruction("chair", validation.errors)}`
+        chairResult = await callOpenAiStructured<LlmChairPayload>({
+          model: route.chair.model,
+          fallbackModel: route.fallbackModel,
+          schemaName: "qeoindex_llm_chair",
+          schema: CHAIR_SCHEMA,
+          input: buildRoleInput(packet, `${CHAIR_TASK}\n${repair}`, participants),
+          maxOutputTokens: 1600,
+          reasoningEffort: route.chair.reasoningEffort,
+          cacheKey,
+        })
+        validation = validateCouncilEvidenceRefs("chair", chairResult.payload.evidenceRefs, packet)
+      }
       if (!validation.valid) {
         chair = null
-        chairAudit = auditFailure("chair", route.chair, new Error(`Validation failed: ${validation.errors.join("; ")}`))
+        chairAudit = auditValidationFailure(
+          "chair",
+          chairResult as OpenAiCallResult<unknown>,
+          new Error(`Validation failed after repair: ${validation.errors.join("; ")}`),
+        )
       } else {
         chair = chairResult.payload
         chairAudit = auditSuccess("chair", chairResult as OpenAiCallResult<unknown>)
+      }
+      if (priorChairResult) {
+        chairAudit = addPriorCallUsage(chairAudit, priorChairResult as OpenAiCallResult<unknown>)
       }
     } catch (error) {
       chairAudit = auditFailure("chair", route.chair, error)
@@ -996,8 +1089,9 @@ async function runOneDebate(
 
   if (escalationReason) {
     try {
-      const escalationResult = await callOpenAiStructured<LlmChairPayload>({
+      let escalationResult = await callOpenAiStructured<LlmChairPayload>({
         model: route.escalation.model,
+        fallbackModel: route.fallbackModel,
         schemaName: "qeoindex_llm_escalation_chair",
         schema: CHAIR_SCHEMA,
         input: buildRoleInput(packet, ESCALATION_TASK, { ...participants, initialChair: chair, escalationReason }),
@@ -1005,13 +1099,35 @@ async function runOneDebate(
         reasoningEffort: route.escalation.reasoningEffort,
         cacheKey,
       })
-      const validation = validateCouncilEvidenceRefs("chair_escalation", escalationResult.payload.evidenceRefs, packet)
+      let validation = validateCouncilEvidenceRefs("chair_escalation", escalationResult.payload.evidenceRefs, packet)
+      let priorEscalationResult: OpenAiCallResult<LlmChairPayload> | null = null
       if (!validation.valid) {
-        chair = null
-        escalationAudit = auditFailure("chair_escalation", route.escalation, new Error(`Validation failed: ${validation.errors.join("; ")}`))
+        priorEscalationResult = escalationResult
+        const repair = `VALIDATION_REPAIR: ${validationRepairInstruction("chair_escalation", validation.errors)}`
+        escalationResult = await callOpenAiStructured<LlmChairPayload>({
+          model: route.escalation.model,
+          fallbackModel: route.fallbackModel,
+          schemaName: "qeoindex_llm_escalation_chair",
+          schema: CHAIR_SCHEMA,
+          input: buildRoleInput(packet, `${ESCALATION_TASK}\n${repair}`, { ...participants, initialChair: chair, escalationReason }),
+          maxOutputTokens: 2000,
+          reasoningEffort: route.escalation.reasoningEffort,
+          cacheKey,
+        })
+        validation = validateCouncilEvidenceRefs("chair_escalation", escalationResult.payload.evidenceRefs, packet)
+      }
+      if (!validation.valid) {
+        escalationAudit = auditValidationFailure(
+          "chair_escalation",
+          escalationResult as OpenAiCallResult<unknown>,
+          new Error(`Validation failed after repair: ${validation.errors.join("; ")}`),
+        )
       } else {
         chair = escalationResult.payload
         escalationAudit = auditSuccess("chair_escalation", escalationResult as OpenAiCallResult<unknown>)
+      }
+      if (priorEscalationResult) {
+        escalationAudit = addPriorCallUsage(escalationAudit, priorEscalationResult as OpenAiCallResult<unknown>)
       }
     } catch (error) {
       escalationAudit = auditFailure("chair_escalation", route.escalation, error)
