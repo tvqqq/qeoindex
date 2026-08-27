@@ -41,3 +41,33 @@ export function formatAdminTime(value: string | number | Date) {
 export function formatAdminDate(value: string | number | Date) {
   return DATE_FORMATTER.format(asDate(value))
 }
+
+export function formatAdminDuration(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value) || value < 0) return "—"
+  if (value < 1000) return `${Math.round(value)}ms`
+
+  let seconds = Math.round(value / 1000)
+  const hours = Math.floor(seconds / 3600)
+  seconds -= hours * 3600
+  const minutes = Math.floor(seconds / 60)
+  seconds -= minutes * 60
+
+  const parts: string[] = []
+  if (hours > 0) parts.push(`${hours}h`)
+  if (minutes > 0 || hours > 0) parts.push(`${minutes}m`)
+  parts.push(`${seconds}s`)
+  return parts.join(" ")
+}
+
+export function formatAdminTokenCount(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value) || value < 0) return "—"
+  if (value >= 1_000_000) {
+    const formatted = (value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")
+    return `${formatted}M`
+  }
+  if (value >= 1_000) {
+    const formatted = (value / 1_000).toFixed(value >= 100_000 ? 1 : value >= 10_000 ? 1 : 2).replace(/\.0+$/, "")
+    return `${formatted}K`
+  }
+  return String(Math.round(value))
+}
