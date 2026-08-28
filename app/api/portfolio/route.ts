@@ -19,7 +19,7 @@ export async function GET() {
 
   const { data, error } = await auth.context.supabase
     .from("portfolios")
-    .select("id,user_id,name,description,is_default,sort_order,created_at,updated_at")
+    .select("id,user_id,name,description,initial_capital,is_default,sort_order,created_at,updated_at")
     .eq("user_id", auth.context.user.id)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true })
@@ -52,11 +52,20 @@ export async function POST(request: Request) {
     return err(`Tối đa ${MAX_PORTFOLIOS} danh mục đầu tư.`, 400)
   }
 
-  const body = await request.json().catch(() => null) as { name?: unknown; description?: unknown } | null
+  const body = (await request.json().catch(() => null)) as {
+    name?: unknown
+    description?: unknown
+    initial_capital?: unknown
+  } | null
   const name = String(body?.name ?? "").trim()
   if (!name || name.length > 80) {
     return err("Tên danh mục không hợp lệ (1-80 ký tự).", 400)
   }
+
+  const initial_capital =
+    body?.initial_capital != null && Number.isFinite(Number(body.initial_capital))
+      ? Math.max(0, Number(body.initial_capital))
+      : 0
 
   const { data, error } = await auth.context.supabase
     .from("portfolios")
@@ -64,10 +73,11 @@ export async function POST(request: Request) {
       user_id: auth.context.user.id,
       name,
       description: body?.description ? String(body.description).slice(0, 500) : null,
+      initial_capital,
       is_default: (count ?? 0) === 0,
       sort_order: count ?? 0,
     })
-    .select("id,user_id,name,description,is_default,sort_order,created_at,updated_at")
+    .select("id,user_id,name,description,initial_capital,is_default,sort_order,created_at,updated_at")
     .single()
 
   if (error || !data) {

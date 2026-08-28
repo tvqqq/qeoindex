@@ -228,24 +228,39 @@ export function PortfolioTransactionHistory({
                     </span>
                   </TableCell>
 
-                  {/* Ghi chú / Tags */}
-                  <TableCell className="py-0 px-2 max-w-xs truncate">
+                  {/* Ghi chú / Tags & Target/SL */}
+                  <TableCell className="py-0 px-2 max-w-xs">
                     <div className="flex flex-wrap items-center gap-1">
-                      {tx.tags && tx.tags.length > 0 && tx.tags.map((tag) => (
+                      {tx.setup_tags && tx.setup_tags.map((tag) => (
                         <span
-                          key={tag}
-                          className="inline-flex items-center rounded bg-white/5 px-1 py-0.2 text-[10px] text-[var(--color-muted-2)]"
+                          key={`s-${tag}`}
+                          className="inline-flex items-center rounded bg-purple-500/20 px-1.5 py-0.5 text-[9px] font-bold text-purple-300 border border-purple-500/30"
                         >
-                          #{tag}
+                          {tag}
                         </span>
                       ))}
-                      {tx.note && (
-                        <span className="truncate text-xs text-[var(--color-muted-2)]" title={tx.note}>
-                          {tx.note}
+                      {tx.mistake_tags && tx.mistake_tags.map((tag) => (
+                        <span
+                          key={`m-${tag}`}
+                          className="inline-flex items-center rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-bold text-rose-300 border border-rose-500/30"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                      {tx.target_price_1 != null && tx.target_price_1 > 0 && (
+                        <span className="font-ticker inline-flex items-center rounded bg-[var(--color-up)]/10 px-1 py-0.5 text-[9px] font-medium text-[var(--color-up)]">
+                          TP: {tx.target_price_1}
                         </span>
                       )}
-                      {!tx.note && (!tx.tags || tx.tags.length === 0) && (
-                        <span className="text-xs text-[var(--color-border)]">–</span>
+                      {tx.stop_loss_1 != null && tx.stop_loss_1 > 0 && (
+                        <span className="font-ticker inline-flex items-center rounded bg-[var(--color-down)]/10 px-1 py-0.5 text-[9px] font-medium text-[var(--color-down)]">
+                          SL: {tx.stop_loss_1}
+                        </span>
+                      )}
+                      {tx.note && (
+                        <span className="truncate text-xs text-[var(--color-muted-2)] max-w-[140px]" title={tx.note}>
+                          {tx.note}
+                        </span>
                       )}
                     </div>
                   </TableCell>

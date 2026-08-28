@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { computePortfolioPositions, type RawTransaction } from '../lib/portfolio/pnl.ts'
+import { computePortfolioPositions, calculatePositionSizing, type RawTransaction } from '../lib/portfolio/pnl.ts'
 
 test('AVCO P&L Engine: Single Buy transaction', () => {
   const txs: RawTransaction[] = [
@@ -109,8 +109,8 @@ test('AVCO P&L Engine: Partial Sell with Realized P&L', () => {
   const summary = computePortfolioPositions(txs)
   const pos = summary.positions[0]
   assert.equal(pos.openQty, 1000)
-  assert.equal(pos.avgCost, 25.0)
-  // Realized PnL = (30 - 25) * 1000 - 50 = 5000 - 50 = 4950 k₫
+  assert.equal(pos.avgCost, 25.0) // avgCost unchanged for remaining shares
+  // Realized PnL = (30.0 - 25.0) * 1000 - 50 = 5000 - 50 = 4950 k₫
   assert.equal(pos.realizedPnl, 4950)
   assert.equal(summary.totalRealizedPnl, 4950)
 })
@@ -135,9 +135,9 @@ test('AVCO P&L Engine: Cash Dividend reduces cost basis', () => {
       ticker: 'VNM',
       action: 'dividend_cash',
       quantity: 1000,
-      price: 2.0, // 2.0 k₫ / share dividend
-      fee: 0,
-      transaction_date: '2026-08-20',
+      price: 2.0, // 2.0 k₫/CP dividend = 2,000 VND/share
+      fee: 100.0, // 5% withholding tax = 100 k₫
+      transaction_date: '2026-08-15',
       note: 'Cash dividend 20%',
       tags: [],
       target_price: null,
@@ -148,11 +148,13 @@ test('AVCO P&L Engine: Cash Dividend reduces cost basis', () => {
   const summary = computePortfolioPositions(txs)
   const pos = summary.positions[0]
   assert.equal(pos.openQty, 1000)
-  // New total cost = 70,000 - 2,000 = 68,000 k₫ -> avg_cost = 68.0 k₫
-  assert.equal(pos.avgCost, 68.0)
+  // Net dividend = 1000 * 2.0 - 100 = 1900 k₫
+  // New total cost = 70000 - 1900 = 68100 k₫
+  // New avg cost = 68.1 k₫
+  assert.equal(pos.avgCost, 68.1)
 })
 
-test('AVCO P&L Engine: Stock Dividend increases shares with zero cost', () => {
+test('AVCO P&L Engine: Stock Dividend increases shares and dilutes avg cost', () => {
   const txs: RawTransaction[] = [
     {
       id: '1',
@@ -174,7 +176,7 @@ test('AVCO P&L Engine: Stock Dividend increases shares with zero cost', () => {
       quantity: 200, // 20% bonus shares
       price: 0,
       fee: 0,
-      transaction_date: '2026-08-20',
+      transaction_date: '2026-08-15',
       note: 'Stock dividend 20%',
       tags: [],
       target_price: null,
@@ -185,6 +187,53 @@ test('AVCO P&L Engine: Stock Dividend increases shares with zero cost', () => {
   const summary = computePortfolioPositions(txs)
   const pos = summary.positions[0]
   assert.equal(pos.openQty, 1200)
-  // Total cost = 24,000 k₫ -> new avg_cost = 24,000 / 1200 = 20.0 k₫
+  // Total cost remains 24,000 k₫, new avg cost = 24000 / 1200 = 20.0 k₫
   assert.equal(pos.avgCost, 20.0)
+})
+
+test('AVCO P&L Engine: Multi-target, multi-stoploss and Setup/Mistake tags', () => {
+  const txs: RawTransaction[] = [
+    {
+      id: '1',
+      ticker: 'SSI',
+      action: 'buy',
+      quantity: 1000,
+      price: 32.0,
+      fee: 15.0,
+      transaction_date: '2026-08-01',
+      note: 'Breakout vượt nền',
+      tags: [],
+      setup_tags: ['Breakout KL lớn', 'Mô hình VCP'],
+      mistake_tags: [],
+      target_price_1: 38.0,
+      target_price_2: 42.0,
+      target_price_3: 45.0,
+      stop_loss_1: 29.5,
+      stop_loss_2: 28.0,
+    },
+  ]
+
+  const summary = computePortfolioPositions(txs)
+  const pos = summary.positions[0]
+  assert.equal(pos.targetPrice1, 38.0)
+  assert.equal(pos.targetPrice2, 42.0)
+  assert.equal(pos.targetPrice3, 45.0)
+  assert.equal(pos.stopLoss1, 29.5)
+  assert.equal(pos.stopLoss2, 28.0)
+  assert.deepEqual(pos.setupTags, ['Breakout KL lớn', 'Mô hình VCP'])
+})
+
+test('Position Sizing Engine: Fixed Fractional Account Risk calculation', () => {
+  // Account = 1 tỷ (1,000,000,000 VND), max risk = 1.5% NAV (= 15,000,000 VND), stoploss = 7.5%, price = 25.0 k₫
+  const sizing = calculatePositionSizing({
+    initialCapital: 1_000_000_000,
+    accountRiskPct: 1.5,
+    tradeStopLossPct: 7.5,
+    entryPrice: 25.0,
+  })
+
+  assert.equal(sizing.maxRiskAmount, 15_000_000)
+  assert.equal(sizing.allocatedCapital, 200_000_000) // 15,000,000 / 0.075 = 200 tr
+  assert.equal(sizing.allocationPctOfNav, 20.0) // 20% NAV
+  assert.equal(sizing.maxShares, 8000) // 200,000,000 / (25 * 1000) = 8,000 shares
 })

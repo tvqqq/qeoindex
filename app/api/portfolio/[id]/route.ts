@@ -13,12 +13,11 @@ function err(msg: string, status = 500) {
 
 function getPortfolioId(params: Record<string, string>) {
   const id = params.id ?? ""
-  // UUID format validation
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) return null
   return id
 }
 
-/** PATCH /api/portfolio/[id] — rename or update a portfolio */
+/** PATCH /api/portfolio/[id] — rename, update description or initial_capital */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -30,7 +29,11 @@ export async function PATCH(
   const portfolioId = getPortfolioId({ id })
   if (!portfolioId) return err("Portfolio ID không hợp lệ.", 400)
 
-  const body = await request.json().catch(() => null) as { name?: unknown; description?: unknown } | null
+  const body = (await request.json().catch(() => null)) as {
+    name?: unknown
+    description?: unknown
+    initial_capital?: unknown
+  } | null
   const updates: Record<string, unknown> = {}
 
   if (body?.name !== undefined) {
@@ -43,6 +46,13 @@ export async function PATCH(
     updates.description = body.description ? String(body.description).slice(0, 500) : null
   }
 
+  if (body?.initial_capital !== undefined) {
+    const cap = Number(body.initial_capital)
+    if (Number.isFinite(cap) && cap >= 0) {
+      updates.initial_capital = cap
+    }
+  }
+
   if (Object.keys(updates).length === 0) {
     return err("Không có thông tin cần cập nhật.", 400)
   }
@@ -52,7 +62,7 @@ export async function PATCH(
     .update(updates)
     .eq("id", portfolioId)
     .eq("user_id", auth.context.user.id)
-    .select("id,user_id,name,description,is_default,sort_order,created_at,updated_at")
+    .select("id,user_id,name,description,initial_capital,is_default,sort_order,created_at,updated_at")
     .single()
 
   if (error || !data) {
