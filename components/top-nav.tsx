@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { BrainCircuit, CandlestickChart, ChevronDown, Compass, GitCommit, LayoutDashboard, Sparkles, Terminal } from "lucide-react"
+import { BrainCircuit, Briefcase, CandlestickChart, ChevronDown, Compass, GitCommit, LayoutDashboard, Sparkles, Terminal } from "lucide-react"
 
 import { BRAND } from "@/lib/brand"
 
@@ -90,7 +90,7 @@ export function TopNav() {
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isBoardActive = pathname === "/"
-  const isInsightsActive = pathname.startsWith("/insights") || pathname.startsWith("/research")
+  const isPortfolioActive = pathname.startsWith("/portfolio")
   const isAdminActive = pathname.startsWith("/admin")
   const insightsActiveStyle = getInsightsActiveStyle(pathname)
 
@@ -158,6 +158,20 @@ export function TopNav() {
           >
             <LayoutDashboard className={`h-3.5 w-3.5 ${isBoardActive ? "text-emerald-300" : "text-slate-400 group-hover:text-purple-300"}`} />
             <span>Bảng điện</span>
+          </Link>
+
+          <Link
+            href="/portfolio"
+            prefetch={false}
+            className={[
+              "group flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors duration-200",
+              isPortfolioActive
+                ? "border-emerald-400/50 bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-emerald-500/25 font-bold text-emerald-300 shadow-[0_0_16px_rgba(34,201,138,0.28),0_0_10px_rgba(20,184,166,0.32),inset_0_1px_0_0_rgba(255,255,255,0.22)]"
+                : "border-transparent text-slate-300 hover:border-emerald-500/30 hover:bg-gradient-to-r hover:from-emerald-500/10 hover:via-teal-500/10 hover:to-transparent hover:text-white",
+            ].join(" ")}
+          >
+            <Briefcase className={`h-3.5 w-3.5 ${isPortfolioActive ? "text-emerald-300" : "text-slate-400 group-hover:text-emerald-300"}`} />
+            <span>Danh mục</span>
           </Link>
 
           <div
