@@ -232,6 +232,13 @@ export function WatchlistPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      <section className="relative overflow-hidden rounded-[28px] border border-[#b9ff66]/15 bg-[#0d130f] px-5 py-6 shadow-[0_18px_60px_rgba(0,0,0,0.24)] sm:px-7">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#b9ff66]/70 to-transparent" />
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#b9ff66]">Market radar</p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">Theo dõi cơ hội, không chạy theo nhiễu.</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#9ba79e]">Nhóm cổ phiếu theo thesis, ghi lại điều kiện chờ và đặt vùng giá cần chú ý.</p>
+      </section>
+
       {/* Watchlist selector row */}
       <div className="flex flex-wrap items-center gap-2">
         {watchlists.map((wl) => (
@@ -316,7 +323,8 @@ export function WatchlistPanel({
       </div>
 
       {/* Items table */}
-      <div className="rounded-xl border border-[var(--color-border)] bg-[#0b0f13] overflow-hidden">
+      <div className="overflow-x-auto rounded-2xl border border-white/[0.07] bg-[#0b0f0c]">
+        <div className="min-w-[620px]">
         {/* Table header */}
         <div className="grid grid-cols-[1fr_100px_100px_80px_60px] gap-2 border-b border-[var(--color-border)] px-4 py-2.5 text-xs font-medium text-[var(--color-muted-2)]">
           <span>Mã / Ghi chú</span>
@@ -353,6 +361,7 @@ export function WatchlistPanel({
             ))}
           </div>
         )}
+        </div>
       </div>
 
       {/* Add Ticker Dialog with Note & Price Alerts */}

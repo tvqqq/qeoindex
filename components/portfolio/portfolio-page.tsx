@@ -1,14 +1,13 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { Briefcase, Eye, RefreshCw, Plus } from "lucide-react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { Activity, Briefcase, Eye, RefreshCw, Plus, ShieldCheck, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { WatchlistPanel } from "@/components/portfolio/watchlist-panel"
 import { computePortfolioPositions, type RawTransaction } from "@/lib/portfolio/pnl"
+import { extractPortfolioMarketPrices, type PortfolioIntradayPayload } from "@/lib/portfolio/market-prices"
 
-// These components will be used once all subagents finish writing them
-// Using dynamic imports would prevent build errors during incremental development
 import dynamic from "next/dynamic"
 
 const PortfolioSummaryBar = dynamic(
@@ -84,6 +83,8 @@ export function PortfolioPage() {
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({})
   const [loadingPortfolio, setLoadingPortfolio] = useState(true)
   const [loadingTx, setLoadingTx] = useState(false)
+  const [portfolioError, setPortfolioError] = useState("")
+  const transactionRequestRef = useRef(0)
 
   // Watchlist state
   const [watchlists, setWatchlists] = useState<WatchlistMeta[]>([])
@@ -100,14 +101,17 @@ export function PortfolioPage() {
     async function loadPortfolios() {
       setLoadingPortfolio(true)
       try {
+        setPortfolioError("")
         const res = await fetch("/api/portfolio", { cache: "no-store", credentials: "same-origin" })
-        if (!res.ok) return
+        if (!res.ok) throw new Error("Không thể tải danh mục")
         const data = await res.json() as { ok: boolean; portfolios?: PortfolioMeta[] }
         if (data.ok && data.portfolios) {
           setPortfolios(data.portfolios)
           const def = data.portfolios.find((p) => p.is_default) ?? data.portfolios[0]
           if (def) setActivePortfolioId(def.id)
         }
+      } catch {
+        setPortfolioError("Không thể tải danh mục. Hãy thử làm mới lại.")
       } finally {
         setLoadingPortfolio(false)
       }
@@ -144,17 +148,21 @@ export function PortfolioPage() {
 
   // ── Load transactions when portfolio changes ──
   const loadTransactions = useCallback(async (portfolioId: string) => {
+    const requestId = ++transactionRequestRef.current
     setLoadingTx(true)
     try {
+      setPortfolioError("")
       const res = await fetch(`/api/portfolio/${portfolioId}/transactions`, {
         cache: "no-store",
         credentials: "same-origin",
       })
-      if (!res.ok) return
+      if (!res.ok) throw new Error("Không thể tải giao dịch")
       const data = await res.json() as { ok: boolean; transactions?: RawTransaction[] }
-      if (data.ok && data.transactions) setTransactions(data.transactions)
+      if (requestId === transactionRequestRef.current && data.ok && data.transactions) setTransactions(data.transactions)
+    } catch {
+      if (requestId === transactionRequestRef.current) setPortfolioError("Không thể tải lịch sử giao dịch của danh mục này.")
     } finally {
-      setLoadingTx(false)
+      if (requestId === transactionRequestRef.current) setLoadingTx(false)
     }
   }, [])
 
@@ -172,13 +180,9 @@ export function PortfolioPage() {
     if (!tickersKey) return
     fetch(`/api/market/intraday?tickers=${tickersKey}`, { cache: "no-store", credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: Record<string, { close?: number; last?: number }> | null) => {
-        if (!data) return
-        const prices: Record<string, number> = {}
-        for (const [ticker, quote] of Object.entries(data)) {
-          prices[ticker] = quote.close ?? quote.last ?? 0
-        }
-        setCurrentPrices(prices)
+      .then((data: PortfolioIntradayPayload | null) => {
+        if (!data?.histories) return
+        setCurrentPrices(extractPortfolioMarketPrices(data))
       })
       .catch(() => {})
   }, [tickersKey])
@@ -231,6 +235,15 @@ export function PortfolioPage() {
     setAddTxOpen(true)
   }, [])
 
+  const journalStats = useMemo(() => {
+    const riskControlled = positions.filter((position) => position.targetPrice != null && position.stopLoss != null).length
+    return {
+      tradeCount: transactions.length,
+      disciplinedCount: transactions.filter((tx) => tx.target_price != null || tx.stop_loss != null).length,
+      riskCoverage: positions.length > 0 ? Math.round((riskControlled / positions.length) * 100) : null,
+    }
+  }, [positions, transactions])
+
   // ── Tab styles ──
   function tabClass(tab: ActiveTab) {
     return [
@@ -242,10 +255,10 @@ export function PortfolioPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)]">
+    <div className="min-h-screen bg-[#070a08]">
       {/* Page header */}
-      <div className="sticky top-14 z-30 border-b border-[var(--color-border)] bg-[var(--color-background)]/95 px-4 py-3 sm:px-6">
-        <div className="mx-auto max-w-7xl">
+      <div className="sticky top-14 z-30 border-b border-white/[0.07] bg-[#070a08]/95 px-4 py-3 sm:px-6">
+        <div className="mx-auto max-w-[1440px]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Tabs */}
             <div className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-panel)] p-1">
@@ -287,18 +300,29 @@ export function PortfolioPage() {
       </div>
 
       {/* Page content */}
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:py-8">
         {/* ── PORTFOLIO TAB ── */}
         {activeTab === "portfolio" && (
-          <div className="space-y-5">
-            {/* Portfolio selector */}
-            <PortfolioSelector
-              portfolios={portfolios}
-              activeId={activePortfolioId ?? ""}
-              onSelect={setActivePortfolioId}
-              onCreate={handlePortfolioCreate}
-              onDelete={handlePortfolioDelete}
-            />
+          <div className="space-y-6">
+            <section className="relative overflow-hidden rounded-[28px] border border-[#b9ff66]/15 bg-[#0d130f] px-5 py-6 shadow-[0_18px_60px_rgba(0,0,0,0.24)] sm:px-7 lg:px-8">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#b9ff66]/70 to-transparent" />
+              <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div className="max-w-2xl">
+                  <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#b9ff66]">
+                    <Sparkles className="h-3.5 w-3.5" /> Portfolio command center
+                  </div>
+                  <h1 className="text-2xl font-semibold tracking-[-0.03em] text-white sm:text-3xl">Danh mục rõ ràng. Quyết định có kỷ luật.</h1>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-[#9ba79e]">Theo dõi hiệu suất, phân bổ vốn và nhật ký giao dịch trong cùng một không gian làm việc.</p>
+                </div>
+                <div className="min-w-0 lg:w-[420px]">
+                  <PortfolioSelector portfolios={portfolios} activeId={activePortfolioId ?? ""} onSelect={setActivePortfolioId} onCreate={handlePortfolioCreate} onDelete={handlePortfolioDelete} />
+                </div>
+              </div>
+            </section>
+
+            {portfolioError && (
+              <div role="alert" className="rounded-xl border border-[var(--color-down)]/30 bg-[var(--color-down)]/10 px-4 py-3 text-sm text-[var(--color-down)]">{portfolioError}</div>
+            )}
 
             {/* KPI summary */}
             <PortfolioSummaryBar
@@ -307,29 +331,32 @@ export function PortfolioPage() {
               loading={loadingPortfolio || loadingTx}
             />
 
-            {/* Positions table & Allocation chart */}
-            {positions.length > 0 && (
-              <PortfolioAllocationChart positions={positions} currentPrices={currentPrices} />
-            )}
-
-            <div>
-              <h2 className="mb-3 text-sm font-semibold text-[var(--color-foreground)]">
-                Vị thế đang mở
-              </h2>
-              <PortfolioPositionsTable
-                positions={positions}
-                currentPrices={currentPrices}
-                loading={loadingTx}
-                onAddTransaction={handleOpenAddTx}
-              />
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.75fr)]">
+              <div className="min-w-0 rounded-2xl border border-white/[0.07] bg-[#0b0f0c] p-4 sm:p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#758078]">Holdings</p><h2 className="mt-1 text-base font-semibold text-white">Vị thế đang mở</h2></div>
+                  <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-xs text-[#9ba79e]">{positions.length} mã</span>
+                </div>
+                <PortfolioPositionsTable positions={positions} currentPrices={currentPrices} loading={loadingTx} onAddTransaction={handleOpenAddTx} />
+              </div>
+              <div className="space-y-4">
+                {positions.length > 0 && <PortfolioAllocationChart positions={positions} currentPrices={currentPrices} />}
+                <div className="rounded-2xl border border-white/[0.07] bg-[#0b0f0c] p-5">
+                  <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#b9ff66]" /><h3 className="text-sm font-semibold text-white">Kỷ luật giao dịch</h3></div>
+                  <div className="mt-5 grid grid-cols-3 gap-2 text-center">
+                    <div><div className="font-ticker text-lg font-semibold text-white">{journalStats.tradeCount}</div><div className="mt-1 text-[10px] text-[#758078]">Giao dịch</div></div>
+                    <div><div className="font-ticker text-lg font-semibold text-[#b9ff66]">{journalStats.disciplinedCount}</div><div className="mt-1 text-[10px] text-[#758078]">Có kế hoạch</div></div>
+                    <div><div className="font-ticker text-lg font-semibold text-white">{journalStats.riskCoverage == null ? "—" : `${journalStats.riskCoverage}%`}</div><div className="mt-1 text-[10px] text-[#758078]">Có Target + SL</div></div>
+                  </div>
+                  <p className="mt-4 border-t border-white/[0.06] pt-3 text-[10px] leading-4 text-[#667169]">Chỉ đo mức độ hoàn thiện kế hoạch giao dịch; không suy diễn chất lượng hay xác suất thắng.</p>
+                </div>
+              </div>
             </div>
 
             {/* Transaction history */}
             {transactions.length > 0 && (
-              <div>
-                <h2 className="mb-3 text-sm font-semibold text-[var(--color-foreground)]">
-                  Lịch sử giao dịch
-                </h2>
+              <div className="rounded-2xl border border-white/[0.07] bg-[#0b0f0c] p-4 sm:p-5">
+                <div className="mb-4 flex items-center gap-2"><Activity className="h-4 w-4 text-[#b9ff66]" /><h2 className="text-base font-semibold text-white">Nhật ký giao dịch</h2></div>
                 <PortfolioTransactionHistory
                   transactions={transactions}
                   onDelete={handleTxDelete}

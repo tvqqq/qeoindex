@@ -3,7 +3,6 @@
 import React, { useMemo, memo } from "react"
 
 import { PortfolioPosition } from "@/lib/portfolio/pnl"
-import { cn } from "@/lib/utils"
 
 // Vibrant, distinct palette for dark financial UI
 const SLICE_COLORS = [
@@ -124,9 +123,9 @@ export const PortfolioAllocationChart = memo(function PortfolioAllocationChart({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-[var(--color-border)] bg-[#0b0f13] p-4">
+    <div className="flex flex-col gap-3 rounded-2xl border border-white/[0.07] bg-[#0b0f0c] p-5">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold text-white">Phân bổ tỷ trọng</h3>
+        <div><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#758078]">Allocation</p><h3 className="mt-1 text-sm font-semibold text-white">Phân bổ tỷ trọng</h3></div>
         <span className="font-ticker text-xs text-[var(--color-muted-2)]">
           {positions.length} mã ({formatVND(totalMarketValue)})
         </span>
