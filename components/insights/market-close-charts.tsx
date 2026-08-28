@@ -232,6 +232,34 @@ export function LiquidityLeadersChart({ leaders }: { leaders: MarketLeaderItem[]
   )
 }
 
+const impactConfig = {
+  impact: { label: "Tác động (điểm)", color: ACCENT },
+} satisfies ChartConfig
+
+export function IndexImpactChart({ leaders }: { leaders: MarketLeaderItem[] }) {
+  const data = leaders
+    .filter((item) => (item.category === "index_up" || item.category === "index_down") && item.estimatedIndexPoints != null)
+    .sort((left, right) => (right.estimatedIndexPoints ?? 0) - (left.estimatedIndexPoints ?? 0))
+    .map((item) => ({ ticker: item.ticker, impact: item.estimatedIndexPoints }))
+
+  if (!data.length) return <EmptyChart message="Chưa có dữ liệu đóng góp chỉ số." />
+
+  return (
+    <ChartContainer config={impactConfig} className="h-[300px] w-full" initialDimension={{ width: 560, height: 300 }}>
+      <BarChart accessibilityLayer data={data} layout="vertical" margin={{ left: 2, right: 12 }}>
+        <CartesianGrid horizontal={false} stroke={GRID} />
+        <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 10 }} />
+        <YAxis dataKey="ticker" type="category" width={52} axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 11, fontWeight: 800 }} />
+        <ReferenceLine x={0} stroke="rgba(148,163,184,.38)" />
+        <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
+        <Bar dataKey="impact" radius={[0, 5, 5, 0]}>
+          {data.map((item) => <Cell key={item.ticker} fill={(item.impact ?? 0) >= 0 ? POSITIVE : NEGATIVE} />)}
+        </Bar>
+      </BarChart>
+    </ChartContainer>
+  )
+}
+
 const historyConfig = {
   sentimentScore: { label: "Tâm lý", color: ACCENT },
   riskScore: { label: "Rủi ro", color: NEGATIVE },

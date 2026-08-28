@@ -91,6 +91,7 @@ test("Market Close dashboard uses stable accessible shadcn chart composition", (
     "SectorPerformanceChart",
     "SectorBreadthChart",
     "LiquidityLeadersChart",
+    "IndexImpactChart",
     "MarketHistoryChart",
     "MarketHistoryFlowChart",
   ]) {
@@ -99,8 +100,8 @@ test("Market Close dashboard uses stable accessible shadcn chart composition", (
 
   assert.match(charts, /ChartContainer/)
   assert.match(charts, /ChartTooltipContent/)
-  assert.ok((charts.match(/accessibilityLayer/g) || []).length >= 8, "charts must expose Recharts accessibility layers")
-  assert.ok((charts.match(/initialDimension=/g) || []).length >= 8, "charts must have stable initial dimensions")
+  assert.ok((charts.match(/accessibilityLayer/g) || []).length >= 9, "charts must expose Recharts accessibility layers")
+  assert.ok((charts.match(/initialDimension=/g) || []).length >= 9, "charts must have stable initial dimensions")
   assert.doesNotMatch(charts, /backdrop-blur|backdrop-filter|transition-all|filter:/i)
 })
 
@@ -113,6 +114,8 @@ test("Market Close presents every insight section on one tab-free dashboard", ()
   }
   assert.match(dashboard, /2xl:grid-cols-4/, "overview charts should use four columns on wide screens")
   assert.match(dashboard, /2xl:grid-cols-3/, "leader cards should use three columns on wide screens")
+  assert.match(dashboard, /data-stock-analytics-dashboard/, "the dashboard must preserve the analytics-first visual hierarchy")
+  assert.doesNotMatch(dashboard, /<Table\b/, "market-close analytics should prioritize charts over long data tables")
   assert.doesNotMatch(dashboard, /Dữ liệu thị trường cũ \(Stale\)/, "stale status belongs in the page header, not inside the market dashboard")
 })
 

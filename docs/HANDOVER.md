@@ -95,6 +95,8 @@ The two destructive market maintenance routes are POST-only. Do not restore unau
 
 The Market Close Insights subsystem provides an automated, factual post-market briefing after 15:15 ICT every trading session.
 
+The `/insights` presentation uses an analytics-first, tab-free hierarchy: market pulse and score tiles, four canonical index tiles, chart grids for breadth/MA/flows, sector performance and breadth, liquidity and index impact, then 20-session context. Long duplicate tables and narrative blocks are intentionally avoided; factual observations are capped as compact signal chips. The separate `Top cổ phiếu rating score` disclosure remains unchanged and closed by default. Keep chart containers dimensionally stable and do not add blur/filter/continuous motion around this screen.
+
 ### Core Architecture & Boundaries
 
 1. **Pipeline Phase**: `MARKET_CLOSE_COLLECT` executes as Phase 2 in `workflows/qeoindex-eod-pipeline.ts`. It extracts 4 canonical indexes (`VNINDEX`, `VN30`, `HNX`, `UPCOM`) scaled to billion VND (`1e9`) from TradingView and passes them in the sync payload.

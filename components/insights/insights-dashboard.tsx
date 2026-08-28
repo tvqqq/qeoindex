@@ -238,19 +238,22 @@ function MetricLabel({
 function ModuleCard({ module }: { module: InsightsModuleSummary }) {
   const Icon = MODULE_ICONS[module.key]
   return (
-    <Card className="group border border-white/[0.07] bg-panel/90 py-0 ring-0 transition-colors hover:border-brand/35">
-      <CardContent className="flex h-full flex-col p-5">
+    <Card className="group border border-white/[0.07] bg-[#0b111c] py-0 ring-0 transition-colors hover:border-cyan-300/25">
+      <CardContent className="flex h-full flex-col p-4">
         <div className="flex items-start justify-between gap-4">
-          <span className="flex size-11 items-center justify-center rounded-xl border border-brand/25 bg-brand/10 text-brand">
-            <Icon className="size-5" />
+          <span className="flex size-9 items-center justify-center rounded-lg border border-cyan-300/15 bg-cyan-300/[0.06] text-cyan-300">
+            <Icon className="size-4" />
           </span>
-          <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-[11px] text-muted-2">{module.status}</Badge>
+          <Badge variant="outline" className="border-white/[0.07] bg-white/[0.02] text-[10px] text-slate-500">{module.status}</Badge>
         </div>
-        <h3 className="mt-5 text-lg font-bold text-white">{module.label}</h3>
-        <p className="mt-2 text-2xl font-extrabold tracking-tight text-brand">{module.value}</p>
-        <p className="mt-2 min-h-10 text-sm leading-5 text-muted-2">{module.detail}</p>
-        <Link href={module.href} prefetch={false} className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-foreground transition-colors group-hover:text-brand">
-          Mở module <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+        <p className="mt-5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{module.label}</p>
+        <p className="mt-1 font-mono text-2xl font-black tracking-tight text-white">{module.value}</p>
+        <div className="mt-3 flex h-5 items-end gap-1" aria-hidden="true">
+          {[35, 58, 44, 76, 62, 88, 72, 96].map((height, index) => <span key={index} className="flex-1 rounded-sm bg-cyan-300/15" style={{ height: `${height}%` }} />)}
+        </div>
+        <p className="mt-3 line-clamp-2 min-h-8 text-xs leading-4 text-slate-500">{module.detail}</p>
+        <Link href={module.href} prefetch={false} className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-slate-300 transition-colors group-hover:text-cyan-300">
+          Mở workspace <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" />
         </Link>
       </CardContent>
     </Card>
@@ -1441,18 +1444,18 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
     <div className="min-h-screen bg-background text-foreground">
       <TopNav />
       <main className="mx-auto w-full max-w-[1880px] px-3 pb-16 pt-8 sm:px-5 lg:px-6">
-        <section className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+        <section className="flex flex-col justify-between gap-5 border-b border-white/[0.06] pb-6 lg:flex-row lg:items-end">
           <div>
             <div className="flex items-center gap-3.5 sm:gap-4">
-              <div className="relative flex size-10 sm:size-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/20 via-cyan-500/15 to-purple-500/20 shadow-[0_0_24px_-4px_rgba(34,201,138,0.45),inset_0_1px_0_rgba(255,255,255,0.22)] transition-transform duration-300 hover:scale-105">
-                <Sparkles className="relative size-5 sm:size-6 text-emerald-300" />
+              <div className="flex size-10 sm:size-12 shrink-0 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-300/[0.06]">
+                <Sparkles className="size-5 sm:size-6 text-cyan-300" />
               </div>
-              <h1 className="font-ticker text-3xl font-extrabold italic tracking-[-0.03em] text-white sm:text-4xl lg:text-5xl">
+              <h1 className="font-ticker text-3xl font-extrabold tracking-[-0.03em] text-white sm:text-4xl lg:text-5xl">
                 Insights thị trường
               </h1>
             </div>
             <p className="mt-2.5 max-w-3xl text-sm font-medium leading-6 text-muted-2 sm:text-base">
-              Tín hiệu đủ rõ để hành động, trước khi bảng giá đổi màu.
+              Market analytics trực quan: chỉ số, độ rộng, dòng tiền, nhóm ngành và cổ phiếu dẫn dắt.
             </p>
           </div>
           <div className="flex flex-col items-start gap-2.5 sm:items-end">
@@ -1460,7 +1463,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
               <CalendarDays className="size-4 text-emerald-400" />
               <span>{DATE_FORMAT.format(new Date(data.generatedAt))}</span>
             </div>
-            <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-panel px-3.5 py-2 text-xs text-muted-2">
+            <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-[#0b111c] px-3.5 py-2 text-xs text-slate-500">
               <Database className="size-3.5 text-brand" />
               <span>Supabase ratings · Notion research · Market feeds</span>
             </div>
@@ -1832,14 +1835,14 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
           </details>
         </section>
 
-        <section id="nghien-cuu" aria-labelledby="nghien-cuu-title" className="scroll-mt-32 pt-12">
+        <section id="nghien-cuu" aria-labelledby="nghien-cuu-title" className="scroll-mt-32 pt-10">
           <div className="space-y-8">
         <section>
           <div className="flex items-end justify-between gap-4">
             <div>
-              <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-300">Research workspace</div>
-              <h2 id="nghien-cuu-title" className="mt-2 text-2xl font-extrabold text-white sm:text-3xl">Khám phá Insights chuyên sâu</h2>
-              <p className="mt-2 text-sm font-medium text-muted-2">Tổng hợp trực tiếp từ các read-model hiện có của `/research`.</p>
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300/80">Research workspace</div>
+              <h2 id="nghien-cuu-title" className="mt-1 text-xl font-bold text-white sm:text-2xl">Phân tích chuyên sâu</h2>
+              <p className="mt-1 text-xs text-slate-500">Đi tiếp từ tín hiệu thị trường vào scanner, signals, FA và research.</p>
             </div>
           </div>
           <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
