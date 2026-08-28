@@ -387,7 +387,7 @@ export function PortfolioPage() {
       {/* Main Container */}
       <div className="mx-auto max-w-[1480px] px-4 py-5 sm:px-6 lg:py-6">
         {/* Top Header Card */}
-        <section className="mb-6 relative overflow-hidden rounded-3xl border border-[#2b2e40] bg-gradient-to-r from-[#0d1017] via-[#121520] to-[#0d1017] px-6 py-5 shadow-lg">
+        <section className="mb-6 relative rounded-3xl border border-[#2b2e40] bg-gradient-to-r from-[#0d1017] via-[#121520] to-[#0d1017] px-6 py-5 shadow-lg">
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-purple-400">
