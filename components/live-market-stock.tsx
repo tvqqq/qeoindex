@@ -202,7 +202,6 @@ export const LiveStockRow = memo(function LiveStockRow({
   onToggleWatch,
 }: LiveStockRowProps) {
   const tone = quoteTone(quote)
-  const text = quote ? marketToneText(tone) : "text-muted-2"
   const chart = showChart ? sparkData(history, quote?.price) : []
   const chartReference = sparkReference(chart, quote?.reference, stock.lastClose)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
@@ -270,7 +269,9 @@ export const LiveStockRow = memo(function LiveStockRow({
 
       <div className="flex min-w-0 flex-col items-end gap-1">
         <div
-          className={`max-w-full truncate font-mono text-[13px] font-bold leading-tight tracking-tight rounded px-0.5 transition-colors ${text} ${
+          className={`max-w-full truncate font-mono text-[13px] font-bold leading-tight tracking-tight rounded px-0.5 transition-colors ${
+            quote ? "text-white" : "text-muted-2"
+          } ${
             priceFlash === "up"
               ? "flash-text-up font-black"
               : priceFlash === "down"
@@ -308,7 +309,6 @@ export const LiveMoverCard = memo(function LiveMoverCard({
   onToggleWatch,
 }: LiveStockRowProps) {
   const tone = quoteTone(quote)
-  const text = quote ? marketToneText(tone) : "text-muted-2"
   const chart = showChart ? sparkData(history, quote?.price) : []
   const chartReference = sparkReference(chart, quote?.reference, stock.lastClose)
   const strongGainer = (quote?.changePercent ?? 0) >= 3
@@ -366,7 +366,9 @@ export const LiveMoverCard = memo(function LiveMoverCard({
       <div className="flex flex-col items-end gap-2 text-right">
         {quote ? <MarketChangePill value={quote.changePercent} tone={tone} title="% thay đổi so với giá tham chiếu (đóng cửa phiên trước)" /> : <span className="text-muted-2">—</span>}
         <div
-          className={`font-mono text-xs font-semibold rounded px-1 transition-colors ${text} ${
+          className={`font-mono text-sm font-bold rounded px-1 transition-colors ${
+            quote ? "text-white" : "text-muted-2"
+          } ${
             priceFlash === "up"
               ? "flash-text-up font-bold"
               : priceFlash === "down"

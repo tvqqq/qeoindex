@@ -53,7 +53,7 @@ export function StockCell({ stockKey }: { stockKey: string }) {
       </div>
 
       <div className="flex w-[68px] shrink-0 flex-col items-end gap-1.5">
-        <span className={`font-mono text-[11px] font-bold leading-tight ${text}`}>{formatPrice(s.price)}</span>
+        <span className={`font-mono text-[11px] font-bold leading-tight ${s.price ? "text-white" : "text-muted-2"}`}>{formatPrice(s.price)}</span>
         <MarketChangePill value={s.changePct} tone={tone} compact />
       </div>
     </button>

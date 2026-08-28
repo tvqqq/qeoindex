@@ -12,6 +12,7 @@ const cssSource = readFileSync(new URL("../app/globals.css", import.meta.url), "
 const intradayRouteSource = readFileSync(new URL("../app/api/market/intraday/route.ts", import.meta.url), "utf8")
 const boardTransitionSource = readFileSync(new URL("../components/smoothui/market-board-transition/index.tsx", import.meta.url), "utf8")
 const orderbookSource = readFileSync(new URL("../components/orderbook/live-orderbook-panel.tsx", import.meta.url), "utf8")
+const pillSource = readFileSync(new URL("../components/market-change-pill.tsx", import.meta.url), "utf8")
 
 function boardColumnsAt(width: number) {
   if (width >= 1280) return 6
@@ -176,3 +177,12 @@ test("ATO hides mini charts and DNSE OHLC updates only one 5-minute bucket", () 
   assert.match(orderbookSource, /const bucket = Math\.floor\(timestamp \/ 300\) \* 300/)
   assert.match(orderbookSource, /lastMiniChartBucket\.current === bucket/)
 })
+
+test("stock prices render in clean white with color-toned percentage pills", () => {
+  assert.match(stockSource, /quote \? "text-white" : "text-muted-2"/)
+  assert.match(pillSource, /text-\[12\.5px\]/)
+  assert.match(pillSource, /text-emerald-400 bg-emerald-500/)
+  assert.match(pillSource, /text-rose-400 bg-rose-500/)
+  assert.match(pillSource, /text-amber-400 bg-amber-500/)
+})
+

@@ -29,7 +29,7 @@ export function SidebarCell({ stockKey }: { stockKey: string }) {
         <Sparkline data={s.history} refValue={s.refPrice} color={color} width={62} height={26} strokeWidth={1.7} showDot />
       </div>
       <div className="flex w-[62px] shrink-0 flex-col items-end gap-1">
-        <span className={`font-mono text-[10px] font-bold leading-tight ${text}`}>{formatPrice(s.price)}</span>
+        <span className={`font-mono text-[10px] font-bold leading-tight ${s.price ? "text-white" : "text-muted-2"}`}>{formatPrice(s.price)}</span>
         <MarketChangePill value={s.changePct} tone={tone} compact />
       </div>
     </button>
