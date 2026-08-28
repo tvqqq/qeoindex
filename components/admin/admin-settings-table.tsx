@@ -54,29 +54,29 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
 
   return (
     <div className="space-y-4">
-      {/* Search and Filters */}
+      {/* Search and Group Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Tìm kiếm cài đặt theo key, nhãn..."
+            placeholder="Tìm kiếm cài đặt theo key, nhãn, mô tả..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-lg border border-white/[0.08] bg-[#0c1016] py-2 pl-9 pr-3 text-xs text-white placeholder-slate-400 focus:border-emerald-500/50 focus:outline-none"
+            className="w-full rounded-xl border border-white/[0.08] bg-[#0c1017] py-2 pl-10 pr-3.5 text-xs text-white placeholder-slate-400 focus:border-emerald-500/50 focus:outline-none"
           />
         </div>
 
-        <div className="flex overflow-x-auto gap-1">
+        <div className="flex overflow-x-auto gap-1.5">
           {groups.map((group) => (
             <button
               key={group}
               type="button"
               onClick={() => setSelectedGroup(group)}
-              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium uppercase transition-colors ${
+              className={`rounded-xl px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors ${
                 selectedGroup === group
-                  ? "border border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
-                  : "text-slate-400 hover:bg-white/[0.04] hover:text-white"
+                  ? "border border-emerald-500/40 bg-emerald-500/15 text-emerald-300 shadow-sm"
+                  : "border border-transparent text-slate-400 hover:border-white/[0.06] hover:bg-white/[0.03] hover:text-white"
               }`}
             >
               {group}
@@ -85,32 +85,32 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
         </div>
       </div>
 
-      {/* Global feedback message */}
+      {/* Global feedback messages */}
       {saveState?.error ? (
-        <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+        <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
           <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
           <span>{saveState.error}</span>
         </div>
       ) : null}
       {resetState?.error ? (
-        <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+        <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
           <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
           <span>{resetState.error}</span>
         </div>
       ) : null}
 
-      {/* Table */}
-      <div className="rounded-xl border border-white/[0.08] bg-[#0c1016] overflow-hidden">
+      {/* Modern Settings Data Table */}
+      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0c1017]">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="border-b border-white/[0.06] bg-[#080c10]">
+            <thead className="border-b border-white/[0.06] bg-[#080c11]">
               <tr className="text-[11px] font-medium text-slate-400">
-                <th className="px-4 py-3 font-medium">Khóa (Key) & Mô tả</th>
-                <th className="px-4 py-3 font-medium">Nhóm</th>
-                <th className="px-4 py-3 font-medium">Giá trị Hiện tại</th>
-                <th className="px-4 py-3 font-medium">Nguồn giải quyết</th>
-                <th className="px-4 py-3 font-medium">Phiên bản</th>
-                <th className="px-4 py-3 text-right font-medium">Thao tác</th>
+                <th className="px-4 py-3.5 font-medium">Khóa (Key) & Mô tả</th>
+                <th className="px-4 py-3.5 font-medium">Nhóm</th>
+                <th className="px-4 py-3.5 font-medium">Giá trị Hiện tại</th>
+                <th className="px-4 py-3.5 font-medium">Nguồn giải quyết</th>
+                <th className="px-4 py-3.5 font-medium">Phiên bản</th>
+                <th className="px-4 py-3.5 text-right font-medium">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.04]">
@@ -119,16 +119,16 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
                 const isEnv = item.resolvedFrom === "environment"
 
                 return (
-                  <tr key={item.key} className="text-slate-300 hover:bg-white/[0.02]">
+                  <tr key={item.key} className="text-slate-300 transition-colors hover:bg-white/[0.02]">
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-white">{item.key}</span>
                         {item.editable ? (
-                          <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1 py-0.2 text-[9px] font-bold uppercase text-emerald-400">
+                          <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.2 text-[9px] font-bold uppercase text-emerald-400">
                             RUNTIME
                           </span>
                         ) : (
-                          <span className="rounded border border-white/[0.1] bg-white/[0.04] px-1 py-0.2 text-[9px] font-bold uppercase text-slate-400">
+                          <span className="rounded-md border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.2 text-[9px] font-bold uppercase text-slate-400">
                             CHỈ ĐỌC
                           </span>
                         )}
@@ -137,17 +137,17 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
                     </td>
 
                     <td className="px-4 py-3.5">
-                      <span className="rounded border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium uppercase text-slate-300">
+                      <span className="rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium uppercase text-slate-300">
                         {item.group}
                       </span>
                     </td>
 
                     <td className="px-4 py-3.5 font-mono text-white">
                       <span
-                        className={`rounded px-1.5 py-0.5 ${
+                        className={`rounded-lg px-2 py-1 font-semibold ${
                           isRuntime
                             ? "border border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
-                            : "bg-white/[0.04] text-slate-200"
+                            : "border border-white/[0.06] bg-white/[0.03] text-slate-200"
                         }`}
                       >
                         {formatValue(item.value)}
@@ -156,12 +156,12 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
 
                     <td className="px-4 py-3.5">
                       <span
-                        className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                        className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                           isRuntime
-                            ? "border border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
+                            ? "border border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
                             : isEnv
                               ? "border border-purple-500/30 bg-purple-500/10 text-purple-300"
-                              : "border border-white/[0.08] bg-white/[0.04] text-slate-400"
+                              : "border border-white/[0.08] bg-white/[0.03] text-slate-400"
                         }`}
                       >
                         {item.resolvedFrom}
@@ -169,7 +169,13 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
                     </td>
 
                     <td className="px-4 py-3.5 font-mono text-slate-400">
-                      {item.version ? `v${item.version}` : "—"}
+                      {item.version ? (
+                        <span className="rounded bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-slate-300">
+                          v{item.version}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </td>
 
                     <td className="px-4 py-3.5 text-right">
@@ -178,7 +184,7 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
                           <button
                             type="button"
                             onClick={() => setEditingSetting(item)}
-                            className="flex items-center gap-1 rounded-lg border border-white/[0.1] bg-white/[0.03] px-2.5 py-1 text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300"
+                            className="flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/20"
                           >
                             <Edit2 className="h-3 w-3" />
                             <span>Sửa</span>
@@ -188,7 +194,7 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
                             <button
                               type="button"
                               onClick={() => setResettingSetting(item)}
-                              className="flex items-center gap-1 rounded-lg border border-white/[0.1] bg-white/[0.03] px-2.5 py-1 text-xs text-slate-300 transition-colors hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-300"
+                              className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-500/20"
                               title="Khôi phục về mặc định"
                             >
                               <RotateCcw className="h-3 w-3" />
@@ -197,7 +203,7 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
                           ) : null}
                         </div>
                       ) : (
-                        <span className="text-[11px] text-slate-400">Cố định</span>
+                        <span className="text-[11px] text-slate-500 font-mono">Bảo vệ</span>
                       )}
                     </td>
                   </tr>
@@ -210,17 +216,22 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
 
       {/* Edit Modal */}
       {editingSetting ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
-          <div className="w-full max-w-md rounded-xl border border-white/[0.12] bg-[#0d1218] p-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-white">Chỉnh sửa Cài đặt Runtime</h3>
-                <p className="font-mono text-xs text-emerald-400">{editingSetting.key}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/[0.12] bg-[#0c1017] p-5 sm:p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+                  <Edit2 className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Chỉnh sửa Cài đặt Runtime</h3>
+                  <p className="font-mono text-xs text-emerald-400">{editingSetting.key}</p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingSetting(null)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-white/[0.06] hover:text-white"
+                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -239,7 +250,7 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
                   <select
                     name="value"
                     defaultValue={String(editingSetting.value)}
-                    className="mt-1 w-full rounded-lg border border-white/[0.1] bg-[#070b10] px-3 py-2 text-xs text-white focus:border-emerald-500/50 focus:outline-none"
+                    className="mt-1.5 w-full rounded-xl border border-white/[0.1] bg-[#080c11] px-3.5 py-2.5 text-xs text-white focus:border-emerald-500/50 focus:outline-none"
                   >
                     <option value="true">true (Bật)</option>
                     <option value="false">false (Tắt)</option>
@@ -254,10 +265,10 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
                         : String(editingSetting.value ?? "")
                     }
                     required
-                    className="mt-1 w-full rounded-lg border border-white/[0.1] bg-[#070b10] px-3 py-2 font-mono text-xs text-white focus:border-emerald-500/50 focus:outline-none"
+                    className="mt-1.5 w-full rounded-xl border border-white/[0.1] bg-[#080c11] px-3.5 py-2.5 font-mono text-xs text-white focus:border-emerald-500/50 focus:outline-none"
                   />
                 )}
-                <p className="mt-1 text-[11px] text-slate-400">{editingSetting.description}</p>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">{editingSetting.description}</p>
               </div>
 
               <div>
@@ -271,22 +282,22 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
                   maxLength={240}
                   rows={3}
                   placeholder="Ví dụ: Tăng số lượng ticker debate trong phiên biến động..."
-                  className="mt-1 w-full rounded-lg border border-white/[0.1] bg-[#070b10] p-2.5 text-xs text-white placeholder-slate-400 focus:border-emerald-500/50 focus:outline-none"
+                  className="mt-1.5 w-full rounded-xl border border-white/[0.1] bg-[#080c11] p-3 text-xs text-white placeholder-slate-400 focus:border-emerald-500/50 focus:outline-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setEditingSetting(null)}
-                  className="rounded-lg border border-white/[0.1] px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/[0.04]"
+                  className="rounded-xl border border-white/[0.08] px-3.5 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.04]"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/20 px-4 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/20 px-4 py-2 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30 disabled:opacity-50"
                 >
                   {isSaving ? "Đang lưu..." : "Lưu Thay Đổi"}
                 </button>
@@ -298,17 +309,22 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
 
       {/* Reset Modal */}
       {resettingSetting ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
-          <div className="w-full max-w-md rounded-xl border border-white/[0.12] bg-[#0d1218] p-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-white">Khôi phục Cài đặt về Mặc định</h3>
-                <p className="font-mono text-xs text-amber-400">{resettingSetting.key}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/[0.12] bg-[#0c1017] p-5 sm:p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400">
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Khôi phục Cài đặt về Mặc định</h3>
+                  <p className="font-mono text-xs text-amber-400">{resettingSetting.key}</p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setResettingSetting(null)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-white/[0.06] hover:text-white"
+                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -318,7 +334,7 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
               <input type="hidden" name="key" value={resettingSetting.key} />
               <input type="hidden" name="expectedVersion" value={resettingSetting.version || 1} />
 
-              <p className="text-xs text-slate-300">
+              <p className="text-xs leading-relaxed text-slate-300">
                 Bạn có chắc chắn muốn xóa bản ghi đè runtime này và khôi phục về giá trị cấu hình mặc định từ mã nguồn hoặc biến môi trường?
               </p>
 
@@ -333,22 +349,22 @@ export function AdminSettingsTable({ settings }: AdminSettingsTableProps) {
                   maxLength={240}
                   rows={3}
                   placeholder="Ví dụ: Hoàn tất đợt kiểm thử, trả về cấu hình chuẩn..."
-                  className="mt-1 w-full rounded-lg border border-white/[0.1] bg-[#070b10] p-2.5 text-xs text-white placeholder-slate-400 focus:border-amber-500/50 focus:outline-none"
+                  className="mt-1.5 w-full rounded-xl border border-white/[0.1] bg-[#080c11] p-3 text-xs text-white placeholder-slate-400 focus:border-amber-500/50 focus:outline-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setResettingSetting(null)}
-                  className="rounded-lg border border-white/[0.1] px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/[0.04]"
+                  className="rounded-xl border border-white/[0.08] px-3.5 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.04]"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={isResetting}
-                  className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/20 px-4 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/30 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-300 transition-colors hover:bg-amber-500/30 disabled:opacity-50"
                 >
                   {isResetting ? "Đang khôi phục..." : "Xác nhận Reset"}
                 </button>

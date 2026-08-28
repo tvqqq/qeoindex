@@ -5,6 +5,8 @@ import Link from "next/link"
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock,
   ExternalLink,
   Layers,
@@ -57,9 +59,9 @@ const STATUS_BADGE_CONFIG: Record<
   },
   unknown: {
     bg: "bg-white/[0.04]",
-    border: "border-white/[0.1]",
+    border: "border-white/[0.08]",
     text: "text-slate-400",
-    label: "CHỜ CHẠY / UNKNOWN",
+    label: "CHỜ CHẠY",
     icon: Clock,
   },
 }
@@ -82,15 +84,17 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
   return (
     <section
       aria-label="Sơ đồ Lịch chạy Cron & Mindmap ICT"
-      className="space-y-4 rounded-xl border border-white/[0.08] bg-[#0c1016] p-4 sm:p-5"
+      className="space-y-4.5 rounded-2xl border border-white/[0.08] bg-[#0c1017] p-5 sm:p-6"
     >
       {/* Header & Controls */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.06] pb-4">
+      <div className="flex flex-col gap-3.5 border-b border-white/[0.06] pb-4.5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-emerald-400" />
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+              <Clock className="h-4 w-4" />
+            </div>
             <h3 className="text-sm font-bold text-white">Sơ đồ Lịch chạy Cron & Chu kỳ ICT (UTC+7)</h3>
-            <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-400">
+            <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-400">
               24H SPINE
             </span>
           </div>
@@ -101,29 +105,29 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
 
         <div className="flex flex-wrap items-center gap-2">
           {/* View mode toggle */}
-          <div className="flex rounded-lg border border-white/[0.08] bg-[#080c10] p-0.5 text-xs">
+          <div className="flex rounded-xl border border-white/[0.08] bg-[#080c11] p-1 text-xs">
             <button
               type="button"
               onClick={() => setViewMode("visual")}
-              className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors ${
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
                 viewMode === "visual"
-                  ? "bg-emerald-500/20 text-emerald-300 font-medium"
+                  ? "bg-emerald-500/20 text-emerald-300 shadow-sm"
                   : "text-slate-400 hover:text-white"
               }`}
             >
-              <Layers className="h-3 w-3" />
+              <Layers className="h-3.5 w-3.5" />
               <span>Sơ đồ</span>
             </button>
             <button
               type="button"
               onClick={() => setViewMode("table")}
-              className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors ${
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
                 viewMode === "table"
-                  ? "bg-emerald-500/20 text-emerald-300 font-medium"
+                  ? "bg-emerald-500/20 text-emerald-300 shadow-sm"
                   : "text-slate-400 hover:text-white"
               }`}
             >
-              <ListOrdered className="h-3 w-3" />
+              <ListOrdered className="h-3.5 w-3.5" />
               <span>Bảng tuần tự</span>
             </button>
           </div>
@@ -143,10 +147,10 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
                 key={filter.id}
                 type="button"
                 onClick={() => setFilterMode(filter.id)}
-                className={`rounded-lg px-2.5 py-1 font-medium transition-colors ${
+                className={`rounded-xl px-3 py-1 text-xs font-medium transition-colors ${
                   filterMode === filter.id
-                    ? "border border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-                    : "text-slate-400 hover:bg-white/[0.04] hover:text-white"
+                    ? "border border-emerald-500/40 bg-emerald-500/15 font-semibold text-emerald-300"
+                    : "border border-transparent text-slate-400 hover:border-white/[0.06] hover:bg-white/[0.03] hover:text-white"
                 }`}
               >
                 {filter.label}
@@ -157,18 +161,18 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
       </div>
 
       {/* 24-Hour ICT Time Spine Axis */}
-      <div className="rounded-lg border border-white/[0.06] bg-[#080c10] p-3 text-[11px]">
-        <div className="flex items-center justify-between text-slate-400 font-mono">
+      <div className="rounded-xl border border-white/[0.06] bg-[#080c11] p-3.5 text-[11px]">
+        <div className="flex items-center justify-between font-mono text-slate-400">
           <span>00:00 ICT</span>
-          <span className="text-emerald-400/80 font-bold">07:00 (Signals & KFSP)</span>
+          <span className="font-bold text-emerald-400/90">07:00 (Signals & KFSP)</span>
           <span>09:00 (Mở phiên)</span>
           <span>11:30 (Nghỉ trưa)</span>
           <span>13:00 (Chiều)</span>
-          <span className="text-emerald-400/90 font-bold">14:45 (ATC & EOD Sync)</span>
-          <span className="text-sky-400/90 font-bold">15:15 (EOD Chain)</span>
+          <span className="font-bold text-emerald-400">14:45 (ATC & EOD Sync)</span>
+          <span className="font-bold text-sky-400">15:15 (EOD Chain)</span>
           <span>24:00</span>
         </div>
-        <div className="relative mt-2 h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+        <div className="relative mt-2.5 h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
           {/* Market hours band: 09:00 to 14:45 = 37.5% to 61.46% */}
           <div
             className="absolute top-0 bottom-0 bg-emerald-500/20"
@@ -177,13 +181,13 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
           />
           {/* EOD sync point at 14:45: ~61.46% */}
           <div
-            className="absolute top-0 bottom-0 w-1 bg-emerald-400"
+            className="absolute top-0 bottom-0 w-1.5 bg-emerald-400"
             style={{ left: "61.46%" }}
             title="14:45 ICT: Market EOD Closing Orderbook Sync (ATC Close)"
           />
           {/* EOD Pipeline point at 15:15: ~63.5% */}
           <div
-            className="absolute top-0 bottom-0 w-1 bg-sky-400"
+            className="absolute top-0 bottom-0 w-1.5 bg-sky-400"
             style={{ left: "63.5%" }}
             title="15:15 ICT: QeoIndex Unified EOD Pipeline"
           />
@@ -200,20 +204,20 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
             return (
               <div
                 key={lane.id}
-                className="rounded-lg border border-white/[0.06] bg-[#080c10]/60 p-3.5 space-y-3"
+                className="space-y-3.5 rounded-xl border border-white/[0.06] bg-[#080c11]/80 p-4"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-white/[0.04] pb-2">
+                <div className="flex flex-col gap-1 border-b border-white/[0.04] pb-2.5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">{lane.title}</h4>
-                    <span className="rounded bg-white/[0.04] px-1.5 py-0.2 text-[10px] font-mono text-slate-400">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-white">{lane.title}</h4>
+                    <span className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-0.2 font-mono text-[10px] text-slate-300">
                       {laneNodes.length} tác vụ
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400">{lane.description}</p>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 lg:grid-cols-3">
                   {laneNodes.map((node) => (
                     <TimelineCard
                       key={node.key}
@@ -234,44 +238,44 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
         className={viewMode === "table" ? "block" : "sr-only"}
         aria-label="Danh sách tác vụ tuần tự chi tiết"
       >
-        <div className="overflow-x-auto rounded-lg border border-white/[0.06] bg-[#080c10]">
+        <div className="overflow-x-auto rounded-xl border border-white/[0.06] bg-[#080c11]">
           <table className="w-full text-left text-xs">
             <thead className="border-b border-white/[0.06] bg-[#05080c] text-[11px] font-medium text-slate-400">
               <tr>
-                <th className="px-3 py-2.5">Thời gian (ICT)</th>
-                <th className="px-3 py-2.5">Tác vụ</th>
-                <th className="px-3 py-2.5">Luồng / Scheduler</th>
-                <th className="px-3 py-2.5">Scheduler State</th>
-                <th className="px-3 py-2.5">Execution Evidence</th>
-                <th className="px-3 py-2.5">Chi tiết / Cảnh báo</th>
+                <th className="px-3.5 py-3">Thời gian (ICT)</th>
+                <th className="px-3.5 py-3">Tác vụ</th>
+                <th className="px-3.5 py-3">Luồng / Scheduler</th>
+                <th className="px-3.5 py-3">Scheduler State</th>
+                <th className="px-3.5 py-3">Execution Evidence</th>
+                <th className="px-3.5 py-3">Chi tiết / Cảnh báo</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.04] text-slate-300">
               {filteredNodes.map((node) => (
-                <tr key={node.key} className="hover:bg-white/[0.02]">
-                  <td className="px-3 py-2 font-mono text-white whitespace-nowrap">
+                <tr key={node.key} className="transition-colors hover:bg-white/[0.02]">
+                  <td className="whitespace-nowrap px-3.5 py-2.5 font-mono text-white">
                     <span className="font-bold">{node.timeIctLabel}</span>
                     <span className="ml-1 text-[10px] text-slate-400">({node.daysLabel})</span>
                   </td>
-                  <td className="px-3 py-2 font-mono font-medium text-white">
+                  <td className="px-3.5 py-2.5 font-mono font-medium text-white">
                     <Link
                       href={`/admin/jobs/${node.key}`}
                       prefetch={false}
-                      className="hover:text-emerald-400"
+                      className="hover:text-emerald-400 transition-colors"
                     >
                       {node.label}
                     </Link>
-                    <div className="text-[10px] text-slate-400 font-normal">{node.key}</div>
+                    <div className="font-mono text-[10px] font-normal text-slate-400">{node.key}</div>
                   </td>
-                  <td className="px-3 py-2 text-slate-300">
+                  <td className="px-3.5 py-2.5 text-slate-300">
                     <div className="font-mono text-[11px]">{node.provider}</div>
                     {node.schedulerName ? (
-                      <div className="text-[10px] text-slate-400 font-mono">cron: {node.schedulerName}</div>
+                      <div className="font-mono text-[10px] text-slate-400">cron: {node.schedulerName}</div>
                     ) : null}
                   </td>
-                  <td className="px-3 py-2 font-mono text-[11px]">
+                  <td className="px-3.5 py-2.5 font-mono text-[11px]">
                     <span
-                      className={`inline-block rounded px-1.5 py-0.5 text-[10px] uppercase ${
+                      className={`inline-block rounded-md px-2 py-0.5 text-[10px] uppercase font-bold ${
                         node.schedulerStatus === "active"
                           ? "bg-emerald-500/15 text-emerald-300"
                           : node.schedulerStatus === "unscheduled"
@@ -282,9 +286,9 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
                       {node.schedulerStatus}
                     </span>
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3.5 py-2.5">
                     <span
-                      className={`inline-block rounded border px-2 py-0.5 text-[10px] font-bold uppercase ${
+                      className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase ${
                         STATUS_BADGE_CONFIG[node.executionStatus]?.bg
                       } ${STATUS_BADGE_CONFIG[node.executionStatus]?.border} ${
                         STATUS_BADGE_CONFIG[node.executionStatus]?.text
@@ -293,10 +297,10 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
                       {STATUS_BADGE_CONFIG[node.executionStatus]?.label || node.executionStatus}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-[11px] text-slate-300">
+                  <td className="px-3.5 py-2.5 text-[11px] text-slate-300">
                     <div>{node.healthReason}</div>
                     {node.conflictWarning ? (
-                      <div className="mt-0.5 flex items-center gap-1 text-[10px] text-amber-400 font-medium">
+                      <div className="mt-0.5 flex items-center gap-1 font-medium text-amber-400 text-[10px]">
                         <AlertTriangle className="h-3 w-3 shrink-0" />
                         <span>{node.conflictWarning}</span>
                       </div>
@@ -326,7 +330,7 @@ function TimelineCard({
 
   return (
     <div
-      className={`rounded-lg border bg-[#0c1016] p-3.5 flex flex-col justify-between space-y-2.5 transition-colors ${
+      className={`flex flex-col justify-between space-y-3 rounded-2xl border bg-[#0c1017] p-4 transition-colors hover:border-white/[0.14] ${
         node.executionStatus === "failing"
           ? "border-rose-500/40"
           : node.conflictWarning
@@ -337,17 +341,17 @@ function TimelineCard({
       <div>
         {/* Top bar: Time, Frequency & Status Badge */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] font-bold text-emerald-300">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] font-bold text-emerald-300">
               {node.timeIctLabel}
             </span>
-            <span className="rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-mono text-slate-400">
+            <span className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 font-mono text-[10px] text-slate-400">
               {node.daysLabel}
             </span>
           </div>
 
           <span
-            className={`flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-bold uppercase ${config.bg} ${config.border} ${config.text}`}
+            className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${config.bg} ${config.border} ${config.text}`}
           >
             <StatusIcon className="h-3 w-3" />
             <span>{config.label}</span>
@@ -355,64 +359,65 @@ function TimelineCard({
         </div>
 
         {/* Job Identity */}
-        <div className="mt-2">
+        <div className="mt-2.5">
           <div className="flex items-center justify-between">
             <Link
               href={`/admin/jobs/${node.key}`}
               prefetch={false}
-              className="font-mono text-xs font-bold text-white hover:text-emerald-400 transition-colors flex items-center gap-1"
+              className="flex items-center gap-1 font-mono text-xs font-bold text-white transition-colors hover:text-emerald-400"
             >
               <span>{node.label}</span>
               <ExternalLink className="h-2.5 w-2.5 text-slate-400" />
             </Link>
           </div>
           <p className="mt-0.5 font-mono text-[10px] text-slate-400">{node.key}</p>
-          <p className="mt-1 text-[11px] text-slate-300 line-clamp-2">{node.description}</p>
+          <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-slate-300">{node.description}</p>
         </div>
 
         {/* Conflict warning banner */}
         {node.conflictWarning ? (
-          <div className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-300">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-400" />
+          <div className="mt-2.5 flex items-start gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] text-amber-300">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
             <div>
-              <div className="font-bold text-[10px] uppercase">Xung đột lịch chạy</div>
-              <div>{node.conflictWarning}</div>
+              <div className="text-[10px] font-bold uppercase">Xung đột lịch chạy</div>
+              <div className="text-[11px] leading-relaxed">{node.conflictWarning}</div>
             </div>
           </div>
         ) : null}
 
         {/* Execution evidence summary */}
-        <div className="mt-2.5 rounded-md border border-white/[0.04] bg-[#080c10] p-2 text-[11px]">
-          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mb-1">
+        <div className="mt-2.5 rounded-xl border border-white/[0.06] bg-[#080c11] p-2.5 text-[11px]">
+          <div className="mb-1 flex items-center justify-between font-mono text-[10px] text-slate-400">
             <span>Bằng chứng thực thi:</span>
             <span className="text-slate-300">{node.evidenceSource}</span>
           </div>
-          <div className="text-slate-200 font-medium">{node.healthReason}</div>
+          <div className="font-medium text-slate-200">{node.healthReason}</div>
         </div>
 
         {/* Special: QeoIndex EOD Pipeline 10 Dependency Phases */}
         {node.phases ? (
-          <div className="mt-2.5 rounded-md border border-sky-500/20 bg-sky-500/5 p-2.5">
+          <div className="mt-2.5 rounded-xl border border-sky-500/20 bg-sky-500/5 p-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-sky-300 flex items-center gap-1">
+              <span className="flex items-center gap-1 text-[11px] font-bold text-sky-300">
                 <Zap className="h-3 w-3" />
                 <span>10 Phân đoạn EOD tuần tự:</span>
               </span>
               <button
                 type="button"
                 onClick={onToggleEod}
-                className="text-[10px] font-mono text-sky-400 hover:underline"
+                className="flex items-center gap-0.5 font-mono text-[10px] text-sky-400 hover:underline"
               >
-                {expandedEod ? "Thu gọn" : "Chi tiết"}
+                <span>{expandedEod ? "Thu gọn" : "Chi tiết"}</span>
+                {expandedEod ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
               </button>
             </div>
 
             {expandedEod ? (
-              <div className="mt-2 grid grid-cols-2 gap-1 text-[10px] font-mono">
+              <div className="mt-2 grid grid-cols-2 gap-1.5 font-mono text-[10px]">
                 {node.phases.map((phase) => (
                   <div
                     key={phase.key}
-                    className="rounded bg-white/[0.03] px-1.5 py-0.5 text-slate-300 border border-white/[0.04]"
+                    className="rounded-lg border border-white/[0.04] bg-white/[0.03] px-2 py-1 text-slate-300"
                   >
                     {phase.label}
                   </div>
@@ -424,7 +429,7 @@ function TimelineCard({
       </div>
 
       {/* Footer: Scheduler vs Execution Separation */}
-      <div className="border-t border-white/[0.04] pt-2 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+      <div className="flex items-center justify-between border-t border-white/[0.06] pt-2.5 font-mono text-[10px] text-slate-400">
         <div>
           <span>Scheduler: </span>
           <span
@@ -444,7 +449,7 @@ function TimelineCard({
         <Link
           href={`/admin/jobs/${node.key}`}
           prefetch={false}
-          className="text-slate-400 hover:text-white transition-colors"
+          className="text-slate-400 transition-colors hover:text-emerald-400"
         >
           Lịch sử →
         </Link>

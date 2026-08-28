@@ -1,5 +1,18 @@
 import Link from "next/link"
-import { Activity, CheckCircle, FileText, KeyRound, Server, Settings, ShieldAlert, XCircle } from "lucide-react"
+import {
+  Activity,
+  ArrowUpRight,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  FileText,
+  GitBranch,
+  KeyRound,
+  Server,
+  Settings,
+  ShieldAlert,
+  XCircle,
+} from "lucide-react"
 
 import { formatAdminDateTime, formatAdminTime } from "@/lib/admin/time"
 import type { AdminSystemOverview } from "@/lib/admin/types"
@@ -14,33 +27,46 @@ export function AdminOverviewDashboard({ overview }: AdminOverviewDashboardProps
 
   const overrideCount = settings.filter((s) => s.hasOverride).length
   const envConfiguredCount = environment.filter((e) => e.isConfigured).length
+  const secretCount = environment.filter((e) => e.sensitivity === "secret").length
 
   return (
     <div className="space-y-6">
-      {/* Build and runtime banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#0c1016] px-4 py-3 text-xs text-slate-300">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-400">Environment:</span>
-            <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono font-medium text-emerald-400">
+      {/* System Infrastructure Banner */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/[0.08] bg-[#0c1017] p-4 text-xs text-slate-300">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2.5 w-2.5 items-center justify-center">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping opacity-75" />
+              <span className="absolute h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            </span>
+            <span className="font-semibold text-white">System Runtime:</span>
+            <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] font-bold uppercase text-emerald-300">
               {build.nodeEnv}
             </span>
           </div>
+
           {build.vercelEnv ? (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <span className="text-slate-400">Vercel:</span>
-              <span className="rounded border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 font-mono text-purple-300">
+              <span className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 font-mono text-[11px] font-medium text-purple-300">
                 {build.vercelEnv}
               </span>
             </div>
           ) : null}
-          <div className="flex items-center gap-1.5">
+
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-3.5 w-3.5 text-slate-400" />
             <span className="text-slate-400">Commit:</span>
-            <span className="font-mono text-slate-200">{build.commitSha.slice(0, 7)}</span>
+            <span className="rounded bg-white/[0.04] px-1.5 py-0.5 font-mono text-[11px] text-slate-200">
+              {build.commitSha.slice(0, 7)}
+            </span>
           </div>
         </div>
-        <div className="text-[11px] text-slate-400">
-          Làm mới lúc (ICT): <span className="font-mono text-slate-300">{formatAdminTime(overview.refreshedAt)}</span>
+
+        <div className="flex items-center gap-2 text-[11px] text-slate-400">
+          <Clock className="h-3.5 w-3.5 text-emerald-400" />
+          <span>Làm mới lúc (ICT):</span>
+          <span className="font-mono font-medium text-slate-200">{formatAdminTime(overview.refreshedAt)}</span>
         </div>
       </div>
 
@@ -56,21 +82,21 @@ export function AdminOverviewDashboard({ overview }: AdminOverviewDashboardProps
         <AdminStatCard
           label="Cài đặt Runtime"
           value={`${overrideCount} ghi đè`}
-          subValue={`${settings.length} cài đặt trong danh mục`}
+          subValue={`${settings.length} tham số trong danh mục`}
           icon={<Settings className="h-4 w-4" />}
           tone={overrideCount > 0 ? "cyan" : "default"}
         />
         <AdminStatCard
           label="Biến môi trường"
           value={`${envConfiguredCount}/${environment.length}`}
-          subValue={`${environment.filter((e) => e.sensitivity === "secret").length} secrets`}
+          subValue={`${secretCount} khóa bí mật được bảo vệ`}
           icon={<KeyRound className="h-4 w-4" />}
           tone="purple"
         />
         <AdminStatCard
           label="Nhật ký Audit"
-          value={`${audit.length} gần đây`}
-          subValue="Ghi nhận mọi thay đổi và thực thi"
+          value={`${audit.length} sự kiện`}
+          subValue="Ghi nhận mọi thay đổi tham số & run"
           icon={<FileText className="h-4 w-4" />}
           tone="default"
         />
@@ -79,13 +105,19 @@ export function AdminOverviewDashboard({ overview }: AdminOverviewDashboardProps
       {/* Sources Health and Quick Actions Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Source Health Check */}
-        <div className="rounded-xl border border-white/[0.08] bg-[#0c1016] p-4 lg:col-span-2">
-          <div className="mb-4 flex items-center justify-between border-b border-white/[0.06] pb-3">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-white">
-              <Server className="h-4 w-4 text-emerald-400" />
-              Tình trạng Nguồn dữ liệu & Hạ tầng
-            </h2>
-            <span className="text-xs text-slate-400">{sources.length} dịch vụ kết nối</span>
+        <div className="rounded-2xl border border-white/[0.08] bg-[#0c1017] p-5 lg:col-span-2">
+          <div className="mb-4 flex items-center justify-between border-b border-white/[0.06] pb-3.5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+                <Server className="h-3.5 w-3.5" />
+              </div>
+              <h2 className="text-sm font-bold text-white">
+                Hạ tầng & Nguồn Dữ liệu Kết nối
+              </h2>
+            </div>
+            <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-0.5 text-[10px] font-medium text-slate-400">
+              {sources.length} Dịch vụ tích hợp
+            </span>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -94,20 +126,24 @@ export function AdminOverviewDashboard({ overview }: AdminOverviewDashboardProps
               return (
                 <div
                   key={source.name}
-                  className="flex items-start gap-3 rounded-lg border border-white/[0.06] bg-[#080c10] p-3"
+                  className="flex items-start gap-3 rounded-xl border border-white/[0.06] bg-[#080c11] p-3.5 transition-colors hover:border-white/[0.1]"
                 >
                   <div className="mt-0.5">
                     {isHealthy ? (
-                      <CheckCircle className="h-4 w-4 text-emerald-400" />
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      </div>
                     ) : (
-                      <XCircle className="h-4 w-4 text-amber-400" />
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
+                        <XCircle className="h-3.5 w-3.5" />
+                      </div>
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-white">{source.name}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-xs font-semibold text-slate-100">{source.name}</span>
                       <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                        className={`rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
                           isHealthy
                             ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                             : "border border-amber-500/30 bg-amber-500/10 text-amber-400"
@@ -117,7 +153,7 @@ export function AdminOverviewDashboard({ overview }: AdminOverviewDashboardProps
                       </span>
                     </div>
                     {source.message ? (
-                      <p className="mt-1 text-[11px] text-slate-400">{source.message}</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{source.message}</p>
                     ) : null}
                   </div>
                 </div>
@@ -126,112 +162,146 @@ export function AdminOverviewDashboard({ overview }: AdminOverviewDashboardProps
           </div>
         </div>
 
-        {/* Quick Links */}
-        <div className="rounded-xl border border-white/[0.08] bg-[#0c1016] p-4">
-          <h2 className="mb-4 border-b border-white/[0.06] pb-3 text-sm font-bold text-white">
-            Điều hướng nhanh
-          </h2>
-          <div className="space-y-2">
+        {/* Quick Operations Links */}
+        <div className="rounded-2xl border border-white/[0.08] bg-[#0c1017] p-5">
+          <div className="mb-4 border-b border-white/[0.06] pb-3.5">
+            <h2 className="text-sm font-bold text-white">
+              Điều hướng Chức năng
+            </h2>
+            <p className="mt-0.5 text-[11px] text-slate-400">Truy cập nhanh các phân hệ quản trị</p>
+          </div>
+
+          <div className="space-y-2.5">
             <Link
               href="/admin/settings"
               prefetch={false}
-              className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-[#080c10] p-3 text-xs text-slate-200 transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:text-emerald-300"
+              className="group flex items-center justify-between rounded-xl border border-white/[0.06] bg-[#080c11] p-3 text-xs text-slate-200 transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:text-emerald-300"
             >
-              <div className="flex items-center gap-2.5">
-                <Settings className="h-4 w-4 text-slate-400" />
-                <span className="font-medium">Quản lý Cài đặt Runtime</span>
+              <div className="flex items-center gap-3">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-400 transition-colors group-hover:border-emerald-500/30 group-hover:bg-emerald-500/10 group-hover:text-emerald-400">
+                  <Settings className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <div className="font-semibold">Cài đặt Runtime</div>
+                  <div className="text-[10px] text-slate-400">Tham số LLM, batch size, threshold</div>
+                </div>
               </div>
-              <span className="text-slate-400">→</span>
+              <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-400" />
             </Link>
 
             <Link
               href="/admin/jobs"
               prefetch={false}
-              className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-[#080c10] p-3 text-xs text-slate-200 transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:text-emerald-300"
+              className="group flex items-center justify-between rounded-xl border border-white/[0.06] bg-[#080c11] p-3 text-xs text-slate-200 transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:text-emerald-300"
             >
-              <div className="flex items-center gap-2.5">
-                <Activity className="h-4 w-4 text-slate-400" />
-                <span className="font-medium">Quản lý Tác vụ & Lịch Cron</span>
+              <div className="flex items-center gap-3">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-400 transition-colors group-hover:border-emerald-500/30 group-hover:bg-emerald-500/10 group-hover:text-emerald-400">
+                  <Activity className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <div className="font-semibold">Tác vụ & Cron Timeline</div>
+                  <div className="text-[10px] text-slate-400">Lịch 24H ICT, EOD pipeline, chạy thủ công</div>
+                </div>
               </div>
-              <span className="text-slate-400">→</span>
+              <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-400" />
             </Link>
 
             <Link
               href="/admin/environment"
               prefetch={false}
-              className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-[#080c10] p-3 text-xs text-slate-200 transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:text-emerald-300"
+              className="group flex items-center justify-between rounded-xl border border-white/[0.06] bg-[#080c11] p-3 text-xs text-slate-200 transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:text-emerald-300"
             >
-              <div className="flex items-center gap-2.5">
-                <ShieldAlert className="h-4 w-4 text-slate-400" />
-                <span className="font-medium">Kiểm tra Biến môi trường</span>
+              <div className="flex items-center gap-3">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-400 transition-colors group-hover:border-emerald-500/30 group-hover:bg-emerald-500/10 group-hover:text-emerald-400">
+                  <ShieldAlert className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <div className="font-semibold">Biến Môi trường & Bí mật</div>
+                  <div className="text-[10px] text-slate-400">Kiểm tra cấu hình API keys & Secrets</div>
+                </div>
               </div>
-              <span className="text-slate-400">→</span>
+              <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-400" />
             </Link>
 
             <Link
               href="/admin/audit"
               prefetch={false}
-              className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-[#080c10] p-3 text-xs text-slate-200 transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:text-emerald-300"
+              className="group flex items-center justify-between rounded-xl border border-white/[0.06] bg-[#080c11] p-3 text-xs text-slate-200 transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:text-emerald-300"
             >
-              <div className="flex items-center gap-2.5">
-                <FileText className="h-4 w-4 text-slate-400" />
-                <span className="font-medium">Xem Toàn bộ Audit Log</span>
+              <div className="flex items-center gap-3">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-400 transition-colors group-hover:border-emerald-500/30 group-hover:bg-emerald-500/10 group-hover:text-emerald-400">
+                  <FileText className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <div className="font-semibold">Nhật ký Audit</div>
+                  <div className="text-[10px] text-slate-400">Lịch sử thay đổi và kiểm toán vận hành</div>
+                </div>
               </div>
-              <span className="text-slate-400">→</span>
+              <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-400" />
             </Link>
           </div>
         </div>
       </div>
 
       {/* Recent Audit Log Trail */}
-      <div className="rounded-xl border border-white/[0.08] bg-[#0c1016] p-4">
-        <div className="mb-4 flex items-center justify-between border-b border-white/[0.06] pb-3">
-          <h2 className="flex items-center gap-2 text-sm font-bold text-white">
-            <FileText className="h-4 w-4 text-emerald-400" />
-            Nhật ký Hoạt động Gần đây
-          </h2>
+      <div className="rounded-2xl border border-white/[0.08] bg-[#0c1017] p-5">
+        <div className="mb-4 flex items-center justify-between border-b border-white/[0.06] pb-3.5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+              <FileText className="h-3.5 w-3.5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-white">
+                Nhật ký Hoạt động Gần đây
+              </h2>
+              <p className="text-[11px] text-slate-400">Audit trail các thay đổi tham số và thực thi thủ công</p>
+            </div>
+          </div>
           <Link
             href="/admin/audit"
             prefetch={false}
-            className="text-xs text-emerald-400 transition-colors hover:text-emerald-300"
+            className="flex items-center gap-1 text-xs font-semibold text-emerald-400 transition-colors hover:text-emerald-300"
           >
-            Xem tất cả →
+            <span>Xem tất cả</span>
+            <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
 
         {audit.length === 0 ? (
-          <p className="py-6 text-center text-xs text-slate-400">Chưa có hoạt động audit nào được ghi nhận.</p>
+          <p className="py-8 text-center text-xs text-slate-400">Chưa có hoạt động audit nào được ghi nhận.</p>
         ) : (
-          <div className="divide-y divide-white/[0.04] overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="text-[11px] font-medium text-slate-400">
-                  <th className="pb-2 font-medium">Hành động</th>
-                  <th className="pb-2 font-medium">Đối tượng</th>
-                  <th className="pb-2 font-medium">Lý do</th>
-                  <th className="pb-2 font-medium">Thời gian (ICT)</th>
-                  <th className="pb-2 text-right font-medium">Kết quả</th>
+                <tr className="border-b border-white/[0.06] text-[11px] font-medium text-slate-400">
+                  <th className="pb-3 pl-2 font-medium">Hành động</th>
+                  <th className="pb-3 font-medium">Đối tượng</th>
+                  <th className="pb-3 font-medium">Lý do thay đổi</th>
+                  <th className="pb-3 font-medium">Thời gian (ICT)</th>
+                  <th className="pb-3 pr-2 text-right font-medium">Kết quả</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.04]">
                 {audit.slice(0, 8).map((log) => (
-                  <tr key={log.id} className="text-slate-300">
-                    <td className="py-2.5">
-                      <span className="font-mono text-emerald-400">{log.action}</span>
+                  <tr key={log.id} className="text-slate-300 transition-colors hover:bg-white/[0.02]">
+                    <td className="py-3 pl-2">
+                      <span className="rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-400">
+                        {log.action}
+                      </span>
                     </td>
-                    <td className="py-2.5 font-medium text-white">{log.targetKey}</td>
-                    <td className="max-w-[280px] truncate py-2.5 text-slate-400" title={log.reason}>
+                    <td className="py-3 font-mono font-medium text-white">{log.targetKey}</td>
+                    <td className="max-w-[280px] truncate py-3 text-slate-400" title={log.reason}>
                       {log.reason}
                     </td>
-                    <td className="py-2.5 font-mono text-[11px] text-slate-400">
+                    <td className="py-3 font-mono text-[11px] text-slate-400">
                       {formatAdminDateTime(log.createdAt)}
                     </td>
-                    <td className="py-2.5 text-right">
+                    <td className="py-3 pr-2 text-right">
                       <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                        className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                           log.success
-                            ? "bg-emerald-500/10 text-emerald-400"
-                            : "bg-rose-500/10 text-rose-400"
+                            ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                            : "border border-rose-500/30 bg-rose-500/10 text-rose-400"
                         }`}
                       >
                         {log.success ? "THÀNH CÔNG" : "THẤT BẠI"}
