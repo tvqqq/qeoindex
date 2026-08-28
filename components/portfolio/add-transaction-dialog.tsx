@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
-import { PlusCircle, Loader2 } from "lucide-react"
+import React, { useState, useCallback } from "react"
+import { Loader2, PencilLine, PlusCircle } from "lucide-react"
 
 import {
   Dialog,
@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { TransactionAction } from "@/lib/portfolio/pnl"
+import { TransactionAction, type RawTransaction } from "@/lib/portfolio/pnl"
 
 interface AddTransactionDialogProps {
   portfolioId: string
@@ -27,6 +27,7 @@ interface AddTransactionDialogProps {
   onOpenChange: (open: boolean) => void
   onSuccess: () => void
   initialTicker?: string
+  transaction?: RawTransaction | null
 }
 
 const ACTION_OPTIONS: Array<{ value: TransactionAction; label: string }> = [
@@ -43,30 +44,21 @@ export function AddTransactionDialog({
   onOpenChange,
   onSuccess,
   initialTicker = "",
+  transaction = null,
 }: AddTransactionDialogProps) {
-  const [action, setAction] = useState<TransactionAction>("buy")
-  const [ticker, setTicker] = useState(initialTicker)
-  const [transactionDate, setTransactionDate] = useState(() => {
-    const today = new Date()
-    return today.toISOString().split("T")[0]
-  })
-  const [quantity, setQuantity] = useState<string>("")
-  const [price, setPrice] = useState<string>("")
-  const [fee, setFee] = useState<string>("0")
-  const [targetPrice, setTargetPrice] = useState<string>("")
-  const [stopLoss, setStopLoss] = useState<string>("")
-  const [note, setNote] = useState<string>("")
-  const [tagsInput, setTagsInput] = useState<string>("")
+  const [action, setAction] = useState<TransactionAction>(transaction?.action ?? "buy")
+  const [ticker, setTicker] = useState(transaction?.ticker ?? initialTicker)
+  const [transactionDate, setTransactionDate] = useState(transaction?.transaction_date ?? new Date().toISOString().split("T")[0])
+  const [quantity, setQuantity] = useState(transaction ? String(transaction.quantity) : "")
+  const [price, setPrice] = useState(transaction ? String(transaction.price) : "")
+  const [fee, setFee] = useState(transaction ? String(transaction.fee) : "0")
+  const [targetPrice, setTargetPrice] = useState(transaction?.target_price != null ? String(transaction.target_price) : "")
+  const [stopLoss, setStopLoss] = useState(transaction?.stop_loss != null ? String(transaction.stop_loss) : "")
+  const [note, setNote] = useState(transaction?.note ?? "")
+  const [tagsInput, setTagsInput] = useState(transaction?.tags?.join(", ") ?? "")
 
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string>("")
-
-  useEffect(() => {
-    if (open) {
-      if (initialTicker) setTicker(initialTicker)
-      setErrorMsg("")
-    }
-  }, [open, initialTicker])
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -111,8 +103,11 @@ export function AddTransactionDialog({
 
       setSubmitting(true)
       try {
-        const res = await fetch(`/api/portfolio/${portfolioId}/transactions`, {
-          method: "POST",
+        const endpoint = transaction
+          ? `/api/portfolio/${portfolioId}/transactions/${transaction.id}`
+          : `/api/portfolio/${portfolioId}/transactions`
+        const res = await fetch(endpoint, {
+          method: transaction ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
           body: JSON.stringify({
@@ -131,7 +126,7 @@ export function AddTransactionDialog({
 
         const data = await res.json()
         if (!res.ok || !data.ok) {
-          setErrorMsg(data.error || "Thêm giao dịch thất bại.")
+          setErrorMsg(data.error || (transaction ? "Cập nhật giao dịch thất bại." : "Thêm giao dịch thất bại."))
           return
         }
 
@@ -163,20 +158,23 @@ export function AddTransactionDialog({
       note,
       tagsInput,
       onSuccess,
+      transaction,
     ],
   )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md border-[var(--color-border)] bg-[#0b0f13] text-foreground">
+      <DialogContent className="max-w-lg border-[#26293a] bg-[#11131c] p-0 text-foreground shadow-[0_28px_90px_rgba(0,0,0,0.7)]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base font-semibold text-white">
-            <PlusCircle className="h-4 w-4 text-[var(--color-up)]" />
-            Thêm giao dịch mới
+          <DialogTitle className="flex items-center gap-3 border-b border-white/[0.07] px-6 py-5 text-base font-semibold text-white">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#7c5cff]/15 text-[#9b87ff]">
+              {transaction ? <PencilLine className="h-4 w-4" /> : <PlusCircle className="h-4 w-4" />}
+            </span>
+            <span>{transaction ? "Chỉnh sửa giao dịch" : "Thêm giao dịch mới"}</span>
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-3.5 pt-1">
+        <form onSubmit={handleSubmit} className="space-y-4 px-6 pb-6">
           {/* Loại giao dịch & Mã CP */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -367,7 +365,7 @@ export function AddTransactionDialog({
                   Đang lưu...
                 </>
               ) : (
-                "Lưu giao dịch"
+                transaction ? "Cập nhật giao dịch" : "Lưu giao dịch"
               )}
             </Button>
           </DialogFooter>

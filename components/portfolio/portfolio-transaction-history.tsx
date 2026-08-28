@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react"
 import Link from "next/link"
-import { Trash2, Check, X } from "lucide-react"
+import { Check, Pencil, Trash2, X } from "lucide-react"
 
 import { RawTransaction, TransactionAction } from "@/lib/portfolio/pnl"
 import { cn } from "@/lib/utils"
@@ -19,6 +19,7 @@ import {
 interface PortfolioTransactionHistoryProps {
   transactions: RawTransaction[]
   onDelete: (id: string) => Promise<void>
+  onEdit: (transaction: RawTransaction) => void
   loading?: boolean
 }
 
@@ -60,6 +61,7 @@ function ActionBadge({ action }: { action: TransactionAction }) {
 export function PortfolioTransactionHistory({
   transactions,
   onDelete,
+  onEdit,
   loading = false,
 }: PortfolioTransactionHistoryProps) {
   const [selectedTicker, setSelectedTicker] = useState<string>("all")
@@ -97,7 +99,7 @@ export function PortfolioTransactionHistory({
 
   if (!loading && transactions.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-[#0b0f13] py-8 text-center">
+      <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[#343748] bg-[#0d0f17] py-8 text-center">
         <p className="text-xs text-[var(--color-muted-2)]">Chưa có lịch sử giao dịch nào.</p>
       </div>
     )
@@ -114,7 +116,7 @@ export function PortfolioTransactionHistory({
             className={cn(
               "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
               selectedTicker === "all"
-                ? "border-[var(--color-up)]/40 bg-[var(--color-up)]/10 text-[var(--color-up)]"
+                ? "border-[#7c5cff]/40 bg-[#7c5cff]/15 text-[#a997ff]"
                 : "border-[var(--color-border)] text-[var(--color-muted-2)] hover:border-white/20 hover:text-white",
             )}
           >
@@ -130,7 +132,7 @@ export function PortfolioTransactionHistory({
                 className={cn(
                   "font-ticker rounded-full border px-2.5 py-1 text-xs font-medium uppercase transition-colors",
                   selectedTicker === t
-                    ? "border-[var(--color-up)]/40 bg-[var(--color-up)]/10 text-[var(--color-up)]"
+                    ? "border-[#7c5cff]/40 bg-[#7c5cff]/15 text-[#a997ff]"
                     : "border-[var(--color-border)] text-[var(--color-muted-2)] hover:border-white/20 hover:text-white",
                 )}
               >
@@ -142,7 +144,7 @@ export function PortfolioTransactionHistory({
       )}
 
       {/* Transactions table */}
-      <div className="rounded-xl border border-[var(--color-border)] bg-[#0b0f13] overflow-hidden">
+      <div className="overflow-x-auto rounded-2xl border border-[#252837] bg-[#0d0f17]">
         <Table>
           <TableHeader>
             <TableRow className="h-8 border-b border-[var(--color-border)] hover:bg-transparent">
@@ -248,7 +250,7 @@ export function PortfolioTransactionHistory({
                     </div>
                   </TableCell>
 
-                  {/* Actions (Delete) */}
+                  {/* Actions */}
                   <TableCell className="py-0 pl-2 pr-3 text-right">
                     {isConfirming ? (
                       <div className="flex items-center justify-end gap-1">
@@ -274,15 +276,14 @@ export function PortfolioTransactionHistory({
                         </Button>
                       </div>
                     ) : (
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => setDeleteConfirmId(tx.id)}
-                        className="h-6 w-6 text-[var(--color-muted-2)] hover:text-[var(--color-down)]"
-                        title="Xóa giao dịch"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon-xs" onClick={() => onEdit(tx)} className="h-7 w-7 text-slate-400 hover:bg-[#7c5cff]/10 hover:text-[#9b87ff]" title="Chỉnh sửa giao dịch" aria-label={`Chỉnh sửa giao dịch ${tx.ticker}`}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon-xs" onClick={() => setDeleteConfirmId(tx.id)} className="h-7 w-7 text-slate-400 hover:text-[var(--color-down)]" title="Xóa giao dịch" aria-label={`Xóa giao dịch ${tx.ticker}`}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>

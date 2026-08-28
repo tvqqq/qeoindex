@@ -166,11 +166,11 @@ export function TopNav() {
             className={[
               "group flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors duration-200",
               isPortfolioActive
-                ? "border-emerald-400/50 bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-emerald-500/25 font-bold text-emerald-300 shadow-[0_0_16px_rgba(34,201,138,0.28),0_0_10px_rgba(20,184,166,0.32),inset_0_1px_0_0_rgba(255,255,255,0.22)]"
+                ? "border-[#816cff]/50 bg-gradient-to-r from-[#7057ff]/25 via-[#35305f]/35 to-[#7057ff]/20 font-bold text-[#b4a6ff] shadow-[0_0_16px_rgba(124,92,255,0.22),inset_0_1px_0_0_rgba(255,255,255,0.16)]"
                 : "border-transparent text-slate-300 hover:border-emerald-500/30 hover:bg-gradient-to-r hover:from-emerald-500/10 hover:via-teal-500/10 hover:to-transparent hover:text-white",
             ].join(" ")}
           >
-            <Briefcase className={`h-3.5 w-3.5 ${isPortfolioActive ? "text-emerald-300" : "text-slate-400 group-hover:text-emerald-300"}`} />
+            <Briefcase className={`h-3.5 w-3.5 ${isPortfolioActive ? "text-[#a997ff]" : "text-slate-400 group-hover:text-emerald-300"}`} />
             <span>Danh mục</span>
           </Link>
 

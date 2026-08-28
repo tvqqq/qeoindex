@@ -382,7 +382,7 @@ export function PortfolioPositionsTable({
   // Empty state
   if (!loading && positions.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-[var(--color-border)] bg-[#0b0f13] py-12 text-center">
+      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-[#343748] bg-[#0d0f17] py-12 text-center">
         <p className="text-sm text-[var(--color-muted-2)]">Chưa có vị thế nào đang mở.</p>
         <Button
           variant="outline"
@@ -398,7 +398,7 @@ export function PortfolioPositionsTable({
   }
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[#0b0f13] overflow-hidden">
+    <div className="overflow-x-auto rounded-2xl border border-[#252837] bg-[#0d0f17]">
       <Table>
         <TableHeader>
           <TableRow className="h-8 border-b border-[var(--color-border)] hover:bg-transparent">

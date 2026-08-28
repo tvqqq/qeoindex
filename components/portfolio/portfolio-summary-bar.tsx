@@ -74,7 +74,8 @@ export function PortfolioSummaryBar({
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {/* 1. Tổng giá trị tài sản */}
-      <div className="rounded-2xl border border-[#b9ff66]/15 bg-[#101712] p-4 shadow-[0_12px_34px_rgba(0,0,0,0.16)]">
+      <div className="relative overflow-hidden rounded-3xl border border-[#7057ff]/35 bg-gradient-to-br from-[#1b1730] to-[#12141e] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
+        <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-bl-[64px] bg-[#765cff]/10" />
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-[var(--color-muted-2)]">Tổng tài sản</span>
           <Wallet className="h-4 w-4 text-[var(--color-muted-2)]" />
@@ -90,7 +91,7 @@ export function PortfolioSummaryBar({
       </div>
 
       {/* 2. Lãi/lỗ chưa thực hiện */}
-      <div className="rounded-2xl border border-white/[0.07] bg-[#0b0f0c] p-4 shadow-[0_12px_34px_rgba(0,0,0,0.16)]">
+      <div className="rounded-3xl border border-[#252837] bg-[#11131c] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.16)]">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-[var(--color-muted-2)]">Lãi/Lỗ tạm tính</span>
           {isUnrealizedUp ? (
@@ -132,7 +133,7 @@ export function PortfolioSummaryBar({
       </div>
 
       {/* 3. Lãi/lỗ đã chốt */}
-      <div className="rounded-2xl border border-white/[0.07] bg-[#0b0f0c] p-4 shadow-[0_12px_34px_rgba(0,0,0,0.16)]">
+      <div className="rounded-3xl border border-[#252837] bg-[#11131c] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.16)]">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-[var(--color-muted-2)]">Lãi/Lỗ đã chốt</span>
           <DollarSign className="h-4 w-4 text-[var(--color-muted-2)]" />
@@ -156,7 +157,7 @@ export function PortfolioSummaryBar({
       </div>
 
       {/* 4. Số vị thế đang mở */}
-      <div className="rounded-2xl border border-white/[0.07] bg-[#0b0f0c] p-4 shadow-[0_12px_34px_rgba(0,0,0,0.16)]">
+      <div className="rounded-3xl border border-[#252837] bg-[#11131c] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.16)]">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-[var(--color-muted-2)]">Số mã nắm giữ</span>
           <PieChart className="h-4 w-4 text-[var(--color-muted-2)]" />

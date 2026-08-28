@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic"
 
 const NO_STORE = { "Cache-Control": "no-store, max-age=0", "X-Content-Type-Options": "nosniff" }
 const VALID_ACTIONS = ["buy", "sell", "dividend_cash", "dividend_stock", "rights"] as const
+const TICKER_RE = /^[A-Z0-9]{2,12}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -35,6 +36,12 @@ export async function PATCH(
   if (!body) return err("Request body không hợp lệ.", 400)
 
   const updates: Record<string, unknown> = {}
+
+  if (body.ticker !== undefined) {
+    const ticker = String(body.ticker).trim().toUpperCase()
+    if (!TICKER_RE.test(ticker)) return err("Mã cổ phiếu không hợp lệ.", 400)
+    updates.ticker = ticker
+  }
 
   if (body.action !== undefined) {
     const action = String(body.action)

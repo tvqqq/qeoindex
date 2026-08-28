@@ -1,0 +1,19 @@
+.shell {
+  background-color: #090a10;
+  background-image:
+    radial-gradient(circle at 14% 0%, rgb(112 76 255 / 10%), transparent 28rem),
+    radial-gradient(circle at 92% 18%, rgb(33 200 246 / 6%), transparent 24rem),
+    linear-gradient(rgb(255 255 255 / 1.8%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 1.8%) 1px, transparent 1px);
+  background-size: auto, auto, 48px 48px, 48px 48px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell *,
+  .shell *::before,
+  .shell *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

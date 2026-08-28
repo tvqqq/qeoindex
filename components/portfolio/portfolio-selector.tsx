@@ -63,13 +63,13 @@ export function PortfolioSelector({
   }, [onDelete])
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center justify-end gap-2">
       {/* Portfolio dropdown */}
       <div className="relative">
         <button
           type="button"
           onClick={() => setDropdownOpen((o) => !o)}
-          className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] px-3 py-2 text-sm font-medium text-[var(--color-foreground)] transition-colors hover:border-white/20"
+          className="flex min-w-48 items-center justify-between gap-3 rounded-xl border border-[#2d3041] bg-[#0e1018] px-4 py-2.5 text-sm font-medium text-white transition-colors duration-200 hover:border-[#7560ff]/50"
         >
           <span className="font-ticker">{activePortfolio?.name ?? "Danh mục"}</span>
           <ChevronDown className={`h-3.5 w-3.5 text-[var(--color-muted-2)] transition-transform duration-150 ${dropdownOpen ? "rotate-180" : ""}`} />
@@ -77,7 +77,7 @@ export function PortfolioSelector({
 
         {dropdownOpen && (
           <div
-            className="absolute left-0 top-full z-50 mt-1.5 min-w-[200px] rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] py-1 shadow-[0_8px_32px_rgba(0,0,0,0.5)]"
+            className="absolute right-0 top-full z-50 mt-2 min-w-[240px] rounded-2xl border border-[#2d3041] bg-[#151722] p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.65)]"
             onMouseLeave={() => setDropdownOpen(false)}
           >
             {portfolios.map((p) => (
@@ -87,10 +87,10 @@ export function PortfolioSelector({
                 onClick={() => { onSelect(p.id); setDropdownOpen(false) }}
                 className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-white/[0.05]"
               >
-                <span className={p.id === activeId ? "font-semibold text-[var(--color-up)]" : "text-[var(--color-foreground)]"}>
+                <span className={p.id === activeId ? "font-semibold text-[#a997ff]" : "text-slate-200"}>
                   {p.name}
                 </span>
-                {p.id === activeId && <Check className="h-3.5 w-3.5 text-[var(--color-up)]" />}
+                {p.id === activeId && <Check className="h-3.5 w-3.5 text-[#9b87ff]" />}
               </button>
             ))}
 

@@ -285,6 +285,7 @@ See `docs/market-board.md` and `docs/perf-market-board-state-buffer.md` for the 
 - `/portfolio` combines a Simplize-style overview (market value, unrealized/realized P&L, allocation) with a KFSP-style trading journal (transaction history, notes/tags, target and stop-loss) and multi-list watchlists with price alerts.
 - Market prices must be read from `/api/market/intraday` at `histories[symbol].price`, with the latest valid point close as a fallback. `lib/portfolio/market-prices.ts` owns this boundary; never treat the response as a flat ticker map.
 - Portfolio switching is race-guarded so a slower response from the previous portfolio cannot replace the active portfolio's transaction state.
+- The portfolio shell renders `TopNav` before its `top-14` sticky workspace bar; omitting `TopNav` creates a visible 56px header gap. Transaction rows support edit as well as delete: the shared dialog prefills the selected row and persists through the user-scoped `PATCH /api/portfolio/[id]/transactions/[txId]` route.
 - The dashboard's “Kỷ luật giao dịch” values are descriptive coverage metrics only. They must not be presented as advice, signal quality, or a win-rate estimate without a canonical closed-trade model.
 - Dense ticker links keep `prefetch={false}`. Keep the workspace free of backdrop blur, CSS filter stacks, continuous motion, and unstable chart sizing.
 

@@ -232,11 +232,11 @@ export function WatchlistPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="relative overflow-hidden rounded-[28px] border border-[#b9ff66]/15 bg-[#0d130f] px-5 py-6 shadow-[0_18px_60px_rgba(0,0,0,0.24)] sm:px-7">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#b9ff66]/70 to-transparent" />
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#b9ff66]">Market radar</p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">Theo dõi cơ hội, không chạy theo nhiễu.</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#9ba79e]">Nhóm cổ phiếu theo thesis, ghi lại điều kiện chờ và đặt vùng giá cần chú ý.</p>
+      <section className="relative overflow-hidden rounded-3xl border border-[#2b2e40] bg-[#12141e] px-5 py-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:px-7">
+        <div className="pointer-events-none absolute -right-24 -top-40 h-80 w-80 rounded-full bg-[#7257ff]/10" />
+        <p className="relative text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9b87ff]">Market radar</p>
+        <h1 className="relative mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">Danh sách theo dõi</h1>
+        <p className="relative mt-2 max-w-2xl text-sm leading-6 text-slate-400">Nhóm cổ phiếu theo luận điểm, ghi lại điều kiện chờ và vùng giá cần chú ý.</p>
       </section>
 
       {/* Watchlist selector row */}
@@ -249,7 +249,7 @@ export function WatchlistPanel({
             className={cn(
               "flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors",
               wl.id === activeId
-                ? "border-[var(--color-up)]/40 bg-[var(--color-up)]/10 text-[var(--color-up)] font-semibold"
+                ? "border-[#7c5cff]/40 bg-[#7c5cff]/15 text-[#a997ff] font-semibold"
                 : "border-[var(--color-border)] text-[var(--color-muted-2)] hover:border-white/20 hover:text-white",
             )}
           >
@@ -323,7 +323,7 @@ export function WatchlistPanel({
       </div>
 
       {/* Items table */}
-      <div className="overflow-x-auto rounded-2xl border border-white/[0.07] bg-[#0b0f0c]">
+      <div className="overflow-x-auto rounded-3xl border border-[#252837] bg-[#11131c]">
         <div className="min-w-[620px]">
         {/* Table header */}
         <div className="grid grid-cols-[1fr_100px_100px_80px_60px] gap-2 border-b border-[var(--color-border)] px-4 py-2.5 text-xs font-medium text-[var(--color-muted-2)]">

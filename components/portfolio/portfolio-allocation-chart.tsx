@@ -6,9 +6,9 @@ import { PortfolioPosition } from "@/lib/portfolio/pnl"
 
 // Vibrant, distinct palette for dark financial UI
 const SLICE_COLORS = [
-  "#22c98a", // emerald
-  "#3b82f6", // blue
-  "#8b5cf6", // purple
+  "#7c5cff", // violet
+  "#36c5f0", // cyan
+  "#b084ff", // purple
   "#f59e0b", // amber
   "#ec4899", // pink
   "#06b6d4", // cyan
@@ -123,9 +123,9 @@ export const PortfolioAllocationChart = memo(function PortfolioAllocationChart({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-white/[0.07] bg-[#0b0f0c] p-5">
+    <div className="flex flex-col gap-3 rounded-3xl border border-[#252837] bg-[#11131c] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.16)]">
       <div className="flex items-center justify-between">
-        <div><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#758078]">Allocation</p><h3 className="mt-1 text-sm font-semibold text-white">Phân bổ tỷ trọng</h3></div>
+        <div><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7f8292]">Allocation</p><h3 className="mt-1 text-sm font-semibold text-white">Phân bổ tỷ trọng</h3></div>
         <span className="font-ticker text-xs text-[var(--color-muted-2)]">
           {positions.length} mã ({formatVND(totalMarketValue)})
         </span>
