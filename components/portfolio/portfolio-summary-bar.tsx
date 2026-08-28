@@ -58,7 +58,7 @@ export function PortfolioSummaryBar({
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="h-20 animate-pulse rounded-xl border border-[var(--color-border)] bg-[#0b0f13]"
+            className="h-24 animate-pulse rounded-3xl border border-[var(--color-border)] bg-[#0b0f13]"
           />
         ))}
       </div>
@@ -72,28 +72,32 @@ export function PortfolioSummaryBar({
   const isRealizedDown = totalRealizedPnl < 0
 
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
       {/* 1. Tổng giá trị tài sản */}
-      <div className="relative overflow-hidden rounded-3xl border border-[#7057ff]/35 bg-gradient-to-br from-[#1b1730] to-[#12141e] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
-        <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-bl-[64px] bg-[#765cff]/10" />
+      <div className="relative overflow-hidden rounded-3xl border border-[#7057ff]/40 bg-gradient-to-br from-[#1c1833] via-[#121420] to-[#0e1017] p-5 shadow-[0_20px_50px_rgba(0,0,0,0.25)] transition-colors hover:border-[#7057ff]/60">
+        <div className="pointer-events-none absolute right-0 top-0 h-24 w-24 rounded-bl-[80px] bg-[#765cff]/15" />
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-[var(--color-muted-2)]">Tổng tài sản</span>
-          <Wallet className="h-4 w-4 text-[var(--color-muted-2)]" />
+          <span className="font-ticker text-xs font-bold uppercase tracking-wider text-purple-300">
+            Tổng tài sản (NAV)
+          </span>
+          <Wallet className="h-4 w-4 text-purple-400" />
         </div>
-        <div className="mt-1.5 flex items-baseline gap-1.5">
-          <span className="font-ticker text-lg font-bold text-white tabular-nums sm:text-xl">
+        <div className="mt-2 flex items-baseline gap-1.5">
+          <span className="font-ticker text-2xl sm:text-3xl font-extrabold text-white tracking-tight tabular-nums">
             {formatVND(totalMarketValue)}
           </span>
         </div>
-        <div className="mt-0.5 text-[11px] text-[var(--color-muted-2)]">
-          Vốn: {formatVND(totalInvested)}
+        <div className="mt-1 font-ticker text-xs text-[var(--color-muted-2)]">
+          Vốn thực góp: <span className="font-semibold text-slate-300 italic">{formatVND(totalInvested)}</span>
         </div>
       </div>
 
       {/* 2. Lãi/lỗ chưa thực hiện */}
-      <div className="rounded-3xl border border-[#252837] bg-[#11131c] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.16)]">
+      <div className="rounded-3xl border border-[#272b3b] bg-[#0f121a] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.2)] transition-colors hover:border-[#383d54]">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-[var(--color-muted-2)]">Lãi/Lỗ tạm tính</span>
+          <span className="font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
+            Lãi/Lỗ tạm tính
+          </span>
           {isUnrealizedUp ? (
             <TrendingUp className="h-4 w-4 text-[var(--color-up)]" />
           ) : isUnrealizedDown ? (
@@ -102,15 +106,15 @@ export function PortfolioSummaryBar({
             <DollarSign className="h-4 w-4 text-[var(--color-muted-2)]" />
           )}
         </div>
-        <div className="mt-1.5 flex items-baseline gap-1.5">
+        <div className="mt-2 flex items-baseline gap-1.5">
           <span
             className={cn(
-              "font-ticker text-lg font-bold tabular-nums sm:text-xl",
+              "font-ticker text-2xl sm:text-3xl font-extrabold tracking-tight tabular-nums",
               isUnrealizedUp
                 ? "text-[var(--color-up)]"
                 : isUnrealizedDown
                 ? "text-[var(--color-down)]"
-                : "text-[var(--color-foreground)]",
+                : "text-white",
             )}
           >
             {isUnrealizedUp ? "+" : ""}
@@ -119,7 +123,7 @@ export function PortfolioSummaryBar({
         </div>
         <div
           className={cn(
-            "mt-0.5 font-ticker text-[11px] font-medium tabular-nums",
+            "mt-1 font-ticker text-xs font-bold tabular-nums",
             isUnrealizedUp
               ? "text-[var(--color-up)]"
               : isUnrealizedDown
@@ -128,48 +132,54 @@ export function PortfolioSummaryBar({
           )}
         >
           {isUnrealizedUp ? "▲ +" : isUnrealizedDown ? "▼ " : ""}
-          {unrealizedPnlPct.toFixed(2)}%
+          {unrealizedPnlPct.toFixed(2)}% <span className="text-[11px] font-normal text-[var(--color-muted-2)] italic">(Tỷ suất danh mục)</span>
         </div>
       </div>
 
       {/* 3. Lãi/lỗ đã chốt */}
-      <div className="rounded-3xl border border-[#252837] bg-[#11131c] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.16)]">
+      <div className="rounded-3xl border border-[#272b3b] bg-[#0f121a] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.2)] transition-colors hover:border-[#383d54]">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-[var(--color-muted-2)]">Lãi/Lỗ đã chốt</span>
+          <span className="font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
+            Lãi/Lỗ đã chốt
+          </span>
           <DollarSign className="h-4 w-4 text-[var(--color-muted-2)]" />
         </div>
-        <div className="mt-1.5 flex items-baseline gap-1.5">
+        <div className="mt-2 flex items-baseline gap-1.5">
           <span
             className={cn(
-              "font-ticker text-lg font-bold tabular-nums sm:text-xl",
+              "font-ticker text-2xl sm:text-3xl font-extrabold tracking-tight tabular-nums",
               isRealizedUp
                 ? "text-[var(--color-up)]"
                 : isRealizedDown
                 ? "text-[var(--color-down)]"
-                : "text-[var(--color-foreground)]",
+                : "text-white",
             )}
           >
             {isRealizedUp ? "+" : ""}
             {formatVND(totalRealizedPnl)}
           </span>
         </div>
-        <div className="mt-0.5 text-[11px] text-[var(--color-muted-2)]">Toàn thời gian</div>
+        <div className="mt-1 font-ticker text-xs text-[var(--color-muted-2)] italic">
+          Lợi nhuận thực nhận
+        </div>
       </div>
 
       {/* 4. Số vị thế đang mở */}
-      <div className="rounded-3xl border border-[#252837] bg-[#11131c] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.16)]">
+      <div className="rounded-3xl border border-[#272b3b] bg-[#0f121a] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.2)] transition-colors hover:border-[#383d54]">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-[var(--color-muted-2)]">Số mã nắm giữ</span>
+          <span className="font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
+            Vị thế nắm giữ
+          </span>
           <PieChart className="h-4 w-4 text-[var(--color-muted-2)]" />
         </div>
-        <div className="mt-1.5 flex items-baseline gap-1.5">
-          <span className="font-ticker text-lg font-bold text-white tabular-nums sm:text-xl">
+        <div className="mt-2 flex items-baseline gap-1.5">
+          <span className="font-ticker text-2xl sm:text-3xl font-extrabold text-white tracking-tight tabular-nums">
             {positions.length}
           </span>
-          <span className="text-xs text-[var(--color-muted-2)]">mã</span>
+          <span className="font-ticker text-xs font-medium text-[var(--color-muted-2)]">mã cổ phiếu</span>
         </div>
-        <div className="mt-0.5 text-[11px] text-[var(--color-muted-2)]">
-          {positions.length > 0 ? "Đang phân bổ" : "Trống"}
+        <div className="mt-1 font-ticker text-xs text-[var(--color-muted-2)] italic">
+          {positions.length > 0 ? "Đang phân bổ rủi ro" : "Chưa có vị thế mở"}
         </div>
       </div>
     </div>

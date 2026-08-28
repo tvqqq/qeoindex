@@ -3,67 +3,105 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import {
   Activity,
-  Briefcase,
-  Eye,
   RefreshCw,
   Plus,
-  Calculator,
-  BarChart3,
   BookOpen,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { WatchlistPanel } from "@/components/portfolio/watchlist-panel"
+import { WatchlistPanel, type WatchlistMeta, type WatchlistItem } from "@/components/portfolio/watchlist-panel"
 import { TopNav } from "@/components/top-nav"
 import { computePortfolioPositions, type RawTransaction } from "@/lib/portfolio/pnl"
 import { extractPortfolioMarketPrices, type PortfolioIntradayPayload } from "@/lib/portfolio/market-prices"
-import { cn } from "@/lib/utils"
+import { AnimatedTabs, type AnimatedTab } from "@/components/smoothui/animated-tabs"
 import styles from "@/components/portfolio/portfolio-theme.module.css"
 
 import dynamic from "next/dynamic"
 
 const PortfolioSummaryBar = dynamic(
-  () => import("@/components/portfolio/portfolio-summary-bar").then((m) => m.PortfolioSummaryBar),
+  () =>
+    import("@/components/portfolio/portfolio-summary-bar").then(
+      (m) => m.PortfolioSummaryBar,
+    ),
   { ssr: false, loading: () => <SummaryBarSkeleton /> },
 )
+
 const PortfolioPositionsTable = dynamic(
-  () => import("@/components/portfolio/portfolio-positions-table").then((m) => m.PortfolioPositionsTable),
-  { ssr: false, loading: () => null },
+  () =>
+    import("@/components/portfolio/portfolio-positions-table").then(
+      (m) => m.PortfolioPositionsTable,
+    ),
+  { ssr: false },
 )
+
 const PortfolioTransactionHistory = dynamic(
-  () => import("@/components/portfolio/portfolio-transaction-history").then((m) => m.PortfolioTransactionHistory),
-  { ssr: false, loading: () => null },
-)
-const AddTransactionDialog = dynamic(
-  () => import("@/components/portfolio/add-transaction-dialog").then((m) => m.AddTransactionDialog),
+  () =>
+    import("@/components/portfolio/portfolio-transaction-history").then(
+      (m) => m.PortfolioTransactionHistory,
+    ),
   { ssr: false },
 )
-const PortfolioSelector = dynamic(
-  () => import("@/components/portfolio/portfolio-selector").then((m) => m.PortfolioSelector),
-  { ssr: false },
-)
+
 const PortfolioAllocationChart = dynamic(
-  () => import("@/components/portfolio/portfolio-allocation-chart").then((m) => m.PortfolioAllocationChart),
+  () =>
+    import("@/components/portfolio/portfolio-allocation-chart").then(
+      (m) => m.PortfolioAllocationChart,
+    ),
   { ssr: false },
 )
+
 const PortfolioCapitalAllocation = dynamic(
-  () => import("@/components/portfolio/portfolio-capital-allocation").then((m) => m.PortfolioCapitalAllocation),
+  () =>
+    import("@/components/portfolio/portfolio-capital-allocation").then(
+      (m) => m.PortfolioCapitalAllocation,
+    ),
   { ssr: false },
 )
+
 const PortfolioBenchmarkChart = dynamic(
-  () => import("@/components/portfolio/portfolio-benchmark-chart").then((m) => m.PortfolioBenchmarkChart),
+  () =>
+    import("@/components/portfolio/portfolio-benchmark-chart").then(
+      (m) => m.PortfolioBenchmarkChart,
+    ),
   { ssr: false },
 )
+
+const PortfolioSelector = dynamic(
+  () =>
+    import("@/components/portfolio/portfolio-selector").then(
+      (m) => m.PortfolioSelector,
+    ),
+  { ssr: false },
+)
+
+const AddTransactionDialog = dynamic(
+  () =>
+    import("@/components/portfolio/add-transaction-dialog").then(
+      (m) => m.AddTransactionDialog,
+    ),
+  { ssr: false },
+)
+
 const PortfolioGuidanceDialog = dynamic(
-  () => import("@/components/portfolio/portfolio-guidance-dialog").then((m) => m.PortfolioGuidanceDialog),
+  () =>
+    import("@/components/portfolio/portfolio-guidance-dialog").then(
+      (m) => m.PortfolioGuidanceDialog,
+    ),
   { ssr: false },
 )
 
-// ─────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────
+// ── Types ──
+export type ActiveTab = "portfolio" | "journal" | "allocation" | "benchmark" | "watchlist"
 
-interface PortfolioMeta {
+const PORTFOLIO_TABS: AnimatedTab<ActiveTab>[] = [
+  { value: "portfolio", label: "Tài sản" },
+  { value: "journal", label: "Nhật ký" },
+  { value: "allocation", label: "Phân bổ vốn" },
+  { value: "benchmark", label: "Hiệu suất" },
+  { value: "watchlist", label: "Theo dõi" },
+]
+
+export interface PortfolioMeta {
   id: string
   name: string
   description: string | null
@@ -72,46 +110,23 @@ interface PortfolioMeta {
   sort_order: number
 }
 
-interface WatchlistMeta {
-  id: string
-  name: string
-  is_default: boolean
-  sort_order: number
-}
-
-interface WatchlistItem {
-  id: string
-  watchlist_id: string
-  ticker: string
-  sort_order: number
-  note: string | null
-  alert_price_above: number | null
-  alert_price_below: number | null
-  tags: string[]
-  created_at: string
-  updated_at: string
-}
-
-type ActiveTab = "portfolio" | "journal" | "allocation" | "benchmark" | "watchlist"
-
-// ─────────────────────────────────────────────────────────────
-// Main page component
-// ─────────────────────────────────────────────────────────────
-
 export function PortfolioPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("portfolio")
 
   // Portfolio state
   const [portfolios, setPortfolios] = useState<PortfolioMeta[]>([])
   const [activePortfolioId, setActivePortfolioId] = useState<string | null>(null)
-  const [transactions, setTransactions] = useState<RawTransaction[]>([])
-  const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({})
   const [loadingPortfolio, setLoadingPortfolio] = useState(true)
-  const [loadingTx, setLoadingTx] = useState(false)
-  const [portfolioError, setPortfolioError] = useState("")
-  const transactionRequestRef = useRef(0)
+  const [portfolioError, setPortfolioError] = useState<string | null>(null)
 
-  // Watchlist state
+  // Transactions state
+  const [transactions, setTransactions] = useState<RawTransaction[]>([])
+  const [loadingTx, setLoadingTx] = useState(false)
+
+  // Live market prices: { [ticker]: number }
+  const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({})
+
+  // Watchlists state
   const [watchlists, setWatchlists] = useState<WatchlistMeta[]>([])
   const [activeWatchlistId, setActiveWatchlistId] = useState<string | null>(null)
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([])
@@ -124,49 +139,48 @@ export function PortfolioPage() {
   // ── Load Portfolios ──
   const loadPortfolios = useCallback(async () => {
     setLoadingPortfolio(true)
-    setPortfolioError("")
+    setPortfolioError(null)
     try {
       const res = await fetch("/api/portfolio", { cache: "no-store", credentials: "same-origin" })
       if (!res.ok) {
+        if (res.status === 401) {
+          setPortfolioError("Vui lòng đăng nhập để xem danh mục.")
+          return
+        }
         setPortfolioError("Không thể tải danh mục đầu tư.")
         return
       }
       const data = (await res.json()) as { ok: boolean; portfolios?: PortfolioMeta[] }
-      if (data.ok && data.portfolios) {
+      if (data.ok && data.portfolios && data.portfolios.length > 0) {
         setPortfolios(data.portfolios)
-        if (!activePortfolioId && data.portfolios.length > 0) {
-          const def = data.portfolios.find((p) => p.is_default) ?? data.portfolios[0]
-          setActivePortfolioId(def.id)
-        }
+        setActivePortfolioId((prev) => {
+          if (prev && data.portfolios!.some((p) => p.id === prev)) return prev
+          const def = data.portfolios!.find((p) => p.is_default)
+          return def ? def.id : data.portfolios![0].id
+        })
       }
     } catch {
-      setPortfolioError("Lỗi kết nối khi tải danh mục.")
+      setPortfolioError("Lỗi kết nối. Vui lòng thử lại sau.")
     } finally {
       setLoadingPortfolio(false)
     }
-  }, [activePortfolioId])
+  }, [])
 
-  // ── Load Transactions ──
-  const loadTransactions = useCallback(async (portfolioId: string) => {
-    const requestId = ++transactionRequestRef.current
+  // ── Load Transactions for active portfolio ──
+  const loadTransactions = useCallback(async (pid: string) => {
     setLoadingTx(true)
     try {
-      const res = await fetch(`/api/portfolio/${portfolioId}/transactions`, {
+      const res = await fetch(`/api/portfolio/${pid}/transactions`, {
         cache: "no-store",
         credentials: "same-origin",
       })
       if (!res.ok) return
       const data = (await res.json()) as { ok: boolean; transactions?: RawTransaction[] }
-      if (requestId !== transactionRequestRef.current) return
       if (data.ok && data.transactions) {
         setTransactions(data.transactions)
       }
-    } catch {
-      // ignore
     } finally {
-      if (requestId === transactionRequestRef.current) {
-        setLoadingTx(false)
-      }
+      setLoadingTx(false)
     }
   }, [])
 
@@ -232,13 +246,12 @@ export function PortfolioPage() {
       credentials: "same-origin",
       body: JSON.stringify({ name, initial_capital: initialCapital }),
     })
-    const data = (await res.json()) as { ok: boolean; portfolio?: PortfolioMeta; error?: string }
-    if (!res.ok || !data.ok || !data.portfolio) {
-      alert(data.error ?? "Không thể tạo danh mục.")
-      return
+    if (!res.ok) return
+    const data = (await res.json()) as { ok: boolean; portfolio?: PortfolioMeta }
+    if (data.ok && data.portfolio) {
+      setPortfolios((prev) => [...prev, data.portfolio!])
+      setActivePortfolioId(data.portfolio.id)
     }
-    setPortfolios((prev) => [...prev, data.portfolio!])
-    setActivePortfolioId(data.portfolio.id)
   }, [])
 
   const handlePortfolioUpdate = useCallback(
@@ -249,47 +262,51 @@ export function PortfolioPage() {
         credentials: "same-origin",
         body: JSON.stringify(updates),
       })
-      const data = (await res.json()) as { ok: boolean; portfolio?: PortfolioMeta; error?: string }
-      if (!res.ok || !data.ok || !data.portfolio) {
-        alert(data.error ?? "Không thể cập nhật danh mục.")
-        return
+      if (!res.ok) return
+      const data = (await res.json()) as { ok: boolean; portfolio?: PortfolioMeta }
+      if (data.ok && data.portfolio) {
+        setPortfolios((prev) => prev.map((p) => (p.id === id ? { ...p, ...data.portfolio } : p)))
       }
-      setPortfolios((prev) => prev.map((p) => (p.id === id ? { ...p, ...data.portfolio } : p)))
     },
     [],
   )
 
   const handlePortfolioDelete = useCallback(
     async (id: string) => {
-      const res = await fetch(`/api/portfolio/${id}`, { method: "DELETE", credentials: "same-origin" })
-      const data = (await res.json()) as { ok: boolean; error?: string }
-      if (!res.ok || !data.ok) {
-        alert(data.error ?? "Không thể xóa danh mục.")
-        return
-      }
-      setPortfolios((prev) => {
-        const remaining = prev.filter((p) => p.id !== id)
-        if (activePortfolioId === id && remaining.length > 0) {
-          setActivePortfolioId(remaining[0].id)
-        }
-        return remaining
+      const res = await fetch(`/api/portfolio/${id}`, {
+        method: "DELETE",
+        credentials: "same-origin",
       })
-      setTransactions([])
+      if (!res.ok) return
+      const data = (await res.json()) as { ok: boolean }
+      if (data.ok) {
+        setPortfolios((prev) => {
+          const next = prev.filter((p) => p.id !== id)
+          if (activePortfolioId === id) {
+            setActivePortfolioId(next[0]?.id ?? null)
+          }
+          return next
+        })
+      }
     },
     [activePortfolioId],
   )
 
-  // ── Transaction handlers ──
+  // ── Open Add Transaction dialog ──
   const handleOpenAddTx = useCallback((ticker?: string) => {
     setAddTxTicker(ticker)
     setAddTxOpen(true)
   }, [])
 
+  // ── After transaction added ──
   const handleTxSuccess = useCallback(() => {
     setAddTxOpen(false)
-    if (activePortfolioId) loadTransactions(activePortfolioId)
+    if (activePortfolioId) {
+      loadTransactions(activePortfolioId)
+    }
   }, [activePortfolioId, loadTransactions])
 
+  // ── Delete transaction ──
   const handleTxDelete = useCallback(
     async (txId: string) => {
       if (!activePortfolioId) return
@@ -307,47 +324,24 @@ export function PortfolioPage() {
     [activePortfolioId],
   )
 
-  // ── Tab button helper ──
-  function tabClass(tab: ActiveTab) {
-    return cn(
-      "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200",
-      activeTab === tab
-        ? "border border-purple-500/40 bg-purple-500/15 font-semibold text-purple-300 shadow-sm"
-        : "text-slate-400 hover:bg-white/[0.04] hover:text-white border border-transparent",
-    )
-  }
-
   return (
     <div className={`${styles.shell} min-h-screen text-slate-100 bg-[#06080b]`}>
       <TopNav />
 
-      {/* Sub Navigation Bar */}
+      {/* Sub Navigation Bar with SmoothUI AnimatedTabs */}
       <div className="sticky top-14 z-30 border-b border-white/[0.07] bg-[#090c10]/95 px-4 sm:px-6">
         <div className="mx-auto flex min-h-14 max-w-[1480px] items-center">
-          <div className="flex w-full flex-wrap items-center justify-between gap-3">
-            {/* 5 Main Tabs (Tài sản | Nhật ký | Phân bổ vốn | Hiệu suất | Theo dõi) */}
-            <div className="flex items-center gap-1 rounded-xl border border-white/[0.08] bg-[#0e1218] p-1">
-              <button type="button" className={tabClass("portfolio")} onClick={() => setActiveTab("portfolio")}>
-                <Briefcase className="h-3.5 w-3.5" />
-                <span>Tài sản</span>
-              </button>
-              <button type="button" className={tabClass("journal")} onClick={() => setActiveTab("journal")}>
-                <Activity className="h-3.5 w-3.5" />
-                <span>Nhật ký</span>
-              </button>
-              <button type="button" className={tabClass("allocation")} onClick={() => setActiveTab("allocation")}>
-                <Calculator className="h-3.5 w-3.5" />
-                <span>Phân bổ vốn</span>
-              </button>
-              <button type="button" className={tabClass("benchmark")} onClick={() => setActiveTab("benchmark")}>
-                <BarChart3 className="h-3.5 w-3.5" />
-                <span>Hiệu suất</span>
-              </button>
-              <button type="button" className={tabClass("watchlist")} onClick={() => setActiveTab("watchlist")}>
-                <Eye className="h-3.5 w-3.5" />
-                <span>Theo dõi</span>
-              </button>
-            </div>
+          <div className="flex w-full flex-wrap items-center justify-between gap-3 py-2">
+            {/* 5 Main Tabs with SmoothUI Pill Indicator */}
+            <AnimatedTabs
+              tabs={PORTFOLIO_TABS}
+              value={activeTab}
+              onValueChange={(val) => setActiveTab(val as ActiveTab)}
+              variant="pill"
+              className="border border-[#2a2e40] bg-[#0b0e14] p-1 rounded-2xl"
+              tabClassName="font-ticker font-bold text-xs sm:text-sm px-4 py-1.5 transition-colors"
+              indicatorClassName="bg-gradient-to-r from-purple-600/35 to-indigo-600/35 border border-purple-500/50 rounded-xl shadow-[0_0_12px_rgba(168,85,247,0.25)]"
+            />
 
             {/* Right Action buttons */}
             <div className="flex items-center gap-2">
@@ -355,7 +349,7 @@ export function PortfolioPage() {
                 size="sm"
                 variant="ghost"
                 onClick={() => setGuidanceOpen(true)}
-                className="h-8 gap-1.5 rounded-full px-3 text-xs text-purple-300 border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20"
+                className="h-8 gap-1.5 rounded-full px-3 text-xs font-bold font-ticker text-purple-300 border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 transition-colors"
               >
                 <BookOpen className="h-3.5 w-3.5" />
                 <span>Hướng dẫn</span>
@@ -365,7 +359,7 @@ export function PortfolioPage() {
                 size="sm"
                 variant="ghost"
                 onClick={() => activePortfolioId && loadTransactions(activePortfolioId)}
-                className="h-8 gap-1.5 rounded-full px-3 text-xs text-slate-400 hover:bg-white/[0.05] hover:text-white"
+                className="h-8 gap-1.5 rounded-full px-3 text-xs font-semibold font-ticker text-slate-300 hover:bg-white/[0.06] hover:text-white transition-colors"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
                 <span>Làm mới</span>
@@ -374,7 +368,7 @@ export function PortfolioPage() {
               <Button
                 size="sm"
                 onClick={() => handleOpenAddTx()}
-                className="h-8 gap-1.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 px-4 text-xs font-semibold text-white shadow-[0_0_15px_rgba(147,51,234,0.35)]"
+                className="h-8 gap-1.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 px-4 text-xs font-bold font-ticker text-white shadow-[0_0_15px_rgba(147,51,234,0.35)] transition-all cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Thêm giao dịch</span>
@@ -387,16 +381,19 @@ export function PortfolioPage() {
       {/* Main Container */}
       <div className="mx-auto max-w-[1480px] px-4 py-5 sm:px-6 lg:py-6">
         {/* Top Header Card */}
-        <section className="mb-6 relative rounded-3xl border border-[#2b2e40] bg-gradient-to-r from-[#0d1017] via-[#121520] to-[#0d1017] px-6 py-5 shadow-lg">
+        <section className="mb-6 relative rounded-3xl border border-[#2b2e40] bg-gradient-to-r from-[#0d1017] via-[#131724] to-[#0d1017] px-6 py-6 shadow-xl">
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-purple-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+              <div className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-purple-400 font-ticker">
+                <span className="h-2 w-2 rounded-full bg-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.9)]" />
                 Portfolio & Risk Management
               </div>
-              <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
-                Quản lý Danh mục & Nhật ký Giao dịch
+              <h1 className="font-ticker text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+                Quản lý Danh mục & <span className="italic bg-gradient-to-r from-purple-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">Nhật ký Giao dịch</span>
               </h1>
+              <p className="mt-1 font-ticker text-xs sm:text-sm text-[var(--color-muted-2)] font-medium">
+                Hệ thống phân bổ vốn <span className="font-bold text-slate-200 italic">1–2% NAV</span> kết hợp nhật ký giao dịch và so sánh hiệu suất chuẩn Wyckoff.
+              </p>
             </div>
 
             {/* Portfolio Selector Pill (Screenshot 1) */}
@@ -412,7 +409,7 @@ export function PortfolioPage() {
         </section>
 
         {portfolioError && (
-          <div className="mb-4 rounded-xl border border-[var(--color-down)]/30 bg-[var(--color-down)]/10 px-4 py-3 text-sm text-[var(--color-down)]">
+          <div className="mb-4 rounded-2xl border border-[var(--color-down)]/30 bg-[var(--color-down)]/10 px-4 py-3 text-sm text-[var(--color-down)] font-ticker font-semibold">
             {portfolioError}
           </div>
         )}
@@ -427,10 +424,12 @@ export function PortfolioPage() {
             />
 
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.75fr)]">
-              <div className="min-w-0 rounded-2xl border border-[var(--color-border)] bg-[#0b0f13] p-5 shadow-sm">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <h2 className="text-sm font-bold text-white uppercase tracking-wider">Vị thế đang mở</h2>
-                  <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-xs text-[var(--color-muted-2)]">
+              <div className="min-w-0 rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 shadow-sm">
+                <div className="mb-4 flex items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3">
+                  <h2 className="font-ticker text-sm sm:text-base font-extrabold text-white uppercase tracking-wide">
+                    Vị thế đang mở
+                  </h2>
+                  <span className="font-ticker font-bold rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-0.5 text-xs text-purple-300">
                     {positions.length} mã
                   </span>
                 </div>
@@ -453,13 +452,17 @@ export function PortfolioPage() {
 
         {/* ── 2. TAB: NHẬT KÝ (JOURNAL) ── */}
         {activeTab === "journal" && (
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[#0b0f13] p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
+          <div className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <div className="flex items-center gap-2">
-                <Activity className="h-4 w-4 text-purple-400" />
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider">Nhật ký giao dịch</h2>
+                <Activity className="h-5 w-5 text-purple-400" />
+                <h2 className="font-ticker text-sm sm:text-base font-extrabold text-white uppercase tracking-wide">
+                  Nhật ký giao dịch chi tiết
+                </h2>
               </div>
-              <span className="text-xs text-[var(--color-muted-2)]">{transactions.length} giao dịch</span>
+              <span className="font-ticker font-bold text-xs text-[var(--color-muted-2)]">
+                {transactions.length} giao dịch ghi nhận
+              </span>
             </div>
             <PortfolioTransactionHistory
               transactions={transactions}
@@ -487,7 +490,7 @@ export function PortfolioPage() {
 
         {/* ── 5. TAB: THEO DÕI (WATCHLIST) ── */}
         {activeTab === "watchlist" && (
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[#0b0f13] p-5 shadow-sm">
+          <div className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 shadow-sm">
             <WatchlistPanel
               initialWatchlists={watchlists}
               initialActiveId={activeWatchlistId ?? (watchlists[0]?.id || "")}
@@ -520,7 +523,7 @@ function SummaryBarSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="h-20 animate-pulse rounded-2xl border border-[var(--color-border)] bg-white/[0.02]" />
+        <div key={i} className="h-24 animate-pulse rounded-3xl border border-[var(--color-border)] bg-white/[0.02]" />
       ))}
     </div>
   )

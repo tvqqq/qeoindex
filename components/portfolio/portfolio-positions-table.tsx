@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils'
 function formatVND(kVND: number): string {
   const abs = Math.abs(kVND)
   if (abs >= 1_000_000) return `${(kVND / 1_000_000).toFixed(2)} tỷ`
-  if (abs >= 1_000) return `${(kVND / 1_000).toFixed(1)} triệu`
+  if (abs >= 1_000) return `${(kVND / 1_000).toFixed(1)} tr`
   return `${kVND.toFixed(0)} k₫`
 }
 
@@ -71,17 +71,17 @@ const PnlChip = memo(function PnlChip({ value }: PnlChipProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-ticker text-xs',
+        'inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-ticker text-xs font-bold tabular-nums',
         bg,
         text,
       )}
     >
       {isUp ? (
-        <ArrowUpIcon className="size-2.5 shrink-0" />
+        <ArrowUpIcon className="size-3 shrink-0" />
       ) : isDown ? (
-        <ArrowDownIcon className="size-2.5 shrink-0" />
+        <ArrowDownIcon className="size-3 shrink-0" />
       ) : (
-        <MinusIcon className="size-2.5 shrink-0" />
+        <MinusIcon className="size-3 shrink-0" />
       )}
       {formatVND(value)}
     </span>
@@ -100,10 +100,10 @@ const PctCell = memo(function PctCell({ pct }: PctCellProps) {
     : isDown
     ? 'text-[var(--color-down)]'
     : 'text-[var(--color-muted-2)]'
-  const prefix = isUp ? '▲' : isDown ? '▼' : '–'
+  const prefix = isUp ? '▲ +' : isDown ? '▼ ' : '– '
 
   return (
-    <span className={cn('font-ticker text-xs', color)}>
+    <span className={cn('font-ticker text-xs sm:text-sm font-bold tabular-nums', color)}>
       {prefix}
       {Math.abs(pct).toFixed(2)}%
     </span>
@@ -119,29 +119,25 @@ const PriceCell = memo(function PriceCell({ currentPrice, avgCost }: PriceCellPr
   const isUp = currentPrice > avgCost
   const isDown = currentPrice < avgCost
   const color = isUp
-    ? 'text-[var(--color-up)]'
+    ? 'text-[var(--color-up)] font-bold'
     : isDown
-    ? 'text-[var(--color-down)]'
-    : 'text-foreground'
+    ? 'text-[var(--color-down)] font-bold'
+    : 'text-[var(--color-ref)] font-semibold'
 
   return (
-    <span className={cn('font-ticker text-xs tabular-nums', color)}>
+    <span className={cn('font-ticker text-xs sm:text-sm tabular-nums', color)}>
       {currentPrice.toFixed(1)}
     </span>
   )
 })
 
-// ---------------------------------------------------------------------------
-// Position row (memoized — re-renders only when derived values change)
-// ---------------------------------------------------------------------------
-
-interface PositionRowProps {
+interface PositionRowComponentProps {
   row: PositionRow
-  onAddTransaction: (ticker: string) => void
+  onAddTransaction: (ticker?: string) => void
 }
 
-const PositionTableRow = memo(
-  function PositionTableRow({ row, onAddTransaction }: PositionRowProps) {
+const PositionRowComponent = memo(
+  function PositionRowComponent({ row, onAddTransaction }: PositionRowComponentProps) {
     const {
       ticker,
       openQty,
@@ -155,13 +151,13 @@ const PositionTableRow = memo(
     } = row
 
     return (
-      <TableRow className="liquid-glass-row h-10 border-b border-[var(--color-border)]">
-        {/* Mã */}
+      <TableRow className="h-11 border-b border-[var(--color-border)] hover:bg-white/[0.04] transition-colors">
+        {/* Mã CK */}
         <TableCell className="py-0 pl-3 pr-2">
           <Link
             href={`/insights/wyckoff?ticker=${ticker}`}
             prefetch={false}
-            className="font-bold uppercase tracking-wide text-foreground hover:text-[var(--color-up)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="font-ticker text-sm font-extrabold uppercase tracking-wider text-purple-300 hover:text-purple-200 transition-colors focus-visible:outline-none"
           >
             {ticker}
           </Link>
@@ -169,14 +165,14 @@ const PositionTableRow = memo(
 
         {/* KL */}
         <TableCell className="py-0 px-2 text-right">
-          <span className="font-ticker text-xs text-[var(--color-muted-2)] tabular-nums">
+          <span className="font-ticker text-xs sm:text-sm font-semibold text-slate-300 tabular-nums">
             {formatQty(openQty)}
           </span>
         </TableCell>
 
         {/* Giá vốn TB */}
         <TableCell className="py-0 px-2 text-right">
-          <span className="font-ticker text-xs text-[var(--color-muted-2)] tabular-nums">
+          <span className="font-ticker text-xs sm:text-sm font-semibold text-[var(--color-muted-2)] tabular-nums">
             {avgCost.toFixed(1)}
           </span>
         </TableCell>
@@ -188,7 +184,7 @@ const PositionTableRow = memo(
 
         {/* Giá trị TT */}
         <TableCell className="py-0 px-2 text-right">
-          <span className="font-ticker text-xs tabular-nums text-[var(--color-muted-2)]">
+          <span className="font-ticker text-xs sm:text-sm font-bold tabular-nums text-slate-200">
             {formatVND(marketValue)}
           </span>
         </TableCell>
@@ -205,12 +201,12 @@ const PositionTableRow = memo(
 
         {/* Target / SL */}
         <TableCell className="py-0 px-2">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             {targetPrice != null && (
               <TooltipProvider delay={200}>
                 <Tooltip>
                   <TooltipTrigger>
-                    <span className="inline-flex items-center rounded border border-[var(--color-up)]/30 bg-[var(--color-up-dim)] px-1 py-0 font-ticker text-[10px] text-[var(--color-up)] tabular-nums">
+                    <span className="inline-flex items-center rounded-md border border-[var(--color-up)]/30 bg-[var(--color-up-dim)] px-1.5 py-0.5 font-ticker text-[10px] font-bold text-[var(--color-up)] tabular-nums">
                       T {targetPrice.toFixed(1)}
                     </span>
                   </TooltipTrigger>
@@ -222,7 +218,7 @@ const PositionTableRow = memo(
               <TooltipProvider delay={200}>
                 <Tooltip>
                   <TooltipTrigger>
-                    <span className="inline-flex items-center rounded border border-[var(--color-down)]/30 bg-[var(--color-down-dim)] px-1 py-0 font-ticker text-[10px] text-[var(--color-down)] tabular-nums">
+                    <span className="inline-flex items-center rounded-md border border-[var(--color-down)]/30 bg-[var(--color-down-dim)] px-1.5 py-0.5 font-ticker text-[10px] font-bold text-[var(--color-down)] tabular-nums">
                       SL {stopLoss.toFixed(1)}
                     </span>
                   </TooltipTrigger>
@@ -231,7 +227,7 @@ const PositionTableRow = memo(
               </TooltipProvider>
             )}
             {targetPrice == null && stopLoss == null && (
-              <span className="text-[10px] text-[var(--color-muted-2)]">–</span>
+              <span className="text-xs text-[var(--color-muted-2)]">–</span>
             )}
           </div>
         </TableCell>
@@ -243,7 +239,7 @@ const PositionTableRow = memo(
             size="icon-xs"
             aria-label={`Thêm giao dịch ${ticker}`}
             onClick={() => onAddTransaction(ticker)}
-            className="text-[var(--color-muted-2)] hover:text-foreground"
+            className="text-[var(--color-muted-2)] hover:text-white hover:bg-white/10 rounded-full"
           >
             <PlusIcon />
           </Button>
@@ -268,10 +264,10 @@ const PositionTableRow = memo(
 
 function SkeletonRow() {
   return (
-    <TableRow className="h-10 border-b border-[var(--color-border)]">
+    <TableRow className="h-11 border-b border-[var(--color-border)]">
       {Array.from({ length: 9 }).map((_, i) => (
         <TableCell key={i} className="py-0 px-2">
-          <div className="h-3 animate-pulse rounded bg-white/10" />
+          <div className="h-3.5 animate-pulse rounded bg-white/10" />
         </TableCell>
       ))}
     </TableRow>
@@ -309,7 +305,7 @@ function SortableHead({
   return (
     <TableHead
       className={cn(
-        'cursor-pointer select-none py-0 text-[11px] text-[var(--color-muted-2)] hover:text-foreground',
+        'cursor-pointer select-none py-0 font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)] hover:text-white transition-colors',
         className,
       )}
       onClick={() => onSort(colKey)}
@@ -321,7 +317,7 @@ function SortableHead({
 }
 
 // ---------------------------------------------------------------------------
-// Main export
+// Main component props
 // ---------------------------------------------------------------------------
 
 export interface PortfolioPositionsTableProps {
@@ -331,7 +327,11 @@ export interface PortfolioPositionsTableProps {
   onAddTransaction: (ticker?: string) => void
 }
 
-export function PortfolioPositionsTable({
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
+export const PortfolioPositionsTable = memo(function PortfolioPositionsTable({
   positions,
   currentPrices,
   loading,
@@ -340,83 +340,85 @@ export function PortfolioPositionsTable({
   const [sortKey, setSortKey] = useState<SortKey>('marketValue')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  // Derive rows with computed metrics
-  const rows = useMemo<PositionRow[]>(() => {
-    return positions.map((pos) => {
-      const currentPrice = currentPrices[pos.ticker] ?? pos.avgCost
-      const marketValue = currentPrice * pos.openQty
-      const unrealizedPnl = (currentPrice - pos.avgCost) * pos.openQty
-      const unrealizedPnlPct =
-        pos.avgCost > 0 ? ((currentPrice - pos.avgCost) / pos.avgCost) * 100 : 0
-      return { ...pos, currentPrice, marketValue, unrealizedPnl, unrealizedPnlPct }
-    })
-  }, [positions, currentPrices])
-
-  // Sorted rows
-  const sorted = useMemo<PositionRow[]>(() => {
-    const mult = sortDir === 'asc' ? 1 : -1
-    return [...rows].sort((a, b) => {
-      switch (sortKey) {
-        case 'ticker':
-          return mult * a.ticker.localeCompare(b.ticker)
-        case 'unrealizedPnl':
-          return mult * (a.unrealizedPnl - b.unrealizedPnl)
-        case 'unrealizedPnlPct':
-          return mult * (a.unrealizedPnlPct - b.unrealizedPnlPct)
-        case 'marketValue':
-        default:
-          return mult * (a.marketValue - b.marketValue)
-      }
-    })
-  }, [rows, sortKey, sortDir])
-
-  function handleSort(key: SortKey) {
+  const handleSort = (key: SortKey) => {
     if (sortKey === key) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))
     } else {
       setSortKey(key)
       setSortDir('desc')
     }
   }
 
-  // Empty state
-  if (!loading && positions.length === 0) {
+  // Derive rows with current prices and computed P&L
+  const rows: PositionRow[] = useMemo(() => {
+    return positions.map((pos) => {
+      const currentPrice = currentPrices[pos.ticker] ?? pos.avgCost
+      const marketValue = currentPrice * pos.openQty
+      const unrealizedPnl = (currentPrice - pos.avgCost) * pos.openQty
+      const unrealizedPnlPct =
+        pos.avgCost > 0 ? ((currentPrice - pos.avgCost) / pos.avgCost) * 100 : 0
+
+      return {
+        ...pos,
+        currentPrice,
+        marketValue,
+        unrealizedPnl,
+        unrealizedPnlPct,
+      }
+    })
+  }, [positions, currentPrices])
+
+  // Sort rows client-side
+  const sortedRows = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      let valA: number | string = a[sortKey]
+      let valB: number | string = b[sortKey]
+
+      if (typeof valA === 'string') {
+        valA = (valA as string).toLowerCase()
+        valB = (valB as string).toLowerCase()
+        return sortDir === 'asc'
+          ? (valA as string).localeCompare(valB as string)
+          : (valB as string).localeCompare(valA as string)
+      }
+
+      return sortDir === 'asc'
+        ? (valA as number) - (valB as number)
+        : (valB as number) - (valA as number)
+    })
+  }, [rows, sortKey, sortDir])
+
+  if (!loading && rows.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-[#343748] bg-[#0d0f17] py-12 text-center">
-        <p className="text-sm text-[var(--color-muted-2)]">Chưa có vị thế nào đang mở.</p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onAddTransaction()}
-          className="gap-1.5"
-        >
-          <PlusIcon className="size-3.5" />
-          Thêm giao dịch đầu tiên
-        </Button>
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <p className="font-ticker text-sm font-semibold text-slate-300">Chưa có vị thế nào</p>
+        <p className="mt-1 font-ticker text-xs text-[var(--color-muted-2)]">
+          Bấm &ldquo;Thêm giao dịch&rdquo; để ghi nhận lệnh mua đầu tiên vào danh mục.
+        </p>
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-[#252837] bg-[#0d0f17]">
+    <div className="overflow-x-auto">
       <Table>
         <TableHeader>
-          <TableRow className="h-8 border-b border-[var(--color-border)] hover:bg-transparent">
+          <TableRow className="h-9 border-b border-[var(--color-border)] hover:bg-transparent">
             <SortableHead
               label="Mã"
               colKey="ticker"
               active={sortKey === 'ticker'}
               dir={sortDir}
               onSort={handleSort}
-              className="pl-3 pr-2 text-left"
+              className="pl-3 pr-2"
             />
-            <TableHead className="py-0 px-2 text-right text-[11px] text-[var(--color-muted-2)]">
+            <TableHead className="py-0 px-2 text-right font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
               KL
             </TableHead>
-            <TableHead className="py-0 px-2 text-right text-[11px] text-[var(--color-muted-2)]">
-              Giá vốn TB
+            <TableHead className="py-0 px-2 text-right font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
+              Giá vốn
             </TableHead>
-            <TableHead className="py-0 px-2 text-right text-[11px] text-[var(--color-muted-2)]">
+            <TableHead className="py-0 px-2 text-right font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
               Giá TT
             </TableHead>
             <SortableHead
@@ -443,26 +445,30 @@ export function PortfolioPositionsTable({
               onSort={handleSort}
               className="px-2 text-right"
             />
-            <TableHead className="py-0 px-2 text-[11px] text-[var(--color-muted-2)]">
-              Target/SL
+            <TableHead className="py-0 px-2 font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
+              Target / SL
             </TableHead>
-            <TableHead className="py-0 pl-2 pr-3 text-right text-[11px] text-[var(--color-muted-2)]">
-              &nbsp;
-            </TableHead>
+            <TableHead className="py-0 pl-2 pr-3 text-right" />
           </TableRow>
         </TableHeader>
         <TableBody>
-          {loading
-            ? Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} />)
-            : sorted.map((row) => (
-                <PositionTableRow
-                  key={row.ticker}
-                  row={row}
-                  onAddTransaction={onAddTransaction}
-                />
-              ))}
+          {loading ? (
+            <>
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
+            </>
+          ) : (
+            sortedRows.map((row) => (
+              <PositionRowComponent
+                key={row.ticker}
+                row={row}
+                onAddTransaction={onAddTransaction}
+              />
+            ))
+          )}
         </TableBody>
       </Table>
     </div>
   )
-}
+})
