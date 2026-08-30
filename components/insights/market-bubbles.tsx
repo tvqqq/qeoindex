@@ -65,6 +65,19 @@ interface SimBubble {
   volNorm: number
 }
 
+function getCeilingThreshold(period: BubblePeriod): number {
+  switch (period) {
+    case "1D":
+      return 6.95 // >= 7% (chuẩn phiên 1D)
+    case "1W":
+      return 15.0 // >= 15% (chuẩn tuần 1W)
+    case "1M":
+      return 30.0 // >= 30% (chuẩn tháng 1M)
+    case "1Y":
+      return 70.0 // >= 70% (chuẩn năm 1Y)
+  }
+}
+
 const PERIOD_TABS: AnimatedTab<BubblePeriod>[] = [
   { value: "1D", label: "1D" },
   { value: "1W", label: "1W" },
@@ -167,7 +180,7 @@ export function MarketBubbles({
     ].filter((group) => group.items.length > 0)
   }, [topStocks])
 
-  // Physics Simulation: Airy, spacious, well-distributed bubbles with guaranteed 10px spacing (no clumping!)
+  // Physics Simulation: Airy, spacious, well-distributed bubbles with guaranteed 17px spacing
   const bubbles: SimBubble[] = React.useMemo(() => {
     const count = topStocks.length
     if (count === 0) return []
@@ -182,49 +195,73 @@ export function MarketBubbles({
     const absChanges = changes.map((c) => Math.abs(c))
     const maxAbsChange = Math.max(2.5, ...absChanges)
     const minAbsChange = Math.min(...absChanges)
+    const ceilingThreshold = getCeilingThreshold(period)
 
     // Volume statistics for border thickness
     const volumes = topStocks.map((s) => s.volume ?? 0)
     const maxVol = Math.max(1_000_000, ...volumes)
     const minVol = Math.min(...volumes.filter((v) => v > 0)) || 10_000
 
-    // Target area coverage: 54% of available viewport area (+20% size increase)
+    // Target area coverage: 54% of available viewport area
     const targetTotalArea = W * H * 0.54
 
-    // Calculate dynamic radii with +20% size boost and readable minimum size for 0% movers
+    // Calculate dynamic radii with timeframe-aware scaling
     const rawRadii = topStocks.map((stock, i) => {
       const chg = changes[i]
       const absChg = Math.abs(chg)
       const norm = Math.max(0, (absChg - minAbsChange) / (maxAbsChange - minAbsChange || 1))
 
-      // Base radius from 22px to 64px (+20% larger base size so 0% bubbles are never too small)
+      // Base radius
       let r = 22 + Math.pow(norm, 0.48) * 42
 
-      // Price gain scaling (Tăng mạnh kích thước theo % tăng giá của cổ phiếu)
-      if (chg > 0) {
-        if (chg >= 6.5) {
-          // Ceiling / massive gainers (>6.5% - 10%)
-          r *= 2.05 + (chg - 6.5) * 0.12
-        } else if (chg >= 4.0) {
-          // Strong gainers (4.0% - 6.5%)
-          r *= 1.68 + (chg - 4.0) * 0.09
-        } else if (chg >= 2.0) {
-          // Solid gainers (2.0% - 4.0%)
-          r *= 1.38 + (chg - 2.0) * 0.06
-        } else if (chg >= 0.5) {
-          // Moderate gainers
-          r *= 1.2
+      // Timeframe-specific Price gain scaling:
+      if (period === "1Y") {
+        // Nén độ chênh lệch của 1Y để các mã tăng 200%-500% không đè bẹp các mã khác
+        if (chg > 0) {
+          if (chg >= 70) {
+            // Tím 1Y (>= 70%)
+            r *= 1.48 + Math.min(0.2, (chg - 70) * 0.001)
+          } else if (chg >= 35) {
+            r *= 1.32 + (chg - 35) * 0.003
+          } else if (chg >= 15) {
+            r *= 1.20 + (chg - 15) * 0.005
+          } else {
+            r *= 1.10
+          }
+        } else if (chg < 0) {
+          if (absChg >= 40) {
+            r *= 1.35
+          } else if (absChg >= 20) {
+            r *= 1.18
+          }
         }
-      } else if (chg < 0) {
-        // Losers scaled based on decline magnitude
-        if (absChg >= 5.0) {
-          r *= 1.45
-        } else if (absChg >= 2.5) {
-          r *= 1.22
+      } else {
+        // 1D (>=7% tím), 1W (>=15% tím), 1M (>=30% tím)
+        if (chg > 0) {
+          if (chg >= ceilingThreshold) {
+            // Trần / bùng nổ tím
+            r *= 2.05 + Math.min(0.5, (chg - ceilingThreshold) * 0.1)
+          } else if (chg >= ceilingThreshold * 0.58) {
+            // Tăng mạnh
+            r *= 1.68 + (chg - ceilingThreshold * 0.58) * 0.08
+          } else if (chg >= ceilingThreshold * 0.28) {
+            // Tăng khá
+            r *= 1.38 + (chg - ceilingThreshold * 0.28) * 0.05
+          } else if (chg >= 0.5) {
+            // Tăng nhẹ
+            r *= 1.2
+          }
+        } else if (chg < 0) {
+          // Giảm giá
+          if (absChg >= ceilingThreshold * 0.7) {
+            r *= 1.45
+          } else if (absChg >= ceilingThreshold * 0.35) {
+            r *= 1.22
+          }
         }
       }
 
-      // Universal +20% scale boost requested by user
+      // Universal +20% scale boost
       r *= 1.2
 
       if (W < 640) {
@@ -274,8 +311,8 @@ export function MarketBubbles({
       const initY = centerY + Math.sin(phi) * radDist
 
       let tone: SimBubble["tone"] = "neutral"
-      if (change >= 6.5) {
-        tone = "fuchsia"
+      if (change >= ceilingThreshold) {
+        tone = "fuchsia" // Tím theo chuẩn khung thời gian (1D >= 7%, 1W >= 15%, 1M >= 30%, 1Y >= 70%)
       } else if (change > 0) {
         tone = "emerald"
       } else if (change < 0) {
@@ -654,7 +691,8 @@ export function MarketBubbles({
                   {group.items.map(({ stock, rank }) => {
                     const change = getStockChange(stock, period)
                     const chgVal = change ?? 0
-                    const isFuchsia = chgVal >= 6.5
+                    const ceilingThreshold = getCeilingThreshold(period)
+                    const isFuchsia = chgVal >= ceilingThreshold
                     const isEmerald = chgVal > 0 && !isFuchsia
                     const isRose = chgVal < 0
                     const SectorIcon = getSectorIcon(stock.sector)
