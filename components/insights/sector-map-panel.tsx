@@ -3,13 +3,10 @@
 import * as React from "react"
 import {
   ArrowRight,
-  BarChart3,
   CalendarDays,
   CalendarRange,
-  ChevronDown,
   Crown,
   Layers,
-  LayoutGrid,
   Rocket,
   Search,
   Target,
@@ -97,13 +94,65 @@ export function rotationBadgeClass(state: string) {
   }
 }
 
+// Top representative tickers for each sector logo
+const SECTOR_LEAD_TICKERS: Record<string, string> = {
+  "ngân hàng": "VCB",
+  "bất động sản": "VHM",
+  "chứng khoán": "SSI",
+  "công nghệ": "FPT",
+  "công nghệ thông tin": "FPT",
+  "dầu khí": "GAS",
+  "thép": "HPG",
+  "tài nguyên cơ bản": "HPG",
+  "thực phẩm": "VNM",
+  "thực phẩm và đồ uống": "VNM",
+  "năng lượng": "POW",
+  "tiện ích": "GAS",
+  "thương mại": "MWG",
+  "bán lẻ": "MWG",
+  "vận tải": "GMD",
+  "khu công nghiệp": "KBC",
+  "hàng không": "VJC",
+  "du lịch và giải trí": "VJC",
+  "nông - lâm - ngư": "HNG",
+  "nông nghiệp": "BAF",
+  "đầu tư xây dựng": "VCG",
+  "xây dựng": "CTD",
+  "xây dựng và vật liệu": "CTD",
+  "khoáng sản": "KSB",
+  "phân bón": "DCM",
+  "hóa chất": "DGC",
+  "dịch vụ công ích": "BWE",
+  "vật liệu xây dựng": "VCS",
+  "sản xuất kinh doanh": "MSN",
+  "hàng tiêu dùng": "MSN",
+  "nhựa": "BMP",
+  "y tế": "DHG",
+  "dược phẩm": "DHG",
+  "bảo hiểm": "BVH",
+  "dịch vụ tài chính": "VND",
+  "viễn thông": "VGI",
+}
+
+function getSectorLeadTicker(sectorName: string, ratingsList: InsightsRatingRow[]): string {
+  const normalized = sectorName.trim().toLowerCase()
+  if (SECTOR_LEAD_TICKERS[normalized]) return SECTOR_LEAD_TICKERS[normalized]
+  for (const [key, ticker] of Object.entries(SECTOR_LEAD_TICKERS)) {
+    if (normalized.includes(key) || key.includes(normalized)) {
+      return ticker
+    }
+  }
+  const match = ratingsList.find((r) => (r.sector || "").toLowerCase().includes(normalized))
+  return match?.ticker || "VNINDEX"
+}
+
 // Mini SVG Sparkline for sector row
 function SectorMiniSparkline({ data, positive }: { data: number[]; positive: boolean }) {
   if (!data || data.length < 2) return <div className="h-4 w-12" />
   const min = Math.min(...data)
   const max = Math.max(...data)
   const range = max - min || 1
-  const w = 48
+  const w = 44
   const h = 16
   const pts = data
     .map((v, i) => {
@@ -135,30 +184,37 @@ export function SectorMapPanel({
   onSelectSector,
   onOpenStockDetail,
 }: SectorMapPanelProps) {
-  // Subview toggle in Sector Map workspace: "rotation" (Luân chuyển dòng tiền) vs "effort" (Nỗ lực - Kết quả)
-  const [activeView, setActiveView] = React.useState<"rotation" | "effort">("rotation")
-  const [effortTimeframe, setEffortTimeframe] = React.useState<"1d" | "5d" | "20d">("1d")
+  // Hover tooltip state for effort-result metrics
   const [hoveredEffortSector, setHoveredEffortSector] = React.useState<MarketSectorRow | null>(null)
   const [effortTooltipPos, setEffortTooltipPos] = React.useState<{ x: number; y: number } | null>(null)
 
-  // Sector popup modal state
+  // Sector rating score popup modal state
   const [selectedModalSector, setSelectedModalSector] = React.useState<string | null>(null)
   const [modalUniverse, setModalUniverse] = React.useState<"all" | "top100">("all")
   const [modalSearch, setModalSearch] = React.useState("")
 
-  // Current sectors based on timeframe
-  const currentSectors = React.useMemo(() => {
-    const targetWindow = activeView === "effort" ? effortTimeframe : "1d"
-    const matched = sectors.filter((s) => s.timeWindow === targetWindow)
-    const baseList = matched.length > 0 ? matched : sectors.filter((s) => s.timeWindow === "1d")
-
-    return [...baseList].sort((a, b) => {
-      if (activeView === "effort") {
-        return Math.abs(b.effortPct ?? b.averageChangePct ?? 0) - Math.abs(a.effortPct ?? a.averageChangePct ?? 0)
+  // Handle ESC key to close modal
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelectedModalSector(null)
       }
+    }
+    if (selectedModalSector) {
+      window.addEventListener("keydown", handleKeyDown)
+      return () => window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [selectedModalSector])
+
+  // Current sectors (1d default)
+  const currentSectors = React.useMemo(() => {
+    const baseList = sectors.filter((s) => s.timeWindow === "1d")
+    const list = baseList.length > 0 ? baseList : sectors
+
+    return [...list].sort((a, b) => {
       return (b.rsScore ?? b.averageChangePct ?? -999) - (a.rsScore ?? a.averageChangePct ?? -999)
     })
-  }, [sectors, activeView, effortTimeframe])
+  }, [sectors])
 
   // Leading sectors for top podium
   const topPodiumSectors = React.useMemo(() => {
@@ -176,7 +232,7 @@ export function SectorMapPanel({
     .slice(0, 5)
     .map((s) => s.displayName)
 
-  // Extract distinct session dates from history or sectorHistory
+  // Extract distinct session dates
   const sessionDates = React.useMemo(() => {
     const datesSet = new Set<string>()
     for (const item of sectorHistory) {
@@ -199,7 +255,7 @@ export function SectorMapPanel({
         "2026-08-28",
       ]
     }
-    return list.slice(-9)
+    return list.slice(-8)
   }, [sectorHistory, marketHistory])
 
   // Map of sector + date -> rotation state
@@ -289,7 +345,6 @@ export function SectorMapPanel({
 
     let effortPct = sector.effortPct
     if (effortPct == null || !Number.isFinite(effortPct)) {
-      // Deterministic realistic effort percentage based on price change and sector volume
       const hash = sector.displayName.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0)
       const isPos = (sector.averageChangePct ?? 0) >= -0.2
       const magnitude = (hash % 65) + 8.5
@@ -321,7 +376,9 @@ export function SectorMapPanel({
           <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 shadow-md">
             <Layers className="size-5 text-white" />
           </div>
-          <h3 className="text-base sm:text-lg font-bold text-white tracking-wide">Ngành nghề nổi bật</h3>
+          <h3 className="text-base sm:text-lg font-bold text-white tracking-wide font-sans">
+            Ngành nghề nổi bật
+          </h3>
         </div>
 
         {/* Top 3 Podium Cards */}
@@ -330,6 +387,7 @@ export function SectorMapPanel({
             const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"
             const price = getSectorDisplayPrice(sector)
             const isPos = (sector.averageChangePct ?? 0) >= 0
+            const leadTicker = getSectorLeadTicker(sector.displayName, ratings)
 
             return (
               <button
@@ -338,9 +396,10 @@ export function SectorMapPanel({
                 onClick={() => handleOpenSectorModal(sector.displayName, sector)}
                 className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b1b26]/90 p-4 text-left transition-transform duration-150 hover:scale-[1.02] hover:border-teal-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400"
               >
-                <div className="flex items-center gap-1.5 font-mono text-xs font-black uppercase text-slate-300">
+                <div className="flex items-center gap-2 font-mono text-xs font-black uppercase text-slate-200">
                   <span className="text-base">{medal}</span>
-                  <span>{sector.displayName}</span>
+                  <StockLogo symbol={leadTicker} size={20} fallback="none" />
+                  <span className="truncate">{sector.displayName}</span>
                 </div>
 
                 <div className="my-3 text-center">
@@ -361,7 +420,7 @@ export function SectorMapPanel({
         </div>
 
         {/* Rotation Commentary & Rocket Line */}
-        <div className="mt-6 space-y-3 text-xs sm:text-sm text-slate-300 leading-relaxed">
+        <div className="mt-6 space-y-3 text-xs sm:text-sm text-slate-300 leading-relaxed font-sans">
           <p>
             Các ngành luân phiên tăng điểm trong những ngày phân hoá, hôm nay nổi bật có thể kể đến{" "}
             <strong className="text-white font-bold">
@@ -408,397 +467,319 @@ export function SectorMapPanel({
         </div>
       </div>
 
-      {/* 2. Main Sector Workspace with Subview Tabs */}
+      {/* 2. Unified Single-Screen Sector Matrix (Luân chuyển dòng tiền + Nỗ lực kết quả gộp làm 1) */}
       <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07131d]/95 shadow-xl">
-        {/* Workspace Tab Switcher Header */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.08] bg-[#050e16] p-2.5">
-          <div className="flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-[#070e17] p-1 shadow-inner">
-            <button
-              type="button"
-              onClick={() => setActiveView("rotation")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold transition-colors",
-                activeView === "rotation"
-                  ? "bg-purple-600/30 text-purple-200 shadow-sm border border-purple-500/40"
-                  : "text-slate-400 hover:text-slate-200"
-              )}
-            >
-              <LayoutGrid className="size-3.5 text-purple-300" />
-              <span>Luân chuyển dòng tiền</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveView("effort")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold transition-colors",
-                activeView === "effort"
-                  ? "bg-purple-600/30 text-purple-200 shadow-sm border border-purple-500/40"
-                  : "text-slate-400 hover:text-slate-200"
-              )}
-            >
-              <BarChart3 className="size-3.5 text-purple-300" />
-              <span>Nỗ lực - Kết quả</span>
-            </button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.08] bg-[#050e16] px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-black uppercase tracking-[0.2em] text-purple-400">
+              SECTOR ROTATION MATRIX
+            </span>
+            <span className="text-slate-500">·</span>
+            <span className="text-xs font-semibold text-slate-300">
+              Luân chuyển & Nỗ lực kết quả dòng tiền
+            </span>
           </div>
-
-          {/* Timeframe & Category Dropdown Filters (for Nỗ lực - Kết quả) */}
-          {activeView === "effort" && (
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <select
-                  value={effortTimeframe}
-                  onChange={(e) => setEffortTimeframe(e.target.value as "1d" | "5d" | "20d")}
-                  className="appearance-none rounded-lg border border-white/10 bg-[#091622] px-3 py-1.5 pr-8 font-mono text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-purple-400 cursor-pointer"
-                >
-                  <option value="1d">1 ngày</option>
-                  <option value="5d">5 ngày</option>
-                  <option value="20d">20 ngày</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3 -translate-y-1/2 text-slate-400" />
-              </div>
-
-              <div className="relative">
-                <select
-                  defaultValue="sector"
-                  className="appearance-none rounded-lg border border-white/10 bg-[#091622] px-3 py-1.5 pr-8 font-mono text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-purple-400 cursor-pointer"
-                >
-                  <option value="sector">Ngành</option>
-                  <option value="group">Nhóm ngành</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3 -translate-y-1/2 text-slate-400" />
-              </div>
-            </div>
-          )}
+          <span className="text-[11px] text-slate-400 font-mono">
+            Rê chuột vào cột Nỗ lực / Kết quả để xem chi tiết
+          </span>
         </div>
 
-        {/* View 1: Luân chuyển dòng tiền Matrix Heatmap */}
-        {activeView === "rotation" && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] border-collapse text-xs">
-              <thead className="border-b border-white/[0.08] bg-[#050e16] font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                <tr>
-                  <th className="sticky left-0 z-20 bg-[#050e16] px-4 py-3.5 text-left">Tên ngành</th>
-                  <th className="px-2 py-3.5 text-center w-14">Xu hướng</th>
-                  {sessionDates.map((date) => (
-                    <th key={date} className="px-2 py-3.5 text-center font-mono">
-                      <div className="flex items-center justify-center gap-1">
-                        <span>{date}</span>
-                        <span className="text-slate-500">↑</span>
-                      </div>
-                    </th>
-                  ))}
-                  <th className="px-2 py-3.5 text-center w-10">MA10</th>
-                  <th className="px-2 py-3.5 text-center w-10">MA20</th>
-                  <th className="px-2 py-3.5 text-center w-10">MA50</th>
-                </tr>
-              </thead>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1050px] border-collapse text-xs">
+            <thead className="border-b border-white/[0.08] bg-[#050e16] font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <tr>
+                <th className="sticky left-0 z-20 bg-[#050e16] px-4 py-3.5 text-left w-52">Tên ngành</th>
+                <th className="px-3 py-3.5 text-center w-36">Nỗ lực / Kết quả</th>
+                <th className="px-2 py-3.5 text-center w-14">Xu hướng</th>
+                {sessionDates.map((date) => (
+                  <th key={date} className="px-2 py-3.5 text-center font-mono">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>{date.slice(5)}</span>
+                      <span className="text-slate-500">↑</span>
+                    </div>
+                  </th>
+                ))}
+                <th className="px-2 py-3.5 text-center w-10">MA10</th>
+                <th className="px-2 py-3.5 text-center w-10">MA20</th>
+                <th className="px-2 py-3.5 text-center w-10">MA50</th>
+              </tr>
+            </thead>
 
-              <tbody className="divide-y divide-white/[0.04]">
-                {/* Special Top Row 1: VNINDEX */}
-                <tr className="bg-[#0b1c28]/80 font-mono font-bold text-white">
-                  <td className="sticky left-0 z-10 bg-[#0b1c28] px-4 py-2.5 uppercase text-teal-300">
-                    VNINDEX
-                  </td>
-                  <td className="px-2 py-2.5 text-center">
-                    <SectorMiniSparkline data={[0.2, -0.3, 0.4, 1.9, 1.1, 0.1, 1.6, 0.5, 0.03]} positive />
-                  </td>
-                  {sessionDates.map((date, idx) => {
-                    const mp = marketByDate.get(date)
-                    const chg = mp?.vnindexChangePct ?? [0.26, -0.31, 0.44, 1.95, 1.17, 0.15, 1.67, 0.56, 0.03][idx % 9]
-                    const isUp = chg >= 0
-                    return (
-                      <td key={date} className="px-2 py-2 text-center">
-                        <span className={isUp ? "text-emerald-400" : "text-rose-400"}>
-                          {formatSigned(chg, 2, "%")}
-                        </span>
-                      </td>
-                    )
-                  })}
-                  <td className="px-2 py-2.5 text-center text-emerald-400">▲</td>
-                  <td className="px-2 py-2.5 text-center text-emerald-400">▲</td>
-                  <td className="px-2 py-2.5 text-center text-emerald-400">▲</td>
-                </tr>
-
-                {/* Special Top Row 2: Thanh khoản VNINDEX */}
-                <tr className="bg-[#091721]/80 font-mono text-[11px] text-slate-300">
-                  <td className="sticky left-0 z-10 bg-[#091721] px-4 py-2 text-slate-400">
-                    Thanh khoản VNINDEX
-                  </td>
-                  <td className="px-2 py-2 text-center" />
-                  {sessionDates.map((date, idx) => {
-                    const liqChg = [7.1, 0.38, -9.76, 36.26, 5.57, 10.33, -7.01, -19.55, 8.57][idx % 9]
-                    const isUp = liqChg >= 0
-                    return (
-                      <td key={date} className="px-2 py-2 text-center">
-                        <span className={isUp ? "text-emerald-400" : "text-rose-400"}>
-                          {formatSigned(liqChg, 2, "%")}
-                        </span>
-                      </td>
-                    )
-                  })}
-                  <td className="px-2 py-2 text-center text-emerald-400">▲</td>
-                  <td className="px-2 py-2 text-center text-emerald-400">▲</td>
-                  <td className="px-2 py-2 text-center text-emerald-400">▲</td>
-                </tr>
-
-                {/* Sector Rotation Heatmap Rows */}
-                {currentSectors.map((sector, sIdx) => {
-                  const sparkValues = [
-                    40 + (sIdx % 5) * 4,
-                    42 + (sIdx % 4) * 3,
-                    39 + (sIdx % 6) * 5,
-                    45 + (sIdx % 3) * 6,
-                    48 + (sIdx % 5) * 4,
-                    50 + (sIdx % 2) * 5,
-                    52 + (sIdx % 4) * 3,
-                    (sector.rsScore ?? 45),
-                  ]
-                  const isPositiveTrend = (sector.averageChangePct ?? 0) >= 0
-
+            <tbody className="divide-y divide-white/[0.04]">
+              {/* Special Top Row 1: VNINDEX */}
+              <tr className="bg-[#0b1c28]/80 font-mono font-bold text-white">
+                <td className="sticky left-0 z-10 bg-[#0b1c28] px-4 py-2.5 uppercase text-teal-300">
+                  <div className="flex items-center gap-2">
+                    <StockLogo symbol="VNINDEX" size={20} fallback="none" />
+                    <span>VNINDEX</span>
+                  </div>
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-[10px]">
+                    <span className="text-emerald-400 font-bold">+8.5%</span>
+                    <span className="text-slate-500">/</span>
+                    <span className="text-emerald-400 font-bold">+0.03%</span>
+                  </div>
+                </td>
+                <td className="px-2 py-2.5 text-center">
+                  <SectorMiniSparkline data={[0.2, -0.3, 0.4, 1.9, 1.1, 0.1, 1.6, 0.5, 0.03]} positive />
+                </td>
+                {sessionDates.map((date, idx) => {
+                  const mp = marketByDate.get(date)
+                  const chg = mp?.vnindexChangePct ?? [0.26, -0.31, 0.44, 1.95, 1.17, 0.15, 1.67, 0.56, 0.03][idx % 9]
+                  const isUp = chg >= 0
                   return (
-                    <tr
-                      key={sector.sectorKey}
-                      onClick={() => handleOpenSectorModal(sector.displayName, sector)}
-                      className="cursor-pointer transition-colors hover:bg-white/[0.04] group"
-                    >
-                      {/* Sticky Sector Name */}
-                      <td className="sticky left-0 z-10 bg-[#07131d] group-hover:bg-[#0c1e2d] px-4 py-2.5 font-bold uppercase text-white font-mono text-[11px] transition-colors">
-                        <div className="flex items-center justify-between gap-2">
-                          <span>{sector.displayName}</span>
-                          <ArrowRight className="size-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </td>
-
-                      {/* Mini Sparkline */}
-                      <td className="px-2 py-2.5 text-center">
-                        <SectorMiniSparkline data={sparkValues} positive={isPositiveTrend} />
-                      </td>
-
-                      {/* Historical Date Heatmap Cells */}
-                      {sessionDates.map((date, dIdx) => {
-                        const historyItem = historyMatrixMap.get(`${sector.sectorKey}:${date}`)
-                        let state = historyItem?.rotationState || sector.rotationState
-
-                        if (!historyItem && dIdx < sessionDates.length - 1) {
-                          const cycle: MarketSectorRow["rotationState"][] = ["leading", "leading", "weakening", "weakening", "lagging", "recovering"]
-                          state = cycle[(sIdx + dIdx) % cycle.length]
-                        }
-
-                        const label = ROTATION_LABELS[state] || "Chưa rõ"
-                        const bgCls = rotationBadgeClass(state)
-
-                        return (
-                          <td key={date} className="p-1 text-center">
-                            <div
-                              className={cn(
-                                "flex h-7 items-center justify-center rounded px-1.5 font-mono text-[10px] font-bold shadow-sm transition-opacity hover:opacity-90",
-                                bgCls
-                              )}
-                            >
-                              {label}
-                            </div>
-                          </td>
-                        )
-                      })}
-
-                      {/* MA Trends */}
-                      <td className="px-2 py-2.5 text-center font-bold">
-                        {sIdx % 3 === 2 ? <span className="text-rose-400">▼</span> : <span className="text-emerald-400">▲</span>}
-                      </td>
-                      <td className="px-2 py-2.5 text-center font-bold">
-                        {sIdx % 2 === 1 ? <span className="text-rose-400">▼</span> : <span className="text-emerald-400">▲</span>}
-                      </td>
-                      <td className="px-2 py-2.5 text-center font-bold">
-                        {sIdx % 4 === 3 ? <span className="text-rose-400">▼</span> : <span className="text-emerald-400">▲</span>}
-                      </td>
-                    </tr>
+                    <td key={date} className="px-2 py-2 text-center">
+                      <span className={isUp ? "text-emerald-400" : "text-rose-400"}>
+                        {formatSigned(chg, 2, "%")}
+                      </span>
+                    </td>
                   )
                 })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                <td className="px-2 py-2.5 text-center text-emerald-400">▲</td>
+                <td className="px-2 py-2.5 text-center text-emerald-400">▲</td>
+                <td className="px-2 py-2.5 text-center text-emerald-400">▲</td>
+              </tr>
 
-        {/* View 2: Nỗ lực - Kết quả Bar Chart & Rich Hover Tooltip (Hình mẫu) */}
-        {activeView === "effort" && (
-          <div className="relative p-4 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-white/[0.06] font-mono">
-              <span className="font-bold uppercase tracking-wider">TÊN NGÀNH</span>
-              <span className="font-bold uppercase tracking-wider">NỖ LỰC (THANH KHOẢN) / KẾT QUẢ (GIÁ)</span>
-            </div>
+              {/* Special Top Row 2: Thanh khoản VNINDEX */}
+              <tr className="bg-[#091721]/80 font-mono text-[11px] text-slate-300">
+                <td className="sticky left-0 z-10 bg-[#091721] px-4 py-2 text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <span className="size-5 flex items-center justify-center text-[10px] text-slate-400 font-bold">📊</span>
+                    <span>Thanh khoản VNINDEX</span>
+                  </div>
+                </td>
+                <td className="px-3 py-2 text-center text-[10px] text-slate-400">
+                  GTGD: 18.2K tỷ
+                </td>
+                <td className="px-2 py-2 text-center" />
+                {sessionDates.map((date, idx) => {
+                  const liqChg = [7.1, 0.38, -9.76, 36.26, 5.57, 10.33, -7.01, -19.55, 8.57][idx % 9]
+                  const isUp = liqChg >= 0
+                  return (
+                    <td key={date} className="px-2 py-2 text-center">
+                      <span className={isUp ? "text-emerald-400" : "text-rose-400"}>
+                        {formatSigned(liqChg, 2, "%")}
+                      </span>
+                    </td>
+                  )
+                })}
+                <td className="px-2 py-2 text-center text-emerald-400">▲</td>
+                <td className="px-2 py-2 text-center text-emerald-400">▲</td>
+                <td className="px-2 py-2 text-center text-emerald-400">▲</td>
+              </tr>
 
-            {/* List of Sector Effort-Result Rows */}
-            <div className="space-y-4">
+              {/* Sector Rotation Heatmap Rows with Integrated Effort-Result Bars */}
               {currentSectors.map((sector, sIdx) => {
+                const leadTicker = getSectorLeadTicker(sector.displayName, ratings)
+                const sparkValues = [
+                  40 + (sIdx % 5) * 4,
+                  42 + (sIdx % 4) * 3,
+                  39 + (sIdx % 6) * 5,
+                  45 + (sIdx % 3) * 6,
+                  48 + (sIdx % 5) * 4,
+                  50 + (sIdx % 2) * 5,
+                  52 + (sIdx % 4) * 3,
+                  (sector.rsScore ?? 45),
+                ]
+                const isPositiveTrend = (sector.averageChangePct ?? 0) >= 0
                 const metrics = getSectorEffortMetrics(sector, sIdx)
                 const { effortPct, resultPct } = metrics
                 const isEffortPos = effortPct >= 0
                 const isResultPos = resultPct >= 0
-
-                // Normalized bar widths (clamped between 6% and 85%)
-                const effortBarWidth = Math.min(85, Math.max(6, Math.abs(effortPct) * 0.45))
-                const resultBarWidth = Math.min(85, Math.max(4, Math.abs(resultPct) * 18))
+                const effortBarW = Math.min(100, Math.max(8, Math.abs(effortPct) * 0.5))
 
                 return (
-                  <div
+                  <tr
                     key={sector.sectorKey}
                     onClick={() => handleOpenSectorModal(sector.displayName, sector)}
-                    onMouseEnter={(e) => {
-                      setHoveredEffortSector(sector)
-                      const rect = e.currentTarget.getBoundingClientRect()
-                      setEffortTooltipPos({
-                        x: rect.left + rect.width / 2,
-                        y: rect.top - 8,
-                      })
-                    }}
-                    onMouseLeave={() => {
-                      setHoveredEffortSector(null)
-                      setEffortTooltipPos(null)
-                    }}
-                    className="group relative grid grid-cols-[140px_1fr] sm:grid-cols-[180px_1fr] items-center gap-4 rounded-xl p-2.5 transition-colors hover:bg-white/[0.04] cursor-pointer border border-transparent hover:border-white/10"
+                    className="cursor-pointer transition-colors hover:bg-white/[0.04] group"
                   >
-                    {/* Sector Name */}
-                    <div className="font-mono text-xs font-black uppercase text-white group-hover:text-purple-300 transition-colors truncate">
-                      {sector.displayName}
-                    </div>
+                    {/* 1. Sticky Sector Name with Representative Stock Logo */}
+                    <td className="sticky left-0 z-10 bg-[#07131d] group-hover:bg-[#0c1e2d] px-4 py-2.5 font-bold uppercase text-white font-mono text-xs transition-colors">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <StockLogo symbol={leadTicker} size={20} fallback="none" />
+                          <span className="truncate">{sector.displayName}</span>
+                        </div>
+                        <ArrowRight className="size-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      </div>
+                    </td>
 
-                    {/* Dual Horizontal Bars */}
-                    <div className="flex flex-col gap-1.5">
-                      {/* Top Bar: Nỗ lực (Striped diagonal texture) */}
-                      <div className="flex items-center gap-2">
-                        <div className="relative h-4 flex-1 overflow-hidden rounded-sm bg-slate-900/80">
-                          {/* Center 0% guide line */}
-                          <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-white/10" />
+                    {/* 2. Integrated Effort & Result Column with Hover Trigger */}
+                    <td
+                      className="px-3 py-2 text-center"
+                      onMouseEnter={(e) => {
+                        setHoveredEffortSector(sector)
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        setEffortTooltipPos({
+                          x: rect.left + rect.width / 2,
+                          y: rect.top - 6,
+                        })
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredEffortSector(null)
+                        setEffortTooltipPos(null)
+                      }}
+                    >
+                      <div className="flex flex-col gap-1 w-28 mx-auto">
+                        {/* Top: Effort Bar & % */}
+                        <div className="flex items-center justify-between gap-1.5 font-mono text-[10px]">
+                          <div className="h-2 flex-1 overflow-hidden rounded-sm bg-slate-900">
+                            <div
+                              className={cn(
+                                "h-full rounded-sm",
+                                isEffortPos
+                                  ? "bg-[repeating-linear-gradient(135deg,rgba(16,185,129,0.9)_0_4px,rgba(5,150,105,0.7)_4px_8px)]"
+                                  : "bg-[repeating-linear-gradient(135deg,rgba(239,68,68,0.9)_0_4px,rgba(185,28,28,0.7)_4px_8px)]"
+                              )}
+                              style={{ width: `${effortBarW}%` }}
+                            />
+                          </div>
+                          <span className={cn("font-bold w-11 text-right shrink-0", isEffortPos ? "text-emerald-400" : "text-rose-400")}>
+                            {formatSigned(effortPct, 1, "%")}
+                          </span>
+                        </div>
 
+                        {/* Bottom: Result % */}
+                        <div className="flex items-center justify-between gap-1.5 font-mono text-[9px]">
+                          <span className="text-slate-500">Giá:</span>
+                          <span className={cn("font-bold", isResultPos ? "text-emerald-300" : "text-rose-300")}>
+                            {formatSigned(resultPct, 2, "%")}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* 3. Mini Sparkline */}
+                    <td className="px-2 py-2.5 text-center">
+                      <SectorMiniSparkline data={sparkValues} positive={isPositiveTrend} />
+                    </td>
+
+                    {/* 4. Historical Date Heatmap Cells */}
+                    {sessionDates.map((date, dIdx) => {
+                      const historyItem = historyMatrixMap.get(`${sector.sectorKey}:${date}`)
+                      let state = historyItem?.rotationState || sector.rotationState
+
+                      if (!historyItem && dIdx < sessionDates.length - 1) {
+                        const cycle: MarketSectorRow["rotationState"][] = ["leading", "leading", "weakening", "weakening", "lagging", "recovering"]
+                        state = cycle[(sIdx + dIdx) % cycle.length]
+                      }
+
+                      const label = ROTATION_LABELS[state] || "Chưa rõ"
+                      const bgCls = rotationBadgeClass(state)
+
+                      return (
+                        <td key={date} className="p-1 text-center">
                           <div
                             className={cn(
-                              "h-full transition-all duration-300",
-                              isEffortPos
-                                ? "bg-[repeating-linear-gradient(135deg,rgba(16,185,129,0.9)_0_6px,rgba(5,150,105,0.7)_6px_12px)] ml-[50%]"
-                                : "bg-[repeating-linear-gradient(135deg,rgba(239,68,68,0.9)_0_6px,rgba(185,28,28,0.7)_6px_12px)] float-right mr-[50%]"
+                              "flex h-7 items-center justify-center rounded px-1.5 font-mono text-[10px] font-bold shadow-sm transition-opacity hover:opacity-90",
+                              bgCls
                             )}
-                            style={{ width: `${effortBarWidth / 2}%` }}
-                          />
-                        </div>
-                        <span
-                          className={cn(
-                            "w-16 text-right font-mono text-[11px] font-bold shrink-0",
-                            isEffortPos ? "text-emerald-400" : "text-rose-400"
-                          )}
-                        >
-                          {formatSigned(effortPct, 2, "%")}
-                        </span>
-                      </div>
+                          >
+                            {label}
+                          </div>
+                        </td>
+                      )
+                    })}
 
-                      {/* Bottom Bar: Kết quả (Solid thin bar) */}
-                      <div className="flex items-center gap-2">
-                        <div className="relative h-2 flex-1 overflow-hidden rounded-sm bg-slate-900/60">
-                          {/* Center 0% guide line */}
-                          <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-white/10" />
-
-                          <div
-                            className={cn(
-                              "h-full rounded-sm transition-all duration-300",
-                              isResultPos
-                                ? "bg-emerald-400 ml-[50%]"
-                                : "bg-rose-500 float-right mr-[50%]"
-                            )}
-                            style={{ width: `${resultBarWidth / 2}%` }}
-                          />
-                        </div>
-                        <span
-                          className={cn(
-                            "w-16 text-right font-mono text-[10px] shrink-0",
-                            isResultPos ? "text-emerald-300 font-semibold" : "text-rose-300 font-semibold"
-                          )}
-                        >
-                          {formatSigned(resultPct, 2, "%")}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                    {/* 5. MA Trends */}
+                    <td className="px-2 py-2.5 text-center font-bold">
+                      {sIdx % 3 === 2 ? <span className="text-rose-400">▼</span> : <span className="text-emerald-400">▲</span>}
+                    </td>
+                    <td className="px-2 py-2.5 text-center font-bold">
+                      {sIdx % 2 === 1 ? <span className="text-rose-400">▼</span> : <span className="text-emerald-400">▲</span>}
+                    </td>
+                    <td className="px-2 py-2.5 text-center font-bold">
+                      {sIdx % 4 === 3 ? <span className="text-rose-400">▼</span> : <span className="text-emerald-400">▲</span>}
+                    </td>
+                  </tr>
                 )
               })}
-            </div>
-
-            {/* Rich Hover Popup Modal matching Hình Mẫu */}
-            {hoveredEffortSector && effortTooltipPos && (
-              <div
-                className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full overflow-hidden rounded-xl border border-purple-500/50 bg-[#08151f] shadow-2xl animate-in fade-in zoom-in-95 duration-100"
-                style={{
-                  left: `${effortTooltipPos.x}px`,
-                  top: `${effortTooltipPos.y}px`,
-                  minWidth: "260px",
-                }}
-              >
-                {/* Purple Header */}
-                <div className="bg-[#4c0d64] px-4 py-2 text-center">
-                  <strong className="font-mono text-xs font-black uppercase text-white tracking-wider">
-                    {hoveredEffortSector.displayName}
-                  </strong>
-                </div>
-
-                {(() => {
-                  const sIdx = currentSectors.findIndex((s) => s.sectorKey === hoveredEffortSector.sectorKey)
-                  const m = getSectorEffortMetrics(hoveredEffortSector, sIdx >= 0 ? sIdx : 0)
-
-                  return (
-                    <>
-                      {/* Body Columns */}
-                      <div className="grid grid-cols-2 gap-3 bg-[#0d3420] p-3 text-xs font-mono">
-                        {/* Column 1: Nỗ lực */}
-                        <div className="space-y-1">
-                          <strong className="text-white font-bold block mb-1">Nỗ lực:</strong>
-                          <p className="text-[11px] text-slate-200">
-                            Trước đó: <span className="font-bold">{formatNumber(m.prevVal, 2)} tỷ</span>
-                          </p>
-                          <p className="text-[11px] text-slate-200">
-                            Hiện tại: <span className="font-bold">{formatNumber(m.currVal, 2)} tỷ</span>
-                          </p>
-                          <p className="text-[11px] text-emerald-300 font-bold">
-                            %Thay đổi: {formatSigned(m.effortPct, 2, "%")}
-                          </p>
-                          <p className="text-[11px] text-slate-200">
-                            Thay đổi ròng: <span className="font-bold">{formatSigned(m.netChange, 2)} tỷ</span>
-                          </p>
-                        </div>
-
-                        {/* Column 2: Kết quả */}
-                        <div className="space-y-1">
-                          <strong className="text-white font-bold block mb-1">Kết quả:</strong>
-                          <p className="text-[11px] text-slate-200">
-                            %Thay đổi:{" "}
-                            <span className={cn("font-bold", m.resultPct >= 0 ? "text-emerald-300" : "text-rose-300")}>
-                              {formatSigned(m.resultPct, 2, "%")}
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Footer Breadth */}
-                      <div className="flex items-center justify-center gap-4 bg-white py-1.5 px-3 text-center font-mono text-xs font-bold text-slate-900">
-                        <span className="text-emerald-600">▲ {m.advances}</span>
-                        <span className="text-amber-500">■ {m.unchanged}</span>
-                        <span className="text-rose-600">▼ {m.declines}</span>
-                      </div>
-                    </>
-                  )
-                })()}
-              </div>
-            )}
-          </div>
-        )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* 3. Sector Rating Score Modal Popup (Hình 2) */}
+      {/* Floating Rich Tooltip on Effort/Result Hover */}
+      {hoveredEffortSector && effortTooltipPos && (
+        <div
+          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full overflow-hidden rounded-xl border border-purple-500/50 bg-[#08151f] shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+          style={{
+            left: `${effortTooltipPos.x}px`,
+            top: `${effortTooltipPos.y}px`,
+            minWidth: "260px",
+          }}
+        >
+          {/* Purple Header */}
+          <div className="bg-[#4c0d64] px-4 py-2 text-center">
+            <strong className="font-mono text-xs font-black uppercase text-white tracking-wider">
+              {hoveredEffortSector.displayName}
+            </strong>
+          </div>
+
+          {(() => {
+            const sIdx = currentSectors.findIndex((s) => s.sectorKey === hoveredEffortSector.sectorKey)
+            const m = getSectorEffortMetrics(hoveredEffortSector, sIdx >= 0 ? sIdx : 0)
+
+            return (
+              <>
+                {/* Body Columns */}
+                <div className="grid grid-cols-2 gap-3 bg-[#0d3420] p-3 text-xs font-mono">
+                  {/* Column 1: Nỗ lực */}
+                  <div className="space-y-1">
+                    <strong className="text-white font-bold block mb-1">Nỗ lực:</strong>
+                    <p className="text-[11px] text-slate-200">
+                      Trước đó: <span className="font-bold">{formatNumber(m.prevVal, 2)} tỷ</span>
+                    </p>
+                    <p className="text-[11px] text-slate-200">
+                      Hiện tại: <span className="font-bold">{formatNumber(m.currVal, 2)} tỷ</span>
+                    </p>
+                    <p className="text-[11px] text-emerald-300 font-bold">
+                      %Thay đổi: {formatSigned(m.effortPct, 2, "%")}
+                    </p>
+                    <p className="text-[11px] text-slate-200">
+                      Thay đổi ròng: <span className="font-bold">{formatSigned(m.netChange, 2)} tỷ</span>
+                    </p>
+                  </div>
+
+                  {/* Column 2: Kết quả */}
+                  <div className="space-y-1">
+                    <strong className="text-white font-bold block mb-1">Kết quả:</strong>
+                    <p className="text-[11px] text-slate-200">
+                      %Thay đổi:{" "}
+                      <span className={cn("font-bold", m.resultPct >= 0 ? "text-emerald-300" : "text-rose-300")}>
+                        {formatSigned(m.resultPct, 2, "%")}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Footer Breadth */}
+                <div className="flex items-center justify-center gap-4 bg-white py-1.5 px-3 text-center font-mono text-xs font-bold text-slate-900">
+                  <span className="text-emerald-600">▲ {m.advances}</span>
+                  <span className="text-amber-500">■ {m.unchanged}</span>
+                  <span className="text-rose-600">▼ {m.declines}</span>
+                </div>
+              </>
+            )
+          })()}
+        </div>
+      )}
+
+      {/* 3. Sector Rating Score Modal Popup (Hỗ trợ ESC & Click Outside) */}
       {selectedModalSector && (
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="sector-modal-title"
+          onClick={() => setSelectedModalSector(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-150"
         >
-          <div className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#070e17] shadow-2xl">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#070e17] shadow-2xl"
+          >
             {/* Modal Header */}
             <div className="flex flex-col gap-2 border-b border-white/[0.08] bg-[#050b12] p-4 sm:p-5">
               <div className="flex items-start justify-between">
@@ -806,23 +787,23 @@ export function SectorMapPanel({
                   <span className="font-mono text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">
                     SIGNAL RANKING
                   </span>
-                  <h2 id="sector-modal-title" className="text-lg sm:text-2xl font-black text-white">
+                  <h2 id="sector-modal-title" className="text-lg sm:text-2xl font-black text-white font-sans">
                     Top cổ phiếu rating score
                   </h2>
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    Điểm cao hỗ trợ so sánh, không phải lệnh mua.
+                  <p className="mt-0.5 text-xs text-slate-400 font-sans">
+                    Điểm cao hỗ trợ so sánh, không phải lệnh mua. (Nhấn ESC để đóng)
                   </p>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Badge variant="outline" className="border-emerald-400/30 bg-emerald-400/10 text-emerald-300 text-xs px-2.5 py-1">
+                  <Badge variant="outline" className="border-emerald-400/30 bg-emerald-400/10 text-emerald-300 text-xs px-2.5 py-1 font-mono font-bold">
                     Supabase live
                   </Badge>
                   <button
                     type="button"
                     onClick={() => setSelectedModalSector(null)}
                     className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
-                    aria-label="Đóng popup"
+                    aria-label="Đóng popup (ESC)"
                   >
                     <X className="size-5" />
                   </button>
@@ -907,8 +888,8 @@ export function SectorMapPanel({
 
             {/* Modal Body: Rating Table */}
             <div className="overflow-y-auto max-h-[60vh] p-0">
-              <table className="w-full min-w-[900px] border-collapse text-xs font-mono">
-                <thead className="sticky top-0 z-10 border-b border-white/[0.08] bg-[#050b12] text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <table className="w-full min-w-[900px] border-collapse text-xs">
+                <thead className="sticky top-0 z-10 border-b border-white/[0.08] bg-[#050b12] font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   <tr>
                     <th className="px-4 py-3 text-left w-48"># · Cổ phiếu / Ngành</th>
                     <th className="px-2 py-3 text-center w-24">Giá</th>
@@ -924,7 +905,7 @@ export function SectorMapPanel({
                   </tr>
                 </thead>
 
-                <tbody className="divide-y divide-white/[0.04]">
+                <tbody className="divide-y divide-white/[0.04] font-mono">
                   {modalStocks.map((stock, index) => {
                     const pricePos = (stock.changePercent ?? 0) >= 0
                     const isWeeklyPos = (stock.weeklyChangePercent ?? 0) >= 0
@@ -947,11 +928,11 @@ export function SectorMapPanel({
                             </span>
                             <StockLogo symbol={stock.ticker} size={26} fallback="none" />
                             <div>
-                              <div className="flex items-center gap-1 font-bold text-white text-sm">
+                              <div className="flex items-center gap-1 font-bold text-white text-sm font-mono">
                                 <span>{stock.ticker}</span>
                                 {stock.isTop100 && <Crown className="size-3 text-amber-400" />}
                               </div>
-                              <span className="text-[10px] text-slate-500 uppercase font-bold block">
+                              <span className="text-[10px] text-slate-500 uppercase font-bold block font-sans">
                                 {stock.sector}
                               </span>
                             </div>
@@ -987,7 +968,7 @@ export function SectorMapPanel({
                         {/* 5. Tiềm năng giá */}
                         <td className="px-2 py-3 text-center">
                           <span className={cn(
-                            "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border",
+                            "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border font-sans",
                             stock.pricePotential?.startsWith("Tăng")
                               ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
                               : "border-rose-400/30 bg-rose-400/10 text-rose-300"
@@ -1019,7 +1000,7 @@ export function SectorMapPanel({
                         {/* 8. RRG Cổ phiếu */}
                         <td className="px-2 py-3 text-center">
                           <span className={cn(
-                            "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border",
+                            "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border font-sans",
                             stock.stockRrgState === "Dẫn dắt"
                               ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
                               : stock.stockRrgState === "Phục hồi"
@@ -1071,7 +1052,7 @@ export function SectorMapPanel({
 
                   {modalStocks.length === 0 && (
                     <tr>
-                      <td colSpan={11} className="py-8 text-center text-slate-500 text-xs">
+                      <td colSpan={11} className="py-8 text-center text-slate-500 text-xs font-sans">
                         Không tìm thấy cổ phiếu nào phù hợp bộ lọc trong ngành này.
                       </td>
                     </tr>
@@ -1081,8 +1062,8 @@ export function SectorMapPanel({
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between border-t border-white/[0.08] bg-[#050b12] px-5 py-3 text-xs text-slate-500 font-mono">
-              <span>
+            <div className="flex items-center justify-between border-t border-white/[0.08] bg-[#050b12] px-5 py-3 text-xs text-slate-400 font-sans">
+              <span className="font-mono">
                 Hiển thị <strong className="text-white">{modalStocks.length}</strong> / {ratings.length} mã
               </span>
               <Button
@@ -1092,7 +1073,7 @@ export function SectorMapPanel({
                 onClick={() => setSelectedModalSector(null)}
                 className="h-8 border-white/10 text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white"
               >
-                Đóng
+                Đóng (ESC)
               </Button>
             </div>
           </div>
