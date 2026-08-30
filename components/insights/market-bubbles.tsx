@@ -3,7 +3,6 @@
 import * as React from "react"
 import { CircleDot, LayoutGrid } from "lucide-react"
 
-import { StockLogo } from "@/components/stock-logo"
 import { AnimatedTabs, type AnimatedTab } from "@/components/smoothui/animated-tabs"
 import { cn } from "@/lib/utils"
 
@@ -98,7 +97,7 @@ export function MarketBubbles({
       .slice(0, 100)
   }, [stocks])
 
-  // Physics Simulation: High density tight-packing filling 76% of canvas without gaps
+  // Physics Simulation: High density tight-packing filling 78% of canvas without gaps
   const bubbles: SimBubble[] = React.useMemo(() => {
     const count = topStocks.length
     if (count === 0) return []
@@ -112,8 +111,8 @@ export function MarketBubbles({
     const maxAbsChange = Math.max(2.5, ...absChanges)
     const minAbsChange = Math.min(...absChanges)
 
-    // Target coverage: 76% of available viewport area for dense edge-to-edge bubbles
-    const targetTotalArea = W * H * 0.76
+    // Target coverage: 78% of available viewport area for dense edge-to-edge bubbles
+    const targetTotalArea = W * H * 0.78
 
     // Calculate raw radii based on price change
     const rawRadii = topStocks.map((stock, i) => {
@@ -122,29 +121,29 @@ export function MarketBubbles({
       const norm = Math.max(0, (absChg - minAbsChange) / (maxAbsChange - minAbsChange || 1))
       const scale = Math.pow(norm, 0.52) // smooth power curve
 
-      // Base radius from 26px up to 105px on desktop
-      let r = 26 + scale * 74
+      // Base radius from 26px up to 110px on desktop
+      let r = 26 + scale * 78
 
-      // Ceiling bonus: >6.5% gains get extra size
+      // Ceiling bonus: >6.5% gains get extra size prominence
       if (chg >= 6.5) {
-        r = Math.min(115, r * 1.15)
+        r = Math.min(120, r * 1.15)
       }
 
       if (W < 640) {
-        r = Math.max(16, Math.min(60, Math.round(r * 0.72)))
+        r = Math.max(16, Math.min(64, Math.round(r * 0.72)))
       }
       return r
     })
 
-    // Scale so total area matches target area (76% density)
+    // Scale so total area matches target area (78% density)
     const currentSumArea = rawRadii.reduce((acc, r) => acc + Math.PI * r * r, 0)
     const areaMultiplier = Math.sqrt(targetTotalArea / (currentSumArea || 1))
 
     // Initialize bubbles evenly distributed across full grid
     const cols = Math.ceil(Math.sqrt(count * (W / H)))
     const rows = Math.ceil(count / cols)
-    const cellW = (W - 30) / cols
-    const cellH = (H - 30) / rows
+    const cellW = (W - 20) / cols
+    const cellH = (H - 20) / rows
 
     const indexedStocks = topStocks.map((stock, index) => ({
       stock,
@@ -159,16 +158,16 @@ export function MarketBubbles({
       const row = Math.floor(i / cols)
 
       // Jittered grid covering full bounding box
-      const x = 15 + (col + 0.5) * cellW + (Math.sin(i * 3.7) * cellW * 0.2)
-      const y = 15 + (row + 0.5) * cellH + (Math.cos(i * 4.3) * cellH * 0.2)
+      const x = 10 + (col + 0.5) * cellW + (Math.sin(i * 3.7) * cellW * 0.2)
+      const y = 10 + (row + 0.5) * cellH + (Math.cos(i * 4.3) * cellH * 0.2)
 
       let tone: SimBubble["tone"] = "neutral"
       if (change >= 6.5) {
-        tone = "fuchsia"
+        tone = "fuchsia" // Ceiling / extreme gainer
       } else if (change > 0) {
-        tone = "emerald"
+        tone = "emerald" // Positive gainer
       } else if (change < 0) {
-        tone = "rose"
+        tone = "rose" // Loser
       }
 
       return {
@@ -192,10 +191,10 @@ export function MarketBubbles({
       // 1. Soft boundary expansion (keeps bubbles spread to edges)
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        if (node.x < node.r + 15) node.x += (node.r + 15 - node.x) * 0.08 * alpha
-        if (node.x > W - node.r - 15) node.x -= (node.x - (W - node.r - 15)) * 0.08 * alpha
-        if (node.y < node.r + 15) node.y += (node.r + 15 - node.y) * 0.08 * alpha
-        if (node.y > H - node.r - 15) node.y -= (node.y - (H - node.r - 15)) * 0.08 * alpha
+        if (node.x < node.r + 10) node.x += (node.r + 10 - node.x) * 0.08 * alpha
+        if (node.x > W - node.r - 10) node.x -= (node.x - (W - node.r - 10)) * 0.08 * alpha
+        if (node.y < node.r + 10) node.y += (node.r + 10 - node.y) * 0.08 * alpha
+        if (node.y > H - node.r - 10) node.y -= (node.y - (H - node.r - 10)) * 0.08 * alpha
       }
 
       // 2. Strict Pairwise Circle Collision Push
@@ -228,8 +227,8 @@ export function MarketBubbles({
       // 3. Strict Boundary Containment
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        node.x = Math.max(node.r + 4, Math.min(W - node.r - 4, node.x))
-        node.y = Math.max(node.r + 4, Math.min(H - node.r - 4, node.y))
+        node.x = Math.max(node.r + 3, Math.min(W - node.r - 3, node.x))
+        node.y = Math.max(node.r + 3, Math.min(H - node.r - 3, node.y))
       }
     }
 
@@ -262,7 +261,7 @@ export function MarketBubbles({
         {/* Left Side: View Mode & Timeframe Controls */}
         <div className="flex flex-wrap items-center gap-3">
           {/* View Mode Switcher */}
-          <div className="flex items-center rounded-xl border border-white/[0.08] bg-black/40 p-1 shadow-inner backdrop-blur-none">
+          <div className="flex items-center rounded-xl border border-white/[0.08] bg-[#070e17] p-1 shadow-inner">
             <button
               type="button"
               onClick={() => setViewMode("bubbles")}
@@ -300,15 +299,15 @@ export function MarketBubbles({
             onValueChange={setPeriod}
             variant="segment"
             ariaLabel="Chọn khung thời gian"
-            className="border-white/[0.08] bg-black/40 p-1 font-mono text-xs font-bold"
+            className="border-white/[0.08] bg-[#070e17] p-1 font-mono text-xs font-bold"
             tabClassName="px-3 py-1.5 text-slate-400 data-[state=active]:text-white"
-            indicatorClassName="bg-white/[0.14] rounded-lg shadow-sm"
+            indicatorClassName="bg-white/[0.12] rounded-lg shadow-sm"
           />
         </div>
 
         {/* Right Side: Status Badge */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.08] px-3.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-wider text-cyan-300 shadow-sm">
+          <div className="flex items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.07] px-3.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-wider text-cyan-300 shadow-sm">
             <span className="relative flex size-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
               <span className="relative inline-flex size-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]" />
@@ -318,29 +317,29 @@ export function MarketBubbles({
         </div>
       </div>
 
-      {/* Main Viewport */}
+      {/* Main Viewport: Professional Financial Terminal Grid */}
       {viewMode === "bubbles" ? (
         <div
           ref={containerRef}
-          className="market-bubble-field relative min-h-[650px] sm:min-h-[780px] w-full overflow-hidden rounded-2xl border border-white/[0.09] bg-[radial-gradient(ellipse_80%_60%_at_50%_40%,#051824_0%,#020b13_50%,#01050a_100%)] select-none shadow-2xl"
+          className="market-bubble-field relative min-h-[650px] sm:min-h-[780px] w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070d15] select-none shadow-2xl"
           aria-label={`Bản đồ Top 100 cổ phiếu ${period}`}
         >
-          {/* Ambient Liquid Glass background aura */}
-          <div className="pointer-events-none absolute -left-20 -top-20 size-96 rounded-full bg-teal-500/[0.04] blur-3xl" aria-hidden="true" />
-          <div className="pointer-events-none absolute -bottom-20 -right-20 size-96 rounded-full bg-indigo-500/[0.04] blur-3xl" aria-hidden="true" />
-
-          {/* Compass / grid coordinate rings */}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-30" aria-hidden="true">
-            <div className="size-[320px] sm:size-[460px] rounded-full border border-cyan-400/[0.08]" />
-            <div className="absolute size-[600px] sm:size-[800px] rounded-full border border-cyan-400/[0.05]" />
-          </div>
+          {/* Institutional Financial Coordinate Grid Pattern */}
+          <div
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:44px_44px]"
+            aria-hidden="true"
+          />
+          {/* Subtle deep radial depth */}
+          <div
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(13,33,54,0.35)_0%,rgba(7,13,21,0.85)_100%)]"
+            aria-hidden="true"
+          />
 
           {/* Collision-Resolved Bubbles Canvas */}
           <div className="relative z-10 size-full min-h-[650px] sm:min-h-[780px]">
             {bubbles.map((bubble) => {
               const { stock, change, x, y, r, tone } = bubble
               const diameter = r * 2
-              const logoSize = r >= 55 ? 38 : r >= 40 ? 30 : r >= 28 ? 22 : r >= 20 ? 16 : 12
 
               const isFuchsia = tone === "fuchsia"
               const isEmerald = tone === "emerald"
@@ -361,34 +360,34 @@ export function MarketBubbles({
                     height: `${diameter}px`,
                   }}
                   className={cn(
-                    "group absolute flex flex-col items-center justify-center rounded-full text-center transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
-                    hoveredTicker === stock.ticker ? "z-30 scale-110" : "hover:z-20 hover:scale-105",
+                    "group absolute flex flex-col items-center justify-center rounded-full text-center will-change-transform transition-transform duration-75 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
+                    hoveredTicker === stock.ticker ? "z-30 scale-105" : "hover:z-20 hover:scale-[1.03] active:scale-95",
 
                     // Fuchsia / Purple ceiling glass
                     isFuchsia && [
                       "border-2 border-fuchsia-300/90",
-                      "bg-[radial-gradient(135%_135%_at_30%_25%,rgba(232,121,249,0.48)_0%,rgba(217,70,239,0.28)_45%,rgba(112,26,117,0.75)_100%)]",
+                      "bg-[radial-gradient(circle_at_35%_30%,rgba(232,121,249,0.55)_0%,rgba(168,85,247,0.3)_45%,rgba(74,4,78,0.8)_100%)]",
                       isBigBubble
-                        ? "shadow-[0_0_35px_rgba(217,70,239,0.65),0_0_12px_rgba(232,121,249,0.9),inset_0_0_22px_rgba(232,121,249,0.4)]"
-                        : "shadow-[0_0_18px_rgba(217,70,239,0.4),inset_0_0_12px_rgba(232,121,249,0.25)]",
+                        ? "shadow-[0_0_30px_rgba(217,70,239,0.6),0_0_8px_rgba(232,121,249,0.8),inset_0_0_18px_rgba(232,121,249,0.35)]"
+                        : "shadow-[0_0_15px_rgba(217,70,239,0.35),inset_0_0_10px_rgba(232,121,249,0.2)]",
                     ],
 
                     // Emerald / Green gainer glass
                     isEmerald && [
                       "border-2 border-emerald-400/90",
-                      "bg-[radial-gradient(135%_135%_at_30%_25%,rgba(52,211,153,0.42)_0%,rgba(16,185,129,0.22)_45%,rgba(6,78,59,0.65)_100%)]",
+                      "bg-[radial-gradient(circle_at_35%_30%,rgba(52,211,153,0.48)_0%,rgba(16,185,129,0.25)_45%,rgba(5,46,22,0.8)_100%)]",
                       isBigBubble
-                        ? "shadow-[0_0_30px_rgba(16,185,129,0.55),0_0_10px_rgba(52,211,153,0.85),inset_0_0_20px_rgba(52,211,153,0.35)]"
-                        : "shadow-[0_0_15px_rgba(16,185,129,0.35),inset_0_0_10px_rgba(52,211,153,0.2)]",
+                        ? "shadow-[0_0_26px_rgba(16,185,129,0.5),0_0_8px_rgba(52,211,153,0.8),inset_0_0_16px_rgba(52,211,153,0.3)]"
+                        : "shadow-[0_0_14px_rgba(16,185,129,0.3),inset_0_0_8px_rgba(52,211,153,0.18)]",
                     ],
 
                     // Rose / Red loser glass
                     isRose && [
                       "border-2 border-rose-400/90",
-                      "bg-[radial-gradient(135%_135%_at_30%_25%,rgba(251,113,133,0.42)_0%,rgba(244,63,94,0.22)_45%,rgba(136,19,55,0.65)_100%)]",
+                      "bg-[radial-gradient(circle_at_35%_30%,rgba(251,113,133,0.48)_0%,rgba(244,63,94,0.25)_45%,rgba(76,5,25,0.8)_100%)]",
                       isBigBubble
-                        ? "shadow-[0_0_30px_rgba(244,63,94,0.55),0_0_10px_rgba(251,113,133,0.85),inset_0_0_20px_rgba(251,113,133,0.35)]"
-                        : "shadow-[0_0_15px_rgba(244,63,94,0.35),inset_0_0_10px_rgba(251,113,133,0.2)]",
+                        ? "shadow-[0_0_26px_rgba(244,63,94,0.5),0_0_8px_rgba(251,113,133,0.8),inset_0_0_16px_rgba(251,113,133,0.3)]"
+                        : "shadow-[0_0_14px_rgba(244,63,94,0.3),inset_0_0_8px_rgba(251,113,133,0.18)]",
                     ],
 
                     // Neutral / Flat glass
@@ -396,63 +395,47 @@ export function MarketBubbles({
                       !isEmerald &&
                       !isRose && [
                         "border-2 border-slate-500/70",
-                        "bg-[radial-gradient(135%_135%_at_30%_25%,rgba(148,163,184,0.25)_0%,rgba(71,85,105,0.2)_45%,rgba(15,23,42,0.7)_100%)]",
-                        "shadow-[0_0_14px_rgba(148,163,184,0.2),inset_0_0_10px_rgba(148,163,184,0.15)]",
+                        "bg-[radial-gradient(circle_at_35%_30%,rgba(148,163,184,0.3)_0%,rgba(71,85,105,0.2)_45%,rgba(15,23,42,0.8)_100%)]",
+                        "shadow-[0_0_12px_rgba(148,163,184,0.18),inset_0_0_8px_rgba(148,163,184,0.12)]",
                       ]
                   )}
                   title={`${stock.ticker} · ${stock.companyName} (${formatSigned(change, 2, "%")})`}
                 >
-                  {/* Top-left specular liquid glass glare */}
-                  <div
-                    className="pointer-events-none absolute left-1.5 top-1.5 rounded-full bg-gradient-to-b from-white/30 to-transparent"
-                    style={{
-                      width: `${Math.round(r * 0.7)}px`,
-                      height: `${Math.round(r * 0.45)}px`,
-                    }}
-                    aria-hidden="true"
-                  />
-
-                  <StockLogo
-                    symbol={stock.ticker}
-                    size={logoSize}
-                    fallback="none"
-                    className="mb-0.5 pointer-events-none drop-shadow-sm"
-                  />
                   <strong
                     className={cn(
-                      "font-mono font-black uppercase text-white tracking-wider leading-none drop-shadow",
-                      r >= 55
-                        ? "text-base sm:text-2xl"
-                        : r >= 40
-                        ? "text-sm sm:text-lg"
-                        : r >= 28
-                        ? "text-xs sm:text-sm font-extrabold"
-                        : r >= 20
-                        ? "text-[10px] font-bold"
-                        : "text-[9px] font-bold"
+                      "font-mono font-black uppercase text-white tracking-wider leading-none drop-shadow-md",
+                      r >= 65
+                        ? "text-2xl sm:text-4xl"
+                        : r >= 48
+                        ? "text-lg sm:text-2xl"
+                        : r >= 34
+                        ? "text-sm sm:text-base"
+                        : r >= 24
+                        ? "text-xs font-black"
+                        : "text-[10px] font-extrabold"
                     )}
                   >
                     {stock.ticker}
                   </strong>
                   <span
                     className={cn(
-                      "font-mono font-bold leading-none mt-0.5 drop-shadow-sm",
-                      r >= 55
-                        ? "text-xs sm:text-base font-extrabold"
-                        : r >= 40
-                        ? "text-[11px] sm:text-sm font-bold"
-                        : r >= 28
-                        ? "text-[10px] font-bold"
-                        : r >= 20
-                        ? "text-[9px]"
-                        : "text-[8px]",
+                      "font-mono leading-none drop-shadow-sm font-black",
+                      r >= 65
+                        ? "text-sm sm:text-xl mt-1"
+                        : r >= 48
+                        ? "text-xs sm:text-base mt-0.5"
+                        : r >= 34
+                        ? "text-[11px] sm:text-xs mt-0.5"
+                        : r >= 24
+                        ? "text-[10px] mt-0.5"
+                        : "text-[8px] font-semibold mt-0.5",
                       isFuchsia
-                        ? "text-fuchsia-200"
+                        ? "text-fuchsia-100"
                         : isEmerald
-                        ? "text-emerald-200"
+                        ? "text-emerald-100"
                         : isRose
-                        ? "text-rose-200"
-                        : "text-slate-300"
+                        ? "text-rose-100"
+                        : "text-slate-200"
                     )}
                   >
                     {formatSigned(change, 2, "%")}
@@ -465,25 +448,22 @@ export function MarketBubbles({
           {/* Floating Rich Tooltip */}
           {hoveredBubble && tooltipPos && (
             <div
-              className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-xl border border-white/20 bg-[#071520]/95 p-3.5 text-xs shadow-2xl backdrop-blur-none"
+              className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-xl border border-white/20 bg-[#08121c]/95 p-3.5 text-xs shadow-2xl backdrop-blur-none"
               style={{
                 left: `${tooltipPos.x}px`,
                 top: `${tooltipPos.y}px`,
               }}
             >
-              <div className="flex items-center gap-2.5">
-                <StockLogo symbol={hoveredBubble.stock.ticker} size={28} fallback="none" />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-black text-white">{hoveredBubble.stock.ticker}</span>
-                    <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[9px] font-bold text-teal-300">
-                      {hoveredBubble.stock.sector}
-                    </span>
-                  </div>
-                  <p className="line-clamp-1 text-[11px] text-slate-400 max-w-[200px]">
-                    {hoveredBubble.stock.companyName}
-                  </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-black text-white text-sm">{hoveredBubble.stock.ticker}</span>
+                  <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[9px] font-bold text-teal-300">
+                    {hoveredBubble.stock.sector}
+                  </span>
                 </div>
+                <p className="line-clamp-1 text-[11px] text-slate-400 max-w-[200px] mt-0.5">
+                  {hoveredBubble.stock.companyName}
+                </p>
               </div>
 
               <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/[0.08] pt-2 text-center font-mono">
@@ -523,7 +503,7 @@ export function MarketBubbles({
         </div>
       ) : (
         /* Columns / List Ranking View */
-        <div className="rounded-2xl border border-white/[0.08] bg-[#020b12] p-4">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#070d15] p-4">
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {topStocks.map((stock, index) => {
               const change = getStockChange(stock, period)
@@ -535,16 +515,13 @@ export function MarketBubbles({
                   onClick={() => onOpenStockDetail?.(stock.ticker)}
                   className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-left transition-colors hover:border-teal-300/25 hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/40"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="font-mono text-[10px] font-bold text-slate-500">#{index + 1}</span>
-                    <StockLogo symbol={stock.ticker} size={32} />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <strong className="font-mono text-sm font-black text-white">{stock.ticker}</strong>
-                        <span className="truncate text-[9px] text-slate-500 max-w-[90px]">{stock.sector}</span>
-                      </div>
-                      <p className="truncate text-[10px] text-slate-400 max-w-[140px]">{stock.companyName}</p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] font-bold text-slate-500">#{index + 1}</span>
+                      <strong className="font-mono text-sm font-black text-white">{stock.ticker}</strong>
+                      <span className="truncate text-[9px] text-slate-500 max-w-[90px]">{stock.sector}</span>
                     </div>
+                    <p className="truncate text-[10px] text-slate-400 max-w-[140px]">{stock.companyName}</p>
                   </div>
 
                   <div className="text-right shrink-0">
