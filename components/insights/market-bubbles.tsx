@@ -93,21 +93,22 @@ export function MarketBubbles({
     return () => ro.disconnect()
   }, [])
 
-  // Filter to Top 200 liquid stocks for optimum visual balance
+  // Filter to Top 200 liquid stocks (sorted by volume descending)
   const topStocks = React.useMemo(() => {
     return [...stocks]
       .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))
       .slice(0, 200)
   }, [stocks])
 
-  // Physics Simulation: High density tight-packing for Top 200 stocks filling 78% of canvas
-  // Adjusted with higher baseline radius so all bubbles are clearly readable, and moderated purple outliers
+  // Physics Simulation: High volume stocks gravitate to the center, big movers have prominent size
   const bubbles: SimBubble[] = React.useMemo(() => {
     const count = topStocks.length
     if (count === 0) return []
 
     const W = Math.max(dimensions.width, 600)
     const H = Math.max(dimensions.height, 700)
+    const centerX = W / 2
+    const centerY = H / 2
 
     // Calculate changes & extremes
     const changes = topStocks.map((s) => getStockChange(s, period) ?? 0)
@@ -115,7 +116,7 @@ export function MarketBubbles({
     const maxAbsChange = Math.max(2.5, ...absChanges)
     const minAbsChange = Math.min(...absChanges)
 
-    // Volume statistics for border thickness
+    // Volume statistics for border thickness & central gravity
     const volumes = topStocks.map((s) => s.volume ?? 0)
     const maxVol = Math.max(1_000_000, ...volumes)
     const minVol = Math.min(...volumes.filter((v) => v > 0)) || 10_000
@@ -123,23 +124,25 @@ export function MarketBubbles({
     // Target coverage: 78% of available viewport area
     const targetTotalArea = W * H * 0.78
 
-    // Calculate balanced radii: Elevated base radius (24px) for readability, balanced upper bound (58px)
+    // Calculate dynamic radii with strong visual contrast for top gainers/movers
     const rawRadii = topStocks.map((stock, i) => {
       const chg = changes[i]
       const absChg = Math.abs(chg)
       const norm = Math.max(0, (absChg - minAbsChange) / (maxAbsChange - minAbsChange || 1))
-      const scale = Math.pow(norm, 0.36) // Flatter power curve lifts smaller/average bubbles up
+      const scale = Math.pow(norm, 0.56) // Steeper power curve provides clear contrast between leaders and followers
 
-      // Base radius from 24px up to 58px on desktop (ensuring average bubbles are larger)
-      let r = 24 + scale * 34
+      // Base radius from 18px (small movers) up to 74px (strong movers) on desktop
+      let r = 18 + scale * 56
 
-      // Ceiling bonus: moderately prominent for purple ceiling stocks without taking over the canvas
+      // Top gainer bonuses: >6.5% ceiling gainers or >4% movers get extra prominent scale
       if (chg >= 6.5) {
-        r = Math.min(68, r * 1.1)
+        r = Math.min(94, r * 1.25)
+      } else if (absChg >= 4.0) {
+        r = Math.min(84, r * 1.12)
       }
 
       if (W < 640) {
-        r = Math.max(14, Math.min(42, Math.round(r * 0.72)))
+        r = Math.max(12, Math.min(48, Math.round(r * 0.72)))
       }
       return r
     })
@@ -147,12 +150,6 @@ export function MarketBubbles({
     // Scale so total area matches target area (78% density)
     const currentSumArea = rawRadii.reduce((acc, r) => acc + Math.PI * r * r, 0)
     const areaMultiplier = Math.sqrt(targetTotalArea / (currentSumArea || 1))
-
-    // Initialize bubbles evenly distributed across full grid
-    const cols = Math.ceil(Math.sqrt(count * (W / H)))
-    const rows = Math.ceil(count / cols)
-    const cellW = (W - 20) / cols
-    const cellH = (H - 20) / rows
 
     const indexedStocks = topStocks.map((stock, index) => {
       const vol = stock.volume ?? 0
@@ -176,17 +173,19 @@ export function MarketBubbles({
         change: changes[index],
         r: Math.round(rawRadii[index] * areaMultiplier),
         borderWidth,
+        volNorm,
       }
     })
 
+    // Initialize positions in Fermat Golden Spiral sorted by volume
+    // High-volume stocks (index 0, 1, 2...) start right at the center!
     const nodes: SimBubble[] = indexedStocks.map((item, i) => {
       const { stock, change, r, borderWidth } = item
-      const col = i % cols
-      const row = Math.floor(i / cols)
 
-      // Jittered grid covering full bounding box
-      const x = 10 + (col + 0.5) * cellW + (Math.sin(i * 3.7) * cellW * 0.2)
-      const y = 10 + (row + 0.5) * cellH + (Math.cos(i * 4.3) * cellH * 0.2)
+      const phi = i * 2.3999632 // Golden angle
+      const radDist = Math.sqrt(i / count) * Math.min(W, H) * 0.44
+      const x = centerX + Math.cos(phi) * radDist * (W / H)
+      const y = centerY + Math.sin(phi) * radDist
 
       let tone: SimBubble["tone"] = "neutral"
       if (change >= 6.5) {
@@ -215,23 +214,25 @@ export function MarketBubbles({
       }
     })
 
-    // Iterative 2D Collision-Free Physics (180 passes for smooth zero-overlap spread)
+    // Iterative 2D Physics with Central Volume-Weighted Gravity (180 passes)
     const iterations = 180
     const padding = 2 // 2px tight contact gap
 
     for (let iter = 0; iter < iterations; iter++) {
       const alpha = Math.max(0.06, 1 - iter / iterations)
 
-      // 1. Soft boundary expansion (keeps bubbles spread to edges)
+      // 1. Central Gravity Force: High-volume stocks are strongly attracted to the center
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        if (node.x < node.r + 10) node.x += (node.r + 10 - node.x) * 0.08 * alpha
-        if (node.x > W - node.r - 10) node.x -= (node.x - (W - node.r - 10)) * 0.08 * alpha
-        if (node.y < node.r + 10) node.y += (node.r + 10 - node.y) * 0.08 * alpha
-        if (node.y > H - node.r - 10) node.y -= (node.y - (H - node.r - 10)) * 0.08 * alpha
+        const vol = node.stock.volume ?? 0
+        const volRatio = Math.max(0, Math.min(1, (vol - minVol) / (maxVol - minVol || 1)))
+        const gravityStrength = (0.012 + volRatio * 0.045) * alpha
+
+        node.x += (centerX - node.x) * gravityStrength
+        node.y += (centerY - node.y) * gravityStrength
       }
 
-      // 2. Strict Pairwise Circle Collision Push
+      // 2. Strict Pairwise Circle Collision Push (prevents any overlap)
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const n1 = nodes[i]
@@ -443,13 +444,15 @@ export function MarketBubbles({
                   <strong
                     className={cn(
                       "font-mono font-black uppercase text-white tracking-wider leading-none drop-shadow-md",
-                      r >= 48
-                        ? "text-xl sm:text-2xl"
-                        : r >= 34
-                        ? "text-sm sm:text-base"
-                        : r >= 24
-                        ? "text-xs sm:text-sm font-black"
-                        : "text-[10px] sm:text-xs font-extrabold"
+                      r >= 58
+                        ? "text-2xl sm:text-4xl"
+                        : r >= 42
+                        ? "text-lg sm:text-2xl"
+                        : r >= 28
+                        ? "text-xs sm:text-base font-black"
+                        : r >= 18
+                        ? "text-[10px] sm:text-xs font-black"
+                        : "text-[8px] font-bold"
                     )}
                   >
                     {stock.ticker}
@@ -457,13 +460,15 @@ export function MarketBubbles({
                   <span
                     className={cn(
                       "font-mono leading-none drop-shadow-sm font-black",
-                      r >= 48
-                        ? "text-xs sm:text-sm mt-1"
-                        : r >= 34
-                        ? "text-[11px] sm:text-xs mt-0.5"
-                        : r >= 24
-                        ? "text-[10px] sm:text-[11px] font-bold mt-0.5"
-                        : "text-[9px] font-bold mt-0.5",
+                      r >= 58
+                        ? "text-sm sm:text-lg mt-1"
+                        : r >= 42
+                        ? "text-xs sm:text-sm mt-0.5"
+                        : r >= 28
+                        ? "text-[10px] sm:text-xs font-bold mt-0.5"
+                        : r >= 18
+                        ? "text-[8px] sm:text-[9px] font-bold mt-0.5"
+                        : "text-[7px] mt-0.5",
                       isFuchsia
                         ? "text-fuchsia-100"
                         : isEmerald
