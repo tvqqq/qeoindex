@@ -103,8 +103,9 @@ export function MarketCloseDashboard({ data, bubbleStocks = [], onOpenStockDetai
             </div>
           </CardHeader>
           <CardContent className="p-4 sm:p-5 min-h-[650px]">
+            {/* bubbleStocks supports all stocks in database or slice(0, 100) */}
             <MarketBubbles
-              stocks={bubbleStocks.slice(0, 100)}
+              stocks={bubbleStocks}
               onOpenStockDetail={onOpenStockDetail}
               defaultPeriod="1D"
             />

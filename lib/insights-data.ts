@@ -304,7 +304,7 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
     .range(from, to)
 
   const [topRatings, top100, leanPageOne, leanPageTwo] = await Promise.all([
-    baseQuery().limit(500),
+    baseQuery().limit(1000),
     baseQuery().eq("is_top100", true).limit(100),
     leanQuery(0, 999),
     leanQuery(1000, 1999),
