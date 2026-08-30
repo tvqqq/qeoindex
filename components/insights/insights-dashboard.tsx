@@ -170,6 +170,16 @@ function metricValue(row: InsightsRatingRow, key: string): KfspMetricValue | und
   return fallback[key]
 }
 
+function metricNumericValue(row: InsightsRatingRow, key: string, fallback: number | null) {
+  const value = metricValue(row, key)
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value.replace(/%$/, ""))
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return fallback
+}
+
 function formatMetric(value: KfspMetricValue | undefined, definition: KfspFieldDefinition) {
   if (value == null || value === "" || value === "--") return "—"
   if (definition.format === "link") return String(value)
@@ -1464,26 +1474,29 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
               <CalendarDays className="size-4 text-emerald-400" />
               <span>{DATE_FORMAT.format(new Date(data.generatedAt))}</span>
             </div>
-            <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3.5 py-2 text-xs text-slate-500">
-              <Database className="size-3.5 text-brand" />
-              <span>Snapshot sau phiên · dữ liệu đã chuẩn hóa</span>
+            <div className={cn("flex items-start gap-2 rounded-lg border px-3.5 py-2 text-xs", data.marketClose?.isStale ? "border-amber-400/30 bg-amber-400/[0.08] text-amber-100" : "border-white/[0.07] bg-white/[0.025] text-slate-500")} role={data.marketClose?.isStale ? "status" : undefined}>
+              {data.marketClose?.isStale ? <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-400" /> : <Database className="size-3.5 shrink-0 text-brand" />}
+              <span>{data.marketClose?.isStale ? <>Dữ liệu thị trường cũ (Stale) · phiên {data.marketClose.sessionDate}</> : "Snapshot sau phiên · dữ liệu đã chuẩn hóa"}</span>
             </div>
           </div>
         </section>
 
-        {data.marketClose?.isStale && (
-          <div role="status" className="mt-5 flex items-start gap-3 rounded-xl border border-amber-400/30 bg-amber-400/[0.08] px-4 py-3 text-amber-100">
-            <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-400" />
-            <div>
-              <div className="text-sm font-bold">Dữ liệu thị trường cũ (Stale)</div>
-              <p className="mt-0.5 text-xs text-amber-200/75">Snapshot gần nhất thuộc phiên {data.marketClose.sessionDate}. Dữ liệu phiên mới sẽ sẵn sàng sau 15:15.</p>
-            </div>
-          </div>
-        )}
-
         <section id="sau-phien" aria-labelledby="sau-phien-title" className="pt-6">
           <h2 id="sau-phien-title" className="sr-only">Insight sau phiên</h2>
-            <MarketCloseDashboard data={data.marketClose || null} onOpenStockDetail={handleOpenStockDetail} />
+            <MarketCloseDashboard
+              data={data.marketClose || null}
+              bubbleStocks={data.ratings.map((row) => ({
+                ticker: row.ticker,
+                companyName: row.companyName,
+                sector: row.sector,
+                volume: row.volume,
+                change1d: metricNumericValue(row, "price_change_1d_pct", row.changePercent),
+                change1w: metricNumericValue(row, "price_change_1w_pct", row.weeklyChangePercent),
+                change1m: metricNumericValue(row, "price_change_1m_pct", row.monthlyChangePercent),
+                change1y: metricNumericValue(row, "price_change_1y_pct", null),
+              }))}
+              onOpenStockDetail={handleOpenStockDetail}
+            />
         </section>
 
         <section id="top-100" aria-labelledby="top-100-title" className="pt-8">

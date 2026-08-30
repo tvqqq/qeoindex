@@ -94,7 +94,6 @@ test("Market Close dashboard uses stable accessible shadcn chart composition", (
     "IndexImpactChart",
     "MarketHistoryChart",
     "MarketHistoryFlowChart",
-    "VnindexHistoryChart",
   ]) {
     assert.match(dashboard, new RegExp(`<${component}\\b`), `${component} must be rendered in the dashboard`)
   }
@@ -126,10 +125,15 @@ test("VNINDEX hero history comes from a bounded canonical-index query", () => {
   assert.doesNotMatch(dataSource, /vnindexClose:\s*Math\.|vnindexClose:\s*\d/)
 })
 
-test("Market Close presents every insight section on one tab-free dashboard", () => {
+test("Market Close keeps the main dashboard continuous and limits tabs to the three market views", () => {
   const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
 
-  assert.doesNotMatch(dashboard, /Tabs(Content|List|Trigger)?|activeTab|setActiveTab/, "market-close indicators must not be hidden behind tabs")
+  assert.doesNotMatch(dashboard, /Tabs(Content|List|Trigger)?|activeTab|setActiveTab/, "the dashboard must not introduce a page-level tab system")
+  assert.match(dashboard, /Nhịp đập thị trường/)
+  assert.match(dashboard, /Nỗ lực kết quả/)
+  assert.match(dashboard, /Sức khoẻ thị trường/)
+  assert.match(dashboard, /\["1D", "1W", "1M", "1Y"\]/, "market bubbles must expose the requested time windows")
+  assert.match(dashboard, /min-h-\[420px\]/, "bubble layout must reserve stable space")
   for (const sectionId of ["market-overview-title", "market-sectors-title", "market-leaders-title", "market-history-title"]) {
     assert.match(dashboard, new RegExp(`id="${sectionId}"`), `${sectionId} must be visible in the continuous dashboard`)
   }
