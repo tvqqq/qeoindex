@@ -48,7 +48,8 @@ interface SimBubble {
   change: number | null
   x: number // in px
   y: number // in px
-  r: number // radius in px
+  r: number // radius in px (Price Change magnitude)
+  borderWidth: number // border width in px (Volume magnitude)
   tone: "fuchsia" | "emerald" | "rose" | "neutral"
 }
 
@@ -67,7 +68,7 @@ export function MarketBubbles({
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = React.useState<{ width: number; height: number }>({
     width: 1200,
-    height: 1050,
+    height: 850,
   })
 
   const [viewMode, setViewMode] = React.useState<"bubbles" | "columns">("bubbles")
@@ -90,45 +91,52 @@ export function MarketBubbles({
     return () => ro.disconnect()
   }, [])
 
-  // Take all stocks in database (sorted by volume descending)
-  const allStocks = React.useMemo(() => {
-    return [...stocks].sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))
+  // Filter to Top 200 liquid stocks for ideal visual balance
+  const topStocks = React.useMemo(() => {
+    return [...stocks]
+      .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))
+      .slice(0, 200)
   }, [stocks])
 
-  // Physics Simulation: High density tight-packing for all ~530+ stocks filling 78% of canvas
+  // Physics Simulation: High density tight-packing for Top 200 stocks filling 78% of canvas
   const bubbles: SimBubble[] = React.useMemo(() => {
-    const count = allStocks.length
+    const count = topStocks.length
     if (count === 0) return []
 
     const W = Math.max(dimensions.width, 600)
-    const H = Math.max(dimensions.height, 800)
+    const H = Math.max(dimensions.height, 700)
 
     // Calculate changes & extremes
-    const changes = allStocks.map((s) => getStockChange(s, period) ?? 0)
+    const changes = topStocks.map((s) => getStockChange(s, period) ?? 0)
     const absChanges = changes.map((c) => Math.abs(c))
     const maxAbsChange = Math.max(2.5, ...absChanges)
     const minAbsChange = Math.min(...absChanges)
+
+    // Volume statistics for border thickness
+    const volumes = topStocks.map((s) => s.volume ?? 0)
+    const maxVol = Math.max(1_000_000, ...volumes)
+    const minVol = Math.min(...volumes.filter((v) => v > 0)) || 10_000
 
     // Target coverage: 78% of available viewport area
     const targetTotalArea = W * H * 0.78
 
     // Calculate raw radii based on price change
-    const rawRadii = allStocks.map((stock, i) => {
+    const rawRadii = topStocks.map((stock, i) => {
       const chg = changes[i]
       const absChg = Math.abs(chg)
       const norm = Math.max(0, (absChg - minAbsChange) / (maxAbsChange - minAbsChange || 1))
-      const scale = Math.pow(norm, 0.46) // smooth power curve for ~530 stocks
+      const scale = Math.pow(norm, 0.48) // smooth power curve
 
-      // Base radius from 13px up to 76px on desktop
-      let r = 13 + scale * 63
+      // Base radius from 18px up to 88px on desktop
+      let r = 18 + scale * 70
 
       // Ceiling bonus: >6.5% gains get extra size prominence
       if (chg >= 6.5) {
-        r = Math.min(84, r * 1.15)
+        r = Math.min(100, r * 1.15)
       }
 
       if (W < 640) {
-        r = Math.max(10, Math.min(46, Math.round(r * 0.72)))
+        r = Math.max(12, Math.min(52, Math.round(r * 0.72)))
       }
       return r
     })
@@ -143,15 +151,33 @@ export function MarketBubbles({
     const cellW = (W - 20) / cols
     const cellH = (H - 20) / rows
 
-    const indexedStocks = allStocks.map((stock, index) => ({
-      stock,
-      index,
-      change: changes[index],
-      r: Math.round(rawRadii[index] * areaMultiplier),
-    }))
+    const indexedStocks = topStocks.map((stock, index) => {
+      const vol = stock.volume ?? 0
+      const volNorm = Math.max(0, Math.min(1, (vol - minVol) / (maxVol - minVol || 1)))
+
+      // Volume-driven border width: High vol = thick bold border (up to 4.5px), low vol = 1.5px
+      let borderWidth = 1.5
+      if (vol >= 15_000_000 || volNorm >= 0.6) {
+        borderWidth = 4.5
+      } else if (vol >= 6_000_000 || volNorm >= 0.32) {
+        borderWidth = 3.5
+      } else if (vol >= 1_500_000 || volNorm >= 0.12) {
+        borderWidth = 2.5
+      } else if (vol >= 300_000) {
+        borderWidth = 2.0
+      }
+
+      return {
+        stock,
+        index,
+        change: changes[index],
+        r: Math.round(rawRadii[index] * areaMultiplier),
+        borderWidth,
+      }
+    })
 
     const nodes: SimBubble[] = indexedStocks.map((item, i) => {
-      const { stock, change, r } = item
+      const { stock, change, r, borderWidth } = item
       const col = i % cols
       const row = Math.floor(i / cols)
 
@@ -175,13 +201,14 @@ export function MarketBubbles({
         x,
         y,
         r,
+        borderWidth,
         tone,
       }
     })
 
-    // Iterative 2D Collision-Free Physics (140 passes for fast, zero-overlap spread)
-    const iterations = 140
-    const padding = 1.5 // 1.5px tight contact gap
+    // Iterative 2D Collision-Free Physics (180 passes for smooth zero-overlap spread)
+    const iterations = 180
+    const padding = 2 // 2px tight contact gap
 
     for (let iter = 0; iter < iterations; iter++) {
       const alpha = Math.max(0.06, 1 - iter / iterations)
@@ -231,7 +258,7 @@ export function MarketBubbles({
     }
 
     return nodes
-  }, [allStocks, period, dimensions])
+  }, [topStocks, period, dimensions])
 
   const hoveredBubble = React.useMemo(
     () => bubbles.find((b) => b.stock.ticker === hoveredTicker),
@@ -310,7 +337,7 @@ export function MarketBubbles({
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
               <span className="relative inline-flex size-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]" />
             </span>
-            <span>{allStocks.length} mã · {period}</span>
+            <span>Top 200 · {period}</span>
           </div>
         </div>
       </div>
@@ -319,8 +346,8 @@ export function MarketBubbles({
       {viewMode === "bubbles" ? (
         <div
           ref={containerRef}
-          className="market-bubble-field relative min-h-[850px] sm:min-h-[1000px] lg:min-h-[1100px] w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070d15] select-none shadow-2xl"
-          aria-label={`Bản đồ ${allStocks.length} cổ phiếu ${period}`}
+          className="market-bubble-field relative min-h-[750px] sm:min-h-[850px] lg:min-h-[920px] w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070d15] select-none shadow-2xl"
+          aria-label={`Bản đồ Top ${topStocks.length} cổ phiếu ${period}`}
         >
           {/* Institutional Financial Coordinate Grid Pattern */}
           <div
@@ -334,15 +361,15 @@ export function MarketBubbles({
           />
 
           {/* Collision-Resolved Bubbles Canvas */}
-          <div className="relative z-10 size-full min-h-[850px] sm:min-h-[1000px] lg:min-h-[1100px]">
+          <div className="relative z-10 size-full min-h-[750px] sm:min-h-[850px] lg:min-h-[920px]">
             {bubbles.map((bubble) => {
-              const { stock, change, x, y, r, tone } = bubble
+              const { stock, change, x, y, r, borderWidth, tone } = bubble
               const diameter = r * 2
 
               const isFuchsia = tone === "fuchsia"
               const isEmerald = tone === "emerald"
               const isRose = tone === "rose"
-              const isBigBubble = r >= 32
+              const isHighVol = borderWidth >= 3.0
 
               return (
                 <button
@@ -356,6 +383,8 @@ export function MarketBubbles({
                     top: `${Math.round(y - r)}px`,
                     width: `${diameter}px`,
                     height: `${diameter}px`,
+                    borderWidth: `${borderWidth}px`,
+                    borderStyle: "solid",
                   }}
                   className={cn(
                     "group absolute flex flex-col items-center justify-center rounded-full text-center will-change-transform transition-transform duration-75 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
@@ -363,53 +392,53 @@ export function MarketBubbles({
 
                     // Fuchsia / Purple ceiling glass
                     isFuchsia && [
-                      "border-2 border-fuchsia-300/90",
+                      "border-fuchsia-300/90",
                       "bg-[radial-gradient(circle_at_35%_30%,rgba(232,121,249,0.55)_0%,rgba(168,85,247,0.3)_45%,rgba(74,4,78,0.8)_100%)]",
-                      isBigBubble
-                        ? "shadow-[0_0_26px_rgba(217,70,239,0.6),0_0_6px_rgba(232,121,249,0.8),inset_0_0_16px_rgba(232,121,249,0.35)]"
-                        : "shadow-[0_0_12px_rgba(217,70,239,0.35),inset_0_0_8px_rgba(232,121,249,0.2)]",
+                      isHighVol
+                        ? "shadow-[0_0_28px_rgba(217,70,239,0.65),0_0_8px_rgba(232,121,249,0.9),inset_0_0_16px_rgba(232,121,249,0.35)]"
+                        : "shadow-[0_0_14px_rgba(217,70,239,0.35),inset_0_0_8px_rgba(232,121,249,0.2)]",
                     ],
 
                     // Emerald / Green gainer glass
                     isEmerald && [
-                      "border-2 border-emerald-400/90",
+                      "border-emerald-400/90",
                       "bg-[radial-gradient(circle_at_35%_30%,rgba(52,211,153,0.48)_0%,rgba(16,185,129,0.25)_45%,rgba(5,46,22,0.8)_100%)]",
-                      isBigBubble
-                        ? "shadow-[0_0_22px_rgba(16,185,129,0.5),0_0_6px_rgba(52,211,153,0.8),inset_0_0_14px_rgba(52,211,153,0.3)]"
-                        : "shadow-[0_0_10px_rgba(16,185,129,0.3),inset_0_0_6px_rgba(52,211,153,0.18)]",
+                      isHighVol
+                        ? "shadow-[0_0_26px_rgba(16,185,129,0.6),0_0_8px_rgba(52,211,153,0.9),inset_0_0_16px_rgba(52,211,153,0.35)]"
+                        : "shadow-[0_0_12px_rgba(16,185,129,0.3),inset_0_0_8px_rgba(52,211,153,0.18)]",
                     ],
 
                     // Rose / Red loser glass
                     isRose && [
-                      "border-2 border-rose-400/90",
+                      "border-rose-400/90",
                       "bg-[radial-gradient(circle_at_35%_30%,rgba(251,113,133,0.48)_0%,rgba(244,63,94,0.25)_45%,rgba(76,5,25,0.8)_100%)]",
-                      isBigBubble
-                        ? "shadow-[0_0_22px_rgba(244,63,94,0.5),0_0_6px_rgba(251,113,133,0.8),inset_0_0_14px_rgba(251,113,133,0.3)]"
-                        : "shadow-[0_0_10px_rgba(244,63,94,0.3),inset_0_0_6px_rgba(251,113,133,0.18)]",
+                      isHighVol
+                        ? "shadow-[0_0_26px_rgba(244,63,94,0.6),0_0_8px_rgba(251,113,133,0.9),inset_0_0_16px_rgba(251,113,133,0.35)]"
+                        : "shadow-[0_0_12px_rgba(244,63,94,0.3),inset_0_0_8px_rgba(251,113,133,0.18)]",
                     ],
 
                     // Neutral / Flat glass
                     !isFuchsia &&
                       !isEmerald &&
                       !isRose && [
-                        "border border-slate-500/70",
+                        "border-slate-500/70",
                         "bg-[radial-gradient(circle_at_35%_30%,rgba(148,163,184,0.3)_0%,rgba(71,85,105,0.2)_45%,rgba(15,23,42,0.8)_100%)]",
                         "shadow-[0_0_10px_rgba(148,163,184,0.18),inset_0_0_6px_rgba(148,163,184,0.12)]",
                       ]
                   )}
-                  title={`${stock.ticker} · ${stock.companyName} (${formatSigned(change, 2, "%")})`}
+                  title={`${stock.ticker} · ${stock.companyName} (${formatSigned(change, 2, "%")}) · KLGD: ${formatNumber(stock.volume)}`}
                 >
                   <strong
                     className={cn(
                       "font-mono font-black uppercase text-white tracking-wider leading-none drop-shadow-md",
-                      r >= 50
-                        ? "text-lg sm:text-2xl"
-                        : r >= 34
-                        ? "text-sm sm:text-base"
-                        : r >= 22
-                        ? "text-xs font-black"
-                        : r >= 15
-                        ? "text-[9px] sm:text-[10px] font-extrabold"
+                      r >= 55
+                        ? "text-xl sm:text-3xl"
+                        : r >= 40
+                        ? "text-base sm:text-xl"
+                        : r >= 28
+                        ? "text-xs sm:text-sm font-black"
+                        : r >= 18
+                        ? "text-[10px] sm:text-xs font-black"
                         : "text-[8px] font-bold"
                     )}
                   >
@@ -418,14 +447,14 @@ export function MarketBubbles({
                   <span
                     className={cn(
                       "font-mono leading-none drop-shadow-sm font-black",
-                      r >= 50
-                        ? "text-xs sm:text-base mt-0.5"
-                        : r >= 34
-                        ? "text-[10px] sm:text-xs mt-0.5"
-                        : r >= 22
-                        ? "text-[9px] font-bold mt-0.5"
-                        : r >= 15
-                        ? "text-[7px] sm:text-[8px] mt-0.5"
+                      r >= 55
+                        ? "text-xs sm:text-base mt-1"
+                        : r >= 40
+                        ? "text-[11px] sm:text-xs mt-0.5"
+                        : r >= 28
+                        ? "text-[9px] sm:text-[10px] font-bold mt-0.5"
+                        : r >= 18
+                        ? "text-[8px] font-bold mt-0.5"
                         : "text-[7px] mt-0.5",
                       isFuchsia
                         ? "text-fuchsia-100"
@@ -503,7 +532,7 @@ export function MarketBubbles({
         /* Columns / List Ranking View */
         <div className="rounded-2xl border border-white/[0.08] bg-[#070d15] p-4">
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {allStocks.map((stock, index) => {
+            {topStocks.map((stock, index) => {
               const change = getStockChange(stock, period)
               const isPos = (change ?? 0) >= 0
               return (
