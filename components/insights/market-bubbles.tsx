@@ -68,7 +68,7 @@ export function MarketBubbles({
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = React.useState<{ width: number; height: number }>({
     width: 1200,
-    height: 720,
+    height: 740,
   })
 
   const [viewMode, setViewMode] = React.useState<"bubbles" | "columns">("bubbles")
@@ -98,7 +98,7 @@ export function MarketBubbles({
       .slice(0, 100)
   }, [stocks])
 
-  // Physics Simulation: Bubble size by Price Gain (|change|), Spread evenly across canvas
+  // Physics Simulation: High density tight-packing filling 76% of canvas without gaps
   const bubbles: SimBubble[] = React.useMemo(() => {
     const count = topStocks.length
     if (count === 0) return []
@@ -106,48 +106,46 @@ export function MarketBubbles({
     const W = Math.max(dimensions.width, 600)
     const H = Math.max(dimensions.height, 600)
 
-    // Calculate changes & find extremes
+    // Calculate changes & extremes
     const changes = topStocks.map((s) => getStockChange(s, period) ?? 0)
     const absChanges = changes.map((c) => Math.abs(c))
-    const maxAbsChange = Math.max(2.0, ...absChanges)
+    const maxAbsChange = Math.max(2.5, ...absChanges)
     const minAbsChange = Math.min(...absChanges)
 
-    // Target coverage: 55% of available viewport area
-    const targetTotalArea = W * H * 0.55
+    // Target coverage: 76% of available viewport area for dense edge-to-edge bubbles
+    const targetTotalArea = W * H * 0.76
 
-    // Radius scaling: size is directly determined by price change magnitude
+    // Calculate raw radii based on price change
     const rawRadii = topStocks.map((stock, i) => {
       const chg = changes[i]
       const absChg = Math.abs(chg)
-      // Non-linear power scale for visual contrast between high movers and flat stocks
       const norm = Math.max(0, (absChg - minAbsChange) / (maxAbsChange - minAbsChange || 1))
-      const scale = Math.pow(norm, 0.6) // 0.6 exponent enhances medium/large movers
+      const scale = Math.pow(norm, 0.52) // smooth power curve
 
-      // Base radius from 18px (for flat 0%) up to 80px (for top movers)
-      let r = 18 + scale * 62
+      // Base radius from 26px up to 105px on desktop
+      let r = 26 + scale * 74
 
-      // Ceiling bonus: >6.5% gains (or top positive mover) get extra size prominence
+      // Ceiling bonus: >6.5% gains get extra size
       if (chg >= 6.5) {
-        r = Math.min(84, r * 1.12)
+        r = Math.min(115, r * 1.15)
       }
 
       if (W < 640) {
-        r = Math.max(13, Math.min(48, Math.round(r * 0.72)))
+        r = Math.max(16, Math.min(60, Math.round(r * 0.72)))
       }
       return r
     })
 
-    // Adjust scale so total area matches target area
+    // Scale so total area matches target area (76% density)
     const currentSumArea = rawRadii.reduce((acc, r) => acc + Math.PI * r * r, 0)
-    const areaMultiplier = Math.min(1.1, Math.max(0.7, Math.sqrt(targetTotalArea / (currentSumArea || 1))))
+    const areaMultiplier = Math.sqrt(targetTotalArea / (currentSumArea || 1))
 
-    // Initialize bubbles distributed across a full uniform 2D grid
+    // Initialize bubbles evenly distributed across full grid
     const cols = Math.ceil(Math.sqrt(count * (W / H)))
     const rows = Math.ceil(count / cols)
-    const cellW = (W - 80) / cols
-    const cellH = (H - 80) / rows
+    const cellW = (W - 30) / cols
+    const cellH = (H - 30) / rows
 
-    // Sort order: scatter larger bubbles evenly rather than bunching in center
     const indexedStocks = topStocks.map((stock, index) => ({
       stock,
       index,
@@ -155,23 +153,22 @@ export function MarketBubbles({
       r: Math.round(rawRadii[index] * areaMultiplier),
     }))
 
-    // Shuffle placement index evenly across grid
     const nodes: SimBubble[] = indexedStocks.map((item, i) => {
       const { stock, change, r } = item
       const col = i % cols
       const row = Math.floor(i / cols)
 
-      // Jittered grid placement spanning the full canvas
-      const x = 40 + (col + 0.5) * cellW + (Math.sin(i * 3.7) * cellW * 0.25)
-      const y = 40 + (row + 0.5) * cellH + (Math.cos(i * 4.3) * cellH * 0.25)
+      // Jittered grid covering full bounding box
+      const x = 15 + (col + 0.5) * cellW + (Math.sin(i * 3.7) * cellW * 0.2)
+      const y = 15 + (row + 0.5) * cellH + (Math.cos(i * 4.3) * cellH * 0.2)
 
       let tone: SimBubble["tone"] = "neutral"
       if (change >= 6.5) {
-        tone = "fuchsia" // Ceiling / extreme gainer
+        tone = "fuchsia"
       } else if (change > 0) {
-        tone = "emerald" // Positive gainer
+        tone = "emerald"
       } else if (change < 0) {
-        tone = "rose" // Loser
+        tone = "rose"
       }
 
       return {
@@ -185,21 +182,20 @@ export function MarketBubbles({
       }
     })
 
-    // 2D Force-Collision Relaxation (220 iterations for zero-overlap spread)
-    const iterations = 220
-    const padding = 5 // 5px safety physical gap
+    // Iterative 2D Collision-Free Physics (250 passes, minimal 2px gap)
+    const iterations = 250
+    const padding = 2 // 2px tight contact gap like real foam bubbles
 
     for (let iter = 0; iter < iterations; iter++) {
-      const alpha = Math.max(0.08, 1 - iter / iterations)
+      const alpha = Math.max(0.06, 1 - iter / iterations)
 
-      // 1. Soft boundary repulsive force (spreads bubbles to fill edges evenly)
+      // 1. Soft boundary expansion (keeps bubbles spread to edges)
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        // Gentle push away from walls to keep inside
-        if (node.x < node.r + 30) node.x += (node.r + 30 - node.x) * 0.1 * alpha
-        if (node.x > W - node.r - 30) node.x -= (node.x - (W - node.r - 30)) * 0.1 * alpha
-        if (node.y < node.r + 30) node.y += (node.r + 30 - node.y) * 0.1 * alpha
-        if (node.y > H - node.r - 30) node.y -= (node.y - (H - node.r - 30)) * 0.1 * alpha
+        if (node.x < node.r + 15) node.x += (node.r + 15 - node.x) * 0.08 * alpha
+        if (node.x > W - node.r - 15) node.x -= (node.x - (W - node.r - 15)) * 0.08 * alpha
+        if (node.y < node.r + 15) node.y += (node.r + 15 - node.y) * 0.08 * alpha
+        if (node.y > H - node.r - 15) node.y -= (node.y - (H - node.r - 15)) * 0.08 * alpha
       }
 
       // 2. Strict Pairwise Circle Collision Push
@@ -214,8 +210,8 @@ export function MarketBubbles({
 
           if (dist < minDist) {
             const overlap = minDist - dist
-            const nx = dist > 0.0001 ? dx / dist : Math.cos((i * 17 + j * 11) % 6.28)
-            const ny = dist > 0.0001 ? dy / dist : Math.sin((i * 17 + j * 11) % 6.28)
+            const nx = dist > 0.0001 ? dx / dist : Math.cos((i * 19 + j * 13) % 6.28)
+            const ny = dist > 0.0001 ? dy / dist : Math.sin((i * 19 + j * 13) % 6.28)
 
             const totalR = n1.r + n2.r
             const ratio1 = n2.r / totalR
@@ -232,8 +228,8 @@ export function MarketBubbles({
       // 3. Strict Boundary Containment
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        node.x = Math.max(node.r + 12, Math.min(W - node.r - 12, node.x))
-        node.y = Math.max(node.r + 12, Math.min(H - node.r - 12, node.y))
+        node.x = Math.max(node.r + 4, Math.min(W - node.r - 4, node.x))
+        node.y = Math.max(node.r + 4, Math.min(H - node.r - 4, node.y))
       }
     }
 
@@ -326,10 +322,10 @@ export function MarketBubbles({
       {viewMode === "bubbles" ? (
         <div
           ref={containerRef}
-          className="market-bubble-field relative min-h-[650px] sm:min-h-[760px] w-full overflow-hidden rounded-2xl border border-white/[0.09] bg-[radial-gradient(ellipse_80%_60%_at_50%_40%,#051824_0%,#020b13_50%,#01050a_100%)] select-none shadow-2xl"
+          className="market-bubble-field relative min-h-[650px] sm:min-h-[780px] w-full overflow-hidden rounded-2xl border border-white/[0.09] bg-[radial-gradient(ellipse_80%_60%_at_50%_40%,#051824_0%,#020b13_50%,#01050a_100%)] select-none shadow-2xl"
           aria-label={`Bản đồ Top 100 cổ phiếu ${period}`}
         >
-          {/* Ambient Liquid Glass background aura (smooth static gradients, no scan animation) */}
+          {/* Ambient Liquid Glass background aura */}
           <div className="pointer-events-none absolute -left-20 -top-20 size-96 rounded-full bg-teal-500/[0.04] blur-3xl" aria-hidden="true" />
           <div className="pointer-events-none absolute -bottom-20 -right-20 size-96 rounded-full bg-indigo-500/[0.04] blur-3xl" aria-hidden="true" />
 
@@ -340,7 +336,7 @@ export function MarketBubbles({
           </div>
 
           {/* Collision-Resolved Bubbles Canvas */}
-          <div className="relative z-10 size-full min-h-[650px] sm:min-h-[760px]">
+          <div className="relative z-10 size-full min-h-[650px] sm:min-h-[780px]">
             {bubbles.map((bubble) => {
               const { stock, change, x, y, r, tone } = bubble
               const diameter = r * 2
@@ -416,16 +412,21 @@ export function MarketBubbles({
                     aria-hidden="true"
                   />
 
-                  <StockLogo symbol={stock.ticker} size={logoSize} className="mb-0.5 pointer-events-none drop-shadow-sm" />
+                  <StockLogo
+                    symbol={stock.ticker}
+                    size={logoSize}
+                    fallback="none"
+                    className="mb-0.5 pointer-events-none drop-shadow-sm"
+                  />
                   <strong
                     className={cn(
                       "font-mono font-black uppercase text-white tracking-wider leading-none drop-shadow",
                       r >= 55
-                        ? "text-base sm:text-xl"
+                        ? "text-base sm:text-2xl"
                         : r >= 40
-                        ? "text-sm sm:text-base"
+                        ? "text-sm sm:text-lg"
                         : r >= 28
-                        ? "text-xs font-extrabold"
+                        ? "text-xs sm:text-sm font-extrabold"
                         : r >= 20
                         ? "text-[10px] font-bold"
                         : "text-[9px] font-bold"
@@ -437,9 +438,9 @@ export function MarketBubbles({
                     className={cn(
                       "font-mono font-bold leading-none mt-0.5 drop-shadow-sm",
                       r >= 55
-                        ? "text-xs sm:text-sm font-extrabold"
+                        ? "text-xs sm:text-base font-extrabold"
                         : r >= 40
-                        ? "text-[11px] sm:text-xs font-bold"
+                        ? "text-[11px] sm:text-sm font-bold"
                         : r >= 28
                         ? "text-[10px] font-bold"
                         : r >= 20
@@ -471,7 +472,7 @@ export function MarketBubbles({
               }}
             >
               <div className="flex items-center gap-2.5">
-                <StockLogo symbol={hoveredBubble.stock.ticker} size={28} />
+                <StockLogo symbol={hoveredBubble.stock.ticker} size={28} fallback="none" />
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-black text-white">{hoveredBubble.stock.ticker}</span>

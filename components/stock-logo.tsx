@@ -7,6 +7,7 @@ export interface StockLogoProps {
   size?: number
   className?: string
   alt?: string
+  fallback?: "badge" | "none"
 }
 
 export const StockLogo = memo(function StockLogo({
@@ -14,16 +15,17 @@ export const StockLogo = memo(function StockLogo({
   size = 28,
   className = "",
   alt,
+  fallback = "badge",
 }: StockLogoProps) {
   const ticker = symbol?.toUpperCase() || ""
   const [error, setError] = useState(false)
 
   if (!ticker) return null
 
-  const defaultRounded = className.includes("rounded-") ? "" : "rounded-lg"
-
-  // If image errored, display clean branded fallback badge
+  // If image errored, display clean branded fallback badge or return null if fallback is none
   if (error) {
+    if (fallback === "none") return null
+    const defaultRounded = className.includes("rounded-") ? "" : "rounded-lg"
     return (
       <div
         className={`inline-flex shrink-0 items-center justify-center ${defaultRounded} border border-white/10 bg-white/[0.06] font-mono font-bold text-foreground/80 shadow-sm select-none ${className}`}
@@ -38,6 +40,8 @@ export const StockLogo = memo(function StockLogo({
       </div>
     )
   }
+
+  const defaultRounded = className.includes("rounded-") ? "" : "rounded-lg"
 
   return (
     <div
