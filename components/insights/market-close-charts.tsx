@@ -72,6 +72,28 @@ const indexConfig = {
   tradedValue: { label: "GTGD (tỷ)", color: ACCENT },
 } satisfies ChartConfig
 
+const vnindexHistoryConfig = {
+  vnindexClose: { label: "VNINDEX", color: "#5eead4" },
+} satisfies ChartConfig
+
+export function VnindexHistoryChart({ history }: { history: MarketHistoryPoint[] }) {
+  const data = history.filter((item) => item.vnindexClose != null)
+
+  if (!data.length) return <EmptyChart message="Lịch sử VNINDEX sẽ hiển thị sau khi đủ snapshot." />
+
+  return (
+    <ChartContainer config={vnindexHistoryConfig} className="h-[260px] w-full" initialDimension={{ width: 860, height: 260 }}>
+      <AreaChart accessibilityLayer data={data} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
+        <CartesianGrid vertical={false} stroke={GRID} strokeDasharray="3 6" />
+        <XAxis dataKey="sessionDate" axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 10 }} tickFormatter={shortDate} minTickGap={28} />
+        <YAxis domain={["dataMin - 8", "dataMax + 8"]} axisLine={false} tickLine={false} tick={{ fill: AXIS, fontSize: 10 }} />
+        <ChartTooltip content={<ChartTooltipContent indicator="line" labelFormatter={(value) => shortDate(String(value))} />} />
+        <Area dataKey="vnindexClose" type="monotone" fill="var(--color-vnindexClose)" fillOpacity={0.08} stroke="var(--color-vnindexClose)" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls />
+      </AreaChart>
+    </ChartContainer>
+  )
+}
+
 export function IndexPerformanceChart({ indexes }: { indexes: MarketIndexCard[] }) {
   const data = indexes.map((item) => ({
     name: item.indexCode,

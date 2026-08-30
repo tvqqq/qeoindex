@@ -94,15 +94,36 @@ test("Market Close dashboard uses stable accessible shadcn chart composition", (
     "IndexImpactChart",
     "MarketHistoryChart",
     "MarketHistoryFlowChart",
+    "VnindexHistoryChart",
   ]) {
     assert.match(dashboard, new RegExp(`<${component}\\b`), `${component} must be rendered in the dashboard`)
   }
 
   assert.match(charts, /ChartContainer/)
   assert.match(charts, /ChartTooltipContent/)
-  assert.ok((charts.match(/accessibilityLayer/g) || []).length >= 9, "charts must expose Recharts accessibility layers")
-  assert.ok((charts.match(/initialDimension=/g) || []).length >= 9, "charts must have stable initial dimensions")
+  assert.ok((charts.match(/accessibilityLayer/g) || []).length >= 10, "charts must expose Recharts accessibility layers")
+  assert.ok((charts.match(/initialDimension=/g) || []).length >= 10, "charts must have stable initial dimensions")
   assert.doesNotMatch(charts, /backdrop-blur|backdrop-filter|transition-all|filter:/i)
+})
+
+test("Liquid Glass Insights styling stays compositor-safe around charts", () => {
+  const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
+  const globalCss = fs.readFileSync(path.resolve("app/globals.css"), "utf8")
+  const scopedStart = globalCss.indexOf(".insights-liquid-shell")
+  const scopedEnd = globalCss.indexOf(".liquid-glass-surface", scopedStart)
+  const scopedCss = globalCss.slice(scopedStart, scopedEnd)
+
+  assert.match(dashboard, /data-liquid-glass-dashboard/)
+  assert.match(scopedCss, /insights-glass-panel/)
+  assert.doesNotMatch(scopedCss, /backdrop-filter|\bfilter\s*:|transition:\s*all/i)
+})
+
+test("VNINDEX hero history comes from a bounded canonical-index query", () => {
+  const dataSource = fs.readFileSync(path.resolve("lib/market-insight-data.ts"), "utf8")
+
+  assert.match(dataSource, /\.from\("market_insight_indexes"\)[\s\S]*\.eq\("index_code", "VNINDEX"\)[\s\S]*\.limit\(20\)/)
+  assert.match(dataSource, /vnindexHistoryByDate/)
+  assert.doesNotMatch(dataSource, /vnindexClose:\s*Math\.|vnindexClose:\s*\d/)
 })
 
 test("Market Close presents every insight section on one tab-free dashboard", () => {

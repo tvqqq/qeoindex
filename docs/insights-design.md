@@ -8,7 +8,8 @@ Insights uses the information density of a Vietnamese market board without sacri
 
 - Page route: `/insights`; authenticated application shell and top navigation remain unchanged.
 - Content maximum: 1,880px with responsive page gutters.
-- Main sequence: VNIndex overview → market pulse → rating table → research module cards.
+- Main sequence: VNINDEX 20-session hero + market pulse → four index tiles → sector map → breadth/trend/flow → liquidity/index impact → 20-session context → closed rating disclosure → research modules.
+- Liquid Glass is expressed with translucent color, edge light, restrained gradients, and bounded shadows. Persistent backdrop blur/filter layers are prohibited around the chart-heavy dashboard.
 - Rating table: fixed 11-column layout with percentage widths totaling 100%.
 
 | Column | Width | Semantic treatment |

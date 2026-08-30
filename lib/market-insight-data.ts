@@ -163,7 +163,7 @@ export async function getMarketCloseInsightData(
   const isStale = targetDate < today
 
   // 2. Fetch daily, indexes, sectors, leaders in parallel
-  const [dailyRes, indexesRes, sectorsRes, leadersRes, historyRes] = await Promise.all([
+  const [dailyRes, indexesRes, sectorsRes, leadersRes, historyRes, vnindexHistoryRes] = await Promise.all([
     supabase
       .from("market_insight_daily")
       .select("*")
@@ -185,6 +185,13 @@ export async function getMarketCloseInsightData(
     supabase
       .from("market_insight_daily")
       .select("session_date,sentiment_score,risk_score,above_ma10_pct,above_ma20_pct,above_ma50_pct,above_ma200_pct,foreign_net_value,proprietary_net_value,total_traded_value")
+      .lte("session_date", targetDate)
+      .order("session_date", { ascending: false })
+      .limit(20),
+    supabase
+      .from("market_insight_indexes")
+      .select("session_date,value,change_pct")
+      .eq("index_code", "VNINDEX")
       .lte("session_date", targetDate)
       .order("session_date", { ascending: false })
       .limit(20),
@@ -260,6 +267,16 @@ export async function getMarketCloseInsightData(
     asOf: String(row.as_of || new Date().toISOString()),
   }))
 
+  const vnindexHistoryByDate = new Map(
+    (vnindexHistoryRes.data || []).map((row: Record<string, unknown>) => [
+      String(row.session_date),
+      {
+        close: row.value != null ? Number(row.value) : null,
+        changePct: row.change_pct != null ? Number(row.change_pct) : null,
+      },
+    ])
+  )
+
   const history: MarketHistoryPoint[] = (historyRes.data || [])
     .map((row: Record<string, unknown>) => ({
       sessionDate: String(row.session_date),
@@ -272,8 +289,8 @@ export async function getMarketCloseInsightData(
       foreignNetValue: row.foreign_net_value != null ? Number(row.foreign_net_value) : null,
       proprietaryNetValue: row.proprietary_net_value != null ? Number(row.proprietary_net_value) : null,
       totalTradedValue: row.total_traded_value != null ? Number(row.total_traded_value) : null,
-      vnindexClose: null,
-      vnindexChangePct: null,
+      vnindexClose: vnindexHistoryByDate.get(String(row.session_date))?.close ?? null,
+      vnindexChangePct: vnindexHistoryByDate.get(String(row.session_date))?.changePct ?? null,
     }))
     .reverse()
 

@@ -146,6 +146,33 @@ body::after {
 }
 
 /* Liquid Glass Utilities */
+.insights-liquid-shell {
+  position: relative;
+  isolation: isolate;
+  background-color: #061118;
+  background-image:
+    radial-gradient(circle at 12% 6%, rgba(45, 212, 191, 0.09), transparent 26rem),
+    radial-gradient(circle at 88% 22%, rgba(56, 189, 248, 0.055), transparent 30rem),
+    linear-gradient(180deg, rgba(6, 17, 24, 0.82), #061118 38%, #050d13 100%);
+}
+
+/* Optical glass for the chart-heavy Insights page: translucent color, edge
+ * light and bounded shadows only. Avoid compositor-heavy visual layers. */
+.insights-glass-header,
+.insights-glass-panel,
+.insights-glass-chip {
+  background-image:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 42%),
+    linear-gradient(180deg, rgba(45, 212, 191, 0.018), transparent 55%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 20px 55px -48px rgba(45, 212, 191, 0.5);
+}
+
+.insights-glass-panel {
+  border-radius: 1.2rem;
+}
+
 .liquid-glass-surface {
   background: rgba(12, 17, 22, 0.72);
   backdrop-filter: blur(28px) saturate(190%);

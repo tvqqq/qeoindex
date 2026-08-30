@@ -1441,21 +1441,22 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="insights-liquid-shell min-h-screen bg-background text-foreground" data-insights-liquid-glass>
       <TopNav />
-      <main className="mx-auto w-full max-w-[1880px] px-3 pb-16 pt-8 sm:px-5 lg:px-6">
-        <section className="flex flex-col justify-between gap-5 border-b border-white/[0.06] pb-6 lg:flex-row lg:items-end">
+      <main className="relative mx-auto w-full max-w-[1880px] px-3 pb-16 pt-5 sm:px-5 lg:px-6">
+        <section className="insights-glass-header flex flex-col justify-between gap-5 rounded-2xl border border-white/[0.07] bg-[#08151c]/75 px-4 py-4 sm:px-5 lg:flex-row lg:items-center">
           <div>
             <div className="flex items-center gap-3.5 sm:gap-4">
-              <div className="flex size-10 sm:size-12 shrink-0 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-300/[0.06]">
-                <Sparkles className="size-5 sm:size-6 text-cyan-300" />
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-teal-300/20 bg-teal-300/[0.08]">
+                <Sparkles className="size-5 text-teal-200" />
               </div>
-              <h1 className="font-ticker text-3xl font-extrabold tracking-[-0.03em] text-white sm:text-4xl lg:text-5xl">
-                Insights thị trường
-              </h1>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-teal-300/70">QeoIndex Financial Center</p>
+                <h1 className="font-ticker text-2xl font-extrabold tracking-[-0.03em] text-white sm:text-3xl">Insights thị trường</h1>
+              </div>
             </div>
-            <p className="mt-2.5 max-w-3xl text-sm font-medium leading-6 text-muted-2 sm:text-base">
-              Market analytics trực quan: chỉ số, độ rộng, dòng tiền, nhóm ngành và cổ phiếu dẫn dắt.
+            <p className="mt-2 max-w-3xl text-xs font-medium leading-5 text-muted-2 sm:ml-14 sm:text-sm">
+              Một nhịp đọc từ sức khỏe thị trường đến ngành và cổ phiếu dẫn dắt.
             </p>
           </div>
           <div className="flex flex-col items-start gap-2.5 sm:items-end">
@@ -1463,9 +1464,9 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
               <CalendarDays className="size-4 text-emerald-400" />
               <span>{DATE_FORMAT.format(new Date(data.generatedAt))}</span>
             </div>
-            <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-[#0b111c] px-3.5 py-2 text-xs text-slate-500">
+            <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3.5 py-2 text-xs text-slate-500">
               <Database className="size-3.5 text-brand" />
-              <span>Supabase ratings · Notion research · Market feeds</span>
+              <span>Snapshot sau phiên · dữ liệu đã chuẩn hóa</span>
             </div>
           </div>
         </section>
