@@ -79,7 +79,7 @@ const BUBBLE_PERIODS = ["1D", "1W", "1M", "1Y"] as const
 
 export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], onOpenStockDetail }: MarketCloseDashboardProps) {
   const [guideOpen, setGuideOpen] = React.useState(false)
-  const [marketView, setMarketView] = React.useState<"pulse" | "effort" | "health">("pulse")
+  const [marketView, setMarketView] = React.useState<"pulse" | "health">("pulse")
 
   if (!data) return (
     <Card className={cn(surface, "py-12 text-center")}><CardContent className="space-y-3"><Activity className="mx-auto size-10 text-slate-600" /><CardTitle>Chưa có dữ liệu phiên đóng cửa</CardTitle><CardDescription>Snapshot sau phiên được cập nhật tự động sau 15:15 vào ngày giao dịch.</CardDescription></CardContent></Card>
@@ -122,7 +122,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
           <SectionHeading
             eyebrow="Sector map"
             title="Nhóm ngành đang dẫn nhịp"
-            description="Đọc hiệu suất cùng độ lan tỏa và Luân chuyển dòng tiền ngành để tránh nhầm một vài mã tăng với sức mạnh toàn ngành."
+            description="Đọc hiệu suất cùng độ lan tỏa, Nỗ lực kết quả và Luân chuyển dòng tiền ngành để tránh nhầm một vài mã tăng với sức mạnh toàn ngành."
           />
         </div>
         <SectorMapPanel
@@ -153,32 +153,24 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
   )
 }
 
-function MarketIntelligencePanel({ view, onViewChange, data, onOpenGuide }: { view: "pulse" | "effort" | "health"; onViewChange: (view: "pulse" | "effort" | "health") => void; data: MarketCloseDashboardData; onOpenGuide: () => void }) {
-  const { dailySummary, indexes, sectors, history, marketRegime } = data
+function MarketIntelligencePanel({ view, onViewChange, data, onOpenGuide }: { view: "pulse" | "health"; onViewChange: (view: "pulse" | "health") => void; data: MarketCloseDashboardData; onOpenGuide: () => void }) {
+  const { dailySummary, indexes, history, marketRegime } = data
   const vnindex = indexes.find((item) => item.indexCode === "VNINDEX")
   const breadthTotal = Math.max(1, (vnindex?.advances ?? 0) + (vnindex?.unchanged ?? 0) + (vnindex?.declines ?? 0))
-  const effortRows = sectors.filter((item) => item.timeWindow === "1d").sort((a, b) => Math.abs(b.effortPct ?? b.resultPct ?? 0) - Math.abs(a.effortPct ?? a.resultPct ?? 0)).slice(0, 12)
   return (
     <section aria-labelledby="market-intelligence-title">
       <Card className={cn(surface, "overflow-hidden py-0")}>
-        <div className="grid grid-cols-3 gap-1 border-b border-white/[0.07] bg-black/10 p-1.5">{([{ key: "pulse", label: "Nhịp đập thị trường" }, { key: "effort", label: "Nỗ lực kết quả" }, { key: "health", label: "Sức khoẻ thị trường" }] as const).map((item) => <button key={item.key} type="button" onClick={() => onViewChange(item.key)} className={cn("rounded-lg px-2 py-3 text-xs font-bold transition-colors sm:text-sm", view === item.key ? "bg-white/[0.08] text-white" : "text-slate-500 hover:text-slate-200")}>{item.label}</button>)}</div>
+        <div className="grid grid-cols-2 gap-1 border-b border-white/[0.07] bg-black/10 p-1.5">{([{ key: "pulse", label: "Nhịp đập thị trường" }, { key: "health", label: "Sức khoẻ thị trường" }] as const).map((item) => <button key={item.key} type="button" onClick={() => onViewChange(item.key)} className={cn("rounded-lg px-2 py-3 text-xs font-bold transition-colors sm:text-sm", view === item.key ? "bg-white/[0.08] text-white" : "text-slate-500 hover:text-slate-200")}>{item.label}</button>)}</div>
         <CardContent className="p-5 sm:p-6">
           {view === "pulse" && <div className="grid gap-6 xl:grid-cols-[.85fr_1.15fr]">
             <div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-teal-300/70">Tổng quan thị trường</p><div className="mt-4 flex items-center gap-5"><div className="flex size-28 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/[0.06]"><strong className="text-center text-lg font-black uppercase text-amber-300">{marketRegime || "Chưa rõ"}</strong></div><div className="grid flex-1 grid-cols-2 gap-2"><PulseStat label="Tâm lý" value={`${formatNumber(dailySummary.sentimentScore, 0)} · ${dailySummary.sentimentLabel || "—"}`} /><PulseStat label="Rủi ro" value={formatNumber(dailySummary.riskScore, 2)} tone={(dailySummary.riskScore ?? 0) >= 60 ? "down" : "up"} /><PulseStat label="Khối ngoại" value={`${formatSigned(dailySummary.foreignNetValue, 0)} tỷ`} tone={(dailySummary.foreignNetValue ?? 0) >= 0 ? "up" : "down"} /><PulseStat label="Phân phối" value={`${dailySummary.distributionCount ?? "—"} ngày`} /></div></div></div>
             <div className="space-y-4"><BreadthBar label="Tăng giá" value={vnindex?.advances ?? 0} total={breadthTotal} tone="up" /><BreadthBar label="Đứng giá" value={vnindex?.unchanged ?? 0} total={breadthTotal} tone="flat" /><BreadthBar label="Giảm giá" value={vnindex?.declines ?? 0} total={breadthTotal} tone="down" /><div className="grid grid-cols-2 gap-2 pt-2 sm:grid-cols-4"><PulseStat label="Trên MA10" value={`${formatNumber(dailySummary.aboveMa10Pct, 0)}%`} /><PulseStat label="Trên MA20" value={`${formatNumber(dailySummary.aboveMa20Pct, 0)}%`} /><PulseStat label="Trên MA50" value={`${formatNumber(dailySummary.aboveMa50Pct, 0)}%`} /><PulseStat label="Trên MA200" value={`${formatNumber(dailySummary.aboveMa200Pct, 0)}%`} /></div></div>
           </div>}
-          {view === "effort" && <div><div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><h3 id="market-intelligence-title" className="text-base font-bold text-white">Nỗ lực và kết quả theo ngành</h3><p className="mt-1 text-xs text-slate-500">Nỗ lực là thay đổi thanh khoản; kết quả là biến động giá bình quân trong phiên.</p></div><Badge variant="outline" className="border-white/10 text-slate-400">1 ngày · Ngành</Badge></div><div className="space-y-3">{effortRows.map((sector) => <div key={sector.sectorKey} className="grid grid-cols-[110px_1fr] items-center gap-3 sm:grid-cols-[180px_1fr]"><span className="truncate text-[11px] font-semibold uppercase text-slate-500">{sector.displayName}</span><div className="grid gap-1 sm:grid-cols-2"><MetricBar label="Nỗ lực" value={sector.effortPct} missing="Chưa có dữ liệu nỗ lực" striped /><MetricBar label="Kết quả" value={sector.resultPct ?? sector.averageChangePct} /></div></div>)}</div></div>}
           {view === "health" && <MarketHealthView data={data} history={history} />}
         </CardContent>
       </Card>
     </section>
   )
-}
-
-function MetricBar({ label, value, missing, striped }: { label: string; value: number | null; missing?: string; striped?: boolean }) {
-  const positive = (value ?? 0) >= 0
-  const width = value == null ? 0 : Math.min(100, Math.max(3, Math.abs(value)))
-  return <div className="grid grid-cols-[58px_1fr_70px] items-center gap-2"><span className="text-[9px] text-slate-600">{label}</span><div className="h-5 overflow-hidden rounded bg-white/[0.04]" title={value == null ? missing : undefined}><div className={cn("h-full rounded", positive ? "bg-teal-400/80" : "bg-rose-500/80", striped && "bg-[repeating-linear-gradient(135deg,rgba(255,255,255,.12)_0_7px,transparent_7px_14px)]")} style={{ width: `${width}%` }} /></div><span className={cn("truncate font-mono text-[10px]", value == null ? "text-slate-600" : positive ? "text-teal-300" : "text-rose-300")} title={value == null ? missing : undefined}>{value == null ? "Thiếu data" : formatSigned(value, 2, "%")}</span></div>
 }
 
 function PulseStat({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
