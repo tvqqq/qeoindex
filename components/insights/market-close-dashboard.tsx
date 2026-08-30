@@ -13,7 +13,6 @@ import { SectorMapPanel } from "@/components/insights/sector-map-panel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import type { MarketCloseDashboardData, MarketSectorRow } from "@/lib/market-insight-data"
 import type { InsightsRatingRow } from "@/lib/insights-data"
 import { cn } from "@/lib/utils"
@@ -78,7 +77,6 @@ function BreadthBar({ label, value, total, tone }: { label: string; value: numbe
 const BUBBLE_PERIODS = ["1D", "1W", "1M", "1Y"] as const
 
 export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], onOpenStockDetail }: MarketCloseDashboardProps) {
-  const [selectedSector, setSelectedSector] = React.useState<MarketSectorRow | null>(null)
   const [guideOpen, setGuideOpen] = React.useState(false)
   const [marketView, setMarketView] = React.useState<"pulse" | "effort" | "health">("pulse")
 
@@ -132,7 +130,6 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
           ratings={ratings}
           sectorHistory={sectorHistory}
           marketHistory={history}
-          onSelectSector={setSelectedSector}
           onOpenStockDetail={onOpenStockDetail}
         />
       </section>
@@ -160,10 +157,6 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
         <div className="grid gap-3 xl:grid-cols-2" data-market-close-chart-grid><ChartPanel icon={Gauge} title="Tâm lý, rủi ro và MA20" description="Thang điểm sức khỏe qua tối đa 20 phiên"><MarketHistoryChart history={history} /></ChartPanel><ChartPanel icon={CircleDollarSign} title="Dòng tiền theo phiên" description="Khối ngoại và tự doanh quanh trục trung tính"><MarketHistoryFlowChart history={history} /></ChartPanel></div>
       </section>
 
-      {/* Sector Detail Dialog */}
-      <Dialog open={Boolean(selectedSector)} onOpenChange={(open) => { if (!open) setSelectedSector(null) }}>
-        <DialogContent className="max-w-md border-white/10 bg-[#0b151d]"><DialogHeader><DialogTitle className="flex items-center justify-between text-base"><span>{selectedSector?.displayName}</span><Badge variant="outline" className="font-mono text-xs">{selectedSector?.timeWindow || "1d"}</Badge></DialogTitle><DialogDescription>Snapshot sức mạnh và thanh khoản ngành</DialogDescription></DialogHeader>{selectedSector && <div className="grid grid-cols-2 gap-2 py-2">{[["Biến động TB", formatSigned(selectedSector.averageChangePct, 2, "%")], ["Thanh khoản", `${formatNumber(selectedSector.tradedValue, 1)} tỷ`], ["Độ rộng", `${selectedSector.advances} tăng / ${selectedSector.declines} giảm`], ["Điểm RS", formatNumber(selectedSector.rsScore, 1)]].map(([label, value]) => <div key={label} className="rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"><span className="text-[10px] text-slate-500">{label}</span><strong className="mt-1 block font-mono text-sm text-white">{value}</strong></div>)}</div>}</DialogContent>
-      </Dialog>
       <MetricGuideDialog open={guideOpen} onOpenChange={setGuideOpen} />
     </div>
   )
