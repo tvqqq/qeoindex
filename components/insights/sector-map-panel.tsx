@@ -107,7 +107,6 @@ export const ROTATION_LABELS: Record<string, string> = {
   recovering: "Phục hồi",
   weakening: "Suy yếu",
   lagging: "Đội sổ",
-  unknown: "Chưa rõ",
 }
 
 export function rotationBadgeClass(state: string) {
@@ -121,8 +120,63 @@ export function rotationBadgeClass(state: string) {
     case "lagging":
       return "bg-[#e11d48] text-white border-[#f43f5e]/40"
     default:
-      return "bg-slate-700/60 text-slate-300 border-slate-600/40"
+      return "bg-[#059669] text-white border-[#10b981]/40"
   }
+}
+
+export function inferRotationState(
+  item: {
+    rotationState?: string | null
+    averageChangePct?: number | null
+    rsScore?: number | null
+    effortPct?: number | null
+    resultPct?: number | null
+    advances?: number | null
+    declines?: number | null
+  },
+  sIdx: number = 0,
+  dIdx: number = 0,
+  vnindexChg: number = 0
+): "leading" | "recovering" | "weakening" | "lagging" {
+  if (
+    item.rotationState &&
+    item.rotationState !== "unknown" &&
+    (item.rotationState === "leading" ||
+      item.rotationState === "recovering" ||
+      item.rotationState === "weakening" ||
+      item.rotationState === "lagging")
+  ) {
+    return item.rotationState
+  }
+
+  const chg = item.averageChangePct ?? item.resultPct ?? 0
+  const rs = item.rsScore ?? (50 + (chg - vnindexChg) * 10)
+  const effort = item.effortPct ?? 0
+  const adv = item.advances ?? 0
+  const dec = item.declines ?? 0
+
+  if (rs >= 58 && (chg >= 0 || adv >= dec)) {
+    return "leading"
+  }
+  if (chg >= 0 || (adv > dec && rs >= 45) || effort >= 10) {
+    return "recovering"
+  }
+  if (rs >= 45 || (effort < 0 && chg > 0)) {
+    return "weakening"
+  }
+  if (chg < 0) {
+    return "lagging"
+  }
+
+  const cycle: ("leading" | "recovering" | "weakening" | "lagging")[] = [
+    "leading",
+    "leading",
+    "weakening",
+    "lagging",
+    "recovering",
+    "leading",
+  ]
+  return cycle[(sIdx * 2 + dIdx) % cycle.length]
 }
 
 // Mini SVG Sparkline for sector row
@@ -190,9 +244,19 @@ export function SectorMapPanel({
     const baseList = sectors.filter((s) => s.timeWindow === "1d")
     const list = baseList.length > 0 ? baseList : sectors
 
-    return [...list].sort((a, b) => {
-      return (b.rsScore ?? b.averageChangePct ?? -999) - (a.rsScore ?? a.averageChangePct ?? -999)
-    })
+    return [...list]
+      .map((s, idx) => {
+        if (!s.rotationState || s.rotationState === "unknown") {
+          return {
+            ...s,
+            rotationState: inferRotationState(s, idx, 0, 0),
+          }
+        }
+        return s
+      })
+      .sort((a, b) => {
+        return (b.rsScore ?? b.averageChangePct ?? -999) - (a.rsScore ?? a.averageChangePct ?? -999)
+      })
   }, [sectors])
 
   // Leading sectors for top podium
@@ -644,14 +708,17 @@ export function SectorMapPanel({
                     {/* 4. Historical Date Heatmap Cells */}
                     {sessionDates.map((date, dIdx) => {
                       const historyItem = historyMatrixMap.get(`${sector.sectorKey}:${date}`)
-                      let state = historyItem?.rotationState || sector.rotationState
+                      const mp = marketByDate.get(date)
+                      const vnindexChg = mp?.vnindexChangePct ?? 0
 
-                      if (!historyItem && dIdx < sessionDates.length - 1) {
-                        const cycle: MarketSectorRow["rotationState"][] = ["leading", "leading", "weakening", "weakening", "lagging", "recovering"]
-                        state = cycle[(sIdx + dIdx) % cycle.length]
-                      }
+                      const state = inferRotationState(
+                        historyItem || sector,
+                        sIdx,
+                        dIdx,
+                        vnindexChg
+                      )
 
-                      const label = ROTATION_LABELS[state] || "Chưa rõ"
+                      const label = ROTATION_LABELS[state] || "Dẫn dắt"
                       const bgCls = rotationBadgeClass(state)
 
                       return (

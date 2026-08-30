@@ -526,7 +526,38 @@ export function parseVerifiedMarketClosePayloads(params: {
     }
   }
 
-  const sectors = Array.from(sectorMap.values())
+  // Calculate RS score, strength/momentum ratios, and rotation_state for sectors
+  const vnindexChg = canonicalIndexes.find((i) => i.index_code === "VNINDEX")?.change_pct ?? 0
+  const sectorList = Array.from(sectorMap.values())
+  const totalSecCount = sectorList.length
+
+  if (totalSecCount > 0) {
+    const sortedByChg = [...sectorList].sort((a, b) => (b.average_change_pct ?? 0) - (a.average_change_pct ?? 0))
+    sortedByChg.forEach((sec, idx) => {
+      const rankPct = totalSecCount > 1 ? ((totalSecCount - 1 - idx) / (totalSecCount - 1)) * 100 : 50
+      const chg = sec.average_change_pct ?? 0
+      const adv = sec.advances ?? 0
+      const dec = sec.declines ?? 0
+      const breadthRatio = adv + dec > 0 ? adv / (adv + dec) : 0.5
+
+      sec.rs_score = Math.round(rankPct * 0.7 + Math.max(0, Math.min(100, (chg - vnindexChg + 5) * 10)) * 0.3)
+      sec.strength_ratio = Number((100 + (chg - vnindexChg) * 10).toFixed(2))
+      sec.momentum_ratio = Number((100 + (breadthRatio - 0.5) * 40).toFixed(2))
+
+      // 4 Quadrants of Sector Rotation:
+      if (sec.rs_score >= 58 && chg >= 0) {
+        sec.rotation_state = "leading"
+      } else if (chg >= 0 || (adv > dec && sec.rs_score >= 45)) {
+        sec.rotation_state = "recovering"
+      } else if (sec.rs_score >= 45) {
+        sec.rotation_state = "weakening"
+      } else {
+        sec.rotation_state = "lagging"
+      }
+    })
+  }
+
+  const sectors = sectorList
 
   // 8. Parse Leaders: only include tickers that actually match live response with price or volume
   const leaders: NormalizedLeaderRow[] = []
