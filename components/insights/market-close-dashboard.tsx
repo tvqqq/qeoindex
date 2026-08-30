@@ -10,6 +10,7 @@ import {
 } from "@/components/insights/market-close-charts"
 import { MarketBubbles, type MarketBubbleStock } from "@/components/insights/market-bubbles"
 import { SectorMapPanel } from "@/components/insights/sector-map-panel"
+import { MarketHealthView } from "@/components/insights/market-health-view"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -167,7 +168,7 @@ function MarketIntelligencePanel({ view, onViewChange, data, onOpenGuide }: { vi
             <div className="space-y-4"><BreadthBar label="Tăng giá" value={vnindex?.advances ?? 0} total={breadthTotal} tone="up" /><BreadthBar label="Đứng giá" value={vnindex?.unchanged ?? 0} total={breadthTotal} tone="flat" /><BreadthBar label="Giảm giá" value={vnindex?.declines ?? 0} total={breadthTotal} tone="down" /><div className="grid grid-cols-2 gap-2 pt-2 sm:grid-cols-4"><PulseStat label="Trên MA10" value={`${formatNumber(dailySummary.aboveMa10Pct, 0)}%`} /><PulseStat label="Trên MA20" value={`${formatNumber(dailySummary.aboveMa20Pct, 0)}%`} /><PulseStat label="Trên MA50" value={`${formatNumber(dailySummary.aboveMa50Pct, 0)}%`} /><PulseStat label="Trên MA200" value={`${formatNumber(dailySummary.aboveMa200Pct, 0)}%`} /></div></div>
           </div>}
           {view === "effort" && <div><div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><h3 id="market-intelligence-title" className="text-base font-bold text-white">Nỗ lực và kết quả theo ngành</h3><p className="mt-1 text-xs text-slate-500">Nỗ lực là thay đổi thanh khoản; kết quả là biến động giá bình quân trong phiên.</p></div><Badge variant="outline" className="border-white/10 text-slate-400">1 ngày · Ngành</Badge></div><div className="space-y-3">{effortRows.map((sector) => <div key={sector.sectorKey} className="grid grid-cols-[110px_1fr] items-center gap-3 sm:grid-cols-[180px_1fr]"><span className="truncate text-[11px] font-semibold uppercase text-slate-500">{sector.displayName}</span><div className="grid gap-1 sm:grid-cols-2"><MetricBar label="Nỗ lực" value={sector.effortPct} missing="Chưa có dữ liệu nỗ lực" striped /><MetricBar label="Kết quả" value={sector.resultPct ?? sector.averageChangePct} /></div></div>)}</div></div>}
-          {view === "health" && <div><div className="mb-4 flex items-start justify-between gap-3"><div><h3 id="market-intelligence-title" className="text-base font-bold text-white">Chỉ báo tâm lý và rủi ro</h3><p className="mt-1 text-xs text-slate-500">Theo dõi diễn biến tối đa 20 phiên gần nhất trên cùng thang đo.</p></div><Button variant="outline" size="sm" onClick={onOpenGuide} className="border-white/10 bg-white/[0.025] text-xs"><BookOpen className="size-3.5" /> Cách đọc</Button></div><MarketHistoryChart history={history} /></div>}
+          {view === "health" && <MarketHealthView data={data} history={history} />}
         </CardContent>
       </Card>
     </section>
