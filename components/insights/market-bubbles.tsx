@@ -188,8 +188,8 @@ export function MarketBubbles({
     const maxVol = Math.max(1_000_000, ...volumes)
     const minVol = Math.min(...volumes.filter((v) => v > 0)) || 10_000
 
-    // Target area coverage: 52% of available viewport area
-    const targetTotalArea = W * H * 0.52
+    // Target area coverage: 40% of available viewport area for very spacious, airy spacing
+    const targetTotalArea = W * H * 0.40
 
     // Calculate dynamic radii with strong visual amplification for stock price gains
     const rawRadii = topStocks.map((stock, i) => {
@@ -197,20 +197,20 @@ export function MarketBubbles({
       const absChg = Math.abs(chg)
       const norm = Math.max(0, (absChg - minAbsChange) / (maxAbsChange - minAbsChange || 1))
 
-      // Base radius from 16px to 54px
-      let r = 16 + Math.pow(norm, 0.48) * 38
+      // Base radius from 14px to 48px
+      let r = 14 + Math.pow(norm, 0.48) * 34
 
       // Price gain scaling (Tăng mạnh kích thước theo % tăng giá của cổ phiếu)
       if (chg > 0) {
         if (chg >= 6.5) {
           // Ceiling / massive gainers (>6.5% - 10%)
-          r *= 1.85 + (chg - 6.5) * 0.1
+          r *= 1.95 + (chg - 6.5) * 0.12
         } else if (chg >= 4.0) {
           // Strong gainers (4.0% - 6.5%)
-          r *= 1.55 + (chg - 4.0) * 0.08
+          r *= 1.6 + (chg - 4.0) * 0.09
         } else if (chg >= 2.0) {
           // Solid gainers (2.0% - 4.0%)
-          r *= 1.30 + (chg - 2.0) * 0.06
+          r *= 1.32 + (chg - 2.0) * 0.06
         } else if (chg >= 0.5) {
           // Moderate gainers
           r *= 1.15
@@ -225,7 +225,7 @@ export function MarketBubbles({
       }
 
       if (W < 640) {
-        r = Math.max(12, Math.min(48, Math.round(r * 0.68)))
+        r = Math.max(11, Math.min(44, Math.round(r * 0.68)))
       }
       return r
     })
@@ -298,9 +298,9 @@ export function MarketBubbles({
       }
     })
 
-    // Iterative 2D Physics: Uniformly spread with guaranteed 10px spacing (no clumping!)
-    const iterations = 180
-    const padding = W < 640 ? 6.0 : 10.0 // Guaranteed 10px gap between all bubble boundaries
+    // Iterative 2D Physics: Uniformly spread with guaranteed 16px spacing (no clumping!)
+    const iterations = 220
+    const padding = W < 640 ? 8.0 : 16.0 // Guaranteed 16px gap between all bubble boundaries
 
     for (let iter = 0; iter < iterations; iter++) {
       const alpha = Math.max(0.08, 1 - iter / iterations)
@@ -308,11 +308,11 @@ export function MarketBubbles({
       // 1. Subtle centering force (keeps nodes inside canvas without squeezing into a clump)
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        node.x += (centerX - node.x) * 0.005 * alpha
-        node.y += (centerY - node.y) * 0.005 * alpha
+        node.x += (centerX - node.x) * 0.004 * alpha
+        node.y += (centerY - node.y) * 0.004 * alpha
       }
 
-      // 2. Strict Pairwise Circle Collision with Generous Spacing Padding
+      // 2. Strict Pairwise Circle Collision with Generous 16px Spacing Padding
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const n1 = nodes[i]
@@ -342,8 +342,8 @@ export function MarketBubbles({
       // 3. Strict Boundary Containment with Edge Margin
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        node.x = Math.max(node.r + 12, Math.min(W - node.r - 12, node.x))
-        node.y = Math.max(node.r + 12, Math.min(H - node.r - 12, node.y))
+        node.x = Math.max(node.r + 14, Math.min(W - node.r - 14, node.x))
+        node.y = Math.max(node.r + 14, Math.min(H - node.r - 14, node.y))
       }
     }
 
