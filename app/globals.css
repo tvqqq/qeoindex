@@ -318,13 +318,52 @@ body::after {
   animation: market-radar-scan 8s linear infinite;
 }
 
-@keyframes market-bubble-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+@keyframes market-bubble-sway-1 {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(0, -6px, 0) rotate(1.2deg); }
 }
 
-.market-bubble-float {
-  animation: market-bubble-float 4.8s ease-in-out infinite;
+@keyframes market-bubble-sway-2 {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  33% { transform: translate3d(3px, -4px, 0) rotate(-1deg); }
+  66% { transform: translate3d(-3px, -2px, 0) rotate(0.8deg); }
+}
+
+@keyframes market-bubble-sway-3 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-2px, -5px, 0) scale(1.02); }
+}
+
+@keyframes market-bubble-sway-4 {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(3px, -5px, 0); }
+}
+
+.bubble-bob-1 {
+  animation: market-bubble-sway-1 5.2s ease-in-out infinite;
+}
+
+.bubble-bob-2 {
+  animation: market-bubble-sway-2 6.4s ease-in-out infinite;
+}
+
+.bubble-bob-3 {
+  animation: market-bubble-sway-3 4.6s ease-in-out infinite;
+}
+
+.bubble-bob-4 {
+  animation: market-bubble-sway-4 5.8s ease-in-out infinite;
+}
+
+.market-bubble-item {
+  will-change: transform;
+  transition: transform 0.12s ease-out, filter 0.12s ease-out;
+}
+
+.market-bubble-item:hover {
+  animation-play-state: paused !important;
+  transform: scale(1.08) !important;
+  z-index: 40 !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -336,7 +375,12 @@ body::after {
   .flash-text-ref,
   .whale-golden-pulse,
   .market-radar-sweep::after,
-  .market-bubble-float {
-    animation: none;
+  .bubble-bob-1,
+  .bubble-bob-2,
+  .bubble-bob-3,
+  .bubble-bob-4,
+  .market-bubble-item {
+    animation: none !important;
   }
 }
+
