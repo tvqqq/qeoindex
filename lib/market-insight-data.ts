@@ -91,6 +91,18 @@ export interface MarketHistoryPoint {
   vnindexChangePct: number | null
 }
 
+export interface MarketSectorHistoryItem {
+  sessionDate: string
+  sectorKey: string
+  displayName: string
+  rotationState: RotationState
+  averageChangePct: number | null
+  rsScore: number | null
+  effortPct: number | null
+  resultPct: number | null
+  tradedValue: number | null
+}
+
 export interface MarketCloseDashboardData {
   sessionDate: string
   isStale: boolean
@@ -121,6 +133,7 @@ export interface MarketCloseDashboardData {
   }
   indexes: MarketIndexCard[]
   sectors: MarketSectorRow[]
+  sectorHistory?: MarketSectorHistoryItem[]
   leaders: MarketLeaderItem[]
   observations: MarketObservation[]
   history: MarketHistoryPoint[]
@@ -163,7 +176,7 @@ export async function getMarketCloseInsightData(
   const isStale = targetDate < today
 
   // 2. Fetch daily, indexes, sectors, leaders in parallel
-  const [dailyRes, indexesRes, sectorsRes, leadersRes, historyRes, vnindexHistoryRes] = await Promise.all([
+  const [dailyRes, indexesRes, sectorsRes, leadersRes, historyRes, vnindexHistoryRes, sectorHistoryRes] = await Promise.all([
     supabase
       .from("market_insight_daily")
       .select("*")
@@ -195,6 +208,13 @@ export async function getMarketCloseInsightData(
       .lte("session_date", targetDate)
       .order("session_date", { ascending: false })
       .limit(20),
+    supabase
+      .from("market_insight_sectors")
+      .select("session_date,sector_key,display_name,rotation_state,average_change_pct,rs_score,effort_pct,result_pct,traded_value")
+      .eq("time_window", "1d")
+      .lte("session_date", targetDate)
+      .order("session_date", { ascending: false })
+      .limit(300),
   ])
 
   const daily = dailyRes.data
@@ -352,6 +372,18 @@ export async function getMarketCloseInsightData(
 
   const observations = generateMarketObservations(modelInput)
 
+  const sectorHistory: MarketSectorHistoryItem[] = (sectorHistoryRes.data || []).map((row: Record<string, unknown>) => ({
+    sessionDate: String(row.session_date || ""),
+    sectorKey: String(row.sector_key || ""),
+    displayName: String(row.display_name || row.sector_key || ""),
+    rotationState: (row.rotation_state as RotationState) || "unknown",
+    averageChangePct: row.average_change_pct != null ? Number(row.average_change_pct) : null,
+    rsScore: row.rs_score != null ? Number(row.rs_score) : null,
+    effortPct: row.effort_pct != null ? Number(row.effort_pct) : null,
+    resultPct: row.result_pct != null ? Number(row.result_pct) : null,
+    tradedValue: row.traded_value != null ? Number(row.traded_value) : null,
+  }))
+
   return {
     sessionDate: targetDate,
     isStale,
@@ -382,6 +414,7 @@ export async function getMarketCloseInsightData(
     },
     indexes,
     sectors,
+    sectorHistory,
     leaders,
     observations,
     history,
