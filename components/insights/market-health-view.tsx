@@ -440,7 +440,7 @@ function ValuationBandChart({ data }: ValuationChartProps) {
               }}
             />
 
-            {/* 1 SD Bands */}
+            {/* 1 SD Bands (Đứt nét) */}
             {show1SD && (
               <>
                 <Line
@@ -448,6 +448,7 @@ function ValuationBandChart({ data }: ValuationChartProps) {
                   type="monotone"
                   dataKey="sd1Upper"
                   stroke="#fb7185"
+                  strokeDasharray="4 4"
                   strokeWidth={1.5}
                   dot={false}
                   name="+1 SD"
@@ -457,6 +458,7 @@ function ValuationBandChart({ data }: ValuationChartProps) {
                   type="monotone"
                   dataKey="sd1Lower"
                   stroke="#f43f5e"
+                  strokeDasharray="4 4"
                   strokeWidth={1.5}
                   dot={false}
                   name="-1 SD"
@@ -464,7 +466,7 @@ function ValuationBandChart({ data }: ValuationChartProps) {
               </>
             )}
 
-            {/* 2 SD Bands */}
+            {/* 2 SD Bands (Đứt nét) */}
             {show2SD && (
               <>
                 <Line
@@ -490,27 +492,27 @@ function ValuationBandChart({ data }: ValuationChartProps) {
               </>
             )}
 
-            {/* VNINDEX Line (Blue) */}
+            {/* VNINDEX Line (Blue - Đậm hơn) */}
             <Line
               yAxisId="vnindex"
               type="monotone"
               dataKey="vnindex"
               stroke="#3b82f6"
-              strokeWidth={2}
+              strokeWidth={2.8}
               dot={false}
-              activeDot={{ r: 4, fill: "#3b82f6" }}
+              activeDot={{ r: 4.5, fill: "#3b82f6" }}
               name="VNINDEX"
             />
 
-            {/* Valuation Line (Lime Green) */}
+            {/* Valuation Line (Lime Green - Đậm hơn) */}
             <Line
               yAxisId="valuation"
               type="monotone"
               dataKey={metric === "PE" ? "pe" : "pb"}
               stroke="#84cc16"
-              strokeWidth={2}
+              strokeWidth={2.8}
               dot={false}
-              activeDot={{ r: 4, fill: "#84cc16" }}
+              activeDot={{ r: 4.5, fill: "#84cc16" }}
               name={metric}
             />
           </ComposedChart>
