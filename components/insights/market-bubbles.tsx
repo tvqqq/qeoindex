@@ -121,8 +121,8 @@ export function MarketBubbles({
     const maxVol = Math.max(1_000_000, ...volumes)
     const minVol = Math.min(...volumes.filter((v) => v > 0)) || 10_000
 
-    // Target coverage: 78% of available viewport area
-    const targetTotalArea = W * H * 0.78
+    // Target coverage: 62% of available viewport area for airy, breathable spacing
+    const targetTotalArea = W * H * 0.62
 
     // Calculate dynamic radii with strong visual contrast for top gainers/movers
     const rawRadii = topStocks.map((stock, i) => {
@@ -147,7 +147,7 @@ export function MarketBubbles({
       return r
     })
 
-    // Scale so total area matches target area (78% density)
+    // Scale so total area matches target area (62% density with breathable gaps)
     const currentSumArea = rawRadii.reduce((acc, r) => acc + Math.PI * r * r, 0)
     const areaMultiplier = Math.sqrt(targetTotalArea / (currentSumArea || 1))
 
@@ -216,7 +216,7 @@ export function MarketBubbles({
 
     // Iterative 2D Physics with Central Volume-Weighted Gravity (180 passes)
     const iterations = 180
-    const padding = 2 // 2px tight contact gap
+    const padding = W < 640 ? 5 : 8 // 8px breathable spacing on desktop, 5px on mobile
 
     for (let iter = 0; iter < iterations; iter++) {
       const alpha = Math.max(0.06, 1 - iter / iterations)
@@ -232,7 +232,7 @@ export function MarketBubbles({
         node.y += (centerY - node.y) * gravityStrength
       }
 
-      // 2. Strict Pairwise Circle Collision Push (prevents any overlap)
+      // 2. Strict Pairwise Circle Collision Push with Spacing Gap
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const n1 = nodes[i]
@@ -259,11 +259,11 @@ export function MarketBubbles({
         }
       }
 
-      // 3. Strict Boundary Containment
+      // 3. Strict Boundary Containment with Margin
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        node.x = Math.max(node.r + 3, Math.min(W - node.r - 3, node.x))
-        node.y = Math.max(node.r + 3, Math.min(H - node.r - 3, node.y))
+        node.x = Math.max(node.r + 8, Math.min(W - node.r - 8, node.x))
+        node.y = Math.max(node.r + 8, Math.min(H - node.r - 8, node.y))
       }
     }
 
