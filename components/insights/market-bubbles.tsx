@@ -53,6 +53,7 @@ interface SimBubble {
   bobClass: string
   animDelay: string
   tone: "fuchsia" | "emerald" | "rose" | "neutral"
+  volNorm: number
 }
 
 const PERIOD_TABS: AnimatedTab<BubblePeriod>[] = [
@@ -100,7 +101,7 @@ export function MarketBubbles({
       .slice(0, 200)
   }, [stocks])
 
-  // Physics Simulation: High volume stocks gravitate to the center, big movers have prominent size
+  // Physics Simulation: Even rectangular distribution with corner coverage & central volume attraction
   const bubbles: SimBubble[] = React.useMemo(() => {
     const count = topStocks.length
     if (count === 0) return []
@@ -121,24 +122,24 @@ export function MarketBubbles({
     const maxVol = Math.max(1_000_000, ...volumes)
     const minVol = Math.min(...volumes.filter((v) => v > 0)) || 10_000
 
-    // Target coverage: 62% of available viewport area for airy, breathable spacing
-    const targetTotalArea = W * H * 0.62
+    // Target coverage: 68% of available viewport area for balanced fullness and corner reach
+    const targetTotalArea = W * H * 0.68
 
     // Calculate dynamic radii with strong visual contrast for top gainers/movers
     const rawRadii = topStocks.map((stock, i) => {
       const chg = changes[i]
       const absChg = Math.abs(chg)
       const norm = Math.max(0, (absChg - minAbsChange) / (maxAbsChange - minAbsChange || 1))
-      const scale = Math.pow(norm, 0.56) // Steeper power curve provides clear contrast between leaders and followers
+      const scale = Math.pow(norm, 0.54)
 
       // Base radius from 18px (small movers) up to 74px (strong movers) on desktop
       let r = 18 + scale * 56
 
       // Top gainer bonuses: >6.5% ceiling gainers or >4% movers get extra prominent scale
       if (chg >= 6.5) {
-        r = Math.min(94, r * 1.25)
+        r = Math.min(92, r * 1.22)
       } else if (absChg >= 4.0) {
-        r = Math.min(84, r * 1.12)
+        r = Math.min(82, r * 1.1)
       }
 
       if (W < 640) {
@@ -147,7 +148,7 @@ export function MarketBubbles({
       return r
     })
 
-    // Scale so total area matches target area (62% density with breathable gaps)
+    // Scale so total area matches target area (68% density)
     const currentSumArea = rawRadii.reduce((acc, r) => acc + Math.PI * r * r, 0)
     const areaMultiplier = Math.sqrt(targetTotalArea / (currentSumArea || 1))
 
@@ -177,15 +178,37 @@ export function MarketBubbles({
       }
     })
 
-    // Initialize positions in Fermat Golden Spiral sorted by volume
-    // High-volume stocks (index 0, 1, 2...) start right at the center!
-    const nodes: SimBubble[] = indexedStocks.map((item, i) => {
-      const { stock, change, r, borderWidth } = item
+    // 1. Generate full rectangular grid cells to ensure all 4 corners and edges are filled
+    const cols = Math.ceil(Math.sqrt(count * (W / H)))
+    const rows = Math.ceil(count / cols)
+    const cellW = (W - 40) / cols
+    const cellH = (H - 40) / rows
 
-      const phi = i * 2.3999632 // Golden angle
-      const radDist = Math.sqrt(i / count) * Math.min(W, H) * 0.44
-      const x = centerX + Math.cos(phi) * radDist * (W / H)
-      const y = centerY + Math.sin(phi) * radDist
+    interface GridCell {
+      x: number
+      y: number
+      distFromCenterNorm: number
+    }
+
+    const gridCells: GridCell[] = []
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const cx = 20 + (col + 0.5) * cellW + (Math.sin(col * 4.1 + row * 2.3) * cellW * 0.15)
+        const cy = 20 + (row + 0.5) * cellH + (Math.cos(row * 3.7 + col * 1.9) * cellH * 0.15)
+        const normDx = (cx - centerX) / (W / 2)
+        const normDy = (cy - centerY) / (H / 2)
+        const distNorm = Math.hypot(normDx, normDy)
+        gridCells.push({ x: cx, y: cy, distFromCenterNorm: distNorm })
+      }
+    }
+
+    // Sort grid cells from inner center to outer corners
+    gridCells.sort((a, b) => a.distFromCenterNorm - b.distFromCenterNorm)
+
+    // Map sorted stocks to grid cells (highest vol stocks in center, outer stocks fill all 4 corners)
+    const nodes: SimBubble[] = indexedStocks.map((item, i) => {
+      const { stock, change, r, borderWidth, volNorm } = item
+      const cell = gridCells[i] || { x: centerX, y: centerY, distFromCenterNorm: 0 }
 
       let tone: SimBubble["tone"] = "neutral"
       if (change >= 6.5) {
@@ -204,32 +227,42 @@ export function MarketBubbles({
         stock,
         rank: i + 1,
         change,
-        x,
-        y,
+        x: cell.x,
+        y: cell.y,
         r,
         borderWidth,
         bobClass,
         animDelay,
         tone,
+        volNorm,
       }
     })
 
-    // Iterative 2D Physics with Central Volume-Weighted Gravity (180 passes)
+    // Iterative 2D Physics with Rectangular Uniform Expansion & Central Volume Anchor (180 passes)
     const iterations = 180
-    const padding = W < 640 ? 5 : 8 // 8px breathable spacing on desktop, 5px on mobile
+    const padding = W < 640 ? 4 : 6 // 6px clean spacing on desktop, 4px on mobile
 
     for (let iter = 0; iter < iterations; iter++) {
       const alpha = Math.max(0.06, 1 - iter / iterations)
 
-      // 1. Central Gravity Force: High-volume stocks are strongly attracted to the center
+      // 1. Forces: Central pull for top volume stocks, gentle outward spread for outer stocks
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        const vol = node.stock.volume ?? 0
-        const volRatio = Math.max(0, Math.min(1, (vol - minVol) / (maxVol - minVol || 1)))
-        const gravityStrength = (0.012 + volRatio * 0.045) * alpha
+        const volRatio = node.volNorm
 
-        node.x += (centerX - node.x) * gravityStrength
-        node.y += (centerY - node.y) * gravityStrength
+        if (volRatio >= 0.3) {
+          // Inner/High-volume stocks stay anchored towards center
+          node.x += (centerX - node.x) * (volRatio * 0.03) * alpha
+          node.y += (centerY - node.y) * (volRatio * 0.03) * alpha
+        } else {
+          // Outer stocks expand towards corners and perimeter to fill the entire box evenly
+          const dxCenter = node.x - centerX
+          const dyCenter = node.y - centerY
+          const distCenter = Math.hypot(dxCenter, dyCenter) || 1
+          const pushOut = 0.5 * alpha
+          node.x += (dxCenter / distCenter) * pushOut
+          node.y += (dyCenter / distCenter) * pushOut
+        }
       }
 
       // 2. Strict Pairwise Circle Collision Push with Spacing Gap
@@ -259,7 +292,7 @@ export function MarketBubbles({
         }
       }
 
-      // 3. Strict Boundary Containment with Margin
+      // 3. Strict Boundary Containment with Edge Margin
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
         node.x = Math.max(node.r + 8, Math.min(W - node.r - 8, node.x))
@@ -542,35 +575,61 @@ export function MarketBubbles({
           )}
         </div>
       ) : (
-        /* Columns / List Ranking View */
-        <div className="rounded-2xl border border-white/[0.08] bg-[#070d15] p-4">
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        /* Redesigned Compact Columns View: High-density multi-card rows */
+        <div className="rounded-2xl border border-white/[0.08] bg-[#070d15] p-3 sm:p-4 shadow-xl">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2">
             {topStocks.map((stock, index) => {
               const change = getStockChange(stock, period)
-              const isPos = (change ?? 0) >= 0
+              const chgVal = change ?? 0
+              const isFuchsia = chgVal >= 6.5
+              const isEmerald = chgVal > 0 && !isFuchsia
+              const isRose = chgVal < 0
+
               return (
                 <button
                   key={stock.ticker}
                   type="button"
                   onClick={() => onOpenStockDetail?.(stock.ticker)}
-                  className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-left transition-colors hover:border-teal-300/25 hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/40"
+                  className={cn(
+                    "group flex flex-col justify-between rounded-xl border p-2 text-left transition-all duration-150 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/50",
+                    isFuchsia && "border-fuchsia-500/30 bg-fuchsia-500/[0.06] hover:border-fuchsia-400/60 hover:bg-fuchsia-500/[0.12]",
+                    isEmerald && "border-emerald-500/30 bg-emerald-500/[0.06] hover:border-emerald-400/60 hover:bg-emerald-500/[0.12]",
+                    isRose && "border-rose-500/30 bg-rose-500/[0.06] hover:border-rose-400/60 hover:bg-rose-500/[0.12]",
+                    !isFuchsia && !isEmerald && !isRose && "border-white/[0.07] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05]"
+                  )}
                 >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[10px] font-bold text-slate-500">#{index + 1}</span>
-                      <strong className="font-mono text-sm font-black text-white">{stock.ticker}</strong>
-                      <span className="truncate text-[9px] text-slate-500 max-w-[90px]">{stock.sector}</span>
+                  {/* Top Row: Rank & Ticker & Sector Tag */}
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1 min-w-0">
+                      <span className="font-mono text-[9px] font-bold text-slate-500">#{index + 1}</span>
+                      <strong className="font-mono text-xs sm:text-sm font-black text-white group-hover:text-cyan-200 tracking-tight">
+                        {stock.ticker}
+                      </strong>
                     </div>
-                    <p className="truncate text-[10px] text-slate-400 max-w-[140px]">{stock.companyName}</p>
+                    <span className="truncate rounded bg-white/[0.06] px-1 py-0.5 text-[8px] font-bold uppercase text-slate-400 max-w-[58px]">
+                      {stock.sector}
+                    </span>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <strong className={cn("font-mono text-sm font-black", isPos ? "text-emerald-300" : "text-rose-300")}>
+                  {/* Bottom Row: Volume & % Change */}
+                  <div className="mt-1.5 flex items-baseline justify-between gap-1 font-mono">
+                    <span className="text-[9px] text-slate-500 truncate">
+                      {stock.volume != null ? `${(stock.volume / 1000000).toFixed(1)}M` : "—"}
+                    </span>
+                    <strong
+                      className={cn(
+                        "text-xs sm:text-sm font-black",
+                        isFuchsia
+                          ? "text-fuchsia-300"
+                          : isEmerald
+                          ? "text-emerald-400"
+                          : isRose
+                          ? "text-rose-400"
+                          : "text-slate-300"
+                      )}
+                    >
                       {formatSigned(change, 2, "%")}
                     </strong>
-                    <span className="block font-mono text-[9px] text-slate-500">
-                      {stock.volume != null ? `${(stock.volume / 1000000).toFixed(1)}M cp` : "—"}
-                    </span>
                   </div>
                 </button>
               )
