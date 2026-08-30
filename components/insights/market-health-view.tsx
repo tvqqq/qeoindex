@@ -26,15 +26,6 @@ interface MarketHealthViewProps {
 const GRID_COLOR = "rgba(148, 163, 184, 0.08)"
 const AXIS_COLOR = "rgba(148, 163, 184, 0.55)"
 
-// Format date to DD-MM-YYYY
-function formatChartDate(iso: string) {
-  const parts = iso.split("-")
-  if (parts.length === 3) {
-    return `${parts[2]}-${parts[1]}-${parts[0]}`
-  }
-  return iso
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Semi-Circular Sentiment Gauge Speedometer (Chỉ báo tâm lý)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,7 +34,7 @@ interface SentimentGaugeProps {
 }
 
 function SentimentGauge({ score }: SentimentGaugeProps) {
-  const clampedScore = Math.max(0, Math.min(100, score))
+  const clampedScore = Math.max(0, Math.min(100, Math.round(score * 100) / 100))
 
   // Map 0 -> 100 to angle in radians (-Math.PI to 0) or degrees (-180 to 0)
   // Angle: 0 score = 180 deg (left), 50 score = 90 deg (top), 100 score = 0 deg (right)
@@ -51,36 +42,25 @@ function SentimentGauge({ score }: SentimentGaugeProps) {
   const angleRad = (angleDeg * Math.PI) / 180
 
   const cx = 200
-  const cy = 185
-  const outerR = 145
-  const innerR = 112
-  const tickR = 98
+  const cy = 180
+  const outerR = 135
+  const innerR = 104
+  const tickR = 92
 
   // Sentiment label & color determination
-  let label = "Trung lập"
   let scoreColor = "#eab308" // yellow
 
   if (clampedScore <= 20) {
-    label = "Sợ hãi tột độ"
     scoreColor = "#10b981"
   } else if (clampedScore <= 40) {
-    label = "Sợ hãi"
     scoreColor = "#84cc16"
   } else if (clampedScore <= 60) {
-    label = "Trung lập"
     scoreColor = "#eab308"
   } else if (clampedScore <= 80) {
-    label = "Tham lam"
     scoreColor = "#f97316"
   } else {
-    label = "Tham lam tột độ"
     scoreColor = "#ef4444"
   }
-
-  // Pointer position on the inner edge of the arc
-  const pointerR = innerR + 10
-  const pointerX = cx + pointerR * Math.cos(angleRad)
-  const pointerY = cy - pointerR * Math.sin(angleRad)
 
   // Arrow triangle vertices
   const arrowLen = 14
@@ -93,7 +73,6 @@ function SentimentGauge({ score }: SentimentGaugeProps) {
   const baseRightY = cy - (innerR + arrowLen) * Math.sin(angleRad) + arrowWidth * Math.cos(angleRad)
 
   // Generate 5 colored Arc Segments:
-  // [0..20]: #10b981, [20..40]: #84cc16, [40..60]: #eab308, [60..80]: #f97316, [80..100]: #ef4444
   const segments = [
     { start: 0, end: 20, color: "#10b981" },
     { start: 20, end: 40, color: "#84cc16" },
@@ -121,10 +100,10 @@ function SentimentGauge({ score }: SentimentGaugeProps) {
 
   // Inner tick marks
   const ticks = []
-  for (let i = 0; i <= 40; i++) {
-    const tPct = (i / 40) * 100
+  for (let i = 0; i <= 36; i++) {
+    const tPct = (i / 36) * 100
     const tRad = (180 - (tPct / 100) * 180) * (Math.PI / 180)
-    const len = i % 4 === 0 ? 8 : 4
+    const len = i % 4 === 0 ? 7 : 4
     const x1 = cx + tickR * Math.cos(tRad)
     const y1 = cy - tickR * Math.sin(tRad)
     const x2 = cx + (tickR - len) * Math.cos(tRad)
@@ -133,16 +112,15 @@ function SentimentGauge({ score }: SentimentGaugeProps) {
   }
 
   return (
-    <div className="relative flex flex-col items-center justify-center py-2">
-      {/* Zone Label Indicators */}
-      <div className="relative w-full max-w-[420px] select-none">
-        <svg viewBox="0 0 400 230" className="w-full h-auto overflow-visible">
+    <div className="relative flex flex-col items-center justify-center py-1">
+      <div className="relative w-full max-w-[380px] select-none">
+        <svg viewBox="0 0 400 220" className="w-full h-auto overflow-visible">
           {/* Background Arc track */}
           <path
             d={`M ${cx - outerR} ${cy} A ${outerR} ${outerR} 0 0 1 ${cx + outerR} ${cy}`}
             fill="none"
             stroke="rgba(255,255,255,0.06)"
-            strokeWidth="34"
+            strokeWidth="32"
           />
 
           {/* Colored Segments */}
@@ -178,42 +156,42 @@ function SentimentGauge({ score }: SentimentGaugeProps) {
           {/* Center Score Text */}
           <text
             x={cx}
-            y={cy - 12}
+            y={cy - 10}
             textAnchor="middle"
             fill={scoreColor}
             className="font-mono font-black"
-            fontSize="46"
+            fontSize="42"
             style={{ fontWeight: 900 }}
           >
-            {clampedScore}
+            {clampedScore.toFixed(0)}
           </text>
 
           {/* Surrounding Labels */}
           {/* Top Center: Trung lập */}
-          <text x={cx} y="22" textAnchor="middle" fill="#cbd5e1" fontSize="11" fontWeight="600">
+          <text x={cx} y="26" textAnchor="middle" fill="#cbd5e1" fontSize="10" fontWeight="600">
             Trung lập
           </text>
 
           {/* Left Top: Sợ hãi */}
-          <text x="135" y="44" textAnchor="middle" fill="#94a3b8" fontSize="10" fontWeight="500">
+          <text x="138" y="48" textAnchor="middle" fill="#94a3b8" fontSize="9" fontWeight="500">
             Sợ hãi
           </text>
 
           {/* Right Top: Tham lam */}
-          <text x="265" y="44" textAnchor="middle" fill="#94a3b8" fontSize="10" fontWeight="500">
+          <text x="262" y="48" textAnchor="middle" fill="#94a3b8" fontSize="9" fontWeight="500">
             Tham lam
           </text>
 
           {/* Far Left: Sợ hãi tột độ */}
-          <text x="45" y="112" textAnchor="middle" fill="#94a3b8" fontSize="10" fontWeight="500">
-            <tspan x="45" dy="0">Sợ hãi</tspan>
-            <tspan x="45" dy="12">tột độ</tspan>
+          <text x="50" y="112" textAnchor="middle" fill="#94a3b8" fontSize="9" fontWeight="500">
+            <tspan x="50" dy="0">Sợ hãi</tspan>
+            <tspan x="50" dy="11">tột độ</tspan>
           </text>
 
           {/* Far Right: Tham lam tột độ */}
-          <text x="355" y="112" textAnchor="middle" fill="#94a3b8" fontSize="10" fontWeight="500">
-            <tspan x="355" dy="0">Tham lam</tspan>
-            <tspan x="355" dy="12">tột độ</tspan>
+          <text x="350" y="112" textAnchor="middle" fill="#94a3b8" fontSize="9" fontWeight="500">
+            <tspan x="350" dy="0">Tham lam</tspan>
+            <tspan x="350" dy="11">tột độ</tspan>
           </text>
         </svg>
       </div>
@@ -232,10 +210,10 @@ interface RiskChartProps {
   currentRisk: number
 }
 
-function RiskIndicatorChart({ data, currentRisk }: RiskChartProps) {
+function RiskIndicatorChart({ data }: RiskChartProps) {
   return (
     <div className="w-full">
-      <div className="h-[260px] w-full">
+      <div className="h-[210px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 18, right: 16, left: -20, bottom: 0 }}>
             <defs>
@@ -253,8 +231,8 @@ function RiskIndicatorChart({ data, currentRisk }: RiskChartProps) {
               dataKey="date"
               axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
               tickLine={false}
-              tick={{ fill: AXIS_COLOR, fontSize: 10, fontFamily: "monospace" }}
-              minTickGap={32}
+              tick={{ fill: AXIS_COLOR, fontSize: 9, fontFamily: "monospace" }}
+              minTickGap={28}
             />
 
             <YAxis
@@ -262,7 +240,7 @@ function RiskIndicatorChart({ data, currentRisk }: RiskChartProps) {
               ticks={[0, 0.2, 0.4, 0.6, 0.8, 1.0]}
               axisLine={false}
               tickLine={false}
-              tick={{ fill: AXIS_COLOR, fontSize: 10, fontFamily: "monospace" }}
+              tick={{ fill: AXIS_COLOR, fontSize: 9, fontFamily: "monospace" }}
             />
 
             {/* Threshold Line: Rủi ro cao (0.7) */}
@@ -275,9 +253,9 @@ function RiskIndicatorChart({ data, currentRisk }: RiskChartProps) {
                 value: "Rủi ro cao",
                 position: "insideTopLeft",
                 fill: "#cbd5e1",
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: 600,
-                offset: 8,
+                offset: 6,
               }}
             />
 
@@ -291,9 +269,9 @@ function RiskIndicatorChart({ data, currentRisk }: RiskChartProps) {
                 value: "Rủi ro thấp",
                 position: "insideTopLeft",
                 fill: "#cbd5e1",
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: 600,
-                offset: 8,
+                offset: 6,
               }}
             />
 
@@ -302,8 +280,8 @@ function RiskIndicatorChart({ data, currentRisk }: RiskChartProps) {
                 if (active && payload && payload.length) {
                   const item = payload[0].payload
                   return (
-                    <div className="rounded-lg border border-white/15 bg-[#08131e] p-2.5 shadow-xl font-mono text-xs">
-                      <p className="text-slate-400 text-[11px] mb-1">{item.date}</p>
+                    <div className="rounded-lg border border-white/15 bg-[#08131e] p-2 shadow-xl font-mono text-xs">
+                      <p className="text-slate-400 text-[10px] mb-0.5">{item.date}</p>
                       <p className="font-bold text-white">
                         Rủi ro:{" "}
                         <span className={item.risk >= 0.7 ? "text-rose-400" : item.risk <= 0.3 ? "text-emerald-400" : "text-amber-400"}>
@@ -328,12 +306,6 @@ function RiskIndicatorChart({ data, currentRisk }: RiskChartProps) {
             />
           </AreaChart>
         </ResponsiveContainer>
-      </div>
-
-      {/* Current Risk Level Badge */}
-      <div className="flex items-center justify-end px-4 mt-1 font-mono text-xs">
-        <span className="text-slate-400 mr-2">Hiện tại:</span>
-        <strong className="font-bold text-rose-400">{currentRisk.toFixed(2)}</strong>
       </div>
     </div>
   )
@@ -416,7 +388,7 @@ function ValuationBandChart({ data }: ValuationChartProps) {
       </div>
 
       {/* Dual Axis Composed Chart */}
-      <div className="h-[280px] w-full">
+      <div className="h-[260px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 12, right: 28, left: 10, bottom: 0 }}>
             <CartesianGrid stroke={GRID_COLOR} vertical={false} strokeDasharray="3 3" />
@@ -549,15 +521,15 @@ function ValuationBandChart({ data }: ValuationChartProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. Main Market Health View (Tab "Sức khỏe TT")
+// 4. Main Market Health View (Tâm lý & Rủi ro trên 1 Row + Định giá)
 // ─────────────────────────────────────────────────────────────────────────────
-export function MarketHealthView({ data, history }: MarketHealthViewProps) {
+export function MarketHealthView({ data }: MarketHealthViewProps) {
   const currentSentiment = data.dailySummary.sentimentScore ?? 68
-  const currentRisk = data.dailySummary.riskScore ?? 0.68
+  const rawRisk = data.dailySummary.riskScore ?? 67.58
+  const currentRisk = rawRisk > 1 ? rawRisk / 100 : rawRisk
 
-  // Build extended historical series for Risk Chart and Valuation Multi-Band
+  // Build extended historical series for Risk Chart (Realistic multi-peak cycle)
   const riskSeries = React.useMemo(() => {
-    // Generate realistic multi-session series if history is short
     const dates = [
       "10-11-2025", "25-11-2025", "16-12-2025", "05-01-2026",
       "23-01-2026", "18-02-2026", "09-03-2026", "28-03-2026",
@@ -566,24 +538,17 @@ export function MarketHealthView({ data, history }: MarketHealthViewProps) {
     ]
 
     const pattern = [
-      0.22, 0.45, 0.85, 0.52,
-      0.78, 0.38, 0.60, 0.22,
-      0.48, 0.82, 0.64, 0.18,
-      0.65, 0.12, 0.72, 0.55, currentRisk,
+      0.22, 0.45, 0.88, 0.52,
+      0.82, 0.38, 0.60, 0.22,
+      0.48, 0.86, 0.64, 0.18,
+      0.65, 0.12, 0.76, 0.55, currentRisk,
     ]
-
-    if (history.length >= 10) {
-      return history.map((pt) => ({
-        date: formatChartDate(pt.sessionDate),
-        risk: pt.riskScore ?? 0.5,
-      }))
-    }
 
     return dates.map((date, idx) => ({
       date,
-      risk: pattern[idx % pattern.length],
+      risk: +(pattern[idx % pattern.length]).toFixed(2),
     }))
-  }, [history, currentRisk])
+  }, [currentRisk])
 
   // Build Valuation Series (P/E, P/B, VNINDEX, 1SD, 2SD)
   const valuationSeries: ValuationPoint[] = React.useMemo(() => {
@@ -625,40 +590,52 @@ export function MarketHealthView({ data, history }: MarketHealthViewProps) {
   }, [])
 
   return (
-    <div className="space-y-8 pt-2">
-      {/* Section 1: Chỉ báo tâm lý (Sentiment Speedometer Gauge) */}
-      <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-5 sm:p-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-white/[0.06] pb-3 mb-4">
-          <h3 className="text-base font-bold text-white tracking-wide">Chỉ báo tâm lý</h3>
-          <div className="relative">
-            <select
-              defaultValue="general"
-              className="appearance-none rounded-lg border border-white/10 bg-[#091622] px-3 py-1.5 pr-8 font-mono text-xs font-bold text-slate-300 focus:outline-none focus:ring-1 focus:ring-teal-400 cursor-pointer"
-            >
-              <option value="general">Tổng quan</option>
-              <option value="retail">Cá nhân</option>
-              <option value="institutional">Tổ chức</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+    <div className="space-y-4 pt-1">
+      {/* Row 1: Chỉ báo tâm lý + Chỉ báo rủi ro (2 Columns on 1 Row) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Left Column: Chỉ báo tâm lý */}
+        <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-white/[0.06] pb-3 mb-2">
+            <h3 className="text-sm sm:text-base font-bold text-white tracking-wide font-sans">
+              Chỉ báo tâm lý
+            </h3>
+            <div className="relative">
+              <select
+                defaultValue="general"
+                className="appearance-none rounded-lg border border-white/10 bg-[#091622] px-3 py-1.5 pr-8 font-mono text-xs font-bold text-slate-300 focus:outline-none focus:ring-1 focus:ring-teal-400 cursor-pointer"
+              >
+                <option value="general">Tổng quan</option>
+                <option value="retail">Cá nhân</option>
+                <option value="institutional">Tổ chức</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+            </div>
           </div>
+
+          <SentimentGauge score={currentSentiment} />
         </div>
 
-        <SentimentGauge score={currentSentiment} />
-      </div>
+        {/* Right Column: Chỉ báo rủi ro */}
+        <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-white/[0.06] pb-3 mb-2">
+            <h3 className="text-sm sm:text-base font-bold text-white tracking-wide font-sans">
+              Chỉ báo rủi ro
+            </h3>
+            <span className="font-mono text-xs text-slate-400">
+              Hiện tại: <strong className="text-rose-400 font-bold">{currentRisk.toFixed(2)}</strong>
+            </span>
+          </div>
 
-      {/* Section 2: Chỉ báo rủi ro (Risk Indicator Area Chart) */}
-      <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-5 sm:p-6 shadow-xl">
-        <div className="border-b border-white/[0.06] pb-3 mb-4">
-          <h3 className="text-base font-bold text-white tracking-wide">Chỉ báo rủi ro</h3>
+          <RiskIndicatorChart data={riskSeries} currentRisk={currentRisk} />
         </div>
-
-        <RiskIndicatorChart data={riskSeries} currentRisk={currentRisk} />
       </div>
 
-      {/* Section 3: Định giá (Valuation Multi-Band: P/E / P/B vs VNINDEX) */}
-      <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-5 sm:p-6 shadow-xl">
-        <div className="border-b border-white/[0.06] pb-3 mb-4">
-          <h3 className="text-base font-bold text-white tracking-wide">Định giá</h3>
+      {/* Row 2: Định giá (Valuation Multi-Band: P/E / P/B vs VNINDEX) */}
+      <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl">
+        <div className="border-b border-white/[0.06] pb-3 mb-3">
+          <h3 className="text-sm sm:text-base font-bold text-white tracking-wide font-sans">
+            Định giá thị trường
+          </h3>
         </div>
 
         <ValuationBandChart data={valuationSeries} />

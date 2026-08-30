@@ -79,7 +79,6 @@ const BUBBLE_PERIODS = ["1D", "1W", "1M", "1Y"] as const
 
 export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], onOpenStockDetail }: MarketCloseDashboardProps) {
   const [guideOpen, setGuideOpen] = React.useState(false)
-  const [marketView, setMarketView] = React.useState<"pulse" | "health">("pulse")
 
   if (!data) return (
     <Card className={cn(surface, "py-12 text-center")}><CardContent className="space-y-3"><Activity className="mx-auto size-10 text-slate-600" /><CardTitle>Chưa có dữ liệu phiên đóng cửa</CardTitle><CardDescription>Snapshot sau phiên được cập nhật tự động sau 15:15 vào ngày giao dịch.</CardDescription></CardContent></Card>
@@ -113,8 +112,8 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
         </Card>
       </section>
 
-      {/* 2. Market Intelligence Panel (Nhịp đập, Nỗ lực kết quả, Sức khoẻ thị trường) */}
-      <MarketIntelligencePanel view={marketView} onViewChange={setMarketView} data={data} onOpenGuide={() => setGuideOpen(true)} />
+      {/* 2. Market Intelligence Panel (Gom Nhịp đập thị trường & Sức khoẻ thị trường thành 1) */}
+      <MarketIntelligencePanel data={data} onOpenGuide={() => setGuideOpen(true)} />
 
       {/* 3. Sector Map Section (Nhóm ngành đang dẫn nhịp) */}
       <section aria-labelledby="market-sectors-title" className="space-y-4 border-t border-white/[0.06] pt-8">
@@ -153,22 +152,55 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
   )
 }
 
-function MarketIntelligencePanel({ view, onViewChange, data, onOpenGuide }: { view: "pulse" | "health"; onViewChange: (view: "pulse" | "health") => void; data: MarketCloseDashboardData; onOpenGuide: () => void }) {
+function MarketIntelligencePanel({ data, onOpenGuide }: { data: MarketCloseDashboardData; onOpenGuide: () => void }) {
   const { dailySummary, indexes, history, marketRegime } = data
   const vnindex = indexes.find((item) => item.indexCode === "VNINDEX")
   const breadthTotal = Math.max(1, (vnindex?.advances ?? 0) + (vnindex?.unchanged ?? 0) + (vnindex?.declines ?? 0))
   return (
-    <section aria-labelledby="market-intelligence-title">
+    <section aria-labelledby="market-intelligence-title" className="space-y-6">
+      {/* Khối Nhịp đập thị trường */}
       <Card className={cn(surface, "overflow-hidden py-0")}>
-        <div className="grid grid-cols-2 gap-1 border-b border-white/[0.07] bg-black/10 p-1.5">{([{ key: "pulse", label: "Nhịp đập thị trường" }, { key: "health", label: "Sức khoẻ thị trường" }] as const).map((item) => <button key={item.key} type="button" onClick={() => onViewChange(item.key)} className={cn("rounded-lg px-2 py-3 text-xs font-bold transition-colors sm:text-sm", view === item.key ? "bg-white/[0.08] text-white" : "text-slate-500 hover:text-slate-200")}>{item.label}</button>)}</div>
+        <div className="border-b border-white/[0.07] bg-black/10 px-5 py-3.5 flex items-center justify-between">
+          <span className="text-sm font-bold text-white tracking-wide font-sans">
+            Nhịp đập thị trường
+          </span>
+          <span className="text-xs font-mono text-slate-400">
+            Dữ liệu tổng quan phiên
+          </span>
+        </div>
         <CardContent className="p-5 sm:p-6">
-          {view === "pulse" && <div className="grid gap-6 xl:grid-cols-[.85fr_1.15fr]">
-            <div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-teal-300/70">Tổng quan thị trường</p><div className="mt-4 flex items-center gap-5"><div className="flex size-28 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/[0.06]"><strong className="text-center text-lg font-black uppercase text-amber-300">{marketRegime || "Chưa rõ"}</strong></div><div className="grid flex-1 grid-cols-2 gap-2"><PulseStat label="Tâm lý" value={`${formatNumber(dailySummary.sentimentScore, 0)} · ${dailySummary.sentimentLabel || "—"}`} /><PulseStat label="Rủi ro" value={formatNumber(dailySummary.riskScore, 2)} tone={(dailySummary.riskScore ?? 0) >= 60 ? "down" : "up"} /><PulseStat label="Khối ngoại" value={`${formatSigned(dailySummary.foreignNetValue, 0)} tỷ`} tone={(dailySummary.foreignNetValue ?? 0) >= 0 ? "up" : "down"} /><PulseStat label="Phân phối" value={`${dailySummary.distributionCount ?? "—"} ngày`} /></div></div></div>
-            <div className="space-y-4"><BreadthBar label="Tăng giá" value={vnindex?.advances ?? 0} total={breadthTotal} tone="up" /><BreadthBar label="Đứng giá" value={vnindex?.unchanged ?? 0} total={breadthTotal} tone="flat" /><BreadthBar label="Giảm giá" value={vnindex?.declines ?? 0} total={breadthTotal} tone="down" /><div className="grid grid-cols-2 gap-2 pt-2 sm:grid-cols-4"><PulseStat label="Trên MA10" value={`${formatNumber(dailySummary.aboveMa10Pct, 0)}%`} /><PulseStat label="Trên MA20" value={`${formatNumber(dailySummary.aboveMa20Pct, 0)}%`} /><PulseStat label="Trên MA50" value={`${formatNumber(dailySummary.aboveMa50Pct, 0)}%`} /><PulseStat label="Trên MA200" value={`${formatNumber(dailySummary.aboveMa200Pct, 0)}%`} /></div></div>
-          </div>}
-          {view === "health" && <MarketHealthView data={data} history={history} />}
+          <div className="grid gap-6 xl:grid-cols-[.85fr_1.15fr]">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-teal-300/70">Tổng quan thị trường</p>
+              <div className="mt-4 flex items-center gap-5">
+                <div className="flex size-28 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/[0.06]">
+                  <strong className="text-center text-lg font-black uppercase text-amber-300">{marketRegime || "Chưa rõ"}</strong>
+                </div>
+                <div className="grid flex-1 grid-cols-2 gap-2">
+                  <PulseStat label="Tâm lý" value={`${formatNumber(dailySummary.sentimentScore, 0)} · ${dailySummary.sentimentLabel || "—"}`} />
+                  <PulseStat label="Rủi ro" value={formatNumber(dailySummary.riskScore, 2)} tone={(dailySummary.riskScore ?? 0) >= 60 ? "down" : "up"} />
+                  <PulseStat label="Khối ngoại" value={`${formatSigned(dailySummary.foreignNetValue, 0)} tỷ`} tone={(dailySummary.foreignNetValue ?? 0) >= 0 ? "up" : "down"} />
+                  <PulseStat label="Phân phối" value={`${dailySummary.distributionCount ?? "—"} ngày`} />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <BreadthBar label="Tăng giá" value={vnindex?.advances ?? 0} total={breadthTotal} tone="up" />
+              <BreadthBar label="Đứng giá" value={vnindex?.unchanged ?? 0} total={breadthTotal} tone="flat" />
+              <BreadthBar label="Giảm giá" value={vnindex?.declines ?? 0} total={breadthTotal} tone="down" />
+              <div className="grid grid-cols-2 gap-2 pt-2 sm:grid-cols-4">
+                <PulseStat label="Trên MA10" value={`${formatNumber(dailySummary.aboveMa10Pct, 0)}%`} />
+                <PulseStat label="Trên MA20" value={`${formatNumber(dailySummary.aboveMa20Pct, 0)}%`} />
+                <PulseStat label="Trên MA50" value={`${formatNumber(dailySummary.aboveMa50Pct, 0)}%`} />
+                <PulseStat label="Trên MA200" value={`${formatNumber(dailySummary.aboveMa200Pct, 0)}%`} />
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Khối Sức khoẻ thị trường (Chỉ báo tâm lý + Chỉ báo rủi ro trên 1 row + Định giá) */}
+      <MarketHealthView data={data} history={history} />
     </section>
   )
 }

@@ -159,7 +159,7 @@ export function MarketBubbles({
     ].filter((group) => group.items.length > 0)
   }, [topStocks])
 
-  // Physics Simulation: Dense packing in the center (less gaps) & airy spacing in 4 corners
+  // Physics Simulation: High central bubble density + breathable 5px spacing between all bubbles
   const bubbles: SimBubble[] = React.useMemo(() => {
     const count = topStocks.length
     if (count === 0) return []
@@ -236,37 +236,15 @@ export function MarketBubbles({
       }
     })
 
-    // 1. Generate full rectangular grid cells to ensure all 4 corners and edges are filled
-    const cols = Math.ceil(Math.sqrt(count * (W / H)))
-    const rows = Math.ceil(count / cols)
-    const cellW = (W - 40) / cols
-    const cellH = (H - 40) / rows
-
-    interface GridCell {
-      x: number
-      y: number
-      distFromCenterNorm: number
-    }
-
-    const gridCells: GridCell[] = []
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        const cx = 20 + (col + 0.5) * cellW + (Math.sin(col * 4.1 + row * 2.3) * cellW * 0.15)
-        const cy = 20 + (row + 0.5) * cellH + (Math.cos(row * 3.7 + col * 1.9) * cellH * 0.15)
-        const normDx = (cx - centerX) / (W / 2)
-        const normDy = (cy - centerY) / (H / 2)
-        const distNorm = Math.hypot(normDx, normDy)
-        gridCells.push({ x: cx, y: cy, distFromCenterNorm: distNorm })
-      }
-    }
-
-    // Sort grid cells from inner center to outer corners
-    gridCells.sort((a, b) => a.distFromCenterNorm - b.distFromCenterNorm)
-
-    // Map sorted stocks to grid cells with tighter center compression
+    // Initialize with Fermat Golden Spiral that concentrates the first 130 nodes in the center area!
     const nodes: SimBubble[] = indexedStocks.map((item, i) => {
       const { stock, change, r, borderWidth, volNorm } = item
-      const cell = gridCells[i] || { x: centerX, y: centerY, distFromCenterNorm: 0 }
+
+      const phi = i * 2.3999632 // Golden angle
+      // Power 0.58 clusters more than 60% of all nodes within the inner central circle
+      const radDist = Math.pow(i / count, 0.58) * Math.min(W, H) * 0.48
+      const initX = centerX + Math.cos(phi) * radDist * (W / H)
+      const initY = centerY + Math.sin(phi) * radDist
 
       let tone: SimBubble["tone"] = "neutral"
       if (change >= 6.5) {
@@ -285,8 +263,8 @@ export function MarketBubbles({
         stock,
         rank: i + 1,
         change,
-        x: cell.x,
-        y: cell.y,
+        x: initX,
+        y: initY,
         r,
         borderWidth,
         bobClass,
@@ -296,36 +274,35 @@ export function MarketBubbles({
       }
     })
 
-    // Iterative 2D Physics: Tight center packing (2px gap) + spacious corners (8-10px gap)
+    // Iterative 2D Physics: Dense central cluster with guaranteed 5px spacing gap
     const iterations = 190
+    const padding = W < 640 ? 3.5 : 5.0 // Guaranteed 5px spacing on desktop, 3.5px on mobile
 
     for (let iter = 0; iter < iterations; iter++) {
       const alpha = Math.max(0.06, 1 - iter / iterations)
 
-      // 1. Forces: Strong centripetal pull in the center to eliminate voids; gentle spread at corners
+      // 1. Centripetal cluster pull: Pull the first 140 nodes into the center area so the center is filled with many bubbles
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
         const volRatio = node.volNorm
-        const dxCenter = node.x - centerX
-        const dyCenter = node.y - centerY
-        const distCenterNorm = Math.hypot(dxCenter / (W / 2), dyCenter / (H / 2))
 
-        if (distCenterNorm < 0.6 || volRatio >= 0.2) {
-          // In center: Stronger pull to eliminate empty voids in the middle
-          const gravity = (0.025 + volRatio * 0.05) * alpha
+        if (i < 130 || volRatio >= 0.15) {
+          // Strong central pull for the inner 130 nodes
+          const gravity = (0.022 + (1 - i / count) * 0.045) * alpha
           node.x += (centerX - node.x) * gravity
           node.y += (centerY - node.y) * gravity
         } else {
-          // Near corners: gentle outward pressure to keep corners airy and filled
+          // Outer nodes gently spread into the 4 corners and borders
+          const dxCenter = node.x - centerX
+          const dyCenter = node.y - centerY
           const distCenter = Math.hypot(dxCenter, dyCenter) || 1
-          const pushOut = 0.45 * alpha
+          const pushOut = 0.4 * alpha
           node.x += (dxCenter / distCenter) * pushOut
           node.y += (dyCenter / distCenter) * pushOut
         }
       }
 
-      // 2. Dynamic Radial Distance Collision:
-      // CENTER has TIGHT spacing (2px padding), CORNERS have MORE SPACING (8-10px padding)
+      // 2. Strict Pairwise Circle Collision: Enforces minimum spacing padding between all bubble edges
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const n1 = nodes[i]
@@ -333,18 +310,7 @@ export function MarketBubbles({
           const dx = n2.x - n1.x
           const dy = n2.y - n1.y
           const dist = Math.hypot(dx, dy)
-
-          // Average distance from center for this pair
-          const midX = (n1.x + n2.x) / 2 - centerX
-          const midY = (n1.y + n2.y) / 2 - centerY
-          const dMidNorm = Math.min(1, Math.hypot(midX / (W / 2), midY / (H / 2)))
-
-          // Dynamic padding: 2.0px in center, increasing to 8.5px in corners
-          const pairPadding = W < 640
-            ? 1.5 + Math.pow(dMidNorm, 1.2) * 4.5
-            : 2.0 + Math.pow(dMidNorm, 1.3) * 6.5
-
-          const minDist = n1.r + n2.r + pairPadding
+          const minDist = n1.r + n2.r + padding
 
           if (dist < minDist) {
             const overlap = minDist - dist
@@ -405,7 +371,7 @@ export function MarketBubbles({
               type="button"
               onClick={() => setViewMode("bubbles")}
               className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
+                "flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-colors",
                 viewMode === "bubbles"
                   ? "bg-teal-400/20 text-teal-200 shadow-sm"
                   : "text-slate-400 hover:text-slate-200"
@@ -419,7 +385,7 @@ export function MarketBubbles({
               type="button"
               onClick={() => setViewMode("columns")}
               className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
+                "flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-colors",
                 viewMode === "columns"
                   ? "bg-teal-400/20 text-teal-200 shadow-sm"
                   : "text-slate-400 hover:text-slate-200"
@@ -646,28 +612,28 @@ export function MarketBubbles({
           )}
         </div>
       ) : (
-        /* Redesigned Compact Columns View Grouped by Volume Tiers */
-        <div className="space-y-5 rounded-2xl border border-white/[0.08] bg-[#070d15] p-4 sm:p-5 shadow-xl">
+        /* Redesigned Columns View with Large Clear Typography */
+        <div className="space-y-6 rounded-2xl border border-white/[0.08] bg-[#070d15] p-4 sm:p-5 shadow-xl">
           {volumeGroups.map((group) => {
             const Icon = group.icon
 
             return (
-              <div key={group.id} className="space-y-2.5">
+              <div key={group.id} className="space-y-3">
                 {/* Volume Tier Header */}
-                <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
-                  <div className="flex items-center gap-2">
-                    <Icon className="size-4 text-teal-300" />
-                    <h3 className="font-mono text-xs sm:text-sm font-bold text-white tracking-wide">
+                <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <Icon className="size-4 sm:size-5 text-teal-300" />
+                    <h3 className="font-mono text-sm sm:text-base font-bold text-white tracking-wide">
                       {group.title}
                     </h3>
                   </div>
-                  <Badge variant="outline" className={cn("text-[10px] font-mono font-bold px-2 py-0.5", group.badgeClass)}>
+                  <Badge variant="outline" className={cn("text-xs font-mono font-bold px-2.5 py-0.5", group.badgeClass)}>
                     {group.badge}
                   </Badge>
                 </div>
 
-                {/* Grid of Compact Mini Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2">
+                {/* Grid of Readable Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2.5">
                   {group.items.map(({ stock, rank }) => {
                     const change = getStockChange(stock, period)
                     const chgVal = change ?? 0
@@ -681,34 +647,34 @@ export function MarketBubbles({
                         type="button"
                         onClick={() => onOpenStockDetail?.(stock.ticker)}
                         className={cn(
-                          "group flex flex-col justify-between rounded-xl border p-2 text-left transition-all duration-150 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/50",
-                          isFuchsia && "border-fuchsia-500/30 bg-fuchsia-500/[0.06] hover:border-fuchsia-400/60 hover:bg-fuchsia-500/[0.12]",
-                          isEmerald && "border-emerald-500/30 bg-emerald-500/[0.06] hover:border-emerald-400/60 hover:bg-emerald-500/[0.12]",
-                          isRose && "border-rose-500/30 bg-rose-500/[0.06] hover:border-rose-400/60 hover:bg-rose-500/[0.12]",
-                          !isFuchsia && !isEmerald && !isRose && "border-white/[0.07] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05]"
+                          "group flex flex-col justify-between rounded-xl border p-2.5 sm:p-3 text-left transition-all duration-150 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/50",
+                          isFuchsia && "border-fuchsia-500/40 bg-fuchsia-500/[0.07] hover:border-fuchsia-400/80 hover:bg-fuchsia-500/[0.14]",
+                          isEmerald && "border-emerald-500/40 bg-emerald-500/[0.07] hover:border-emerald-400/80 hover:bg-emerald-500/[0.14]",
+                          isRose && "border-rose-500/40 bg-rose-500/[0.07] hover:border-rose-400/80 hover:bg-rose-500/[0.14]",
+                          !isFuchsia && !isEmerald && !isRose && "border-white/[0.08] bg-white/[0.025] hover:border-white/25 hover:bg-white/[0.06]"
                         )}
                       >
                         {/* Top Row: Rank & Ticker & Sector Tag */}
                         <div className="flex items-center justify-between gap-1">
-                          <div className="flex items-center gap-1 min-w-0">
-                            <span className="font-mono text-[9px] font-bold text-slate-500">#{rank}</span>
-                            <strong className="font-mono text-xs sm:text-sm font-black text-white group-hover:text-cyan-200 tracking-tight">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-mono text-xs font-bold text-slate-400">#{rank}</span>
+                            <strong className="font-mono text-sm sm:text-base font-black text-white group-hover:text-cyan-200 tracking-tight">
                               {stock.ticker}
                             </strong>
                           </div>
-                          <span className="truncate rounded bg-white/[0.06] px-1 py-0.5 text-[8px] font-bold uppercase text-slate-400 max-w-[58px]">
+                          <span className="truncate rounded bg-white/[0.07] px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase text-slate-400 max-w-[62px]">
                             {stock.sector}
                           </span>
                         </div>
 
                         {/* Bottom Row: Volume & % Change */}
-                        <div className="mt-1.5 flex items-baseline justify-between gap-1 font-mono">
-                          <span className="text-[9px] text-slate-500 truncate">
+                        <div className="mt-2 flex items-baseline justify-between gap-1 font-mono">
+                          <span className="text-xs font-semibold text-slate-300 truncate">
                             {stock.volume != null ? `${(stock.volume / 1000000).toFixed(1)}M` : "—"}
                           </span>
                           <strong
                             className={cn(
-                              "text-xs sm:text-sm font-black",
+                              "text-sm sm:text-base font-black",
                               isFuchsia
                                 ? "text-fuchsia-300"
                                 : isEmerald

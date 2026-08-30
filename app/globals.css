@@ -146,9 +146,11 @@ body::after {
 }
 
 /* Liquid Glass Utilities */
-.insights-liquid-shell {
+.insights-liquid-shell,
+[data-stock-analytics-dashboard] {
   position: relative;
   isolation: isolate;
+  font-family: var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   background-color: #061118;
   background-image:
     radial-gradient(circle at 12% 6%, rgba(45, 212, 191, 0.09), transparent 26rem),
