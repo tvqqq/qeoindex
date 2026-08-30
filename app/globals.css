@@ -293,6 +293,40 @@ body::after {
   z-index: 20;
 }
 
+/* One bounded radar layer and a few gently floating leaders; tail bubbles stay static. */
+.market-bubble-field {
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.035) 1px, transparent 1px),
+    radial-gradient(circle at 50% 50%, rgba(14, 116, 144, 0.12), transparent 58%);
+  background-size: 48px 48px, 48px 48px, 100% 100%;
+}
+
+@keyframes market-radar-scan {
+  0% { transform: translateX(-45%); opacity: 0; }
+  18%, 75% { opacity: 0.55; }
+  100% { transform: translateX(145%); opacity: 0; }
+}
+
+.market-radar-sweep::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 26%;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.08), rgba(103, 232, 249, 0.2), transparent);
+  border-right: 1px solid rgba(103, 232, 249, 0.25);
+  animation: market-radar-scan 8s linear infinite;
+}
+
+@keyframes market-bubble-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.market-bubble-float {
+  animation: market-bubble-float 4.8s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flash-up,
   .flash-down,
@@ -300,7 +334,9 @@ body::after {
   .flash-text-up,
   .flash-text-down,
   .flash-text-ref,
-  .whale-golden-pulse {
+  .whale-golden-pulse,
+  .market-radar-sweep::after,
+  .market-bubble-float {
     animation: none;
   }
 }

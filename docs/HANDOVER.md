@@ -339,9 +339,10 @@ A strict CSP is deliberately deferred until the DNSE WebSocket/external-provider
 ### Insights market workspace (2026-08-30)
 
 - The post-close Insights header owns freshness messaging. A stale snapshot appears inline where the normalized-snapshot status normally sits; do not add a second alert below the header.
-- Index cards precede the main visualization. The hero is a deterministic, non-animated stock bubble map ranked by the existing top-volume snapshot, with 1D/1W/1M/1Y values taken from KFSP metrics when present.
+- Index cards precede the main visualization. The hero is a deterministic Top 100 stock bubble field ranked by the existing top-volume snapshot, with 1D/1W/1M/1Y values taken from KFSP metrics when present. Only one radar layer and the largest twelve bubbles animate; reduced-motion disables both.
 - The compact market workspace exposes three local views: market pulse, sector effort/result, and health history. Missing `effortPct` and long-period performance stay explicitly missing; never derive them from unrelated price or volume fields.
-- Bubble circles use a stable flex layout rather than force simulation/canvas animation to protect chart and realtime rendering performance.
+- Bubble circles use a stable dense grid rather than force simulation/canvas animation to protect chart and realtime rendering performance.
+- Sector Map has an overview table (rotation state, performance, RS, breadth, effort/result) and a 1D/5D/20D rotation matrix. The UI must not imply daily history when the current read model only contains window snapshots.
 
 | Change area | Minimum checks |
 | --- | --- |

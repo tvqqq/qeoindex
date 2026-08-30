@@ -88,8 +88,6 @@ test("Market Close dashboard uses stable accessible shadcn chart composition", (
     "IndexBreadthChart",
     "MaBreadthChart",
     "InstitutionalFlowChart",
-    "SectorPerformanceChart",
-    "SectorBreadthChart",
     "LiquidityLeadersChart",
     "IndexImpactChart",
     "MarketHistoryChart",
@@ -133,7 +131,9 @@ test("Market Close keeps the main dashboard continuous and limits tabs to the th
   assert.match(dashboard, /Nỗ lực kết quả/)
   assert.match(dashboard, /Sức khoẻ thị trường/)
   assert.match(dashboard, /\["1D", "1W", "1M", "1Y"\]/, "market bubbles must expose the requested time windows")
-  assert.match(dashboard, /min-h-\[420px\]/, "bubble layout must reserve stable space")
+  assert.match(dashboard, /slice\(0, 100\)/, "bubble field must keep the requested Top 100 cap")
+  assert.match(dashboard, /min-h-\[650px\]/, "bubble layout must reserve stable space")
+  assert.match(dashboard, /Luân chuyển dòng tiền/, "sector workspace must expose the rotation view")
   for (const sectionId of ["market-overview-title", "market-sectors-title", "market-leaders-title", "market-history-title"]) {
     assert.match(dashboard, new RegExp(`id="${sectionId}"`), `${sectionId} must be visible in the continuous dashboard`)
   }
