@@ -677,7 +677,7 @@ export function MarketBubbles({
                 <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5">
                   <div className="flex items-center gap-2.5">
                     <GroupIcon className="size-4 sm:size-5 text-teal-300" />
-                    <h3 className="font-mono text-sm sm:text-base font-bold text-white tracking-wide">
+                    <h3 className="font-sans text-sm sm:text-base font-bold text-white tracking-wide">
                       {group.title}
                     </h3>
                   </div>

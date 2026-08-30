@@ -50,7 +50,10 @@ function PanelHeading({ title, description, icon: Icon }: { title: string; descr
     <CardHeader className="border-b border-white/[0.06] px-4 py-3.5">
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-teal-300/20 bg-teal-300/[0.07] text-teal-200"><Icon className="size-4" /></span>
-        <div className="min-w-0"><CardTitle className="text-sm font-bold text-white">{title}</CardTitle><CardDescription className="mt-1 line-clamp-1 text-[11px]">{description}</CardDescription></div>
+        <div className="min-w-0">
+          <CardTitle className="text-sm font-bold text-white tracking-wide font-sans">{title}</CardTitle>
+          <CardDescription className="mt-1 line-clamp-1 text-[11px] text-slate-400 italic font-medium">{description}</CardDescription>
+        </div>
       </div>
     </CardHeader>
   )
@@ -59,8 +62,11 @@ function PanelHeading({ title, description, icon: Icon }: { title: string; descr
 function SectionHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
   return (
     <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
-      <div><p className="text-[10px] font-black uppercase tracking-[0.24em] text-teal-300/80">{eyebrow}</p><h3 className="mt-1 text-lg font-bold text-white sm:text-xl">{title}</h3></div>
-      <p className="max-w-xl text-xs leading-5 text-slate-500 sm:text-right">{description}</p>
+      <div>
+        <p className="text-[10px] font-mono font-black uppercase tracking-[0.24em] text-teal-300/80">{eyebrow}</p>
+        <h3 className="mt-1 text-lg font-bold text-white tracking-tight sm:text-xl font-sans">{title}</h3>
+      </div>
+      <p className="max-w-xl text-xs sm:text-sm leading-5 text-slate-400 italic font-medium sm:text-right">{description}</p>
     </div>
   )
 }
@@ -70,7 +76,9 @@ function BreadthBar({ label, value, total, tone }: { label: string; value: numbe
   const bar = tone === "up" ? "bg-teal-300" : tone === "down" ? "bg-rose-400" : "bg-sky-200/70"
   return (
     <div className="grid grid-cols-[68px_1fr_38px] items-center gap-3 text-[11px]">
-      <span className="text-slate-500">{label}</span><div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]"><div className={cn("h-full rounded-full", bar)} style={{ width: `${width}%` }} /></div><strong className="text-right font-mono text-slate-300">{value}</strong>
+      <span className="text-slate-400 font-semibold font-sans">{label}</span>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]"><div className={cn("h-full rounded-full", bar)} style={{ width: `${width}%` }} /></div>
+      <strong className="text-right font-mono text-slate-200 font-bold">{value}</strong>
     </div>
   )
 }
@@ -81,7 +89,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
   const [guideOpen, setGuideOpen] = React.useState(false)
 
   if (!data) return (
-    <Card className={cn(surface, "py-12 text-center")}><CardContent className="space-y-3"><Activity className="mx-auto size-10 text-slate-600" /><CardTitle>Chưa có dữ liệu phiên đóng cửa</CardTitle><CardDescription>Snapshot sau phiên được cập nhật tự động sau 15:15 vào ngày giao dịch.</CardDescription></CardContent></Card>
+    <Card className={cn(surface, "py-12 text-center")}><CardContent className="space-y-3"><Activity className="mx-auto size-10 text-slate-600" /><CardTitle className="font-bold text-white font-sans">Chưa có dữ liệu phiên đóng cửa</CardTitle><CardDescription className="italic text-slate-400">Snapshot sau phiên được cập nhật tự động sau 15:15 vào ngày giao dịch.</CardDescription></CardContent></Card>
   )
 
   const { sessionDate, asOf, dailySummary, indexes, sectors, sectorHistory = [], history } = data
@@ -91,20 +99,19 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
       {/* 1. Market Overview Tiles & Bubbles Section */}
       <section aria-labelledby="market-overview-title" className="space-y-3">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{indexes.map((item) => <IndexTile key={item.indexCode} item={item} />)}</div>
-        <p className="px-1 text-[10px] text-slate-600">Phiên {sessionDate} · cập nhật {formatTime(asOf)} · dữ liệu EOD đã chuẩn hóa</p>
+        <p className="px-1 text-[10px] font-mono text-slate-500">Phiên {sessionDate} · cập nhật {formatTime(asOf)} · dữ liệu EOD đã chuẩn hóa</p>
 
         <Card className={cn(surface, "overflow-hidden py-0")}>
           <CardHeader className="flex flex-col gap-2 border-b border-white/[0.07] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-teal-300/70">Market bubbles</p>
-              <h2 id="market-overview-title" className="mt-1 text-lg font-bold text-white">Bubbles · Bản đồ giao dịch thị trường</h2>
-              <p className="mt-1 text-[11px] text-slate-500">Kích thước theo mức độ tăng giảm giá, màu theo biến động từng kỳ (1D, 1W, 1M, 1Y).</p>
+              <p className="text-[10px] font-mono font-black uppercase tracking-[0.22em] text-teal-300/70">Market bubbles</p>
+              <h2 id="market-overview-title" className="mt-1 text-lg font-bold text-white tracking-tight font-sans">Bubbles · Bản đồ giao dịch thị trường</h2>
+              <p className="mt-1 text-xs text-slate-400 italic font-medium">Kích thước theo mức độ tăng giảm giá, màu theo biến động từng kỳ (1D, 1W, 1M, 1Y).</p>
             </div>
           </CardHeader>
           <CardContent className="p-4 sm:p-5 min-h-[650px]">
-            {/* bubbleStocks supports all stocks in database or slice(0, 100) */}
             <MarketBubbles
-              stocks={bubbleStocks}
+              stocks={bubbleStocks.length > 0 ? bubbleStocks : bubbleStocks.slice(0, 100)}
               onOpenStockDetail={onOpenStockDetail}
               defaultPeriod="1D"
             />
@@ -112,14 +119,14 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
         </Card>
       </section>
 
-      {/* 2. Market Intelligence Panel (Gom Nhịp đập thị trường & Sức khoẻ thị trường thành 1) */}
+      {/* 2. Market Intelligence Panel */}
       <MarketIntelligencePanel data={data} onOpenGuide={() => setGuideOpen(true)} />
 
       {/* 3. Sector Map Section (Nhóm ngành đang dẫn nhịp) */}
       <section aria-labelledby="market-sectors-title" className="space-y-4 border-t border-white/[0.06] pt-8">
         <div id="market-sectors-title">
           <SectionHeading
-            eyebrow="Sector map"
+            eyebrow="Market pulse & cash flow"
             title="Nhóm ngành đang dẫn nhịp"
             description="Đọc hiệu suất cùng độ lan tỏa, Nỗ lực kết quả và Luân chuyển dòng tiền ngành để tránh nhầm một vài mã tăng với sức mạnh toàn ngành."
           />
@@ -133,10 +140,10 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
         />
       </section>
 
-      {/* 4. Breadth & Flow Charts */}
-      <section aria-labelledby="market-breadth-title" className="space-y-4 border-t border-white/[0.06] pt-8">
-        <div id="market-breadth-title"><SectionHeading eyebrow="Breadth & flow" title="Độ rộng, xu hướng và dòng tiền" description="Ba góc nhìn thiết yếu để xác nhận mức bền vững của chuyển động giá." /></div>
-        <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-4" data-market-close-chart-grid>
+      {/* 4. Index & Market Breadth Charts */}
+      <section aria-labelledby="market-charts-title" className="space-y-4 border-t border-white/[0.06] pt-8">
+        <div id="market-charts-title"><SectionHeading eyebrow="Market internals" title="Nội lực thị trường & Phân tích chuyên sâu" description="Tập hợp 4 góc nhìn chuẩn hóa về thanh khoản, độ rộng và xu hướng để nhìn rõ bức tranh sau phiên." /></div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2 2xl:grid-cols-4" data-market-close-chart-grid>
           <ChartPanel icon={LineChart} title="Hiệu suất chỉ số" description="Biến động và giá trị giao dịch"><IndexPerformanceChart indexes={indexes} /></ChartPanel><ChartPanel icon={BarChart3} title="Độ rộng thị trường" description="Mã tăng, đứng giá và giảm"><IndexBreadthChart indexes={indexes} /></ChartPanel><ChartPanel icon={Gauge} title="Sức khỏe xu hướng" description="Tỷ lệ cổ phiếu trên các đường MA"><MaBreadthChart daily={dailySummary} /></ChartPanel><ChartPanel icon={CircleDollarSign} title="Dòng tiền tổ chức" description="Mua bán ròng theo nhóm nhà đầu tư"><InstitutionalFlowChart daily={dailySummary} /></ChartPanel>
         </div>
       </section>
@@ -158,23 +165,22 @@ function MarketIntelligencePanel({ data, onOpenGuide }: { data: MarketCloseDashb
   const breadthTotal = Math.max(1, (vnindex?.advances ?? 0) + (vnindex?.unchanged ?? 0) + (vnindex?.declines ?? 0))
   return (
     <section aria-labelledby="market-intelligence-title" className="space-y-6">
-      {/* Khối Nhịp đập thị trường */}
       <Card className={cn(surface, "overflow-hidden py-0")}>
         <div className="border-b border-white/[0.07] bg-black/10 px-5 py-3.5 flex items-center justify-between">
           <span className="text-sm font-bold text-white tracking-wide font-sans">
-            Nhịp đập thị trường
+            Nhịp đập thị trường & Sức khoẻ thị trường
           </span>
-          <span className="text-xs font-mono text-slate-400">
-            Dữ liệu tổng quan phiên
+          <span className="text-xs font-sans italic text-slate-400 font-medium">
+            Dữ liệu tổng quan phiên & chỉ báo sức khỏe
           </span>
         </div>
         <CardContent className="p-5 sm:p-6">
           <div className="grid gap-6 xl:grid-cols-[.85fr_1.15fr]">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-teal-300/70">Tổng quan thị trường</p>
+              <p className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-teal-300/70">Tổng quan thị trường</p>
               <div className="mt-4 flex items-center gap-5">
                 <div className="flex size-28 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/[0.06]">
-                  <strong className="text-center text-lg font-black uppercase text-amber-300">{marketRegime || "Chưa rõ"}</strong>
+                  <strong className="text-center text-lg font-black uppercase text-amber-300 font-sans">{marketRegime || "Phân hóa"}</strong>
                 </div>
                 <div className="grid flex-1 grid-cols-2 gap-2">
                   <PulseStat label="Tâm lý" value={`${formatNumber(dailySummary.sentimentScore, 0)} · ${dailySummary.sentimentLabel || "—"}`} />
