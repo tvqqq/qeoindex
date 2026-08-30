@@ -15,12 +15,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import type { MarketCloseDashboardData, MarketSectorRow } from "@/lib/market-insight-data"
+import type { InsightsRatingRow } from "@/lib/insights-data"
 import { cn } from "@/lib/utils"
 
 export type { MarketBubbleStock }
 
 interface MarketCloseDashboardProps {
   data: MarketCloseDashboardData | null
+  ratings?: InsightsRatingRow[]
   bubbleStocks?: MarketBubbleStock[]
   onOpenStockDetail?: (ticker: string) => void
 }
@@ -75,7 +77,7 @@ function BreadthBar({ label, value, total, tone }: { label: string; value: numbe
 
 const BUBBLE_PERIODS = ["1D", "1W", "1M", "1Y"] as const
 
-export function MarketCloseDashboard({ data, bubbleStocks = [], onOpenStockDetail }: MarketCloseDashboardProps) {
+export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], onOpenStockDetail }: MarketCloseDashboardProps) {
   const [selectedSector, setSelectedSector] = React.useState<MarketSectorRow | null>(null)
   const [guideOpen, setGuideOpen] = React.useState(false)
   const [marketView, setMarketView] = React.useState<"pulse" | "effort" | "health">("pulse")
@@ -127,6 +129,7 @@ export function MarketCloseDashboard({ data, bubbleStocks = [], onOpenStockDetai
         </div>
         <SectorMapPanel
           sectors={sectors}
+          ratings={ratings}
           sectorHistory={sectorHistory}
           marketHistory={history}
           onSelectSector={setSelectedSector}

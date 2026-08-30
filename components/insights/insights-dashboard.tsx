@@ -1485,6 +1485,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
           <h2 id="sau-phien-title" className="sr-only">Insight sau phiên</h2>
             <MarketCloseDashboard
               data={data.marketClose || null}
+              ratings={data.ratings}
               bubbleStocks={data.ratings.map((row) => ({
                 ticker: row.ticker,
                 companyName: row.companyName,
