@@ -188,8 +188,8 @@ export function MarketBubbles({
     const maxVol = Math.max(1_000_000, ...volumes)
     const minVol = Math.min(...volumes.filter((v) => v > 0)) || 10_000
 
-    // Target area coverage: 48% of available viewport area (+20% size increase)
-    const targetTotalArea = W * H * 0.48
+    // Target area coverage: 54% of available viewport area (+20% size increase)
+    const targetTotalArea = W * H * 0.54
 
     // Calculate dynamic radii with +20% size boost and readable minimum size for 0% movers
     const rawRadii = topStocks.map((stock, i) => {
@@ -197,8 +197,8 @@ export function MarketBubbles({
       const absChg = Math.abs(chg)
       const norm = Math.max(0, (absChg - minAbsChange) / (maxAbsChange - minAbsChange || 1))
 
-      // Base radius from 18px to 54px (+20% larger base size so 0% bubbles are never too small)
-      let r = 18 + Math.pow(norm, 0.48) * 38
+      // Base radius from 22px to 64px (+20% larger base size so 0% bubbles are never too small)
+      let r = 22 + Math.pow(norm, 0.48) * 42
 
       // Price gain scaling (Tăng mạnh kích thước theo % tăng giá của cổ phiếu)
       if (chg > 0) {
@@ -228,7 +228,7 @@ export function MarketBubbles({
       r *= 1.2
 
       if (W < 640) {
-        r = Math.max(13, Math.min(52, Math.round(r * 0.7)))
+        r = Math.max(15, Math.min(58, Math.round(r * 0.7)))
       }
       return r
     })
@@ -301,9 +301,9 @@ export function MarketBubbles({
       }
     })
 
-    // Iterative 2D Physics: Uniformly spread with generous 14px spacing
+    // Iterative 2D Physics: Uniformly spread with generous 17px spacing (+20% spacing boost)
     const iterations = 220
-    const padding = W < 640 ? 7.0 : 14.0 // Guaranteed 14px gap between all bubble boundaries
+    const padding = W < 640 ? 9.0 : 17.0 // Guaranteed 17px gap between all bubble boundaries
 
     for (let iter = 0; iter < iterations; iter++) {
       const alpha = Math.max(0.08, 1 - iter / iterations)
@@ -315,7 +315,7 @@ export function MarketBubbles({
         node.y += (centerY - node.y) * 0.004 * alpha
       }
 
-      // 2. Strict Pairwise Circle Collision with Generous Spacing Padding
+      // 2. Strict Pairwise Circle Collision with Generous 17px Spacing Padding
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const n1 = nodes[i]
@@ -345,8 +345,8 @@ export function MarketBubbles({
       // 3. Strict Boundary Containment with Edge Margin
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        node.x = Math.max(node.r + 14, Math.min(W - node.r - 14, node.x))
-        node.y = Math.max(node.r + 14, Math.min(H - node.r - 14, node.y))
+        node.x = Math.max(node.r + 16, Math.min(W - node.r - 16, node.x))
+        node.y = Math.max(node.r + 16, Math.min(H - node.r - 16, node.y))
       }
     }
 
