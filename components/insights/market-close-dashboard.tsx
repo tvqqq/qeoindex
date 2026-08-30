@@ -99,7 +99,7 @@ export function MarketCloseDashboard({ data, bubbleStocks = [], onOpenStockDetai
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-teal-300/70">Market bubbles</p>
               <h2 id="market-overview-title" className="mt-1 text-lg font-bold text-white">Bubbles · Bản đồ giao dịch thị trường</h2>
-              <p className="mt-1 text-[11px] text-slate-500">Kích thước theo thanh khoản, màu theo biến động từng kỳ (1D, 1W, 1M, 1Y).</p>
+              <p className="mt-1 text-[11px] text-slate-500">Kích thước theo mức độ tăng giảm giá, màu theo biến động từng kỳ (1D, 1W, 1M, 1Y).</p>
             </div>
           </CardHeader>
           <CardContent className="p-4 sm:p-5 min-h-[650px]">
@@ -107,7 +107,6 @@ export function MarketCloseDashboard({ data, bubbleStocks = [], onOpenStockDetai
               stocks={bubbleStocks.slice(0, 100)}
               onOpenStockDetail={onOpenStockDetail}
               defaultPeriod="1D"
-              defaultRank={100}
             />
           </CardContent>
         </Card>

@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { CircleDot, LayoutGrid, Search, X } from "lucide-react"
+import { CircleDot, LayoutGrid } from "lucide-react"
 
 import { StockLogo } from "@/components/stock-logo"
+import { AnimatedTabs, type AnimatedTab } from "@/components/smoothui/animated-tabs"
 import { cn } from "@/lib/utils"
 
 export interface MarketBubbleStock {
@@ -17,14 +18,12 @@ export interface MarketBubbleStock {
   change1y: number | null
 }
 
-export type BubblePeriod = "15M" | "1H" | "1D" | "1W" | "1M" | "1Y"
-export type BubbleRank = 50 | 100 | 200 | 500
+export type BubblePeriod = "1D" | "1W" | "1M" | "1Y"
 
 interface MarketBubblesProps {
   stocks: MarketBubbleStock[]
   onOpenStockDetail?: (ticker: string) => void
   defaultPeriod?: BubblePeriod
-  defaultRank?: BubbleRank
 }
 
 function formatNumber(value: number | null | undefined, decimals = 2) {
@@ -41,46 +40,43 @@ function getStockChange(stock: MarketBubbleStock, period: BubblePeriod): number 
   if (period === "1W") return stock.change1w
   if (period === "1M") return stock.change1m
   if (period === "1Y") return stock.change1y
-  if (period === "15M" || period === "1H") {
-    const scale = period === "15M" ? 0.25 : 0.5
-    return stock.change1d != null ? Number((stock.change1d * scale).toFixed(2)) : null
-  }
   return stock.change1d
 }
 
-// 2D Physics node for collision-free circle packing
 interface SimBubble {
   stock: MarketBubbleStock
   rank: number
   change: number | null
   x: number // in px
   y: number // in px
-  vx: number
-  vy: number
   r: number // radius in px
   tone: "fuchsia" | "emerald" | "rose" | "neutral"
 }
+
+const PERIOD_TABS: AnimatedTab<BubblePeriod>[] = [
+  { value: "1D", label: "1D" },
+  { value: "1W", label: "1W" },
+  { value: "1M", label: "1M" },
+  { value: "1Y", label: "1Y" },
+]
 
 export function MarketBubbles({
   stocks,
   onOpenStockDetail,
   defaultPeriod = "1D",
-  defaultRank = 100,
 }: MarketBubblesProps) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = React.useState<{ width: number; height: number }>({
-    width: 1100,
-    height: 680,
+    width: 1200,
+    height: 720,
   })
 
   const [viewMode, setViewMode] = React.useState<"bubbles" | "columns">("bubbles")
   const [period, setPeriod] = React.useState<BubblePeriod>(defaultPeriod)
-  const [rankFilter, setRankFilter] = React.useState<BubbleRank>(defaultRank)
-  const [searchQuery, setSearchQuery] = React.useState("")
   const [hoveredTicker, setHoveredTicker] = React.useState<string | null>(null)
   const [tooltipPos, setTooltipPos] = React.useState<{ x: number; y: number } | null>(null)
 
-  // Track container pixel size
+  // Track container pixel size via ResizeObserver
   React.useEffect(() => {
     if (!containerRef.current) return
     const ro = new ResizeObserver((entries) => {
@@ -95,113 +91,118 @@ export function MarketBubbles({
     return () => ro.disconnect()
   }, [])
 
-  // Filter and sort stocks
-  const filteredStocks = React.useMemo(() => {
-    let list = stocks
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase()
-      list = list.filter(
-        (s) =>
-          s.ticker.toLowerCase().includes(q) ||
-          s.companyName.toLowerCase().includes(q) ||
-          s.sector.toLowerCase().includes(q)
-      )
-    }
-    return [...list]
+  // Auto Top 100 stocks
+  const topStocks = React.useMemo(() => {
+    return [...stocks]
       .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))
-      .slice(0, rankFilter)
-  }, [stocks, searchQuery, rankFilter])
+      .slice(0, 100)
+  }, [stocks])
 
-  // Physics Simulation: 100% Collision-free circle packing
+  // Physics Simulation: Bubble size by Price Gain (|change|), Spread evenly across canvas
   const bubbles: SimBubble[] = React.useMemo(() => {
-    const count = filteredStocks.length
+    const count = topStocks.length
     if (count === 0) return []
 
     const W = Math.max(dimensions.width, 600)
     const H = Math.max(dimensions.height, 600)
-    const centerX = W / 2
-    const centerY = H / 2
 
-    // Find highest gainer for special fuchsia aura
-    let maxGain = -Infinity
-    let topGainerTicker = ""
-    for (const stock of filteredStocks) {
-      const chg = getStockChange(stock, period) ?? 0
-      if (chg > maxGain) {
-        maxGain = chg
-        topGainerTicker = stock.ticker
+    // Calculate changes & find extremes
+    const changes = topStocks.map((s) => getStockChange(s, period) ?? 0)
+    const absChanges = changes.map((c) => Math.abs(c))
+    const maxAbsChange = Math.max(2.0, ...absChanges)
+    const minAbsChange = Math.min(...absChanges)
+
+    // Target coverage: 55% of available viewport area
+    const targetTotalArea = W * H * 0.55
+
+    // Radius scaling: size is directly determined by price change magnitude
+    const rawRadii = topStocks.map((stock, i) => {
+      const chg = changes[i]
+      const absChg = Math.abs(chg)
+      // Non-linear power scale for visual contrast between high movers and flat stocks
+      const norm = Math.max(0, (absChg - minAbsChange) / (maxAbsChange - minAbsChange || 1))
+      const scale = Math.pow(norm, 0.6) // 0.6 exponent enhances medium/large movers
+
+      // Base radius from 18px (for flat 0%) up to 80px (for top movers)
+      let r = 18 + scale * 62
+
+      // Ceiling bonus: >6.5% gains (or top positive mover) get extra size prominence
+      if (chg >= 6.5) {
+        r = Math.min(84, r * 1.12)
       }
-    }
-
-    // Physics Simulation: 100% Collision-free circle packing
-    const totalArea = W * H * 0.44 // Fill 44% of canvas area
-    const rawWeights = filteredStocks.map((_, i) => {
-      if (i === 0) return 5.8
-      if (i < 3) return 4.0
-      if (i < 8) return 2.6
-      if (i < 20) return 1.7
-      if (i < 50) return 1.15
-      return 0.8
-    })
-    const sumWeights = rawWeights.reduce((acc, w) => acc + w * w, 0)
-    const baseScale = Math.sqrt(totalArea / (Math.PI * sumWeights))
-
-    const nodes: SimBubble[] = filteredStocks.map((stock, index) => {
-      const change = getStockChange(stock, period)
-      const weight = rawWeights[index]
-      let r = Math.max(16, Math.min(80, Math.round(weight * baseScale)))
 
       if (W < 640) {
-        r = Math.max(13, Math.min(46, Math.round(r * 0.72)))
+        r = Math.max(13, Math.min(48, Math.round(r * 0.72)))
       }
+      return r
+    })
+
+    // Adjust scale so total area matches target area
+    const currentSumArea = rawRadii.reduce((acc, r) => acc + Math.PI * r * r, 0)
+    const areaMultiplier = Math.min(1.1, Math.max(0.7, Math.sqrt(targetTotalArea / (currentSumArea || 1))))
+
+    // Initialize bubbles distributed across a full uniform 2D grid
+    const cols = Math.ceil(Math.sqrt(count * (W / H)))
+    const rows = Math.ceil(count / cols)
+    const cellW = (W - 80) / cols
+    const cellH = (H - 80) / rows
+
+    // Sort order: scatter larger bubbles evenly rather than bunching in center
+    const indexedStocks = topStocks.map((stock, index) => ({
+      stock,
+      index,
+      change: changes[index],
+      r: Math.round(rawRadii[index] * areaMultiplier),
+    }))
+
+    // Shuffle placement index evenly across grid
+    const nodes: SimBubble[] = indexedStocks.map((item, i) => {
+      const { stock, change, r } = item
+      const col = i % cols
+      const row = Math.floor(i / cols)
+
+      // Jittered grid placement spanning the full canvas
+      const x = 40 + (col + 0.5) * cellW + (Math.sin(i * 3.7) * cellW * 0.25)
+      const y = 40 + (row + 0.5) * cellH + (Math.cos(i * 4.3) * cellH * 0.25)
 
       let tone: SimBubble["tone"] = "neutral"
-      if (stock.ticker === topGainerTicker && maxGain >= 3.5) {
-        tone = "fuchsia"
-      } else if ((change ?? 0) >= 5) {
-        tone = "fuchsia"
-      } else if ((change ?? 0) > 0) {
-        tone = "emerald"
-      } else if ((change ?? 0) < 0) {
-        tone = "rose"
+      if (change >= 6.5) {
+        tone = "fuchsia" // Ceiling / extreme gainer
+      } else if (change > 0) {
+        tone = "emerald" // Positive gainer
+      } else if (change < 0) {
+        tone = "rose" // Loser
       }
-
-      // Initial placement: distribute in golden spiral
-      const phi = index * 2.39996322972865332
-      const dist = Math.sqrt(index + 0.5) * (baseScale * 1.7)
-      const x = centerX + Math.cos(phi) * dist * 1.35
-      const y = centerY + Math.sin(phi) * dist * 0.95
 
       return {
         stock,
-        rank: index + 1,
+        rank: i + 1,
         change,
         x,
         y,
-        vx: 0,
-        vy: 0,
         r,
         tone,
       }
     })
 
-    // Iterative 2D Force-Collision Relaxation (200 passes)
-    const iterations = 200
-    const padding = 6 // 6px guaranteed physical gap between bubbles
+    // 2D Force-Collision Relaxation (220 iterations for zero-overlap spread)
+    const iterations = 220
+    const padding = 5 // 5px safety physical gap
 
     for (let iter = 0; iter < iterations; iter++) {
-      const alpha = Math.max(0.1, 1 - iter / iterations)
+      const alpha = Math.max(0.08, 1 - iter / iterations)
 
-      // 1. Center gravity attraction
+      // 1. Soft boundary repulsive force (spreads bubbles to fill edges evenly)
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        const dx = centerX - node.x
-        const dy = centerY - node.y
-        node.x += dx * 0.03 * alpha
-        node.y += dy * 0.03 * alpha
+        // Gentle push away from walls to keep inside
+        if (node.x < node.r + 30) node.x += (node.r + 30 - node.x) * 0.1 * alpha
+        if (node.x > W - node.r - 30) node.x -= (node.x - (W - node.r - 30)) * 0.1 * alpha
+        if (node.y < node.r + 30) node.y += (node.r + 30 - node.y) * 0.1 * alpha
+        if (node.y > H - node.r - 30) node.y -= (node.y - (H - node.r - 30)) * 0.1 * alpha
       }
 
-      // 2. Strict Pairwise Circle Collision Resolution
+      // 2. Strict Pairwise Circle Collision Push
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const n1 = nodes[i]
@@ -213,8 +214,8 @@ export function MarketBubbles({
 
           if (dist < minDist) {
             const overlap = minDist - dist
-            const nx = dist > 0.0001 ? dx / dist : Math.cos((i * 13 + j * 7) % 6.28)
-            const ny = dist > 0.0001 ? dy / dist : Math.sin((i * 13 + j * 7) % 6.28)
+            const nx = dist > 0.0001 ? dx / dist : Math.cos((i * 17 + j * 11) % 6.28)
+            const ny = dist > 0.0001 ? dy / dist : Math.sin((i * 17 + j * 11) % 6.28)
 
             const totalR = n1.r + n2.r
             const ratio1 = n2.r / totalR
@@ -228,7 +229,7 @@ export function MarketBubbles({
         }
       }
 
-      // 3. Boundary containment
+      // 3. Strict Boundary Containment
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
         node.x = Math.max(node.r + 12, Math.min(W - node.r - 12, node.x))
@@ -237,7 +238,7 @@ export function MarketBubbles({
     }
 
     return nodes
-  }, [filteredStocks, period, dimensions])
+  }, [topStocks, period, dimensions])
 
   const hoveredBubble = React.useMemo(
     () => bubbles.find((b) => b.stock.ticker === hoveredTicker),
@@ -260,20 +261,20 @@ export function MarketBubbles({
 
   return (
     <div className="space-y-4">
-      {/* Top Controls Toolbar */}
+      {/* Top Toolbar with SmoothUI AnimatedTabs */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {/* Left Side: View Switcher, Period Filter, Rank Filter */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Bubbles vs Columns Mode Switcher */}
-          <div className="flex items-center rounded-lg border border-white/[0.08] bg-[#020b12] p-1 shadow-inner">
+        {/* Left Side: View Mode & Timeframe Controls */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* View Mode Switcher */}
+          <div className="flex items-center rounded-xl border border-white/[0.08] bg-black/40 p-1 shadow-inner backdrop-blur-none">
             <button
               type="button"
               onClick={() => setViewMode("bubbles")}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-colors",
+                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
                 viewMode === "bubbles"
                   ? "bg-teal-400/20 text-teal-200 shadow-sm"
-                  : "text-slate-500 hover:text-slate-200"
+                  : "text-slate-400 hover:text-slate-200"
               )}
               aria-label="Chế độ Bubbles"
             >
@@ -284,10 +285,10 @@ export function MarketBubbles({
               type="button"
               onClick={() => setViewMode("columns")}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-colors",
+                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
                 viewMode === "columns"
                   ? "bg-teal-400/20 text-teal-200 shadow-sm"
-                  : "text-slate-500 hover:text-slate-200"
+                  : "text-slate-400 hover:text-slate-200"
               )}
               aria-label="Chế độ Columns"
             >
@@ -296,70 +297,27 @@ export function MarketBubbles({
             </button>
           </div>
 
-          {/* Timeframe Pills */}
-          <div className="flex items-center rounded-lg border border-white/[0.08] bg-[#020b12] p-1">
-            {(["15M", "1H", "1D", "1W", "1M", "1Y"] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPeriod(p)}
-                className={cn(
-                  "rounded-md px-2.5 py-1 font-mono text-[11px] font-bold transition-colors",
-                  period === p
-                    ? "bg-white/[0.12] text-white shadow-sm"
-                    : "text-slate-500 hover:text-slate-300"
-                )}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-
-          {/* Rank Selector */}
-          <div className="flex items-center rounded-lg border border-white/[0.08] bg-[#020b12] px-2 py-1">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500 mr-1.5">Rank:</span>
-            <select
-              value={rankFilter}
-              onChange={(e) => setRankFilter(Number(e.target.value) as BubbleRank)}
-              className="bg-transparent font-mono text-xs font-bold text-teal-200 outline-none cursor-pointer"
-              aria-label="Chọn số lượng cổ phiếu"
-            >
-              <option value={50} className="bg-[#0b1822] text-white">Top 50</option>
-              <option value={100} className="bg-[#0b1822] text-white">Top 100</option>
-              <option value={200} className="bg-[#0b1822] text-white">Top 200</option>
-              <option value={500} className="bg-[#0b1822] text-white">Tất cả</option>
-            </select>
-          </div>
+          {/* Timeframe Animated Tabs (1D, 1W, 1M, 1Y) */}
+          <AnimatedTabs
+            tabs={PERIOD_TABS}
+            value={period}
+            onValueChange={setPeriod}
+            variant="segment"
+            ariaLabel="Chọn khung thời gian"
+            className="border-white/[0.08] bg-black/40 p-1 font-mono text-xs font-bold"
+            tabClassName="px-3 py-1.5 text-slate-400 data-[state=active]:text-white"
+            indicatorClassName="bg-white/[0.14] rounded-lg shadow-sm"
+          />
         </div>
 
-        {/* Right Side: Search Input & Radar Badge */}
+        {/* Right Side: Status Badge */}
         <div className="flex items-center gap-2">
-          <label className="flex h-9 items-center gap-2 rounded-lg border border-white/[0.08] bg-[#020b12] px-3 focus-within:border-teal-400/40 focus-within:ring-1 focus-within:ring-teal-400/30">
-            <Search className="size-3.5 text-slate-500" />
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm mã cổ phiếu..."
-              className="w-32 bg-transparent text-xs text-white outline-none placeholder:text-slate-500 sm:w-40"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="text-slate-500 hover:text-white"
-                aria-label="Xoá tìm kiếm"
-              >
-                <X className="size-3" />
-              </button>
-            )}
-          </label>
-
-          <div className="flex items-center gap-2 rounded-lg border border-cyan-400/20 bg-cyan-400/[0.07] px-3 py-2 font-mono text-[10px] font-black uppercase tracking-wider text-cyan-300">
+          <div className="flex items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.08] px-3.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-wider text-cyan-300 shadow-sm">
             <span className="relative flex size-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
               <span className="relative inline-flex size-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]" />
             </span>
-            <span>Radar Active · {filteredStocks.length}</span>
+            <span>Top 100 · {period}</span>
           </div>
         </div>
       </div>
@@ -368,28 +326,30 @@ export function MarketBubbles({
       {viewMode === "bubbles" ? (
         <div
           ref={containerRef}
-          className="market-bubble-field relative min-h-[650px] sm:min-h-[740px] w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#020b12] select-none"
-          aria-label={`Bản đồ Top ${filteredStocks.length} cổ phiếu ${period}`}
+          className="market-bubble-field relative min-h-[650px] sm:min-h-[760px] w-full overflow-hidden rounded-2xl border border-white/[0.09] bg-[radial-gradient(ellipse_80%_60%_at_50%_40%,#051824_0%,#020b13_50%,#01050a_100%)] select-none shadow-2xl"
+          aria-label={`Bản đồ Top 100 cổ phiếu ${period}`}
         >
-          {/* Radar sweep background */}
-          <div className="market-radar-sweep pointer-events-none absolute inset-0" aria-hidden="true" />
+          {/* Ambient Liquid Glass background aura (smooth static gradients, no scan animation) */}
+          <div className="pointer-events-none absolute -left-20 -top-20 size-96 rounded-full bg-teal-500/[0.04] blur-3xl" aria-hidden="true" />
+          <div className="pointer-events-none absolute -bottom-20 -right-20 size-96 rounded-full bg-indigo-500/[0.04] blur-3xl" aria-hidden="true" />
 
-          {/* Compass / grid rings */}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
-            <div className="size-[280px] sm:size-[380px] rounded-full border border-cyan-500/[0.06]" />
-            <div className="absolute size-[520px] sm:size-[680px] rounded-full border border-cyan-500/[0.04]" />
+          {/* Compass / grid coordinate rings */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-30" aria-hidden="true">
+            <div className="size-[320px] sm:size-[460px] rounded-full border border-cyan-400/[0.08]" />
+            <div className="absolute size-[600px] sm:size-[800px] rounded-full border border-cyan-400/[0.05]" />
           </div>
 
           {/* Collision-Resolved Bubbles Canvas */}
-          <div className="relative z-10 size-full min-h-[650px] sm:min-h-[740px]">
+          <div className="relative z-10 size-full min-h-[650px] sm:min-h-[760px]">
             {bubbles.map((bubble) => {
-              const { stock, rank, change, x, y, r, tone } = bubble
+              const { stock, change, x, y, r, tone } = bubble
               const diameter = r * 2
-              const logoSize = r >= 55 ? 36 : r >= 40 ? 28 : r >= 28 ? 20 : r >= 20 ? 15 : 12
+              const logoSize = r >= 55 ? 38 : r >= 40 ? 30 : r >= 28 ? 22 : r >= 20 ? 16 : 12
 
               const isFuchsia = tone === "fuchsia"
               const isEmerald = tone === "emerald"
               const isRose = tone === "rose"
+              const isBigBubble = r >= 38
 
               return (
                 <button
@@ -405,25 +365,61 @@ export function MarketBubbles({
                     height: `${diameter}px`,
                   }}
                   className={cn(
-                    "group absolute flex flex-col items-center justify-center rounded-full text-center transition-transform duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
+                    "group absolute flex flex-col items-center justify-center rounded-full text-center transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
                     hoveredTicker === stock.ticker ? "z-30 scale-110" : "hover:z-20 hover:scale-105",
-                    isFuchsia &&
-                      "border-2 border-fuchsia-400/90 shadow-[0_0_26px_rgba(217,70,239,0.5),inset_0_0_22px_rgba(217,70,239,0.18)] bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.15),transparent_50%),#120417]",
-                    isEmerald &&
-                      "border-2 border-emerald-400/90 shadow-[0_0_20px_rgba(16,185,129,0.4),inset_0_0_20px_rgba(16,185,129,0.15)] bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.12),transparent_50%),#02120e]",
-                    isRose &&
-                      "border-2 border-rose-500/90 shadow-[0_0_20px_rgba(244,63,94,0.4),inset_0_0_20px_rgba(244,63,94,0.15)] bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.12),transparent_50%),#140307]",
+
+                    // Fuchsia / Purple ceiling glass
+                    isFuchsia && [
+                      "border-2 border-fuchsia-300/90",
+                      "bg-[radial-gradient(135%_135%_at_30%_25%,rgba(232,121,249,0.48)_0%,rgba(217,70,239,0.28)_45%,rgba(112,26,117,0.75)_100%)]",
+                      isBigBubble
+                        ? "shadow-[0_0_35px_rgba(217,70,239,0.65),0_0_12px_rgba(232,121,249,0.9),inset_0_0_22px_rgba(232,121,249,0.4)]"
+                        : "shadow-[0_0_18px_rgba(217,70,239,0.4),inset_0_0_12px_rgba(232,121,249,0.25)]",
+                    ],
+
+                    // Emerald / Green gainer glass
+                    isEmerald && [
+                      "border-2 border-emerald-400/90",
+                      "bg-[radial-gradient(135%_135%_at_30%_25%,rgba(52,211,153,0.42)_0%,rgba(16,185,129,0.22)_45%,rgba(6,78,59,0.65)_100%)]",
+                      isBigBubble
+                        ? "shadow-[0_0_30px_rgba(16,185,129,0.55),0_0_10px_rgba(52,211,153,0.85),inset_0_0_20px_rgba(52,211,153,0.35)]"
+                        : "shadow-[0_0_15px_rgba(16,185,129,0.35),inset_0_0_10px_rgba(52,211,153,0.2)]",
+                    ],
+
+                    // Rose / Red loser glass
+                    isRose && [
+                      "border-2 border-rose-400/90",
+                      "bg-[radial-gradient(135%_135%_at_30%_25%,rgba(251,113,133,0.42)_0%,rgba(244,63,94,0.22)_45%,rgba(136,19,55,0.65)_100%)]",
+                      isBigBubble
+                        ? "shadow-[0_0_30px_rgba(244,63,94,0.55),0_0_10px_rgba(251,113,133,0.85),inset_0_0_20px_rgba(251,113,133,0.35)]"
+                        : "shadow-[0_0_15px_rgba(244,63,94,0.35),inset_0_0_10px_rgba(251,113,133,0.2)]",
+                    ],
+
+                    // Neutral / Flat glass
                     !isFuchsia &&
                       !isEmerald &&
-                      !isRose &&
-                      "border-2 border-slate-600/70 shadow-[0_0_12px_rgba(148,163,184,0.2)] bg-[#070f17]"
+                      !isRose && [
+                        "border-2 border-slate-500/70",
+                        "bg-[radial-gradient(135%_135%_at_30%_25%,rgba(148,163,184,0.25)_0%,rgba(71,85,105,0.2)_45%,rgba(15,23,42,0.7)_100%)]",
+                        "shadow-[0_0_14px_rgba(148,163,184,0.2),inset_0_0_10px_rgba(148,163,184,0.15)]",
+                      ]
                   )}
                   title={`${stock.ticker} · ${stock.companyName} (${formatSigned(change, 2, "%")})`}
                 >
-                  <StockLogo symbol={stock.ticker} size={logoSize} className="mb-0.5 pointer-events-none" />
+                  {/* Top-left specular liquid glass glare */}
+                  <div
+                    className="pointer-events-none absolute left-1.5 top-1.5 rounded-full bg-gradient-to-b from-white/30 to-transparent"
+                    style={{
+                      width: `${Math.round(r * 0.7)}px`,
+                      height: `${Math.round(r * 0.45)}px`,
+                    }}
+                    aria-hidden="true"
+                  />
+
+                  <StockLogo symbol={stock.ticker} size={logoSize} className="mb-0.5 pointer-events-none drop-shadow-sm" />
                   <strong
                     className={cn(
-                      "font-mono font-black uppercase text-white tracking-wider leading-none",
+                      "font-mono font-black uppercase text-white tracking-wider leading-none drop-shadow",
                       r >= 55
                         ? "text-base sm:text-xl"
                         : r >= 40
@@ -439,7 +435,7 @@ export function MarketBubbles({
                   </strong>
                   <span
                     className={cn(
-                      "font-mono font-bold leading-none mt-0.5",
+                      "font-mono font-bold leading-none mt-0.5 drop-shadow-sm",
                       r >= 55
                         ? "text-xs sm:text-sm font-extrabold"
                         : r >= 40
@@ -450,12 +446,12 @@ export function MarketBubbles({
                         ? "text-[9px]"
                         : "text-[8px]",
                       isFuchsia
-                        ? "text-fuchsia-300"
+                        ? "text-fuchsia-200"
                         : isEmerald
-                        ? "text-emerald-300"
+                        ? "text-emerald-200"
                         : isRose
-                        ? "text-rose-300"
-                        : "text-slate-400"
+                        ? "text-rose-200"
+                        : "text-slate-300"
                     )}
                   >
                     {formatSigned(change, 2, "%")}
@@ -463,25 +459,12 @@ export function MarketBubbles({
                 </button>
               )
             })}
-
-            {bubbles.length === 0 && (
-              <div className="flex h-full min-h-[500px] flex-col items-center justify-center text-center text-slate-500">
-                <p className="text-sm font-medium">Không tìm thấy mã cổ phiếu phù hợp với từ khóa.</p>
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="mt-2 text-xs text-teal-300 underline"
-                >
-                  Xoá bộ lọc tìm kiếm
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Floating Rich Tooltip */}
           {hoveredBubble && tooltipPos && (
             <div
-              className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-xl border border-white/15 bg-[#0a1820]/95 p-3.5 text-xs shadow-2xl backdrop-blur-none"
+              className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-xl border border-white/20 bg-[#071520]/95 p-3.5 text-xs shadow-2xl backdrop-blur-none"
               style={{
                 left: `${tooltipPos.x}px`,
                 top: `${tooltipPos.y}px`,
@@ -541,7 +524,7 @@ export function MarketBubbles({
         /* Columns / List Ranking View */
         <div className="rounded-2xl border border-white/[0.08] bg-[#020b12] p-4">
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredStocks.map((stock, index) => {
+            {topStocks.map((stock, index) => {
               const change = getStockChange(stock, period)
               const isPos = (change ?? 0) >= 0
               return (
