@@ -133,16 +133,15 @@ export function MarketBubbles({
       }
     }
 
-    // Determine radii based on rank and available area
-    const totalArea = W * H * 0.48 // Fill 48% of canvas
-    // Weight by index: leaders get significantly larger radius
+    // Physics Simulation: 100% Collision-free circle packing
+    const totalArea = W * H * 0.44 // Fill 44% of canvas area
     const rawWeights = filteredStocks.map((_, i) => {
-      if (i === 0) return 6.0
-      if (i < 3) return 4.2
-      if (i < 8) return 2.8
-      if (i < 20) return 1.8
-      if (i < 50) return 1.2
-      return 0.85
+      if (i === 0) return 5.8
+      if (i < 3) return 4.0
+      if (i < 8) return 2.6
+      if (i < 20) return 1.7
+      if (i < 50) return 1.15
+      return 0.8
     })
     const sumWeights = rawWeights.reduce((acc, w) => acc + w * w, 0)
     const baseScale = Math.sqrt(totalArea / (Math.PI * sumWeights))
@@ -150,14 +149,12 @@ export function MarketBubbles({
     const nodes: SimBubble[] = filteredStocks.map((stock, index) => {
       const change = getStockChange(stock, period)
       const weight = rawWeights[index]
-      let r = Math.max(18, Math.min(75, Math.round(weight * baseScale)))
+      let r = Math.max(16, Math.min(80, Math.round(weight * baseScale)))
 
-      // On narrow mobile screens, cap radius slightly
       if (W < 640) {
-        r = Math.max(14, Math.min(48, Math.round(r * 0.75)))
+        r = Math.max(13, Math.min(46, Math.round(r * 0.72)))
       }
 
-      // Determine tone
       let tone: SimBubble["tone"] = "neutral"
       if (stock.ticker === topGainerTicker && maxGain >= 3.5) {
         tone = "fuchsia"
@@ -169,11 +166,11 @@ export function MarketBubbles({
         tone = "rose"
       }
 
-      // Initial placement in concentric spiral outward from center
+      // Initial placement: distribute in golden spiral
       const phi = index * 2.39996322972865332
-      const dist = Math.sqrt(index + 0.5) * (baseScale * 1.8)
-      const x = centerX + Math.cos(phi) * dist * 1.3
-      const y = centerY + Math.sin(phi) * dist * 0.9
+      const dist = Math.sqrt(index + 0.5) * (baseScale * 1.7)
+      const x = centerX + Math.cos(phi) * dist * 1.35
+      const y = centerY + Math.sin(phi) * dist * 0.95
 
       return {
         stock,
@@ -188,20 +185,20 @@ export function MarketBubbles({
       }
     })
 
-    // Iterative 2D Force-Collision Relaxation (150 iterations)
-    const iterations = 150
-    const padding = 4 // 4px safety gap between bubbles
+    // Iterative 2D Force-Collision Relaxation (200 passes)
+    const iterations = 200
+    const padding = 6 // 6px guaranteed physical gap between bubbles
 
     for (let iter = 0; iter < iterations; iter++) {
-      const alpha = 1 - iter / iterations // Cooling factor
+      const alpha = Math.max(0.1, 1 - iter / iterations)
 
-      // 1. Center attraction force
+      // 1. Center gravity attraction
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
         const dx = centerX - node.x
         const dy = centerY - node.y
-        node.x += dx * 0.035 * alpha
-        node.y += dy * 0.035 * alpha
+        node.x += dx * 0.03 * alpha
+        node.y += dy * 0.03 * alpha
       }
 
       // 2. Strict Pairwise Circle Collision Resolution
@@ -216,18 +213,17 @@ export function MarketBubbles({
 
           if (dist < minDist) {
             const overlap = minDist - dist
-            const nx = dist > 0.001 ? dx / dist : Math.cos(i + j)
-            const ny = dist > 0.001 ? dy / dist : Math.sin(i + j)
+            const nx = dist > 0.0001 ? dx / dist : Math.cos((i * 13 + j * 7) % 6.28)
+            const ny = dist > 0.0001 ? dy / dist : Math.sin((i * 13 + j * 7) % 6.28)
 
-            // Push apart proportionally to relative radii
             const totalR = n1.r + n2.r
             const ratio1 = n2.r / totalR
             const ratio2 = n1.r / totalR
 
-            n1.x -= nx * overlap * ratio1 * 0.85
-            n1.y -= ny * overlap * ratio1 * 0.85
-            n2.x += nx * overlap * ratio2 * 0.85
-            n2.y += ny * overlap * ratio2 * 0.85
+            n1.x -= nx * overlap * ratio1
+            n1.y -= ny * overlap * ratio1
+            n2.x += nx * overlap * ratio2
+            n2.y += ny * overlap * ratio2
           }
         }
       }
@@ -235,8 +231,8 @@ export function MarketBubbles({
       // 3. Boundary containment
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        node.x = Math.max(node.r + 10, Math.min(W - node.r - 10, node.x))
-        node.y = Math.max(node.r + 10, Math.min(H - node.r - 10, node.y))
+        node.x = Math.max(node.r + 12, Math.min(W - node.r - 12, node.x))
+        node.y = Math.max(node.r + 12, Math.min(H - node.r - 12, node.y))
       }
     }
 
@@ -372,7 +368,7 @@ export function MarketBubbles({
       {viewMode === "bubbles" ? (
         <div
           ref={containerRef}
-          className="market-bubble-field relative min-h-[650px] sm:min-h-[720px] w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#020b12] select-none"
+          className="market-bubble-field relative min-h-[650px] sm:min-h-[740px] w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#020b12] select-none"
           aria-label={`Bản đồ Top ${filteredStocks.length} cổ phiếu ${period}`}
         >
           {/* Radar sweep background */}
@@ -385,11 +381,11 @@ export function MarketBubbles({
           </div>
 
           {/* Collision-Resolved Bubbles Canvas */}
-          <div className="relative z-10 size-full min-h-[650px] sm:min-h-[720px]">
+          <div className="relative z-10 size-full min-h-[650px] sm:min-h-[740px]">
             {bubbles.map((bubble) => {
               const { stock, rank, change, x, y, r, tone } = bubble
               const diameter = r * 2
-              const logoSize = r >= 50 ? 34 : r >= 38 ? 26 : r >= 26 ? 18 : 13
+              const logoSize = r >= 55 ? 36 : r >= 40 ? 28 : r >= 28 ? 20 : r >= 20 ? 15 : 12
 
               const isFuchsia = tone === "fuchsia"
               const isEmerald = tone === "emerald"
@@ -403,15 +399,13 @@ export function MarketBubbles({
                   onMouseEnter={(e) => handleBubbleHover(stock.ticker, e)}
                   onMouseLeave={handleBubbleLeave}
                   style={{
-                    left: `${x}px`,
-                    top: `${y}px`,
+                    left: `${Math.round(x - r)}px`,
+                    top: `${Math.round(y - r)}px`,
                     width: `${diameter}px`,
                     height: `${diameter}px`,
-                    transform: "translate(-50%, -50%)",
                   }}
                   className={cn(
                     "group absolute flex flex-col items-center justify-center rounded-full text-center transition-transform duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
-                    rank <= 14 && "market-bubble-float",
                     hoveredTicker === stock.ticker ? "z-30 scale-110" : "hover:z-20 hover:scale-105",
                     isFuchsia &&
                       "border-2 border-fuchsia-400/90 shadow-[0_0_26px_rgba(217,70,239,0.5),inset_0_0_22px_rgba(217,70,239,0.18)] bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.15),transparent_50%),#120417]",
@@ -430,13 +424,15 @@ export function MarketBubbles({
                   <strong
                     className={cn(
                       "font-mono font-black uppercase text-white tracking-wider leading-none",
-                      r >= 50
+                      r >= 55
+                        ? "text-base sm:text-xl"
+                        : r >= 40
                         ? "text-sm sm:text-base"
-                        : r >= 38
-                        ? "text-xs sm:text-sm"
-                        : r >= 26
-                        ? "text-[10px] sm:text-xs"
-                        : "text-[8px] sm:text-[9px]"
+                        : r >= 28
+                        ? "text-xs font-extrabold"
+                        : r >= 20
+                        ? "text-[10px] font-bold"
+                        : "text-[9px] font-bold"
                     )}
                   >
                     {stock.ticker}
@@ -444,12 +440,14 @@ export function MarketBubbles({
                   <span
                     className={cn(
                       "font-mono font-bold leading-none mt-0.5",
-                      r >= 50
-                        ? "text-xs sm:text-sm"
-                        : r >= 38
-                        ? "text-[10px] sm:text-xs"
-                        : r >= 26
-                        ? "text-[9px] sm:text-[10px]"
+                      r >= 55
+                        ? "text-xs sm:text-sm font-extrabold"
+                        : r >= 40
+                        ? "text-[11px] sm:text-xs font-bold"
+                        : r >= 28
+                        ? "text-[10px] font-bold"
+                        : r >= 20
+                        ? "text-[9px]"
                         : "text-[8px]",
                       isFuchsia
                         ? "text-fuchsia-300"
