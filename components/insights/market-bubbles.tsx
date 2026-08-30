@@ -188,28 +188,44 @@ export function MarketBubbles({
     const maxVol = Math.max(1_000_000, ...volumes)
     const minVol = Math.min(...volumes.filter((v) => v > 0)) || 10_000
 
-    // Target area coverage: 46% of available viewport area for an open, airy, breathable feel
-    const targetTotalArea = W * H * 0.46
+    // Target area coverage: 52% of available viewport area
+    const targetTotalArea = W * H * 0.52
 
-    // Calculate dynamic radii with strong visual contrast
+    // Calculate dynamic radii with strong visual amplification for stock price gains
     const rawRadii = topStocks.map((stock, i) => {
       const chg = changes[i]
       const absChg = Math.abs(chg)
       const norm = Math.max(0, (absChg - minAbsChange) / (maxAbsChange - minAbsChange || 1))
-      const scale = Math.pow(norm, 0.52)
 
-      // Base radius from 16px to 62px
-      let r = 16 + scale * 46
+      // Base radius from 16px to 54px
+      let r = 16 + Math.pow(norm, 0.48) * 38
 
-      // Top ceiling gainers or major movers
-      if (chg >= 6.5) {
-        r = Math.min(78, r * 1.18)
-      } else if (absChg >= 4.0) {
-        r = Math.min(70, r * 1.08)
+      // Price gain scaling (Tăng mạnh kích thước theo % tăng giá của cổ phiếu)
+      if (chg > 0) {
+        if (chg >= 6.5) {
+          // Ceiling / massive gainers (>6.5% - 10%)
+          r *= 1.85 + (chg - 6.5) * 0.1
+        } else if (chg >= 4.0) {
+          // Strong gainers (4.0% - 6.5%)
+          r *= 1.55 + (chg - 4.0) * 0.08
+        } else if (chg >= 2.0) {
+          // Solid gainers (2.0% - 4.0%)
+          r *= 1.30 + (chg - 2.0) * 0.06
+        } else if (chg >= 0.5) {
+          // Moderate gainers
+          r *= 1.15
+        }
+      } else if (chg < 0) {
+        // Losers scaled based on decline magnitude
+        if (absChg >= 5.0) {
+          r *= 1.4
+        } else if (absChg >= 2.5) {
+          r *= 1.18
+        }
       }
 
       if (W < 640) {
-        r = Math.max(12, Math.min(42, Math.round(r * 0.7)))
+        r = Math.max(12, Math.min(48, Math.round(r * 0.68)))
       }
       return r
     })
@@ -508,15 +524,17 @@ export function MarketBubbles({
                   <strong
                     className={cn(
                       "font-mono font-black uppercase text-white tracking-wider leading-none drop-shadow-md",
-                      r >= 54
-                        ? "text-2xl sm:text-3xl"
-                        : r >= 38
-                        ? "text-lg sm:text-xl"
-                        : r >= 26
+                      r >= 64
+                        ? "text-3xl sm:text-4xl"
+                        : r >= 48
+                        ? "text-xl sm:text-2xl"
+                        : r >= 34
+                        ? "text-sm sm:text-base font-black"
+                        : r >= 22
                         ? "text-xs sm:text-sm font-black"
-                        : r >= 16
-                        ? "text-[10px] sm:text-xs font-black"
-                        : "text-[8px] font-bold"
+                        : r >= 14
+                        ? "text-[9px] sm:text-[10px] font-black"
+                        : "text-[7px] font-bold"
                     )}
                   >
                     {stock.ticker}
@@ -524,15 +542,17 @@ export function MarketBubbles({
                   <span
                     className={cn(
                       "font-mono leading-none drop-shadow-sm font-black",
-                      r >= 54
+                      r >= 64
+                        ? "text-sm sm:text-base mt-1.5"
+                        : r >= 48
                         ? "text-xs sm:text-sm mt-1"
-                        : r >= 38
-                        ? "text-[11px] sm:text-xs mt-0.5"
-                        : r >= 26
-                        ? "text-[9px] sm:text-[10px] font-bold mt-0.5"
-                        : r >= 16
+                        : r >= 34
+                        ? "text-[10px] sm:text-xs font-bold mt-0.5"
+                        : r >= 22
                         ? "text-[8px] sm:text-[9px] font-bold mt-0.5"
-                        : "text-[7px] mt-0.5",
+                        : r >= 14
+                        ? "text-[7px] sm:text-[8px] font-bold mt-0.5"
+                        : "text-[6px] mt-0.5",
                       isFuchsia
                         ? "text-fuchsia-100"
                         : isEmerald
