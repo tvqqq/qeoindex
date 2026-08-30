@@ -1,11 +1,19 @@
 "use client"
 
 import * as React from "react"
-import { CircleDot, Flame, Gem, LayoutGrid, Layers, Search } from "lucide-react"
+import {
+  CircleDot,
+  Flame,
+  Gem,
+  LayoutGrid,
+  Layers,
+  Search,
+} from "lucide-react"
 
 import { AnimatedTabs, type AnimatedTab } from "@/components/smoothui/animated-tabs"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { getSectorIcon } from "@/components/insights/sector-map-panel"
 
 export interface MarketBubbleStock {
   ticker: string
@@ -159,7 +167,7 @@ export function MarketBubbles({
     ].filter((group) => group.items.length > 0)
   }, [topStocks])
 
-  // Physics Simulation: High central bubble density + breathable 5px spacing between all bubbles
+  // Physics Simulation: Airy, spacious, well-distributed bubbles with guaranteed 10px spacing (no clumping!)
   const bubbles: SimBubble[] = React.useMemo(() => {
     const count = topStocks.length
     if (count === 0) return []
@@ -175,38 +183,38 @@ export function MarketBubbles({
     const maxAbsChange = Math.max(2.5, ...absChanges)
     const minAbsChange = Math.min(...absChanges)
 
-    // Volume statistics for border thickness & central gravity
+    // Volume statistics for border thickness
     const volumes = topStocks.map((s) => s.volume ?? 0)
     const maxVol = Math.max(1_000_000, ...volumes)
     const minVol = Math.min(...volumes.filter((v) => v > 0)) || 10_000
 
-    // Target coverage: 68% of available viewport area
-    const targetTotalArea = W * H * 0.68
+    // Target area coverage: 46% of available viewport area for an open, airy, breathable feel
+    const targetTotalArea = W * H * 0.46
 
-    // Calculate dynamic radii with strong visual contrast for top gainers/movers
+    // Calculate dynamic radii with strong visual contrast
     const rawRadii = topStocks.map((stock, i) => {
       const chg = changes[i]
       const absChg = Math.abs(chg)
       const norm = Math.max(0, (absChg - minAbsChange) / (maxAbsChange - minAbsChange || 1))
-      const scale = Math.pow(norm, 0.54)
+      const scale = Math.pow(norm, 0.52)
 
-      // Base radius from 18px (small movers) up to 74px (strong movers) on desktop
-      let r = 18 + scale * 56
+      // Base radius from 16px to 62px
+      let r = 16 + scale * 46
 
-      // Top gainer bonuses: >6.5% ceiling gainers or >4% movers get extra prominent scale
+      // Top ceiling gainers or major movers
       if (chg >= 6.5) {
-        r = Math.min(92, r * 1.22)
+        r = Math.min(78, r * 1.18)
       } else if (absChg >= 4.0) {
-        r = Math.min(82, r * 1.1)
+        r = Math.min(70, r * 1.08)
       }
 
       if (W < 640) {
-        r = Math.max(12, Math.min(48, Math.round(r * 0.72)))
+        r = Math.max(12, Math.min(42, Math.round(r * 0.7)))
       }
       return r
     })
 
-    // Scale so total area matches target area (68% density)
+    // Scale so total area matches target area
     const currentSumArea = rawRadii.reduce((acc, r) => acc + Math.PI * r * r, 0)
     const areaMultiplier = Math.sqrt(targetTotalArea / (currentSumArea || 1))
 
@@ -214,16 +222,16 @@ export function MarketBubbles({
       const vol = stock.volume ?? 0
       const volNorm = Math.max(0, Math.min(1, (vol - minVol) / (maxVol - minVol || 1)))
 
-      // Volume-driven border width: High vol = thick bold border (up to 4.5px), low vol = 1.5px
+      // Volume-driven border width
       let borderWidth = 1.5
       if (vol >= 15_000_000 || volNorm >= 0.6) {
-        borderWidth = 4.5
+        borderWidth = 4.0
       } else if (vol >= 6_000_000 || volNorm >= 0.32) {
-        borderWidth = 3.5
+        borderWidth = 3.0
       } else if (vol >= 1_500_000 || volNorm >= 0.12) {
-        borderWidth = 2.5
+        borderWidth = 2.2
       } else if (vol >= 300_000) {
-        borderWidth = 2.0
+        borderWidth = 1.8
       }
 
       return {
@@ -236,23 +244,23 @@ export function MarketBubbles({
       }
     })
 
-    // Initialize with Fermat Golden Spiral that concentrates the first 130 nodes in the center area!
+    // Initialize with even area-preserving Fermat Golden Spiral across the full canvas
     const nodes: SimBubble[] = indexedStocks.map((item, i) => {
       const { stock, change, r, borderWidth, volNorm } = item
 
       const phi = i * 2.3999632 // Golden angle
-      // Power 0.58 clusters more than 60% of all nodes within the inner central circle
-      const radDist = Math.pow(i / count, 0.58) * Math.min(W, H) * 0.48
+      // Equal area dispersion: radDist grows with sqrt(i)
+      const radDist = Math.sqrt((i + 0.5) / count) * Math.min(W, H) * 0.44
       const initX = centerX + Math.cos(phi) * radDist * (W / H)
       const initY = centerY + Math.sin(phi) * radDist
 
       let tone: SimBubble["tone"] = "neutral"
       if (change >= 6.5) {
-        tone = "fuchsia" // Ceiling / extreme gainer
+        tone = "fuchsia"
       } else if (change > 0) {
-        tone = "emerald" // Positive gainer
+        tone = "emerald"
       } else if (change < 0) {
-        tone = "rose" // Loser
+        tone = "rose"
       }
 
       // Organic sway animation variation
@@ -274,35 +282,21 @@ export function MarketBubbles({
       }
     })
 
-    // Iterative 2D Physics: Dense central cluster with guaranteed 5px spacing gap
-    const iterations = 190
-    const padding = W < 640 ? 3.5 : 5.0 // Guaranteed 5px spacing on desktop, 3.5px on mobile
+    // Iterative 2D Physics: Uniformly spread with guaranteed 10px spacing (no clumping!)
+    const iterations = 180
+    const padding = W < 640 ? 6.0 : 10.0 // Guaranteed 10px gap between all bubble boundaries
 
     for (let iter = 0; iter < iterations; iter++) {
-      const alpha = Math.max(0.06, 1 - iter / iterations)
+      const alpha = Math.max(0.08, 1 - iter / iterations)
 
-      // 1. Centripetal cluster pull: Pull the first 140 nodes into the center area so the center is filled with many bubbles
+      // 1. Subtle centering force (keeps nodes inside canvas without squeezing into a clump)
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        const volRatio = node.volNorm
-
-        if (i < 130 || volRatio >= 0.15) {
-          // Strong central pull for the inner 130 nodes
-          const gravity = (0.022 + (1 - i / count) * 0.045) * alpha
-          node.x += (centerX - node.x) * gravity
-          node.y += (centerY - node.y) * gravity
-        } else {
-          // Outer nodes gently spread into the 4 corners and borders
-          const dxCenter = node.x - centerX
-          const dyCenter = node.y - centerY
-          const distCenter = Math.hypot(dxCenter, dyCenter) || 1
-          const pushOut = 0.4 * alpha
-          node.x += (dxCenter / distCenter) * pushOut
-          node.y += (dyCenter / distCenter) * pushOut
-        }
+        node.x += (centerX - node.x) * 0.005 * alpha
+        node.y += (centerY - node.y) * 0.005 * alpha
       }
 
-      // 2. Strict Pairwise Circle Collision: Enforces minimum spacing padding between all bubble edges
+      // 2. Strict Pairwise Circle Collision with Generous Spacing Padding
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const n1 = nodes[i]
@@ -332,8 +326,8 @@ export function MarketBubbles({
       // 3. Strict Boundary Containment with Edge Margin
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        node.x = Math.max(node.r + 8, Math.min(W - node.r - 8, node.x))
-        node.y = Math.max(node.r + 8, Math.min(H - node.r - 8, node.y))
+        node.x = Math.max(node.r + 12, Math.min(W - node.r - 12, node.x))
+        node.y = Math.max(node.r + 12, Math.min(H - node.r - 12, node.y))
       }
     }
 
@@ -514,13 +508,13 @@ export function MarketBubbles({
                   <strong
                     className={cn(
                       "font-mono font-black uppercase text-white tracking-wider leading-none drop-shadow-md",
-                      r >= 58
-                        ? "text-2xl sm:text-4xl"
-                        : r >= 42
-                        ? "text-lg sm:text-2xl"
-                        : r >= 28
-                        ? "text-xs sm:text-base font-black"
-                        : r >= 18
+                      r >= 54
+                        ? "text-2xl sm:text-3xl"
+                        : r >= 38
+                        ? "text-lg sm:text-xl"
+                        : r >= 26
+                        ? "text-xs sm:text-sm font-black"
+                        : r >= 16
                         ? "text-[10px] sm:text-xs font-black"
                         : "text-[8px] font-bold"
                     )}
@@ -530,13 +524,13 @@ export function MarketBubbles({
                   <span
                     className={cn(
                       "font-mono leading-none drop-shadow-sm font-black",
-                      r >= 58
-                        ? "text-sm sm:text-lg mt-1"
-                        : r >= 42
-                        ? "text-xs sm:text-sm mt-0.5"
-                        : r >= 28
-                        ? "text-[10px] sm:text-xs font-bold mt-0.5"
-                        : r >= 18
+                      r >= 54
+                        ? "text-xs sm:text-sm mt-1"
+                        : r >= 38
+                        ? "text-[11px] sm:text-xs mt-0.5"
+                        : r >= 26
+                        ? "text-[9px] sm:text-[10px] font-bold mt-0.5"
+                        : r >= 16
                         ? "text-[8px] sm:text-[9px] font-bold mt-0.5"
                         : "text-[7px] mt-0.5",
                       isFuchsia
@@ -612,17 +606,17 @@ export function MarketBubbles({
           )}
         </div>
       ) : (
-        /* Redesigned Columns View with Large Clear Typography */
+        /* Redesigned Columns View with Sector Icons and Large Typography */
         <div className="space-y-6 rounded-2xl border border-white/[0.08] bg-[#070d15] p-4 sm:p-5 shadow-xl">
           {volumeGroups.map((group) => {
-            const Icon = group.icon
+            const GroupIcon = group.icon
 
             return (
               <div key={group.id} className="space-y-3">
                 {/* Volume Tier Header */}
                 <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5">
                   <div className="flex items-center gap-2.5">
-                    <Icon className="size-4 sm:size-5 text-teal-300" />
+                    <GroupIcon className="size-4 sm:size-5 text-teal-300" />
                     <h3 className="font-mono text-sm sm:text-base font-bold text-white tracking-wide">
                       {group.title}
                     </h3>
@@ -632,7 +626,7 @@ export function MarketBubbles({
                   </Badge>
                 </div>
 
-                {/* Grid of Readable Cards */}
+                {/* Grid of Readable Cards with Thematic Sector Icons */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2.5">
                   {group.items.map(({ stock, rank }) => {
                     const change = getStockChange(stock, period)
@@ -640,6 +634,7 @@ export function MarketBubbles({
                     const isFuchsia = chgVal >= 6.5
                     const isEmerald = chgVal > 0 && !isFuchsia
                     const isRose = chgVal < 0
+                    const SectorIcon = getSectorIcon(stock.sector)
 
                     return (
                       <button
@@ -654,7 +649,7 @@ export function MarketBubbles({
                           !isFuchsia && !isEmerald && !isRose && "border-white/[0.08] bg-white/[0.025] hover:border-white/25 hover:bg-white/[0.06]"
                         )}
                       >
-                        {/* Top Row: Rank & Ticker & Sector Tag */}
+                        {/* Top Row: Rank & Ticker & Sector Icon */}
                         <div className="flex items-center justify-between gap-1">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span className="font-mono text-xs font-bold text-slate-400">#{rank}</span>
@@ -662,13 +657,16 @@ export function MarketBubbles({
                               {stock.ticker}
                             </strong>
                           </div>
-                          <span className="truncate rounded bg-white/[0.07] px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase text-slate-400 max-w-[62px]">
-                            {stock.sector}
-                          </span>
+                          <div
+                            className="flex items-center justify-center size-6 rounded-md bg-cyan-400/10 border border-cyan-400/20 shrink-0"
+                            title={stock.sector}
+                          >
+                            <SectorIcon className="size-3.5 text-cyan-400" />
+                          </div>
                         </div>
 
                         {/* Bottom Row: Volume & % Change */}
-                        <div className="mt-2 flex items-baseline justify-between gap-1 font-mono">
+                        <div className="mt-2.5 flex items-baseline justify-between gap-1 font-mono">
                           <span className="text-xs font-semibold text-slate-300 truncate">
                             {stock.volume != null ? `${(stock.volume / 1000000).toFixed(1)}M` : "—"}
                           </span>

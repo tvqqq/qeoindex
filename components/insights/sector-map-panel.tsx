@@ -3,15 +3,28 @@
 import * as React from "react"
 import {
   ArrowRight,
+  Building2,
   CalendarDays,
   CalendarRange,
+  Compass,
+  Cpu,
   Crown,
+  FlaskConical,
+  Flame,
+  HeartPulse,
+  Landmark,
   Layers,
+  Layers3,
+  LineChart,
   Rocket,
   Search,
+  ShieldCheck,
+  ShoppingBag,
   Target,
   TrendingDown,
   TrendingUp,
+  Truck,
+  Utensils,
   X,
   Zap,
 } from "lucide-react"
@@ -40,6 +53,24 @@ interface SectorMapPanelProps {
   marketHistory?: MarketHistoryPoint[]
   onSelectSector?: (sector: MarketSectorRow) => void
   onOpenStockDetail?: (ticker: string) => void
+}
+
+export function getSectorIcon(sector: string) {
+  const normalized = (sector || "").toLowerCase()
+  if (normalized.includes("ngân hàng") || normalized.includes("bank")) return Landmark
+  if (normalized.includes("chứng khoán") || normalized.includes("tài chính")) return LineChart
+  if (normalized.includes("bất động sản") || normalized.includes("xây dựng") || normalized.includes("đầu tư xây dựng")) return Building2
+  if (normalized.includes("công nghệ") || normalized.includes("it") || normalized.includes("viễn thông")) return Cpu
+  if (normalized.includes("bán lẻ") || normalized.includes("tiêu dùng") || normalized.includes("sản xuất kinh doanh")) return ShoppingBag
+  if (normalized.includes("thép") || normalized.includes("vật liệu") || normalized.includes("kim loại") || normalized.includes("khoáng sản") || normalized.includes("nhựa") || normalized.includes("thương mại")) return Layers3
+  if (normalized.includes("dầu khí") || normalized.includes("năng lượng") || normalized.includes("tiện ích") || normalized.includes("điện")) return Flame
+  if (normalized.includes("thực phẩm") || normalized.includes("đồ uống") || normalized.includes("nông nghiệp") || normalized.includes("nông - lâm - ngư")) return Utensils
+  if (normalized.includes("y tế") || normalized.includes("dược")) return HeartPulse
+  if (normalized.includes("hóa chất") || normalized.includes("phân bón")) return FlaskConical
+  if (normalized.includes("vận tải") || normalized.includes("logistics") || normalized.includes("cảng") || normalized.includes("hàng không")) return Truck
+  if (normalized.includes("bảo hiểm")) return ShieldCheck
+  if (normalized.includes("du lịch") || normalized.includes("dịch vụ")) return Compass
+  return Layers3
 }
 
 function formatNumber(value: number | null | undefined, decimals = 0) {
@@ -92,58 +123,6 @@ export function rotationBadgeClass(state: string) {
     default:
       return "bg-slate-700/60 text-slate-300 border-slate-600/40"
   }
-}
-
-// Top representative tickers for each sector logo
-const SECTOR_LEAD_TICKERS: Record<string, string> = {
-  "ngân hàng": "VCB",
-  "bất động sản": "VHM",
-  "chứng khoán": "SSI",
-  "công nghệ": "FPT",
-  "công nghệ thông tin": "FPT",
-  "dầu khí": "GAS",
-  "thép": "HPG",
-  "tài nguyên cơ bản": "HPG",
-  "thực phẩm": "VNM",
-  "thực phẩm và đồ uống": "VNM",
-  "năng lượng": "POW",
-  "tiện ích": "GAS",
-  "thương mại": "MWG",
-  "bán lẻ": "MWG",
-  "vận tải": "GMD",
-  "khu công nghiệp": "KBC",
-  "hàng không": "VJC",
-  "du lịch và giải trí": "VJC",
-  "nông - lâm - ngư": "HNG",
-  "nông nghiệp": "BAF",
-  "đầu tư xây dựng": "VCG",
-  "xây dựng": "CTD",
-  "xây dựng và vật liệu": "CTD",
-  "khoáng sản": "KSB",
-  "phân bón": "DCM",
-  "hóa chất": "DGC",
-  "dịch vụ công ích": "BWE",
-  "vật liệu xây dựng": "VCS",
-  "sản xuất kinh doanh": "MSN",
-  "hàng tiêu dùng": "MSN",
-  "nhựa": "BMP",
-  "y tế": "DHG",
-  "dược phẩm": "DHG",
-  "bảo hiểm": "BVH",
-  "dịch vụ tài chính": "VND",
-  "viễn thông": "VGI",
-}
-
-function getSectorLeadTicker(sectorName: string, ratingsList: InsightsRatingRow[]): string {
-  const normalized = sectorName.trim().toLowerCase()
-  if (SECTOR_LEAD_TICKERS[normalized]) return SECTOR_LEAD_TICKERS[normalized]
-  for (const [key, ticker] of Object.entries(SECTOR_LEAD_TICKERS)) {
-    if (normalized.includes(key) || key.includes(normalized)) {
-      return ticker
-    }
-  }
-  const match = ratingsList.find((r) => (r.sector || "").toLowerCase().includes(normalized))
-  return match?.ticker || "VNINDEX"
 }
 
 // Mini SVG Sparkline for sector row
@@ -337,7 +316,7 @@ export function SectorMapPanel({
     return 15000 + (hash % 150) * 1000 + (hash % 99) * 10
   }
 
-  // Enhanced Effort Statistics for each sector to guarantee 100% complete rich data
+  // Enhanced Effort Statistics for each sector
   const getSectorEffortMetrics = (sector: MarketSectorRow, index: number) => {
     const currVal = sector.tradedValue && sector.tradedValue > 0
       ? sector.tradedValue
@@ -387,7 +366,7 @@ export function SectorMapPanel({
             const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"
             const price = getSectorDisplayPrice(sector)
             const isPos = (sector.averageChangePct ?? 0) >= 0
-            const leadTicker = getSectorLeadTicker(sector.displayName, ratings)
+            const SectorIcon = getSectorIcon(sector.displayName)
 
             return (
               <button
@@ -398,7 +377,9 @@ export function SectorMapPanel({
               >
                 <div className="flex items-center gap-2 font-mono text-xs font-black uppercase text-slate-200">
                   <span className="text-base">{medal}</span>
-                  <StockLogo symbol={leadTicker} size={20} fallback="none" />
+                  <div className="flex items-center justify-center size-6 rounded-md bg-cyan-400/10 border border-cyan-400/20 shrink-0">
+                    <SectorIcon className="size-3.5 text-cyan-400" />
+                  </div>
                   <span className="truncate">{sector.displayName}</span>
                 </div>
 
@@ -510,7 +491,9 @@ export function SectorMapPanel({
               <tr className="bg-[#0b1c28]/80 font-mono font-bold text-white">
                 <td className="sticky left-0 z-10 bg-[#0b1c28] px-4 py-2.5 uppercase text-teal-300">
                   <div className="flex items-center gap-2">
-                    <StockLogo symbol="VNINDEX" size={20} fallback="none" />
+                    <div className="flex items-center justify-center size-5 rounded bg-teal-400/10 text-teal-300">
+                      <LineChart className="size-3.5" />
+                    </div>
                     <span>VNINDEX</span>
                   </div>
                 </td>
@@ -565,13 +548,13 @@ export function SectorMapPanel({
                   )
                 })}
                 <td className="px-2 py-2 text-center text-emerald-400">▲</td>
-                <td className="px-2 py-2 text-center text-emerald-400">▲</td>
+                <td className="px-2 py-2.5 text-center text-emerald-400">▲</td>
                 <td className="px-2 py-2 text-center text-emerald-400">▲</td>
               </tr>
 
-              {/* Sector Rotation Heatmap Rows with Integrated Effort-Result Bars */}
+              {/* Sector Rotation Heatmap Rows with Exact Sector Thematic Icons */}
               {currentSectors.map((sector, sIdx) => {
-                const leadTicker = getSectorLeadTicker(sector.displayName, ratings)
+                const SectorIcon = getSectorIcon(sector.displayName)
                 const sparkValues = [
                   40 + (sIdx % 5) * 4,
                   42 + (sIdx % 4) * 3,
@@ -595,11 +578,13 @@ export function SectorMapPanel({
                     onClick={() => handleOpenSectorModal(sector.displayName, sector)}
                     className="cursor-pointer transition-colors hover:bg-white/[0.04] group"
                   >
-                    {/* 1. Sticky Sector Name with Representative Stock Logo */}
+                    {/* 1. Sticky Sector Name with Thematic Sector Icon */}
                     <td className="sticky left-0 z-10 bg-[#07131d] group-hover:bg-[#0c1e2d] px-4 py-2.5 font-bold uppercase text-white font-mono text-xs transition-colors">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          <StockLogo symbol={leadTicker} size={20} fallback="none" />
+                          <div className="flex items-center justify-center size-5 rounded bg-cyan-400/10 border border-cyan-400/20 shrink-0">
+                            <SectorIcon className="size-3 text-cyan-400" />
+                          </div>
                           <span className="truncate">{sector.displayName}</span>
                         </div>
                         <ArrowRight className="size-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
@@ -767,7 +752,7 @@ export function SectorMapPanel({
         </div>
       )}
 
-      {/* 3. Sector Rating Score Modal Popup (Hỗ trợ ESC & Click Outside) */}
+      {/* 3. Sector Rating Score Modal Popup (Hỗ trợ ESC & Click Outside & Icon ngành chuẩn) */}
       {selectedModalSector && (
         <div
           role="dialog"
@@ -910,6 +895,7 @@ export function SectorMapPanel({
                     const pricePos = (stock.changePercent ?? 0) >= 0
                     const isWeeklyPos = (stock.weeklyChangePercent ?? 0) >= 0
                     const isMonthlyPos = (stock.monthlyChangePercent ?? 0) >= 0
+                    const SectorIcon = getSectorIcon(stock.sector)
 
                     return (
                       <tr
@@ -920,7 +906,7 @@ export function SectorMapPanel({
                         }}
                         className="cursor-pointer transition-colors hover:bg-white/[0.03] group"
                       >
-                        {/* 1. Ticker + Name */}
+                        {/* 1. Ticker + Exact Sector Thematic Icon (Image 2 style) */}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">
                             <span className="text-[10px] text-slate-500 font-bold w-4">
@@ -932,9 +918,10 @@ export function SectorMapPanel({
                                 <span>{stock.ticker}</span>
                                 {stock.isTop100 && <Crown className="size-3 text-amber-400" />}
                               </div>
-                              <span className="text-[10px] text-slate-500 uppercase font-bold block font-sans">
-                                {stock.sector}
-                              </span>
+                              <div className="flex items-center gap-1 text-[10px] text-cyan-400 font-bold uppercase font-sans">
+                                <SectorIcon className="size-3 text-cyan-400 shrink-0" />
+                                <span>{stock.sector}</span>
+                              </div>
                             </div>
                           </div>
                         </td>
