@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, Gauge, HeartPulse, ShieldAlert } from "lucide-react"
 
 import type { MarketCloseDashboardData, MarketHistoryPoint } from "@/lib/market-insight-data"
 import { cn } from "@/lib/utils"
@@ -598,9 +598,17 @@ export function MarketHealthView({ data }: MarketHealthViewProps) {
         {/* Left Column: Chỉ báo tâm lý */}
         <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl flex flex-col justify-between">
           <div className="flex items-center justify-between border-b border-white/[0.06] pb-3 mb-2">
-            <h3 className="text-sm sm:text-base font-bold text-white tracking-wide font-sans">
-              Chỉ báo tâm lý
-            </h3>
+            <div className="flex items-center gap-3">
+              <div className="flex size-8.5 shrink-0 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300 shadow-sm">
+                <HeartPulse className="size-4" />
+              </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white tracking-wide font-sans">
+                  Chỉ báo tâm lý
+                </h3>
+                <p className="text-[11px] text-slate-400 italic font-medium">Đo lường mức độ hưng phấn / sợ hãi</p>
+              </div>
+            </div>
             <div className="relative">
               <select
                 defaultValue="general"
@@ -620,9 +628,17 @@ export function MarketHealthView({ data }: MarketHealthViewProps) {
         {/* Right Column: Chỉ báo rủi ro */}
         <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl flex flex-col justify-between">
           <div className="flex items-center justify-between border-b border-white/[0.06] pb-3 mb-2">
-            <h3 className="text-sm sm:text-base font-bold text-white tracking-wide font-sans">
-              Chỉ báo rủi ro
-            </h3>
+            <div className="flex items-center gap-3">
+              <div className="flex size-8.5 shrink-0 items-center justify-center rounded-xl border border-rose-400/20 bg-rose-400/[0.08] text-rose-300 shadow-sm">
+                <ShieldAlert className="size-4" />
+              </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white tracking-wide font-sans">
+                  Chỉ báo rủi ro
+                </h3>
+                <p className="text-[11px] text-slate-400 italic font-medium">Mức độ rủi ro phân phối ngắn hạn</p>
+              </div>
+            </div>
             <span className="font-mono text-xs text-slate-400">
               Hiện tại: <strong className="text-rose-400 font-bold">{currentRisk.toFixed(2)}</strong>
             </span>
@@ -634,10 +650,18 @@ export function MarketHealthView({ data }: MarketHealthViewProps) {
 
       {/* Row 2: Định giá (Valuation Multi-Band: P/E / P/B vs VNINDEX) */}
       <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl">
-        <div className="border-b border-white/[0.06] pb-3 mb-3">
-          <h3 className="text-sm sm:text-base font-bold text-white tracking-wide font-sans">
-            Định giá thị trường
-          </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.06] pb-3 mb-3 gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex size-8.5 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-300 shadow-sm">
+              <Gauge className="size-4" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-white tracking-wide font-sans">
+                Định giá thị trường (P/E & P/B)
+              </h3>
+              <p className="text-[11px] text-slate-400 italic font-medium">Đa dải độ lệch chuẩn P/E, P/B so với chỉ số VN-Index</p>
+            </div>
+          </div>
         </div>
 
         <ValuationBandChart data={valuationSeries} />

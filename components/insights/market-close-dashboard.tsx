@@ -1,7 +1,5 @@
-"use client"
-
 import * as React from "react"
-import { Activity, BarChart3, BookOpen, CircleDollarSign, Gauge, LineChart } from "lucide-react"
+import { Activity, BarChart3, BookOpen, CircleDollarSign, CircleDot, Gauge, Layers, LineChart, Sparkles } from "lucide-react"
 
 import { MetricGuideDialog } from "@/components/insights/metric-guide-dialog"
 import {
@@ -45,28 +43,86 @@ function formatTime(iso: string) {
 
 const surface = "insights-glass-panel border-white/[0.09] bg-[#0a1820]/90 shadow-[0_20px_60px_-48px_rgba(45,212,191,0.55)]"
 
-function PanelHeading({ title, description, icon: Icon }: { title: string; description: string; icon: React.ComponentType<{ className?: string }> }) {
+function PanelHeading({
+  title,
+  description,
+  icon: Icon,
+  iconTone = "teal",
+}: {
+  title: string
+  description: string
+  icon: React.ComponentType<{ className?: string }>
+  iconTone?: "teal" | "purple" | "cyan" | "emerald" | "amber"
+}) {
+  const iconTones = {
+    teal: "border-teal-300/20 bg-teal-300/[0.08] text-teal-300",
+    purple: "border-purple-400/20 bg-purple-400/[0.08] text-purple-300",
+    cyan: "border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-300",
+    emerald: "border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300",
+    amber: "border-amber-400/20 bg-amber-400/[0.08] text-amber-300",
+  }
+
   return (
     <CardHeader className="border-b border-white/[0.06] px-4 py-3.5">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-teal-300/20 bg-teal-300/[0.07] text-teal-200"><Icon className="size-4" /></span>
+      <div className="flex items-center gap-3">
+        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-xl border shadow-sm", iconTones[iconTone])}>
+          <Icon className="size-4" />
+        </span>
         <div className="min-w-0">
           <CardTitle className="text-sm font-bold text-white tracking-wide font-sans">{title}</CardTitle>
-          <CardDescription className="mt-1 line-clamp-1 text-[11px] text-slate-400 italic font-medium">{description}</CardDescription>
+          <CardDescription className="mt-0.5 line-clamp-1 text-[11px] text-slate-400 italic font-medium">{description}</CardDescription>
         </div>
       </div>
     </CardHeader>
   )
 }
 
-function SectionHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
+function SectionHeading({
+  eyebrow,
+  title,
+  description,
+  icon: Icon,
+  iconTone = "teal",
+}: {
+  eyebrow: string
+  title: string
+  description: string
+  icon?: React.ComponentType<{ className?: string }>
+  iconTone?: "teal" | "purple" | "cyan" | "emerald" | "amber"
+}) {
+  const iconTones = {
+    teal: "border-teal-300/20 bg-teal-300/[0.08] text-teal-300",
+    purple: "border-purple-400/20 bg-purple-400/[0.08] text-purple-300",
+    cyan: "border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-300",
+    emerald: "border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300",
+    amber: "border-amber-400/20 bg-amber-400/[0.08] text-amber-300",
+  }
+
   return (
-    <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
-      <div>
-        <p className="text-[10px] font-mono font-black uppercase tracking-[0.24em] text-teal-300/80">{eyebrow}</p>
-        <h3 className="mt-1 text-lg font-bold text-white tracking-tight sm:text-xl font-sans">{title}</h3>
+    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+      <div className="flex items-start gap-3.5">
+        {Icon && (
+          <span
+            className={cn(
+              "mt-0.5 flex size-9 sm:size-10 shrink-0 items-center justify-center rounded-xl border shadow-sm",
+              iconTones[iconTone]
+            )}
+          >
+            <Icon className="size-4 sm:size-5" />
+          </span>
+        )}
+        <div>
+          <p className="text-[10px] font-mono font-black uppercase tracking-[0.24em] text-teal-300/80">
+            {eyebrow}
+          </p>
+          <h3 className="mt-1 text-lg font-bold text-white tracking-tight sm:text-xl font-sans">
+            {title}
+          </h3>
+        </div>
       </div>
-      <p className="max-w-xl text-xs sm:text-sm leading-5 text-slate-400 italic font-medium sm:text-right">{description}</p>
+      <p className="max-w-xl text-xs sm:text-sm leading-5 text-slate-400 italic font-medium sm:text-right">
+        {description}
+      </p>
     </div>
   )
 }
@@ -103,10 +159,21 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
 
         <Card className={cn(surface, "overflow-hidden py-0")}>
           <CardHeader className="flex flex-col gap-2 border-b border-white/[0.07] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[10px] font-mono font-black uppercase tracking-[0.22em] text-teal-300/70">Market bubbles</p>
-              <h2 id="market-overview-title" className="mt-1 text-lg font-bold text-white tracking-tight font-sans">Bubbles · Bản đồ giao dịch thị trường</h2>
-              <p className="mt-1 text-xs text-slate-400 italic font-medium">Kích thước theo mức độ tăng giảm giá, màu theo biến động từng kỳ (1D, 1W, 1M, 1Y).</p>
+            <div className="flex items-center gap-3.5">
+              <span className="flex size-9 sm:size-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-300 shadow-sm">
+                <CircleDot className="size-4 sm:size-5" />
+              </span>
+              <div>
+                <p className="text-[10px] font-mono font-black uppercase tracking-[0.22em] text-teal-300/70">
+                  Market bubbles
+                </p>
+                <h2 id="market-overview-title" className="mt-0.5 text-lg font-bold text-white tracking-tight font-sans">
+                  Bubbles · Bản đồ giao dịch thị trường
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-400 italic font-medium">
+                  Kích thước theo mức độ tăng giảm giá, màu theo biến động từng kỳ (1D, 1W, 1M, 1Y).
+                </p>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-4 sm:p-5 min-h-[650px]">
@@ -126,6 +193,8 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
       <section aria-labelledby="market-sectors-title" className="space-y-4 border-t border-white/[0.06] pt-8">
         <div id="market-sectors-title">
           <SectionHeading
+            icon={Layers}
+            iconTone="purple"
             eyebrow="Market pulse & cash flow"
             title="Nhóm ngành đang dẫn nhịp"
             description="Đọc hiệu suất cùng độ lan tỏa, Nỗ lực kết quả và Luân chuyển dòng tiền ngành để tránh nhầm một vài mã tăng với sức mạnh toàn ngành."
@@ -142,16 +211,38 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
 
       {/* 4. Index & Market Breadth Charts */}
       <section aria-labelledby="market-charts-title" className="space-y-4 border-t border-white/[0.06] pt-8">
-        <div id="market-charts-title"><SectionHeading eyebrow="Market internals" title="Nội lực thị trường & Phân tích chuyên sâu" description="Tập hợp 4 góc nhìn chuẩn hóa về thanh khoản, độ rộng và xu hướng để nhìn rõ bức tranh sau phiên." /></div>
+        <div id="market-charts-title">
+          <SectionHeading
+            icon={BarChart3}
+            iconTone="cyan"
+            eyebrow="Market internals"
+            title="Nội lực thị trường & Phân tích chuyên sâu"
+            description="Tập hợp 4 góc nhìn chuẩn hóa về thanh khoản, độ rộng và xu hướng để nhìn rõ bức tranh sau phiên."
+          />
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2 2xl:grid-cols-4" data-market-close-chart-grid>
-          <ChartPanel icon={LineChart} title="Hiệu suất chỉ số" description="Biến động và giá trị giao dịch"><IndexPerformanceChart indexes={indexes} /></ChartPanel><ChartPanel icon={BarChart3} title="Độ rộng thị trường" description="Mã tăng, đứng giá và giảm"><IndexBreadthChart indexes={indexes} /></ChartPanel><ChartPanel icon={Gauge} title="Sức khỏe xu hướng" description="Tỷ lệ cổ phiếu trên các đường MA"><MaBreadthChart daily={dailySummary} /></ChartPanel><ChartPanel icon={CircleDollarSign} title="Dòng tiền tổ chức" description="Mua bán ròng theo nhóm nhà đầu tư"><InstitutionalFlowChart daily={dailySummary} /></ChartPanel>
+          <ChartPanel icon={LineChart} title="Hiệu suất chỉ số" description="Biến động và giá trị giao dịch"><IndexPerformanceChart indexes={indexes} /></ChartPanel>
+          <ChartPanel icon={BarChart3} title="Độ rộng thị trường" description="Mã tăng, đứng giá và giảm"><IndexBreadthChart indexes={indexes} /></ChartPanel>
+          <ChartPanel icon={Gauge} title="Sức khỏe xu hướng" description="Tỷ lệ cổ phiếu trên các đường MA"><MaBreadthChart daily={dailySummary} /></ChartPanel>
+          <ChartPanel icon={CircleDollarSign} title="Dòng tiền tổ chức" description="Mua bán ròng theo nhóm nhà đầu tư"><InstitutionalFlowChart daily={dailySummary} /></ChartPanel>
         </div>
       </section>
 
       {/* 5. 20-Session Market History */}
       <section aria-labelledby="market-history-title" className="space-y-4 border-t border-white/[0.06] pt-8">
-        <div id="market-history-title"><SectionHeading eyebrow="20-session context" title="Bối cảnh trước khi ra quyết định" description="Đặt phiên hiện tại cạnh sức khỏe và dòng tiền gần đây, thay vì chỉ nhìn một ngày." /></div>
-        <div className="grid gap-3 xl:grid-cols-2" data-market-close-chart-grid><ChartPanel icon={Gauge} title="Tâm lý, rủi ro và MA20" description="Thang điểm sức khỏe qua tối đa 20 phiên"><MarketHistoryChart history={history} /></ChartPanel><ChartPanel icon={CircleDollarSign} title="Dòng tiền theo phiên" description="Khối ngoại và tự doanh quanh trục trung tính"><MarketHistoryFlowChart history={history} /></ChartPanel></div>
+        <div id="market-history-title">
+          <SectionHeading
+            icon={LineChart}
+            iconTone="purple"
+            eyebrow="20-session context"
+            title="Bối cảnh trước khi ra quyết định"
+            description="Đặt phiên hiện tại cạnh sức khỏe và dòng tiền gần đây, thay vì chỉ nhìn một ngày."
+          />
+        </div>
+        <div className="grid gap-3 xl:grid-cols-2" data-market-close-chart-grid>
+          <ChartPanel icon={Gauge} title="Tâm lý, rủi ro và MA20" description="Thang điểm sức khỏe qua tối đa 20 phiên"><MarketHistoryChart history={history} /></ChartPanel>
+          <ChartPanel icon={CircleDollarSign} title="Dòng tiền theo phiên" description="Khối ngoại và tự doanh quanh trục trung tính"><MarketHistoryFlowChart history={history} /></ChartPanel>
+        </div>
       </section>
 
       <MetricGuideDialog open={guideOpen} onOpenChange={setGuideOpen} />
@@ -166,12 +257,22 @@ function MarketIntelligencePanel({ data, onOpenGuide }: { data: MarketCloseDashb
   return (
     <section aria-labelledby="market-intelligence-title" className="space-y-6">
       <Card className={cn(surface, "overflow-hidden py-0")}>
-        <div className="border-b border-white/[0.07] bg-black/10 px-5 py-3.5 flex items-center justify-between">
-          <span className="text-sm font-bold text-white tracking-wide font-sans">
-            Nhịp đập thị trường & Sức khoẻ thị trường
-          </span>
-          <span className="text-xs font-sans italic text-slate-400 font-medium">
-            Dữ liệu tổng quan phiên & chỉ báo sức khỏe
+        <div className="border-b border-white/[0.07] bg-black/10 px-4 sm:px-5 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300 shadow-sm">
+              <Activity className="size-4 sm:size-5" />
+            </span>
+            <div>
+              <span className="text-sm font-bold text-white tracking-wide font-sans block">
+                Nhịp đập thị trường & Sức khoẻ thị trường
+              </span>
+              <span className="text-xs font-sans italic text-slate-400 font-medium">
+                Dữ liệu tổng quan phiên & chỉ báo sức khỏe
+              </span>
+            </div>
+          </div>
+          <span className="text-xs font-mono font-bold text-slate-400">
+            Dữ liệu tổng quan phiên
           </span>
         </div>
         <CardContent className="p-5 sm:p-6">

@@ -16,6 +16,7 @@ import {
   Layers,
   Layers3,
   LineChart,
+  RefreshCw,
   Rocket,
   Search,
   ShieldCheck,
@@ -415,13 +416,18 @@ export function SectorMapPanel({
       {/* 1. Ngành nghề nổi bật & Nhận định dòng tiền */}
       <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-5 sm:p-6 shadow-xl">
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 shadow-md">
-            <Layers className="size-5 text-white" />
+        <div className="flex items-center gap-3.5">
+          <div className="flex size-9 sm:size-10 items-center justify-center rounded-xl border border-purple-400/25 bg-gradient-to-tr from-purple-600/30 to-indigo-500/20 text-purple-300 shadow-md">
+            <Layers className="size-5" />
           </div>
-          <h3 className="text-base sm:text-lg font-bold text-white tracking-wide font-sans">
-            Ngành nghề nổi bật
-          </h3>
+          <div>
+            <p className="font-mono text-[10px] font-black uppercase tracking-[0.2em] text-purple-400">
+              TOP LEADING SECTORS
+            </p>
+            <h3 className="text-base sm:text-lg font-bold text-white tracking-wide font-sans">
+              Ngành nghề nổi bật & Sức mạnh dòng tiền
+            </h3>
+          </div>
         </div>
 
         {/* Top 3 Podium Cards */}
@@ -514,19 +520,26 @@ export function SectorMapPanel({
 
       {/* 2. Unified Single-Screen Sector Matrix (Luân chuyển dòng tiền + Nỗ lực kết quả gộp làm 1) */}
       <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07131d]/95 shadow-xl">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.08] bg-[#050e16] px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] font-black uppercase tracking-[0.2em] text-purple-400">
-              SECTOR ROTATION MATRIX
-            </span>
-            <span className="text-slate-500">·</span>
-            <span className="text-xs font-semibold text-slate-300">
-              Luân chuyển & Nỗ lực kết quả dòng tiền
-            </span>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.08] bg-[#050e16] px-4 py-3.5">
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 sm:size-10 items-center justify-center rounded-xl border border-purple-400/25 bg-purple-500/10 text-purple-300 shadow-sm">
+              <RefreshCw className="size-4 sm:size-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] font-black uppercase tracking-[0.2em] text-purple-400">
+                  SECTOR ROTATION MATRIX
+                </span>
+                <span className="text-slate-500">·</span>
+                <span className="text-xs font-semibold text-slate-300 font-sans">
+                  Luân chuyển & Nỗ lực kết quả dòng tiền
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-sans italic font-medium mt-0.5">
+                Rê chuột vào cột Nỗ lực / Kết quả để xem chi tiết
+              </p>
+            </div>
           </div>
-          <span className="text-[11px] text-slate-400 font-mono">
-            Rê chuột vào cột Nỗ lực / Kết quả để xem chi tiết
-          </span>
         </div>
 
         <div className="overflow-x-auto">

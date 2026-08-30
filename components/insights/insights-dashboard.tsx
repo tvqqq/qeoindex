@@ -1501,12 +1501,17 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
         </section>
 
         <section id="top-100" aria-labelledby="top-100-title" className="pt-8">
-          <details className="group rounded-2xl border border-white/[0.08] bg-panel/70 p-4 open:bg-panel/90">
+          <details className="group rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 open:bg-[#07131d] shadow-xl">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
-              <div>
-                <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Signal ranking</div>
-                <h2 id="top-100-title" className="mt-1 text-xl font-extrabold text-white sm:text-2xl">Top cổ phiếu rating score</h2>
-                <p className="mt-1 text-xs font-medium text-muted-2">Bấm để mở bảng xếp hạng và bộ lọc cổ phiếu.</p>
+              <div className="flex items-center gap-3.5 sm:gap-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-amber-400/20 bg-amber-400/[0.08] text-amber-300 shadow-sm">
+                  <Crown className="size-5" />
+                </div>
+                <div>
+                  <div className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-brand">Signal ranking & screener</div>
+                  <h2 id="top-100-title" className="mt-0.5 text-xl font-bold text-white tracking-tight sm:text-2xl font-sans">Top cổ phiếu rating score</h2>
+                  <p className="mt-0.5 text-xs font-medium text-slate-400 italic">Bấm để mở bảng xếp hạng và bộ lọc cổ phiếu chuyên sâu.</p>
+                </div>
               </div>
               <span className="flex shrink-0 items-center gap-2 text-xs font-bold text-brand">
                 {data.ratings.length} mã
