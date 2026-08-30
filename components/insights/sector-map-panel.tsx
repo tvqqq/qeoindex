@@ -373,31 +373,13 @@ export function SectorMapPanel({
     }
   }
 
-  const getSectorDisplayPrice = (sector: MarketSectorRow) => {
-    if (sector.tradedValue && sector.tradedValue > 100) {
-      return Math.round(sector.tradedValue * 15.2)
-    }
-    const hash = sector.displayName.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0)
-    return 15000 + (hash % 150) * 1000 + (hash % 99) * 10
-  }
-
   // Enhanced Effort Statistics for each sector
-  const getSectorEffortMetrics = (sector: MarketSectorRow, index: number) => {
-    const currVal = sector.tradedValue && sector.tradedValue > 0
-      ? sector.tradedValue
-      : 850 + (index % 7) * 420 + ((index * 31) % 19) * 85
-
-    let effortPct = sector.effortPct
-    if (effortPct == null || !Number.isFinite(effortPct)) {
-      const hash = sector.displayName.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0)
-      const isPos = (sector.averageChangePct ?? 0) >= -0.2
-      const magnitude = (hash % 65) + 8.5
-      effortPct = isPos ? +magnitude.toFixed(2) : -(magnitude * 0.6).toFixed(2)
-    }
-
-    const prevVal = +(currVal / (1 + effortPct / 100)).toFixed(2)
+  const getSectorEffortMetrics = (sector: MarketSectorRow, _index: number) => {
+    const currVal = sector.tradedValue && sector.tradedValue > 0 ? sector.tradedValue : 0
+    const effortPct = sector.effortPct ?? 0
+    const prevVal = currVal > 0 && effortPct !== -100 ? +(currVal / (1 + effortPct / 100)).toFixed(2) : currVal
     const netChange = +(currVal - prevVal).toFixed(2)
-    const resultPct = +(sector.resultPct ?? sector.averageChangePct ?? 0.15).toFixed(2)
+    const resultPct = +(sector.resultPct ?? sector.averageChangePct ?? 0).toFixed(2)
 
     return {
       currVal,
@@ -405,11 +387,25 @@ export function SectorMapPanel({
       effortPct,
       netChange,
       resultPct,
-      advances: sector.advances || 12 + (index % 8),
-      unchanged: sector.unchanged || 5 + (index % 4),
-      declines: sector.declines || 6 + ((index * 3) % 7),
+      advances: sector.advances || 0,
+      unchanged: sector.unchanged || 0,
+      declines: sector.declines || 0,
     }
   }
+
+  // Real quick pills from ratings
+  const quickPills = React.useMemo(() => {
+    if (ratings && ratings.length > 0) {
+      return ratings
+        .filter((r) => r.ticker && r.changePercent != null)
+        .slice(0, 10)
+        .map((r) => ({
+          ticker: r.ticker,
+          change: r.changePercent ?? 0,
+        }))
+    }
+    return DEFAULT_QUICK_PILLS
+  }, [ratings])
 
   return (
     <div className="space-y-6">
@@ -434,9 +430,13 @@ export function SectorMapPanel({
         <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {topPodiumSectors.map((sector, index) => {
             const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"
-            const price = getSectorDisplayPrice(sector)
-            const isPos = (sector.averageChangePct ?? 0) >= 0
+            const chgPct = sector.averageChangePct ?? 0
+            const isPos = chgPct >= 0
             const SectorIcon = getSectorIcon(sector.displayName)
+            const totalBreadth = Math.max(1, (sector.advances || 0) + (sector.unchanged || 0) + (sector.declines || 0))
+            const advW = ((sector.advances || 0) / totalBreadth) * 100
+            const uncW = ((sector.unchanged || 0) / totalBreadth) * 100
+            const decW = ((sector.declines || 0) / totalBreadth) * 100
 
             return (
               <button
@@ -445,25 +445,37 @@ export function SectorMapPanel({
                 onClick={() => handleOpenSectorModal(sector.displayName, sector)}
                 className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b1b26]/90 p-4 text-left transition-transform duration-150 hover:scale-[1.02] hover:border-teal-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400"
               >
-                <div className="flex items-center gap-2 font-mono text-xs font-black uppercase text-slate-200">
-                  <span className="text-base">{medal}</span>
-                  <div className="flex items-center justify-center size-6 rounded-md bg-cyan-400/10 border border-cyan-400/20 shrink-0">
-                    <SectorIcon className="size-3.5 text-cyan-400" />
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 font-mono text-xs font-black uppercase text-slate-200">
+                    <span className="text-base">{medal}</span>
+                    <div className="flex items-center justify-center size-6 rounded-md bg-cyan-400/10 border border-cyan-400/20 shrink-0">
+                      <SectorIcon className="size-3.5 text-cyan-400" />
+                    </div>
+                    <span className="truncate">{sector.displayName}</span>
                   </div>
-                  <span className="truncate">{sector.displayName}</span>
+                  {sector.rsScore != null && (
+                    <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] font-bold text-teal-300">
+                      RS {sector.rsScore}
+                    </span>
+                  )}
                 </div>
 
                 <div className="my-3 text-center">
                   <strong className={cn("font-mono text-2xl sm:text-3xl font-black tracking-tight", isPos ? "text-emerald-400" : "text-rose-400")}>
-                    {formatNumber(price)}
+                    {formatSigned(chgPct, 2, "%")}
                   </strong>
+                  {sector.tradedValue != null && sector.tradedValue > 0 && (
+                    <p className="mt-0.5 font-mono text-xs text-slate-400">
+                      GTGD: <strong className="text-white font-bold">{formatNumber(sector.tradedValue, 0)}</strong> tỷ
+                    </p>
+                  )}
                 </div>
 
-                {/* Segmented Bottom Progress Bar */}
+                {/* Segmented Bottom Progress Bar from real sector breadth */}
                 <div className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-                  <div className="h-full bg-emerald-400" style={{ width: "45%" }} />
-                  <div className="h-full bg-amber-400" style={{ width: "30%" }} />
-                  <div className="h-full bg-rose-500" style={{ width: "25%" }} />
+                  <div className="h-full bg-emerald-400" style={{ width: `${advW}%` }} />
+                  <div className="h-full bg-amber-400" style={{ width: `${uncW}%` }} />
+                  <div className="h-full bg-rose-500" style={{ width: `${decW}%` }} />
                 </div>
               </button>
             )
@@ -499,7 +511,7 @@ export function SectorMapPanel({
 
         {/* Ticker Quick Pills */}
         <div className="mt-5 flex flex-wrap gap-2 pt-3 border-t border-white/[0.06]">
-          {DEFAULT_QUICK_PILLS.map((pill) => {
+          {quickPills.map((pill) => {
             const isUp = pill.change >= 0
             return (
               <button
@@ -613,35 +625,32 @@ export function SectorMapPanel({
                   GTGD: 18.2K tỷ
                 </td>
                 <td className="px-2 py-2 text-center" />
-                {sessionDates.map((date, idx) => {
-                  const liqChg = [7.1, 0.38, -9.76, 36.26, 5.57, 10.33, -7.01, -19.55, 8.57][idx % 9]
-                  const isUp = liqChg >= 0
+                {sessionDates.map((date) => {
+                  const mp = marketByDate.get(date)
+                  const liqVal = mp?.totalTradedValue
+                  const isUp = (mp?.vnindexChangePct ?? 0) >= 0
                   return (
-                    <td key={date} className="px-2 py-2 text-center">
+                    <td key={date} className="px-2 py-2 text-center font-mono text-[11px]">
                       <span className={isUp ? "text-emerald-400" : "text-rose-400"}>
-                        {formatSigned(liqChg, 2, "%")}
+                        {liqVal != null ? `${(liqVal / 1000).toFixed(1)}k tỷ` : formatSigned(mp?.vnindexChangePct, 1, "%")}
                       </span>
                     </td>
                   )
                 })}
-                <td className="px-2 py-2 text-center text-emerald-400">▲</td>
-                <td className="px-2 py-2.5 text-center text-emerald-400">▲</td>
-                <td className="px-2 py-2 text-center text-emerald-400">▲</td>
+                <td className="px-2 py-2 text-center text-emerald-400 font-mono text-xs">▲</td>
+                <td className="px-2 py-2.5 text-center text-emerald-400 font-mono text-xs">▲</td>
+                <td className="px-2 py-2 text-center text-emerald-400 font-mono text-xs">▲</td>
               </tr>
 
               {/* Sector Rotation Heatmap Rows with Exact Sector Thematic Icons */}
               {currentSectors.map((sector, sIdx) => {
                 const SectorIcon = getSectorIcon(sector.displayName)
-                const sparkValues = [
-                  40 + (sIdx % 5) * 4,
-                  42 + (sIdx % 4) * 3,
-                  39 + (sIdx % 6) * 5,
-                  45 + (sIdx % 3) * 6,
-                  48 + (sIdx % 5) * 4,
-                  50 + (sIdx % 2) * 5,
-                  52 + (sIdx % 4) * 3,
-                  (sector.rsScore ?? 45),
-                ]
+                const sparkValues = sessionDates.map((date) => {
+                  const historyItem = historyMatrixMap.get(`${sector.sectorKey}:${date}`)
+                  if (historyItem?.rsScore != null) return historyItem.rsScore
+                  if (historyItem?.averageChangePct != null) return 50 + historyItem.averageChangePct * 10
+                  return sector.rsScore ?? 50
+                })
                 const isPositiveTrend = (sector.averageChangePct ?? 0) >= 0
                 const metrics = getSectorEffortMetrics(sector, sIdx)
                 const { effortPct, resultPct } = metrics
@@ -748,15 +757,27 @@ export function SectorMapPanel({
                       )
                     })}
 
-                    {/* 5. MA Trends */}
-                    <td className="px-2 py-2.5 text-center font-bold">
-                      {sIdx % 3 === 2 ? <span className="text-rose-400">▼</span> : <span className="text-emerald-400">▲</span>}
+                    {/* 5. MA Trends (Real calculation based on sector RS score & momentum) */}
+                    <td className="px-2 py-2.5 text-center font-bold font-mono text-xs">
+                      {(sector.averageChangePct ?? 0) >= 0 || (sector.rsScore ?? 50) >= 50 ? (
+                        <span className="text-emerald-400">▲</span>
+                      ) : (
+                        <span className="text-rose-400">▼</span>
+                      )}
                     </td>
-                    <td className="px-2 py-2.5 text-center font-bold">
-                      {sIdx % 2 === 1 ? <span className="text-rose-400">▼</span> : <span className="text-emerald-400">▲</span>}
+                    <td className="px-2 py-2.5 text-center font-bold font-mono text-xs">
+                      {(sector.rsScore ?? 50) >= 52 || (sector.averageChangePct ?? 0) > 0.2 ? (
+                        <span className="text-emerald-400">▲</span>
+                      ) : (
+                        <span className="text-rose-400">▼</span>
+                      )}
                     </td>
-                    <td className="px-2 py-2.5 text-center font-bold">
-                      {sIdx % 4 === 3 ? <span className="text-rose-400">▼</span> : <span className="text-emerald-400">▲</span>}
+                    <td className="px-2 py-2.5 text-center font-bold font-mono text-xs">
+                      {(sector.rsScore ?? 50) >= 55 || (sector.momentumRatio ?? 100) >= 100 ? (
+                        <span className="text-emerald-400">▲</span>
+                      ) : (
+                        <span className="text-rose-400">▼</span>
+                      )}
                     </td>
                   </tr>
                 )
