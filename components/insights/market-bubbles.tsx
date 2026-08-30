@@ -70,7 +70,7 @@ export function MarketBubbles({
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = React.useState<{ width: number; height: number }>({
     width: 1200,
-    height: 900,
+    height: 850,
   })
 
   const [viewMode, setViewMode] = React.useState<"bubbles" | "columns">("bubbles")
@@ -93,20 +93,21 @@ export function MarketBubbles({
     return () => ro.disconnect()
   }, [])
 
-  // Filter to Top 250 liquid stocks for ideal visual balance and rich market depth
+  // Filter to Top 200 liquid stocks for optimum visual balance
   const topStocks = React.useMemo(() => {
     return [...stocks]
       .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))
-      .slice(0, 250)
+      .slice(0, 200)
   }, [stocks])
 
-  // Physics Simulation: High density tight-packing for Top 250 stocks filling 78% of canvas
+  // Physics Simulation: High density tight-packing for Top 200 stocks filling 78% of canvas
+  // Adjusted with higher baseline radius so all bubbles are clearly readable, and moderated purple outliers
   const bubbles: SimBubble[] = React.useMemo(() => {
     const count = topStocks.length
     if (count === 0) return []
 
     const W = Math.max(dimensions.width, 600)
-    const H = Math.max(dimensions.height, 750)
+    const H = Math.max(dimensions.height, 700)
 
     // Calculate changes & extremes
     const changes = topStocks.map((s) => getStockChange(s, period) ?? 0)
@@ -122,23 +123,23 @@ export function MarketBubbles({
     // Target coverage: 78% of available viewport area
     const targetTotalArea = W * H * 0.78
 
-    // Calculate raw radii based on price change
+    // Calculate balanced radii: Elevated base radius (24px) for readability, balanced upper bound (58px)
     const rawRadii = topStocks.map((stock, i) => {
       const chg = changes[i]
       const absChg = Math.abs(chg)
       const norm = Math.max(0, (absChg - minAbsChange) / (maxAbsChange - minAbsChange || 1))
-      const scale = Math.pow(norm, 0.48) // smooth power curve
+      const scale = Math.pow(norm, 0.36) // Flatter power curve lifts smaller/average bubbles up
 
-      // Base radius from 16px up to 84px on desktop
-      let r = 16 + scale * 68
+      // Base radius from 24px up to 58px on desktop (ensuring average bubbles are larger)
+      let r = 24 + scale * 34
 
-      // Ceiling bonus: >6.5% gains get extra size prominence
+      // Ceiling bonus: moderately prominent for purple ceiling stocks without taking over the canvas
       if (chg >= 6.5) {
-        r = Math.min(96, r * 1.15)
+        r = Math.min(68, r * 1.1)
       }
 
       if (W < 640) {
-        r = Math.max(11, Math.min(48, Math.round(r * 0.72)))
+        r = Math.max(14, Math.min(42, Math.round(r * 0.72)))
       }
       return r
     })
@@ -345,7 +346,7 @@ export function MarketBubbles({
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
               <span className="relative inline-flex size-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]" />
             </span>
-            <span>Top 250 · {period}</span>
+            <span>Top 200 · {period}</span>
           </div>
         </div>
       </div>
@@ -354,7 +355,7 @@ export function MarketBubbles({
       {viewMode === "bubbles" ? (
         <div
           ref={containerRef}
-          className="market-bubble-field relative min-h-[780px] sm:min-h-[880px] lg:min-h-[960px] w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070d15] select-none shadow-2xl"
+          className="market-bubble-field relative min-h-[750px] sm:min-h-[850px] lg:min-h-[900px] w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070d15] select-none shadow-2xl"
           aria-label={`Bản đồ Top ${topStocks.length} cổ phiếu ${period}`}
         >
           {/* Institutional Financial Coordinate Grid Pattern */}
@@ -369,7 +370,7 @@ export function MarketBubbles({
           />
 
           {/* Collision-Resolved Bubbles Canvas */}
-          <div className="relative z-10 size-full min-h-[780px] sm:min-h-[880px] lg:min-h-[960px]">
+          <div className="relative z-10 size-full min-h-[750px] sm:min-h-[850px] lg:min-h-[900px]">
             {bubbles.map((bubble) => {
               const { stock, change, x, y, r, borderWidth, bobClass, animDelay, tone } = bubble
               const diameter = r * 2
@@ -442,15 +443,13 @@ export function MarketBubbles({
                   <strong
                     className={cn(
                       "font-mono font-black uppercase text-white tracking-wider leading-none drop-shadow-md",
-                      r >= 52
-                        ? "text-xl sm:text-3xl"
-                        : r >= 38
-                        ? "text-base sm:text-xl"
-                        : r >= 26
+                      r >= 48
+                        ? "text-xl sm:text-2xl"
+                        : r >= 34
+                        ? "text-sm sm:text-base"
+                        : r >= 24
                         ? "text-xs sm:text-sm font-black"
-                        : r >= 17
-                        ? "text-[10px] sm:text-xs font-black"
-                        : "text-[8px] font-bold"
+                        : "text-[10px] sm:text-xs font-extrabold"
                     )}
                   >
                     {stock.ticker}
@@ -458,15 +457,13 @@ export function MarketBubbles({
                   <span
                     className={cn(
                       "font-mono leading-none drop-shadow-sm font-black",
-                      r >= 52
-                        ? "text-xs sm:text-base mt-1"
-                        : r >= 38
+                      r >= 48
+                        ? "text-xs sm:text-sm mt-1"
+                        : r >= 34
                         ? "text-[11px] sm:text-xs mt-0.5"
-                        : r >= 26
-                        ? "text-[9px] sm:text-[10px] font-bold mt-0.5"
-                        : r >= 17
-                        ? "text-[8px] font-bold mt-0.5"
-                        : "text-[7px] mt-0.5",
+                        : r >= 24
+                        ? "text-[10px] sm:text-[11px] font-bold mt-0.5"
+                        : "text-[9px] font-bold mt-0.5",
                       isFuchsia
                         ? "text-fuchsia-100"
                         : isEmerald
