@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { CircleDot, LayoutGrid } from "lucide-react"
+import { CircleDot, Flame, Gem, LayoutGrid, Layers, Search } from "lucide-react"
 
 import { AnimatedTabs, type AnimatedTab } from "@/components/smoothui/animated-tabs"
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
 export interface MarketBubbleStock {
@@ -101,7 +102,64 @@ export function MarketBubbles({
       .slice(0, 200)
   }, [stocks])
 
-  // Physics Simulation: Even rectangular distribution with corner coverage & central volume attraction
+  // Group stocks by volume tiers for Columns view
+  const volumeGroups = React.useMemo(() => {
+    const g1: { stock: MarketBubbleStock; rank: number }[] = [] // > 10M cp
+    const g2: { stock: MarketBubbleStock; rank: number }[] = [] // 3M - 10M cp
+    const g3: { stock: MarketBubbleStock; rank: number }[] = [] // 1M - 3M cp
+    const g4: { stock: MarketBubbleStock; rank: number }[] = [] // < 1M cp
+
+    topStocks.forEach((stock, index) => {
+      const vol = stock.volume ?? 0
+      const rank = index + 1
+      if (vol >= 10_000_000) {
+        g1.push({ stock, rank })
+      } else if (vol >= 3_000_000) {
+        g2.push({ stock, rank })
+      } else if (vol >= 1_000_000) {
+        g3.push({ stock, rank })
+      } else {
+        g4.push({ stock, rank })
+      }
+    })
+
+    return [
+      {
+        id: "ultra",
+        icon: Flame,
+        title: "Khối lượng cực lớn (> 10 Triệu cp)",
+        badge: `${g1.length} mã`,
+        badgeClass: "border-cyan-400/40 bg-cyan-400/10 text-cyan-300",
+        items: g1,
+      },
+      {
+        id: "high",
+        icon: Gem,
+        title: "Khối lượng cao (3M – 10M cp)",
+        badge: `${g2.length} mã`,
+        badgeClass: "border-teal-400/40 bg-teal-400/10 text-teal-300",
+        items: g2,
+      },
+      {
+        id: "medium",
+        icon: Layers,
+        title: "Khối lượng tích cực (1M – 3M cp)",
+        badge: `${g3.length} mã`,
+        badgeClass: "border-amber-400/40 bg-amber-400/10 text-amber-300",
+        items: g3,
+      },
+      {
+        id: "normal",
+        icon: Search,
+        title: "Khối lượng vừa & nhỏ (< 1M cp)",
+        badge: `${g4.length} mã`,
+        badgeClass: "border-slate-500/40 bg-slate-500/10 text-slate-300",
+        items: g4,
+      },
+    ].filter((group) => group.items.length > 0)
+  }, [topStocks])
+
+  // Physics Simulation: Dense packing in the center (less gaps) & airy spacing in 4 corners
   const bubbles: SimBubble[] = React.useMemo(() => {
     const count = topStocks.length
     if (count === 0) return []
@@ -122,7 +180,7 @@ export function MarketBubbles({
     const maxVol = Math.max(1_000_000, ...volumes)
     const minVol = Math.min(...volumes.filter((v) => v > 0)) || 10_000
 
-    // Target coverage: 68% of available viewport area for balanced fullness and corner reach
+    // Target coverage: 68% of available viewport area
     const targetTotalArea = W * H * 0.68
 
     // Calculate dynamic radii with strong visual contrast for top gainers/movers
@@ -205,7 +263,7 @@ export function MarketBubbles({
     // Sort grid cells from inner center to outer corners
     gridCells.sort((a, b) => a.distFromCenterNorm - b.distFromCenterNorm)
 
-    // Map sorted stocks to grid cells (highest vol stocks in center, outer stocks fill all 4 corners)
+    // Map sorted stocks to grid cells with tighter center compression
     const nodes: SimBubble[] = indexedStocks.map((item, i) => {
       const { stock, change, r, borderWidth, volNorm } = item
       const cell = gridCells[i] || { x: centerX, y: centerY, distFromCenterNorm: 0 }
@@ -238,34 +296,36 @@ export function MarketBubbles({
       }
     })
 
-    // Iterative 2D Physics with Rectangular Uniform Expansion & Central Volume Anchor (180 passes)
-    const iterations = 180
-    const padding = W < 640 ? 4 : 6 // 6px clean spacing on desktop, 4px on mobile
+    // Iterative 2D Physics: Tight center packing (2px gap) + spacious corners (8-10px gap)
+    const iterations = 190
 
     for (let iter = 0; iter < iterations; iter++) {
       const alpha = Math.max(0.06, 1 - iter / iterations)
 
-      // 1. Forces: Central pull for top volume stocks, gentle outward spread for outer stocks
+      // 1. Forces: Strong centripetal pull in the center to eliminate voids; gentle spread at corners
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
         const volRatio = node.volNorm
+        const dxCenter = node.x - centerX
+        const dyCenter = node.y - centerY
+        const distCenterNorm = Math.hypot(dxCenter / (W / 2), dyCenter / (H / 2))
 
-        if (volRatio >= 0.3) {
-          // Inner/High-volume stocks stay anchored towards center
-          node.x += (centerX - node.x) * (volRatio * 0.03) * alpha
-          node.y += (centerY - node.y) * (volRatio * 0.03) * alpha
+        if (distCenterNorm < 0.6 || volRatio >= 0.2) {
+          // In center: Stronger pull to eliminate empty voids in the middle
+          const gravity = (0.025 + volRatio * 0.05) * alpha
+          node.x += (centerX - node.x) * gravity
+          node.y += (centerY - node.y) * gravity
         } else {
-          // Outer stocks expand towards corners and perimeter to fill the entire box evenly
-          const dxCenter = node.x - centerX
-          const dyCenter = node.y - centerY
+          // Near corners: gentle outward pressure to keep corners airy and filled
           const distCenter = Math.hypot(dxCenter, dyCenter) || 1
-          const pushOut = 0.5 * alpha
+          const pushOut = 0.45 * alpha
           node.x += (dxCenter / distCenter) * pushOut
           node.y += (dyCenter / distCenter) * pushOut
         }
       }
 
-      // 2. Strict Pairwise Circle Collision Push with Spacing Gap
+      // 2. Dynamic Radial Distance Collision:
+      // CENTER has TIGHT spacing (2px padding), CORNERS have MORE SPACING (8-10px padding)
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const n1 = nodes[i]
@@ -273,7 +333,18 @@ export function MarketBubbles({
           const dx = n2.x - n1.x
           const dy = n2.y - n1.y
           const dist = Math.hypot(dx, dy)
-          const minDist = n1.r + n2.r + padding
+
+          // Average distance from center for this pair
+          const midX = (n1.x + n2.x) / 2 - centerX
+          const midY = (n1.y + n2.y) / 2 - centerY
+          const dMidNorm = Math.min(1, Math.hypot(midX / (W / 2), midY / (H / 2)))
+
+          // Dynamic padding: 2.0px in center, increasing to 8.5px in corners
+          const pairPadding = W < 640
+            ? 1.5 + Math.pow(dMidNorm, 1.2) * 4.5
+            : 2.0 + Math.pow(dMidNorm, 1.3) * 6.5
+
+          const minDist = n1.r + n2.r + pairPadding
 
           if (dist < minDist) {
             const overlap = minDist - dist
@@ -575,66 +646,88 @@ export function MarketBubbles({
           )}
         </div>
       ) : (
-        /* Redesigned Compact Columns View: High-density multi-card rows */
-        <div className="rounded-2xl border border-white/[0.08] bg-[#070d15] p-3 sm:p-4 shadow-xl">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2">
-            {topStocks.map((stock, index) => {
-              const change = getStockChange(stock, period)
-              const chgVal = change ?? 0
-              const isFuchsia = chgVal >= 6.5
-              const isEmerald = chgVal > 0 && !isFuchsia
-              const isRose = chgVal < 0
+        /* Redesigned Compact Columns View Grouped by Volume Tiers */
+        <div className="space-y-5 rounded-2xl border border-white/[0.08] bg-[#070d15] p-4 sm:p-5 shadow-xl">
+          {volumeGroups.map((group) => {
+            const Icon = group.icon
 
-              return (
-                <button
-                  key={stock.ticker}
-                  type="button"
-                  onClick={() => onOpenStockDetail?.(stock.ticker)}
-                  className={cn(
-                    "group flex flex-col justify-between rounded-xl border p-2 text-left transition-all duration-150 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/50",
-                    isFuchsia && "border-fuchsia-500/30 bg-fuchsia-500/[0.06] hover:border-fuchsia-400/60 hover:bg-fuchsia-500/[0.12]",
-                    isEmerald && "border-emerald-500/30 bg-emerald-500/[0.06] hover:border-emerald-400/60 hover:bg-emerald-500/[0.12]",
-                    isRose && "border-rose-500/30 bg-rose-500/[0.06] hover:border-rose-400/60 hover:bg-rose-500/[0.12]",
-                    !isFuchsia && !isEmerald && !isRose && "border-white/[0.07] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05]"
-                  )}
-                >
-                  {/* Top Row: Rank & Ticker & Sector Tag */}
-                  <div className="flex items-center justify-between gap-1">
-                    <div className="flex items-center gap-1 min-w-0">
-                      <span className="font-mono text-[9px] font-bold text-slate-500">#{index + 1}</span>
-                      <strong className="font-mono text-xs sm:text-sm font-black text-white group-hover:text-cyan-200 tracking-tight">
-                        {stock.ticker}
-                      </strong>
-                    </div>
-                    <span className="truncate rounded bg-white/[0.06] px-1 py-0.5 text-[8px] font-bold uppercase text-slate-400 max-w-[58px]">
-                      {stock.sector}
-                    </span>
+            return (
+              <div key={group.id} className="space-y-2.5">
+                {/* Volume Tier Header */}
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
+                  <div className="flex items-center gap-2">
+                    <Icon className="size-4 text-teal-300" />
+                    <h3 className="font-mono text-xs sm:text-sm font-bold text-white tracking-wide">
+                      {group.title}
+                    </h3>
                   </div>
+                  <Badge variant="outline" className={cn("text-[10px] font-mono font-bold px-2 py-0.5", group.badgeClass)}>
+                    {group.badge}
+                  </Badge>
+                </div>
 
-                  {/* Bottom Row: Volume & % Change */}
-                  <div className="mt-1.5 flex items-baseline justify-between gap-1 font-mono">
-                    <span className="text-[9px] text-slate-500 truncate">
-                      {stock.volume != null ? `${(stock.volume / 1000000).toFixed(1)}M` : "—"}
-                    </span>
-                    <strong
-                      className={cn(
-                        "text-xs sm:text-sm font-black",
-                        isFuchsia
-                          ? "text-fuchsia-300"
-                          : isEmerald
-                          ? "text-emerald-400"
-                          : isRose
-                          ? "text-rose-400"
-                          : "text-slate-300"
-                      )}
-                    >
-                      {formatSigned(change, 2, "%")}
-                    </strong>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+                {/* Grid of Compact Mini Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2">
+                  {group.items.map(({ stock, rank }) => {
+                    const change = getStockChange(stock, period)
+                    const chgVal = change ?? 0
+                    const isFuchsia = chgVal >= 6.5
+                    const isEmerald = chgVal > 0 && !isFuchsia
+                    const isRose = chgVal < 0
+
+                    return (
+                      <button
+                        key={stock.ticker}
+                        type="button"
+                        onClick={() => onOpenStockDetail?.(stock.ticker)}
+                        className={cn(
+                          "group flex flex-col justify-between rounded-xl border p-2 text-left transition-all duration-150 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/50",
+                          isFuchsia && "border-fuchsia-500/30 bg-fuchsia-500/[0.06] hover:border-fuchsia-400/60 hover:bg-fuchsia-500/[0.12]",
+                          isEmerald && "border-emerald-500/30 bg-emerald-500/[0.06] hover:border-emerald-400/60 hover:bg-emerald-500/[0.12]",
+                          isRose && "border-rose-500/30 bg-rose-500/[0.06] hover:border-rose-400/60 hover:bg-rose-500/[0.12]",
+                          !isFuchsia && !isEmerald && !isRose && "border-white/[0.07] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05]"
+                        )}
+                      >
+                        {/* Top Row: Rank & Ticker & Sector Tag */}
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <span className="font-mono text-[9px] font-bold text-slate-500">#{rank}</span>
+                            <strong className="font-mono text-xs sm:text-sm font-black text-white group-hover:text-cyan-200 tracking-tight">
+                              {stock.ticker}
+                            </strong>
+                          </div>
+                          <span className="truncate rounded bg-white/[0.06] px-1 py-0.5 text-[8px] font-bold uppercase text-slate-400 max-w-[58px]">
+                            {stock.sector}
+                          </span>
+                        </div>
+
+                        {/* Bottom Row: Volume & % Change */}
+                        <div className="mt-1.5 flex items-baseline justify-between gap-1 font-mono">
+                          <span className="text-[9px] text-slate-500 truncate">
+                            {stock.volume != null ? `${(stock.volume / 1000000).toFixed(1)}M` : "—"}
+                          </span>
+                          <strong
+                            className={cn(
+                              "text-xs sm:text-sm font-black",
+                              isFuchsia
+                                ? "text-fuchsia-300"
+                                : isEmerald
+                                ? "text-emerald-400"
+                                : isRose
+                                ? "text-rose-400"
+                                : "text-slate-300"
+                            )}
+                          >
+                            {formatSigned(change, 2, "%")}
+                          </strong>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
