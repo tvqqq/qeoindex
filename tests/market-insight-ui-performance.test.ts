@@ -88,8 +88,6 @@ test("Market Close dashboard uses stable accessible shadcn chart composition", (
     "IndexBreadthChart",
     "MaBreadthChart",
     "InstitutionalFlowChart",
-    "LiquidityLeadersChart",
-    "IndexImpactChart",
     "MarketHistoryChart",
     "MarketHistoryFlowChart",
   ]) {
@@ -134,11 +132,10 @@ test("Market Close keeps the main dashboard continuous and limits tabs to the th
   assert.match(dashboard, /slice\(0, 100\)/, "bubble field must keep the requested Top 100 cap")
   assert.match(dashboard, /min-h-\[650px\]/, "bubble layout must reserve stable space")
   assert.match(dashboard, /Luân chuyển dòng tiền/, "sector workspace must expose the rotation view")
-  for (const sectionId of ["market-overview-title", "market-sectors-title", "market-leaders-title", "market-history-title"]) {
+  for (const sectionId of ["market-overview-title", "market-sectors-title", "market-history-title"]) {
     assert.match(dashboard, new RegExp(`id="${sectionId}"`), `${sectionId} must be visible in the continuous dashboard`)
   }
   assert.match(dashboard, /2xl:grid-cols-4/, "overview charts should use four columns on wide screens")
-  assert.match(dashboard, /2xl:grid-cols-3/, "leader cards should use three columns on wide screens")
   assert.match(dashboard, /data-stock-analytics-dashboard/, "the dashboard must preserve the analytics-first visual hierarchy")
   assert.doesNotMatch(dashboard, /<Table\b/, "market-close analytics should prioritize charts over long data tables")
   assert.doesNotMatch(dashboard, /Dữ liệu thị trường cũ \(Stale\)/, "stale status belongs in the page header, not inside the market dashboard")

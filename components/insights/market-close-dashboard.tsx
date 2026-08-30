@@ -5,8 +5,8 @@ import { Activity, BarChart3, BookOpen, CircleDollarSign, Gauge, LineChart } fro
 
 import { MetricGuideDialog } from "@/components/insights/metric-guide-dialog"
 import {
-  IndexBreadthChart, IndexImpactChart, IndexPerformanceChart, InstitutionalFlowChart,
-  LiquidityLeadersChart, MaBreadthChart, MarketHistoryChart, MarketHistoryFlowChart,
+  IndexBreadthChart, IndexPerformanceChart, InstitutionalFlowChart,
+  MaBreadthChart, MarketHistoryChart, MarketHistoryFlowChart,
 } from "@/components/insights/market-close-charts"
 import { MarketBubbles, type MarketBubbleStock } from "@/components/insights/market-bubbles"
 import { SectorMapPanel } from "@/components/insights/sector-map-panel"
@@ -84,8 +84,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
     <Card className={cn(surface, "py-12 text-center")}><CardContent className="space-y-3"><Activity className="mx-auto size-10 text-slate-600" /><CardTitle>Chưa có dữ liệu phiên đóng cửa</CardTitle><CardDescription>Snapshot sau phiên được cập nhật tự động sau 15:15 vào ngày giao dịch.</CardDescription></CardContent></Card>
   )
 
-  const { sessionDate, asOf, dailySummary, indexes, sectors, sectorHistory = [], leaders, history } = data
-  const topVolumeLeaders = leaders.filter((item) => item.category === "top_volume").slice(0, 6)
+  const { sessionDate, asOf, dailySummary, indexes, sectors, sectorHistory = [], history } = data
 
   return (
     <div className="space-y-10" data-stock-analytics-dashboard data-liquid-glass-dashboard>
@@ -142,16 +141,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
         </div>
       </section>
 
-      {/* 5. Leaders & Liquidity Map */}
-      <section aria-labelledby="market-leaders-title" className="space-y-4 border-t border-white/[0.06] pt-8">
-        <div id="market-leaders-title"><SectionHeading eyebrow="Liquidity map" title="Thanh khoản và mã dẫn dắt" description="Nhìn nhanh nơi dòng tiền tập trung và cổ phiếu đang kéo hoặc ghìm VNINDEX." /></div>
-        <div className="grid gap-3 xl:grid-cols-[1.2fr_1.2fr_.65fr] 2xl:grid-cols-3" data-market-close-chart-grid>
-          <ChartPanel icon={BarChart3} title="Thanh khoản dẫn đầu" description="Khối lượng khớp theo triệu cổ phiếu"><LiquidityLeadersChart leaders={leaders} /></ChartPanel><ChartPanel icon={Activity} title="Tác động VNINDEX" description="Đóng góp tăng và giảm điểm"><IndexImpactChart leaders={leaders} /></ChartPanel>
-          <Card className={cn(surface, "py-0")}><PanelHeading icon={CircleDollarSign} title="Mã sôi động" description="Bấm để mở hồ sơ cổ phiếu" /><CardContent className="grid grid-cols-2 gap-2 p-3 xl:grid-cols-1">{topVolumeLeaders.map((item) => <button key={`${item.rank}:${item.ticker}`} type="button" onClick={() => onOpenStockDetail?.(item.ticker)} className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.05] bg-white/[0.02] p-2.5 text-left transition-colors hover:border-teal-300/15 hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/40"><span className="font-mono text-xs font-black text-white">{item.ticker}</span><span className={cn("font-mono text-[10px] font-bold", (item.changePct ?? 0) >= 0 ? "text-teal-300" : "text-rose-300")}>{formatSigned(item.changePct, 2, "%")}</span></button>)}</CardContent></Card>
-        </div>
-      </section>
-
-      {/* 6. 20-Session Market History */}
+      {/* 5. 20-Session Market History */}
       <section aria-labelledby="market-history-title" className="space-y-4 border-t border-white/[0.06] pt-8">
         <div id="market-history-title"><SectionHeading eyebrow="20-session context" title="Bối cảnh trước khi ra quyết định" description="Đặt phiên hiện tại cạnh sức khỏe và dòng tiền gần đây, thay vì chỉ nhìn một ngày." /></div>
         <div className="grid gap-3 xl:grid-cols-2" data-market-close-chart-grid><ChartPanel icon={Gauge} title="Tâm lý, rủi ro và MA20" description="Thang điểm sức khỏe qua tối đa 20 phiên"><MarketHistoryChart history={history} /></ChartPanel><ChartPanel icon={CircleDollarSign} title="Dòng tiền theo phiên" description="Khối ngoại và tự doanh quanh trục trung tính"><MarketHistoryFlowChart history={history} /></ChartPanel></div>
