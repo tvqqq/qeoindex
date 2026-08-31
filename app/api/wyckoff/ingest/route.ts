@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { isMachineRequestAuthorized } from "@/lib/auth/machine"
+import { executeSystemJob } from "@/lib/admin/job-telemetry"
 import { notifyOpsError } from "@/lib/ops-alerts"
 import { ingestLatestReadyWyckoffRun } from "@/lib/wyckoff-notion-ingest"
 
@@ -13,7 +14,13 @@ async function ingest(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
   }
   try {
-    return NextResponse.json(await ingestLatestReadyWyckoffRun())
+    const { result } = await executeSystemJob({
+      jobKey: "wyckoff.ingest",
+      trigger: "external",
+      telemetry: "required",
+      fn: ingestLatestReadyWyckoffRun,
+    })
+    return NextResponse.json(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     await notifyOpsError({ source: "wyckoff-notion-ingest", message, path: request.nextUrl.pathname, method: request.method, status: 500 })

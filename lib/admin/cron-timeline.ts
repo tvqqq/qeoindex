@@ -1,4 +1,4 @@
-import { getPgCronNameForJobKey } from "./job-schedule.ts"
+import { getJobTimelineLane, getPgCronNameForJobKey } from "./job-schedule.ts"
 import type { AdminJobView, AdminJobStatus, AdminSchedulerStatus, AdminJobEvidenceSource } from "./types.ts"
 
 export interface TimelinePhaseItem {
@@ -36,6 +36,7 @@ export interface TimelineJobNode {
   endPercent?: number
   executionStatus: AdminJobStatus
   schedulerStatus: AdminSchedulerStatus
+  schedulerEvidence?: AdminJobView["schedulerEvidence"]
   schedulerLastStatus: string | null
   healthReason: string
   conflictWarning: string | null
@@ -64,9 +65,8 @@ export interface CronTimelineModel {
   conflictCount: number
 }
 
-function timeToMinuteOfDay(timeStr: string): number {
-  const [h, m] = timeStr.split(":").map(Number)
-  return (h || 0) * 60 + (m || 0)
+function formatMinute(minute: number) {
+  return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`
 }
 
 function minuteToPercent(minutes: number): number {
@@ -85,56 +85,31 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
     let endPercent: number | undefined
     let phases: TimelinePhaseItem[] | undefined
 
-    if (job.key === "qeoindex.eod_pipeline") {
-      lane = "pg_cron"
-      displayType = "point"
-      timeIctLabel = "15:15 ICT"
-      daysLabel = "T2-T6"
-      startMinuteOfDay = 15 * 60 + 15
-      startPercent = minuteToPercent(startMinuteOfDay)
-      phases = EOD_PIPELINE_PHASES
-    } else if (job.key === "signals.daily") {
-      lane = "vercel"
-      displayType = "point"
-      timeIctLabel = "07:00 ICT"
-      daysLabel = "T2-T6"
-      startMinuteOfDay = 7 * 60
-      startPercent = minuteToPercent(startMinuteOfDay)
-    } else if (job.key === "kfsp.rating_daily") {
-      lane = "pg_cron"
-      displayType = "point"
-      timeIctLabel = "07:00 ICT"
-      daysLabel = "Hàng ngày"
-      startMinuteOfDay = 7 * 60
-      startPercent = minuteToPercent(startMinuteOfDay)
-    } else if (job.key === "kfsp.ttai_history") {
-      lane = "pg_cron"
-      displayType = "point"
-      timeIctLabel = "01:00 ICT"
-      daysLabel = "Hàng ngày"
-      startMinuteOfDay = timeToMinuteOfDay("01:00")
-      startPercent = minuteToPercent(startMinuteOfDay)
-    } else if (job.key === "market.sync_5m") {
-      lane = "pg_cron"
-      displayType = "interval"
-      timeIctLabel = "09:00 – 14:40 (mỗi 5p)"
-      daysLabel = "T2-T6"
-      startMinuteOfDay = timeToMinuteOfDay("09:00")
-      endMinuteOfDay = timeToMinuteOfDay("14:40")
-      startPercent = minuteToPercent(startMinuteOfDay)
-      endPercent = minuteToPercent(endMinuteOfDay)
-    } else if (job.key === "market.sync_eod") {
-      lane = "pg_cron"
-      displayType = "point"
-      timeIctLabel = "14:45 ICT"
-      daysLabel = "T2-T6"
-      startMinuteOfDay = timeToMinuteOfDay("14:45")
-      startPercent = minuteToPercent(startMinuteOfDay)
-    } else {
+    const policy = job.schedulePolicy
+    lane = getJobTimelineLane(job)
+    if (!policy || policy.kind === "manual") {
       lane = "manual"
       displayType = "manual"
       timeIctLabel = "Thủ công"
       daysLabel = "Thủ công"
+    } else if (policy.kind === "fixed_time") {
+      displayType = job.key === "qeoindex.eod_pipeline" ? "point" : "point"
+      const minute = policy.minuteOfDay
+      timeIctLabel = `${formatMinute(minute)} ICT`
+      daysLabel = policy.cadence === "weekdays" ? "T2-T6" : "Hàng ngày"
+      startMinuteOfDay = minute
+      startPercent = minuteToPercent(minute)
+      if (job.key === "qeoindex.eod_pipeline") phases = EOD_PIPELINE_PHASES
+    } else {
+      displayType = "interval"
+      const first = policy.windows[0]
+      const last = policy.windows[policy.windows.length - 1]
+      timeIctLabel = `${formatMinute(first.startMinuteOfDay)} – ${formatMinute(last.endMinuteOfDay)} (mỗi ${first.cadenceMinutes}p)`
+      daysLabel = policy.cadence === "weekdays" ? "T2-T6" : "Hàng ngày"
+      startMinuteOfDay = first.startMinuteOfDay
+      endMinuteOfDay = last.endMinuteOfDay
+      startPercent = minuteToPercent(startMinuteOfDay)
+      endPercent = minuteToPercent(endMinuteOfDay)
     }
 
     const schedulerName = job.schedulerName || getPgCronNameForJobKey(job.key)
@@ -155,6 +130,7 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
       endPercent,
       executionStatus: job.status,
       schedulerStatus: job.schedulerStatus ?? "unknown",
+      schedulerEvidence: job.schedulerEvidence,
       schedulerLastStatus: job.schedulerLastStatus ?? null,
       healthReason: job.healthReason || "Không có ghi chú thực thi",
       conflictWarning: job.conflictWarning ?? null,

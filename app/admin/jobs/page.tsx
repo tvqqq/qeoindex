@@ -4,10 +4,12 @@ import { AdminCronTimeline } from "@/components/admin/admin-cron-timeline"
 import { AdminJobAuditSummary } from "@/components/admin/admin-job-audit-summary"
 import { AdminJobsTable } from "@/components/admin/admin-jobs-table"
 import { loadAdminJobsSnapshot } from "@/lib/admin/job-health"
+import { requireRootPageContext } from "@/lib/auth/root"
 
 export const dynamic = "force-dynamic"
 
 export default async function AdminJobsPage() {
+  await requireRootPageContext()
   const snapshot = await loadAdminJobsSnapshot()
 
   return (
@@ -23,6 +25,9 @@ export default async function AdminJobsPage() {
           </div>
           <p className="mt-0.5 text-xs text-slate-400">
             Giám sát trạng thái {snapshot.counts.total} tác vụ, chu kỳ làm mới, thời lượng thực thi và kích hoạt thủ công các tác vụ an toàn.
+          </p>
+          <p className="mt-1 text-[11px] text-slate-500">
+            Scheduler evidence: {snapshot.scheduler.expected} expected · {snapshot.scheduler.liveVerified} live verified · {snapshot.scheduler.configOnly} config-only · {snapshot.scheduler.unavailable ? `${snapshot.scheduler.unavailable} unavailable` : `${snapshot.scheduler.missing} missing`}
           </p>
         </div>
       </div>

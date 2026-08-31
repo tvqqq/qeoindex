@@ -10,6 +10,7 @@ import {
   getPgCronNameForJobKey,
   PG_CRON_NAME_TO_JOB_KEY,
 } from "../lib/admin/job-schedule.ts"
+import { isValidSchedulePolicy } from "../lib/admin/schedule-policy.ts"
 
 function readJsonFile(path: string) {
   return JSON.parse(readFileSync(new URL(`../${path}`, import.meta.url), "utf8"))
@@ -162,4 +163,18 @@ test("detects legacy 14:50 ICT overlap conflict when 5m runs past 14:40 and EOD 
   assert.equal(conflicts.length, 2)
   assert.equal(conflicts[0].timeIct, "14:50")
   assert.match(conflicts[0].reason, /14:50 ICT/)
+})
+
+test("effective catalog has complete structured ICT schedule policies", () => {
+  assert.equal(new Set(EFFECTIVE_ADMIN_JOB_CATALOG.map((job) => job.key)).size, 11)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 5)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 6)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => !isValidSchedulePolicy(job.schedulePolicy)).length, 0)
+  const ttai = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "kfsp.ttai_history")
+  assert.equal(ttai?.schedulePolicy?.kind, "fixed_time")
+  assert.equal((ttai?.schedulePolicy as { minuteOfDay: number }).minuteOfDay, 430)
+  const market = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "market.sync_5m")
+  assert.equal((market?.schedulePolicy as { windows: unknown[] }).windows.length, 2)
+  assert.equal(isValidSchedulePolicy(undefined), false)
+  assert.equal(isValidSchedulePolicy({ kind: "fixed_time", timezone: "UTC", cadence: "daily", minuteOfDay: 420, graceMinutes: 5 }), false)
 })

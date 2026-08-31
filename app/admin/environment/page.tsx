@@ -1,9 +1,11 @@
 import { AdminEnvironmentTable } from "@/components/admin/admin-environment-table"
 import { getAdminEnvironmentInventory } from "@/lib/admin/catalog"
+import { requireRootPageContext } from "@/lib/auth/root"
 
 export const dynamic = "force-dynamic"
 
-export default function AdminEnvironmentPage() {
+export default async function AdminEnvironmentPage() {
+  await requireRootPageContext()
   const environment = getAdminEnvironmentInventory()
   const configuredCount = environment.filter((e) => e.isConfigured).length
   const secretCount = environment.filter((e) => e.sensitivity === "secret").length

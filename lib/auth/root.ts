@@ -1,5 +1,6 @@
 import "server-only"
 
+import { notFound } from "next/navigation"
 import { NextResponse } from "next/server"
 import { getServerAuthContext, requireApiUser, type ServerAuthContext } from "@/lib/auth/server"
 import { isRootAdminUserId } from "@/lib/auth/root-id"
@@ -13,6 +14,13 @@ export function isConfiguredRootUserId(userId: string): boolean {
 export async function getRootPageContext(): Promise<ServerAuthContext | null> {
   const context = await getServerAuthContext()
   return context && isConfiguredRootUserId(context.user.id) ? context : null
+}
+
+/** Guard server-rendered admin pages before any private loader is started. */
+export async function requireRootPageContext(): Promise<ServerAuthContext> {
+  const context = await getRootPageContext()
+  if (!context) notFound()
+  return context
 }
 
 export async function requireApiRoot(): Promise<

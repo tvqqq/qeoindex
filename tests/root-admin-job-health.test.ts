@@ -6,6 +6,27 @@ import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.
 import { getPgCronNameForJobKey } from "../lib/admin/job-schedule.ts"
 import type { AdminJobDefinition } from "../lib/admin/types.ts"
 import { buildAdminJobViews, deriveAdminJobStatus } from "../lib/admin/job-health.ts"
+import { deriveScheduleDueState, resolveJobEvidence } from "../lib/admin/job-evidence.ts"
+import { interpretEodQuality, interpretRatingQuality, interpretSignalsDailyQuality, interpretTtaiQuality } from "../lib/admin/job-quality.ts"
+
+test("quality interpreters preserve reported scalar counts and honest unknowns", () => {
+  assert.equal(interpretEodQuality({ total: 500, complete: 383, incomplete: 117, validationAgreement: true, limitedCoverageCount: 26 }).status, "partial_by_reported_counts")
+  assert.equal(interpretEodQuality({ total: 500, complete: 400, incomplete: 100, validationAgreement: false }).status, "inconsistent")
+  assert.equal(interpretEodQuality({ total: 0, complete: 0, incomplete: 0, validationAgreement: true }).status, "empty")
+  assert.equal(interpretEodQuality({ total: 500, complete: 383, incomplete: 117 }).status, "unknown")
+  assert.equal(interpretEodQuality({ total: -1, complete: 0, incomplete: 0, validationAgreement: true }).status, "inconsistent")
+  assert.equal(interpretSignalsDailyQuality({ completed: 49, errors: 1, skipped: 0 }).status, "reported_issues")
+  assert.equal(interpretSignalsDailyQuality({ completed: 50, errors: 0, skipped: 0 }).status, "no_reported_issues")
+  assert.equal(interpretSignalsDailyQuality({ completed: "bad", errors: 0, skipped: 0 }).status, "inconsistent")
+  assert.equal(interpretSignalsDailyQuality({ completed: 51, errors: 0, skipped: 0 }).status, "no_reported_issues")
+  assert.equal(interpretRatingQuality({ staged: 100, published: 99 }).status, "partial_by_reported_counts")
+  assert.equal(interpretRatingQuality({ staged: 0, published: 0 }).status, "empty")
+  assert.equal(interpretRatingQuality({ staged: 1, published: 2 }).status, "inconsistent")
+  assert.equal(interpretTtaiQuality({ candidates: 12, processed: 11, failed: 1 }).status, "reported_issues")
+  assert.equal(interpretTtaiQuality({ candidates: 12, processed: 10, failed: 0 }).status, "no_reported_issues")
+  assert.equal(interpretTtaiQuality({ candidates: 0, processed: 0, failed: 0 }).status, "empty")
+  assert.equal(interpretTtaiQuality({ candidates: 2, processed: 2, failed: 1 }).status, "inconsistent")
+})
 
 const definition: AdminJobDefinition = {
   key: "wyckoff.ingest",
@@ -19,6 +40,57 @@ const definition: AdminJobDefinition = {
   freshnessMinutes: 26 * 60,
   maxDurationMinutes: 5,
 }
+
+test("schedule due state does not mark Friday EOD stale before Monday deadline", () => {
+  const eod = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "qeoindex.eod_pipeline")
+  assert.ok(eod?.schedulePolicy)
+  const monday = new Date("2026-08-31T03:52:00.000Z")
+  assert.equal(deriveScheduleDueState(eod.schedulePolicy, "2026-08-28T09:00:00.000Z", monday), "not_due")
+  const { jobs } = buildAdminJobViews([eod], [{
+    id: "friday-eod", job_key: eod.key, trigger: "workflow", status: "succeeded",
+    started_at: "2026-08-28T08:15:00.000Z", finished_at: "2026-08-28T09:00:00.000Z",
+  }], [], monday)
+  assert.equal(jobs[0].status, "healthy")
+  assert.equal(jobs[0].scheduleDueState, "not_due")
+})
+
+test("current execution is separated from prior terminal evidence", () => {
+  const signals = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "signals.daily")
+  assert.ok(signals)
+  const monday = new Date("2026-08-31T03:52:00.000Z")
+  const resolved = resolveJobEvidence(signals, {
+    systemJobRuns: [
+      { id: "current", job_key: signals.key, trigger: "workflow", status: "running", started_at: "2026-08-31T00:28:00.000Z", finished_at: null },
+      { id: "prior", job_key: signals.key, trigger: "workflow", status: "succeeded", started_at: "2026-08-28T00:28:00.000Z", finished_at: "2026-08-28T07:30:00.000Z" },
+    ], cronSnapshots: [], kfspRatingRuns: [], kfspTtaiRuns: [], orderbookStats: null,
+  }, monday)
+  assert.equal(resolved.executionStatus, "in_progress")
+  assert.equal(resolved.currentExecution?.runId, "current")
+  assert.equal(resolved.lastTerminalExecution?.runId, "prior")
+})
+
+test("market domain health remains independent when execution telemetry is absent", () => {
+  const market = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "market.sync_5m")
+  assert.ok(market)
+  const resolved = resolveJobEvidence(market, {
+    systemJobRuns: [], cronSnapshots: [], kfspRatingRuns: [], kfspTtaiRuns: [],
+    orderbookStats: { latestSessionDate: "2026-08-31", totalSnapshots: 100, latestUpdatedAt: "2026-08-31T03:52:00.000Z" },
+  }, new Date("2026-08-31T03:52:00.000Z"))
+  assert.equal(resolved.executionStatus, "healthy")
+  assert.equal(resolved.domainEvidence?.totalSnapshots, 100)
+  assert.equal(resolved.executionTelemetry?.source, "unavailable")
+})
+
+test("schedule due state respects weekday, deadline and both market windows", () => {
+  const eod = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "market.sync_eod")
+  const fiveMinute = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "market.sync_5m")
+  assert.ok(eod?.schedulePolicy && fiveMinute?.schedulePolicy)
+  assert.equal(deriveScheduleDueState(eod.schedulePolicy, null, new Date("2026-08-30T08:00:00.000Z")), "not_due")
+  assert.equal(deriveScheduleDueState(eod.schedulePolicy, null, new Date("2026-08-31T08:05:00.000Z")), "due")
+  assert.equal(deriveScheduleDueState(eod.schedulePolicy, null, new Date("2026-08-31T09:30:00.000Z")), "overdue")
+  assert.equal(deriveScheduleDueState(fiveMinute.schedulePolicy, null, new Date("2026-08-31T03:00:00.000Z")), "due")
+  assert.equal(deriveScheduleDueState(fiveMinute.schedulePolicy, null, new Date("2026-08-31T03:50:00.000Z")), "due")
+})
 
 test("job health is derived from result and freshness", () => {
   const now = new Date("2026-08-24T12:00:00Z")
@@ -34,7 +106,11 @@ test("job health is derived from result and freshness", () => {
   )
   assert.equal(
     deriveAdminJobStatus(definition, { status: "running", startedAt: "2026-08-24T11:58:00Z", finishedAt: null }, now),
-    "healthy",
+    "in_progress",
+  )
+  assert.equal(
+    deriveAdminJobStatus(definition, { status: "queued", startedAt: null, finishedAt: null }, now),
+    "in_progress",
   )
   assert.equal(
     deriveAdminJobStatus(definition, { status: "skipped", startedAt: "2026-08-24T10:00:00Z", finishedAt: "2026-08-24T10:01:00Z" }, now),
@@ -193,6 +269,26 @@ test("Daily Signals reports partial scanner quality as degraded and allows an al
 
   assert.equal(jobs[0].status, "degraded")
   assert.match(jobs[0].healthReason || "", /49\/50|1 lỗi/i)
+})
+
+test("EOD and Signals expose quality separately from terminal execution", () => {
+  const eod = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "qeoindex.eod_pipeline")
+  const signals = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "signals.daily")
+  assert.ok(eod && signals)
+  const eodView = buildAdminJobViews([eod], [{
+    id: "eod-partial", job_key: eod.key, trigger: "workflow", status: "succeeded",
+    started_at: "2026-08-31T08:15:00.000Z", finished_at: "2026-08-31T09:00:00.000Z",
+    summary: { build: { total: 500, complete: 383, incomplete: 117 }, validation: { total: 500, complete: 383, incomplete: 117 }, history: { limitedCoverageCount: 26 } },
+  }], [], new Date("2026-08-31T10:00:00.000Z"))
+  assert.equal(eodView.jobs[0].status, "degraded")
+  assert.equal((eodView.jobs[0].domainEvidence?.quality as { status: string }).status, "partial_by_reported_counts")
+  const signalView = buildAdminJobViews([signals], [{
+    id: "signals-issues", job_key: signals.key, trigger: "workflow", status: "succeeded",
+    started_at: "2026-08-31T00:00:00.000Z", finished_at: "2026-08-31T07:30:00.000Z",
+    summary: { scanner: { completed: 49, skipped: 0, errors: 1 } },
+  }], [], new Date("2026-08-31T08:00:00.000Z"))
+  assert.equal(signalView.jobs[0].status, "degraded")
+  assert.equal((signalView.jobs[0].domainEvidence?.quality as { status: string }).status, "reported_issues")
 })
 
 test("Market 5-minute row uses the latest scheduler invocation rather than the 14:45 EOD snapshot timestamp", () => {

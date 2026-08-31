@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { isMachineRequestAuthorized } from "@/lib/auth/machine"
+import { executeSystemJob } from "@/lib/admin/job-telemetry"
 import { runMarketUniverseSync } from "@/lib/market-sync-universe"
 
 export const runtime = "nodejs"
@@ -17,7 +18,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    return NextResponse.json(await runMarketUniverseSync())
+    const { result } = await executeSystemJob({
+      jobKey: "market.sync_universe",
+      trigger: "external",
+      telemetry: "required",
+      fn: runMarketUniverseSync,
+    })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Market Sync] Sync failed", error)
     return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Market sync failed." }, { status: 503 })

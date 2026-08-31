@@ -18,6 +18,7 @@ import type {
   AdminJobView,
   AdminSystemOverview,
 } from "./types.ts"
+import { reconcileSupabaseSchedulers } from "./scheduler-reconciliation.ts"
 
 export type {
   CronSnapshotRow,
@@ -52,7 +53,7 @@ export function buildAdminJobViews(
   evidenceOrRuns: RawEvidenceSnapshot | SystemJobRunRow[],
   cronSnapshots: CronSnapshotRow[] = [],
   now: Date = new Date(),
-): { jobs: AdminJobView[]; counts: AdminSystemOverview["jobCounts"] } {
+): { jobs: AdminJobView[]; counts: AdminSystemOverview["jobCounts"]; scheduler: AdminSystemOverview["scheduler"] } {
   let rawEvidence: RawEvidenceSnapshot
 
   if (Array.isArray(evidenceOrRuns)) {
@@ -63,6 +64,9 @@ export function buildAdminJobViews(
       kfspTtaiRuns: [],
       orderbookStats: null,
       aiCouncilLlmDebates: [],
+      schedulerReconciliation: cronSnapshots.length > 0
+        ? reconcileSupabaseSchedulers({ availability: "available", rows: cronSnapshots })
+        : reconcileSupabaseSchedulers({ availability: "unavailable", reason: "rpc_error" }),
     }
   } else {
     rawEvidence = evidenceOrRuns
@@ -77,6 +81,7 @@ export function buildAdminJobViews(
     degraded: 0,
     failing: 0,
     stale: 0,
+    in_progress: 0,
     unknown: 0,
   }
 
@@ -123,13 +128,20 @@ export function buildAdminJobViews(
       lastErrorCode: resolved.lastErrorCode,
       lastErrorMessage: resolved.lastErrorMessage,
       aiUsage,
+      schedulePolicy: def.schedulePolicy,
+      currentExecution: resolved.currentExecution,
+      lastTerminalExecution: resolved.lastTerminalExecution,
+      domainEvidence: resolved.domainEvidence,
+      executionTelemetry: resolved.executionTelemetry,
+      scheduleDueState: resolved.scheduleDueState,
+      schedulerEvidence: resolved.schedulerEvidence,
     }
   })
 
-  return { jobs, counts }
+  return { jobs, counts, scheduler: rawEvidence.schedulerReconciliation?.aggregate ?? { expected: 6, liveVerified: 0, configOnly: 1, missing: 0, drifted: 0, duplicated: 0, unavailable: 6, extraUnmapped: 0, inventoryClean: false, expectedMappingsVerified: false } }
 }
 
-export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; counts: AdminSystemOverview["jobCounts"] }> {
+export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; counts: AdminSystemOverview["jobCounts"]; scheduler: AdminSystemOverview["scheduler"] }> {
   const supabase = await getSupabase()
   if (!supabase) {
     return buildAdminJobViews(EFFECTIVE_ADMIN_JOB_CATALOG, [])
@@ -142,6 +154,7 @@ export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; c
     kfspTtaiRuns: [],
     orderbookStats: null,
     aiCouncilLlmDebates: [],
+    schedulerReconciliation: reconcileSupabaseSchedulers({ availability: "unavailable", reason: "rpc_error" }),
   }
 
   const [runsResult, cronResult, ratingResult, ttaiResult, orderbookResult, aiUsageResult] = await Promise.allSettled([
@@ -181,6 +194,9 @@ export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; c
   }
   if (cronResult.status === "fulfilled" && Array.isArray(cronResult.value.data)) {
     rawEvidence.cronSnapshots = cronResult.value.data as CronSnapshotRow[]
+    rawEvidence.schedulerReconciliation = reconcileSupabaseSchedulers({ availability: "available", rows: rawEvidence.cronSnapshots })
+  } else {
+    rawEvidence.schedulerReconciliation = reconcileSupabaseSchedulers({ availability: "unavailable", reason: cronResult.status === "fulfilled" ? "invalid_response" : "rpc_error" })
   }
   if (ratingResult.status === "fulfilled" && Array.isArray(ratingResult.value.data)) {
     rawEvidence.kfspRatingRuns = ratingResult.value.data as KfspRatingRunEvidence[]

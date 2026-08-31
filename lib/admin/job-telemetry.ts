@@ -1,6 +1,15 @@
 import { sanitizeAdminValue } from "./redact.ts"
 import { getAdminJobDefinition } from "./catalog.ts"
 
+export type SystemJobTelemetryClient = {
+  from(table: string): {
+    insert(values: Record<string, unknown>): {
+      select(columns: string): { single(): Promise<{ data?: { id?: string | number } | null; error?: unknown | null }> }
+    }
+    update(values: Record<string, unknown>): { eq(column: string, value: string): Promise<{ error?: unknown | null }> }
+  }
+}
+
 async function getSupabase() {
   const { getSupabaseServerClient } = await import("../supabase/server.ts")
   return getSupabaseServerClient()
@@ -13,12 +22,15 @@ export interface ExecuteSystemJobInput<T> {
   telemetry?: "best_effort" | "required"
   fn: (runId: string | null) => Promise<T>
   extractSummary?: (result: T) => Record<string, unknown>
+  isSuccess?: (result: T) => boolean
+  terminalUpdateFailure?: "preserve-domain-success"
+  telemetryClient?: SystemJobTelemetryClient
 }
 
 export async function executeSystemJob<T>(input: ExecuteSystemJobInput<T>): Promise<{ runId: string | null; result: T }> {
   const startedAt = new Date()
   let runId: string | null = null
-  const supabase = await getSupabase()
+  const supabase = input.telemetryClient ?? await getSupabase()
   const provider = getAdminJobDefinition(input.jobKey)?.provider
 
   if (!provider && input.telemetry === "required") {
@@ -56,6 +68,9 @@ export async function executeSystemJob<T>(input: ExecuteSystemJobInput<T>): Prom
 
   try {
     const result = await input.fn(runId)
+    if (input.isSuccess && !input.isSuccess(result)) {
+      throw new Error("Job completed without a successful result.")
+    }
     const finishedAt = new Date()
     const durationMs = finishedAt.getTime() - startedAt.getTime()
 
@@ -79,9 +94,15 @@ export async function executeSystemJob<T>(input: ExecuteSystemJobInput<T>): Prom
             summary: summary as Record<string, unknown> | null,
           })
           .eq("id", runId)
-        if (error) throw error
+        if (error) throw new Error("Job success telemetry could not be persisted.")
       } catch (err: unknown) {
-        console.warn(`Failed to record job success telemetry for ${input.jobKey}:`, err)
+        const warning = `Failed to record sanitized job success telemetry for ${input.jobKey} run ${runId}`
+        if (input.terminalUpdateFailure === "preserve-domain-success") {
+          console.warn(warning)
+          return { runId, result }
+        }
+        console.warn(warning)
+        throw err
       }
     }
 

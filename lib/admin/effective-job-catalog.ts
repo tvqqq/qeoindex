@@ -1,5 +1,6 @@
 import { ADMIN_JOB_CATALOG } from "./catalog.ts"
 import type { AdminJobDefinition } from "./types.ts"
+import { withSchedulePolicy } from "./schedule-policy.ts"
 
 const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
   key: "qeoindex.eod_pipeline",
@@ -40,23 +41,23 @@ const LEGACY_EOD_JOB_KEYS = new Set([
 
 function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition {
   if (job.key === "signals.daily") {
-    return {
+    return withSchedulePolicy({
       ...job,
       maxDurationMinutes: 8 * 60,
-    }
+    })
   }
 
   if (job.key === "kfsp.ttai_history") {
-    return {
+    return withSchedulePolicy({
       ...job,
       description: "Kiểm tra và cập nhật lịch sử TTAI lúc 07:10 ICT khi kỳ báo cáo tài chính thay đổi.",
       scheduleUtc: "10 0 * * *",
       scheduleIct: "07:10 hàng ngày",
       schedulerName: "kfsp-ttai-history-daily-0710-ict",
-    }
+    })
   }
 
-  return job
+  return withSchedulePolicy(job)
 }
 
 /**
@@ -66,7 +67,7 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
  * effective catalog mirrors the actual production scheduler and workflow shape.
  */
 export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
-  QEOINDEX_EOD_PIPELINE_JOB,
+  withSchedulePolicy(QEOINDEX_EOD_PIPELINE_JOB),
   ...ADMIN_JOB_CATALOG
     .filter((job) => !LEGACY_EOD_JOB_KEYS.has(job.key))
     .map(applyOperationalOverrides),

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { isMachineRequestAuthorized } from "@/lib/auth/machine"
+import { executeSystemJob } from "@/lib/admin/job-telemetry"
 import { runScannerUniverse } from "@/lib/scanner-runner"
 import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
 
@@ -20,7 +21,13 @@ async function run(request: NextRequest) {
   const url = new URL(request.url)
   const limit = Math.max(1, Math.min(UNIVERSE_SIZE, Number(url.searchParams.get("limit") ?? UNIVERSE_SIZE)))
   const offset = Math.max(0, Number(url.searchParams.get("offset") ?? 0))
-  const result = await runScannerUniverse({ limit, offset })
+  const { result } = await executeSystemJob({
+    jobKey: "scanner.run",
+    trigger: "external",
+    telemetry: "required",
+    fn: () => runScannerUniverse({ limit, offset }),
+    isSuccess: (value) => value.errors.length < value.requested,
+  })
   return NextResponse.json(result, { status: result.errors.length === result.requested && result.requested > 0 ? 502 : 200 })
 }
 

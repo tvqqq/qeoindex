@@ -63,6 +63,25 @@ test("admin layout strictly enforces root user authorization with a concealed 40
   assert.doesNotMatch(layout, /ROOT_ADMIN_USER_IDS/)
 })
 
+test("every data-bearing admin page guards before private loaders", () => {
+  const overview = source("app/admin/page.tsx")
+  const jobs = source("app/admin/jobs/page.tsx")
+  const detail = source("app/admin/jobs/[key]/page.tsx")
+  const settings = source("app/admin/settings/page.tsx")
+  const environment = source("app/admin/environment/page.tsx")
+  const audit = source("app/admin/audit/page.tsx")
+
+  assert.match(overview, /requireRootPageContext\(\)/)
+  assert.match(overview, /const actorUserId = context\.user\.id/)
+  assert.doesNotMatch(overview, /actorUserId = .*root/)
+  assert.ok(overview.indexOf("requireRootPageContext()") < overview.indexOf("loadAdminJobsSnapshot()"))
+  assert.ok(jobs.indexOf("requireRootPageContext()") < jobs.indexOf("loadAdminJobsSnapshot()"))
+  assert.ok(detail.indexOf("requireRootPageContext()") < detail.indexOf("loadAdminJobHistory("))
+  assert.ok(settings.indexOf("requireRootPageContext()") < settings.indexOf("loadAdminSettingsSnapshot()"))
+  assert.ok(environment.indexOf("requireRootPageContext()") < environment.indexOf("getAdminEnvironmentInventory()"))
+  assert.ok(audit.indexOf("requireRootPageContext()") < audit.indexOf("loadRecentAuditLogs("))
+})
+
 test("admin job detail resolves the effective operational catalog", () => {
   const page = source("app/admin/jobs/[key]/page.tsx")
   assert.match(page, /getEffectiveAdminJobDefinition/)

@@ -29,7 +29,7 @@ export type AdminSensitivity = "public" | "internal" | "secret"
 
 export type AdminImpact = "low" | "medium" | "high"
 
-export type AdminJobStatus = "healthy" | "degraded" | "failing" | "stale" | "unknown"
+export type AdminJobStatus = "healthy" | "degraded" | "failing" | "stale" | "in_progress" | "unknown"
 
 export type AdminManualPolicy = "disabled" | "allowed" | "confirm"
 
@@ -125,6 +125,20 @@ export type AdminJobEvidenceSource =
   | "none"
 
 export type AdminSchedulerStatus = "active" | "inactive" | "unscheduled" | "unknown"
+export type SchedulerReconciliationView = {
+  availability: "available" | "unavailable"
+  status?: "live_verified" | "config_only" | "missing" | "drifted" | "inactive" | "duplicated" | "legacy_alias"
+  reason?: string
+}
+export type SchedulerAggregate = { expected: number; liveVerified: number; configOnly: number; missing: number; drifted: number; duplicated: number; unavailable: number; extraUnmapped: number; inventoryClean: boolean; expectedMappingsVerified: boolean }
+
+export type SchedulePolicy =
+  | { kind: "manual"; timezone: "Asia/Ho_Chi_Minh" }
+  | { kind: "fixed_time"; timezone: "Asia/Ho_Chi_Minh"; cadence: "daily" | "weekdays"; minuteOfDay: number; completionDeadlineMinuteOfDay?: number; graceMinutes: number }
+  | { kind: "window"; timezone: "Asia/Ho_Chi_Minh"; cadence: "daily" | "weekdays"; windows: Array<{ startMinuteOfDay: number; endMinuteOfDay: number; cadenceMinutes: number }>; graceMinutes: number }
+
+export type AdminExecutionEvidence = { status: "queued" | "running"; startedAt: string | null; runId: string | null }
+export type AdminTerminalExecutionEvidence = { status: string; finishedAt: string | null; runId: string | null }
 
 export type AdminJobDefinition = {
   key: string
@@ -145,6 +159,7 @@ export type AdminJobDefinition = {
   manualPolicy: AdminManualPolicy
   freshnessMinutes: number
   maxDurationMinutes: number
+  schedulePolicy?: SchedulePolicy
 }
 
 export type AdminJobView = {
@@ -181,6 +196,13 @@ export type AdminJobView = {
   lastErrorCode?: string | null
   lastErrorMessage?: string | null
   aiUsage?: AdminAiUsage | null
+  schedulePolicy?: SchedulePolicy
+  currentExecution?: AdminExecutionEvidence | null
+  lastTerminalExecution?: AdminTerminalExecutionEvidence | null
+  domainEvidence?: Record<string, unknown> | null
+  executionTelemetry?: Record<string, unknown> | null
+  scheduleDueState?: "not_due" | "due" | "overdue" | "unknown"
+  schedulerEvidence?: SchedulerReconciliationView
 }
 
 export type AdminAuditView = {
@@ -221,8 +243,10 @@ export type AdminSystemOverview = {
     degraded: number
     failing: number
     stale: number
+    in_progress: number
     unknown: number
   }
+  scheduler: SchedulerAggregate
   jobs: AdminJobView[]
   settings: ResolvedAdminSetting[]
   environment: AdminEnvironmentItem[]

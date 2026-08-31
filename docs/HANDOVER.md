@@ -95,7 +95,7 @@ The two destructive market maintenance routes are POST-only. Do not restore unau
 
 The Market Close Insights subsystem provides an automated, factual post-market briefing after 15:15 ICT every trading session.
 
-The `/insights` presentation uses an analytics-first, tab-free hierarchy: market pulse and score tiles, four canonical index tiles, chart grids for breadth/MA/flows, sector performance and breadth, liquidity and index impact, then 20-session context. Long duplicate tables and narrative blocks are intentionally avoided; factual observations are capped as compact signal chips. The separate `Top cổ phiếu rating score` disclosure remains unchanged and closed by default. Keep chart containers dimensionally stable and do not add blur/filter/continuous motion around this screen.
+The `/insights` presentation uses an analytics-first, tab-free hierarchy: market pulse and score tiles, four KFSP index tiles, chart grids for breadth/MA/flows, sector performance and breadth, liquidity and index impact, then bounded history. Long duplicate tables and narrative blocks are intentionally avoided; factual observations are capped as compact signal chips. The separate `Top cổ phiếu theo Qeo composite` disclosure is closed by default; its inputs are KFSP values but the arithmetic-mean composite is QeoIndex-owned. The exact provider contracts, null rules, cron schedules, and no-synthetic-data boundary are documented in `docs/insights-handover.md`. Keep chart containers dimensionally stable and do not add blur/filter/continuous motion around this screen.
 
 The visual shell follows the Liquid Glass Financial Center direction with translucent color, edge highlights, gradients, and bounded shadows only. It intentionally avoids persistent `backdrop-filter` around charts. The VNINDEX hero line is grounded in a bounded 20-row query to `market_insight_indexes`; missing history shows an explicit empty state and is never synthesized.
 
@@ -181,6 +181,12 @@ A critical invariant of the Control Plane is the strict separation between:
    - `market.sync_5m` & `market.sync_eod`: `stock_orderbook_snapshots` coverage and session freshness.
    - `signals.daily`: `system_job_runs` workflow completion telemetry.
 
+The Admin catalog also carries a machine-readable `SchedulePolicy` for every effective job. Policies are explicit `Asia/Ho_Chi_Minh` manual, fixed-time, or multi-window schedules with cadence, deadline, and grace values; the timeline and due-state logic do not parse display strings or scheduler names.
+
+Scheduler evidence is separate from dispatch/execution: the admin loader reconciles six expected Supabase `pg_cron` physical mappings (including both Market 5m windows) against the sanitized `qeo_admin_cron_snapshot()` response using exact names and normalized cron whitespace. Empty available evidence reports six missing mappings; RPC rejection or invalid output reports six unavailable mappings. The single Vercel Signals mapping is configuration-only (`configured in deployed revision`), never live-active from catalog metadata. Raw commands and provider payloads are not exposed.
+
+Admin data-quality labels are scalar-only interpretations of each domain's reported counts (`complete_by_reported_counts`, `partial_by_reported_counts`, `reported_issues`, `no_reported_issues`, `inconsistent`, `empty`, or `unknown`). They remain separate from execution telemetry; an in-progress run retains the previous terminal quality. Signals Monitor intentionally preserves a successful domain response if only its terminal success update fails, leaving that telemetry row running for later reconciliation.
+
 #### Active Production Schedules & Scheduler Names
 
 | Job Key | Provider | Scheduler Name | Schedule (UTC) | Schedule (ICT) | Evidence Source |
@@ -188,7 +194,7 @@ A critical invariant of the Control Plane is the strict separation between:
 | `qeoindex.eod_pipeline` | `supabase_pg_cron_workflow` | `qeoindex-eod-pipeline-1515-ict` | `15 8 * * 1-5` | 15:15 T2-T6 | `system_job_runs` / `system_job_phases` |
 | `signals.daily` | `vercel_cron_workflow` | Vercel Cron | `0 0 * * 1-5` | 07:00 T2-T6 | `system_job_runs` |
 | `kfsp.rating_daily` | `supabase_pg_cron` | `kfsp-rating-daily-7am-ict` | `0 0 * * *` | 07:00 Hàng ngày | `kfsp_rating_sync_runs` |
-| `kfsp.ttai_history` | `supabase_pg_cron` | `kfsp-ttai-history-daily-1am-ict` | `0 18 * * *` | 01:00 Hàng ngày | `kfsp_ttai_sync_runs` |
+| `kfsp.ttai_history` | `supabase_pg_cron` | `kfsp-ttai-history-daily-0710-ict` | `10 0 * * *` | 07:10 Hàng ngày | `kfsp_ttai_sync_runs` |
 | `market.sync_5m` | `supabase_pg_cron` | `sync-universe-5m` | `*/5 2-6 * * 1-5; 0-40/5 7 * * 1-5` | 09:00-14:40 T2-T6 | `stock_orderbook_snapshots` |
 | `market.sync_eod` | `supabase_pg_cron` | `sync-universe-eod-1445` | `45 7 * * 1-5` | 14:45 T2-T6 | `stock_orderbook_snapshots` |
 
@@ -198,12 +204,15 @@ A critical invariant of the Control Plane is the strict separation between:
 2. **KFSP TTAI Provider Failure**: Edge Function returns HTTP 207 with `0/12` processed and `12/12` failed due to upstream provider changes. Displayed truthfully as `FAILING` on `/admin/jobs`.
 3. **QeoIndex EOD First Run**: Remains `UNKNOWN` (Pending First Run) until actual execution telemetry is recorded in `system_job_runs`.
 4. **Signals Daily Telemetry**: Workflow start, finish, and failure are durably persisted to `system_job_runs` via step telemetry.
+5. **Admin authorization boundary (Resolved in code)**: `/admin`, `/admin/jobs`, and `/admin/jobs/[key]` perform the root-user check before starting private loaders; unauthenticated requests must not receive serialized job counts or execution evidence. The API remains protected by `requireApiRoot`.
+6. **In-progress execution status**: `queued` and `running` evidence is shown as `in_progress`, never as healthy; only a terminal successful result can produce `healthy`.
 
 **Health Status Derivation**:
 - `healthy`: Bằng chứng thực thi gần nhất thành công và trong ngưỡng độ tươi (`freshnessMinutes`).
 - `degraded`: Lần chạy gần nhất có cảnh báo hoặc thời lượng thực thi vượt ngưỡng tối đa.
 - `failing`: Lần chạy gần nhất thất bại hoặc kết thúc với mã lỗi / HTTP 207 provider failure.
 - `stale`: Quá thời hạn kiểm tra độ tươi mà không có lượt chạy mới thành công.
+- `in_progress`: Đã ghi nhận `queued`/`running`; chưa được coi là kết quả thành công cuối cùng.
 - `unknown`: Chưa ghi nhận lần chạy nào trong hệ thống telemetry hoặc đang chờ lượt chạy đầu tiên.
 
 ### Admin endpoints & Navigation
@@ -212,7 +221,7 @@ A critical invariant of the Control Plane is the strict separation between:
 | --- | --- | --- | --- |
 | `/admin` | `GET` | Server Root Auth | Bảng điều khiển tổng quan hệ thống, nguồn dữ liệu, telemetry và audit trail. |
 | `/admin/settings` | `GET` | Server Root Auth | Quản lý cài đặt runtime, hỗ trợ chỉnh sửa in-place với optimistic locking và lý do thay đổi. |
-| `/admin/jobs` | `GET` | Server Root Auth | Giám sát 13 tác vụ, trạng thái sức khỏe, lịch cron và kích hoạt chạy thủ công. |
+| `/admin/jobs` | `GET` | Server Root Auth | Giám sát 11 tác vụ hiệu lực (6 logical scheduled jobs + 5 manual jobs), trạng thái sức khỏe, lịch cron và kích hoạt chạy thủ công. Có 7 physical scheduler rows (6 Supabase + 1 Vercel); hai market-5m rows được gộp thành một logical job. |
 | `/admin/jobs/[key]` | `GET` | Server Root Auth | Lịch sử chi tiết 50 lần chạy gần nhất của từng tác vụ cụ thể. |
 | `/admin/environment` | `GET` | Server Root Auth | Kiểm tra trạng thái cấu hình của tất cả các biến môi trường; bí mật được ẩn hoàn toàn. |
 | `/admin/audit` | `GET` | Server Root Auth | Lịch sử audit log đầy đủ với bộ lọc hành động, đối tượng và người thực hiện. |

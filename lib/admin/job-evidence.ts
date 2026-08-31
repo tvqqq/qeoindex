@@ -1,10 +1,17 @@
 import type { AiCouncilLlmUsageRow } from "./job-ai-usage.ts"
 import { sanitizeAdminValue } from "./redact.ts"
 import { getJobKeyForPgCron } from "./job-schedule.ts"
+import { interpretEodQuality, interpretRatingQuality, interpretSignalsDailyQuality, interpretTtaiQuality } from "./job-quality.ts"
+import type { SchedulerReconciliation } from "./scheduler-reconciliation.ts"
 import type {
   AdminJobDefinition,
+  AdminJobView,
+  AdminExecutionEvidence,
+  AdminTerminalExecutionEvidence,
   AdminJobStatus,
   AdminSchedulerStatus,
+  SchedulePolicy,
+  SchedulerReconciliationView,
 } from "./types.ts"
 
 export interface SystemJobRunRow {
@@ -71,6 +78,7 @@ export interface RawEvidenceSnapshot {
   kfspTtaiRuns: KfspTtaiRunEvidence[]
   orderbookStats: OrderbookStatsEvidence | null
   aiCouncilLlmDebates?: AiCouncilLlmUsageRow[]
+  schedulerReconciliation?: SchedulerReconciliation
 }
 
 export interface ResolvedJobEvidence {
@@ -88,6 +96,12 @@ export interface ResolvedJobEvidence {
   lastSummary: Record<string, unknown> | null
   lastErrorCode: string | null
   lastErrorMessage: string | null
+  currentExecution: AdminExecutionEvidence | null
+  lastTerminalExecution: AdminTerminalExecutionEvidence | null
+  domainEvidence: Record<string, unknown> | null
+  executionTelemetry: Record<string, unknown> | null
+  scheduleDueState: "not_due" | "due" | "overdue" | "unknown"
+  schedulerEvidence: NonNullable<AdminJobView["schedulerEvidence"]>
 }
 
 export function deriveBasicJobStatus(
@@ -117,7 +131,7 @@ export function deriveBasicJobStatus(
         return "stale"
       }
     }
-    return "healthy"
+    return "in_progress"
   }
 
   if (status === "succeeded" || status === "success" || status === "completed") {
@@ -171,6 +185,35 @@ export function getVietnamMarketSessionState(now: Date): VietnamMarketSessionSta
   }
 }
 
+function ictDateAndMinute(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(value)
+  const pick = (type: string) => parts.find((part) => part.type === type)?.value ?? ""
+  return { date: `${pick("year")}-${pick("month")}-${pick("day")}`, minute: Number(pick("hour")) * 60 + Number(pick("minute")) }
+}
+
+export function deriveScheduleDueState(policy: SchedulePolicy | undefined, lastTerminalFinishedAt: string | null, now: Date = new Date()): "not_due" | "due" | "overdue" | "unknown" {
+  if (!policy || policy.kind === "manual") return "not_due"
+  const current = ictDateAndMinute(now)
+  const weekday = new Date(`${current.date}T12:00:00Z`).getUTCDay()
+  if (policy.cadence === "weekdays" && (weekday === 0 || weekday === 6)) return "not_due"
+  const terminal = lastTerminalFinishedAt ? new Date(lastTerminalFinishedAt) : null
+  const terminalParts = terminal && Number.isFinite(terminal.getTime()) ? ictDateAndMinute(terminal) : null
+
+  if (policy.kind === "fixed_time") {
+    const deadline = policy.completionDeadlineMinuteOfDay ?? policy.minuteOfDay + policy.graceMinutes
+    if (current.minute < policy.minuteOfDay) return "not_due"
+    if (terminalParts?.date === current.date && terminalParts.minute >= policy.minuteOfDay) return "due"
+    return current.minute > deadline + policy.graceMinutes ? "overdue" : "due"
+  }
+
+  const active = policy.windows.some((window) => current.minute >= window.startMinuteOfDay && current.minute <= window.endMinuteOfDay)
+  if (active) return "due"
+  const lastWindow = policy.windows[policy.windows.length - 1]
+  if (current.minute < policy.windows[0].startMinuteOfDay) return "not_due"
+  if (terminalParts?.date === current.date && terminalParts.minute >= lastWindow.endMinuteOfDay) return "due"
+  return current.minute > lastWindow.endMinuteOfDay + policy.graceMinutes ? "overdue" : "due"
+}
+
 function cronTimestamp(row: CronSnapshotRow) {
   const value = row.lastStartedAt || row.lastFinishedAt
   if (!value) return Number.NEGATIVE_INFINITY
@@ -221,8 +264,18 @@ export function resolveJobEvidence(
   }
 
   const matchedCron = latestMatchingCron(def, raw.cronSnapshots)
+  const schedulerMapping = raw.schedulerReconciliation?.mappings.find((mapping) => mapping.jobKey === def.key && mapping.schedulerName === def.schedulerName)
 
-  if (matchedCron) {
+  if (raw.schedulerReconciliation) {
+    if (schedulerMapping?.status === "live_verified") {
+      schedulerStatus = matchedCron?.active ? "active" : "inactive"
+      schedulerLastStatus = matchedCron?.lastStatus ?? null
+      schedulerLastStartedAt = matchedCron?.lastStartedAt ?? null
+      schedulerLastFinishedAt = matchedCron?.lastFinishedAt ?? null
+    } else if (schedulerMapping?.status === "inactive") {
+      schedulerStatus = "inactive"
+    }
+  } else if (matchedCron) {
     schedulerStatus = matchedCron.active ? "active" : "inactive"
     schedulerLastStatus = matchedCron.lastStatus
     schedulerLastStartedAt = matchedCron.lastStartedAt
@@ -239,6 +292,45 @@ export function resolveJobEvidence(
   let lastSummary: Record<string, unknown> | null = null
   let lastErrorCode: string | null = null
   let lastErrorMessage: string | null = null
+  const matchingRuns = raw.systemJobRuns.filter((run) => run.job_key === def.key)
+  const currentRun = matchingRuns.find((run) => run.status === "running" || run.status === "queued")
+  const terminalRun = matchingRuns.find((run) => !["running", "queued"].includes(run.status))
+  const currentExecution: AdminExecutionEvidence | null = currentRun
+    ? { status: currentRun.status as "queued" | "running", startedAt: currentRun.started_at ?? null, runId: currentRun.id }
+    : null
+  const lastTerminalExecution: AdminTerminalExecutionEvidence | null = terminalRun
+    ? { status: terminalRun.status, finishedAt: terminalRun.finished_at ?? null, runId: terminalRun.id }
+    : null
+  const scheduleDueState = deriveScheduleDueState(def.schedulePolicy, lastTerminalExecution?.finishedAt ?? null, now)
+  let domainEvidence: Record<string, unknown> | null = null
+  let executionTelemetry: Record<string, unknown> | null = null
+
+  const evidenceResult = () => ({
+    executionStatus,
+    schedulerStatus,
+    schedulerLastStatus,
+    schedulerLastStartedAt,
+    schedulerLastFinishedAt,
+    healthReason,
+    lastRunId,
+    lastTrigger,
+    lastStartedAt,
+    lastFinishedAt,
+    lastDurationMs,
+    lastSummary,
+    lastErrorCode,
+    lastErrorMessage,
+    currentExecution,
+    lastTerminalExecution,
+    domainEvidence,
+    executionTelemetry,
+    scheduleDueState,
+    schedulerEvidence: (raw.schedulerReconciliation
+      ? raw.schedulerReconciliation.availability === "unavailable"
+        ? { availability: "unavailable" as const, reason: raw.schedulerReconciliation.aggregate.unavailable ? "RPC unavailable" : "Invalid scheduler evidence" }
+        : { availability: "available" as const, status: (schedulerMapping?.status ?? (def.provider.startsWith("vercel_cron") ? "config_only" : "missing")) as SchedulerReconciliationView["status"] }
+      : { availability: "unavailable" as const, reason: "Scheduler evidence not loaded" }) as NonNullable<AdminJobView["schedulerEvidence"]>,
+  })
 
   if (def.key === "kfsp.rating_daily" && raw.kfspRatingRuns.length > 0) {
     const run = raw.kfspRatingRuns[0]
@@ -253,6 +345,8 @@ export function resolveJobEvidence(
     }) as Record<string, unknown>
     lastErrorCode = run.error_code
     lastErrorMessage = run.error_message
+    domainEvidence = { source: "kfsp_rating_sync_runs", asOfDate: run.as_of_date, publishedRows: run.published_row_count, quality: interpretRatingQuality({ staged: run.staged_row_count, published: run.published_row_count }) }
+    executionTelemetry = matchedCron ? { source: "pg_cron", lastStatus: matchedCron.lastStatus } : { source: "unavailable" }
 
     if (run.status === "completed") {
       if (run.published_row_count > 0) {
@@ -277,27 +371,14 @@ export function resolveJobEvidence(
         executionStatus = "stale"
         healthReason = `Đang chạy nhưng vượt quá thời lượng tối đa (${def.maxDurationMinutes}p)`
       } else {
-        executionStatus = "healthy"
+        executionStatus = "in_progress"
         healthReason = "Đang trong quá trình đồng bộ dữ liệu"
       }
     }
 
-    return {
-      executionStatus,
-      schedulerStatus,
-      schedulerLastStatus,
-      schedulerLastStartedAt,
-      schedulerLastFinishedAt,
-      healthReason,
-      lastRunId,
-      lastTrigger,
-      lastStartedAt,
-      lastFinishedAt,
-      lastDurationMs,
-      lastSummary,
-      lastErrorCode,
-      lastErrorMessage,
-    }
+    if (executionStatus === "stale" && scheduleDueState !== "overdue" && !currentExecution) executionStatus = "healthy"
+
+    return evidenceResult()
   }
 
   if (def.key === "kfsp.ttai_history" && raw.kfspTtaiRuns.length > 0) {
@@ -313,6 +394,8 @@ export function resolveJobEvidence(
       latest_rating_date: run.latest_rating_date,
     }) as Record<string, unknown>
     lastErrorMessage = run.error_message
+    domainEvidence = { source: "kfsp_ttai_sync_runs", latestRatingDate: run.latest_rating_date, processed: run.processed_count, failed: run.failed_count, quality: interpretTtaiQuality({ candidates: run.candidate_count, processed: run.processed_count, failed: run.failed_count }) }
+    executionTelemetry = matchedCron ? { source: "pg_cron", lastStatus: matchedCron.lastStatus } : { source: "unavailable" }
 
     if (run.status === "failed" || (run.failed_count > 0 && run.processed_count === 0)) {
       executionStatus = "failing"
@@ -330,26 +413,11 @@ export function resolveJobEvidence(
       executionStatus = "degraded"
       healthReason = `Xử lý một phần: ${run.processed_count} thành công, ${run.failed_count} lỗi`
     } else if (run.status === "running") {
-      executionStatus = "healthy"
+      executionStatus = "in_progress"
       healthReason = "Đang cập nhật lịch sử TTAI"
     }
 
-    return {
-      executionStatus,
-      schedulerStatus,
-      schedulerLastStatus,
-      schedulerLastStartedAt,
-      schedulerLastFinishedAt,
-      healthReason,
-      lastRunId,
-      lastTrigger,
-      lastStartedAt,
-      lastFinishedAt,
-      lastDurationMs,
-      lastSummary,
-      lastErrorCode,
-      lastErrorMessage,
-    }
+    return evidenceResult()
   }
 
   if ((def.key === "market.sync_5m" || def.key === "market.sync_eod") && raw.orderbookStats && raw.orderbookStats.totalSnapshots > 0) {
@@ -362,6 +430,8 @@ export function resolveJobEvidence(
       total_snapshots: stats.totalSnapshots,
       evidence_updated_at: stats.latestUpdatedAt,
     }) as Record<string, unknown>
+    domainEvidence = { source: "stock_orderbook_snapshots", sessionDate: stats.latestSessionDate, totalSnapshots: stats.totalSnapshots }
+    executionTelemetry = matchedCron ? { source: "pg_cron", lastStatus: matchedCron.lastStatus } : { source: "unavailable", reason: "No execution telemetry recorded" }
 
     const sessionState = getVietnamMarketSessionState(now)
 
@@ -425,25 +495,11 @@ export function resolveJobEvidence(
       }
     }
 
-    return {
-      executionStatus,
-      schedulerStatus,
-      schedulerLastStatus,
-      schedulerLastStartedAt,
-      schedulerLastFinishedAt,
-      healthReason,
-      lastRunId,
-      lastTrigger,
-      lastStartedAt,
-      lastFinishedAt,
-      lastDurationMs,
-      lastSummary,
-      lastErrorCode,
-      lastErrorMessage,
-    }
+    return evidenceResult()
   }
 
-  const matchingRun = raw.systemJobRuns.find((r) => r.job_key === def.key)
+  const matchingRun = matchingRuns[0]
+  const qualityRun = currentRun ? terminalRun : matchingRun
 
   if (matchingRun) {
     executionStatus = deriveBasicJobStatus(
@@ -463,6 +519,29 @@ export function resolveJobEvidence(
     lastSummary = sanitizeAdminValue(matchingRun.summary) as Record<string, unknown> | null
     lastErrorCode = matchingRun.error_code ?? null
     lastErrorMessage = matchingRun.error_message ?? null
+    executionTelemetry = { source: "system_job_runs", runId: matchingRun.id, status: matchingRun.status }
+
+    const qualitySummary = summaryObject(qualityRun?.summary)
+    if (def.key === "qeoindex.eod_pipeline" && qualitySummary) {
+      const build = summaryObject(qualitySummary.build)
+      const validation = summaryObject(qualitySummary.validation)
+      const history = summaryObject(qualitySummary.history)
+      const total = summaryNumber(build?.total ?? validation?.total)
+      const complete = summaryNumber(build?.complete ?? validation?.complete)
+      const incomplete = summaryNumber(build?.incomplete ?? validation?.incomplete)
+      const validationAgreement = build && validation
+        ? total !== null && complete !== null && incomplete !== null
+          && total === summaryNumber(validation.total)
+          && complete === summaryNumber(validation.complete)
+          && incomplete === summaryNumber(validation.incomplete)
+        : null
+      if (total !== null && complete !== null && incomplete !== null && validationAgreement !== null) {
+        domainEvidence = { source: "system_job_runs", quality: interpretEodQuality({ total, complete, incomplete, validationAgreement, limitedCoverageCount: history?.limitedCoverageCount }) }
+      }
+    } else if (def.key === "signals.daily" && qualitySummary) {
+      const scanner = summaryObject(qualitySummary.scanner)
+      if (scanner) domainEvidence = { source: "system_job_runs", quality: interpretSignalsDailyQuality({ completed: scanner.completed, errors: scanner.errors, skipped: scanner.skipped }) }
+    }
 
     const isIdempotentEodNoop = def.key === "qeoindex.eod_pipeline"
       && matchingRun.status === "skipped"
@@ -501,6 +580,15 @@ export function resolveJobEvidence(
     } else if (matchingRun.status === "skipped") {
       healthReason = "Lần chạy gần nhất được đánh dấu bỏ qua"
     }
+    const qualityStatus = (domainEvidence?.quality as { status?: string } | undefined)?.status
+    if (matchingRun.status === "succeeded" && qualityStatus && ["partial_by_reported_counts", "reported_issues", "inconsistent"].includes(qualityStatus)) {
+      executionStatus = "degraded"
+      healthReason = (domainEvidence?.quality as { label?: string }).label || "Chất lượng dữ liệu cần kiểm tra"
+    }
+    if (executionStatus === "stale" && scheduleDueState !== "overdue" && !currentExecution) {
+      executionStatus = "healthy"
+      healthReason = "Bằng chứng terminal gần nhất còn hiệu lực; lịch kế tiếp chưa đến hạn"
+    }
   } else {
     executionStatus = "unknown"
     if (def.key === "qeoindex.eod_pipeline") {
@@ -512,20 +600,5 @@ export function resolveJobEvidence(
     }
   }
 
-  return {
-    executionStatus,
-    schedulerStatus,
-    schedulerLastStatus,
-    schedulerLastStartedAt,
-    schedulerLastFinishedAt,
-    healthReason,
-    lastRunId,
-    lastTrigger,
-    lastStartedAt,
-    lastFinishedAt,
-    lastDurationMs,
-    lastSummary,
-    lastErrorCode,
-    lastErrorMessage,
-  }
+  return evidenceResult()
 }

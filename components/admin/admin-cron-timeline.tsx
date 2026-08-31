@@ -57,6 +57,13 @@ const STATUS_BADGE_CONFIG: Record<
     label: "STALE",
     icon: Clock,
   },
+  in_progress: {
+    bg: "bg-cyan-500/10",
+    border: "border-cyan-500/30",
+    text: "text-cyan-300",
+    label: "ĐANG CHẠY",
+    icon: Clock,
+  },
   unknown: {
     bg: "bg-white/[0.04]",
     border: "border-white/[0.08]",
@@ -441,7 +448,13 @@ function TimelineCard({
                   : "text-rose-400"
             }`}
           >
-            {node.schedulerStatus.toUpperCase()}
+            {node.schedulerEvidence?.availability === "unavailable"
+              ? "EVIDENCE UNAVAILABLE"
+              : node.schedulerEvidence?.status === "config_only"
+                ? "CONFIGURED IN DEPLOYED REVISION"
+                : node.schedulerEvidence?.status === "live_verified"
+                  ? "LIVE VERIFIED"
+                  : node.schedulerStatus.toUpperCase()}
           </span>
           {node.schedulerName ? ` (${node.schedulerName})` : ""}
         </div>

@@ -55,6 +55,7 @@ export async function GET() {
     },
     sources,
     jobCounts: jobsSnapshot.counts,
+    scheduler: jobsSnapshot.scheduler,
     jobs: jobsSnapshot.jobs,
     settings: settingsSnapshot.settings,
     environment,

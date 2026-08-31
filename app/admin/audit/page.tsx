@@ -1,9 +1,11 @@
 import { AdminAuditTable } from "@/components/admin/admin-audit-table"
 import { loadRecentAuditLogs } from "@/lib/admin/settings"
+import { requireRootPageContext } from "@/lib/auth/root"
 
 export const dynamic = "force-dynamic"
 
 export default async function AdminAuditPage() {
+  await requireRootPageContext()
   const logs = await loadRecentAuditLogs(100)
 
   return (

@@ -18,6 +18,7 @@ const STATUS_BADGE_STYLES = {
   degraded: "border-amber-500/30 bg-amber-500/10 text-amber-400",
   failing: "border-rose-500/30 bg-rose-500/10 text-rose-400",
   stale: "border-orange-500/30 bg-orange-500/10 text-orange-400",
+  in_progress: "border-cyan-500/30 bg-cyan-500/10 text-cyan-300",
   unknown: "border-white/[0.08] bg-white/[0.04] text-slate-400",
 }
 
@@ -115,6 +116,20 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                       {job.healthReason ? (
                         <p className="mt-1 text-[11px] font-medium text-slate-300">{job.healthReason}</p>
                       ) : null}
+                      {job.currentExecution ? (
+                        <p className="mt-1 text-[10px] font-medium text-cyan-300">Execution: {job.currentExecution.status}</p>
+                      ) : null}
+                      {job.executionTelemetry?.source === "unavailable" ? (
+                        <p className="mt-1 text-[10px] font-medium text-slate-500">Execution telemetry: unavailable</p>
+                      ) : null}
+                      {job.domainEvidence?.quality && typeof job.domainEvidence.quality === "object" ? (
+                        (() => {
+                          const quality = job.domainEvidence.quality as { label?: string; details?: { limitedCoverageCount?: number } }
+                          return <p className="mt-1 text-[10px] font-medium text-amber-300">
+                            Data quality: {String(quality.label || "unknown")}{quality.details?.limitedCoverageCount ? ` · Coverage giới hạn: ${quality.details.limitedCoverageCount}` : ""}
+                          </p>
+                        })()
+                      ) : null}
                       {job.conflictWarning ? (
                         <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-amber-400">
                           <AlertTriangle className="h-3 w-3 shrink-0" />
@@ -130,12 +145,20 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                           Scheduler:{" "}
                           <span
                             className={
-                              job.schedulerStatus === "active"
+                              job.schedulerEvidence?.status === "live_verified"
                                 ? "font-bold text-emerald-400"
-                                : "font-bold text-rose-400"
+                                : job.schedulerEvidence?.status === "config_only"
+                                  ? "font-bold text-sky-300"
+                                  : "font-bold text-amber-300"
                             }
                           >
-                            {job.schedulerStatus}
+                            {job.schedulerEvidence?.availability === "unavailable"
+                              ? "EVIDENCE UNAVAILABLE"
+                              : job.schedulerEvidence?.status === "config_only"
+                                ? "CONFIGURED IN DEPLOYED REVISION"
+                                : job.schedulerEvidence?.status === "live_verified"
+                                  ? "LIVE VERIFIED"
+                                  : (job.schedulerEvidence?.status || job.schedulerStatus)}
                           </span>
                         </div>
                       ) : null}
@@ -151,6 +174,8 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                               ? "bg-emerald-400"
                               : job.status === "failing"
                                 ? "bg-rose-400"
+                                : job.status === "in_progress"
+                                  ? "bg-cyan-300"
                                 : "bg-amber-400"
                           }`}
                         />

@@ -3,13 +3,13 @@ import { getAdminEnvironmentInventory } from "@/lib/admin/catalog"
 import { loadAdminJobsSnapshot } from "@/lib/admin/job-health"
 import { loadAdminSettingsSnapshot, loadRecentAuditLogs } from "@/lib/admin/settings"
 import type { AdminSourceHealth, AdminSystemOverview } from "@/lib/admin/types"
-import { getRootPageContext } from "@/lib/auth/root"
+import { requireRootPageContext } from "@/lib/auth/root"
 
 export const dynamic = "force-dynamic"
 
 export default async function AdminOverviewPage() {
-  const context = await getRootPageContext()
-  const actorUserId = context?.user?.id || "root"
+  const context = await requireRootPageContext()
+  const actorUserId = context.user.id
 
   const [settingsSnapshot, jobsSnapshot, audit] = await Promise.all([
     loadAdminSettingsSnapshot(),
@@ -53,6 +53,7 @@ export default async function AdminOverviewPage() {
     },
     sources,
     jobCounts: jobsSnapshot.counts,
+    scheduler: jobsSnapshot.scheduler,
     jobs: jobsSnapshot.jobs,
     settings: settingsSnapshot.settings,
     environment,

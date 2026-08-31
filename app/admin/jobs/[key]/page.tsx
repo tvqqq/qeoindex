@@ -7,11 +7,13 @@ import { AdminJobPhaseTimeline } from "@/components/admin/admin-job-phase-timeli
 import { getEffectiveAdminJobDefinition } from "@/lib/admin/effective-job-catalog"
 import { loadAdminJobPhases } from "@/lib/admin/job-phase-data"
 import { QEOINDEX_EOD_JOB_KEY } from "@/lib/admin/job-phases"
-import { deriveAdminJobStatus, loadAdminJobHistory } from "@/lib/admin/job-health"
+import { buildAdminJobViews, loadAdminJobHistory } from "@/lib/admin/job-health"
+import { requireRootPageContext } from "@/lib/auth/root"
 
 export const dynamic = "force-dynamic"
 
 export default async function AdminJobDetailPage(props: { params: Promise<{ key: string }> }) {
+  await requireRootPageContext()
   const { key } = await props.params
   const decodedKey = decodeURIComponent(key)
   const jobDefinition = getEffectiveAdminJobDefinition(decodedKey)
@@ -25,7 +27,8 @@ export default async function AdminJobDetailPage(props: { params: Promise<{ key:
   const phases = decodedKey === QEOINDEX_EOD_JOB_KEY && latestRun?.id
     ? await loadAdminJobPhases(latestRun.id)
     : []
-  const status = deriveAdminJobStatus(jobDefinition, latestRun ? { status: latestRun.status, startedAt: latestRun.started_at, finishedAt: latestRun.finished_at } : null)
+  const { jobs: [jobView] } = buildAdminJobViews([jobDefinition], history)
+  const status = jobView.status
 
   const isHealthy = status === "healthy"
   const isFailing = status === "failing"
@@ -90,6 +93,13 @@ export default async function AdminJobDetailPage(props: { params: Promise<{ key:
       <div className="rounded-2xl border border-white/[0.08] bg-[#0c1017] p-5 text-xs text-slate-300">
         <h3 className="font-semibold text-white">Mô tả quy trình nghiệp vụ</h3>
         <p className="mt-1 leading-relaxed text-slate-400">{jobDefinition.description}</p>
+        <div className="mt-3 grid gap-1 border-t border-white/[0.06] pt-3 text-[11px] text-slate-400 sm:grid-cols-3">
+          <span>Health: <strong className="text-slate-200">{status}</strong></span>
+          <span>Current execution: <strong className="text-slate-200">{jobView.currentExecution ? jobView.currentExecution.status : "none"}</strong></span>
+          <span>Telemetry: <strong className="text-slate-200">{jobView.executionTelemetry?.source === "unavailable" ? "unavailable" : "recorded"}</strong></span>
+          <span>Data quality: <strong className="text-slate-200">{jobView.domainEvidence?.quality && typeof jobView.domainEvidence.quality === "object" ? String((jobView.domainEvidence.quality as { label?: string }).label || "unknown") : "unknown"}</strong></span>
+          {jobView.domainEvidence?.quality && typeof jobView.domainEvidence.quality === "object" && Number((jobView.domainEvidence.quality as { details?: { limitedCoverageCount?: number } }).details?.limitedCoverageCount || 0) > 0 ? <span>Coverage warning: <strong className="text-amber-300">{String((jobView.domainEvidence.quality as { details: { limitedCoverageCount: number } }).details.limitedCoverageCount)} limited</strong></span> : null}
+        </div>
       </div>
 
       {/* EOD Pipeline Phase Timeline if applicable */}

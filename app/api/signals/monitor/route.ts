@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { isMachineRequestAuthorized } from "@/lib/auth/machine"
+import { executeSystemJob } from "@/lib/admin/job-telemetry"
 import { runSignalMonitor } from "@/lib/signal-monitor"
 import { SIGNAL_ENGINE_VERSION } from "@/lib/signal-engine"
 import { notifyOpsError } from "@/lib/ops-alerts"
@@ -18,7 +19,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await runSignalMonitor({ force: request.nextUrl.searchParams.get("force") === "1" })
+    const { result } = await executeSystemJob({
+      jobKey: "signals.monitor",
+      trigger: "external",
+      telemetry: "required",
+      terminalUpdateFailure: "preserve-domain-success",
+      fn: () => runSignalMonitor({ force: request.nextUrl.searchParams.get("force") === "1" }),
+      isSuccess: (value) => !value.missingQuotes?.length,
+    })
     return NextResponse.json(result, { status: result.missingQuotes?.length ? 207 : 200 })
   } catch (error) {
     console.error("Intraday signal monitor failed", error)

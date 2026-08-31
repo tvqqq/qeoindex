@@ -1,9 +1,11 @@
 import { AdminSettingsTable } from "@/components/admin/admin-settings-table"
 import { loadAdminSettingsSnapshot } from "@/lib/admin/settings"
+import { requireRootPageContext } from "@/lib/auth/root"
 
 export const dynamic = "force-dynamic"
 
 export default async function AdminSettingsPage() {
+  await requireRootPageContext()
   const snapshot = await loadAdminSettingsSnapshot()
   const overrideCount = snapshot.settings.filter((s) => s.hasOverride).length
 

@@ -69,8 +69,8 @@ test("buildCronTimelineModel categorizes jobs into 3 lanes and models EOD depend
   const ttai = timeline.lanes[1].jobs.find((j) => j.key === "kfsp.ttai_history")
   assert.ok(ttai)
   assert.equal(ttai.displayType, "point")
-  assert.equal(ttai.timeIctLabel, "01:00 ICT")
-  assert.equal(ttai.startMinuteOfDay, 60)
+  assert.equal(ttai.timeIctLabel, "07:10 ICT")
+  assert.equal(ttai.startMinuteOfDay, 430)
 
   // Check manual lane
   const scanner = timeline.lanes[2].jobs.find((j) => j.key === "scanner.run")
