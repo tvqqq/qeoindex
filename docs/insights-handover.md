@@ -136,7 +136,11 @@ pnpm build
 
 Material UI change phải kiểm tra bằng browser thật: desktop + mobile, ba view `Nhịp đập TT` / `Nỗ lực - Kết quả` / `Sức khỏe TT`, empty state, tooltip, modal stock, không console error.
 
-Kết quả acceptance ngày 2026-08-31 trên Chrome đã xác thực với local production build `localhost:3001`: ở mobile 390x844, cả trạng thái đóng và mở đều có `clientWidth/scrollWidth = 390/390`; dropdown nằm trong rect `16..374` (rộng 358px) và hiển thị đủ 4 links. Empty state thiếu Kết quả KFSP hiển thị trung thực; chọn `1W` + `Columns` cho `Top 100 · 1W`, document width vẫn 390; console có 0 errors/0 warnings (chỉ log dự kiến của Vercel Analytics/Speed Insights trên localhost). Sau khi reset viewport về desktop 2294px, dropdown có rect `453..843` (rộng 390px), không có document overflow. Đây là acceptance của local production build, chưa phải verification trên Vercel production đã deploy.
+Bubble universe: the post-session `Bubbles · Bản đồ giao dịch thị trường` reads a separate latest-published KFSP query, not the composite-ranked detail result. It keeps rows with `average_volume_50_sessions > 500000`, orders descending by that provider-owned `avg50` field with ticker ascending as the tie-break, and limits the result to 200. KFSP defines `avg50` as average trading volume over 50 sessions, but this repository does not establish whether the provider unit is shares or lots; copy must keep that unit unqualified. Missing values are excluded and a smaller result is displayed honestly.
+
+Kết quả acceptance ngày 2026-08-31 trên Chrome đã xác thực với local production build `localhost:3001`: ở mobile 390x844, cả trạng thái đóng và mở đều có `clientWidth/scrollWidth = 390/390`; dropdown nằm trong rect `16..374` (rộng 358px) và hiển thị đủ 4 links. Empty state thiếu Kết quả KFSP hiển thị trung thực; chọn `1W` + `Columns` cho Top 100, document width vẫn 390; console có 0 errors/0 warnings (chỉ log dự kiến của Vercel Analytics/Speed Insights trên localhost). Sau khi reset viewport về desktop 2294px, dropdown có rect `453..843` (rộng 390px), không có document overflow. Đây là acceptance lịch sử của local production build, chưa phải verification trên Vercel production đã deploy.
+
+Top 200 bubble QA trên browser thật chưa được thực hiện; cần acceptance mới trên desktop/mobile trước release.
 
 ### Production SQL
 
@@ -178,3 +182,10 @@ limit 5;
 - Supabase migration/function deploy áp dụng ngay theo project invariant.
 - Next.js UI chỉ lên production qua Git Integration: merge/push `main` → đúng một Vercel deployment.
 - Không chạy `vercel --prod` và không redeploy chỉ để verify.
+
+## 8. Market-health UI contract (2026-08-31)
+
+- `Nhịp đập thị trường & Sức khoẻ thị trường` composes a 70/30 overview/sentiment row and a responsive risk/valuation row; the old breadth/MA summary column is not rendered.
+- The four Market internals charts and two 20-session charts are mounted once in this composition. Their existing bounded chart dimensions, real-data inputs, and empty states remain authoritative.
+- Sentiment has no provider-segment selector; the displayed value is the published KFSP market sentiment only.
+- VNINDEX liquidity displays the raw provider value with at most two decimals and explicitly labels the provider unit as unverified. No ingestion conversion is implied until the provider contract proves `totalvalue` units.

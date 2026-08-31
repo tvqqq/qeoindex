@@ -519,14 +519,14 @@ export function generateOrderBook(stock: Stock, seed = Math.random() * 1e9): Ord
 
 export function formatVolume(v: number): string {
   if (v >= 1_000_000) return (v / 1_000_000).toFixed(2) + "M"
-  if (v >= 1_000) return (v / 1_000).toFixed(1) + "K"
+  if (v >= 1_000) return (v / 1_000).toFixed(2) + "K"
   return String(v)
 }
 export function formatPrice(p: number): string {
   return p.toFixed(2)
 }
 export function formatPct(p: number): string {
-  return (p > 0 ? "+" : "") + p.toFixed(1) + "%"
+  return (p > 0 ? "+" : "") + p.toFixed(2) + "%"
 }
 export function formatSigned(n: number): string {
   return (n > 0 ? "+" : "") + n.toFixed(2)

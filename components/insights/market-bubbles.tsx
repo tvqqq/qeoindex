@@ -116,11 +116,12 @@ export function MarketBubbles({
     return () => ro.disconnect()
   }, [])
 
-  // Bound the provider-backed universe to the requested Top 100 by liquidity.
+  // Keep the provider-qualified universe bounded for deterministic rendering.
   const topStocks = React.useMemo(() => {
     return [...stocks]
-      .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))
-      .slice(0, 100)
+      .filter((stock) => (stock.volume ?? 0) > 500_000)
+      .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0) || a.ticker.localeCompare(b.ticker))
+      .slice(0, 200)
   }, [stocks])
 
   // Group stocks by volume tiers for Columns view
@@ -477,7 +478,7 @@ export function MarketBubbles({
         <div
           ref={containerRef}
           className="market-bubble-field relative min-h-[750px] sm:min-h-[850px] lg:min-h-[900px] w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070d15] select-none shadow-2xl"
-          aria-label={`Bản đồ Top ${topStocks.length} cổ phiếu ${period}`}
+          aria-label={`Bản đồ Top ${topStocks.length} cổ phiếu theo KLGD TB 50 phiên ${period}`}
         >
           {/* Institutional Financial Coordinate Grid Pattern */}
           <div

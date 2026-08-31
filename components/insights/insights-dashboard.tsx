@@ -170,16 +170,6 @@ function metricValue(row: InsightsRatingRow, key: string): KfspMetricValue | und
   return fallback[key]
 }
 
-function metricNumericValue(row: InsightsRatingRow, key: string, fallback: number | null) {
-  const value = metricValue(row, key)
-  if (typeof value === "number" && Number.isFinite(value)) return value
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value.replace(/%$/, ""))
-    if (Number.isFinite(parsed)) return parsed
-  }
-  return fallback
-}
-
 function formatMetric(value: KfspMetricValue | undefined, definition: KfspFieldDefinition) {
   if (value == null || value === "" || value === "--") return "—"
   if (definition.format === "link") return String(value)
@@ -1489,15 +1479,16 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
             <MarketCloseDashboard
               data={data.marketClose || null}
               ratings={data.ratings}
-              bubbleStocks={data.ratings.map((row) => ({
+              bubbleAsOfDate={data.bubbleAsOfDate}
+              bubbleStocks={data.bubbleStocks.map((row) => ({
                 ticker: row.ticker,
                 companyName: row.companyName,
                 sector: row.sector,
-                volume: row.volume,
-                change1d: metricNumericValue(row, "price_change_1d_pct", row.changePercent),
-                change1w: metricNumericValue(row, "price_change_1w_pct", row.weeklyChangePercent),
-                change1m: metricNumericValue(row, "price_change_1m_pct", row.monthlyChangePercent),
-                change1y: metricNumericValue(row, "price_change_1y_pct", null),
+                volume: row.averageVolume50Sessions,
+                change1d: row.change1d,
+                change1w: row.change1w,
+                change1m: row.change1m,
+                change1y: row.change1y,
               }))}
               onOpenStockDetail={handleOpenStockDetail}
             />

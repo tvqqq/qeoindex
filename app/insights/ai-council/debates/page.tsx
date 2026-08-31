@@ -41,8 +41,8 @@ function leanTone(lean: "bull" | "base" | "bear") {
 
 function money(value: number | null) {
   if (value == null) return "—"
-  if (value < 0.01) return `$${value.toFixed(4)}`
-  return `$${value.toFixed(3)}`
+  if (value < 0.01) return "$<0,01"
+  return `$${value.toFixed(2)}`
 }
 
 function shortHash(value: string | null | undefined) {

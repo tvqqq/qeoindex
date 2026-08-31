@@ -6,6 +6,7 @@ import {
   Building2,
   CalendarDays,
   CalendarRange,
+  CircleAlert,
   Compass,
   Cpu,
   Crown,
@@ -17,6 +18,7 @@ import {
   Layers3,
   LineChart,
   RefreshCw,
+  Radar,
   Rocket,
   Search,
   ShieldCheck,
@@ -74,6 +76,19 @@ export function getSectorIcon(sector: string) {
   return Layers3
 }
 
+function SectorLabel({ name, compact = false }: { name: string; compact?: boolean }) {
+  const Icon = getSectorIcon(name)
+  return (
+    <span className={cn(
+      "inline-flex max-w-full items-center gap-1.5 rounded-md border border-cyan-400/25 bg-cyan-400/10 px-1.5 py-0.5 font-sans font-bold text-cyan-300",
+      compact ? "text-[10px]" : "text-xs",
+    )}>
+      {React.createElement(Icon, { className: cn(compact ? "size-3" : "size-3.5", "shrink-0") })}
+      <span className="truncate">{name}</span>
+    </span>
+  )
+}
+
 function formatNumber(value: number | null | undefined, decimals = 0) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: decimals }).format(value)
@@ -109,6 +124,20 @@ export function rotationBadgeClass(state: string) {
     default:
       return "bg-[#059669] text-white border-[#10b981]/40"
   }
+}
+
+function RotationBadge({ value }: { value: string | null | undefined }) {
+  const Icon = value === "Dẫn dắt" || value === "leading" ? Rocket
+    : value === "Phục hồi" || value === "recovering" ? RefreshCw
+      : value === "Suy yếu" || value === "weakening" ? TrendingDown
+        : value === "Đội sổ" || value === "lagging" ? CircleAlert : Radar
+  const label = ROTATION_LABELS[value || ""] || value || "—"
+  const tone = label === "Dẫn dắt" ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-300"
+    : label === "Phục hồi" ? "border-sky-300/30 bg-sky-400/15 text-sky-300"
+      : label === "Suy yếu" ? "border-amber-300/30 bg-amber-400/15 text-amber-300"
+        : label === "Đội sổ" ? "border-rose-300/30 bg-rose-400/15 text-rose-300"
+          : "border-white/10 bg-white/[0.03] text-slate-400"
+  return <span className={cn("inline-flex min-w-20 items-center justify-center gap-1 rounded-md border px-1.5 py-0.5 font-sans text-[10px] font-bold", tone)}><Icon className="size-3.5" />{label}</span>
 }
 
 export function inferRotationState(
@@ -499,11 +528,11 @@ export function SectorMapPanel({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1050px] border-collapse text-xs">
-            <thead className="border-b border-white/[0.08] bg-[#050e16] font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <table className="w-full min-w-[1050px] border-collapse text-sm">
+            <thead className="border-b border-white/[0.08] bg-[#050e16] font-sans text-xs font-bold text-slate-300">
               <tr>
-                <th className="sticky left-0 z-20 bg-[#050e16] px-4 py-3.5 text-left w-52">Tên ngành</th>
-                <th className="px-3 py-3.5 text-center w-36">Nỗ lực / Kết quả</th>
+                <th className="sticky left-0 z-20 w-52 bg-[#050e16] px-4 py-3.5 text-left">Tên ngành</th>
+                <th className="w-36 px-3 py-3.5 text-center">Nỗ lực / Kết quả</th>
                 <th className="px-2 py-3.5 text-center w-14">Xu hướng</th>
                 {sessionDates.map((date) => (
                   <th key={date} className="px-2 py-3.5 text-center font-mono">
@@ -564,12 +593,12 @@ export function SectorMapPanel({
               <tr className="bg-[#091721]/80 font-mono text-[11px] text-slate-300">
                 <td className="sticky left-0 z-10 bg-[#091721] px-4 py-2 text-slate-400">
                   <div className="flex items-center gap-2">
-                    <span className="size-5 flex items-center justify-center text-[10px] text-slate-400 font-bold">📊</span>
-                    <span>Thanh khoản VNINDEX</span>
+                    <span className="flex size-5 items-center justify-center rounded bg-cyan-400/10 text-cyan-300"><LineChart className="size-3.5" /></span>
+                    <span className="whitespace-nowrap">Thanh khoản VNINDEX</span>
                   </div>
                 </td>
                 <td className="px-3 py-2 text-center text-[10px] text-slate-400">
-                  GTGD: {formatNumber(marketHistory[marketHistory.length - 1]?.totalTradedValue, 1)} tỷ
+                  <span title="Đơn vị nguồn chưa xác minh">GTGD: {formatNumber(marketHistory[marketHistory.length - 1]?.totalTradedValue, 2)}</span>
                 </td>
                 <td className="px-2 py-2 text-center" />
                 {sessionDates.map((date) => {
@@ -579,7 +608,7 @@ export function SectorMapPanel({
                   return (
                     <td key={date} className="px-2 py-2 text-center font-mono text-[11px]">
                       <span className={isUp ? "text-emerald-400" : "text-rose-400"}>
-                        {liqVal != null ? `${formatNumber(liqVal, 1)} tỷ` : "—"}
+                        {liqVal != null ? formatNumber(liqVal, 2) : "—"}
                       </span>
                     </td>
                   )
@@ -591,7 +620,6 @@ export function SectorMapPanel({
 
               {/* Sector Rotation Heatmap Rows with Exact Sector Thematic Icons */}
               {currentSectors.map((sector) => {
-                const SectorIcon = getSectorIcon(sector.displayName)
                 const sparkValues = sessionDates.flatMap((date) => {
                   const historyItem = historyMatrixMap.get(`${sector.sectorKey}:${date}`)
                   return historyItem?.closePrice == null ? [] : [historyItem.closePrice]
@@ -610,14 +638,11 @@ export function SectorMapPanel({
                     className="cursor-pointer transition-colors hover:bg-white/[0.04] group"
                   >
                     {/* 1. Sticky Sector Name with Thematic Sector Icon */}
-                    <td className="sticky left-0 z-10 bg-[#07131d] group-hover:bg-[#0c1e2d] px-4 py-2.5 font-bold uppercase text-white font-mono text-xs transition-colors">
+                    <td className="sticky left-0 z-10 bg-[#07131d] px-4 py-2.5 font-sans text-sm font-semibold text-white transition-colors group-hover:bg-[#0c1e2d]">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="flex items-center justify-center size-5 rounded bg-cyan-400/10 border border-cyan-400/20 shrink-0">
-                            <SectorIcon className="size-3 text-cyan-400" />
+                          <div className="flex min-w-0 items-center">
+                            <SectorLabel name={sector.displayName} />
                           </div>
-                          <span className="truncate">{sector.displayName}</span>
-                        </div>
                         <ArrowRight className="size-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                       </div>
                     </td>
@@ -638,9 +663,10 @@ export function SectorMapPanel({
                         setEffortTooltipPos(null)
                       }}
                     >
-                      <div className="flex flex-col gap-1 w-28 mx-auto">
+                      <div className="mx-auto flex w-28 flex-col gap-1" aria-label={`Nỗ lực ${formatSigned(effortPct, 2, "%")}; Kết quả ${formatSigned(resultPct, 2, "%")}`}>
                         {/* Top: Effort Bar & % */}
-                        <div className="flex items-center justify-between gap-1.5 font-mono text-[10px]">
+                        <div className="flex items-center justify-between gap-1.5 font-sans text-xs">
+                          <span className="sr-only">Nỗ lực</span>
                           <div className="h-2 flex-1 overflow-hidden rounded-sm bg-slate-900">
                             <div
                               className={cn(
@@ -658,8 +684,8 @@ export function SectorMapPanel({
                         </div>
 
                         {/* Bottom: Result % */}
-                        <div className="flex items-center justify-between gap-1.5 font-mono text-[9px]">
-                          <span className="text-slate-500">Giá:</span>
+                        <div className="flex items-center justify-between gap-1.5 font-sans text-xs">
+                          <span className="text-slate-400">Kết quả:</span>
                           <span className={cn("font-bold", isResultPos ? "text-emerald-300" : "text-rose-300")}>
                             {formatSigned(resultPct, 2, "%")}
                           </span>
@@ -676,19 +702,10 @@ export function SectorMapPanel({
                     {sessionDates.map((date) => {
                       const historyItem = historyMatrixMap.get(`${sector.sectorKey}:${date}`)
                       const state = historyItem?.rotationState ?? "unknown"
-                      const label = ROTATION_LABELS[state] || "—"
-                      const bgCls = rotationBadgeClass(state)
 
                       return (
                         <td key={date} className="p-1 text-center">
-                          <div
-                            className={cn(
-                              "flex h-7 items-center justify-center rounded px-1.5 font-mono text-[10px] font-bold shadow-sm transition-opacity hover:opacity-90",
-                              bgCls
-                            )}
-                          >
-                            {label}
-                          </div>
+                          <RotationBadge value={state} />
                         </td>
                       )
                     })}
@@ -931,7 +948,6 @@ export function SectorMapPanel({
                     const pricePos = (stock.changePercent ?? 0) >= 0
                     const isWeeklyPos = (stock.weeklyChangePercent ?? 0) >= 0
                     const isMonthlyPos = (stock.monthlyChangePercent ?? 0) >= 0
-                    const SectorIcon = getSectorIcon(stock.sector)
 
                     return (
                       <tr
@@ -955,8 +971,7 @@ export function SectorMapPanel({
                                 {stock.isTop100 && <Crown className="size-3 text-amber-400" />}
                               </div>
                               <div className="flex items-center gap-1 text-[10px] text-cyan-400 font-bold uppercase font-sans">
-                                <SectorIcon className="size-3 text-cyan-400 shrink-0" />
-                                <span>{stock.sector}</span>
+                            <SectorLabel name={stock.sector} compact />
                               </div>
                             </div>
                           </div>
@@ -1022,19 +1037,7 @@ export function SectorMapPanel({
 
                         {/* 8. RRG Cổ phiếu */}
                         <td className="px-2 py-3 text-center">
-                          <span className={cn(
-                            "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border font-sans",
-                            stock.stockRrgState === "Dẫn dắt"
-                              ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
-                              : stock.stockRrgState === "Phục hồi"
-                              ? "border-sky-400/30 bg-sky-400/10 text-sky-300"
-                              : stock.stockRrgState === "Suy yếu"
-                              ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
-                              : "border-rose-400/30 bg-rose-400/10 text-rose-300"
-                          )}>
-                            <span>~</span>
-                            <span>{stock.stockRrgState || "Suy yếu"}</span>
-                          </span>
+                          <RotationBadge value={stock.stockRrgState} />
                         </td>
 
                         {/* 9. Biến động tuần */}

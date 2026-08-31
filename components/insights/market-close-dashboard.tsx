@@ -7,7 +7,7 @@ import {
 } from "@/components/insights/market-close-charts"
 import { MarketBubbles, type MarketBubbleStock } from "@/components/insights/market-bubbles"
 import { SectorMapPanel } from "@/components/insights/sector-map-panel"
-import { MarketHealthView } from "@/components/insights/market-health-view"
+import { MarketHealthView, MarketSentimentCard } from "@/components/insights/market-health-view"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { MarketCloseDashboardData } from "@/lib/market-insight-data"
 import type { InsightsRatingRow } from "@/lib/insights-data"
@@ -19,6 +19,7 @@ interface MarketCloseDashboardProps {
   data: MarketCloseDashboardData | null
   ratings?: InsightsRatingRow[]
   bubbleStocks?: MarketBubbleStock[]
+  bubbleAsOfDate?: string | null
   onOpenStockDetail?: (ticker: string) => void
 }
 
@@ -124,24 +125,12 @@ function SectionHeading({
   )
 }
 
-function BreadthBar({ label, value, total, tone }: { label: string; value: number; total: number; tone: "up" | "flat" | "down" }) {
-  const width = total > 0 ? Math.max(2, value / total * 100) : 0
-  const bar = tone === "up" ? "bg-teal-300" : tone === "down" ? "bg-rose-400" : "bg-sky-200/70"
-  return (
-    <div className="grid grid-cols-[68px_1fr_38px] items-center gap-3 text-[11px]">
-      <span className="text-slate-400 font-semibold font-sans">{label}</span>
-      <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]"><div className={cn("h-full rounded-full", bar)} style={{ width: `${width}%` }} /></div>
-      <strong className="text-right font-mono text-slate-200 font-bold">{value}</strong>
-    </div>
-  )
-}
-
-export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], onOpenStockDetail }: MarketCloseDashboardProps) {
+export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bubbleAsOfDate = null, onOpenStockDetail }: MarketCloseDashboardProps) {
   if (!data) return (
     <Card className={cn(surface, "py-12 text-center")}><CardContent className="space-y-3"><Activity className="mx-auto size-10 text-slate-600" /><CardTitle className="font-bold text-white font-sans">Chưa có dữ liệu phiên đóng cửa</CardTitle><CardDescription className="italic text-slate-400">Snapshot sau phiên được cập nhật tự động sau 15:15 vào ngày giao dịch.</CardDescription></CardContent></Card>
   )
 
-  const { sessionDate, asOf, dailySummary, indexes, sectors, sectorHistory = [], history } = data
+  const { sessionDate, asOf, indexes, sectors, sectorHistory = [], history } = data
 
   return (
     <div className="space-y-10" data-stock-analytics-dashboard data-liquid-glass-dashboard>
@@ -164,14 +153,15 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
                   Bubbles · Bản đồ giao dịch thị trường
                 </h2>
                 <p className="mt-0.5 text-xs text-slate-400 italic font-medium">
-                  Kích thước theo mức độ tăng giảm giá, màu theo biến động từng kỳ (1D, 1W, 1M, 1Y).
+                  KFSP KLGD TB 50 phiên &gt; 500.000; xếp theo thanh khoản giảm dần, tối đa 200 mã. Kích thước theo biến động giá.
                 </p>
+                <p className="mt-1 text-[10px] font-mono text-slate-500">Nguồn KFSP · snapshot {bubbleAsOfDate ?? "—"} · thiếu dữ liệu không được bù</p>
               </div>
             </div>
           </CardHeader>
           <CardContent className="p-4 sm:p-5 min-h-[650px]">
             <MarketBubbles
-              stocks={bubbleStocks.slice(0, 100)}
+              stocks={bubbleStocks}
               onOpenStockDetail={onOpenStockDetail}
               defaultPeriod="1D"
             />
@@ -202,50 +192,12 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
         />
       </section>
 
-      {/* 4. Index & Market Breadth Charts */}
-      <section aria-labelledby="market-charts-title" className="space-y-4 border-t border-white/[0.06] pt-8">
-        <div id="market-charts-title">
-          <SectionHeading
-            icon={BarChart3}
-            iconTone="cyan"
-            eyebrow="Market internals"
-            title="Nội lực thị trường & Phân tích chuyên sâu"
-            description="Tập hợp 4 góc nhìn chuẩn hóa về thanh khoản, độ rộng và xu hướng để nhìn rõ bức tranh sau phiên."
-          />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2 2xl:grid-cols-4" data-market-close-chart-grid>
-          <ChartPanel icon={LineChart} title="Hiệu suất chỉ số" description="Biến động và giá trị giao dịch"><IndexPerformanceChart indexes={indexes} /></ChartPanel>
-          <ChartPanel icon={BarChart3} title="Độ rộng thị trường" description="Mã tăng, đứng giá và giảm"><IndexBreadthChart indexes={indexes} /></ChartPanel>
-          <ChartPanel icon={Gauge} title="Sức khỏe xu hướng" description="Tỷ lệ cổ phiếu trên các đường MA"><MaBreadthChart daily={dailySummary} /></ChartPanel>
-          <ChartPanel icon={CircleDollarSign} title="Dòng tiền tổ chức" description="Mua bán ròng theo nhóm nhà đầu tư"><InstitutionalFlowChart daily={dailySummary} /></ChartPanel>
-        </div>
-      </section>
-
-      {/* 5. 20-Session Market History */}
-      <section aria-labelledby="market-history-title" className="space-y-4 border-t border-white/[0.06] pt-8">
-        <div id="market-history-title">
-          <SectionHeading
-            icon={LineChart}
-            iconTone="purple"
-            eyebrow="20-session context"
-            title="Bối cảnh trước khi ra quyết định"
-            description="Đặt phiên hiện tại cạnh sức khỏe và dòng tiền gần đây, thay vì chỉ nhìn một ngày."
-          />
-        </div>
-        <div className="grid gap-3 xl:grid-cols-2" data-market-close-chart-grid>
-          <ChartPanel icon={Gauge} title="Tâm lý, rủi ro và MA20" description="Thang điểm sức khỏe qua tối đa 20 phiên"><MarketHistoryChart history={history} /></ChartPanel>
-          <ChartPanel icon={CircleDollarSign} title="Dòng tiền theo phiên" description="Khối ngoại và tự doanh quanh trục trung tính"><MarketHistoryFlowChart history={history} /></ChartPanel>
-        </div>
-      </section>
-
     </div>
   )
 }
 
 function MarketIntelligencePanel({ data }: { data: MarketCloseDashboardData }) {
   const { dailySummary, indexes, history, marketRegime } = data
-  const vnindex = indexes.find((item) => item.indexCode === "VNINDEX")
-  const breadthTotal = Math.max(1, (vnindex?.advances ?? 0) + (vnindex?.unchanged ?? 0) + (vnindex?.declines ?? 0))
   return (
     <section aria-labelledby="market-intelligence-title" className="space-y-6">
       <Card className={cn(surface, "overflow-hidden py-0")}>
@@ -268,7 +220,7 @@ function MarketIntelligencePanel({ data }: { data: MarketCloseDashboardData }) {
           </span>
         </div>
         <CardContent className="p-5 sm:p-6">
-          <div className="grid gap-6 xl:grid-cols-[.85fr_1.15fr]">
+          <div className="grid gap-4 xl:grid-cols-[7fr_3fr]">
             <div>
               <p className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-teal-300/70">Tổng quan thị trường</p>
               <div className="mt-4 flex items-center gap-5">
@@ -283,23 +235,29 @@ function MarketIntelligencePanel({ data }: { data: MarketCloseDashboardData }) {
                 </div>
               </div>
             </div>
-            <div className="space-y-4">
-              <BreadthBar label="Tăng giá" value={vnindex?.advances ?? 0} total={breadthTotal} tone="up" />
-              <BreadthBar label="Đứng giá" value={vnindex?.unchanged ?? 0} total={breadthTotal} tone="flat" />
-              <BreadthBar label="Giảm giá" value={vnindex?.declines ?? 0} total={breadthTotal} tone="down" />
-              <div className="grid grid-cols-2 gap-2 pt-2 sm:grid-cols-4">
-                <PulseStat label="Trên MA10" value={`${formatNumber(dailySummary.aboveMa10Pct, 0)}%`} />
-                <PulseStat label="Trên MA20" value={`${formatNumber(dailySummary.aboveMa20Pct, 0)}%`} />
-                <PulseStat label="Trên MA50" value={`${formatNumber(dailySummary.aboveMa50Pct, 0)}%`} />
-                <PulseStat label="Trên MA200" value={`${formatNumber(dailySummary.aboveMa200Pct, 0)}%`} />
-              </div>
-            </div>
+            <MarketSentimentCard data={data} />
+          </div>
+          <div id="market-charts-title" className="mt-5">
+            <SectionHeading icon={BarChart3} iconTone="cyan" eyebrow="Market internals" title="Nội lực thị trường & Phân tích chuyên sâu" description="Thanh khoản, độ rộng, xu hướng và dòng tiền từ snapshot hiện tại." />
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4" data-market-close-chart-grid>
+            <ChartPanel icon={LineChart} title="Hiệu suất chỉ số" description="Biến động và giá trị giao dịch"><IndexPerformanceChart indexes={indexes} /></ChartPanel>
+            <ChartPanel icon={BarChart3} title="Độ rộng thị trường" description="Mã tăng, đứng giá và giảm"><IndexBreadthChart indexes={indexes} /></ChartPanel>
+            <ChartPanel icon={Gauge} title="Sức khỏe xu hướng" description="Tỷ lệ cổ phiếu trên các đường MA"><MaBreadthChart daily={dailySummary} /></ChartPanel>
+            <ChartPanel icon={CircleDollarSign} title="Dòng tiền tổ chức" description="Mua bán ròng theo nhóm nhà đầu tư"><InstitutionalFlowChart daily={dailySummary} /></ChartPanel>
           </div>
         </CardContent>
       </Card>
 
       {/* Khối Sức khoẻ thị trường (Chỉ báo tâm lý + Chỉ báo rủi ro trên 1 row + Định giá) */}
       <MarketHealthView data={data} history={history} />
+      <div id="market-history-title">
+        <SectionHeading icon={LineChart} iconTone="purple" eyebrow="20-session context" title="Bối cảnh trước khi ra quyết định" description="Đặt phiên hiện tại cạnh sức khỏe và dòng tiền gần đây, thay vì chỉ nhìn một ngày." />
+      </div>
+      <div className="grid gap-3 xl:grid-cols-2" data-market-close-chart-grid>
+        <ChartPanel icon={Gauge} title="Tâm lý, rủi ro và MA20" description="Bối cảnh 20 phiên gần nhất"><MarketHistoryChart history={history} /></ChartPanel>
+        <ChartPanel icon={CircleDollarSign} title="Dòng tiền theo phiên" description="Dòng tiền 20 phiên gần nhất"><MarketHistoryFlowChart history={history} /></ChartPanel>
+      </div>
     </section>
   )
 }

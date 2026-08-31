@@ -535,7 +535,6 @@ function ValuationBandChart({ data }: ValuationChartProps) {
 // 4. Main Market Health View (Tâm lý & Rủi ro trên 1 Row + Định giá)
 // ─────────────────────────────────────────────────────────────────────────────
 export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) {
-  const currentSentiment = data.dailySummary.sentimentScore
   const currentRisk = data.dailySummary.riskScore
 
   // Build historical series for Risk Chart from real Supabase market close history
@@ -581,41 +580,8 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
 
   return (
     <div className="space-y-4 pt-1">
-      {/* Row 1: Chỉ báo tâm lý + Chỉ báo rủi ro (2 Columns on 1 Row) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Left Column: Chỉ báo tâm lý */}
-        <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-white/[0.06] pb-3 mb-2">
-            <div className="flex items-center gap-3">
-              <div className="flex size-8.5 shrink-0 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300 shadow-sm">
-                <HeartPulse className="size-4" />
-              </div>
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-white tracking-wide font-sans">
-                  Chỉ báo tâm lý
-                </h3>
-                <p className="text-[11px] text-slate-400 italic font-medium">Đo lường mức độ hưng phấn / sợ hãi</p>
-              </div>
-            </div>
-            <div className="relative">
-              <select
-                defaultValue="general"
-                className="appearance-none rounded-lg border border-white/10 bg-[#091622] px-3 py-1.5 pr-8 font-mono text-xs font-bold text-slate-300 focus:outline-none focus:ring-1 focus:ring-teal-400 cursor-pointer"
-              >
-                <option value="general">Tổng quan</option>
-                <option value="retail">Cá nhân</option>
-                <option value="institutional">Tổ chức</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
-            </div>
-          </div>
-
-          {currentSentiment == null
-            ? <div className="flex h-[210px] items-center justify-center text-sm text-slate-500">KFSP chưa trả chỉ báo tâm lý.</div>
-            : <SentimentGauge score={currentSentiment} />}
-        </div>
-
-        {/* Right Column: Chỉ báo rủi ro */}
+      {/* Risk and valuation form the second responsive market-health row. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl flex flex-col justify-between">
           <div className="flex items-center justify-between border-b border-white/[0.06] pb-3 mb-2">
             <div className="flex items-center gap-3">
@@ -638,10 +604,7 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
             ? <div className="flex h-[210px] items-center justify-center text-sm text-slate-500">KFSP chưa trả lịch sử rủi ro.</div>
             : <RiskIndicatorChart data={riskSeries} />}
         </div>
-      </div>
-
-      {/* Row 2: Định giá (Valuation Multi-Band: P/E / P/B vs VNINDEX) */}
-      <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.06] pb-3 mb-3 gap-2">
           <div className="flex items-center gap-3">
             <div className="flex size-8.5 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-300 shadow-sm">
@@ -657,7 +620,21 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
         </div>
 
         <ValuationBandChart data={valuationSeries} />
+        </div>
       </div>
+    </div>
+  )
+}
+
+export function MarketSentimentCard({ data }: { data: MarketCloseDashboardData }) {
+  const score = data.dailySummary.sentimentScore
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl">
+      <div className="mb-2 flex items-center gap-3 border-b border-white/[0.06] pb-3">
+        <div className="flex size-8.5 shrink-0 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300 shadow-sm"><HeartPulse className="size-4" /></div>
+        <div><h3 className="text-sm font-bold tracking-wide text-white sm:text-base">Chỉ báo tâm lý</h3><p className="text-[11px] font-medium italic text-slate-400">Đo lường mức độ hưng phấn / sợ hãi</p></div>
+      </div>
+      {score == null ? <div className="flex h-[210px] items-center justify-center text-sm text-slate-500">KFSP chưa trả chỉ báo tâm lý.</div> : <SentimentGauge score={score} />}
     </div>
   )
 }

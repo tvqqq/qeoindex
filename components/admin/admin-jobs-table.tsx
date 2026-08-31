@@ -27,6 +27,12 @@ function formatDateKey(value: string) {
   return year && month && day ? `${day}/${month}` : value
 }
 
+function formatEstimatedCost(value: number) {
+  if (!Number.isFinite(value) || value === 0) return "$0"
+  if (value > 0 && value < 0.01) return "<$0.01"
+  return `$${value.toFixed(2)}`
+}
+
 export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedGroup, setSelectedGroup] = useState<string>("all")
@@ -205,7 +211,7 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                       {job.aiUsage ? (
                         <div
                           className="space-y-0.5"
-                          title={`${job.aiUsage.models.join(" · ")} | input ${job.aiUsage.inputTokens}, output ${job.aiUsage.outputTokens}, reasoning ${job.aiUsage.reasoningTokens}, cost $${job.aiUsage.estimatedCostUsd.toFixed(6)}`}
+                          title={`${job.aiUsage.models.join(" · ")} | input ${job.aiUsage.inputTokens}, output ${job.aiUsage.outputTokens}, reasoning ${job.aiUsage.reasoningTokens}, cost ${formatEstimatedCost(job.aiUsage.estimatedCostUsd)}`}
                         >
                           <div className="font-mono font-semibold text-emerald-300">
                             {formatAdminTokenCount(job.aiUsage.totalTokens)} tokens

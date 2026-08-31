@@ -36,7 +36,7 @@ test("insights has no public auth bypass and reads with the user-scoped client",
   assert.match(insightsData, /getInsightsDashboardData\(supabase: SupabaseClient\)/)
   assert.match(insightsData, /\.from\("insights_stock_ratings"\)/)
   assert.match(insightsData, /\.eq\("is_published", true\)/)
-  assert.match(insightsData, /baseQuery\(\)\.eq\("is_top100", true\)\.limit\(100\)/)
+  assert.match(insightsData, /\.gt\("average_volume_50_sessions", 500_000\)[\s\S]*\.order\("average_volume_50_sessions", \{ ascending: false \}\)[\s\S]*\.limit\(200\)/)
   assert.match(insightsData, /new Map\(/)
 })
 

@@ -129,16 +129,22 @@ test("Market Close keeps the main dashboard continuous and limits tabs to the th
   assert.match(dashboard, /Nhịp đập thị trường/)
   assert.match(dashboard, /Nỗ lực kết quả/)
   assert.match(dashboard, /Sức khoẻ thị trường/)
+  assert.match(dashboard, /MarketSentimentCard/)
+  assert.match(dashboard, /xl:grid-cols-\[7fr_3fr\]/)
+  assert.doesNotMatch(fs.readFileSync(path.resolve("components/insights/market-health-view.tsx"), "utf8"), /<option value="(general|retail|institutional)">/)
   for (const period of ["1D", "1W", "1M", "1Y"]) {
     assert.match(bubbles, new RegExp(`value: "${period}"`), `market bubbles must expose the ${period} time window`)
   }
-  assert.match(dashboard, /slice\(0, 100\)/, "bubble field must keep the requested Top 100 cap")
+  assert.match(bubbles, /filter\(\(stock\) => \(stock\.volume \?\? 0\) > 500_000\)/, "bubble field must exclude stocks at or below the provider threshold")
+  assert.match(bubbles, /slice\(0, 200\)/, "bubble solver must keep the requested Top 200 cap")
   assert.match(dashboard, /min-h-\[650px\]/, "bubble layout must reserve stable space")
   assert.match(dashboard, /Luân chuyển dòng tiền/, "sector workspace must expose the rotation view")
   for (const sectionId of ["market-overview-title", "market-sectors-title", "market-history-title"]) {
     assert.match(dashboard, new RegExp(`id="${sectionId}"`), `${sectionId} must be visible in the continuous dashboard`)
   }
   assert.match(dashboard, /2xl:grid-cols-4/, "overview charts should use four columns on wide screens")
+  assert.match(dashboard, /MarketHistoryChart history=\{history\}/)
+  assert.match(dashboard, /MarketHistoryFlowChart history=\{history\}/)
   assert.match(dashboard, /data-stock-analytics-dashboard/, "the dashboard must preserve the analytics-first visual hierarchy")
   assert.doesNotMatch(dashboard, /<Table\b/, "market-close analytics should prioritize charts over long data tables")
   assert.doesNotMatch(dashboard, /Dữ liệu thị trường cũ \(Stale\)/, "stale status belongs in the page header, not inside the market dashboard")
@@ -152,6 +158,23 @@ test("Market Close charts use a minimal semantic palette without SVG gradients",
   assert.match(charts, /const NEUTRAL/)
   assert.match(charts, /const ACCENT/)
   assert.doesNotMatch(charts, /linearGradient|url\(#/, "chart fills must remain flat and minimal")
+})
+
+test("sector matrix keeps provider liquidity and sector labels honest", () => {
+  const sectors = fs.readFileSync(path.resolve("components/insights/sector-map-panel.tsx"), "utf8")
+  assert.match(sectors, /function SectorLabel/)
+  assert.match(sectors, /Đơn vị nguồn chưa xác minh/)
+  assert.doesNotMatch(sectors, /📊/)
+  assert.match(sectors, /aria-label=\{`Nỗ lực/)
+  assert.match(sectors, /function RotationBadge/)
+  assert.doesNotMatch(sectors, /<span>~<\/span>/)
+})
+
+test("admin AI cost tooltips never expose more than two display decimals", () => {
+  const adminJobs = fs.readFileSync(path.resolve("components/admin/admin-jobs-table.tsx"), "utf8")
+  assert.match(adminJobs, /function formatEstimatedCost/)
+  assert.match(adminJobs, /value < 0\.01/)
+  assert.doesNotMatch(adminJobs, /estimatedCostUsd\.toFixed\(6\)/)
 })
 
 test("market health SVG coordinates are stable across server and browser hydration", () => {

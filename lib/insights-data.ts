@@ -91,6 +91,19 @@ export interface InsightsDashboardData {
   modules: InsightsModuleSummary[]
   faSnapshotDate: string
   marketClose?: MarketCloseDashboardData | null
+  bubbleStocks: InsightsBubbleStock[]
+  bubbleAsOfDate: string | null
+}
+
+export interface InsightsBubbleStock {
+  ticker: string
+  companyName: string
+  sector: string
+  averageVolume50Sessions: number
+  change1d: number | null
+  change1w: number | null
+  change1m: number | null
+  change1y: number | null
 }
 
 type RatingDatabaseRow = {
@@ -126,6 +139,11 @@ type RatingDatabaseRow = {
   source: string
 }
 
+type BubbleDatabaseRow = Pick<RatingDatabaseRow,
+  "ticker" | "company_name" | "sector" | "average_volume_50_sessions" |
+  "price_change_pct" | "weekly_change_pct" | "monthly_change_pct" | "kfsp_metrics"
+>
+
 type SectorDatabaseRow = Pick<RatingDatabaseRow,
   "ticker" | "sector" | "is_top100" | "price" | "market_cap_billion" |
   "kfsp_composite_score" | "kfsp_score_4m" | "kfsp_canslim_score" | "kfsp_price_potential" |
@@ -136,6 +154,15 @@ function nullableNumber(value: unknown) {
   if (value == null || value === "") return null
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function metricNumberFromGroups(groups: KfspMetricGroups, key: string) {
+  for (const group of Object.values(groups)) {
+    const value = group?.[key]
+    const parsed = nullableNumber(value)
+    if (parsed != null) return parsed
+  }
+  return null
 }
 
 function average(values: Array<number | null>) {
@@ -238,7 +265,7 @@ function componentScore(value: unknown) {
   return Number.isFinite(parsed) ? Math.round(Math.max(0, Math.min(100, parsed))) : null
 }
 
-async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRatingRow[]; sectorSummaries: InsightsSectorSummary[]; message: string }> {
+async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRatingRow[]; sectorSummaries: InsightsSectorSummary[]; bubbleStocks: InsightsBubbleStock[]; bubbleAsOfDate: string | null; message: string }> {
   const latest = await supabase
     .from("insights_stock_ratings")
     .select("as_of_date")
@@ -248,8 +275,8 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
     .limit(1)
     .maybeSingle()
 
-  if (latest.error) return { rows: [], sectorSummaries: [], message: `Supabase rating chưa sẵn sàng: ${latest.error.message}` }
-  if (!latest.data?.as_of_date) return { rows: [], sectorSummaries: [], message: "Chưa có snapshot rating được cron công bố." }
+  if (latest.error) return { rows: [], sectorSummaries: [], bubbleStocks: [], bubbleAsOfDate: null, message: `Supabase rating chưa sẵn sàng: ${latest.error.message}` }
+  if (!latest.data?.as_of_date) return { rows: [], sectorSummaries: [], bubbleStocks: [], bubbleAsOfDate: null, message: "Chưa có snapshot rating được cron công bố." }
   const latestDate = latest.data.as_of_date
 
   const selection = "ticker,company_name,sector,industry_group,exchange,is_top100,top100_rank,price,price_change_pct,average_volume_50_sessions,market_cap_billion,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,kfsp_stock_rrg_state,kfsp_sector_rrg_state,rs_short,rs_medium,rsi_14,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics,as_of_date,source"
@@ -272,15 +299,28 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
     .order("ticker", { ascending: true })
     .range(from, to)
 
-  const [topRatings, top100, leanPageOne, leanPageTwo] = await Promise.all([
+  const bubbleQuery = supabase
+    .from("insights_stock_ratings")
+    .select("ticker,company_name,sector,average_volume_50_sessions,price_change_pct,weekly_change_pct,monthly_change_pct,kfsp_metrics")
+    .eq("is_published", true)
+    .eq("as_of_date", latestDate)
+    .eq("source", "kfsp")
+    .gt("average_volume_50_sessions", 500_000)
+    .order("average_volume_50_sessions", { ascending: false })
+    .order("ticker", { ascending: true })
+    .limit(200)
+
+  const [topRatings, top100, leanPageOne, leanPageTwo, bubbleUniverse] = await Promise.all([
     baseQuery().limit(500),
     baseQuery().eq("is_top100", true).limit(100),
     leanQuery(0, 999),
     leanQuery(1000, 1999),
+    bubbleQuery,
   ])
-  if (topRatings.error) return { rows: [], sectorSummaries: [], message: `Không đọc được rating: ${topRatings.error.message}` }
-  if (top100.error) return { rows: [], sectorSummaries: [], message: `Không đọc được Top 100: ${top100.error.message}` }
-  if (leanPageOne.error || leanPageTwo.error) return { rows: [], sectorSummaries: [], message: `Không đọc được thống kê ngành: ${(leanPageOne.error || leanPageTwo.error)?.message}` }
+  if (topRatings.error) return { rows: [], sectorSummaries: [], bubbleStocks: [], bubbleAsOfDate: null, message: `Không đọc được rating: ${topRatings.error.message}` }
+  if (top100.error) return { rows: [], sectorSummaries: [], bubbleStocks: [], bubbleAsOfDate: null, message: `Không đọc được Top 100: ${top100.error.message}` }
+  if (leanPageOne.error || leanPageTwo.error) return { rows: [], sectorSummaries: [], bubbleStocks: [], bubbleAsOfDate: null, message: `Không đọc được thống kê ngành: ${(leanPageOne.error || leanPageTwo.error)?.message}` }
+  if (bubbleUniverse.error) return { rows: [], sectorSummaries: [], bubbleStocks: [], bubbleAsOfDate: null, message: `Không đọc được Bubbles universe: ${bubbleUniverse.error.message}` }
 
   const databaseRows = [...new Map(
     ([...(topRatings.data || []), ...(top100.data || [])] as RatingDatabaseRow[])
@@ -355,7 +395,22 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
   }
 
   const sectorSummaries = buildSectorSummaries([...(leanPageOne.data || []), ...(leanPageTwo.data || [])])
-  return { rows, message: `${rows.length} mã chi tiết · ${sectorSummaries.length} ngành · snapshot ${latestDate}`, sectorSummaries }
+  const bubbleStocks = (bubbleUniverse.data || []).flatMap((row) => {
+    const volume = nullableNumber((row as BubbleDatabaseRow).average_volume_50_sessions)
+    if (volume == null || volume <= 500_000) return []
+    const metrics = parseMetricGroups((row as BubbleDatabaseRow).kfsp_metrics)
+    return [{
+      ticker: String(row.ticker),
+      companyName: row.company_name || row.ticker,
+      sector: row.sector || "Chưa phân ngành",
+      averageVolume50Sessions: volume,
+      change1d: nullableNumber(row.price_change_pct),
+      change1w: nullableNumber(row.weekly_change_pct) ?? metricNumberFromGroups(metrics, "price_change_1w_pct"),
+      change1m: nullableNumber(row.monthly_change_pct) ?? metricNumberFromGroups(metrics, "price_change_1m_pct"),
+      change1y: metricNumberFromGroups(metrics, "price_change_1y_pct"),
+    }]
+  })
+  return { rows, message: `${rows.length} mã chi tiết · ${sectorSummaries.length} ngành · snapshot ${latestDate}`, sectorSummaries, bubbleStocks, bubbleAsOfDate: latestDate }
 }
 
 function parseMetricGroups(value: unknown): KfspMetricGroups {
@@ -396,6 +451,8 @@ export async function getInsightsDashboardData(supabase: SupabaseClient): Promis
   const marketClose = settledValue(settled[6])
   const vnindex = indexes?.VNINDEX ?? null
   const ratings = ratingResult?.rows ?? []
+  const bubbleStocks = ratingResult?.bubbleStocks ?? []
+  const bubbleAsOfDate = ratingResult?.bubbleAsOfDate ?? null
   const sectorSummaries = ratingResult?.sectorSummaries ?? []
   const unavailable = !ratingResult?.rows.length
   const scans = scanner ? Object.values(scanner.latestScans) : []
@@ -453,5 +510,7 @@ export async function getInsightsDashboardData(supabase: SupabaseClient): Promis
     ],
     faSnapshotDate: FA_SCREEN_SNAPSHOT_DATE,
     marketClose,
+    bubbleStocks,
+    bubbleAsOfDate,
   }
 }
