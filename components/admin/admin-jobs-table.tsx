@@ -130,6 +130,9 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                           </p>
                         })()
                       ) : null}
+                      {job.schedulerEvidence?.children && job.schedulerEvidence.children.length > 1 ? (
+                        <p className="mt-1 text-[10px] font-medium text-slate-500">Scheduler children: {job.schedulerEvidence.children.map((child) => `${child.mappingId}=${child.status}`).join(" · ")}</p>
+                      ) : null}
                       {job.conflictWarning ? (
                         <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-amber-400">
                           <AlertTriangle className="h-3 w-3 shrink-0" />

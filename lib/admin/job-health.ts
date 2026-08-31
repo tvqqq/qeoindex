@@ -138,7 +138,7 @@ export function buildAdminJobViews(
     }
   })
 
-  return { jobs, counts, scheduler: rawEvidence.schedulerReconciliation?.aggregate ?? { expected: 6, liveVerified: 0, configOnly: 1, missing: 0, drifted: 0, duplicated: 0, unavailable: 6, extraUnmapped: 0, inventoryClean: false, expectedMappingsVerified: false } }
+  return { jobs, counts, scheduler: rawEvidence.schedulerReconciliation?.aggregate ?? { expected: 7, liveVerified: 0, configOnly: 1, missing: 0, drifted: 0, duplicated: 0, unavailable: 6, extraUnmapped: 0, inventoryClean: false, expectedMappingsVerified: false } }
 }
 
 export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; counts: AdminSystemOverview["jobCounts"]; scheduler: AdminSystemOverview["scheduler"] }> {

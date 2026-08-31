@@ -127,8 +127,9 @@ export type AdminJobEvidenceSource =
 export type AdminSchedulerStatus = "active" | "inactive" | "unscheduled" | "unknown"
 export type SchedulerReconciliationView = {
   availability: "available" | "unavailable"
-  status?: "live_verified" | "config_only" | "missing" | "drifted" | "inactive" | "duplicated" | "legacy_alias"
+  status?: "live_verified" | "config_only" | "missing" | "drifted" | "inactive" | "duplicated" | "legacy_alias" | "partial" | "unknown"
   reason?: string
+  children?: Array<{ mappingId: string; status: string }>
 }
 export type SchedulerAggregate = { expected: number; liveVerified: number; configOnly: number; missing: number; drifted: number; duplicated: number; unavailable: number; extraUnmapped: number; inventoryClean: boolean; expectedMappingsVerified: boolean }
 

@@ -9,10 +9,13 @@ const rows = EXPECTED_SUPABASE_SCHEDULERS.map((mapping, index) => ({ jobId: inde
 
 test("six exact Supabase physical mappings are live verified and market windows are both required", () => {
   const result = reconcileSupabaseSchedulers({ availability: "available", rows })
-  assert.equal(result.aggregate.expected, 6)
+  assert.equal(result.aggregate.expected, 7)
+  assert.equal(result.physicalMappings.length, 7)
   assert.equal(result.aggregate.liveVerified, 6)
   assert.equal(result.aggregate.expectedMappingsVerified, true)
   assert.equal(result.aggregate.inventoryClean, true)
+  assert.deepEqual(result.mappings.filter((mapping) => mapping.jobKey === "market.sync_5m").map((mapping) => mapping.mappingId), ["supabase:sync-universe-5m-am", "supabase:sync-universe-5m-pm"])
+  assert.deepEqual(result.logical.find((mapping) => mapping.jobKey === "market.sync_5m")?.childMappingIds, ["supabase:sync-universe-5m-am", "supabase:sync-universe-5m-pm"])
 })
 
 test("scheduler reconciliation reports missing window, drift, inactive, duplicate, alias and extra", () => {
@@ -31,6 +34,7 @@ test("scheduler reconciliation reports missing window, drift, inactive, duplicat
   assert.equal(result.mappings.find((m) => m.schedulerName === "sync-universe-eod-1445")?.status, "inactive")
   assert.equal(result.mappings.find((m) => m.schedulerName === "qeoindex-eod-pipeline-1515-ict")?.status, "duplicated")
   assert.equal(result.mappings.find((m) => m.schedulerName === "kfsp-ttai-history-daily-0710-ict")?.status, "legacy_alias")
+  assert.equal(result.logical.find((m) => m.jobKey === "market.sync_5m")?.status, "partial")
   assert.deepEqual(result.extraUnmapped, ["retired-job"])
   assert.equal(result.aggregate.inventoryClean, false)
 })

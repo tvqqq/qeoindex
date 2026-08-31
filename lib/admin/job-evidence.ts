@@ -265,6 +265,7 @@ export function resolveJobEvidence(
 
   const matchedCron = latestMatchingCron(def, raw.cronSnapshots)
   const schedulerMapping = raw.schedulerReconciliation?.mappings.find((mapping) => mapping.jobKey === def.key && mapping.schedulerName === def.schedulerName)
+  const logicalScheduler = raw.schedulerReconciliation?.logical.find((mapping) => mapping.jobKey === def.key)
 
   if (raw.schedulerReconciliation) {
     if (schedulerMapping?.status === "live_verified") {
@@ -328,7 +329,7 @@ export function resolveJobEvidence(
     schedulerEvidence: (raw.schedulerReconciliation
       ? raw.schedulerReconciliation.availability === "unavailable"
         ? { availability: "unavailable" as const, reason: raw.schedulerReconciliation.aggregate.unavailable ? "RPC unavailable" : "Invalid scheduler evidence" }
-        : { availability: "available" as const, status: (schedulerMapping?.status ?? (def.provider.startsWith("vercel_cron") ? "config_only" : "missing")) as SchedulerReconciliationView["status"] }
+        : { availability: "available" as const, status: (logicalScheduler?.status ?? (def.provider.startsWith("vercel_cron") ? "config_only" : "missing")) as SchedulerReconciliationView["status"], children: raw.schedulerReconciliation.physicalMappings.filter((mapping) => mapping.jobKey === def.key).map((mapping) => ({ mappingId: mapping.mappingId, status: mapping.status })) }
       : { availability: "unavailable" as const, reason: "Scheduler evidence not loaded" }) as NonNullable<AdminJobView["schedulerEvidence"]>,
   })
 
