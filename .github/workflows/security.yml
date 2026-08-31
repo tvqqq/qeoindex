@@ -2,8 +2,7 @@ name: Verify
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,19 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  secret-scan:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
       - name: Scan tracked source for secrets
         run: bash scripts/scan-secrets.sh
-
-  core-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
