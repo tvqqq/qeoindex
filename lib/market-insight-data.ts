@@ -45,7 +45,9 @@ export interface MarketSectorRow {
   sectorKey: string
   timeWindow: "1d" | "5d" | "20d"
   displayName: string
+  closePrice: number | null
   tradedValue: number | null
+  previousTradedValue: number | null
   averageChangePct: number | null
   advances: number
   unchanged: number
@@ -57,6 +59,10 @@ export interface MarketSectorRow {
   effortPct: number | null
   resultPct: number | null
   effortResultState: string | null
+  ma10State: "up" | "down" | null
+  ma20State: "up" | "down" | null
+  ma50State: "up" | "down" | null
+  rotationHistory: Array<{ tradingDate: string; status: RotationState; closePrice: number | null }>
   qualityStatus: QualityStatus
   evidenceRefs: EvidenceRef[]
   asOf: string
@@ -101,6 +107,7 @@ export interface MarketSectorHistoryItem {
   effortPct: number | null
   resultPct: number | null
   tradedValue: number | null
+  closePrice: number | null
 }
 
 export interface MarketCloseDashboardData {
@@ -109,14 +116,30 @@ export interface MarketCloseDashboardData {
   staleMessage?: string
   asOf: string
   qualityStatus: QualityStatus
-  marketRegime: MarketRegime
+  marketRegime: MarketRegime | null
   dailySummary: {
     sentimentScore: number | null
     sentimentLabel: string | null
     riskScore: number | null
     riskLabel: string | null
     distributionCount: number | null
-    distributionWindow: string
+    distributionWindow: string | null
+    sentimentHistory: Array<{ tradingDate: string; value: number }>
+    riskHistory: Array<{ tradingDate: string; risk: number }>
+    valuationHistory: Array<{
+      tradingDate: string
+      price: number | null
+      pe: number | null
+      pb: number | null
+      pe1StdUp: number | null
+      pe1StdDown: number | null
+      pe2StdUp: number | null
+      pe2StdDown: number | null
+      pb1StdUp: number | null
+      pb1StdDown: number | null
+      pb2StdUp: number | null
+      pb2StdDown: number | null
+    }>
     aboveMa10Pct: number | null
     aboveMa20Pct: number | null
     aboveMa50Pct: number | null
@@ -210,7 +233,7 @@ export async function getMarketCloseInsightData(
       .limit(20),
     supabase
       .from("market_insight_sectors")
-      .select("session_date,sector_key,display_name,rotation_state,average_change_pct,rs_score,effort_pct,result_pct,traded_value")
+      .select("session_date,sector_key,display_name,rotation_state,average_change_pct,rs_score,effort_pct,result_pct,traded_value,close_price")
       .eq("time_window", "1d")
       .lte("session_date", targetDate)
       .order("session_date", { ascending: false })
@@ -256,7 +279,9 @@ export async function getMarketCloseInsightData(
     sectorKey: String(row.sector_key || ""),
     timeWindow: (row.time_window as MarketSectorRow["timeWindow"]) || "1d",
     displayName: String(row.display_name || row.sector_key || ""),
+    closePrice: row.close_price != null ? Number(row.close_price) : null,
     tradedValue: row.traded_value != null ? Number(row.traded_value) : null,
+    previousTradedValue: row.previous_traded_value != null ? Number(row.previous_traded_value) : null,
     averageChangePct: row.average_change_pct != null ? Number(row.average_change_pct) : null,
     advances: Number(row.advances || 0),
     unchanged: Number(row.unchanged || 0),
@@ -268,6 +293,22 @@ export async function getMarketCloseInsightData(
     effortPct: row.effort_pct != null ? Number(row.effort_pct) : null,
     resultPct: row.result_pct != null ? Number(row.result_pct) : null,
     effortResultState: (row.effort_result_state as string) || null,
+    ma10State: row.ma10_state === "up" || row.ma10_state === "down" ? row.ma10_state : null,
+    ma20State: row.ma20_state === "up" || row.ma20_state === "down" ? row.ma20_state : null,
+    ma50State: row.ma50_state === "up" || row.ma50_state === "down" ? row.ma50_state : null,
+    rotationHistory: Array.isArray(row.rotation_history)
+      ? row.rotation_history.flatMap((item: unknown) => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) return []
+          const value = item as Record<string, unknown>
+          const status = value.status as RotationState
+          if (!value.trading_date || !["leading", "recovering", "weakening", "lagging"].includes(status)) return []
+          return [{
+            tradingDate: String(value.trading_date),
+            status,
+            closePrice: value.close_price != null ? Number(value.close_price) : null,
+          }]
+        })
+      : [],
     qualityStatus: (row.quality_status as QualityStatus) || "healthy",
     evidenceRefs: Array.isArray(row.evidence_refs) ? (row.evidence_refs as EvidenceRef[]) : [],
     asOf: String(row.as_of || new Date().toISOString()),
@@ -318,7 +359,7 @@ export async function getMarketCloseInsightData(
   const modelInput: MarketObservationSnapshotInput = {
     sessionDate: targetDate,
     asOf: daily.as_of || new Date().toISOString(),
-    regime: (daily.market_regime as MarketRegime) || "PHÂN HÓA",
+    regime: (daily.market_regime as MarketRegime) || null,
     daily: {
       sentimentScore: daily.sentiment_score != null ? Number(daily.sentiment_score) : null,
       sentimentLabel: daily.sentiment_label || null,
@@ -372,7 +413,7 @@ export async function getMarketCloseInsightData(
 
   const observations = generateMarketObservations(modelInput)
 
-  const sectorHistory: MarketSectorHistoryItem[] = (sectorHistoryRes.data || []).map((row: Record<string, unknown>) => ({
+  const storedSectorHistory: MarketSectorHistoryItem[] = (sectorHistoryRes.data || []).map((row: Record<string, unknown>) => ({
     sessionDate: String(row.session_date || ""),
     sectorKey: String(row.sector_key || ""),
     displayName: String(row.display_name || row.sector_key || ""),
@@ -382,7 +423,32 @@ export async function getMarketCloseInsightData(
     effortPct: row.effort_pct != null ? Number(row.effort_pct) : null,
     resultPct: row.result_pct != null ? Number(row.result_pct) : null,
     tradedValue: row.traded_value != null ? Number(row.traded_value) : null,
+    closePrice: row.close_price != null ? Number(row.close_price) : null,
   }))
+  const providerSectorHistory: MarketSectorHistoryItem[] = sectors.flatMap((sector) =>
+    sector.rotationHistory.map((point) => ({
+      sessionDate: point.tradingDate,
+      sectorKey: sector.sectorKey,
+      displayName: sector.displayName,
+      rotationState: point.status,
+      averageChangePct: null,
+      rsScore: null,
+      effortPct: null,
+      resultPct: null,
+      tradedValue: null,
+      closePrice: point.closePrice,
+    })))
+  const sectorHistory = [...new Map(
+    [...storedSectorHistory, ...providerSectorHistory]
+      .map((item) => [`${item.sectorKey}:${item.sessionDate}`, item]),
+  ).values()]
+
+  const parseDailySeries = <T,>(value: unknown, parser: (row: Record<string, unknown>) => T | null): T[] =>
+    Array.isArray(value) ? value.flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return []
+      const parsed = parser(item as Record<string, unknown>)
+      return parsed == null ? [] : [parsed]
+    }) : []
 
   return {
     sessionDate: targetDate,
@@ -390,14 +456,36 @@ export async function getMarketCloseInsightData(
     staleMessage: isStale ? `Dữ liệu phiên ${targetDate} (chưa có snapshot phiên hôm nay)` : undefined,
     asOf: daily.as_of || new Date().toISOString(),
     qualityStatus: daily.quality_status || "healthy",
-    marketRegime: (daily.market_regime as MarketRegime) || "PHÂN HÓA",
+    marketRegime: (daily.market_regime as MarketRegime) || null,
     dailySummary: {
       sentimentScore: daily.sentiment_score != null ? Number(daily.sentiment_score) : null,
       sentimentLabel: daily.sentiment_label || null,
       riskScore: daily.risk_score != null ? Number(daily.risk_score) : null,
       riskLabel: daily.risk_label || null,
       distributionCount: daily.distribution_count != null ? Number(daily.distribution_count) : null,
-      distributionWindow: daily.distribution_window || "25_sessions",
+      distributionWindow: daily.distribution_window || null,
+      sentimentHistory: parseDailySeries(daily.sentiment_history, (row) =>
+        row.trading_date && row.value != null
+          ? { tradingDate: String(row.trading_date), value: Number(row.value) }
+          : null),
+      riskHistory: parseDailySeries(daily.risk_history, (row) =>
+        row.trading_date && row.risk != null
+          ? { tradingDate: String(row.trading_date), risk: Number(row.risk) }
+          : null),
+      valuationHistory: parseDailySeries(daily.valuation_history, (row) => row.trading_date ? ({
+        tradingDate: String(row.trading_date),
+        price: row.price != null ? Number(row.price) : null,
+        pe: row.pe != null ? Number(row.pe) : null,
+        pb: row.pb != null ? Number(row.pb) : null,
+        pe1StdUp: row.pe_1std_up != null ? Number(row.pe_1std_up) : null,
+        pe1StdDown: row.pe_1std_down != null ? Number(row.pe_1std_down) : null,
+        pe2StdUp: row.pe_2std_up != null ? Number(row.pe_2std_up) : null,
+        pe2StdDown: row.pe_2std_down != null ? Number(row.pe_2std_down) : null,
+        pb1StdUp: row.pb_1std_up != null ? Number(row.pb_1std_up) : null,
+        pb1StdDown: row.pb_1std_down != null ? Number(row.pb_1std_down) : null,
+        pb2StdUp: row.pb_2std_up != null ? Number(row.pb_2std_up) : null,
+        pb2StdDown: row.pb_2std_down != null ? Number(row.pb_2std_down) : null,
+      }) : null),
       aboveMa10Pct: daily.above_ma10_pct != null ? Number(daily.above_ma10_pct) : null,
       aboveMa20Pct: daily.above_ma20_pct != null ? Number(daily.above_ma20_pct) : null,
       aboveMa50Pct: daily.above_ma50_pct != null ? Number(daily.above_ma50_pct) : null,

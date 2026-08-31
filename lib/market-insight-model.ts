@@ -18,7 +18,7 @@ export interface MarketObservation {
 export interface MarketObservationSnapshotInput {
   sessionDate: string
   asOf: string
-  regime: MarketRegime
+  regime: MarketRegime | null
   daily: {
     sentimentScore: number | null
     sentimentLabel: string | null
@@ -188,16 +188,16 @@ export function generateMarketObservations(input: MarketObservationSnapshotInput
 
     if (distCount != null) {
       const statusLabel = distCount <= 2 ? "vùng an toàn" : distCount <= 4 ? "vùng theo dõi" : "vùng rủi ro cao"
-      parts.push(`số ngày phân phối ghi nhận ${distCount} phiên trong 25 phiên gần nhất (${statusLabel})`)
+      parts.push(`số ngày phân phối do KFSP công bố là ${distCount} phiên (${statusLabel})`)
       evidence.push({ field: "distribution_count", value: distCount, unit: "sessions" })
     }
 
     if (riskScore != null) {
-      evidence.push({ field: "risk_score", value: riskScore, unit: "score_0_100" })
+      evidence.push({ field: "risk_score", value: riskScore, unit: "ratio_0_1" })
     }
 
     let sentiment: MarketObservation["sentiment"] = "neutral"
-    if ((distCount != null && distCount >= 5) || (riskScore != null && riskScore >= 70)) sentiment = "warning"
+    if ((distCount != null && distCount >= 5) || (riskScore != null && riskScore >= 0.7)) sentiment = "warning"
     else if (ma20 != null && ma20 >= 60 && (distCount == null || distCount <= 2)) sentiment = "positive"
 
     observations.push({

@@ -54,7 +54,9 @@ export function AdminAuditTable({ logs }: AdminAuditTableProps) {
               {filteredLogs.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-10 text-center text-xs text-slate-400">
-                    Không có bản ghi audit nào phù hợp với bộ lọc.
+                    {logs.length === 0
+                      ? "Chưa có bản ghi audit nào. Nhật ký sẽ tự động ghi nhận khi có thao tác thay đổi Cài đặt Runtime hoặc thực thi Tác vụ thủ công."
+                      : "Không có bản ghi audit nào phù hợp với bộ lọc tìm kiếm."}
                   </td>
                 </tr>
               ) : (

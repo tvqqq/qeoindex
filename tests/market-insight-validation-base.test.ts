@@ -10,9 +10,21 @@ import {
   clampPercent,
   mapRotationState,
   normalizeSectorSlug,
-  deriveMarketRegime,
+  normalizeSectorMaSlug,
   type NormalizedIndexRow,
 } from "../supabase/functions/_shared/market-close-normalizer.ts"
+
+function makeSectorIbd(names: string[]) {
+  return {
+    ten_nganh: names,
+    closeprice: names.map((_, index) => 100 + index),
+    rss: names.map((_, index) => 60 + index),
+    totalval_market_pulse: names.map((_, index) => 3500 - index * 700),
+    totalvalbefore_market_pulse: names.map((_, index) => 3200 - index * 650),
+    percent_market_pulse: names.map((_, index) => 9.38 - index * 3),
+    percent_market_pulse_marketcap: names.map((_, index) => 1.25 - index * 2.05),
+  }
+}
 
 test("market-close normalizer: parseNumeric helper correctly handles numbers, strings, commas, percentages, and empty values", () => {
   assert.equal(parseNumeric(123.45), 123.45)
@@ -54,45 +66,10 @@ test("market-close normalizer: normalizeSectorSlug converts Vietnamese names to 
   assert.equal(normalizeSectorSlug("Dầu khí"), "dau_khi")
 })
 
-test("market-close normalizer: deriveMarketRegime produces deterministic regimes based on index change, breadth, and risk", () => {
-  // High risk or high distribution count -> RỦI RO
-  assert.equal(
-    deriveMarketRegime({
-      vnindexChangePct: 0.8,
-      breadthAdvances: 300,
-      breadthDeclines: 100,
-      sentimentScore: 70,
-      riskScore: 80,
-      distributionCount: 3,
-    }),
-    "RỦI RO"
-  )
-
-  // Strong positive breadth and positive index -> TÍCH CỰC
-  assert.equal(
-    deriveMarketRegime({
-      vnindexChangePct: 0.95,
-      breadthAdvances: 274,
-      breadthDeclines: 122,
-      sentimentScore: 56,
-      riskScore: 63,
-      distributionCount: 2,
-    }),
-    "TÍCH CỰC"
-  )
-
-  // Strong negative breadth and negative index -> THẬN TRỌNG
-  assert.equal(
-    deriveMarketRegime({
-      vnindexChangePct: -1.2,
-      breadthAdvances: 90,
-      breadthDeclines: 310,
-      sentimentScore: 25,
-      riskScore: 65,
-      distributionCount: 4,
-    }),
-    "THẬN TRỌNG"
-  )
+test("market-close normalizer: normalizeSectorMaSlug matches KFSP getdatama page contract", () => {
+  assert.equal(normalizeSectorMaSlug("NÔNG - LÂM - NGƯ"), "nong_lam_ngu")
+  assert.equal(normalizeSectorMaSlug("Thiết bị - Y tế"), "thiet_bi_-_y_te")
+  assert.equal(normalizeSectorMaSlug("Bất động sản"), "bat_dong_san")
 })
 
 test("market-close normalizer: parses verified bundle contract fixture with canonical indexes and compound keys", () => {
@@ -229,8 +206,30 @@ test("market-close normalizer: parses verified bundle contract fixture with cano
     riskOk: true,
     psychologyPayload: raw.socket_psychology,
     psychologyOk: true,
-    sectorPulsePayload: raw.socket_sector_pulse,
-    sectorPulseOk: true,
+    valuationPayload: [{ tradingdate: "2026-08-26", price: 1284.55, pe: 14.35, pb: 1.82, pe_1std_up: 15.5, pe_1std_down: 12.5, pe_2std_up: 17, pe_2std_down: 11, pb_1std_up: 2, pb_1std_down: 1.5, pb_2std_up: 2.2, pb_2std_down: 1.3 }],
+    valuationOk: true,
+    sectorIbdPayload: {
+      ten_nganh: raw.socket_sector_pulse.name,
+      closeprice: [112.5, 108.2, 119.4],
+      rss: [72, 65, 81],
+      totalval_market_pulse: raw.socket_sector_pulse.totalval,
+      totalvalbefore_market_pulse: raw.socket_sector_pulse.totalvalbefore,
+      percent_market_pulse: [18.95, 4.49, 23.1],
+      percent_market_pulse_marketcap: raw.socket_sector_pulse.percent,
+    },
+    sectorIbdOk: true,
+    sectorRrgPayload: {
+      "Bất động sản": [{ tradingdate: "2026-08-26", status: "Dẫn dắt", closeprice: 112.5 }],
+      "Ngân hàng": [{ tradingdate: "2026-08-26", status: "Phục hồi", closeprice: 108.2 }],
+      "Dịch vụ tài chính": [{ tradingdate: "2026-08-26", status: "Dẫn dắt", closeprice: 119.4 }],
+    },
+    sectorRrgOk: true,
+    sectorMaPayload: {
+      "Bất động sản": { ma10: "up", ma20: "up", ma50: "up" },
+      "Ngân hàng": { ma10: "up", ma20: "up", ma50: "down" },
+      "Dịch vụ tài chính": { ma10: "up", ma20: "up", ma50: "up" },
+    },
+    sectorMaOk: true,
     sectorBreadthPayload: raw.socket_sector_breadth,
     sectorBreadthOk: true,
     cashFlowsPayload: raw.rest_cash_flows,
@@ -238,15 +237,15 @@ test("market-close normalizer: parses verified bundle contract fixture with cano
     topVolatilityTickers: raw.rest_top_volatility_tickers,
     getLivePayload: raw.socket_getlive,
     getLiveOk: true,
-    canonicalIndexes,
+    providerIndexes: canonicalIndexes,
   })
 
   assert.equal(snapshot.session_date, "2026-08-26")
   assert.equal(snapshot.quality_status, "healthy")
-  assert.equal(snapshot.daily.market_regime, "TÍCH CỰC")
+  assert.equal(snapshot.daily.market_regime, null)
   assert.equal(snapshot.daily.sentiment_score, 56)
-  assert.equal(snapshot.daily.sentiment_label, "Lạc quan")
-  assert.equal(snapshot.daily.risk_score, 63)
+  assert.equal(snapshot.daily.sentiment_label, "Trung lập")
+  assert.equal(snapshot.daily.risk_score, 0.63)
   assert.equal(snapshot.daily.risk_label, "Trung tính")
   assert.equal(snapshot.daily.distribution_count, 2)
   assert.equal(snapshot.daily.above_ma10_pct, 70.89)
@@ -323,7 +322,7 @@ test("market-close normalizer: rejects missing or null canonical index data with
   const snapshot = parseVerifiedMarketClosePayloads({
     sessionDate: "2026-08-26",
     asOfIso: "2026-08-26T08:15:00.000Z",
-    canonicalIndexes: corruptedIndexes,
+    providerIndexes: corruptedIndexes,
   })
 
   const vnindex = snapshot.indexes.find((i) => i.index_code === "VNINDEX")
@@ -347,7 +346,7 @@ test("market-close normalizer: fail-closed on partial P0 socket/flow/sector cove
   const partialMaSnapshot = parseVerifiedMarketClosePayloads({
     sessionDate: "2026-08-26",
     asOfIso: "2026-08-26T08:15:00.000Z",
-    canonicalIndexes,
+    providerIndexes: canonicalIndexes,
     pulseOk: true,
     pulseContentPayload: { content: JSON.stringify({ list_main_content: [{ title: "Ngày phân phối", distribution_date: 2 }] }) },
     maBreadthOk: true,
@@ -358,8 +357,8 @@ test("market-close normalizer: fail-closed on partial P0 socket/flow/sector cove
     psychologyPayload: [{ value: 56 }],
     cashFlowsOk: true,
     cashFlowsPayload: { nuocngoairong: [-145.2], tudoanh: [92.5], cntckhacrong: [52.7] },
-    sectorPulseOk: true,
-    sectorPulsePayload: { name: ["Ngân hàng"], percent: [1.25], totalval: [3500] },
+    sectorIbdOk: true,
+    sectorIbdPayload: makeSectorIbd(["Ngân hàng"]),
     sectorBreadthOk: true,
     sectorBreadthPayload: [{ nganh: "Ngân hàng", count_advances: 18, count_declines: 4, count_nochange: 2 }],
   })
@@ -370,7 +369,7 @@ test("market-close normalizer: fail-closed on partial P0 socket/flow/sector cove
   const noDistSnapshot = parseVerifiedMarketClosePayloads({
     sessionDate: "2026-08-26",
     asOfIso: "2026-08-26T08:15:00.000Z",
-    canonicalIndexes,
+    providerIndexes: canonicalIndexes,
     pulseOk: true,
     pulseContentPayload: { content: JSON.stringify({ list_main_content: [{ title: "Tổng quan thị trường chung" }] }) }, // No distribution date
     maBreadthOk: true,
@@ -381,8 +380,8 @@ test("market-close normalizer: fail-closed on partial P0 socket/flow/sector cove
     psychologyPayload: [{ value: 56 }],
     cashFlowsOk: true,
     cashFlowsPayload: { nuocngoairong: [-145.2], tudoanh: [92.5] },
-    sectorPulseOk: true,
-    sectorPulsePayload: { name: ["Ngân hàng"], percent: [1.25], totalval: [3500] },
+    sectorIbdOk: true,
+    sectorIbdPayload: makeSectorIbd(["Ngân hàng"]),
     sectorBreadthOk: true,
     sectorBreadthPayload: [{ nganh: "Ngân hàng", count_advances: 18, count_declines: 4, count_nochange: 2 }],
   })
@@ -393,7 +392,7 @@ test("market-close normalizer: fail-closed on partial P0 socket/flow/sector cove
   const noPropFlowSnapshot = parseVerifiedMarketClosePayloads({
     sessionDate: "2026-08-26",
     asOfIso: "2026-08-26T08:15:00.000Z",
-    canonicalIndexes,
+    providerIndexes: canonicalIndexes,
     pulseOk: true,
     pulseContentPayload: { content: JSON.stringify({ list_main_content: [{ title: "Ngày phân phối", distribution_date: 2 }] }) },
     maBreadthOk: true,
@@ -404,8 +403,8 @@ test("market-close normalizer: fail-closed on partial P0 socket/flow/sector cove
     psychologyPayload: [{ value: 56 }],
     cashFlowsOk: true,
     cashFlowsPayload: { nuocngoairong: [-145.2] }, // Missing tudoanh
-    sectorPulseOk: true,
-    sectorPulsePayload: { name: ["Ngân hàng"], percent: [1.25], totalval: [3500] },
+    sectorIbdOk: true,
+    sectorIbdPayload: makeSectorIbd(["Ngân hàng"]),
     sectorBreadthOk: true,
     sectorBreadthPayload: [{ nganh: "Ngân hàng", count_advances: 18, count_declines: 4, count_nochange: 2 }],
   })
@@ -416,7 +415,7 @@ test("market-close normalizer: fail-closed on partial P0 socket/flow/sector cove
   const partialSectorBreadthSnapshot = parseVerifiedMarketClosePayloads({
     sessionDate: "2026-08-26",
     asOfIso: "2026-08-26T08:15:00.000Z",
-    canonicalIndexes,
+    providerIndexes: canonicalIndexes,
     pulseOk: true,
     pulseContentPayload: { content: JSON.stringify({ list_main_content: [{ title: "Ngày phân phối", distribution_date: 2 }] }) },
     maBreadthOk: true,
@@ -427,8 +426,8 @@ test("market-close normalizer: fail-closed on partial P0 socket/flow/sector cove
     psychologyPayload: [{ value: 56 }],
     cashFlowsOk: true,
     cashFlowsPayload: { nuocngoairong: [-145.2], tudoanh: [92.5] },
-    sectorPulseOk: true,
-    sectorPulsePayload: { name: ["Ngân hàng", "Bất động sản"], percent: [1.25, -0.8], totalval: [3500, 2800] },
+    sectorIbdOk: true,
+    sectorIbdPayload: makeSectorIbd(["Ngân hàng", "Bất động sản"]),
     sectorBreadthOk: true,
     sectorBreadthPayload: [{ nganh: "Ngân hàng", count_advances: 18, count_declines: 4, count_nochange: 2 }], // Missing Bất động sản
   })
@@ -439,7 +438,7 @@ test("market-close normalizer: fail-closed on partial P0 socket/flow/sector cove
   const emptyLeaderSnapshot = parseVerifiedMarketClosePayloads({
     sessionDate: "2026-08-26",
     asOfIso: "2026-08-26T08:15:00.000Z",
-    canonicalIndexes,
+    providerIndexes: canonicalIndexes,
     topVolatilityTickers: ["UNKNOWN_TICKER"],
     getLiveOk: true,
     getLivePayload: { stockcode: ["OTHER_TICKER"], lastprice: [null], totalvol: [null] },

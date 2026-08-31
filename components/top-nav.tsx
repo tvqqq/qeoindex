@@ -157,7 +157,7 @@ export function TopNav() {
             ].join(" ")}
           >
             <LayoutDashboard className={`h-3.5 w-3.5 ${isBoardActive ? "text-emerald-300" : "text-slate-400 group-hover:text-purple-300"}`} />
-            <span>Bảng điện</span>
+            <span className={isBoardActive ? "" : "hidden sm:inline"}>Bảng điện</span>
           </Link>
 
           <Link
@@ -171,7 +171,7 @@ export function TopNav() {
             ].join(" ")}
           >
             <Briefcase className={`h-3.5 w-3.5 ${isPortfolioActive ? "text-[#a997ff]" : "text-slate-400 group-hover:text-emerald-300"}`} />
-            <span>Danh mục</span>
+            <span className={isPortfolioActive ? "" : "hidden sm:inline"}>Danh mục</span>
           </Link>
 
           <div
@@ -212,8 +212,8 @@ export function TopNav() {
             </div>
 
             {isOpen ? (
-              <div className="absolute left-0 top-full z-50 pt-2">
-                <div className="w-[360px] select-none rounded-2xl border border-white/[0.12] bg-[#0c1015] p-2 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.95),0_0_30px_rgba(34,201,138,0.12)] sm:w-[390px]">
+              <div className="fixed left-4 right-4 top-14 z-50 pt-2 sm:absolute sm:left-0 sm:right-auto sm:top-full">
+                <div className="mx-auto w-full max-w-[360px] select-none rounded-2xl border border-white/[0.12] bg-[#0c1015] p-2 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.95),0_0_30px_rgba(34,201,138,0.12)] sm:mx-0 sm:w-[390px] sm:max-w-none">
                   <div className="mb-1.5 border-b border-white/[0.08] px-3.5 py-2.5">
                     <div className="flex flex-col">
                       <span className="flex items-center gap-1.5 text-sm font-bold tracking-tight text-foreground">

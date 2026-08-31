@@ -65,7 +65,7 @@ test("Insights is one continuous dashboard without primary tabs or a sticky sect
   }
   assert.doesNotMatch(content, /Điều hướng dashboard Insights|href="#sau-phien"/, "the removed section navigator must stay removed")
   assert.match(content, /<details[^>]*className="group[^"]*"/)
-  assert.match(content, /Top cổ phiếu rating score/)
+  assert.match(content, /Top cổ phiếu theo Qeo composite/)
   assert.doesNotMatch(content, /Tổng quan VNIndex|Market pulse/, "duplicate Top 100 market summary must stay removed")
   assert.match(content, /data\.marketClose\?\.isStale/)
   assert.match(content, /Dữ liệu thị trường cũ \(Stale\)/)
@@ -123,12 +123,15 @@ test("VNINDEX hero history comes from a bounded canonical-index query", () => {
 
 test("Market Close keeps the main dashboard continuous and limits tabs to the three market views", () => {
   const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
+  const bubbles = fs.readFileSync(path.resolve("components/insights/market-bubbles.tsx"), "utf8")
 
   assert.doesNotMatch(dashboard, /Tabs(Content|List|Trigger)?|activeTab|setActiveTab/, "the dashboard must not introduce a page-level tab system")
   assert.match(dashboard, /Nhịp đập thị trường/)
   assert.match(dashboard, /Nỗ lực kết quả/)
   assert.match(dashboard, /Sức khoẻ thị trường/)
-  assert.match(dashboard, /\["1D", "1W", "1M", "1Y"\]/, "market bubbles must expose the requested time windows")
+  for (const period of ["1D", "1W", "1M", "1Y"]) {
+    assert.match(bubbles, new RegExp(`value: "${period}"`), `market bubbles must expose the ${period} time window`)
+  }
   assert.match(dashboard, /slice\(0, 100\)/, "bubble field must keep the requested Top 100 cap")
   assert.match(dashboard, /min-h-\[650px\]/, "bubble layout must reserve stable space")
   assert.match(dashboard, /Luân chuyển dòng tiền/, "sector workspace must expose the rotation view")
@@ -149,4 +152,12 @@ test("Market Close charts use a minimal semantic palette without SVG gradients",
   assert.match(charts, /const NEUTRAL/)
   assert.match(charts, /const ACCENT/)
   assert.doesNotMatch(charts, /linearGradient|url\(#/, "chart fills must remain flat and minimal")
+})
+
+test("market health SVG coordinates are stable across server and browser hydration", () => {
+  const health = fs.readFileSync(path.resolve("components/insights/market-health-view.tsx"), "utf8")
+
+  assert.match(health, /function stableSvgCoordinate\(value: number\)/)
+  assert.match(health, /Number\(value\.toFixed\(6\)\)/)
+  assert.ok((health.match(/stableSvgCoordinate\(/g) || []).length >= 17, "all computed gauge coordinates must be rounded")
 })

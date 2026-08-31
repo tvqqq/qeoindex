@@ -179,13 +179,16 @@ test("KFSP contract maps all nine provider groups without leaking provider crede
   assert.match(syncFunction, /api\/watchlist\/canslim-fourm\/by-mack/)
   assert.match(syncFunction, /url\.searchParams\.append\("mack\[\]", ticker\)/)
   assert.match(syncFunction, /Object\.assign\(providerRecord, supplemental\.get\(ticker\) \|\| \{\}\)/)
-  assert.match(syncFunction, /fairValue, providerPrice/)
+  assert.match(syncFunction, /function pricePotentialLabel\(value: JsonValue \| undefined\)/)
+  assert.doesNotMatch(syncFunction, /fairValue \/ price/)
   assert.doesNotMatch(syncFunction, /@gmail\.com/i)
   assert.doesNotMatch(syncFunction, /Bearer\s+eyJ/i)
 })
 
-test("missing component scores fall back to the composite score instead of zero", () => {
-  assert.match(insightsData, /if \(value == null \|\| value === ""\) return fallback/)
+test("missing KFSP component scores stay null instead of inheriting a composite score", () => {
+  assert.match(insightsData, /technical: number \| null/)
+  assert.match(insightsData, /momentum: number \| null/)
+  assert.doesNotMatch(insightsData, /return fallback/)
 })
 
 test("KFSP snapshot publish is atomic, authenticated read-only, and scheduled for 07:00 ICT", () => {

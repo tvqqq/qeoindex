@@ -6,17 +6,18 @@ import {
   parseVerifiedMarketClosePayloads,
   validateMarketCloseSnapshot,
   parseNumeric,
+  normalizeSectorMaSlug,
   type NormalizedIndexRow,
 } from "../_shared/market-close-normalizer.ts"
 
 const PROVIDER_TIMEOUT_MS = 8_000
-const SOCKET_TIMEOUT_MS = 6_000
+const SOCKET_TIMEOUT_MS = 10_000
 const TOKEN_EXPIRY_SKEW_MS = 5 * 60 * 1_000
 const LOGIN_URL = Deno.env.get("KFSP_LOGIN_URL") || "https://api.kfsp.vn/api/login"
 const MARKET_PULSE_URL = Deno.env.get("KFSP_MARKET_PULSE_URL") || "https://api.kfsp.vn/api/stocks/market_pulse/getContent?is_get_style=true&version=v3"
 const CASH_FLOWS_URL = Deno.env.get("KFSP_CASH_FLOWS_URL") || "https://api2.kfsp.vn/api/stocks/dashboard/get-data-cash-flows"
 const TOP_VOLATILITY_URL = Deno.env.get("KFSP_TOP_VOLATILITY_URL") || "https://api.kfsp.vn/api/stocks/dashboard/get-list-mack-market-volatility?type=volume_desc&board=1&limit=10"
-const CONTRACT_VERSION = 1
+const CONTRACT_VERSION = 2
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } })
@@ -136,8 +137,12 @@ async function collectSocketData(token: string, topTickers: string[]): Promise<{
   maBreadth: unknown
   risk: unknown
   psychology: unknown
-  sectorPulse: unknown
+  valuation: unknown
+  sectorIbd: unknown
   sectorBreadth: unknown
+  sectorRrg: unknown
+  sectorMa: unknown
+  indexLive: unknown
   getLive: unknown
 }> {
   return new Promise((resolve) => {
@@ -146,8 +151,12 @@ async function collectSocketData(token: string, topTickers: string[]): Promise<{
       maBreadth: null as unknown,
       risk: null as unknown,
       psychology: null as unknown,
-      sectorPulse: null as unknown,
+      valuation: null as unknown,
+      sectorIbd: null as unknown,
       sectorBreadth: null as unknown,
+      sectorRrg: null as unknown,
+      sectorMa: null as unknown,
+      indexLive: null as unknown,
       getLive: null as unknown,
     }
 
@@ -171,8 +180,12 @@ async function collectSocketData(token: string, topTickers: string[]): Promise<{
         results.maBreadth &&
         results.risk &&
         results.psychology &&
-        results.sectorPulse &&
+        results.valuation &&
+        results.sectorIbd &&
         results.sectorBreadth &&
+        results.sectorRrg &&
+        results.sectorMa &&
+        results.indexLive &&
         (!needsLive || results.getLive)
       ) {
         cleanupAndResolve()
@@ -196,26 +209,44 @@ async function collectSocketData(token: string, topTickers: string[]): Promise<{
           maybeResolve()
         })
 
-        socket?.emit("getdatariskindex", "VNINDEX", 1, (res: unknown) => {
+        socket?.emit("getdatariskindex", "VNINDEX", 200, (res: unknown) => {
           results.risk = res
           maybeResolve()
         })
 
-        socket?.emit("getpsychologyindicator", "VNINDEX", 1, (res: unknown) => {
+        socket?.emit("getpsychologyindicator", "VNINDEX", 200, (res: unknown) => {
           results.psychology = res
           maybeResolve()
         })
 
-        socket?.emit("getmarketpulse", "nganh", "1", (res: unknown) => {
-          results.sectorPulse = res
+        socket?.emit("getvaluationindex", "VNINDEX", 200, (res: unknown) => {
+          results.valuation = res
           maybeResolve()
-          const sectorNames = (res as any)?.name
+        })
+
+        socket?.emit("getdataibdnganh", (res: unknown) => {
+          results.sectorIbd = res
+          maybeResolve()
+          const sectorNames = (res as any)?.ten_nganh
           if (Array.isArray(sectorNames) && sectorNames.length > 0) {
             socket?.emit("getincreasesdecreasesnganh", sectorNames, (bRes: unknown) => {
               results.sectorBreadth = bRes
               maybeResolve()
             })
+            socket?.emit("getdatarrgnganh", sectorNames, "VNINDEX", 9, (rrgRes: unknown) => {
+              results.sectorRrg = rrgRes
+              maybeResolve()
+            })
+            socket?.emit("getdatama", sectorNames.map((name: unknown) => normalizeSectorMaSlug(String(name || ""))), (maRes: unknown) => {
+              results.sectorMa = maRes
+              maybeResolve()
+            })
           }
+        })
+
+        socket?.emit("getliveindex", ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"], (res: unknown) => {
+          results.indexLive = res
+          maybeResolve()
         })
 
         if (topTickers.length > 0) {
@@ -233,124 +264,53 @@ async function collectSocketData(token: string, topTickers: string[]): Promise<{
   })
 }
 
-function validateCanonicalIndexesInput(input: unknown, sessionDate: string, asOfIso: string): NormalizedIndexRow[] | null {
-  if (!Array.isArray(input) || input.length !== 4) return null
-  const required = ["VNINDEX", "VN30", "HNX", "UPCOM"] as const
+function normalizeProviderIndexes(input: unknown, sessionDate: string, asOfIso: string): NormalizedIndexRow[] | null {
+  const source = asObject(input)
+  if (!source || !Array.isArray(source.stockcode)) return null
+  const providerCodes = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"] as const
+  const canonicalCodes = ["VNINDEX", "VN30", "HNX", "UPCOM"] as const
   const rows: NormalizedIndexRow[] = []
 
-  for (const req of required) {
-    const found = input.find((item) => asObject(item)?.index_code === req)
-    const obj = asObject(found)
-    if (!obj) return null
-    const val = parseNumeric(obj.value)
+  for (let canonicalIndex = 0; canonicalIndex < providerCodes.length; canonicalIndex += 1) {
+    const req = providerCodes[canonicalIndex]
+    const position = source.stockcode.findIndex((value) => String(value || "").toUpperCase() === req)
+    if (position < 0) return null
+    const at = (key: string) => Array.isArray(source[key]) ? source[key][position] : null
+    const val = parseNumeric(at("lastprice"))
     if (val == null || val <= 0) return null
+    const change = parseNumeric(at("change"))
 
     rows.push({
       session_date: sessionDate,
-      index_code: req,
+      index_code: canonicalCodes[canonicalIndex],
       value: val,
-      change: parseNumeric(obj.change),
-      change_pct: parseNumeric(obj.change_pct),
-      reference: parseNumeric(obj.reference),
-      open: parseNumeric(obj.open),
-      high: parseNumeric(obj.high),
-      low: parseNumeric(obj.low),
-      matched_volume: parseNumeric(obj.matched_volume),
-      traded_value: parseNumeric(obj.traded_value),
-      previous_value_change_pct: parseNumeric(obj.previous_value_change_pct),
-      advances: Math.max(0, Math.round(parseNumeric(obj.advances) ?? 0)),
-      unchanged: Math.max(0, Math.round(parseNumeric(obj.unchanged) ?? 0)),
-      declines: Math.max(0, Math.round(parseNumeric(obj.declines) ?? 0)),
-      ceilings: Math.max(0, Math.round(parseNumeric(obj.ceilings) ?? 0)),
-      floors: Math.max(0, Math.round(parseNumeric(obj.floors) ?? 0)),
-      market_pe: parseNumeric(obj.market_pe),
-      foreign_buy_value: parseNumeric(obj.foreign_buy_value),
-      foreign_sell_value: parseNumeric(obj.foreign_sell_value),
-      foreign_net_value: parseNumeric(obj.foreign_net_value),
+      change,
+      change_pct: parseNumeric(at("perchange")),
+      reference: change == null ? null : Number((val - change).toFixed(4)),
+      open: null,
+      high: null,
+      low: null,
+      matched_volume: parseNumeric(at("totalvol")),
+      traded_value: parseNumeric(at("totalvalue")),
+      previous_value_change_pct: null,
+      advances: Math.max(0, Math.round(parseNumeric(at("advances")) ?? 0)),
+      unchanged: Math.max(0, Math.round(parseNumeric(at("nochange")) ?? 0)),
+      declines: Math.max(0, Math.round(parseNumeric(at("declines")) ?? 0)),
+      ceilings: 0,
+      floors: 0,
+      market_pe: null,
+      foreign_buy_value: null,
+      foreign_sell_value: null,
+      foreign_net_value: null,
       quality_status: "healthy",
       missing_fields: [],
-      evidence_refs: Array.isArray(obj.evidence_refs) && obj.evidence_refs.length > 0
-        ? obj.evidence_refs
-        : [{ field: "value", source_class: "canonical_market_feed", observed_at: asOfIso, unit: "points" }],
-      source_timestamp: typeof obj.source_timestamp === "string" ? obj.source_timestamp : asOfIso,
+      evidence_refs: [{ field: "value", source_class: "market_indexes", observed_at: asOfIso, unit: "points" }],
+      source_timestamp: asOfIso,
       as_of: asOfIso,
     })
   }
 
   return rows
-}
-
-async function fetchFallbackCanonicalIndexes(sessionDate: string, asOfIso: string): Promise<NormalizedIndexRow[]> {
-  const codes = ["VNINDEX", "VN30", "HNX", "UPCOM"] as const
-  const vpsRes = await fetch("https://bgapidatafeed.vps.com.vn/getlistindexdetail/10,11,02,03", {
-    headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
-    signal: AbortSignal.timeout(5_000),
-  }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
-
-  const vpsMap: Record<string, string> = { "10": "VNINDEX", "11": "VN30", "02": "HNX", "03": "UPCOM" }
-  const resultMap = new Map<string, Record<string, unknown>>()
-
-  if (Array.isArray(vpsRes)) {
-    for (const item of vpsRes) {
-      const code = vpsMap[String(item?.mc)]
-      if (code) resultMap.set(code, item)
-    }
-  }
-
-  return codes.map((code) => {
-    const raw = resultMap.get(code)
-    const val = raw?.cIndex != null ? Number(raw.cIndex) : null
-    const open = raw?.oIndex != null ? Number(raw.oIndex) : null
-    const ot = String(raw?.ot || "")
-    let advances = 0
-    let declines = 0
-    let unchanged = 0
-    let ceilings = 0
-    let floors = 0
-
-    if (ot) {
-      const p = ot.split("|")
-      if (p.length >= 6) {
-        advances = Number(p[3]) || 0
-        declines = Number(p[4]) || 0
-        unchanged = Number(p[5]) || 0
-      }
-    }
-
-    const missing: string[] = []
-    if (val == null) missing.push("value")
-
-    return {
-      session_date: sessionDate,
-      index_code: code,
-      value: val,
-      change: raw?.change != null ? Number(raw.change) : null,
-      change_pct: raw?.perchange != null ? Number(raw.perchange) : null,
-      reference: raw?.rIndex != null ? Number(raw.rIndex) : null,
-      open,
-      high: raw?.highIndex != null ? Number(raw.highIndex) : null,
-      low: raw?.lowIndex != null ? Number(raw.lowIndex) : null,
-      matched_volume: raw?.vol != null ? Number(raw.vol) : null,
-      traded_value: raw?.value != null ? Number((Number(raw.value) / 1000).toFixed(2)) : null,
-      previous_value_change_pct: null,
-      advances,
-      unchanged,
-      declines,
-      ceilings,
-      floors,
-      market_pe: null,
-      foreign_buy_value: null,
-      foreign_sell_value: null,
-      foreign_net_value: null,
-      quality_status: missing.length === 0 ? "healthy" : "degraded",
-      missing_fields: missing,
-      evidence_refs: [
-        { field: "value", source_class: "canonical_market_feed", observed_at: asOfIso, unit: "points" },
-      ],
-      source_timestamp: asOfIso,
-      as_of: asOfIso,
-    }
-  })
 }
 
 Deno.serve(async (req: Request) => {
@@ -418,17 +378,12 @@ Deno.serve(async (req: Request) => {
       ? (topVolatility.payload as unknown[]).map((t) => String(t || "").trim().toUpperCase()).filter((t) => /^[A-Z0-9]{2,12}$/.test(t))
       : []
 
-    // Collect Socket.IO data (MA, Risk, Psychology, Sector pulse & breadth, getlive)
+    // Collect the exact KFSP Ngành socket contracts used by the provider page.
     const socketData = await collectSocketData(auth.token, topTickers)
 
-    // Canonical indexes: validate strictly from body or fallback
-    let canonicalIndexes = validateCanonicalIndexesInput(reqBody.canonicalIndexes, sessionDate, asOfIso)
-    if (!canonicalIndexes) {
-      canonicalIndexes = await fetchFallbackCanonicalIndexes(sessionDate, asOfIso)
-    }
-
-    if (!canonicalIndexes || canonicalIndexes.length !== 4 || canonicalIndexes.some((i) => i.value == null)) {
-      throw new Error("VALIDATION_FAILED: canonicalIndexes missing or invalid for 4 required indexes")
+    const providerIndexes = normalizeProviderIndexes(socketData.indexLive, sessionDate, asOfIso)
+    if (!providerIndexes || providerIndexes.length !== 4 || providerIndexes.some((i) => i.value == null)) {
+      throw new Error("VALIDATION_FAILED: KFSP getliveindex missing or invalid for 4 required indexes")
     }
 
     const normalized = parseVerifiedMarketClosePayloads({
@@ -442,8 +397,14 @@ Deno.serve(async (req: Request) => {
       riskOk: Boolean(socketData.risk),
       psychologyPayload: socketData.psychology,
       psychologyOk: Boolean(socketData.psychology),
-      sectorPulsePayload: socketData.sectorPulse,
-      sectorPulseOk: Boolean(socketData.sectorPulse),
+      valuationPayload: socketData.valuation,
+      valuationOk: Boolean(socketData.valuation),
+      sectorIbdPayload: socketData.sectorIbd,
+      sectorIbdOk: Boolean(socketData.sectorIbd),
+      sectorRrgPayload: socketData.sectorRrg,
+      sectorRrgOk: Boolean(socketData.sectorRrg),
+      sectorMaPayload: socketData.sectorMa,
+      sectorMaOk: Boolean(socketData.sectorMa),
       sectorBreadthPayload: socketData.sectorBreadth,
       sectorBreadthOk: Boolean(socketData.sectorBreadth),
       cashFlowsPayload: cashFlows.payload,
@@ -451,7 +412,7 @@ Deno.serve(async (req: Request) => {
       topVolatilityTickers: topTickers,
       getLivePayload: socketData.getLive,
       getLiveOk: Boolean(socketData.getLive),
-      canonicalIndexes,
+      providerIndexes,
     })
 
     // Persist collection diagnostics before the fail-closed gate so provider drift is observable.
@@ -493,7 +454,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Atomic publish RPC
-    const publishRes = await supabase.rpc("publish_market_insight_snapshot", {
+    const publishRes = await supabase.rpc("publish_market_insight_snapshot_v2", {
       p_sync_run_id: syncRunId,
     })
     if (publishRes.error) {

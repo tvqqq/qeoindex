@@ -16,7 +16,6 @@ import {
 import { ChevronDown, Gauge, HeartPulse, ShieldAlert } from "lucide-react"
 
 import type { MarketCloseDashboardData, MarketHistoryPoint } from "@/lib/market-insight-data"
-import { cn } from "@/lib/utils"
 
 interface MarketHealthViewProps {
   data: MarketCloseDashboardData
@@ -25,6 +24,10 @@ interface MarketHealthViewProps {
 
 const GRID_COLOR = "rgba(148, 163, 184, 0.08)"
 const AXIS_COLOR = "rgba(148, 163, 184, 0.55)"
+
+function stableSvgCoordinate(value: number) {
+  return Number(value.toFixed(6))
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Semi-Circular Sentiment Gauge Speedometer (Chỉ báo tâm lý)
@@ -65,12 +68,12 @@ function SentimentGauge({ score }: SentimentGaugeProps) {
   // Arrow triangle vertices
   const arrowLen = 14
   const arrowWidth = 7
-  const tipX = cx + (innerR - 4) * Math.cos(angleRad)
-  const tipY = cy - (innerR - 4) * Math.sin(angleRad)
-  const baseLeftX = cx + (innerR + arrowLen) * Math.cos(angleRad) - arrowWidth * Math.sin(angleRad)
-  const baseLeftY = cy - (innerR + arrowLen) * Math.sin(angleRad) - arrowWidth * Math.cos(angleRad)
-  const baseRightX = cx + (innerR + arrowLen) * Math.cos(angleRad) + arrowWidth * Math.sin(angleRad)
-  const baseRightY = cy - (innerR + arrowLen) * Math.sin(angleRad) + arrowWidth * Math.cos(angleRad)
+  const tipX = stableSvgCoordinate(cx + (innerR - 4) * Math.cos(angleRad))
+  const tipY = stableSvgCoordinate(cy - (innerR - 4) * Math.sin(angleRad))
+  const baseLeftX = stableSvgCoordinate(cx + (innerR + arrowLen) * Math.cos(angleRad) - arrowWidth * Math.sin(angleRad))
+  const baseLeftY = stableSvgCoordinate(cy - (innerR + arrowLen) * Math.sin(angleRad) - arrowWidth * Math.cos(angleRad))
+  const baseRightX = stableSvgCoordinate(cx + (innerR + arrowLen) * Math.cos(angleRad) + arrowWidth * Math.sin(angleRad))
+  const baseRightY = stableSvgCoordinate(cy - (innerR + arrowLen) * Math.sin(angleRad) + arrowWidth * Math.cos(angleRad))
 
   // Generate 5 colored Arc Segments:
   const segments = [
@@ -85,15 +88,15 @@ function SentimentGauge({ score }: SentimentGaugeProps) {
     const a1 = (180 - (startPct / 100) * 180) * (Math.PI / 180)
     const a2 = (180 - (endPct / 100) * 180) * (Math.PI / 180)
 
-    const x1Out = cx + rOut * Math.cos(a1)
-    const y1Out = cy - rOut * Math.sin(a1)
-    const x2Out = cx + rOut * Math.cos(a2)
-    const y2Out = cy - rOut * Math.sin(a2)
+    const x1Out = stableSvgCoordinate(cx + rOut * Math.cos(a1))
+    const y1Out = stableSvgCoordinate(cy - rOut * Math.sin(a1))
+    const x2Out = stableSvgCoordinate(cx + rOut * Math.cos(a2))
+    const y2Out = stableSvgCoordinate(cy - rOut * Math.sin(a2))
 
-    const x1In = cx + rIn * Math.cos(a2)
-    const y1In = cy - rIn * Math.sin(a2)
-    const x2In = cx + rIn * Math.cos(a1)
-    const y2In = cy - rIn * Math.sin(a1)
+    const x1In = stableSvgCoordinate(cx + rIn * Math.cos(a2))
+    const y1In = stableSvgCoordinate(cy - rIn * Math.sin(a2))
+    const x2In = stableSvgCoordinate(cx + rIn * Math.cos(a1))
+    const y2In = stableSvgCoordinate(cy - rIn * Math.sin(a1))
 
     return `M ${x1Out} ${y1Out} A ${rOut} ${rOut} 0 0 1 ${x2Out} ${y2Out} L ${x1In} ${y1In} A ${rIn} ${rIn} 0 0 0 ${x2In} ${y2In} Z`
   }
@@ -104,10 +107,10 @@ function SentimentGauge({ score }: SentimentGaugeProps) {
     const tPct = (i / 36) * 100
     const tRad = (180 - (tPct / 100) * 180) * (Math.PI / 180)
     const len = i % 4 === 0 ? 7 : 4
-    const x1 = cx + tickR * Math.cos(tRad)
-    const y1 = cy - tickR * Math.sin(tRad)
-    const x2 = cx + (tickR - len) * Math.cos(tRad)
-    const y2 = cy - (tickR - len) * Math.sin(tRad)
+    const x1 = stableSvgCoordinate(cx + tickR * Math.cos(tRad))
+    const y1 = stableSvgCoordinate(cy - tickR * Math.sin(tRad))
+    const x2 = stableSvgCoordinate(cx + (tickR - len) * Math.cos(tRad))
+    const y2 = stableSvgCoordinate(cy - (tickR - len) * Math.sin(tRad))
     ticks.push({ x1, y1, x2, y2, major: i % 4 === 0 })
   }
 
@@ -207,7 +210,6 @@ interface RiskChartProps {
     date: string
     risk: number
   }[]
-  currentRisk: number
 }
 
 function RiskIndicatorChart({ data }: RiskChartProps) {
@@ -319,10 +321,14 @@ interface ValuationPoint {
   vnindex: number
   pe: number
   pb: number
-  sd1Upper: number
-  sd1Lower: number
-  sd2Upper: number
-  sd2Lower: number
+  pe1StdUp: number | null
+  pe1StdDown: number | null
+  pe2StdUp: number | null
+  pe2StdDown: number | null
+  pb1StdUp: number | null
+  pb1StdDown: number | null
+  pb2StdUp: number | null
+  pb2StdDown: number | null
 }
 
 interface ValuationChartProps {
@@ -333,6 +339,10 @@ function ValuationBandChart({ data }: ValuationChartProps) {
   const [metric, setMetric] = React.useState<"PE" | "PB">("PE")
   const [show1SD, setShow1SD] = React.useState(true)
   const [show2SD, setShow2SD] = React.useState(false)
+
+  if (data.length === 0) {
+    return <div className="flex h-[260px] items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-slate-500">KFSP chưa trả lịch sử định giá hợp lệ.</div>
+  }
 
   return (
     <div className="space-y-3">
@@ -415,8 +425,7 @@ function ValuationBandChart({ data }: ValuationChartProps) {
             <YAxis
               yAxisId="valuation"
               orientation="right"
-              domain={[9, 18]}
-              ticks={[10, 11, 12, 13, 14, 15, 16, 17]}
+              domain={["dataMin - 1", "dataMax + 1"]}
               axisLine={false}
               tickLine={false}
               tick={{ fill: AXIS_COLOR, fontSize: 10, fontFamily: "monospace" }}
@@ -446,7 +455,7 @@ function ValuationBandChart({ data }: ValuationChartProps) {
                 <Line
                   yAxisId="valuation"
                   type="monotone"
-                  dataKey="sd1Upper"
+                  dataKey={metric === "PE" ? "pe1StdUp" : "pb1StdUp"}
                   stroke="#fb7185"
                   strokeDasharray="4 4"
                   strokeWidth={1.5}
@@ -456,7 +465,7 @@ function ValuationBandChart({ data }: ValuationChartProps) {
                 <Line
                   yAxisId="valuation"
                   type="monotone"
-                  dataKey="sd1Lower"
+                  dataKey={metric === "PE" ? "pe1StdDown" : "pb1StdDown"}
                   stroke="#f43f5e"
                   strokeDasharray="4 4"
                   strokeWidth={1.5}
@@ -472,7 +481,7 @@ function ValuationBandChart({ data }: ValuationChartProps) {
                 <Line
                   yAxisId="valuation"
                   type="monotone"
-                  dataKey="sd2Upper"
+                  dataKey={metric === "PE" ? "pe2StdUp" : "pb2StdUp"}
                   stroke="#f43f5e"
                   strokeDasharray="3 3"
                   strokeWidth={1.2}
@@ -482,7 +491,7 @@ function ValuationBandChart({ data }: ValuationChartProps) {
                 <Line
                   yAxisId="valuation"
                   type="monotone"
-                  dataKey="sd2Lower"
+                  dataKey={metric === "PE" ? "pe2StdDown" : "pb2StdDown"}
                   stroke="#e11d48"
                   strokeDasharray="3 3"
                   strokeWidth={1.2}
@@ -526,74 +535,49 @@ function ValuationBandChart({ data }: ValuationChartProps) {
 // 4. Main Market Health View (Tâm lý & Rủi ro trên 1 Row + Định giá)
 // ─────────────────────────────────────────────────────────────────────────────
 export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) {
-  const currentSentiment = data.dailySummary.sentimentScore ?? 68
-  const rawRisk = data.dailySummary.riskScore ?? 67.58
-  const currentRisk = rawRisk > 1 ? rawRisk / 100 : rawRisk
+  const currentSentiment = data.dailySummary.sentimentScore
+  const currentRisk = data.dailySummary.riskScore
 
   // Build historical series for Risk Chart from real Supabase market close history
   const riskSeries = React.useMemo(() => {
-    if (history && history.length > 0) {
-      return history.map((item) => {
-        const raw = item.riskScore != null ? item.riskScore : (currentRisk * 100)
-        const normalized = raw > 1 ? raw / 100 : raw
-        const parts = item.sessionDate.split("-")
-        const formattedDate = parts.length === 3 ? `${parts[2]}-${parts[1]}` : item.sessionDate
+    if (data.dailySummary.riskHistory.length > 0) {
+      return data.dailySummary.riskHistory.map((item) => {
+        const parts = item.tradingDate.split("-")
+        const formattedDate = parts.length === 3 ? `${parts[2]}-${parts[1]}` : item.tradingDate
         return {
           date: formattedDate,
-          risk: +(normalized).toFixed(2),
+          risk: Number(item.risk.toFixed(4)),
         }
       })
     }
-
-    return [
-      { date: "20-08", risk: +(currentRisk * 0.9).toFixed(2) },
-      { date: "21-08", risk: +(currentRisk * 0.95).toFixed(2) },
-      { date: "25-08", risk: +(currentRisk * 1.05).toFixed(2) },
-      { date: "26-08", risk: +(currentRisk * 0.98).toFixed(2) },
-      { date: "27-08", risk: +(currentRisk * 1.02).toFixed(2) },
-      { date: "28-08", risk: +currentRisk.toFixed(2) },
-    ]
-  }, [history, currentRisk])
+    return history.flatMap((item) => {
+      if (item.riskScore == null || item.riskScore < 0 || item.riskScore > 1) return []
+      const parts = item.sessionDate.split("-")
+      return [{ date: parts.length === 3 ? `${parts[2]}-${parts[1]}` : item.sessionDate, risk: item.riskScore }]
+    })
+  }, [data.dailySummary.riskHistory, history])
 
   // Build Valuation Series (P/E, P/B, VNINDEX, 1SD, 2SD) from real VN-Index and market P/E
-  const vnindexItem = data.indexes.find((i) => i.indexCode === "VNINDEX")
-  const currentPe = vnindexItem?.marketPe ?? 14.35
-  const currentVnindex = vnindexItem?.value ?? 1284.55
-
   const valuationSeries: ValuationPoint[] = React.useMemo(() => {
-    if (history && history.length > 0) {
-      const peValues = history.map((item) => {
-        const v = item.vnindexClose ?? currentVnindex
-        const peRatio = v / (currentVnindex || 1)
-        return +(currentPe * peRatio).toFixed(2)
-      })
-
-      const avgPe = peValues.reduce((a, b) => a + b, 0) / peValues.length
-      const sd = Math.sqrt(peValues.map((x) => Math.pow(x - avgPe, 2)).reduce((a, b) => a + b, 0) / peValues.length) || 0.65
-
-      return history.map((item) => {
-        const v = item.vnindexClose ?? currentVnindex
-        const peRatio = v / (currentVnindex || 1)
-        const pe = +(currentPe * peRatio).toFixed(2)
-        const pb = +(pe * 0.12).toFixed(2)
-        const parts = item.sessionDate.split("-")
-        const formattedDate = parts.length === 3 ? `${parts[2]}-${parts[1]}` : item.sessionDate
-
-        return {
-          date: formattedDate,
-          vnindex: v,
-          pe: pe,
-          pb: pb,
-          sd1Upper: +(avgPe + sd).toFixed(2),
-          sd1Lower: +(avgPe - sd).toFixed(2),
-          sd2Upper: +(avgPe + 2 * sd).toFixed(2),
-          sd2Lower: +(avgPe - 2 * sd).toFixed(2),
-        }
-      })
-    }
-
-    return []
-  }, [history, currentVnindex, currentPe])
+    return data.dailySummary.valuationHistory.flatMap((item) => {
+      if (item.price == null || item.pe == null || item.pb == null) return []
+      const parts = item.tradingDate.split("-")
+      return [{
+        date: parts.length === 3 ? `${parts[2]}-${parts[1]}` : item.tradingDate,
+        vnindex: item.price,
+        pe: item.pe,
+        pb: item.pb,
+        pe1StdUp: item.pe1StdUp,
+        pe1StdDown: item.pe1StdDown,
+        pe2StdUp: item.pe2StdUp,
+        pe2StdDown: item.pe2StdDown,
+        pb1StdUp: item.pb1StdUp,
+        pb1StdDown: item.pb1StdDown,
+        pb2StdUp: item.pb2StdUp,
+        pb2StdDown: item.pb2StdDown,
+      }]
+    })
+  }, [data.dailySummary.valuationHistory])
 
   return (
     <div className="space-y-4 pt-1">
@@ -626,7 +610,9 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
             </div>
           </div>
 
-          <SentimentGauge score={currentSentiment} />
+          {currentSentiment == null
+            ? <div className="flex h-[210px] items-center justify-center text-sm text-slate-500">KFSP chưa trả chỉ báo tâm lý.</div>
+            : <SentimentGauge score={currentSentiment} />}
         </div>
 
         {/* Right Column: Chỉ báo rủi ro */}
@@ -644,11 +630,13 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
               </div>
             </div>
             <span className="font-mono text-xs text-slate-400">
-              Hiện tại: <strong className="text-rose-400 font-bold">{currentRisk.toFixed(2)}</strong>
+              Hiện tại: <strong className="text-rose-400 font-bold">{currentRisk == null ? "—" : currentRisk.toFixed(2)}</strong>
             </span>
           </div>
 
-          <RiskIndicatorChart data={riskSeries} currentRisk={currentRisk} />
+          {riskSeries.length === 0
+            ? <div className="flex h-[210px] items-center justify-center text-sm text-slate-500">KFSP chưa trả lịch sử rủi ro.</div>
+            : <RiskIndicatorChart data={riskSeries} />}
         </div>
       </div>
 

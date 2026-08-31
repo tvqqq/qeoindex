@@ -454,7 +454,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
   },
   {
     key: "kfsp_composite_score",
-    label: "Rating tổng hợp",
+    label: "Qeo composite",
     aliases: ["rating", "rating_score", "kfsp_composite_score", "diem_tong_hop"],
     category: "quality",
     source: "qeoindex",
@@ -477,7 +477,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
         "Do not treat as provider investment recommendation, probability of price appreciation, or backtested alpha.",
       ],
     },
-    provenanceNote: "Công thức mean(4M, CANSLIM, stock RS-S, sector RS-S) tại lib/insights-rating-model.ts.",
+    provenanceNote: "Công thức mean(4M, CANSLIM, stock RS-S, sector RS-S) tại supabase/functions/kfsp-rating-sync/index.ts.",
   },
   {
     key: "beta",

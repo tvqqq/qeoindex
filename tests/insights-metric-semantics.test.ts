@@ -146,7 +146,7 @@ test("derived metrics identify exact formula ownership", () => {
   assert.ok(riskScore?.provenanceNote.includes("lib/insights-data.ts"))
 
   const composite = getMetricSemantic("kfsp_composite_score")
-  assert.ok(composite?.provenanceNote.includes("lib/insights-rating-model.ts"))
+  assert.ok(composite?.provenanceNote.includes("supabase/functions/kfsp-rating-sync/index.ts"))
 
   const regime = getMetricSemantic("vnindex_regime")
   assert.ok(regime?.provenanceNote.includes("lib/ai-council-market.ts"))

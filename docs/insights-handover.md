@@ -1,268 +1,180 @@
-# Insights System Architecture, Data Semantics & Operations Handover
+# Insights handover: KFSP source contract and operations
 
-Tài liệu bàn giao và quy chuẩn vận hành chính thức cho toàn bộ trang **Insights thị trường** (`/insights`) trên hệ thống QeoIndex.
+Tài liệu này là source of truth cho `/insights`. Bản audit ngày 2026-08-31 bắt đầu từ commit `bf5054d` và đối chiếu trực tiếp với trang **Kungfu Stocks Pro - Ngành** cùng JavaScript bundle đang chạy của KFSP.
 
----
+## 1. Nguyên tắc bắt buộc
 
-## 1. Sơ đồ Kiến trúc & Luồng Dữ liệu (System Architecture & Data Flow)
+- Dữ liệu thị trường, ngành và định giá hiển thị trên Insights phải đến từ KFSP và có `as_of`/`session_date` rõ ràng.
+- Không có preview rows, số mẫu, lịch sử tạo bằng công thức, ngày hard-code hoặc fallback từ một metric khác.
+- Trường KFSP thiếu phải giữ `null` và UI hiển thị `—`/empty state.
+- Không tự suy ra RRG, MA, P/E, P/B, độ lệch chuẩn, Nỗ lực hoặc Kết quả.
+- Giá trị QeoIndex tự tính phải có tên **Qeo**, công thức và owner rõ ràng; không được gắn nhãn như điểm KFSP.
+- Provider drift hoặc thiếu P0 làm run `failing`; snapshot cũ đang tốt không bị thay bằng snapshot thiếu dữ liệu.
+
+## 2. Luồng dữ liệu
 
 ```mermaid
-flowchart TB
-    subgraph DataSources["1. Nguồn Dữ Liệu Ngoại Vi & Cron Sync"]
-        TV["TradingView API\n(Live Index Quotes)"]
-        DNSE["DNSE Open API\n(VNINDEX 5m/EOD Candles)"]
-        KFSP["KFSP Provider / EOD Feed\n(Ratings, Sector Stats, Health)"]
-    end
-
-    subgraph EdgeFunctions["2. Supabase Edge Functions (Ingest & Normalize)"]
-        SyncRatings["kfsp-rating-sync\n(Chạy lúc 15:30 EOD)"]
-        SyncMarketClose["market-insight-eod-sync\n(Chạy lúc 15:45 EOD)"]
-    end
-
-    subgraph SupabaseDB["3. Supabase Database (Single Source of Truth)"]
-        T_Ratings["kfsp_stock_ratings\n(Top 100 & Toàn thị trường)"]
-        T_Daily["market_insight_daily\n(Tâm lý, Rủi ro, Phân phối, MA, Dòng tiền)"]
-        T_Indexes["market_insight_indexes\n(VNINDEX, VN30, HNX, UPCOM, P/E)"]
-        T_Sectors["market_insight_sectors\n(11-19 Ngành: GTGD, %Chg, RS, Nỗ lực/Kết quả)"]
-        T_SectorHist["market_insight_sector_history\n(Lịch sử luân chuyển & nỗ lực qua từng phiên)"]
-        T_Leaders["market_insight_leaders\n(Top tác động điểm số, Top Volume)"]
-    end
-
-    subgraph ServerSide["4. Next.js Server Read Model (/app/insights)"]
-        Page["app/insights/page.tsx\n(Server Component - force-dynamic)"]
-        Aggregator["lib/insights-data.ts\n(getInsightsDashboardData)"]
-        MarketCloseAgg["lib/market-insight-data.ts\n(getMarketCloseInsightData)"]
-    end
-
-    subgraph ClientUI["5. Client Dashboard Shell & Modules"]
-        Shell["components/insights/insights-dashboard.tsx"]
-        Bubbles["MarketBubbles\n(Bản đồ bong bóng dòng tiền)"]
-        Pulse["MarketIntelligencePanel\n(Nhịp đập & Sức khỏe thị trường)"]
-        Health["MarketHealthView\n(Chỉ báo tâm lý, rủi ro & Định giá đa dải)"]
-        Sectors["SectorMapPanel\n(Ma trận luân chuyển dòng tiền & Nỗ lực/Kết quả)"]
-        RatingTable["InsightsRatingTable\n(Top cổ phiếu rating score)"]
-    end
-
-    TV --> Aggregator
-    DNSE --> Aggregator
-    KFSP --> SyncRatings & SyncMarketClose
-    SyncRatings --> T_Ratings
-    SyncMarketClose --> T_Daily & T_Indexes & T_Sectors & T_SectorHist & T_Leaders
-
-    SupabaseDB --> Aggregator
-    Aggregator --> Page
-    Page --> Shell
-    Shell --> Bubbles & Pulse & Health & Sectors & RatingTable
+flowchart LR
+  KFSP["KFSP REST + Socket.IO\ncontracts của /nganh"] --> Edge["market-insight-eod-sync\ncontract v2, fail closed"]
+  Edge --> Stage["market_insight_snapshot_staging"]
+  Stage --> RPC["publish_market_insight_snapshot_v2"]
+  RPC --> Daily["market_insight_daily"]
+  RPC --> Indexes["market_insight_indexes"]
+  RPC --> Sectors["market_insight_sectors"]
+  RPC --> Leaders["market_insight_leaders"]
+  KFSPStock["KFSP stock filter/detail APIs"] --> RatingSync["kfsp-rating-sync"]
+  RatingSync --> Ratings["insights_stock_ratings"]
+  Daily & Indexes & Sectors & Leaders & Ratings --> Loader["server loaders"]
+  Loader --> UI["/insights"]
 ```
 
----
+`market-insight-eod-sync` tự lấy bốn chỉ số từ KFSP `getliveindex`; unified EOD workflow không gửi TradingView `canonicalIndexes` vào collector nữa.
 
-## 2. Chi tiết Ý nghĩa Nghiệp vụ & Dữ liệu (Data Dictionary & Financial Semantics)
+## 3. Contract KFSP đã verify
 
-### 2.1. Bản đồ Bong bóng Thị trường (Market Bubbles)
-- **Vị trí**: Nằm ở đầu trang Insights.
-- **Ý nghĩa tài chính**: Cung cấp cái nhìn trực quan toàn cảnh về sự phân bổ dòng tiền và hiệu suất giá của các cổ phiếu lớn/toàn thị trường theo các khung thời gian (`1D`, `1W`, `1M`, `1Y`).
-- **Các trường dữ liệu**:
-  - `ticker`: Mã cổ phiếu (VD: `HPG`, `SSI`, `VCB`).
-  - `companyName`: Tên doanh nghiệp niêm yết.
-  - `sector`: Nhóm ngành phân loại.
-  - `volume`: Khối lượng giao dịch trong phiên (dùng để tính toán kích thước bán kính bong bóng theo logarit cơ số).
-  - `change1d`, `change1w`, `change1m`, `change1y`: % Tăng/giảm giá theo khung thời gian.
-- **Quy tắc phối màu động**:
-  - 🟣 **Màu tím (Trần / Siêu tăng trưởng)**: `1D >= 7%`, `1W >= 15%`, `1M >= 30%`, `1Y >= 70%`.
-  - 🟢 **Màu xanh lục (Tăng giá)**: `change > 0%`.
-  - ⚪ **Màu xám (Đứng giá tham chiếu)**: `change == 0%`.
-  - 🔴 **Màu đỏ (Giảm giá)**: `change < 0%`.
-  - 🔵 **Màu xanh lơ / Cyan (Giảm sàn)**: `1D <= -7%`.
+### 3.1. Market health và index
 
----
+| KFSP call | Payload dùng | Cách lưu/hiển thị |
+| --- | --- | --- |
+| `getmarketpulsemabyindex("VNINDEX")` | `name[]`, `above[]`, `under[]` | `% trên MA = above / (above + under) * 100` cho MA10/20/50/200. Đây là phép đổi shape trực tiếp. |
+| `getdatariskindex("VNINDEX", 200)` | `{ risk, tradingdate }[]` | Giữ nguyên thang `0..1`; không nhân 100 khi lưu. UI có thể format thành tỷ lệ nhưng tooltip giữ giá trị gốc. |
+| `getpsychologyindicator("VNINDEX", 200)` | `{ value, tradingdate }[]` | Giữ nguyên thang `0..100`. Nhãn: `<20` Sợ hãi tột độ, `20–39` Sợ hãi, `40–59` Trung lập, `60–79` Tham lam, `>=80` Tham lam tột độ. |
+| `getvaluationindex("VNINDEX", 200)` | `price`, `pe`, `pb`, các field `pe_*std_*`, `pb_*std_*` | Vẽ trực tiếp P/E, P/B và dải 1SD/2SD của provider. Không tạo SD từ history giá và không suy P/B từ P/E. |
+| `getliveindex(["VNINDEX","VN30","HNXINDEX","UPCOMINDEX"])` | `stockcode`, `lastprice`, `change`, `perchange`, `advances`, `declines`, `nochange`, `totalvol`, `totalvalue`, `time` | Map mã `HNXINDEX → HNX`, `UPCOMINDEX → UPCOM`; các giá trị khác giữ nguyên đơn vị provider. |
 
-### 2.2. Nhịp đập & Sức khỏe Thị trường (Market Overview & Pulse)
-- **Market Regime (Trạng thái thị trường)**:
-  - Giá trị: `BÙNG NỔ`, `TĂNG GIÁ`, `PHÂN HÓA`, `TÍCH LŨY`, `ĐIỀU CHỈNH`, `RỦI RO CAO`.
-  - *Ý nghĩa:* Đánh giá chu kỳ vĩ mô ngắn hạn dựa trên độ rộng, khối lượng và vị thế của các chỉ số chính.
-- **Chỉ báo Tâm lý (Sentiment Gauge)**:
-  - Thang điểm `0 - 100`:
-    - `0 - 25`: Sợ hãi tột độ (Extreme Fear - Vùng quá bán, cơ hội tích lũy dài hạn).
-    - `25 - 45`: Thận trọng / Sợ hãi (Fear).
-    - `45 - 55`: Trung lập (Neutral).
-    - `55 - 75`: Hưng phấn / Lạc quan (Greed).
-    - `75 - 100`: Hưng phấn cực độ (Extreme Greed - Vùng cảnh báo điều chỉnh ngắn hạn).
-- **Chỉ báo Rủi ro (Risk Indicator)**:
-  - Thang điểm `0.00 - 1.00`: Đo lường xác suất phân phối và đảo chiều giảm điểm trong ngắn hạn dựa trên biến động giá của rổ dẫn dắt và áp lực cung tiềm ẩn.
-- **Số ngày Phân phối (Distribution Count)**:
-  - Số phiên phân phối (Volume tăng mạnh nhưng giá giảm hoặc đóng cửa gần đáy nến) trong khung cửa sổ 25 phiên gần nhất.
-- **Độ rộng xu hướng (MA Breadth)**:
-  - `% Trên MA10`: Tỷ lệ cổ phiếu đang giao dịch trên đường trung bình 10 ngày (Động lượng siêu ngắn).
-  - `% Trên MA20`: Tỷ lệ cổ phiếu trên MA20 (Xu hướng ngắn hạn).
-  - `% Trên MA50`: Tỷ lệ cổ phiếu trên MA50 (Xu hướng trung hạn).
-  - `% Trên MA200`: Tỷ lệ cổ phiếu trên MA200 (Xu hướng dài hạn/Bull market).
-- **Dòng tiền Tổ chức (Institutional Flows)**:
-  - `Khối ngoại mua / bán / ròng (tỷ VND)`: Đo lường hoạt động của dòng vốn ngoại.
-  - `Tự doanh mua / bán / ròng (tỷ VND)`: Hoạt động của các công ty chứng khoán.
+REST KFSP `market_pulse/getContent` cung cấp `distribution_count`; không gắn thêm cửa sổ “25 phiên” vì response không công bố window. REST cash-flow cung cấp khối ngoại/tự doanh theo đúng field provider.
 
----
+### 3.2. Ngành
 
-### 2.3. Nhóm ngành Dẫn nhịp & Ma trận Luân chuyển Dòng tiền (Sector Rotation Matrix)
-- **4 Trạng thái Luân chuyển Dòng tiền (RRG Quadrant Rotation)**:
-  - 🟢 **Dẫn dắt (`leading`)**: Sức mạnh giá (RS) cao và Động lượng (Momentum) tăng $\to$ Nhóm ngành sinh lời vượt trội thị trường chung.
-  - 🟡 **Cải thiện / Tích cực (`recovering` / `improving`)**: RS bắt đầu cải thiện từ vùng đáy, động lượng bứt phá $\to$ Tiền bắt đầu chảy vào tích lũy.
-  - 🟠 **Suy yếu (`weakening`)**: RS vẫn ở mức cao nhưng động lượng giảm tốc $\to$ Xuất hiện áp lực chốt lời.
-  - 🔴 **Tụt hậu (`lagging`)**: RS thấp và động lượng suy giảm $\to$ Nhóm ngành yếu hơn thị trường chung, dòng tiền rút ra.
-- **Nỗ lực vs Kết quả (Wyckoff Effort & Result for Sectors)**:
-  - **Nỗ lực (Effort %)**: Đo lường mức độ gia tăng thanh khoản/giá trị giao dịch của ngành so với mức bình quân các phiên trước.
-  - **Kết quả (Result %)**: Biến động giá bình quân thực tế của các cổ phiếu trong ngành.
-  - *Diễn giải Wyckoff:*
-    - *Nỗ lực lớn + Kết quả lớn tăng*: Tích cực, dòng tiền lớn đẩy giá thành công.
-    - *Nỗ lực lớn + Kết quả bé/âm*: Phân phối / Hấp thụ cung không hiệu quả (Cảnh báo đảo chiều).
-    - *Nỗ lực nhỏ + Kết quả lớn tăng*: Tiết cung, giá tăng nhẹ nhàng.
-- **Sparkline & Lịch sử 8 phiên**: Theo dõi chuỗi trạng thái luân chuyển và điểm sức mạnh tương đối (RS Score) của từng ngành qua từng phiên giao dịch.
+| KFSP call | Ý nghĩa chính xác |
+| --- | --- |
+| `getdataibdnganh()` | `ten_nganh`, `closeprice`, `rss`, `totalval_market_pulse`, `totalvalbefore_market_pulse`, `percent_market_pulse`, `percent_market_pulse_marketcap`. |
+| `percent_market_pulse` | **Nỗ lực**: % thay đổi giá trị giao dịch hiện tại so với phiên trước. Có thể lớn hơn 100%; minimum hợp lệ là `-100%`. |
+| `percent_market_pulse_marketcap` | **Kết quả**: % thay đổi giá ngành. Đồng thời là `average_change_pct` trong read model. |
+| `getincreasesdecreasesnganh(names)` | Số mã tăng/giảm/đứng giá từng ngành. Coverage chỉ đạt khi match đủ mọi ngành của snapshot. |
+| `getdatarrgnganh(names, "VNINDEX", 9)` | Lịch sử ngày + status provider: `Dẫn dắt`, `Phục hồi`, `Suy yếu`, `Đội sổ`. Response 9 phiên dùng trên `/nganh` đang theo thứ tự cũ → mới; current state là phần tử cuối. |
+| `getdatama(slugs)` | `ma10`, `ma20`, `ma50` có giá trị `up`/`down`. Slug phải khớp hàm của KFSP, gồm special case `NÔNG - LÂM - NGƯ → nong_lam_ngu` và giữ punctuation khác. |
 
----
+UI không còn:
 
-### 2.4. Định giá Thị trường Đa dải (Valuation Multi-Band Chart)
-- **Mục đích**: So sánh chỉ số P/E, P/B của toàn thị trường VN-Index với các dải độ lệch chuẩn lịch sử ($\pm 1\text{SD}, \pm 2\text{SD}$).
-- **Ý nghĩa định giá**:
-  - Dưới $-2\text{SD}$ (Vùng rẻ lịch sử / Đại suy thoái).
-  - Giữa $-1\text{SD}$ và $-2\text{SD}$ (Vùng định giá hấp dẫn).
-  - Quanh trục trung bình (Định giá hợp lý).
-  - Vượt $+1\text{SD} \to +2\text{SD}$ (Vùng định giá đắt / Hưng phấn quá đà).
+- tự xếp RRG từ biến động/độ rộng;
+- suy MA từ RS hoặc momentum;
+- tính ngược GTGD phiên trước từ Nỗ lực;
+- dùng ngày, sparkline, VNINDEX, GTGD hoặc ticker pill hard-code;
+- tạo P/E/P/B/risk history giả.
 
----
+### 3.3. Stock ratings
 
-### 2.5. Bảng xếp hạng Top Cổ phiếu Rating Score (KFSP Model)
-- **Composite Rating Score (0 - 100)**: Điểm xếp hạng tổng hợp dựa trên 4 trụ cột: Kỹ thuật (Technical), Động lượng (Momentum), Dòng tiền (Money Flow), Cơ bản (Fundamental).
-- **CANSLIM Score**: Điểm tăng trưởng theo tiêu chí William O'Neil (Doanh thu, Lợi nhuận, Sản phẩm mới, Cung cầu, Dẫn đầu ngành, Bảo trợ tổ chức, Xu hướng thị trường).
-- **4M Score**: Điểm đầu tư giá trị theo Phil Town (Meaning - Dễ hiểu, Moat - Lợi thế cạnh tranh, Management - Ban lãnh đạo, Margin of Safety - Biên an toàn).
-- **RS Ngắn hạn (RSs) & RS Trung hạn (RSm)**: Sức mạnh giá tương đối so với VN-Index trong 3 tháng và 6 tháng.
+- Chỉ đọc snapshot `source = 'kfsp'` và `is_published = true` từ `public.insights_stock_ratings`.
+- 4M, CANSLIM, RS-S, RS-M, RRG, giá, volume, valuation và các `kfsp_metrics` giữ nguyên provider value sau normalize đơn vị đã document.
+- Component thiếu giữ `null`; không lấy composite để lấp 4M/CANSLIM/RS.
+- `kfsp_price_potential` chỉ nhận label string provider. Không tự tạo label từ fair value/price.
+- Cột DB `kfsp_composite_score` là legacy name. Giá trị là **Qeo composite**:
 
----
+```text
+mean(các giá trị có mặt trong [KFSP 4M, KFSP CANSLIM, KFSP stock RS-S, KFSP sector RS-S])
+```
 
-## 3. Nguồn Dữ Liệu (Data Sources) & Database Schema
+Null bị loại khỏi mean; nếu cả bốn null thì composite null. UI phải ghi “Qeo composite” hoặc “Nguồn KFSP · điểm Qeo”, không gọi đây là model/composite của KFSP.
 
-### 3.1. Các bảng cơ sở dữ liệu Supabase
+`QeoIndex state radar` là heuristic UI riêng, owner tại `lib/insights-rating-model.ts`; công thức/weights nằm trong file và UI ghi rõ đây không phải logic proprietary của KFSP. Nếu thay đổi công thức phải cập nhật tests và metric guide trong cùng commit.
 
-| Bảng Cơ Sở Dữ Liệu | Vai trò & Dữ liệu lưu trữ | Cơ chế cập nhật |
-| :--- | :--- | :--- |
-| `public.market_insight_daily` | Lưu snapshot tổng hợp phiên: `sentiment_score`, `risk_score`, `distribution_count`, `above_ma10_pct` ... `above_ma200_pct`, `foreign_net_value`, `proprietary_net_value`, `total_traded_value`, `market_regime`. | Edge Function `market-insight-eod-sync` đẩy lúc 15:45 hàng ngày. |
-| `public.market_insight_indexes` | Lưu chỉ số `VNINDEX`, `VN30`, `HNX`, `UPCOM`: `value`, `change_pct`, `advances`, `unchanged`, `declines`, `ceilings`, `floors`, `market_pe`. | Edge Function `market-insight-eod-sync`. |
-| `public.market_insight_sectors` | Lưu dữ liệu 11-19 ngành cho phiên hiện tại: `traded_value`, `average_change_pct`, `advances`, `declines`, `rs_score`, `rotation_state`, `effort_pct`, `result_pct`. | Edge Function `market-insight-eod-sync`. |
-| `public.market_insight_sector_history` | Lưu lịch sử chuyển động ngành theo từng phiên (`session_date`, `sector_key`, `rotation_state`, `rs_score`, `effort_pct`, `result_pct`). | Edge Function `market-insight-eod-sync`. |
-| `public.market_insight_leaders` | Top cổ phiếu tác động điểm số, top thanh khoản, top biến động. | Edge Function `market-insight-eod-sync`. |
-| `public.kfsp_stock_ratings` | Toàn bộ 1,752 cổ phiếu với đầy đủ điểm số: `kfsp_composite_score`, `kfsp_score_4m`, `kfsp_canslim_score`, `kfsp_stock_rs_score`, `kfsp_stock_rrg_state`, `price`, `volume`, `market_cap_billion`, `is_top100`. | Edge Function `kfsp-rating-sync` đẩy lúc 15:30 hàng ngày. |
-| `public.kfsp_rating_sync_runs` | Audit log của các lần đồng bộ dữ liệu ratings (`status`, `staged_row_count`, `published_row_count`, `error_message`). | Tự động ghi nhận trong transaction publish. |
+## 4. Storage contract v2
 
----
+Migrations:
 
-### 3.2. Các API Ngoại vi Live
-- **TradingView Quotes** (`lib/tradingview-index.ts`):
-  - Function: `fetchTradingViewIndexes()`
-  - Lấy giá trực tiếp theo thời gian thực cho `VNINDEX`, `VN30`, `HNX`, `UPCOM`.
-- **DNSE Index Candles** (`lib/dnse-index-candles.ts`):
-  - Function: `fetchDnseIndexCandleHistory("VNINDEX", date, resolution, count)`
-  - Lấy lịch sử nến 5 phút và nến ngày phục vụ biểu đồ nến VN-Index.
+- `supabase/migrations/20260830113000_kfsp_insights_exact_contract_v2.sql`: schema/constraints và RPC v2.
+- `supabase/migrations/20260831002500_fix_kfsp_insights_v2_staging_capture.sql`: giữ payload v2 trong biến transaction trước khi publisher v1 cleanup staging; nếu bỏ guard này, history/MA/RRG sẽ không được persist.
 
----
+### `market_insight_daily`
 
-## 4. Danh mục API Functions & Edge Functions
+- Direct fields: `sentiment_score`, `risk_score`, `distribution_count`, MA breadth, cash flows, totals.
+- History JSON: `sentiment_history`, `risk_history`, `valuation_history`.
+- `risk_score` constraint: `0..1`.
+- `market_regime` và `distribution_window` nullable; collector v2 không tự tính hai field này.
 
-### 4.1. Server-Side Data Loaders (`lib/`)
+### `market_insight_sectors`
 
-#### 1. `getInsightsDashboardData(supabase: SupabaseClient): Promise<InsightsDashboardData>`
-- **File**: `lib/insights-data.ts`
-- **Mục đích**: Hàm đọc dữ liệu tổng hợp cho toàn bộ trang `/insights`.
-- **Luồng xử lý**:
-  - Gọi song song `fetchTradingViewIndexes()`, `fetchDnseIndexCandleHistory()`, `loadRatings(supabase)`, `getScannerData()`, `getSignalUiData()`, `getResearchOverviewData()`, `getMarketCloseInsightData(supabase)` qua `Promise.allSettled`.
-  - Đảm bảo 1 module lỗi thì các module còn lại vẫn hiển thị bình thường.
+- Direct fields: `close_price`, `traded_value`, `previous_traded_value`, `average_change_pct`, breadth, `rs_score`, `rotation_state`, `effort_pct`, `result_pct`, `ma10_state`, `ma20_state`, `ma50_state`, `rotation_history`.
+- `strength_ratio`, `momentum_ratio`, `effort_result_state` giữ nullable và không được local normalizer dựng lên.
 
-#### 2. `getMarketCloseInsightData(supabase: SupabaseClient, requestedDate?: string): Promise<MarketCloseDashboardData | null>`
-- **File**: `lib/market-insight-data.ts`
-- **Mục đích**: Đọc dữ liệu sau phiên đã chuẩn hóa từ 5 bảng Supabase (`market_insight_daily`, `market_insight_indexes`, `market_insight_sectors`, `market_insight_leaders`, `market_insight_sector_history`).
-- **Đầu ra**: Cung cấp dữ liệu cho `MarketCloseDashboard`, `MarketBubbles`, `SectorMapPanel`, `MarketHealthView`.
+### Atomic publish
 
-#### 3. `loadRatings(supabase: SupabaseClient): Promise<RatingLoadResult>`
-- **File**: `lib/insights-data.ts`
-- **Mục đích**: Đọc snapshot mới nhất từ bảng `kfsp_stock_ratings`, tự động de-duplicate theo ticker, tổng hợp số liệu theo ngành (`InsightsSectorSummary`), và phân loại Top 100 / Toàn thị trường.
+`publish_market_insight_snapshot_v2(uuid)` gọi publisher v1 để giữ lock/P0 validation/four-table replace, sau đó ghi các cột v2 trong cùng transaction. Chỉ `service_role` được execute.
 
----
+## 5. Scheduler và deployment
 
-### 4.2. Supabase Edge Functions (`supabase/functions/`)
+| Job | Lịch UTC | Lịch ICT | Vai trò |
+| --- | --- | --- | --- |
+| `kfsp-rating-daily-7am-ict` | `0 0 * * *` | 07:00 hàng ngày | Stock rating snapshot. |
+| `qeoindex-eod-pipeline-1515-ict` | `15 8 * * 1-5` | 15:15 thứ Hai–thứ Sáu | Unified EOD; phase `MARKET_CLOSE_COLLECT` gọi `market-insight-eod-sync`. |
 
-#### 1. `market-insight-eod-sync`
-- **File**: `supabase/functions/market-insight-eod-sync/index.ts`
-- **Chức năng**:
-  - Nhận payload EOD thô hoặc fetch từ provider.
-  - Chuẩn hóa chỉ số, độ rộng, tính toán `rotation_state`, `rs_score`, `effort_pct`, `result_pct` cho từng ngành.
-  - Thực thi RPC `publish_market_close_snapshot` để lưu trữ dữ liệu an toàn vào DB trong 1 transaction duy nhất.
-- **Lệnh deploy**:
-  ```bash
-  npx supabase functions deploy market-insight-eod-sync --no-verify-jwt
-  ```
+Khi thay đổi resource Supabase:
 
-#### 2. `kfsp-rating-sync`
-- **File**: `supabase/functions/kfsp-rating-sync/index.ts`
-- **Chức năng**:
-  - Đồng bộ toàn bộ bảng điểm rating cổ phiếu (CANSLIM, 4M, RS, RRG, Technical, Fundamental).
-  - Chuẩn hóa đơn vị giá (chia 1,000 từ VND về nghìn VND) và vốn hóa (tỷ VND).
-  - Thực thi RPC `publish_kfsp_rating_snapshot`.
-- **Lệnh deploy**:
-  ```bash
-  npx supabase functions deploy kfsp-rating-sync --no-verify-jwt
-  ```
+```bash
+npx supabase db push
+npx supabase functions deploy market-insight-eod-sync --no-verify-jwt
+npx supabase functions deploy kfsp-rating-sync --no-verify-jwt # chỉ khi function rating thay đổi
+```
 
----
+Không log token, credential hoặc URL có query token. Token KFSP chỉ nằm trong Edge Function secret/cache được bảo vệ.
 
-## 5. Quy chuẩn Vận hành & Kiểm tra Dữ liệu (Operations Runbook)
+Trạng thái production ngày 2026-08-31: contract v2 và hai function trên đã deploy. Các snapshot 2026-08-26 đến 2026-08-28 vẫn mang `contract_version = 1`; migration sửa thang risk và đưa các trường từng bị map/suy diễn sai về null, không giả lập history/provider fields mới. Chúng sẽ được thay bằng snapshot v2 ở lần unified EOD thành công tiếp theo. Backfill lịch sử là thao tác replace dữ liệu production và chỉ chạy khi có phê duyệt riêng.
 
-### 5.1. Kiểm tra Sức khỏe Dữ liệu Hàng ngày (Daily Verification)
-Sau mỗi phiên giao dịch (sau 15:45 ICT), chạy câu lệnh SQL kiểm tra tính toàn vẹn của dữ liệu:
+## 6. Verification runbook
+
+### Local gates
+
+```bash
+pnpm typecheck
+node --test tests/market-insight-validation.test.ts tests/market-insight-edge-types.test.ts
+pnpm test:core
+pnpm lint:touched
+pnpm scan:secrets
+pnpm build
+```
+
+Material UI change phải kiểm tra bằng browser thật: desktop + mobile, ba view `Nhịp đập TT` / `Nỗ lực - Kết quả` / `Sức khỏe TT`, empty state, tooltip, modal stock, không console error.
+
+Kết quả acceptance ngày 2026-08-31 trên Chrome đã xác thực với local production build `localhost:3001`: ở mobile 390x844, cả trạng thái đóng và mở đều có `clientWidth/scrollWidth = 390/390`; dropdown nằm trong rect `16..374` (rộng 358px) và hiển thị đủ 4 links. Empty state thiếu Kết quả KFSP hiển thị trung thực; chọn `1W` + `Columns` cho `Top 100 · 1W`, document width vẫn 390; console có 0 errors/0 warnings (chỉ log dự kiến của Vercel Analytics/Speed Insights trên localhost). Sau khi reset viewport về desktop 2294px, dropdown có rect `453..843` (rộng 390px), không có document overflow. Đây là acceptance của local production build, chưa phải verification trên Vercel production đã deploy.
+
+### Production SQL
 
 ```sql
--- 1. Kiểm tra snapshot EOD mới nhất
-select session_date, sentiment_score, risk_score, distribution_count,
-       above_ma10_pct, above_ma20_pct, above_ma50_pct, above_ma200_pct,
-       foreign_net_value, proprietary_net_value, total_traded_value, market_regime
+select session_date, risk_score, sentiment_score,
+       jsonb_array_length(risk_history) as risk_points,
+       jsonb_array_length(sentiment_history) as sentiment_points,
+       jsonb_array_length(valuation_history) as valuation_points,
+       market_regime, distribution_window, quality_status
 from public.market_insight_daily
 order by session_date desc
 limit 5;
 
--- 2. Kiểm tra độ phủ của các ngành trong phiên mới nhất
-select session_date, count(*) as sector_count,
-       count(*) filter (where rs_score is not null) as sectors_with_rs,
-       count(*) filter (where rotation_state != 'unknown') as valid_rotation_states
+select session_date, count(*) as sectors,
+       count(*) filter (where rs_score is not null) as with_rs,
+       count(*) filter (where rotation_state <> 'unknown') as with_rrg,
+       count(*) filter (where effort_pct is not null and result_pct is not null) as with_effort_result,
+       count(*) filter (where ma10_state is not null and ma20_state is not null and ma50_state is not null) as with_ma
 from public.market_insight_sectors
 group by session_date
 order by session_date desc
 limit 5;
 
--- 3. Kiểm tra snapshot Ratings
-select as_of_date, count(*) as total_stocks,
-       count(*) filter (where is_top100) as top100_count,
-       count(distinct sector) as distinct_sectors
-from public.kfsp_stock_ratings
-where is_published
+select as_of_date, count(*) as rows,
+       count(*) filter (where kfsp_score_4m is not null) as with_4m,
+       count(*) filter (where kfsp_canslim_score is not null) as with_canslim,
+       count(*) filter (where kfsp_composite_score is not null) as with_qeo_composite
+from public.insights_stock_ratings
+where source = 'kfsp' and is_published
 group by as_of_date
 order by as_of_date desc
 limit 5;
 ```
 
----
+Đối chiếu ít nhất một snapshot với DOM KFSP `/nganh`: risk giữ thang `0..1`, sentiment/MA breadth khớp, số ngành khớp, và với một ngành phải khớp đồng thời `Giá`, `RS`, `Nỗ lực`, `Kết quả`, RRG, MA10/20/50.
 
-### 5.2. Tiêu chuẩn Kiểm thử & Triển khai Mã nguồn (Deployment Matrix)
-Mọi thay đổi liên quan đến trang Insights phải vượt qua 100% bộ kiểm thử tự động trước khi deploy:
+## 7. Release boundary
 
-```bash
-# 1. Chạy core unit & integration tests
-pnpm test:core
-
-# 2. Kiểm tra TypeScript type safety
-pnpm typecheck
-
-# 3. Kiểm tra ESLint trên các file đã sửa
-pnpm lint:touched
-
-# 4. Quét bảo mật secret
-pnpm scan:secrets
-```
-
-*Lưu ý triển khai:* Khi hoàn tất kiểm tra, commit và push trực tiếp vào nhánh `main`. Vercel Git Integration sẽ tự động kích hoạt quá trình build và deploy lên môi trường Production.
+- Supabase migration/function deploy áp dụng ngay theo project invariant.
+- Next.js UI chỉ lên production qua Git Integration: merge/push `main` → đúng một Vercel deployment.
+- Không chạy `vercel --prod` và không redeploy chỉ để verify.

@@ -116,11 +116,11 @@ export function MarketBubbles({
     return () => ro.disconnect()
   }, [])
 
-  // Filter to Top 200 liquid stocks (sorted by volume descending)
+  // Bound the provider-backed universe to the requested Top 100 by liquidity.
   const topStocks = React.useMemo(() => {
     return [...stocks]
       .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))
-      .slice(0, 200)
+      .slice(0, 100)
   }, [stocks])
 
   // Group stocks by volume tiers for Columns view
@@ -464,10 +464,10 @@ export function MarketBubbles({
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.07] px-3.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-wider text-cyan-300 shadow-sm">
             <span className="relative flex size-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75 motion-reduce:animate-none" />
               <span className="relative inline-flex size-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]" />
             </span>
-            <span>Top 200 · {period}</span>
+            <span>Top {topStocks.length} · {period}</span>
           </div>
         </div>
       </div>

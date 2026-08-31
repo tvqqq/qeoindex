@@ -12,18 +12,18 @@ import {
 } from "../supabase/functions/_shared/market-close-normalizer.ts"
 
 test("market-close edge types: deriveRiskLabel matches verified DOM scale", () => {
-  assert.equal(deriveRiskLabel(25), "Thấp")
-  assert.equal(deriveRiskLabel(63), "Trung tính")
-  assert.equal(deriveRiskLabel(75), "Cao")
-  assert.equal(deriveRiskLabel(90), "Rất cao")
+  assert.equal(deriveRiskLabel(0.25), "Thấp")
+  assert.equal(deriveRiskLabel(0.63), "Trung tính")
+  assert.equal(deriveRiskLabel(0.75), "Cao")
   assert.equal(deriveRiskLabel(null), null)
 })
 
-test("market-close edge types: deriveSentimentLabel maps scores to intuitive Vietnamese states", () => {
-  assert.equal(deriveSentimentLabel(80), "Hưng phấn")
-  assert.equal(deriveSentimentLabel(56), "Lạc quan")
-  assert.equal(deriveSentimentLabel(40), "Thận trọng")
-  assert.equal(deriveSentimentLabel(20), "Bi quan")
+test("market-close edge types: deriveSentimentLabel matches KFSP psychology labels", () => {
+  assert.equal(deriveSentimentLabel(80), "Tham lam tột độ")
+  assert.equal(deriveSentimentLabel(60), "Tham lam")
+  assert.equal(deriveSentimentLabel(40), "Trung lập")
+  assert.equal(deriveSentimentLabel(20), "Sợ hãi")
+  assert.equal(deriveSentimentLabel(10), "Sợ hãi tột độ")
   assert.equal(deriveSentimentLabel(null), null)
 })
 

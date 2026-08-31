@@ -1,7 +1,6 @@
 import * as React from "react"
-import { Activity, BarChart3, BookOpen, CircleDollarSign, CircleDot, Gauge, Layers, LineChart, Sparkles } from "lucide-react"
+import { Activity, BarChart3, CircleDollarSign, CircleDot, Gauge, Layers, LineChart } from "lucide-react"
 
-import { MetricGuideDialog } from "@/components/insights/metric-guide-dialog"
 import {
   IndexBreadthChart, IndexPerformanceChart, InstitutionalFlowChart,
   MaBreadthChart, MarketHistoryChart, MarketHistoryFlowChart,
@@ -9,10 +8,8 @@ import {
 import { MarketBubbles, type MarketBubbleStock } from "@/components/insights/market-bubbles"
 import { SectorMapPanel } from "@/components/insights/sector-map-panel"
 import { MarketHealthView } from "@/components/insights/market-health-view"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import type { MarketCloseDashboardData, MarketSectorRow } from "@/lib/market-insight-data"
+import type { MarketCloseDashboardData } from "@/lib/market-insight-data"
 import type { InsightsRatingRow } from "@/lib/insights-data"
 import { cn } from "@/lib/utils"
 
@@ -139,11 +136,7 @@ function BreadthBar({ label, value, total, tone }: { label: string; value: numbe
   )
 }
 
-const BUBBLE_PERIODS = ["1D", "1W", "1M", "1Y"] as const
-
 export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], onOpenStockDetail }: MarketCloseDashboardProps) {
-  const [guideOpen, setGuideOpen] = React.useState(false)
-
   if (!data) return (
     <Card className={cn(surface, "py-12 text-center")}><CardContent className="space-y-3"><Activity className="mx-auto size-10 text-slate-600" /><CardTitle className="font-bold text-white font-sans">Chưa có dữ liệu phiên đóng cửa</CardTitle><CardDescription className="italic text-slate-400">Snapshot sau phiên được cập nhật tự động sau 15:15 vào ngày giao dịch.</CardDescription></CardContent></Card>
   )
@@ -155,7 +148,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
       {/* 1. Market Overview Tiles & Bubbles Section */}
       <section aria-labelledby="market-overview-title" className="space-y-3">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{indexes.map((item) => <IndexTile key={item.indexCode} item={item} />)}</div>
-        <p className="px-1 text-[10px] font-mono text-slate-500">Phiên {sessionDate} · cập nhật {formatTime(asOf)} · dữ liệu EOD đã chuẩn hóa</p>
+        <p className="px-1 text-[10px] font-mono text-slate-500">Phiên {sessionDate} · cập nhật {formatTime(asOf)} · nguồn KFSP Ngành</p>
 
         <Card className={cn(surface, "overflow-hidden py-0")}>
           <CardHeader className="flex flex-col gap-2 border-b border-white/[0.07] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -178,7 +171,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
           </CardHeader>
           <CardContent className="p-4 sm:p-5 min-h-[650px]">
             <MarketBubbles
-              stocks={bubbleStocks.length > 0 ? bubbleStocks : bubbleStocks.slice(0, 100)}
+              stocks={bubbleStocks.slice(0, 100)}
               onOpenStockDetail={onOpenStockDetail}
               defaultPeriod="1D"
             />
@@ -187,7 +180,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
       </section>
 
       {/* 2. Market Intelligence Panel */}
-      <MarketIntelligencePanel data={data} onOpenGuide={() => setGuideOpen(true)} />
+      <MarketIntelligencePanel data={data} />
 
       {/* 3. Sector Map Section (Nhóm ngành đang dẫn nhịp) */}
       <section aria-labelledby="market-sectors-title" className="space-y-4 border-t border-white/[0.06] pt-8">
@@ -245,12 +238,11 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], on
         </div>
       </section>
 
-      <MetricGuideDialog open={guideOpen} onOpenChange={setGuideOpen} />
     </div>
   )
 }
 
-function MarketIntelligencePanel({ data, onOpenGuide }: { data: MarketCloseDashboardData; onOpenGuide: () => void }) {
+function MarketIntelligencePanel({ data }: { data: MarketCloseDashboardData }) {
   const { dailySummary, indexes, history, marketRegime } = data
   const vnindex = indexes.find((item) => item.indexCode === "VNINDEX")
   const breadthTotal = Math.max(1, (vnindex?.advances ?? 0) + (vnindex?.unchanged ?? 0) + (vnindex?.declines ?? 0))
@@ -281,11 +273,11 @@ function MarketIntelligencePanel({ data, onOpenGuide }: { data: MarketCloseDashb
               <p className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-teal-300/70">Tổng quan thị trường</p>
               <div className="mt-4 flex items-center gap-5">
                 <div className="flex size-28 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/[0.06]">
-                  <strong className="text-center text-lg font-black uppercase text-amber-300 font-sans">{marketRegime || "Phân hóa"}</strong>
+                  <strong className="px-3 text-center text-sm font-black uppercase text-amber-300 font-sans">{marketRegime || "Không suy diễn"}</strong>
                 </div>
                 <div className="grid flex-1 grid-cols-2 gap-2">
                   <PulseStat label="Tâm lý" value={`${formatNumber(dailySummary.sentimentScore, 0)} · ${dailySummary.sentimentLabel || "—"}`} />
-                  <PulseStat label="Rủi ro" value={formatNumber(dailySummary.riskScore, 2)} tone={(dailySummary.riskScore ?? 0) >= 60 ? "down" : "up"} />
+                  <PulseStat label="Rủi ro" value={formatNumber(dailySummary.riskScore, 2)} tone={(dailySummary.riskScore ?? 0) >= 0.7 ? "down" : "up"} />
                   <PulseStat label="Khối ngoại" value={`${formatSigned(dailySummary.foreignNetValue, 0)} tỷ`} tone={(dailySummary.foreignNetValue ?? 0) >= 0 ? "up" : "down"} />
                   <PulseStat label="Phân phối" value={`${dailySummary.distributionCount ?? "—"} ngày`} />
                 </div>
@@ -325,4 +317,3 @@ function IndexTile({ item }: { item: MarketCloseDashboardData["indexes"][number]
 function ChartPanel({ icon, title, description, children }: { icon: React.ComponentType<{ className?: string }>; title: string; description: string; children: React.ReactNode }) {
   return <Card className={cn(surface, "py-0")}><PanelHeading icon={icon} title={title} description={description} /><CardContent className="p-3">{children}</CardContent></Card>
 }
-

@@ -265,16 +265,9 @@ function compositeScore(values: Array<number | null>) {
   return Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length * 100) / 100
 }
 
-function pricePotentialLabel(value: JsonValue | undefined, fairValue: number | null, price: number | null) {
+function pricePotentialLabel(value: JsonValue | undefined) {
   if (typeof value === "string" && value.trim()) return value.trim()
-  const ratio = numeric(value) ?? (fairValue != null && price != null && price > 0 ? fairValue / price : null)
-  if (ratio == null) return null
-  if (ratio <= 0.5) return "Giảm ↓↓↓"
-  if (ratio <= 0.8) return "Giảm ↓↓"
-  if (ratio <= 1) return "Giảm ↓"
-  if (ratio <= 1.2) return "Tăng ↑"
-  if (ratio <= 1.5) return "Tăng ↑↑"
-  return "Tăng ↑↑↑"
+  return null
 }
 
 function buildProviderRows(payload: unknown, supplemental: Map<string, Record<string, unknown>>, asOfDate: string, syncRunId: string, fetchedAt: string) {
@@ -298,7 +291,6 @@ function buildProviderRows(payload: unknown, supplemental: Map<string, Record<st
     const providerPrice = numeric(findMetric(metrics, "price"))
     const price = providerPrice == null ? null : providerPrice / 1_000
     if (price != null) metrics.overview.price = price
-    const fairValue = numeric(findMetric(metrics, "kfsp_fair_value"))
     const rank = TOP100_RANK.get(ticker) ?? null
 
     return {
@@ -318,7 +310,7 @@ function buildProviderRows(payload: unknown, supplemental: Map<string, Record<st
       kfsp_composite_score: compositeScore([score4m, canslim, stockRs, sectorRs]),
       kfsp_score_4m: score4m,
       kfsp_canslim_score: canslim,
-      kfsp_price_potential: pricePotentialLabel(findMetric(metrics, "kfsp_price_potential"), fairValue, providerPrice),
+      kfsp_price_potential: pricePotentialLabel(findMetric(metrics, "kfsp_price_potential")),
       kfsp_stock_rs_score: stockRs,
       kfsp_sector_rs_score: sectorRs,
       kfsp_stock_rrg_state: textValue(findMetric(metrics, "kfsp_stock_rrg_state")),

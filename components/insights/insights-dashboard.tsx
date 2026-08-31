@@ -754,7 +754,7 @@ function RatingHistoryChart({ row }: { row: InsightsRatingRow }) {
             <LineChart className="size-4 text-violet-300" />
           </span>
           <div className="min-w-0">
-            <h4 className="text-base font-extrabold text-white">Xu hướng Composite Rating qua các phiên</h4>
+            <h4 className="text-base font-extrabold text-white">Xu hướng Qeo composite qua các phiên</h4>
             <p className="mt-0.5 text-xs text-muted-2">Lịch sử biến động điểm số tổng hợp từ cơ sở dữ liệu.</p>
           </div>
         </div>
@@ -1010,14 +1010,17 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
             <section id="rating-panel-overview" role="tabpanel" aria-labelledby="rating-tab-overview" className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl border border-violet-300/20 bg-violet-400/[0.07] p-4">
-                  <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-violet-200/70"><span>Composite</span><Sparkles className="size-4" /></div>
+                  <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-violet-200/70"><span>Qeo composite</span><Sparkles className="size-4" /></div>
                   <div className="mt-3 font-mono text-3xl font-black text-violet-200">{row.ratingScore}<span className="text-base text-violet-200/50">/100</span></div>
                   <div className="mt-2 text-sm font-bold text-white">{ratingModel.state}</div>
                 </div>
                 <div className="rounded-xl border border-emerald-300/20 bg-emerald-400/[0.07] p-4">
                   <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-emerald-200/70"><span>CANSLIM / 4M</span><Target className="size-4" /></div>
                   <div className="mt-3 flex items-end gap-3"><span className="font-mono text-2xl font-black text-emerald-300">{row.canslimScore}</span><span className="pb-1 text-muted-2">/</span><span className="font-mono text-2xl font-black text-amber-300">{row.score4m}</span></div>
-                  <div className="mt-3 grid grid-cols-2 gap-2"><AnimatedProgressBar value={row.canslimScore} color="#6ee7b7" /><AnimatedProgressBar value={row.score4m} color="#fcd34d" /></div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {row.canslimScore == null ? <span className="text-xs text-muted-2">CANSLIM —</span> : <AnimatedProgressBar value={row.canslimScore} color="#6ee7b7" />}
+                    {row.score4m == null ? <span className="text-xs text-muted-2">4M —</span> : <AnimatedProgressBar value={row.score4m} color="#fcd34d" />}
+                  </div>
                 </div>
                 <div className="rounded-xl border border-cyan-300/20 bg-cyan-400/[0.07] p-4">
                   <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-cyan-200/70"><span>RS Momentum</span><Zap className="size-4" /></div>
@@ -1113,7 +1116,7 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
                     {renderPerformanceBars()}
                   </div>
 
-                  {/* 4. Xu hướng Composite Rating qua các phiên (Dưới cùng cột phải) */}
+                  {/* 4. Xu hướng Qeo composite qua các phiên (Dưới cùng cột phải) */}
                   <RatingHistoryChart row={row} />
                 </div>
               </div>
@@ -1509,7 +1512,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                 </div>
                 <div>
                   <div className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-brand">Signal ranking & screener</div>
-                  <h2 id="top-100-title" className="mt-0.5 text-xl font-bold text-white tracking-tight sm:text-2xl font-sans">Top cổ phiếu rating score</h2>
+                  <h2 id="top-100-title" className="mt-0.5 text-xl font-bold text-white tracking-tight sm:text-2xl font-sans">Top cổ phiếu theo Qeo composite</h2>
                   <p className="mt-0.5 text-xs font-medium text-slate-400 italic">Bấm để mở bảng xếp hạng và bộ lọc cổ phiếu chuyên sâu.</p>
                 </div>
               </div>
@@ -1532,7 +1535,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                 <BookOpen className="size-3.5 text-brand" /> Hiểu các chỉ số
               </Button>
               <Badge variant="outline" className={cn("h-7 px-3", data.ratingMode === "supabase" ? "border-up/30 bg-up/10 text-up" : "border-ref/30 bg-ref/10 text-ref")}>
-                {data.ratingMode === "supabase" ? "Supabase live" : "Dữ liệu mẫu UI"}
+                {data.ratingMode === "supabase" ? "Nguồn KFSP · điểm Qeo" : "Chưa có snapshot"}
               </Badge>
                 </div>
               </div>
@@ -1581,7 +1584,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                     <SortableHead sortKey="stockRrgState" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={showSectorGroups ? RRG_FIELD_DEFINITIONS.sectorRrgState : RRG_FIELD_DEFINITIONS.stockRrgState} metricKey={showSectorGroups ? "kfsp_sector_rrg_state" : "kfsp_stock_rrg_state"} onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-cyan-300" />
                     <SortableHead sortKey="weeklyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("weekly_change_pct")} metricKey="weekly_change_pct" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-cyan-200" />
                     <SortableHead sortKey="monthlyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("monthly_change_pct")} metricKey="monthly_change_pct" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-violet-200" />
-                    <SortableHead sortKey="ratingScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="Rating tổng hợp" metricKey="kfsp_composite_score" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-brand" />
+                    <SortableHead sortKey="ratingScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="Qeo composite" metricKey="kfsp_composite_score" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-brand" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>

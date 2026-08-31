@@ -13,7 +13,7 @@ export type LeaderCategory =
 
 export interface EvidenceRef {
   field: string
-  source_class: "market_pulse" | "market_indexes" | "market_sectors" | "market_flows" | "market_leaders" | "canonical_market_feed"
+  source_class: "market_pulse" | "market_indexes" | "market_sectors" | "market_flows" | "market_leaders" | "market_valuation" | "canonical_market_feed"
   observed_at: string
   unit?: string
 }
@@ -26,13 +26,29 @@ export interface StagedItem<T> {
 
 export interface NormalizedDailySummary {
   session_date: string
-  market_regime: MarketRegime
+  market_regime: MarketRegime | null
   sentiment_score: number | null
   sentiment_label: string | null
   risk_score: number | null
   risk_label: string | null
   distribution_count: number | null
-  distribution_window: string
+  distribution_window: string | null
+  sentiment_history: Array<{ trading_date: string; value: number }>
+  risk_history: Array<{ trading_date: string; risk: number }>
+  valuation_history: Array<{
+    trading_date: string
+    price: number | null
+    pe: number | null
+    pb: number | null
+    pe_1std_up: number | null
+    pe_1std_down: number | null
+    pe_2std_up: number | null
+    pe_2std_down: number | null
+    pb_1std_up: number | null
+    pb_1std_down: number | null
+    pb_2std_up: number | null
+    pb_2std_down: number | null
+  }>
   above_ma10_pct: number | null
   above_ma20_pct: number | null
   above_ma50_pct: number | null
@@ -83,7 +99,9 @@ export interface NormalizedSectorRow {
   sector_key: string
   time_window: "1d" | "5d" | "20d"
   display_name: string
+  close_price: number | null
   traded_value: number | null
+  previous_traded_value: number | null
   average_change_pct: number | null
   advances: number
   unchanged: number
@@ -95,6 +113,10 @@ export interface NormalizedSectorRow {
   effort_pct: number | null
   result_pct: number | null
   effort_result_state: string | null
+  ma10_state: "up" | "down" | null
+  ma20_state: "up" | "down" | null
+  ma50_state: "up" | "down" | null
+  rotation_history: Array<{ trading_date: string; status: RotationState; close_price: number | null }>
   quality_status: QualityStatus
   missing_fields: string[]
   evidence_refs: EvidenceRef[]
@@ -159,7 +181,7 @@ export function mapRotationState(state: unknown): RotationState {
   if (normalized.includes("lead") || normalized.includes("dẫn dắt") || normalized.includes("leading")) return "leading"
   if (normalized.includes("recov") || normalized.includes("phục hồi") || normalized.includes("improving")) return "recovering"
   if (normalized.includes("weak") || normalized.includes("suy yếu") || normalized.includes("weakening")) return "weakening"
-  if (normalized.includes("lag") || normalized.includes("tụt hậu") || normalized.includes("lagging")) return "lagging"
+  if (normalized.includes("lag") || normalized.includes("tụt hậu") || normalized.includes("đội sổ") || normalized.includes("lagging")) return "lagging"
   return "unknown"
 }
 
@@ -173,50 +195,33 @@ export function normalizeSectorSlug(name: string): string {
     .replace(/^_+|_+$/g, "")
 }
 
-export function deriveMarketRegime(params: {
-  vnindexChangePct: number | null
-  breadthAdvances: number
-  breadthDeclines: number
-  sentimentScore: number | null
-  riskScore: number | null
-  distributionCount: number | null
-}): MarketRegime {
-  const { vnindexChangePct, breadthAdvances, breadthDeclines, riskScore, distributionCount } = params
-  const advanceRatio = breadthAdvances + breadthDeclines > 0 ? breadthAdvances / (breadthAdvances + breadthDeclines) : 0.5
-
-  if ((riskScore != null && riskScore >= 75) || (distributionCount != null && distributionCount >= 5)) {
-    return "RỦI RO"
-  }
-
-  if (vnindexChangePct != null && vnindexChangePct > 0.5 && advanceRatio >= 0.6) {
-    return "TÍCH CỰC"
-  }
-
-  if (vnindexChangePct != null && vnindexChangePct < -0.5 && advanceRatio <= 0.4) {
-    return "THẬN TRỌNG"
-  }
-
-  if (Math.abs(advanceRatio - 0.5) < 0.15 || (vnindexChangePct != null && Math.abs(vnindexChangePct) <= 0.5)) {
-    return "PHÂN HÓA"
-  }
-
-  return advanceRatio >= 0.5 ? "TÍCH CỰC" : "THẬN TRỌNG"
+// KFSP's getdatama socket uses the page's own slug contract, which deliberately
+// preserves punctuation. Keep this separate from the DB-safe sector key.
+export function normalizeSectorMaSlug(name: string): string {
+  if (name.trim().toUpperCase() === "NÔNG - LÂM - NGƯ") return "nong_lam_ngu"
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/\s+/g, "_")
+    .trim()
 }
 
 export function deriveRiskLabel(riskScore: number | null): string | null {
   if (riskScore == null) return null
-  if (riskScore < 40) return "Thấp"
-  if (riskScore <= 70) return "Trung tính"
-  if (riskScore <= 85) return "Cao"
-  return "Rất cao"
+  if (riskScore < 0.3) return "Thấp"
+  if (riskScore <= 0.7) return "Trung tính"
+  return "Cao"
 }
 
 export function deriveSentimentLabel(sentimentScore: number | null): string | null {
   if (sentimentScore == null) return null
-  if (sentimentScore >= 70) return "Hưng phấn"
-  if (sentimentScore >= 50) return "Lạc quan"
-  if (sentimentScore >= 35) return "Thận trọng"
-  return "Bi quan"
+  if (sentimentScore >= 80) return "Tham lam tột độ"
+  if (sentimentScore >= 60) return "Tham lam"
+  if (sentimentScore >= 40) return "Trung lập"
+  if (sentimentScore >= 20) return "Sợ hãi"
+  return "Sợ hãi tột độ"
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -246,8 +251,14 @@ export function parseVerifiedMarketClosePayloads(params: {
   riskOk?: boolean
   psychologyPayload?: unknown
   psychologyOk?: boolean
-  sectorPulsePayload?: unknown
-  sectorPulseOk?: boolean
+  valuationPayload?: unknown
+  valuationOk?: boolean
+  sectorIbdPayload?: unknown
+  sectorIbdOk?: boolean
+  sectorRrgPayload?: unknown
+  sectorRrgOk?: boolean
+  sectorMaPayload?: unknown
+  sectorMaOk?: boolean
   sectorBreadthPayload?: unknown
   sectorBreadthOk?: boolean
   cashFlowsPayload?: unknown
@@ -255,7 +266,7 @@ export function parseVerifiedMarketClosePayloads(params: {
   topVolatilityTickers?: unknown
   getLivePayload?: unknown
   getLiveOk?: boolean
-  canonicalIndexes: NormalizedIndexRow[]
+  providerIndexes: NormalizedIndexRow[]
 }): NormalizedMarketSnapshot {
   const {
     sessionDate,
@@ -268,8 +279,14 @@ export function parseVerifiedMarketClosePayloads(params: {
     riskOk = false,
     psychologyPayload,
     psychologyOk = false,
-    sectorPulsePayload,
-    sectorPulseOk = false,
+    valuationPayload,
+    valuationOk = false,
+    sectorIbdPayload,
+    sectorIbdOk = false,
+    sectorRrgPayload,
+    sectorRrgOk = false,
+    sectorMaPayload,
+    sectorMaOk = false,
     sectorBreadthPayload,
     sectorBreadthOk = false,
     cashFlowsPayload,
@@ -277,7 +294,7 @@ export function parseVerifiedMarketClosePayloads(params: {
     topVolatilityTickers,
     getLivePayload,
     getLiveOk = false,
-    canonicalIndexes,
+    providerIndexes,
   } = params
 
   const coverage: Record<string, boolean> = {
@@ -285,11 +302,15 @@ export function parseVerifiedMarketClosePayloads(params: {
     ma_breadth: false,
     risk_indicator: false,
     psychology_indicator: false,
+    valuation_history: false,
+    sector_ibd: false,
     sector_pulse: false,
+    sector_rrg: false,
+    sector_ma: false,
     sector_breadth: false,
     cash_flows: false,
     get_live: false,
-    canonical_indexes: canonicalIndexes.length === 4 && canonicalIndexes.every((i) => i.value != null && i.value > 0),
+    canonical_indexes: providerIndexes.length === 4 && providerIndexes.every((i) => i.value != null && i.value > 0),
   }
 
   const dailyMissing: string[] = []
@@ -353,19 +374,29 @@ export function parseVerifiedMarketClosePayloads(params: {
 
   // 3. Parse Risk Indicator [ { risk: number } ]
   let riskScore: number | null = null
+  const riskHistory: NormalizedDailySummary["risk_history"] = []
   if (riskOk && Array.isArray(riskPayload) && riskPayload.length > 0) {
     const first = asObject(riskPayload[0])
     const rawRisk = parseNumeric(first?.risk)
-    if (rawRisk != null) {
+    if (rawRisk != null && rawRisk >= 0 && rawRisk <= 1) {
       coverage.risk_indicator = true
-      riskScore = rawRisk <= 1.0 ? clampPercent(rawRisk * 100) : clampPercent(rawRisk)
-      dailyEvidence.push({ field: "risk_score", source_class: "market_pulse", observed_at: asOfIso, unit: "score_0_100" })
+      riskScore = Number(rawRisk.toFixed(4))
+      dailyEvidence.push({ field: "risk_score", source_class: "market_pulse", observed_at: asOfIso, unit: "ratio_0_1" })
+    }
+    for (const item of riskPayload) {
+      const obj = asObject(item)
+      const risk = parseNumeric(obj?.risk)
+      const tradingDate = typeof obj?.tradingdate === "string" ? obj.tradingdate.slice(0, 10) : ""
+      if (tradingDate && risk != null && risk >= 0 && risk <= 1) {
+        riskHistory.push({ trading_date: tradingDate, risk: Number(risk.toFixed(4)) })
+      }
     }
   }
   if (riskScore == null) dailyMissing.push("risk_score")
 
   // 4. Parse Psychology / Sentiment [ { value: number } ]
   let sentimentScore: number | null = null
+  const sentimentHistory: NormalizedDailySummary["sentiment_history"] = []
   if (psychologyOk && Array.isArray(psychologyPayload) && psychologyPayload.length > 0) {
     const first = asObject(psychologyPayload[0])
     const rawVal = parseNumeric(first?.value)
@@ -373,6 +404,14 @@ export function parseVerifiedMarketClosePayloads(params: {
       coverage.psychology_indicator = true
       sentimentScore = clampPercent(rawVal)
       dailyEvidence.push({ field: "sentiment_score", source_class: "market_pulse", observed_at: asOfIso, unit: "score_0_100" })
+    }
+    for (const item of psychologyPayload) {
+      const obj = asObject(item)
+      const value = parseNumeric(obj?.value)
+      const tradingDate = typeof obj?.tradingdate === "string" ? obj.tradingdate.slice(0, 10) : ""
+      if (tradingDate && value != null && value >= 0 && value <= 100) {
+        sentimentHistory.push({ trading_date: tradingDate, value: Number(value.toFixed(2)) })
+      }
     }
   }
   if (sentimentScore == null) dailyMissing.push("sentiment_score")
@@ -405,34 +444,53 @@ export function parseVerifiedMarketClosePayloads(params: {
   if (proprietaryNet != null) dailyEvidence.push({ field: "proprietary_net_value", source_class: "market_flows", observed_at: asOfIso, unit: "billion_vnd" })
   else dailyMissing.push("proprietary_net_value")
 
-  // 6. Canonical Indexes OHLC / Breadth
-  const vnindex = canonicalIndexes.find((i) => i.index_code === "VNINDEX")
+  // 6. KFSP canonical indexes
+  const vnindex = providerIndexes.find((i) => i.index_code === "VNINDEX")
   const totalVolume = vnindex?.matched_volume ?? null
   const totalValue = vnindex?.traded_value ?? null
 
   const sentimentLabel = deriveSentimentLabel(sentimentScore)
   const riskLabel = deriveRiskLabel(riskScore)
 
-  const marketRegime = deriveMarketRegime({
-    vnindexChangePct: vnindex?.change_pct ?? null,
-    breadthAdvances: vnindex?.advances ?? 0,
-    breadthDeclines: vnindex?.declines ?? 0,
-    sentimentScore,
-    riskScore,
-    distributionCount: distributionCount != null ? Math.round(distributionCount) : null,
-  })
+  const valuationHistory: NormalizedDailySummary["valuation_history"] = []
+  if (valuationOk && Array.isArray(valuationPayload)) {
+    for (const item of valuationPayload) {
+      const obj = asObject(item)
+      const tradingDate = typeof obj?.tradingdate === "string" ? obj.tradingdate.slice(0, 10) : ""
+      if (!tradingDate) continue
+      const point = {
+        trading_date: tradingDate,
+        price: parseNumeric(obj?.price),
+        pe: parseNumeric(obj?.pe),
+        pb: parseNumeric(obj?.pb),
+        pe_1std_up: parseNumeric(obj?.pe_1std_up),
+        pe_1std_down: parseNumeric(obj?.pe_1std_down),
+        pe_2std_up: parseNumeric(obj?.pe_2std_up),
+        pe_2std_down: parseNumeric(obj?.pe_2std_down),
+        pb_1std_up: parseNumeric(obj?.pb_1std_up),
+        pb_1std_down: parseNumeric(obj?.pb_1std_down),
+        pb_2std_up: parseNumeric(obj?.pb_2std_up),
+        pb_2std_down: parseNumeric(obj?.pb_2std_down),
+      }
+      if (point.price != null && (point.pe != null || point.pb != null)) valuationHistory.push(point)
+    }
+    coverage.valuation_history = valuationHistory.length > 0
+  }
 
   const dailyQuality: QualityStatus = dailyMissing.length > 2 ? "degraded" : "healthy"
 
   const daily: NormalizedDailySummary = {
     session_date: sessionDate,
-    market_regime: marketRegime,
+    market_regime: null,
     sentiment_score: sentimentScore,
     sentiment_label: sentimentLabel,
     risk_score: riskScore,
     risk_label: riskLabel,
     distribution_count: distributionCount != null ? Math.max(0, Math.round(distributionCount)) : null,
-    distribution_window: "25_sessions",
+    distribution_window: null,
+    sentiment_history: sentimentHistory.reverse(),
+    risk_history: riskHistory.reverse(),
+    valuation_history: valuationHistory.reverse(),
     above_ma10_pct: ma10,
     above_ma20_pct: ma20,
     above_ma50_pct: ma50,
@@ -451,48 +509,66 @@ export function parseVerifiedMarketClosePayloads(params: {
 
   // 7. Parse Sectors
   const sectorMap = new Map<string, NormalizedSectorRow>()
-  const secObj = asObject(sectorPulsePayload)
-  if (sectorPulseOk && secObj && Array.isArray(secObj.name) && Array.isArray(secObj.percent)) {
-    const names = secObj.name as unknown[]
-    const percents = secObj.percent as unknown[]
-    const totalVals = Array.isArray(secObj.totalval) ? (secObj.totalval as unknown[]) : []
+  const secObj = asObject(sectorIbdPayload)
+  if (sectorIbdOk && secObj && Array.isArray(secObj.ten_nganh)) {
+    const names = secObj.ten_nganh as unknown[]
+    const closes = Array.isArray(secObj.closeprice) ? secObj.closeprice as unknown[] : []
+    const rsScores = Array.isArray(secObj.rss) ? secObj.rss as unknown[] : []
+    const currentValues = Array.isArray(secObj.totalval_market_pulse) ? secObj.totalval_market_pulse as unknown[] : []
+    const previousValues = Array.isArray(secObj.totalvalbefore_market_pulse) ? secObj.totalvalbefore_market_pulse as unknown[] : []
+    const efforts = Array.isArray(secObj.percent_market_pulse) ? secObj.percent_market_pulse as unknown[] : []
+    const results = Array.isArray(secObj.percent_market_pulse_marketcap) ? secObj.percent_market_pulse_marketcap as unknown[] : []
 
     names.forEach((nameRaw, idx) => {
       const displayName = String(nameRaw || "").trim()
       const slug = normalizeSectorSlug(displayName)
-      const avgChange = parseNumeric(percents[idx])
-      if (!slug || avgChange == null) return
-
-      const tradedVal = parseNumeric(totalVals[idx])
+      const resultPct = parseNumeric(results[idx])
+      if (!slug || resultPct == null) return
+      const tradedVal = parseNumeric(currentValues[idx])
+      const previousTradedVal = parseNumeric(previousValues[idx])
+      const rsScore = parseNumeric(rsScores[idx])
+      const effortPct = parseNumeric(efforts[idx])
 
       sectorMap.set(slug, {
         session_date: sessionDate,
         sector_key: slug,
         time_window: "1d",
         display_name: displayName,
+        close_price: parseNumeric(closes[idx]),
         traded_value: tradedVal,
-        average_change_pct: avgChange,
+        previous_traded_value: previousTradedVal,
+        average_change_pct: resultPct,
         advances: 0,
         unchanged: 0,
         declines: 0,
-        rs_score: null,
+        rs_score: rsScore,
         rotation_state: "unknown",
         strength_ratio: null,
         momentum_ratio: null,
-        effort_pct: null,
-        result_pct: avgChange,
+        effort_pct: effortPct,
+        result_pct: resultPct,
         effort_result_state: null,
+        ma10_state: null,
+        ma20_state: null,
+        ma50_state: null,
+        rotation_history: [],
         quality_status: "healthy",
         missing_fields: [],
         evidence_refs: [
-          { field: "average_change_pct", source_class: "market_sectors", observed_at: asOfIso, unit: "%" },
+          { field: "rs_score", source_class: "market_sectors", observed_at: asOfIso, unit: "score_0_100" },
+          { field: "effort_pct", source_class: "market_sectors", observed_at: asOfIso, unit: "%" },
+          { field: "result_pct", source_class: "market_sectors", observed_at: asOfIso, unit: "%" },
         ],
         source_timestamp: asOfIso,
         as_of: asOfIso,
       })
     })
 
-    if (sectorMap.size > 0) coverage.sector_pulse = true
+    if (sectorMap.size > 0) {
+      coverage.sector_ibd = true
+      // Compatibility alias for the v1 atomic publisher guard.
+      coverage.sector_pulse = true
+    }
   }
 
   // Merge sector breadth if available: requires EVERY sector row to match with 3 non-negative counts
@@ -526,36 +602,46 @@ export function parseVerifiedMarketClosePayloads(params: {
     }
   }
 
-  // Calculate RS score, strength/momentum ratios, and rotation_state for sectors
-  const vnindexChg = canonicalIndexes.find((i) => i.index_code === "VNINDEX")?.change_pct ?? 0
   const sectorList = Array.from(sectorMap.values())
-  const totalSecCount = sectorList.length
 
-  if (totalSecCount > 0) {
-    const sortedByChg = [...sectorList].sort((a, b) => (b.average_change_pct ?? 0) - (a.average_change_pct ?? 0))
-    sortedByChg.forEach((sec, idx) => {
-      const rankPct = totalSecCount > 1 ? ((totalSecCount - 1 - idx) / (totalSecCount - 1)) * 100 : 50
-      const chg = sec.average_change_pct ?? 0
-      const adv = sec.advances ?? 0
-      const dec = sec.declines ?? 0
-      const breadthRatio = adv + dec > 0 ? adv / (adv + dec) : 0.5
-
-      sec.rs_score = Math.round(rankPct * 0.7 + Math.max(0, Math.min(100, (chg - vnindexChg + 5) * 10)) * 0.3)
-      sec.strength_ratio = Number((100 + (chg - vnindexChg) * 10).toFixed(2))
-      sec.momentum_ratio = Number((100 + (breadthRatio - 0.5) * 40).toFixed(2))
-
-      // 4 Quadrants of Sector Rotation:
-      if (sec.rs_score >= 58 && chg >= 0) {
-        sec.rotation_state = "leading"
-      } else if (chg >= 0 || (adv > dec && sec.rs_score >= 45)) {
-        sec.rotation_state = "recovering"
-      } else if (sec.rs_score >= 45) {
-        sec.rotation_state = "weakening"
-      } else {
-        sec.rotation_state = "lagging"
+  const rrgObj = asObject(sectorRrgPayload)
+  let rrgCount = 0
+  if (sectorRrgOk && rrgObj) {
+    for (const sec of sectorList) {
+      const records = Array.isArray(rrgObj[sec.display_name]) ? rrgObj[sec.display_name] as unknown[] : []
+      const history = records.flatMap((record) => {
+        const obj = asObject(record)
+        const tradingDate = typeof obj?.tradingdate === "string" ? obj.tradingdate.slice(0, 10) : ""
+        const state = mapRotationState(obj?.status)
+        return tradingDate && state !== "unknown"
+          ? [{ trading_date: tradingDate, status: state, close_price: parseNumeric(obj?.closeprice) }]
+          : []
+      })
+      if (history.length > 0) {
+        sec.rotation_history = history
+        sec.rotation_state = history[history.length - 1].status
+        sec.evidence_refs.push({ field: "rotation_state", source_class: "market_sectors", observed_at: asOfIso })
+        rrgCount += 1
       }
-    })
+    }
   }
+  coverage.sector_rrg = sectorList.length > 0 && rrgCount === sectorList.length
+
+  const sectorMaObj = asObject(sectorMaPayload)
+  let maCount = 0
+  if (sectorMaOk && sectorMaObj) {
+    for (const sec of sectorList) {
+      const raw = asObject(sectorMaObj[sec.display_name]) || asObject(sectorMaObj[sec.sector_key])
+      const ma10 = raw?.ma10 === "up" || raw?.ma10 === "down" ? raw.ma10 : null
+      const ma20 = raw?.ma20 === "up" || raw?.ma20 === "down" ? raw.ma20 : null
+      const ma50 = raw?.ma50 === "up" || raw?.ma50 === "down" ? raw.ma50 : null
+      sec.ma10_state = ma10
+      sec.ma20_state = ma20
+      sec.ma50_state = ma50
+      if (ma10 && ma20 && ma50) maCount += 1
+    }
+  }
+  coverage.sector_ma = sectorList.length > 0 && maCount === sectorList.length
 
   const sectors = sectorList
 
@@ -621,7 +707,7 @@ export function parseVerifiedMarketClosePayloads(params: {
     payload: daily as unknown as Record<string, unknown>,
   })
 
-  for (const idx of canonicalIndexes) {
+  for (const idx of providerIndexes) {
     staged_items.push({
       staging_key: `index:${idx.index_code}`,
       category: "index",
@@ -652,8 +738,11 @@ export function parseVerifiedMarketClosePayloads(params: {
     coverage.risk_indicator &&
     coverage.psychology_indicator &&
     coverage.cash_flows &&
-    coverage.sector_pulse &&
-    coverage.sector_breadth
+    coverage.valuation_history &&
+    coverage.sector_ibd &&
+    coverage.sector_breadth &&
+    coverage.sector_rrg &&
+    coverage.sector_ma
 
   const overallQuality: QualityStatus = !allP0Present
     ? "failing"
@@ -663,9 +752,9 @@ export function parseVerifiedMarketClosePayloads(params: {
 
   return {
     session_date: sessionDate,
-    contract_version: 1,
+    contract_version: 2,
     daily,
-    indexes: canonicalIndexes,
+    indexes: providerIndexes,
     sectors,
     leaders,
     staged_items,
@@ -673,7 +762,7 @@ export function parseVerifiedMarketClosePayloads(params: {
     endpoint_coverage: coverage,
     staged_counts: {
       daily: 1,
-      index: canonicalIndexes.length,
+      index: providerIndexes.length,
       sector: sectors.length,
       leader: leaders.length,
       total: staged_items.length,
@@ -703,7 +792,7 @@ export function validateMarketCloseSnapshot(snapshot: NormalizedMarketSnapshot):
     errors.push(`Invalid above_ma20_pct: ${snapshot.daily.above_ma20_pct}`)
   }
 
-  if (snapshot.daily.risk_score != null && (snapshot.daily.risk_score < 0 || snapshot.daily.risk_score > 100)) {
+  if (snapshot.daily.risk_score != null && (snapshot.daily.risk_score < 0 || snapshot.daily.risk_score > 1)) {
     errors.push(`Invalid risk_score: ${snapshot.daily.risk_score}`)
   }
 

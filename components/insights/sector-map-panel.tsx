@@ -89,20 +89,6 @@ function formatPrice(value: number | null | undefined) {
   return new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
 }
 
-// Fallback stock pills if none match
-const DEFAULT_QUICK_PILLS = [
-  { ticker: "SHB", change: 2.5 },
-  { ticker: "VIX", change: -1.1 },
-  { ticker: "VPB", change: 1.5 },
-  { ticker: "TCB", change: -2.1 },
-  { ticker: "SSI", change: -0.2 },
-  { ticker: "HPG", change: -0.5 },
-  { ticker: "GEX", change: 1.2 },
-  { ticker: "VCI", change: 1.1 },
-  { ticker: "VND", change: -0.6 },
-  { ticker: "FPT", change: 1.4 },
-]
-
 export const ROTATION_LABELS: Record<string, string> = {
   leading: "Dẫn dắt",
   recovering: "Phục hồi",
@@ -138,7 +124,7 @@ export function inferRotationState(
   sIdx: number = 0,
   dIdx: number = 0,
   vnindexChg: number = 0
-): "leading" | "recovering" | "weakening" | "lagging" {
+): "leading" | "recovering" | "weakening" | "lagging" | "unknown" {
   if (
     item.rotationState &&
     item.rotationState !== "unknown" &&
@@ -150,34 +136,10 @@ export function inferRotationState(
     return item.rotationState
   }
 
-  const chg = item.averageChangePct ?? item.resultPct ?? 0
-  const rs = item.rsScore ?? (50 + (chg - vnindexChg) * 10)
-  const effort = item.effortPct ?? 0
-  const adv = item.advances ?? 0
-  const dec = item.declines ?? 0
-
-  if (rs >= 58 && (chg >= 0 || adv >= dec)) {
-    return "leading"
-  }
-  if (chg >= 0 || (adv > dec && rs >= 45) || effort >= 10) {
-    return "recovering"
-  }
-  if (rs >= 45 || (effort < 0 && chg > 0)) {
-    return "weakening"
-  }
-  if (chg < 0) {
-    return "lagging"
-  }
-
-  const cycle: ("leading" | "recovering" | "weakening" | "lagging")[] = [
-    "leading",
-    "leading",
-    "weakening",
-    "lagging",
-    "recovering",
-    "leading",
-  ]
-  return cycle[(sIdx * 2 + dIdx) % cycle.length]
+  void sIdx
+  void dIdx
+  void vnindexChg
+  return "unknown"
 }
 
 // Mini SVG Sparkline for sector row
@@ -245,34 +207,24 @@ export function SectorMapPanel({
     const baseList = sectors.filter((s) => s.timeWindow === "1d")
     const list = baseList.length > 0 ? baseList : sectors
 
-    return [...list]
-      .map((s, idx) => {
-        if (!s.rotationState || s.rotationState === "unknown") {
-          return {
-            ...s,
-            rotationState: inferRotationState(s, idx, 0, 0),
-          }
-        }
-        return s
-      })
-      .sort((a, b) => {
+    return [...list].sort((a, b) => {
         return (b.rsScore ?? b.averageChangePct ?? -999) - (a.rsScore ?? a.averageChangePct ?? -999)
       })
   }, [sectors])
 
   // Leading sectors for top podium
   const topPodiumSectors = React.useMemo(() => {
-    return currentSectors.slice(0, 3)
+    return currentSectors.filter((sector) => sector.averageChangePct != null).slice(0, 3)
   }, [currentSectors])
 
   // Dynamic commentary generation
   const leadingNames = currentSectors
-    .filter((s) => s.rotationState === "leading" || (s.averageChangePct ?? 0) > 0.5)
+    .filter((s) => s.rotationState === "leading")
     .slice(0, 3)
     .map((s) => s.displayName)
 
-  const activeCashFlowNames = currentSectors
-    .filter((s) => (s.effortPct ?? 0) > 10 || s.rotationState === "recovering")
+  const recoveringNames = currentSectors
+    .filter((s) => s.rotationState === "recovering")
     .slice(0, 5)
     .map((s) => s.displayName)
 
@@ -285,20 +237,7 @@ export function SectorMapPanel({
     for (const item of marketHistory) {
       if (item.sessionDate) datesSet.add(item.sessionDate)
     }
-    let list = Array.from(datesSet).sort()
-    if (list.length === 0) {
-      list = [
-        "2026-08-18",
-        "2026-08-19",
-        "2026-08-20",
-        "2026-08-21",
-        "2026-08-24",
-        "2026-08-25",
-        "2026-08-26",
-        "2026-08-27",
-        "2026-08-28",
-      ]
-    }
+    const list = Array.from(datesSet).sort()
     return list.slice(-8)
   }, [sectorHistory, marketHistory])
 
@@ -374,12 +313,12 @@ export function SectorMapPanel({
   }
 
   // Enhanced Effort Statistics for each sector
-  const getSectorEffortMetrics = (sector: MarketSectorRow, _index: number) => {
-    const currVal = sector.tradedValue && sector.tradedValue > 0 ? sector.tradedValue : 0
-    const effortPct = sector.effortPct ?? 0
-    const prevVal = currVal > 0 && effortPct !== -100 ? +(currVal / (1 + effortPct / 100)).toFixed(2) : currVal
-    const netChange = +(currVal - prevVal).toFixed(2)
-    const resultPct = +(sector.resultPct ?? sector.averageChangePct ?? 0).toFixed(2)
+  const getSectorEffortMetrics = (sector: MarketSectorRow) => {
+    const currVal = sector.tradedValue
+    const prevVal = sector.previousTradedValue
+    const effortPct = sector.effortPct
+    const netChange = currVal != null && prevVal != null ? +(currVal - prevVal).toFixed(2) : null
+    const resultPct = sector.resultPct
 
     return {
       currVal,
@@ -404,7 +343,7 @@ export function SectorMapPanel({
           change: r.changePercent ?? 0,
         }))
     }
-    return DEFAULT_QUICK_PILLS
+    return []
   }, [ratings])
 
   return (
@@ -428,9 +367,14 @@ export function SectorMapPanel({
 
         {/* Top 3 Podium Cards */}
         <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {topPodiumSectors.length === 0 ? (
+            <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-6 text-center text-sm text-slate-400">
+              KFSP chưa có dữ liệu Kết quả ngành hợp lệ cho snapshot này.
+            </div>
+          ) : null}
           {topPodiumSectors.map((sector, index) => {
             const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"
-            const chgPct = sector.averageChangePct ?? 0
+            const chgPct = sector.averageChangePct!
             const isPos = chgPct >= 0
             const SectorIcon = getSectorIcon(sector.displayName)
             const totalBreadth = Math.max(1, (sector.advances || 0) + (sector.unchanged || 0) + (sector.declines || 0))
@@ -485,9 +429,9 @@ export function SectorMapPanel({
         {/* Rotation Commentary & Rocket Line */}
         <div className="mt-6 space-y-3 text-xs sm:text-sm text-slate-300 leading-relaxed font-sans">
           <p>
-            Các ngành luân phiên tăng điểm trong những ngày phân hoá, hôm nay nổi bật có thể kể đến{" "}
+            Trạng thái <strong className="text-white font-bold">Dẫn dắt</strong> do KFSP trả về hiện gồm{" "}
             <strong className="text-white font-bold">
-              {leadingNames.length > 0 ? leadingNames.join(", ") : "Ngân hàng, Công nghệ"}
+              {leadingNames.length > 0 ? leadingNames.join(", ") : "chưa có trạng thái Dẫn dắt từ KFSP"}
             </strong>
             .
           </p>
@@ -497,11 +441,11 @@ export function SectorMapPanel({
             <div>
               <strong className="text-white font-bold block mb-1">Chuyển động sức mạnh Ngành:</strong>
               <p className="text-slate-300">
-                Luân chuyển sức mạnh dòng tiền Ngành nổi bật hôm nay có thể kể đến{" "}
+                Trạng thái <strong className="text-white font-bold">Phục hồi</strong> do KFSP trả về hiện gồm{" "}
                 <strong className="text-white font-bold">
-                  {activeCashFlowNames.length > 0
-                    ? activeCashFlowNames.join(", ")
-                    : "Thực phẩm, Vận tải, Chứng khoán, Phân bón, Bất động sản"}
+                  {recoveringNames.length > 0
+                    ? recoveringNames.join(", ")
+                    : "chưa có ngành Phục hồi trong snapshot"}
                 </strong>
                 .
               </p>
@@ -510,7 +454,7 @@ export function SectorMapPanel({
         </div>
 
         {/* Ticker Quick Pills */}
-        <div className="mt-5 flex flex-wrap gap-2 pt-3 border-t border-white/[0.06]">
+        {quickPills.length > 0 && <div className="mt-5 flex flex-wrap gap-2 pt-3 border-t border-white/[0.06]">
           {quickPills.map((pill) => {
             const isUp = pill.change >= 0
             return (
@@ -527,7 +471,7 @@ export function SectorMapPanel({
               </button>
             )
           })}
-        </div>
+        </div>}
       </div>
 
       {/* 2. Unified Single-Screen Sector Matrix (Luân chuyển dòng tiền + Nỗ lực kết quả gộp làm 1) */}
@@ -588,18 +532,21 @@ export function SectorMapPanel({
                 </td>
                 <td className="px-3 py-2 text-center">
                   <div className="flex items-center justify-center gap-1.5 text-[10px]">
-                    <span className="text-emerald-400 font-bold">+8.5%</span>
+                    <span className="text-slate-400 font-bold">—</span>
                     <span className="text-slate-500">/</span>
-                    <span className="text-emerald-400 font-bold">+0.03%</span>
+                    <span className="text-slate-400 font-bold">{formatSigned(marketHistory[marketHistory.length - 1]?.vnindexChangePct, 2, "%")}</span>
                   </div>
                 </td>
                 <td className="px-2 py-2.5 text-center">
-                  <SectorMiniSparkline data={[0.2, -0.3, 0.4, 1.9, 1.1, 0.1, 1.6, 0.5, 0.03]} positive />
+                  <SectorMiniSparkline
+                    data={marketHistory.flatMap((item) => item.vnindexChangePct == null ? [] : [item.vnindexChangePct])}
+                    positive={(marketHistory[marketHistory.length - 1]?.vnindexChangePct ?? 0) >= 0}
+                  />
                 </td>
-                {sessionDates.map((date, idx) => {
+                {sessionDates.map((date) => {
                   const mp = marketByDate.get(date)
-                  const chg = mp?.vnindexChangePct ?? [0.26, -0.31, 0.44, 1.95, 1.17, 0.15, 1.67, 0.56, 0.03][idx % 9]
-                  const isUp = chg >= 0
+                  const chg = mp?.vnindexChangePct
+                  const isUp = (chg ?? 0) >= 0
                   return (
                     <td key={date} className="px-2 py-2 text-center">
                       <span className={isUp ? "text-emerald-400" : "text-rose-400"}>
@@ -608,9 +555,9 @@ export function SectorMapPanel({
                     </td>
                   )
                 })}
-                <td className="px-2 py-2.5 text-center text-emerald-400">▲</td>
-                <td className="px-2 py-2.5 text-center text-emerald-400">▲</td>
-                <td className="px-2 py-2.5 text-center text-emerald-400">▲</td>
+                <td className="px-2 py-2.5 text-center text-slate-500">—</td>
+                <td className="px-2 py-2.5 text-center text-slate-500">—</td>
+                <td className="px-2 py-2.5 text-center text-slate-500">—</td>
               </tr>
 
               {/* Special Top Row 2: Thanh khoản VNINDEX */}
@@ -622,7 +569,7 @@ export function SectorMapPanel({
                   </div>
                 </td>
                 <td className="px-3 py-2 text-center text-[10px] text-slate-400">
-                  GTGD: 18.2K tỷ
+                  GTGD: {formatNumber(marketHistory[marketHistory.length - 1]?.totalTradedValue, 1)} tỷ
                 </td>
                 <td className="px-2 py-2 text-center" />
                 {sessionDates.map((date) => {
@@ -632,31 +579,29 @@ export function SectorMapPanel({
                   return (
                     <td key={date} className="px-2 py-2 text-center font-mono text-[11px]">
                       <span className={isUp ? "text-emerald-400" : "text-rose-400"}>
-                        {liqVal != null ? `${(liqVal / 1000).toFixed(1)}k tỷ` : formatSigned(mp?.vnindexChangePct, 1, "%")}
+                        {liqVal != null ? `${formatNumber(liqVal, 1)} tỷ` : "—"}
                       </span>
                     </td>
                   )
                 })}
-                <td className="px-2 py-2 text-center text-emerald-400 font-mono text-xs">▲</td>
-                <td className="px-2 py-2.5 text-center text-emerald-400 font-mono text-xs">▲</td>
-                <td className="px-2 py-2 text-center text-emerald-400 font-mono text-xs">▲</td>
+                <td className="px-2 py-2 text-center text-slate-500 font-mono text-xs">—</td>
+                <td className="px-2 py-2.5 text-center text-slate-500 font-mono text-xs">—</td>
+                <td className="px-2 py-2 text-center text-slate-500 font-mono text-xs">—</td>
               </tr>
 
               {/* Sector Rotation Heatmap Rows with Exact Sector Thematic Icons */}
-              {currentSectors.map((sector, sIdx) => {
+              {currentSectors.map((sector) => {
                 const SectorIcon = getSectorIcon(sector.displayName)
-                const sparkValues = sessionDates.map((date) => {
+                const sparkValues = sessionDates.flatMap((date) => {
                   const historyItem = historyMatrixMap.get(`${sector.sectorKey}:${date}`)
-                  if (historyItem?.rsScore != null) return historyItem.rsScore
-                  if (historyItem?.averageChangePct != null) return 50 + historyItem.averageChangePct * 10
-                  return sector.rsScore ?? 50
+                  return historyItem?.closePrice == null ? [] : [historyItem.closePrice]
                 })
                 const isPositiveTrend = (sector.averageChangePct ?? 0) >= 0
-                const metrics = getSectorEffortMetrics(sector, sIdx)
+                const metrics = getSectorEffortMetrics(sector)
                 const { effortPct, resultPct } = metrics
-                const isEffortPos = effortPct >= 0
-                const isResultPos = resultPct >= 0
-                const effortBarW = Math.min(100, Math.max(8, Math.abs(effortPct) * 0.5))
+                const isEffortPos = effortPct != null && effortPct >= 0
+                const isResultPos = resultPct != null && resultPct >= 0
+                const effortBarW = effortPct == null ? 0 : Math.min(100, Math.max(8, Math.abs(effortPct) * 0.5))
 
                 return (
                   <tr
@@ -728,19 +673,10 @@ export function SectorMapPanel({
                     </td>
 
                     {/* 4. Historical Date Heatmap Cells */}
-                    {sessionDates.map((date, dIdx) => {
+                    {sessionDates.map((date) => {
                       const historyItem = historyMatrixMap.get(`${sector.sectorKey}:${date}`)
-                      const mp = marketByDate.get(date)
-                      const vnindexChg = mp?.vnindexChangePct ?? 0
-
-                      const state = inferRotationState(
-                        historyItem || sector,
-                        sIdx,
-                        dIdx,
-                        vnindexChg
-                      )
-
-                      const label = ROTATION_LABELS[state] || "Dẫn dắt"
+                      const state = historyItem?.rotationState ?? "unknown"
+                      const label = ROTATION_LABELS[state] || "—"
                       const bgCls = rotationBadgeClass(state)
 
                       return (
@@ -757,27 +693,27 @@ export function SectorMapPanel({
                       )
                     })}
 
-                    {/* 5. MA Trends (Real calculation based on sector RS score & momentum) */}
+                    {/* 5. Provider MA states from KFSP getdatama */}
                     <td className="px-2 py-2.5 text-center font-bold font-mono text-xs">
-                      {(sector.averageChangePct ?? 0) >= 0 || (sector.rsScore ?? 50) >= 50 ? (
+                      {sector.ma10State === "up" ? (
                         <span className="text-emerald-400">▲</span>
-                      ) : (
+                      ) : sector.ma10State === "down" ? (
                         <span className="text-rose-400">▼</span>
-                      )}
+                      ) : <span className="text-slate-500">—</span>}
                     </td>
                     <td className="px-2 py-2.5 text-center font-bold font-mono text-xs">
-                      {(sector.rsScore ?? 50) >= 52 || (sector.averageChangePct ?? 0) > 0.2 ? (
+                      {sector.ma20State === "up" ? (
                         <span className="text-emerald-400">▲</span>
-                      ) : (
+                      ) : sector.ma20State === "down" ? (
                         <span className="text-rose-400">▼</span>
-                      )}
+                      ) : <span className="text-slate-500">—</span>}
                     </td>
                     <td className="px-2 py-2.5 text-center font-bold font-mono text-xs">
-                      {(sector.rsScore ?? 50) >= 55 || (sector.momentumRatio ?? 100) >= 100 ? (
+                      {sector.ma50State === "up" ? (
                         <span className="text-emerald-400">▲</span>
-                      ) : (
+                      ) : sector.ma50State === "down" ? (
                         <span className="text-rose-400">▼</span>
-                      )}
+                      ) : <span className="text-slate-500">—</span>}
                     </td>
                   </tr>
                 )
@@ -805,8 +741,7 @@ export function SectorMapPanel({
           </div>
 
           {(() => {
-            const sIdx = currentSectors.findIndex((s) => s.sectorKey === hoveredEffortSector.sectorKey)
-            const m = getSectorEffortMetrics(hoveredEffortSector, sIdx >= 0 ? sIdx : 0)
+            const m = getSectorEffortMetrics(hoveredEffortSector)
 
             return (
               <>
@@ -834,7 +769,7 @@ export function SectorMapPanel({
                     <strong className="text-white font-bold block mb-1">Kết quả:</strong>
                     <p className="text-[11px] text-slate-200">
                       %Thay đổi:{" "}
-                      <span className={cn("font-bold", m.resultPct >= 0 ? "text-emerald-300" : "text-rose-300")}>
+                      <span className={cn("font-bold", m.resultPct != null && m.resultPct >= 0 ? "text-emerald-300" : "text-rose-300")}>
                         {formatSigned(m.resultPct, 2, "%")}
                       </span>
                     </p>
@@ -874,7 +809,7 @@ export function SectorMapPanel({
                     SIGNAL RANKING
                   </span>
                   <h2 id="sector-modal-title" className="text-lg sm:text-2xl font-black text-white font-sans">
-                    Top cổ phiếu rating score
+                    Top cổ phiếu theo Qeo composite
                   </h2>
                   <p className="mt-0.5 text-xs text-slate-400 font-sans">
                     Điểm cao hỗ trợ so sánh, không phải lệnh mua. (Nhấn ESC để đóng)
@@ -987,7 +922,7 @@ export function SectorMapPanel({
                     <th className="px-2 py-3 text-center text-amber-300 w-28">RRG cổ phiếu</th>
                     <th className="px-2 py-3 text-center text-cyan-200 w-28">Biến động tuần</th>
                     <th className="px-2 py-3 text-center text-purple-200 w-28">Biến động tháng</th>
-                    <th className="px-4 py-3 text-center text-rose-400 w-28">Rating tổng hợp</th>
+                    <th className="px-4 py-3 text-center text-rose-400 w-28">Qeo composite</th>
                   </tr>
                 </thead>
 
@@ -1118,7 +1053,7 @@ export function SectorMapPanel({
                           </span>
                         </td>
 
-                        {/* 11. Rating tổng hợp */}
+                        {/* 11. Qeo composite */}
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <strong className={cn(

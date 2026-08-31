@@ -205,7 +205,7 @@ function ScoreHistoryChart({ title, history, scoreKey, fallbackScore, tone }: {
   title: string
   history: QuarterlyHistoryPoint[]
   scoreKey: "fourmScore" | "canslimScore"
-  fallbackScore: number
+  fallbackScore: number | null
   tone: "amber" | "emerald"
 }) {
   const source = history.filter((item) => item[scoreKey] != null).slice(-12)
@@ -232,7 +232,7 @@ function ScoreHistoryChart({ title, history, scoreKey, fallbackScore, tone }: {
         <TooltipTrigger render={<div className="mt-2 flex cursor-help items-center gap-2 text-xs font-bold text-muted-2" />}><Info className="size-3.5" /> Cách đọc điểm</TooltipTrigger>
         <TooltipContent className="w-80 max-w-sm border border-white/10 bg-[#090e19] p-3 text-xs leading-relaxed text-white shadow-2xl">Điểm và lịch sử lấy trực tiếp từ KFSP. Response cung cấp điểm 0–100 nhưng không công bố công thức trọng số đầy đủ; QeoIndex không tái tính điểm.</TooltipContent>
       </Tooltip>
-      <div className="relative mt-4 h-3 overflow-hidden rounded-full"><div className="absolute inset-y-0 left-0 w-2/5 bg-rose-500" /><div className="absolute inset-y-0 left-[40%] w-1/5 bg-amber-400" /><div className="absolute inset-y-0 right-0 w-2/5 bg-emerald-500" /><span className="absolute -top-1 h-5 w-1 rounded bg-white shadow-[0_0_10px_white]" style={{ left: `${Math.max(0, Math.min(100, Number(score) || 0))}%` }} /></div>
+      <div className="relative mt-4 h-3 overflow-hidden rounded-full"><div className="absolute inset-y-0 left-0 w-2/5 bg-rose-500" /><div className="absolute inset-y-0 left-[40%] w-1/5 bg-amber-400" /><div className="absolute inset-y-0 right-0 w-2/5 bg-emerald-500" />{score != null && <span className="absolute -top-1 h-5 w-1 rounded bg-white shadow-[0_0_10px_white]" style={{ left: `${Math.max(0, Math.min(100, score))}%` }} />}</div>
       {source.length >= 2 ? (
         <ChartContainer config={chartConfig} className="mt-4 h-[250px] w-full aspect-auto">
           <AreaChart accessibilityLayer data={data} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
@@ -333,7 +333,7 @@ function ScoreSection({ title, history, scoreKey, componentKey, fallbackScore, t
   history: QuarterlyHistoryPoint[]
   scoreKey: "fourmScore" | "canslimScore"
   componentKey: "fourmComponents" | "canslimComponents"
-  fallbackScore: number
+  fallbackScore: number | null
   tone: "amber" | "emerald"
 }) {
   const latest = [...history].reverse().find((item) => Object.keys(item[componentKey]).length > 0)
