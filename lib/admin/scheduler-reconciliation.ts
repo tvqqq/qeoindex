@@ -11,7 +11,7 @@ export const EXPECTED_SUPABASE_SCHEDULERS: ExpectedSchedulerMapping[] = [
   { mappingId: "supabase:kfsp-rating-daily-7am-ict", jobKey: "kfsp.rating_daily", schedulerName: "kfsp-rating-daily-7am-ict", schedule: "0 0 * * *" },
   { mappingId: "supabase:kfsp-ttai-history-daily-0710-ict", jobKey: "kfsp.ttai_history", schedulerName: "kfsp-ttai-history-daily-0710-ict", schedule: "10 0 * * *", aliases: ["kfsp-ttai-history-daily-1am-ict", "kfsp-ttai-history-hourly"] },
   { mappingId: "supabase:sync-universe-5m-am", jobKey: "market.sync_5m", schedulerName: "sync-universe-5m", schedule: "*/5 2-6 * * 1-5" },
-  { mappingId: "supabase:sync-universe-5m-pm", jobKey: "market.sync_5m", schedulerName: "sync-universe-5m-afternoon", schedule: "0-40/5 7 * * 1-5" },
+  { mappingId: "supabase:sync-universe-5m-pm", jobKey: "market.sync_5m", schedulerName: "sync-universe-5m-afternoon", schedule: "0,5,10,15,20,25,30,35,40 7 * * 1-5" },
   { mappingId: "supabase:sync-universe-eod-1445", jobKey: "market.sync_eod", schedulerName: "sync-universe-eod-1445", schedule: "45 7 * * 1-5", aliases: ["sync-universe-eod-1450"] },
 ]
 export const EXPECTED_VERCEL_SCHEDULERS = [{ jobKey: "signals.daily", path: "/api/signals/daily", schedule: "0 0 * * 1-5" }] as const
