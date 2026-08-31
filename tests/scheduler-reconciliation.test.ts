@@ -18,6 +18,14 @@ test("six exact Supabase physical mappings are live verified and market windows 
   assert.deepEqual(result.logical.find((mapping) => mapping.jobKey === "market.sync_5m")?.childMappingIds, ["supabase:sync-universe-5m-am", "supabase:sync-universe-5m-pm"])
 })
 
+test("PM mapping keeps exact-string semantics while normalizing only whitespace", () => {
+  const expected = EXPECTED_SUPABASE_SCHEDULERS.find((mapping) => mapping.mappingId === "supabase:sync-universe-5m-pm")!
+  const whitespaceVariant = rows.map((row) => row.jobName === expected.schedulerName ? { ...row, schedule: `  ${expected.schedule.replaceAll(" ", "   ")}  ` } : row)
+  assert.equal(reconcileSupabaseSchedulers({ availability: "available", rows: whitespaceVariant }).mappings.find((m) => m.mappingId === expected.mappingId)?.status, "live_verified")
+  const stepForm = rows.map((row) => row.jobName === expected.schedulerName ? { ...row, schedule: "0-40/5 7 * * 1-5" } : row)
+  assert.equal(reconcileSupabaseSchedulers({ availability: "available", rows: stepForm }).mappings.find((m) => m.mappingId === expected.mappingId)?.status, "drifted")
+})
+
 test("scheduler reconciliation reports missing window, drift, inactive, duplicate, alias and extra", () => {
   const evidence: SchedulerEvidence = { availability: "available", rows: [
     ...rows.filter((row) => !["sync-universe-5m-afternoon", "kfsp-rating-daily-7am-ict", "sync-universe-eod-1445", "qeoindex-eod-pipeline-1515-ict", "kfsp-ttai-history-daily-0710-ict"].includes(row.jobName)),
