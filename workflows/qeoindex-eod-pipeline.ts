@@ -29,6 +29,8 @@ import {
 
 const MARKET_CLOSE_MAX_ATTEMPTS = 3
 const MARKET_CLOSE_RETRY_INTERVAL_MS = 5 * 60_000
+const MAX_CANONICAL_UNIVERSE_SIZE = 200
+const WYCKOFF_TIMEFRAME_COUNT = 5
 
 function retryAt(startedAtIso: string, attempt: number) {
   const startedAt = new Date(startedAtIso).getTime()
@@ -117,6 +119,11 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
     }
     if (!ready) throw new Error("EOD_READY did not produce a pipeline context")
 
+    const universeCount = ready.stocks.length
+    if (universeCount < 1 || universeCount > MAX_CANONICAL_UNIVERSE_SIZE) {
+      throw new Error(`Canonical universe count ${universeCount} is outside 1-${MAX_CANONICAL_UNIVERSE_SIZE}`)
+    }
+    const expectedSnapshots = universeCount * WYCKOFF_TIMEFRAME_COUNT
     const shouldBuild = ready.notionAction === "write"
     const shouldPublish = ready.notionAction !== "stop"
     const resumeSupabaseRunId = ready.notionAction === "resume" ? ready.notionSupabaseRunId : ""
@@ -196,8 +203,8 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
           true,
         )
       }
-      if (history.completedTickers !== 100 || history.requestedTickers !== 100) {
-        throw new Error(`HISTORY_REFRESH completed ${history.completedTickers}/${history.requestedTickers} tickers; expected 100/100`)
+      if (history.completedTickers !== universeCount || history.requestedTickers !== universeCount) {
+        throw new Error(`HISTORY_REFRESH completed ${history.completedTickers}/${history.requestedTickers} tickers; expected ${universeCount}/${universeCount}`)
       }
     } else {
       history = await runHistoryRefreshBatchStep(runId, [], startedAtIso, history, false)
@@ -228,17 +235,17 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
           true,
         )
       }
-      if (staging.total !== 500) {
-        throw new Error(`NOTION_STAGING completed ${staging.total}/500 snapshots`)
+      if (staging.total !== expectedSnapshots) {
+        throw new Error(`NOTION_STAGING completed ${staging.total}/${expectedSnapshots} snapshots`)
       }
     } else {
       staging = await runNotionStagingBatchStep(runId, [], ready.runKey, ready.scanDate, staging, false)
     }
 
     const providerSummary = staging.providers.length
-      ? `Persistent OHLCV cache providers: ${staging.providers.join(", ")}; 100 tickers; 500 snapshot contract.`
+      ? `Persistent OHLCV cache providers: ${staging.providers.join(", ")}; ${universeCount} tickers; ${expectedSnapshots} snapshot contract.`
       : build.providers.length
-        ? `Persistent OHLCV cache providers: ${build.providers.join(", ")}; 100 tickers; 500 snapshot contract.`
+        ? `Persistent OHLCV cache providers: ${build.providers.join(", ")}; ${universeCount} tickers; ${expectedSnapshots} snapshot contract.`
         : "Existing notion-unified-v2 Ready run."
     const validation = await runNotionValidateStep(runId, ready.runKey, ready.scanDate, startedAtIso, providerSummary, shouldBuild)
     const ingest = await runIngestStep(runId, ready.runKey, shouldPublish, resumeSupabaseRunId)
@@ -250,6 +257,8 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
     const complete = await runCompleteStep(runId, {
       runKey: ready.runKey,
       scanDate: ready.scanDate,
+      universeCount,
+      expectedSnapshots,
       notionAction: ready.notionAction,
       historicalBackfill,
       rankWarnings: ready.rankWarnings.slice(0, 10),
@@ -270,6 +279,8 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       runId,
       runKey: ready.runKey,
       scanDate: ready.scanDate,
+      universeCount,
+      expectedSnapshots,
       notionAction: ready.notionAction,
       historicalBackfill,
       publishStatus: publish.status,
