@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "npm:@supabase/supabase-js@2"
+import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "../_shared/vn-market-calendar.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,16 +45,17 @@ Deno.serve(async (req: Request) => {
         )
       }
 
-      const today = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Ho_Chi_Minh",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(new Date())
+      const sessionDate = String(body.session_date ?? vietnamDateKey(new Date()))
+      if (!isVietnamSecuritiesTradingDateKey(sessionDate)) {
+        return new Response(
+          JSON.stringify({ ok: true, skipped: true, reason: "NON_TRADING_DAY", session_date: sessionDate }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        )
+      }
 
       const payload = {
         symbol: body.symbol.toUpperCase(),
-        session_date: body.session_date ?? today,
+        session_date: sessionDate,
         reference_price: body.reference_price ?? body.latestQuote?.reference ?? null,
         ceiling_price: body.ceiling_price ?? body.latestQuote?.ceiling ?? null,
         floor_price: body.floor_price ?? body.latestQuote?.floor ?? null,
@@ -80,7 +82,7 @@ Deno.serve(async (req: Request) => {
       }
 
       return new Response(
-        JSON.stringify({ ok: true, symbol: payload.symbol, updated_at: payload.updated_at }),
+        JSON.stringify({ ok: true, skipped: false, symbol: payload.symbol, session_date: sessionDate, updated_at: payload.updated_at }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       )
     } catch (err: unknown) {
@@ -92,7 +94,6 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // GET snapshot
   const { data, error } = await supabase
     .from("stock_orderbook_snapshots")
     .select("*")
@@ -101,11 +102,7 @@ Deno.serve(async (req: Request) => {
 
   if (error || !data) {
     return new Response(
-      JSON.stringify({
-        ok: false,
-        symbol,
-        message: "No snapshot found for symbol.",
-      }),
+      JSON.stringify({ ok: false, symbol, message: "No snapshot found for symbol." }),
       { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     )
   }
