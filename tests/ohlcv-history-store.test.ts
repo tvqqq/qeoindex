@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -21,6 +22,7 @@ import {
 } from "../lib/eod-history-refresh.ts"
 
 const NOW = new Date("2026-08-25T08:35:00.000Z")
+const dnseHistorySource = readFileSync("lib/dnse-history.ts", "utf8")
 
 test("historical source URLs are deterministic and contain no credentials", () => {
   const dnse = buildHistoricalSourceUrl("DNSE", "msn", "1D", 14, NOW)
@@ -34,6 +36,14 @@ test("historical source URLs are deterministic and contain no credentials", () =
   assert.match(yahoo, /^https:\/\/query1\.finance\.yahoo\.com\/v8\/finance\/chart\/HPG\.VN\?/)
   assert.match(yahoo, /interval=60m/)
   assert.doesNotMatch(yahoo, /cookie|authorization|token/i)
+})
+
+test("DNSE bootstrap uses bounded Daily and Hourly request windows", () => {
+  assert.match(dnseHistorySource, /DAILY_REQUEST_WINDOW_DAYS\s*=\s*366/)
+  assert.match(dnseHistorySource, /HOURLY_REQUEST_WINDOW_DAYS\s*=\s*30/)
+  assert.match(dnseHistorySource, /buildRequestWindows/)
+  assert.match(dnseHistorySource, /requestOhlcWindows/)
+  assert.match(dnseHistorySource, /dedupeBars/)
 })
 
 test("refresh planner backfills insufficient coverage then switches to bounded deltas", () => {

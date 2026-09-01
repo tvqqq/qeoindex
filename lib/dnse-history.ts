@@ -5,6 +5,9 @@ import type { OhlcvBar } from "@/lib/technical-indicators"
 const DEFAULT_BASE_URL = "https://openapi.dnse.com.vn"
 const DEFAULT_LOOKBACK_DAYS = 520
 const DEFAULT_INTRADAY_LOOKBACK_DAYS = 180
+const DAILY_REQUEST_WINDOW_DAYS = 366
+const HOURLY_REQUEST_WINDOW_DAYS = 30
+const SECONDS_PER_DAY = 86400
 
 export interface ProviderHealth {
   configured: boolean
@@ -121,7 +124,26 @@ function removeIncompleteCurrentHourlyBar(bars: OhlcvBar[], now = new Date()) {
   })
 }
 
-async function requestOhlc(symbol: string, resolution: string, from: number, to: number) {
+function buildRequestWindows(from: number, to: number, maxDays: number) {
+  const maxSeconds = Math.max(1, Math.floor(maxDays)) * SECONDS_PER_DAY
+  const windows: Array<{ from: number; to: number }> = []
+  let cursor = from
+  while (cursor < to) {
+    const windowTo = Math.min(to, cursor + maxSeconds)
+    windows.push({ from: cursor, to: windowTo })
+    if (windowTo >= to) break
+    cursor = windowTo + 1
+  }
+  return windows
+}
+
+function dedupeBars(bars: OhlcvBar[]) {
+  const byTime = new Map<number, OhlcvBar>()
+  for (const bar of bars) byTime.set(bar.time, bar)
+  return [...byTime.values()].sort((a, b) => a.time - b.time)
+}
+
+async function requestOhlc(symbol: string, resolution: string, from: number, to: number, allowEmpty = false) {
   const { apiKey, apiSecret } = credentials()
   if (!apiKey || !apiSecret) throw new Error("DNSE server credentials are not configured")
   const path = "/price/ohlc"
@@ -141,17 +163,40 @@ async function requestOhlc(symbol: string, resolution: string, from: number, to:
   const body = await response.text()
   if (!response.ok) throw new Error(`DNSE OHLC ${symbol} ${resolution} failed (${response.status}): ${body.slice(0, 180)}`)
   const bars = normalizePayload(body)
-  if (!bars.length) throw new Error(`DNSE OHLC ${symbol} ${resolution} returned no usable bars`)
+  if (!bars.length && !allowEmpty) throw new Error(`DNSE OHLC ${symbol} ${resolution} returned no usable bars`)
   return bars
+}
+
+async function requestOhlcWindows(
+  symbol: string,
+  resolution: string,
+  from: number,
+  to: number,
+  maxDays: number,
+) {
+  const windows = buildRequestWindows(from, to, maxDays)
+  const bars: OhlcvBar[] = []
+  const allowEmptyWindow = windows.length > 1
+  for (const window of windows) {
+    try {
+      bars.push(...await requestOhlc(symbol, resolution, window.from, window.to, allowEmptyWindow))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`${message} [window ${window.from}-${window.to}]`)
+    }
+  }
+  const merged = dedupeBars(bars)
+  if (!merged.length) throw new Error(`DNSE OHLC ${symbol} ${resolution} returned no usable bars across ${windows.length} window(s)`)
+  return merged
 }
 
 export async function fetchDailyOhlcv(symbol: string, now = new Date(), lookbackDays = DEFAULT_LOOKBACK_DAYS): Promise<OhlcvBar[]> {
   const to = Math.floor(now.getTime() / 1000)
-  const from = to - lookbackDays * 86400
+  const from = to - lookbackDays * SECONDS_PER_DAY
   const errors: string[] = []
   for (const resolution of ["1D", "D"]) {
     try {
-      const bars = await requestOhlc(symbol, resolution, from, to)
+      const bars = await requestOhlcWindows(symbol, resolution, from, to, DAILY_REQUEST_WINDOW_DAYS)
       return removeIncompleteCurrentDailyBar(bars, now)
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error))
@@ -162,11 +207,11 @@ export async function fetchDailyOhlcv(symbol: string, now = new Date(), lookback
 
 export async function fetchHourlyOhlcv(symbol: string, now = new Date(), lookbackDays = DEFAULT_INTRADAY_LOOKBACK_DAYS): Promise<OhlcvBar[]> {
   const to = Math.floor(now.getTime() / 1000)
-  const from = to - lookbackDays * 86400
+  const from = to - lookbackDays * SECONDS_PER_DAY
   const errors: string[] = []
   for (const resolution of ["1H", "60"]) {
     try {
-      const bars = await requestOhlc(symbol, resolution, from, to)
+      const bars = await requestOhlcWindows(symbol, resolution, from, to, HOURLY_REQUEST_WINDOW_DAYS)
       const completed = removeIncompleteCurrentHourlyBar(bars, now)
       if (completed.length < 2) throw new Error(`DNSE OHLC ${symbol} ${resolution} returned insufficient completed bars`)
       return completed
