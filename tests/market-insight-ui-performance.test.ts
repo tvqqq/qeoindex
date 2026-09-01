@@ -60,7 +60,7 @@ test("Insights is one continuous dashboard without primary tabs or a sticky sect
   const content = fs.readFileSync(path.resolve("components/insights/insights-dashboard.tsx"), "utf8")
 
   assert.doesNotMatch(content, /mainTab|setMainTab/, "primary dashboard sections must not be conditionally remounted")
-  for (const sectionId of ["sau-phien", "top-100", "nghien-cuu"]) {
+  for (const sectionId of ["sau-phien", "top-stocks", "nghien-cuu"]) {
     assert.match(content, new RegExp(`id="${sectionId}"`), `${sectionId} must exist on the unified dashboard`)
   }
   assert.doesNotMatch(content, /Điều hướng dashboard Insights|href="#sau-phien"/, "the removed section navigator must stay removed")
@@ -135,7 +135,7 @@ test("Market Close keeps the main dashboard continuous and limits tabs to the th
   for (const period of ["1D", "1W", "1M", "1Y"]) {
     assert.match(bubbles, new RegExp(`value: "${period}"`), `market bubbles must expose the ${period} time window`)
   }
-  assert.match(bubbles, /filter\(\(stock\) => \(stock\.volume \?\? 0\) > 300_000\)/, "bubble field must exclude stocks at or below the provider threshold")
+  assert.doesNotMatch(bubbles, /stock\.volume[^\n]*>\s*300_000/, "bubble field must not apply a second liquidity cutoff inside the canonical universe")
   assert.match(bubbles, /slice\(0, 200\)/, "bubble solver must keep the requested Top 200 cap")
   assert.match(dashboard, /min-h-\[650px\]/, "bubble layout must reserve stable space")
   assert.match(dashboard, /Luân chuyển dòng tiền/, "sector workspace must expose the rotation view")

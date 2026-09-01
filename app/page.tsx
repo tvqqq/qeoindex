@@ -5,7 +5,7 @@ import { OrderBookManager } from "@/components/orderbook/orderbook-manager"
 import MarketBoardTransition from "@/components/smoothui/market-board-transition"
 import { TopNav } from "@/components/top-nav"
 import { getServerAuthContext } from "@/lib/auth/server"
-import { sectorForTicker } from "@/lib/market-sectors"
+import { boardSectorGroupForSector, sectorForTicker } from "@/lib/market-sectors"
 import { getCanonicalUniverse, type CanonicalUniverseSnapshot } from "@/lib/market-universe"
 import { getBoardOverviewSnapshotsFromSupabase } from "@/lib/supabase/orderbook"
 import { isTradingSessionOpen, getMarketSessionStatus } from "@/lib/session-countdown"
@@ -20,7 +20,7 @@ import styles from "./market-board-performance.module.css"
 export const dynamic = "force-dynamic"
 
 const INITIAL_HISTORY_POINTS = 90
-const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v4"
+const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v5"
 
 type InitialBoardData = {
   universe: BoardUniverseStock[]
@@ -64,7 +64,7 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
     return {
       ticker: stock.ticker,
       rank: stock.rank,
-      sector: stock.sector || sectorForTicker(stock.ticker),
+      sector: boardSectorGroupForSector(stock.sector || sectorForTicker(stock.ticker)).sectors[0],
       marketCapT: stock.marketCapBillion / 1000,
       lastClose: lastClosePrice,
       lastCloseDate: snap?.session_date || "",

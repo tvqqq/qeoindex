@@ -134,7 +134,8 @@ function formatNumber(value: number | null, maximumFractionDigits = 2) {
   return value.toLocaleString("vi-VN", { maximumFractionDigits })
 }
 
-function formatMarketCapBillion(value: number) {
+function formatMarketCapBillion(value: number | null) {
+  if (value == null) return "—"
   return `${value.toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tỷ`
 }
 
@@ -291,7 +292,7 @@ const RRG_FIELD_DEFINITIONS = {
 } satisfies Record<string, KfspFieldDefinition>
 
 type RatingSortKey = keyof Pick<InsightsRatingRow,
-  "ticker" | "price" | "canslimScore" | "score4m" | "pricePotential" | "rsShort" | "rsMedium" |
+  "ticker" | "price" | "marketCapBillion" | "canslimScore" | "score4m" | "pricePotential" | "rsShort" | "rsMedium" |
   "stockRrgState" | "weeklyChangePercent" | "monthlyChangePercent" | "ratingScore"
 >
 type SortDirection = "asc" | "desc"
@@ -477,6 +478,7 @@ function sectorSortValue(row: InsightsSectorSummary, key: RatingSortKey): string
   const mapping: Record<RatingSortKey, string | number | null> = {
     ticker: row.sector,
     price: row.averagePrice,
+    marketCapBillion: row.totalMarketCapBillion,
     canslimScore: row.averageCanslimScore,
     score4m: row.averageScore4m,
     pricePotential: row.stockCount ? row.pricePotentialUpCount / row.stockCount * 100 : null,
@@ -512,7 +514,7 @@ function RatingTooltip({ row, children }: { row: InsightsRatingRow; children: Re
           <div className="flex justify-between gap-4"><span className="text-muted-2">RSs / RSm</span><strong className="font-mono text-white">{row.rsShort ?? "—"} / {row.rsMedium ?? "—"}</strong></div>
           <div className="flex justify-between gap-4"><span className="text-muted-2">Biến động</span><strong className={cn("font-mono", (row.changePercent ?? 0) >= 0 ? "text-up" : "text-down")}>{formatPercent(row.changePercent)}</strong></div>
         </div>
-        {row.isTop100 && <Badge variant="outline" className="mt-4 border-amber-300/30 bg-amber-300/10 text-amber-200"><Crown className="size-3.5" /> Top 100{row.top100Rank ? ` · #${row.top100Rank}` : ""}</Badge>}
+        {row.isTop100 && <Badge variant="outline" className="mt-4 border-amber-300/30 bg-amber-300/10 text-amber-200"><Crown className="size-3.5" /> Top Stocks{row.top100Rank ? ` · #${row.top100Rank}` : ""}</Badge>}
         <div className="mt-4 border-t border-white/[0.07] pt-3 text-xs font-semibold text-cyan-200">Click vào dòng để mở hồ sơ phân tích</div>
       </TooltipContent>
     </Tooltip>
@@ -910,7 +912,7 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
             ) : null}
             {row.isTop100 && (
               <Badge variant="outline" className="border-amber-400/40 bg-amber-400/10 text-amber-300 font-ticker text-[10px] font-bold shrink-0 hidden lg:inline-flex">
-                <Crown className="size-3" /> Top 100{row.top100Rank ? ` · #${row.top100Rank}` : ""}
+                <Crown className="size-3" /> Top Stocks{row.top100Rank ? ` · #${row.top100Rank}` : ""}
               </Badge>
             )}
           </div>
@@ -1360,7 +1362,6 @@ function RatingDialog({ row, onOpenChange }: { row: InsightsRatingRow | null; on
   )
 }
 export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashboardData; initialTicker?: string }) {
-  const [universeFilter, setUniverseFilter] = useState<"top100" | "all">("top100")
   const [sectorFilter, setSectorFilter] = useState("all")
   const [query, setQuery] = useState("")
   const [sort, setSort] = useState<{ key: RatingSortKey; direction: SortDirection }>({ key: "ratingScore", direction: "desc" })
@@ -1404,14 +1405,13 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
     const normalized = query.trim().toUpperCase()
     return data.ratings
       .filter((row) => {
-        if (universeFilter === "top100" && !row.isTop100) return false
         if (sectorFilter !== "all" && row.sector !== sectorFilter) return false
         return !normalized || row.ticker.includes(normalized) || row.companyName.toUpperCase().includes(normalized) || row.sector.toUpperCase().includes(normalized)
       })
       .sort((left, right) => compareRatingValues(left[sort.key], right[sort.key], sort.direction) || left.ticker.localeCompare(right.ticker))
-  }, [data.ratings, query, sectorFilter, sort, universeFilter])
+  }, [data.ratings, query, sectorFilter, sort])
 
-  const showSectorGroups = universeFilter === "all" && sectorFilter === "all" && !query.trim()
+  const showSectorGroups = false
 
   const sortedSectorSummaries = useMemo(() => [...data.sectorSummaries]
     .sort((left, right) => compareRatingValues(sectorSortValue(left, sort.key), sectorSortValue(right, sort.key), sort.direction) || left.sector.localeCompare(right.sector, "vi")), [data.sectorSummaries, sort])
@@ -1495,7 +1495,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
             />
         </section>
 
-        <section id="top-100" aria-labelledby="top-100-title" className="pt-8">
+        <section id="top-stocks" aria-labelledby="top-stocks-title" className="pt-8">
           <details className="group rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 open:bg-[#07131d] shadow-xl">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
               <div className="flex items-center gap-3.5 sm:gap-4">
@@ -1504,7 +1504,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                 </div>
                 <div>
                   <div className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-brand">Signal ranking & screener</div>
-                  <h2 id="top-100-title" className="mt-0.5 text-xl font-bold text-white tracking-tight sm:text-2xl font-sans">Top cổ phiếu theo Qeo composite</h2>
+                  <h2 id="top-stocks-title" className="mt-0.5 text-xl font-bold text-white tracking-tight sm:text-2xl font-sans">Top cổ phiếu theo Qeo composite</h2>
                   <p className="mt-0.5 text-xs font-medium text-slate-400 italic">Bấm để mở bảng xếp hạng và bộ lọc cổ phiếu chuyên sâu.</p>
                 </div>
               </div>
@@ -1536,14 +1536,10 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
           <Card className="mt-5 border border-white/[0.07] bg-panel/95 py-0 ring-0">
             <CardHeader className="flex-col gap-4 border-b border-white/[0.06] p-4 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
-                <div className="flex rounded-lg border border-white/10 bg-cell p-1">
-                  {([ ["top100", "Top 100"], ["all", "Tất cả"] ] as const).map(([value, label]) => (
-                    <Button key={value} type="button" variant="ghost" size="sm" onClick={() => setUniverseFilter(value)} className={cn("flex-1 text-muted-2 sm:flex-none text-xs sm:text-sm font-bold", universeFilter === value && "bg-brand/15 text-brand hover:bg-brand/20 hover:text-brand")}>
-                      {value === "top100" && <Crown className="size-3.5 text-amber-300" />}{label}
-                    </Button>
-                  ))}
-                </div>
-                <Select value={sectorFilter} onValueChange={(value) => setSectorFilter(value ?? "all")}>
+                <Badge variant="outline" className="h-10 justify-center border-brand/30 bg-brand/10 px-3 text-sm font-bold text-brand sm:min-w-28">
+        Tất cả · {data.ratings.length} mã
+      </Badge>
+      <Select value={sectorFilter} onValueChange={(value) => setSectorFilter(value ?? "all")}>
                   <SelectTrigger aria-label="Lọc theo ngành" className="h-10 w-full min-w-64 border-white/10 bg-cell px-3 text-sm sm:text-base font-bold text-white hover:bg-white/[0.05] sm:w-80">
                     <SelectValue>{sectorFilter === "all" ? "Ngành: Tất cả ngành" : `Ngành: ${sectorFilter}`}</SelectValue>
                   </SelectTrigger>
@@ -1563,11 +1559,12 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
             </CardHeader>
             <CardContent className="p-0">
               <Table className="w-full table-fixed font-ticker">
-                <colgroup><col className="w-[20%]" /><col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[7%]" /><col className="w-[9%]" /><col className="w-[6%]" /><col className="w-[6%]" /><col className="w-[10%]" /><col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[10%]" /></colgroup>
+                <colgroup><col className="w-[18%]" /><col className="w-[7%]" /><col className="w-[9%]" /><col className="w-[7%]" /><col className="w-[7%]" /><col className="w-[8%]" /><col className="w-[5%]" /><col className="w-[5%]" /><col className="w-[9%]" /><col className="w-[7%]" /><col className="w-[7%]" /><col className="w-[11%]" /></colgroup>
                 <TableHeader className="sticky top-0 z-20 bg-[#05090f]">
                   <TableRow className="border-white/[0.08] hover:bg-transparent">
                     <SortableHead sortKey="ticker" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="# · Cổ phiếu / Ngành" className="h-14 px-2 text-xs font-extrabold uppercase text-muted-2" />
                     <SortableHead sortKey="price" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("price")} metricKey="price" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-muted-2" />
+                    <SortableHead sortKey="marketCapBillion" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="Vốn hóa" metricKey="market_cap_billion" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-cyan-200" />
                     <SortableHead sortKey="canslimScore" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_canslim_score")} metricKey="kfsp_canslim_score" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-emerald-300" />
                     <SortableHead sortKey="score4m" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_score_4m")} metricKey="kfsp_score_4m" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-amber-300" />
                     <SortableHead sortKey="pricePotential" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("kfsp_price_potential")} metricKey="kfsp_price_potential" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-ref" />
@@ -1621,7 +1618,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                                   {sectorSummary.sector}
                                 </div>
                                 <div className="mt-0.5 truncate text-xs text-muted-2">
-                                  Σ {sectorSummary.stockCount} mã ({childRows.length} nạp) · Top100 {sectorSummary.top100Count} · Vốn hóa Σ {formatMarketCapBillion(sectorSummary.totalMarketCapBillion)}
+                                  Σ {sectorSummary.stockCount} mã ({childRows.length} nạp) · Top Stocks {sectorSummary.stockCount} · Vốn hóa Σ {formatMarketCapBillion(sectorSummary.totalMarketCapBillion)}
                                 </div>
                               </div>
                             </div>
@@ -1664,8 +1661,8 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
 
                         {isExpanded && childRows.length === 0 && (
                           <TableRow className="border-white/[0.04] bg-[#050b14]/50">
-                            <TableCell colSpan={11} className="py-3 pl-12 text-xs italic text-muted-2">
-                              Chưa có mã chi tiết nạp sẵn từ dataset Top 500 / Top 100 cho ngành này.
+                            <TableCell colSpan={12} className="py-3 pl-12 text-xs italic text-muted-2">
+                              Chưa có mã chi tiết nạp sẵn từ dataset canonical Top Stocks cho ngành này.
                             </TableCell>
                           </TableRow>
                         )}
@@ -1696,7 +1693,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                                     <StockLogo symbol={child.ticker} size={34} className="shrink-0 rounded-full group-hover:shadow-[0_0_18px_-4px_rgba(103,232,249,.75)]" />
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-1 font-ticker text-[16px] font-extrabold leading-none tracking-tight text-white group-hover:text-cyan-200">
-                                        {child.ticker}{child.isTop100 && <Crown className="size-3 text-amber-300" />}
+                                        {child.ticker}
                                       </div>
                                       <div className="mt-1 flex items-center gap-1 text-[11px] font-bold uppercase text-cyan-300/80">
                                         <ChildSectorIcon className="size-3 shrink-0" />
@@ -1782,7 +1779,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                               <StockLogo symbol={row.ticker} size={36} className="shrink-0 rounded-full group-hover:shadow-[0_0_20px_-5px_rgba(103,232,249,.75)]" />
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1 font-ticker text-[16px] font-extrabold leading-none tracking-tight text-white group-hover:text-cyan-200">
-                                  {row.ticker}{row.isTop100 && <Crown className="size-3 text-amber-300" />}
+                                  {row.ticker}
                                 </div>
                                 <div className="mt-1 flex items-center gap-1 text-[11px] font-bold uppercase text-cyan-300/80">
                                   <SectorIcon className="size-3 shrink-0" />
@@ -1799,6 +1796,9 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                           <div className="mt-1 flex justify-center">
                             <MarketChangePill value={row.changePercent} tone={rowTone} compact />
                           </div>
+                        </TableCell>
+                        <TableCell className="px-1 text-center font-mono text-xs font-bold text-cyan-100">
+                          {formatMarketCapBillion(row.marketCapBillion)}
                         </TableCell>
                         <TableCell className="px-1 text-center">
                           <ScorePill value={row.canslimScore} tone="emerald" icon={Target} label="Điểm CANSLIM" description={overviewField("kfsp_canslim_score").description} metricKey="kfsp_canslim_score" onOpenGuide={openGuide} />
@@ -1839,7 +1839,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
                       </TableRow>
                     )
                   })}
-                  {!showSectorGroups && !filteredRatings.length && <TableRow><TableCell colSpan={11} className="h-32 text-center text-sm text-muted-2">Không có mã phù hợp với bộ lọc.</TableCell></TableRow>}
+                  {!showSectorGroups && !filteredRatings.length && <TableRow><TableCell colSpan={12} className="h-32 text-center text-sm text-muted-2">Không có mã phù hợp với bộ lọc.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </CardContent>

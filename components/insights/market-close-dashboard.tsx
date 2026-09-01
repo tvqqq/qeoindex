@@ -122,7 +122,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
                   Bubbles · Bản đồ giao dịch thị trường
                 </h2>
                 <p className="mt-0.5 text-xs text-slate-400 italic font-medium">
-                  KFSP KLGD TB 50 phiên &gt; 300.000; xếp theo thanh khoản giảm dần, tối đa 200 mã. Kích thước theo biến động giá.
+                  Top Stocks canonical; xếp theo KLGD TB 50 phiên giảm dần, hiển thị toàn bộ universe (tối đa 200 mã). Kích thước theo biến động giá.
                 </p>
                 <p className="mt-1 text-[10px] font-mono text-slate-500">Nguồn KFSP · snapshot {bubbleAsOfDate ?? "—"} · thiếu dữ liệu không được bù</p>
               </div>

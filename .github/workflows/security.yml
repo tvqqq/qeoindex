@@ -43,6 +43,8 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
       - name: Core regression suite
         run: pnpm test:core
+      - name: Canonical 200 UI regression
+        run: node --test tests/canonical-200-ui.test.ts
       - name: Touched lint
         run: pnpm lint:touched
       - name: TypeScript
