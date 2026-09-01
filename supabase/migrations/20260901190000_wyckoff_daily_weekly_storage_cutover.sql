@@ -21,7 +21,7 @@ alter table public.wyckoff_chart_series
   drop constraint if exists wyckoff_chart_series_timeframe_check;
 alter table public.wyckoff_chart_series
   add constraint wyckoff_chart_series_timeframe_check
-  check (timeframe = '1D') not valid;
+  check (timeframe in ('1D', '1W')) not valid;
 
 -- A successful full-provider bootstrap is a durable fact. Newly listed tickers with
 -- <60 calendar months must not repeat an 8-year provider bootstrap every EOD forever.
