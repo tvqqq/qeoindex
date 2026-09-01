@@ -45,6 +45,8 @@ jobs:
         run: pnpm test:core
       - name: KFSP canonical universe regression
         run: node --test tests/kfsp-canonical-universe-sync.test.ts
+      - name: KFSP manual recovery lifecycle regression
+        run: node --test tests/kfsp-manual-recovery-lifecycle.test.ts
       - name: Canonical 200 UI regression
         run: node --test tests/canonical-200-ui.test.ts
       - name: Touched lint
