@@ -41,6 +41,17 @@ test("EOD v3 publishes validated Wyckoff to Supabase before Council and archives
   assert.doesNotMatch(workflow, /notionAction|notionSupabaseRunId/)
 })
 
+test("EOD readiness retry classifier survives durable-workflow FatalError wrapping", () => {
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  assert.match(workflow, /function isEodNotReady/)
+  assert.match(workflow, /EOD_NOT_READY/)
+  assert.match(workflow, /FINAL EOD MARKET SNAPSHOTS INCOMPLETE/)
+  assert.match(workflow, /CANONICAL RATING UNIVERSE INCOMPLETE/)
+  assert.match(workflow, /KFSP\/TTAI RATING DATE/)
+  assert.match(workflow, /EOD_READY_MAX_ATTEMPTS\s*=\s*4/)
+  assert.match(workflow, /EOD_READY_RETRY_INTERVAL_MS\s*=\s*5 \* 60_000/)
+})
+
 test("EOD readiness is canonical-only and does not begin a Notion staging run", () => {
   const steps = source("lib/qeoindex-eod-workflow-steps.ts")
   assert.match(steps, /getCanonicalUniverse/)
