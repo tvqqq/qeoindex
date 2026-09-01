@@ -43,6 +43,8 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
       - name: Core regression suite
         run: pnpm test:core
+      - name: KFSP canonical universe regression
+        run: node --test tests/kfsp-canonical-universe-sync.test.ts
       - name: Canonical 200 UI regression
         run: node --test tests/canonical-200-ui.test.ts
       - name: Touched lint
