@@ -16,6 +16,7 @@ const ttaiMigration = readFileSync("supabase/migrations/20260823104000_kfsp_ttai
 const ttaiScheduleMigration = readFileSync("supabase/migrations/20260826013742_reschedule_kfsp_ttai_daily_0100_ict.sql", "utf8")
 const syncFunction = readFileSync("supabase/functions/kfsp-rating-sync/index.ts", "utf8")
 const ttaiSyncFunction = readFileSync("supabase/functions/kfsp-ttai-history-sync/index.ts", "utf8")
+const ttaiNormalize = readFileSync("supabase/functions/kfsp-ttai-history-sync/normalize.ts", "utf8")
 const fieldCatalog = readFileSync("supabase/functions/_shared/kfsp-catalog.ts", "utf8")
 
 test("stock ratings are authenticated read-only through RLS", () => {
@@ -29,14 +30,20 @@ test("stock ratings are authenticated read-only through RLS", () => {
   assert.doesNotMatch(authMigration, /grant (?:insert|update|delete)[^;]*to authenticated/i)
 })
 
-test("insights has no public auth bypass and reads with the user-scoped client", () => {
+test("insights has no public auth bypass and reads only the canonical Top Stocks universe", () => {
   assert.doesNotMatch(authGate, /isPublicRoute/)
   assert.doesNotMatch(insightsData, /NEXT_PUBLIC_SUPABASE_ANON_KEY/)
   assert.doesNotMatch(insightsData, /SUPABASE_SERVICE_ROLE_KEY/)
   assert.match(insightsData, /getInsightsDashboardData\(supabase: SupabaseClient\)/)
+  assert.match(insightsData, /getCanonicalUniverse/)
+  assert.match(insightsData, /const tickers = universe\.stocks\.map\(\(stock\) => stock\.ticker\)/)
   assert.match(insightsData, /\.from\("insights_stock_ratings"\)/)
   assert.match(insightsData, /\.eq\("is_published", true\)/)
-  assert.match(insightsData, /\.gt\("average_volume_50_sessions", 300_000\)[\s\S]*\.order\("average_volume_50_sessions", \{ ascending: false \}\)[\s\S]*\.limit\(200\)/)
+  assert.match(insightsData, /\.in\("ticker", tickers\)/)
+  assert.match(insightsData, /\.in\("ticker", chunk\)/)
+  assert.doesNotMatch(insightsData, /\.eq\("is_top100"/)
+  assert.match(insightsData, /const bubbleStocks: InsightsBubbleStock\[\] = databaseRows/)
+  assert.match(insightsData, /sort\(\(left, right\) => right\.averageVolume50Sessions - left\.averageVolume50Sessions/)
   assert.match(insightsData, /new Map\(/)
 })
 
@@ -130,7 +137,7 @@ test("TTAI history UI compares RS-S, exposes RRG history, and renders 4M/CANSLIM
   assert.match(ttaiDashboard, /fetch\(`\/api\/insights\/stock-history\?ticker=/)
 })
 
-test("TTAI quarterly history is normalized, authenticated read-only, and detects new financial periods", () => {
+test("TTAI quarterly history is normalized, authenticated read-only, and canonical-universe scoped", () => {
   assert.match(ttaiMigration, /create table if not exists public\.kfsp_ttai_quarterly_history/i)
   assert.match(ttaiMigration, /primary key \(ticker, period\)/i)
   assert.match(ttaiMigration, /fourm_components jsonb/i)
@@ -144,11 +151,15 @@ test("TTAI quarterly history is normalized, authenticated read-only, and detects
   assert.match(ttaiSyncFunction, /fourm-canslim-point-chart/)
   assert.match(ttaiSyncFunction, /currentFinancialPeriod/)
   assert.match(ttaiSyncFunction, /state\.get\(row\.ticker\) !== row\.financialPeriod/)
-  assert.match(ttaiSyncFunction, /periods\.length - values\.length/)
-  assert.match(ttaiSyncFunction, /fourm_option_history_chart/)
-  assert.match(ttaiSyncFunction, /canslim_option_history_chart/)
-  assert.match(ttaiSyncFunction, /data_table_4m/)
-  assert.match(ttaiSyncFunction, /data_table_canslim/)
+  assert.match(ttaiSyncFunction, /from "\.\/normalize\.ts"/)
+  assert.match(ttaiSyncFunction, /qeo_current_market_universe/)
+  assert.match(ttaiSyncFunction, /vn_top_stocks/)
+  assert.doesNotMatch(ttaiSyncFunction, /is_top100|top100_rank/)
+  assert.match(ttaiNormalize, /periods\.length - values\.length/)
+  assert.match(ttaiNormalize, /fourm_option_history_chart/)
+  assert.match(ttaiNormalize, /canslim_option_history_chart/)
+  assert.match(ttaiNormalize, /data_table_4m/)
+  assert.match(ttaiNormalize, /data_table_canslim/)
   assert.match(ttaiSyncFunction, /Deno\.env\.get\("KFSP_USERNAME"\)/)
   assert.match(ttaiSyncFunction, /Deno\.env\.get\("KFSP_PASSWORD"\)/)
   assert.doesNotMatch(ttaiSyncFunction, /Bearer\s+eyJ/i)
