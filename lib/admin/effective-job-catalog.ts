@@ -50,13 +50,22 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
     })
   }
 
+  if (job.key === "kfsp.rating_daily") {
+    return withSchedulePolicy({
+      ...job,
+      description: "Đồng bộ lại snapshot KFSP canonical Top Stocks 200. Chạy thủ công yêu cầu xác nhận và dùng one-shot recovery dispatcher.",
+      manualPolicy: "confirm",
+    })
+  }
+
   if (job.key === "kfsp.ttai_history") {
     return withSchedulePolicy({
       ...job,
-      description: "Kiểm tra và cập nhật lịch sử TTAI lúc 07:10 ICT khi kỳ báo cáo tài chính thay đổi.",
+      description: "Kiểm tra/cập nhật lịch sử TTAI lúc 07:10 ICT; chạy thủ công hỗ trợ batch tối đa 50 mã và force refresh qua one-shot recovery dispatcher.",
       scheduleUtc: "10 0 * * *",
       scheduleIct: "07:10 hàng ngày",
       schedulerName: "kfsp-ttai-history-daily-0710-ict",
+      manualPolicy: "confirm",
     })
   }
 

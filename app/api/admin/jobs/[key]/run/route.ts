@@ -8,6 +8,13 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
 
+type ManualJobApiParams = {
+  limit?: number
+  offset?: number
+  tickers?: string[]
+  force?: boolean
+}
+
 export async function POST(
   request: Request,
   props: { params: Promise<{ key: string }> },
@@ -41,6 +48,9 @@ export async function POST(
 
     const { reason, confirmed, params } = body ?? {}
     const requestId = crypto.randomUUID()
+    const normalizedParams = params && typeof params === "object"
+      ? params as ManualJobApiParams
+      : undefined
 
     const result = await dispatchManualAdminJob({
       key,
@@ -48,7 +58,7 @@ export async function POST(
       reason: String(reason || ""),
       requestId,
       confirmed: confirmed === true,
-      params: params && typeof params === "object" ? params as { limit?: number; offset?: number } : undefined,
+      params: normalizedParams,
     })
 
     if (!result.ok) {
@@ -60,7 +70,10 @@ export async function POST(
 
     return NextResponse.json(
       { ok: true, result },
-      { headers: { "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate" } },
+      {
+        status: result.summary?.queued === true ? 202 : 200,
+        headers: { "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate" },
+      },
     )
   } catch (error: unknown) {
     return NextResponse.json(

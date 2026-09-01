@@ -12,14 +12,18 @@ function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
-test("only the 4 allowlisted jobs are manual-safe", () => {
+test("only the 6 allowlisted jobs are manual-safe", () => {
   assert.deepEqual([...ALLOWLISTED_MANUAL_JOB_KEYS].sort(), [
+    "kfsp.rating_daily",
+    "kfsp.ttai_history",
     "market.sync_universe",
     "scanner.run",
     "signals.monitor",
     "wyckoff.ingest",
   ])
 
+  assert.equal(isManualJobAllowed("kfsp.rating_daily"), true)
+  assert.equal(isManualJobAllowed("kfsp.ttai_history"), true)
   assert.equal(isManualJobAllowed("market.sync_universe"), true)
   assert.equal(isManualJobAllowed("scanner.run"), true)
   assert.equal(isManualJobAllowed("signals.monitor"), true)
@@ -30,16 +34,45 @@ test("only the 4 allowlisted jobs are manual-safe", () => {
   assert.equal(isManualJobAllowed("arbitrary.job"), false)
 })
 
-test("getManualJobCapabilities returns metadata for the 4 manual-safe jobs", () => {
+test("getManualJobCapabilities returns metadata for the 6 manual-safe jobs", () => {
   const capabilities = getManualJobCapabilities()
-  assert.equal(capabilities.length, 4)
+  assert.equal(capabilities.length, 6)
   const keys = capabilities.map((c) => c.key).sort()
   assert.deepEqual(keys, [
+    "kfsp.rating_daily",
+    "kfsp.ttai_history",
     "market.sync_universe",
     "scanner.run",
     "signals.monitor",
     "wyckoff.ingest",
   ])
+  assert.equal(capabilities.find((c) => c.key === "kfsp.rating_daily")?.manualPolicy, "confirm")
+  assert.equal(capabilities.find((c) => c.key === "kfsp.ttai_history")?.manualPolicy, "confirm")
+})
+
+test("KFSP manual recovery is confirmation-gated and wired to the one-shot RPC", () => {
+  const effectiveCatalog = source("lib/admin/effective-job-catalog.ts")
+  const jobs = source("lib/admin/jobs.ts")
+  const actions = source("app/admin/actions.ts")
+  const api = source("app/api/admin/jobs/[key]/run/route.ts")
+  const modal = source("components/admin/admin-manual-job-modal.tsx")
+
+  assert.match(effectiveCatalog, /job\.key === "kfsp\.rating_daily"[\s\S]{0,500}manualPolicy: "confirm"/)
+  assert.match(effectiveCatalog, /job\.key === "kfsp\.ttai_history"[\s\S]{0,700}manualPolicy: "confirm"/)
+  assert.match(jobs, /qeo_dispatch_kfsp_job/)
+  assert.match(jobs, /p_request_id: input\.requestId/)
+  assert.match(jobs, /p_requested_by: input\.actorUserId/)
+  assert.match(jobs, /p_reason: input\.reason/)
+  assert.match(jobs, /p_tickers/)
+  assert.match(jobs, /p_force/)
+  assert.match(actions, /formData\.get\("tickers"\)/)
+  assert.match(actions, /formData\.get\("force"\)/)
+  assert.match(api, /tickers\?: string\[\]/)
+  assert.match(api, /force\?: boolean/)
+  assert.match(api, /result\.summary\?\.queued === true \? 202 : 200/)
+  assert.match(modal, /name="tickers"/)
+  assert.match(modal, /name="force"/)
+  assert.match(modal, /job\.key === "kfsp\.ttai_history"/)
 })
 
 test("dispatchManualAdminJob rejects un-allowlisted jobs with error", async () => {
