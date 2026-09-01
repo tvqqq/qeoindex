@@ -1,0 +1,46 @@
+name: Apply Board Cache Namespace Bump
+
+on:
+  push:
+    branches:
+      - fix/canonical-200-board-bubbles-composite
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bump board cache namespace and lock regression
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          page = Path("app/page.tsx")
+          text = page.read_text()
+          old = 'const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v4"'
+          new = 'const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v5"'
+          if text.count(old) != 1:
+              raise SystemExit(f"page cache namespace expected once, got {text.count(old)}")
+          page.write_text(text.replace(old, new, 1))
+
+          test_path = Path("tests/canonical-200-ui.test.ts")
+          test = test_path.read_text()
+          old_test = 'test("board maps live KFSP sector taxonomy into all six board groups", () => {\n'
+          new_test = '''test("board maps live KFSP sector taxonomy into all six board groups", () => {
+  const page = source("app/page.tsx")
+  assert.match(page, /BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v5"/)
+'''
+          if test.count(old_test) != 1:
+              raise SystemExit(f"board regression insertion point expected once, got {test.count(old_test)}")
+          test_path.write_text(test.replace(old_test, new_test, 1))
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/page.tsx tests/canonical-200-ui.test.ts
+          git commit -m "fix: invalidate stale board sector cache"
+          git push origin HEAD:${GITHUB_REF_NAME}
