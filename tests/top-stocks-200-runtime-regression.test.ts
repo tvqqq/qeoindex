@@ -1,18 +1,29 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
-const wyckoffPage = readFileSync("app/insights/wyckoff/page.tsx", "utf8")
-const wyckoffApi = readFileSync("app/api/insights/wyckoff/route.ts", "utf8")
-const wyckoffRunner = readFileSync("lib/wyckoff-unified-runner.ts", "utf8")
-const deferredDashboard = readFileSync("components/insights/wyckoff-deferred-dashboard.tsx", "utf8")
-const obsoleteDashboard = readFileSync("components/insights/wyckoff-chart-dashboard.tsx", "utf8")
-const aiFreshness = readFileSync("lib/ai-council-freshness.ts", "utf8")
-const realtime = readFileSync("lib/supabase/realtime.ts", "utf8")
-const intraday = readFileSync("lib/intraday-5m-service.ts", "utf8")
-const ratingModel = readFileSync("lib/insights-rating-model.ts", "utf8")
-const notionStaging = readFileSync("lib/wyckoff-v2-notion-staging.ts", "utf8")
-const schedulePrompt = readFileSync("scripts/chatgpt-plus-wyckoff-schedule-prompt.md", "utf8")
+function source(path: string) {
+  return readFileSync(path, "utf8")
+}
+
+const wyckoffPage = source("app/insights/wyckoff/page.tsx")
+const wyckoffApi = source("app/api/insights/wyckoff/route.ts")
+const wyckoffRunner = source("lib/wyckoff-unified-runner.ts")
+const deferredDashboard = source("components/insights/wyckoff-deferred-dashboard.tsx")
+const obsoleteDashboard = source("components/insights/wyckoff-chart-dashboard.tsx")
+const aiFreshness = source("lib/ai-council-freshness.ts")
+const realtime = source("lib/supabase/realtime.ts")
+const intraday = source("lib/intraday-5m-service.ts")
+const ratingModel = source("lib/insights-rating-model.ts")
+const notionStaging = source("lib/wyckoff-v2-notion-staging.ts")
+const schedulePrompt = source("scripts/chatgpt-plus-wyckoff-schedule-prompt.md")
+const marketSelection = source("lib/market-universe-selection.ts")
+const marketSectors = source("lib/market-sectors.ts")
+const boardStore = source("lib/supabase/board-overview.ts")
+const boardPage = source("app/page.tsx")
+const boardRefresh = source("components/market-universe-version-refresh.tsx")
+const orderbookCleanupMigration = source("supabase/migrations/20260901162500_prune_noncanonical_orderbook_snapshots.sql")
+const insightsPage = source("app/insights/page.tsx")
 
 test("Wyckoff runtime reads canonical Supabase universe instead of Notion Top100", () => {
   assert.match(wyckoffRunner, /getCanonicalUniverse/)
@@ -64,4 +75,46 @@ test("Notion flow is a canonical 200 mirror/staging contract, not Top100 source 
   assert.doesNotMatch(schedulePrompt, /Snapshot Expected = 500/)
   assert.match(schedulePrompt, /vn_top_stocks/)
   assert.match(schedulePrompt, /1000|Universe Count = 200/)
+})
+
+test("canonical selector enforces the approved 4-of-5 daily trading activity gate", () => {
+  assert.match(marketSelection, /MARKET_UNIVERSE_ACTIVITY_OBSERVATION_DAYS = 5/)
+  assert.match(marketSelection, /MARKET_UNIVERSE_MIN_ACTIVE_DAYS = 4/)
+  assert.match(marketSelection, /tradingObservationDays !== MARKET_UNIVERSE_ACTIVITY_OBSERVATION_DAYS/)
+  assert.match(marketSelection, /tradingActiveDays < MARKET_UNIVERSE_MIN_ACTIVE_DAYS/)
+})
+
+test("board orderbook read model is canonical-only and publication prunes stale rows", () => {
+  assert.match(boardStore, /getCanonicalBoardOverviewSnapshots/)
+  assert.match(boardStore, /\.in\("symbol", normalizedSymbols\)/)
+  assert.match(boardPage, /getCanonicalBoardOverviewSnapshots\(tickers\)/)
+  assert.match(orderbookCleanupMigration, /qeo_prune_noncanonical_orderbook_snapshots/)
+  assert.match(orderbookCleanupMigration, /market_universe_memberships/)
+  assert.match(orderbookCleanupMigration, /after update of status, published_at/)
+})
+
+test("open board tabs refresh when canonical universe run changes", () => {
+  assert.equal(existsSync("app/api/market-universe/version/route.ts"), true)
+  assert.match(boardPage, /MarketUniverseVersionRefresh universeRunId=\{canonical\.runId\}/)
+  assert.match(boardRefresh, /\/api\/market-universe\/version/)
+  assert.match(boardRefresh, /payload\.runId !== universeRunId/)
+  assert.match(boardRefresh, /router\.refresh\(\)/)
+})
+
+test("board sector taxonomy follows requested grouping rules", () => {
+  assert.match(marketSectors, /đầu tư xây dựng/)
+  assert.match(marketSectors, /return group\("real-estate"\)/)
+  assert.match(marketSectors, /phân bón/)
+  assert.match(marketSectors, /nông - lâm - ngư/)
+  assert.match(marketSectors, /return group\("other"\)/)
+})
+
+test("Insights normalizes ticker-specific sectors and removes empty sector groups", () => {
+  assert.equal(existsSync("lib/insights-sector-normalization.ts"), true)
+  if (!existsSync("lib/insights-sector-normalization.ts")) return
+  const normalizer = source("lib/insights-sector-normalization.ts")
+  assert.match(normalizer, /YEG:\s*"Dịch vụ công ích"/)
+  assert.match(normalizer, /TVC:\s*"Chứng khoán"/)
+  assert.match(normalizer, /stockCount > 0/)
+  assert.match(insightsPage, /normalizeInsightsDashboardSectors/)
 })

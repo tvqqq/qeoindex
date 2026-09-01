@@ -50,6 +50,17 @@ test("EOD readiness is canonical-only and does not begin a Notion staging run", 
   assert.doesNotMatch(steps, /publishIngestingWyckoffV2Run/)
 })
 
+test("EOD readiness retries known not-ready messages even when workflow wrapper drops error code", () => {
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  assert.match(workflow, /EOD_READY_MAX_ATTEMPTS = 4/)
+  assert.match(workflow, /EOD_READY_RETRY_INTERVAL_MS = 5 \* 60_000/)
+  assert.match(workflow, /function isEodNotReady/)
+  assert.match(workflow, /EOD_NOT_READY/)
+  assert.match(workflow, /FINAL EOD MARKET SNAPSHOTS INCOMPLETE/)
+  assert.match(workflow, /CANONICAL RATING UNIVERSE INCOMPLETE/)
+  assert.match(workflow, /KFSP\/TTAI RATING DATE/)
+})
+
 test("direct Wyckoff publisher accepts in-memory validated snapshots and verifies exact canonical membership", () => {
   const path = "lib/wyckoff-supabase-publish.ts"
   assert.equal(existsSync(new URL(`../${path}`, import.meta.url)), true)

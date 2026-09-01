@@ -39,9 +39,10 @@ export function boardSectorGroupForSector(sector: string) {
   const group = (key: string) => BOARD_SECTOR_GROUPS.find((item) => item.key === key)!
   if (normalized.includes("ngân hàng")) return group("bank")
   if (normalized.includes("chứng khoán") || normalized.includes("tài chính")) return group("securities")
-  if (normalized.includes("bất động sản") || normalized.includes("khu công nghiệp")) return group("real-estate")
-  if (["thương mại", "thực phẩm", "dược", "thủy sản", "nông - lâm - ngư", "nông nghiệp", "tiêu dùng", "bán lẻ"].some((term) => normalized.includes(term))) return group("consumer")
-  if (["công nghệ", "viễn thông", "xây dựng", "thép", "vật liệu", "sản xuất kinh doanh", "khoáng sản", "nhựa", "phân bón", "hóa chất", "cao su", "công nghiệp"].some((term) => normalized.includes(term))) return group("industrial-tech")
+  if (normalized.includes("bất động sản") || normalized.includes("khu công nghiệp") || normalized.includes("đầu tư xây dựng")) return group("real-estate")
+  if (["nông - lâm - ngư", "phân bón"].some((term) => normalized.includes(term))) return group("other")
+  if (["thương mại", "thực phẩm", "dược", "thủy sản", "nông nghiệp", "tiêu dùng", "bán lẻ"].some((term) => normalized.includes(term))) return group("consumer")
+  if (["công nghệ", "viễn thông", "xây dựng", "thép", "vật liệu", "sản xuất kinh doanh", "khoáng sản", "nhựa", "hóa chất", "cao su", "công nghiệp"].some((term) => normalized.includes(term))) return group("industrial-tech")
   return group("other")
 }
 

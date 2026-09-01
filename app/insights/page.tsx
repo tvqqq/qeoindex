@@ -4,6 +4,7 @@ import { LandingLogin } from "@/components/auth/landing-login"
 import { InsightsDashboard } from "@/components/insights/insights-dashboard"
 import { getServerAuthContext } from "@/lib/auth/server"
 import { getInsightsDashboardData } from "@/lib/insights-data"
+import { normalizeInsightsDashboardSectors } from "@/lib/insights-sector-normalization"
 
 export const dynamic = "force-dynamic"
 
@@ -22,6 +23,6 @@ export default async function InsightsPage({
   if (!auth) return <LandingLogin />
   const query = searchParams ? await searchParams : {}
   const requestedTicker = (Array.isArray(query.ticker) ? query.ticker[0] : query.ticker || (Array.isArray(query.rating) ? query.rating[0] : query.rating) || "").trim().toUpperCase()
-  const data = await getInsightsDashboardData(auth.supabase)
+  const data = normalizeInsightsDashboardSectors(await getInsightsDashboardData(auth.supabase))
   return <InsightsDashboard data={data} initialTicker={requestedTicker} />
 }

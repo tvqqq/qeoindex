@@ -10,13 +10,16 @@ function source(path: string) {
 
 test("board maps live KFSP sector taxonomy into all six board groups", () => {
   const page = source("app/page.tsx")
-  assert.match(page, /BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v5"/)
+  assert.match(page, /BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v6"/)
   assert.equal(boardSectorGroupForSector("NGÂN HÀNG").key, "bank")
   assert.equal(boardSectorGroupForSector("CHỨNG KHOÁN").key, "securities")
   assert.equal(boardSectorGroupForSector("BẤT ĐỘNG SẢN").key, "real-estate")
+  assert.equal(boardSectorGroupForSector("ĐẦU TƯ XÂY DỰNG").key, "real-estate")
   assert.equal(boardSectorGroupForSector("THƯƠNG MẠI").key, "consumer")
   assert.equal(boardSectorGroupForSector("THỰC PHẨM").key, "consumer")
   assert.equal(boardSectorGroupForSector("CÔNG NGHỆ").key, "industrial-tech")
+  assert.equal(boardSectorGroupForSector("PHÂN BÓN").key, "other")
+  assert.equal(boardSectorGroupForSector("NÔNG - LÂM - NGƯ").key, "other")
   assert.equal(boardSectorGroupForSector("DẦU KHÍ").key, "other")
 })
 
