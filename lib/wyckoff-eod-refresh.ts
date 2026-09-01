@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { getCanonicalUniverse } from "@/lib/market-universe"
+import { getCanonicalUniverse } from "./market-universe.ts"
 
 export const WYCKOFF_EOD_MAX_STOCKS = 200
 export const WYCKOFF_EOD_BATCH_SIZE = 10
