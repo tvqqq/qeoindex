@@ -3,12 +3,13 @@ import { getCache } from "@vercel/functions"
 
 import { intradaySnapshot, type IntradayPoint } from "@/lib/intraday-5m"
 import { fetchYahooFiveMinuteSnapshot } from "@/lib/yahoo-history"
-import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
+import { MARKET_UNIVERSE_MAX_SIZE } from "@/lib/market-universe-selection"
 import { getMarketSessionStatus, getVnTimeSeconds } from "@/lib/session-countdown"
 import { sessionTimestampSeconds, shouldAcceptRealtimeMiniChart } from "@/lib/market-session-ui"
 import { fetchLiveBatchQuotes } from "@/lib/broker-live-quotes"
 
 export const FETCH_CONCURRENCY = 12
+const INTRADAY_CACHE_VERSION = "market-universe:v11"
 
 export type IntradayRow = {
   symbol: string
@@ -48,12 +49,12 @@ export function vietnamDateKey(now: Date) {
 }
 
 export function latestSnapshotCacheKey(symbols: string[] | readonly string[], now: Date) {
-  return `top100:v10:${vietnamDateKey(now)}:latest:${symbols.join("-")}`
+  return `${INTRADAY_CACHE_VERSION}:${vietnamDateKey(now)}:latest:${symbols.join("-")}`
 }
 
 export function snapshotCacheKey(symbols: string[] | readonly string[], now: Date) {
   const status = getMarketSessionStatus(now)
-  return `top100:v10:${vietnamDateKey(now)}:${status.cacheBucketKey}:${symbols.join("-")}`
+  return `${INTRADAY_CACHE_VERSION}:${vietnamDateKey(now)}:${status.cacheBucketKey}:${symbols.join("-")}`
 }
 
 export function secondsToNextBucket(now: Date) {
@@ -112,7 +113,6 @@ export async function fetchDnseFiveMinutePoints(symbol: string, now: Date): Prom
     day: "2-digit",
   }).format(now)
   const [y, m, d] = vnDateStr.split("-").map(Number)
-  // 09:00:00 ICT = 02:00:00 UTC
   const from = Math.floor(Date.UTC(y, m - 1, d, 2, 0, 0) / 1000)
   const to = Math.max(from + 300, Math.floor(now.getTime() / 1000))
 
@@ -142,60 +142,57 @@ export async function fetchDnseFiveMinutePoints(symbol: string, now: Date): Prom
 export async function fetchSnapshot(symbols: string[] | readonly string[], now: Date): Promise<IntradaySnapshot> {
   const liveBatchResult = await fetchLiveBatchQuotes(symbols).catch(() => ({} as Record<string, any>))
   const rows = await mapWithConcurrency(symbols, FETCH_CONCURRENCY, async (symbol): Promise<IntradayRow> => {
-    // 1. Try high-fidelity DNSE 5m Chart API first (full continuous session bars)
     const dnsePoints = await fetchDnseFiveMinutePoints(symbol, now)
     if (dnsePoints && dnsePoints.length > 0) {
       const live = liveBatchResult[symbol]
-        const reference = live?.reference ?? dnsePoints[0]?.close ?? null
-        const price = dnsePoints.at(-1)?.close ?? live?.price ?? null
-        const change = price !== null && reference !== null ? price - reference : null
-        const changePercent = price !== null && reference !== null && reference > 0 ? ((price - reference) / reference) * 100 : null
-        return {
-          symbol,
-          provider: "Yahoo", // Keep polymorphic contract provider type
-          points: dnsePoints,
-          reference,
-          price,
-          change,
-          changePercent,
-          lastBarAt: dnsePoints.at(-1)?.time ?? null,
-          fallbackReason: null,
-          error: null,
-        }
+      const reference = live?.reference ?? dnsePoints[0]?.close ?? null
+      const price = dnsePoints.at(-1)?.close ?? live?.price ?? null
+      const change = price !== null && reference !== null ? price - reference : null
+      const changePercent = price !== null && reference !== null && reference > 0 ? ((price - reference) / reference) * 100 : null
+      return {
+        symbol,
+        provider: "Yahoo",
+        points: dnsePoints,
+        reference,
+        price,
+        change,
+        changePercent,
+        lastBarAt: dnsePoints.at(-1)?.time ?? null,
+        fallbackReason: null,
+        error: null,
       }
+    }
 
-      // 2. Fallback to Yahoo if DNSE is unavailable
-      try {
-        const yahoo = await fetchYahooFiveMinuteSnapshot(symbol, now)
-        const bars = yahoo.bars
-        const snapshot = intradaySnapshot(bars, yahoo.reference)
-        return {
-          symbol,
-          provider: "Yahoo",
-          points: bars.map(({ time, close }) => ({ time, close })),
-          ...snapshot,
-          lastBarAt: bars.at(-1)?.time ?? null,
-          fallbackReason: null,
-          error: null,
-        }
-      } catch (error) {
-        const live = liveBatchResult[symbol]
-        return {
-          symbol,
-          provider: null,
-          points: [],
-          reference: live?.reference ?? null,
-          price: live?.price ?? null,
-          change: live?.change ?? null,
-          changePercent: live?.changePercent ?? null,
-          lastBarAt: null,
-          fallbackReason: null,
-          error: error instanceof Error ? error.message : String(error),
-        }
+    try {
+      const yahoo = await fetchYahooFiveMinuteSnapshot(symbol, now)
+      const bars = yahoo.bars
+      const snapshot = intradaySnapshot(bars, yahoo.reference)
+      return {
+        symbol,
+        provider: "Yahoo",
+        points: bars.map(({ time, close }) => ({ time, close })),
+        ...snapshot,
+        lastBarAt: bars.at(-1)?.time ?? null,
+        fallbackReason: null,
+        error: null,
       }
-    })
+    } catch (error) {
+      const live = liveBatchResult[symbol]
+      return {
+        symbol,
+        provider: null,
+        points: [],
+        reference: live?.reference ?? null,
+        price: live?.price ?? null,
+        change: live?.change ?? null,
+        changePercent: live?.changePercent ?? null,
+        lastBarAt: null,
+        fallbackReason: null,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
+  })
 
-  // Merge fast live broker prices onto intraday rows
   const enhancedRows = rows.map((row) => {
     const live = liveBatchResult[row.symbol]
     if (!live || !live.price) return row
@@ -231,9 +228,8 @@ export async function fetchSnapshot(symbols: string[] | readonly string[], now: 
 export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly string[], now: Date = new Date()): Promise<IntradaySnapshot | null> {
   const bucketKey = snapshotCacheKey(symbols, now)
   const latestKey = latestSnapshotCacheKey(symbols, now)
-  const cache = getCache({ namespace: "market-board-v10" })
+  const cache = getCache({ namespace: "market-board-v11" })
 
-  // 1. Exact bucket from Runtime Cache
   try {
     const cached = await cache.get(bucketKey)
     if (isUsableCachedIntradaySnapshot(cached, symbols, now)) return cached
@@ -241,20 +237,17 @@ export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly s
 
   const redisClient = getRedis()
   if (redisClient) {
-    // 2. Exact bucket from Redis
     try {
       const cached = await redisClient.get<IntradaySnapshot>(bucketKey)
       if (isUsableCachedIntradaySnapshot(cached, symbols, now)) return cached
     } catch { /* Redis fail open */ }
 
-    // 3. Fallback to latest available snapshot of today from Redis
     try {
       const cachedLatest = await redisClient.get<IntradaySnapshot>(latestKey)
       if (isUsableCachedIntradaySnapshot(cachedLatest, symbols, now)) return cachedLatest
     } catch { /* Redis fail open */ }
   }
 
-  // 4. Fallback to latest snapshot from Runtime Cache
   try {
     const cachedLatest = await cache.get(latestKey)
     if (isUsableCachedIntradaySnapshot(cachedLatest, symbols, now)) return cachedLatest
@@ -270,14 +263,14 @@ export async function getIntraday5mSnapshot(symbols: string[] | readonly string[
   const snapshot = await fetchSnapshot(symbols, now)
   const key = snapshotCacheKey(symbols, now)
   const latestKey = latestSnapshotCacheKey(symbols, now)
-  const cache = getCache({ namespace: "market-board-v10" })
+  const cache = getCache({ namespace: "market-board-v11" })
   const redisClient = getRedis()
   const writeTtl = secondsToNextBucket(now)
   const latestTtl = 86400
 
   void Promise.allSettled([
-    cache.set(key, snapshot, { ttl: writeTtl, tags: ["market-board"], name: "Top 100 5m snapshot" }),
-    cache.set(latestKey, snapshot, { ttl: latestTtl, tags: ["market-board"], name: "Top 100 5m latest" }),
+    cache.set(key, snapshot, { ttl: writeTtl, tags: ["market-board"], name: "Top Stocks 5m snapshot" }),
+    cache.set(latestKey, snapshot, { ttl: latestTtl, tags: ["market-board"], name: "Top Stocks 5m latest" }),
     redisClient ? redisClient.set(key, snapshot, { ex: writeTtl }) : Promise.resolve(),
     redisClient ? redisClient.set(latestKey, snapshot, { ex: latestTtl }) : Promise.resolve(),
   ])
@@ -287,5 +280,5 @@ export async function getIntraday5mSnapshot(symbols: string[] | readonly string[
 
 export function parseSymbols(request: Request) {
   const values = new URL(request.url).searchParams.get("symbols") ?? ""
-  return [...new Set(values.split(",").map((symbol) => symbol.trim().toUpperCase()).filter((symbol) => /^[A-Z0-9]{2,12}$/.test(symbol)))].slice(0, UNIVERSE_SIZE)
+  return [...new Set(values.split(",").map((symbol) => symbol.trim().toUpperCase()).filter((symbol) => /^[A-Z0-9]{2,12}$/.test(symbol)))].slice(0, MARKET_UNIVERSE_MAX_SIZE)
 }
