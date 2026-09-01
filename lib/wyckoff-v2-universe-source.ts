@@ -1,4 +1,3 @@
-import { getCanonicalUniverse } from "./market-universe.ts"
 import { type NotionPage } from "./notion/client.ts"
 import { checkboxValue, numberValue, pageProperties, richText, selectText, titleText } from "./notion/properties.ts"
 import { selectWyckoffV2Universe, type WyckoffV2UniverseRow } from "./wyckoff-v2-universe.ts"
@@ -20,6 +19,7 @@ export function parseWyckoffV2UniversePage(page: NotionPage): WyckoffV2UniverseR
 }
 
 export async function loadWyckoffV2Universe() {
+  const { getCanonicalUniverse } = await import("@/lib/market-universe")
   const snapshot = await getCanonicalUniverse()
   const rows: WyckoffV2UniverseRow[] = snapshot.stocks.map((stock) => ({
     ticker: stock.ticker,
