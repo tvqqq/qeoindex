@@ -1536,7 +1536,10 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
           <Card className="mt-5 border border-white/[0.07] bg-panel/95 py-0 ring-0">
             <CardHeader className="flex-col gap-4 border-b border-white/[0.06] p-4 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
-                <Select value={sectorFilter} onValueChange={(value) => setSectorFilter(value ?? "all")}>
+                <Badge variant="outline" className="h-10 justify-center border-brand/30 bg-brand/10 px-3 text-sm font-bold text-brand sm:min-w-28">
+        Tất cả · {data.ratings.length} mã
+      </Badge>
+      <Select value={sectorFilter} onValueChange={(value) => setSectorFilter(value ?? "all")}>
                   <SelectTrigger aria-label="Lọc theo ngành" className="h-10 w-full min-w-64 border-white/10 bg-cell px-3 text-sm sm:text-base font-bold text-white hover:bg-white/[0.05] sm:w-80">
                     <SelectValue>{sectorFilter === "all" ? "Ngành: Tất cả ngành" : `Ngành: ${sectorFilter}`}</SelectValue>
                   </SelectTrigger>

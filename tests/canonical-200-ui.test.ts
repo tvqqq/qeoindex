@@ -33,6 +33,7 @@ test("Qeo Composite defaults to all canonical stocks and exposes sortable market
 
   assert.doesNotMatch(dashboard, /useState<"top100"\s*\|\s*"all">/)
   assert.doesNotMatch(dashboard, /\["top100",\s*"Top 100"\]/)
+  assert.match(dashboard, /Tất cả · \{data\.ratings\.length\} mã/)
   assert.doesNotMatch(dashboard, /showSectorGroups\s*=\s*universeFilter/)
   assert.match(dashboard, /"marketCapBillion"/)
   assert.match(dashboard, /sortKey="marketCapBillion"/)
