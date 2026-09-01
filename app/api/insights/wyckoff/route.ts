@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
 import { requireApiUser } from "@/lib/auth/server"
@@ -26,9 +27,7 @@ function finiteNumber(value: unknown) {
 }
 
 async function loadCanonicalWatchlist(
-  supabase: Awaited<ReturnType<typeof requireApiUser>> extends { ok: true; context: infer Context }
-    ? Context extends { supabase: infer Client } ? Client : never
-    : never,
+  supabase: SupabaseClient,
   canonical: CanonicalUniverseSnapshot,
 ) {
   const rows: WatchlistSnapshotRow[] = []
