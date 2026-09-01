@@ -16,7 +16,7 @@ export interface BoardOverviewRow {
   latest_price: number | null
   total_volume: number
   intraday_1m: unknown[]
-  foreign_flow: Record<string, unknown>
+  foreign_flow: ReturnType<typeof normalizeForeignFlow>
   updated_at: string
 }
 
@@ -55,21 +55,21 @@ export async function getCanonicalBoardOverviewSnapshots(
     if (error || !data) return {}
 
     const result: Record<string, BoardOverviewRow> = {}
-    for (const rawRow of data as Record<string, any>[]) {
+    for (const rawRow of data as Array<Record<string, unknown>>) {
       const symbol = String(rawRow.symbol || "").toUpperCase()
       if (!normalizedSymbols.includes(symbol)) continue
-      const reference = normalizeToKiloPrice(rawRow.reference_price)
-      const latest = normalizeToKiloPrice(rawRow.latest_price) || reference
+      const reference = normalizeToKiloPrice(Number(rawRow.reference_price))
+      const latest = normalizeToKiloPrice(Number(rawRow.latest_price)) || reference
       result[symbol] = {
         symbol,
         session_date: String(rawRow.session_date || ""),
         reference_price: reference,
-        ceiling_price: normalizeToKiloPrice(rawRow.ceiling_price) || (reference ? Math.round(reference * 1.07 * 100) / 100 : null),
-        floor_price: normalizeToKiloPrice(rawRow.floor_price) || (reference ? Math.round(reference * 0.93 * 100) / 100 : null),
+        ceiling_price: normalizeToKiloPrice(Number(rawRow.ceiling_price)) || (reference ? Math.round(reference * 1.07 * 100) / 100 : null),
+        floor_price: normalizeToKiloPrice(Number(rawRow.floor_price)) || (reference ? Math.round(reference * 0.93 * 100) / 100 : null),
         latest_price: latest,
         total_volume: normalizeVolume(rawRow.total_volume),
-        intraday_1m: normalizeIntradayBars(rawRow.intraday_1m),
-        foreign_flow: normalizeForeignFlow(rawRow.foreign_flow, latest) as Record<string, unknown>,
+        intraday_1m: normalizeIntradayBars(Array.isArray(rawRow.intraday_1m) ? rawRow.intraday_1m : []),
+        foreign_flow: normalizeForeignFlow(rawRow.foreign_flow, latest),
         updated_at: String(rawRow.updated_at || ""),
       }
     }
