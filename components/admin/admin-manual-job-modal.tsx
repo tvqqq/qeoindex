@@ -90,6 +90,36 @@ export function AdminManualJobModal({ job, onClose }: AdminManualJobModalProps) 
             </div>
           ) : null}
 
+          {job.key === "kfsp.ttai_history" ? (
+            <div className="space-y-3 rounded-xl border border-sky-500/20 bg-sky-500/[0.06] p-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-300">
+                  Mã TTAI cần refresh <span className="text-emerald-400">*</span>
+                </label>
+                <textarea
+                  name="tickers"
+                  required
+                  rows={3}
+                  placeholder="VCB, FPT, MSN (tối đa 50 mã)"
+                  className="mt-1.5 w-full rounded-xl border border-white/[0.1] bg-[#080c11] p-3 font-mono text-xs uppercase text-white placeholder-slate-500 focus:border-sky-500/50 focus:outline-none"
+                />
+                <p className="mt-1 text-[10px] text-slate-500">Phân cách bằng dấu phẩy, khoảng trắng hoặc xuống dòng. Chỉ mã trong canonical universe mới được Edge Function xử lý.</p>
+              </div>
+              <label className="flex items-start gap-2.5 text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  name="force"
+                  value="true"
+                  className="mt-0.5 h-4 w-4 rounded border-white/20 bg-[#080c11]"
+                />
+                <span>
+                  <span className="font-medium text-white">Force refresh</span>
+                  <span className="mt-0.5 block text-[10px] text-slate-500">Bỏ qua financial-period state hiện tại và fetch lại lịch sử cho batch đã nhập.</span>
+                </span>
+              </label>
+            </div>
+          ) : null}
+
           <div>
             <label className="block text-xs font-medium text-slate-300">
               Lý do thực thi <span className="text-emerald-400">*</span> (8–240 ký tự)
