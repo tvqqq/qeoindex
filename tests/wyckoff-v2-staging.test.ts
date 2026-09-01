@@ -6,7 +6,7 @@ import { buildWyckoffV2TickerSnapshots, type WyckoffV2Snapshot } from "../lib/wy
 import { selectWyckoffV2Universe, type WyckoffV2UniverseRow } from "../lib/wyckoff-v2-universe.ts"
 import type { OhlcvBar } from "../lib/technical-indicators.ts"
 
-function universe(count = 100): WyckoffV2UniverseRow[] {
+function universe(count = 200): WyckoffV2UniverseRow[] {
   return Array.from({ length: count }, (_, index) => ({
     ticker: `T${String(index + 1).padStart(3, "0")}`,
     active: true,
@@ -75,14 +75,18 @@ function buildSnapshots(dailyCount: number): WyckoffV2Snapshot[] {
   })
 }
 
-test("v2 universe keeps 100 Active HOSE tickers and moves duplicate-rank anomaly behind valid ranks", () => {
+test("v2 universe keeps up to 200 supported-exchange tickers and moves duplicate-rank anomaly behind valid ranks", () => {
   const rows = universe()
+  rows[40] = { ...rows[40], exchange: "HNX" }
+  rows[80] = { ...rows[80], exchange: "UPCOM" }
   rows[20] = { ...rows[20], ticker: "DMX", rank: 21 }
   rows[21] = { ...rows[21], ticker: "TCX", rank: 21 }
 
   const result = selectWyckoffV2Universe(rows)
-  assert.equal(result.stocks.length, 100)
-  assert.equal(new Set(result.stocks.map((row) => row.ticker)).size, 100)
+  assert.equal(result.stocks.length, 200)
+  assert.equal(new Set(result.stocks.map((row) => row.ticker)).size, 200)
+  assert.ok(result.stocks.some((row) => row.exchange === "HNX"))
+  assert.ok(result.stocks.some((row) => row.exchange === "UPCOM"))
   assert.ok(result.warnings.some((warning) => /duplicate Rank 21/i.test(warning)))
   assert.equal(result.stocks.at(-1)?.ticker, "TCX")
   assert.equal(result.stocks.find((row) => row.ticker === "TCX")?.rank, 21)
@@ -91,36 +95,41 @@ test("v2 universe keeps 100 Active HOSE tickers and moves duplicate-rank anomaly
 test("v2 universe moves missing and out-of-range rank anomalies to the deterministic tail without renumbering", () => {
   const rows = universe()
   rows[5] = { ...rows[5], ticker: "NULLR", rank: null }
-  rows[6] = { ...rows[6], ticker: "OUTR", rank: 151 }
+  rows[6] = { ...rows[6], ticker: "OUTR", rank: 201 }
 
   const result = selectWyckoffV2Universe(rows)
   assert.deepEqual(result.stocks.slice(-2).map((row) => [row.ticker, row.rank]), [
-    ["OUTR", 151],
+    ["OUTR", 201],
     ["NULLR", null],
   ])
   assert.equal(result.warnings.length >= 2, true)
 })
 
-test("v2 universe hard-stops duplicate ticker, non-HOSE candidates and fewer than 100 unique Active HOSE", () => {
+test("v2 universe rejects duplicate ticker or unsupported exchange but allows HNX/UPCOM and fewer than 200", () => {
   const duplicate = universe()
-  duplicate[99] = { ...duplicate[99], ticker: duplicate[0].ticker }
+  duplicate[199] = { ...duplicate[199], ticker: duplicate[0].ticker }
   assert.throws(() => selectWyckoffV2Universe(duplicate), /duplicate ticker/i)
 
-  const nonHose = universe()
-  nonHose[50] = { ...nonHose[50], exchange: "HNX" }
-  assert.throws(() => selectWyckoffV2Universe(nonHose), /non-HOSE/i)
+  const multiExchange = universe(99)
+  multiExchange[40] = { ...multiExchange[40], exchange: "HNX" }
+  multiExchange[60] = { ...multiExchange[60], exchange: "UPCOM" }
+  const selected = selectWyckoffV2Universe(multiExchange)
+  assert.equal(selected.stocks.length, 99)
 
-  assert.throws(() => selectWyckoffV2Universe(universe(99)), /fewer than 100/i)
+  const unsupported = universe()
+  unsupported[50] = { ...unsupported[50], exchange: "OTC" }
+  assert.throws(() => selectWyckoffV2Universe(unsupported), /unsupported exchange/i)
 })
 
-test("v2 universe deterministically selects exactly 100 when more than 100 candidates exist", () => {
-  const rows = universe(102)
-  rows[100] = { ...rows[100], ticker: "AAA", rank: null }
-  rows[101] = { ...rows[101], ticker: "ZZZ", rank: null }
+test("v2 universe deterministically caps at 200 when more than 200 candidates exist", () => {
+  const rows = universe(202)
+  rows[200] = { ...rows[200], ticker: "AAA", rank: null }
+  rows[201] = { ...rows[201], ticker: "ZZZ", rank: null }
   const result = selectWyckoffV2Universe(rows)
-  assert.equal(result.stocks.length, 100)
+  assert.equal(result.stocks.length, 200)
   assert.equal(result.stocks.some((row) => row.ticker === "AAA"), false)
   assert.equal(result.stocks.some((row) => row.ticker === "ZZZ"), false)
+  assert.ok(result.warnings.some((warning) => /capped at 200/i.test(warning)))
 })
 
 test("cached v2 builder creates exactly five complete snapshot keys at the 60-bar contract", () => {
