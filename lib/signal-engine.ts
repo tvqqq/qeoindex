@@ -1,3 +1,5 @@
+import { isVietnamSecuritiesTradingDay } from "./vn-market-calendar.ts"
+
 export const SIGNAL_ENGINE_VERSION = "workflow-v2.1"
 
 export interface SignalDailyScan {
@@ -56,6 +58,7 @@ function localClock(timestampMs: number) {
   return { weekday: value("weekday"), hour: Number(value("hour")), minute: Number(value("minute")) }
 }
 export function marketSessionProgress(timestampMs = Date.now()) {
+  if (!isVietnamSecuritiesTradingDay(timestampMs)) return { active: false, progress: 0, label: "Closed" }
   const { weekday, hour, minute } = localClock(timestampMs)
   if (["Sat", "Sun"].includes(weekday)) return { active: false, progress: 0, label: "Closed" }
   const clock = hour * 60 + minute

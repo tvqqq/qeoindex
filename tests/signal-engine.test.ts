@@ -47,6 +47,12 @@ test("market session boundaries include ATO and fail closed outside HOSE windows
   assert.equal(marketSessionProgress(atIct("10:00", "2026-08-16")).active, false)
 })
 
+test("market session closes for 2026 National Day holiday and reopens on September 3", () => {
+  assert.equal(marketSessionProgress(atIct("10:00", "2026-09-01")).active, false)
+  assert.equal(marketSessionProgress(atIct("10:00", "2026-09-01")).label, "Closed")
+  assert.equal(marketSessionProgress(atIct("10:00", "2026-09-03")).active, true)
+})
+
 test("BUY requires complete bullish daily context and confirmation", () => {
   const quote: LiveQuote = { ticker: "HPG", price: 25.5, totalVolume: 8_000_000, timestamp: atIct("10:30") }
   assert.equal(evaluateBuy(scan, quote, quote.timestamp).signal, true)

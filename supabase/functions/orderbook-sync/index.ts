@@ -1,5 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2"
+import {
+  isVietnamSecuritiesTradingDateKey,
+  isVietnamSecuritiesTradingDay,
+  vietnamDateKey,
+} from "../_shared/vn-market-calendar.ts"
 
 const UNIVERSE_KEY = "vn_top_stocks"
 const corsHeaders = {
@@ -71,12 +76,8 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { tickers, runId } = await loadCanonicalTickers(supabase)
-    const tickerSet = new Set(tickers)
-    const today = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
-    }).format(new Date())
-
+    const now = new Date()
+    const today = vietnamDateKey(now)
     let rawSnapshots: Record<string, unknown>[] = []
     let isAutomated = false
     if (req.method === "POST") {
@@ -87,6 +88,20 @@ Deno.serve(async (req: Request) => {
         else isAutomated = true
       } catch { isAutomated = true }
     } else isAutomated = true
+
+    if ((isAutomated || rawSnapshots.length === 0) && !isVietnamSecuritiesTradingDay(now)) {
+      return new Response(JSON.stringify({
+        ok: true,
+        skipped: true,
+        reason: "NON_TRADING_DAY",
+        session_date: today,
+        count: 0,
+        synced_at: now.toISOString(),
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+    }
+
+    const { tickers, runId } = await loadCanonicalTickers(supabase)
+    const tickerSet = new Set(tickers)
 
     if (isAutomated || rawSnapshots.length === 0) {
       const ptMap: Record<string, Record<string, unknown>[]> = {}
@@ -188,15 +203,16 @@ Deno.serve(async (req: Request) => {
       }
 
       return new Response(JSON.stringify({
-        ok: true, source: "vps_full_deep_sync", universeRunId: runId, universeCount: tickers.length,
+        ok: true, skipped: false, source: "vps_full_deep_sync", universeRunId: runId, universeCount: tickers.length,
         count: records.length, session_date: today, synced_at: new Date().toISOString(),
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
     const records = rawSnapshots.map((item) => {
       const latestQuote = (item.latestQuote || {}) as Record<string, unknown>
+      const sessionDate = String(item.session_date ?? today)
       return {
-        symbol: String(item.symbol || "").toUpperCase(), session_date: item.session_date ?? today,
+        symbol: String(item.symbol || "").toUpperCase(), session_date: sessionDate,
         reference_price: normalizePrice(Number(item.reference_price ?? latestQuote.reference)),
         ceiling_price: normalizePrice(Number(item.ceiling_price ?? latestQuote.ceiling)),
         floor_price: normalizePrice(Number(item.floor_price ?? latestQuote.floor)),
@@ -206,10 +222,10 @@ Deno.serve(async (req: Request) => {
         trades_truncated: Boolean(item.trades_truncated ?? item.tradesTruncated), latest_quote: item.latest_quote ?? item.latestQuote ?? {},
         foreign_flow: item.foreign_flow ?? item.foreign ?? {}, put_through: item.put_through ?? item.putThrough ?? [], updated_at: new Date().toISOString(),
       }
-    }).filter((record) => tickerSet.has(record.symbol))
+    }).filter((record) => tickerSet.has(record.symbol) && isVietnamSecuritiesTradingDateKey(record.session_date))
 
     if (!records.length) {
-      return new Response(JSON.stringify({ ok: false, message: "No canonical-universe snapshots supplied" }), {
+      return new Response(JSON.stringify({ ok: false, message: "No canonical trading-session snapshots supplied" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
@@ -217,7 +233,7 @@ Deno.serve(async (req: Request) => {
     const { data, error } = await supabase.from("stock_orderbook_snapshots").upsert(records, { onConflict: "symbol" }).select("symbol, updated_at")
     if (error) throw new Error(error.message)
     return new Response(JSON.stringify({
-      ok: true, universeRunId: runId, count: records.length,
+      ok: true, skipped: false, universeRunId: runId, count: records.length,
       synced: data?.map((d: Record<string, unknown>) => d.symbol) ?? records.map((record) => record.symbol), updated_at: new Date().toISOString(),
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   } catch (err: unknown) {

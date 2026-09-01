@@ -1,5 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 
 import type {
   NormalizedIndexRow,
@@ -10,6 +11,10 @@ import {
   deriveRiskLabel,
   deriveSentimentLabel,
 } from "../supabase/functions/_shared/market-close-normalizer.ts"
+
+function source(path: string) {
+  return readFileSync(path, "utf8")
+}
 
 test("market-close edge types: deriveRiskLabel matches verified DOM scale", () => {
   assert.equal(deriveRiskLabel(0.25), "Thấp")
@@ -79,4 +84,11 @@ test("market-close edge types: structural interface completeness", () => {
   }
 
   assert.equal(dummyLeader.estimated_index_points, 0.85)
+})
+
+test("direct market snapshot writer fails closed on Vietnam securities holidays", () => {
+  const marketSession = source("supabase/functions/market-session/index.ts")
+  assert.match(marketSession, /_shared\/vn-market-calendar\.ts/)
+  assert.match(marketSession, /isVietnamSecuritiesTradingDateKey/)
+  assert.match(marketSession, /NON_TRADING_DAY/)
 })
