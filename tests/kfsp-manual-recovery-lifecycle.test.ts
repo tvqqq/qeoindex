@@ -6,6 +6,7 @@ const lifecycleMigrationPath = "supabase/migrations/20260902060000_kfsp_manual_r
 const helperPath = "supabase/functions/_shared/kfsp-manual-lifecycle.ts"
 const ratingPath = "supabase/functions/kfsp-rating-sync/index.ts"
 const ttaiPath = "supabase/functions/kfsp-ttai-history-sync/index.ts"
+const jobsPath = "lib/admin/jobs.ts"
 
 function source(path: string) {
   assert.ok(existsSync(path), `${path} must exist`)
@@ -54,4 +55,19 @@ test("TTAI sync correlates manual request id and preserves partial-failure seman
   assert.match(ttai, /request_id/)
   assert.match(ttai, /crypto\.randomUUID\(\)/)
   assert.match(ttai, /failed \? 207 : 200/)
+})
+
+test("Root Admin queues KFSP recovery without synchronous executeSystemJob terminalization", () => {
+  const jobs = source(jobsPath)
+  assert.match(jobs, /p_actor_user_id: input\.actorUserId/)
+  assert.match(jobs, /p_max_duration_minutes:/)
+  assert.match(jobs, /state: row\.status/)
+  assert.match(jobs, /systemJobRunId: row\.system_job_run_id/)
+
+  const functionStart = jobs.indexOf("export async function dispatchManualAdminJob")
+  const kfspAsyncBranch = jobs.indexOf('input.key === "kfsp.rating_daily" || input.key === "kfsp.ttai_history"', functionStart)
+  const genericTelemetry = jobs.indexOf("await executeSystemJob", functionStart)
+  assert.ok(functionStart >= 0, "dispatchManualAdminJob must exist")
+  assert.ok(kfspAsyncBranch > functionStart, "KFSP async branch must exist in dispatchManualAdminJob")
+  assert.ok(genericTelemetry > kfspAsyncBranch, "KFSP async dispatch must return before generic synchronous telemetry")
 })
