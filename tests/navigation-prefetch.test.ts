@@ -26,22 +26,20 @@ test("dense ticker lists do not auto-prefetch every dynamic research route", () 
   }
 })
 
-test("Wyckoff chart shell avoids eager route work and compositor-heavy navigation effects", () => {
-  const file = source("components/insights/wyckoff-chart-dashboard.tsx")
+test("Wyckoff shell defers heavy chart work and avoids compositor-heavy navigation effects", () => {
+  const deferred = source("components/insights/wyckoff-deferred-dashboard.tsx")
+  const infographic = source("components/insights/wyckoff-infographic-dashboard.tsx")
+  const files = `${deferred}\n${infographic}`
 
-  assert.equal(file.includes("backdrop-blur-2xl"), false, "Wyckoff workspace must not use backdrop-filter blur")
-  assert.equal(file.includes("drop-shadow-["), false, "Wyckoff workspace must not add CSS filter drop-shadows around the chart canvas")
-  assert.equal(file.includes("transition-all"), false, "Wyckoff interactions should transition only paint-safe properties")
-  assert.equal(file.includes("data-wyckoff-back-row"), false, "Wyckoff should not reserve a separate Rating navigation row")
-  assert.equal(file.includes("Quay lại Rating"), false, "Wyckoff should not restore the removed Rating control")
-  assert.equal(file.includes("<Link"), false, "Wyckoff dense shell should avoid heavyweight Next Link navigation")
-
-  const headerStart = file.indexOf("<header")
-  const headerEnd = file.indexOf("</header>", headerStart)
-  assert.notEqual(headerStart, -1)
-  assert.notEqual(headerEnd, -1)
-  const header = file.slice(headerStart, headerEnd)
-  assert.doesNotMatch(header, /<Link/)
+  assert.equal(files.includes("backdrop-blur-2xl"), false, "Wyckoff workspace must not use backdrop-filter blur")
+  assert.equal(files.includes("transition-all"), false, "Wyckoff interactions should transition only bounded properties")
+  assert.equal(files.includes("data-wyckoff-back-row"), false, "Wyckoff should not reserve a separate Rating navigation row")
+  assert.equal(files.includes("Quay lại Rating"), false, "Wyckoff should not restore the removed Rating control")
+  assert.match(deferred, /dynamic\(/)
+  assert.match(deferred, /ssr:\s*false/)
+  assert.match(deferred, /requestAnimationFrame/)
+  assert.match(deferred, /AbortController/)
+  assert.doesNotMatch(deferred, /<Link/)
 })
 
 test("top navigation restores Insights as a styled parent menu with three child pages", () => {
