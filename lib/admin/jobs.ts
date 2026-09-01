@@ -1,4 +1,4 @@
-import { getAdminJobDefinition } from "./catalog.ts"
+import { getEffectiveAdminJobDefinition } from "./effective-job-catalog.ts"
 import { executeSystemJob } from "./job-telemetry.ts"
 import { sanitizeAdminValue } from "./redact.ts"
 import { validateChangeReason } from "./request-security.ts"
@@ -9,6 +9,8 @@ export const ALLOWLISTED_MANUAL_JOB_KEYS = [
   "scanner.run",
   "signals.monitor",
   "wyckoff.ingest",
+  "kfsp.rating_daily",
+  "kfsp.ttai_history",
 ] as const
 
 export type AllowlistedManualJobKey = (typeof ALLOWLISTED_MANUAL_JOB_KEYS)[number]
@@ -21,13 +23,20 @@ export interface ManualJobCapability {
   group: AdminJobGroup
 }
 
+export interface ManualJobParams {
+  limit?: number
+  offset?: number
+  tickers?: string[]
+  force?: boolean
+}
+
 export interface DispatchManualAdminJobInput {
   key: string
   actorUserId: string
   reason: string
   requestId: string
   confirmed?: boolean
-  params?: { limit?: number; offset?: number }
+  params?: ManualJobParams
 }
 
 export interface AdminJobExecutionResult {
@@ -39,13 +48,15 @@ export interface AdminJobExecutionResult {
   error?: string
 }
 
+const TICKER_PATTERN = /^[A-Z0-9]{2,12}$/
+
 export function isManualJobAllowed(jobKey: string): boolean {
   return (ALLOWLISTED_MANUAL_JOB_KEYS as readonly string[]).includes(jobKey)
 }
 
 export function getManualJobCapabilities(): ManualJobCapability[] {
   return ALLOWLISTED_MANUAL_JOB_KEYS.map((key) => {
-    const def = getAdminJobDefinition(key)
+    const def = getEffectiveAdminJobDefinition(key)
     return {
       key,
       label: def?.label ?? key,
@@ -90,7 +101,7 @@ async function writeAuditLog(entry: {
   }
 }
 
-async function runScannerJob(params?: { limit?: number; offset?: number }): Promise<Record<string, unknown>> {
+async function runScannerJob(params?: ManualJobParams): Promise<Record<string, unknown>> {
   const { runScannerUniverse } = await import("../scanner-runner.ts")
   const result = await runScannerUniverse(params)
   return {
@@ -99,6 +110,60 @@ async function runScannerJob(params?: { limit?: number; offset?: number }): Prom
     completed: result.completed.length,
     skipped: result.skipped.length,
     errors: result.errors.length,
+  }
+}
+
+function normalizeKfspTickers(raw: unknown): string[] {
+  const values = Array.isArray(raw)
+    ? raw
+    : typeof raw === "string"
+      ? raw.split(/[;,\s]+/)
+      : []
+  return [...new Set(values
+    .map((value) => String(value || "").trim().toUpperCase())
+    .filter((ticker) => TICKER_PATTERN.test(ticker)))]
+}
+
+async function runKfspRecoveryDispatch(input: DispatchManualAdminJobInput): Promise<Record<string, unknown>> {
+  const isTtai = input.key === "kfsp.ttai_history"
+  const tickers = normalizeKfspTickers(input.params?.tickers)
+
+  if (isTtai && (tickers.length < 1 || tickers.length > 50)) {
+    throw new Error("TTAI recovery yêu cầu từ 1 đến 50 mã cổ phiếu hợp lệ.")
+  }
+  if (!isTtai && tickers.length > 0) {
+    throw new Error("KFSP Rating recovery không nhận danh sách mã riêng lẻ.")
+  }
+
+  const { getSupabaseServerClient } = await import("../supabase/server.ts")
+  const supabase = getSupabaseServerClient()
+  if (!supabase) throw new Error("Supabase service client chưa được cấu hình.")
+
+  const { data, error } = await supabase.rpc("qeo_dispatch_kfsp_job", {
+    p_job_key: input.key,
+    p_request_id: input.requestId,
+    p_reason: input.reason,
+    p_tickers: isTtai ? tickers : null,
+    p_force: isTtai ? input.params?.force === true : false,
+    p_requested_by: input.actorUserId,
+  })
+  if (error) {
+    throw new Error(`KFSP recovery dispatch thất bại (${error.code || "unknown"}).`)
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row || !row.request_id || !row.net_request_id) {
+    throw new Error("KFSP recovery dispatcher không trả về request evidence hợp lệ.")
+  }
+
+  return {
+    ok: true,
+    queued: true,
+    requestId: row.request_id,
+    netRequestId: row.net_request_id,
+    duplicate: row.duplicate === true,
+    tickers: isTtai ? tickers : undefined,
+    force: isTtai ? input.params?.force === true : undefined,
   }
 }
 
@@ -126,7 +191,7 @@ export async function dispatchManualAdminJob(input: DispatchManualAdminJobInput)
     }
   }
 
-  const definition = getAdminJobDefinition(input.key)
+  const definition = getEffectiveAdminJobDefinition(input.key)
   if (definition?.manualPolicy === "confirm" && input.confirmed !== true) {
     return { ok: false, jobKey: input.key, runId: null, durationMs: 0, error: "Tác vụ yêu cầu xác nhận rõ ràng trước khi chạy." }
   }
@@ -152,6 +217,9 @@ export async function dispatchManualAdminJob(input: DispatchManualAdminJobInput)
         if (input.key === "wyckoff.ingest") {
           const { ingestLatestReadyWyckoffRun } = await import("../wyckoff-notion-ingest.ts")
           return await ingestLatestReadyWyckoffRun()
+        }
+        if (input.key === "kfsp.rating_daily" || input.key === "kfsp.ttai_history") {
+          return await runKfspRecoveryDispatch(input)
         }
         throw new Error(`Unhandled job: ${input.key}`)
       },
