@@ -383,12 +383,12 @@ export async function getAiCouncilData(
     .map((row) => {
       const rating = normalizeRating(row, rankByTicker.get(row.ticker) ?? null)
       const snapshots = wyckoffByTicker.get(row.ticker) || []
-      const evidenceHash = buildEvidenceHash(rating, snapshots)
       const baseStock = buildCouncilStock(rating, snapshots)
+      const stock = { ...baseStock, evidenceHash: buildEvidenceHash(rating, snapshots) }
       const promptEvidence: AiCouncilPromptStockSnapshot | undefined = options.includePromptEvidence
-        ? { rating, snapshots, ratingDate, evidenceHash }
+        ? { rating, snapshots, ratingDate, evidenceHash: stock.evidenceHash }
         : undefined
-      return { ...baseStock, evidenceHash, ...(promptEvidence ? { promptEvidence } : {}) }
+      return { ...stock, ...(promptEvidence ? { promptEvidence } : {}) }
     })
     .sort((left, right) => (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER) || right.councilScore - left.councilScore || left.ticker.localeCompare(right.ticker))
 
