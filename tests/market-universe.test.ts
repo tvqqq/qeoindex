@@ -4,7 +4,18 @@ import test from "node:test"
 
 import { selectMarketUniverse, type MarketUniverseSelectionRow } from "../lib/market-universe-selection.ts"
 
-function row(ticker: string, marketCapBillion: number, averageVolume50d: number): MarketUniverseSelectionRow {
+type ActivityRow = MarketUniverseSelectionRow & {
+  tradingObservationDays: number
+  tradingActiveDays: number
+}
+
+function row(
+  ticker: string,
+  marketCapBillion: number,
+  averageVolume50d: number,
+  tradingObservationDays = 5,
+  tradingActiveDays = 5,
+): ActivityRow {
   return {
     ticker,
     companyName: `${ticker} Company`,
@@ -13,6 +24,8 @@ function row(ticker: string, marketCapBillion: number, averageVolume50d: number)
     marketCapBillion,
     averageVolume50d,
     sourceAsOfDate: "2026-09-01",
+    tradingObservationDays,
+    tradingActiveDays,
   }
 }
 
@@ -31,6 +44,18 @@ test("selector uses strict > boundaries and requires both conditions", () => {
 
   assert.deepEqual(selected.map((item) => item.ticker), ["PASS"])
   assert.equal(selected[0]?.rank, 1)
+})
+
+test("selector excludes suspended or restricted-weekly stocks using recent daily activity", () => {
+  const selected = selectMarketUniverse([
+    row("ACTIVE", 400, 500_000, 5, 5),
+    row("ONEZERO", 300, 500_000, 5, 4),
+    row("POM", 200, 500_000, 5, 2),
+    row("ROS", 100, 5_000_000, 5, 0),
+    row("BOOT", 500, 500_000, 4, 4),
+  ], { minMarketCapBillion: 10, minAverageVolume50d: 250_000, maxSize: 200 })
+
+  assert.deepEqual(selected.map((item) => item.ticker), ["ACTIVE", "ONEZERO"])
 })
 
 test("selector ranks market cap desc then Avg50 desc then ticker asc", () => {
@@ -95,6 +120,8 @@ test("monthly sync contract guarantees Storage object before publication", () =>
   assert.match(code, /250_000|250000/)
   assert.match(code, /market_cap_billion/)
   assert.match(code, /average_volume_50_sessions/)
+  assert.match(code, /tradingObservationDays|activity_observation_days/)
+  assert.match(code, /tradingActiveDays|activity_positive_days/)
   assert.match(code, /generated_fallback/)
   assert.match(code, /qeo_publish_market_universe_run/)
 })
