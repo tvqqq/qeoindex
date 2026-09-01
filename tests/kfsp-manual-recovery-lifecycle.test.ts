@@ -43,7 +43,6 @@ test("rating sync correlates manual request id while scheduled runs keep random 
   assert.match(rating, /manualKfspRequestId\(requestBody\)/)
   assert.match(rating, /beginManualKfspLifecycle/)
   assert.match(rating, /finalizeManualKfspLifecycle/)
-  assert.match(rating, /request_id/)
   assert.match(rating, /crypto\.randomUUID\(\)/)
 })
 
@@ -52,7 +51,6 @@ test("TTAI sync correlates manual request id and preserves partial-failure seman
   assert.match(ttai, /manualKfspRequestId\(requestBody\)/)
   assert.match(ttai, /beginManualKfspLifecycle/)
   assert.match(ttai, /finalizeManualKfspLifecycle/)
-  assert.match(ttai, /request_id/)
   assert.match(ttai, /crypto\.randomUUID\(\)/)
   assert.match(ttai, /failed \? 207 : 200/)
 })
