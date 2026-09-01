@@ -123,11 +123,12 @@ truncate table
   public.wyckoff_scan_runs
 restart identity cascade;
 
--- Current market/orderbook projections are rebuilt immediately after the new universe publish.
+-- Current market/orderbook projections are rebuilt immediately after cutover.
 truncate table public.stock_orderbook_snapshots restart identity cascade;
 
--- Remove the pre-cutover canonical snapshot too: the release must publish a fresh run.
-truncate table public.market_universe_memberships, public.market_universe_runs restart identity cascade;
+-- Keep the already-published vn_top_stocks snapshot live during the destructive
+-- cutover. After the fresh monthly publisher succeeds, release automation deletes
+-- superseded market_universe runs. This avoids an empty-universe production window.
 
 -- Remove stale cached/derived TTAI synchronization state only; provider quarterly history remains
 -- source evidence and is not a Top100 membership materialization.
