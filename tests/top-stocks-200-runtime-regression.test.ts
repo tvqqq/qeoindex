@@ -150,9 +150,9 @@ test("clean rebuild is an explicit one-shot purge of rebuildable stock operation
 
   assert.match(migration, /market_universe_memberships/)
   assert.match(migration, /market_universe_runs/)
-  assert.doesNotMatch(migration, /truncate table[^;]*kfsp_provider_tokens/is)
-  assert.doesNotMatch(migration, /truncate table[^;]*kfsp_ttai_quarterly_history/is)
-  assert.doesNotMatch(migration, /truncate table[^;]*market_ohlcv_archive_ranges/is)
+  assert.doesNotMatch(migration, /truncate table[^;]*kfsp_provider_tokens/i)
+  assert.doesNotMatch(migration, /truncate table[^;]*kfsp_ttai_quarterly_history/i)
+  assert.doesNotMatch(migration, /truncate table[^;]*market_ohlcv_archive_ranges/i)
   assert.match(migration, /check \(timeframe = '1D'\)/)
   assert.match(migration, /check \(timeframe in \('1D', '1W'\)\)/)
 })
