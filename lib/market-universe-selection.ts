@@ -1,5 +1,7 @@
 export const MARKET_UNIVERSE_KEY = "vn_top_stocks" as const
 export const MARKET_UNIVERSE_MAX_SIZE = 200 as const
+export const MARKET_UNIVERSE_ACTIVITY_OBSERVATION_DAYS = 5 as const
+export const MARKET_UNIVERSE_MIN_ACTIVE_DAYS = 4 as const
 
 export interface MarketUniverseSelectionRow {
   ticker: string
@@ -9,6 +11,8 @@ export interface MarketUniverseSelectionRow {
   marketCapBillion: number
   averageVolume50d: number
   sourceAsOfDate: string
+  tradingObservationDays: number
+  tradingActiveDays: number
 }
 
 export interface MarketUniverseSelectionFilters {
@@ -24,6 +28,11 @@ export interface SelectedMarketUniverseRow extends MarketUniverseSelectionRow {
 function finitePositive(value: unknown): number | null {
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function finiteNonNegativeInteger(value: unknown): number | null {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null
 }
 
 export function selectMarketUniverse(
@@ -43,8 +52,21 @@ export function selectMarketUniverse(
     const ticker = String(row.ticker || "").trim().toUpperCase()
     const marketCapBillion = finitePositive(row.marketCapBillion)
     const averageVolume50d = finitePositive(row.averageVolume50d)
-    if (!/^[A-Z0-9]{2,12}$/.test(ticker) || marketCapBillion == null || averageVolume50d == null) return []
+    const tradingObservationDays = finiteNonNegativeInteger(row.tradingObservationDays)
+    const tradingActiveDays = finiteNonNegativeInteger(row.tradingActiveDays)
+    if (
+      !/^[A-Z0-9]{2,12}$/.test(ticker)
+      || marketCapBillion == null
+      || averageVolume50d == null
+      || tradingObservationDays == null
+      || tradingActiveDays == null
+    ) return []
     if (!(marketCapBillion > minMarketCapBillion) || !(averageVolume50d > minAverageVolume50d)) return []
+    if (
+      tradingObservationDays !== MARKET_UNIVERSE_ACTIVITY_OBSERVATION_DAYS
+      || tradingActiveDays < MARKET_UNIVERSE_MIN_ACTIVE_DAYS
+      || tradingActiveDays > tradingObservationDays
+    ) return []
     return [{
       ticker,
       companyName: row.companyName ? String(row.companyName) : null,
@@ -53,6 +75,8 @@ export function selectMarketUniverse(
       marketCapBillion,
       averageVolume50d,
       sourceAsOfDate: String(row.sourceAsOfDate),
+      tradingObservationDays,
+      tradingActiveDays,
     }]
   })
 
