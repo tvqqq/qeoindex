@@ -11,6 +11,9 @@ export interface WyckoffV2UniverseSelection {
   warnings: string[]
 }
 
+const MAX_UNIVERSE_SIZE = 200
+const SUPPORTED_EXCHANGES = new Set(["HOSE", "HNX", "UPCOM"])
+
 type ClassifiedRow = WyckoffV2UniverseRow & { rankValid: boolean }
 
 function normalizedRow(row: WyckoffV2UniverseRow): WyckoffV2UniverseRow {
@@ -25,7 +28,7 @@ function normalizedRow(row: WyckoffV2UniverseRow): WyckoffV2UniverseRow {
 }
 
 function rankIsInContract(rank: number | null) {
-  return rank !== null && Number.isInteger(rank) && rank >= 1 && rank <= 100
+  return rank !== null && Number.isInteger(rank) && rank >= 1 && rank <= MAX_UNIVERSE_SIZE
 }
 
 function anomalyComparator(a: ClassifiedRow, b: ClassifiedRow) {
@@ -40,19 +43,15 @@ export function selectWyckoffV2Universe(rows: WyckoffV2UniverseRow[]): WyckoffV2
   if (!Array.isArray(rows)) throw new Error("Universe query unavailable")
 
   const active = rows.map(normalizedRow).filter((row) => row.active)
-  if (active.some((row) => row.exchange !== "HOSE")) {
-    const offenders = active.filter((row) => row.exchange !== "HOSE").map((row) => row.ticker).slice(0, 5)
-    throw new Error(`Universe contains non-HOSE Active candidates: ${offenders.join(", ")}`)
-  }
+  if (!active.length) throw new Error("Universe has no active tickers")
 
   const tickerSeen = new Set<string>()
   for (const row of active) {
     if (!/^[A-Z0-9]{2,12}$/.test(row.ticker)) throw new Error(`Invalid ticker symbol: ${row.ticker || "<empty>"}`)
+    if (!SUPPORTED_EXCHANGES.has(row.exchange)) throw new Error(`Unsupported exchange for ${row.ticker}: ${row.exchange || "<empty>"}`)
     if (tickerSeen.has(row.ticker)) throw new Error(`Duplicate ticker symbol: ${row.ticker}`)
     tickerSeen.add(row.ticker)
   }
-
-  if (active.length < 100) throw new Error(`Universe has fewer than 100 unique Active HOSE tickers: ${active.length}`)
 
   const rankCandidates = [...active].sort((a, b) => {
     const aValid = rankIsInContract(a.rank)
@@ -87,16 +86,18 @@ export function selectWyckoffV2Universe(rows: WyckoffV2UniverseRow[]): WyckoffV2
   for (const [rank, tickers] of [...duplicateGroups.entries()].sort((a, b) => a[0] - b[0])) {
     if (tickers.length > 1) warnings.push(`duplicate Rank ${rank}: ${[...tickers].sort().join(", ")}; later duplicate(s) moved to anomaly tail`)
   }
+  if (active.length > MAX_UNIVERSE_SIZE) warnings.push(`Universe has ${active.length} active tickers; capped at ${MAX_UNIVERSE_SIZE}`)
 
   const validRows = classified
     .filter((row) => row.rankValid)
     .sort((a, b) => (a.rank as number) - (b.rank as number) || a.ticker.localeCompare(b.ticker))
   const anomalyRows = classified.filter((row) => !row.rankValid).sort(anomalyComparator)
-  const ordered = [...validRows, ...anomalyRows]
-  const stocks = ordered.slice(0, 100).map(({ rankValid: _rankValid, ...row }) => row)
+  const stocks = [...validRows, ...anomalyRows]
+    .slice(0, MAX_UNIVERSE_SIZE)
+    .map(({ rankValid: _rankValid, ...row }) => row)
 
-  if (stocks.length !== 100 || new Set(stocks.map((row) => row.ticker)).size !== 100) {
-    throw new Error("Unable to deterministically select exactly 100 unique Active HOSE tickers")
+  if (!stocks.length || new Set(stocks.map((row) => row.ticker)).size !== stocks.length) {
+    throw new Error("Unable to deterministically select canonical universe")
   }
 
   return { stocks, warnings }
