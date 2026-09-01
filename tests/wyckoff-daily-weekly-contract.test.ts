@@ -16,15 +16,18 @@ test("Wyckoff runtime supports exactly Daily and Weekly timeframes", () => {
   assert.doesNotMatch(builder, /aggregateFourHour|aggregateMonthly|args\.hourly/)
 })
 
-test("persistent Wyckoff OHLCV stores and refreshes Daily only", () => {
+test("persistent Wyckoff OHLCV accepts new Daily writes only without deleting legacy history", () => {
   const history = source("lib/ohlcv-history-store.ts")
   const cache = source("lib/wyckoff-v2-cache-read.ts")
   const migration = source("supabase/migrations/20260901190000_wyckoff_daily_weekly_storage_cutover.sql")
 
   assert.doesNotMatch(history, /fetchHourlyMarketHistoryWindow/)
   assert.doesNotMatch(cache, /"1H"/)
-  assert.match(migration, /delete from public\.market_ohlcv_history\s+where timeframe <> '1D'/)
-  assert.match(migration, /check \(timeframe = '1D'\)/)
+  assert.doesNotMatch(migration, /delete from public\.market_ohlcv_history/i)
+  assert.doesNotMatch(migration, /delete from public\.wyckoff_analysis_snapshots/i)
+  assert.doesNotMatch(migration, /delete from public\.wyckoff_chart_series/i)
+  assert.match(migration, /check \(timeframe = '1D'\) not valid/i)
+  assert.match(migration, /check \(timeframe in \('1D', '1W'\)\) not valid/i)
 })
 
 test("EOD builds two Wyckoff snapshots per canonical ticker", () => {

@@ -1,32 +1,27 @@
 begin;
 
 -- ---------------------------------------------------------------------------
--- Wyckoff operational contract: raw Daily only; Weekly is derived deterministically.
--- Remove obsolete intraday/raw and non-Daily/Weekly derived rows before tightening checks.
+-- Wyckoff operational write contract: raw Daily only; Weekly is derived deterministically.
+-- Historical non-contract rows are intentionally preserved until archive coverage is verified.
+-- NOT VALID checks reject new non-contract writes without scanning/deleting legacy rows.
 -- ---------------------------------------------------------------------------
-delete from public.market_ohlcv_history
-where timeframe <> '1D';
-
 alter table public.market_ohlcv_history
   drop constraint if exists market_ohlcv_history_timeframe_check;
 alter table public.market_ohlcv_history
-  add constraint market_ohlcv_history_timeframe_check check (timeframe = '1D');
-
-delete from public.wyckoff_analysis_snapshots
-where timeframe not in ('1D', '1W');
+  add constraint market_ohlcv_history_timeframe_check
+  check (timeframe = '1D') not valid;
 
 alter table public.wyckoff_analysis_snapshots
   drop constraint if exists wyckoff_analysis_snapshots_timeframe_check;
 alter table public.wyckoff_analysis_snapshots
-  add constraint wyckoff_analysis_snapshots_timeframe_check check (timeframe in ('1D', '1W'));
-
-delete from public.wyckoff_chart_series
-where timeframe <> '1D';
+  add constraint wyckoff_analysis_snapshots_timeframe_check
+  check (timeframe in ('1D', '1W')) not valid;
 
 alter table public.wyckoff_chart_series
   drop constraint if exists wyckoff_chart_series_timeframe_check;
 alter table public.wyckoff_chart_series
-  add constraint wyckoff_chart_series_timeframe_check check (timeframe = '1D');
+  add constraint wyckoff_chart_series_timeframe_check
+  check (timeframe = '1D') not valid;
 
 -- A successful full-provider bootstrap is a durable fact. Newly listed tickers with
 -- <60 calendar months must not repeat an 8-year provider bootstrap every EOD forever.
