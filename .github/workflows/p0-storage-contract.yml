@@ -1,0 +1,20 @@
+name: P0 Storage Contract
+
+on:
+  push:
+    branches:
+      - feat/p0-history-storage-lifecycle
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/dnse-request-windows.test.ts tests/wyckoff-daily-weekly-contract.test.ts
