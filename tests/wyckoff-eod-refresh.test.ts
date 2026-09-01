@@ -147,6 +147,7 @@ test("EOD orchestration is one durable unified dependency workflow", () => {
   assert.match(workflow, /for \(let offset = 0; offset < ready\.stocks\.length; offset \+= 10\)/)
   assert.match(workflow, /ready\.stocks\.slice\(offset, offset \+ 10\)/)
   assert.match(steps, /buildWyckoffV2TickerSnapshots/)
+  assert.match(steps, /publishWyckoffV2SnapshotsDirect/)
   assert.match(steps, /runAiCouncilDailyOperation/)
   assert.match(steps, /runAiCouncilDebateOperation/)
   assert.match(operations, /export async function runAiCouncilDailyOperation/)
@@ -155,17 +156,20 @@ test("EOD orchestration is one durable unified dependency workflow", () => {
   assert.match(route, /isMachineRequestAuthorized/)
 })
 
-test("unified EOD workflow is fail-closed and orders readiness -> history -> Wyckoff -> publish -> deterministic -> LLM", () => {
+test("unified EOD workflow is fail-closed and orders readiness -> history -> Wyckoff -> Supabase validate/publish -> Council -> archive", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   const bodyStart = workflow.indexOf("export async function qeoindexEodPipeline")
   const body = workflow.slice(bodyStart)
   const market = body.indexOf("runEodReadyStep")
   const history = body.indexOf("runHistoryRefreshBatchStep")
   const wyckoff = body.indexOf("runWyckoffBuildStep")
-  const validation = body.indexOf("runNotionValidateStep")
+  const validation = body.indexOf("runSupabaseValidateStep")
   const publish = body.indexOf("runSupabasePublishStep")
   const deterministic = body.indexOf("runDeterministicCouncilStep")
   const debate = body.indexOf("runLlmDebateStep")
+  const notionArchive = body.indexOf("runNotionArchiveStep")
+  const driveArchive = body.indexOf("runDriveArchiveStep")
+  const retention = body.indexOf("runRetentionCleanupStep")
   assert.ok(bodyStart >= 0)
   assert.ok(market >= 0)
   assert.ok(history > market)
@@ -174,8 +178,12 @@ test("unified EOD workflow is fail-closed and orders readiness -> history -> Wyc
   assert.ok(publish > validation)
   assert.ok(deterministic > publish)
   assert.ok(debate > deterministic)
+  assert.ok(notionArchive > debate)
+  assert.ok(driveArchive > notionArchive)
+  assert.ok(retention > driveArchive)
   assert.match(body, /published && deterministic\.ok/)
   assert.match(body, /failQeoIndexEodRunStep/)
+  assert.doesNotMatch(body, /runNotionValidateStep|runNotionStagingBatchStep|runIngestStep/)
 })
 
 test("production has one Supabase-triggered EOD chain and no legacy Vercel EOD cron", () => {
