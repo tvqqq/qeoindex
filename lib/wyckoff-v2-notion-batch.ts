@@ -15,7 +15,7 @@ import {
   type WyckoffV2NotionIo,
 } from "./wyckoff-v2-notion-staging.ts"
 
-const TIMEFRAMES = ["1H", "4H", "1D", "1W", "1M"] as const
+const TIMEFRAMES = ["1D", "1W"] as const
 const MAX_BATCH_SNAPSHOTS = 50
 const DEFAULT_WRITE_INTERVAL_MS = 360
 
@@ -86,10 +86,10 @@ async function querySnapshotPages(runKey: string, io: WyckoffV2NotionIo) {
   const result = await io.queryDataSource(WYCKOFF_V2_SNAPSHOTS_DATA_SOURCE_ID, {
     filter: { property: "Run Key", rich_text: { equals: runKey } },
     pageSize: 100,
-    maxPages: 5,
+    maxPages: 4,
     errorContext: "Notion Wyckoff v2 batch snapshot query",
   })
-  if (result.hasMore) throw new Error(`More than 500 Notion snapshots found for ${runKey}`)
+  if (result.hasMore) throw new Error(`More than 400 Notion snapshots found for ${runKey}`)
   return result.results
 }
 
@@ -113,11 +113,11 @@ function assertSnapshotBatch(runKey: string, snapshots: WyckoffV2Snapshot[]) {
   }
 
   if (snapshots.length !== tickerFrames.size * TIMEFRAMES.length) {
-    throw new Error(`Notion staging batch must contain all five timeframes per ticker; received ${snapshots.length} snapshots for ${tickerFrames.size} ticker(s)`)
+    throw new Error(`Notion staging batch must contain Daily and Weekly per ticker; received ${snapshots.length} snapshots for ${tickerFrames.size} ticker(s)`)
   }
   for (const [ticker, frames] of tickerFrames) {
     if (frames.size !== TIMEFRAMES.length || TIMEFRAMES.some((timeframe) => !frames.has(timeframe))) {
-      throw new Error(`${ticker} does not have all five timeframes in Notion staging batch`)
+      throw new Error(`${ticker} does not have both Daily and Weekly in Notion staging batch`)
     }
   }
 }

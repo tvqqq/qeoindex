@@ -50,14 +50,13 @@ function applyStudy(controller: ChartController, study: WyckoffChartStudy, showS
   const latest = study.bars.at(-1)
   if (!latest) return
   const format = pricePrecision(latest.close)
-  const intraday = study.timeframe === "1H" || study.timeframe === "4H"
 
   controller.chart.applyOptions({
     timeScale: {
-      timeVisible: intraday,
+      timeVisible: false,
       secondsVisible: false,
       rightOffset: 8,
-      barSpacing: intraday ? 8 : 9,
+      barSpacing: 9,
       minBarSpacing: 2,
     },
   })
@@ -125,7 +124,7 @@ function applyStudy(controller: ChartController, study: WyckoffChartStudy, showS
     }
   }
 
-  const visible = study.timeframe === "1M" ? 84 : study.timeframe === "1W" ? 150 : 180
+  const visible = study.timeframe === "1W" ? 150 : 180
   const last = study.bars.length - 1
   controller.chart.timeScale().setVisibleLogicalRange({ from: Math.max(-0.5, last - visible + 1), to: last + 8 })
 }

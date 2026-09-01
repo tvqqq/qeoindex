@@ -1,15 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import type { CachedOhlcvHistory } from "./ohlcv-history-store.ts"
-import type { HistoricalProvider, RawHistoryTimeframe } from "./market-history-contract.ts"
+import type { HistoricalProvider } from "./market-history-contract.ts"
 import type { OhlcvBar } from "./technical-indicators.ts"
 
 export const DAILY_V2_CACHE_LIMIT = 1700
-export const HOURLY_V2_CACHE_LIMIT = 360
 
 export interface StoredV2OhlcvRow {
   ticker: string
-  timeframe: RawHistoryTimeframe
+  timeframe: "1D"
   bar_time: string
   open: number
   high: number
@@ -35,23 +34,19 @@ function validBar(row: StoredV2OhlcvRow): OhlcvBar | null {
   return { time: Math.floor(timestamp / 1000), open, high, low, close, volume }
 }
 
-export function cachedHistoryFromRows(
-  ticker: string,
-  timeframe: RawHistoryTimeframe,
-  inputRows: StoredV2OhlcvRow[],
-): CachedOhlcvHistory {
+export function cachedHistoryFromRows(ticker: string, inputRows: StoredV2OhlcvRow[]): CachedOhlcvHistory {
   const rows = inputRows
-    .filter((row) => row.ticker === ticker && row.timeframe === timeframe)
+    .filter((row) => row.ticker === ticker && row.timeframe === "1D")
     .slice()
     .sort((a, b) => new Date(a.bar_time).getTime() - new Date(b.bar_time).getTime())
   const usable = rows
     .map((row) => ({ row, bar: validBar(row) }))
     .filter((item): item is { row: StoredV2OhlcvRow; bar: OhlcvBar } => Boolean(item.bar))
-  if (!usable.length) throw new Error(`OHLCV cache has no usable ${timeframe} bars for ${ticker}`)
+  if (!usable.length) throw new Error(`OHLCV cache has no usable Daily bars for ${ticker}`)
   const latest = usable.at(-1)!
   return {
     ticker,
-    timeframe,
+    timeframe: "1D",
     bars: usable.map((item) => item.bar),
     provider: provider(latest.row.provider),
     detail: latest.row.provider_detail,
@@ -62,32 +57,26 @@ export function cachedHistoryFromRows(
   }
 }
 
-async function loadRows(
-  supabase: SupabaseClient,
-  ticker: string,
-  timeframe: RawHistoryTimeframe,
-  limit: number,
-) {
+async function loadRows(supabase: SupabaseClient, ticker: string) {
   const { data, error } = await supabase
     .from("market_ohlcv_history")
     .select("ticker,timeframe,bar_time,open,high,low,close,volume,provider,provider_detail,source_url,fetched_at")
     .eq("ticker", ticker)
-    .eq("timeframe", timeframe)
+    .eq("timeframe", "1D")
     .order("bar_time", { ascending: false })
-    .limit(limit)
-  if (error) throw new Error(`OHLCV cache read failed for ${ticker} ${timeframe}: ${error.message}`)
+    .limit(DAILY_V2_CACHE_LIMIT)
+  if (error) throw new Error(`OHLCV cache read failed for ${ticker} Daily: ${error.message}`)
   return (data || []) as StoredV2OhlcvRow[]
 }
 
 export async function loadWyckoffV2CachedTickerHistory(supabase: SupabaseClient, tickerInput: string) {
   const ticker = tickerInput.trim().toUpperCase()
   if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new Error(`Invalid ticker: ${tickerInput}`)
-  const [dailyRows, hourlyRows] = await Promise.all([
-    loadRows(supabase, ticker, "1D", DAILY_V2_CACHE_LIMIT),
-    loadRows(supabase, ticker, "1H", HOURLY_V2_CACHE_LIMIT),
-  ])
+  const dailyRows = await loadRows(supabase, ticker)
+  const daily = cachedHistoryFromRows(ticker, dailyRows)
   return {
-    daily: cachedHistoryFromRows(ticker, "1D", dailyRows),
-    hourly: cachedHistoryFromRows(ticker, "1H", hourlyRows),
+    daily,
+    // Compatibility alias for legacy modules during the cutover. It points to Daily data and is never persisted as intraday history.
+    hourly: daily,
   }
 }

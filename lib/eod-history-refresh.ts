@@ -46,7 +46,7 @@ export function buildEodHistoryRefreshSummary(result: OhlcvUniverseRefreshResult
     completedTickers: result.completedTickers,
     failedTickers: result.failedTickers,
     dailyFetchedBars: result.dailyFetchedBars,
-    hourlyFetchedBars: result.hourlyFetchedBars,
+    hourlyFetchedBars: result.hourlyFetchedBars ?? 0,
     backfillOperations: result.backfillOperations,
     deltaOperations: result.deltaOperations,
     limitedCoverageCount: result.limitedCoverage.length,

@@ -30,34 +30,14 @@ function dailyBars(count: number, start = Date.UTC(2020, 0, 1) / 1000): OhlcvBar
   })
 }
 
-function hourlySessionBars(days: number, startDate = Date.UTC(2025, 10, 1)): OhlcvBar[] {
-  const hoursUtc = [2, 3, 4, 6, 7] // 09:00,10:00,11:00,13:00,14:00 ICT
-  const bars: OhlcvBar[] = []
-  for (let day = 0; day < days; day += 1) {
-    for (let slot = 0; slot < hoursUtc.length; slot += 1) {
-      const index = day * hoursUtc.length + slot
-      const price = 50 + index * 0.002 + Math.sin(index / 9) * 0.3
-      bars.push({
-        time: (startDate + day * 86400_000 + hoursUtc[slot] * 3600_000) / 1000,
-        open: price - 0.05,
-        high: price + 0.2,
-        low: price - 0.2,
-        close: price,
-        volume: 400_000 + (index % 12) * 8_000,
-      })
-    }
-  }
-  return bars
-}
-
-function cached(ticker: string, timeframe: "1D" | "1H", bars: OhlcvBar[]): CachedOhlcvHistory {
+function cachedDaily(ticker: string, bars: OhlcvBar[]): CachedOhlcvHistory {
   return {
     ticker,
-    timeframe,
+    timeframe: "1D",
     bars,
     provider: "DNSE",
-    detail: `DNSE cached ${timeframe}`,
-    sourceUrl: `https://openapi.dnse.com.vn/price/ohlc?symbol=${ticker}&resolution=${timeframe}&type=STOCK`,
+    detail: "DNSE cached 1D",
+    sourceUrl: `https://openapi.dnse.com.vn/price/ohlc?symbol=${ticker}&resolution=1D&type=STOCK`,
     fetchedAt: "2026-08-25T08:20:00.000Z",
     firstBarAt: new Date(bars[0].time * 1000).toISOString(),
     lastBarAt: new Date(bars.at(-1)!.time * 1000).toISOString(),
@@ -68,9 +48,8 @@ function buildSnapshots(dailyCount: number): WyckoffV2Snapshot[] {
   const stock: WyckoffV2UniverseRow = { ticker: "MSN", active: true, exchange: "HOSE", rank: 15, sector: "Consumer" }
   return buildWyckoffV2TickerSnapshots({
     stock,
-    daily: cached("MSN", "1D", dailyBars(dailyCount)),
-    hourly: cached("MSN", "1H", hourlySessionBars(120)),
-    runKey: "WYCKOFF-2026-08-25-EOD-v2",
+    daily: cachedDaily("MSN", dailyBars(dailyCount)),
+    runKey: "WYCKOFF-2026-08-25-EOD-v3",
     scanDate: "2026-08-25",
   })
 }
@@ -132,11 +111,11 @@ test("v2 universe deterministically caps at 200 when more than 200 candidates ex
   assert.ok(result.warnings.some((warning) => /capped at 200/i.test(warning)))
 })
 
-test("cached v2 builder creates exactly five complete snapshot keys at the 60-bar contract", () => {
+test("cached v2 builder creates exactly Daily and Weekly snapshot keys", () => {
   const snapshots = buildSnapshots(2200)
-  assert.deepEqual(snapshots.map((row) => row.timeframe), ["1H", "4H", "1D", "1W", "1M"])
-  assert.equal(snapshots.length, 5)
-  assert.equal(new Set(snapshots.map((row) => row.snapshotKey)).size, 5)
+  assert.deepEqual(snapshots.map((row) => row.timeframe), ["1D", "1W"])
+  assert.equal(snapshots.length, 2)
+  assert.equal(new Set(snapshots.map((row) => row.snapshotKey)).size, 2)
   assert.ok(snapshots.every((row) => row.snapshotKey === `${row.runKey}|MSN|${row.timeframe}`))
   assert.ok(snapshots.every((row) => row.historyStatus === "Complete"))
   assert.ok(snapshots.every((row) => row.historyBarCount >= 60))
@@ -145,11 +124,8 @@ test("cached v2 builder creates exactly five complete snapshot keys at the 60-ba
 test("complete v2 snapshots carry provider provenance, probability/scenario consistency and mapped horizons", () => {
   const snapshots = buildSnapshots(2200)
   const expectedHorizon = new Map([
-    ["1H", "intraday"],
-    ["4H", "swing"],
     ["1D", "week"],
     ["1W", "month"],
-    ["1M", "long_term"],
   ])
   for (const row of snapshots) {
     assert.equal((row.bullProbability ?? 0) + (row.baseProbability ?? 0) + (row.bearProbability ?? 0), 100)
@@ -166,26 +142,28 @@ test("complete v2 snapshots carry provider provenance, probability/scenario cons
   }
 })
 
-test("genuine short Monthly history becomes Incomplete without fabricated analysis or scenarios", () => {
-  const snapshots = buildSnapshots(500)
-  const monthly = snapshots.find((row) => row.timeframe === "1M")!
-  assert.equal(monthly.historyStatus, "Incomplete")
-  assert.ok(monthly.historyBarCount > 0 && monthly.historyBarCount < 60)
-  assert.equal(monthly.phase, null)
-  assert.equal(monthly.wyckoffState, null)
-  assert.equal(monthly.taBias, null)
-  assert.equal(monthly.confidence, null)
-  assert.equal(monthly.bullProbability, null)
-  assert.equal(monthly.baseProbability, null)
-  assert.equal(monthly.bearProbability, null)
-  assert.equal(monthly.support, null)
-  assert.equal(monthly.resistance, null)
-  assert.equal(monthly.confirmation, null)
-  assert.equal(monthly.invalidation, null)
-  assert.equal(monthly.whatChanged, null)
-  assert.deepEqual(monthly.technical, {})
-  assert.deepEqual(monthly.markers, [])
-  assert.deepEqual(monthly.scenarios, [])
-  assert.match(String(monthly.evidence.missingReason), /completed bars/i)
-  assert.equal(monthly.validationStatus, "Valid")
+test("genuine short Weekly history becomes Incomplete without fabricated analysis or scenarios", () => {
+  const snapshots = buildSnapshots(200)
+  const daily = snapshots.find((row) => row.timeframe === "1D")!
+  const weekly = snapshots.find((row) => row.timeframe === "1W")!
+  assert.equal(daily.historyStatus, "Complete")
+  assert.equal(weekly.historyStatus, "Incomplete")
+  assert.ok(weekly.historyBarCount > 0 && weekly.historyBarCount < 60)
+  assert.equal(weekly.phase, null)
+  assert.equal(weekly.wyckoffState, null)
+  assert.equal(weekly.taBias, null)
+  assert.equal(weekly.confidence, null)
+  assert.equal(weekly.bullProbability, null)
+  assert.equal(weekly.baseProbability, null)
+  assert.equal(weekly.bearProbability, null)
+  assert.equal(weekly.support, null)
+  assert.equal(weekly.resistance, null)
+  assert.equal(weekly.confirmation, null)
+  assert.equal(weekly.invalidation, null)
+  assert.equal(weekly.whatChanged, null)
+  assert.deepEqual(weekly.technical, {})
+  assert.deepEqual(weekly.markers, [])
+  assert.deepEqual(weekly.scenarios, [])
+  assert.match(String(weekly.evidence.missingReason), /completed bars/i)
+  assert.equal(weekly.validationStatus, "Valid")
 })

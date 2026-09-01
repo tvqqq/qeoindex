@@ -5,7 +5,6 @@ import type { NotionPage } from "../lib/notion/client.ts"
 import { parseWyckoffV2UniversePage } from "../lib/wyckoff-v2-universe-source.ts"
 import {
   DAILY_V2_CACHE_LIMIT,
-  HOURLY_V2_CACHE_LIMIT,
   cachedHistoryFromRows,
 } from "../lib/wyckoff-v2-cache-read.ts"
 
@@ -32,15 +31,13 @@ test("v2 universe source preserves explicit exchange and active state for hard-s
   assert.deepEqual(row, { ticker: "ABC", active: false, exchange: "HNX", rank: 12, sector: "Banks" })
 })
 
-test("bounded v2 cache budgets are sufficient for 60 monthly and 60 4H bars without full-history reads", () => {
+test("bounded Daily cache budget is sufficient to derive at least 60 completed Weekly bars", () => {
   assert.ok(DAILY_V2_CACHE_LIMIT >= 1500)
   assert.ok(DAILY_V2_CACHE_LIMIT < 2200)
-  assert.ok(HOURLY_V2_CACHE_LIMIT >= 300)
-  assert.ok(HOURLY_V2_CACHE_LIMIT <= 500)
 })
 
-test("cached history conversion sorts ascending and uses latest-row provenance", () => {
-  const history = cachedHistoryFromRows("MSN", "1D", [
+test("cached Daily history conversion sorts ascending and uses latest-row provenance", () => {
+  const history = cachedHistoryFromRows("MSN", [
     { ticker: "MSN", timeframe: "1D", bar_time: "2026-08-25T07:00:00.000Z", open: 70, high: 72, low: 69, close: 71, volume: 2_000_000, provider: "DNSE", provider_detail: "new", source_url: "https://example.com/new", fetched_at: "2026-08-25T08:00:00.000Z" },
     { ticker: "MSN", timeframe: "1D", bar_time: "2026-08-24T07:00:00.000Z", open: 68, high: 71, low: 67, close: 70, volume: 1_000_000, provider: "Fallback", provider_detail: "old", source_url: "https://example.com/old", fetched_at: "2026-08-24T08:00:00.000Z" },
   ])
@@ -52,9 +49,9 @@ test("cached history conversion sorts ascending and uses latest-row provenance",
   assert.equal(history.lastBarAt, "2026-08-25T07:00:00.000Z")
 })
 
-test("cached history conversion rejects empty or invalid data", () => {
-  assert.throws(() => cachedHistoryFromRows("MSN", "1D", []), /no usable/i)
-  assert.throws(() => cachedHistoryFromRows("MSN", "1D", [
+test("cached Daily history conversion rejects empty or invalid data", () => {
+  assert.throws(() => cachedHistoryFromRows("MSN", []), /no usable/i)
+  assert.throws(() => cachedHistoryFromRows("MSN", [
     { ticker: "MSN", timeframe: "1D", bar_time: "bad", open: 70, high: 72, low: 69, close: 71, volume: 1, provider: "DNSE", provider_detail: "x", source_url: "https://example.com", fetched_at: "2026-08-25T08:00:00.000Z" },
   ]), /no usable/i)
 })

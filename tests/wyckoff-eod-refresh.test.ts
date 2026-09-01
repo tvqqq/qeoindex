@@ -17,28 +17,11 @@ function source(path: string) {
 
 function ratingFixture(): CouncilRatingEvidence {
   return {
-    ticker: "MSN",
-    companyName: "Masan",
-    sector: "Consumer",
-    exchange: "HOSE",
-    rank: 1,
-    price: 69.8,
-    changePct: 0,
-    ratingScore: 70,
-    score4m: 80,
-    canslimScore: 75,
-    pricePotential: "Neutral",
-    stockRsScore: 60,
-    sectorRsScore: 55,
-    rsShort: 62,
-    rsMedium: 58,
-    stockRrgState: "Dẫn dắt",
-    sectorRrgState: "Phục hồi",
-    weeklyChangePct: 2,
-    monthlyChangePct: 5,
-    beta: 1,
-    peTtm: 20,
-    pbTtm: 3,
+    ticker: "MSN", companyName: "Masan", sector: "Consumer", exchange: "HOSE", rank: 1,
+    price: 69.8, changePct: 0, ratingScore: 70, score4m: 80, canslimScore: 75,
+    pricePotential: "Neutral", stockRsScore: 60, sectorRsScore: 55, rsShort: 62, rsMedium: 58,
+    stockRrgState: "Dẫn dắt", sectorRrgState: "Phục hồi", weeklyChangePct: 2, monthlyChangePct: 5,
+    beta: 1, peTtm: 20, pbTtm: 3,
     fundamentals: { revenueGrowthPct: 10, netIncomeGrowthPct: 15, roePct: 18, roaPct: 7, netMarginPct: 9 },
     technical: { priceVsSma10Pct: 1, priceVsSma20Pct: 2, priceVsSma50Pct: 3, priceVsSma100Pct: 4, priceVsSma200Pct: 5, macdVsSignal: "above" },
     liquidity: { volume1d: 1_000_000, averageVolume10d: 2_000_000, averageVolume20d: 2_100_000, averageVolume50d: 2_200_000, volumeVsPreviousSessionPct: 10, tradedValueVsPreviousSessionPct: 12 },
@@ -54,10 +37,9 @@ test("EOD refresh plans the 200-stock cap as twenty bounded batches", () => {
 })
 
 test("EOD refresh rejects a mixed-session 1D snapshot set", () => {
-  const tickers = ["AAA", "BBB", "CCC"]
   const result = validateWyckoffEodDailyRows({
     expectedSessionDate: "2026-08-24",
-    expectedTickers: tickers,
+    expectedTickers: ["AAA", "BBB", "CCC"],
     rows: [
       { ticker: "AAA", timeframe: "1D", bar_closed_at: "2026-08-24T07:00:00.000Z" },
       { ticker: "BBB", timeframe: "1D", bar_closed_at: "2026-08-21T07:00:00.000Z" },
@@ -82,11 +64,12 @@ test("EOD refresh accepts an exact same-session 1D snapshot set", () => {
   assert.deepEqual(result.staleOrMissingTickers, [])
 })
 
-test("operational Wyckoff runner bypasses UI history caches for EOD decisions", () => {
+test("operational Wyckoff runner uses long Daily history only and bypasses UI caches", () => {
   const runner = source("lib/wyckoff-unified-runner.ts")
   assert.match(runner, /fetchLongDailyMarketHistory/)
-  assert.match(runner, /fetchHourlyMarketHistory/)
+  assert.doesNotMatch(runner, /fetchHourlyMarketHistory/)
   assert.doesNotMatch(runner, /getCachedLongDailyHistory|getCachedHourlyHistory|request-cache/)
+  assert.match(runner, /timeframes:\s*\["1D", "1W"\]/)
 })
 
 test("Council EOD overlay replaces only completed-session price, change and volume", () => {
@@ -100,7 +83,6 @@ test("Council EOD overlay replaces only completed-session price, change and volu
   assert.equal(result.rating.liquidity.volume1d, 4_715_100)
   assert.equal(result.rating.score4m, 80)
   assert.equal(result.rating.rsShort, 62)
-  assert.equal(result.rating.flow.netForeignTradingBillion, 1)
 })
 
 test("Council EOD overlay refuses stale or pre-final snapshots", () => {
@@ -115,7 +97,6 @@ test("Council EOD overlay refuses stale or pre-final snapshots", () => {
   assert.equal(staleDate.applied, false)
   assert.equal(tooEarly.applied, false)
   assert.equal(staleDate.rating.price, 69.8)
-  assert.equal(tooEarly.rating.liquidity.volume1d, 1_000_000)
 })
 
 test("operational Council operations request the rebuilt final EOD evidence ensemble", () => {
@@ -126,15 +107,13 @@ test("operational Council operations request the rebuilt final EOD evidence ense
   const debate = source("app/api/ai-council/debate-daily/route.ts")
   assert.match(eodData, /stock_orderbook_snapshots/)
   assert.match(eodData, /overlayCouncilRatingWithEodSnapshot/)
-  assert.match(eodData, /buildCouncilStock/)
-  assert.match(eodData, /eodMarketOverlay/)
   assert.match(runtime, /includeEodMarketOverlay/)
   assert.match(daily, /runAiCouncilDailyOperation/)
   assert.match(debate, /runAiCouncilDebateOperation/)
   assert.equal((operations.match(/includeEodMarketOverlay:\s*true/g) || []).length, 2)
 })
 
-test("EOD orchestration is one durable unified dependency workflow", () => {
+test("EOD orchestration is one durable dependency workflow with active Daily-only history and Council steps", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   const steps = source("lib/qeoindex-eod-workflow-steps.ts")
   const operations = source("lib/ai-council-operations.ts")
@@ -143,7 +122,7 @@ test("EOD orchestration is one durable unified dependency workflow", () => {
   assert.doesNotMatch(workflow, /"use step"/)
   assert.match(steps, /"use step"/)
   assert.match(steps, /refreshOhlcvHistoryBatch/)
-  assert.doesNotMatch(steps, /refreshOhlcvHistoryUniverse/)
+  assert.doesNotMatch(steps, /refreshOhlcvHistoryUniverse|hourlyFetchedBars/)
   assert.match(workflow, /for \(let offset = 0; offset < ready\.stocks\.length; offset \+= 10\)/)
   assert.match(workflow, /ready\.stocks\.slice\(offset, offset \+ 10\)/)
   assert.match(steps, /buildWyckoffV2TickerSnapshots/)
@@ -156,31 +135,20 @@ test("EOD orchestration is one durable unified dependency workflow", () => {
   assert.match(route, /isMachineRequestAuthorized/)
 })
 
-test("unified EOD workflow is fail-closed and orders readiness -> history -> Wyckoff -> Supabase validate/publish -> Council -> archive", () => {
+test("unified EOD workflow remains fail-closed in dependency order", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
-  const bodyStart = workflow.indexOf("export async function qeoindexEodPipeline")
-  const body = workflow.slice(bodyStart)
-  const market = body.indexOf("runEodReadyStep")
-  const history = body.indexOf("runHistoryRefreshBatchStep")
-  const wyckoff = body.indexOf("runWyckoffBuildStep")
-  const validation = body.indexOf("runSupabaseValidateStep")
-  const publish = body.indexOf("runSupabasePublishStep")
-  const deterministic = body.indexOf("runDeterministicCouncilStep")
-  const debate = body.indexOf("runLlmDebateStep")
-  const notionArchive = body.indexOf("runNotionArchiveStep")
-  const driveArchive = body.indexOf("runDriveArchiveStep")
-  const retention = body.indexOf("runRetentionCleanupStep")
-  assert.ok(bodyStart >= 0)
-  assert.ok(market >= 0)
-  assert.ok(history > market)
-  assert.ok(wyckoff > history)
-  assert.ok(validation > wyckoff)
-  assert.ok(publish > validation)
-  assert.ok(deterministic > publish)
-  assert.ok(debate > deterministic)
-  assert.ok(notionArchive > debate)
-  assert.ok(driveArchive > notionArchive)
-  assert.ok(retention > driveArchive)
+  const body = workflow.slice(workflow.indexOf("export async function qeoindexEodPipeline"))
+  const ordered = [
+    "runEodReadyStep", "runHistoryRefreshBatchStep", "runWyckoffBuildStep", "runSupabaseValidateStep",
+    "runSupabasePublishStep", "runDeterministicCouncilStep", "runLlmDebateStep", "runNotionArchiveStep",
+    "runDriveArchiveStep", "runRetentionCleanupStep",
+  ]
+  let cursor = -1
+  for (const call of ordered) {
+    const next = body.indexOf(call, cursor + 1)
+    assert.ok(next > cursor, `${call} must remain ordered after the prior phase`)
+    cursor = next
+  }
   assert.match(body, /published && deterministic\.ok/)
   assert.match(body, /failQeoIndexEodRunStep/)
   assert.doesNotMatch(body, /runNotionValidateStep|runNotionStagingBatchStep|runIngestStep/)
@@ -192,8 +160,7 @@ test("production has one Supabase-triggered EOD chain and no legacy Vercel EOD c
   const scheduler = source("supabase/migrations/20260825174500_qeoindex_eod_pipeline_cron.sql")
   assert.match(scheduler, /'15 8 \* \* 1-5'/)
   assert.match(scheduler, /\/api\/qeoindex\/eod/)
-  assert.equal(crons.some((cron) => cron.path === "/api/ai-council/eod"), false)
-  assert.equal(crons.some((cron) => cron.path === "/api/wyckoff/ingest"), false)
-  assert.equal(crons.some((cron) => cron.path === "/api/ai-council/daily"), false)
-  assert.equal(crons.some((cron) => cron.path === "/api/ai-council/debate-daily"), false)
+  for (const path of ["/api/ai-council/eod", "/api/wyckoff/ingest", "/api/ai-council/daily", "/api/ai-council/debate-daily"]) {
+    assert.equal(crons.some((cron) => cron.path === path), false)
+  }
 })

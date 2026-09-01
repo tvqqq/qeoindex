@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
   title: "Phân tích chart Wyckoff — QeoIndex",
-  description: "Chart Wyckoff đa khung thời gian cho canonical Top Stocks, tối đa 200 cổ phiếu QeoIndex.",
+  description: "Chart Wyckoff Daily và Weekly cho canonical Top Stocks, tối đa 200 cổ phiếu QeoIndex.",
   alternates: { canonical: "/insights/wyckoff" },
 }
 
@@ -48,7 +48,6 @@ export default async function WyckoffChartPage({
     price: null,
     changePct: null,
     phase: "",
-    phase1H: "",
     phase1D: "",
     phase1W: "",
     bias: "",

@@ -14,7 +14,7 @@ import { computeWyckoffV2ValidationHash, validateWyckoffV2SnapshotSet } from "@/
 import { buildWyckoffV2SupabasePayload, WYCKOFF_V2_OPERATIONAL_SOURCE, WYCKOFF_V2_UNIVERSE_KEY } from "@/lib/wyckoff-v2-ingest"
 import { WYCKOFF_V2_RUNS_DATA_SOURCE_ID, WYCKOFF_V2_SNAPSHOTS_DATA_SOURCE_ID } from "@/lib/wyckoff-v2-notion-staging"
 
-const TIMEFRAMES = new Set(["1H", "4H", "1D", "1W", "1M"])
+const TIMEFRAMES = new Set(["1D", "1W"])
 const TA_BIASES = new Set(["Bullish", "Neutral", "Bearish", "Mixed"])
 const CONFIDENCE_LEVELS = new Set(["HIGH", "MEDIUM", "LOW"])
 
@@ -252,7 +252,7 @@ export async function publishIngestingWyckoffV2Run(runKey: string, expectedSupab
     if (chartSeriesError) throw new Error(`Supabase chart-series upsert failed: ${chartSeriesError.message}`)
 
     const { data: publishedSeries, error: chartSeriesVerifyError } = await supabase
-      .from("wyckoff_chart_series").select("ticker,timeframe").eq("run_id", expectedSupabaseRunId).in("ticker", tickers).in("timeframe", ["1H", "1D"])
+      .from("wyckoff_chart_series").select("ticker,timeframe").eq("run_id", expectedSupabaseRunId).in("ticker", tickers).in("timeframe", ["1D", "1W"])
     if (chartSeriesVerifyError) throw new Error(`Supabase chart-series verification failed: ${chartSeriesVerifyError.message}`)
     const publishedSeriesKeys = new Set((publishedSeries || []).map((row) => `${row.ticker}|${row.timeframe}`))
     if (publishedSeriesKeys.size !== expectedSeriesCount) throw new Error(`Expected ${expectedSeriesCount} persisted Wyckoff chart series; received ${publishedSeriesKeys.size}`)
