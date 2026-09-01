@@ -123,6 +123,11 @@ export async function runJobAction(
   const key = String(formData.get("key") || "").trim()
   const reason = String(formData.get("reason") || "").trim()
   const confirmed = formData.get("confirmed") === "true"
+  const tickers = String(formData.get("tickers") || "")
+    .split(/[;,\s]+/)
+    .map((ticker) => ticker.trim().toUpperCase())
+    .filter(Boolean)
+  const force = formData.get("force") === "true" || formData.get("force") === "on"
 
   if (!key) {
     return { ok: false, error: "Key tác vụ không được để trống." }
@@ -135,6 +140,7 @@ export async function runJobAction(
     reason,
     requestId,
     confirmed,
+    params: key === "kfsp.ttai_history" ? { tickers, force } : undefined,
   })
 
   if (!result.ok) {
