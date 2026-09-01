@@ -21,7 +21,7 @@ const marketSectors = readFileSync("lib/market-sectors.ts", "utf8")
 test("Wyckoff header uses canonical stock identity and removes the Rating back row", () => {
   assert.match(dashboard, /import \{ StockIdentity \}/)
   assert.match(dashboard, /<StockIdentity/)
-  assert.match(dashboard, /ticker=\{ticker\}/)
+  assert.match(dashboard, /ticker=\{activeTicker\}/)
   assert.doesNotMatch(dashboard, /function SymbolIdentity/)
   assert.doesNotMatch(dashboard, /data-wyckoff-back-row|Quay lại Rating|>\s*Rating\s*</)
   assert.doesNotMatch(dashboard, /ArrowLeft/)
