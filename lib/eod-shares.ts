@@ -1,8 +1,10 @@
-import { getCanonicalUniverseTickers } from "@/lib/market-universe"
-
 /**
  * EOD Canonical Shares Outstanding for Universe Stocks.
  * Source of Truth: TradingView Scanner & HOSE/HNX Listed Shares.
+ *
+ * This module is imported by client orderbook UI, so it must remain browser-safe.
+ * Canonical universe membership is resolved server-side and passed explicitly to
+ * provider helpers rather than importing the server-only universe service here.
  */
 export const STATIC_SHARES_FALLBACK: Record<string, number> = {
   BCM: 1035000000, BVH: 742323000, VPX: 1875000000, GVR: 4000000000, HSG: 807263000,
@@ -55,20 +57,22 @@ export function setEodForeignRooms(map: Record<string, number>) {
 
 let cachedSharesMap: Record<string, number> | null = null
 let lastFetchedAt = 0
+let cachedUniverseKey = ""
 
-/** Fetches latest EOD shares outstanding for the current published universe. */
-export async function getUniverseSharesOutstanding(): Promise<Record<string, number>> {
+/** Fetches latest EOD shares outstanding for an explicitly supplied canonical universe. */
+export async function getUniverseSharesOutstanding(tickers: string[]): Promise<Record<string, number>> {
+  const universe = [...new Set(tickers.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))]
+  if (!universe.length) return STATIC_SHARES_FALLBACK
+  const universeKey = universe.join(",")
   const now = Date.now()
-  if (cachedSharesMap && now - lastFetchedAt < 12 * 60 * 60 * 1000) return cachedSharesMap
+  if (cachedSharesMap && cachedUniverseKey === universeKey && now - lastFetchedAt < 12 * 60 * 60 * 1000) return cachedSharesMap
 
   try {
-    const tickers = await getCanonicalUniverseTickers()
-    if (!tickers.length) throw new Error("Canonical market universe is empty")
     const res = await fetch("https://scanner.tradingview.com/vietnam/scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        filter: [{ left: "name", operation: "in_range", right: tickers }],
+        filter: [{ left: "name", operation: "in_range", right: universe }],
         symbols: { tickers: [] },
         columns: ["name", "total_shares_outstanding"],
       }),
@@ -85,6 +89,7 @@ export async function getUniverseSharesOutstanding(): Promise<Record<string, num
           if (sym && Number.isFinite(shares) && shares > 0) nextMap[sym] = Math.round(shares)
         }
         cachedSharesMap = nextMap
+        cachedUniverseKey = universeKey
         lastFetchedAt = now
         return nextMap
       }
