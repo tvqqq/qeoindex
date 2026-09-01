@@ -23,6 +23,7 @@ import {
 
 const NOW = new Date("2026-08-25T08:35:00.000Z")
 const dnseHistorySource = readFileSync("lib/dnse-history.ts", "utf8")
+const yahooHistorySource = readFileSync("lib/yahoo-history.ts", "utf8")
 
 test("historical source URLs are deterministic and contain no credentials", () => {
   const dnse = buildHistoricalSourceUrl("DNSE", "msn", "1D", 14, NOW)
@@ -44,6 +45,15 @@ test("DNSE bootstrap uses bounded Daily and Hourly request windows", () => {
   assert.match(dnseHistorySource, /buildRequestWindows/)
   assert.match(dnseHistorySource, /requestOhlcWindows/)
   assert.match(dnseHistorySource, /dedupeBars/)
+})
+
+test("HISTORY_REFRESH provider waterfall has a bounded wall-clock budget", () => {
+  assert.match(dnseHistorySource, /DAILY_ADAPTIVE_BUDGET_MS\s*=\s*30_000/)
+  assert.match(dnseHistorySource, /const deadlineMs = Date\.now\(\) \+ DAILY_ADAPTIVE_BUDGET_MS/)
+  assert.match(dnseHistorySource, /requestOhlcWindows\([^)]*deadlineMs/s)
+  assert.match(dnseHistorySource, /Math\.min\(8_000, deadlineMs - Date\.now\(\)\)/)
+  assert.match(yahooHistorySource, /YAHOO_REQUEST_TIMEOUT_MS\s*=\s*15_000/)
+  assert.match(yahooHistorySource, /signal:\s*AbortSignal\.timeout\(YAHOO_REQUEST_TIMEOUT_MS\)/)
 })
 
 test("refresh planner backfills insufficient coverage then switches to bounded deltas", () => {
