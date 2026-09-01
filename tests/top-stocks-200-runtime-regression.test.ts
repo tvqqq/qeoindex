@@ -26,6 +26,7 @@ const boardRefresh = source("components/market-universe-version-refresh.tsx")
 const universeVersionRoute = source("app/api/market-universe/version/route.ts")
 const orderbookCleanupMigration = source("supabase/migrations/20260901162500_prune_noncanonical_orderbook_snapshots.sql")
 const cleanRebuildMigrationPath = "supabase/migrations/20260901213000_clean_rebuild_top_stocks_200.sql"
+const cleanRebuildMarketSyncMigrationPath = "supabase/migrations/20260901214500_clean_rebuild_market_snapshot_trigger.sql"
 const insightsPage = source("app/insights/page.tsx")
 
 test("Wyckoff runtime reads canonical Supabase universe instead of Notion Top100", () => {
@@ -155,4 +156,14 @@ test("clean rebuild is an explicit one-shot purge of rebuildable stock operation
   assert.doesNotMatch(migration, /truncate table[^;]*market_ohlcv_archive_ranges/i)
   assert.match(migration, /check \(timeframe = '1D'\)/)
   assert.match(migration, /check \(timeframe in \('1D', '1W'\)\)/)
+})
+
+test("clean rebuild has a service-role-only final market snapshot bootstrap trigger", () => {
+  assert.equal(existsSync(cleanRebuildMarketSyncMigrationPath), true)
+  if (!existsSync(cleanRebuildMarketSyncMigrationPath)) return
+  const migration = source(cleanRebuildMarketSyncMigrationPath)
+  assert.match(migration, /qeo_trigger_market_snapshot_bootstrap/)
+  assert.match(migration, /functions\/v1\/orderbook-sync/)
+  assert.match(migration, /revoke all on function public\.qeo_trigger_market_snapshot_bootstrap\(\) from public, anon, authenticated/i)
+  assert.match(migration, /grant execute on function public\.qeo_trigger_market_snapshot_bootstrap\(\) to service_role/i)
 })
