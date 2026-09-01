@@ -45,7 +45,7 @@ export async function runQeoIndexEodPhase<T>(input: {
   runId: string
   phaseKey: QeoIndexEodPhaseKey
   fn: () => Promise<T>
-  summarize?: (result: T) => Record<string, unknown>
+  summarize?: (result: T) => unknown
   io?: QeoIndexEodPhaseIo
 }): Promise<T> {
   if (!input.runId) throw new Error("QeoIndex EOD phase telemetry requires runId")
