@@ -2,7 +2,7 @@ import "server-only"
 
 import type { OhlcvBar } from "@/lib/technical-indicators"
 
-const VNDIRECT_STOCK_PRICES_URL = "https://finfo-api.vndirect.com.vn/v4/stock_prices"
+const VNDIRECT_STOCK_PRICES_URL = "https://api-finfo.vndirect.com.vn/v4/stock_prices"
 const VNDIRECT_REQUEST_TIMEOUT_MS = 15_000
 const VNDIRECT_MAX_ROWS = 5_000
 const MILLIS_PER_DAY = 86_400_000
