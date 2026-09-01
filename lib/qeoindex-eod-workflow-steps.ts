@@ -1,6 +1,7 @@
 import { runAiCouncilDailyOperation, runAiCouncilDebateOperation } from "@/lib/ai-council-operations"
 import { markQeoIndexEodPhaseSkipped, runQeoIndexEodPhase } from "@/lib/admin/job-phase-telemetry"
 import { QEOINDEX_EOD_JOB_KEY } from "@/lib/admin/job-phases"
+import { getCanonicalUniverse } from "@/lib/market-universe"
 import {
   refreshOhlcvHistoryBatch,
   type OhlcvUniverseRefreshResult,
@@ -26,22 +27,23 @@ function requiredSupabase() {
 
 function vietnamDateKey(iso: string) {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
+    timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
   }).format(new Date(iso))
 }
 
 async function assertFinalEodMarketReady(startedAtIso: string) {
   const supabase = requiredSupabase()
   const expectedSessionDate = vietnamDateKey(startedAtIso)
+  const universe = await getCanonicalUniverse()
+  const tickers = universe.stocks.map((stock) => stock.ticker)
+  if (!tickers.length) throw Object.assign(new Error("Canonical market universe is empty"), { code: "EOD_NOT_READY" })
+
   const latest = await supabase
     .from("insights_stock_ratings")
     .select("as_of_date")
     .eq("is_published", true)
     .eq("source", "kfsp")
-    .eq("is_top100", true)
+    .in("ticker", tickers)
     .order("as_of_date", { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -49,8 +51,7 @@ async function assertFinalEodMarketReady(startedAtIso: string) {
 
   const ratingDate = latest.data?.as_of_date ? String(latest.data.as_of_date) : null
   if (ratingDate !== expectedSessionDate) {
-    const error = Object.assign(new Error(`KFSP/TTAI rating date ${ratingDate || "missing"} != EOD session ${expectedSessionDate}`), { code: "EOD_NOT_READY" })
-    throw error
+    throw Object.assign(new Error(`KFSP/TTAI rating date ${ratingDate || "missing"} != EOD session ${expectedSessionDate}`), { code: "EOD_NOT_READY" })
   }
 
   const ratings = await supabase
@@ -58,15 +59,14 @@ async function assertFinalEodMarketReady(startedAtIso: string) {
     .select("ticker")
     .eq("is_published", true)
     .eq("source", "kfsp")
-    .eq("is_top100", true)
     .eq("as_of_date", expectedSessionDate)
-    .order("top100_rank", { ascending: true, nullsFirst: false })
-    .order("ticker", { ascending: true })
-  if (ratings.error) throw new Error(`Load EOD Top100 ratings failed: ${ratings.error.message}`)
+    .in("ticker", tickers)
+  if (ratings.error) throw new Error(`Load EOD canonical ratings failed: ${ratings.error.message}`)
 
-  const tickers = [...new Set((ratings.data || []).map((row) => String(row.ticker || "").trim().toUpperCase()).filter(Boolean))]
-  if (tickers.length !== 100) {
-    throw Object.assign(new Error(`Top100 rating universe incomplete: ${tickers.length}/100`), { code: "EOD_NOT_READY" })
+  const ratingTickerSet = new Set((ratings.data || []).map((row) => String(row.ticker || "").trim().toUpperCase()).filter(Boolean))
+  const missingRatings = tickers.filter((ticker) => !ratingTickerSet.has(ticker))
+  if (missingRatings.length) {
+    throw Object.assign(new Error(`Canonical rating universe incomplete: ${tickers.length - missingRatings.length}/${tickers.length}; missing=${missingRatings.slice(0, 20).join(",")}`), { code: "EOD_NOT_READY" })
   }
 
   const snapshots = await supabase
@@ -90,7 +90,7 @@ async function assertFinalEodMarketReady(startedAtIso: string) {
     throw Object.assign(new Error(`Final EOD market snapshots incomplete: ${fresh.size}/${tickers.length}`), { code: "EOD_NOT_READY" })
   }
 
-  return { expectedSessionDate, ratingDate, ratingTickers: tickers, freshMarketCount: fresh.size }
+  return { expectedSessionDate, ratingDate, ratingTickers: tickers, freshMarketCount: fresh.size, universeRunId: universe.runId }
 }
 
 async function buildAllSnapshots(stocks: WyckoffV2UniverseRow[], runKey: string, scanDate: string) {
@@ -108,7 +108,8 @@ async function buildAllSnapshots(stocks: WyckoffV2UniverseRow[], runKey: string,
     snapshots.push(...batch.flat())
   }
 
-  if (snapshots.length !== 500) throw new Error(`Expected 500 Wyckoff v2 snapshots; received ${snapshots.length}`)
+  const expectedSnapshots = stocks.length * 5
+  if (snapshots.length !== expectedSnapshots) throw new Error(`Expected ${expectedSnapshots} Wyckoff v2 snapshots; received ${snapshots.length}`)
   const validation = validateWyckoffV2SnapshotSet(runKey, snapshots)
   return { snapshots, validation, providers: [...providers].sort() }
 }
@@ -116,17 +117,9 @@ async function buildAllSnapshots(stocks: WyckoffV2UniverseRow[], runKey: string,
 export async function startQeoIndexEodRunStep(startedAtIso: string) {
   "use step"
   const supabase = requiredSupabase()
-  const result = await supabase
-    .from("system_job_runs")
-    .insert({
-      job_key: QEOINDEX_EOD_JOB_KEY,
-      provider: "supabase_pg_cron",
-      trigger: "workflow",
-      status: "running",
-      started_at: startedAtIso,
-    })
-    .select("id")
-    .single()
+  const result = await supabase.from("system_job_runs").insert({
+    job_key: QEOINDEX_EOD_JOB_KEY, provider: "supabase_pg_cron", trigger: "workflow", status: "running", started_at: startedAtIso,
+  }).select("id").single()
   if (result.error || !result.data?.id) throw new Error(`QeoIndex EOD telemetry start failed: ${result.error?.message || "missing run id"}`)
   return String(result.data.id)
 }
@@ -145,26 +138,19 @@ export async function runEodReadyStep(runId: string, startedAtIso: string) {
         runKey,
         scanDate,
         startedAt: startedAtIso,
-        providerSummary: "QeoIndex EOD v2 preflight; persistent OHLCV refresh pending.",
+        providerSummary: `QeoIndex EOD v2 preflight; canonical universe ${market.universeRunId}.`,
+        universeCount: selection.stocks.length,
       })
       return {
-        runKey,
-        scanDate,
-        stocks: selection.stocks,
-        rankWarnings: selection.warnings,
-        notionAction: notion.action,
-        notionStatus: notion.status,
-        notionSupabaseRunId: "supabaseRunId" in notion ? notion.supabaseRunId : "",
-        market,
+        runKey, scanDate, stocks: selection.stocks, rankWarnings: selection.warnings,
+        notionAction: notion.action, notionStatus: notion.status,
+        notionSupabaseRunId: "supabaseRunId" in notion ? notion.supabaseRunId : "", market,
       }
     },
     summarize: (result) => ({
-      runKey: result.runKey,
-      scanDate: result.scanDate,
-      universeCount: result.stocks.length,
-      rankWarnings: result.rankWarnings.slice(0, 10),
-      notionAction: result.notionAction,
-      freshMarketCount: result.market.freshMarketCount,
+      runKey: result.runKey, scanDate: result.scanDate, universeCount: result.stocks.length,
+      rankWarnings: result.rankWarnings.slice(0, 10), notionAction: result.notionAction,
+      freshMarketCount: result.market.freshMarketCount, universeRunId: result.market.universeRunId,
     }),
   })
 }
@@ -184,59 +170,32 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
       const secretResult = await supabase.rpc("qeo_get_market_close_sync_secret")
       const syncSecret = typeof secretResult.data === "string" ? secretResult.data.trim() : ""
       if (secretResult.error || !syncSecret) {
-        throw Object.assign(
-          new Error(`MARKET_CLOSE_COLLECT failed to load dedicated sync secret: ${secretResult.error?.message || "missing secret"}`),
-          { code: "MARKET_CLOSE_COLLECT_FAILED" },
-        )
+        throw Object.assign(new Error(`MARKET_CLOSE_COLLECT failed to load dedicated sync secret: ${secretResult.error?.message || "missing secret"}`), { code: "MARKET_CLOSE_COLLECT_FAILED" })
       }
       const cleanUrl = supabaseUrl.endsWith("/") ? supabaseUrl.slice(0, -1) : supabaseUrl
       const endpoint = `${cleanUrl}/functions/v1/market-insight-eod-sync`
       const sessionDate = vietnamDateKey(startedAtIso)
-
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${syncSecret}`,
-        },
-        body: JSON.stringify({
-          startedAt: startedAtIso,
-          trigger: "qeoindex_eod_pipeline",
-        }),
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${syncSecret}` },
+        body: JSON.stringify({ startedAt: startedAtIso, trigger: "qeoindex_eod_pipeline" }),
         signal: AbortSignal.timeout(30_000),
       }).catch((err) => ({ ok: false, status: 500, json: async () => ({ error: err instanceof Error ? err.message : String(err) }) } as unknown as Response))
-
       const payload = await response.json().catch(() => ({})) as Record<string, unknown>
       if (!response.ok || payload.ok === false) {
         const errCode = String(payload.error || `HTTP_${response.status}`)
-        throw Object.assign(
-          new Error(`MARKET_CLOSE_COLLECT failed: ${errCode}`),
-          { code: "MARKET_CLOSE_COLLECT_FAILED" },
-        )
+        throw Object.assign(new Error(`MARKET_CLOSE_COLLECT failed: ${errCode}`), { code: "MARKET_CLOSE_COLLECT_FAILED" })
       }
-
       return {
-        ok: true,
-        status: "succeeded" as const,
-        syncRunId: String(payload.sync_run_id || ""),
-        sessionDate: String(payload.session_date || sessionDate),
-        qualityStatus: String(payload.quality_status || "healthy"),
-        published: payload.published,
+        ok: true, status: "succeeded" as const, syncRunId: String(payload.sync_run_id || ""),
+        sessionDate: String(payload.session_date || sessionDate), qualityStatus: String(payload.quality_status || "healthy"), published: payload.published,
       }
     },
-    summarize: (result) => ({
-      status: result.status,
-      sessionDate: result.sessionDate,
-      qualityStatus: "qualityStatus" in result ? result.qualityStatus : "degraded",
-      error: "error" in result ? result.error : undefined,
-    }),
+    summarize: (result) => ({ status: result.status, sessionDate: result.sessionDate, qualityStatus: "qualityStatus" in result ? result.qualityStatus : "degraded", error: "error" in result ? result.error : undefined }),
   })
 }
 
-function mergeHistoryRefreshProgress(
-  previous: OhlcvUniverseRefreshResult,
-  current: OhlcvUniverseRefreshResult,
-): OhlcvUniverseRefreshResult {
+function mergeHistoryRefreshProgress(previous: OhlcvUniverseRefreshResult, current: OhlcvUniverseRefreshResult): OhlcvUniverseRefreshResult {
   return {
     requestedTickers: previous.requestedTickers + current.requestedTickers,
     completedTickers: previous.completedTickers + current.completedTickers,
@@ -266,25 +225,15 @@ export async function runHistoryRefreshBatchStep(
     runId,
     phaseKey: "HISTORY_REFRESH",
     fn: async () => {
-      if (stocks.length < 1 || stocks.length > 10) {
-        throw Object.assign(new Error(`HISTORY_REFRESH batch must contain 1-10 tickers; received ${stocks.length}`), { code: "HISTORY_REFRESH_FAILED" })
-      }
+      if (stocks.length < 1 || stocks.length > 10) throw Object.assign(new Error(`HISTORY_REFRESH batch must contain 1-10 tickers; received ${stocks.length}`), { code: "HISTORY_REFRESH_FAILED" })
       const result = await refreshOhlcvHistoryBatch(requiredSupabase(), stocks.map((stock) => stock.ticker), new Date(startedAtIso))
-      if (result.failedTickers > 0) {
-        throw Object.assign(new Error(`HISTORY_REFRESH failed for ${result.failedTickers} ticker(s): ${result.errors.slice(0, 5).map((item) => `${item.ticker}: ${item.error}`).join(" | ")}`), { code: "HISTORY_REFRESH_FAILED" })
-      }
-      if (result.completedTickers !== result.requestedTickers) {
-        throw Object.assign(new Error(`HISTORY_REFRESH batch completed ${result.completedTickers}/${result.requestedTickers} tickers`), { code: "HISTORY_REFRESH_FAILED" })
-      }
+      if (result.failedTickers > 0) throw Object.assign(new Error(`HISTORY_REFRESH failed for ${result.failedTickers} ticker(s): ${result.errors.slice(0, 5).map((item) => `${item.ticker}: ${item.error}`).join(" | ")}`), { code: "HISTORY_REFRESH_FAILED" })
+      if (result.completedTickers !== result.requestedTickers) throw Object.assign(new Error(`HISTORY_REFRESH batch completed ${result.completedTickers}/${result.requestedTickers} tickers`), { code: "HISTORY_REFRESH_FAILED" })
       return mergeHistoryRefreshProgress(progress, result)
     },
     summarize: (result) => ({
-      requestedTickers: result.requestedTickers,
-      completedTickers: result.completedTickers,
-      dailyFetchedBars: result.dailyFetchedBars,
-      hourlyFetchedBars: result.hourlyFetchedBars,
-      backfillOperations: result.backfillOperations,
-      deltaOperations: result.deltaOperations,
+      requestedTickers: result.requestedTickers, completedTickers: result.completedTickers, dailyFetchedBars: result.dailyFetchedBars,
+      hourlyFetchedBars: result.hourlyFetchedBars, backfillOperations: result.backfillOperations, deltaOperations: result.deltaOperations,
       limitedCoverageCount: result.limitedCoverage.length,
     }),
   })
@@ -294,11 +243,10 @@ export async function runWyckoffBuildStep(runId: string, stocks: WyckoffV2Univer
   "use step"
   if (!enabled) {
     await markQeoIndexEodPhaseSkipped({ runId, phaseKey: "WYCKOFF_BUILD", reason: "Existing Ready/Ingested Notion run; build skipped." })
-    return { skipped: true as const, total: 500, complete: 0, incomplete: 0, providers: [] as string[] }
+    return { skipped: true as const, total: stocks.length * 5, complete: 0, incomplete: 0, providers: [] as string[] }
   }
   return runQeoIndexEodPhase({
-    runId,
-    phaseKey: "WYCKOFF_BUILD",
+    runId, phaseKey: "WYCKOFF_BUILD",
     fn: async () => {
       const built = await buildAllSnapshots(stocks, runKey, scanDate)
       return { total: built.validation.total, complete: built.validation.complete, incomplete: built.validation.incomplete, providers: built.providers }
@@ -311,11 +259,10 @@ export async function runNotionStagingStep(runId: string, stocks: WyckoffV2Unive
   "use step"
   if (!enabled) {
     await markQeoIndexEodPhaseSkipped({ runId, phaseKey: "NOTION_STAGING", reason: "Existing Ready/Ingested Notion run; staging skipped." })
-    return { skipped: true as const, created: 0, updated: 0, skippedRows: 500, providers: [] as string[] }
+    return { skipped: true as const, created: 0, updated: 0, skippedRows: stocks.length * 5, providers: [] as string[] }
   }
   return runQeoIndexEodPhase({
-    runId,
-    phaseKey: "NOTION_STAGING",
+    runId, phaseKey: "NOTION_STAGING",
     fn: async () => {
       const built = await buildAllSnapshots(stocks, runKey, scanDate)
       const staged = await stageWyckoffV2Snapshots({ runKey, snapshots: built.snapshots })
@@ -329,18 +276,11 @@ export async function runNotionValidateStep(runId: string, runKey: string, scanD
   "use step"
   if (!enabled) {
     await markQeoIndexEodPhaseSkipped({ runId, phaseKey: "NOTION_VALIDATE", reason: "Existing Ready/Ingested Notion run; validation finalize skipped." })
-    return { skipped: true as const, status: "Ready" as const, validationHash: "", total: 500, complete: 0, incomplete: 0 }
+    return { skipped: true as const, status: "Ready" as const, validationHash: "", total: 0, complete: 0, incomplete: 0 }
   }
   return runQeoIndexEodPhase({
-    runId,
-    phaseKey: "NOTION_VALIDATE",
-    fn: () => validateAndFinalizeWyckoffV2NotionRun({
-      runKey,
-      scanDate,
-      startedAt: startedAtIso,
-      completedAt: new Date().toISOString(),
-      providerSummary,
-    }),
+    runId, phaseKey: "NOTION_VALIDATE",
+    fn: () => validateAndFinalizeWyckoffV2NotionRun({ runKey, scanDate, startedAt: startedAtIso, completedAt: new Date().toISOString(), providerSummary }),
     summarize: (result) => ({ status: result.status, total: result.total, complete: result.complete, incomplete: result.incomplete, validationHash: result.validationHash }),
   })
 }
@@ -352,20 +292,9 @@ export async function runIngestStep(runId: string, runKey: string, enabled = tru
     return { ok: true as const, status: "idle" as const, runKey, supabaseRunId: "", complete: 0, incomplete: 0, validationHash: "" }
   }
   return runQeoIndexEodPhase({
-    runId,
-    phaseKey: "INGEST",
+    runId, phaseKey: "INGEST",
     fn: async () => {
-      if (resumeSupabaseRunId) {
-        return {
-          ok: true as const,
-          status: "resumed" as const,
-          runKey,
-          supabaseRunId: resumeSupabaseRunId,
-          complete: 0,
-          incomplete: 0,
-          validationHash: "",
-        }
-      }
+      if (resumeSupabaseRunId) return { ok: true as const, status: "resumed" as const, runKey, supabaseRunId: resumeSupabaseRunId, complete: 0, incomplete: 0, validationHash: "" }
       const result = await claimReadyWyckoffV2Run(runKey)
       if (result.status !== "claimed") throw new Error(`INGEST could not claim ${runKey}: ${result.message || result.status}`)
       return result
@@ -380,12 +309,7 @@ export async function runSupabasePublishStep(runId: string, runKey: string, supa
     await markQeoIndexEodPhaseSkipped({ runId, phaseKey: "SUPABASE_PUBLISH", reason: "No active v2 ingest claim to publish." })
     return { ok: true as const, status: "skipped" as const, runKey }
   }
-  return runQeoIndexEodPhase({
-    runId,
-    phaseKey: "SUPABASE_PUBLISH",
-    fn: () => publishIngestingWyckoffV2Run(runKey, supabaseRunId),
-    summarize: (result) => result as unknown as Record<string, unknown>,
-  })
+  return runQeoIndexEodPhase({ runId, phaseKey: "SUPABASE_PUBLISH", fn: () => publishIngestingWyckoffV2Run(runKey, supabaseRunId), summarize: (result) => result as unknown as Record<string, unknown> })
 }
 
 export async function runDeterministicCouncilStep(runId: string, enabled = true, ratingDate?: string) {
@@ -396,9 +320,7 @@ export async function runDeterministicCouncilStep(runId: string, enabled = true,
   }
   const operationDate = ratingDate ? new Date(`${ratingDate}T08:15:00.000Z`) : new Date()
   return runQeoIndexEodPhase({
-    runId,
-    phaseKey: "AI_COUNCIL_DETERMINISTIC",
-    fn: () => runAiCouncilDailyOperation(requiredSupabase(), operationDate, ratingDate),
+    runId, phaseKey: "AI_COUNCIL_DETERMINISTIC", fn: () => runAiCouncilDailyOperation(requiredSupabase(), operationDate, ratingDate),
     summarize: (result) => ({ ok: result.ok, status: result.status, ratingDate: result.ratingDate, reason: "reason" in result ? result.reason : undefined }),
   })
 }
@@ -410,9 +332,7 @@ export async function runLlmDebateStep(runId: string, enabled = true, ratingDate
     return { ok: false as const, status: "skipped" as const, reason: "DETERMINISTIC_NOT_READY" as const }
   }
   return runQeoIndexEodPhase({
-    runId,
-    phaseKey: "AI_COUNCIL_LLM",
-    fn: () => runAiCouncilDebateOperation(requiredSupabase(), ratingDate),
+    runId, phaseKey: "AI_COUNCIL_LLM", fn: () => runAiCouncilDebateOperation(requiredSupabase(), ratingDate),
     summarize: (result) => ({ ok: result.ok, status: result.status, ratingDate: result.ratingDate, reason: "reason" in result ? result.reason : undefined }),
   })
 }
@@ -420,15 +340,10 @@ export async function runLlmDebateStep(runId: string, enabled = true, ratingDate
 export async function runCompleteStep(runId: string, summary: Record<string, unknown>, skipped = false) {
   "use step"
   return runQeoIndexEodPhase({
-    runId,
-    phaseKey: "COMPLETE",
+    runId, phaseKey: "COMPLETE",
     fn: async () => {
-      const supabase = requiredSupabase()
       const finishedAt = new Date().toISOString()
-      const result = await supabase
-        .from("system_job_runs")
-        .update({ status: skipped ? "skipped" : "succeeded", finished_at: finishedAt, summary })
-        .eq("id", runId)
+      const result = await requiredSupabase().from("system_job_runs").update({ status: skipped ? "skipped" : "succeeded", finished_at: finishedAt, summary }).eq("id", runId)
       if (result.error) throw new Error(`QeoIndex EOD telemetry completion failed: ${result.error.message}`)
       return { ok: true as const, status: skipped ? "skipped" as const : "succeeded" as const, finishedAt }
     },
@@ -440,15 +355,9 @@ export async function failQeoIndexEodRunStep(runId: string, errorMessage: string
   "use step"
   const supabase = requiredSupabase()
   await markQeoIndexEodPhaseSkipped({ runId, phaseKey: "COMPLETE", reason: "Pipeline stopped because an earlier phase failed." })
-  const result = await supabase
-    .from("system_job_runs")
-    .update({
-      status: "failed",
-      finished_at: new Date().toISOString(),
-      error_code: "QEOINDEX_EOD_FAILED",
-      error_message: errorMessage.slice(0, 1000),
-    })
-    .eq("id", runId)
+  const result = await supabase.from("system_job_runs").update({
+    status: "failed", finished_at: new Date().toISOString(), error_code: "QEOINDEX_EOD_FAILED", error_message: errorMessage.slice(0, 1000),
+  }).eq("id", runId)
   if (result.error) throw new Error(`QeoIndex EOD failure telemetry update failed: ${result.error.message}`)
   return { ok: true as const }
 }
