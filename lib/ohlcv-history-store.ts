@@ -49,8 +49,8 @@ export interface OhlcvUniverseRefreshResult {
   completedTickers: number
   failedTickers: number
   dailyFetchedBars: number
-  /** Deprecated compatibility field. Persistent Wyckoff refresh is Daily-only. */
-  hourlyFetchedBars?: number
+  /** Deprecated compatibility counter. Persistent Wyckoff refresh is Daily-only and this is always zero. */
+  hourlyFetchedBars: number
   backfillOperations: number
   deltaOperations: number
   limitedCoverage: OhlcvLimitedCoverage[]
