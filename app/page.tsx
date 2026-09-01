@@ -20,7 +20,7 @@ import styles from "./market-board-performance.module.css"
 export const dynamic = "force-dynamic"
 
 const INITIAL_HISTORY_POINTS = 90
-const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v4"
+const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v5"
 
 type InitialBoardData = {
   universe: BoardUniverseStock[]
