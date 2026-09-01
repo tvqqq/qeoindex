@@ -74,6 +74,7 @@ Canonical phase order remains:
 Key invariants:
 
 - EOD readiness and market-close retry behavior remain fail-closed.
+- `EOD_READY` requires fresh same-session `stock_orderbook_snapshots` for the exact canonical universe; a clean rebuild must bootstrap those snapshots before dispatching EOD.
 - `HISTORY_REFRESH` uses max-10 ticker batches and persists Daily only.
 - `WYCKOFF_BUILD` / validation / publish require exact canonical membership and exactly `universeCount × 2` snapshots.
 - AI Council starts only from the healthy Supabase-published Wyckoff run for the same session.
@@ -117,14 +118,24 @@ This is the explicit destructive cutover for rebuildable stock operational state
 - preserves KFSP ratings/provider history, TTAI quarterly history, auth/user/config data, job audit telemetry, calibration history and verified `market_ohlcv_archive_ranges` cold-archive evidence;
 - validates the raw `1D` and Wyckoff `1D/1W` physical constraints after the purge.
 
+### Clean-rebuild market snapshot bootstrap
+
+`supabase/migrations/20260901214500_clean_rebuild_market_snapshot_trigger.sql`
+
+It creates service-role-only `qeo_trigger_market_snapshot_bootstrap()`, which reuses the existing canonical `orderbook-sync` Edge Function already used by production pg_cron. The function exists specifically because the destructive clean rebuild removes `stock_orderbook_snapshots` while `EOD_READY` requires fresh final snapshots before the later `MARKET_CLOSE_COLLECT` phase can run.
+
+Do not bypass or weaken `EOD_READY`. Bootstrap fresh market evidence first and verify it before EOD dispatch.
+
 After applying the one-shot clean rebuild, execute in this order:
 
 1. `qeo_trigger_market_universe_monthly()` and verify a new published `vn_top_stocks` run.
 2. Verify exact canonical membership (target 200 under current eligibility/settings).
-3. `qeo_trigger_eod_pipeline()` for the current completed session.
-4. Verify fresh Daily raw history for the exact canonical ticker set.
-5. Verify Wyckoff exact membership and `universeCount × 2` snapshots.
-6. Verify downstream phases report their real success/failure state.
+3. `qeo_trigger_market_snapshot_bootstrap()` and verify its pg_net response succeeds.
+4. Verify `stock_orderbook_snapshots` contains the exact canonical ticker set for the current session and every row is fresh enough for `EOD_READY`.
+5. `qeo_trigger_eod_pipeline()` for the current completed session.
+6. Verify fresh Daily raw history for the exact canonical ticker set.
+7. Verify Wyckoff exact membership and `universeCount × 2` snapshots.
+8. Verify downstream phases report their real success/failure state.
 
 ## Manual EOD acceptance
 
@@ -140,4 +151,4 @@ A current-session manual smoke is accepted only when evidence shows:
 - archive phases report their real state and do not fake success;
 - `COMPLETE` closes the parent run without hidden skipped critical phases.
 
-For fast troubleshooting, inspect `system_job_runs`, `system_job_phases`, latest `market_universe_runs`, `wyckoff_scan_runs`, `market_ohlcv_history`, `market_ohlcv_bootstrap_state`, and `eod_archive_checkpoints` before interpreting UI state.
+For fast troubleshooting, inspect `system_job_runs`, `system_job_phases`, latest `market_universe_runs`, `stock_orderbook_snapshots`, `wyckoff_scan_runs`, `market_ohlcv_history`, `market_ohlcv_bootstrap_state`, and `eod_archive_checkpoints` before interpreting UI state.
