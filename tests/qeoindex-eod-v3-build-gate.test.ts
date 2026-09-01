@@ -70,3 +70,11 @@ test("archive retention is checkpointed and historical coverage is fail-closed",
   assert.match(migration, /safe/)
   assert.match(migration, /missingDates/)
 })
+
+test("Google Drive archive supports service-account writes into Shared Drives", () => {
+  const archive = source("lib/qeoindex-eod-archive.ts")
+  assert.match(archive, /supportsAllDrives/)
+  assert.match(archive, /includeItemsFromAllDrives/)
+  assert.match(archive, /GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/)
+  assert.match(archive, /GOOGLE_DRIVE_ARCHIVE_FOLDER_ID/)
+})
