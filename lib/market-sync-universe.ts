@@ -1,5 +1,6 @@
 import { getCanonicalUniverse } from "@/lib/market-universe"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { isVietnamSecuritiesTradingDay, vietnamDateKey } from "@/lib/vn-market-calendar"
 
 function parseGroupLevel(raw: string | undefined): { price: number; volume: number } | null {
   if (!raw || typeof raw !== "string") return null
@@ -11,14 +12,26 @@ function parseGroupLevel(raw: string | undefined): { price: number; volume: numb
 
 export async function runMarketUniverseSync() {
   const startedAt = Date.now()
+  const now = new Date()
+  const today = vietnamDateKey(now)
+  if (!isVietnamSecuritiesTradingDay(now)) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "NON_TRADING_DAY",
+      sessionDate: today,
+      count: 0,
+      persistedToSupabase: false,
+      persistedCount: 0,
+      durationMs: Date.now() - startedAt,
+    }
+  }
+
   const universe = await getCanonicalUniverse()
   const tickers = universe.stocks.map((stock) => stock.ticker)
   const tickerSet = new Set(tickers)
   if (!tickers.length) throw new Error("Canonical market universe is empty.")
 
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date())
   const feedUrl = `https://bgapidatafeed.vps.com.vn/getliststockdata/${tickers.join(",")}`
   const response = await fetch(feedUrl, {
     headers: { "User-Agent": "Mozilla/5.0 QeoIndex/1.0" },
@@ -58,6 +71,7 @@ export async function runMarketUniverseSync() {
   if (error) throw new Error("Snapshot persistence failed.")
   return {
     ok: true,
+    skipped: false,
     source: "vps_authoritative_market_feed",
     universeRunId: universe.runId,
     universeCount: tickers.length,
