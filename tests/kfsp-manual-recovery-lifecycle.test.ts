@@ -1,0 +1,57 @@
+import assert from "node:assert/strict"
+import { existsSync, readFileSync } from "node:fs"
+import test from "node:test"
+
+const lifecycleMigrationPath = "supabase/migrations/20260902060000_kfsp_manual_recovery_lifecycle.sql"
+const helperPath = "supabase/functions/_shared/kfsp-manual-lifecycle.ts"
+const ratingPath = "supabase/functions/kfsp-rating-sync/index.ts"
+const ttaiPath = "supabase/functions/kfsp-ttai-history-sync/index.ts"
+
+function source(path: string) {
+  assert.ok(existsSync(path), `${path} must exist`)
+  return readFileSync(path, "utf8")
+}
+
+test("manual recovery migration defines deterministic correlation and bounded queue conflict", () => {
+  const lifecycle = source(lifecycleMigrationPath)
+  assert.match(lifecycle, /system_job_run_id uuid/i)
+  assert.match(lifecycle, /sync_run_id uuid/i)
+  assert.match(lifecycle, /status text/i)
+  assert.match(lifecycle, /p_actor_user_id uuid/i)
+  assert.match(lifecycle, /p_max_duration_minutes integer/i)
+  assert.match(lifecycle, /KFSP_REQUEST_ID_CONFLICT/i)
+  assert.match(lifecycle, /KFSP_ACTIVE_RUN_CONFLICT/i)
+  assert.match(lifecycle, /status in \('queued', 'running'\)/i)
+  assert.match(lifecycle, /net\.http_post/i)
+  assert.match(lifecycle, /system_job_runs/i)
+})
+
+test("shared Edge lifecycle helper owns running and terminal transitions without secrets", () => {
+  const helper = source(helperPath)
+  assert.match(helper, /beginManualKfspLifecycle/)
+  assert.match(helper, /finalizeManualKfspLifecycle/)
+  assert.match(helper, /duplicate/)
+  assert.match(helper, /manual_recovery_rpc/)
+  assert.match(helper, /system_job_runs/)
+  assert.match(helper, /kfsp_manual_dispatch_runs/)
+  assert.doesNotMatch(helper, /access_token|x-kfsp-sync-secret|vault\.decrypted_secrets/i)
+})
+
+test("rating sync correlates manual request id while scheduled runs keep random ids", () => {
+  const rating = source(ratingPath)
+  assert.match(rating, /beginManualKfspLifecycle/)
+  assert.match(rating, /finalizeManualKfspLifecycle/)
+  assert.match(rating, /manual_recovery_rpc/)
+  assert.match(rating, /request_id/)
+  assert.match(rating, /crypto\.randomUUID\(\)/)
+})
+
+test("TTAI sync correlates manual request id and preserves partial-failure semantics", () => {
+  const ttai = source(ttaiPath)
+  assert.match(ttai, /beginManualKfspLifecycle/)
+  assert.match(ttai, /finalizeManualKfspLifecycle/)
+  assert.match(ttai, /manual_recovery_rpc/)
+  assert.match(ttai, /request_id/)
+  assert.match(ttai, /crypto\.randomUUID\(\)/)
+  assert.match(ttai, /failed \? 207 : 200/)
+})
