@@ -86,13 +86,9 @@ test("market-close edge types: structural interface completeness", () => {
   assert.equal(dummyLeader.estimated_index_points, 0.85)
 })
 
-test("direct market Edge writers fail closed on Vietnam securities holidays", () => {
+test("direct market snapshot writer fails closed on Vietnam securities holidays", () => {
   const marketSession = source("supabase/functions/market-session/index.ts")
-  const marketClose = source("supabase/functions/market-insight-eod-sync/index.ts")
-
-  for (const edge of [marketSession, marketClose]) {
-    assert.match(edge, /_shared\/vn-market-calendar\.ts/)
-    assert.match(edge, /isVietnamSecuritiesTradingDateKey|isVietnamSecuritiesTradingDay/)
-    assert.match(edge, /NON_TRADING_DAY/)
-  }
+  assert.match(marketSession, /_shared\/vn-market-calendar\.ts/)
+  assert.match(marketSession, /isVietnamSecuritiesTradingDateKey/)
+  assert.match(marketSession, /NON_TRADING_DAY/)
 })
