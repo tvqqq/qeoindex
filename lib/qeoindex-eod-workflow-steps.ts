@@ -1,7 +1,9 @@
 import "server-only"
 
-import { runQeoIndexEodPhase } from "@/lib/admin/job-phase-telemetry"
+import { runAiCouncilDailyOperation, runAiCouncilDebateOperation } from "@/lib/ai-council-operations"
+import { markQeoIndexEodPhaseSkipped, runQeoIndexEodPhase } from "@/lib/admin/job-phase-telemetry"
 import { getCanonicalUniverse } from "@/lib/market-universe"
+import { refreshOhlcvHistoryBatch, type OhlcvUniverseRefreshResult } from "@/lib/ohlcv-history-store"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { buildWyckoffV2TickerSnapshots, type WyckoffV2Snapshot } from "@/lib/wyckoff-v2-builder"
 import { loadWyckoffV2CachedTickerHistory } from "@/lib/wyckoff-v2-cache-read"
@@ -11,11 +13,8 @@ import { publishWyckoffV2SnapshotsDirect } from "@/lib/wyckoff-supabase-publish"
 
 export {
   runCompleteStep,
-  runDeterministicCouncilStep,
   runDriveArchiveStep,
   runEodReadyStep,
-  runHistoryRefreshBatchStep,
-  runLlmDebateStep,
   runMarketCloseCollectStep,
   runMarketSynthesisStep,
   runNotionArchiveStep,
@@ -27,6 +26,72 @@ function requiredSupabase() {
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured")
   return supabase
+}
+
+function mergeHistoryRefreshProgress(
+  previous: OhlcvUniverseRefreshResult,
+  current: OhlcvUniverseRefreshResult,
+): OhlcvUniverseRefreshResult {
+  return {
+    requestedTickers: previous.requestedTickers + current.requestedTickers,
+    completedTickers: previous.completedTickers + current.completedTickers,
+    failedTickers: previous.failedTickers + current.failedTickers,
+    dailyFetchedBars: previous.dailyFetchedBars + current.dailyFetchedBars,
+    backfillOperations: previous.backfillOperations + current.backfillOperations,
+    deltaOperations: previous.deltaOperations + current.deltaOperations,
+    limitedCoverage: [...previous.limitedCoverage, ...current.limitedCoverage],
+    errors: [...previous.errors, ...current.errors],
+  }
+}
+
+export async function runHistoryRefreshBatchStep(
+  runId: string,
+  stocks: WyckoffV2UniverseRow[],
+  startedAtIso: string,
+  progress: OhlcvUniverseRefreshResult,
+) {
+  "use step"
+  return runQeoIndexEodPhase({
+    runId,
+    phaseKey: "HISTORY_REFRESH",
+    fn: async () => {
+      if (stocks.length < 1 || stocks.length > 10) {
+        throw Object.assign(
+          new Error(`HISTORY_REFRESH batch must contain 1-10 tickers; received ${stocks.length}`),
+          { code: "HISTORY_REFRESH_FAILED" },
+        )
+      }
+      const result = await refreshOhlcvHistoryBatch(
+        requiredSupabase(),
+        stocks.map((stock) => stock.ticker),
+        new Date(startedAtIso),
+      )
+      if (result.failedTickers > 0) {
+        throw Object.assign(
+          new Error(
+            `HISTORY_REFRESH failed for ${result.failedTickers} ticker(s): `
+            + result.errors.slice(0, 5).map((item) => `${item.ticker}: ${item.error}`).join(" | "),
+          ),
+          { code: "HISTORY_REFRESH_FAILED" },
+        )
+      }
+      if (result.completedTickers !== result.requestedTickers) {
+        throw Object.assign(
+          new Error(`HISTORY_REFRESH batch completed ${result.completedTickers}/${result.requestedTickers} tickers`),
+          { code: "HISTORY_REFRESH_FAILED" },
+        )
+      }
+      return mergeHistoryRefreshProgress(progress, result)
+    },
+    summarize: (result) => ({
+      requestedTickers: result.requestedTickers,
+      completedTickers: result.completedTickers,
+      dailyFetchedBars: result.dailyFetchedBars,
+      backfillOperations: result.backfillOperations,
+      deltaOperations: result.deltaOperations,
+      limitedCoverageCount: result.limitedCoverage.length,
+    }),
+  })
 }
 
 async function buildAllSnapshots(stocks: WyckoffV2UniverseRow[], runKey: string, scanDate: string) {
@@ -156,6 +221,57 @@ export async function runSupabasePublishStep(
       snapshotCount: result.snapshotCount,
       chartSeriesCount: result.chartSeriesCount,
       validationHash: result.validationHash,
+    }),
+  })
+}
+
+export async function runDeterministicCouncilStep(runId: string, enabled = true, ratingDate?: string) {
+  "use step"
+  if (!enabled) {
+    await markQeoIndexEodPhaseSkipped({
+      runId,
+      phaseKey: "AI_COUNCIL_DETERMINISTIC",
+      reason: "Supabase Wyckoff publish did not complete.",
+    })
+    return { ok: false as const, status: "skipped" as const, reason: "SUPABASE_NOT_PUBLISHED" as const }
+  }
+  const operationDate = ratingDate ? new Date(`${ratingDate}T08:15:00.000Z`) : new Date()
+  return runQeoIndexEodPhase({
+    runId,
+    phaseKey: "AI_COUNCIL_DETERMINISTIC",
+    fn: () => runAiCouncilDailyOperation(requiredSupabase(), operationDate, ratingDate),
+    summarize: (result) => ({
+      ok: result.ok,
+      status: result.status,
+      ratingDate: result.ratingDate,
+      reason: "reason" in result ? result.reason : undefined,
+      stockCount: "stockCount" in result ? result.stockCount : undefined,
+    }),
+  })
+}
+
+export async function runLlmDebateStep(runId: string, enabled = true, ratingDate?: string) {
+  "use step"
+  if (!enabled) {
+    await markQeoIndexEodPhaseSkipped({
+      runId,
+      phaseKey: "AI_COUNCIL_LLM",
+      reason: "Deterministic Council did not complete.",
+    })
+    return { ok: false as const, status: "skipped" as const, reason: "DETERMINISTIC_NOT_READY" as const }
+  }
+  return runQeoIndexEodPhase({
+    runId,
+    phaseKey: "AI_COUNCIL_LLM",
+    fn: () => runAiCouncilDebateOperation(requiredSupabase(), ratingDate),
+    summarize: (result) => ({
+      ok: result.ok,
+      status: result.status,
+      ratingDate: result.ratingDate,
+      reason: "reason" in result ? result.reason : undefined,
+      selected: "selected" in result ? result.selected : undefined,
+      completed: "completed" in result ? result.completed : undefined,
+      totalTokens: "totalTokens" in result ? result.totalTokens : undefined,
     }),
   })
 }
