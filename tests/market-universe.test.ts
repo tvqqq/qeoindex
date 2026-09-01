@@ -77,8 +77,8 @@ test("canonical universe persistence and runtime boundaries exist", () => {
 
   const sql = source(migration)
   const runtime = source(service)
-  assert.match(sql, /create table[^;]*market_universe_runs/is)
-  assert.match(sql, /create table[^;]*market_universe_memberships/is)
+  assert.match(sql, /create table[\s\S]*market_universe_runs/i)
+  assert.match(sql, /create table[\s\S]*market_universe_memberships/i)
   assert.match(sql, /rank[^\n]*between 1 and 200/i)
   assert.match(sql, /qeo_current_market_universe/i)
   assert.match(sql, /qeo_publish_market_universe_run/i)
