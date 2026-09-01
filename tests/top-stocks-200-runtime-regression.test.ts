@@ -25,6 +25,7 @@ const boardPage = source("app/page.tsx")
 const boardRefresh = source("components/market-universe-version-refresh.tsx")
 const universeVersionRoute = source("app/api/market-universe/version/route.ts")
 const orderbookCleanupMigration = source("supabase/migrations/20260901162500_prune_noncanonical_orderbook_snapshots.sql")
+const cleanRebuildMigrationPath = "supabase/migrations/20260901213000_clean_rebuild_top_stocks_200.sql"
 const insightsPage = source("app/insights/page.tsx")
 
 test("Wyckoff runtime reads canonical Supabase universe instead of Notion Top100", () => {
@@ -127,4 +128,31 @@ test("Insights normalizes ticker-specific sectors and removes empty sector group
   assert.match(normalizer, /TVC:\s*"Chứng khoán"/)
   assert.match(normalizer, /stockCount > 0/)
   assert.match(insightsPage, /normalizeInsightsDashboardSectors/)
+})
+
+test("clean rebuild is an explicit one-shot purge of rebuildable stock operational state", () => {
+  assert.equal(existsSync(cleanRebuildMigrationPath), true)
+  if (!existsSync(cleanRebuildMigrationPath)) return
+  const migration = source(cleanRebuildMigrationPath)
+
+  for (const table of [
+    "market_ohlcv_history",
+    "market_ohlcv_bootstrap_state",
+    "wyckoff_analysis_snapshots",
+    "wyckoff_chart_series",
+    "wyckoff_universe_memberships",
+    "wyckoff_scan_runs",
+    "stock_orderbook_snapshots",
+    "ai_council_runs",
+  ]) {
+    assert.match(migration, new RegExp(table))
+  }
+
+  assert.match(migration, /market_universe_memberships/)
+  assert.match(migration, /market_universe_runs/)
+  assert.doesNotMatch(migration, /truncate table[^;]*kfsp_provider_tokens/is)
+  assert.doesNotMatch(migration, /truncate table[^;]*kfsp_ttai_quarterly_history/is)
+  assert.doesNotMatch(migration, /truncate table[^;]*market_ohlcv_archive_ranges/is)
+  assert.match(migration, /check \(timeframe = '1D'\)/)
+  assert.match(migration, /check \(timeframe in \('1D', '1W'\)\)/)
 })
