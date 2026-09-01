@@ -6,13 +6,13 @@ Branch: `feat/top-stocks-200-universe`
 
 ## 1. Goal
 
-Replace every operational Top 100 stock universe in QeoIndex with one canonical, monthly-refreshed **Top Stocks 200** universe. The universe is selected from the latest successfully published KFSP stock snapshot, persisted as an immutable monthly membership snapshot, cached for fast runtime reads, used consistently by Bubbles, Bảng điện, Wyckoff Chart, AI Council, Qeo Composite and related stock-list consumers, and managed from a new Root Admin universe screen.
+Replace every operational Top 100 stock universe in QeoIndex with one canonical, monthly-refreshed **Top Stocks 200** universe. The same published membership must drive Bubbles, Bảng điện, Wyckoff Chart, AI Council, Qeo Composite and all general stock-list consumers.
 
-The maximum universe size is fixed at **200**.
+The hard maximum universe size is **200**.
 
 ## 2. Canonical selection rule
 
-The default selector is:
+Default selector:
 
 ```text
 average_volume_50_sessions > 250000
@@ -25,25 +25,21 @@ LIMIT 200
 
 Rules:
 
-- `average_volume_50_sessions` is stock volume, unit shares.
-- `market_cap_billion` is market capitalization, unit billion VND.
-- Threshold semantics are strict `>` to match the product requirement.
-- Membership is not restricted to HOSE. Any supported Vietnamese listed stock in the KFSP snapshot may qualify; the original exchange is preserved.
-- The selector does not pad the list with stocks that fail the configured thresholds. If 167 stocks qualify, the published universe contains 167 stocks and Admin shows `167 / 200` with a warning.
-- Sorting is deterministic. Market capitalization is the primary ranking field; average 50-session volume and ticker are deterministic tie-breakers.
-- The maximum size of 200 is a code-level safety contract and is not editable from Admin.
+- `average_volume_50_sessions`: shares.
+- `market_cap_billion`: billion VND.
+- Thresholds use strict `>`.
+- Do not restrict membership to HOSE; preserve the provider exchange.
+- Do not pad the list. If only 167 stocks qualify, publish 167 and show `167 / 200` in Admin.
+- Market cap is the primary rank; Avg50 and ticker are deterministic tie-breakers.
+- Maximum 200 is a read-only code safety contract.
 
-## 3. Source of truth and refresh cadence
+## 3. Data source and monthly lifecycle
 
-### 3.1 Source
+The selector reads the latest successfully published KFSP snapshot from `insights_stock_ratings`, using normalized ticker, company, exchange, sector, `average_volume_50_sessions`, `market_cap_billion`, detail metrics and source date.
 
-The selector reads the latest successfully published KFSP rating/detail snapshot in `insights_stock_ratings`. It uses normalized fields already produced by the KFSP pipeline, including ticker, company name, exchange, sector, `average_volume_50_sessions`, `market_cap_billion`, and `kfsp_metrics`.
+KFSP detail/rating data remains daily. **Membership changes only when a universe refresh successfully publishes.** Daily KFSP updates cannot silently alter membership.
 
-The KFSP source remains a daily data source. **Universe membership is monthly.** Daily rating/detail refreshes must not mutate membership between monthly universe publishes.
-
-### 3.2 Monthly publish
-
-Create a monthly system job with key:
+Create system job:
 
 ```text
 market.universe_monthly
@@ -55,30 +51,25 @@ Default schedule:
 07:10 Asia/Ho_Chi_Minh on day 1 of every month
 ```
 
-If day 1 is a non-trading day, the job uses the latest successfully published KFSP snapshot available at execution time.
+If day 1 is not a trading day, use the latest successfully published KFSP snapshot available at execution time.
 
-The monthly job must:
+The job must:
 
-1. load the current admin selector configuration;
-2. resolve the latest valid KFSP snapshot date;
-3. select candidates using the canonical rule;
-4. deterministically rank and cap at 200;
-5. verify required detail fields are resolvable for every selected ticker;
-6. ensure a canonical logo object exists in Supabase Storage for every ticker, allowing the controlled text badge only as an application rendering fallback if external logo discovery fails;
-7. stage the membership snapshot and metadata;
-8. atomically publish the run;
-9. invalidate universe-related runtime caches;
-10. record system job telemetry and audit-relevant summary fields.
+1. load current Admin selector settings;
+2. resolve latest valid KFSP snapshot;
+3. filter, sort and cap candidates deterministically;
+4. verify detail identity/evidence;
+5. ensure every selected ticker has an object in Supabase `stock-logo`;
+6. stage the run and memberships;
+7. atomically publish the run;
+8. invalidate universe caches;
+9. record system-job telemetry.
 
-A failed run must not partially replace the current universe. The previously published universe remains active.
+A failed run never partially replaces the current universe; the previous published run remains active.
 
-## 4. Persistence model
-
-Create two canonical tables.
+## 4. Persistence
 
 ### 4.1 `market_universe_runs`
-
-One row per universe refresh attempt.
 
 Required fields:
 
@@ -98,15 +89,13 @@ Required fields:
 - `error_message text null`
 - `created_at timestamptz not null default now()`
 
-Canonical universe key:
+Canonical key:
 
 ```text
 vn_top_stocks
 ```
 
 ### 4.2 `market_universe_memberships`
-
-Immutable membership rows tied to a run.
 
 Required fields:
 
@@ -120,77 +109,42 @@ Required fields:
 - `market_cap_billion numeric not null`
 - `average_volume_50d bigint not null`
 - `source_as_of_date date not null`
-- `logo_path text null`
+- `logo_path text not null`
+- `logo_kind text not null` constrained to `official`, `generated_fallback`
 - `detail_complete boolean not null default false`
 - `created_at timestamptz not null default now()`
-- primary/unique constraints that prevent duplicate ticker or rank inside a run
 
-A database read model/RPC must resolve exactly one current published run and return memberships ordered by rank.
+Prevent duplicate ticker and duplicate rank within one run. A database read model/RPC resolves exactly one current published run and returns memberships by rank.
 
-## 5. Runtime universe service and cache
+## 5. Runtime service and cache
 
-Replace static Top 100 aliases with one server-side service boundary, for example:
+Replace static Top 100 imports with a server-side `getCanonicalUniverse()` boundary returning current run metadata plus stocks.
 
-```ts
-export interface CanonicalUniverseStock {
-  ticker: string
-  rank: number
-  companyName: string | null
-  exchange: string | null
-  sector: string | null
-  marketCapBillion: number
-  averageVolume50d: number
-  logoPath: string | null
-  sourceAsOfDate: string
-}
-
-export interface CanonicalUniverseSnapshot {
-  key: "vn_top_stocks"
-  runId: string
-  updatedAt: string
-  sourceAsOfDate: string
-  selectedCount: number
-  maxSize: 200
-  filters: {
-    minMarketCapBillion: number
-    minAverageVolume50d: number
-  }
-  stocks: CanonicalUniverseStock[]
-}
-```
-
-Runtime consumers call a cached `getCanonicalUniverse()` service rather than importing a static ticker array.
+Each stock includes ticker, rank, company, exchange, sector, market cap, Avg50, logo path and source date.
 
 Caching rules:
 
-- cache the current published snapshot and ticker list;
-- use a semantic namespace such as `market-universe:v1`, never `top100:*` or `top200:*`;
-- cache invalidation occurs only after successful monthly publish;
-- cache failures fail open to the current published database snapshot;
-- no page dynamically re-runs the membership selector.
+- use semantic namespace `market-universe:v1`, not `top100:*` or `top200:*`;
+- cache current published snapshot/ticker list;
+- invalidate only after successful publish;
+- on cache failure, read the current published database snapshot;
+- never execute the selector during page render;
+- Edge Functions read the same Supabase universe read model/RPC, never a duplicated ticker array.
 
-For Edge Functions that cannot import the Next.js server module, membership must come from the same Supabase read model/RPC rather than from a duplicated ticker constant.
+## 6. Root Admin
 
-## 6. Root Admin configuration and UI
+### 6.1 Editable selector settings
 
-### 6.1 Editable settings
-
-Add two runtime-safe settings to the existing Root Admin settings catalog:
+Add:
 
 ```text
 market.universe_min_market_cap_billion = 10
 market.universe_min_avg_volume_50d = 250000
 ```
 
-Constraints:
+Use existing Root Admin CAS, same-origin mutation validation, mandatory change reason and audit log. A setting change affects the **next refresh**, not the current membership.
 
-- market cap must be a positive numeric value with a sensible bounded maximum;
-- volume must be a positive integer with a sensible bounded maximum;
-- settings use the existing optimistic-lock/CAS mutation path, same-origin protection, mandatory change reason, and audit log;
-- changing a selector setting does **not** immediately change the current membership;
-- the next universe refresh reads the new settings.
-
-Keep the code-level inventory item:
+Keep:
 
 ```text
 market.universe_size = 200
@@ -200,43 +154,44 @@ read-only.
 
 ### 6.2 `/admin/universe`
 
-Add a Root Admin navigation tab named `Top Stocks 200`.
+Add navigation tab `Top Stocks 200`.
 
-The page shows:
+Show:
 
-- current selected count and maximum 200;
-- current published universe run ID;
-- source KFSP snapshot date;
-- last successful update timestamp;
-- next scheduled update timestamp;
-- selector values that created the current snapshot;
-- selector values currently configured for the next run;
-- warning if selected count is below 200;
-- detail completeness count;
-- logo availability count.
+- selected count / 200;
+- current run ID;
+- KFSP source date;
+- last successful update;
+- next scheduled update;
+- filters used by current run;
+- filters configured for next run;
+- warning when selected count < 200;
+- detail completeness;
+- logo coverage.
 
-Membership table columns:
+Table:
 
 ```text
 Rank | Logo | Ticker | Company | Exchange | Sector | Market Cap | Avg Vol 50D | Detail | Source Date
 ```
 
-The table may filter/search client-side because the hard maximum is 200 rows.
+Maximum 200 rows allows client-side search/filter.
 
-## 7. Canonical logo storage
+## 7. Supabase `stock-logo` is the canonical logo store
 
-### 7.1 Supabase bucket
-
-Use the existing Supabase Storage bucket:
+Project:
 
 ```text
-project: glwhhrmejlonhyorvtzm
-bucket: stock-logo
+glwhhrmejlonhyorvtzm
 ```
 
-This bucket becomes the **canonical source of truth for all stock logos used by the universe**.
+Bucket:
 
-Target storage contract:
+```text
+stock-logo
+```
+
+Canonical object contract:
 
 ```text
 stock-logo/{TICKER}.png
@@ -244,113 +199,99 @@ stock-logo/{TICKER}.png
 
 Requirements:
 
-- every current universe ticker must have an attempted canonical object in the bucket;
-- write/update access is service-role only;
-- stock logos are non-sensitive assets and the intended runtime model is public-read for maximum UI performance; implementation must verify the current bucket accessibility and enforce the intended public-read/service-role-write policy without exposing write credentials;
-- membership stores `logo_path`, not a hardcoded external provider URL;
-- the UI resolves the Supabase Storage asset URL from `logo_path`;
-- the existing branded ticker badge remains the final rendering fallback if a logo object cannot be loaded.
+- **every published universe member must have a real object in this bucket**;
+- bucket is intended public-read for non-sensitive company-logo assets; writes remain service-role only;
+- implementation must inspect current bucket configuration and enforce public-read/service-role-write without exposing credentials;
+- membership persists `logo_path` and `logo_kind`;
+- UI resolves the Supabase Storage/CDN URL from `logo_path`;
+- `public/logos` is not the long-term source of truth.
 
-### 7.2 Logo discovery
+### 7.1 Official logo discovery
 
-Preserve the current source-priority logic as the canonical discovery strategy:
+Preserve current priority:
 
 1. Ruatichsan JPEG/PNG/JPG;
 2. 24hMoney JPG/PNG;
 3. Vietstock image endpoint;
-4. rank candidates by square/near-square ratio, preferred source, then usable resolution/file size.
+4. rank by square/near-square ratio, preferred source, then usable resolution/file size.
 
-The discovery job takes the current universe ticker list as input. It must not contain its own static stock list.
+The resolver receives the canonical membership list and contains no static ticker list.
 
-For existing repository assets under `public/logos`, backfill every valid asset into `stock-logo` before the cutover. For universe tickers missing locally, run external discovery and upload the chosen object to Supabase Storage.
+### 7.2 Guaranteed 100% bucket coverage
 
-After cutover, `public/logos` is no longer the canonical runtime source. It may remain temporarily as a compatibility fallback only until all consumers are migrated and verified; the cleanup phase removes obsolete local-logo data and static logo indexes when no runtime reference remains.
+Before the first new-universe publish:
 
-## 8. Detail completeness contract
+1. upload every valid existing `public/logos/{TICKER}.png` asset for selected tickers;
+2. for missing assets, run official discovery and upload the selected candidate;
+3. if no official candidate can be resolved, generate a deterministic branded ticker PNG and upload it as `stock-logo/{TICKER}.png` with `logo_kind = generated_fallback`.
 
-Every published universe member must resolve a detailed KFSP record for popup/detail usage.
+Therefore a published membership never depends on a missing Storage object. Admin distinguishes official vs generated fallback so official logos can be improved later.
 
-The detailed UI uses the latest valid daily data for the ticker while membership remains monthly.
+After all runtime consumers use Supabase Storage and verification passes, obsolete local logo files/static logo indexes may be removed from the repository in the cleanup phase.
 
-If the latest daily detail row is unavailable, the detail loader may use the latest previous successfully published row for that same ticker. The UI must not silently substitute a different ticker or synthetic fundamentals.
+## 8. Detail completeness
 
-The monthly universe run records detail completeness. A ticker without minimally required identity and filter evidence cannot be published as a member.
+Every published member must open a usable detail popup.
 
-Minimum selection evidence is:
+Membership selection requires ticker, market cap and Avg50. Detail identity requires ticker, source date and company identity; exchange is preserved when provided.
 
-- ticker;
-- market cap;
-- average volume 50D.
-
-Minimum detail identity is:
-
-- ticker;
-- company name or an explicit canonical ticker fallback;
-- exchange if provided by the source;
-- source snapshot date.
+The detail popup uses the newest valid daily KFSP record for that ticker. If the latest day is missing, it may use the latest previous successfully published detail row for the **same ticker**. Never substitute another ticker or synthesize fundamentals.
 
 ## 9. Consumer migration
 
-The following product areas must use the same current published membership.
+### Bảng điện / orderbook
 
-### 9.1 Bảng điện
+- SSR quotes, 5m snapshots, EOD shares, market sync and realtime/orderbook membership use the current canonical universe.
+- Remove static ticker copies from Edge Functions/scripts.
 
-- SSR batch quotes use current universe tickers.
-- 5m snapshot requests use current universe tickers.
-- EOD share/market sync uses current universe tickers.
-- realtime/orderbook ingestion validates against current membership.
-- Edge Functions do not carry a static copy of the ticker list.
+### Bubbles
 
-### 9.2 Bubbles
+Delete the separate membership rule `average_volume_50_sessions > 300000` + volume ranking. Bubbles can reorder current members for display but cannot add a stock outside the canonical universe.
 
-Remove the independent Bubbles membership rule based on `average_volume_50_sessions > 300000` and volume ranking. Bubbles receives the canonical universe and may sort/present that membership differently for visualization, but cannot add a ticker outside the current universe.
+### Qeo Composite / rating / popup
 
-### 9.3 Qeo Composite and stock rating surfaces
+Use canonical membership. Qeo Composite score can control presentation ranking but not membership.
 
-The Qeo Composite table, sector stock rows, stock-detail popup and any general Top Stocks disclosure operate on canonical universe membership. Presentation sorting can use Qeo Composite score but does not alter membership.
+### Wyckoff
 
-### 9.4 Wyckoff Chart and scanner
+Replace current operational `hose_top100` membership with `vn_top_stocks`.
 
-Replace legacy `hose_top100` operational membership with `vn_top_stocks`.
-
-The required snapshot count is dynamic:
+Expected snapshots become:
 
 ```text
 expected_snapshots = universe_count * timeframe_count
 ```
 
-With five current timeframes and 200 members, the maximum expected count is 1000. Bounded scanning/ingestion batches remain small enough to respect provider/runtime limits.
+With five timeframes, the maximum is 1000 for 200 stocks. Keep execution in bounded batches. Remove runtime assumptions such as `Universe Count = 100`, `Snapshot Expected = 500`, `.slice(0, 100)` and exact 100-ticker readiness checks.
 
-Do not preserve `Universe Count = 100`, `Snapshot Expected = 500`, `.slice(0, 100)`, or equivalent assumptions in runtime contracts.
+Historical Wyckoff runs preserve their original universe key/count; do not rewrite history.
 
-Historical run records retain their historical universe key/count. Do not rewrite old historical Wyckoff outcomes as though they were generated for the new universe.
+### AI Council
 
-### 9.5 AI Council
+AI Council evidence/readiness uses canonical membership. The candidate pool may grow to 200, but LLM-specific ticker caps remain independent cost controls. Do not create 200 LLM calls.
 
-AI Council evidence selection and EOD readiness use canonical universe membership. The candidate pool may grow to 200, but the existing LLM-specific ticker limits remain independent cost controls. The migration must not cause 200 LLM calls.
+### Repository-wide audit
 
-### 9.6 Other list consumers
+Audit runtime references to:
 
-Audit all runtime code for static Top 100 references, including:
+- `CANONICAL_TOP100_TICKERS`
+- `UNIVERSE_SIZE = 100`
+- `is_top100`
+- `top100_rank`
+- `hose_top100`
+- universe-specific `.limit(100)` / `.slice(0, 100)`
+- exact `length !== 100`
+- `top100:*` cache keys
+- static Top 100 arrays
+- Top 100 product copy
 
-- `CANONICAL_TOP100_TICKERS`;
-- `UNIVERSE_SIZE = 100`;
-- `is_top100`;
-- `top100_rank`;
-- `hose_top100`;
-- `.limit(100)` or `.slice(0, 100)` where the literal is a universe contract;
-- exact `length !== 100` readiness checks;
-- `top100:*` cache namespaces;
-- static Top 100 arrays in Edge Functions/scripts;
-- user-facing copy that claims Top 100 where the operational universe is now Top Stocks 200.
-
-Not every literal `100` in the repository is a universe contract; unrelated limits, percentages, portfolio batch limits, telemetry truncation, and score scales must not be modified just because they contain `100`.
+Do not modify unrelated `100` values such as score scales, percentages, batch APIs or string truncation.
 
 ## 10. Rating schema migration
 
-Do not introduce `is_top200` or `top200_rank` as the new long-term schema.
+Do **not** create long-term `is_top200` / `top200_rank` fields.
 
-Normalize universe semantics to generic fields/read models such as:
+Use generic semantics where needed:
 
 ```text
 is_universe
@@ -359,196 +300,179 @@ universe_key
 universe_effective_date
 ```
 
-The exact migration may temporarily retain `is_top100` and `top100_rank` for compatibility while consumers are migrated. Final cleanup removes the legacy columns, constraints and indexes only after code-search and automated tests prove no active runtime path uses them.
+A compatibility migration may temporarily keep `is_top100` / `top100_rank`. Final cleanup removes them only after runtime code and tests have zero active references. The current `top100_rank between 1 and 100` constraint cannot survive final cutover.
 
-The `top100_rank between 1 and 100` database constraint must not survive the final cutover.
+## 11. Guarded legacy database/data cleanup
 
-## 11. Legacy cleanup and destructive data removal
+The user requires obsolete database data to be removed after new-universe cutover.
 
-The user requires obsolete database data to be removed after the new universe is implemented.
+This is a separate destructive phase after a successful new-universe publish and consumer verification.
 
-Cleanup is a separate post-cutover phase, not part of the first schema migration.
+### 11.1 Deletion gate
 
-### 11.1 Cleanup eligibility
+Delete a legacy object/data set only when all are true:
 
-A legacy object is eligible for deletion only when all are true:
+1. runtime code has zero active references;
+2. current tests/read models no longer require compatibility;
+3. a new `vn_top_stocks` run is successfully published;
+4. Bảng điện, Bubbles, Qeo Composite, Wyckoff and AI Council read the new membership;
+5. database preflight finds no active FK/read-model dependency;
+6. historical evidence required for audit/post-analysis is preserved.
 
-1. current branch runtime has no references to the legacy object/column/key;
-2. migrations/tests no longer require it for compatibility;
-3. the new universe has a successfully published current snapshot;
-4. Bảng điện, Bubbles, Qeo Composite, Wyckoff and AI Council successfully read the new universe;
-5. a database preflight shows the legacy data is not referenced by active foreign keys or current read models;
-6. historical records whose value is still required for audit/post-analysis are preserved.
+### 11.2 Expected cleanup targets
 
-### 11.2 Intended cleanup targets
+Where confirmed obsolete:
 
-Expected cleanup includes, where confirmed obsolete during implementation:
+- `is_top100` / `top100_rank` columns, constraints and indexes;
+- legacy **current-membership** materializations keyed only by `hose_top100` after replacement;
+- abandoned legacy staging/current-universe rows with no audit value;
+- persisted compatibility caches or cache metadata using `top100:*` if stored in database-backed cache infrastructure;
+- duplicate current-universe materializations that are no longer read;
+- obsolete database functions/views/RPCs whose only purpose is the old Top 100 contract.
 
-- `is_top100` and `top100_rank` columns/constraints/indexes from current rating tables;
-- legacy current-membership rows identified only by `hose_top100` when the same current membership has been migrated to `vn_top_stocks`;
-- stale compatibility/current-universe cache records whose namespace is `top100:*`;
-- duplicate static/current universe materializations no longer used by any runtime path;
-- obsolete local logo index/runtime data after Supabase Storage cutover;
-- obsolete current-universe staging rows from failed/abandoned legacy runs where retention has no audit value.
+Do **not** delete historical market, rating, AI Council, Wyckoff, telemetry, audit, thesis or analysis records just because they were produced during the Top 100 era. Historical evidence remains historically accurate.
 
-Do **not** delete historical market, rating, AI Council, Wyckoff, job telemetry, audit, or analysis records solely because they were produced when the universe size was 100. Historical evidence must remain historically accurate.
+### 11.3 Cleanup mechanics
 
-### 11.3 Cleanup execution
+Use an explicit migration/maintenance operation with:
 
-Use an explicit migration or maintenance script with:
-
-- preflight counts;
-- transaction boundaries where supported;
-- exact table/column/key targets;
+- preflight object/row counts;
+- exact targets;
+- transactional DDL/DML where supported;
 - post-cleanup counts;
-- failure rollback for transactional operations;
-- logged summary of what was removed and what was intentionally preserved.
+- rollback on transactional failure;
+- logged summary of deleted and intentionally preserved objects/data.
 
-No blanket truncation of shared history tables is allowed.
+No blanket truncate of shared history tables.
 
-## 12. Full refresh after cutover
+## 12. Full refresh after implementation and cleanup
 
-After schema, runtime consumers, logo storage, Admin UI and cleanup pass verification, execute one complete fresh universe refresh.
+After schema, runtime consumers, Admin UI, Storage logos and guarded cleanup pass verification, run one complete fresh universe cycle.
 
 Required sequence:
 
-1. ensure latest KFSP rating/detail snapshot is successfully published;
-2. run `market.universe_monthly` manually through the authorized system-job path using the default selector unless Admin settings have intentionally changed it;
-3. verify run status `published`;
-4. verify selected count is `<= 200` and every member satisfies the strict filter;
-5. verify rank ordering is deterministic and market-cap descending;
-6. verify detail completeness for every selected member;
-7. verify `stock-logo` object coverage for every selected member or explicitly record controlled fallback failures;
-8. invalidate/read back the runtime universe cache;
-9. run dependent market/orderbook/insights refresh paths needed for the new membership;
-10. run the EOD/readiness path that proves Wyckoff and AI Council accept the new membership contract;
-11. smoke-test Bảng điện, Bubbles, Qeo Composite, Wyckoff Chart, AI Council and `/admin/universe` against the same run ID/member set.
+1. confirm latest KFSP detail/rating snapshot is published;
+2. manually execute `market.universe_monthly` through the authorized job path;
+3. verify status `published`;
+4. verify every member satisfies strict filters;
+5. verify count `<= 200` and ranks are deterministic market-cap-descending;
+6. verify detail completeness = selected count;
+7. verify `stock-logo` object coverage = selected count;
+8. invalidate and read back runtime universe cache;
+9. refresh dependent board/orderbook/insights data needed by the new membership;
+10. run EOD/readiness verification proving Wyckoff and AI Council accept the new contract;
+11. smoke-test Bảng điện, Bubbles, Qeo Composite, Wyckoff Chart, AI Council and `/admin/universe` against the same current universe run.
 
-The new universe is considered live only after this refresh and verification complete successfully.
+The new universe is live only after this cycle succeeds.
 
 ## 13. Failure behavior
 
-- No valid KFSP snapshot: fail the monthly run; keep previous published universe.
-- Selector returns zero rows: fail closed; keep previous published universe.
-- Selector returns fewer than 200 rows: publish the qualifying set and show Admin warning.
-- Database stage/publish failure: do not mutate current universe.
-- Cache invalidation failure: database snapshot is authoritative and runtime may fall back to it.
-- External logo source failure for one ticker: retain controlled ticker-badge rendering fallback and surface logo coverage in Admin; do not replace the ticker with another stock.
-- Supabase Storage upload failure: record the failed logo status and retry in the refresh workflow; membership publication may proceed only if product identity/detail remains usable and the failure is visible.
-- One downstream ticker data refresh failure must not invalidate the entire membership; downstream jobs use bounded retries/skip semantics according to their own contracts while preserving the canonical member list.
+- no valid KFSP snapshot: fail refresh, preserve previous universe;
+- zero candidates: fail closed, preserve previous universe;
+- fewer than 200 qualifying candidates: publish that qualifying set and warn in Admin;
+- database publish failure: preserve previous current run;
+- cache invalidation failure: database current run remains authoritative;
+- external official-logo discovery failure: generate/upload deterministic fallback PNG; do not publish with a missing bucket object;
+- one downstream ticker refresh failure does not alter canonical membership; downstream jobs use their bounded retry/skip semantics.
 
-## 14. Security
+## 14. Security and performance
 
-- Root Admin remains restricted by existing `ROOT_ADMIN_USER_IDS` server authorization.
-- Universe settings mutations use existing same-origin validation, required change reason, CAS versioning and audit logging.
-- Supabase Storage writes use service-role credentials only on the server/job side.
-- No service-role key or Storage write credential is exposed to the browser.
-- The logo bucket stores public company-logo assets only; no sensitive user data is stored there.
-- Monthly/manual refresh endpoints use existing machine/admin authorization patterns.
+- Root Admin keeps existing `ROOT_ADMIN_USER_IDS` authorization.
+- Settings keep current CAS, same-origin and audit protections.
+- Storage writes are service-role only; no browser write credentials.
+- Universe/manual refresh endpoints use existing machine/admin authorization.
+- Never run selector on page render.
+- Never fetch 200 provider details serially in a browser request.
+- SSR and realtime consumers receive cached membership and keep bounded provider concurrency.
+- All UI work obeys `AGENTS.md` chart/realtime/dense-table performance invariants.
 
-## 15. Performance constraints
-
-- Never run the universe selector on page render.
-- Never fetch 200 detailed provider records serially in a browser request.
-- SSR market board receives a cached ticker list and uses existing bounded quote/history services.
-- Dense-table and realtime UI changes continue to obey `AGENTS.md` performance invariants: no broad persistent backdrop blur, no unbounded prefetch, stable chart dimensions, bounded network concurrency.
-- Logo URLs resolve directly from Supabase Storage/CDN rather than proxying every image through a dynamic application route unless bucket configuration makes a proxy unavoidable.
-
-## 16. Testing and acceptance criteria
-
-The implementation is accepted only when automated and production verification cover all of the following.
+## 15. Acceptance criteria
 
 ### Selector
 
-- strict volume boundary: exactly 250000 is excluded;
-- strict market-cap boundary: exactly 10 is excluded;
-- eligible rows above both thresholds are included;
-- market-cap descending ordering;
-- deterministic average-volume/ticker tie-breaks;
-- hard cap at 200;
-- fewer than 200 candidates are not padded.
+- exactly 250000 volume is excluded;
+- exactly 10 billion VND market cap is excluded;
+- both thresholds above boundary are required;
+- deterministic market-cap/Avg50/ticker ordering;
+- hard maximum 200;
+- no padding below thresholds.
 
-### Monthly stability
+### Monthly semantics
 
-- daily KFSP data changes do not alter membership without a monthly publish;
-- a failed monthly refresh leaves the previous current run unchanged;
-- changed Admin filters affect the next refresh, not the current snapshot.
+- daily KFSP changes do not mutate membership;
+- failed refresh leaves previous current run unchanged;
+- Admin filter changes affect next refresh only.
 
-### Consumers
+### Consumer consistency
 
-- Bảng điện contains only current universe tickers;
-- Bubbles contains only current universe tickers;
-- Qeo Composite contains only current universe tickers;
-- Wyckoff stock list contains only current universe tickers;
-- AI Council candidate/evidence queries contain only current universe tickers;
-- detail popup works for every current member;
-- all selected tickers render a Supabase Storage logo or the controlled ticker fallback.
+- Bảng điện, Bubbles, Qeo Composite, Wyckoff and AI Council use the same current membership;
+- no product consumer adds a ticker outside it;
+- every member opens detail;
+- every member has `stock-logo/{TICKER}.png` in Supabase Storage.
 
 ### Wyckoff
 
-- universe count is dynamic and up to 200;
-- expected snapshot count equals `universe_count * 5` for the current five-timeframe contract;
-- no runtime readiness path requires exactly 100 tickers or 500 snapshots.
+- dynamic universe up to 200;
+- expected snapshot count = `universe_count * 5` under current five-timeframe contract;
+- no runtime exact-100/exact-500 readiness assumption.
 
-### Database cleanup
+### Cleanup
 
-- active runtime code has zero references to removed legacy columns/keys;
-- post-cleanup schema no longer contains obsolete current Top 100 constraints/materializations;
-- historical audit/research records remain intact;
-- no active read model breaks after cleanup.
+- removed legacy DB columns/views/functions/data have zero runtime references;
+- no active read model breaks after cleanup;
+- historical evidence remains intact.
 
 ### Full refresh
 
-- a fresh `market.universe_monthly` run publishes successfully;
-- runtime cache returns the same run/member ordering;
-- Admin timestamps and next-run metadata are correct;
-- current product surfaces use the same universe run.
+- fresh `market.universe_monthly` run publishes successfully;
+- cache returns the same run/member ordering;
+- Admin last/next update metadata is correct;
+- logo and detail coverage both equal selected count;
+- all required product surfaces point to the same current run.
 
-## 17. Rollout sequence
+## 16. Rollout order
 
-Use this order to keep the system recoverable:
-
-1. add generic universe persistence and read model without deleting legacy fields;
+1. add generic universe persistence/read model without deleting compatibility fields;
 2. add selector tests and universe service/cache;
-3. add Admin settings and `/admin/universe`;
-4. migrate/backfill logos into Supabase `stock-logo` and switch logo resolution;
-5. migrate Bảng điện/orderbook and general consumer paths;
-6. migrate Insights/Bubbles/Qeo Composite/detail paths;
-7. migrate Wyckoff membership/run/readiness contracts;
-8. migrate AI Council and EOD readiness contracts;
-9. publish and verify a new universe snapshot;
+3. add Admin selector settings and `/admin/universe`;
+4. backfill/generate/upload all selected logos into `stock-logo` and switch logo resolution;
+5. migrate Bảng điện/orderbook/general consumers;
+6. migrate Insights/Bubbles/Qeo Composite/detail;
+7. migrate Wyckoff membership/snapshot/readiness contracts;
+8. migrate AI Council/EOD readiness;
+9. publish and verify a new `vn_top_stocks` snapshot;
 10. run comprehensive code-search/tests/smoke checks;
-11. execute guarded legacy database/data cleanup;
-12. run one final complete `market.universe_monthly` refresh plus dependent refresh verification;
-13. update canonical engineering handoff documentation;
-14. merge the approved feature branch to `main` once for the production Vercel deployment trigger.
+11. execute guarded legacy DB/data cleanup;
+12. run the final full `market.universe_monthly` refresh and dependent readiness verification;
+13. update canonical handoff documents;
+14. merge the approved feature branch to `main` once, producing one Vercel Git-triggered production deployment.
 
-Supabase migrations and Edge Function changes must be deployed to production according to the repository's `AGENTS.md` invariants during implementation. Do not create a duplicate manual Vercel production deployment for the same release.
+Supabase migrations and changed Edge Functions must be deployed to production according to `AGENTS.md`. Do not manually duplicate the Vercel production deployment for the same release.
 
-## 18. Rollback
+## 17. Rollback
 
-Before destructive cleanup, rollback is simply re-pointing the current published universe/read model to the previous valid run and reverting consumer code if needed.
+Before destructive cleanup, rollback can restore the previous published current run/read model and revert consumers.
 
-After destructive cleanup, rollback must use forward migrations restoring only the required compatibility schema; do not edit already-applied production migrations. Historical records are preserved specifically so universe version changes do not erase prior evidence.
+After destructive cleanup, restore required compatibility only via forward migrations; do not edit already-applied production migrations.
 
-The monthly publication model always keeps prior published run rows available unless a later retention policy explicitly archives them. Current selection is a pointer/read-model decision, not destructive replacement of prior run history.
+Prior published universe runs and historical analysis evidence remain preserved so universe changes never rewrite historical outcomes.
 
-## 19. Documentation deliverables
+## 18. Documentation / handoff deliverables
 
-Implementation must update:
+Update:
 
 - `docs/HANDOVER.md`;
-- market-board documentation;
-- Insights handover/rating documentation;
-- Wyckoff unified-data documentation and external staging prompt/contract where applicable;
-- Root Admin documentation;
-- a dedicated final implementation handoff that lists migrations, runtime interfaces, cron/manual commands, cleanup executed, verification evidence, and remaining known limitations.
+- market-board docs;
+- Insights handover/rating docs;
+- Wyckoff unified-data docs and external staging contract/prompt;
+- Root Admin docs;
+- final Top Stocks 200 implementation handoff containing schema/migrations, runtime interfaces, Storage logo behavior, cron/manual commands, cleanup evidence, verification results and known limitations.
 
-## 20. Non-goals
+## 19. Non-goals
 
-- Do not redesign the Qeo Composite formula.
-- Do not make the Admin-selected universe maximum editable above 200.
-- Do not call the LLM once per universe member.
-- Do not replace KFSP accounting/detail data with synthetic values.
-- Do not rewrite historical analyses or old Wyckoff/AI Council outcomes to pretend they used the new universe.
-- Do not delete unrelated rows merely because they were created during the Top 100 era.
+- no Qeo Composite formula redesign;
+- no editable maximum above 200;
+- no 200-ticker LLM fan-out;
+- no synthetic KFSP accounting/detail values;
+- no rewriting historical analysis/AI Council/Wyckoff outcomes;
+- no deletion of unrelated historical data solely because it predates Top Stocks 200.
