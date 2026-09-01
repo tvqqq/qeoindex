@@ -1,5 +1,6 @@
 import { LandingLogin } from "@/components/auth/landing-login"
 import { LiveMarketBoardV2, type BoardUniverseStock, type IndexQuote } from "@/components/live-market-board-v2"
+import { MarketUniverseVersionRefresh } from "@/components/market-universe-version-refresh"
 import { OrderBookProvider } from "@/components/orderbook/orderbook-context"
 import { OrderBookManager } from "@/components/orderbook/orderbook-manager"
 import MarketBoardTransition from "@/components/smoothui/market-board-transition"
@@ -7,7 +8,7 @@ import { TopNav } from "@/components/top-nav"
 import { getServerAuthContext } from "@/lib/auth/server"
 import { boardSectorGroupForSector, sectorForTicker } from "@/lib/market-sectors"
 import { getCanonicalUniverse, type CanonicalUniverseSnapshot } from "@/lib/market-universe"
-import { getBoardOverviewSnapshotsFromSupabase } from "@/lib/supabase/orderbook"
+import { getCanonicalBoardOverviewSnapshots } from "@/lib/supabase/board-overview"
 import { isTradingSessionOpen, getMarketSessionStatus } from "@/lib/session-countdown"
 import { fetchLiveBatchQuotes } from "@/lib/broker-live-quotes"
 import { readThroughUiCache } from "@/lib/ui-data-cache"
@@ -20,7 +21,7 @@ import styles from "./market-board-performance.module.css"
 export const dynamic = "force-dynamic"
 
 const INITIAL_HISTORY_POINTS = 90
-const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v5"
+const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v6"
 
 type InitialBoardData = {
   universe: BoardUniverseStock[]
@@ -47,7 +48,7 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
   const currentDay = vietnamDateKey(now)
   const tickers = canonical.stocks.map((stock) => stock.ticker)
   const [snapshots, liveQuotes, intraday5m] = await Promise.all([
-    getBoardOverviewSnapshotsFromSupabase(),
+    getCanonicalBoardOverviewSnapshots(tickers),
     fetchLiveBatchQuotes(tickers),
     getIntraday5mSnapshot(tickers, now),
   ])
@@ -143,6 +144,7 @@ export default async function Page() {
   return (
     <OrderBookProvider>
       <div data-market-board className={`${styles.performanceSurface} flex h-screen flex-col overflow-hidden bg-background`}>
+        <MarketUniverseVersionRefresh universeRunId={canonical.runId} />
         <TopNav />
         <main className="min-h-0 flex-1">
           <MarketBoardTransition className="h-full min-h-0">
