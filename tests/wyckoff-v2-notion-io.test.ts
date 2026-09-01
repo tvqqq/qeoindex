@@ -18,9 +18,9 @@ function rich(property: unknown) {
   return (value.rich_text ?? []).map((item) => item.text?.content ?? "").join("")
 }
 
-function snapshot(ticker: string, timeframe: "1H" | "4H" | "1D" | "1W" | "1M", rank: number | null): WyckoffV2Snapshot {
-  const runKey = "WYCKOFF-2026-08-25-EOD-v2"
-  const horizon = timeframe === "1H" ? "intraday" : timeframe === "4H" ? "swing" : timeframe === "1D" ? "week" : timeframe === "1W" ? "month" : "long_term"
+function snapshot(ticker: string, timeframe: WyckoffV2Snapshot["timeframe"], rank: number | null): WyckoffV2Snapshot {
+  const runKey = "WYCKOFF-2026-08-25-EOD-v3"
+  const horizon = timeframe === "1D" ? "week" : "month"
   return {
     snapshot: `${ticker} · ${timeframe} · 2026-08-25`, snapshotKey: `${runKey}|${ticker}|${timeframe}`, runKey, ticker, rank,
     exchange: "HOSE", sector: "Consumer", timeframe, barClosedAt: "2026-08-25T07:45:00.000Z", historyBarCount: 80,
@@ -31,7 +31,7 @@ function snapshot(ticker: string, timeframe: "1H" | "4H" | "1D" | "1W" | "1M", r
     bullProbability: 40, baseProbability: 35, bearProbability: 25, support: "60", resistance: "70",
     confirmation: "Breakout → Hold → Retest → Follow-through.", invalidation: "Acceptance dưới Support 60.", whatChanged: "Baseline scan.",
     technical: { price: 65, changePct: 1, volume: 1_000_000, ma20: 64, ma50: 62, ma200: 55, rsi14: 58, macd: 1, macdSignal: 0.8, atr14: 1.2, relVolume: 1.1 },
-    evidence: { provider: "DNSE", providerDetail: "DNSE cached history", sourceUrl: `https://openapi.dnse.com.vn/price/ohlc?symbol=${ticker}&resolution=1D&type=STOCK`, fetchedAt: "2026-08-25T08:20:00.000Z", firstBarAt: "2025-01-01T00:00:00.000Z", lastBarAt: "2026-08-25T07:45:00.000Z", completedBars: 80, derived: timeframe !== "1H" && timeframe !== "1D", rulesTriggered: ["Above MA50"], missingReason: "" },
+    evidence: { provider: "DNSE", providerDetail: "DNSE cached history", sourceUrl: `https://openapi.dnse.com.vn/price/ohlc?symbol=${ticker}&resolution=1D&type=STOCK`, fetchedAt: "2026-08-25T08:20:00.000Z", firstBarAt: "2025-01-01T00:00:00.000Z", lastBarAt: "2026-08-25T07:45:00.000Z", completedBars: 80, derived: timeframe === "1W", rulesTriggered: ["Above MA50"], missingReason: "" },
     markers: [],
     scenarios: [
       { key: "bull", label: "Bull", probability: 40, color: "#0", target: 72, path: [{ time: 1, value: 65 }, { time: 2, value: 72 }], description: "Bull case", horizon, trigger: "Breakout", confirmation: "Hold", invalidation: "Lose Support", evidence: ["Demand"] },
@@ -42,7 +42,7 @@ function snapshot(ticker: string, timeframe: "1H" | "4H" | "1D" | "1W" | "1M", r
 }
 
 function fullSet() {
-  const frames = ["1H", "4H", "1D", "1W", "1M"] as const
+  const frames = ["1D", "1W"] as const
   return Array.from({ length: 100 }, (_, index) => {
     const ticker = `T${String(index + 1).padStart(3, "0")}`
     const rank = index === 20 || index === 21 ? 21 : index + 1
@@ -83,27 +83,27 @@ class MemoryNotion implements WyckoffV2NotionIo {
   }
 }
 
-test("v2 Notion writer creates Writing run, stages 500 rows idempotently, validates and closes Ready", async () => {
+test("v2 Notion writer creates Writing run, stages 200 Daily Weekly rows idempotently, validates and closes Ready", async () => {
   const io = new MemoryNotion()
-  const runKey = "WYCKOFF-2026-08-25-EOD-v2"
+  const runKey = "WYCKOFF-2026-08-25-EOD-v3"
   const startedAt = "2026-08-25T08:15:00.000Z"
-  const begin = await beginWyckoffV2NotionRun({ runKey, scanDate: "2026-08-25", startedAt, providerSummary: "persistent OHLCV cache" }, io)
+  const begin = await beginWyckoffV2NotionRun({ runKey, scanDate: "2026-08-25", startedAt, providerSummary: "persistent OHLCV cache", universeCount: 100 }, io)
   assert.equal(begin.status, "Writing")
   assert.equal(io.runs.length, 1)
   assert.equal((io.runs[0].properties as any).Status.select.name, "Writing")
 
   const snapshots = fullSet()
   const staged = await stageWyckoffV2Snapshots({ runKey, snapshots, minWriteIntervalMs: 0 }, io)
-  assert.equal(staged.created, 500)
+  assert.equal(staged.created, 200)
   assert.equal(staged.updated, 0)
   assert.equal(staged.skipped, 0)
-  assert.equal(io.snapshots.length, 500)
+  assert.equal(io.snapshots.length, 200)
 
   const createsAfterFirstStage = io.creates
   const rerun = await stageWyckoffV2Snapshots({ runKey, snapshots, minWriteIntervalMs: 0 }, io)
   assert.equal(rerun.created, 0)
   assert.equal(rerun.updated, 0)
-  assert.equal(rerun.skipped, 500)
+  assert.equal(rerun.skipped, 200)
   assert.equal(io.creates, createsAfterFirstStage)
 
   const finalized = await validateAndFinalizeWyckoffV2NotionRun({
@@ -112,10 +112,11 @@ test("v2 Notion writer creates Writing run, stages 500 rows idempotently, valida
     startedAt,
     completedAt: "2026-08-25T08:22:00.000Z",
     providerSummary: "persistent OHLCV cache",
+    universeCount: 100,
   }, io)
   assert.equal(finalized.status, "Ready")
-  assert.equal(finalized.total, 500)
-  assert.equal(finalized.complete, 500)
+  assert.equal(finalized.total, 200)
+  assert.equal(finalized.complete, 200)
   assert.match(finalized.validationHash, /^[a-f0-9]{64}$/)
   assert.equal((io.runs[0].properties as any).Status.select.name, "Ready")
   assert.equal(rich((io.runs[0].properties as any)["Validation Hash"]), finalized.validationHash)
@@ -123,7 +124,7 @@ test("v2 Notion writer creates Writing run, stages 500 rows idempotently, valida
 
 test("durable Notion batch writer skips an unchanged 50-snapshot retry", async () => {
   const io = new MemoryNotion()
-  const runKey = "WYCKOFF-2026-08-25-EOD-v2"
+  const runKey = "WYCKOFF-2026-08-25-EOD-v3"
   const batch = fullSet().slice(0, 50)
 
   const first = await stageWyckoffV2SnapshotBatch({ runKey, snapshots: batch, minWriteIntervalMs: 0 }, io)
@@ -138,10 +139,10 @@ test("durable Notion batch writer skips an unchanged 50-snapshot retry", async (
 test("begin stops rather than rewrites a run already Ingested", async () => {
   const io = new MemoryNotion()
   io.runs.push({ id: "r1", properties: {
-    "Run Key": { rich_text: [{ type: "text", text: { content: "WYCKOFF-2026-08-25-EOD-v2" } }] },
+    "Run Key": { rich_text: [{ type: "text", text: { content: "WYCKOFF-2026-08-25-EOD-v3" } }] },
     Status: { select: { name: "Ingested" } },
   } })
-  const result = await beginWyckoffV2NotionRun({ runKey: "WYCKOFF-2026-08-25-EOD-v2", scanDate: "2026-08-25", startedAt: "2026-08-25T08:15:00.000Z", providerSummary: "cache" }, io)
+  const result = await beginWyckoffV2NotionRun({ runKey: "WYCKOFF-2026-08-25-EOD-v3", scanDate: "2026-08-25", startedAt: "2026-08-25T08:15:00.000Z", providerSummary: "cache" }, io)
   assert.equal(result.status, "Ingested")
   assert.equal(result.action, "stop")
   assert.equal(io.updates, 0)
@@ -151,12 +152,12 @@ test("begin resumes an Ingesting run with its existing Supabase claim instead of
   const io = new MemoryNotion()
   const supabaseRunId = "28a406cd-7c96-4076-8031-149d07741a26"
   io.runs.push({ id: "r1", properties: {
-    "Run Key": { rich_text: [{ type: "text", text: { content: "WYCKOFF-2026-08-25-EOD-v2" } }] },
+    "Run Key": { rich_text: [{ type: "text", text: { content: "WYCKOFF-2026-08-25-EOD-v3" } }] },
     Status: { select: { name: "Ingesting" } },
     "Supabase Run ID": { rich_text: [{ type: "text", text: { content: supabaseRunId } }] },
   } })
 
-  const result = await beginWyckoffV2NotionRun({ runKey: "WYCKOFF-2026-08-25-EOD-v2", scanDate: "2026-08-25", startedAt: "2026-08-25T08:15:00.000Z", providerSummary: "cache" }, io)
+  const result = await beginWyckoffV2NotionRun({ runKey: "WYCKOFF-2026-08-25-EOD-v3", scanDate: "2026-08-25", startedAt: "2026-08-25T08:15:00.000Z", providerSummary: "cache" }, io)
 
   assert.equal(result.status, "Ingesting")
   assert.equal(result.action, "resume")
