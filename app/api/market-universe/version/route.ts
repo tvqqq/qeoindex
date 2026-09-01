@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 
 import { requireApiUser } from "@/lib/auth/server"
-import { getCanonicalUniverse } from "@/lib/market-universe"
+import { getCanonicalUniverseVersion } from "@/lib/market-universe"
 
 export async function GET() {
   const auth = await requireApiUser()
   if (!auth.ok) return auth.response
 
-  const canonical = await getCanonicalUniverse()
+  const canonical = await getCanonicalUniverseVersion()
   return NextResponse.json(
     {
       ok: true,

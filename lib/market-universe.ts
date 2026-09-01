@@ -33,8 +33,14 @@ export interface CanonicalUniverseSnapshot {
   stocks: CanonicalUniverseStock[]
 }
 
-const CACHE_NAMESPACE = "market-universe:v1"
-const CACHE_KEY = "current"
+export interface CanonicalUniverseVersion {
+  runId: string
+  updatedAt: string
+  sourceAsOfDate: string
+  selectedCount: number
+}
+
+const CACHE_NAMESPACE = "market-universe:v2"
 const CACHE_TAG = "market-universe"
 const CACHE_TTL_SECONDS = 35 * 24 * 60 * 60
 
@@ -112,21 +118,54 @@ async function loadCanonicalUniverse(): Promise<CanonicalUniverseSnapshot> {
   return normalizeSnapshot(data)
 }
 
+export async function getCanonicalUniverseVersion(): Promise<CanonicalUniverseVersion> {
+  const supabase = getSupabaseServerClient()
+  if (!supabase) throw new Error("Supabase service role is unavailable for canonical universe")
+
+  const { data, error } = await supabase
+    .from("market_universe_runs")
+    .select("id, selected_count, source_as_of_date, published_at, created_at")
+    .eq("universe_key", MARKET_UNIVERSE_KEY)
+    .eq("status", "published")
+    .not("published_at", "is", null)
+    .order("published_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw new Error(`Unable to load canonical market universe version: ${error.message}`)
+  if (!data) throw new Error("Canonical market universe is not published")
+
+  const row = data as Record<string, unknown>
+  const version: CanonicalUniverseVersion = {
+    runId: String(row.id || ""),
+    updatedAt: String(row.published_at || ""),
+    sourceAsOfDate: String(row.source_as_of_date || ""),
+    selectedCount: Number(row.selected_count || 0),
+  }
+  if (!version.runId || !version.updatedAt || !version.sourceAsOfDate || version.selectedCount <= 0) {
+    throw new Error("Canonical market universe version is invalid")
+  }
+  return version
+}
+
 export async function getCanonicalUniverse(): Promise<CanonicalUniverseSnapshot> {
+  const version = await getCanonicalUniverseVersion()
   return readThroughUiCache({
     namespace: CACHE_NAMESPACE,
-    key: CACHE_KEY,
+    key: `run:${version.runId}`,
     tag: CACHE_TAG,
     name: "Canonical Top Stocks universe",
     ttlSeconds: CACHE_TTL_SECONDS,
-    validate: isCanonicalUniverseSnapshot,
-    shouldCache: (snapshot) => snapshot.stocks.length > 0,
+    validate: (value): value is CanonicalUniverseSnapshot => isCanonicalUniverseSnapshot(value) && value.runId === version.runId,
+    shouldCache: (snapshot) => snapshot.stocks.length > 0 && snapshot.runId === version.runId,
     load: loadCanonicalUniverse,
   })
 }
 
 export async function invalidateCanonicalUniverseCache() {
-  return invalidateUiCache({ namespace: CACHE_NAMESPACE, key: CACHE_KEY, tag: CACHE_TAG })
+  const version = await getCanonicalUniverseVersion()
+  return invalidateUiCache({ namespace: CACHE_NAMESPACE, key: `run:${version.runId}`, tag: CACHE_TAG })
 }
 
 export async function getCanonicalUniverseTickers() {
