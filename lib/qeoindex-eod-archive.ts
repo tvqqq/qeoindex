@@ -500,21 +500,31 @@ async function driveJson<T>(token: string, url: string, init?: RequestInit): Pro
 async function ensureDriveFolder(token: string, parentId: string, name: string) {
   const escapedName = name.replace(/'/g, "\\'")
   const query = `'${parentId}' in parents and name='${escapedName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`
-  const params = new URLSearchParams({ q: query, fields: "files(id,name)", pageSize: "10" })
+  const params = new URLSearchParams({
+    q: query,
+    fields: "files(id,name)",
+    pageSize: "10",
+    supportsAllDrives: "true",
+    includeItemsFromAllDrives: "true",
+  })
   const existing = await driveJson<{ files?: Array<{ id: string; name: string }> }>(
     token,
     `https://www.googleapis.com/drive/v3/files?${params.toString()}`,
   )
   if (existing.files?.[0]?.id) return existing.files[0].id
-  const created = await driveJson<{ id: string }>(token, "https://www.googleapis.com/drive/v3/files?fields=id", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name,
-      mimeType: "application/vnd.google-apps.folder",
-      parents: [parentId],
-    }),
-  })
+  const created = await driveJson<{ id: string }>(
+    token,
+    "https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        mimeType: "application/vnd.google-apps.folder",
+        parents: [parentId],
+      }),
+    },
+  )
   if (!created.id) throw new Error(`Google Drive folder create returned no id: ${name}`)
   return created.id
 }
@@ -535,7 +545,7 @@ async function uploadDriveFile(
   const suffix = Buffer.from(`\r\n--${boundary}--\r\n`)
   const body = Buffer.concat([prefix, Buffer.from(bytes), suffix])
   const response = await fetch(
-    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink&supportsAllDrives=true",
     {
       method: "POST",
       headers: {
