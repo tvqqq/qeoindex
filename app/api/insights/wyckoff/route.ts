@@ -1,29 +1,113 @@
 import { NextResponse } from "next/server"
 
 import { requireApiUser } from "@/lib/auth/server"
+import { getCanonicalUniverse, type CanonicalUniverseSnapshot } from "@/lib/market-universe"
 import { getCachedDailyHistory, getCachedHourlyHistory, getCachedLongDailyHistory } from "@/lib/request-cache"
-import { getScannerData, rowToPreviousResult } from "@/lib/scanner-data"
-import type { OhlcvBar } from "@/lib/technical-indicators"
-import { getWyckoffCompanyMetadata } from "@/lib/wyckoff-company-metadata"
 import { buildWyckoffChartStudies } from "@/lib/wyckoff-chart-model"
 import { getUnifiedWyckoffTickerData } from "@/lib/wyckoff-unified-data"
 
 const TICKER_PATTERN = /^[A-Z0-9]{2,12}$/
+const QUERY_CHUNK_SIZE = 100
 
-function vietnamDateKey(timestampSeconds: number) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date(timestampSeconds * 1000))
-  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ""
-  return `${value("year")}-${value("month")}-${value("day")}`
+interface WatchlistSnapshotRow {
+  ticker: string
+  timeframe: "1H" | "1D" | "1W"
+  bar_closed_at: string | null
+  history_status: string | null
+  phase: string | null
+  ta_bias: string | null
+  confidence: string | null
+  technical: Record<string, unknown> | null
 }
 
-function alignDailyBars(bars: OhlcvBar[], scanDate?: string) {
-  if (!scanDate) return bars
-  return bars.filter((bar) => vietnamDateKey(bar.time) <= scanDate)
+function finiteNumber(value: unknown) {
+  const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+async function loadCanonicalWatchlist(
+  supabase: Awaited<ReturnType<typeof requireApiUser>> extends { ok: true; context: infer Context }
+    ? Context extends { supabase: infer Client } ? Client : never
+    : never,
+  canonical: CanonicalUniverseSnapshot,
+) {
+  const rows: WatchlistSnapshotRow[] = []
+  const tickers = canonical.stocks.map((stock) => stock.ticker)
+  for (let offset = 0; offset < tickers.length; offset += QUERY_CHUNK_SIZE) {
+    const chunk = tickers.slice(offset, offset + QUERY_CHUNK_SIZE)
+    const result = await supabase
+      .from("wyckoff_latest_by_timeframe")
+      .select("ticker,timeframe,bar_closed_at,history_status,phase,ta_bias,confidence,technical")
+      .in("timeframe", ["1H", "1D", "1W"])
+      .in("ticker", chunk)
+    if (result.error) throw new Error(`Load Wyckoff watchlist failed: ${result.error.message}`)
+    rows.push(...(result.data || []) as WatchlistSnapshotRow[])
+  }
+
+  const byKey = new Map(rows.map((row) => [`${row.ticker}|${row.timeframe}`, row] as const))
+  return canonical.stocks.map((stock) => {
+    const row1H = byKey.get(`${stock.ticker}|1H`)
+    const row1D = byKey.get(`${stock.ticker}|1D`)
+    const row1W = byKey.get(`${stock.ticker}|1W`)
+    return {
+      ticker: stock.ticker,
+      rank: stock.rank,
+      sector: stock.sector || "",
+      price: finiteNumber(row1D?.technical?.price),
+      changePct: finiteNumber(row1D?.technical?.changePct),
+      phase: row1D?.phase || "",
+      phase1H: row1H?.phase || "",
+      phase1D: row1D?.phase || "",
+      phase1W: row1W?.phase || "",
+      bias: row1D?.ta_bias || "",
+      confidence: row1D?.confidence || "",
+      status: row1D ? (row1D.history_status === "complete" ? "Complete" : "Incomplete") : "Pending",
+      date: row1D?.bar_closed_at?.slice(0, 10) || "",
+    }
+  })
+}
+
+async function buildOnDemandTickerData(
+  ticker: string,
+  member: CanonicalUniverseSnapshot["stocks"][number],
+) {
+  const [dailyResult, hourlyResult] = await Promise.allSettled([
+    getCachedLongDailyHistory(ticker),
+    getCachedHourlyHistory(ticker),
+  ])
+
+  let daily = dailyResult.status === "fulfilled" ? dailyResult.value : null
+  if (!daily) {
+    try {
+      daily = await getCachedDailyHistory(ticker)
+    } catch {
+      // Selected ticker can still render any available hourly evidence.
+    }
+  }
+  const hourly = hourlyResult.status === "fulfilled" ? hourlyResult.value : null
+  if (!daily?.bars.length && !hourly?.bars.length) return null
+
+  const studies = buildWyckoffChartStudies({
+    dailyBars: daily?.bars ?? [],
+    hourlyBars: hourly?.bars ?? [],
+    dailyProvider: daily?.provider ?? "Unavailable",
+    dailyDetail: daily?.detail ?? "Daily provider unavailable",
+    hourlyProvider: hourly?.provider ?? "Unavailable",
+    hourlyDetail: hourly?.detail ?? "1H provider unavailable",
+  })
+  const latestSeconds = Math.max(
+    daily?.bars.at(-1)?.time ?? 0,
+    hourly?.bars.at(-1)?.time ?? 0,
+  )
+
+  return {
+    ticker,
+    companyName: member.companyName || ticker,
+    exchange: member.exchange || "",
+    sector: member.sector || "",
+    studies,
+    generatedAt: latestSeconds > 0 ? new Date(latestSeconds * 1000).toISOString() : new Date().toISOString(),
+  }
 }
 
 export async function GET(request: Request) {
@@ -31,6 +115,16 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response
 
   const url = new URL(request.url)
+  const canonical = await getCanonicalUniverse()
+
+  if (url.searchParams.get("mode") === "watchlist") {
+    const stocks = await loadCanonicalWatchlist(auth.context.supabase, canonical)
+    return NextResponse.json(
+      { ok: true, stocks, generatedAt: canonical.updatedAt, universeRunId: canonical.runId },
+      { headers: { "Cache-Control": "private, max-age=15, stale-while-revalidate=45" } },
+    )
+  }
+
   const ticker = (url.searchParams.get("ticker") || "").trim().toUpperCase()
   if (!TICKER_PATTERN.test(ticker)) {
     return NextResponse.json(
@@ -39,55 +133,16 @@ export async function GET(request: Request) {
     )
   }
 
-  let data = await getUnifiedWyckoffTickerData(auth.context.supabase, ticker)
-
-  if (!data) {
-    try {
-      const scanner = await getScannerData()
-      const dailyScan = scanner.latestScans[ticker]
-      const metadataPromise = getWyckoffCompanyMetadata(auth.context.supabase, [ticker])
-
-      const [dailyResult, hourlyResult] = await Promise.allSettled([
-        getCachedLongDailyHistory(ticker),
-        getCachedHourlyHistory(ticker),
-      ])
-
-      let daily = dailyResult.status === "fulfilled" ? dailyResult.value : null
-      if (!daily) {
-        try {
-          daily = await getCachedDailyHistory(ticker)
-        } catch {
-          // Fallback failed
-        }
-      }
-      const hourly = hourlyResult.status === "fulfilled" ? hourlyResult.value : null
-
-      const dailyBars = alignDailyBars(daily?.bars ?? [], dailyScan?.date)
-      const studies = buildWyckoffChartStudies({
-        dailyBars,
-        hourlyBars: hourly?.bars ?? [],
-        dailyProvider: daily?.provider ?? "Unavailable",
-        dailyDetail: daily?.detail ?? "Daily provider unavailable",
-        hourlyProvider: hourly?.provider ?? "Unavailable",
-        hourlyDetail: hourly?.detail ?? "1H provider unavailable",
-        dailyAnalysis: rowToPreviousResult(dailyScan),
-      })
-
-      const companyMetadata = await metadataPromise
-      const selectedMetadata = companyMetadata.get(ticker)
-
-      data = {
-        ticker,
-        companyName: selectedMetadata?.companyName ?? ticker,
-        exchange: selectedMetadata?.exchange ?? "HOSE",
-        sector: selectedMetadata?.sector,
-        studies,
-        generatedAt: scanner.generatedAt,
-      }
-    } catch (fallbackError) {
-      console.error(`[QeoIndex Wyckoff API] Fallback failed for ${ticker}:`, fallbackError)
-    }
+  const member = canonical.stocks.find((stock) => stock.ticker === ticker)
+  if (!member) {
+    return NextResponse.json(
+      { ok: false, error: `${ticker} không thuộc canonical Top Stocks hiện tại.` },
+      { status: 404, headers: { "Cache-Control": "no-store" } },
+    )
   }
+
+  let data = await getUnifiedWyckoffTickerData(auth.context.supabase, ticker)
+  if (!data) data = await buildOnDemandTickerData(ticker, member)
 
   if (!data) {
     return NextResponse.json(
@@ -97,15 +152,7 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json(
-    {
-      ok: true,
-      data,
-      ticker: data.ticker,
-      companyName: data.companyName,
-      exchange: data.exchange,
-      studies: data.studies,
-      generatedAt: data.generatedAt,
-    },
+    { ok: true, data },
     { headers: { "Cache-Control": "private, max-age=15, stale-while-revalidate=45" } },
   )
 }
