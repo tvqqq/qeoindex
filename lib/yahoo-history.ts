@@ -4,6 +4,7 @@ import { normalizeToKiloPrice, normalizeVolume } from "./market-data-contract.ts
 
 const DEFAULT_LOOKBACK_DAYS = 620
 const DEFAULT_HOURLY_LOOKBACK_DAYS = 180
+const YAHOO_REQUEST_TIMEOUT_MS = 15_000
 
 function finite(value: unknown) {
   const number = Number(value)
@@ -47,7 +48,11 @@ async function fetchYahooOhlcvResult(symbol: string, interval: "1d" | "60m" | "5
   const period2 = Math.floor(now.getTime() / 1000)
   const period1 = period2 - lookbackDays * 86400
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol.toUpperCase()}.VN?period1=${period1}&period2=${period2}&interval=${interval}&events=history&includeAdjustedClose=true`
-  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" }, next: { revalidate: 60 } })
+  const res = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0 StockOS/1.0" },
+    next: { revalidate: 60 },
+    signal: AbortSignal.timeout(YAHOO_REQUEST_TIMEOUT_MS),
+  })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Yahoo OHLC ${symbol.toUpperCase()}.VN failed (${res.status}): ${text.slice(0, 120)}`)
