@@ -25,8 +25,24 @@ export const BOARD_SECTOR_GROUPS = [
 
 export type BoardSectorGroup = (typeof BOARD_SECTOR_GROUPS)[number]
 
+function normalizeSectorLabel(sector: string) {
+  return sector.trim().toLocaleLowerCase("vi-VN")
+}
+
 export function boardSectorGroupForSector(sector: string) {
-  return BOARD_SECTOR_GROUPS.find((group) => (group.sectors as readonly string[]).includes(sector)) ?? BOARD_SECTOR_GROUPS.at(-1)!
+  const normalized = normalizeSectorLabel(sector)
+  const exact = BOARD_SECTOR_GROUPS.find((group) =>
+    group.sectors.some((candidate) => normalizeSectorLabel(candidate) === normalized),
+  )
+  if (exact) return exact
+
+  const group = (key: string) => BOARD_SECTOR_GROUPS.find((item) => item.key === key)!
+  if (normalized.includes("ngân hàng")) return group("bank")
+  if (normalized.includes("chứng khoán") || normalized.includes("tài chính")) return group("securities")
+  if (normalized.includes("bất động sản") || normalized.includes("khu công nghiệp")) return group("real-estate")
+  if (["thương mại", "thực phẩm", "dược", "thủy sản", "nông - lâm - ngư", "nông nghiệp", "tiêu dùng", "bán lẻ"].some((term) => normalized.includes(term))) return group("consumer")
+  if (["công nghệ", "viễn thông", "xây dựng", "thép", "vật liệu", "sản xuất kinh doanh", "khoáng sản", "nhựa", "phân bón", "hóa chất", "cao su", "công nghiệp"].some((term) => normalized.includes(term))) return group("industrial-tech")
+  return group("other")
 }
 
 const SECTOR_BY_TICKER: Record<string, MarketSector> = {

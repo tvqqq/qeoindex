@@ -119,7 +119,6 @@ export function MarketBubbles({
   // Keep the provider-qualified universe bounded for deterministic rendering.
   const topStocks = React.useMemo(() => {
     return [...stocks]
-      .filter((stock) => (stock.volume ?? 0) > 300_000)
       .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0) || a.ticker.localeCompare(b.ticker))
       .slice(0, 200)
   }, [stocks])
