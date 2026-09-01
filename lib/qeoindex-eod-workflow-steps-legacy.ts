@@ -293,7 +293,7 @@ function mergeHistoryRefreshProgress(
     completedTickers: previous.completedTickers + current.completedTickers,
     failedTickers: previous.failedTickers + current.failedTickers,
     dailyFetchedBars: previous.dailyFetchedBars + current.dailyFetchedBars,
-    hourlyFetchedBars: previous.hourlyFetchedBars + current.hourlyFetchedBars,
+    hourlyFetchedBars: (previous.hourlyFetchedBars ?? 0) + (current.hourlyFetchedBars ?? 0),
     backfillOperations: previous.backfillOperations + current.backfillOperations,
     deltaOperations: previous.deltaOperations + current.deltaOperations,
     limitedCoverage: [...previous.limitedCoverage, ...current.limitedCoverage],
