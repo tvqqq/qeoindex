@@ -26,17 +26,25 @@ The one-shot dispatcher remains the only component that reads the Vault-backed K
 
 Root Admin validates the existing manual confirmation/reason/ticker rules and calls `qeo_dispatch_kfsp_job(...)`.
 
+QEO-14 extends the dispatcher contract with two trailing optional parameters while preserving the existing arguments:
+
+- `p_actor_user_id uuid default null`
+- `p_max_duration_minutes integer default 15`
+
+Root Admin passes the authenticated root actor UUID and the effective job definition's `maxDurationMinutes`. Direct service-role/operator calls that omit the new arguments use the 15-minute default. The RPC validates `p_max_duration_minutes` to the bounded range 1–120 minutes.
+
 The dispatcher performs the manual lifecycle transition atomically inside Postgres:
 
-1. Validate `job_key`, `request_id`, reason, and TTAI ticker payload.
-2. Look up an existing `kfsp_manual_dispatch_runs` row for the same `request_id`.
-3. If it exists and its job/payload differs, fail with an idempotency conflict rather than silently reusing the request ID.
-4. If it exists and matches, return the original dispatch/system-run evidence with `duplicate = true`; do not call `net.http_post` again.
-5. Before creating a new request, inspect `system_job_runs` for another fresh `queued` or `running` run for the same KFSP job. A fresh different request conflicts; an older run is considered stale by the existing `maxDurationMinutes` health rule and does not block recovery.
-6. Insert `system_job_runs` with `id = request_id`, `trigger = manual`, and `status = queued`.
-7. Insert the correlated `kfsp_manual_dispatch_runs` row.
-8. Queue exactly one `net.http_post` using the Vault secret.
-9. Save `net_request_id` and return HTTP/API evidence as queued, not final success.
+1. Validate `job_key`, `request_id`, reason, TTAI ticker payload, actor UUID when provided, and max duration.
+2. Build the normalized request body before any idempotency comparison.
+3. Look up an existing `kfsp_manual_dispatch_runs` row for the same `request_id`.
+4. If it exists and its job or normalized request body differs, fail with `KFSP_REQUEST_ID_CONFLICT` rather than silently reusing the request ID.
+5. If it exists and matches, return the original dispatch/system-run evidence with `duplicate = true`; do not call `net.http_post` again.
+6. Before creating a new request, inspect `system_job_runs` for another `queued` or `running` run for the same KFSP job whose `started_at` is newer than `now() - p_max_duration_minutes`. A fresh different request fails with an active-run conflict. Older rows do not block recovery.
+7. Insert `system_job_runs` with `id = request_id`, `trigger = manual`, `status = queued`, `provider = supabase_edge_function`, and `actor_user_id = p_actor_user_id`.
+8. Insert the correlated `kfsp_manual_dispatch_runs` row with `system_job_run_id = request_id` and `status = queued`.
+9. Queue exactly one `net.http_post` using the Vault secret.
+10. Save `net_request_id` and return queued evidence.
 
 The dispatcher does not mark the system job `succeeded`.
 
@@ -97,7 +105,7 @@ No `request_id` column is required on `kfsp_rating_sync_runs` or `kfsp_ttai_sync
 
 KFSP manual recovery must bypass the synchronous-completion behavior of generic `executeSystemJob()`.
 
-`dispatchManualAdminJob()` keeps the existing allowlist, confirmation gate, reason validation, TTAI ticker validation, and audit log. For the two KFSP jobs it calls the one-shot dispatcher directly and returns a queued result. Other manual jobs continue using `executeSystemJob()` unchanged.
+`dispatchManualAdminJob()` keeps the existing allowlist, confirmation gate, reason validation, TTAI ticker validation, and audit log. For the two KFSP jobs it calls the one-shot dispatcher directly, passing `p_actor_user_id` and the effective definition's `maxDurationMinutes`, then returns a queued result. Other manual jobs continue using `executeSystemJob()` unchanged.
 
 The success bit in `system_audit_log` for the initial `job.run` action means the dispatch request was accepted/queued. The actual provider outcome is represented by `system_job_runs` and native KFSP run tables.
 
@@ -107,15 +115,15 @@ The API continues returning HTTP 202 when the dispatcher returns queued evidence
 
 The original Root Admin control-plane invariant is restored for KFSP recovery: a different manual request cannot start while the same job has a fresh `queued` or `running` system run.
 
-The freshness threshold reuses each effective job definition's existing `maxDurationMinutes`; the app passes this bounded value into the dispatcher contract or otherwise enforces the same value in the server-side queue path. No new configurable timeout is introduced for QEO-14.
+The RPC uses the exact `p_max_duration_minutes` value supplied by Root Admin from the effective job catalog. A direct service-role call that omits it uses 15 minutes. No additional runtime setting is introduced.
 
-A `queued` or `running` row older than the bounded maximum duration is surfaced as stale/unhealthy by the existing Admin health derivation and no longer blocks a subsequent recovery. QEO-14 does not add a background cleanup scheduler solely to mutate stale rows.
+A `queued` or `running` row older than the bounded maximum duration is surfaced as stale/unhealthy by the existing Admin health derivation and does not block a subsequent recovery. QEO-14 does not add a background cleanup scheduler solely to mutate stale rows.
 
 ## Idempotency Rules
 
 1. One `request_id` can represent only one job and one normalized payload.
 2. Retrying the same request ID with the same job/payload returns the original evidence and does not enqueue another HTTP request.
-3. Reusing a request ID with a different job, ticker list, force flag, or reason fails closed with a request-ID conflict.
+3. Reusing a request ID with a different job, ticker list, force flag, or reason fails closed with `KFSP_REQUEST_ID_CONFLICT`.
 4. Manual Edge delivery uses the request UUID as the native sync-run primary key; duplicate delivery cannot create a second native run.
 5. A fresh different request for the same job conflicts while the previous manual run is still queued/running.
 
