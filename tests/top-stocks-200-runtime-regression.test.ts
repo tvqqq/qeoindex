@@ -18,10 +18,12 @@ const ratingModel = source("lib/insights-rating-model.ts")
 const notionStaging = source("lib/wyckoff-v2-notion-staging.ts")
 const schedulePrompt = source("scripts/chatgpt-plus-wyckoff-schedule-prompt.md")
 const marketSelection = source("lib/market-universe-selection.ts")
+const marketUniverse = source("lib/market-universe.ts")
 const marketSectors = source("lib/market-sectors.ts")
 const boardStore = source("lib/supabase/board-overview.ts")
 const boardPage = source("app/page.tsx")
 const boardRefresh = source("components/market-universe-version-refresh.tsx")
+const universeVersionRoute = source("app/api/market-universe/version/route.ts")
 const orderbookCleanupMigration = source("supabase/migrations/20260901162500_prune_noncanonical_orderbook_snapshots.sql")
 const insightsPage = source("app/insights/page.tsx")
 
@@ -60,6 +62,14 @@ test("runtime cache and realtime naming contain no Top100 membership semantics",
   assert.doesNotMatch(realtime, /market:top100/)
   assert.doesNotMatch(intraday, /top100:v/)
   assert.doesNotMatch(intraday, /Top 100 5m/)
+})
+
+test("canonical universe cache follows the latest published run instead of a fixed current key", () => {
+  assert.match(marketUniverse, /getCanonicalUniverseVersion/)
+  assert.match(marketUniverse, /key:\s*`run:\$\{version\.runId\}`/)
+  assert.doesNotMatch(marketUniverse, /const CACHE_KEY = "current"/)
+  assert.match(universeVersionRoute, /getCanonicalUniverseVersion/)
+  assert.doesNotMatch(universeVersionRoute, /getCanonicalUniverse\(\)/)
 })
 
 test("stock detail history deltas are normalized to at most two decimals", () => {
