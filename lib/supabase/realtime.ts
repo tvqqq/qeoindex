@@ -22,7 +22,7 @@ export type RealtimeCallback = (tick: RealtimeMarketTick) => void
  * realtime connection.
  */
 export function subscribeMarketRealtime(
-  _channelName: string = "market:top100",
+  _channelName: string = "market:canonical-universe",
   _onTick: RealtimeCallback
 ): (() => void) | null {
   return null
