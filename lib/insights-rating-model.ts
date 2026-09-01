@@ -143,5 +143,6 @@ export function historyDelta(current: number, history: RatingModelSnapshot[], da
     .filter((item) => new Date(`${item.asOfDate}T00:00:00Z`).getTime() <= targetTime)
     .sort((a, b) => b.asOfDate.localeCompare(a.asOfDate))[0]
   const previous = snapshot ? selector(snapshot) : null
-  return previous == null ? null : current - previous
+  if (previous == null) return null
+  return Math.round((current - previous) * 100) / 100
 }
