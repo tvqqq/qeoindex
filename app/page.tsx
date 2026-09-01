@@ -6,7 +6,7 @@ import MarketBoardTransition from "@/components/smoothui/market-board-transition
 import { TopNav } from "@/components/top-nav"
 import { getServerAuthContext } from "@/lib/auth/server"
 import { sectorForTicker } from "@/lib/market-sectors"
-import { CANONICAL_UNIVERSE_STOCKS, CANONICAL_UNIVERSE_TICKERS } from "@/lib/wyckoff-universe"
+import { getCanonicalUniverse, type CanonicalUniverseSnapshot } from "@/lib/market-universe"
 import { getBoardOverviewSnapshotsFromSupabase } from "@/lib/supabase/orderbook"
 import { isTradingSessionOpen, getMarketSessionStatus } from "@/lib/session-countdown"
 import { fetchLiveBatchQuotes } from "@/lib/broker-live-quotes"
@@ -20,7 +20,7 @@ import styles from "./market-board-performance.module.css"
 export const dynamic = "force-dynamic"
 
 const INITIAL_HISTORY_POINTS = 90
-const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v3"
+const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v4"
 
 type InitialBoardData = {
   universe: BoardUniverseStock[]
@@ -43,19 +43,20 @@ function vietnamDateKey(now: Date) {
   }).format(now)
 }
 
-async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardData> {
+async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniverseSnapshot): Promise<InitialBoardData> {
   const currentDay = vietnamDateKey(now)
+  const tickers = canonical.stocks.map((stock) => stock.ticker)
   const [snapshots, liveQuotes, intraday5m] = await Promise.all([
     getBoardOverviewSnapshotsFromSupabase(),
-    fetchLiveBatchQuotes(CANONICAL_UNIVERSE_TICKERS),
-    getIntraday5mSnapshot(CANONICAL_UNIVERSE_TICKERS, now),
+    fetchLiveBatchQuotes(tickers),
+    getIntraday5mSnapshot(tickers, now),
   ])
 
   const cachedRowsBySymbol = intraday5m?.rows
     ? Object.fromEntries(intraday5m.rows.map((row) => [row.symbol, row]))
     : null
 
-  const universe: BoardUniverseStock[] = CANONICAL_UNIVERSE_STOCKS.map((stock) => {
+  const universe: BoardUniverseStock[] = canonical.stocks.map((stock) => {
     const snap = snapshots[stock.ticker]
     const live = liveQuotes[stock.ticker]
     const cachedRow = cachedRowsBySymbol?.[stock.ticker]
@@ -63,8 +64,8 @@ async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardDat
     return {
       ticker: stock.ticker,
       rank: stock.rank,
-      sector: sectorForTicker(stock.ticker),
-      marketCapT: stock.marketCapT,
+      sector: stock.sector || sectorForTicker(stock.ticker),
+      marketCapT: stock.marketCapBillion / 1000,
       lastClose: lastClosePrice,
       lastCloseDate: snap?.session_date || "",
     }
@@ -111,9 +112,7 @@ async function loadInitialBoardDataCanonical(now: Date): Promise<InitialBoardDat
         foreignRoom: live?.foreignRoom ?? (snap?.foreign_flow as any)?.foreignRoom ?? getEodForeignRoom(stock.ticker) ?? null,
         updatedAt: snap?.updated_at || new Date().toISOString(),
       }
-      if (intraday.length > 0) {
-        initialHistories[stock.ticker] = intraday
-      }
+      if (intraday.length > 0) initialHistories[stock.ticker] = intraday
     }
   }
 
@@ -125,10 +124,11 @@ export default async function Page() {
   if (!auth) return <LandingLogin />
 
   const now = new Date()
+  const canonical = await getCanonicalUniverse()
   const isSessionOpen = isTradingSessionOpen(now)
   const session = getMarketSessionStatus(now)
   const ttlSeconds = session.isLiveSession ? 4 : Math.min(session.ttlSeconds, 3600)
-  const cacheKey = `ssr:${vietnamDateKey(now)}:${session.cacheBucketKey}`
+  const cacheKey = `ssr:${canonical.runId}:${vietnamDateKey(now)}:${session.cacheBucketKey}`
 
   const { universe, initialQuotes, initialHistories } = await readThroughUiCache({
     namespace: BOARD_SSR_CACHE_NAMESPACE,
@@ -137,7 +137,7 @@ export default async function Page() {
     name: "QeoIndex Board SSR Initial Data",
     ttlSeconds,
     validate: isInitialBoardData,
-    load: () => loadInitialBoardDataCanonical(now),
+    load: () => loadInitialBoardDataCanonical(now, canonical),
   })
 
   return (
