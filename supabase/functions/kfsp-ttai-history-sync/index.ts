@@ -1,5 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2"
+import {
+  beginManualKfspLifecycle,
+  finalizeManualKfspLifecycle,
+  manualKfspRequestId,
+  type ManualKfspContext,
+} from "../_shared/kfsp-manual-lifecycle.ts"
 import { isTtaiNoHistoryError, normalizeTtaiHistory } from "./normalize.ts"
 
 type JsonObject = Record<string, unknown>
@@ -157,6 +163,13 @@ Deno.serve(async (req: Request) => {
   if (!constantTimeEqual(expectedSecret, providedSecret)) return response({ ok: false, error: "UNAUTHORIZED" }, 401)
 
   const requestBody = asObject(await req.json().catch(() => null))
+  let manualRequestId: string | null = null
+  try {
+    manualRequestId = manualKfspRequestId(requestBody)
+  } catch {
+    return response({ ok: false, error: "KFSP_MANUAL_REQUEST_ID_INVALID" }, 400)
+  }
+
   const requestedTickers = new Set((Array.isArray(requestBody?.tickers) ? requestBody.tickers : [])
     .map((value) => String(value || "").trim().toUpperCase()).filter((ticker) => /^[A-Z0-9]{2,12}$/.test(ticker)))
   const forceRequested = requestBody?.force === true && requestedTickers.size > 0
@@ -165,11 +178,36 @@ Deno.serve(async (req: Request) => {
   const supabaseKey = serviceRoleKey()
   if (!supabaseUrl || !supabaseKey) return response({ ok: false, error: "SUPABASE_NOT_CONFIGURED" }, 500)
   const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } })
-  const runId = crypto.randomUUID()
+  const runId = manualRequestId ?? crypto.randomUUID()
+  let manualContext: ManualKfspContext | null = null
   const started = await supabase.from("kfsp_ttai_sync_runs").insert({ id: runId, status: "running" })
-  if (started.error) return response({ ok: false, error: "KFSP_TTAI_RUN_CREATE_FAILED" }, 500)
+  if (started.error) {
+    if (manualRequestId && String(started.error.code || "") === "23505") {
+      const existing = await supabase.from("kfsp_ttai_sync_runs").select("status,processed_count,failed_count,error_message").eq("id", runId).maybeSingle()
+      const status = String(existing.data?.status || "running")
+      return response({
+        ok: status === "completed",
+        duplicate: true,
+        sync_run_id: runId,
+        status,
+        processed: Number(existing.data?.processed_count || 0),
+        failed: Number(existing.data?.failed_count || 0),
+      }, status === "running" ? 202 : 200)
+    }
+    return response({ ok: false, error: "KFSP_TTAI_RUN_CREATE_FAILED" }, 500)
+  }
 
   try {
+    const lifecycle = await beginManualKfspLifecycle(supabase, {
+      requestBody,
+      jobKey: "kfsp.ttai_history",
+      syncRunId: runId,
+    })
+    manualContext = lifecycle.context
+    if (lifecycle.duplicate) {
+      return response({ ok: lifecycle.status === "succeeded", duplicate: true, sync_run_id: runId, status: lifecycle.status || "running" }, lifecycle.status === "running" ? 202 : 200)
+    }
+
     const canonicalTickers = await loadCanonicalTickers(supabase)
     const canonicalSet = new Set(canonicalTickers)
     const selectedTickers = requestedTickers.size ? [...requestedTickers].filter((ticker) => canonicalSet.has(ticker)) : canonicalTickers
@@ -189,6 +227,11 @@ Deno.serve(async (req: Request) => {
     await supabase.from("kfsp_ttai_sync_runs").update({ latest_rating_date: latestDate, candidate_count: candidates.length }).eq("id", runId)
     if (!candidates.length) {
       await supabase.from("kfsp_ttai_sync_runs").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", runId)
+      await finalizeManualKfspLifecycle(supabase, {
+        context: manualContext,
+        success: true,
+        summary: { latest_rating_date: latestDate, candidate_count: 0, processed: 0, failed: 0, skipped: 0, reason: "NO_NEW_FINANCIAL_PERIOD", universe_count: canonicalTickers.length },
+      })
       return response({ ok: true, sync_run_id: runId, latest_rating_date: latestDate, processed: 0, failed: 0, skipped: 0, reason: "NO_NEW_FINANCIAL_PERIOD" })
     }
 
@@ -231,11 +274,32 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    await supabase.from("kfsp_ttai_sync_runs").update({ status: failed ? "failed" : "completed", processed_count: processed, failed_count: failed, error_message: failed ? `${failed} ticker(s) failed; inspect kfsp_ttai_sync_state.last_error for per-ticker cause.` : null, completed_at: new Date().toISOString() }).eq("id", runId)
-    return response({ ok: failed === 0, sync_run_id: runId, latest_rating_date: latestDate, processed, failed, skipped, candidate_count: candidates.length, universe_count: canonicalTickers.length }, failed ? 207 : 200)
+    const terminalMessage = failed ? `${failed} ticker(s) failed; inspect kfsp_ttai_sync_state.last_error for per-ticker cause.` : null
+    await supabase.from("kfsp_ttai_sync_runs").update({ status: failed ? "failed" : "completed", processed_count: processed, failed_count: failed, error_message: terminalMessage, completed_at: new Date().toISOString() }).eq("id", runId)
+    const terminalSummary = { latest_rating_date: latestDate, candidate_count: candidates.length, processed, failed, skipped, universe_count: canonicalTickers.length }
+    await finalizeManualKfspLifecycle(supabase, {
+      context: manualContext,
+      success: failed === 0,
+      summary: terminalSummary,
+      errorCode: failed ? "KFSP_TTAI_PARTIAL_FAILURE" : null,
+      errorMessage: terminalMessage,
+    })
+    return response({ ok: failed === 0, sync_run_id: runId, ...terminalSummary }, failed ? 207 : 200)
   } catch (error) {
     const message = error instanceof Error ? error.message : "KFSP_TTAI_SYNC_FAILED"
+    const publicMessage = "KFSP TTAI sync failed; inspect Edge Function logs and per-ticker state for diagnostics."
     await supabase.from("kfsp_ttai_sync_runs").update({ status: "failed", error_message: message.slice(0, 200), completed_at: new Date().toISOString() }).eq("id", runId)
+    try {
+      await finalizeManualKfspLifecycle(supabase, {
+        context: manualContext,
+        success: false,
+        summary: { requested_ticker_count: requestedTickers.size, force: forceRequested },
+        errorCode: message.slice(0, 100),
+        errorMessage: publicMessage,
+      })
+    } catch (lifecycleError) {
+      console.error("KFSP TTAI manual lifecycle failure finalization failed", lifecycleError instanceof Error ? lifecycleError.message : "unknown")
+    }
     return response({ ok: false, sync_run_id: runId, error: message.slice(0, 120) }, 502)
   }
 })
