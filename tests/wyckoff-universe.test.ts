@@ -6,8 +6,8 @@ import { UNIVERSE_SIZE } from "../lib/wyckoff-universe.ts"
 
 const NEW_TICKERS = "GEL VCI VND NAB FRT KDH VPI SBT PNJ HAG VGC PVD DCM DGC CRV DPM KDC VBB SJS DXG LGC TAL DHG SIP BMP PDR BAF NLG VCG VHC TCH VSH CTR KLB BWE DSE CII EVF PVT VTP HPA ORS DGW HAH HSG PC1 DIG FTS VAB BVB".split(" ")
 
-test("source-of-truth universe remains capped at 100", () => {
-  assert.equal(UNIVERSE_SIZE, 100)
+test("source-of-truth universe safety cap is 200", () => {
+  assert.equal(UNIVERSE_SIZE, 200)
 })
 
 test("all 50 newly added Notion tickers have an explicit sector fallback", () => {

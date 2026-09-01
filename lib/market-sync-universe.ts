@@ -1,4 +1,4 @@
-import { CANONICAL_UNIVERSE_TICKERS } from "@/lib/wyckoff-universe"
+import { getCanonicalUniverse } from "@/lib/market-universe"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 
 function parseGroupLevel(raw: string | undefined): { price: number; volume: number } | null {
@@ -11,10 +11,15 @@ function parseGroupLevel(raw: string | undefined): { price: number; volume: numb
 
 export async function runMarketUniverseSync() {
   const startedAt = Date.now()
+  const universe = await getCanonicalUniverse()
+  const tickers = universe.stocks.map((stock) => stock.ticker)
+  const tickerSet = new Set(tickers)
+  if (!tickers.length) throw new Error("Canonical market universe is empty.")
+
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
   }).format(new Date())
-  const feedUrl = `https://bgapidatafeed.vps.com.vn/getliststockdata/${CANONICAL_UNIVERSE_TICKERS.join(",")}`
+  const feedUrl = `https://bgapidatafeed.vps.com.vn/getliststockdata/${tickers.join(",")}`
   const response = await fetch(feedUrl, {
     headers: { "User-Agent": "Mozilla/5.0 QeoIndex/1.0" },
     signal: AbortSignal.timeout(10_000),
@@ -27,7 +32,7 @@ export async function runMarketUniverseSync() {
   for (const rawItem of feedData) {
     const item = rawItem as Record<string, any>
     const symbol = String(item.sym || "").toUpperCase()
-    if (!symbol || !CANONICAL_UNIVERSE_TICKERS.includes(symbol as (typeof CANONICAL_UNIVERSE_TICKERS)[number])) continue
+    if (!symbol || !tickerSet.has(symbol)) continue
     const ref = Number(item.r || item.closePrice || 0)
     const lastPrice = Number(item.lastPrice ?? item.openPrice ?? ref)
     const ceiling = Number(item.c ?? (ref ? Math.round(ref * 1.07 * 100) / 100 : 0))
@@ -51,5 +56,14 @@ export async function runMarketUniverseSync() {
   if (!supabase) throw new Error("Snapshot storage is not configured.")
   const { error } = await supabase.from("stock_orderbook_snapshots").upsert(records, { onConflict: "symbol" })
   if (error) throw new Error("Snapshot persistence failed.")
-  return { ok: true, source: "vps_authoritative_market_feed", count: records.length, persistedToSupabase: true, persistedCount: records.length, durationMs: Date.now() - startedAt }
+  return {
+    ok: true,
+    source: "vps_authoritative_market_feed",
+    universeRunId: universe.runId,
+    universeCount: tickers.length,
+    count: records.length,
+    persistedToSupabase: true,
+    persistedCount: records.length,
+    durationMs: Date.now() - startedAt,
+  }
 }

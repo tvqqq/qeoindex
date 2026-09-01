@@ -6,7 +6,7 @@ import { overlayCouncilRatingWithEodSnapshot } from "../lib/ai-council-eod-marke
 import type { CouncilRatingEvidence } from "../lib/ai-council-model.ts"
 import {
   WYCKOFF_EOD_BATCH_SIZE,
-  WYCKOFF_EOD_EXPECTED_STOCKS,
+  WYCKOFF_EOD_MAX_STOCKS,
   buildWyckoffEodBatchOffsets,
   validateWyckoffEodDailyRows,
 } from "../lib/wyckoff-eod-refresh.ts"
@@ -46,10 +46,11 @@ function ratingFixture(): CouncilRatingEvidence {
   }
 }
 
-test("EOD refresh plans the Top100 as ten bounded batches", () => {
-  assert.equal(WYCKOFF_EOD_EXPECTED_STOCKS, 100)
+test("EOD refresh plans the 200-stock cap as twenty bounded batches", () => {
+  assert.equal(WYCKOFF_EOD_MAX_STOCKS, 200)
   assert.equal(WYCKOFF_EOD_BATCH_SIZE, 10)
-  assert.deepEqual(buildWyckoffEodBatchOffsets(), [0, 10, 20, 30, 40, 50, 60, 70, 80, 90])
+  assert.deepEqual(buildWyckoffEodBatchOffsets(200), Array.from({ length: 20 }, (_, index) => index * 10))
+  assert.deepEqual(buildWyckoffEodBatchOffsets(17), [0, 10])
 })
 
 test("EOD refresh rejects a mixed-session 1D snapshot set", () => {
@@ -62,7 +63,6 @@ test("EOD refresh rejects a mixed-session 1D snapshot set", () => {
       { ticker: "BBB", timeframe: "1D", bar_closed_at: "2026-08-21T07:00:00.000Z" },
     ],
   })
-
   assert.equal(result.ok, false)
   assert.equal(result.freshCount, 1)
   assert.deepEqual(result.staleOrMissingTickers, ["BBB", "CCC"])
@@ -77,7 +77,6 @@ test("EOD refresh accepts an exact same-session 1D snapshot set", () => {
       { ticker: "BBB", timeframe: "1D", bar_closed_at: "2026-08-24T07:00:00.000Z" },
     ],
   })
-
   assert.equal(result.ok, true)
   assert.equal(result.freshCount, 2)
   assert.deepEqual(result.staleOrMissingTickers, [])
@@ -85,7 +84,6 @@ test("EOD refresh accepts an exact same-session 1D snapshot set", () => {
 
 test("operational Wyckoff runner bypasses UI history caches for EOD decisions", () => {
   const runner = source("lib/wyckoff-unified-runner.ts")
-
   assert.match(runner, /fetchLongDailyMarketHistory/)
   assert.match(runner, /fetchHourlyMarketHistory/)
   assert.doesNotMatch(runner, /getCachedLongDailyHistory|getCachedHourlyHistory|request-cache/)
@@ -93,14 +91,9 @@ test("operational Wyckoff runner bypasses UI history caches for EOD decisions", 
 
 test("Council EOD overlay replaces only completed-session price, change and volume", () => {
   const result = overlayCouncilRatingWithEodSnapshot(ratingFixture(), {
-    symbol: "MSN",
-    session_date: "2026-08-24",
-    reference_price: 69.8,
-    latest_price: 70,
-    total_volume: 4_715_100,
-    updated_at: "2026-08-24T07:55:07.130Z",
+    symbol: "MSN", session_date: "2026-08-24", reference_price: 69.8, latest_price: 70,
+    total_volume: 4_715_100, updated_at: "2026-08-24T07:55:07.130Z",
   }, "2026-08-24")
-
   assert.equal(result.applied, true)
   assert.equal(result.rating.price, 70)
   assert.equal(Number(result.rating.changePct?.toFixed(4)), 0.2865)
@@ -112,22 +105,13 @@ test("Council EOD overlay replaces only completed-session price, change and volu
 
 test("Council EOD overlay refuses stale or pre-final snapshots", () => {
   const staleDate = overlayCouncilRatingWithEodSnapshot(ratingFixture(), {
-    symbol: "MSN",
-    session_date: "2026-08-21",
-    reference_price: 69.8,
-    latest_price: 70,
-    total_volume: 4_715_100,
-    updated_at: "2026-08-21T07:55:07.130Z",
+    symbol: "MSN", session_date: "2026-08-21", reference_price: 69.8, latest_price: 70,
+    total_volume: 4_715_100, updated_at: "2026-08-21T07:55:07.130Z",
   }, "2026-08-24")
   const tooEarly = overlayCouncilRatingWithEodSnapshot(ratingFixture(), {
-    symbol: "MSN",
-    session_date: "2026-08-24",
-    reference_price: 69.8,
-    latest_price: 70,
-    total_volume: 4_715_100,
-    updated_at: "2026-08-24T07:30:00.000Z",
+    symbol: "MSN", session_date: "2026-08-24", reference_price: 69.8, latest_price: 70,
+    total_volume: 4_715_100, updated_at: "2026-08-24T07:30:00.000Z",
   }, "2026-08-24")
-
   assert.equal(staleDate.applied, false)
   assert.equal(tooEarly.applied, false)
   assert.equal(staleDate.rating.price, 69.8)
@@ -140,7 +124,6 @@ test("operational Council operations request the rebuilt final EOD evidence ense
   const operations = source("lib/ai-council-operations.ts")
   const daily = source("app/api/ai-council/daily/route.ts")
   const debate = source("app/api/ai-council/debate-daily/route.ts")
-
   assert.match(eodData, /stock_orderbook_snapshots/)
   assert.match(eodData, /overlayCouncilRatingWithEodSnapshot/)
   assert.match(eodData, /buildCouncilStock/)
@@ -156,7 +139,6 @@ test("EOD orchestration is one durable unified dependency workflow", () => {
   const steps = source("lib/qeoindex-eod-workflow-steps.ts")
   const operations = source("lib/ai-council-operations.ts")
   const route = source("app/api/qeoindex/eod/route.ts")
-
   assert.match(workflow, /"use workflow"/)
   assert.doesNotMatch(workflow, /"use step"/)
   assert.match(steps, /"use step"/)
@@ -184,7 +166,6 @@ test("unified EOD workflow is fail-closed and orders readiness -> history -> Wyc
   const publish = body.indexOf("runSupabasePublishStep")
   const deterministic = body.indexOf("runDeterministicCouncilStep")
   const debate = body.indexOf("runLlmDebateStep")
-
   assert.ok(bodyStart >= 0)
   assert.ok(market >= 0)
   assert.ok(history > market)
@@ -201,7 +182,6 @@ test("production has one Supabase-triggered EOD chain and no legacy Vercel EOD c
   const config = JSON.parse(source("vercel.json")) as { crons?: Array<{ path: string; schedule: string }> }
   const crons = config.crons || []
   const scheduler = source("supabase/migrations/20260825174500_qeoindex_eod_pipeline_cron.sql")
-
   assert.match(scheduler, /'15 8 \* \* 1-5'/)
   assert.match(scheduler, /\/api\/qeoindex\/eod/)
   assert.equal(crons.some((cron) => cron.path === "/api/ai-council/eod"), false)

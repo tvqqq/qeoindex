@@ -20,29 +20,21 @@ import type { WyckoffEventMarker, WyckoffScenario } from "./wyckoff-chart-model.
 
 export const WYCKOFF_V2_RUNS_DATA_SOURCE_ID = process.env.NOTION_WYCKOFF_RUNS_DATA_SOURCE_ID ?? "4efe8131-196a-4b4e-8a9c-dea48c51a554"
 export const WYCKOFF_V2_SNAPSHOTS_DATA_SOURCE_ID = process.env.NOTION_WYCKOFF_SNAPSHOTS_DATA_SOURCE_ID ?? "f9d84b24-965a-4008-a339-5a62db409ecf"
+export const WYCKOFF_V2_UNIVERSE_KEY = "vn_top_stocks"
 
 const RICH_TEXT_CHUNK = 1900
 const DEFAULT_WRITE_INTERVAL_MS = 360
+const DEFAULT_UNIVERSE_COUNT = 200
+const TIMEFRAME_COUNT = 5
 
 function titleProperty(value: string) {
   return { title: [{ type: "text", text: { content: value.slice(0, RICH_TEXT_CHUNK) } }] }
 }
 
-function selectProperty(value: string | null) {
-  return { select: value ? { name: value } : null }
-}
-
-function numberProperty(value: number | null | undefined) {
-  return { number: typeof value === "number" && Number.isFinite(value) ? value : null }
-}
-
-function dateProperty(value: string | null | undefined) {
-  return { date: value ? { start: value } : null }
-}
-
-function urlProperty(value: string | null | undefined) {
-  return { url: value || null }
-}
+function selectProperty(value: string | null) { return { select: value ? { name: value } : null } }
+function numberProperty(value: number | null | undefined) { return { number: typeof value === "number" && Number.isFinite(value) ? value : null } }
+function dateProperty(value: string | null | undefined) { return { date: value ? { start: value } : null } }
+function urlProperty(value: string | null | undefined) { return { url: value || null } }
 
 export function chunkedRichTextProperty(value: string | null | undefined) {
   if (!value) return { rich_text: [] }
@@ -53,13 +45,8 @@ export function chunkedRichTextProperty(value: string | null | undefined) {
   return { rich_text: chunks }
 }
 
-function jsonProperty(value: unknown) {
-  return chunkedRichTextProperty(JSON.stringify(value))
-}
-
-function objectValue(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? value as Record<string, unknown> : null
-}
+function jsonProperty(value: unknown) { return chunkedRichTextProperty(JSON.stringify(value)) }
+function objectValue(value: unknown): Record<string, unknown> | null { return value && typeof value === "object" ? value as Record<string, unknown> : null }
 
 function propertyText(property: unknown, kind: "rich_text" | "title" = "rich_text") {
   const record = objectValue(property)
@@ -73,11 +60,7 @@ function propertyText(property: unknown, kind: "rich_text" | "title" = "rich_tex
 }
 
 function parseJson<T>(value: string, field: string): T {
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    throw new Error(`${field} must be valid JSON`)
-  }
+  try { return JSON.parse(value) as T } catch { throw new Error(`${field} must be valid JSON`) }
 }
 
 export interface WyckoffV2RunPropertyInput {
@@ -94,17 +77,25 @@ export interface WyckoffV2RunPropertyInput {
   providerSummary: string
   validationHash: string
   supabaseRunId?: string
+  universeCount?: number
+}
+
+function normalizedUniverseCount(value: number | undefined) {
+  const count = value ?? DEFAULT_UNIVERSE_COUNT
+  if (!Number.isInteger(count) || count < 1 || count > 200) throw new Error(`Universe Count must be between 1 and 200; received ${count}`)
+  return count
 }
 
 export function buildWyckoffV2RunProperties(input: WyckoffV2RunPropertyInput) {
+  const universeCount = normalizedUniverseCount(input.universeCount)
   return {
     Run: titleProperty(input.runKey),
     "Run Key": chunkedRichTextProperty(input.runKey),
     "Scan Date": dateProperty(input.scanDate),
     Status: selectProperty(input.status),
-    "Universe Key": chunkedRichTextProperty("hose_top100"),
-    "Universe Count": numberProperty(100),
-    "Snapshot Expected": numberProperty(500),
+    "Universe Key": chunkedRichTextProperty(WYCKOFF_V2_UNIVERSE_KEY),
+    "Universe Count": numberProperty(universeCount),
+    "Snapshot Expected": numberProperty(universeCount * TIMEFRAME_COUNT),
     "Snapshot Complete": numberProperty(input.snapshotComplete),
     "Snapshot Incomplete": numberProperty(input.snapshotIncomplete),
     "Error Count": numberProperty(input.errorCount),
@@ -168,28 +159,19 @@ export interface WyckoffV2NotionIo {
   updatePageProperties(pageId: string, properties: NotionProperties, options?: { errorContext?: string; timeoutMs?: number }): Promise<NotionPage>
 }
 
-const DEFAULT_NOTION_IO: WyckoffV2NotionIo = {
-  queryDataSource,
-  createDataSourcePage,
-  updatePageProperties,
-}
+const DEFAULT_NOTION_IO: WyckoffV2NotionIo = { queryDataSource, createDataSourcePage, updatePageProperties }
 
 async function queryRunPages(runKey: string, io: WyckoffV2NotionIo) {
   return io.queryDataSource(WYCKOFF_V2_RUNS_DATA_SOURCE_ID, {
-    filter: { property: "Run Key", rich_text: { equals: runKey } },
-    pageSize: 10,
-    errorContext: "Notion Wyckoff v2 run query",
+    filter: { property: "Run Key", rich_text: { equals: runKey } }, pageSize: 10, errorContext: "Notion Wyckoff v2 run query",
   })
 }
 
 async function querySnapshotPages(runKey: string, io: WyckoffV2NotionIo) {
   const result = await io.queryDataSource(WYCKOFF_V2_SNAPSHOTS_DATA_SOURCE_ID, {
-    filter: { property: "Run Key", rich_text: { equals: runKey } },
-    pageSize: 100,
-    maxPages: 5,
-    errorContext: "Notion Wyckoff v2 snapshot query",
+    filter: { property: "Run Key", rich_text: { equals: runKey } }, pageSize: 100, maxPages: 10, errorContext: "Notion Wyckoff v2 snapshot query",
   })
-  if (result.hasMore) throw new Error(`More than 500 Notion snapshots found for ${runKey}`)
+  if (result.hasMore) throw new Error(`More than 1000 Notion snapshots found for ${runKey}`)
   return result.results
 }
 
@@ -200,48 +182,30 @@ function uniqueRunPage(runKey: string, pages: NotionPage[]) {
 }
 
 export async function beginWyckoffV2NotionRun(
-  input: { runKey: string; scanDate: string; startedAt: string; providerSummary: string },
+  input: { runKey: string; scanDate: string; startedAt: string; providerSummary: string; universeCount?: number },
   io: WyckoffV2NotionIo = DEFAULT_NOTION_IO,
 ) {
   const queried = await queryRunPages(input.runKey, io)
   let page = uniqueRunPage(input.runKey, queried.results)
   const currentStatus = page ? selectText(pageProperties(page).Status) : ""
-
-  if (currentStatus === "Ingested") {
-    return { action: "stop" as const, status: "Ingested" as const, pageId: page!.id }
-  }
+  if (currentStatus === "Ingested") return { action: "stop" as const, status: "Ingested" as const, pageId: page!.id }
   if (currentStatus === "Ingesting") {
     const supabaseRunId = propertyText(pageProperties(page!)["Supabase Run ID"])
     if (!supabaseRunId) throw new Error(`NOTION_INGEST_CLAIM_MISSING: ${input.runKey} is Ingesting without Supabase Run ID`)
     return { action: "resume" as const, status: "Ingesting" as const, pageId: page!.id, supabaseRunId }
   }
-  if (currentStatus === "Ready") {
-    return { action: "ready" as const, status: "Ready" as const, pageId: page!.id }
-  }
+  if (currentStatus === "Ready") return { action: "ready" as const, status: "Ready" as const, pageId: page!.id }
 
-  const properties = buildWyckoffV2RunProperties({
-    ...input,
-    status: "Writing",
-    snapshotComplete: 0,
-    snapshotIncomplete: 0,
-    errorCount: 0,
-    errorSummary: "",
-    validationHash: "",
-  })
+  const properties = buildWyckoffV2RunProperties({ ...input, status: "Writing", snapshotComplete: 0, snapshotIncomplete: 0, errorCount: 0, errorSummary: "", validationHash: "" })
   page = page
     ? await io.updatePageProperties(page.id, properties, { errorContext: "Notion Wyckoff v2 run Writing update" })
     : await io.createDataSourcePage(WYCKOFF_V2_RUNS_DATA_SOURCE_ID, properties, { errorContext: "Notion Wyckoff v2 run create" })
-
   const readBack = uniqueRunPage(input.runKey, (await queryRunPages(input.runKey, io)).results)
-  if (!readBack || selectText(pageProperties(readBack).Status) !== "Writing") {
-    throw new Error(`NOTION_WRITE_UNAVAILABLE: could not read back Writing run ${input.runKey}`)
-  }
+  if (!readBack || selectText(pageProperties(readBack).Status) !== "Writing") throw new Error(`NOTION_WRITE_UNAVAILABLE: could not read back Writing run ${input.runKey}`)
   return { action: "write" as const, status: "Writing" as const, pageId: readBack.id || page.id }
 }
 
-function snapshotPageKey(page: NotionPage) {
-  return propertyText(pageProperties(page)["Snapshot Key"])
-}
+function snapshotPageKey(page: NotionPage) { return propertyText(pageProperties(page)["Snapshot Key"]) }
 
 function snapshotPageMatches(page: NotionPage, row: WyckoffV2Snapshot) {
   const props = pageProperties(page)
@@ -262,16 +226,11 @@ function snapshotPageMatches(page: NotionPage, row: WyckoffV2Snapshot) {
     && propertyText(props["Scenarios JSON"]) === JSON.stringify(row.scenarios)
 }
 
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms))
-}
-
+function sleep(ms: number) { return new Promise<void>((resolve) => setTimeout(resolve, ms)) }
 async function withRateLimitRetry<T>(fn: () => Promise<T>, attempts = 4): Promise<T> {
   let lastError: unknown
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      return await fn()
-    } catch (error) {
+    try { return await fn() } catch (error) {
       lastError = error
       const message = error instanceof Error ? error.message : String(error)
       if (!/\(429\)|rate.?limit/i.test(message) || attempt === attempts - 1) throw error
@@ -294,19 +253,11 @@ export async function stageWyckoffV2Snapshots(
     if (existingByKey.has(key)) throw new Error(`Duplicate existing Notion Snapshot Key: ${key}`)
     existingByKey.set(key, page)
   }
-
-  let created = 0
-  let updated = 0
-  let skipped = 0
-  let lastWriteStartedAt = 0
+  let created = 0, updated = 0, skipped = 0, lastWriteStartedAt = 0
   const interval = Math.max(0, input.minWriteIntervalMs ?? DEFAULT_WRITE_INTERVAL_MS)
-
   for (const row of input.snapshots) {
     const existing = existingByKey.get(row.snapshotKey)
-    if (existing && snapshotPageMatches(existing, row)) {
-      skipped += 1
-      continue
-    }
+    if (existing && snapshotPageMatches(existing, row)) { skipped += 1; continue }
     const waitMs = interval - (Date.now() - lastWriteStartedAt)
     if (waitMs > 0) await sleep(waitMs)
     lastWriteStartedAt = Date.now()
@@ -319,7 +270,6 @@ export async function stageWyckoffV2Snapshots(
       created += 1
     }
   }
-
   return { created, updated, skipped, total: input.snapshots.length }
 }
 
@@ -335,71 +285,42 @@ function parseSnapshotPage(page: NotionPage): WyckoffV2Snapshot {
   const evidenceText = propertyText(props["Evidence JSON"])
   const markersText = propertyText(props["Markers JSON"])
   const scenariosText = propertyText(props["Scenarios JSON"])
-
   return {
-    snapshot: propertyText(props.Snapshot, "title"),
-    snapshotKey: propertyText(props["Snapshot Key"]),
-    runKey: propertyText(props["Run Key"]),
-    ticker: propertyText(props.Ticker),
-    rank: numberValue(props.Rank),
-    exchange: selectText(props.Exchange),
-    sector: propertyText(props.Sector),
-    timeframe: timeframe as WyckoffV2Snapshot["timeframe"],
-    barClosedAt: dateText(props["Bar Closed At"]) || null,
-    historyBarCount: numberValue(props["History Bar Count"]) ?? 0,
-    historyStatus,
-    provider: propertyText(props.Provider),
-    providerDetail: propertyText(props["Provider Detail"]),
-    sourceUrl: urlText(props["Source URL"]),
-    fetchedAt: dateText(props["Fetched At"]),
-    modelVersion: propertyText(props["Model Version"]),
-    aggregationVersion: propertyText(props["Aggregation Version"]),
-    promptVersion: propertyText(props["Prompt Version"]),
-    phase: propertyText(props.Phase) || null,
-    wyckoffState: propertyText(props["Wyckoff State"]) || null,
-    taBias: (taBias || null) as WyckoffV2Snapshot["taBias"],
-    confidence: (confidence || null) as WyckoffV2Snapshot["confidence"],
-    bullProbability: numberValue(props["Bull Probability"]),
-    baseProbability: numberValue(props["Base Probability"]),
-    bearProbability: numberValue(props["Bear Probability"]),
-    support: propertyText(props.Support) || null,
-    resistance: propertyText(props.Resistance) || null,
-    confirmation: propertyText(props.Confirmation) || null,
-    invalidation: propertyText(props.Invalidation) || null,
-    whatChanged: propertyText(props["What Changed"]) || null,
+    snapshot: propertyText(props.Snapshot, "title"), snapshotKey: propertyText(props["Snapshot Key"]), runKey: propertyText(props["Run Key"]),
+    ticker: propertyText(props.Ticker), rank: numberValue(props.Rank), exchange: selectText(props.Exchange), sector: propertyText(props.Sector),
+    timeframe: timeframe as WyckoffV2Snapshot["timeframe"], barClosedAt: dateText(props["Bar Closed At"]) || null,
+    historyBarCount: numberValue(props["History Bar Count"]) ?? 0, historyStatus,
+    provider: propertyText(props.Provider), providerDetail: propertyText(props["Provider Detail"]), sourceUrl: urlText(props["Source URL"]), fetchedAt: dateText(props["Fetched At"]),
+    modelVersion: propertyText(props["Model Version"]), aggregationVersion: propertyText(props["Aggregation Version"]), promptVersion: propertyText(props["Prompt Version"]),
+    phase: propertyText(props.Phase) || null, wyckoffState: propertyText(props["Wyckoff State"]) || null,
+    taBias: (taBias || null) as WyckoffV2Snapshot["taBias"], confidence: (confidence || null) as WyckoffV2Snapshot["confidence"],
+    bullProbability: numberValue(props["Bull Probability"]), baseProbability: numberValue(props["Base Probability"]), bearProbability: numberValue(props["Bear Probability"]),
+    support: propertyText(props.Support) || null, resistance: propertyText(props.Resistance) || null, confirmation: propertyText(props.Confirmation) || null,
+    invalidation: propertyText(props.Invalidation) || null, whatChanged: propertyText(props["What Changed"]) || null,
     technical: technicalText ? parseJson<Partial<TechnicalSnapshot>>(technicalText, `${page.id} Technical JSON`) : {},
     evidence: parseJson<WyckoffV2Snapshot["evidence"]>(evidenceText, `${page.id} Evidence JSON`),
     markers: markersText ? parseJson<WyckoffEventMarker[]>(markersText, `${page.id} Markers JSON`) : [],
     scenarios: scenariosText ? parseJson<WyckoffScenario[]>(scenariosText, `${page.id} Scenarios JSON`) : [],
-    validationStatus: selectText(props["Validation Status"]) as "Valid",
-    validationError: propertyText(props["Validation Error"]),
+    validationStatus: selectText(props["Validation Status"]) as "Valid", validationError: propertyText(props["Validation Error"]),
   }
 }
 
 export async function validateAndFinalizeWyckoffV2NotionRun(
-  input: { runKey: string; scanDate: string; startedAt: string; completedAt: string; providerSummary: string },
+  input: { runKey: string; scanDate: string; startedAt: string; completedAt: string; providerSummary: string; universeCount?: number },
   io: WyckoffV2NotionIo = DEFAULT_NOTION_IO,
 ) {
   const pages = await querySnapshotPages(input.runKey, io)
   const snapshots = pages.map(parseSnapshotPage)
   const validation = validateWyckoffV2SnapshotSet(input.runKey, snapshots)
   const validationHash = computeWyckoffV2ValidationHash(snapshots)
-
   const runPage = uniqueRunPage(input.runKey, (await queryRunPages(input.runKey, io)).results)
   if (!runPage) throw new Error(`Notion Run not found for ${input.runKey}`)
   await io.updatePageProperties(runPage.id, buildWyckoffV2RunProperties({
-    ...input,
-    status: "Ready",
-    snapshotComplete: validation.complete,
-    snapshotIncomplete: validation.incomplete,
-    errorCount: 0,
-    errorSummary: "",
-    validationHash,
+    ...input, universeCount: input.universeCount ?? validation.tickerCount, status: "Ready",
+    snapshotComplete: validation.complete, snapshotIncomplete: validation.incomplete, errorCount: 0, errorSummary: "", validationHash,
   }), { errorContext: "Notion Wyckoff v2 finalize Ready" })
-
   const readBack = uniqueRunPage(input.runKey, (await queryRunPages(input.runKey, io)).results)
   if (!readBack || selectText(pageProperties(readBack).Status) !== "Ready") throw new Error(`Notion Ready read-back failed for ${input.runKey}`)
   if (propertyText(pageProperties(readBack)["Validation Hash"]) !== validationHash) throw new Error(`Notion Validation Hash read-back failed for ${input.runKey}`)
-
   return { status: "Ready" as const, validationHash, ...validation }
 }

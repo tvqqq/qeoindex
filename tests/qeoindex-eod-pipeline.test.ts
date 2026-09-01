@@ -47,11 +47,12 @@ test("unified QeoIndex EOD workflow owns the full v2 pipeline in canonical phase
   assert.doesNotMatch(code, /runUnifiedWyckoff/)
 })
 
-test("workflow steps use v2 persistent-cache, Notion staging and split claim/publish boundaries", () => {
+test("workflow steps use v2 persistent-cache, dynamic canonical counts, Notion staging and split claim/publish boundaries", () => {
   assert.equal(existsSync(stepsUrl), true, "qeoindex-eod-workflow-steps.ts must exist")
   assert.equal(existsSync(stagingStepsUrl), true, "qeoindex-eod-notion-staging-batch.ts must exist")
   if (!existsSync(stepsUrl) || !existsSync(stagingStepsUrl)) return
   const code = source("lib/qeoindex-eod-workflow-steps.ts")
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   const stagingCode = source("lib/qeoindex-eod-notion-staging-batch.ts")
 
   for (const required of [
@@ -75,10 +76,15 @@ test("workflow steps use v2 persistent-cache, Notion staging and split claim/pub
   assert.doesNotMatch(code, /refreshOhlcvHistoryUniverse/)
   assert.doesNotMatch(code, /runUnifiedWyckoff/)
   assert.match(code, /failedTickers[\s\S]*throw/i)
-  assert.match(code, /snapshots\.length !== 500|Expected 500/i)
+  assert.match(code, /const expectedSnapshots = stocks\.length \* 5/)
+  assert.match(workflow, /const universeCount = ready\.stocks\.length/)
+  assert.match(workflow, /const expectedSnapshots = universeCount \* WYCKOFF_TIMEFRAME_COUNT/)
+  assert.match(workflow, /history\.completedTickers !== universeCount/)
+  assert.match(workflow, /staging\.total !== expectedSnapshots/)
+  assert.doesNotMatch(workflow, /expected 100\/100|100 tickers; 500 snapshot contract/)
 })
 
-test("v2 Supabase publisher refreshes and verifies 200 1H/1D chart read models before published/Ingested", () => {
+test("v2 Supabase publisher refreshes and verifies two 1H/1D chart read models per canonical ticker before published/Ingested", () => {
   assert.equal(existsSync(ingestUrl), true, "wyckoff-notion-ingest.ts must exist")
   const code = source("lib/wyckoff-notion-ingest.ts")
   const loadIndex = code.indexOf("loadWyckoffV2ChartSeriesRows")
@@ -90,8 +96,10 @@ test("v2 Supabase publisher refreshes and verifies 200 1H/1D chart read models b
   assert.ok(seriesWriteIndex > loadIndex, "chart series must be written after recent OHLCV load")
   assert.ok(runPublishedIndex > seriesWriteIndex, "operational run must not become published before chart-series write")
   assert.ok(notionIngestedIndex > runPublishedIndex, "Notion must not become Ingested before operational publish succeeds")
+  assert.match(code, /const expectedSeriesCount = tickers\.length \* 2/)
+  assert.match(code, /chartSeries\.length !== expectedSeriesCount/)
+  assert.match(code, /publishedSeriesKeys\.size !== expectedSeriesCount/)
   assert.match(code, /chartSeriesCount:\s*chartSeries\.length/)
-  assert.match(code, /chartSeries\.length\s*!==\s*200|expected 200/i)
 })
 
 test("new QeoIndex EOD route starts only the unified durable workflow behind machine auth", () => {
@@ -142,7 +150,7 @@ test("market-close collection uses only the dedicated Vault secret and fails clo
   assert.doesNotMatch(steps, /status:\s*"degraded"\s+as const/)
 })
 
-test("HISTORY_REFRESH executes as ten durable workflow steps of at most ten tickers and repairs only verified no-trade Daily gaps", () => {
+test("HISTORY_REFRESH executes as durable batches of at most ten tickers and repairs only verified no-trade Daily gaps", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   const steps = source("lib/qeoindex-eod-workflow-steps.ts")
   const repair = source("lib/qeoindex-eod-no-trade-repair-step.ts")
@@ -161,7 +169,7 @@ test("HISTORY_REFRESH executes as ten durable workflow steps of at most ten tick
   assert.match(repair, /Exact EOD Daily bars incomplete after verified no-trade repair/)
 })
 
-test("NOTION_STAGING executes as ten durable workflow steps of at most ten tickers", () => {
+test("NOTION_STAGING executes as durable batches of at most ten tickers with dynamic snapshot count", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   const stagingSteps = source("lib/qeoindex-eod-notion-staging-batch.ts")
 
@@ -174,7 +182,8 @@ test("NOTION_STAGING executes as ten durable workflow steps of at most ten ticke
   assert.doesNotMatch(workflow, /runNotionStagingStep\(runId, ready\.stocks/)
   assert.match(stagingSteps, /stageWyckoffV2SnapshotBatch/)
   assert.match(stagingSteps, /NOTION_STAGING batch must contain 1-10 tickers/)
-  assert.match(workflow, /staging\.total !== 500/)
+  assert.match(workflow, /const expectedSnapshots = universeCount \* WYCKOFF_TIMEFRAME_COUNT/)
+  assert.match(workflow, /staging\.total !== expectedSnapshots/)
 })
 
 test("parent workflow failure closes orphaned running phase telemetry", () => {

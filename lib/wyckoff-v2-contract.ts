@@ -9,6 +9,8 @@ import {
 } from "./wyckoff-v2-builder.ts"
 
 const TIMEFRAMES = ["1H", "4H", "1D", "1W", "1M"] as const
+const SUPPORTED_EXCHANGES = new Set(["HOSE", "HNX", "UPCOM"])
+const MAX_UNIVERSE_SIZE = 200
 const MARKER_LABELS = new Set(["SPR", "UT", "SOS", "SOW", "TEST", "LPS", "LPSY"])
 const MARKER_TONES = new Set(["bullish", "bearish", "neutral"])
 const HORIZON_BY_TIMEFRAME = new Map([
@@ -88,7 +90,13 @@ function assertIncompleteSnapshot(row: WyckoffV2Snapshot) {
 }
 
 export function validateWyckoffV2SnapshotSet(runKey: string, snapshots: WyckoffV2Snapshot[]): WyckoffV2ValidationSummary {
-  if (snapshots.length !== 500) throw new Error(`Expected exactly 500 snapshots; received ${snapshots.length}`)
+  if (!snapshots.length || snapshots.length % TIMEFRAMES.length !== 0) {
+    throw new Error(`Snapshot count must be a positive multiple of ${TIMEFRAMES.length}; received ${snapshots.length}`)
+  }
+  const expectedTickerCount = snapshots.length / TIMEFRAMES.length
+  if (expectedTickerCount < 1 || expectedTickerCount > MAX_UNIVERSE_SIZE) {
+    throw new Error(`Ticker count must be between 1 and ${MAX_UNIVERSE_SIZE}; received ${expectedTickerCount}`)
+  }
 
   const keys = new Set<string>()
   const tickerFrames = new Map<string, Set<string>>()
@@ -101,7 +109,7 @@ export function validateWyckoffV2SnapshotSet(runKey: string, snapshots: WyckoffV
     if (keys.has(row.snapshotKey)) throw new Error(`Duplicate Snapshot Key: ${row.snapshotKey}`)
     keys.add(row.snapshotKey)
     if (!(TIMEFRAMES as readonly string[]).includes(row.timeframe)) throw new Error(`Invalid timeframe: ${row.snapshotKey}`)
-    if (row.exchange !== "HOSE") throw new Error(`Non-HOSE snapshot: ${row.snapshotKey}`)
+    if (!SUPPORTED_EXCHANGES.has(String(row.exchange || "").toUpperCase())) throw new Error(`Unsupported exchange snapshot: ${row.snapshotKey}`)
     if (row.validationStatus !== "Valid" || row.validationError) throw new Error(`Invalid snapshot status: ${row.snapshotKey}`)
     if (row.modelVersion !== WYCKOFF_V2_MODEL_VERSION || row.aggregationVersion !== WYCKOFF_V2_AGGREGATION_VERSION || row.promptVersion !== WYCKOFF_V2_PROMPT_VERSION) {
       throw new Error(`Version mismatch: ${row.snapshotKey}`)
@@ -125,14 +133,14 @@ export function validateWyckoffV2SnapshotSet(runKey: string, snapshots: WyckoffV
     }
   }
 
-  if (keys.size !== 500) throw new Error(`Expected 500 unique Snapshot Keys; received ${keys.size}`)
-  if (tickerFrames.size !== 100) throw new Error(`Expected 100 tickers; received ${tickerFrames.size}`)
+  if (keys.size !== snapshots.length) throw new Error(`Expected ${snapshots.length} unique Snapshot Keys; received ${keys.size}`)
+  if (tickerFrames.size !== expectedTickerCount) throw new Error(`Expected ${expectedTickerCount} tickers; received ${tickerFrames.size}`)
   for (const [ticker, frames] of tickerFrames) {
-    if (frames.size !== 5 || TIMEFRAMES.some((timeframe) => !frames.has(timeframe))) throw new Error(`${ticker} does not have all five timeframes`)
+    if (frames.size !== TIMEFRAMES.length || TIMEFRAMES.some((timeframe) => !frames.has(timeframe))) throw new Error(`${ticker} does not have all five timeframes`)
   }
-  if (complete + incomplete !== 500) throw new Error("Complete + genuine Incomplete must equal 500")
+  if (complete + incomplete !== snapshots.length) throw new Error(`Complete + genuine Incomplete must equal ${snapshots.length}`)
 
-  return { total: 500, complete, incomplete, invalid: 0, tickerCount: 100 }
+  return { total: snapshots.length, complete, incomplete, invalid: 0, tickerCount: expectedTickerCount }
 }
 
 export function computeWyckoffV2ValidationHash(snapshots: Pick<WyckoffV2Snapshot, "snapshotKey" | "barClosedAt" | "historyStatus">[]) {

@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-export const WYCKOFF_EOD_EXPECTED_STOCKS = 100
+export const WYCKOFF_EOD_MAX_STOCKS = 200
 export const WYCKOFF_EOD_BATCH_SIZE = 10
-export const WYCKOFF_EOD_REFRESH_VERSION = "wyckoff-eod-refresh-v1"
+export const WYCKOFF_EOD_REFRESH_VERSION = "wyckoff-eod-refresh-v2"
 
 type DailyRow = {
   ticker: string
@@ -52,11 +52,8 @@ function dateOnly(value: string | null) {
   return parsed.toISOString().slice(0, 10)
 }
 
-export function buildWyckoffEodBatchOffsets(
-  total = WYCKOFF_EOD_EXPECTED_STOCKS,
-  batchSize = WYCKOFF_EOD_BATCH_SIZE,
-) {
-  if (!Number.isInteger(total) || total < 1) throw new Error("total must be a positive integer")
+export function buildWyckoffEodBatchOffsets(total: number, batchSize = WYCKOFF_EOD_BATCH_SIZE) {
+  if (!Number.isInteger(total) || total < 1 || total > WYCKOFF_EOD_MAX_STOCKS) throw new Error(`total must be an integer from 1 to ${WYCKOFF_EOD_MAX_STOCKS}`)
   if (!Number.isInteger(batchSize) || batchSize < 1) throw new Error("batchSize must be a positive integer")
   return Array.from({ length: Math.ceil(total / batchSize) }, (_, index) => index * batchSize)
 }
@@ -74,14 +71,10 @@ export function validateWyckoffEodDailyRows(input: {
     const ticker = normalizedTicker(row.ticker)
     if (!expectedTickers.includes(ticker)) continue
     const current = latestByTicker.get(ticker)
-    if (!current || (row.bar_closed_at || "") > (current.bar_closed_at || "")) {
-      latestByTicker.set(ticker, row)
-    }
+    if (!current || (row.bar_closed_at || "") > (current.bar_closed_at || "")) latestByTicker.set(ticker, row)
   }
 
-  const staleOrMissingTickers = expectedTickers.filter((ticker) => {
-    return dateOnly(latestByTicker.get(ticker)?.bar_closed_at || null) !== input.expectedSessionDate
-  })
+  const staleOrMissingTickers = expectedTickers.filter((ticker) => dateOnly(latestByTicker.get(ticker)?.bar_closed_at || null) !== input.expectedSessionDate)
   const latestBarClosedAt = [...latestByTicker.values()]
     .map((row) => row.bar_closed_at)
     .filter((value): value is string => Boolean(value))
@@ -98,21 +91,14 @@ export function validateWyckoffEodDailyRows(input: {
   }
 }
 
-async function loadExpectedTickers(supabase: SupabaseClient, expectedSessionDate: string) {
-  const result = await supabase
-    .from("insights_stock_ratings")
-    .select("ticker")
-    .eq("source", "kfsp")
-    .eq("is_top100", true)
-    .eq("is_published", true)
-    .eq("as_of_date", expectedSessionDate)
-    .order("top100_rank", { ascending: true, nullsFirst: false })
-    .order("ticker", { ascending: true })
-
-  if (result.error) throw new Error(`Load EOD Top100 universe failed: ${result.error.message}`)
-  const tickers = [...new Set((result.data || []).map((row) => normalizedTicker(String(row.ticker || ""))).filter(Boolean))]
-  if (tickers.length !== WYCKOFF_EOD_EXPECTED_STOCKS) {
-    throw new Error(`WYCKOFF_EOD_UNIVERSE_INCOMPLETE: ${tickers.length}/${WYCKOFF_EOD_EXPECTED_STOCKS}`)
+async function loadExpectedTickers(expectedSessionDate: string) {
+  const { getCanonicalUniverse } = await import("@/lib/market-universe")
+  const universe = await getCanonicalUniverse()
+  const tickers = universe.stocks.map((stock) => stock.ticker)
+  if (!tickers.length || tickers.length > WYCKOFF_EOD_MAX_STOCKS) throw new Error(`WYCKOFF_EOD_UNIVERSE_INCOMPLETE: ${tickers.length}/${WYCKOFF_EOD_MAX_STOCKS} max`)
+  if (universe.sourceAsOfDate > expectedSessionDate) {
+    // Membership is monthly and may be newer than a historical backfill. The caller
+    // still receives an explicit canonical list instead of silently reconstructing Top100.
   }
   return tickers
 }
@@ -123,10 +109,10 @@ export async function runWyckoffEodRefresh(
 ): Promise<WyckoffEodRefreshResult> {
   const expectedTickers = input.tickers?.length
     ? [...new Set(input.tickers.map(normalizedTicker).filter(Boolean))]
-    : await loadExpectedTickers(supabase, input.expectedSessionDate)
+    : await loadExpectedTickers(input.expectedSessionDate)
 
-  if (expectedTickers.length !== WYCKOFF_EOD_EXPECTED_STOCKS) {
-    throw new Error(`WYCKOFF_EOD_UNIVERSE_INCOMPLETE: ${expectedTickers.length}/${WYCKOFF_EOD_EXPECTED_STOCKS}`)
+  if (!expectedTickers.length || expectedTickers.length > WYCKOFF_EOD_MAX_STOCKS) {
+    throw new Error(`WYCKOFF_EOD_UNIVERSE_INCOMPLETE: ${expectedTickers.length}/${WYCKOFF_EOD_MAX_STOCKS} max`)
   }
 
   const { runUnifiedWyckoff } = await import("@/lib/wyckoff-unified-runner")
@@ -135,7 +121,8 @@ export async function runWyckoffEodRefresh(
   const batchErrors: WyckoffEodRefreshResult["batchErrors"] = []
 
   for (const offset of offsets) {
-    const batch = await runUnifiedWyckoff({ limit: WYCKOFF_EOD_BATCH_SIZE, offset })
+    const limit = Math.min(WYCKOFF_EOD_BATCH_SIZE, expectedTickers.length - offset)
+    const batch = await runUnifiedWyckoff({ limit, offset })
     completedStocks += batch.completed.length
     if (batch.errors.length) batchErrors.push({ offset, errors: batch.errors })
   }

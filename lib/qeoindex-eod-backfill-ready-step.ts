@@ -1,5 +1,6 @@
 import { runQeoIndexEodPhase } from "@/lib/admin/job-phase-telemetry"
 import { loadPersistentCouncilEodSnapshots } from "@/lib/ai-council-eod-market"
+import { getCanonicalUniverse } from "@/lib/market-universe"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { beginWyckoffV2NotionRun } from "@/lib/wyckoff-v2-notion-staging"
 import { loadWyckoffV2Universe } from "@/lib/wyckoff-v2-universe-source"
@@ -27,21 +28,23 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
     fn: async () => {
       const supabase = requiredSupabase()
       const expectedSessionDate = vietnamDateKey(startedAtIso)
+      const universe = await getCanonicalUniverse()
+      const tickers = universe.stocks.map((stock) => stock.ticker)
+      if (!tickers.length) throw Object.assign(new Error("Canonical market universe is empty"), { code: "EOD_NOT_READY" })
 
       const ratings = await supabase
         .from("insights_stock_ratings")
         .select("ticker")
         .eq("is_published", true)
         .eq("source", "kfsp")
-        .eq("is_top100", true)
         .eq("as_of_date", expectedSessionDate)
-        .order("top100_rank", { ascending: true, nullsFirst: false })
-        .order("ticker", { ascending: true })
-      if (ratings.error) throw new Error(`Load historical EOD Top100 ratings failed: ${ratings.error.message}`)
+        .in("ticker", tickers)
+      if (ratings.error) throw new Error(`Load historical canonical ratings failed: ${ratings.error.message}`)
 
-      const tickers = [...new Set((ratings.data || []).map((row) => String(row.ticker || "").trim().toUpperCase()).filter(Boolean))]
-      if (tickers.length !== 100) {
-        throw Object.assign(new Error(`Historical Top100 rating universe incomplete for ${expectedSessionDate}: ${tickers.length}/100`), { code: "EOD_NOT_READY" })
+      const ratingTickers = new Set((ratings.data || []).map((row) => String(row.ticker || "").trim().toUpperCase()).filter(Boolean))
+      const missingRatings = tickers.filter((ticker) => !ratingTickers.has(ticker))
+      if (missingRatings.length) {
+        throw Object.assign(new Error(`Historical canonical rating universe incomplete for ${expectedSessionDate}: ${tickers.length - missingRatings.length}/${tickers.length}; missing=${missingRatings.slice(0, 20).join(",")}`), { code: "EOD_NOT_READY" })
       }
 
       const persistentMarket = await loadPersistentCouncilEodSnapshots(supabase, tickers, expectedSessionDate)
@@ -59,7 +62,7 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
         runKey,
         scanDate,
         startedAt: startedAtIso,
-        providerSummary: "QeoIndex historical EOD v2 preflight; persistent OHLCV recovery source verified.",
+        providerSummary: `QeoIndex canonical EOD v2 preflight; ${tickers.length} membership rows verified from ${universe.runId}.`,
       })
 
       return {
@@ -77,6 +80,7 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
           freshMarketCount: persistentMarket.snapshots.length,
           latestMarketUpdatedAt: persistentMarket.latestUpdatedAt,
           source: "persistent_ohlcv" as const,
+          universeRunId: universe.runId,
         },
       }
     },
@@ -89,6 +93,7 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
       freshMarketCount: result.market.freshMarketCount,
       marketSource: result.market.source,
       historicalBackfill: true,
+      universeRunId: result.market.universeRunId,
     }),
   })
 }

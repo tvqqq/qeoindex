@@ -1,6 +1,8 @@
 "use client"
 
-import React, { memo, useState } from "react"
+import React, { memo, useEffect, useState } from "react"
+
+import { stockLogoUrl } from "@/lib/stock-logo-url"
 
 export interface StockLogoProps {
   symbol: string
@@ -8,6 +10,7 @@ export interface StockLogoProps {
   className?: string
   alt?: string
   fallback?: "badge" | "none"
+  logoPath?: string | null
 }
 
 export const StockLogo = memo(function StockLogo({
@@ -16,14 +19,17 @@ export const StockLogo = memo(function StockLogo({
   className = "",
   alt,
   fallback = "badge",
+  logoPath,
 }: StockLogoProps) {
   const ticker = symbol?.toUpperCase() || ""
   const [error, setError] = useState(false)
+  const src = stockLogoUrl(logoPath || ticker)
+
+  useEffect(() => setError(false), [src])
 
   if (!ticker) return null
 
-  // If image errored, display clean branded fallback badge or return null if fallback is none
-  if (error) {
+  if (error || !src) {
     if (fallback === "none") return null
     const defaultRounded = className.includes("rounded-") ? "" : "rounded-lg"
     return (
@@ -46,14 +52,11 @@ export const StockLogo = memo(function StockLogo({
   return (
     <div
       className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden ${defaultRounded} border border-white/20 bg-[#ffffff] p-1 shadow-[0_2px_8px_rgba(0,0,0,0.2)] transition-transform hover:scale-105 select-none ${className}`}
-      style={{
-        width: size,
-        height: size,
-      }}
+      style={{ width: size, height: size }}
       title={alt || `Logo ${ticker}`}
     >
       <img
-        src={`/logos/${ticker}.png`}
+        src={src}
         alt={alt || `Logo ${ticker}`}
         width={size}
         height={size}

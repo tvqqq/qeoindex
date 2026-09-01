@@ -13,6 +13,7 @@ import {
   type CouncilWyckoffEvidence,
 } from "@/lib/ai-council-model"
 import type { AiCouncilPromptStockSnapshot } from "@/lib/ai-council-prompt-evidence"
+import { getCanonicalUniverse } from "@/lib/market-universe"
 
 export type { AiCouncilPromptStockSnapshot }
 
@@ -64,7 +65,6 @@ type RatingRow = {
   company_name: string | null
   sector: string | null
   exchange: string | null
-  top100_rank: number | null
   price: number | null
   price_change_pct: number | null
   kfsp_composite_score: number | null
@@ -151,25 +151,17 @@ function nullableString(value: unknown) {
   return trimmed || null
 }
 
-function metricGroup(metrics: unknown, group: string) {
-  return record(record(metrics)[group])
-}
+function metricGroup(metrics: unknown, group: string) { return record(record(metrics)[group]) }
+function metricNumber(metrics: unknown, group: string, key: string) { return nullableNumber(metricGroup(metrics, group)[key]) }
+function metricString(metrics: unknown, group: string, key: string) { return nullableString(metricGroup(metrics, group)[key]) }
 
-function metricNumber(metrics: unknown, group: string, key: string) {
-  return nullableNumber(metricGroup(metrics, group)[key])
-}
-
-function metricString(metrics: unknown, group: string, key: string) {
-  return nullableString(metricGroup(metrics, group)[key])
-}
-
-function normalizeRating(row: RatingRow): CouncilRatingEvidence {
+function normalizeRating(row: RatingRow, rank: number | null): CouncilRatingEvidence {
   return {
     ticker: row.ticker,
     companyName: row.company_name || row.ticker,
     sector: row.sector || "Chưa phân ngành",
     exchange: row.exchange,
-    rank: row.top100_rank,
+    rank,
     price: nullableNumber(row.price),
     changePct: nullableNumber(row.price_change_pct),
     ratingScore: nullableNumber(row.kfsp_composite_score),
@@ -217,9 +209,7 @@ function normalizeRating(row: RatingRow): CouncilRatingEvidence {
   }
 }
 
-function isCouncilTimeframe(value: string): value is CouncilTimeframe {
-  return value === "1W" || value === "1D" || value === "4H" || value === "1H"
-}
+function isCouncilTimeframe(value: string): value is CouncilTimeframe { return value === "1W" || value === "1D" || value === "4H" || value === "1H" }
 
 function normalizeWyckoff(row: WyckoffRow): CouncilWyckoffEvidence | null {
   if (!isCouncilTimeframe(row.timeframe)) return null
@@ -252,11 +242,7 @@ function normalizeWyckoff(row: WyckoffRow): CouncilWyckoffEvidence | null {
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize)
   if (!value || typeof value !== "object") return value
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => [key, canonicalize(child)]),
-  )
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)).map(([key, child]) => [key, canonicalize(child)]))
 }
 
 function buildEvidenceHash(rating: CouncilRatingEvidence, snapshots: CouncilWyckoffEvidence[]) {
@@ -265,52 +251,38 @@ function buildEvidenceHash(rating: CouncilRatingEvidence, snapshots: CouncilWyck
     const rightIndex = TIMEFRAME_ORDER.indexOf(right.timeframe)
     return leftIndex - rightIndex || (left.barClosedAt || "").localeCompare(right.barClosedAt || "")
   })
-  const payload = JSON.stringify(canonicalize({ rating, snapshots: orderedSnapshots }))
-  return createHash("sha256").update(payload, "utf8").digest("hex")
+  return createHash("sha256").update(JSON.stringify(canonicalize({ rating, snapshots: orderedSnapshots })), "utf8").digest("hex")
 }
 
-function isCouncilSignal(value: string): value is CouncilSignal {
-  return value === "BUY" || value === "BUY_ON_CONFIRMATION" || value === "WAIT" || value === "REDUCE" || value === "SELL"
-}
-
-function isCouncilRisk(value: string): value is CouncilRiskStance {
-  return value === "approve" || value === "caution" || value === "veto"
-}
+function isCouncilSignal(value: string): value is CouncilSignal { return value === "BUY" || value === "BUY_ON_CONFIRMATION" || value === "WAIT" || value === "REDUCE" || value === "SELL" }
+function isCouncilRisk(value: string): value is CouncilRiskStance { return value === "approve" || value === "caution" || value === "veto" }
 
 async function loadCouncilHistory(supabase: SupabaseClient, tickers: string[]) {
   if (!tickers.length) return { history: [] as AiCouncilHistoryEntry[], message: "" }
-
   const runsResult = await supabase
     .from("ai_council_runs")
     .select("id,ticker,as_of_date,signal,council_score,confidence,consensus,risk_status,price,policy_version,evidence_hash,created_at")
     .in("ticker", tickers)
     .order("as_of_date", { ascending: false })
     .order("created_at", { ascending: false })
-    .limit(800)
-
-  if (runsResult.error) {
-    return { history: [] as AiCouncilHistoryEntry[], message: `Historical audit trail chưa sẵn sàng: ${runsResult.error.message}` }
-  }
+    .limit(1600)
+  if (runsResult.error) return { history: [] as AiCouncilHistoryEntry[], message: `Historical audit trail chưa sẵn sàng: ${runsResult.error.message}` }
 
   const runs = (runsResult.data || []) as HistoryRunRow[]
   const runIds = runs.map((run) => run.id)
   const outcomeRows: HistoryOutcomeRow[] = []
-
   for (let offset = 0; offset < runIds.length; offset += 100) {
     const result = await supabase
       .from("ai_council_outcomes")
       .select("run_id,outcome_status,sessions_observed,evaluated_through_date,return_1d_pct,return_5d_pct,return_20d_pct,mfe_20d_pct,mae_20d_pct,direction_correct_5d")
       .in("run_id", runIds.slice(offset, offset + 100))
-    if (result.error) {
-      return { history: [] as AiCouncilHistoryEntry[], message: `Council outcomes chưa đọc được: ${result.error.message}` }
-    }
+    if (result.error) return { history: [] as AiCouncilHistoryEntry[], message: `Council outcomes chưa đọc được: ${result.error.message}` }
     outcomeRows.push(...((result.data || []) as HistoryOutcomeRow[]))
   }
 
   const outcomeByRun = new Map(outcomeRows.map((row) => [row.run_id, row]))
   const perTicker = new Map<string, number>()
   const history: AiCouncilHistoryEntry[] = []
-
   for (const run of runs) {
     if (!isCouncilSignal(run.signal) || !isCouncilRisk(run.risk_status)) continue
     const seen = perTicker.get(run.ticker) || 0
@@ -318,32 +290,17 @@ async function loadCouncilHistory(supabase: SupabaseClient, tickers: string[]) {
     perTicker.set(run.ticker, seen + 1)
     const outcome = outcomeByRun.get(run.id)
     history.push({
-      id: run.id,
-      ticker: run.ticker,
-      asOfDate: run.as_of_date,
-      signal: run.signal,
-      councilScore: Number(run.council_score),
-      confidence: Number(run.confidence),
-      consensus: Number(run.consensus),
-      riskStatus: run.risk_status,
-      price: nullableNumber(run.price),
-      policyVersion: run.policy_version,
-      evidenceHash: run.evidence_hash,
-      createdAt: run.created_at,
+      id: run.id, ticker: run.ticker, asOfDate: run.as_of_date, signal: run.signal,
+      councilScore: Number(run.council_score), confidence: Number(run.confidence), consensus: Number(run.consensus), riskStatus: run.risk_status,
+      price: nullableNumber(run.price), policyVersion: run.policy_version, evidenceHash: run.evidence_hash, createdAt: run.created_at,
       outcome: outcome ? {
         status: (outcome.outcome_status === "partial" || outcome.outcome_status === "matured" || outcome.outcome_status === "unavailable") ? outcome.outcome_status : "pending",
-        sessionsObserved: Number(outcome.sessions_observed || 0),
-        evaluatedThroughDate: outcome.evaluated_through_date,
-        return1dPct: nullableNumber(outcome.return_1d_pct),
-        return5dPct: nullableNumber(outcome.return_5d_pct),
-        return20dPct: nullableNumber(outcome.return_20d_pct),
-        mfe20dPct: nullableNumber(outcome.mfe_20d_pct),
-        mae20dPct: nullableNumber(outcome.mae_20d_pct),
-        directionCorrect5d: outcome.direction_correct_5d,
+        sessionsObserved: Number(outcome.sessions_observed || 0), evaluatedThroughDate: outcome.evaluated_through_date,
+        return1dPct: nullableNumber(outcome.return_1d_pct), return5dPct: nullableNumber(outcome.return_5d_pct), return20dPct: nullableNumber(outcome.return_20d_pct),
+        mfe20dPct: nullableNumber(outcome.mfe_20d_pct), mae20dPct: nullableNumber(outcome.mae_20d_pct), directionCorrect5d: outcome.direction_correct_5d,
       } : null,
     })
   }
-
   return {
     history,
     message: history.length ? "Persisted Council revisions are immutable; forward outcomes update as new published sessions arrive." : "Chưa có persisted Council run; cron sẽ bắt đầu tạo audit trail sau snapshot giao dịch kế tiếp.",
@@ -355,7 +312,14 @@ export async function getAiCouncilData(
   options: { includeHistory?: boolean; includePromptEvidence?: boolean; ratingDate?: string } = {},
 ): Promise<AiCouncilData> {
   const generatedAt = new Date().toISOString()
+  const universe = await getCanonicalUniverse()
+  const universeTickers = universe.stocks.map((stock) => stock.ticker)
+  const rankByTicker = new Map(universe.stocks.map((stock) => [stock.ticker, stock.rank] as const))
   let ratingDate = options.ratingDate?.trim() || ""
+
+  if (!universeTickers.length) {
+    return { generatedAt, ratingDate: null, mode: "evidence-ensemble-v1", message: "Canonical market universe chưa được publish.", historyMessage: "", stocks: [], history: [] }
+  }
 
   if (!ratingDate) {
     const latest = await supabase
@@ -363,49 +327,37 @@ export async function getAiCouncilData(
       .select("as_of_date")
       .eq("is_published", true)
       .eq("source", "kfsp")
-      .eq("is_top100", true)
+      .in("ticker", universeTickers)
       .order("as_of_date", { ascending: false })
       .limit(1)
       .maybeSingle()
-
     if (latest.error || !latest.data?.as_of_date) {
       return {
-        generatedAt,
-        ratingDate: null,
-        mode: "evidence-ensemble-v1",
-        message: latest.error ? `Không đọc được rating snapshot: ${latest.error.message}` : "Chưa có Top 100 rating snapshot được publish.",
-        historyMessage: "",
-        stocks: [],
-        history: [],
+        generatedAt, ratingDate: null, mode: "evidence-ensemble-v1",
+        message: latest.error ? `Không đọc được rating snapshot: ${latest.error.message}` : "Chưa có canonical rating snapshot được publish.",
+        historyMessage: "", stocks: [], history: [],
       }
     }
-
     ratingDate = latest.data.as_of_date as string
   }
 
   const ratingsResult = await supabase
     .from("insights_stock_ratings")
-    .select("ticker,company_name,sector,exchange,top100_rank,price,price_change_pct,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,rs_short,rs_medium,kfsp_stock_rrg_state,kfsp_sector_rrg_state,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics")
+    .select("ticker,company_name,sector,exchange,price,price_change_pct,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,rs_short,rs_medium,kfsp_stock_rrg_state,kfsp_sector_rrg_state,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics")
     .eq("is_published", true)
     .eq("source", "kfsp")
-    .eq("is_top100", true)
     .eq("as_of_date", ratingDate)
-    .order("top100_rank", { ascending: true, nullsFirst: false })
-    .order("ticker", { ascending: true })
+    .in("ticker", universeTickers)
 
   if (ratingsResult.error) {
-    return {
-      generatedAt,
-      ratingDate,
-      mode: "evidence-ensemble-v1",
-      message: `Không đọc được Top 100 evidence: ${ratingsResult.error.message}`,
-      historyMessage: "",
-      stocks: [],
-      history: [],
-    }
+    return { generatedAt, ratingDate, mode: "evidence-ensemble-v1", message: `Không đọc được canonical evidence: ${ratingsResult.error.message}`, historyMessage: "", stocks: [], history: [] }
   }
 
-  const ratings = (ratingsResult.data || []) as RatingRow[]
+  const rowByTicker = new Map(((ratingsResult.data || []) as RatingRow[]).map((row) => [row.ticker, row] as const))
+  const ratings = universeTickers.flatMap((ticker) => {
+    const row = rowByTicker.get(ticker)
+    return row ? [row] : []
+  })
   const tickers = ratings.map((row) => row.ticker)
   let wyckoffRows: WyckoffRow[] = []
   let wyckoffMessage = ""
@@ -416,7 +368,6 @@ export async function getAiCouncilData(
       .select("ticker,timeframe,bar_closed_at,phase,wyckoff_state,ta_bias,confidence,bull_probability,base_probability,bear_probability,support,resistance,confirmation,invalidation,what_changed,technical,evidence")
       .in("ticker", tickers)
       .in("timeframe", ["1W", "1D", "4H", "1H"])
-
     if (wyckoffResult.error) wyckoffMessage = ` Wyckoff snapshot chưa đầy đủ: ${wyckoffResult.error.message}`
     else wyckoffRows = (wyckoffResult.data || []) as WyckoffRow[]
   }
@@ -430,24 +381,14 @@ export async function getAiCouncilData(
 
   const stocks = ratings
     .map((row) => {
-      const rating = normalizeRating(row)
+      const rating = normalizeRating(row, rankByTicker.get(row.ticker) ?? null)
       const snapshots = wyckoffByTicker.get(row.ticker) || []
-      const evidenceHash = buildEvidenceHash(rating, snapshots)
       const baseStock = buildCouncilStock(rating, snapshots)
+      const stock = { ...baseStock, evidenceHash: buildEvidenceHash(rating, snapshots) }
       const promptEvidence: AiCouncilPromptStockSnapshot | undefined = options.includePromptEvidence
-        ? {
-            rating,
-            snapshots,
-            ratingDate,
-            evidenceHash,
-          }
+        ? { rating, snapshots, ratingDate, evidenceHash: stock.evidenceHash }
         : undefined
-
-      return {
-        ...baseStock,
-        evidenceHash: buildEvidenceHash(rating, snapshots),
-        ...(promptEvidence ? { promptEvidence } : {}),
-      }
+      return { ...stock, ...(promptEvidence ? { promptEvidence } : {}) }
     })
     .sort((left, right) => (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER) || right.councilScore - left.councilScore || left.ticker.localeCompare(right.ticker))
 
@@ -459,7 +400,7 @@ export async function getAiCouncilData(
     generatedAt,
     ratingDate,
     mode: "evidence-ensemble-v1",
-    message: `Council V1 dùng independent evidence agents + deterministic Chair trên snapshot ${ratingDate}.${wyckoffMessage}`,
+    message: `Council V1 dùng independent evidence agents + deterministic Chair trên canonical universe ${universe.runId}, snapshot ${ratingDate}.${wyckoffMessage}`,
     historyMessage: historyResult.message,
     stocks,
     history: historyResult.history,

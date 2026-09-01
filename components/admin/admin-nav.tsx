@@ -2,10 +2,11 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Activity, FileText, LayoutGrid, Settings, ShieldAlert } from "lucide-react"
+import { Activity, Database, FileText, LayoutGrid, Settings, ShieldAlert } from "lucide-react"
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Tổng quan", icon: LayoutGrid, exact: true },
+  { href: "/admin/universe", label: "Top Stocks 200", icon: Database, exact: false },
   { href: "/admin/settings", label: "Cài đặt Runtime", icon: Settings, exact: false },
   { href: "/admin/jobs", label: "Tác vụ & Cron", icon: Activity, exact: false },
   { href: "/admin/environment", label: "Môi trường & Bí mật", icon: ShieldAlert, exact: false },
@@ -42,9 +43,7 @@ export function AdminNav() {
                   ].join(" ")}
                 />
                 <span>{item.label}</span>
-                {isActive ? (
-                  <span className="ml-1.5 flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                ) : null}
+                {isActive ? <span className="ml-1.5 flex h-1.5 w-1.5 rounded-full bg-emerald-400" /> : null}
               </Link>
             )
           })}

@@ -11,7 +11,7 @@ import {
 } from "@/lib/wyckoff-v2-builder"
 import { loadWyckoffV2ChartSeriesRows } from "@/lib/wyckoff-v2-chart-series"
 import { computeWyckoffV2ValidationHash, validateWyckoffV2SnapshotSet } from "@/lib/wyckoff-v2-contract"
-import { buildWyckoffV2SupabasePayload, WYCKOFF_V2_OPERATIONAL_SOURCE } from "@/lib/wyckoff-v2-ingest"
+import { buildWyckoffV2SupabasePayload, WYCKOFF_V2_OPERATIONAL_SOURCE, WYCKOFF_V2_UNIVERSE_KEY } from "@/lib/wyckoff-v2-ingest"
 import { WYCKOFF_V2_RUNS_DATA_SOURCE_ID, WYCKOFF_V2_SNAPSHOTS_DATA_SOURCE_ID } from "@/lib/wyckoff-v2-notion-staging"
 
 const TIMEFRAMES = new Set(["1H", "4H", "1D", "1W", "1M"])
@@ -37,13 +37,8 @@ function parseArray(value: string, field: string): unknown[] {
   throw new Error(`${field} must be a valid JSON array`)
 }
 
-function selectProperty(value: string) {
-  return { select: { name: value } }
-}
-
-function dateProperty(value: string) {
-  return { date: value ? { start: value } : null }
-}
+function selectProperty(value: string) { return { select: { name: value } } }
+function dateProperty(value: string) { return { date: value ? { start: value } : null } }
 
 function normalizeRunPage(runKey: string, pages: NotionPage[]) {
   const matches = pages.filter((page) => richText(pageProperties(page)["Run Key"]) === runKey)
@@ -53,9 +48,7 @@ function normalizeRunPage(runKey: string, pages: NotionPage[]) {
 
 async function queryRunByKey(runKey: string) {
   const result = await queryDataSource(WYCKOFF_V2_RUNS_DATA_SOURCE_ID, {
-    filter: { property: "Run Key", rich_text: { equals: runKey } },
-    pageSize: 10,
-    errorContext: "Notion Wyckoff v2 run query",
+    filter: { property: "Run Key", rich_text: { equals: runKey } }, pageSize: 10, errorContext: "Notion Wyckoff v2 run query",
   })
   return normalizeRunPage(runKey, result.results)
 }
@@ -132,10 +125,10 @@ async function loadValidatedSnapshotSet(runKey: string) {
   const result = await queryDataSource(WYCKOFF_V2_SNAPSHOTS_DATA_SOURCE_ID, {
     filter: { property: "Run Key", rich_text: { equals: runKey } },
     pageSize: 100,
-    maxPages: 5,
+    maxPages: 10,
     errorContext: "Notion Wyckoff v2 snapshot query",
   })
-  if (result.hasMore) throw new Error(`More than 500 snapshots found for ${runKey}`)
+  if (result.hasMore) throw new Error(`More than 1000 snapshots found for ${runKey}`)
   const snapshots = result.results.map(parseSnapshotPage)
   const validation = validateWyckoffV2SnapshotSet(runKey, snapshots)
   const validationHash = computeWyckoffV2ValidationHash(snapshots)
@@ -165,9 +158,7 @@ export async function claimReadyWyckoffV2Run(requestedRunKey?: string) {
 
   const supabaseRunId = randomUUID()
   await updatePageProperties(page.id, {
-    Status: selectProperty("Ingesting"),
-    "Supabase Run ID": richTextProperty(supabaseRunId),
-    "Error Summary": richTextProperty(""),
+    Status: selectProperty("Ingesting"), "Supabase Run ID": richTextProperty(supabaseRunId), "Error Summary": richTextProperty(""),
   }, { errorContext: "Notion Wyckoff v2 claim" })
 
   const readBack = await queryRunByKey(runKey)
@@ -176,14 +167,8 @@ export async function claimReadyWyckoffV2Run(requestedRunKey?: string) {
   }
 
   return {
-    ok: true as const,
-    status: "claimed" as const,
-    runKey,
-    scanDate,
-    supabaseRunId,
-    complete: validated.validation.complete,
-    incomplete: validated.validation.incomplete,
-    validationHash: validated.validationHash,
+    ok: true as const, status: "claimed" as const, runKey, scanDate, supabaseRunId,
+    complete: validated.validation.complete, incomplete: validated.validation.incomplete, validationHash: validated.validationHash,
   }
 }
 
@@ -193,6 +178,7 @@ async function ensureOperationalRun(supabase: NonNullable<ReturnType<typeof getS
   scanDate: string
   complete: number
   incomplete: number
+  tickerCount: number
 }) {
   const { data: existing, error: lookupError } = await supabase.from("wyckoff_scan_runs").select("id,status").eq("id", input.runId).maybeSingle()
   if (lookupError) throw new Error(`Supabase run lookup failed: ${lookupError.message}`)
@@ -200,17 +186,17 @@ async function ensureOperationalRun(supabase: NonNullable<ReturnType<typeof getS
   if (!existing) {
     const { error } = await supabase.from("wyckoff_scan_runs").insert({
       id: input.runId,
-      universe_key: "hose_top100",
+      universe_key: WYCKOFF_V2_UNIVERSE_KEY,
       universe_effective_date: input.scanDate,
       model_version: WYCKOFF_V2_MODEL_VERSION,
       aggregation_version: WYCKOFF_V2_AGGREGATION_VERSION,
       prompt_version: WYCKOFF_V2_PROMPT_VERSION,
       status: "running",
-      requested_count: 100,
+      requested_count: input.tickerCount,
       completed_count: 0,
       incomplete_count: input.incomplete,
       error_count: 0,
-      diagnostics: { source: WYCKOFF_V2_OPERATIONAL_SOURCE, runKey: input.runKey, completeSnapshots: input.complete, incompleteSnapshots: input.incomplete },
+      diagnostics: { source: WYCKOFF_V2_OPERATIONAL_SOURCE, runKey: input.runKey, completeSnapshots: input.complete, incompleteSnapshots: input.incomplete, tickerCount: input.tickerCount },
       started_at: new Date().toISOString(),
     })
     if (error) throw new Error(`Supabase run insert failed: ${error.message}`)
@@ -235,7 +221,8 @@ export async function publishIngestingWyckoffV2Run(runKey: string, expectedSupab
   const payload = buildWyckoffV2SupabasePayload({ snapshots: validated.snapshots, runId: expectedSupabaseRunId, scanDate, runKey })
   const tickers = payload.memberships.map((row) => row.ticker)
   const chartSeries = await loadWyckoffV2ChartSeriesRows(supabase, tickers, expectedSupabaseRunId)
-  if (chartSeries.length !== 200) throw new Error(`Expected 200 Wyckoff chart series; received ${chartSeries.length}`)
+  const expectedSeriesCount = tickers.length * 2
+  if (chartSeries.length !== expectedSeriesCount) throw new Error(`Expected ${expectedSeriesCount} Wyckoff chart series; received ${chartSeries.length}`)
 
   const runState = await ensureOperationalRun(supabase, {
     runId: expectedSupabaseRunId,
@@ -243,53 +230,42 @@ export async function publishIngestingWyckoffV2Run(runKey: string, expectedSupab
     scanDate,
     complete: payload.complete,
     incomplete: payload.incomplete,
+    tickerCount: tickers.length,
   })
 
   if (runState !== "published") {
     const now = new Date().toISOString()
     const { error: membershipError } = await supabase.from("wyckoff_universe_memberships").upsert(
-      payload.memberships.map((row) => ({ ...row, synced_at: now })),
-      { onConflict: "universe_key,ticker,effective_date" },
+      payload.memberships.map((row) => ({ ...row, synced_at: now })), { onConflict: "universe_key,ticker,effective_date" },
     )
     if (membershipError) throw new Error(`Supabase membership upsert failed: ${membershipError.message}`)
 
     for (let offset = 0; offset < payload.snapshots.length; offset += 100) {
       const chunk = payload.snapshots.slice(offset, offset + 100).map((row) => ({ id: randomUUID(), ...row }))
       const { error } = await supabase.from("wyckoff_analysis_snapshots").upsert(chunk, {
-        onConflict: "ticker,timeframe,bar_closed_at,model_version,aggregation_version,prompt_version",
-        ignoreDuplicates: true,
+        onConflict: "ticker,timeframe,bar_closed_at,model_version,aggregation_version,prompt_version", ignoreDuplicates: true,
       })
       if (error) throw new Error(`Supabase snapshot upsert failed: ${error.message}`)
     }
 
-    const { error: chartSeriesError } = await supabase
-      .from("wyckoff_chart_series")
-      .upsert(chartSeries, { onConflict: "ticker,timeframe" })
+    const { error: chartSeriesError } = await supabase.from("wyckoff_chart_series").upsert(chartSeries, { onConflict: "ticker,timeframe" })
     if (chartSeriesError) throw new Error(`Supabase chart-series upsert failed: ${chartSeriesError.message}`)
 
     const { data: publishedSeries, error: chartSeriesVerifyError } = await supabase
-      .from("wyckoff_chart_series")
-      .select("ticker,timeframe")
-      .eq("run_id", expectedSupabaseRunId)
-      .in("ticker", tickers)
-      .in("timeframe", ["1H", "1D"])
+      .from("wyckoff_chart_series").select("ticker,timeframe").eq("run_id", expectedSupabaseRunId).in("ticker", tickers).in("timeframe", ["1H", "1D"])
     if (chartSeriesVerifyError) throw new Error(`Supabase chart-series verification failed: ${chartSeriesVerifyError.message}`)
     const publishedSeriesKeys = new Set((publishedSeries || []).map((row) => `${row.ticker}|${row.timeframe}`))
-    if (publishedSeriesKeys.size !== 200) throw new Error(`Expected 200 persisted Wyckoff chart series; received ${publishedSeriesKeys.size}`)
+    if (publishedSeriesKeys.size !== expectedSeriesCount) throw new Error(`Expected ${expectedSeriesCount} persisted Wyckoff chart series; received ${publishedSeriesKeys.size}`)
 
     const finishedAt = new Date().toISOString()
     const { error: finishError } = await supabase.from("wyckoff_scan_runs").update({
       status: "published",
-      completed_count: 100,
+      completed_count: tickers.length,
       incomplete_count: payload.incomplete,
       error_count: 0,
       diagnostics: {
-        source: payload.source,
-        runKey,
-        completeSnapshots: payload.complete,
-        incompleteSnapshots: payload.incomplete,
-        validationHash: validated.validationHash,
-        chartSeriesCount: chartSeries.length,
+        source: payload.source, runKey, completeSnapshots: payload.complete, incompleteSnapshots: payload.incomplete,
+        validationHash: validated.validationHash, chartSeriesCount: chartSeries.length, tickerCount: tickers.length,
       },
       finished_at: finishedAt,
     }).eq("id", expectedSupabaseRunId).eq("status", "running")
@@ -298,10 +274,7 @@ export async function publishIngestingWyckoffV2Run(runKey: string, expectedSupab
 
   const ingestedAt = new Date().toISOString()
   await updatePageProperties(page.id, {
-    Status: selectProperty("Ingested"),
-    "Ingested At": dateProperty(ingestedAt),
-    "Supabase Run ID": richTextProperty(expectedSupabaseRunId),
-    "Error Summary": richTextProperty(""),
+    Status: selectProperty("Ingested"), "Ingested At": dateProperty(ingestedAt), "Supabase Run ID": richTextProperty(expectedSupabaseRunId), "Error Summary": richTextProperty(""),
   }, { errorContext: "Notion Wyckoff v2 Ingested completion" })
 
   const readBack = await queryRunByKey(runKey)
@@ -310,13 +283,8 @@ export async function publishIngestingWyckoffV2Run(runKey: string, expectedSupab
   }
 
   return {
-    ok: true as const,
-    status: "ingested" as const,
-    runKey,
-    supabaseRunId: expectedSupabaseRunId,
-    complete: payload.complete,
-    incomplete: payload.incomplete,
-    chartSeriesCount: chartSeries.length,
+    ok: true as const, status: "ingested" as const, runKey, supabaseRunId: expectedSupabaseRunId,
+    complete: payload.complete, incomplete: payload.incomplete, chartSeriesCount: chartSeries.length,
   }
 }
 

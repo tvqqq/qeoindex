@@ -12,6 +12,8 @@ import {
 } from "@/lib/wyckoff-chart-model"
 import type { WyckoffScanResult } from "@/lib/wyckoff-engine"
 
+const CANONICAL_UNIVERSE_KEY = "vn_top_stocks"
+
 type SnapshotEvidence = {
   rulesTriggered?: unknown
   [key: string]: unknown
@@ -86,12 +88,7 @@ function normalizeMarker(value: unknown): WyckoffEventMarker | null {
   const label = typeof value.label === "string" ? value.label.trim().toUpperCase() as WyckoffEventLabel : null
   const tone = value.tone === "bullish" || value.tone === "bearish" || value.tone === "neutral" ? value.tone : "neutral"
   if (time == null || !label || !EVENT_LABELS.has(label)) return null
-  return {
-    time,
-    label,
-    tone,
-    detail: typeof value.detail === "string" ? value.detail.trim() : "",
-  }
+  return { time, label, tone, detail: typeof value.detail === "string" ? value.detail.trim() : "" }
 }
 
 function normalizeScenario(value: unknown, timeframe: WyckoffChartTimeframe): WyckoffScenario | null {
@@ -166,12 +163,7 @@ function toAnalysis(row: SnapshotRow): WyckoffScanResult | null {
 
 function buildStudies(
   selectedRows: SnapshotRow[],
-  seriesRows: Array<{
-    timeframe: WyckoffChartTimeframe
-    bars: OhlcvBar[]
-    provider: string
-    provider_detail: string
-  }>,
+  seriesRows: Array<{ timeframe: WyckoffChartTimeframe; bars: OhlcvBar[]; provider: string; provider_detail: string }>,
 ) {
   const analyses = Object.fromEntries(selectedRows.flatMap((row) => {
     const analysis = toAnalysis(row)
@@ -206,7 +198,7 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
   const { data: latestMembership, error: membershipDateError } = await supabase
     .from("wyckoff_universe_memberships")
     .select("effective_date")
-    .eq("universe_key", "hose_top100")
+    .eq("universe_key", CANONICAL_UNIVERSE_KEY)
     .eq("active", true)
     .order("effective_date", { ascending: false })
     .limit(1)
@@ -216,7 +208,7 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
   const { data: memberships, error: membershipsError } = await supabase
     .from("wyckoff_universe_memberships")
     .select("ticker,rank,sector")
-    .eq("universe_key", "hose_top100")
+    .eq("universe_key", CANONICAL_UNIVERSE_KEY)
     .eq("effective_date", latestMembership.effective_date)
     .eq("active", true)
     .order("rank")
@@ -241,9 +233,7 @@ export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedT
   const studies = buildStudies(selectedRows as SnapshotRow[], seriesRows as Array<{ timeframe: WyckoffChartTimeframe; bars: OhlcvBar[]; provider: string; provider_detail: string }>)
   if (!studies) return null
 
-  const snapshotByTickerTimeframe = new Map(
-    (watchlistRows as SnapshotRow[]).map((row) => [`${row.ticker}|${row.timeframe}`, row] as const),
-  )
+  const snapshotByTickerTimeframe = new Map((watchlistRows as SnapshotRow[]).map((row) => [`${row.ticker}|${row.timeframe}`, row] as const))
   const stocks = memberships.map((membership) => {
     const row1H = snapshotByTickerTimeframe.get(`${membership.ticker}|1H`)
     const row1D = snapshotByTickerTimeframe.get(`${membership.ticker}|1D`)
