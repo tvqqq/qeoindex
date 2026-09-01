@@ -157,6 +157,10 @@ export interface NormalizedMarketSnapshot {
     sector: number
     leader: number
     total: number
+    sector_returned_count: number
+    sector_valid_count: number
+    sector_missing_required_count: number
+    sector_recognized_rotation_count: number
   }
 }
 
@@ -509,6 +513,9 @@ export function parseVerifiedMarketClosePayloads(params: {
 
   // 7. Parse Sectors
   const sectorMap = new Map<string, NormalizedSectorRow>()
+  let sectorReturnedCount = 0
+  let sectorValidCount = 0
+  let sectorMissingRequiredCount = 0
   const secObj = asObject(sectorIbdPayload)
   if (sectorIbdOk && secObj && Array.isArray(secObj.ten_nganh)) {
     const names = secObj.ten_nganh as unknown[]
@@ -520,10 +527,15 @@ export function parseVerifiedMarketClosePayloads(params: {
     const results = Array.isArray(secObj.percent_market_pulse_marketcap) ? secObj.percent_market_pulse_marketcap as unknown[] : []
 
     names.forEach((nameRaw, idx) => {
+      sectorReturnedCount += 1
       const displayName = String(nameRaw || "").trim()
       const slug = normalizeSectorSlug(displayName)
       const resultPct = parseNumeric(results[idx])
-      if (!slug || resultPct == null) return
+      if (!slug || resultPct == null) {
+        sectorMissingRequiredCount += 1
+        return
+      }
+      sectorValidCount += 1
       const tradedVal = parseNumeric(currentValues[idx])
       const previousTradedVal = parseNumeric(previousValues[idx])
       const rsScore = parseNumeric(rsScores[idx])
@@ -564,7 +576,7 @@ export function parseVerifiedMarketClosePayloads(params: {
       })
     })
 
-    if (sectorMap.size > 0) {
+    if (sectorMap.size > 0 && sectorMissingRequiredCount === 0) {
       coverage.sector_ibd = true
       // Compatibility alias for the v1 atomic publisher guard.
       coverage.sector_pulse = true
@@ -625,7 +637,8 @@ export function parseVerifiedMarketClosePayloads(params: {
       }
     }
   }
-  coverage.sector_rrg = sectorList.length > 0 && rrgCount === sectorList.length
+  const recognizedRotationCount = rrgCount
+  coverage.sector_rrg = sectorList.length > 0 && rrgCount === sectorList.length && sectorMissingRequiredCount === 0
 
   const sectorMaObj = asObject(sectorMaPayload)
   let maCount = 0
@@ -766,6 +779,10 @@ export function parseVerifiedMarketClosePayloads(params: {
       sector: sectors.length,
       leader: leaders.length,
       total: staged_items.length,
+      sector_returned_count: sectorReturnedCount,
+      sector_valid_count: sectorValidCount,
+      sector_missing_required_count: sectorMissingRequiredCount,
+      sector_recognized_rotation_count: recognizedRotationCount,
     },
   }
 }

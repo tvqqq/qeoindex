@@ -26,6 +26,26 @@ function makeSectorIbd(names: string[]) {
   }
 }
 
+function makeSectorCoverageInput(sectorIbdPayload: Record<string, unknown>): any {
+  const asOf = "2026-08-31T08:00:00.000Z"
+  const indexes = ["VNINDEX", "VN30", "HNX", "UPCOM"].map((index_code) => ({ index_code, value: 1000, change: 1, change_pct: 0.1, reference: 999, open: 1000, high: 1001, low: 999, matched_volume: 100, traded_value: 100, previous_value_change_pct: 0, advances: 1, unchanged: 1, declines: 1, ceilings: 0, floors: 0, market_pe: null, foreign_buy_value: null, foreign_sell_value: null, foreign_net_value: null, quality_status: "healthy", missing_fields: [], evidence_refs: [], source_timestamp: asOf, as_of: asOf }))
+  const names = Array.isArray(sectorIbdPayload.ten_nganh) ? sectorIbdPayload.ten_nganh.map(String) : []
+  return {
+    sessionDate: "2026-08-31", asOfIso: asOf,
+    pulseContentPayload: { content: JSON.stringify({ list_main_content: [{ title: "Ngày phân phối", distribution_date: 1 }] }) }, pulseOk: true,
+    maBreadthPayload: { name: ["MA10", "MA20", "MA50", "MA200"], above: [50, 50, 50, 50], under: [50, 50, 50, 50] }, maBreadthOk: true,
+    riskPayload: [{ risk: 0.3, tradingdate: "2026-08-31" }], riskOk: true, psychologyPayload: [{ value: 55, tradingdate: "2026-08-31" }], psychologyOk: true,
+    valuationPayload: [{ tradingdate: "2026-08-31", price: 1000, pe: 12, pb: 1.5 }], valuationOk: true,
+    sectorIbdPayload, sectorIbdOk: true,
+    sectorRrgPayload: Object.fromEntries(names.map((name) => [name, [{ tradingdate: "2026-08-31", status: "leading", closeprice: 100 }]])), sectorRrgOk: true,
+    sectorMaPayload: Object.fromEntries(names.map((name) => [name, { ma10: "up", ma20: "up", ma50: "up" }])), sectorMaOk: true,
+    sectorBreadthPayload: names.map((nganh) => ({ nganh, count_advances: 1, count_declines: 1, count_nochange: 1 })), sectorBreadthOk: true,
+    cashFlowsPayload: { nuocngoairong: [1], tudoanh: [1], cntckhacrong: [0] }, cashFlowsOk: true,
+    topVolatilityTickers: ["AAA"], getLivePayload: { stockcode: ["AAA"], lastprice: [10], totalvol: [100], perchange: [1] }, getLiveOk: true,
+    providerIndexes: indexes,
+  }
+}
+
 test("market-close normalizer: parseNumeric helper correctly handles numbers, strings, commas, percentages, and empty values", () => {
   assert.equal(parseNumeric(123.45), 123.45)
   assert.equal(parseNumeric("1,234.56"), 1234.56)
@@ -253,6 +273,10 @@ test("market-close normalizer: parses verified bundle contract fixture with cano
   assert.equal(snapshot.daily.foreign_net_value, -145.2)
   assert.equal(snapshot.daily.proprietary_net_value, 92.5)
   assert.equal(snapshot.daily.source_timestamp, asOf)
+  assert.equal(snapshot.staged_counts.sector_returned_count, 3)
+  assert.equal(snapshot.staged_counts.sector_valid_count, 3)
+  assert.equal(snapshot.staged_counts.sector_missing_required_count, 0)
+  assert.equal(snapshot.staged_counts.sector_recognized_rotation_count, 3)
 
   // 4 Indexes parsed
   assert.equal(snapshot.indexes.length, 4)
@@ -285,6 +309,28 @@ test("market-close normalizer: parses verified bundle contract fixture with cano
   // Validation must pass
   const validation = validateMarketCloseSnapshot(snapshot)
   assert.ok(validation.valid, `Expected valid snapshot, got errors: ${validation.errors.join(", ")}`)
+})
+
+test("market-close normalizer preserves mixed, empty and all-valid sector evidence counts", () => {
+  const allValid = parseVerifiedMarketClosePayloads(makeSectorCoverageInput(makeSectorIbd(["Ngân hàng", "Bất động sản"])))
+  assert.deepEqual(allValid.staged_counts.sector_returned_count, 2)
+  assert.deepEqual(allValid.staged_counts.sector_valid_count, 2)
+  assert.deepEqual(allValid.staged_counts.sector_missing_required_count, 0)
+  assert.equal(allValid.endpoint_coverage.sector_ibd, true)
+
+  const mixedPayload = makeSectorIbd(["Ngân hàng", ""])
+  ;(mixedPayload.percent_market_pulse_marketcap as unknown[])[1] = "--"
+  const mixed = parseVerifiedMarketClosePayloads(makeSectorCoverageInput(mixedPayload))
+  assert.equal(mixed.staged_counts.sector_returned_count, 2)
+  assert.equal(mixed.staged_counts.sector_valid_count, 1)
+  assert.equal(mixed.staged_counts.sector_missing_required_count, 1)
+  assert.equal(mixed.endpoint_coverage.sector_ibd, false)
+
+  const empty = parseVerifiedMarketClosePayloads(makeSectorCoverageInput(makeSectorIbd([])))
+  assert.equal(empty.staged_counts.sector_returned_count, 0)
+  assert.equal(empty.staged_counts.sector_valid_count, 0)
+  assert.equal(empty.staged_counts.sector_missing_required_count, 0)
+  assert.equal(empty.endpoint_coverage.sector_ibd, false)
 })
 
 test("market-close normalizer: rejects missing or null canonical index data without inventing fake fallbacks", () => {

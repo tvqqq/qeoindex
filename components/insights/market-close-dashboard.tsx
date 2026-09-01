@@ -11,7 +11,9 @@ import { MarketHealthView, MarketSentimentCard } from "@/components/insights/mar
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { MarketCloseDashboardData } from "@/lib/market-insight-data"
 import type { InsightsRatingRow } from "@/lib/insights-data"
+import type { MarketAiConclusionView } from "@/lib/market-ai-conclusion-loader"
 import { cn } from "@/lib/utils"
+import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
 
 export type { MarketBubbleStock }
 
@@ -21,6 +23,7 @@ interface MarketCloseDashboardProps {
   bubbleStocks?: MarketBubbleStock[]
   bubbleAsOfDate?: string | null
   onOpenStockDetail?: (ticker: string) => void
+  marketAiConclusion?: MarketAiConclusionView
 }
 
 function formatNumber(value: number | null | undefined, decimals = 2) {
@@ -40,40 +43,6 @@ function formatTime(iso: string) {
 }
 
 const surface = "insights-glass-panel border-white/[0.09] bg-[#0a1820]/90 shadow-[0_20px_60px_-48px_rgba(45,212,191,0.55)]"
-
-function PanelHeading({
-  title,
-  description,
-  icon: Icon,
-  iconTone = "teal",
-}: {
-  title: string
-  description: string
-  icon: React.ComponentType<{ className?: string }>
-  iconTone?: "teal" | "purple" | "cyan" | "emerald" | "amber"
-}) {
-  const iconTones = {
-    teal: "border-teal-300/20 bg-teal-300/[0.08] text-teal-300",
-    purple: "border-purple-400/20 bg-purple-400/[0.08] text-purple-300",
-    cyan: "border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-300",
-    emerald: "border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300",
-    amber: "border-amber-400/20 bg-amber-400/[0.08] text-amber-300",
-  }
-
-  return (
-    <CardHeader className="border-b border-white/[0.06] px-4 py-3.5">
-      <div className="flex items-center gap-3">
-        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-xl border shadow-sm", iconTones[iconTone])}>
-          <Icon className="size-4" />
-        </span>
-        <div className="min-w-0">
-          <CardTitle className="text-sm font-bold text-white tracking-wide font-sans">{title}</CardTitle>
-          <CardDescription className="mt-0.5 line-clamp-1 text-[11px] text-slate-400 italic font-medium">{description}</CardDescription>
-        </div>
-      </div>
-    </CardHeader>
-  )
-}
 
 function SectionHeading({
   eyebrow,
@@ -125,7 +94,7 @@ function SectionHeading({
   )
 }
 
-export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bubbleAsOfDate = null, onOpenStockDetail }: MarketCloseDashboardProps) {
+export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bubbleAsOfDate = null, onOpenStockDetail, marketAiConclusion }: MarketCloseDashboardProps) {
   if (!data) return (
     <Card className={cn(surface, "py-12 text-center")}><CardContent className="space-y-3"><Activity className="mx-auto size-10 text-slate-600" /><CardTitle className="font-bold text-white font-sans">Chưa có dữ liệu phiên đóng cửa</CardTitle><CardDescription className="italic text-slate-400">Snapshot sau phiên được cập nhật tự động sau 15:15 vào ngày giao dịch.</CardDescription></CardContent></Card>
   )
@@ -153,7 +122,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
                   Bubbles · Bản đồ giao dịch thị trường
                 </h2>
                 <p className="mt-0.5 text-xs text-slate-400 italic font-medium">
-                  KFSP KLGD TB 50 phiên &gt; 500.000; xếp theo thanh khoản giảm dần, tối đa 200 mã. Kích thước theo biến động giá.
+                  KFSP KLGD TB 50 phiên &gt; 300.000; xếp theo thanh khoản giảm dần, tối đa 200 mã. Kích thước theo biến động giá.
                 </p>
                 <p className="mt-1 text-[10px] font-mono text-slate-500">Nguồn KFSP · snapshot {bubbleAsOfDate ?? "—"} · thiếu dữ liệu không được bù</p>
               </div>
@@ -170,7 +139,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
       </section>
 
       {/* 2. Market Intelligence Panel */}
-      <MarketIntelligencePanel data={data} />
+      <MarketIntelligencePanel data={data} marketAiConclusion={marketAiConclusion} />
 
       {/* 3. Sector Map Section (Nhóm ngành đang dẫn nhịp) */}
       <section aria-labelledby="market-sectors-title" className="space-y-4 border-t border-white/[0.06] pt-8">
@@ -196,7 +165,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
   )
 }
 
-function MarketIntelligencePanel({ data }: { data: MarketCloseDashboardData }) {
+function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketCloseDashboardData; marketAiConclusion?: MarketAiConclusionView }) {
   const { dailySummary, indexes, history, marketRegime } = data
   return (
     <section aria-labelledby="market-intelligence-title" className="space-y-6">
@@ -222,7 +191,8 @@ function MarketIntelligencePanel({ data }: { data: MarketCloseDashboardData }) {
         <CardContent className="p-5 sm:p-6">
           <div className="grid gap-4 xl:grid-cols-[7fr_3fr]">
             <div>
-              <p className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-teal-300/70">Tổng quan thị trường</p>
+              <MarketWidgetChildHeader icon={Activity} title={marketAiConclusion?.status === "succeeded" ? "AI nhận định thị trường · CANSLIM/4M-inspired" : "Tổng hợp định lượng"} description={marketAiConclusion?.status === "succeeded" ? "Kết luận grounded trên bằng chứng cùng phiên" : "Tóm lược định lượng, không phải AI"} asOf={data.asOf} quality={data.qualityStatus} />
+              {marketAiConclusion?.status === "succeeded" ? <div className="mt-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.05] p-3"><div className="flex items-center justify-between gap-2"><strong className="text-sm text-white">{marketAiConclusion.payload?.headline}</strong><span className="text-[10px] font-mono text-cyan-300">{marketAiConclusion.payload?.posture} · {marketAiConclusion.payload?.confidence}</span></div><p className="mt-2 text-xs leading-5 text-slate-300">{marketAiConclusion.payload?.conclusion}</p><p className="mt-2 text-[10px] text-slate-500">asOf {formatTime(marketAiConclusion.asOf || data.asOf)} · evidence {marketAiConclusion.evidenceHash?.slice(0, 12)}…</p></div> : <p className="mt-2 text-xs text-slate-400">{marketAiConclusion?.message || "Chưa có AI conclusion; hiển thị các chỉ báo định lượng bên dưới."}</p>}
               <div className="mt-4 flex items-center gap-5">
                 <div className="flex size-28 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/[0.06]">
                   <strong className="px-3 text-center text-sm font-black uppercase text-amber-300 font-sans">{marketRegime || "Không suy diễn"}</strong>
@@ -238,7 +208,7 @@ function MarketIntelligencePanel({ data }: { data: MarketCloseDashboardData }) {
             <MarketSentimentCard data={data} />
           </div>
           <div id="market-charts-title" className="mt-5">
-            <SectionHeading icon={BarChart3} iconTone="cyan" eyebrow="Market internals" title="Nội lực thị trường & Phân tích chuyên sâu" description="Thanh khoản, độ rộng, xu hướng và dòng tiền từ snapshot hiện tại." />
+            <h3 className="sr-only">Nội lực thị trường & Phân tích chuyên sâu</h3>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4" data-market-close-chart-grid>
             <ChartPanel icon={LineChart} title="Hiệu suất chỉ số" description="Biến động và giá trị giao dịch"><IndexPerformanceChart indexes={indexes} /></ChartPanel>
@@ -252,7 +222,7 @@ function MarketIntelligencePanel({ data }: { data: MarketCloseDashboardData }) {
       {/* Khối Sức khoẻ thị trường (Chỉ báo tâm lý + Chỉ báo rủi ro trên 1 row + Định giá) */}
       <MarketHealthView data={data} history={history} />
       <div id="market-history-title">
-        <SectionHeading icon={LineChart} iconTone="purple" eyebrow="20-session context" title="Bối cảnh trước khi ra quyết định" description="Đặt phiên hiện tại cạnh sức khỏe và dòng tiền gần đây, thay vì chỉ nhìn một ngày." />
+        <h3 className="sr-only">Bối cảnh trước khi ra quyết định</h3>
       </div>
       <div className="grid gap-3 xl:grid-cols-2" data-market-close-chart-grid>
         <ChartPanel icon={Gauge} title="Tâm lý, rủi ro và MA20" description="Bối cảnh 20 phiên gần nhất"><MarketHistoryChart history={history} /></ChartPanel>
@@ -273,5 +243,5 @@ function IndexTile({ item }: { item: MarketCloseDashboardData["indexes"][number]
 }
 
 function ChartPanel({ icon, title, description, children }: { icon: React.ComponentType<{ className?: string }>; title: string; description: string; children: React.ReactNode }) {
-  return <Card className={cn(surface, "py-0")}><PanelHeading icon={icon} title={title} description={description} /><CardContent className="p-3">{children}</CardContent></Card>
+  return <Card className={cn(surface, "py-0")}><MarketWidgetChildHeader icon={icon} title={title} description={description} /><CardContent className="p-3">{children}</CardContent></Card>
 }

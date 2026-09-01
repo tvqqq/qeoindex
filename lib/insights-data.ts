@@ -10,6 +10,8 @@ import { getSignalUiData } from "@/lib/signal-data"
 import { buildRecommendationPerformance } from "@/lib/signal-performance"
 import { fetchTradingViewIndexes, type MarketIndexQuote } from "@/lib/tradingview-index"
 import { getMarketCloseInsightData, type MarketCloseDashboardData } from "@/lib/market-insight-data"
+import { loadMarketAiConclusion, type MarketAiConclusionView } from "@/lib/market-ai-conclusion-loader"
+import { getSupabaseServerClient } from "@/lib/supabase/server"
 import type { RatingModelSnapshot } from "@/lib/insights-rating-model"
 import { KFSP_GROUPS, type KfspGroupKey } from "@/supabase/functions/_shared/kfsp-catalog"
 
@@ -91,6 +93,7 @@ export interface InsightsDashboardData {
   modules: InsightsModuleSummary[]
   faSnapshotDate: string
   marketClose?: MarketCloseDashboardData | null
+  marketAiConclusion?: MarketAiConclusionView
   bubbleStocks: InsightsBubbleStock[]
   bubbleAsOfDate: string | null
 }
@@ -305,7 +308,7 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
     .eq("is_published", true)
     .eq("as_of_date", latestDate)
     .eq("source", "kfsp")
-    .gt("average_volume_50_sessions", 500_000)
+    .gt("average_volume_50_sessions", 300_000)
     .order("average_volume_50_sessions", { ascending: false })
     .order("ticker", { ascending: true })
     .limit(200)
@@ -397,7 +400,7 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
   const sectorSummaries = buildSectorSummaries([...(leanPageOne.data || []), ...(leanPageTwo.data || [])])
   const bubbleStocks = (bubbleUniverse.data || []).flatMap((row) => {
     const volume = nullableNumber((row as BubbleDatabaseRow).average_volume_50_sessions)
-    if (volume == null || volume <= 500_000) return []
+    if (volume == null || volume <= 300_000) return []
     const metrics = parseMetricGroups((row as BubbleDatabaseRow).kfsp_metrics)
     return [{
       ticker: String(row.ticker),
@@ -449,6 +452,7 @@ export async function getInsightsDashboardData(supabase: SupabaseClient): Promis
   const signals = settledValue(settled[4])
   const research = settledValue(settled[5])
   const marketClose = settledValue(settled[6])
+  const marketAiConclusion = await loadMarketAiConclusion(getSupabaseServerClient(), marketClose)
   const vnindex = indexes?.VNINDEX ?? null
   const ratings = ratingResult?.rows ?? []
   const bubbleStocks = ratingResult?.bubbleStocks ?? []
@@ -510,6 +514,7 @@ export async function getInsightsDashboardData(supabase: SupabaseClient): Promis
     ],
     faSnapshotDate: FA_SCREEN_SNAPSHOT_DATE,
     marketClose,
+    marketAiConclusion,
     bubbleStocks,
     bubbleAsOfDate,
   }

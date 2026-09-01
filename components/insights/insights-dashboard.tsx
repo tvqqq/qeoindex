@@ -1480,6 +1480,7 @@ export function InsightsDashboard({ data, initialTicker }: { data: InsightsDashb
               data={data.marketClose || null}
               ratings={data.ratings}
               bubbleAsOfDate={data.bubbleAsOfDate}
+              marketAiConclusion={data.marketAiConclusion}
               bubbleStocks={data.bubbleStocks.map((row) => ({
                 ticker: row.ticker,
                 companyName: row.companyName,

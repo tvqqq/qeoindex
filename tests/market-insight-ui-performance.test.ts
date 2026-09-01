@@ -135,7 +135,7 @@ test("Market Close keeps the main dashboard continuous and limits tabs to the th
   for (const period of ["1D", "1W", "1M", "1Y"]) {
     assert.match(bubbles, new RegExp(`value: "${period}"`), `market bubbles must expose the ${period} time window`)
   }
-  assert.match(bubbles, /filter\(\(stock\) => \(stock\.volume \?\? 0\) > 500_000\)/, "bubble field must exclude stocks at or below the provider threshold")
+  assert.match(bubbles, /filter\(\(stock\) => \(stock\.volume \?\? 0\) > 300_000\)/, "bubble field must exclude stocks at or below the provider threshold")
   assert.match(bubbles, /slice\(0, 200\)/, "bubble solver must keep the requested Top 200 cap")
   assert.match(dashboard, /min-h-\[650px\]/, "bubble layout must reserve stable space")
   assert.match(dashboard, /Luân chuyển dòng tiền/, "sector workspace must expose the rotation view")
@@ -146,6 +146,8 @@ test("Market Close keeps the main dashboard continuous and limits tabs to the th
   assert.match(dashboard, /MarketHistoryChart history=\{history\}/)
   assert.match(dashboard, /MarketHistoryFlowChart history=\{history\}/)
   assert.match(dashboard, /data-stock-analytics-dashboard/, "the dashboard must preserve the analytics-first visual hierarchy")
+  assert.match(bubbles, /node\.r \* 0\.12/, "bubble centers must reserve transformed hit-area margin")
+  assert.match(bubbles, /node\.x = Math\.max\(node\.r \+ hitMargin/, "bubble x centers must stay inside the clickable field")
   assert.doesNotMatch(dashboard, /<Table\b/, "market-close analytics should prioritize charts over long data tables")
   assert.doesNotMatch(dashboard, /Dữ liệu thị trường cũ \(Stale\)/, "stale status belongs in the page header, not inside the market dashboard")
 })
@@ -158,6 +160,32 @@ test("Market Close charts use a minimal semantic palette without SVG gradients",
   assert.match(charts, /const NEUTRAL/)
   assert.match(charts, /const ACCENT/)
   assert.doesNotMatch(charts, /linearGradient|url\(#/, "chart fills must remain flat and minimal")
+})
+
+test("unified market-health children use the shared header contract", () => {
+  const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
+  const health = fs.readFileSync(path.resolve("components/insights/market-health-view.tsx"), "utf8")
+  const header = fs.readFileSync(path.resolve("components/insights/market-widget-child-header.tsx"), "utf8")
+
+  assert.match(header, /actions\?: React\.ReactNode/)
+  for (const title of [
+    "AI nhận định thị trường",
+    "Tổng hợp định lượng",
+    "Chỉ báo tâm lý",
+    "Chỉ báo rủi ro",
+    "Định giá thị trường (P/E & P/B)",
+    "Hiệu suất chỉ số",
+    "Độ rộng thị trường",
+    "Sức khỏe xu hướng",
+    "Dòng tiền tổ chức",
+    "Tâm lý, rủi ro và MA20",
+    "Dòng tiền theo phiên",
+  ]) {
+    assert.ok(`${dashboard}\n${health}`.includes(title), `missing child title: ${title}`)
+  }
+  assert.match(health, /<MarketWidgetChildHeader icon=\{ShieldAlert\}[^>]*actions=/)
+  assert.match(health, /<MarketWidgetChildHeader icon=\{Gauge\}/)
+  assert.doesNotMatch(health, /<h3[^>]*>\s*(Chỉ báo rủi ro|Định giá thị trường)/)
 })
 
 test("sector matrix keeps provider liquidity and sector labels honest", () => {

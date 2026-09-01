@@ -119,7 +119,7 @@ export function MarketBubbles({
   // Keep the provider-qualified universe bounded for deterministic rendering.
   const topStocks = React.useMemo(() => {
     return [...stocks]
-      .filter((stock) => (stock.volume ?? 0) > 500_000)
+      .filter((stock) => (stock.volume ?? 0) > 300_000)
       .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0) || a.ticker.localeCompare(b.ticker))
       .slice(0, 200)
   }, [stocks])
@@ -383,8 +383,12 @@ export function MarketBubbles({
       // 3. Strict Boundary Containment with Edge Margin
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
-        node.x = Math.max(node.r + 16, Math.min(W - node.r - 16, node.x))
-        node.y = Math.max(node.r + 16, Math.min(H - node.r - 16, node.y))
+        const hitMargin = Math.min(
+          Math.max(16, Math.ceil(node.r * 0.12 + node.borderWidth + 4)),
+          Math.max(0, (W - node.r * 2) / 2),
+        )
+        node.x = Math.max(node.r + hitMargin, Math.min(W - node.r - hitMargin, node.x))
+        node.y = Math.max(node.r + hitMargin, Math.min(H - node.r - hitMargin, node.y))
       }
     }
 

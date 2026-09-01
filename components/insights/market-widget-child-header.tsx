@@ -1,0 +1,6 @@
+import * as React from "react"
+import { CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+
+export function MarketWidgetChildHeader({ title, description, icon: Icon, asOf, quality, actions }: { title: string; description: string; icon: React.ComponentType<{ className?: string }>; asOf?: string; quality?: string; actions?: React.ReactNode }) {
+  return <CardHeader className="border-b border-white/[0.06] px-4 py-3.5"><div className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-teal-300/20 bg-teal-300/[0.08] text-teal-300 shadow-sm"><Icon className="size-4" /></span><div className="min-w-0"><CardTitle className="text-sm font-bold tracking-wide text-white">{title}</CardTitle><CardDescription className="mt-0.5 line-clamp-1 text-[11px] font-medium italic text-slate-400">{description}</CardDescription>{(asOf || quality) && <span className="text-[10px] text-slate-500">{asOf ? `asOf ${asOf}` : ""}{asOf && quality ? " · " : ""}{quality || ""}</span>}</div></div>{actions ? <div className="shrink-0">{actions}</div> : null}</div></CardHeader>
+}

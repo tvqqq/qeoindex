@@ -23,6 +23,12 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } })
 }
 
+async function sha256Hex(value: unknown) {
+  const bytes = new TextEncoder().encode(JSON.stringify(value))
+  const digest = await crypto.subtle.digest("SHA-256", bytes)
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+}
+
 function asObject(value: unknown): Record<string, unknown> | null {
   return value != null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -416,11 +422,21 @@ Deno.serve(async (req: Request) => {
     })
 
     // Persist collection diagnostics before the fail-closed gate so provider drift is observable.
+    const payloadChecksum = await sha256Hex({
+      contractVersion: normalized.contract_version,
+      sessionDate,
+      asOf: asOfIso,
+      daily: normalized.daily,
+      indexes: normalized.indexes,
+      sectors: normalized.sectors,
+      leaders: normalized.leaders,
+    })
     await supabase.from("market_insight_sync_runs").update({
       source_observed_at: asOfIso,
       endpoint_coverage: normalized.endpoint_coverage,
       staged_counts: normalized.staged_counts,
       quality_status: normalized.quality_status,
+      payload_checksum: payloadChecksum,
     }).eq("id", syncRunId)
 
     const validation = validateMarketCloseSnapshot(normalized)
@@ -460,6 +476,10 @@ Deno.serve(async (req: Request) => {
     if (publishRes.error) {
       throw new Error(`PUBLISH_RPC_FAILED: ${publishRes.error.message}`)
     }
+
+    const publishedCounts = { daily: normalized.staged_counts.daily, index: normalized.staged_counts.index, sector: normalized.staged_counts.sector, leader: normalized.staged_counts.leader, total: normalized.staged_counts.total }
+    const publishedUpdate = await supabase.from("market_insight_sync_runs").update({ published_counts: publishedCounts, payload_checksum: payloadChecksum }).eq("id", syncRunId)
+    if (publishedUpdate.error) throw new Error(`PUBLISH_METADATA_FAILED: ${publishedUpdate.error.message}`)
 
     return jsonResponse({
       ok: true,

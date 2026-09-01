@@ -160,6 +160,14 @@ export interface MarketCloseDashboardData {
   leaders: MarketLeaderItem[]
   observations: MarketObservation[]
   history: MarketHistoryPoint[]
+  /** Provenance shared by the AI packet builder and the Edge runtime. */
+  marketInsightProvenance: {
+    syncRunId: string
+    payloadChecksum: string
+    contractVersion: number
+    endpointCoverage: Record<string, boolean>
+    publishedCounts: Record<string, number>
+  } | null
 }
 
 function vietnamTodayDate(): string {
@@ -244,6 +252,39 @@ export async function getMarketCloseInsightData(
   if (!daily) {
     return null
   }
+
+  const syncRunId = typeof daily.sync_run_id === "string" ? daily.sync_run_id : ""
+  const syncRunRes = syncRunId
+    ? await supabase
+      .from("market_insight_sync_runs")
+      .select("id,session_date,status,contract_version,payload_checksum,endpoint_coverage,published_counts")
+      .eq("id", syncRunId)
+      .maybeSingle()
+    : { data: null, error: null }
+  const syncRun = syncRunRes.data as Record<string, unknown> | null
+  const publishedCounts = syncRun && syncRun.published_counts && typeof syncRun.published_counts === "object" && !Array.isArray(syncRun.published_counts)
+    ? Object.fromEntries(Object.entries(syncRun.published_counts as Record<string, unknown>).flatMap(([key, value]) => {
+      const numeric = Number(value)
+      return Number.isFinite(numeric) ? [[key, numeric]] : []
+    }))
+    : null
+  const endpointCoverage = syncRun && syncRun.endpoint_coverage && typeof syncRun.endpoint_coverage === "object" && !Array.isArray(syncRun.endpoint_coverage)
+    ? Object.fromEntries(Object.entries(syncRun.endpoint_coverage as Record<string, unknown>).flatMap(([key, value]) => typeof value === "boolean" ? [[key, value]] : []))
+    : null
+  const provenanceAvailable = Boolean(
+    !syncRunRes.error && syncRun && syncRun.status === "completed" && String(syncRun.session_date) === targetDate &&
+    typeof syncRun.payload_checksum === "string" && /^[0-9a-f]{64}$/.test(syncRun.payload_checksum) &&
+    Number.isInteger(Number(syncRun.contract_version)) && Number(syncRun.contract_version) > 0 &&
+    publishedCounts && endpointCoverage &&
+    Number(publishedCounts.daily) === 1 && Number(publishedCounts.index) === (indexesRes.data || []).length &&
+    Number(publishedCounts.sector) === (sectorsRes.data || []).filter((row) => row.time_window === "1d").length &&
+    Number(publishedCounts.leader) === (leadersRes.data || []).length &&
+    Object.values(endpointCoverage).length > 0 && Object.values(endpointCoverage).every(Boolean) &&
+    Object.entries(endpointCoverage).every(([key, value]) => !key || typeof value === "boolean") &&
+    (indexesRes.data || []).every((row) => row.sync_run_id === syncRunId) &&
+    (sectorsRes.data || []).every((row) => row.sync_run_id === syncRunId) &&
+    (leadersRes.data || []).every((row) => row.sync_run_id === syncRunId)
+  )
 
   const indexes: MarketIndexCard[] = (indexesRes.data || []).map((row: Record<string, unknown>) => ({
     indexCode: row.index_code as MarketIndexCard["indexCode"],
@@ -506,5 +547,12 @@ export async function getMarketCloseInsightData(
     leaders,
     observations,
     history,
+    marketInsightProvenance: provenanceAvailable ? {
+      syncRunId,
+      payloadChecksum: String(syncRun?.payload_checksum),
+      contractVersion: Number(syncRun?.contract_version),
+      endpointCoverage: endpointCoverage as Record<string, boolean>,
+      publishedCounts: publishedCounts as Record<string, number>,
+    } : null,
   }
 }

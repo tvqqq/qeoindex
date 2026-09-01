@@ -16,6 +16,7 @@ import {
 import { ChevronDown, Gauge, HeartPulse, ShieldAlert } from "lucide-react"
 
 import type { MarketCloseDashboardData, MarketHistoryPoint } from "@/lib/market-insight-data"
+import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
 
 interface MarketHealthViewProps {
   data: MarketCloseDashboardData
@@ -582,44 +583,17 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
     <div className="space-y-4 pt-1">
       {/* Risk and valuation form the second responsive market-health row. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-white/[0.06] pb-3 mb-2">
-            <div className="flex items-center gap-3">
-              <div className="flex size-8.5 shrink-0 items-center justify-center rounded-xl border border-rose-400/20 bg-rose-400/[0.08] text-rose-300 shadow-sm">
-                <ShieldAlert className="size-4" />
-              </div>
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-white tracking-wide font-sans">
-                  Chỉ báo rủi ro
-                </h3>
-                <p className="text-[11px] text-slate-400 italic font-medium">Mức độ rủi ro phân phối ngắn hạn</p>
-              </div>
-            </div>
-            <span className="font-mono text-xs text-slate-400">
-              Hiện tại: <strong className="text-rose-400 font-bold">{currentRisk == null ? "—" : currentRisk.toFixed(2)}</strong>
-            </span>
-          </div>
+        <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 shadow-xl flex flex-col justify-between">
+          <MarketWidgetChildHeader icon={ShieldAlert} title="Chỉ báo rủi ro" description="Mức độ rủi ro phân phối ngắn hạn" asOf={data.asOf} quality={data.qualityStatus} actions={<span className="font-mono text-xs text-slate-400">Hiện tại: <strong className="font-bold text-rose-400">{currentRisk == null ? "—" : currentRisk.toFixed(2)}</strong></span>} />
 
           {riskSeries.length === 0
-            ? <div className="flex h-[210px] items-center justify-center text-sm text-slate-500">KFSP chưa trả lịch sử rủi ro.</div>
-            : <RiskIndicatorChart data={riskSeries} />}
+            ? <div className="flex h-[210px] items-center justify-center p-4 text-sm text-slate-500">KFSP chưa trả lịch sử rủi ro.</div>
+            : <div className="p-4 sm:p-5"><RiskIndicatorChart data={riskSeries} /></div>}
         </div>
-        <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.06] pb-3 mb-3 gap-2">
-          <div className="flex items-center gap-3">
-            <div className="flex size-8.5 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-300 shadow-sm">
-              <Gauge className="size-4" />
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-bold text-white tracking-wide font-sans">
-                Định giá thị trường (P/E & P/B)
-              </h3>
-              <p className="text-[11px] text-slate-400 italic font-medium">Đa dải độ lệch chuẩn P/E, P/B so với chỉ số VN-Index</p>
-            </div>
-          </div>
-        </div>
+        <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 shadow-xl">
+        <MarketWidgetChildHeader icon={Gauge} title="Định giá thị trường (P/E & P/B)" description="Đa dải độ lệch chuẩn P/E, P/B so với chỉ số VN-Index" asOf={data.asOf} quality={data.qualityStatus} />
 
-        <ValuationBandChart data={valuationSeries} />
+        <div className="p-4 sm:p-5"><ValuationBandChart data={valuationSeries} /></div>
         </div>
       </div>
     </div>
@@ -630,10 +604,7 @@ export function MarketSentimentCard({ data }: { data: MarketCloseDashboardData }
   const score = data.dailySummary.sentimentScore
   return (
     <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 sm:p-5 shadow-xl">
-      <div className="mb-2 flex items-center gap-3 border-b border-white/[0.06] pb-3">
-        <div className="flex size-8.5 shrink-0 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300 shadow-sm"><HeartPulse className="size-4" /></div>
-        <div><h3 className="text-sm font-bold tracking-wide text-white sm:text-base">Chỉ báo tâm lý</h3><p className="text-[11px] font-medium italic text-slate-400">Đo lường mức độ hưng phấn / sợ hãi</p></div>
-      </div>
+      <MarketWidgetChildHeader icon={HeartPulse} title="Chỉ báo tâm lý" description="Đo lường mức độ hưng phấn / sợ hãi" asOf={data.asOf} quality={data.qualityStatus} />
       {score == null ? <div className="flex h-[210px] items-center justify-center text-sm text-slate-500">KFSP chưa trả chỉ báo tâm lý.</div> : <SentimentGauge score={score} />}
     </div>
   )
