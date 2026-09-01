@@ -34,7 +34,9 @@ At the current maximum universe of 200 tickers this is 400 snapshots per healthy
 
 ### Raw OHLCV storage
 
-Persistent Wyckoff raw OHLCV stores `1D` only in `market_ohlcv_history`. Weekly bars are derived; raw OHLCV `1H` is no longer required by Wyckoff and the storage-cutover migration removes obsolete intraday rows.
+Persistent Wyckoff raw OHLCV stores `1D` only in `market_ohlcv_history`. Weekly bars are derived; raw OHLCV `1H` is no longer required by Wyckoff.
+
+The 19:00 storage-contract migration rejects new non-Daily writes with a `NOT VALID` check but intentionally preserves historical legacy rows until an explicitly approved destructive cleanup. The one-shot 21:30 clean-rebuild migration removes that preserved legacy state and validates the Daily-only constraint.
 
 The active history refresh therefore fetches/persists Daily only. Other non-Wyckoff features may still fetch intraday data directly through their own bounded provider paths, but they must not repopulate `market_ohlcv_history` with `1H`.
 
@@ -44,7 +46,7 @@ The active history refresh therefore fetches/persists Daily only. Other non-Wyck
 
 ## P0 DNSE history reliability
 
-Daily bootstrap keeps the 366-day fast request window for normal tickers. A transient failure on one large window is retried adaptively by recursively splitting only that failed window down toward approximately 183/91/45-day ranges.
+Daily bootstrap keeps the 366-day fast request window for normal tickers. A transient failure on one large window is retried adaptively by recursively splitting only that failed branch down to the current 7-day retry floor.
 
 Adaptive splitting is limited to transient failures such as timeout/abort/network errors, HTTP 408/425/429 and 5xx. Auth/permission errors and explicit non-transient 4xx such as 404 are not recursively retried. Empty pre-listing subwindows are allowed; successful bars are merged and de-duplicated deterministically before fallback is considered.
 
@@ -85,25 +87,44 @@ The 2026-09-01 storage cutover introduces `market_ohlcv_archive_ranges`, a range
 
 **Important:** raw Daily retention is intentionally fail-closed. Do not age-prune Daily bars merely by date while `1W` is derived from Daily and the active model requires at least 60 completed Weekly bars. Daily pruning can be enabled only after cold-history coverage/hydration is verified end-to-end.
 
-Obsolete intraday rows are a one-time schema-cutover cleanup, not a recurring Daily retention rule.
+The approved clean rebuild is a one-shot maintenance operation, not a recurring retention rule.
 
-## Database migration
+## Database migrations
 
-Active cutover migration:
+### Storage-contract foundation
 
 `supabase/migrations/20260901190000_wyckoff_daily_weekly_storage_cutover.sql`
 
 It:
 
-- removes obsolete `market_ohlcv_history` rows where timeframe is not `1D`;
-- tightens raw history to `timeframe = '1D'`;
-- removes active Wyckoff snapshots outside `1D/1W`;
-- keeps chart-series raw storage at `1D` only;
+- changes the active raw write contract to `timeframe = '1D'` without deleting historical legacy rows;
+- changes active Wyckoff snapshot/chart-series writes to `1D/1W` without deleting historical legacy rows;
 - creates `market_ohlcv_bootstrap_state`;
 - changes `qeo_market_ohlcv_recent` to Daily only;
-- creates the Plan C archive-range ledger.
+- creates the Plan C archive-range ledger;
+- intentionally leaves the new timeframe checks `NOT VALID` while preserved legacy rows still exist.
 
-Deploy application code before applying this destructive migration. Then verify production and execute a full manual EOD smoke before treating the cutover as operationally accepted.
+### Approved clean rebuild
+
+`supabase/migrations/20260901213000_clean_rebuild_top_stocks_200.sql`
+
+This is the explicit destructive cutover for rebuildable stock operational state. It:
+
+- refuses to run while `market.universe_monthly` or `qeoindex.eod_pipeline` is active;
+- purges old/current raw OHLCV and bootstrap state;
+- purges canonical universe runs/memberships so the next universe is selected from source evidence again;
+- purges active Wyckoff, current orderbook, AI Council run output, market synthesis conclusion and EOD archive checkpoint materializations;
+- preserves KFSP ratings/provider history, TTAI quarterly history, auth/user/config data, job audit telemetry, calibration history and verified `market_ohlcv_archive_ranges` cold-archive evidence;
+- validates the raw `1D` and Wyckoff `1D/1W` physical constraints after the purge.
+
+After applying the one-shot clean rebuild, execute in this order:
+
+1. `qeo_trigger_market_universe_monthly()` and verify a new published `vn_top_stocks` run.
+2. Verify exact canonical membership (target 200 under current eligibility/settings).
+3. `qeo_trigger_eod_pipeline()` for the current completed session.
+4. Verify fresh Daily raw history for the exact canonical ticker set.
+5. Verify Wyckoff exact membership and `universeCount × 2` snapshots.
+6. Verify downstream phases report their real success/failure state.
 
 ## Manual EOD acceptance
 
@@ -112,10 +133,11 @@ A current-session manual smoke is accepted only when evidence shows:
 - `EOD_READY`: canonical universe complete for the session;
 - `MARKET_CLOSE_COLLECT`: healthy/current-session evidence;
 - `HISTORY_REFRESH`: all requested tickers complete, including VGI;
+- raw persistent OHLCV contains `1D` only and no noncanonical tickers after a clean rebuild;
 - Wyckoff expected count = `universeCount × 2`;
 - `SUPABASE_PUBLISH`: same validation hash and exact canonical ticker set;
 - deterministic AI Council completes for the canonical universe;
 - archive phases report their real state and do not fake success;
 - `COMPLETE` closes the parent run without hidden skipped critical phases.
 
-For fast troubleshooting, inspect `system_job_runs`, `system_job_phases`, latest `wyckoff_scan_runs`, `market_ohlcv_history`, and `eod_archive_checkpoints` before interpreting UI state.
+For fast troubleshooting, inspect `system_job_runs`, `system_job_phases`, latest `market_universe_runs`, `wyckoff_scan_runs`, `market_ohlcv_history`, `market_ohlcv_bootstrap_state`, and `eod_archive_checkpoints` before interpreting UI state.
