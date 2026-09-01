@@ -7,6 +7,12 @@ import {
   KFSP_GROUPS,
   type KfspGroupKey,
 } from "../_shared/kfsp-catalog.ts"
+import {
+  beginManualKfspLifecycle,
+  finalizeManualKfspLifecycle,
+  manualKfspRequestId,
+  type ManualKfspContext,
+} from "../_shared/kfsp-manual-lifecycle.ts"
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 type JsonObject = { [key: string]: JsonValue }
@@ -284,19 +290,45 @@ Deno.serve(async (req: Request) => {
   if (!expectedSecret) return jsonResponse({ ok: false, error: "SYNC_SECRET_NOT_CONFIGURED" }, 503)
   if (!constantTimeEqual(expectedSecret, providedSecret)) return jsonResponse({ ok: false, error: "UNAUTHORIZED" }, 401)
 
+  const requestBody = asObject(await req.json().catch(() => null))
+  let manualRequestId: string | null = null
+  try {
+    manualRequestId = manualKfspRequestId(requestBody)
+  } catch {
+    return jsonResponse({ ok: false, error: "KFSP_MANUAL_REQUEST_ID_INVALID" }, 400)
+  }
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || ""
   const supabaseKey = serviceRoleKey()
   if (!supabaseUrl || !supabaseKey) return jsonResponse({ ok: false, error: "SUPABASE_NOT_CONFIGURED" }, 500)
   const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } })
-  const syncRunId = crypto.randomUUID()
+  const syncRunId = manualRequestId ?? crypto.randomUUID()
   const asOfDate = vietnamDate()
   const fetchedAt = new Date().toISOString()
   let tokenRefreshed = false
+  let manualContext: ManualKfspContext | null = null
 
   const created = await supabase.from("kfsp_rating_sync_runs").insert({ id: syncRunId, as_of_date: asOfDate, status: "running", contract_version: KFSP_CONTRACT_VERSION })
-  if (created.error) return jsonResponse({ ok: false, error: "SYNC_RUN_CREATE_FAILED" }, 500)
+  if (created.error) {
+    if (manualRequestId && String(created.error.code || "") === "23505") {
+      const existing = await supabase.from("kfsp_rating_sync_runs").select("status,error_code").eq("id", syncRunId).maybeSingle()
+      const status = String(existing.data?.status || "running")
+      return jsonResponse({ ok: status === "completed", duplicate: true, sync_run_id: syncRunId, status, error: existing.data?.error_code || null }, status === "running" ? 202 : 200)
+    }
+    return jsonResponse({ ok: false, error: "SYNC_RUN_CREATE_FAILED" }, 500)
+  }
 
   try {
+    const lifecycle = await beginManualKfspLifecycle(supabase, {
+      requestBody,
+      jobKey: "kfsp.rating_daily",
+      syncRunId,
+    })
+    manualContext = lifecycle.context
+    if (lifecycle.duplicate) {
+      return jsonResponse({ ok: lifecycle.status === "succeeded", duplicate: true, sync_run_id: syncRunId, status: lifecycle.status || "running" }, lifecycle.status === "running" ? 202 : 200)
+    }
+
     const canonicalTickers = await loadCanonicalTickers(supabase)
     let auth = await getProviderToken(supabase)
     tokenRefreshed = auth.refreshed
@@ -343,12 +375,26 @@ Deno.serve(async (req: Request) => {
 
     const published = await supabase.rpc("publish_kfsp_rating_snapshot", { p_sync_run_id: syncRunId, p_minimum_rows: canonicalTickers.length })
     if (published.error) throw new Error(`KFSP_SNAPSHOT_PUBLISH_FAILED:${published.error.code || "unknown"}`)
+    const publishedCount = Number(published.data || rows.length)
+
+    await finalizeManualKfspLifecycle(supabase, {
+      context: manualContext,
+      success: true,
+      summary: {
+        as_of_date: asOfDate,
+        published_count: publishedCount,
+        universe_count: canonicalTickers.length,
+        provider_candidate_count: providerRows.length,
+        token_refreshed: tokenRefreshed,
+        contract_version: KFSP_CONTRACT_VERSION,
+      },
+    })
 
     return jsonResponse({
       ok: true,
       sync_run_id: syncRunId,
       as_of_date: asOfDate,
-      published_count: Number(published.data || rows.length),
+      published_count: publishedCount,
       universe_count: canonicalTickers.length,
       provider_candidate_count: providerRows.length,
       token_refreshed: tokenRefreshed,
@@ -356,7 +402,19 @@ Deno.serve(async (req: Request) => {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "KFSP_SYNC_FAILED"
-    await supabase.from("kfsp_rating_sync_runs").update({ status: "failed", token_refreshed: tokenRefreshed, error_code: message.slice(0, 120), error_message: "KFSP daily rating sync failed; inspect Edge Function logs for provider diagnostics.", completed_at: new Date().toISOString() }).eq("id", syncRunId)
+    const publicMessage = "KFSP daily rating sync failed; inspect Edge Function logs for provider diagnostics."
+    await supabase.from("kfsp_rating_sync_runs").update({ status: "failed", token_refreshed: tokenRefreshed, error_code: message.slice(0, 120), error_message: publicMessage, completed_at: new Date().toISOString() }).eq("id", syncRunId)
+    try {
+      await finalizeManualKfspLifecycle(supabase, {
+        context: manualContext,
+        success: false,
+        summary: { as_of_date: asOfDate, token_refreshed: tokenRefreshed },
+        errorCode: message.slice(0, 100),
+        errorMessage: publicMessage,
+      })
+    } catch (lifecycleError) {
+      console.error("KFSP manual lifecycle failure finalization failed", lifecycleError instanceof Error ? lifecycleError.message : "unknown")
+    }
     return jsonResponse({ ok: false, sync_run_id: syncRunId, error: message.slice(0, 120) }, 502)
   }
 })

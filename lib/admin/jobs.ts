@@ -140,6 +140,9 @@ async function runKfspRecoveryDispatch(input: DispatchManualAdminJobInput): Prom
     throw new Error("KFSP Rating recovery không nhận danh sách mã riêng lẻ.")
   }
 
+  const definition = getManualAdminJobDefinition(input.key)
+  const maxDurationMinutes = Math.max(1, Math.min(240, definition?.maxDurationMinutes ?? 15))
+
   const { getSupabaseServerClient } = await import("../supabase/server.ts")
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service client chưa được cấu hình.")
@@ -151,20 +154,26 @@ async function runKfspRecoveryDispatch(input: DispatchManualAdminJobInput): Prom
     p_tickers: isTtai ? tickers : null,
     p_force: isTtai ? input.params?.force === true : false,
     p_requested_by: input.actorUserId,
+    p_actor_user_id: input.actorUserId,
+    p_max_duration_minutes: maxDurationMinutes,
   })
   if (error) {
     throw new Error(`KFSP recovery dispatch thất bại (${error.code || "unknown"}).`)
   }
 
   const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
-  if (!row || !row.request_id || !row.net_request_id) {
+  if (!row || !row.request_id || !row.net_request_id || !row.system_job_run_id) {
     throw new Error("KFSP recovery dispatcher không trả về request evidence hợp lệ.")
   }
 
+  const state = typeof row.status === "string" ? row.status : "queued"
   return {
     ok: true,
-    queued: true,
+    queued: state === "queued" || state === "running",
+    state: row.status ?? "queued",
     requestId: row.request_id,
+    systemJobRunId: row.system_job_run_id,
+    syncRunId: row.sync_run_id ?? undefined,
     netRequestId: row.net_request_id,
     duplicate: row.duplicate === true,
     tickers: isTtai ? tickers : undefined,
@@ -201,6 +210,51 @@ export async function dispatchManualAdminJob(input: DispatchManualAdminJobInput)
     return { ok: false, jobKey: input.key, runId: null, durationMs: 0, error: "Tác vụ yêu cầu xác nhận rõ ràng trước khi chạy." }
   }
 
+  if (input.key === "kfsp.rating_daily" || input.key === "kfsp.ttai_history") {
+    try {
+      const result = await runKfspRecoveryDispatch(input)
+      const sanitizedSummary = sanitizeAdminValue(result) as Record<string, unknown>
+
+      await writeAuditLog({
+        actorUserId: input.actorUserId,
+        action: "job.run",
+        targetType: "job",
+        targetKey: input.key,
+        reason: validReason,
+        requestId: input.requestId,
+        success: true,
+        afterValue: sanitizedSummary,
+      })
+
+      return {
+        ok: true,
+        jobKey: input.key,
+        runId: String(sanitizedSummary.systemJobRunId ?? input.requestId),
+        durationMs: Date.now() - startTime,
+        summary: sanitizedSummary,
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      await writeAuditLog({
+        actorUserId: input.actorUserId,
+        action: "job.run",
+        targetType: "job",
+        targetKey: input.key,
+        reason: validReason,
+        requestId: input.requestId,
+        success: false,
+        errorMessage,
+      })
+      return {
+        ok: false,
+        jobKey: input.key,
+        runId: null,
+        durationMs: Date.now() - startTime,
+        error: errorMessage,
+      }
+    }
+  }
+
   try {
     const { runId, result } = await executeSystemJob({
       jobKey: input.key,
@@ -222,9 +276,6 @@ export async function dispatchManualAdminJob(input: DispatchManualAdminJobInput)
         if (input.key === "wyckoff.ingest") {
           const { ingestLatestReadyWyckoffRun } = await import("../wyckoff-notion-ingest.ts")
           return await ingestLatestReadyWyckoffRun()
-        }
-        if (input.key === "kfsp.rating_daily" || input.key === "kfsp.ttai_history") {
-          return await runKfspRecoveryDispatch(input)
         }
         throw new Error(`Unhandled job: ${input.key}`)
       },
