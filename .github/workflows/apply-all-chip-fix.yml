@@ -1,0 +1,48 @@
+name: Apply All Universe Status Chip
+
+on:
+  push:
+    branches:
+      - fix/canonical-200-board-bubbles-composite
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply status chip and regression assertion
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path("components/insights/insights-dashboard.tsx")
+          text = path.read_text()
+          old = '''              <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
+                <Select value={sectorFilter} onValueChange={(value) => setSectorFilter(value ?? "all")}>'''
+          new = '''              <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
+                <Badge variant="outline" className="h-10 justify-center border-brand/30 bg-brand/10 px-3 text-sm font-bold text-brand sm:min-w-28">
+                  Tất cả · {data.ratings.length} mã
+                </Badge>
+                <Select value={sectorFilter} onValueChange={(value) => setSectorFilter(value ?? "all")}>'''
+          if text.count(old) != 1:
+              raise SystemExit(f"insights-dashboard expected 1 insertion point, got {text.count(old)}")
+          path.write_text(text.replace(old, new, 1))
+
+          test_path = Path("tests/canonical-200-ui.test.ts")
+          test = test_path.read_text()
+          old_test = '  assert.doesNotMatch(dashboard, /\\["top100",\\s*"Top 100"\\]/)\n'
+          new_test = old_test + '  assert.match(dashboard, /Tất cả · \\{data\\.ratings\\.length\\} mã/)\n'
+          if test.count(old_test) != 1:
+              raise SystemExit(f"canonical test expected 1 assertion point, got {test.count(old_test)}")
+          test_path.write_text(test.replace(old_test, new_test, 1))
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/insights/insights-dashboard.tsx tests/canonical-200-ui.test.ts
+          git commit -m "fix: show all canonical stocks status"
+          git push origin HEAD:${GITHUB_REF_NAME}
