@@ -22,7 +22,8 @@ create or replace function public.qeo_dispatch_kfsp_job(
   p_request_id uuid,
   p_reason text,
   p_tickers text[] default null,
-  p_force boolean default false
+  p_force boolean default false,
+  p_requested_by text default null
 )
 returns table (
   request_id uuid,
@@ -42,7 +43,8 @@ declare
   v_tickers text[];
   v_net_request_id bigint;
   v_dispatched_at timestamptz;
-  v_inserted boolean := false;
+  v_row_count integer := 0;
+  v_requested_by text;
 begin
   if p_job_key not in ('kfsp.rating_daily', 'kfsp.ttai_history') then
     raise exception 'Unsupported KFSP job key: %', p_job_key;
@@ -53,6 +55,8 @@ begin
   if nullif(btrim(p_reason), '') is null then
     raise exception 'p_reason is required';
   end if;
+
+  v_requested_by := coalesce(nullif(btrim(p_requested_by), ''), auth.uid()::text, session_user, current_user);
 
   if p_job_key = 'kfsp.ttai_history' then
     select coalesce(array_agg(t order by ord), '{}'::text[])
@@ -95,14 +99,14 @@ begin
     p_request_id,
     p_job_key,
     btrim(p_reason),
-    coalesce(auth.uid()::text, current_user),
+    v_requested_by,
     v_body
   )
   on conflict (request_id) do nothing;
 
-  get diagnostics v_inserted = row_count;
+  get diagnostics v_row_count = row_count;
 
-  if not v_inserted then
+  if v_row_count = 0 then
     return query
     select r.request_id, r.job_key, r.net_request_id, r.dispatched_at, true
     from public.kfsp_manual_dispatch_runs r
@@ -140,10 +144,10 @@ begin
 end;
 $$;
 
-revoke all on function public.qeo_dispatch_kfsp_job(text, uuid, text, text[], boolean) from public, anon, authenticated;
-grant execute on function public.qeo_dispatch_kfsp_job(text, uuid, text, text[], boolean) to service_role;
+revoke all on function public.qeo_dispatch_kfsp_job(text, uuid, text, text[], boolean, text) from public, anon, authenticated;
+grant execute on function public.qeo_dispatch_kfsp_job(text, uuid, text, text[], boolean, text) to service_role;
 
-comment on function public.qeo_dispatch_kfsp_job(text, uuid, text, text[], boolean) is
+comment on function public.qeo_dispatch_kfsp_job(text, uuid, text, text[], boolean, text) is
   'One-shot idempotent service-role-only dispatcher for KFSP rating/TTAI recovery jobs. Vault credentials remain server-side and are never returned.';
 
 commit;
