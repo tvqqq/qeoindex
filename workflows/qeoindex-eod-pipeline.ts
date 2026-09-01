@@ -37,12 +37,21 @@ function retryAt(startedAtIso: string, attempt: number, intervalMs: number) {
   return new Date(startedAt + attempt * intervalMs)
 }
 
-function isEodNotReady(error: unknown) {
-  return (error as { code?: unknown } | null)?.code === "EOD_NOT_READY"
-}
-
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
+}
+
+function isEodNotReady(error: unknown) {
+  if ((error as { code?: unknown } | null)?.code === "EOD_NOT_READY") return true
+  const normalized = errorMessage(error).toUpperCase()
+  return [
+    "EOD_NOT_READY",
+    "FINAL EOD MARKET SNAPSHOTS INCOMPLETE",
+    "CANONICAL RATING UNIVERSE INCOMPLETE",
+    "KFSP/TTAI RATING DATE",
+    "CANONICAL WYCKOFF SELECTION MISMATCH",
+    "CANONICAL MARKET UNIVERSE IS EMPTY",
+  ].some((token) => normalized.includes(token))
 }
 
 function isRetryableMarketCloseFailure(error: unknown) {
@@ -159,7 +168,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
           }
 
           const nextAttemptAt = retryAt(startedAtIso, attempt, MARKET_CLOSE_RETRY_INTERVAL_MS)
-          await markQeoIndexEodPhaseRetryingStep({
+          await markQeoIndexPhaseRetryingStep({
             runId,
             phaseKey: "MARKET_CLOSE_COLLECT",
             attemptsUsed: attempt,
