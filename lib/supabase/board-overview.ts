@@ -67,7 +67,7 @@ export async function getCanonicalBoardOverviewSnapshots(
         ceiling_price: normalizeToKiloPrice(Number(rawRow.ceiling_price)) || (reference ? Math.round(reference * 1.07 * 100) / 100 : null),
         floor_price: normalizeToKiloPrice(Number(rawRow.floor_price)) || (reference ? Math.round(reference * 0.93 * 100) / 100 : null),
         latest_price: latest,
-        total_volume: normalizeVolume(rawRow.total_volume),
+        total_volume: normalizeVolume(Number(rawRow.total_volume ?? 0)),
         intraday_1m: normalizeIntradayBars(Array.isArray(rawRow.intraday_1m) ? rawRow.intraday_1m : []),
         foreign_flow: normalizeForeignFlow(rawRow.foreign_flow, latest),
         updated_at: String(rawRow.updated_at || ""),
