@@ -40,6 +40,16 @@ test("EOD builds two Wyckoff snapshots per canonical ticker", () => {
   assert.match(phases, /universeCount × 2/)
 })
 
+test("Notion mirror and ingest accept exactly Daily and Weekly snapshots", () => {
+  const staging = source("lib/wyckoff-v2-notion-staging.ts")
+  const batch = source("lib/wyckoff-v2-notion-batch.ts")
+  const ingest = source("lib/wyckoff-notion-ingest.ts")
+
+  assert.match(staging, /TIMEFRAME_COUNT\s*=\s*2/)
+  assert.match(batch, /TIMEFRAMES\s*=\s*\["1D",\s*"1W"\]/)
+  assert.match(ingest, /TIMEFRAMES\s*=\s*new Set\(\["1D",\s*"1W"\]\)/)
+})
+
 test("active Wyckoff API and UI contract expose only Daily and Weekly", () => {
   const route = source("app/api/insights/wyckoff/route.ts")
   const page = source("app/insights/wyckoff/page.tsx")
