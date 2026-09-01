@@ -12,6 +12,65 @@ import type {
 
 export type { PersistedSettingRow, AdminSettingsSnapshot, AiCouncilRuntimeConfig }
 
+const MARKET_UNIVERSE_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
+  {
+    key: "market.universe_min_market_cap_billion",
+    group: "market",
+    label: "Universe Min Market Cap",
+    description: "Vốn hóa thị trường tối thiểu cho lần refresh Top Stocks tiếp theo, đơn vị tỷ VND.",
+    type: "number",
+    source: "runtime",
+    defaultValue: 10,
+    editable: true,
+    sensitivity: "public",
+    impact: "high",
+    requiresDeployment: false,
+    validate(value: unknown) {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 10_000_000
+        ? { ok: true as const, value: parsed }
+        : { ok: false as const, error: "Vốn hóa tối thiểu phải lớn hơn 0 và không vượt 10.000.000 tỷ VND" }
+    },
+  },
+  {
+    key: "market.universe_min_avg_volume_50d",
+    group: "market",
+    label: "Universe Min Avg Volume 50D",
+    description: "Khối lượng giao dịch trung bình 50 phiên tối thiểu cho lần refresh Top Stocks tiếp theo.",
+    type: "integer",
+    source: "runtime",
+    defaultValue: 250_000,
+    editable: true,
+    sensitivity: "public",
+    impact: "high",
+    requiresDeployment: false,
+    validate(value: unknown) {
+      const parsed = Number(value)
+      return Number.isInteger(parsed) && parsed > 0 && parsed <= 1_000_000_000
+        ? { ok: true as const, value: parsed }
+        : { ok: false as const, error: "KLTB 50D tối thiểu phải là số nguyên từ 1 đến 1.000.000.000 cổ phiếu" }
+    },
+  },
+]
+
+export const ADMIN_SETTING_CATALOG_WITH_UNIVERSE: AdminSettingDefinition[] = [
+  ...ADMIN_SETTING_CATALOG.map((definition) => definition.key === "market.universe_size"
+    ? { ...definition, label: "Top Stocks Universe Size", description: "Quy mô tối đa của canonical Top Stocks universe.", defaultValue: 200 }
+    : definition.key === "wyckoff.required_snapshots"
+      ? { ...definition, label: "Wyckoff Max Required Snapshots", description: "Số snapshot Wyckoff tối đa theo 200 mã × 5 timeframe; số thực tế là universeCount × 5.", defaultValue: 1000 }
+      : definition),
+  ...MARKET_UNIVERSE_SETTING_DEFINITIONS,
+]
+
+function getEffectiveSettingDefinition(key: string) {
+  return MARKET_UNIVERSE_SETTING_DEFINITIONS.find((definition) => definition.key === key) || getAdminSettingDefinition(key)
+}
+
+function validateEffectiveSetting(key: string, value: unknown) {
+  const universeDefinition = MARKET_UNIVERSE_SETTING_DEFINITIONS.find((definition) => definition.key === key)
+  return universeDefinition ? universeDefinition.validate(value) : validateAdminSetting(key, value)
+}
+
 let cachedSnapshot: { snapshot: AdminSettingsSnapshot; expiresAt: number } | null = null
 const CACHE_TTL_MS = 15_000
 
@@ -31,9 +90,7 @@ export function resolveAdminSettings(
 ): AdminSettingsSnapshot {
   const rowMap = new Map<string, PersistedSettingRow>()
   for (const row of rows) {
-    if (row && typeof row.key === "string") {
-      rowMap.set(row.key, row)
-    }
+    if (row && typeof row.key === "string") rowMap.set(row.key, row)
   }
 
   let degraded = false
@@ -62,9 +119,7 @@ export function resolveAdminSettings(
         updatedAt = row.updated_at ?? null
         updatedBy = row.updated_by ?? null
         changeReason = row.change_reason ?? null
-      } else {
-        degraded = true
-      }
+      } else degraded = true
     }
 
     if (!hasOverride && envConfigured) {
@@ -99,70 +154,37 @@ export function resolveAdminSettings(
       updatedBy,
       changeReason,
     }
-
     settings.push(resolvedSetting)
     byKey[def.key] = resolvedSetting
   }
-
-  return {
-    settings,
-    byKey,
-    degraded,
-  }
+  return { settings, byKey, degraded }
 }
 
 export async function loadAdminSettingsSnapshot(): Promise<AdminSettingsSnapshot> {
   const now = Date.now()
-  if (cachedSnapshot && cachedSnapshot.expiresAt > now) {
-    return cachedSnapshot.snapshot
-  }
+  if (cachedSnapshot && cachedSnapshot.expiresAt > now) return cachedSnapshot.snapshot
 
   const supabase = await getSupabase()
   if (!supabase) {
-    const fallback = resolveAdminSettings(ADMIN_SETTING_CATALOG, [], process.env)
-    return {
-      ...fallback,
-      degraded: true,
-      error: "Supabase service role client is not available",
-    }
+    const fallback = resolveAdminSettings(ADMIN_SETTING_CATALOG_WITH_UNIVERSE, [], process.env)
+    return { ...fallback, degraded: true, error: "Supabase service role client is not available" }
   }
 
   try {
-    const { data, error } = await supabase
-      .from("system_settings")
-      .select("key, value, version, updated_by, change_reason, updated_at")
-
+    const { data, error } = await supabase.from("system_settings").select("key, value, version, updated_by, change_reason, updated_at")
     if (error) {
-      const fallback = resolveAdminSettings(ADMIN_SETTING_CATALOG, [], process.env)
-      return {
-        ...fallback,
-        degraded: true,
-        error: error.message,
-      }
+      const fallback = resolveAdminSettings(ADMIN_SETTING_CATALOG_WITH_UNIVERSE, [], process.env)
+      return { ...fallback, degraded: true, error: error.message }
     }
-
     const rows: PersistedSettingRow[] = (data || []).map((r: { key: string; value: unknown; version: number | string; updated_by?: string | null; change_reason?: string | null; updated_at?: string | null }) => ({
-      key: r.key,
-      value: r.value,
-      version: Number(r.version),
-      updated_by: r.updated_by,
-      change_reason: r.change_reason,
-      updated_at: r.updated_at,
+      key: r.key, value: r.value, version: Number(r.version), updated_by: r.updated_by, change_reason: r.change_reason, updated_at: r.updated_at,
     }))
-
-    const snapshot = resolveAdminSettings(ADMIN_SETTING_CATALOG, rows, process.env)
-    cachedSnapshot = {
-      snapshot,
-      expiresAt: now + CACHE_TTL_MS,
-    }
+    const snapshot = resolveAdminSettings(ADMIN_SETTING_CATALOG_WITH_UNIVERSE, rows, process.env)
+    cachedSnapshot = { snapshot, expiresAt: now + CACHE_TTL_MS }
     return snapshot
   } catch (err: unknown) {
-    const fallback = resolveAdminSettings(ADMIN_SETTING_CATALOG, [], process.env)
-    return {
-      ...fallback,
-      degraded: true,
-      error: err instanceof Error ? err.message : "Unknown error loading settings",
-    }
+    const fallback = resolveAdminSettings(ADMIN_SETTING_CATALOG_WITH_UNIVERSE, [], process.env)
+    return { ...fallback, degraded: true, error: err instanceof Error ? err.message : "Unknown error loading settings" }
   }
 }
 
@@ -174,28 +196,17 @@ export async function setAdminSetting(input: {
   reason: string
   requestId: string
 }): Promise<AdminSettingMutationResult> {
-  const definition = getAdminSettingDefinition(input.key)
-  if (!definition) {
-    return { ok: false, error: `Cài đặt không tồn tại: ${input.key}` }
-  }
-  if (!definition.editable) {
-    return { ok: false, error: `Cài đặt ${input.key} không thể sửa đổi (chỉ đọc)` }
-  }
+  const definition = getEffectiveSettingDefinition(input.key)
+  if (!definition) return { ok: false, error: `Cài đặt không tồn tại: ${input.key}` }
+  if (!definition.editable) return { ok: false, error: `Cài đặt ${input.key} không thể sửa đổi (chỉ đọc)` }
 
-  const validation = validateAdminSetting(input.key, input.value)
-  if (!validation.ok) {
-    return { ok: false, error: validation.error }
-  }
-
+  const validation = validateEffectiveSetting(input.key, input.value)
+  if (!validation.ok) return { ok: false, error: validation.error }
   const validReason = validateChangeReason(input.reason)
-  if (!validReason) {
-    return { ok: false, error: "Lý do thay đổi phải từ 8 đến 240 ký tự" }
-  }
+  if (!validReason) return { ok: false, error: "Lý do thay đổi phải từ 8 đến 240 ký tự" }
 
   const supabase = await getSupabase()
-  if (!supabase) {
-    return { ok: false, error: "Supabase service role client is not available" }
-  }
+  if (!supabase) return { ok: false, error: "Supabase service role client is not available" }
 
   try {
     const { data, error } = await supabase.rpc("qeo_admin_set_system_setting", {
@@ -206,21 +217,10 @@ export async function setAdminSetting(input: {
       p_reason: validReason,
       p_request_id: input.requestId,
     })
-
-    if (error) {
-      return { ok: false, error: error.message }
-    }
-
+    if (error) return { ok: false, error: error.message }
     invalidateAdminSettingsCache()
-
-    if (data?.ok) {
-      return { ok: true, record: sanitizeAdminValue(data.record) }
-    }
-
-    if (data?.conflict) {
-      return { ok: false, conflict: true, current: sanitizeAdminValue(data.record) as ResolvedAdminSetting | null }
-    }
-
+    if (data?.ok) return { ok: true, record: sanitizeAdminValue(data.record) }
+    if (data?.conflict) return { ok: false, conflict: true, current: sanitizeAdminValue(data.record) as ResolvedAdminSetting | null }
     return { ok: false, error: "Unexpected set setting response" }
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to set setting" }
@@ -234,23 +234,14 @@ export async function resetAdminSetting(input: {
   reason: string
   requestId: string
 }): Promise<AdminSettingMutationResult> {
-  const definition = getAdminSettingDefinition(input.key)
-  if (!definition) {
-    return { ok: false, error: `Cài đặt không tồn tại: ${input.key}` }
-  }
-  if (!definition.editable) {
-    return { ok: false, error: `Cài đặt ${input.key} không thể sửa đổi (chỉ đọc)` }
-  }
-
+  const definition = getEffectiveSettingDefinition(input.key)
+  if (!definition) return { ok: false, error: `Cài đặt không tồn tại: ${input.key}` }
+  if (!definition.editable) return { ok: false, error: `Cài đặt ${input.key} không thể sửa đổi (chỉ đọc)` }
   const validReason = validateChangeReason(input.reason)
-  if (!validReason) {
-    return { ok: false, error: "Lý do khôi phục phải từ 8 đến 240 ký tự" }
-  }
+  if (!validReason) return { ok: false, error: "Lý do khôi phục phải từ 8 đến 240 ký tự" }
 
   const supabase = await getSupabase()
-  if (!supabase) {
-    return { ok: false, error: "Supabase service role client is not available" }
-  }
+  if (!supabase) return { ok: false, error: "Supabase service role client is not available" }
 
   try {
     const { data, error } = await supabase.rpc("qeo_admin_reset_system_setting", {
@@ -260,21 +251,10 @@ export async function resetAdminSetting(input: {
       p_reason: validReason,
       p_request_id: input.requestId,
     })
-
-    if (error) {
-      return { ok: false, error: error.message }
-    }
-
+    if (error) return { ok: false, error: error.message }
     invalidateAdminSettingsCache()
-
-    if (data?.ok) {
-      return { ok: true, record: null }
-    }
-
-    if (data?.conflict) {
-      return { ok: false, conflict: true, current: sanitizeAdminValue(data.record) as ResolvedAdminSetting | null }
-    }
-
+    if (data?.ok) return { ok: true, record: null }
+    if (data?.conflict) return { ok: false, conflict: true, current: sanitizeAdminValue(data.record) as ResolvedAdminSetting | null }
     return { ok: false, error: "Unexpected reset setting response" }
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to reset setting" }
@@ -301,24 +281,23 @@ export async function getAdminUiConfig(): Promise<{ refreshIntervalSeconds: numb
 
 export async function getScannerRuntimeConfig(): Promise<{ manualRunLimit: number }> {
   const snapshot = await loadAdminSettingsSnapshot()
+  return { manualRunLimit: (snapshot.byKey["scanner.manual_run_limit"]?.value as number) ?? 100 }
+}
+
+export async function getMarketUniverseRuntimeConfig(): Promise<{ minMarketCapBillion: number; minAverageVolume50d: number }> {
+  const snapshot = await loadAdminSettingsSnapshot()
   return {
-    manualRunLimit: (snapshot.byKey["scanner.manual_run_limit"]?.value as number) ?? 100,
+    minMarketCapBillion: Number(snapshot.byKey["market.universe_min_market_cap_billion"]?.value ?? 10),
+    minAverageVolume50d: Number(snapshot.byKey["market.universe_min_avg_volume_50d"]?.value ?? 250_000),
   }
 }
 
 export async function loadRecentAuditLogs(limit = 20): Promise<import("./types.ts").AdminAuditView[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
-
   try {
-    const { data, error } = await supabase
-      .from("system_audit_log")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(Math.min(100, Math.max(1, limit)))
-
+    const { data, error } = await supabase.from("system_audit_log").select("*").order("created_at", { ascending: false }).limit(Math.min(100, Math.max(1, limit)))
     if (error || !data) return []
-
     return (data as Array<Record<string, unknown>>).map((r) => ({
       id: Number(r.id),
       actorUserId: r.actor_user_id ? String(r.actor_user_id) : null,
