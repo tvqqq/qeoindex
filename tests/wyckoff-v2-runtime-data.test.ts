@@ -37,7 +37,7 @@ test("bounded Daily cache budget is sufficient to derive at least 60 completed W
 })
 
 test("cached Daily history conversion sorts ascending and uses latest-row provenance", () => {
-  const history = cachedHistoryFromRows("MSN", "1D", [
+  const history = cachedHistoryFromRows("MSN", [
     { ticker: "MSN", timeframe: "1D", bar_time: "2026-08-25T07:00:00.000Z", open: 70, high: 72, low: 69, close: 71, volume: 2_000_000, provider: "DNSE", provider_detail: "new", source_url: "https://example.com/new", fetched_at: "2026-08-25T08:00:00.000Z" },
     { ticker: "MSN", timeframe: "1D", bar_time: "2026-08-24T07:00:00.000Z", open: 68, high: 71, low: 67, close: 70, volume: 1_000_000, provider: "Fallback", provider_detail: "old", source_url: "https://example.com/old", fetched_at: "2026-08-24T08:00:00.000Z" },
   ])
@@ -50,8 +50,8 @@ test("cached Daily history conversion sorts ascending and uses latest-row proven
 })
 
 test("cached Daily history conversion rejects empty or invalid data", () => {
-  assert.throws(() => cachedHistoryFromRows("MSN", "1D", []), /no usable/i)
-  assert.throws(() => cachedHistoryFromRows("MSN", "1D", [
+  assert.throws(() => cachedHistoryFromRows("MSN", []), /no usable/i)
+  assert.throws(() => cachedHistoryFromRows("MSN", [
     { ticker: "MSN", timeframe: "1D", bar_time: "bad", open: 70, high: 72, low: 69, close: 71, volume: 1, provider: "DNSE", provider_detail: "x", source_url: "https://example.com", fetched_at: "2026-08-25T08:00:00.000Z" },
   ]), /no usable/i)
 })

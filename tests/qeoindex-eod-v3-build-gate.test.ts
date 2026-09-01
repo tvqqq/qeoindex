@@ -62,7 +62,7 @@ test("no-trade repair supports the full canonical max-200 universe", () => {
 test("archive retention remains fail-closed while implementation is delegated", () => {
   const archive = source("lib/qeoindex-eod-archive.ts")
   const legacyArchive = source("lib/qeoindex-eod-archive-legacy.ts")
-  const migration = source("supabase/migrations/20260901064844_eod_archive_checkpoints.sql")
+  const migration = source("supabase/migrations/20260901130000_eod_archive_checkpoints.sql")
   assert.match(archive, /runEodRetentionCleanup/)
   assert.match(archive, /status:\s*"blocked"/)
   assert.match(legacyArchive, /eod_archive_checkpoints/)
