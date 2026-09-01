@@ -69,7 +69,7 @@ test("Daily provider waterfall includes bounded clean-ticker VNDirect fallback",
   if (!existsSync(vndirectHistoryPath)) return
   const vndirectHistorySource = readFileSync(vndirectHistoryPath, "utf8")
   assert.match(vndirectHistorySource, /VNDIRECT_REQUEST_TIMEOUT_MS\s*=\s*15_000/)
-  assert.match(vndirectHistorySource, /https:\/\/finfo-api\.vndirect\.com\.vn\/v4\/stock_prices/)
+  assert.match(vndirectHistorySource, /https:\/\/api-finfo\.vndirect\.com\.vn\/v4\/stock_prices/)
   assert.match(vndirectHistorySource, /code:\$\{ticker\}~date:gte:/)
   assert.match(vndirectHistorySource, /adOpen/)
   assert.match(vndirectHistorySource, /adHigh/)
