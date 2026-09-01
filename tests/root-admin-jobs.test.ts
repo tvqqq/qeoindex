@@ -46,21 +46,19 @@ test("getManualJobCapabilities returns metadata for the 6 manual-safe jobs", () 
     "signals.monitor",
     "wyckoff.ingest",
   ])
+  assert.equal(capabilities.find((c) => c.key === "kfsp.rating_daily")?.manualPolicy, "confirm")
+  assert.equal(capabilities.find((c) => c.key === "kfsp.ttai_history")?.manualPolicy, "confirm")
 })
 
 test("KFSP manual recovery is confirmation-gated and wired to the one-shot RPC", () => {
-  const catalog = source("lib/admin/catalog.ts")
+  const effectiveCatalog = source("lib/admin/effective-job-catalog.ts")
   const jobs = source("lib/admin/jobs.ts")
   const actions = source("app/admin/actions.ts")
   const api = source("app/api/admin/jobs/[key]/run/route.ts")
   const modal = source("components/admin/admin-manual-job-modal.tsx")
 
-  for (const key of ["kfsp.rating_daily", "kfsp.ttai_history"]) {
-    const start = catalog.indexOf(`key: "${key}"`)
-    assert.ok(start >= 0, `${key} must exist in admin catalog`)
-    assert.match(catalog.slice(start, start + 700), /manualPolicy: "confirm"/)
-  }
-
+  assert.match(effectiveCatalog, /job\.key === "kfsp\.rating_daily"[\s\S]{0,500}manualPolicy: "confirm"/)
+  assert.match(effectiveCatalog, /job\.key === "kfsp\.ttai_history"[\s\S]{0,700}manualPolicy: "confirm"/)
   assert.match(jobs, /qeo_dispatch_kfsp_job/)
   assert.match(jobs, /p_request_id: input\.requestId/)
   assert.match(jobs, /p_requested_by: input\.actorUserId/)
@@ -71,6 +69,7 @@ test("KFSP manual recovery is confirmation-gated and wired to the one-shot RPC",
   assert.match(actions, /formData\.get\("force"\)/)
   assert.match(api, /tickers\?: string\[\]/)
   assert.match(api, /force\?: boolean/)
+  assert.match(api, /result\.summary\?\.queued === true \? 202 : 200/)
   assert.match(modal, /name="tickers"/)
   assert.match(modal, /name="force"/)
   assert.match(modal, /job\.key === "kfsp\.ttai_history"/)
