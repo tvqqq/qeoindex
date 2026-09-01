@@ -53,3 +53,17 @@ test("supabase pg_cron migration reschedules orderbook syncs to 14:45 without ov
   assert.match(fixMigrationSql, /'sync-universe-eod-1445'/)
   assert.match(fixMigrationSql, /'45 7 \* \* 1-5'/)
 })
+
+test("latest orderbook cron fix dispatches provider calls only inside exact trading windows", () => {
+  const sessionFixSql = readFileSync(new URL("../supabase/migrations/20260901152000_fix_orderbook_trading_session_windows.sql", import.meta.url), "utf8")
+  assert.match(sessionFixSql, /'sync-universe-5m'/)
+  assert.match(sessionFixSql, /'\*\/5 2-4 \* \* 1-5'/)
+  assert.match(sessionFixSql, /time '09:00'/)
+  assert.match(sessionFixSql, /time '11:30'/)
+  assert.match(sessionFixSql, /'sync-universe-5m-afternoon'/)
+  assert.match(sessionFixSql, /'\*\/5 6-7 \* \* 1-5'/)
+  assert.match(sessionFixSql, /time '13:00'/)
+  assert.match(sessionFixSql, /time '14:40'/)
+  assert.match(sessionFixSql, /'sync-universe-eod-1445'/)
+  assert.match(sessionFixSql, /'45 7 \* \* 1-5'/)
+})
