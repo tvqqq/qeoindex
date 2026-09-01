@@ -1,7 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { getCanonicalUniverse } from "./market-universe.ts"
-
 export const WYCKOFF_EOD_MAX_STOCKS = 200
 export const WYCKOFF_EOD_BATCH_SIZE = 10
 export const WYCKOFF_EOD_REFRESH_VERSION = "wyckoff-eod-refresh-v2"
@@ -94,6 +92,7 @@ export function validateWyckoffEodDailyRows(input: {
 }
 
 async function loadExpectedTickers(expectedSessionDate: string) {
+  const { getCanonicalUniverse } = await import("@/lib/market-universe")
   const universe = await getCanonicalUniverse()
   const tickers = universe.stocks.map((stock) => stock.ticker)
   if (!tickers.length || tickers.length > WYCKOFF_EOD_MAX_STOCKS) throw new Error(`WYCKOFF_EOD_UNIVERSE_INCOMPLETE: ${tickers.length}/${WYCKOFF_EOD_MAX_STOCKS} max`)
