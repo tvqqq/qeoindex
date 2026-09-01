@@ -19,19 +19,19 @@ jobs:
         run: |
           python <<'PY'
           from pathlib import Path
+          import re
 
           path = Path("components/insights/insights-dashboard.tsx")
           text = path.read_text()
-          old = '''              <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
-                <Select value={sectorFilter} onValueChange={(value) => setSectorFilter(value ?? "all")}>'''
-          new = '''              <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
-                <Badge variant="outline" className="h-10 justify-center border-brand/30 bg-brand/10 px-3 text-sm font-bold text-brand sm:min-w-28">
+          pattern = r'(<div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">\s*)(<Select value=\{sectorFilter\} onValueChange=\{\(value\) => setSectorFilter\(value \?\? "all"\)\}>)'
+          chip = '''<Badge variant="outline" className="h-10 justify-center border-brand/30 bg-brand/10 px-3 text-sm font-bold text-brand sm:min-w-28">
                   Tất cả · {data.ratings.length} mã
                 </Badge>
-                <Select value={sectorFilter} onValueChange={(value) => setSectorFilter(value ?? "all")}>'''
-          if text.count(old) != 1:
-              raise SystemExit(f"insights-dashboard expected 1 insertion point, got {text.count(old)}")
-          path.write_text(text.replace(old, new, 1))
+                '''
+          text, count = re.subn(pattern, lambda m: m.group(1) + chip + m.group(2), text, count=1)
+          if count != 1:
+              raise SystemExit(f"insights-dashboard expected 1 insertion point, got {count}")
+          path.write_text(text)
 
           test_path = Path("tests/canonical-200-ui.test.ts")
           test = test_path.read_text()
