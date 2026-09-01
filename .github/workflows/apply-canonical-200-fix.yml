@@ -28,7 +28,7 @@ jobs:
               text = p.read_text()
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f"{path}: expected one exact match, got {count}: {old[:80]!r}")
+                  raise SystemExit(f"{path}: expected one exact match, got {count}: {old[:100]!r}")
               p.write_text(text.replace(old, new, 1))
 
           def sub_once(path: str, pattern: str, replacement: str):
@@ -36,107 +36,37 @@ jobs:
               text = p.read_text()
               updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
               if count != 1:
-                  raise SystemExit(f"{path}: expected one regex match, got {count}: {pattern[:100]!r}")
+                  raise SystemExit(f"{path}: expected one regex match, got {count}: {pattern[:120]!r}")
               p.write_text(updated)
 
-          # Board: classify live KFSP sector taxonomy into the six board buckets.
           replace_once(
               "lib/market-sectors.ts",
-              '''export function boardSectorGroupForSector(sector: string) {
-            return BOARD_SECTOR_GROUPS.find((group) => (group.sectors as readonly string[]).includes(sector)) ?? BOARD_SECTOR_GROUPS.at(-1)!
-          }''',
-              '''function normalizeSectorLabel(sector: string) {
-            return sector.trim().toLocaleLowerCase("vi-VN")
-          }
+              "export function boardSectorGroupForSector(sector: string) {\n  return BOARD_SECTOR_GROUPS.find((group) => (group.sectors as readonly string[]).includes(sector)) ?? BOARD_SECTOR_GROUPS.at(-1)!\n}",
+              "function normalizeSectorLabel(sector: string) {\n  return sector.trim().toLocaleLowerCase(\"vi-VN\")\n}\n\nexport function boardSectorGroupForSector(sector: string) {\n  const normalized = normalizeSectorLabel(sector)\n  const exact = BOARD_SECTOR_GROUPS.find((group) =>\n    group.sectors.some((candidate) => normalizeSectorLabel(candidate) === normalized),\n  )\n  if (exact) return exact\n\n  const group = (key: string) => BOARD_SECTOR_GROUPS.find((item) => item.key === key)!\n  if (normalized.includes(\"ngân hàng\")) return group(\"bank\")\n  if (normalized.includes(\"chứng khoán\") || normalized.includes(\"tài chính\")) return group(\"securities\")\n  if (normalized.includes(\"bất động sản\") || normalized.includes(\"khu công nghiệp\")) return group(\"real-estate\")\n  if ([\"thương mại\", \"thực phẩm\", \"dược\", \"thủy sản\", \"nông - lâm - ngư\", \"nông nghiệp\", \"tiêu dùng\", \"bán lẻ\"].some((term) => normalized.includes(term))) return group(\"consumer\")\n  if ([\"công nghệ\", \"viễn thông\", \"xây dựng\", \"thép\", \"vật liệu\", \"sản xuất kinh doanh\", \"khoáng sản\", \"nhựa\", \"phân bón\", \"hóa chất\", \"cao su\", \"công nghiệp\"].some((term) => normalized.includes(term))) return group(\"industrial-tech\")\n  return group(\"other\")\n}",
+          )
+          replace_once("app/page.tsx", 'import { sectorForTicker } from "@/lib/market-sectors"', 'import { boardSectorGroupForSector, sectorForTicker } from "@/lib/market-sectors"')
+          replace_once("app/page.tsx", '      sector: stock.sector || sectorForTicker(stock.ticker),', '      sector: boardSectorGroupForSector(stock.sector || sectorForTicker(stock.ticker)).sectors[0],')
 
-          export function boardSectorGroupForSector(sector: string) {
-            const normalized = normalizeSectorLabel(sector)
-            const exact = BOARD_SECTOR_GROUPS.find((group) =>
-              group.sectors.some((candidate) => normalizeSectorLabel(candidate) === normalized),
-            )
-            if (exact) return exact
-
-            const group = (key: string) => BOARD_SECTOR_GROUPS.find((item) => item.key === key)!
-            if (normalized.includes("ngân hàng")) return group("bank")
-            if (normalized.includes("chứng khoán") || normalized.includes("tài chính")) return group("securities")
-            if (normalized.includes("bất động sản") || normalized.includes("khu công nghiệp")) return group("real-estate")
-            if (["thương mại", "thực phẩm", "dược", "thủy sản", "nông - lâm - ngư", "nông nghiệp", "tiêu dùng", "bán lẻ"].some((term) => normalized.includes(term))) return group("consumer")
-            if (["công nghệ", "viễn thông", "xây dựng", "thép", "vật liệu", "sản xuất kinh doanh", "khoáng sản", "nhựa", "phân bón", "hóa chất", "cao su", "công nghiệp"].some((term) => normalized.includes(term))) return group("industrial-tech")
-            return group("other")
-          }''',
-          )
-          replace_once(
-              "app/page.tsx",
-              'import { sectorForTicker } from "@/lib/market-sectors"',
-              'import { boardSectorGroupForSector, sectorForTicker } from "@/lib/market-sectors"',
-          )
-          replace_once(
-              "app/page.tsx",
-              '      sector: stock.sector || sectorForTicker(stock.ticker),',
-              '      sector: boardSectorGroupForSector(stock.sector || sectorForTicker(stock.ticker)).sectors[0],',
-          )
-
-          # Bubbles: canonical membership is the only membership filter.
-          replace_once(
-              "components/insights/market-bubbles.tsx",
-              '      .filter((stock) => (stock.volume ?? 0) > 300_000)\n',
-              '',
-          )
+          replace_once("components/insights/market-bubbles.tsx", '      .filter((stock) => (stock.volume ?? 0) > 300_000)\n', '')
           sub_once(
               "components/insights/market-close-dashboard.tsx",
               r'KFSP KLGD TB 50 phiên &gt; 300\.000; xếp theo thanh khoản giảm dần, tối đa 200 mã\.',
               'Top Stocks canonical; xếp theo KLGD TB 50 phiên giảm dần, hiển thị toàn bộ universe (tối đa 200 mã).',
           )
 
-          # Qeo Composite: all canonical stocks by default, no legacy Top100 toggle.
-          replace_once(
-              "components/insights/insights-dashboard.tsx",
-              '  "ticker" | "price" | "canslimScore" | "score4m" | "pricePotential" | "rsShort" | "rsMedium" |',
-              '  "ticker" | "price" | "marketCapBillion" | "canslimScore" | "score4m" | "pricePotential" | "rsShort" | "rsMedium" |',
-          )
-          replace_once(
-              "components/insights/insights-dashboard.tsx",
-              '''function formatMarketCapBillion(value: number) {
-            return `${value.toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tỷ`
-          }''',
-              '''function formatMarketCapBillion(value: number | null) {
-            if (value == null) return "—"
-            return `${value.toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tỷ`
-          }''',
-          )
-          replace_once(
-              "components/insights/insights-dashboard.tsx",
-              '    price: row.averagePrice,\n',
-              '    price: row.averagePrice,\n    marketCapBillion: row.totalMarketCapBillion,\n',
-          )
-          replace_once(
-              "components/insights/insights-dashboard.tsx",
-              '  const [universeFilter, setUniverseFilter] = useState<"top100" | "all">("top100")\n',
-              '',
-          )
-          replace_once(
-              "components/insights/insights-dashboard.tsx",
-              '        if (universeFilter === "top100" && !row.isTop100) return false\n',
-              '',
-          )
-          replace_once(
-              "components/insights/insights-dashboard.tsx",
-              '  }, [data.ratings, query, sectorFilter, sort, universeFilter])',
-              '  }, [data.ratings, query, sectorFilter, sort])',
-          )
-          replace_once(
-              "components/insights/insights-dashboard.tsx",
-              '  const showSectorGroups = universeFilter === "all" && sectorFilter === "all" && !query.trim()',
-              '  const showSectorGroups = false',
-          )
-          sub_once(
-              "components/insights/insights-dashboard.tsx",
-              r'\n\s*<div className="flex rounded-lg border border-white/10 bg-cell p-1">[\s\S]*?</div>\n\s*<Select value=\{sectorFilter\}',
-              '\n                <Select value={sectorFilter}',
-          )
+          path = "components/insights/insights-dashboard.tsx"
+          replace_once(path, '  "ticker" | "price" | "canslimScore" | "score4m" | "pricePotential" | "rsShort" | "rsMedium" |', '  "ticker" | "price" | "marketCapBillion" | "canslimScore" | "score4m" | "pricePotential" | "rsShort" | "rsMedium" |')
+          replace_once(path, 'function formatMarketCapBillion(value: number) {\n  return `${value.toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tỷ`\n}', 'function formatMarketCapBillion(value: number | null) {\n  if (value == null) return "—"\n  return `${value.toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tỷ`\n}')
+          replace_once(path, '    price: row.averagePrice,\n', '    price: row.averagePrice,\n    marketCapBillion: row.totalMarketCapBillion,\n')
+          replace_once(path, '  const [universeFilter, setUniverseFilter] = useState<"top100" | "all">("top100")\n', '')
+          replace_once(path, '        if (universeFilter === "top100" && !row.isTop100) return false\n', '')
+          replace_once(path, '  }, [data.ratings, query, sectorFilter, sort, universeFilter])', '  }, [data.ratings, query, sectorFilter, sort])')
+          replace_once(path, '  const showSectorGroups = universeFilter === "all" && sectorFilter === "all" && !query.trim()', '  const showSectorGroups = false')
+          sub_once(path, r'\n\s*<div className="flex rounded-lg border border-white/10 bg-cell p-1">[\s\S]*?</div>\n\s*<Select value=\{sectorFilter\}', '\n                <Select value={sectorFilter}')
 
-          p = Path("components/insights/insights-dashboard.tsx")
-          text = p.read_text().replace('top-100', 'top-stocks')
+          p = Path(path)
+          text = p.read_text()
+          text = text.replace('top-100', 'top-stocks')
           text = text.replace('Top 100{row.top100Rank ? ` · #${row.top100Rank}` : ""}', 'Top Stocks{row.top100Rank ? ` · #${row.top100Rank}` : ""}')
           text = text.replace('Top100 {sectorSummary.top100Count}', 'Top Stocks {sectorSummary.stockCount}')
           text = text.replace('Top 500 / Top 100', 'canonical Top Stocks')
@@ -144,80 +74,19 @@ jobs:
           text = text.replace('{child.ticker}{child.isTop100 && <Crown className="size-3 text-amber-300" />}', '{child.ticker}')
           p.write_text(text)
 
-          replace_once(
-              "components/insights/insights-dashboard.tsx",
-              '<colgroup><col className="w-[20%]" /><col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[7%]" /><col className="w-[9%]" /><col className="w-[6%]" /><col className="w-[6%]" /><col className="w-[10%]" /><col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[10%]" /></colgroup>',
-              '<colgroup><col className="w-[18%]" /><col className="w-[7%]" /><col className="w-[9%]" /><col className="w-[7%]" /><col className="w-[7%]" /><col className="w-[8%]" /><col className="w-[5%]" /><col className="w-[5%]" /><col className="w-[9%]" /><col className="w-[7%]" /><col className="w-[7%]" /><col className="w-[11%]" /></colgroup>',
-          )
+          replace_once(path, '<colgroup><col className="w-[20%]" /><col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[7%]" /><col className="w-[9%]" /><col className="w-[6%]" /><col className="w-[6%]" /><col className="w-[10%]" /><col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[10%]" /></colgroup>', '<colgroup><col className="w-[18%]" /><col className="w-[7%]" /><col className="w-[9%]" /><col className="w-[7%]" /><col className="w-[7%]" /><col className="w-[8%]" /><col className="w-[5%]" /><col className="w-[5%]" /><col className="w-[9%]" /><col className="w-[7%]" /><col className="w-[7%]" /><col className="w-[11%]" /></colgroup>')
           price_header = '                    <SortableHead sortKey="price" activeKey={sort.key} direction={sort.direction} onSort={handleSort} definition={overviewField("price")} metricKey="price" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-muted-2" />\n'
-          replace_once(
-              "components/insights/insights-dashboard.tsx",
-              price_header,
-              price_header + '                    <SortableHead sortKey="marketCapBillion" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="Vốn hóa" metricKey="market_cap_billion" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-cyan-200" />\n',
-          )
-          replace_once(
-              "components/insights/insights-dashboard.tsx",
-              '                          <TableCell className="px-1 text-center font-mono text-xs text-muted-2 font-bold">—</TableCell>\n',
-              '                          <TableCell className="px-1 text-center font-mono text-xs text-muted-2 font-bold">—</TableCell>\n                          <TableCell className="px-1 text-center font-mono text-xs font-bold text-cyan-100">{formatMarketCapBillion(sectorSummary.totalMarketCapBillion)}</TableCell>\n',
-          )
-          child_price = '''                              <TableCell className="px-1 text-center">
-                                <div className={cn("font-mono text-[14px] font-bold leading-tight tracking-tight", childPositive ? "text-up" : (child.changePercent ?? 0) < 0 ? "text-down" : "text-ref")}>
-                                  {formatPrice(child.price)}
-                                </div>
-                                <div className="mt-1 flex justify-center">
-                                  <MarketChangePill value={child.changePercent} tone={childTone} compact />
-                                </div>
-                              </TableCell>
-          '''
-          replace_once(
-              "components/insights/insights-dashboard.tsx",
-              child_price,
-              child_price + '''                              <TableCell className="px-1 text-center font-mono text-xs font-bold text-cyan-100">
-                                {formatMarketCapBillion(child.marketCapBillion)}
-                              </TableCell>
-          ''',
-          )
-          row_price = '''                        <TableCell className="px-1 text-center">
-                          <div className={cn("font-mono text-[14px] font-bold leading-tight tracking-tight", rowPositive ? "text-up" : (row.changePercent ?? 0) < 0 ? "text-down" : "text-ref")}>
-                            {formatPrice(row.price)}
-                          </div>
-                          <div className="mt-1 flex justify-center">
-                            <MarketChangePill value={row.changePercent} tone={rowTone} compact />
-                          </div>
-                        </TableCell>
-          '''
-          replace_once(
-              "components/insights/insights-dashboard.tsx",
-              row_price,
-              row_price + '''                        <TableCell className="px-1 text-center font-mono text-xs font-bold text-cyan-100">
-                          {formatMarketCapBillion(row.marketCapBillion)}
-                        </TableCell>
-          ''',
-          )
-          p = Path("components/insights/insights-dashboard.tsx")
+          replace_once(path, price_header, price_header + '                    <SortableHead sortKey="marketCapBillion" activeKey={sort.key} direction={sort.direction} onSort={handleSort} label="Vốn hóa" metricKey="market_cap_billion" onOpenGuide={openGuide} className="px-1 text-xs font-extrabold uppercase text-cyan-200" />\n')
+
+          row_price_tail = '                            {formatPrice(row.price)}\n                          </div>\n                          <div className="mt-1 flex justify-center">\n                            <MarketChangePill value={row.changePercent} tone={rowTone} compact />\n                          </div>\n                        </TableCell>\n'
+          replace_once(path, row_price_tail, row_price_tail + '                        <TableCell className="px-1 text-center font-mono text-xs font-bold text-cyan-100">\n                          {formatMarketCapBillion(row.marketCapBillion)}\n                        </TableCell>\n')
+          p = Path(path)
           p.write_text(p.read_text().replace('colSpan={11}', 'colSpan={12}'))
 
-          # Update old CI contracts to the canonical 200 semantics.
-          replace_once(
-              "tests/insights-schema.test.ts",
-              '  assert.match(insightsDashboard, /Top 100/)\n',
-              '  assert.match(insightsDashboard, /Top Stocks/)\n',
-          )
-          replace_once(
-              "tests/insights-schema.test.ts",
-              '  assert.match(insightsDashboard, /useState<"top100" \\| "all">\\("top100"\\)/)\n',
-              '  assert.doesNotMatch(insightsDashboard, /useState<"top100" \\| "all">/)\n  assert.match(insightsDashboard, /sortKey="marketCapBillion"/)\n  assert.match(insightsDashboard, /Vốn hóa/)\n',
-          )
-          replace_once(
-              "tests/market-insight-ui-performance.test.ts",
-              '  for (const sectionId of ["sau-phien", "top-100", "nghien-cuu"]) {',
-              '  for (const sectionId of ["sau-phien", "top-stocks", "nghien-cuu"]) {',
-          )
-          replace_once(
-              "tests/market-insight-ui-performance.test.ts",
-              '  assert.match(bubbles, /filter\\(\\(stock\\) => \\(stock\\.volume \\?\\? 0\\) > 300_000\\)/, "bubble field must exclude stocks at or below the provider threshold")',
-              '  assert.doesNotMatch(bubbles, /stock\\.volume[^\\n]*>\\s*300_000/, "bubble field must not apply a second liquidity cutoff inside the canonical universe")',
-          )
+          replace_once("tests/insights-schema.test.ts", '  assert.match(insightsDashboard, /Top 100/)\n', '  assert.match(insightsDashboard, /Top Stocks/)\n')
+          replace_once("tests/insights-schema.test.ts", '  assert.match(insightsDashboard, /useState<"top100" \\| "all">\\("top100"\\)/)\n', '  assert.doesNotMatch(insightsDashboard, /useState<"top100" \\| "all">/)\n  assert.match(insightsDashboard, /sortKey="marketCapBillion"/)\n  assert.match(insightsDashboard, /Vốn hóa/)\n')
+          replace_once("tests/market-insight-ui-performance.test.ts", '  for (const sectionId of ["sau-phien", "top-100", "nghien-cuu"]) {', '  for (const sectionId of ["sau-phien", "top-stocks", "nghien-cuu"]) {')
+          replace_once("tests/market-insight-ui-performance.test.ts", '  assert.match(bubbles, /filter\\(\\(stock\\) => \\(stock\\.volume \\?\\? 0\\) > 300_000\\)/, "bubble field must exclude stocks at or below the provider threshold")', '  assert.doesNotMatch(bubbles, /stock\\.volume[^\\n]*>\\s*300_000/, "bubble field must not apply a second liquidity cutoff inside the canonical universe")')
           PY
 
           git status --short
