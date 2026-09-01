@@ -57,6 +57,7 @@ test("HISTORY_REFRESH provider waterfall has a bounded wall-clock budget", () =>
   assert.match(dnseHistorySource, /Math\.min\(8_000, deadlineMs - Date\.now\(\)\)/)
   assert.match(yahooHistorySource, /YAHOO_REQUEST_TIMEOUT_MS\s*=\s*15_000/)
   assert.match(yahooHistorySource, /signal:\s*AbortSignal\.timeout\(YAHOO_REQUEST_TIMEOUT_MS\)/)
+  assert.match(marketHistorySource, /adaptive deadline exceeded/)
 })
 
 test("Daily provider waterfall includes bounded clean-ticker VNDirect fallback", () => {
