@@ -19,10 +19,10 @@ const notionStaging = source("lib/wyckoff-v2-notion-staging.ts")
 const schedulePrompt = source("scripts/chatgpt-plus-wyckoff-schedule-prompt.md")
 const marketSelection = source("lib/market-universe-selection.ts")
 const marketSectors = source("lib/market-sectors.ts")
-const orderbookStore = source("lib/supabase/orderbook.ts")
-const orderbookSync = source("supabase/functions/orderbook-sync/index.ts")
+const boardStore = source("lib/supabase/board-overview.ts")
 const boardPage = source("app/page.tsx")
-const boardComponent = source("components/live-market-board-v2.tsx")
+const boardRefresh = source("components/market-universe-version-refresh.tsx")
+const orderbookCleanupMigration = source("supabase/migrations/20260901162500_prune_noncanonical_orderbook_snapshots.sql")
 const insightsPage = source("app/insights/page.tsx")
 
 test("Wyckoff runtime reads canonical Supabase universe instead of Notion Top100", () => {
@@ -84,20 +84,21 @@ test("canonical selector enforces the approved 4-of-5 daily trading activity gat
   assert.match(marketSelection, /tradingActiveDays < MARKET_UNIVERSE_MIN_ACTIVE_DAYS/)
 })
 
-test("board orderbook read model and sync are canonical-only", () => {
-  assert.match(orderbookStore, /getBoardOverviewSnapshotsFromSupabase\(symbols:/)
-  assert.match(orderbookStore, /\.in\("symbol", normalizedSymbols\)/)
-  assert.match(orderbookSync, /pruneNonCanonicalOrderbookRows/)
-  assert.match(orderbookSync, /staleSymbols/)
-  assert.match(boardPage, /getBoardOverviewSnapshotsFromSupabase\(tickers\)/)
+test("board orderbook read model is canonical-only and publication prunes stale rows", () => {
+  assert.match(boardStore, /getCanonicalBoardOverviewSnapshots/)
+  assert.match(boardStore, /\.in\("symbol", normalizedSymbols\)/)
+  assert.match(boardPage, /getCanonicalBoardOverviewSnapshots\(tickers\)/)
+  assert.match(orderbookCleanupMigration, /qeo_prune_noncanonical_orderbook_snapshots/)
+  assert.match(orderbookCleanupMigration, /market_universe_memberships/)
+  assert.match(orderbookCleanupMigration, /after update of status, published_at/)
 })
 
 test("open board tabs refresh when canonical universe run changes", () => {
   assert.equal(existsSync("app/api/market-universe/version/route.ts"), true)
-  assert.match(boardPage, /universeRunId=\{canonical\.runId\}/)
-  assert.match(boardComponent, /universeRunId:/)
-  assert.match(boardComponent, /\/api\/market-universe\/version/)
-  assert.match(boardComponent, /router\.refresh\(\)/)
+  assert.match(boardPage, /MarketUniverseVersionRefresh universeRunId=\{canonical\.runId\}/)
+  assert.match(boardRefresh, /\/api\/market-universe\/version/)
+  assert.match(boardRefresh, /payload\.runId !== universeRunId/)
+  assert.match(boardRefresh, /router\.refresh\(\)/)
 })
 
 test("board sector taxonomy follows requested grouping rules", () => {
