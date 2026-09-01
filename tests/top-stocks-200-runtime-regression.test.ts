@@ -28,6 +28,10 @@ const orderbookCleanupMigration = source("supabase/migrations/20260901162500_pru
 const cleanRebuildMigrationPath = "supabase/migrations/20260901213000_clean_rebuild_top_stocks_200.sql"
 const cleanRebuildMarketSyncMigrationPath = "supabase/migrations/20260901214500_clean_rebuild_market_snapshot_trigger.sql"
 const insightsPage = source("app/insights/page.tsx")
+const marketSyncUniverse = source("lib/market-sync-universe.ts")
+const orderbookSync = source("supabase/functions/orderbook-sync/index.ts")
+const sessionCountdown = source("lib/session-countdown.ts")
+const eodWorkflow = source("workflows/qeoindex-eod-pipeline.ts")
 
 test("Wyckoff runtime reads canonical Supabase universe instead of Notion Top100", () => {
   assert.match(wyckoffRunner, /getCanonicalUniverse/)
@@ -166,4 +170,14 @@ test("clean rebuild has a service-role-only final market snapshot bootstrap trig
   assert.match(migration, /functions\/v1\/orderbook-sync/)
   assert.match(migration, /revoke all on function public\.qeo_trigger_market_snapshot_bootstrap\(\) from public, anon, authenticated/i)
   assert.match(migration, /grant execute on function public\.qeo_trigger_market_snapshot_bootstrap\(\) to service_role/i)
+})
+
+test("live market collectors and EOD orchestration share the Vietnam trading-calendar guard", () => {
+  assert.match(marketSyncUniverse, /isVietnamSecuritiesTradingDay/)
+  assert.match(marketSyncUniverse, /skipped:\s*true/)
+  assert.match(orderbookSync, /vn-market-calendar/)
+  assert.match(orderbookSync, /isVietnamSecuritiesTradingDay/)
+  assert.match(sessionCountdown, /isVietnamSecuritiesTradingDay/)
+  assert.match(eodWorkflow, /isVietnamSecuritiesTradingDateKey/)
+  assert.match(eodWorkflow, /skipQeoIndexEodRunStep/)
 })
