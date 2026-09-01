@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -23,6 +23,10 @@ import {
 
 const NOW = new Date("2026-08-25T08:35:00.000Z")
 const dnseHistorySource = readFileSync("lib/dnse-history.ts", "utf8")
+const yahooHistorySource = readFileSync("lib/yahoo-history.ts", "utf8")
+const marketHistorySource = readFileSync("lib/market-history.ts", "utf8")
+const marketHistoryContractSource = readFileSync("lib/market-history-contract.ts", "utf8")
+const vndirectHistoryPath = "lib/vndirect-history.ts"
 
 test("historical source URLs are deterministic and contain no credentials", () => {
   const dnse = buildHistoricalSourceUrl("DNSE", "msn", "1D", 14, NOW)
@@ -44,6 +48,35 @@ test("DNSE bootstrap uses bounded Daily and Hourly request windows", () => {
   assert.match(dnseHistorySource, /buildRequestWindows/)
   assert.match(dnseHistorySource, /requestOhlcWindows/)
   assert.match(dnseHistorySource, /dedupeBars/)
+})
+
+test("HISTORY_REFRESH provider waterfall has a bounded wall-clock budget", () => {
+  assert.match(dnseHistorySource, /DAILY_ADAPTIVE_BUDGET_MS\s*=\s*30_000/)
+  assert.match(dnseHistorySource, /const deadlineMs = Date\.now\(\) \+ DAILY_ADAPTIVE_BUDGET_MS/)
+  assert.match(dnseHistorySource, /requestOhlcWindows\(symbol, resolution, from, to, DAILY_REQUEST_WINDOW_DAYS, DAILY_MIN_RETRY_WINDOW_DAYS, deadlineMs\)/)
+  assert.match(dnseHistorySource, /Math\.min\(8_000, deadlineMs - Date\.now\(\)\)/)
+  assert.match(yahooHistorySource, /YAHOO_REQUEST_TIMEOUT_MS\s*=\s*15_000/)
+  assert.match(yahooHistorySource, /signal:\s*AbortSignal\.timeout\(YAHOO_REQUEST_TIMEOUT_MS\)/)
+})
+
+test("Daily provider waterfall includes bounded clean-ticker VNDirect fallback", () => {
+  assert.equal(existsSync(vndirectHistoryPath), true)
+  assert.match(marketHistoryContractSource, /HistoricalProvider\s*=\s*"DNSE"\s*\|\s*"Fallback"\s*\|\s*"VNDirect"/)
+  assert.match(marketHistorySource, /fetchVnDirectDailyOhlcv/)
+  assert.match(marketHistorySource, /provider:\s*"VNDirect"/)
+  assert.match(marketHistorySource, /Yahoo:[\s\S]*VNDirect:/)
+
+  if (!existsSync(vndirectHistoryPath)) return
+  const vndirectHistorySource = readFileSync(vndirectHistoryPath, "utf8")
+  assert.match(vndirectHistorySource, /VNDIRECT_REQUEST_TIMEOUT_MS\s*=\s*15_000/)
+  assert.match(vndirectHistorySource, /https:\/\/finfo-api\.vndirect\.com\.vn\/v4\/stock_prices/)
+  assert.match(vndirectHistorySource, /code:\$\{ticker\}~date:gte:/)
+  assert.match(vndirectHistorySource, /adOpen/)
+  assert.match(vndirectHistorySource, /adHigh/)
+  assert.match(vndirectHistorySource, /adLow/)
+  assert.match(vndirectHistorySource, /adClose/)
+  assert.match(vndirectHistorySource, /nmVolume/)
+  assert.match(vndirectHistorySource, /signal:\s*AbortSignal\.timeout\(VNDIRECT_REQUEST_TIMEOUT_MS\)/)
 })
 
 test("refresh planner backfills insufficient coverage then switches to bounded deltas", () => {

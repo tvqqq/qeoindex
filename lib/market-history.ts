@@ -1,5 +1,6 @@
 import type { OhlcvBar } from "@/lib/technical-indicators"
 import { fetchDailyOhlcv as fetchDnseDailyOhlcv, fetchHourlyOhlcv as fetchDnseHourlyOhlcv } from "@/lib/dnse-history"
+import { fetchVnDirectDailyOhlcv } from "@/lib/vndirect-history"
 import { fetchYahooDailyOhlcv, fetchYahooHourlyOhlcv } from "@/lib/yahoo-history"
 import { readThroughUiCache } from "@/lib/ui-data-cache"
 import {
@@ -32,7 +33,7 @@ function isHistoricalBarsResult(value: unknown): value is HistoricalBarsResult {
   const result = value as Partial<HistoricalBarsResult>
   return Array.isArray(result.bars)
     && result.bars.length > 0
-    && (result.provider === "DNSE" || result.provider === "Fallback")
+    && (result.provider === "DNSE" || result.provider === "Fallback" || result.provider === "VNDirect")
     && typeof result.detail === "string"
     && typeof result.sourceUrl === "string"
     && typeof result.fetchedAt === "string"
@@ -87,7 +88,14 @@ export async function fetchDailyMarketHistoryWindow(
     errors.push(`Yahoo: ${error instanceof Error ? error.message : String(error)}`)
   }
 
-  throw new Error(errors.join(" | ").slice(0, 520))
+  try {
+    const bars = await fetchVnDirectDailyOhlcv(symbol, now, lookbackDays)
+    return historicalResult({ bars, provider: "VNDirect", detail: `VNDirect Finfo fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
+  } catch (error) {
+    errors.push(`VNDirect: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  throw new Error(errors.join(" | ").slice(0, 720))
 }
 
 export async function fetchHourlyMarketHistoryWindow(
@@ -137,18 +145,25 @@ export async function fetchDailyMarketHistory(symbol: string, now = new Date()):
     errors.push(`Yahoo: ${error instanceof Error ? error.message : String(error)}`)
   }
 
-  throw new Error(errors.join(" | ").slice(0, 520))
+  try {
+    const bars = await fetchVnDirectDailyOhlcv(symbol, now, 620)
+    return historicalResult({ bars, provider: "VNDirect", detail: "VNDirect Finfo fallback · 1D", symbol, timeframe: "1D", lookbackDays: 620, now })
+  } catch (error) {
+    errors.push(`VNDirect: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  throw new Error(errors.join(" | ").slice(0, 720))
 }
 
 /** Selected-ticker chart path and initial persistent-cache backfill. */
 export async function fetchLongDailyMarketHistory(symbol: string, now = new Date()): Promise<HistoricalBarsResult> {
   const result = await fetchDailyMarketHistoryWindow(symbol, DAILY_BACKFILL_DAYS, now)
-  return {
-    ...result,
-    detail: result.provider === "DNSE"
-      ? "DNSE OpenAPI · 1D · 8-year Wyckoff window"
-      : "Yahoo Finance .VN fallback · 1D · 8-year Wyckoff window",
-  }
+  const detail = result.provider === "DNSE"
+    ? "DNSE OpenAPI · 1D · 8-year Wyckoff window"
+    : result.provider === "VNDirect"
+      ? "VNDirect Finfo fallback · 1D · 8-year Wyckoff window"
+      : "Yahoo Finance .VN fallback · 1D · 8-year Wyckoff window"
+  return { ...result, detail }
 }
 
 export async function fetchHourlyMarketHistory(symbol: string, now = new Date()): Promise<HistoricalBarsResult> {

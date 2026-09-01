@@ -16,6 +16,9 @@ const DAILY_REQUEST_WINDOW_DAYS = 366
 const HOURLY_REQUEST_WINDOW_DAYS = 30
 const DAILY_MIN_RETRY_WINDOW_DAYS = 7
 const HOURLY_MIN_RETRY_WINDOW_DAYS = 7
+const DAILY_ADAPTIVE_BUDGET_MS = 30_000
+const HOURLY_ADAPTIVE_BUDGET_MS = 20_000
+const REQUEST_TIMEOUT_MS = 8_000
 const SECONDS_PER_DAY = 86400
 
 export interface ProviderHealth {
@@ -141,9 +144,22 @@ function dedupeBars(bars: OhlcvBar[]) {
   return [...byTime.values()].sort((a, b) => a.time - b.time)
 }
 
-async function requestOhlc(symbol: string, resolution: string, from: number, to: number, allowEmpty = false) {
+function adaptiveDeadlineError(symbol: string, resolution: string) {
+  return new Error(`DNSE OHLC ${symbol} ${resolution} adaptive deadline exceeded`)
+}
+
+async function requestOhlc(
+  symbol: string,
+  resolution: string,
+  from: number,
+  to: number,
+  allowEmpty: boolean,
+  deadlineMs: number,
+) {
   const { apiKey, apiSecret } = credentials()
   if (!apiKey || !apiSecret) throw new Error("DNSE server credentials are not configured")
+  const remainingMs = Math.min(8_000, deadlineMs - Date.now())
+  if (remainingMs <= 0) throw adaptiveDeadlineError(symbol, resolution)
   const path = "/price/ohlc"
   const baseUrl = (process.env.DNSE_API_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/$/, "")
   const url = new URL(`${baseUrl}${path}`)
@@ -156,7 +172,7 @@ async function requestOhlc(symbol: string, resolution: string, from: number, to:
   const response = await fetch(url, {
     headers: signatureHeaders("GET", path, apiKey, apiSecret),
     cache: "no-store",
-    signal: AbortSignal.timeout(8_000),
+    signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, Math.max(1, remainingMs))),
   })
   const body = await response.text()
   if (!response.ok) throw new Error(`DNSE OHLC ${symbol} ${resolution} failed (${response.status}): ${body.slice(0, 180)}`)
@@ -171,15 +187,18 @@ async function requestAdaptiveWindow(
   window: DnseRequestWindow,
   minRetryDays: number,
   allowEmpty: boolean,
+  deadlineMs: number,
 ): Promise<OhlcvBar[]> {
+  if (Date.now() >= deadlineMs) throw adaptiveDeadlineError(symbol, resolution)
   try {
-    return await requestOhlc(symbol, resolution, window.from, window.to, allowEmpty)
+    return await requestOhlc(symbol, resolution, window.from, window.to, allowEmpty, deadlineMs)
   } catch (error) {
+    if (Date.now() >= deadlineMs) throw adaptiveDeadlineError(symbol, resolution)
     if (!isRetryableDnseWindowError(error) || dnseWindowSpanDays(window) <= minRetryDays) throw error
     const childWindows = splitDnseRequestWindow(window)
     const childBars: OhlcvBar[] = []
     for (const child of childWindows) {
-      childBars.push(...await requestAdaptiveWindow(symbol, resolution, child, minRetryDays, true))
+      childBars.push(...await requestAdaptiveWindow(symbol, resolution, child, minRetryDays, true, deadlineMs))
     }
     return childBars
   }
@@ -192,13 +211,15 @@ async function requestOhlcWindows(
   to: number,
   maxDays: number,
   minRetryDays: number,
+  deadlineMs: number,
 ) {
   const windows = buildRequestWindows(from, to, maxDays)
   const bars: OhlcvBar[] = []
   const allowEmptyWindow = windows.length > 1
   for (const window of windows) {
+    if (Date.now() >= deadlineMs) throw adaptiveDeadlineError(symbol, resolution)
     try {
-      bars.push(...await requestAdaptiveWindow(symbol, resolution, window, minRetryDays, allowEmptyWindow))
+      bars.push(...await requestAdaptiveWindow(symbol, resolution, window, minRetryDays, allowEmptyWindow, deadlineMs))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       throw new Error(`${message} [window ${window.from}-${window.to}]`)
@@ -212,13 +233,15 @@ async function requestOhlcWindows(
 export async function fetchDailyOhlcv(symbol: string, now = new Date(), lookbackDays = DEFAULT_LOOKBACK_DAYS): Promise<OhlcvBar[]> {
   const to = Math.floor(now.getTime() / 1000)
   const from = to - lookbackDays * SECONDS_PER_DAY
+  const deadlineMs = Date.now() + DAILY_ADAPTIVE_BUDGET_MS
   const errors: string[] = []
   for (const resolution of ["1D", "D"]) {
     try {
-      const bars = await requestOhlcWindows(symbol, resolution, from, to, DAILY_REQUEST_WINDOW_DAYS, DAILY_MIN_RETRY_WINDOW_DAYS)
+      const bars = await requestOhlcWindows(symbol, resolution, from, to, DAILY_REQUEST_WINDOW_DAYS, DAILY_MIN_RETRY_WINDOW_DAYS, deadlineMs)
       return removeIncompleteCurrentDailyBar(bars, now)
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error))
+      if (Date.now() >= deadlineMs) break
     }
   }
   throw new Error(errors.join(" | "))
@@ -227,15 +250,17 @@ export async function fetchDailyOhlcv(symbol: string, now = new Date(), lookback
 export async function fetchHourlyOhlcv(symbol: string, now = new Date(), lookbackDays = DEFAULT_INTRADAY_LOOKBACK_DAYS): Promise<OhlcvBar[]> {
   const to = Math.floor(now.getTime() / 1000)
   const from = to - lookbackDays * SECONDS_PER_DAY
+  const deadlineMs = Date.now() + HOURLY_ADAPTIVE_BUDGET_MS
   const errors: string[] = []
   for (const resolution of ["1H", "60"]) {
     try {
-      const bars = await requestOhlcWindows(symbol, resolution, from, to, HOURLY_REQUEST_WINDOW_DAYS, HOURLY_MIN_RETRY_WINDOW_DAYS)
+      const bars = await requestOhlcWindows(symbol, resolution, from, to, HOURLY_REQUEST_WINDOW_DAYS, HOURLY_MIN_RETRY_WINDOW_DAYS, deadlineMs)
       const completed = removeIncompleteCurrentHourlyBar(bars, now)
       if (completed.length < 2) throw new Error(`DNSE OHLC ${symbol} ${resolution} returned insufficient completed bars`)
       return completed
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error))
+      if (Date.now() >= deadlineMs) break
     }
   }
   throw new Error(errors.join(" | "))

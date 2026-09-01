@@ -1,6 +1,6 @@
 import type { OhlcvBar } from "./technical-indicators.ts"
 
-export type HistoricalProvider = "DNSE" | "Fallback"
+export type HistoricalProvider = "DNSE" | "Fallback" | "VNDirect"
 export type RawHistoryTimeframe = "1D" | "1H"
 
 export interface HistoricalBarsResult {
@@ -26,6 +26,15 @@ function windowSeconds(lookbackDays: number, now: Date) {
   return { from, to }
 }
 
+function vietnamDateKey(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date)
+}
+
 export function buildHistoricalSourceUrl(
   provider: HistoricalProvider,
   symbol: string,
@@ -45,6 +54,19 @@ export function buildHistoricalSourceUrl(
     url.searchParams.set("from", String(from))
     url.searchParams.set("to", String(to))
     url.searchParams.set("type", "STOCK")
+    return url.toString()
+  }
+
+  if (provider === "VNDirect") {
+    if (timeframe !== "1D") throw new Error(`VNDirect history provider does not support ${timeframe}`)
+    const safeLookbackDays = Math.max(1, Math.floor(lookbackDays))
+    const fromDate = vietnamDateKey(new Date(now.getTime() - safeLookbackDays * 86400 * 1000))
+    const toDate = vietnamDateKey(now)
+    const url = new URL("https://finfo-api.vndirect.com.vn/v4/stock_prices")
+    url.searchParams.set("sort", "date")
+    url.searchParams.set("q", `code:${ticker}~date:gte:${fromDate}~date:lte:${toDate}`)
+    url.searchParams.set("size", String(Math.min(5000, safeLookbackDays + 2)))
+    url.searchParams.set("page", "1")
     return url.toString()
   }
 
