@@ -27,31 +27,31 @@ test("manual recovery migration defines deterministic correlation and bounded qu
   assert.match(lifecycle, /system_job_runs/i)
 })
 
-test("shared Edge lifecycle helper owns running and terminal transitions without secrets", () => {
+test("shared Edge lifecycle helper delegates running and terminal transitions without secrets", () => {
   const helper = source(helperPath)
   assert.match(helper, /beginManualKfspLifecycle/)
   assert.match(helper, /finalizeManualKfspLifecycle/)
-  assert.match(helper, /duplicate/)
   assert.match(helper, /manual_recovery_rpc/)
-  assert.match(helper, /system_job_runs/)
-  assert.match(helper, /kfsp_manual_dispatch_runs/)
+  assert.match(helper, /qeo_begin_kfsp_manual_lifecycle/)
+  assert.match(helper, /qeo_finalize_kfsp_manual_lifecycle/)
+  assert.match(helper, /duplicate/)
   assert.doesNotMatch(helper, /access_token|x-kfsp-sync-secret|vault\.decrypted_secrets/i)
 })
 
 test("rating sync correlates manual request id while scheduled runs keep random ids", () => {
   const rating = source(ratingPath)
+  assert.match(rating, /manualKfspRequestId\(requestBody\)/)
   assert.match(rating, /beginManualKfspLifecycle/)
   assert.match(rating, /finalizeManualKfspLifecycle/)
-  assert.match(rating, /manual_recovery_rpc/)
   assert.match(rating, /request_id/)
   assert.match(rating, /crypto\.randomUUID\(\)/)
 })
 
 test("TTAI sync correlates manual request id and preserves partial-failure semantics", () => {
   const ttai = source(ttaiPath)
+  assert.match(ttai, /manualKfspRequestId\(requestBody\)/)
   assert.match(ttai, /beginManualKfspLifecycle/)
   assert.match(ttai, /finalizeManualKfspLifecycle/)
-  assert.match(ttai, /manual_recovery_rpc/)
   assert.match(ttai, /request_id/)
   assert.match(ttai, /crypto\.randomUUID\(\)/)
   assert.match(ttai, /failed \? 207 : 200/)
