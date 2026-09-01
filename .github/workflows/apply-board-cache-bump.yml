@@ -31,10 +31,7 @@ jobs:
           test_path = Path("tests/canonical-200-ui.test.ts")
           test = test_path.read_text()
           old_test = 'test("board maps live KFSP sector taxonomy into all six board groups", () => {\n'
-          new_test = '''test("board maps live KFSP sector taxonomy into all six board groups", () => {
-  const page = source("app/page.tsx")
-  assert.match(page, /BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v5"/)
-'''
+          new_test = 'test("board maps live KFSP sector taxonomy into all six board groups", () => {\n  const page = source("app/page.tsx")\n  assert.match(page, /BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v5"/)\n'
           if test.count(old_test) != 1:
               raise SystemExit(f"board regression insertion point expected once, got {test.count(old_test)}")
           test_path.write_text(test.replace(old_test, new_test, 1))
