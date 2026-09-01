@@ -5,6 +5,8 @@ const UNIVERSE_KEY = "vn_top_stocks"
 const MAX_SIZE = 200
 const DEFAULT_MIN_MARKET_CAP_BILLION = 10
 const DEFAULT_MIN_AVG_VOLUME_50D = 250_000
+const ACTIVITY_OBSERVATION_DAYS = 5
+const MIN_ACTIVE_DAYS = 4
 const LOGO_BUCKET = "stock-logo"
 const LEGACY_LOGO_BASE = "https://qeoindex.qeoqeo.com/logos"
 const CORS = {
@@ -21,6 +23,9 @@ type Candidate = {
   market_cap_billion: number
   average_volume_50_sessions: number
   as_of_date: string
+  activity_observation_days: number
+  activity_positive_days: number
+  eligible_candidate_count: number
 }
 
 type LogoKind = "official" | "generated_fallback"
@@ -281,23 +286,27 @@ Deno.serve(async (req: Request) => {
     if (latest.error || !latest.data?.as_of_date) throw new Error(`No published KFSP snapshot: ${latest.error?.message || "empty"}`)
     const sourceDate = String(latest.data.as_of_date)
 
-    const countQuery = await supabase.from("insights_stock_ratings").select("ticker", { count: "exact", head: true })
-      .eq("is_published", true).eq("source", "kfsp").eq("as_of_date", sourceDate)
-      .gt("average_volume_50_sessions", minAverageVolume50d).gt("market_cap_billion", minMarketCapBillion)
-    if (countQuery.error) throw new Error(`Candidate count failed: ${countQuery.error.message}`)
-    const candidateCount = countQuery.count || 0
-    if (candidateCount === 0) throw new Error("Universe selector produced zero qualifying candidates")
-
-    const candidatesQuery = await supabase.from("insights_stock_ratings")
-      .select("ticker,company_name,exchange,sector,market_cap_billion,average_volume_50_sessions,as_of_date")
-      .eq("is_published", true).eq("source", "kfsp").eq("as_of_date", sourceDate)
-      .gt("average_volume_50_sessions", minAverageVolume50d).gt("market_cap_billion", minMarketCapBillion)
-      .order("market_cap_billion", { ascending: false, nullsFirst: false })
-      .order("average_volume_50_sessions", { ascending: false, nullsFirst: false })
-      .order("ticker", { ascending: true }).limit(MAX_SIZE)
+    const candidatesQuery = await supabase.rpc("qeo_select_market_universe_candidates", {
+      p_source_date: sourceDate,
+      p_min_market_cap_billion: minMarketCapBillion,
+      p_min_average_volume_50d: Math.floor(minAverageVolume50d),
+      p_max_size: MAX_SIZE,
+    })
     if (candidatesQuery.error) throw new Error(`Candidate selection failed: ${candidatesQuery.error.message}`)
     const candidates = (candidatesQuery.data || []) as Candidate[]
-    if (candidates.length === 0) throw new Error("Universe selector produced no publishable rows")
+    if (candidates.length === 0) throw new Error("Universe selector produced no publishable daily-traded rows")
+
+    const candidateCount = Number(candidates[0]?.eligible_candidate_count || candidates.length)
+    if (!Number.isInteger(candidateCount) || candidateCount < candidates.length) {
+      throw new Error(`Universe selector returned invalid eligible candidate count: ${candidateCount}`)
+    }
+    for (const candidate of candidates) {
+      const tradingObservationDays = Number(candidate.activity_observation_days)
+      const tradingActiveDays = Number(candidate.activity_positive_days)
+      if (tradingObservationDays !== ACTIVITY_OBSERVATION_DAYS || tradingActiveDays < MIN_ACTIVE_DAYS || tradingActiveDays > tradingObservationDays) {
+        throw new Error(`Universe selector returned non-daily-traded candidate ${candidate.ticker}: activity=${tradingActiveDays}/${tradingObservationDays}`)
+      }
+    }
 
     const runInsert = await supabase.from("market_universe_runs").insert({
       universe_key: UNIVERSE_KEY, status: "running", source: "kfsp", source_as_of_date: sourceDate,
@@ -339,12 +348,13 @@ Deno.serve(async (req: Request) => {
 
     const official = rows.filter((row) => row.logo_kind === "official").length
     const generatedFallback = rows.length - official
+    const activitySummary = { activityObservationDays: ACTIVITY_OBSERVATION_DAYS, minActiveDays: MIN_ACTIVE_DAYS }
     if (telemetryId) await supabase.from("system_job_runs").update({
       status: "succeeded", finished_at: new Date().toISOString(),
-      summary: { universeKey: UNIVERSE_KEY, runId: universeRunId, sourceDate, candidateCount, selectedCount: rows.length, officialLogos: official, generatedFallbackLogos: generatedFallback, detailComplete: rows.length },
+      summary: { universeKey: UNIVERSE_KEY, runId: universeRunId, sourceDate, candidateCount, selectedCount: rows.length, ...activitySummary, officialLogos: official, generatedFallbackLogos: generatedFallback, detailComplete: rows.length },
     }).eq("id", telemetryId)
 
-    return json({ ok: true, runId: universeRunId, sourceDate, candidateCount, selectedCount: rows.length, officialLogos: official, generatedFallbackLogos: generatedFallback })
+    return json({ ok: true, runId: universeRunId, sourceDate, candidateCount, selectedCount: rows.length, ...activitySummary, officialLogos: official, generatedFallbackLogos: generatedFallback })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     if (universeRunId) await supabase.from("market_universe_runs").update({ status: "failed", error_code: "UNIVERSE_REFRESH_FAILED", error_message: message.slice(0, 1000) }).eq("id", universeRunId)

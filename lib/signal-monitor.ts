@@ -55,9 +55,8 @@ export async function runSignalMonitor({ force = false }: { force?: boolean } = 
     return { ok: true, skipped: true, reason: "Outside HOSE monitoring window", session, engineVersion: SIGNAL_ENGINE_VERSION }
   }
 
-  // Operational decisions intentionally bypass all UI read-model caches.
+  // Operational decisions intentionally bypass all UI read-model caches and read the canonical Supabase scanner source.
   const [scanner, openRows] = await Promise.all([getScannerDataFresh(), getOpenRecommendationsFresh()])
-  if (scanner.source !== "notion") throw new Error("Scanner is not reading live Notion data; fail-closed")
 
   const bullish = Object.values(scanner.latestScans).filter((scan) => scan.taBias === "Bullish" && scan.status === "Complete")
   const openByTicker = new Map(openRows.map((row) => [row.ticker, row]))

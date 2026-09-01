@@ -7,53 +7,47 @@ import {
 import { runEodBackfillReadyStep } from "@/lib/qeoindex-eod-backfill-ready-step"
 import { failQeoIndexEodRunStep } from "@/lib/qeoindex-eod-failure-step"
 import { runEodNoTradeDailyRepairStep } from "@/lib/qeoindex-eod-no-trade-repair-step"
-import {
-  runNotionStagingBatchStep,
-  type NotionStagingProgress,
-} from "@/lib/qeoindex-eod-notion-staging-batch"
 import type { OhlcvUniverseRefreshResult } from "@/lib/ohlcv-history-store"
-
 import {
-  runEodReadyStep,
-  runMarketCloseCollectStep,
-  runHistoryRefreshBatchStep,
-  runWyckoffBuildStep,
-  runNotionValidateStep,
-  runIngestStep,
-  runSupabasePublishStep,
-  runDeterministicCouncilStep,
-  runLlmDebateStep,
   runCompleteStep,
+  runDeterministicCouncilStep,
+  runDriveArchiveStep,
+  runEodReadyStep,
+  runHistoryRefreshBatchStep,
+  runLlmDebateStep,
+  runMarketCloseCollectStep,
+  runMarketSynthesisStep,
+  runNotionArchiveStep,
+  runRetentionCleanupStep,
+  runSupabasePublishStep,
+  runSupabaseValidateStep,
+  runWyckoffBuildStep,
   startQeoIndexEodRunStep,
 } from "@/lib/qeoindex-eod-workflow-steps"
 
+const EOD_READY_MAX_ATTEMPTS = 4
+const EOD_READY_RETRY_INTERVAL_MS = 5 * 60_000
 const MARKET_CLOSE_MAX_ATTEMPTS = 3
 const MARKET_CLOSE_RETRY_INTERVAL_MS = 5 * 60_000
 const MAX_CANONICAL_UNIVERSE_SIZE = 200
 const WYCKOFF_TIMEFRAME_COUNT = 5
 
-function retryAt(startedAtIso: string, attempt: number) {
+function retryAt(startedAtIso: string, attempt: number, intervalMs: number) {
   const startedAt = new Date(startedAtIso).getTime()
-  return new Date(startedAt + attempt * 5 * 60_000)
-}
-
-function marketCloseRetryAt(startedAtIso: string, attempt: number) {
-  const startedAt = new Date(startedAtIso).getTime()
-  return new Date(startedAt + attempt * MARKET_CLOSE_RETRY_INTERVAL_MS)
+  return new Date(startedAt + attempt * intervalMs)
 }
 
 function isEodNotReady(error: unknown) {
   return (error as { code?: unknown } | null)?.code === "EOD_NOT_READY"
 }
 
-function marketCloseErrorMessage(error: unknown) {
+function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
 function isRetryableMarketCloseFailure(error: unknown) {
-  const message = marketCloseErrorMessage(error)
+  const message = errorMessage(error)
   const normalized = message.toUpperCase()
-
   if (message.includes("failed to load dedicated sync secret")) return false
   if (/UNAUTHORIZED|FORBIDDEN|INVALID_SECRET|MISSING_SECRET/.test(normalized)) return false
 
@@ -62,7 +56,6 @@ function isRetryableMarketCloseFailure(error: unknown) {
   const httpStatus = Number.isFinite(statusFromError) && statusFromError > 0
     ? statusFromError
     : statusFromMessage
-
   if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500) return true
 
   return [
@@ -107,13 +100,13 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
     if (historicalBackfill) {
       ready = await runEodBackfillReadyStep(runId, startedAtIso)
     } else {
-      for (let attempt = 1; attempt <= 4; attempt += 1) {
+      for (let attempt = 1; attempt <= EOD_READY_MAX_ATTEMPTS; attempt += 1) {
         try {
           ready = await runEodReadyStep(runId, startedAtIso)
           break
         } catch (error) {
-          if (!isEodNotReady(error) || attempt === 4) throw error
-          await sleep(retryAt(startedAtIso, attempt))
+          if (!isEodNotReady(error) || attempt === EOD_READY_MAX_ATTEMPTS) throw error
+          await sleep(retryAt(startedAtIso, attempt, EOD_READY_RETRY_INTERVAL_MS))
         }
       }
     }
@@ -124,9 +117,6 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       throw new Error(`Canonical universe count ${universeCount} is outside 1-${MAX_CANONICAL_UNIVERSE_SIZE}`)
     }
     const expectedSnapshots = universeCount * WYCKOFF_TIMEFRAME_COUNT
-    const shouldBuild = ready.notionAction === "write"
-    const shouldPublish = ready.notionAction !== "stop"
-    const resumeSupabaseRunId = ready.notionAction === "resume" ? ready.notionSupabaseRunId : ""
 
     let marketClose: Awaited<ReturnType<typeof runMarketCloseCollectStep>> | null = null
     if (historicalBackfill) {
@@ -159,7 +149,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
                   attemptsUsed: attempt,
                   retrying: false,
                   terminal: true,
-                  lastError: marketCloseErrorMessage(error).slice(0, 500),
+                  lastError: errorMessage(error).slice(0, 500),
                 },
               })
             } catch {
@@ -168,15 +158,15 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
             throw error
           }
 
-          const nextAttemptAt = marketCloseRetryAt(startedAtIso, attempt)
+          const nextAttemptAt = retryAt(startedAtIso, attempt, MARKET_CLOSE_RETRY_INTERVAL_MS)
           await markQeoIndexEodPhaseRetryingStep({
             runId,
             phaseKey: "MARKET_CLOSE_COLLECT",
             attemptsUsed: attempt,
             nextAttemptAt: nextAttemptAt.toISOString(),
-            lastError: marketCloseErrorMessage(error),
+            lastError: errorMessage(error),
           })
-          await sleep(marketCloseRetryAt(startedAtIso, attempt))
+          await sleep(nextAttemptAt)
         }
       }
     }
@@ -193,104 +183,138 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       limitedCoverage: [],
       errors: [],
     }
-    if (shouldBuild) {
-      for (let offset = 0; offset < ready.stocks.length; offset += 10) {
-        history = await runHistoryRefreshBatchStep(
-          runId,
-          ready.stocks.slice(offset, offset + 10),
-          startedAtIso,
-          history,
-          true,
-        )
-      }
-      if (history.completedTickers !== universeCount || history.requestedTickers !== universeCount) {
-        throw new Error(`HISTORY_REFRESH completed ${history.completedTickers}/${history.requestedTickers} tickers; expected ${universeCount}/${universeCount}`)
-      }
-    } else {
-      history = await runHistoryRefreshBatchStep(runId, [], startedAtIso, history, false)
+    for (let offset = 0; offset < ready.stocks.length; offset += 10) {
+      history = await runHistoryRefreshBatchStep(
+        runId,
+        ready.stocks.slice(offset, offset + 10),
+        startedAtIso,
+        history,
+      )
+    }
+    if (history.completedTickers !== universeCount || history.requestedTickers !== universeCount) {
+      throw new Error(
+        `HISTORY_REFRESH completed ${history.completedTickers}/${history.requestedTickers}`
+        + `; expected ${universeCount}/${universeCount}`,
+      )
     }
 
     const noTradeRepair = await runEodNoTradeDailyRepairStep(
       ready.stocks.map((stock) => stock.ticker),
       ready.scanDate,
-      shouldBuild && !historicalBackfill,
+      !historicalBackfill,
     )
 
-    const build = await runWyckoffBuildStep(runId, ready.stocks, ready.runKey, ready.scanDate, shouldBuild)
-    let staging: NotionStagingProgress = {
-      created: 0,
-      updated: 0,
-      skippedRows: 0,
-      total: 0,
-      providers: [],
-    }
-    if (shouldBuild) {
-      for (let offset = 0; offset < ready.stocks.length; offset += 10) {
-        staging = await runNotionStagingBatchStep(
-          runId,
-          ready.stocks.slice(offset, offset + 10),
-          ready.runKey,
-          ready.scanDate,
-          staging,
-          true,
-        )
-      }
-      if (staging.total !== expectedSnapshots) {
-        throw new Error(`NOTION_STAGING completed ${staging.total}/${expectedSnapshots} snapshots`)
-      }
-    } else {
-      staging = await runNotionStagingBatchStep(runId, [], ready.runKey, ready.scanDate, staging, false)
+    const build = await runWyckoffBuildStep(runId, ready.stocks, ready.runKey, ready.scanDate)
+    if (build.total !== expectedSnapshots) {
+      throw new Error(`WYCKOFF_BUILD completed ${build.total}/${expectedSnapshots} snapshots`)
     }
 
-    const providerSummary = staging.providers.length
-      ? `Persistent OHLCV cache providers: ${staging.providers.join(", ")}; ${universeCount} tickers; ${expectedSnapshots} snapshot contract.`
-      : build.providers.length
-        ? `Persistent OHLCV cache providers: ${build.providers.join(", ")}; ${universeCount} tickers; ${expectedSnapshots} snapshot contract.`
-        : "Existing notion-unified-v2 Ready run."
-    const validation = await runNotionValidateStep(runId, ready.runKey, ready.scanDate, startedAtIso, providerSummary, shouldBuild)
-    const ingest = await runIngestStep(runId, ready.runKey, shouldPublish, resumeSupabaseRunId)
-    const claimId = ingest.status === "claimed" || ingest.status === "resumed" ? ingest.supabaseRunId : ""
-    const publish = await runSupabasePublishStep(runId, ready.runKey, claimId, shouldPublish && Boolean(claimId))
-    const published = shouldPublish && publish.status !== "skipped"
+    const validation = await runSupabaseValidateStep(runId, ready.stocks, ready.runKey, ready.scanDate)
+    if (validation.snapshotCount !== expectedSnapshots) {
+      throw new Error(`SUPABASE_VALIDATE completed ${validation.snapshotCount}/${expectedSnapshots} snapshots`)
+    }
+
+    const publish = await runSupabasePublishStep(
+      runId,
+      ready.stocks,
+      ready.runKey,
+      ready.scanDate,
+      validation.validationHash,
+    )
+    const published = publish.status === "published"
+
     const deterministic = await runDeterministicCouncilStep(runId, published, ready.scanDate)
     const llm = await runLlmDebateStep(runId, published && deterministic.ok, ready.scanDate)
+
+    let marketSynthesis: Awaited<ReturnType<typeof runMarketSynthesisStep>> | {
+      ok: false
+      status: "failed"
+      requestId: null
+      ratingDate: string
+      error: string
+    }
+    try {
+      marketSynthesis = await runMarketSynthesisStep(
+        runId,
+        published && deterministic.ok,
+        ready.scanDate,
+      )
+    } catch (error) {
+      marketSynthesis = {
+        ok: false,
+        status: "failed",
+        requestId: null,
+        ratingDate: ready.scanDate,
+        error: errorMessage(error),
+      }
+    }
+
+    const notionArchive = await runNotionArchiveStep(runId, {
+      tradingDate: ready.scanDate,
+      universeRunId: ready.market.universeRunId,
+      validationHash: validation.validationHash,
+    })
+    const driveArchive = await runDriveArchiveStep(runId, {
+      tradingDate: ready.scanDate,
+      universeRunId: ready.market.universeRunId,
+      validationHash: validation.validationHash,
+    })
+    const retention = await runRetentionCleanupStep(runId, {
+      startedAtIso,
+      tradingDate: ready.scanDate,
+      universeRunId: ready.market.universeRunId,
+      universeCount,
+      expectedSnapshots,
+      completedSnapshots: publish.snapshotCount,
+      validationHash: validation.validationHash,
+      marketSynthesisStatus: marketSynthesis.status,
+      notionArchive,
+      driveArchive,
+    })
+
     const complete = await runCompleteStep(runId, {
       runKey: ready.runKey,
       scanDate: ready.scanDate,
+      universeRunId: ready.market.universeRunId,
       universeCount,
       expectedSnapshots,
-      notionAction: ready.notionAction,
       historicalBackfill,
       rankWarnings: ready.rankWarnings.slice(0, 10),
       marketCloseStatus: marketClose.status,
       history,
       noTradeRepair,
       build,
-      staging,
       validation,
-      ingestStatus: ingest.status,
       publishStatus: publish.status,
       deterministicStatus: deterministic.status,
       llmStatus: llm.status,
-    }, !shouldPublish)
+      marketSynthesisStatus: marketSynthesis.status,
+      notionArchiveStatus: notionArchive.status,
+      driveArchiveStatus: driveArchive.status,
+      retentionStatus: retention.status,
+      validationHash: validation.validationHash,
+    })
 
     return {
       ok: true as const,
       runId,
       runKey: ready.runKey,
       scanDate: ready.scanDate,
+      universeRunId: ready.market.universeRunId,
       universeCount,
       expectedSnapshots,
-      notionAction: ready.notionAction,
       historicalBackfill,
       publishStatus: publish.status,
       deterministicStatus: deterministic.status,
       llmStatus: llm.status,
+      marketSynthesisStatus: marketSynthesis.status,
+      notionArchiveStatus: notionArchive.status,
+      driveArchiveStatus: driveArchive.status,
+      retentionStatus: retention.status,
       complete,
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    await failQeoIndexEodRunStep(runId, message)
+    await failQeoIndexEodRunStep(runId, errorMessage(error))
     throw error
   }
 }

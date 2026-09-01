@@ -8,7 +8,6 @@ import {
   type NotionProperties,
 } from "@/lib/notion/client"
 import {
-  checkboxValue,
   dateText,
   numberProperty,
   numberValue,
@@ -17,25 +16,26 @@ import {
   richTextProperty,
   selectText,
   titleProperty,
-  titleText,
 } from "@/lib/notion/properties"
 import type { ScannerHistoryStatus } from "@/lib/scanner-policy"
 import { invalidateUiCache, readThroughUiCache } from "@/lib/ui-data-cache"
-import { UNIVERSE_DATE, type UniverseStock } from "@/lib/wyckoff-universe"
 import type { ScannerBias, ScannerConfidence, WyckoffScanResult } from "@/lib/wyckoff-engine"
 
-const UNIVERSE_DATA_SOURCE_ID = process.env.NOTION_WYCKOFF_UNIVERSE_DATA_SOURCE_ID ?? "210c502d-0c32-4fdd-9d69-7ef18e2be7d5"
 const SCAN_DATA_SOURCE_ID = process.env.NOTION_DAILY_WYCKOFF_SCAN_DATA_SOURCE_ID ?? "b76e378a-3f0c-4315-82cd-52c844101b73"
 const SCANNER_CACHE = {
-  namespace: "scanner-read-model-v2",
+  namespace: "scanner-read-model-v3",
   key: "latest",
-  tag: "qeoindex-scanner-read-model-v2",
-  name: "QeoIndex Scanner latest-date read model",
+  tag: "qeoindex-scanner-read-model-v3",
+  name: "QeoIndex canonical scanner latest-date read model",
   ttlSeconds: 60,
 } as const
 
-export interface UniverseRow extends UniverseStock {
+export interface UniverseRow {
   id: string
+  ticker: string
+  rank: number
+  marketCapT: number
+  exchange: string
   active: boolean
   providerStatus: string
   lastScan: string
@@ -86,8 +86,8 @@ export interface ScannerProviderHealth {
 }
 
 export interface ScannerData {
-  source: "notion"
-  operationalBackend: "notion"
+  source: "canonical_supabase"
+  operationalBackend: "supabase_notion_scan_store"
   universeDate: string
   generatedAt: string
   universe: UniverseRow[]
@@ -96,25 +96,6 @@ export interface ScannerData {
 }
 
 export type DailyScanStatus = ScannerHistoryStatus
-
-function parseUniversePage(page: NotionPage): UniverseRow | null {
-  const props = pageProperties(page)
-  const ticker = titleText(props.Ticker).trim().toUpperCase()
-  const rank = numberValue(props.Rank)
-  const marketCapT = numberValue(props["Market Cap T"])
-  if (!ticker || rank == null || marketCapT == null) return null
-  return {
-    id: page.id,
-    ticker,
-    rank,
-    marketCapT,
-    exchange: "HOSE",
-    active: checkboxValue(props.Active),
-    providerStatus: selectText(props["Provider Status"]),
-    lastScan: dateText(props["Last Scan"]),
-    sector: richText(props.Sector),
-  }
-}
 
 function parseScanPage(page: NotionPage): DailyScanRow | null {
   const props = pageProperties(page)
@@ -149,7 +130,7 @@ function parseScanPage(page: NotionPage): DailyScanRow | null {
     whatChanged: richText(props["What Changed"]),
     confidence: selectText(props.Confidence) as ScannerConfidence | "",
     provider: selectText(props.Provider),
-    providerDetail: "Notion",
+    providerDetail: "Notion scan store",
     status: selectText(props.Status),
   }
 }
@@ -157,27 +138,32 @@ function parseScanPage(page: NotionPage): DailyScanRow | null {
 function isScannerData(value: unknown): value is ScannerData {
   if (!value || typeof value !== "object") return false
   const data = value as Partial<ScannerData>
-  return data.source === "notion"
-    && data.operationalBackend === "notion"
+  return data.source === "canonical_supabase"
+    && data.operationalBackend === "supabase_notion_scan_store"
     && typeof data.generatedAt === "string"
     && Array.isArray(data.universe)
     && data.universe.length > 0
+    && data.universe.length <= 200
     && Boolean(data.latestScans)
     && typeof data.latestScans === "object"
 }
 
 async function loadUniverse() {
-  const { results } = await queryDataSource(UNIVERSE_DATA_SOURCE_ID, {
-    sorts: [{ property: "Rank", direction: "ascending" }],
-    maxPages: 2,
-    errorContext: "Notion scanner query",
-  })
-  const universe = results
-    .map(parseUniversePage)
-    .filter((row): row is UniverseRow => Boolean(row?.active))
-    .sort((a, b) => a.rank - b.rank)
-  if (!universe.length) throw new Error("Notion Wyckoff Universe returned no active stocks")
-  return universe
+  const { getCanonicalUniverse } = await import("@/lib/market-universe")
+  const snapshot = await getCanonicalUniverse()
+  const universe: UniverseRow[] = snapshot.stocks.map((stock) => ({
+    id: stock.ticker,
+    ticker: stock.ticker,
+    rank: stock.rank,
+    marketCapT: stock.marketCapBillion / 1000,
+    exchange: stock.exchange || "",
+    active: true,
+    providerStatus: stock.detailComplete ? "Ready" : "Pending",
+    lastScan: "",
+    sector: stock.sector || "",
+  }))
+  if (!universe.length) throw new Error("Canonical scanner universe returned no active stocks")
+  return { universeDate: snapshot.sourceAsOfDate, universe }
 }
 
 async function loadLatestScanPages() {
@@ -197,23 +183,24 @@ async function loadLatestScanPages() {
   return latest.results
 }
 
-function buildScannerData(universe: UniverseRow[], scanPages: NotionPage[]): ScannerData {
+function buildScannerData(universeDate: string, universe: UniverseRow[], scanPages: NotionPage[]): ScannerData {
+  const universeSet = new Set(universe.map((stock) => stock.ticker))
   const latestScans: Record<string, DailyScanRow> = {}
   for (const page of scanPages) {
     const row = parseScanPage(page)
-    if (row) latestScans[row.ticker] = row
+    if (row && universeSet.has(row.ticker)) latestScans[row.ticker] = row
   }
   const providers = [...new Set(Object.values(latestScans).map((scan) => scan.provider).filter(Boolean))]
   return {
-    source: "notion",
-    operationalBackend: "notion",
-    universeDate: UNIVERSE_DATE,
+    source: "canonical_supabase",
+    operationalBackend: "supabase_notion_scan_store",
+    universeDate,
     generatedAt: new Date().toISOString(),
     universe,
     latestScans,
     providerHealth: {
       ...dnseProviderHealth(),
-      status: "notion",
+      status: "canonical",
       currentProvider: providers.length > 1 ? "Mixed providers" : providers[0] === "Fallback" ? "Yahoo fallback" : providers[0] || "Chưa có dữ liệu",
       lastSuccessAt: "",
       lastFailureAt: "",
@@ -222,13 +209,13 @@ function buildScannerData(universe: UniverseRow[], scanPages: NotionPage[]): Sca
 }
 
 async function loadScannerDataCanonical(): Promise<ScannerData> {
-  const [universe, scanPages] = await Promise.all([loadUniverse(), loadLatestScanPages()])
-  return buildScannerData(universe, scanPages)
+  const [universeState, scanPages] = await Promise.all([loadUniverse(), loadLatestScanPages()])
+  return buildScannerData(universeState.universeDate, universeState.universe, scanPages)
 }
 
 async function loadScannerTickerDataCanonical(ticker: string): Promise<ScannerData> {
   const normalized = ticker.trim().toUpperCase()
-  const [universe, scanResult] = await Promise.all([
+  const [universeState, scanResult] = await Promise.all([
     loadUniverse(),
     queryDataSource(SCAN_DATA_SOURCE_ID, {
       pageSize: 1,
@@ -237,21 +224,21 @@ async function loadScannerTickerDataCanonical(ticker: string): Promise<ScannerDa
       errorContext: "Notion scanner query",
     }),
   ])
-  return buildScannerData(universe, scanResult.results)
+  return buildScannerData(universeState.universeDate, universeState.universe, scanResult.results)
 }
 
-/** Operational scanner/promotion paths bypass the UI cache for canonical decisions. */
+/** Operational scanner paths bypass the UI cache but always use canonical Supabase membership. */
 export async function getScannerDataFresh(): Promise<ScannerData> {
   return loadScannerDataCanonical()
 }
 
-/** UI-facing read path: regional Runtime Cache -> shared Redis -> canonical Notion. */
+/** UI-facing read path: regional Runtime Cache -> shared Redis -> canonical Supabase membership + Notion scan facts. */
 export async function getScannerData(): Promise<ScannerData> {
   if (!isNotionConfigured()) return loadScannerDataCanonical()
   return readThroughUiCache({ ...SCANNER_CACHE, validate: isScannerData, load: loadScannerDataCanonical })
 }
 
-/** Ticker detail needs the universe for prev/next navigation, but only one scan row. */
+/** Ticker detail needs the canonical universe for prev/next navigation, but only one scan row. */
 export async function getScannerTickerData(ticker: string): Promise<ScannerData> {
   const normalized = ticker.trim().toUpperCase()
   if (!isNotionConfigured()) return loadScannerTickerDataCanonical(normalized)
