@@ -50,7 +50,7 @@ test("DNSE bootstrap uses bounded Daily and Hourly request windows", () => {
 test("HISTORY_REFRESH provider waterfall has a bounded wall-clock budget", () => {
   assert.match(dnseHistorySource, /DAILY_ADAPTIVE_BUDGET_MS\s*=\s*30_000/)
   assert.match(dnseHistorySource, /const deadlineMs = Date\.now\(\) \+ DAILY_ADAPTIVE_BUDGET_MS/)
-  assert.match(dnseHistorySource, /requestOhlcWindows\([^)]*deadlineMs/s)
+  assert.match(dnseHistorySource, /requestOhlcWindows\(symbol, resolution, from, to, DAILY_REQUEST_WINDOW_DAYS, DAILY_MIN_RETRY_WINDOW_DAYS, deadlineMs\)/)
   assert.match(dnseHistorySource, /Math\.min\(8_000, deadlineMs - Date\.now\(\)\)/)
   assert.match(yahooHistorySource, /YAHOO_REQUEST_TIMEOUT_MS\s*=\s*15_000/)
   assert.match(yahooHistorySource, /signal:\s*AbortSignal\.timeout\(YAHOO_REQUEST_TIMEOUT_MS\)/)
