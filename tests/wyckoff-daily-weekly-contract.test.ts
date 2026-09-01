@@ -26,8 +26,9 @@ test("persistent Wyckoff OHLCV accepts new Daily writes only without deleting le
   assert.doesNotMatch(migration, /delete from public\.market_ohlcv_history/i)
   assert.doesNotMatch(migration, /delete from public\.wyckoff_analysis_snapshots/i)
   assert.doesNotMatch(migration, /delete from public\.wyckoff_chart_series/i)
-  assert.match(migration, /check \(timeframe = '1D'\) not valid/i)
-  assert.match(migration, /check \(timeframe in \('1D', '1W'\)\) not valid/i)
+  assert.match(migration, /alter table public\.market_ohlcv_history[\s\S]*?check \(timeframe = '1D'\) not valid/i)
+  assert.match(migration, /alter table public\.wyckoff_analysis_snapshots[\s\S]*?check \(timeframe in \('1D', '1W'\)\) not valid/i)
+  assert.match(migration, /alter table public\.wyckoff_chart_series[\s\S]*?check \(timeframe in \('1D', '1W'\)\) not valid/i)
 })
 
 test("EOD builds two Wyckoff snapshots per canonical ticker", () => {
@@ -48,6 +49,7 @@ test("Notion mirror and ingest accept exactly Daily and Weekly snapshots", () =>
   assert.match(staging, /TIMEFRAME_COUNT\s*=\s*2/)
   assert.match(batch, /TIMEFRAMES\s*=\s*\["1D",\s*"1W"\]/)
   assert.match(ingest, /TIMEFRAMES\s*=\s*new Set\(\["1D",\s*"1W"\]\)/)
+  assert.match(ingest, /\.in\("timeframe",\s*\["1D",\s*"1W"\]\)/)
 })
 
 test("active Wyckoff API and UI contract expose only Daily and Weekly", () => {
