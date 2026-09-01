@@ -42,15 +42,17 @@ All runtime consumers use the same membership: market board, orderbook, bubbles,
 
 Supabase `pg_cron` is the scheduler owner for market/universe/EOD jobs.
 
-| Job | UTC schedule | ICT schedule | Purpose |
+| Job | UTC schedule | Effective ICT dispatch window | Purpose |
 | --- | --- | --- | --- |
 | `kfsp-rating-daily-7am-ict` | `0 0 * * *` | 07:00 daily | Publish current KFSP/TTAI rating snapshot used as selector/detail evidence. |
 | `kfsp-ttai-history-daily-0710-ict` | `10 0 * * *` | 07:10 daily | Refresh TTAI historical evidence. |
 | `market-universe-monthly-0710-ict` | `10 0 1 * *` | 07:10 on day 1 monthly | Recompute and atomically publish `vn_top_stocks`. |
-| `sync-universe-5m` | `*/5 2-6 * * 1-5` | 09:00–13:55 Mon–Fri | Canonical-universe market/orderbook synchronization. Session/provider guards remain authoritative during non-trading intervals. |
-| `sync-universe-5m-afternoon` | `0,5,10,15,20,25,30,35,40 7 * * 1-5` | 14:00–14:40 Mon–Fri | Afternoon canonical-universe synchronization. |
+| `sync-universe-5m` | `*/5 2-4 * * 1-5` | **09:00–11:30 Mon–Fri** | Morning canonical-universe market/orderbook synchronization. SQL time guard prevents provider calls after the morning close. |
+| `sync-universe-5m-afternoon` | `*/5 6-7 * * 1-5` | **13:00–14:40 Mon–Fri** | Afternoon canonical-universe synchronization. SQL time guard prevents calls before 13:00 or after 14:40. |
 | `sync-universe-eod-1445` | `45 7 * * 1-5` | 14:45 Mon–Fri | Final orderbook/EOD snapshot collection before analytical EOD workflow. |
 | `qeoindex-eod-pipeline-1515-ict` | `15 8 * * 1-5` | 15:15 Mon–Fri | Start the single durable EOD v3 dependency workflow. |
+
+The two five-minute jobs call the same `orderbook-sync` Edge Function. They are separate physical schedules only because the Vietnamese trading day has a lunch break. No provider HTTP request is dispatched between 11:30 and 13:00.
 
 There are no independent production pg_cron jobs for Wyckoff ingest, AI Council deterministic, AI Council LLM, or Notion ingestion. Those are dependency phases inside the one EOD workflow.
 
@@ -215,6 +217,32 @@ The archive records universe-run provenance, ticker/rank, Wyckoff evidence, Coun
 ### 5.11 DRIVE_ARCHIVE
 
 Google Drive is intended for raw, immutable archive packages/manifest evidence.
+
+The production implementation authenticates with a Google **service account** and targets a folder inside a Google Workspace **Shared Drive**. Runtime requests explicitly support Shared Drives (`supportsAllDrives=true`, and list operations include `includeItemsFromAllDrives=true`).
+
+Required Vercel Production environment variables:
+
+- `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` — complete service-account JSON key; server-only secret.
+- `GOOGLE_DRIVE_ARCHIVE_FOLDER_ID` — root archive folder ID inside the Shared Drive.
+- `GOOGLE_DRIVE_RETENTION_BACKFILL_COMPLETE` — keep `false` until the historical archive backfill and retention preflight have both been explicitly verified.
+
+Recommended Drive setup:
+
+1. Enable Google Drive API in the Google Cloud project.
+2. Create a service account and JSON key.
+3. Create or select a Google Workspace Shared Drive.
+4. Create an archive root folder, e.g. `QeoIndex Raw Archive`.
+5. Add the service-account `client_email` as a Shared Drive member with permission to create/manage archive files.
+6. Set the two archive credentials in Vercel Production and redeploy once.
+7. Run an EOD archive smoke test and verify the manifest URL, SHA-256, file count and `eod_archive_checkpoints.drive_status='archived'`.
+8. Backfill every historical date that is eligible for retention.
+9. Only after `qeo_archive_retention_preflight(...)` returns safe may `GOOGLE_DRIVE_RETENTION_BACKFILL_COMPLETE=true` be enabled.
+
+Archive layout is generated automatically:
+
+- `{YEAR}/{MONTH}/1D/{TICKER}-{DATE}.csv.gz`
+- `{YEAR}/{MONTH}/1H/{TICKER}-{DATE}.csv.gz`
+- `{YEAR}/{MONTH}/manifest-{DATE}.json`
 
 The runtime is fail-closed when Drive credentials are not configured:
 

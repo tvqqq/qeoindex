@@ -37,19 +37,23 @@ test("catalog matches vercel.json cron schedules exactly", () => {
 })
 
 test("catalog matches Supabase pg_cron migrations exactly", () => {
-  const syncOrderbookMigration = readTextFile("supabase/migrations/20260826085500_fix_orderbook_cron_1445.sql")
+  const syncOrderbookMigration = readTextFile("supabase/migrations/20260901152000_fix_orderbook_trading_session_windows.sql")
   assert.match(syncOrderbookMigration, /'sync-universe-5m'/)
-  assert.match(syncOrderbookMigration, /'\*\/5 2-6 \* \* 1-5'/)
+  assert.match(syncOrderbookMigration, /'\*\/5 2-4 \* \* 1-5'/)
+  assert.match(syncOrderbookMigration, /time '09:00'/)
+  assert.match(syncOrderbookMigration, /time '11:30'/)
   assert.match(syncOrderbookMigration, /'sync-universe-5m-afternoon'/)
-  assert.match(syncOrderbookMigration, /'0,5,10,15,20,25,30,35,40 7 \* \* 1-5'/)
+  assert.match(syncOrderbookMigration, /'\*\/5 6-7 \* \* 1-5'/)
+  assert.match(syncOrderbookMigration, /time '13:00'/)
+  assert.match(syncOrderbookMigration, /time '14:40'/)
   assert.match(syncOrderbookMigration, /'sync-universe-eod-1445'/)
   assert.match(syncOrderbookMigration, /'45 7 \* \* 1-5'/)
 
-  const sync5mDef = ADMIN_JOB_CATALOG.find((j) => j.key === "market.sync_5m")
+  const sync5mDef = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "market.sync_5m")
   assert.ok(sync5mDef)
   assert.equal(sync5mDef.schedulerName, "sync-universe-5m")
-  assert.equal(sync5mDef.scheduleUtc, "*/5 2-6 * * 1-5; 0-40/5 7 * * 1-5")
-  assert.equal(sync5mDef.scheduleIct, "Mỗi 5p (09:00-14:40 T2-T6)")
+  assert.equal(sync5mDef.scheduleUtc, "*/5 2-4 * * 1-5; */5 6-7 * * 1-5")
+  assert.equal(sync5mDef.scheduleIct, "Mỗi 5p (09:00-11:30; 13:00-14:40 T2-T6)")
   assert.equal(sync5mDef.scheduleKind, "interval")
   assert.equal(sync5mDef.windowStartIct, "09:00")
   assert.equal(sync5mDef.windowEndIct, "14:40")
@@ -174,7 +178,11 @@ test("effective catalog has complete structured ICT schedule policies", () => {
   assert.equal(ttai?.schedulePolicy?.kind, "fixed_time")
   assert.equal((ttai?.schedulePolicy as { minuteOfDay: number }).minuteOfDay, 430)
   const market = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "market.sync_5m")
-  assert.equal((market?.schedulePolicy as { windows: unknown[] }).windows.length, 2)
+  const windows = (market?.schedulePolicy as { windows: Array<{ startMinuteOfDay: number; endMinuteOfDay: number }> }).windows
+  assert.deepEqual(windows, [
+    { startMinuteOfDay: 540, endMinuteOfDay: 690, cadenceMinutes: 5 },
+    { startMinuteOfDay: 780, endMinuteOfDay: 880, cadenceMinutes: 5 },
+  ])
   assert.equal(isValidSchedulePolicy(undefined), false)
   assert.equal(isValidSchedulePolicy({ kind: "fixed_time", timezone: "UTC", cadence: "daily", minuteOfDay: 420, graceMinutes: 5 }), false)
 })

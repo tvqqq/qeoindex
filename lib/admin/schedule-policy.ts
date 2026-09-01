@@ -15,8 +15,8 @@ export function schedulePolicyForJobKey(key: string): SchedulePolicy | null {
   if (key === "market.sync_5m") return {
     kind: "window", timezone: ICT_TIMEZONE, cadence: "weekdays", graceMinutes: 10,
     windows: [
-      { startMinuteOfDay: 540, endMinuteOfDay: 835, cadenceMinutes: 5 },
-      { startMinuteOfDay: 840, endMinuteOfDay: 880, cadenceMinutes: 5 },
+      { startMinuteOfDay: 540, endMinuteOfDay: 690, cadenceMinutes: 5 },
+      { startMinuteOfDay: 780, endMinuteOfDay: 880, cadenceMinutes: 5 },
     ],
   }
   return key.includes(".") ? { kind: "manual", timezone: ICT_TIMEZONE } : null

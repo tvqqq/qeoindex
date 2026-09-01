@@ -9,15 +9,18 @@ export interface TimelinePhaseItem {
 
 export const EOD_PIPELINE_PHASES: TimelinePhaseItem[] = [
   { key: "EOD_READY", label: "1. EOD Ready", order: 1 },
-  { key: "HISTORY_REFRESH", label: "2. History Cache", order: 2 },
-  { key: "WYCKOFF_BUILD", label: "3. Wyckoff 500", order: 3 },
-  { key: "NOTION_STAGING", label: "4. Notion Staging", order: 4 },
-  { key: "NOTION_VALIDATE", label: "5. Validate & Hash", order: 5 },
-  { key: "INGEST", label: "6. Claim Ingest", order: 6 },
-  { key: "SUPABASE_PUBLISH", label: "7. Publish DB", order: 7 },
-  { key: "AI_COUNCIL_DETERMINISTIC", label: "8. Council Rules", order: 8 },
-  { key: "AI_COUNCIL_LLM", label: "9. LLM Debate", order: 9 },
-  { key: "COMPLETE", label: "10. Complete", order: 10 },
+  { key: "MARKET_CLOSE_COLLECT", label: "2. Market Close", order: 2 },
+  { key: "HISTORY_REFRESH", label: "3. History Refresh", order: 3 },
+  { key: "WYCKOFF_BUILD", label: "4. Wyckoff Build", order: 4 },
+  { key: "SUPABASE_VALIDATE", label: "5. Supabase Validate", order: 5 },
+  { key: "SUPABASE_PUBLISH", label: "6. Supabase Publish", order: 6 },
+  { key: "AI_COUNCIL_DETERMINISTIC", label: "7. Council Rules", order: 7 },
+  { key: "AI_COUNCIL_LLM", label: "8. LLM Debate", order: 8 },
+  { key: "MARKET_SYNTHESIS", label: "9. Market Synthesis", order: 9 },
+  { key: "NOTION_ARCHIVE", label: "10. Notion Archive", order: 10 },
+  { key: "DRIVE_ARCHIVE", label: "11. Drive Archive", order: 11 },
+  { key: "RETENTION_CLEANUP", label: "12. Retention", order: 12 },
+  { key: "COMPLETE", label: "13. Complete", order: 13 },
 ]
 
 export interface TimelineJobNode {
@@ -93,7 +96,7 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
       timeIctLabel = "Thủ công"
       daysLabel = "Thủ công"
     } else if (policy.kind === "fixed_time") {
-      displayType = job.key === "qeoindex.eod_pipeline" ? "point" : "point"
+      displayType = "point"
       const minute = policy.minuteOfDay
       timeIctLabel = `${formatMinute(minute)} ICT`
       daysLabel = policy.cadence === "weekdays" ? "T2-T6" : "Hàng ngày"
@@ -104,7 +107,10 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
       displayType = "interval"
       const first = policy.windows[0]
       const last = policy.windows[policy.windows.length - 1]
-      timeIctLabel = `${formatMinute(first.startMinuteOfDay)} – ${formatMinute(last.endMinuteOfDay)} (mỗi ${first.cadenceMinutes}p)`
+      const windowLabel = policy.windows
+        .map((window) => `${formatMinute(window.startMinuteOfDay)}–${formatMinute(window.endMinuteOfDay)}`)
+        .join(" / ")
+      timeIctLabel = `${windowLabel} (mỗi ${first.cadenceMinutes}p)`
       daysLabel = policy.cadence === "weekdays" ? "T2-T6" : "Hàng ngày"
       startMinuteOfDay = first.startMinuteOfDay
       endMinuteOfDay = last.endMinuteOfDay
