@@ -22,7 +22,7 @@ function shouldTryDnse() {
 
 function markDnseUnavailable(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
-  if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|network/i.test(message)) {
+  if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|network|adaptive deadline exceeded/i.test(message)) {
     dnseUnavailableUntil = Date.now() + 5 * 60_000
   }
   return message
