@@ -102,13 +102,14 @@ function currentFinancialPeriod(metrics: unknown) {
 async function loadCanonicalTickers(supabase: SupabaseClient) {
   const current = await supabase.rpc("qeo_current_market_universe", { p_universe_key: "vn_top_stocks" })
   if (current.error) throw new Error("KFSP_TTAI_UNIVERSE_READ_FAILED")
-  const row = Array.isArray(current.data) ? current.data[0] : current.data
-  const payload = asObject(row)
-  const memberships = Array.isArray(payload?.memberships) ? payload.memberships : []
-  const tickers = memberships
+  const payload = asObject(Array.isArray(current.data) ? current.data[0] : current.data)
+  const stocks = Array.isArray(payload?.stocks) ? payload.stocks : []
+  const tickers = stocks
     .map((item) => String(asObject(item)?.ticker || "").trim().toUpperCase())
     .filter((ticker) => /^[A-Z0-9]{2,12}$/.test(ticker))
-  if (!tickers.length || tickers.length > 200) throw new Error(`KFSP_TTAI_UNIVERSE_INVALID:${tickers.length}`)
+  if (!tickers.length || tickers.length > 200 || new Set(tickers).size !== tickers.length) throw new Error(`KFSP_TTAI_UNIVERSE_INVALID:${tickers.length}`)
+  const selectedCount = Number(payload?.selectedCount)
+  if (Number.isFinite(selectedCount) && selectedCount !== tickers.length) throw new Error(`KFSP_TTAI_UNIVERSE_COUNT_MISMATCH:${selectedCount}:${tickers.length}`)
   return tickers
 }
 
@@ -172,6 +173,7 @@ Deno.serve(async (req: Request) => {
     const canonicalTickers = await loadCanonicalTickers(supabase)
     const canonicalSet = new Set(canonicalTickers)
     const selectedTickers = requestedTickers.size ? [...requestedTickers].filter((ticker) => canonicalSet.has(ticker)) : canonicalTickers
+    if (!selectedTickers.length) throw new Error("KFSP_TTAI_REQUEST_OUTSIDE_UNIVERSE")
     const latest = await supabase.from("insights_stock_ratings").select("as_of_date").eq("is_published", true).eq("source", "kfsp").in("ticker", selectedTickers).order("as_of_date", { ascending: false }).limit(1).maybeSingle()
     if (latest.error || !latest.data?.as_of_date) throw new Error("KFSP_TTAI_LATEST_RATING_MISSING")
     const latestDate = String(latest.data.as_of_date)
@@ -180,7 +182,7 @@ Deno.serve(async (req: Request) => {
     const rank = new Map(canonicalTickers.map((ticker, index) => [ticker, index + 1]))
     const candidates = ratings
       .map((row) => ({ ...row, financialPeriod: currentFinancialPeriod(row.kfsp_metrics) }))
-      .filter((row) => row.financialPeriod && (forceRequested || state.get(row.ticker) !== row.financialPeriod))
+      .filter((row) => forceRequested || (row.financialPeriod && state.get(row.ticker) !== row.financialPeriod))
       .sort((left, right) => (rank.get(left.ticker) ?? 999) - (rank.get(right.ticker) ?? 999) || left.ticker.localeCompare(right.ticker))
       .slice(0, requestedTickers.size > 0 ? Math.min(50, requestedTickers.size) : maxPerRun)
 

@@ -20,6 +20,7 @@ const TOKEN_EXPIRY_SKEW_MS = 5 * 60 * 1_000
 const FILTER_URL = Deno.env.get("KFSP_FILTER_URL") || "https://api2.kfsp.vn/api/filter"
 const SUPPLEMENTAL_URL = Deno.env.get("KFSP_SUPPLEMENTAL_URL") || "https://api2.kfsp.vn/api/watchlist/canslim-fourm/by-mack"
 const LOGIN_URL = Deno.env.get("KFSP_LOGIN_URL") || "https://api.kfsp.vn/api/login"
+const CANDIDATE_RETENTION_DAYS = 14
 
 function jsonResponse(body: JsonObject, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } })
@@ -138,6 +139,20 @@ function normalizeTickers(raw: unknown): string[] {
   })
 }
 
+async function loadCanonicalTickers(supabase: SupabaseClient) {
+  const current = await supabase.rpc("qeo_current_market_universe", { p_universe_key: "vn_top_stocks" })
+  if (current.error) throw new Error("KFSP_UNIVERSE_READ_FAILED")
+  const payload = asObject(Array.isArray(current.data) ? current.data[0] : current.data)
+  const stocks = Array.isArray(payload?.stocks) ? payload.stocks : []
+  const tickers = stocks
+    .map((item) => String(asObject(item)?.ticker || "").trim().toUpperCase())
+    .filter((ticker) => /^[A-Z0-9]{2,12}$/.test(ticker))
+  if (!tickers.length || tickers.length > 200 || new Set(tickers).size !== tickers.length) throw new Error(`KFSP_UNIVERSE_INVALID:${tickers.length}`)
+  const selectedCount = Number(payload?.selectedCount)
+  if (Number.isFinite(selectedCount) && selectedCount !== tickers.length) throw new Error(`KFSP_UNIVERSE_COUNT_MISMATCH:${selectedCount}:${tickers.length}`)
+  return tickers
+}
+
 function unknownKey(providerKey: string) {
   let hash = 2166136261
   for (let index = 0; index < providerKey.length; index += 1) { hash ^= providerKey.charCodeAt(index); hash = Math.imul(hash, 16777619) }
@@ -252,6 +267,12 @@ function buildProviderRows(payload: unknown, supplemental: Map<string, Record<st
   })
 }
 
+function calendarDaysBefore(dateText: string, days: number) {
+  const date = new Date(`${dateText}T00:00:00Z`)
+  date.setUTCDate(date.getUTCDate() - days)
+  return date.toISOString().slice(0, 10)
+}
+
 function vietnamDate() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
 }
@@ -276,6 +297,7 @@ Deno.serve(async (req: Request) => {
   if (created.error) return jsonResponse({ ok: false, error: "SYNC_RUN_CREATE_FAILED" }, 500)
 
   try {
+    const canonicalTickers = await loadCanonicalTickers(supabase)
     let auth = await getProviderToken(supabase)
     tokenRefreshed = auth.refreshed
     let filter = await fetchFilterPayload(auth.token)
@@ -286,24 +308,52 @@ Deno.serve(async (req: Request) => {
     }
     if (!filter.response.ok) throw new Error(`KFSP_FILTER_HTTP_${filter.response.status}`)
 
-    const filterRoot = asObject(filter.payload)
-    const filterSource = asObject(filterRoot?.data) || filterRoot
-    const supplemental = await fetchSupplementalRecords(auth.token, normalizeTickers(filterSource?.mack))
-    const rows = buildProviderRows(filter.payload, supplemental, asOfDate, syncRunId, fetchedAt)
-    const minimumRows = Math.max(1, Number(Deno.env.get("KFSP_MINIMUM_ROWS") || 50))
-    if (rows.length < minimumRows) throw new Error("KFSP_FILTER_BATCH_INCOMPLETE")
+    const supplemental = await fetchSupplementalRecords(auth.token, canonicalTickers)
+    const providerRows = buildProviderRows(filter.payload, supplemental, asOfDate, syncRunId, fetchedAt)
+    const byTicker = new Map(providerRows.map((row) => [row.ticker, row]))
+    const missingCanonical = canonicalTickers.filter((ticker) => !byTicker.has(ticker))
+    if (missingCanonical.length) throw new Error(`KFSP_CANONICAL_COVERAGE_INCOMPLETE:${missingCanonical.length}`)
+    const rows = canonicalTickers.map((ticker) => byTicker.get(ticker)!)
     if (rows.some((row) => row.kfsp_composite_score == null && row.kfsp_score_4m == null && row.kfsp_canslim_score == null && row.kfsp_stock_rs_score == null)) throw new Error("KFSP_FILTER_SCORE_MISSING")
 
-    await supabase.from("kfsp_rating_sync_runs").update({ provider_row_count: rows.length, token_refreshed: tokenRefreshed }).eq("id", syncRunId)
+    const candidateRows = providerRows.map((row) => ({
+      as_of_date: row.as_of_date,
+      ticker: row.ticker,
+      company_name: row.company_name,
+      exchange: row.exchange,
+      sector: row.sector,
+      market_cap_billion: row.market_cap_billion,
+      average_volume_50_sessions: row.average_volume_50_sessions,
+      volume_1d: numeric(row.kfsp_metrics.liquidity.volume_1d),
+      sync_run_id: syncRunId,
+      fetched_at: fetchedAt,
+    }))
+    for (let index = 0; index < candidateRows.length; index += 250) {
+      const candidateWrite = await supabase.from("kfsp_universe_candidate_snapshots").upsert(candidateRows.slice(index, index + 250), { onConflict: "as_of_date,ticker" })
+      if (candidateWrite.error) throw new Error(`KFSP_CANDIDATE_WRITE_FAILED:${candidateWrite.error.code || "unknown"}`)
+    }
+    const candidatePrune = await supabase.from("kfsp_universe_candidate_snapshots").delete().lt("as_of_date", calendarDaysBefore(asOfDate, CANDIDATE_RETENTION_DAYS))
+    if (candidatePrune.error) throw new Error(`KFSP_CANDIDATE_PRUNE_FAILED:${candidatePrune.error.code || "unknown"}`)
+
+    await supabase.from("kfsp_rating_sync_runs").update({ provider_row_count: providerRows.length, token_refreshed: tokenRefreshed }).eq("id", syncRunId)
     for (let index = 0; index < rows.length; index += 100) {
       const staged = await supabase.from("kfsp_rating_staging").insert(rows.slice(index, index + 100))
       if (staged.error) throw new Error(`KFSP_STAGING_WRITE_FAILED:${staged.error.code || "unknown"}`)
     }
 
-    const published = await supabase.rpc("publish_kfsp_rating_snapshot", { p_sync_run_id: syncRunId, p_minimum_rows: minimumRows })
+    const published = await supabase.rpc("publish_kfsp_rating_snapshot", { p_sync_run_id: syncRunId, p_minimum_rows: canonicalTickers.length })
     if (published.error) throw new Error(`KFSP_SNAPSHOT_PUBLISH_FAILED:${published.error.code || "unknown"}`)
 
-    return jsonResponse({ ok: true, sync_run_id: syncRunId, as_of_date: asOfDate, published_count: Number(published.data || rows.length), token_refreshed: tokenRefreshed, contract_version: KFSP_CONTRACT_VERSION })
+    return jsonResponse({
+      ok: true,
+      sync_run_id: syncRunId,
+      as_of_date: asOfDate,
+      published_count: Number(published.data || rows.length),
+      universe_count: canonicalTickers.length,
+      provider_candidate_count: providerRows.length,
+      token_refreshed: tokenRefreshed,
+      contract_version: KFSP_CONTRACT_VERSION,
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : "KFSP_SYNC_FAILED"
     await supabase.from("kfsp_rating_sync_runs").update({ status: "failed", token_refreshed: tokenRefreshed, error_code: message.slice(0, 120), error_message: "KFSP daily rating sync failed; inspect Edge Function logs for provider diagnostics.", completed_at: new Date().toISOString() }).eq("id", syncRunId)
