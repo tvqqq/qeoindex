@@ -25,7 +25,8 @@ export const WYCKOFF_V2_UNIVERSE_KEY = "vn_top_stocks"
 const RICH_TEXT_CHUNK = 1900
 const DEFAULT_WRITE_INTERVAL_MS = 360
 const DEFAULT_UNIVERSE_COUNT = 200
-const TIMEFRAME_COUNT = 5
+const TIMEFRAME_COUNT = 2
+const TIMEFRAMES = ["1D", "1W"] as const
 
 function titleProperty(value: string) {
   return { title: [{ type: "text", text: { content: value.slice(0, RICH_TEXT_CHUNK) } }] }
@@ -278,7 +279,7 @@ function parseSnapshotPage(page: NotionPage): WyckoffV2Snapshot {
   const historyStatus = selectText(props["History Status"])
   if (historyStatus !== "Complete" && historyStatus !== "Incomplete") throw new Error(`Invalid Notion History Status on ${page.id}`)
   const timeframe = selectText(props.Timeframe)
-  if (!["1H", "4H", "1D", "1W", "1M"].includes(timeframe)) throw new Error(`Invalid Notion timeframe on ${page.id}`)
+  if (!TIMEFRAMES.includes(timeframe as (typeof TIMEFRAMES)[number])) throw new Error(`Invalid Notion timeframe on ${page.id}`)
   const taBias = selectText(props["TA Bias"])
   const confidence = selectText(props.Confidence)
   const technicalText = propertyText(props["Technical JSON"])
