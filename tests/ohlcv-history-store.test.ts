@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { fetchDailyOhlcv as fetchDnseDailyOhlcv, fetchHourlyOhlcv as fetchDnseHourlyOhlcv } from "../lib/dnse-history.ts"
 import {
   buildHistoricalSourceUrl,
   DAILY_BACKFILL_DAYS,
@@ -34,6 +35,73 @@ test("historical source URLs are deterministic and contain no credentials", () =
   assert.match(yahoo, /^https:\/\/query1\.finance\.yahoo\.com\/v8\/finance\/chart\/HPG\.VN\?/)
   assert.match(yahoo, /interval=60m/)
   assert.doesNotMatch(yahoo, /cookie|authorization|token/i)
+})
+
+test("DNSE Daily backfill splits multi-year history into bounded request windows", async () => {
+  const originalFetch = globalThis.fetch
+  const originalKey = process.env.DNSE_API_KEY
+  const originalSecret = process.env.DNSE_API_SECRET
+  const windows: Array<{ from: number; to: number }> = []
+  process.env.DNSE_API_KEY = "test-key"
+  process.env.DNSE_API_SECRET = "test-secret"
+
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(typeof input === "string" || input instanceof URL ? String(input) : input.url)
+    const from = Number(url.searchParams.get("from"))
+    const to = Number(url.searchParams.get("to"))
+    windows.push({ from, to })
+    return new Response(JSON.stringify({
+      t: [from + 3600],
+      o: [10], h: [11], l: [9], c: [10.5], v: [1000],
+    }), { status: 200 })
+  }) as typeof fetch
+
+  try {
+    const bars = await fetchDnseDailyOhlcv("VGI", NOW, 800)
+    assert.ok(windows.length >= 3, `expected at least 3 bounded requests, received ${windows.length}`)
+    assert.ok(windows.every(({ from, to }) => to - from <= 366 * 86400))
+    assert.equal(bars.length, windows.length)
+    assert.deepEqual(bars.map((bar) => bar.time), [...bars.map((bar) => bar.time)].sort((a, b) => a - b))
+  } finally {
+    globalThis.fetch = originalFetch
+    if (originalKey === undefined) delete process.env.DNSE_API_KEY
+    else process.env.DNSE_API_KEY = originalKey
+    if (originalSecret === undefined) delete process.env.DNSE_API_SECRET
+    else process.env.DNSE_API_SECRET = originalSecret
+  }
+})
+
+test("DNSE Hourly backfill splits long intraday history into bounded request windows", async () => {
+  const originalFetch = globalThis.fetch
+  const originalKey = process.env.DNSE_API_KEY
+  const originalSecret = process.env.DNSE_API_SECRET
+  const windows: Array<{ from: number; to: number }> = []
+  process.env.DNSE_API_KEY = "test-key"
+  process.env.DNSE_API_SECRET = "test-secret"
+
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(typeof input === "string" || input instanceof URL ? String(input) : input.url)
+    const from = Number(url.searchParams.get("from"))
+    const to = Number(url.searchParams.get("to"))
+    windows.push({ from, to })
+    return new Response(JSON.stringify({
+      t: [from + 3600, from + 7200],
+      o: [10, 10.5], h: [11, 11], l: [9, 10], c: [10.5, 10.8], v: [1000, 1200],
+    }), { status: 200 })
+  }) as typeof fetch
+
+  try {
+    const bars = await fetchDnseHourlyOhlcv("VGI", NOW, 120)
+    assert.ok(windows.length >= 4, `expected at least 4 bounded requests, received ${windows.length}`)
+    assert.ok(windows.every(({ from, to }) => to - from <= 31 * 86400))
+    assert.equal(bars.length, windows.length * 2)
+  } finally {
+    globalThis.fetch = originalFetch
+    if (originalKey === undefined) delete process.env.DNSE_API_KEY
+    else process.env.DNSE_API_KEY = originalKey
+    if (originalSecret === undefined) delete process.env.DNSE_API_SECRET
+    else process.env.DNSE_API_SECRET = originalSecret
+  }
 })
 
 test("refresh planner backfills insufficient coverage then switches to bounded deltas", () => {
