@@ -11,13 +11,11 @@ import {
 
 const RUN_ID = "11111111-1111-4111-8111-111111111111"
 
-function recentRow(ticker: string, timeframe: "1H" | "1D", index: number): WyckoffV2RecentOhlcvRow {
-  const base = timeframe === "1H" ? Date.parse("2026-08-25T01:00:00.000Z") : Date.parse("2026-08-20T00:00:00.000Z")
-  const step = timeframe === "1H" ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000
-  const barTime = new Date(base + index * step).toISOString()
+function recentRow(ticker: string, index: number): WyckoffV2RecentOhlcvRow {
+  const barTime = new Date(Date.parse("2026-08-20T00:00:00.000Z") + index * 24 * 60 * 60 * 1000).toISOString()
   return {
     ticker,
-    timeframe,
+    timeframe: "1D",
     bar_time: barTime,
     open: 60 + index,
     high: 61 + index,
@@ -32,48 +30,41 @@ function recentRow(ticker: string, timeframe: "1H" | "1D", index: number): Wycko
 }
 
 function completeRows(tickers = ["AAA", "BBB"]) {
-  return tickers.flatMap((ticker) => [
-    recentRow(ticker, "1H", 2),
-    recentRow(ticker, "1H", 0),
-    recentRow(ticker, "1H", 1),
-    recentRow(ticker, "1D", 1),
-    recentRow(ticker, "1D", 2),
-    recentRow(ticker, "1D", 0),
-  ])
+  return tickers.flatMap((ticker) => [recentRow(ticker, 2), recentRow(ticker, 0), recentRow(ticker, 1)])
 }
 
-test("v2 chart-series builder produces exactly 1H and 1D read models per ticker from recent OHLCV cache", () => {
+test("v2 chart-series builder produces exactly one raw Daily read model per ticker", () => {
   const rows = buildWyckoffV2ChartSeriesRows({
     tickers: ["AAA", "BBB"],
     rows: completeRows(),
     runId: RUN_ID,
   })
 
-  assert.equal(rows.length, 4)
-  assert.deepEqual(rows.map((row) => `${row.ticker}|${row.timeframe}`), ["AAA|1H", "AAA|1D", "BBB|1H", "BBB|1D"])
+  assert.equal(rows.length, 2)
+  assert.deepEqual(rows.map((row) => `${row.ticker}|${row.timeframe}`), ["AAA|1D", "BBB|1D"])
   assert.ok(rows.every((row) => row.bars.length === 3))
   assert.ok(rows.every((row) => row.bars.length <= 260))
   assert.ok(rows.every((row) => row.run_id === RUN_ID))
   assert.ok(rows.every((row) => row.model_version === "qeo-wyckoff-rule-v1"))
   assert.ok(rows.every((row) => row.aggregation_version === "vn-session-v1"))
 
-  const aaaDaily = rows.find((row) => row.ticker === "AAA" && row.timeframe === "1D")!
+  const aaaDaily = rows.find((row) => row.ticker === "AAA")!
   assert.equal(aaaDaily.provider, "Fallback")
   assert.equal(aaaDaily.provider_detail, "latest provenance")
-  assert.equal(aaaDaily.as_of, recentRow("AAA", "1D", 2).bar_time)
-  assert.deepEqual(aaaDaily.bars.map((bar) => bar.time), aaaDaily.bars.map((bar) => bar.time).slice().sort((a, b) => a - b))
+  assert.equal(aaaDaily.as_of, recentRow("AAA", 2).bar_time)
+  assert.deepEqual(aaaDaily.bars.map((bar) => bar.close), [60.5, 61.5, 62.5])
 })
 
-test("v2 chart-series coverage fails closed when any ticker is missing 1H or 1D series", () => {
+test("v2 chart-series coverage fails closed when any ticker is missing Daily series", () => {
   const rows = buildWyckoffV2ChartSeriesRows({
     tickers: ["AAA", "BBB"],
-    rows: completeRows().filter((row) => !(row.ticker === "BBB" && row.timeframe === "1H")),
+    rows: completeRows().filter((row) => row.ticker !== "BBB"),
     runId: RUN_ID,
   })
 
   assert.throws(
     () => assertWyckoffV2ChartSeriesCoverage(["AAA", "BBB"], rows),
-    /BBB\|1H/,
+    /BBB\|1D/,
   )
 })
 
@@ -85,7 +76,7 @@ test("chart-series loader keeps every RPC response below the row cap by loading 
       calls.push(args.p_tickers)
       const complete = completeRows(args.p_tickers)
       return {
-        data: args.p_tickers.length > 1 ? complete.slice(0, 12) : complete,
+        data: args.p_tickers.length > 1 ? complete.slice(0, 6) : complete,
         error: null,
       }
     },
@@ -93,7 +84,8 @@ test("chart-series loader keeps every RPC response below the row cap by loading 
 
   const rows = await loadWyckoffV2ChartSeriesRows(supabase, tickers, RUN_ID)
 
-  assert.equal(rows.length, 200)
+  assert.equal(rows.length, 100)
   assert.equal(calls.length, 100)
   assert.ok(calls.every((call) => call.length === 1))
+  assert.ok(rows.every((row) => row.timeframe === "1D"))
 })

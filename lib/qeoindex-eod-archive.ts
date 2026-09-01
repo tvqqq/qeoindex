@@ -16,9 +16,9 @@ export {
 export type { EodArchiveCheckpoint }
 
 /**
- * Daily/Weekly cutover: the raw store contains Daily bars only. The legacy uploader
- * is retained for its proven Google Drive/auth/manifest implementation; because the
- * database constraint is Daily-only it can only receive Daily rows.
+ * Daily/Weekly cutover: the active raw read/write contract is Daily-only and Weekly
+ * is derived deterministically. Legacy 1H rows remain preserved until cold-archive
+ * coverage is verified. The proven Google Drive/auth/manifest uploader is reused.
  */
 export async function runEodDriveArchive(
   supabase: SupabaseClient,
@@ -33,10 +33,10 @@ export async function runEodDriveArchive(
 }
 
 /**
- * Raw Daily history is the sole source for both 1D and derived 1W Wyckoff analysis.
+ * Raw Daily history is the sole active source for both 1D and derived 1W Wyckoff analysis.
  * It must not be age-pruned until Plan C cold-history coverage can hydrate the model
- * without reducing the minimum 60 completed Weekly bars. Obsolete intraday rows are
- * removed once by the schema cutover migration instead of by recurring retention.
+ * without reducing the minimum 60 completed Weekly bars. Legacy intraday rows are also
+ * preserved until archive coverage makes their removal explicitly safe.
  */
 export async function runEodRetentionCleanup(
   _supabase: SupabaseClient,

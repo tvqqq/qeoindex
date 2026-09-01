@@ -59,22 +59,26 @@ test("no-trade repair supports the full canonical max-200 universe", () => {
   assert.doesNotMatch(repair, /1-100 unique tickers/)
 })
 
-test("archive retention is checkpointed and historical coverage is fail-closed", () => {
+test("archive retention remains fail-closed while implementation is delegated", () => {
   const archive = source("lib/qeoindex-eod-archive.ts")
-  const migration = source("supabase/migrations/20260901130000_eod_archive_checkpoints.sql")
-  assert.match(archive, /eod_archive_checkpoints/)
-  assert.match(archive, /GOOGLE_DRIVE_RETENTION_BACKFILL_COMPLETE/)
-  assert.match(archive, /qeo_archive_retention_preflight/)
+  const legacyArchive = source("lib/qeoindex-eod-archive-legacy.ts")
+  const migration = source("supabase/migrations/20260901064844_eod_archive_checkpoints.sql")
+  assert.match(archive, /runEodRetentionCleanup/)
+  assert.match(archive, /status:\s*"blocked"/)
+  assert.match(legacyArchive, /eod_archive_checkpoints/)
+  assert.match(legacyArchive, /qeo_archive_retention_preflight/)
   assert.match(migration, /create table if not exists public\.eod_archive_checkpoints/)
   assert.match(migration, /create or replace function public\.qeo_archive_retention_preflight/)
   assert.match(migration, /safe/)
   assert.match(migration, /missingDates/)
 })
 
-test("Google Drive archive supports service-account writes into Shared Drives", () => {
+test("Google Drive archive delegates to the proven Shared Drive uploader", () => {
   const archive = source("lib/qeoindex-eod-archive.ts")
-  assert.match(archive, /supportsAllDrives/)
-  assert.match(archive, /includeItemsFromAllDrives/)
-  assert.match(archive, /GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/)
-  assert.match(archive, /GOOGLE_DRIVE_ARCHIVE_FOLDER_ID/)
+  const legacyArchive = source("lib/qeoindex-eod-archive-legacy.ts")
+  assert.match(archive, /runLegacyDriveArchive/)
+  assert.match(legacyArchive, /supportsAllDrives/)
+  assert.match(legacyArchive, /includeItemsFromAllDrives/)
+  assert.match(legacyArchive, /GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/)
+  assert.match(legacyArchive, /GOOGLE_DRIVE_ARCHIVE_FOLDER_ID/)
 })

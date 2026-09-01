@@ -41,13 +41,16 @@ test("EOD v3 publishes validated Wyckoff to Supabase before Council and archives
   assert.doesNotMatch(workflow, /notionAction|notionSupabaseRunId/)
 })
 
-test("EOD readiness is canonical-only and does not begin a Notion staging run", () => {
+test("EOD readiness remains canonical-only through the delegated readiness step", () => {
   const steps = source("lib/qeoindex-eod-workflow-steps.ts")
-  assert.match(steps, /getCanonicalUniverse/)
-  assert.match(steps, /loadWyckoffV2Universe/)
-  assert.doesNotMatch(steps, /beginWyckoffV2NotionRun/)
-  assert.doesNotMatch(steps, /claimReadyWyckoffV2Run/)
-  assert.doesNotMatch(steps, /publishIngestingWyckoffV2Run/)
+  const legacySteps = source("lib/qeoindex-eod-workflow-steps-legacy.ts")
+  assert.match(steps, /runEodReadyStep/)
+  assert.match(steps, /qeoindex-eod-workflow-steps-legacy/)
+  assert.match(legacySteps, /getCanonicalUniverse/)
+  assert.match(legacySteps, /loadWyckoffV2Universe/)
+  assert.doesNotMatch(legacySteps, /beginWyckoffV2NotionRun/)
+  assert.doesNotMatch(legacySteps, /claimReadyWyckoffV2Run/)
+  assert.doesNotMatch(legacySteps, /publishIngestingWyckoffV2Run/)
 })
 
 test("EOD readiness retries known not-ready messages even when workflow wrapper drops error code", () => {
@@ -61,7 +64,7 @@ test("EOD readiness retries known not-ready messages even when workflow wrapper 
   assert.match(workflow, /KFSP\/TTAI RATING DATE/)
 })
 
-test("direct Wyckoff publisher accepts in-memory validated snapshots and verifies exact canonical membership", () => {
+test("direct Wyckoff publisher validates 2 snapshots and one raw Daily chart series per ticker", () => {
   const path = "lib/wyckoff-supabase-publish.ts"
   assert.equal(existsSync(new URL(`../${path}`, import.meta.url)), true)
   if (!existsSync(new URL(`../${path}`, import.meta.url))) return
@@ -71,7 +74,9 @@ test("direct Wyckoff publisher accepts in-memory validated snapshots and verifie
   assert.match(code, /validateWyckoffV2SnapshotSet/)
   assert.match(code, /getCanonicalUniverse/)
   assert.match(code, /Canonical Wyckoff membership mismatch/)
-  assert.match(code, /const expectedSeriesCount = tickers\.length \* 2/)
+  assert.match(code, /const expectedSnapshots = tickers\.length \* 2/)
+  assert.match(code, /const expectedSeriesCount = tickers\.length/)
+  assert.match(code, /\.in\("timeframe", \["1D"\]\)/)
   assert.match(code, /status:\s*"published"/)
   assert.doesNotMatch(code, /queryDataSource|Notion|WYCKOFF_V2_RUNS_DATA_SOURCE_ID/)
 })
@@ -96,6 +101,7 @@ test("admin EOD phase catalog exposes v3 order and dynamic Top Stocks descriptio
 
   assert.doesNotMatch(code, /100 ticker|500 Snapshot|NOTION_STAGING|NOTION_VALIDATE|key: "INGEST"/)
   assert.match(code, /canonical|Top Stocks|universeCount|động/i)
+  assert.match(code, /1D\/1W/)
 })
 
 test("retention is fail-closed behind completed Notion and Drive archive checkpoints", () => {
@@ -107,4 +113,5 @@ test("retention is fail-closed behind completed Notion and Drive archive checkpo
   assert.match(code, /notionArchive.*archived|Notion archive/i)
   assert.match(code, /driveArchive.*archived|Drive archive/i)
   assert.match(code, /blocked/i)
+  assert.doesNotMatch(code, /delete\(/i)
 })
