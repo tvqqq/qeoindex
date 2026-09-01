@@ -2,7 +2,6 @@ import { runQeoIndexEodPhase } from "@/lib/admin/job-phase-telemetry"
 import { loadPersistentCouncilEodSnapshots } from "@/lib/ai-council-eod-market"
 import { getCanonicalUniverse } from "@/lib/market-universe"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
-import { beginWyckoffV2NotionRun } from "@/lib/wyckoff-v2-notion-staging"
 import { loadWyckoffV2Universe } from "@/lib/wyckoff-v2-universe-source"
 
 function requiredSupabase() {
@@ -30,7 +29,9 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
       const expectedSessionDate = vietnamDateKey(startedAtIso)
       const universe = await getCanonicalUniverse()
       const tickers = universe.stocks.map((stock) => stock.ticker)
-      if (!tickers.length) throw Object.assign(new Error("Canonical market universe is empty"), { code: "EOD_NOT_READY" })
+      if (!tickers.length) {
+        throw Object.assign(new Error("Canonical market universe is empty"), { code: "EOD_NOT_READY" })
+      }
 
       const ratings = await supabase
         .from("insights_stock_ratings")
@@ -41,38 +42,54 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
         .in("ticker", tickers)
       if (ratings.error) throw new Error(`Load historical canonical ratings failed: ${ratings.error.message}`)
 
-      const ratingTickers = new Set((ratings.data || []).map((row) => String(row.ticker || "").trim().toUpperCase()).filter(Boolean))
+      const ratingTickers = new Set(
+        (ratings.data || [])
+          .map((row) => String(row.ticker || "").trim().toUpperCase())
+          .filter(Boolean),
+      )
       const missingRatings = tickers.filter((ticker) => !ratingTickers.has(ticker))
       if (missingRatings.length) {
-        throw Object.assign(new Error(`Historical canonical rating universe incomplete for ${expectedSessionDate}: ${tickers.length - missingRatings.length}/${tickers.length}; missing=${missingRatings.slice(0, 20).join(",")}`), { code: "EOD_NOT_READY" })
+        throw Object.assign(
+          new Error(
+            `Historical canonical rating universe incomplete for ${expectedSessionDate}: `
+            + `${tickers.length - missingRatings.length}/${tickers.length}; `
+            + `missing=${missingRatings.slice(0, 20).join(",")}`,
+          ),
+          { code: "EOD_NOT_READY" },
+        )
       }
 
-      const persistentMarket = await loadPersistentCouncilEodSnapshots(supabase, tickers, expectedSessionDate)
+      const persistentMarket = await loadPersistentCouncilEodSnapshots(
+        supabase,
+        tickers,
+        expectedSessionDate,
+      )
       if (persistentMarket.snapshots.length !== tickers.length) {
         throw Object.assign(
-          new Error(`Historical market_ohlcv_history incomplete for ${expectedSessionDate}: ${persistentMarket.snapshots.length}/${tickers.length}; missing=${persistentMarket.missingTickers.join(",") || "none"}`),
+          new Error(
+            `Historical market_ohlcv_history incomplete for ${expectedSessionDate}: `
+            + `${persistentMarket.snapshots.length}/${tickers.length}; `
+            + `missing=${persistentMarket.missingTickers.join(",") || "none"}`,
+          ),
           { code: "EOD_NOT_READY" },
         )
       }
 
       const selection = await loadWyckoffV2Universe()
+      if (selection.stocks.length !== tickers.length) {
+        throw Object.assign(
+          new Error(`Historical canonical Wyckoff selection mismatch: ${selection.stocks.length}/${tickers.length}`),
+          { code: "EOD_NOT_READY" },
+        )
+      }
       const scanDate = expectedSessionDate
-      const runKey = `WYCKOFF-${scanDate}-EOD-v2`
-      const notion = await beginWyckoffV2NotionRun({
-        runKey,
-        scanDate,
-        startedAt: startedAtIso,
-        providerSummary: `QeoIndex canonical EOD v2 preflight; ${tickers.length} membership rows verified from ${universe.runId}.`,
-      })
+      const runKey = `WYCKOFF-${scanDate}-EOD-v3`
 
       return {
         runKey,
         scanDate,
         stocks: selection.stocks,
         rankWarnings: selection.warnings,
-        notionAction: notion.action,
-        notionStatus: notion.status,
-        notionSupabaseRunId: "supabaseRunId" in notion ? notion.supabaseRunId : "",
         market: {
           expectedSessionDate,
           ratingDate: expectedSessionDate,
@@ -89,11 +106,11 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
       scanDate: result.scanDate,
       universeCount: result.stocks.length,
       rankWarnings: result.rankWarnings.slice(0, 10),
-      notionAction: result.notionAction,
       freshMarketCount: result.market.freshMarketCount,
       marketSource: result.market.source,
       historicalBackfill: true,
       universeRunId: result.market.universeRunId,
+      architecture: "supabase-first-eod-v3",
     }),
   })
 }

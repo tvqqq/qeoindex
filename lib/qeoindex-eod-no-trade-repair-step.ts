@@ -3,6 +3,7 @@ import type { OhlcvBar } from "./technical-indicators.ts"
 const FINAL_ORDERBOOK_CUTOFF_HOUR_UTC = 7
 const FINAL_ORDERBOOK_CUTOFF_MINUTE_UTC = 45
 const DAILY_BAR_HOUR_UTC = 2
+const MAX_CANONICAL_UNIVERSE_SIZE = 200
 
 export interface FinalOrderbookSnapshot {
   symbol: string
@@ -78,12 +79,24 @@ export async function runEodNoTradeDailyRepairStep(
   "use step"
 
   if (!enabled) {
-    return { skipped: true as const, sessionDate, expectedCount: inputTickers.length, existingCount: 0, repairedCount: 0, finalCount: 0, repairedTickers: [] as string[] }
+    return {
+      skipped: true as const,
+      sessionDate,
+      expectedCount: inputTickers.length,
+      existingCount: 0,
+      repairedCount: 0,
+      finalCount: 0,
+      repairedTickers: [] as string[],
+    }
   }
   if (!validSessionDate(sessionDate)) throw new Error(`Invalid EOD no-trade repair session date: ${sessionDate}`)
 
   const tickers = [...new Set(inputTickers.map(normalizeTicker).filter(Boolean))]
-  if (!tickers.length || tickers.length > 100) throw new Error(`EOD no-trade repair requires 1-100 unique tickers; received ${tickers.length}`)
+  if (!tickers.length || tickers.length > MAX_CANONICAL_UNIVERSE_SIZE) {
+    throw new Error(
+      `EOD no-trade repair requires 1-${MAX_CANONICAL_UNIVERSE_SIZE} unique tickers; received ${tickers.length}`,
+    )
+  }
 
   const { getSupabaseServerClient } = await import("./supabase/server.ts")
   const supabase = getSupabaseServerClient()
@@ -100,7 +113,11 @@ export async function runEodNoTradeDailyRepairStep(
     .lt("bar_time", end)
   if (existing.error) throw new Error(`Load exact EOD Daily bars failed: ${existing.error.message}`)
 
-  const existingTickers = new Set((existing.data || []).map((row) => normalizeTicker(String(row.ticker || ""))).filter(Boolean))
+  const existingTickers = new Set(
+    (existing.data || [])
+      .map((row) => normalizeTicker(String(row.ticker || "")))
+      .filter(Boolean),
+  )
   const missingTickers = tickers.filter((ticker) => !existingTickers.has(ticker))
   const repairedTickers: string[] = []
 
@@ -154,10 +171,17 @@ export async function runEodNoTradeDailyRepairStep(
     .lt("bar_time", end)
   if (finalRows.error) throw new Error(`Verify exact EOD Daily bars failed: ${finalRows.error.message}`)
 
-  const finalTickers = new Set((finalRows.data || []).map((row) => normalizeTicker(String(row.ticker || ""))).filter(Boolean))
+  const finalTickers = new Set(
+    (finalRows.data || [])
+      .map((row) => normalizeTicker(String(row.ticker || "")))
+      .filter(Boolean),
+  )
   const stillMissing = tickers.filter((ticker) => !finalTickers.has(ticker))
   if (stillMissing.length) {
-    throw new Error(`Exact EOD Daily bars incomplete after verified no-trade repair: ${finalTickers.size}/${tickers.length}; missing ${stillMissing.join(", ")}`)
+    throw new Error(
+      `Exact EOD Daily bars incomplete after verified no-trade repair: ${finalTickers.size}/${tickers.length}`
+      + `; missing ${stillMissing.join(", ")}`,
+    )
   }
 
   return {
