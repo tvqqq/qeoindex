@@ -41,12 +41,15 @@ test("active Wyckoff API and UI contract expose only Daily and Weekly", () => {
   const route = source("app/api/insights/wyckoff/route.ts")
   const page = source("app/insights/wyckoff/page.tsx")
   const listTypes = source("components/insights/wyckoff-chart-dashboard.tsx")
-  const infographic = source("components/insights/wyckoff-infographic-dashboard.tsx")
+  const deferred = source("components/insights/wyckoff-deferred-dashboard.tsx")
+  const dashboard = source("components/insights/wyckoff-daily-weekly-dashboard.tsx")
 
   assert.doesNotMatch(route, /getCachedHourlyHistory|phase1H|\["1H",\s*"1D",\s*"1W"\]/)
   assert.doesNotMatch(page, /phase1H/)
   assert.doesNotMatch(listTypes, /phase1H/)
-  assert.doesNotMatch(infographic, /phase1H|"1H"|1H · 1D · 1W|1H → 1D → 1W/)
+  assert.match(deferred, /wyckoff-daily-weekly-dashboard/)
+  assert.doesNotMatch(deferred, /wyckoff-infographic-dashboard/)
+  assert.doesNotMatch(dashboard, /phase1H|"1H"|1H · 1D · 1W|1H → 1D → 1W/)
 })
 
 test("archive and handoff document the Daily Weekly storage contract", () => {

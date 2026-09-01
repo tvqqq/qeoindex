@@ -17,13 +17,13 @@ export const QEOINDEX_EOD_PHASES = [
     key: "HISTORY_REFRESH",
     order: 3,
     label: "History Refresh",
-    description: "Refresh/backfill OHLCV cho toàn bộ canonical universe theo batch giới hạn, độc lập với universeCount động.",
+    description: "Refresh/backfill raw OHLCV 1D cho toàn bộ canonical universe theo batch giới hạn; 1W được derive từ 1D.",
   },
   {
     key: "WYCKOFF_BUILD",
     order: 4,
     label: "Wyckoff Build",
-    description: "Build 1H/4H/1D/1W/1M; số snapshot kỳ vọng luôn bằng universeCount × 5.",
+    description: "Build Wyckoff 1D/1W; số snapshot kỳ vọng luôn bằng universeCount × 2.",
   },
   {
     key: "SUPABASE_VALIDATE",
@@ -65,7 +65,7 @@ export const QEOINDEX_EOD_PHASES = [
     key: "DRIVE_ARCHIVE",
     order: 11,
     label: "Drive Archive",
-    description: "Archive raw OHLCV sang Google Drive với manifest/hash; thiếu credential hoặc coverage sẽ fail closed.",
+    description: "Archive raw OHLCV 1D sang Google Drive với manifest/hash; thiếu credential hoặc coverage sẽ fail closed.",
   },
   {
     key: "RETENTION_CLEANUP",
@@ -115,13 +115,7 @@ export interface AdminJobPhaseView {
   errorMessage: string | null
 }
 
-const STORED_PHASE_STATUSES = new Set<StoredJobPhaseStatus>([
-  "queued",
-  "running",
-  "succeeded",
-  "failed",
-  "skipped",
-])
+const STORED_PHASE_STATUSES = new Set<StoredJobPhaseStatus>(["queued", "running", "succeeded", "failed", "skipped"])
 
 function normalizePhaseStatus(value: string | undefined): AdminJobPhaseStatus {
   if (!value) return "pending"
@@ -135,14 +129,10 @@ function rowTimestamp(row: SystemJobPhaseRow) {
 
 export function buildAdminJobPhaseTimeline(rows: SystemJobPhaseRow[]): AdminJobPhaseView[] {
   const latestByKey = new Map<string, SystemJobPhaseRow>()
-
   for (const row of rows) {
     const current = latestByKey.get(row.phase_key)
-    if (!current || rowTimestamp(row) >= rowTimestamp(current)) {
-      latestByKey.set(row.phase_key, row)
-    }
+    if (!current || rowTimestamp(row) >= rowTimestamp(current)) latestByKey.set(row.phase_key, row)
   }
-
   return QEOINDEX_EOD_PHASES.map((definition) => {
     const row = latestByKey.get(definition.key)
     return {

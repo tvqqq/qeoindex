@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import { fetchHourlyMarketHistory, fetchLongDailyMarketHistory } from "@/lib/market-history"
+import { fetchLongDailyMarketHistory } from "@/lib/market-history"
 import { getCanonicalUniverse } from "@/lib/market-universe"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { buildWyckoffChartStudies } from "@/lib/wyckoff-chart-model"
@@ -9,12 +9,13 @@ export const WYCKOFF_MODEL_VERSION = "qeo-wyckoff-rule-v1"
 export const WYCKOFF_AGGREGATION_VERSION = "vn-session-v1"
 export const WYCKOFF_UNIVERSE_KEY = "vn_top_stocks"
 const MAX_BATCH_SIZE = 10
+const WYCKOFF_TIMEFRAME_COUNT = 2
 
 export interface UnifiedWyckoffRunSummary {
   ok: boolean
   runId: string
   requested: number
-  completed: Array<{ ticker: string; timeframes: number; dailyProvider: string; hourlyProvider: string }>
+  completed: Array<{ ticker: string; timeframes: number; dailyProvider: string }>
   errors: Array<{ ticker: string; error: string }>
   generatedAt: string
 }
@@ -69,36 +70,36 @@ export async function runUnifiedWyckoff({ limit = MAX_BATCH_SIZE, offset = 0 }: 
   const errors: UnifiedWyckoffRunSummary["errors"] = []
   for (const stock of targets) {
     try {
-      const now = new Date()
-      const [daily, hourly] = await Promise.all([
-        fetchLongDailyMarketHistory(stock.ticker, now),
-        fetchHourlyMarketHistory(stock.ticker, now),
-      ])
-      if (!daily?.bars.length || !hourly?.bars.length) throw new Error("Provider returned no Daily or 1H bars")
+      const daily = await fetchLongDailyMarketHistory(stock.ticker, new Date())
+      if (!daily?.bars.length) throw new Error("Provider returned no Daily bars")
       const studies = buildWyckoffChartStudies({
         dailyBars: daily.bars,
-        hourlyBars: hourly.bars,
         dailyProvider: daily.provider,
         dailyDetail: daily.detail,
-        hourlyProvider: hourly.provider,
-        hourlyDetail: hourly.detail,
       })
       const validStudies = studies.filter((study) => study.analysis && study.asOf)
-      if (!validStudies.length) throw new Error("No timeframe has enough completed history")
+      if (!validStudies.length) throw new Error("No Daily/Weekly timeframe has enough completed history")
 
-      const seriesRows = validStudies.map((study) => ({
-        ticker: stock.ticker,
-        timeframe: study.timeframe,
-        bars: study.bars,
-        provider: study.provider,
-        provider_detail: study.detail,
-        derived: study.derived,
-        as_of: isoFromSeconds(study.asOf!),
-        model_version: WYCKOFF_MODEL_VERSION,
-        aggregation_version: WYCKOFF_AGGREGATION_VERSION,
-        run_id: runId,
-        updated_at: new Date().toISOString(),
-      }))
+      const dailyStudy = validStudies.find((study) => study.timeframe === "1D")
+      if (dailyStudy?.asOf) {
+        const { error: seriesError } = await supabase
+          .from("wyckoff_chart_series")
+          .upsert({
+            ticker: stock.ticker,
+            timeframe: "1D",
+            bars: dailyStudy.bars,
+            provider: dailyStudy.provider,
+            provider_detail: dailyStudy.detail,
+            derived: false,
+            as_of: isoFromSeconds(dailyStudy.asOf),
+            model_version: WYCKOFF_MODEL_VERSION,
+            aggregation_version: WYCKOFF_AGGREGATION_VERSION,
+            run_id: runId,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "ticker,timeframe" })
+        if (seriesError) throw new Error(`Series write failed: ${seriesError.message}`)
+      }
+
       const snapshotRows = validStudies.map((study) => ({
         id: randomUUID(),
         run_id: runId,
@@ -108,7 +109,7 @@ export async function runUnifiedWyckoff({ limit = MAX_BATCH_SIZE, offset = 0 }: 
         model_version: WYCKOFF_MODEL_VERSION,
         aggregation_version: WYCKOFF_AGGREGATION_VERSION,
         history_bar_count: study.bars.length,
-        history_status: study.bars.length >= 120 ? "complete" : "incomplete",
+        history_status: study.bars.length >= 60 ? "complete" : "incomplete",
         phase: study.analysis!.phase,
         wyckoff_state: study.analysis!.wyckoffState,
         ta_bias: study.analysis!.taBias,
@@ -131,11 +132,6 @@ export async function runUnifiedWyckoff({ limit = MAX_BATCH_SIZE, offset = 0 }: 
         markers: study.markers,
         scenarios: study.scenarios,
       }))
-
-      const { error: seriesError } = await supabase
-        .from("wyckoff_chart_series")
-        .upsert(seriesRows, { onConflict: "ticker,timeframe" })
-      if (seriesError) throw new Error(`Series write failed: ${seriesError.message}`)
       const { error: snapshotsError } = await supabase
         .from("wyckoff_analysis_snapshots")
         .upsert(snapshotRows, {
@@ -143,12 +139,7 @@ export async function runUnifiedWyckoff({ limit = MAX_BATCH_SIZE, offset = 0 }: 
           ignoreDuplicates: true,
         })
       if (snapshotsError) throw new Error(`Snapshot write failed: ${snapshotsError.message}`)
-      completed.push({
-        ticker: stock.ticker,
-        timeframes: validStudies.length,
-        dailyProvider: daily.provider,
-        hourlyProvider: hourly.provider,
-      })
+      completed.push({ ticker: stock.ticker, timeframes: validStudies.length, dailyProvider: daily.provider })
     } catch (error) {
       errors.push({ ticker: stock.ticker, error: error instanceof Error ? error.message : String(error) })
     }
@@ -159,13 +150,14 @@ export async function runUnifiedWyckoff({ limit = MAX_BATCH_SIZE, offset = 0 }: 
   await supabase.from("wyckoff_scan_runs").update({
     status,
     completed_count: completed.length,
-    incomplete_count: completed.reduce((sum, item) => sum + (5 - item.timeframes), 0),
+    incomplete_count: completed.reduce((sum, item) => sum + (WYCKOFF_TIMEFRAME_COUNT - item.timeframes), 0),
     error_count: errors.length,
     diagnostics: {
       offset: safeOffset,
       limit: safeLimit,
       canonicalUniverseRunId: canonical.runId,
       canonicalUniverseCount: canonical.selectedCount,
+      timeframes: ["1D", "1W"],
       errors: errors.slice(0, 10),
     },
     finished_at: generatedAt,

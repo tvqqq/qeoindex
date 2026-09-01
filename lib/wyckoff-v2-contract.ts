@@ -8,17 +8,14 @@ import {
   type WyckoffV2Snapshot,
 } from "./wyckoff-v2-builder.ts"
 
-const TIMEFRAMES = ["1H", "4H", "1D", "1W", "1M"] as const
+const TIMEFRAMES = ["1D", "1W"] as const
 const SUPPORTED_EXCHANGES = new Set(["HOSE", "HNX", "UPCOM"])
 const MAX_UNIVERSE_SIZE = 200
 const MARKER_LABELS = new Set(["SPR", "UT", "SOS", "SOW", "TEST", "LPS", "LPSY"])
 const MARKER_TONES = new Set(["bullish", "bearish", "neutral"])
 const HORIZON_BY_TIMEFRAME = new Map([
-  ["1H", "intraday"],
-  ["4H", "swing"],
   ["1D", "week"],
   ["1W", "month"],
-  ["1M", "long_term"],
 ])
 
 export interface WyckoffV2ValidationSummary {
@@ -136,7 +133,9 @@ export function validateWyckoffV2SnapshotSet(runKey: string, snapshots: WyckoffV
   if (keys.size !== snapshots.length) throw new Error(`Expected ${snapshots.length} unique Snapshot Keys; received ${keys.size}`)
   if (tickerFrames.size !== expectedTickerCount) throw new Error(`Expected ${expectedTickerCount} tickers; received ${tickerFrames.size}`)
   for (const [ticker, frames] of tickerFrames) {
-    if (frames.size !== TIMEFRAMES.length || TIMEFRAMES.some((timeframe) => !frames.has(timeframe))) throw new Error(`${ticker} does not have all five timeframes`)
+    if (frames.size !== TIMEFRAMES.length || TIMEFRAMES.some((timeframe) => !frames.has(timeframe))) {
+      throw new Error(`${ticker} does not have both Daily and Weekly timeframes`)
+    }
   }
   if (complete + incomplete !== snapshots.length) throw new Error(`Complete + genuine Incomplete must equal ${snapshots.length}`)
 

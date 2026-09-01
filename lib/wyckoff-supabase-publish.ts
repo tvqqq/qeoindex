@@ -97,25 +97,20 @@ export async function publishWyckoffV2SnapshotsDirect(
   const validationHash = computeWyckoffV2ValidationHash(input.snapshots)
   const canonical = await getCanonicalUniverse()
   const runId = input.runId || randomUUID()
-  const payload = buildWyckoffV2SupabasePayload({
-    snapshots: input.snapshots,
-    runId,
-    scanDate: input.scanDate,
-    runKey: input.runKey,
-  })
+  const payload = buildWyckoffV2SupabasePayload({ snapshots: input.snapshots, runId, scanDate: input.scanDate, runKey: input.runKey })
   const tickers = payload.memberships.map((row) => row.ticker)
   assertExactCanonicalMembership(canonical.stocks.map((stock) => stock.ticker), tickers)
   if (canonical.selectedCount !== tickers.length) {
     throw new Error(`Canonical Wyckoff membership mismatch: selectedCount=${canonical.selectedCount}; snapshots=${tickers.length}`)
   }
 
-  const expectedSnapshots = tickers.length * 5
+  const expectedSnapshots = tickers.length * 2
   if (validation.total !== expectedSnapshots || payload.snapshots.length !== expectedSnapshots) {
     throw new Error(`Supabase Wyckoff validation mismatch: ${validation.total}/${expectedSnapshots} snapshots`)
   }
 
   const chartSeries = await loadWyckoffV2ChartSeriesRows(supabase, tickers, runId)
-  const expectedSeriesCount = tickers.length * 2
+  const expectedSeriesCount = tickers.length
   if (chartSeries.length !== expectedSeriesCount) {
     throw new Error(`Expected ${expectedSeriesCount} Wyckoff chart series; received ${chartSeries.length}`)
   }
@@ -148,14 +143,8 @@ export async function publishWyckoffV2SnapshotsDirect(
 
   try {
     const now = new Date().toISOString()
-    const membershipRows = payload.memberships.map((row) => ({
-      ...row,
-      source: WYCKOFF_SUPABASE_DIRECT_SOURCE,
-      synced_at: now,
-    }))
-    const memberships = await supabase
-      .from("wyckoff_universe_memberships")
-      .upsert(membershipRows, { onConflict: "universe_key,ticker,effective_date" })
+    const membershipRows = payload.memberships.map((row) => ({ ...row, source: WYCKOFF_SUPABASE_DIRECT_SOURCE, synced_at: now }))
+    const memberships = await supabase.from("wyckoff_universe_memberships").upsert(membershipRows, { onConflict: "universe_key,ticker,effective_date" })
     if (memberships.error) throw new Error(`Supabase Wyckoff membership upsert failed: ${memberships.error.message}`)
 
     for (let offset = 0; offset < payload.snapshots.length; offset += 100) {
@@ -175,7 +164,7 @@ export async function publishWyckoffV2SnapshotsDirect(
       .select("ticker,timeframe")
       .eq("run_id", runId)
       .in("ticker", tickers)
-      .in("timeframe", ["1H", "1D"])
+      .in("timeframe", ["1D"])
     if (seriesVerify.error) throw new Error(`Supabase Wyckoff chart-series verification failed: ${seriesVerify.error.message}`)
     const publishedSeriesKeys = new Set((seriesVerify.data || []).map((row) => `${row.ticker}|${row.timeframe}`))
     if (publishedSeriesKeys.size !== expectedSeriesCount) {

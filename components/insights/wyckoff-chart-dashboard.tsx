@@ -1,6 +1,6 @@
 import type { WyckoffChartStudy } from "@/lib/wyckoff-chart-model"
 
-/** Shared payload types for the active deferred Wyckoff infographic UI. */
+/** Shared payload types for the active Daily/Weekly Wyckoff UI. */
 export interface WyckoffListItem {
   ticker: string
   rank: number
@@ -8,7 +8,6 @@ export interface WyckoffListItem {
   price: number | null
   changePct: number | null
   phase: string
-  phase1H?: string
   phase1D?: string
   phase1W?: string
   bias: string

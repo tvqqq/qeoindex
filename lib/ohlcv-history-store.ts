@@ -49,7 +49,8 @@ export interface OhlcvUniverseRefreshResult {
   completedTickers: number
   failedTickers: number
   dailyFetchedBars: number
-  hourlyFetchedBars: number
+  /** Deprecated compatibility field. Persistent Wyckoff refresh is Daily-only. */
+  hourlyFetchedBars?: number
   backfillOperations: number
   deltaOperations: number
   limitedCoverage: OhlcvLimitedCoverage[]
@@ -95,7 +96,6 @@ type StoredOhlcvRow = {
 type TickerRefreshSuccess = {
   ticker: string
   dailyFetchedBars: number
-  hourlyFetchedBars: number
   plans: OhlcvRefreshPlan[]
 }
 
@@ -116,7 +116,6 @@ export function normalizeOhlcvTickers(input: string[], max = 100) {
   if (!Array.isArray(input) || input.length === 0) throw new Error("OHLCV refresh requires at least one ticker")
   const result: string[] = []
   const seen = new Set<string>()
-
   for (const value of input) {
     const ticker = String(value || "").trim().toUpperCase()
     if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new Error(`Invalid ticker: ${value}`)
@@ -125,7 +124,6 @@ export function normalizeOhlcvTickers(input: string[], max = 100) {
       result.push(ticker)
     }
   }
-
   if (result.length > max) throw new Error(`OHLCV refresh supports at most ${max} unique tickers`)
   return result
 }
@@ -133,9 +131,10 @@ export function normalizeOhlcvTickers(input: string[], max = 100) {
 export function buildOhlcvRefreshPlan(
   coverage: OhlcvCoverage | null,
   timeframe: RawHistoryTimeframe,
+  bootstrapCompleted = false,
 ): OhlcvRefreshPlan {
   if (timeframe === "1D") {
-    const needsBackfill = !coverage || coverage.distinctMonths < DAILY_REQUIRED_MONTHS
+    const needsBackfill = !bootstrapCompleted && (!coverage || coverage.distinctMonths < DAILY_REQUIRED_MONTHS)
     return {
       mode: needsBackfill ? "backfill" : "delta",
       timeframe,
@@ -155,28 +154,43 @@ async function loadCoverageMap(supabase: SupabaseClient, tickers: string[]) {
   if (!tickers.length) return new Map<string, OhlcvCoverage>()
   const { data, error } = await supabase.rpc("qeo_market_ohlcv_coverage", { p_tickers: tickers })
   if (error) throw new Error(`OHLCV coverage query failed: ${error.message}`)
-
   const map = new Map<string, OhlcvCoverage>()
   for (const raw of (data || []) as CoverageRpcRow[]) {
     const ticker = String(raw.ticker || "").trim().toUpperCase()
     const timeframe = String(raw.timeframe || "") as RawHistoryTimeframe
     if (!ticker || (timeframe !== "1D" && timeframe !== "1H")) continue
-    const coverage: OhlcvCoverage = {
+    map.set(coverageKey(ticker, timeframe), {
       ticker,
       timeframe,
       rowCount: finite(raw.row_count) ?? 0,
       firstBarTime: raw.first_bar_time ? String(raw.first_bar_time) : null,
       lastBarTime: raw.last_bar_time ? String(raw.last_bar_time) : null,
       distinctMonths: finite(raw.distinct_months) ?? 0,
-    }
-    map.set(coverageKey(ticker, timeframe), coverage)
+    })
   }
   return map
 }
 
+async function loadDailyBootstrapState(supabase: SupabaseClient, tickers: string[]) {
+  const completed = new Set<string>()
+  if (!tickers.length) return completed
+  const { data, error } = await supabase
+    .from("market_ohlcv_bootstrap_state")
+    .select("ticker")
+    .eq("timeframe", "1D")
+    .eq("completed", true)
+    .in("ticker", tickers)
+  if (error) {
+    if (/does not exist|schema cache/i.test(error.message)) return completed
+    throw new Error(`OHLCV bootstrap state query failed: ${error.message}`)
+  }
+  for (const row of data || []) completed.add(String(row.ticker || "").trim().toUpperCase())
+  return completed
+}
+
 function toStoredRows(input: {
   ticker: string
-  timeframe: RawHistoryTimeframe
+  timeframe: "1D"
   bars: OhlcvBar[]
   provider: HistoricalProvider
   detail: string
@@ -184,15 +198,8 @@ function toStoredRows(input: {
   fetchedAt: string
 }) {
   return input.bars
-    .filter((bar) => {
-      return [bar.time, bar.open, bar.high, bar.low, bar.close, bar.volume].every(Number.isFinite)
-        && bar.time > 0
-        && bar.open > 0
-        && bar.high > 0
-        && bar.low > 0
-        && bar.close > 0
-        && bar.volume >= 0
-    })
+    .filter((bar) => [bar.time, bar.open, bar.high, bar.low, bar.close, bar.volume].every(Number.isFinite)
+      && bar.time > 0 && bar.open > 0 && bar.high > 0 && bar.low > 0 && bar.close > 0 && bar.volume >= 0)
     .map((bar) => ({
       ticker: input.ticker,
       timeframe: input.timeframe,
@@ -213,17 +220,37 @@ async function upsertStoredRows(supabase: SupabaseClient, rows: ReturnType<typeo
   for (let offset = 0; offset < rows.length; offset += OHLCV_UPSERT_CHUNK_SIZE) {
     const chunk = rows.slice(offset, offset + OHLCV_UPSERT_CHUNK_SIZE)
     if (!chunk.length) continue
-    const { error } = await supabase
-      .from("market_ohlcv_history")
-      .upsert(chunk, { onConflict: "ticker,timeframe,bar_time" })
+    const { error } = await supabase.from("market_ohlcv_history").upsert(chunk, { onConflict: "ticker,timeframe,bar_time" })
     if (error) throw new Error(`OHLCV history upsert failed: ${error.message}`)
+  }
+}
+
+async function persistBootstrapComplete(
+  supabase: SupabaseClient,
+  ticker: string,
+  provider: HistoricalProvider,
+  rows: ReturnType<typeof toStoredRows>,
+) {
+  const first = rows[0]?.bar_time ?? null
+  const last = rows.at(-1)?.bar_time ?? null
+  const { error } = await supabase.from("market_ohlcv_bootstrap_state").upsert({
+    ticker,
+    timeframe: "1D",
+    completed: true,
+    provider,
+    first_bar_time: first,
+    last_bar_time: last,
+    completed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "ticker,timeframe" })
+  if (error && !/does not exist|schema cache/i.test(error.message)) {
+    throw new Error(`OHLCV bootstrap state upsert failed: ${error.message}`)
   }
 }
 
 async function mapWithConcurrency<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>) {
   const results = new Array<R>(items.length)
   let cursor = 0
-
   async function worker() {
     while (true) {
       const index = cursor
@@ -232,9 +259,7 @@ async function mapWithConcurrency<T, R>(items: T[], concurrency: number, fn: (it
       results[index] = await fn(items[index])
     }
   }
-
-  const workerCount = Math.min(Math.max(1, concurrency), items.length)
-  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, () => worker()))
   return results
 }
 
@@ -242,55 +267,25 @@ async function refreshTicker(
   supabase: SupabaseClient,
   ticker: string,
   coverage: Map<string, OhlcvCoverage>,
+  bootstrapCompleted: boolean,
   now: Date,
 ): Promise<TickerRefreshSuccess> {
-  const dailyPlan = buildOhlcvRefreshPlan(coverage.get(coverageKey(ticker, "1D")) ?? null, "1D")
-  const hourlyPlan = buildOhlcvRefreshPlan(coverage.get(coverageKey(ticker, "1H")) ?? null, "1H")
-  const { fetchDailyMarketHistoryWindow, fetchHourlyMarketHistoryWindow } = await import("./market-history.ts")
-
+  const dailyPlan = buildOhlcvRefreshPlan(coverage.get(coverageKey(ticker, "1D")) ?? null, "1D", bootstrapCompleted)
+  const { fetchDailyMarketHistoryWindow } = await import("./market-history.ts")
   const daily = await fetchDailyMarketHistoryWindow(ticker, dailyPlan.lookbackDays, now)
   const dailyRows = toStoredRows({ ticker, timeframe: "1D", ...daily })
   if (!dailyRows.length) throw new Error("Provider returned no usable completed Daily bars")
   await upsertStoredRows(supabase, dailyRows)
-
-  const hourly = await fetchHourlyMarketHistoryWindow(ticker, hourlyPlan.lookbackDays, now)
-  const hourlyRows = toStoredRows({ ticker, timeframe: "1H", ...hourly })
-  if (!hourlyRows.length) throw new Error("Provider returned no usable completed Hourly bars")
-  await upsertStoredRows(supabase, hourlyRows)
-
-  return {
-    ticker,
-    dailyFetchedBars: dailyRows.length,
-    hourlyFetchedBars: hourlyRows.length,
-    plans: [dailyPlan, hourlyPlan],
-  }
+  if (dailyPlan.mode === "backfill") await persistBootstrapComplete(supabase, ticker, daily.provider, dailyRows)
+  return { ticker, dailyFetchedBars: dailyRows.length, plans: [dailyPlan] }
 }
 
-function limitedCoverageFor(
-  tickers: string[],
-  coverage: Map<string, OhlcvCoverage>,
-): OhlcvLimitedCoverage[] {
+function limitedCoverageFor(tickers: string[], coverage: Map<string, OhlcvCoverage>): OhlcvLimitedCoverage[] {
   const warnings: OhlcvLimitedCoverage[] = []
   for (const ticker of tickers) {
     const daily = coverage.get(coverageKey(ticker, "1D"))
     if (!daily || daily.distinctMonths < DAILY_REQUIRED_MONTHS) {
-      warnings.push({
-        ticker,
-        timeframe: "1D",
-        actual: daily?.distinctMonths ?? 0,
-        required: DAILY_REQUIRED_MONTHS,
-        metric: "distinctMonths",
-      })
-    }
-    const hourly = coverage.get(coverageKey(ticker, "1H"))
-    if (!hourly || hourly.rowCount < HOURLY_REQUIRED_RAW_BARS) {
-      warnings.push({
-        ticker,
-        timeframe: "1H",
-        actual: hourly?.rowCount ?? 0,
-        required: HOURLY_REQUIRED_RAW_BARS,
-        metric: "rawBars",
-      })
+      warnings.push({ ticker, timeframe: "1D", actual: daily?.distinctMonths ?? 0, required: DAILY_REQUIRED_MONTHS, metric: "distinctMonths" })
     }
   }
   return warnings
@@ -302,37 +297,27 @@ export async function refreshOhlcvHistoryBatch(
   now = new Date(),
 ): Promise<OhlcvUniverseRefreshResult> {
   const tickers = normalizeOhlcvTickers(inputTickers, OHLCV_BATCH_SIZE)
-  const coverage = await loadCoverageMap(supabase, tickers)
-
-  const outcomes = await mapWithConcurrency<string, TickerRefreshOutcome>(
-    tickers,
-    OHLCV_PROVIDER_CONCURRENCY,
-    async (ticker) => {
-      try {
-        return { ok: true, result: await refreshTicker(supabase, ticker, coverage, now) }
-      } catch (error) {
-        return { ok: false, error: { ticker, error: error instanceof Error ? error.message : String(error) } }
-      }
-    },
-  )
-
-  const successes = outcomes
-    .filter((outcome): outcome is Extract<TickerRefreshOutcome, { ok: true }> => outcome.ok)
-    .map((outcome) => outcome.result)
-  const errors = outcomes
-    .filter((outcome): outcome is Extract<TickerRefreshOutcome, { ok: false }> => !outcome.ok)
-    .map((outcome) => outcome.error)
+  const [coverage, bootstrapState] = await Promise.all([
+    loadCoverageMap(supabase, tickers),
+    loadDailyBootstrapState(supabase, tickers),
+  ])
+  const outcomes = await mapWithConcurrency<string, TickerRefreshOutcome>(tickers, OHLCV_PROVIDER_CONCURRENCY, async (ticker) => {
+    try {
+      return { ok: true, result: await refreshTicker(supabase, ticker, coverage, bootstrapState.has(ticker), now) }
+    } catch (error) {
+      return { ok: false, error: { ticker, error: error instanceof Error ? error.message : String(error) } }
+    }
+  })
+  const successes = outcomes.filter((outcome): outcome is Extract<TickerRefreshOutcome, { ok: true }> => outcome.ok).map((outcome) => outcome.result)
+  const errors = outcomes.filter((outcome): outcome is Extract<TickerRefreshOutcome, { ok: false }> => !outcome.ok).map((outcome) => outcome.error)
   const successfulTickers = successes.map((item) => item.ticker)
-  const postCoverage = successfulTickers.length
-    ? await loadCoverageMap(supabase, successfulTickers)
-    : new Map<string, OhlcvCoverage>()
-
+  const postCoverage = successfulTickers.length ? await loadCoverageMap(supabase, successfulTickers) : new Map<string, OhlcvCoverage>()
   return {
     requestedTickers: tickers.length,
     completedTickers: successes.length,
     failedTickers: errors.length,
     dailyFetchedBars: successes.reduce((sum, item) => sum + item.dailyFetchedBars, 0),
-    hourlyFetchedBars: successes.reduce((sum, item) => sum + item.hourlyFetchedBars, 0),
+    hourlyFetchedBars: 0,
     backfillOperations: successes.reduce((sum, item) => sum + item.plans.filter((plan) => plan.mode === "backfill").length, 0),
     deltaOperations: successes.reduce((sum, item) => sum + item.plans.filter((plan) => plan.mode === "delta").length, 0),
     limitedCoverage: limitedCoverageFor(successfulTickers, postCoverage),
@@ -346,21 +331,14 @@ function aggregateRefreshResults(results: OhlcvUniverseRefreshResult[]): OhlcvUn
     completedTickers: acc.completedTickers + item.completedTickers,
     failedTickers: acc.failedTickers + item.failedTickers,
     dailyFetchedBars: acc.dailyFetchedBars + item.dailyFetchedBars,
-    hourlyFetchedBars: acc.hourlyFetchedBars + item.hourlyFetchedBars,
+    hourlyFetchedBars: 0,
     backfillOperations: acc.backfillOperations + item.backfillOperations,
     deltaOperations: acc.deltaOperations + item.deltaOperations,
     limitedCoverage: [...acc.limitedCoverage, ...item.limitedCoverage],
     errors: [...acc.errors, ...item.errors],
   }), {
-    requestedTickers: 0,
-    completedTickers: 0,
-    failedTickers: 0,
-    dailyFetchedBars: 0,
-    hourlyFetchedBars: 0,
-    backfillOperations: 0,
-    deltaOperations: 0,
-    limitedCoverage: [],
-    errors: [],
+    requestedTickers: 0, completedTickers: 0, failedTickers: 0, dailyFetchedBars: 0, hourlyFetchedBars: 0,
+    backfillOperations: 0, deltaOperations: 0, limitedCoverage: [], errors: [],
   })
 }
 
@@ -394,31 +372,29 @@ export async function loadCachedOhlcvHistory(
   tickerInput: string,
   timeframe: RawHistoryTimeframe,
 ): Promise<CachedOhlcvHistory> {
+  if (timeframe !== "1D") throw new Error(`Persistent Wyckoff OHLCV supports Daily only; received ${timeframe}`)
   const [ticker] = normalizeOhlcvTickers([tickerInput], 1)
   const rows: StoredOhlcvRow[] = []
   const pageSize = 1000
-
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await supabase
       .from("market_ohlcv_history")
       .select("ticker,timeframe,bar_time,open,high,low,close,volume,provider,provider_detail,source_url,fetched_at")
       .eq("ticker", ticker)
-      .eq("timeframe", timeframe)
+      .eq("timeframe", "1D")
       .order("bar_time", { ascending: true })
       .range(offset, offset + pageSize - 1)
-    if (error) throw new Error(`OHLCV cache read failed for ${ticker} ${timeframe}: ${error.message}`)
+    if (error) throw new Error(`OHLCV cache read failed for ${ticker} 1D: ${error.message}`)
     const page = (data || []) as StoredOhlcvRow[]
     rows.push(...page)
     if (page.length < pageSize) break
   }
-
   const bars = rows.map(storedRowToBar).filter((bar): bar is OhlcvBar => Boolean(bar))
-  if (!bars.length) throw new Error(`OHLCV cache has no usable ${timeframe} bars for ${ticker}`)
+  if (!bars.length) throw new Error(`OHLCV cache has no usable 1D bars for ${ticker}`)
   const latest: StoredOhlcvRow = rows.at(-1) ?? {}
-
   return {
     ticker,
-    timeframe,
+    timeframe: "1D",
     bars,
     provider: String(latest.provider || "Fallback") === "DNSE" ? "DNSE" : "Fallback",
     detail: String(latest.provider_detail || "Supabase OHLCV cache"),
@@ -430,9 +406,6 @@ export async function loadCachedOhlcvHistory(
 }
 
 export async function loadCachedOhlcvPair(supabase: SupabaseClient, ticker: string) {
-  const [daily, hourly] = await Promise.all([
-    loadCachedOhlcvHistory(supabase, ticker, "1D"),
-    loadCachedOhlcvHistory(supabase, ticker, "1H"),
-  ])
-  return { daily, hourly }
+  const daily = await loadCachedOhlcvHistory(supabase, ticker, "1D")
+  return { daily }
 }

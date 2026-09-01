@@ -6,7 +6,7 @@ import {
 } from "./wyckoff-v2-builder.ts"
 import type { OhlcvBar } from "./technical-indicators.ts"
 
-export type WyckoffV2ChartSeriesTimeframe = "1H" | "1D"
+export type WyckoffV2ChartSeriesTimeframe = "1D"
 
 export interface WyckoffV2RecentOhlcvRow {
   ticker: string
@@ -58,12 +58,9 @@ function toBar(row: WyckoffV2RecentOhlcvRow): OhlcvBar | null {
   return { time: Math.floor(timestamp / 1000), open, high, low, close, volume }
 }
 
-export function assertWyckoffV2ChartSeriesCoverage(
-  inputTickers: string[],
-  rows: WyckoffV2ChartSeriesRow[],
-) {
+export function assertWyckoffV2ChartSeriesCoverage(inputTickers: string[], rows: WyckoffV2ChartSeriesRow[]) {
   const tickers = normalizeTickers(inputTickers)
-  const expected = tickers.flatMap((ticker) => [`${ticker}|1H`, `${ticker}|1D`])
+  const expected = tickers.map((ticker) => `${ticker}|1D`)
   const actual = new Set(rows.map((row) => `${row.ticker}|${row.timeframe}`))
   const missing = expected.filter((key) => !actual.has(key))
   if (rows.length !== expected.length || actual.size !== expected.length || missing.length) {
@@ -87,29 +84,27 @@ export function buildWyckoffV2ChartSeriesRows(args: {
   const result: WyckoffV2ChartSeriesRow[] = []
 
   for (const ticker of tickers) {
-    for (const timeframe of ["1H", "1D"] as const) {
-      const usable = args.rows
-        .filter((row) => tickerSet.has(row.ticker) && row.ticker === ticker && row.timeframe === timeframe)
-        .map((row) => ({ row, bar: toBar(row) }))
-        .filter((item): item is { row: WyckoffV2RecentOhlcvRow; bar: OhlcvBar } => Boolean(item.bar))
-        .sort((left, right) => left.bar.time - right.bar.time)
-        .slice(-260)
-      if (!usable.length) continue
-      const latest = usable.at(-1)!
-      result.push({
-        ticker,
-        timeframe,
-        bars: usable.map((item) => item.bar),
-        provider: latest.row.provider || "Unknown",
-        provider_detail: latest.row.provider_detail || "",
-        derived: false,
-        as_of: latest.row.bar_time,
-        model_version: WYCKOFF_V2_MODEL_VERSION,
-        aggregation_version: WYCKOFF_V2_AGGREGATION_VERSION,
-        run_id: args.runId,
-        updated_at: updatedAt,
-      })
-    }
+    const usable = args.rows
+      .filter((row) => tickerSet.has(row.ticker) && row.ticker === ticker && row.timeframe === "1D")
+      .map((row) => ({ row, bar: toBar(row) }))
+      .filter((item): item is { row: WyckoffV2RecentOhlcvRow; bar: OhlcvBar } => Boolean(item.bar))
+      .sort((left, right) => left.bar.time - right.bar.time)
+      .slice(-260)
+    if (!usable.length) continue
+    const latest = usable.at(-1)!
+    result.push({
+      ticker,
+      timeframe: "1D",
+      bars: usable.map((item) => item.bar),
+      provider: latest.row.provider || "Unknown",
+      provider_detail: latest.row.provider_detail || "",
+      derived: false,
+      as_of: latest.row.bar_time,
+      model_version: WYCKOFF_V2_MODEL_VERSION,
+      aggregation_version: WYCKOFF_V2_AGGREGATION_VERSION,
+      run_id: args.runId,
+      updated_at: updatedAt,
+    })
   }
 
   return result
@@ -131,7 +126,7 @@ export async function loadWyckoffV2ChartSeriesRows(
         p_limit: 260,
       })
       if (error) throw new Error(`Load recent OHLCV chart series failed for ${ticker}: ${error.message}`)
-      return (data || []) as WyckoffV2RecentOhlcvRow[]
+      return ((data || []) as Array<WyckoffV2RecentOhlcvRow & { timeframe: string }>).filter((row) => row.timeframe === "1D") as WyckoffV2RecentOhlcvRow[]
     }))
     rows.push(...results.flat())
   }
