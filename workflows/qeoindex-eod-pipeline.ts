@@ -168,7 +168,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
           }
 
           const nextAttemptAt = retryAt(startedAtIso, attempt, MARKET_CLOSE_RETRY_INTERVAL_MS)
-          await markQeoIndexPhaseRetryingStep({
+          await markQeoIndexEodPhaseRetryingStep({
             runId,
             phaseKey: "MARKET_CLOSE_COLLECT",
             attemptsUsed: attempt,
