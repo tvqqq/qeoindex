@@ -8,8 +8,7 @@ import {
   type AiCouncilEodMarketSnapshot,
 } from "@/lib/ai-council-eod-market"
 
-export const AI_COUNCIL_EOD_FRESHNESS_VERSION = "eod-freshness-v1"
-export const AI_COUNCIL_EXPECTED_STOCKS = 100
+export const AI_COUNCIL_EOD_FRESHNESS_VERSION = "eod-freshness-v2"
 
 export type AiCouncilEodMarketSource = "live_snapshot" | "persistent_ohlcv"
 
@@ -95,26 +94,42 @@ export async function assertAiCouncilEodFreshness(
   },
 ): Promise<AiCouncilEodFreshnessReport> {
   const tickers = uniqueTickers(input.tickers)
+  const { getCanonicalUniverse } = await import("@/lib/market-universe")
+  const canonical = await getCanonicalUniverse()
+  const canonicalTickers = canonical.stocks.map((stock) => stock.ticker)
+  const canonicalSet = new Set(canonicalTickers)
+  const requestedSet = new Set(tickers)
+  const expectedStocks = canonical.selectedCount
+  const missingCanonical = canonicalTickers.filter((ticker) => !requestedSet.has(ticker))
+  const unexpectedTickers = tickers.filter((ticker) => !canonicalSet.has(ticker))
   const issues: string[] = []
   const marketSource = input.marketSource ?? "live_snapshot"
+
+  if (
+    tickers.length !== expectedStocks
+    || missingCanonical.length > 0
+    || unexpectedTickers.length > 0
+  ) {
+    issues.push(
+      `Canonical universe mismatch: requested ${tickers.length}/${expectedStocks}`
+      + `${missingCanonical.length ? `; missing=${missingCanonical.slice(0, 20).join(",")}` : ""}`
+      + `${unexpectedTickers.length ? `; unexpected=${unexpectedTickers.slice(0, 20).join(",")}` : ""}`,
+    )
+  }
 
   if (!input.ratingDate) {
     const report: AiCouncilEodFreshnessReport = {
       version: AI_COUNCIL_EOD_FRESHNESS_VERSION,
       ok: false,
       ratingDate: null,
-      expectedStocks: AI_COUNCIL_EXPECTED_STOCKS,
+      expectedStocks,
       requestedStocks: tickers.length,
       benchmarkSessionDate: input.benchmarkSessionDate,
       market: { source: marketSource, sessionDate: null, freshCount: 0, staleOrMissingTickers: tickers, latestUpdatedAt: null },
       wyckoff1d: { sessionDate: null, freshCount: 0, staleOrMissingTickers: tickers, carryForwardTickers: [], latestBarClosedAt: null },
-      issues: ["ratingDate is missing"],
+      issues: [...issues, "ratingDate is missing"],
     }
     throw new AiCouncilUpstreamStaleError(report)
-  }
-
-  if (tickers.length !== AI_COUNCIL_EXPECTED_STOCKS) {
-    issues.push(`Top100 universe incomplete: ${tickers.length}/${AI_COUNCIL_EXPECTED_STOCKS}`)
   }
 
   let marketRows: AiCouncilEodMarketSnapshot[] = []
@@ -188,7 +203,7 @@ export async function assertAiCouncilEodFreshness(
     version: AI_COUNCIL_EOD_FRESHNESS_VERSION,
     ok: issues.length === 0,
     ratingDate: input.ratingDate,
-    expectedStocks: AI_COUNCIL_EXPECTED_STOCKS,
+    expectedStocks,
     requestedStocks: tickers.length,
     benchmarkSessionDate: input.benchmarkSessionDate,
     market: {
