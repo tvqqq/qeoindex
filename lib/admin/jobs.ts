@@ -1,3 +1,4 @@
+import { getAdminJobDefinition } from "./catalog.ts"
 import { getEffectiveAdminJobDefinition } from "./effective-job-catalog.ts"
 import { executeSystemJob } from "./job-telemetry.ts"
 import { sanitizeAdminValue } from "./redact.ts"
@@ -50,13 +51,17 @@ export interface AdminJobExecutionResult {
 
 const TICKER_PATTERN = /^[A-Z0-9]{2,12}$/
 
+function getManualAdminJobDefinition(key: string) {
+  return getEffectiveAdminJobDefinition(key) ?? getAdminJobDefinition(key)
+}
+
 export function isManualJobAllowed(jobKey: string): boolean {
   return (ALLOWLISTED_MANUAL_JOB_KEYS as readonly string[]).includes(jobKey)
 }
 
 export function getManualJobCapabilities(): ManualJobCapability[] {
   return ALLOWLISTED_MANUAL_JOB_KEYS.map((key) => {
-    const def = getEffectiveAdminJobDefinition(key)
+    const def = getManualAdminJobDefinition(key)
     return {
       key,
       label: def?.label ?? key,
@@ -191,7 +196,7 @@ export async function dispatchManualAdminJob(input: DispatchManualAdminJobInput)
     }
   }
 
-  const definition = getEffectiveAdminJobDefinition(input.key)
+  const definition = getManualAdminJobDefinition(input.key)
   if (definition?.manualPolicy === "confirm" && input.confirmed !== true) {
     return { ok: false, jobKey: input.key, runId: null, durationMs: 0, error: "Tác vụ yêu cầu xác nhận rõ ràng trước khi chạy." }
   }
