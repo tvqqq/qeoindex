@@ -3,6 +3,9 @@ import type { WyckoffV2Snapshot } from "./wyckoff-v2-builder.ts"
 import { validateWyckoffV2SnapshotSet } from "./wyckoff-v2-contract.ts"
 
 export const WYCKOFF_V2_OPERATIONAL_SOURCE = "qeoindex-notion-v2" as const
+export const WYCKOFF_V2_UNIVERSE_KEY = "vn_top_stocks" as const
+const MAX_UNIVERSE_SIZE = 200
+const SUPPORTED_EXCHANGES = new Set(["HOSE", "HNX", "UPCOM"])
 
 export interface WyckoffV2Membership {
   ticker: string
@@ -38,10 +41,11 @@ export function validateWyckoffV2Memberships(snapshots: WyckoffV2Snapshot[]): Wy
       throw new Error(`Inconsistent membership metadata for ${row.ticker}`)
     }
   }
-  if (byTicker.size !== 100) throw new Error(`Expected 100 unique ticker memberships; received ${byTicker.size}`)
+  if (!byTicker.size || byTicker.size > MAX_UNIVERSE_SIZE) throw new Error(`Expected 1-${MAX_UNIVERSE_SIZE} unique ticker memberships; received ${byTicker.size}`)
   const memberships = [...byTicker.values()]
-  if (memberships.some((row) => row.exchange !== "HOSE")) throw new Error("Selected memberships must all be HOSE")
-  return memberships.sort((a, b) => a.ticker.localeCompare(b.ticker))
+  const unsupported = memberships.filter((row) => !SUPPORTED_EXCHANGES.has(String(row.exchange || "").toUpperCase()))
+  if (unsupported.length) throw new Error(`Selected memberships contain unsupported exchange: ${unsupported.slice(0, 5).map((row) => row.ticker).join(",")}`)
+  return memberships.sort((a, b) => (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER) || a.ticker.localeCompare(b.ticker))
 }
 
 export function buildWyckoffV2SupabasePayload(input: {
@@ -53,7 +57,7 @@ export function buildWyckoffV2SupabasePayload(input: {
   const validation = validateWyckoffV2SnapshotSet(input.runKey, input.snapshots)
   const memberships = validateWyckoffV2Memberships(input.snapshots).map((row) => ({
     ...row,
-    universe_key: "hose_top100",
+    universe_key: WYCKOFF_V2_UNIVERSE_KEY,
     effective_date: input.scanDate,
     active: true,
     source: WYCKOFF_V2_OPERATIONAL_SOURCE,
@@ -116,35 +120,17 @@ export function buildWyckoffV2ChartSeriesRows(input: {
   }
 
   return [...groups.entries()].map(([key, rows]) => {
-    const ordered = rows
-      .slice()
-      .sort((a, b) => new Date(a.bar_time).getTime() - new Date(b.bar_time).getTime())
-      .slice(-260)
+    const ordered = rows.slice().sort((a, b) => new Date(a.bar_time).getTime() - new Date(b.bar_time).getTime()).slice(-260)
     const latest = ordered.at(-1)
     if (!latest) throw new Error(`No OHLCV rows for ${key}`)
     const bars: OhlcvBar[] = ordered.map((row) => ({
-      time: Math.floor(new Date(row.bar_time).getTime() / 1000),
-      open: Number(row.open),
-      high: Number(row.high),
-      low: Number(row.low),
-      close: Number(row.close),
-      volume: Number(row.volume),
+      time: Math.floor(new Date(row.bar_time).getTime() / 1000), open: Number(row.open), high: Number(row.high), low: Number(row.low), close: Number(row.close), volume: Number(row.volume),
     }))
-    if (bars.some((bar) => !Number.isFinite(bar.time) || !Number.isFinite(bar.close) || bar.time <= 0 || bar.close <= 0)) {
-      throw new Error(`Invalid OHLCV chart series for ${key}`)
-    }
+    if (bars.some((bar) => !Number.isFinite(bar.time) || !Number.isFinite(bar.close) || bar.time <= 0 || bar.close <= 0)) throw new Error(`Invalid OHLCV chart series for ${key}`)
     return {
-      ticker: latest.ticker,
-      timeframe: latest.timeframe,
-      bars,
-      provider: latest.provider,
-      provider_detail: latest.provider_detail,
-      derived: false,
-      as_of: latest.bar_time,
-      model_version: input.modelVersion ?? "qeo-wyckoff-rule-v1",
-      aggregation_version: input.aggregationVersion ?? "vn-session-v1",
-      run_id: input.runId,
-      updated_at: latest.fetched_at,
+      ticker: latest.ticker, timeframe: latest.timeframe, bars, provider: latest.provider, provider_detail: latest.provider_detail,
+      derived: false, as_of: latest.bar_time, model_version: input.modelVersion ?? "qeo-wyckoff-rule-v1",
+      aggregation_version: input.aggregationVersion ?? "vn-session-v1", run_id: input.runId, updated_at: latest.fetched_at,
     }
   }).sort((a, b) => `${a.ticker}|${a.timeframe}`.localeCompare(`${b.ticker}|${b.timeframe}`))
 }
