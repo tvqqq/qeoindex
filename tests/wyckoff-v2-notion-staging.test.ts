@@ -12,9 +12,9 @@ import {
 } from "../lib/wyckoff-v2-notion-staging.ts"
 import type { WyckoffV2Snapshot } from "../lib/wyckoff-v2-builder.ts"
 
-function snapshot(ticker: string, timeframe: "1H" | "4H" | "1D" | "1W" | "1M", rank: number | null): WyckoffV2Snapshot {
-  const runKey = "WYCKOFF-2026-09-01-EOD-v2"
-  const horizon = timeframe === "1H" ? "intraday" : timeframe === "4H" ? "swing" : timeframe === "1D" ? "week" : timeframe === "1W" ? "month" : "long_term"
+function snapshot(ticker: string, timeframe: WyckoffV2Snapshot["timeframe"], rank: number | null): WyckoffV2Snapshot {
+  const runKey = "WYCKOFF-2026-09-01-EOD-v3"
+  const horizon = timeframe === "1D" ? "week" : "month"
   return {
     snapshot: `${ticker} · ${timeframe} · 2026-09-01`, snapshotKey: `${runKey}|${ticker}|${timeframe}`, runKey, ticker, rank,
     exchange: "HOSE", sector: "Consumer", timeframe, barClosedAt: "2026-09-01T07:45:00.000Z", historyBarCount: 80,
@@ -25,7 +25,7 @@ function snapshot(ticker: string, timeframe: "1H" | "4H" | "1D" | "1W" | "1M", r
     bullProbability: 40, baseProbability: 35, bearProbability: 25, support: "60", resistance: "70",
     confirmation: "Breakout → Hold → Retest → Follow-through.", invalidation: "Acceptance dưới Support 60.", whatChanged: "Baseline scan.",
     technical: { price: 65, changePct: 1, volume: 1_000_000, ma20: 64, ma50: 62, ma200: 55, rsi14: 58, macd: 1, macdSignal: 0.8, atr14: 1.2, relVolume: 1.1 },
-    evidence: { provider: "DNSE", providerDetail: "DNSE cached history", sourceUrl: `https://openapi.dnse.com.vn/price/ohlc?symbol=${ticker}&resolution=1D&type=STOCK`, fetchedAt: "2026-09-01T08:20:00.000Z", firstBarAt: "2025-01-01T00:00:00.000Z", lastBarAt: "2026-09-01T07:45:00.000Z", completedBars: 80, derived: timeframe !== "1H" && timeframe !== "1D", rulesTriggered: ["Above MA50"], missingReason: "" },
+    evidence: { provider: "DNSE", providerDetail: "DNSE cached history", sourceUrl: `https://openapi.dnse.com.vn/price/ohlc?symbol=${ticker}&resolution=1D&type=STOCK`, fetchedAt: "2026-09-01T08:20:00.000Z", firstBarAt: "2025-01-01T00:00:00.000Z", lastBarAt: "2026-09-01T07:45:00.000Z", completedBars: 80, derived: timeframe === "1W", rulesTriggered: ["Above MA50"], missingReason: "" },
     markers: [],
     scenarios: [
       { key: "bull", label: "Bull", probability: 40, color: "#0", target: 72, path: [{ time: 1, value: 65 }, { time: 2, value: 72 }], description: "Bull case", horizon, trigger: "Breakout", confirmation: "Hold", invalidation: "Lose Support", evidence: ["Demand"] },
@@ -36,7 +36,7 @@ function snapshot(ticker: string, timeframe: "1H" | "4H" | "1D" | "1W" | "1M", r
 }
 
 function fullSet() {
-  const frames = ["1H", "4H", "1D", "1W", "1M"] as const
+  const frames = ["1D", "1W"] as const
   return Array.from({ length: 200 }, (_, index) => {
     const ticker = `T${String(index + 1).padStart(3, "0")}`
     const rank = index === 20 || index === 21 ? 21 : index + 1
@@ -44,18 +44,18 @@ function fullSet() {
   }).flat()
 }
 
-test("v2 snapshot set validates exactly 1000 unique keys while rank anomalies remain non-blocking", () => {
+test("v2 snapshot set validates exactly 400 unique Daily Weekly keys while rank anomalies remain non-blocking", () => {
   const snapshots = fullSet()
-  const result = validateWyckoffV2SnapshotSet("WYCKOFF-2026-09-01-EOD-v2", snapshots)
-  assert.equal(result.total, 1000)
-  assert.equal(result.complete, 1000)
+  const result = validateWyckoffV2SnapshotSet("WYCKOFF-2026-09-01-EOD-v3", snapshots)
+  assert.equal(result.total, 400)
+  assert.equal(result.complete, 400)
   assert.equal(result.incomplete, 0)
   assert.equal(result.invalid, 0)
   assert.equal(result.tickerCount, 200)
 
   const duplicate = snapshots.slice()
-  duplicate[999] = duplicate[0]
-  assert.throws(() => validateWyckoffV2SnapshotSet("WYCKOFF-2026-09-01-EOD-v2", duplicate), /duplicate|unique/i)
+  duplicate[399] = duplicate[0]
+  assert.throws(() => validateWyckoffV2SnapshotSet("WYCKOFF-2026-09-01-EOD-v3", duplicate), /duplicate|unique/i)
 })
 
 test("validation hash sorts canonical lines and uses lowercase SHA-256", () => {
@@ -89,17 +89,17 @@ test("snapshot property mapping preserves contract fields and parseable JSON", (
   assert.deepEqual(JSON.parse(scenarios), row.scenarios)
 })
 
-test("run property mapping declares canonical 200-stock ownership and actual counters", () => {
+test("run property mapping declares canonical 200-stock Daily Weekly ownership and actual counters", () => {
   const properties = buildWyckoffV2RunProperties({
-    runKey: "WYCKOFF-2026-09-01-EOD-v2", scanDate: "2026-09-01", status: "Writing",
+    runKey: "WYCKOFF-2026-09-01-EOD-v3", scanDate: "2026-09-01", status: "Writing",
     snapshotComplete: 0, snapshotIncomplete: 0, errorCount: 0, errorSummary: "", startedAt: "2026-09-01T08:15:00.000Z",
     providerSummary: "QeoIndex server writer · persistent OHLCV cache", validationHash: "", universeCount: 200,
   }) as Record<string, any>
-  assert.equal(properties.Run.title[0].text.content, "WYCKOFF-2026-09-01-EOD-v2")
+  assert.equal(properties.Run.title[0].text.content, "WYCKOFF-2026-09-01-EOD-v3")
   assert.equal(properties.Status.select.name, "Writing")
   assert.equal(properties["Universe Key"].rich_text[0].text.content, "vn_top_stocks")
   assert.equal(properties["Universe Count"].number, 200)
-  assert.equal(properties["Snapshot Expected"].number, 1000)
+  assert.equal(properties["Snapshot Expected"].number, 400)
   assert.equal(properties["Prompt Version"].rich_text[0].text.content, "notion-unified-v2")
   assert.equal(properties["Model Version"].rich_text[0].text.content, "qeo-wyckoff-rule-v1")
   assert.equal(properties["Aggregation Version"].rich_text[0].text.content, "vn-session-v1")
