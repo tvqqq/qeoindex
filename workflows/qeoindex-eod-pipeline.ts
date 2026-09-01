@@ -7,6 +7,8 @@ import {
 import { runEodBackfillReadyStep } from "@/lib/qeoindex-eod-backfill-ready-step"
 import { failQeoIndexEodRunStep } from "@/lib/qeoindex-eod-failure-step"
 import { runEodNoTradeDailyRepairStep } from "@/lib/qeoindex-eod-no-trade-repair-step"
+import { skipQeoIndexEodRunStep } from "@/lib/qeoindex-eod-skip-step"
+import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "@/lib/vn-market-calendar"
 import type { OhlcvUniverseRefreshResult } from "@/lib/ohlcv-history-store"
 import {
   runCompleteStep,
@@ -84,21 +86,17 @@ function isRetryableMarketCloseFailure(error: unknown) {
   ].some((token) => normalized.includes(token))
 }
 
-function vietnamDateKey(iso: string) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(iso))
-}
-
 export async function qeoindexEodPipeline(startedAtIso: string) {
   "use workflow"
 
   const runId = await startQeoIndexEodRunStep(startedAtIso)
   try {
-    const historicalBackfill = vietnamDateKey(startedAtIso) !== vietnamDateKey(new Date().toISOString())
+    const requestedDate = vietnamDateKey(startedAtIso)
+    if (!isVietnamSecuritiesTradingDateKey(requestedDate)) {
+      return await skipQeoIndexEodRunStep(runId, requestedDate, "NON_TRADING_DAY")
+    }
+
+    const historicalBackfill = requestedDate !== vietnamDateKey(new Date().toISOString())
     let ready:
       | Awaited<ReturnType<typeof runEodReadyStep>>
       | Awaited<ReturnType<typeof runEodBackfillReadyStep>>
