@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto"
 
 import { fetchHourlyMarketHistory, fetchLongDailyMarketHistory } from "@/lib/market-history"
-import { sectorForTicker } from "@/lib/market-sectors"
-import { getScannerDataFresh } from "@/lib/scanner-data"
+import { getCanonicalUniverse } from "@/lib/market-universe"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { buildWyckoffChartStudies } from "@/lib/wyckoff-chart-model"
-import { CANONICAL_UNIVERSE_STOCKS, UNIVERSE_DATE, UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
 
 export const WYCKOFF_MODEL_VERSION = "qeo-wyckoff-rule-v1"
 export const WYCKOFF_AGGREGATION_VERSION = "vn-session-v1"
+export const WYCKOFF_UNIVERSE_KEY = "vn_top_stocks"
+const MAX_BATCH_SIZE = 10
 
 export interface UnifiedWyckoffRunSummary {
   ok: boolean
@@ -23,23 +23,23 @@ function isoFromSeconds(value: number) {
   return new Date(value * 1000).toISOString()
 }
 
-export async function runUnifiedWyckoff({ limit = 10, offset = 0 }: { limit?: number; offset?: number } = {}): Promise<UnifiedWyckoffRunSummary> {
+export async function runUnifiedWyckoff({ limit = MAX_BATCH_SIZE, offset = 0 }: { limit?: number; offset?: number } = {}): Promise<UnifiedWyckoffRunSummary> {
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured")
 
-  const scanner = await getScannerDataFresh().catch(() => ({
-    universeDate: UNIVERSE_DATE,
-    universe: CANONICAL_UNIVERSE_STOCKS.map((stock) => ({ ...stock, id: stock.ticker, active: true, providerStatus: "", lastScan: "", sector: sectorForTicker(stock.ticker) })),
-  }))
-  const safeLimit = Math.max(1, Math.min(10, limit))
-  const safeOffset = Math.max(0, Math.min(UNIVERSE_SIZE - 1, offset))
-  const targets = scanner.universe.slice(safeOffset, safeOffset + safeLimit)
+  const canonical = await getCanonicalUniverse()
+  if (!canonical.stocks.length) throw new Error("Canonical market universe returned no stocks")
+
+  const safeLimit = Math.max(1, Math.min(MAX_BATCH_SIZE, limit))
+  const safeOffset = Math.max(0, Math.min(canonical.stocks.length - 1, offset))
+  const targets = canonical.stocks.slice(safeOffset, safeOffset + safeLimit)
   const runId = randomUUID()
   const startedAt = new Date().toISOString()
 
   const { error: runError } = await supabase.from("wyckoff_scan_runs").insert({
     id: runId,
-    universe_effective_date: scanner.universeDate,
+    universe_key: WYCKOFF_UNIVERSE_KEY,
+    universe_effective_date: canonical.sourceAsOfDate,
     model_version: WYCKOFF_MODEL_VERSION,
     aggregation_version: WYCKOFF_AGGREGATION_VERSION,
     status: "running",
@@ -48,26 +48,27 @@ export async function runUnifiedWyckoff({ limit = 10, offset = 0 }: { limit?: nu
   })
   if (runError) throw new Error(`Cannot create Wyckoff run: ${runError.message}`)
 
-  const memberships = scanner.universe.map((stock) => ({
+  const memberships = canonical.stocks.map((stock) => ({
+    universe_key: WYCKOFF_UNIVERSE_KEY,
     ticker: stock.ticker,
-    exchange: stock.exchange,
+    exchange: stock.exchange || "",
     rank: stock.rank,
-    sector: stock.sector,
-    market_cap_billion: stock.marketCapT * 1000,
-    effective_date: scanner.universeDate,
-    active: stock.active,
-    source: "notion",
+    sector: stock.sector || "",
+    market_cap_billion: stock.marketCapBillion,
+    effective_date: canonical.sourceAsOfDate,
+    active: true,
+    source: "canonical_market_universe",
     synced_at: startedAt,
   }))
-  const { error: membershipError } = await supabase.from("wyckoff_universe_memberships").upsert(memberships, { onConflict: "universe_key,ticker,effective_date" })
+  const { error: membershipError } = await supabase
+    .from("wyckoff_universe_memberships")
+    .upsert(memberships, { onConflict: "universe_key,ticker,effective_date" })
   if (membershipError) throw new Error(`Cannot sync Wyckoff universe: ${membershipError.message}`)
 
   const completed: UnifiedWyckoffRunSummary["completed"] = []
   const errors: UnifiedWyckoffRunSummary["errors"] = []
   for (const stock of targets) {
     try {
-      // Operational EOD decisions must bypass UI cross-request caches. React/UI callers keep
-      // their own cached wrappers, while this path asks providers for the latest completed bars.
       const now = new Date()
       const [daily, hourly] = await Promise.all([
         fetchLongDailyMarketHistory(stock.ticker, now),
@@ -121,16 +122,33 @@ export async function runUnifiedWyckoff({ limit = 10, offset = 0 }: { limit?: nu
         invalidation: study.analysis!.invalidation,
         what_changed: study.analysis!.whatChanged,
         technical: study.analysis!.technical,
-        evidence: { provider: study.provider, providerDetail: study.detail, derived: study.derived, barCount: study.bars.length },
+        evidence: {
+          provider: study.provider,
+          providerDetail: study.detail,
+          derived: study.derived,
+          barCount: study.bars.length,
+        },
         markers: study.markers,
         scenarios: study.scenarios,
       }))
 
-      const { error: seriesError } = await supabase.from("wyckoff_chart_series").upsert(seriesRows, { onConflict: "ticker,timeframe" })
+      const { error: seriesError } = await supabase
+        .from("wyckoff_chart_series")
+        .upsert(seriesRows, { onConflict: "ticker,timeframe" })
       if (seriesError) throw new Error(`Series write failed: ${seriesError.message}`)
-      const { error: snapshotsError } = await supabase.from("wyckoff_analysis_snapshots").upsert(snapshotRows, { onConflict: "ticker,timeframe,bar_closed_at,model_version,aggregation_version", ignoreDuplicates: true })
+      const { error: snapshotsError } = await supabase
+        .from("wyckoff_analysis_snapshots")
+        .upsert(snapshotRows, {
+          onConflict: "ticker,timeframe,bar_closed_at,model_version,aggregation_version",
+          ignoreDuplicates: true,
+        })
       if (snapshotsError) throw new Error(`Snapshot write failed: ${snapshotsError.message}`)
-      completed.push({ ticker: stock.ticker, timeframes: validStudies.length, dailyProvider: daily.provider, hourlyProvider: hourly.provider })
+      completed.push({
+        ticker: stock.ticker,
+        timeframes: validStudies.length,
+        dailyProvider: daily.provider,
+        hourlyProvider: hourly.provider,
+      })
     } catch (error) {
       errors.push({ ticker: stock.ticker, error: error instanceof Error ? error.message : String(error) })
     }
@@ -143,7 +161,13 @@ export async function runUnifiedWyckoff({ limit = 10, offset = 0 }: { limit?: nu
     completed_count: completed.length,
     incomplete_count: completed.reduce((sum, item) => sum + (5 - item.timeframes), 0),
     error_count: errors.length,
-    diagnostics: { offset: safeOffset, limit: safeLimit, errors: errors.slice(0, 10) },
+    diagnostics: {
+      offset: safeOffset,
+      limit: safeLimit,
+      canonicalUniverseRunId: canonical.runId,
+      canonicalUniverseCount: canonical.selectedCount,
+      errors: errors.slice(0, 10),
+    },
     finished_at: generatedAt,
   }).eq("id", runId)
 
