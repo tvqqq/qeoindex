@@ -138,10 +138,10 @@ export function TopNav() {
             <img src="/brand/stockos-mark.svg" alt="" className="h-6 w-6 shrink-0" />
           </div>
           <div className="hidden flex-col leading-none sm:flex">
-            <span className="flex items-center font-ticker text-[17px] font-extrabold italic tracking-tight text-white">
+            <span className="flex items-center font-ticker text-lg font-extrabold italic tracking-tight text-white">
               Qeo<span className="bg-gradient-to-r from-emerald-400 via-teal-200 via-cyan-300 to-emerald-400 bg-clip-text text-transparent">Index</span>
             </span>
-            <span className="mt-0.5 font-ticker text-[10.5px] font-medium text-slate-400">{BRAND.slogan}</span>
+            <span className="mt-0.5 font-ticker text-[11px] font-medium text-slate-400">{BRAND.slogan}</span>
           </div>
         </Link>
 
