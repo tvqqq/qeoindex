@@ -46,11 +46,13 @@ test("DB drift workflow runs clean replay, generated type drift verification, an
 
 test("QEO-29 keeps phase detail for 1 day and terminal run summaries for 7 days", () => {
   const sql = qeo29RetentionMigration()
+  const active = source("lib/qeoindex-eod-archive.ts")
 
   assert.match(sql, /v_phase_cutoff\s+timestamptz\s*:=\s*p_reference_at\s*-\s*interval\s+'1 day'/i)
   assert.match(sql, /v_job_cutoff\s+timestamptz\s*:=\s*p_reference_at\s*-\s*interval\s+'7 days'/i)
   assert.match(sql, /delete\s+from\s+public\.system_job_phases[\s\S]*?status\s+in\s*\(\s*'succeeded'\s*,\s*'failed'\s*,\s*'skipped'\s*\)[\s\S]*?v_phase_cutoff/i)
   assert.match(sql, /delete\s+from\s+public\.system_job_runs[\s\S]*?status\s+in\s*\(\s*'succeeded'\s*,\s*'failed'\s*,\s*'skipped'\s*\)[\s\S]*?v_job_cutoff/i)
+  assert.match(active, /rpc\("qeo_run_job_telemetry_cleanup"/)
   assert.doesNotMatch(sql, /delete\s+from\s+public\.system_audit_log/i)
   assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
 })
