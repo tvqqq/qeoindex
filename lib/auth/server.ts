@@ -4,6 +4,10 @@ import { cache } from "react"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js"
+import {
+  createSanitizedServerAuthTransportFailure,
+  reportServerAuthTransportFailure,
+} from "@/lib/auth/server-observability"
 
 export const AUTH_COOKIE_NAME = "qeoindex_access_token"
 
@@ -49,10 +53,15 @@ export async function verifySupabaseAccessToken(accessToken: string): Promise<Se
   const supabase = createUserScopedSupabaseClient(accessToken)
   if (!supabase) return null
 
-  const { data, error } = await supabase.auth.getUser(accessToken)
-  if (error || !data.user) return null
+  try {
+    const { data, error } = await supabase.auth.getUser(accessToken)
+    if (error || !data.user) return null
 
-  return { user: data.user, supabase, accessToken }
+    return { user: data.user, supabase, accessToken }
+  } catch (transportError) {
+    reportServerAuthTransportFailure(transportError)
+    throw createSanitizedServerAuthTransportFailure(transportError)
+  }
 }
 
 export const getServerAuthContext = cache(async (): Promise<ServerAuthContext | null> => {
