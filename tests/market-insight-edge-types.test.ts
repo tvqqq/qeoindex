@@ -1,6 +1,8 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
+import { pathToFileURL } from "node:url"
+import { resolve } from "node:path"
 
 import type {
   NormalizedIndexRow,
@@ -91,4 +93,44 @@ test("direct market snapshot writer fails closed on Vietnam securities holidays"
   assert.match(marketSession, /_shared\/vn-market-calendar\.ts/)
   assert.match(marketSession, /isVietnamSecuritiesTradingDateKey/)
   assert.match(marketSession, /NON_TRADING_DAY/)
+})
+
+test("market-session writer requires machine auth before service-role access", () => {
+  const helperPath = resolve("supabase/functions/_shared/machine-auth.ts")
+  assert.equal(existsSync(helperPath), true, "expected shared Edge machine-auth helper")
+
+  const marketSession = source("supabase/functions/market-session/index.ts")
+  assert.match(marketSession, /MARKET_SYNC_SECRET/)
+  assert.match(marketSession, /CRON_SECRET/)
+  assert.match(marketSession, /isMachineRequestAuthorized/)
+  assert.match(marketSession, /status:\s*401/)
+
+  const postGate = marketSession.indexOf('if (req.method === "POST")')
+  const authGate = marketSession.indexOf("await isMachineRequestAuthorized(")
+  const serviceClient = marketSession.indexOf("createClient(")
+  assert.ok(postGate >= 0 && authGate > postGate, "POST auth must be scoped to writer path")
+  assert.ok(serviceClient > authGate, "auth must run before service-role client construction")
+})
+
+test("shared Edge machine auth accepts only exact configured bearer tokens", async () => {
+  const helperPath = resolve("supabase/functions/_shared/machine-auth.ts")
+  const { isMachineRequestAuthorized } = await import(pathToFileURL(helperPath).href)
+  const tokens = ["alpha", "beta"]
+
+  assert.equal(await isMachineRequestAuthorized(new Request("https://example.test", {
+    headers: { authorization: "Bearer alpha" },
+  }), tokens), true)
+  assert.equal(await isMachineRequestAuthorized(new Request("https://example.test", {
+    headers: { authorization: "Bearer beta" },
+  }), tokens), true)
+  assert.equal(await isMachineRequestAuthorized(new Request("https://example.test", {
+    headers: { authorization: "Bearer gamma" },
+  }), tokens), false)
+  assert.equal(await isMachineRequestAuthorized(new Request("https://example.test"), tokens), false)
+  assert.equal(await isMachineRequestAuthorized(new Request("https://example.test", {
+    headers: { authorization: "Basic alpha" },
+  }), tokens), false)
+  assert.equal(await isMachineRequestAuthorized(new Request("https://example.test", {
+    headers: { authorization: "Bearer alpha" },
+  }), []), false)
 })
