@@ -15,7 +15,7 @@ function universePage(input: { ticker: string; active?: boolean; exchange?: stri
     id: `page-${input.ticker}`,
     properties: {
       Ticker: { title: [{ plain_text: input.ticker }] },
-      Active: { checkbox: { checked: input.active ?? true } },
+      Active: { checkbox: input.active ?? true },
       Exchange: { select: { name: input.exchange ?? "HOSE" } },
       Rank: { number: input.rank === undefined ? 1 : input.rank },
       Sector: { rich_text: [{ plain_text: input.sector ?? "Consumer" }] },
