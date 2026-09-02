@@ -30,6 +30,12 @@ type Candidate = {
 
 type LogoKind = "official" | "generated_fallback"
 
+type LogoProvenance = {
+  logo_path: string
+  logo_kind: LogoKind
+  source: string
+}
+
 type ImageCandidate = {
   source: string
   body: Uint8Array
@@ -197,11 +203,44 @@ async function objectExists(supabase: SupabaseClient, path: string) {
   return Boolean(data?.some((item) => item.name === path))
 }
 
+async function readLogoProvenance(supabase: SupabaseClient, ticker: string): Promise<LogoProvenance | null> {
+  const { data, error } = await supabase
+    .from("market_logo_provenance")
+    .select("logo_path,logo_kind,source")
+    .eq("ticker", ticker)
+    .maybeSingle()
+  if (error) throw new Error(`Logo provenance lookup failed for ${ticker}: ${error.message}`)
+  if (!data) return null
+  if (data.logo_kind !== "official" && data.logo_kind !== "generated_fallback") {
+    throw new Error(`Invalid logo provenance kind for ${ticker}: ${String(data.logo_kind)}`)
+  }
+  return {
+    logo_path: String(data.logo_path),
+    logo_kind: data.logo_kind,
+    source: String(data.source),
+  }
+}
+
+async function persistLogoProvenance(supabase: SupabaseClient, ticker: string, path: string, kind: LogoKind, source: string) {
+  const { error } = await supabase.from("market_logo_provenance").upsert({
+    ticker,
+    logo_path: path,
+    logo_kind: kind,
+    source,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "ticker" })
+  if (error) throw new Error(`Logo provenance persist failed for ${ticker}: ${error.message}`)
+}
+
 async function ensureLogo(supabase: SupabaseClient, ticker: string): Promise<{ path: string; kind: LogoKind; source: string }> {
   const path = `${ticker}.png`
   if (await objectExists(supabase, path)) {
-    const { data } = await supabase.from("market_universe_memberships").select("logo_kind").eq("ticker", ticker).order("created_at", { ascending: false }).limit(1).maybeSingle()
-    return { path, kind: data?.logo_kind === "generated_fallback" ? "generated_fallback" : "official", source: "storage-existing" }
+    const provenance = await readLogoProvenance(supabase, ticker)
+    if (!provenance) throw new Error(`Logo provenance missing for existing storage object ${ticker}`)
+    if (provenance.logo_path !== path) {
+      throw new Error(`Logo provenance path mismatch for ${ticker}: expected ${path}, got ${provenance.logo_path}`)
+    }
+    return { path, kind: provenance.logo_kind, source: provenance.source }
   }
 
   const legacy = await fetchImage("qeoindex-local-legacy", `${LEGACY_LOGO_BASE}/${ticker}.png`, true)
@@ -221,12 +260,14 @@ async function ensureLogo(supabase: SupabaseClient, ticker: string): Promise<{ p
   }
 
   if (best) {
+    await persistLogoProvenance(supabase, ticker, path, "official", best.source)
     const { error } = await supabase.storage.from(LOGO_BUCKET).upload(path, best.body, { upsert: true, contentType: best.contentType, cacheControl: "2592000" })
     if (error) throw new Error(`Logo upload failed for ${ticker}: ${error.message}`)
     return { path, kind: "official", source: best.source }
   }
 
   const fallback = await deterministicTickerPng(ticker)
+  await persistLogoProvenance(supabase, ticker, path, "generated_fallback", "generated_fallback")
   const { error } = await supabase.storage.from(LOGO_BUCKET).upload(path, fallback, { upsert: true, contentType: "image/png", cacheControl: "2592000" })
   if (error) throw new Error(`Fallback logo upload failed for ${ticker}: ${error.message}`)
   return { path, kind: "generated_fallback", source: "generated_fallback" }

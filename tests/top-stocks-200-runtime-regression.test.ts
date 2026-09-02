@@ -27,8 +27,10 @@ const universeVersionRoute = source("app/api/market-universe/version/route.ts")
 const orderbookCleanupMigration = source("supabase/migrations/20260901162500_prune_noncanonical_orderbook_snapshots.sql")
 const cleanRebuildMigrationPath = "supabase/migrations/20260901144121_clean_rebuild_top_stocks_200.sql"
 const cleanRebuildMarketSyncMigrationPath = "supabase/migrations/20260902011529_clean_rebuild_market_snapshot_trigger.sql"
+const logoProvenanceMigrationPath = "supabase/migrations/20260902024536_market_logo_provenance.sql"
 const insightsPage = source("app/insights/page.tsx")
 const marketSyncUniverse = source("lib/market-sync-universe.ts")
+const marketUniverseEdge = source("supabase/functions/market-universe-sync/index.ts")
 const orderbookSync = source("supabase/functions/orderbook-sync/index.ts")
 const sessionCountdown = source("lib/session-countdown.ts")
 const eodWorkflow = source("workflows/qeoindex-eod-pipeline.ts")
@@ -160,6 +162,25 @@ test("clean rebuild is an explicit one-shot purge of rebuildable stock operation
   assert.doesNotMatch(migration, /truncate table[^;]*market_ohlcv_archive_ranges/i)
   assert.match(migration, /check \(timeframe = '1D'\)/)
   assert.match(migration, /check \(timeframe in \('1D', '1W'\)\)/)
+})
+
+test("logo provenance survives clean rebuild independently of universe membership history", () => {
+  assert.equal(existsSync(logoProvenanceMigrationPath), true)
+  if (!existsSync(logoProvenanceMigrationPath)) return
+  const migration = source(logoProvenanceMigrationPath)
+  const cleanRebuildMigration = source(cleanRebuildMigrationPath)
+
+  assert.match(migration, /create table if not exists public\.market_logo_provenance/i)
+  assert.match(migration, /distinct on \(ticker\)/i)
+  assert.match(migration, /from public\.market_universe_memberships/i)
+  assert.match(migration, /logo_kind in \('official', 'generated_fallback'\)/i)
+  assert.match(migration, /grant all privileges on table public\.market_logo_provenance to service_role/i)
+  assert.doesNotMatch(cleanRebuildMigration, /market_logo_provenance/i)
+
+  assert.match(marketUniverseEdge, /from\("market_logo_provenance"\)/)
+  assert.match(marketUniverseEdge, /Logo provenance missing for existing storage object/)
+  assert.match(marketUniverseEdge, /persistLogoProvenance/)
+  assert.doesNotMatch(marketUniverseEdge, /from\("market_universe_memberships"\)\.select\("logo_kind"\)/)
 })
 
 test("clean rebuild has a service-role-only final market snapshot bootstrap trigger", () => {
