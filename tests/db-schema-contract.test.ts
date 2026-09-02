@@ -19,6 +19,12 @@ function qeo29RetentionMigration() {
   return source(`supabase/migrations/${matches[0]}`)
 }
 
+function qeo39NPlusOneMigration() {
+  const matches = readdirSync("supabase/migrations").filter((name) => name.endsWith("_qeo39_wyckoff_n_plus_one.sql"))
+  assert.equal(matches.length, 1, "expected exactly one QEO-39 N+1 migration")
+  return source(`supabase/migrations/${matches[0]}`)
+}
+
 test("QEO-23 exposes fail-closed database replay and generated type commands", () => {
   assert.equal(
     packageJson.scripts?.["db:types:generate"],
@@ -64,4 +70,16 @@ test("QEO-30 admin job UI reads only bounded 7-day execution telemetry fields", 
   assert.match(code, /SYSTEM_JOB_RUN_COLUMNS/)
   assert.match(code, /JOB_HISTORY_RETENTION_DAYS\s*=\s*7/)
   assert.match(code, /from\("system_job_runs"\)[\s\S]{0,400}\.gte\("started_at",\s*historyCutoff\)/)
+})
+
+test("QEO-39 batches recent OHLCV through indexed per-ticker lateral lookups", () => {
+  const sql = qeo39NPlusOneMigration()
+
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.qeo_market_ohlcv_recent\s*\(p_tickers\s+text\[\],\s*p_limit\s+integer\s+default\s+260\)/i)
+  assert.match(sql, /unnest\s*\(p_tickers\)/i)
+  assert.match(sql, /cross\s+join\s+lateral/i)
+  assert.match(sql, /h\.ticker\s*=\s*q\.ticker/i)
+  assert.match(sql, /order\s+by\s+h\.bar_time\s+desc/i)
+  assert.match(sql, /least\s*\(\s*coalesce\s*\(p_limit,\s*260\),\s*1700\s*\)/i)
+  assert.doesNotMatch(sql, /row_number\s*\(/i)
 })
