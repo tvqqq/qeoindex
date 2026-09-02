@@ -41,6 +41,7 @@ test("baseline captures data, schema, indexes, RLS, policies, privileges and fun
   const baseline = source("scripts/db/recovery/capture-baseline.sql")
   assert.match(baseline, /information_schema\.columns/i)
   assert.match(baseline, /pg_constraint/i)
+  assert.match(baseline, /c\.contype::text/i, "pg_constraint.contype must be cast before text concatenation")
   assert.match(baseline, /pg_indexes/i)
   assert.match(baseline, /relrowsecurity/i)
   assert.match(baseline, /pg_policies/i)
