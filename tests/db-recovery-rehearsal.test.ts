@@ -40,11 +40,13 @@ test("synthetic fixture covers a legacy compatibility column and legacy bridge r
 test("baseline captures data, schema, indexes, RLS, policies, privileges and functions", () => {
   const baseline = source("scripts/db/recovery/capture-baseline.sql")
   assert.match(baseline, /information_schema\.columns/i)
+  assert.match(baseline, /pg_constraint/i)
   assert.match(baseline, /pg_indexes/i)
   assert.match(baseline, /relrowsecurity/i)
   assert.match(baseline, /pg_policies/i)
   assert.match(baseline, /information_schema\.table_privileges/i)
   assert.match(baseline, /pg_proc/i)
+  assert.match(baseline, /pg_type/i)
 })
 
 test("destructive fixture drops the chosen legacy column and bridge table", () => {
@@ -55,4 +57,34 @@ test("destructive fixture drops the chosen legacy column and bridge table", () =
   const destroyed = source("scripts/db/recovery/assert-destroyed.sql")
   assert.match(destroyed, /information_schema\.columns/i)
   assert.match(destroyed, /to_regclass\('public\.wyckoff_universe_memberships'\)/i)
+})
+
+test("restored assertions require the dropped objects and synthetic values to return", () => {
+  const restored = source("scripts/db/recovery/assert-restored.sql")
+  assert.match(restored, /portfolio_transactions/i)
+  assert.match(restored, /target_price/i)
+  assert.match(restored, /target_price_1/i)
+  assert.match(restored, /wyckoff_universe_memberships/i)
+  assert.match(restored, /42\.50|42\.5/)
+  assert.match(restored, /'QEO'/)
+  assert.match(restored, /relrowsecurity/i)
+})
+
+test("harness executes the complete backup destroy restore parity sequence", () => {
+  const harness = source(harnessPath)
+  for (const contract of [
+    /supabase db reset/,
+    /recovery\/seed\.sql/,
+    /capture-baseline\.sql/,
+    /pg_dump/,
+    /pg_restore --list/,
+    /recovery\/destructive\.sql/,
+    /assert-destroyed\.sql/,
+    /pg_restore/,
+    /assert-restored\.sql/,
+    /diff -u/,
+    /recovery rehearsal: PASS/,
+  ]) {
+    assert.match(harness, contract)
+  }
 })
