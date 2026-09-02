@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   drift:
@@ -44,8 +44,6 @@ jobs:
       - name: Replay migrations from zero
         run: pnpm db:replay:verify
       - name: Verify generated Database types
-        id: verify-types
-        continue-on-error: true
         run: pnpm db:types:verify
       - name: Upload generated Database type candidate
         if: always()
@@ -55,19 +53,6 @@ jobs:
           path: artifacts/qeo23/database.types.ts
           if-no-files-found: ignore
           retention-days: 3
-      - name: One-shot sync generated Database types on this feature branch
-        if: steps.verify-types.outcome == 'failure'
-        run: |
-          cp artifacts/qeo23/database.types.ts /tmp/database.types.ts
-          git fetch origin "${{ github.head_ref }}"
-          git checkout -B "${{ github.head_ref }}" "origin/${{ github.head_ref }}"
-          cp /tmp/database.types.ts lib/supabase/database.types.ts
-          git config user.name "qeoindex-db-drift-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add lib/supabase/database.types.ts
-          git commit -m "chore: sync generated database types"
-          git push origin HEAD:${{ github.head_ref }}
-          exit 1
       - name: Run DB contract regressions
         run: node --test tests/db-migration-drift.test.ts tests/db-schema-contract.test.ts tests/kfsp-rating-storage-refactor.test.ts
       - name: Compile TypeScript
