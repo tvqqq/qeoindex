@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-02T03:16:30Z",
+  "capturedAt": "2026-09-02T05:29:30Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
   "migrations": [
     {"version":"20260818","name":"orderbook_snapshots"},
@@ -73,6 +73,7 @@
     {"version":"20260902014425","name":"ai_council_authenticated_readonly"},
     {"version":"20260902014432","name":"ai_council_debate_identity_cleanup"},
     {"version":"20260902020424","name":"kfsp_rating_storage_refactor"},
-    {"version":"20260902024536","name":"market_logo_provenance"}
+    {"version":"20260902024536","name":"market_logo_provenance"},
+    {"version":"20260902052650","name":"qeo22_watchlist_default_invariant"}
   ]
 }
