@@ -4,24 +4,17 @@ import {
   WYCKOFF_V2_AGGREGATION_VERSION,
   WYCKOFF_V2_MODEL_VERSION,
 } from "./wyckoff-v2-builder.ts"
+import {
+  decodeGroupedDailyOhlcvResponse,
+  type GroupedDailyOhlcvRow,
+} from "./market-ohlcv-grouped.ts"
 import type { OhlcvBar } from "./technical-indicators.ts"
 
 export type WyckoffV2ChartSeriesTimeframe = "1D"
 export const WYCKOFF_V2_CHART_SERIES_BATCH_SIZE = 10
 
-export interface WyckoffV2RecentOhlcvRow {
-  ticker: string
+export interface WyckoffV2RecentOhlcvRow extends GroupedDailyOhlcvRow {
   timeframe: WyckoffV2ChartSeriesTimeframe
-  bar_time: string
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
-  provider: string
-  provider_detail: string
-  source_url: string
-  fetched_at: string
 }
 
 export interface WyckoffV2ChartSeriesRow {
@@ -36,11 +29,6 @@ export interface WyckoffV2ChartSeriesRow {
   aggregation_version: string
   run_id: string
   updated_at: string
-}
-
-interface GroupedRecentOhlcvRow {
-  ticker: string
-  rows: unknown
 }
 
 function normalizeTickers(input: string[]) {
@@ -116,25 +104,6 @@ export function buildWyckoffV2ChartSeriesRows(args: {
   return result
 }
 
-function flattenGroupedChartRows(data: unknown, batch: string[]) {
-  const result: WyckoffV2RecentOhlcvRow[] = []
-  const seen = new Set<string>()
-  for (const item of (Array.isArray(data) ? data : []) as GroupedRecentOhlcvRow[]) {
-    const ticker = String(item?.ticker || "").trim().toUpperCase()
-    if (!batch.includes(ticker) || seen.has(ticker)) {
-      throw new Error(`WYCKOFF_CHART_SERIES_GROUP_INVALID: ticker=${ticker || "missing"}`)
-    }
-    if (!Array.isArray(item.rows)) throw new Error(`WYCKOFF_CHART_SERIES_GROUP_INVALID: rows=${ticker}`)
-    seen.add(ticker)
-    for (const row of item.rows as Array<WyckoffV2RecentOhlcvRow & { timeframe?: string }>) {
-      if (row?.ticker === ticker && row?.timeframe === "1D") result.push(row as WyckoffV2RecentOhlcvRow)
-    }
-  }
-  const missing = batch.filter((ticker) => !seen.has(ticker))
-  if (missing.length) throw new Error(`WYCKOFF_CHART_SERIES_GROUP_INCOMPLETE: missing=${missing.join(",")}`)
-  return result
-}
-
 export async function loadWyckoffV2ChartSeriesRows(
   supabase: SupabaseClient,
   inputTickers: string[],
@@ -150,7 +119,8 @@ export async function loadWyckoffV2ChartSeriesRows(
       p_limit: 260,
     })
     if (error) throw new Error(`Load recent OHLCV chart series failed for ${batch.join(",")}: ${error.message}`)
-    rows.push(...flattenGroupedChartRows(data, batch))
+    const grouped = decodeGroupedDailyOhlcvResponse(data, batch)
+    for (const ticker of batch) rows.push(...(grouped.get(ticker) || []) as WyckoffV2RecentOhlcvRow[])
   }
 
   const series = buildWyckoffV2ChartSeriesRows({ tickers, rows, runId })
