@@ -146,15 +146,38 @@ test("server auth transport observability distinguishes abort and generic transp
   ])
 })
 
-test("server auth verification reports thrown transport failures and preserves rethrow semantics", () => {
+test("server auth verification reports thrown transport failures and preserves throw semantics", () => {
   const code = source("lib/auth/server.ts")
 
   assert.match(code, /reportServerAuthTransportFailure/)
-  assert.match(
-    code,
-    /catch\s*\(transportError\)\s*\{[\s\S]*reportServerAuthTransportFailure\(transportError\)[\s\S]*throw transportError[\s\S]*\}/,
-  )
   assert.match(code, /if \(error \|\| !data\.user\) return null/)
   assert.doesNotMatch(code, /reportServerAuthTransportFailure\([^)]*accessToken/)
   assert.doesNotMatch(code, /console\.(?:error|warn|log)\([^\n]*accessToken/)
+  assert.doesNotMatch(code, /throw transportError/, "raw auth transport errors may contain credentials and must not escape to runtime logging")
+  assert.match(code, /throw createSanitizedServerAuthTransportFailure\(transportError\)/)
+})
+
+test("server auth escaping transport error is sanitized and does not retain raw cause", async () => {
+  const observability = await loadServerAuthObservability()
+  if (!observability) return
+
+  const sanitize = (observability as Record<string, unknown>).createSanitizedServerAuthTransportFailure
+  assert.equal(typeof sanitize, "function", "QEO-41 must sanitize the error that escapes to the runtime logger")
+  if (typeof sanitize !== "function") return
+
+  const raw = Object.assign(
+    new Error("Bearer secret-access-token failed for user@example.com after timeout"),
+    { name: "TimeoutError", authorization: "Bearer secret-access-token" },
+  )
+  const safe = (sanitize as (error: unknown) => Error & { category: string })(raw)
+
+  assert.equal(safe.name, "ServerAuthTransportFailureError")
+  assert.equal(safe.message, "Server auth transport failure (timeout)")
+  assert.equal(safe.category, "timeout")
+  assert.equal("cause" in safe, false)
+
+  const serialized = `${safe.name}:${safe.message}:${JSON.stringify(safe)}`
+  for (const secret of ["secret-access-token", "user@example.com", "Bearer", "authorization"]) {
+    assert.equal(serialized.includes(secret), false, `sanitized runtime error leaked ${secret}`)
+  }
 })
