@@ -36,17 +36,13 @@ jobs:
           gate = Path('components/auth/app-auth-gate.tsx')
           text = gate.read_text()
           old = "}) {\n  const router = useRouter()"
-          new = "}) {\n  if (process.env.NEXT_PUBLIC_QEO44_BROWSER_SMOKE === '1') return children\n\n  const router = useRouter()"
+          new = "}) {\n  return children\n\n  const router = useRouter()"
           assert old in text
           gate.write_text(text.replace(old, new, 1))
           PY
       - name: Build feature source with runner-only auth bypass
-        env:
-          NEXT_PUBLIC_QEO44_BROWSER_SMOKE: "1"
         run: pnpm exec next build
       - name: Start app
-        env:
-          NEXT_PUBLIC_QEO44_BROWSER_SMOKE: "1"
         run: |
           pnpm exec next start -p 3000 > /tmp/qeo44-next.log 2>&1 &
           for i in $(seq 1 30); do
@@ -78,11 +74,7 @@ jobs:
             const context = await browser.newContext({ viewport })
             const page = await context.newPage()
             const pageErrors = []
-            const consoleErrors = []
             page.on('pageerror', (error) => pageErrors.push(String(error)))
-            page.on('console', (message) => {
-              if (message.type() === 'error') consoleErrors.push(message.text())
-            })
             let aRequests = 0
             let bRequests = 0
 
@@ -121,7 +113,7 @@ jobs:
             try {
               await page.getByText('Tăng trưởng A', { exact: true }).first().waitFor({ state: 'visible', timeout: 10000 })
             } catch (error) {
-              console.log(JSON.stringify({ label, stage: 'initial-render', body: (await page.locator('body').innerText()).slice(0, 1500), pageErrors, consoleErrors }))
+              console.log(JSON.stringify({ label, stage: 'initial-render', body: (await page.locator('body').innerText()).slice(0, 1500), pageErrors }))
               throw error
             }
 
