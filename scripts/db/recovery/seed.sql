@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP on
 
--- Synthetic local-only fixture for QEO-26/QEO-19. No production row is copied.
+-- Synthetic local-only fixture for destructive recovery rehearsal. No production row is copied.
 -- The auth user is deterministic so the rehearsal can be repeated after reset.
 insert into auth.users (
   instance_id,
@@ -51,8 +51,6 @@ insert into public.portfolio_transactions (
   transaction_date,
   note,
   tags,
-  target_price,
-  stop_loss,
   target_price_1,
   stop_loss_1
 )
@@ -69,22 +67,27 @@ select
   'QEO-26 synthetic recovery fixture',
   array['qeo26'],
   42.50,
-  25.00,
-  42.50,
   25.00
 from public.portfolios p
 where p.user_id = '11111111-1111-4111-8111-111111111111'
 order by p.created_at, p.id
 limit 1
 on conflict (id) do update
-set target_price = excluded.target_price,
-    target_price_1 = excluded.target_price_1,
-    stop_loss = excluded.stop_loss,
+set target_price_1 = excluded.target_price_1,
     stop_loss_1 = excluded.stop_loss_1,
     note = excluded.note;
 
+-- Synthetic compatibility column: this keeps the recovery rehearsal capable of
+-- proving a DROP COLUMN restore after QEO-20 removes the real legacy columns.
+alter table public.portfolio_transactions
+  add column if not exists qeo_recovery_legacy_target numeric(15,2);
+
+update public.portfolio_transactions
+set qeo_recovery_legacy_target = 42.50
+where id = '22222222-2222-4222-8222-222222222222';
+
 -- Independent table-drop fixture. It deliberately does not depend on any real
--- legacy application table so the recovery rehearsal remains valid after QEO-19.
+-- legacy application table so the recovery rehearsal remains valid indefinitely.
 create table if not exists public.qeo_recovery_table_fixture (
   fixture_key text primary key,
   ticker text not null,
