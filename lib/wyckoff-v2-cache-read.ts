@@ -27,6 +27,11 @@ export interface WyckoffV2CachedHistory {
   hourly: CachedOhlcvHistory
 }
 
+interface GroupedRecentOhlcvRow {
+  ticker: string
+  rows: unknown
+}
+
 function normalizeTickers(input: string[]) {
   const tickers = [...new Set(input.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))]
   if (!tickers.length) throw new Error("OHLCV cache read requires at least one ticker")
@@ -72,6 +77,22 @@ export function cachedHistoryFromRows(ticker: string, inputRows: StoredV2OhlcvRo
   }
 }
 
+function groupedRowsForBatch(data: unknown, batch: string[]) {
+  const grouped = new Map<string, StoredV2OhlcvRow[]>()
+  for (const item of (Array.isArray(data) ? data : []) as GroupedRecentOhlcvRow[]) {
+    const ticker = String(item?.ticker || "").trim().toUpperCase()
+    if (!batch.includes(ticker) || grouped.has(ticker)) {
+      throw new Error(`OHLCV cache grouped response has invalid or duplicate ticker=${ticker || "missing"}`)
+    }
+    if (!Array.isArray(item.rows)) throw new Error(`OHLCV cache grouped response rows are invalid for ${ticker}`)
+    const rows = (item.rows as Array<StoredV2OhlcvRow & { timeframe?: string }>).filter(
+      (row) => row?.ticker === ticker && row?.timeframe === "1D",
+    ) as StoredV2OhlcvRow[]
+    grouped.set(ticker, rows)
+  }
+  return grouped
+}
+
 export async function loadWyckoffV2CachedHistories(
   supabase: SupabaseClient,
   inputTickers: string[],
@@ -81,20 +102,13 @@ export async function loadWyckoffV2CachedHistories(
 
   for (let offset = 0; offset < tickers.length; offset += V2_CACHE_BATCH_SIZE) {
     const batch = tickers.slice(offset, offset + V2_CACHE_BATCH_SIZE)
-    const { data, error } = await supabase.rpc("qeo_market_ohlcv_recent", {
+    const { data, error } = await supabase.rpc("qeo_market_ohlcv_recent_grouped", {
       p_tickers: batch,
       p_limit: DAILY_V2_CACHE_LIMIT,
     })
     if (error) throw new Error(`OHLCV cache batch read failed for ${batch.join(",")}: ${error.message}`)
 
-    const grouped = new Map<string, StoredV2OhlcvRow[]>()
-    for (const row of (data || []) as Array<StoredV2OhlcvRow & { timeframe: string }>) {
-      if (row.timeframe !== "1D" || !batch.includes(row.ticker)) continue
-      const rows = grouped.get(row.ticker) || []
-      rows.push(row as StoredV2OhlcvRow)
-      grouped.set(row.ticker, rows)
-    }
-
+    const grouped = groupedRowsForBatch(data, batch)
     for (const ticker of batch) {
       const rows = grouped.get(ticker) || []
       if (!rows.length) throw new Error(`OHLCV cache batch missing Daily history for ${ticker}`)
