@@ -368,7 +368,7 @@ export function PortfolioPage() {
               <Button
                 size="sm"
                 onClick={() => handleOpenAddTx()}
-                className="h-8 gap-1.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 px-4 text-xs font-bold font-ticker text-white shadow-[0_0_15px_rgba(147,51,234,0.35)] transition-all cursor-pointer"
+                className="h-8 gap-1.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 px-4 text-xs font-bold font-ticker text-white shadow-[0_0_15px_rgba(147,51,234,0.35)] transition-colors cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Thêm giao dịch</span>
@@ -515,16 +515,6 @@ export function PortfolioPage() {
         open={guidanceOpen}
         onOpenChange={setGuidanceOpen}
       />
-    </div>
-  )
-}
-
-function SummaryBarSkeleton() {
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="h-24 animate-pulse rounded-3xl border border-[var(--color-border)] bg-white/[0.02]" />
-      ))}
     </div>
   )
 }
