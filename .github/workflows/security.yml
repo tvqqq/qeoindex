@@ -43,6 +43,8 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
       - name: Core regression suite
         run: pnpm test:core
+      - name: Orderbook prune security regression
+        run: node --test tests/orderbook-prune-security.test.ts
       - name: KFSP canonical universe regression
         run: node --test tests/kfsp-canonical-universe-sync.test.ts
       - name: KFSP rating storage refactor regression
