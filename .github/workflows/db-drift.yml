@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   drift:
@@ -26,8 +26,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: tvq9612/qeo-39-n-plus-one-query-optimization
       - uses: pnpm/action-setup@v4
         with:
           version: 10.28.0
@@ -45,18 +43,16 @@ jobs:
         run: supabase start
       - name: Replay migrations from zero
         run: pnpm db:replay:verify
-      - name: Sync generated Database types
-        run: |
-          pnpm db:types:generate
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/supabase/database.types.ts
-          if git diff --cached --quiet; then
-            echo "Generated types already current."
-          else
-            git commit -m "chore(db): sync generated database types"
-            git push origin HEAD:tvq9612/qeo-39-n-plus-one-query-optimization
-          fi
+      - name: Verify generated Database types
+        run: pnpm db:types:verify
+      - name: Upload generated Database type candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo23-database-types
+          path: artifacts/qeo23/database.types.ts
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Run DB contract regressions
         run: node --test tests/db-migration-drift.test.ts tests/db-schema-contract.test.ts tests/kfsp-rating-storage-refactor.test.ts
       - name: Compile TypeScript
