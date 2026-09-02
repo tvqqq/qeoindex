@@ -10,14 +10,14 @@ Do not weaken or bypass these guards. Production is never a rollback-test enviro
 
 ## Representative destructive classes
 
-The reusable rehearsal covers two destructive classes without depending on a real legacy table that may later be removed:
+The reusable rehearsal covers two destructive classes without depending on a real legacy object that may later be removed:
 
-1. compatibility column: `public.portfolio_transactions.target_price`;
+1. synthetic compatibility column: `public.portfolio_transactions.qeo_recovery_legacy_target`;
 2. independent synthetic table-drop fixture: `public.qeo_recovery_table_fixture`.
 
-The synthetic fixture is created only after local migration replay, uses deterministic local-only IDs/ticker `QEO`, has RLS and explicit service-role ACLs, and is included in the validated custom-format backup. No production rows are copied into the rehearsal database.
+The synthetic compatibility column and table fixture are created only after local migration replay. They use deterministic local-only IDs/ticker `QEO`, the table fixture has RLS and explicit service-role ACLs, and both are included in the validated custom-format backup. No production rows are copied into the rehearsal database.
 
-QEO-19 intentionally moved the table-drop rehearsal away from `public.wyckoff_universe_memberships` so the recovery gate remains runnable after the real legacy bridge is removed from the application schema.
+QEO-19 moved the table-drop rehearsal away from `public.wyckoff_universe_memberships`. QEO-20 similarly moved the compatibility-column rehearsal away from `public.portfolio_transactions.target_price`, so the recovery gate remains runnable after the real legacy objects are removed from the application schema.
 
 ## What the gate proves
 
@@ -96,4 +96,4 @@ Before adding a new destructive migration:
 6. keep the production-ref/local-port hard guard unchanged;
 7. obtain a green two-pass recovery workflow before production rollout.
 
-If an object has already been removed from production, do not fabricate it as current production state. Use an isolated synthetic fixture such as `qeo_recovery_table_fixture` for the destructive class instead.
+If an object has already been removed from production, do not fabricate it as current production state. Use an isolated synthetic fixture such as `qeo_recovery_legacy_target` or `qeo_recovery_table_fixture` for the destructive class instead.
