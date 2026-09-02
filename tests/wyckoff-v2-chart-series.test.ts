@@ -29,8 +29,28 @@ function recentRow(ticker: string, index: number): WyckoffV2RecentOhlcvRow {
   }
 }
 
+function compactRecentRow(ticker: string, index: number) {
+  const row = recentRow(ticker, index)
+  return [
+    row.bar_time,
+    row.open,
+    row.high,
+    row.low,
+    row.close,
+    row.volume,
+    row.provider,
+    row.provider_detail,
+    row.source_url,
+    row.fetched_at,
+  ]
+}
+
 function completeRows(tickers = ["AAA", "BBB"]) {
   return tickers.flatMap((ticker) => [recentRow(ticker, 2), recentRow(ticker, 0), recentRow(ticker, 1)])
+}
+
+function completeCompactRows(ticker: string) {
+  return [compactRecentRow(ticker, 2), compactRecentRow(ticker, 0), compactRecentRow(ticker, 1)]
 }
 
 test("v2 chart-series builder produces exactly one raw Daily read model per ticker", () => {
@@ -68,14 +88,14 @@ test("v2 chart-series coverage fails closed when any ticker is missing Daily ser
   )
 })
 
-test("chart-series loader batches 100 tickers into at most 10 grouped RPC requests", async () => {
+test("chart-series loader batches 100 tickers into 10 compact grouped RPC requests", async () => {
   const tickers = Array.from({ length: 100 }, (_, index) => `T${String(index + 1).padStart(3, "0")}`)
   const calls: Array<{ name: string; tickers: string[] }> = []
   const supabase = {
     rpc: async (name: string, args: { p_tickers: string[] }) => {
       calls.push({ name, tickers: args.p_tickers })
       return {
-        data: args.p_tickers.map((ticker) => ({ ticker, rows: completeRows([ticker]) })),
+        data: args.p_tickers.map((ticker) => ({ ticker, rows: completeCompactRows(ticker) })),
         error: null,
       }
     },
