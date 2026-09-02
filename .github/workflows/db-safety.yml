@@ -1,0 +1,40 @@
+name: DB Safety
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/pending-migrations/**"
+      - "scripts/verify-migration-ledger.mjs"
+      - "scripts/db-recovery-rehearsal.sh"
+      - "tests/db-migration-ledger.test.mjs"
+      - "tests/db-recovery-rehearsal.test.mjs"
+      - "docs/db/qeo-25-migration-ledger.json"
+      - ".github/workflows/db-safety.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/pending-migrations/**"
+      - "scripts/verify-migration-ledger.mjs"
+      - "scripts/db-recovery-rehearsal.sh"
+      - "tests/db-migration-ledger.test.mjs"
+      - "tests/db-recovery-rehearsal.test.mjs"
+      - "docs/db/qeo-25-migration-ledger.json"
+      - ".github/workflows/db-safety.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  db-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run DB safety contract tests
+        run: node --test tests/db-migration-ledger.test.mjs tests/db-recovery-rehearsal.test.mjs
+      - name: Verify committed migration ledger reconciliation
+        run: node scripts/verify-migration-ledger.mjs
