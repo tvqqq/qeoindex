@@ -1,6 +1,6 @@
 # QeoIndex engineering handover
 
-Last updated: 2026-09-01.
+Last updated: 2026-09-02.
 
 This document is the canonical fast-start for the active production architecture. The pre-2026-09-01 handover is preserved verbatim at [`docs/HANDOVER-LEGACY.md`](./HANDOVER-LEGACY.md) for historical context; when the two documents conflict, this file wins.
 
@@ -36,7 +36,7 @@ At the current maximum universe of 200 tickers this is 400 snapshots per healthy
 
 Persistent Wyckoff raw OHLCV stores `1D` only in `market_ohlcv_history`. Weekly bars are derived; raw OHLCV `1H` is no longer required by Wyckoff.
 
-The 19:00 storage-contract migration rejects new non-Daily writes with a `NOT VALID` check but intentionally preserves historical legacy rows until an explicitly approved destructive cleanup. The one-shot 21:30 clean-rebuild migration removes that preserved legacy state and validates the Daily-only constraint.
+The 19:00 storage-contract migration rejects new non-Daily writes with a `NOT VALID` check but intentionally preserves historical legacy rows until an explicitly approved destructive cleanup. The one-shot clean-rebuild migration removes that preserved legacy state and validates the Daily-only constraint.
 
 The active history refresh therefore fetches/persists Daily only. Other non-Wyckoff features may still fetch intraday data directly through their own bounded provider paths, but they must not repopulate `market_ohlcv_history` with `1H`.
 
@@ -107,7 +107,7 @@ It:
 
 ### Approved clean rebuild
 
-`supabase/migrations/20260901213000_clean_rebuild_top_stocks_200.sql`
+`supabase/migrations/20260901144121_clean_rebuild_top_stocks_200.sql`
 
 This is the explicit destructive cutover for rebuildable stock operational state. It:
 
@@ -120,7 +120,7 @@ This is the explicit destructive cutover for rebuildable stock operational state
 
 ### Clean-rebuild market snapshot bootstrap
 
-`supabase/migrations/20260901214500_clean_rebuild_market_snapshot_trigger.sql`
+`supabase/migrations/20260902011529_clean_rebuild_market_snapshot_trigger.sql`
 
 It creates service-role-only `qeo_trigger_market_snapshot_bootstrap()`, which reuses the existing canonical `orderbook-sync` Edge Function already used by production pg_cron. The function exists specifically because the destructive clean rebuild removes `stock_orderbook_snapshots` while `EOD_READY` requires fresh final snapshots before the later `MARKET_CLOSE_COLLECT` phase can run.
 
@@ -136,6 +136,12 @@ After applying the one-shot clean rebuild, execute in this order:
 6. Verify fresh Daily raw history for the exact canonical ticker set.
 7. Verify Wyckoff exact membership and `universeCount × 2` snapshots.
 8. Verify downstream phases report their real success/failure state.
+
+## Migration reconciliation guard
+
+Production migration timestamps can differ from earlier repository-planned filenames. `supabase/migration-equivalence.json` is the reviewed mapping contract and `pnpm db:drift:verify` fails closed on unexplained active-repository or production-ledger drift. Never replay SQL merely to make timestamps match.
+
+`kfsp_rating_storage_refactor` is already applied in production as `20260902020424_kfsp_rating_storage_refactor`; source uses that production version so it is not applied a second time.
 
 ## Manual EOD acceptance
 
