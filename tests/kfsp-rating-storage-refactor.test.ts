@@ -59,12 +59,15 @@ test("rating contraction migration creates bounded private raw evidence", () => 
   assert.match(sql, /interval\s+'30 days'/i)
   assert.match(sql, /enable row level security/i)
   assert.match(sql, /revoke all on public\.kfsp_rating_raw_evidence from (?:public,\s*)?anon, authenticated/i)
+  assert.match(sql, /grant select, insert, update, delete on public\.kfsp_rating_raw_evidence to service_role/i)
+  assert.doesNotMatch(sql, /kfsp_rating_raw_evidence[\s\S]{0,500}references\s+public\.kfsp_rating_sync_runs/i)
 })
 
-test("publisher persists raw evidence but published ratings are canonical-only", () => {
+test("publisher persists and prunes raw evidence while published ratings are canonical-only", () => {
   const sql = readFileSync(migrationPath, "utf8")
   assert.match(sql, /insert into public\.kfsp_rating_raw_evidence/i)
   assert.match(sql, /from public\.kfsp_rating_staging/i)
+  assert.match(sql, /delete from public\.kfsp_rating_raw_evidence\s+where expires_at < now\(\)/i)
   assert.match(sql, /insert into public\.insights_stock_ratings/i)
   const publishedInsert = sql.match(/insert into public\.insights_stock_ratings[\s\S]*?from public\.kfsp_rating_staging/i)?.[0] ?? ""
   assert.doesNotMatch(publishedInsert, /\braw_payload\b/i)
