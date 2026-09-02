@@ -133,7 +133,7 @@ export function PortfolioSelector({
         <button
           type="button"
           onClick={() => setDropdownOpen((o) => !o)}
-          className="flex min-w-[200px] items-center justify-between gap-3 rounded-full border border-[#30364d] bg-[#0b0e14] px-5 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:border-purple-500/70 hover:bg-[#10141e] shadow-md cursor-pointer"
+          className="flex min-w-[200px] items-center justify-between gap-3 rounded-full border border-[#30364d] bg-[#0b0e14] px-5 py-2.5 text-sm font-medium text-white transition-colors duration-200 hover:border-purple-500/70 hover:bg-[#10141e] shadow-md cursor-pointer"
         >
           <span className="font-ticker font-semibold text-white tracking-wide truncate">
             {activePortfolio?.name ?? "Danh mục chính"}
