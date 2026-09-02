@@ -1,0 +1,95 @@
+# QEO-26 — Destructive DB recovery rehearsal
+
+This runbook defines the mandatory non-production recovery gate before destructive database refactors such as QEO-18, QEO-19, and QEO-20.
+
+## Safety boundary
+
+The rehearsal is local-only. `scripts/db/rehearse-destructive-recovery.sh` rejects the production project ref `glwhhrmejlonhyorvtzm` and rejects database targets that do not use local Supabase port `54322` on `127.0.0.1` or `localhost`.
+
+Do not weaken or bypass these guards. Production is never a rollback-test environment.
+
+## Representative destructive classes
+
+The reusable rehearsal currently covers two still-existing legacy contracts:
+
+1. compatibility column: `public.portfolio_transactions.target_price`;
+2. legacy bridge table: `public.wyckoff_universe_memberships`.
+
+The synthetic fixture uses deterministic local-only IDs and ticker `QEO`. No production rows are copied into the rehearsal database.
+
+## What the gate proves
+
+For each rehearsal pass the harness performs, in order:
+
+1. clean local migration replay;
+2. deterministic synthetic seed;
+3. baseline capture for representative data and schema metadata;
+4. targeted PostgreSQL custom-format backup of the two representative tables;
+5. backup catalog validation plus SHA-256 capture;
+6. destructive column/table removal;
+7. explicit assertion that the destructive state actually occurred;
+8. restore from the validated backup;
+9. explicit restored data/RLS assertions;
+10. deterministic baseline-vs-restored parity diff.
+
+The captured baseline covers table data plus columns, indexes, RLS state, policies, table privileges, and functions that reference the representative objects. The targeted custom dump restores table schema/data and table-owned indexes, policies and ACLs while avoiding destructive reset of unrelated Supabase-managed schemas.
+
+## Local command
+
+Requirements:
+
+- Docker-compatible runtime;
+- Supabase CLI;
+- repository checkout containing `supabase/config.toml`;
+- local port `54322` available.
+
+Run:
+
+```bash
+pnpm test:db-recovery
+pnpm db:recovery:rehearse
+```
+
+Optional isolated artifact directory:
+
+```bash
+QEO_RECOVERY_ARTIFACT_DIR=.tmp/qeo-db-recovery/manual \
+  pnpm db:recovery:rehearse
+```
+
+Artifacts include:
+
+- `versions.txt`;
+- `baseline.txt`;
+- `pre-destructive.dump`;
+- `pre-destructive.dump.sha256`;
+- `backup.list`;
+- `restored.txt`.
+
+A successful run ends with `recovery rehearsal: PASS`. Any failed backup validation, destructive assertion, restore assertion, or parity diff exits non-zero.
+
+## CI acceptance
+
+`.github/workflows/db-recovery-rehearsal.yml` runs:
+
+1. the static safety/contract regression tests;
+2. an actual local Supabase rehearsal pass;
+3. a second independent rehearsal pass after another clean reset;
+4. evidence artifact upload;
+5. local Supabase cleanup.
+
+QEO-26 can be considered complete only when both actual passes succeed on the same reviewed PR head. A static test pass alone is not recovery evidence.
+
+## Reuse for future destructive migrations
+
+Before adding a new destructive migration:
+
+1. identify the exact legacy object being removed and its canonical replacement;
+2. add deterministic synthetic fixture data that exercises the legacy contract and canonical parity;
+3. extend baseline capture with any additional schema/data contract that matters;
+4. extend the destructive assertion so CI proves the object was really removed;
+5. extend the restore assertion and baseline diff to prove exact recovery;
+6. keep the production-ref/local-port hard guard unchanged;
+7. obtain a green two-pass recovery workflow before production rollout.
+
+If an object has already been removed from production, do not fabricate it as current production state. Select a still-existing representative destructive class or restore the historical schema solely inside an isolated fixture designed for that purpose.
