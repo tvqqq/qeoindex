@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import test from "node:test"
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
@@ -8,6 +8,16 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
 
 const workflowPath = ".github/workflows/db-drift.yml"
 const generatedTypesPath = "lib/supabase/database.types.ts"
+
+function source(path: string) {
+  return readFileSync(path, "utf8")
+}
+
+function qeo29RetentionMigration() {
+  const matches = readdirSync("supabase/migrations").filter((name) => name.endsWith("_qeo29_job_telemetry_retention.sql"))
+  assert.equal(matches.length, 1, "expected exactly one QEO-29 job telemetry retention migration")
+  return source(`supabase/migrations/${matches[0]}`)
+}
 
 test("QEO-23 exposes fail-closed database replay and generated type commands", () => {
   assert.equal(
@@ -32,4 +42,24 @@ test("DB drift workflow runs clean replay, generated type drift verification, an
   assert.match(workflow, /pnpm db:types:verify/)
   assert.match(workflow, /pnpm typecheck/)
   assert.match(workflow, /tests\/db-schema-contract\.test\.ts/)
+})
+
+test("QEO-29 keeps phase detail for 1 day and terminal run summaries for 7 days", () => {
+  const sql = qeo29RetentionMigration()
+
+  assert.match(sql, /v_phase_cutoff\s+timestamptz\s*:=\s*p_reference_at\s*-\s*interval\s+'1 day'/i)
+  assert.match(sql, /v_job_cutoff\s+timestamptz\s*:=\s*p_reference_at\s*-\s*interval\s+'7 days'/i)
+  assert.match(sql, /delete\s+from\s+public\.system_job_phases[\s\S]*?status\s+in\s*\(\s*'succeeded'\s*,\s*'failed'\s*,\s*'skipped'\s*\)[\s\S]*?v_phase_cutoff/i)
+  assert.match(sql, /delete\s+from\s+public\.system_job_runs[\s\S]*?status\s+in\s*\(\s*'succeeded'\s*,\s*'failed'\s*,\s*'skipped'\s*\)[\s\S]*?v_job_cutoff/i)
+  assert.doesNotMatch(sql, /delete\s+from\s+public\.system_audit_log/i)
+  assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
+})
+
+test("QEO-30 admin job UI reads only bounded 7-day execution telemetry fields", () => {
+  const code = source("lib/admin/job-health.ts")
+
+  assert.doesNotMatch(code, /from\("system_job_runs"\)[\s\S]{0,100}select\("\*"\)/)
+  assert.match(code, /SYSTEM_JOB_RUN_COLUMNS/)
+  assert.match(code, /JOB_HISTORY_RETENTION_DAYS\s*=\s*7/)
+  assert.match(code, /from\("system_job_runs"\)[\s\S]{0,400}\.gte\("started_at",\s*historyCutoff\)/)
 })
