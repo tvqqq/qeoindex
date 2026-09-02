@@ -2614,6 +2614,47 @@ export type Database = {
           },
         ]
       }
+      wyckoff_build_artifacts: {
+        Row: {
+          created_at: string
+          ordinal: number
+          run_id: string
+          run_key: string
+          scan_date: string
+          snapshots: Json
+          ticker: string
+          validation_hash: string
+        }
+        Insert: {
+          created_at?: string
+          ordinal: number
+          run_id: string
+          run_key: string
+          scan_date: string
+          snapshots: Json
+          ticker: string
+          validation_hash: string
+        }
+        Update: {
+          created_at?: string
+          ordinal?: number
+          run_id?: string
+          run_key?: string
+          scan_date?: string
+          snapshots?: Json
+          ticker?: string
+          validation_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wyckoff_build_artifacts_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "system_job_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wyckoff_chart_series: {
         Row: {
           aggregation_version: string
@@ -2965,6 +3006,10 @@ export type Database = {
         Returns: Json
       }
       qeo_run_safe_retention_cleanup: {
+        Args: { p_reference_at?: string }
+        Returns: Json
+      }
+      qeo_run_wyckoff_build_artifact_cleanup: {
         Args: { p_reference_at?: string }
         Returns: Json
       }
