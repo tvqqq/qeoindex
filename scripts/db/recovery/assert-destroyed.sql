@@ -7,9 +7,9 @@ begin
     from information_schema.columns
     where table_schema = 'public'
       and table_name = 'portfolio_transactions'
-      and column_name = 'target_price'
+      and column_name = 'qeo_recovery_legacy_target'
   ) then
-    raise exception 'QEO-26 destructive assertion failed: portfolio_transactions.target_price still exists';
+    raise exception 'QEO-26 destructive assertion failed: synthetic compatibility column still exists';
   end if;
 
   if to_regclass('public.qeo_recovery_table_fixture') is not null then
