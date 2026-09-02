@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import { resolve } from "node:path"
 
+import { assertCanonicalWyckoffMembership } from "../lib/wyckoff-canonical-membership.ts"
 import type {
   NormalizedIndexRow,
   NormalizedLeaderRow,
@@ -135,6 +136,24 @@ test("shared Edge machine auth accepts only exact configured bearer tokens", asy
   }), []), false)
 })
 
+test("QEO-19 canonical Wyckoff membership requires exact ticker and rank parity", () => {
+  const canonical = [
+    { ticker: "AAA", rank: 1 },
+    { ticker: "BBB", rank: 2 },
+  ]
+  assert.doesNotThrow(() => assertCanonicalWyckoffMembership(canonical, [
+    { ticker: "bbb", rank: 2 },
+    { ticker: "aaa", rank: 1 },
+  ]))
+  assert.throws(() => assertCanonicalWyckoffMembership(canonical, [
+    { ticker: "AAA", rank: 2 },
+    { ticker: "BBB", rank: 1 },
+  ]), /rankMismatch/i)
+  assert.throws(() => assertCanonicalWyckoffMembership(canonical, [
+    { ticker: "AAA", rank: 1 },
+  ]), /Canonical Wyckoff membership mismatch/)
+})
+
 test("QEO-19 active Wyckoff runtime has no legacy membership-table consumer", () => {
   for (const path of [
     "lib/wyckoff-unified-data.ts",
@@ -158,7 +177,7 @@ test("QEO-19 active KFSP runtime has no provider-token table consumer", () => {
 
 test("QEO-19 KFSP auth uses shared Vault token cache with service-role-only RPCs", () => {
   const helperPath = "supabase/functions/_shared/kfsp-provider-auth.ts"
-  const migrationPath = "supabase/migrations/20260902120500_kfsp_vault_token_cache.sql"
+  const migrationPath = "supabase/pending-migrations/20260902120500_kfsp_vault_token_cache.sql"
   assert.equal(existsSync(helperPath), true, "shared KFSP provider auth helper must exist")
   assert.equal(existsSync(migrationPath), true, "Vault token-cache compatibility migration must exist")
   if (!existsSync(helperPath) || !existsSync(migrationPath)) return
