@@ -5,6 +5,7 @@ import type { HistoricalProvider } from "./market-history-contract.ts"
 import type { OhlcvBar } from "./technical-indicators.ts"
 
 export const DAILY_V2_CACHE_LIMIT = 1700
+export const V2_CACHE_BATCH_SIZE = 10
 
 export interface StoredV2OhlcvRow {
   ticker: string
@@ -19,6 +20,20 @@ export interface StoredV2OhlcvRow {
   provider_detail: string
   source_url: string
   fetched_at: string
+}
+
+export interface WyckoffV2CachedHistory {
+  daily: CachedOhlcvHistory
+  hourly: CachedOhlcvHistory
+}
+
+function normalizeTickers(input: string[]) {
+  const tickers = [...new Set(input.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))]
+  if (!tickers.length) throw new Error("OHLCV cache read requires at least one ticker")
+  for (const ticker of tickers) {
+    if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new Error(`Invalid ticker: ${ticker}`)
+  }
+  return tickers
 }
 
 function provider(value: string): HistoricalProvider {
@@ -57,26 +72,50 @@ export function cachedHistoryFromRows(ticker: string, inputRows: StoredV2OhlcvRo
   }
 }
 
-async function loadRows(supabase: SupabaseClient, ticker: string) {
-  const { data, error } = await supabase
-    .from("market_ohlcv_history")
-    .select("ticker,timeframe,bar_time,open,high,low,close,volume,provider,provider_detail,source_url,fetched_at")
-    .eq("ticker", ticker)
-    .eq("timeframe", "1D")
-    .order("bar_time", { ascending: false })
-    .limit(DAILY_V2_CACHE_LIMIT)
-  if (error) throw new Error(`OHLCV cache read failed for ${ticker} Daily: ${error.message}`)
-  return (data || []) as StoredV2OhlcvRow[]
+export async function loadWyckoffV2CachedHistories(
+  supabase: SupabaseClient,
+  inputTickers: string[],
+): Promise<Map<string, WyckoffV2CachedHistory>> {
+  const tickers = normalizeTickers(inputTickers)
+  const result = new Map<string, WyckoffV2CachedHistory>()
+
+  for (let offset = 0; offset < tickers.length; offset += V2_CACHE_BATCH_SIZE) {
+    const batch = tickers.slice(offset, offset + V2_CACHE_BATCH_SIZE)
+    const { data, error } = await supabase.rpc("qeo_market_ohlcv_recent", {
+      p_tickers: batch,
+      p_limit: DAILY_V2_CACHE_LIMIT,
+    })
+    if (error) throw new Error(`OHLCV cache batch read failed for ${batch.join(",")}: ${error.message}`)
+
+    const grouped = new Map<string, StoredV2OhlcvRow[]>()
+    for (const row of (data || []) as Array<StoredV2OhlcvRow & { timeframe: string }>) {
+      if (row.timeframe !== "1D" || !batch.includes(row.ticker)) continue
+      const rows = grouped.get(row.ticker) || []
+      rows.push(row as StoredV2OhlcvRow)
+      grouped.set(row.ticker, rows)
+    }
+
+    for (const ticker of batch) {
+      const rows = grouped.get(ticker) || []
+      if (!rows.length) throw new Error(`OHLCV cache batch missing Daily history for ${ticker}`)
+      const daily = cachedHistoryFromRows(ticker, rows)
+      result.set(ticker, {
+        daily,
+        // Compatibility alias for legacy modules during the cutover. It points to Daily data and is never persisted as intraday history.
+        hourly: daily,
+      })
+    }
+  }
+
+  if (result.size !== tickers.length) {
+    const missing = tickers.filter((ticker) => !result.has(ticker))
+    throw new Error(`OHLCV cache batch incomplete: missing=${missing.join(",") || "unknown"}`)
+  }
+  return result
 }
 
 export async function loadWyckoffV2CachedTickerHistory(supabase: SupabaseClient, tickerInput: string) {
-  const ticker = tickerInput.trim().toUpperCase()
-  if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new Error(`Invalid ticker: ${tickerInput}`)
-  const dailyRows = await loadRows(supabase, ticker)
-  const daily = cachedHistoryFromRows(ticker, dailyRows)
-  return {
-    daily,
-    // Compatibility alias for legacy modules during the cutover. It points to Daily data and is never persisted as intraday history.
-    hourly: daily,
-  }
+  const ticker = normalizeTickers([tickerInput])[0]
+  const histories = await loadWyckoffV2CachedHistories(supabase, [ticker])
+  return histories.get(ticker)!
 }
