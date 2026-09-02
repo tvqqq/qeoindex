@@ -10,6 +10,8 @@ const VALID_ACTIONS = ["buy", "sell", "dividend_cash", "dividend_stock", "rights
 const TICKER_RE = /^[A-Z0-9]{2,12}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const SELECT_FIELDS =
+  "id,portfolio_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,note,tags,setup_tags,mistake_tags,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3,created_at,updated_at"
 
 function err(msg: string, status = 500) {
   return NextResponse.json({ ok: false, error: msg }, { status, headers: NO_STORE })
@@ -17,6 +19,26 @@ function err(msg: string, status = 500) {
 
 function validateUUID(id: string) {
   return UUID_RE.test(id) ? id : null
+}
+
+function parseNullableNumber(value: unknown) {
+  if (value === null) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function setCanonicalNumber(
+  updates: Record<string, unknown>,
+  body: Record<string, unknown>,
+  canonicalKey: string,
+  legacyKey?: string,
+) {
+  const hasCanonical = body[canonicalKey] !== undefined
+  const hasLegacy = legacyKey ? body[legacyKey] !== undefined : false
+  if (!hasCanonical && !hasLegacy) return
+
+  const raw = hasCanonical ? body[canonicalKey] : legacyKey ? body[legacyKey] : undefined
+  updates[canonicalKey] = parseNullableNumber(raw)
 }
 
 /** PATCH /api/portfolio/[id]/transactions/[txId] — update a transaction */
@@ -69,6 +91,12 @@ export async function PATCH(
     updates.fee = fee
   }
 
+  if (body.fee_rate !== undefined) {
+    const feeRate = Number(body.fee_rate)
+    if (!Number.isFinite(feeRate) || feeRate < 0) return err("Tỷ lệ phí không hợp lệ.", 400)
+    updates.fee_rate = feeRate
+  }
+
   if (body.transaction_date !== undefined) {
     const d = String(body.transaction_date)
     if (!DATE_RE.test(d)) return err("Ngày giao dịch không hợp lệ (YYYY-MM-DD).", 400)
@@ -85,15 +113,26 @@ export async function PATCH(
       : []
   }
 
-  if (body.target_price !== undefined) {
-    const tp = body.target_price !== null ? Number(body.target_price) : null
-    updates.target_price = tp !== null && Number.isFinite(tp) ? tp : null
+  if (body.setup_tags !== undefined) {
+    updates.setup_tags = Array.isArray(body.setup_tags)
+      ? (body.setup_tags as unknown[]).map((t) => String(t).slice(0, 50)).slice(0, 10)
+      : []
   }
 
-  if (body.stop_loss !== undefined) {
-    const sl = body.stop_loss !== null ? Number(body.stop_loss) : null
-    updates.stop_loss = sl !== null && Number.isFinite(sl) ? sl : null
+  if (body.mistake_tags !== undefined) {
+    updates.mistake_tags = Array.isArray(body.mistake_tags)
+      ? (body.mistake_tags as unknown[]).map((t) => String(t).slice(0, 50)).slice(0, 10)
+      : []
   }
+
+  // Canonical keys win when both canonical and legacy request aliases are provided.
+  // The legacy aliases remain accepted at the HTTP boundary only; they are never DB columns again.
+  setCanonicalNumber(updates, body, "target_price_1", "target_price")
+  setCanonicalNumber(updates, body, "target_price_2")
+  setCanonicalNumber(updates, body, "target_price_3")
+  setCanonicalNumber(updates, body, "stop_loss_1", "stop_loss")
+  setCanonicalNumber(updates, body, "stop_loss_2")
+  setCanonicalNumber(updates, body, "stop_loss_3")
 
   if (Object.keys(updates).length === 0) {
     return err("Không có thông tin cần cập nhật.", 400)
@@ -105,9 +144,7 @@ export async function PATCH(
     .eq("id", transactionId)
     .eq("portfolio_id", portfolioId)
     .eq("user_id", auth.context.user.id)
-    .select(
-      "id,portfolio_id,ticker,action,quantity,price,fee,transaction_date,note,tags,target_price,stop_loss,created_at,updated_at",
-    )
+    .select(SELECT_FIELDS)
     .single()
 
   if (error || !data) {
