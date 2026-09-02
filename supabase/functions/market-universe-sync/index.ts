@@ -260,16 +260,16 @@ async function ensureLogo(supabase: SupabaseClient, ticker: string): Promise<{ p
   }
 
   if (best) {
+    await persistLogoProvenance(supabase, ticker, path, "official", best.source)
     const { error } = await supabase.storage.from(LOGO_BUCKET).upload(path, best.body, { upsert: true, contentType: best.contentType, cacheControl: "2592000" })
     if (error) throw new Error(`Logo upload failed for ${ticker}: ${error.message}`)
-    await persistLogoProvenance(supabase, ticker, path, "official", best.source)
     return { path, kind: "official", source: best.source }
   }
 
   const fallback = await deterministicTickerPng(ticker)
+  await persistLogoProvenance(supabase, ticker, path, "generated_fallback", "generated_fallback")
   const { error } = await supabase.storage.from(LOGO_BUCKET).upload(path, fallback, { upsert: true, contentType: "image/png", cacheControl: "2592000" })
   if (error) throw new Error(`Fallback logo upload failed for ${ticker}: ${error.message}`)
-  await persistLogoProvenance(supabase, ticker, path, "generated_fallback", "generated_fallback")
   return { path, kind: "generated_fallback", source: "generated_fallback" }
 }
 
