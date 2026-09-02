@@ -69,8 +69,8 @@ docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -
 test -s "$ARTIFACT_DIR/acl-restore.sql" || fail "ACL recovery snapshot is empty"
 grep -q "revoke all privileges on table public.portfolio_transactions" "$ARTIFACT_DIR/acl-restore.sql" \
   || fail "ACL recovery snapshot is missing portfolio reset"
-grep -q "revoke all privileges on table public.wyckoff_universe_memberships" "$ARTIFACT_DIR/acl-restore.sql" \
-  || fail "ACL recovery snapshot is missing wyckoff reset"
+grep -q "revoke all privileges on table public.qeo_recovery_table_fixture" "$ARTIFACT_DIR/acl-restore.sql" \
+  || fail "ACL recovery snapshot is missing synthetic fixture reset"
 sha256sum "$ARTIFACT_DIR/acl-restore.sql" > "$ARTIFACT_DIR/acl-restore.sql.sha256"
 
 phase "backup"
@@ -80,7 +80,7 @@ docker exec "$DB_CONTAINER" pg_dump \
   --format=custom \
   --no-owner \
   --table=public.portfolio_transactions \
-  --table=public.wyckoff_universe_memberships \
+  --table=public.qeo_recovery_table_fixture \
   > "$ARTIFACT_DIR/pre-destructive.dump"
 
 phase "backup validation"
@@ -106,7 +106,7 @@ docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -
 # table, preserving fail-fast restore semantics without suppressing pg_restore errors.
 phase "restore bootstrap"
 docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - <<'SQL'
-create table public.wyckoff_universe_memberships (
+create table public.qeo_recovery_table_fixture (
   __qeo_restore_stub boolean
 );
 SQL
