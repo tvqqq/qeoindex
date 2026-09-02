@@ -107,7 +107,9 @@ It:
 
 ### Approved clean rebuild
 
-`supabase/migrations/20260901144121_clean_rebuild_top_stocks_200.sql`
+`supabase/migrations/20260901193000_clean_rebuild_top_stocks_200.sql`
+
+Production originally applied this logical migration as version `20260901144121`. The repository filename is intentionally later than the 19:00 storage cutover because clean replay proved the rebuild depends on `market_ohlcv_bootstrap_state` and the timeframe constraints created by that cutover. `supabase/migration-equivalence.json` maps the repository replay version to the unchanged production ledger version; do not replay it in production merely because the timestamps differ.
 
 This is the explicit destructive cutover for rebuildable stock operational state. It:
 
