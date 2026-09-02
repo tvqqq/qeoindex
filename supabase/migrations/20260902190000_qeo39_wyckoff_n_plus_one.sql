@@ -74,12 +74,14 @@ grant execute on function public.qeo_market_ohlcv_recent(text[], integer) to ser
 create table if not exists public.wyckoff_build_artifacts (
   run_id uuid not null references public.system_job_runs(id) on delete cascade,
   ticker text not null check (ticker ~ '^[A-Z0-9]{2,12}$'),
+  ordinal integer not null check (ordinal > 0),
   run_key text not null,
   scan_date date not null,
   validation_hash text not null check (validation_hash ~ '^[a-f0-9]{64}$'),
   snapshots jsonb not null check (jsonb_typeof(snapshots) = 'array' and jsonb_array_length(snapshots) = 2),
   created_at timestamptz not null default now(),
-  primary key (run_id, ticker)
+  primary key (run_id, ticker),
+  unique (run_id, ordinal)
 );
 
 alter table public.wyckoff_build_artifacts enable row level security;
