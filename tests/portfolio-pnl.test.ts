@@ -17,8 +17,8 @@ test('AVCO P&L Engine: Single Buy transaction', () => {
       transaction_date: '2026-08-01',
       note: 'Initial buy',
       tags: ['Tạo nền'],
-      target_price: 95.0,
-      stop_loss: 80.0,
+      target_price_1: 95.0,
+      stop_loss_1: 80.0,
     },
   ]
 
@@ -31,6 +31,8 @@ test('AVCO P&L Engine: Single Buy transaction', () => {
   assert.equal(pos.realizedPnl, 0)
   assert.equal(pos.targetPrice, 95.0)
   assert.equal(pos.stopLoss, 80.0)
+  assert.equal(pos.targetPrice, pos.targetPrice1)
+  assert.equal(pos.stopLoss, pos.stopLoss1)
 
   const { totalUnrealizedPnl, totalMarketValue, positionDetails } = summary.calcUnrealizedPnl({ VCB: 90.0 })
   assert.equal(totalMarketValue, 90_000)
@@ -41,8 +43,8 @@ test('AVCO P&L Engine: Single Buy transaction', () => {
 
 test('AVCO P&L Engine: Multiple Buys with Average Cost update', () => {
   const txs: RawTransaction[] = [
-    { id: '1', ticker: 'FPT', action: 'buy', quantity: 1000, price: 100.0, fee: 0, transaction_date: '2026-08-01', note: null, tags: [], target_price: null, stop_loss: null },
-    { id: '2', ticker: 'FPT', action: 'buy', quantity: 500, price: 130.0, fee: 0, transaction_date: '2026-08-10', note: null, tags: [], target_price: null, stop_loss: null },
+    { id: '1', ticker: 'FPT', action: 'buy', quantity: 1000, price: 100.0, fee: 0, transaction_date: '2026-08-01', note: null, tags: [] },
+    { id: '2', ticker: 'FPT', action: 'buy', quantity: 500, price: 130.0, fee: 0, transaction_date: '2026-08-10', note: null, tags: [] },
   ]
   const summary = computePortfolioPositions(txs)
   const pos = summary.positions[0]
@@ -52,8 +54,8 @@ test('AVCO P&L Engine: Multiple Buys with Average Cost update', () => {
 
 test('AVCO P&L Engine: Partial Sell with Realized P&L', () => {
   const txs: RawTransaction[] = [
-    { id: '1', ticker: 'HPG', action: 'buy', quantity: 2000, price: 25.0, fee: 0, transaction_date: '2026-08-01', note: null, tags: [], target_price: null, stop_loss: null },
-    { id: '2', ticker: 'HPG', action: 'sell', quantity: 1000, price: 30.0, fee: 50.0, transaction_date: '2026-08-15', note: 'Take profit 50%', tags: [], target_price: null, stop_loss: null },
+    { id: '1', ticker: 'HPG', action: 'buy', quantity: 2000, price: 25.0, fee: 0, transaction_date: '2026-08-01', note: null, tags: [] },
+    { id: '2', ticker: 'HPG', action: 'sell', quantity: 1000, price: 30.0, fee: 50.0, transaction_date: '2026-08-15', note: 'Take profit 50%', tags: [] },
   ]
   const summary = computePortfolioPositions(txs)
   const pos = summary.positions[0]
@@ -65,8 +67,8 @@ test('AVCO P&L Engine: Partial Sell with Realized P&L', () => {
 
 test('AVCO P&L Engine: Cash Dividend reduces cost basis', () => {
   const txs: RawTransaction[] = [
-    { id: '1', ticker: 'VNM', action: 'buy', quantity: 1000, price: 70.0, fee: 0, transaction_date: '2026-08-01', note: null, tags: [], target_price: null, stop_loss: null },
-    { id: '2', ticker: 'VNM', action: 'dividend_cash', quantity: 1000, price: 2.0, fee: 100.0, transaction_date: '2026-08-15', note: 'Cash dividend 20%', tags: [], target_price: null, stop_loss: null },
+    { id: '1', ticker: 'VNM', action: 'buy', quantity: 1000, price: 70.0, fee: 0, transaction_date: '2026-08-01', note: null, tags: [] },
+    { id: '2', ticker: 'VNM', action: 'dividend_cash', quantity: 1000, price: 2.0, fee: 100.0, transaction_date: '2026-08-15', note: 'Cash dividend 20%', tags: [] },
   ]
   const summary = computePortfolioPositions(txs)
   const pos = summary.positions[0]
@@ -76,8 +78,8 @@ test('AVCO P&L Engine: Cash Dividend reduces cost basis', () => {
 
 test('AVCO P&L Engine: Stock Dividend increases shares and dilutes avg cost', () => {
   const txs: RawTransaction[] = [
-    { id: '1', ticker: 'MBB', action: 'buy', quantity: 1000, price: 24.0, fee: 0, transaction_date: '2026-08-01', note: null, tags: [], target_price: null, stop_loss: null },
-    { id: '2', ticker: 'MBB', action: 'dividend_stock', quantity: 200, price: 0, fee: 0, transaction_date: '2026-08-15', note: 'Stock dividend 20%', tags: [], target_price: null, stop_loss: null },
+    { id: '1', ticker: 'MBB', action: 'buy', quantity: 1000, price: 24.0, fee: 0, transaction_date: '2026-08-01', note: null, tags: [] },
+    { id: '2', ticker: 'MBB', action: 'dividend_stock', quantity: 200, price: 0, fee: 0, transaction_date: '2026-08-15', note: 'Stock dividend 20%', tags: [] },
   ]
   const summary = computePortfolioPositions(txs)
   const pos = summary.positions[0]
@@ -102,6 +104,8 @@ test('AVCO P&L Engine: Multi-target, multi-stoploss and Setup/Mistake tags', () 
   assert.equal(pos.targetPrice3, 45.0)
   assert.equal(pos.stopLoss1, 29.5)
   assert.equal(pos.stopLoss2, 28.0)
+  assert.equal(pos.targetPrice, 38.0)
+  assert.equal(pos.stopLoss, 29.5)
   assert.deepEqual(pos.setupTags, ['Breakout KL lớn', 'Mô hình VCP'])
 })
 
@@ -128,6 +132,8 @@ test('QEO-20 active runtime stops depending on legacy compatibility DB columns',
   assert.doesNotMatch(benchmark, /,target_price,stop_loss/)
   assert.doesNotMatch(pnl, /tx\.target_price\b/)
   assert.doesNotMatch(pnl, /tx\.stop_loss\b/)
+  assert.match(transactions, /canonicalOrLegacy\(body, "target_price_1", "target_price"\)/)
+  assert.match(transaction, /setCanonicalNumber\(updates, body, "target_price_1", "target_price"\)/)
 })
 
 test('QEO-20 migration is fail-closed, rewrites lease RPCs, and drops exactly approved compatibility columns', () => {
@@ -155,4 +161,16 @@ test('QEO-20 migration is fail-closed, rewrites lease RPCs, and drops exactly ap
   assert.doesNotMatch(complete, /lease_until/i)
   assert.match(claim, /lease_expires_at/i)
   assert.match(complete, /lease_expires_at/i)
+  assert.match(claim, /where market_ai_conclusions\.id = v\.id/i)
+})
+
+test('QEO-20 keeps the destructive recovery rehearsal reusable after legacy columns are dropped', () => {
+  const seed = readFileSync(resolve('scripts/db/recovery/seed.sql'), 'utf8')
+  const destructive = readFileSync(resolve('scripts/db/recovery/destructive.sql'), 'utf8')
+  const restored = readFileSync(resolve('scripts/db/recovery/assert-restored.sql'), 'utf8')
+
+  assert.match(seed, /qeo_recovery_legacy_target/i)
+  assert.match(destructive, /drop column if exists qeo_recovery_legacy_target/i)
+  assert.match(restored, /qeo_recovery_legacy_target/i)
+  assert.doesNotMatch(destructive, /drop column if exists target_price\s*;/i)
 })
