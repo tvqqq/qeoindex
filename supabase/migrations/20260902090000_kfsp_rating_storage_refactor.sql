@@ -1,7 +1,7 @@
 -- QEO-27: contract the hot KFSP rating read model while preserving
 -- bounded, private provider evidence for operational debugging.
 
-create table if not exists public.kfsp_rating_raw_evidence (
+create table public.kfsp_rating_raw_evidence (
   sync_run_id uuid not null,
   ticker text not null check (ticker ~ '^[A-Z0-9]{2,12}$'),
   as_of_date date not null,
