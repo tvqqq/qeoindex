@@ -2960,6 +2960,10 @@ export type Database = {
         Args: { p_run_id: string }
         Returns: Json
       }
+      qeo_run_job_telemetry_cleanup: {
+        Args: { p_reference_at?: string }
+        Returns: Json
+      }
       qeo_run_safe_retention_cleanup: {
         Args: { p_reference_at?: string }
         Returns: Json
