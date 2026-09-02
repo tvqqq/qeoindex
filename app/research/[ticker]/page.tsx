@@ -48,7 +48,7 @@ export default async function ResearchTickerPage({ params }: { params: Promise<{
     return (
       <div className="min-h-screen bg-background text-[15px]">
         <TopNav />
-        <div className="fixed bottom-4 right-4 z-50 max-w-[min(92vw,720px)] rounded-xl border border-border bg-panel/95 p-3 shadow-2xl backdrop-blur">
+        <div className="fixed bottom-4 right-4 z-50 max-w-[min(92vw,720px)] rounded-xl border border-border bg-panel/98 p-3 shadow-[0_12px_32px_-20px_rgba(0,0,0,0.9)]">
           <FinhayLiveControl indexes={[decoded]} />
         </div>
         <Suspense fallback={<div className="flex h-64 items-center justify-center text-sm text-foreground/50">Đang tải nghiên cứu VNINDEX...</div>}>
@@ -62,7 +62,7 @@ export default async function ResearchTickerPage({ params }: { params: Promise<{
     <div className="min-h-screen bg-background text-[15px]">
       <TopNav />
 
-      <div className="fixed bottom-4 right-4 z-50 max-w-[min(92vw,720px)] rounded-xl border border-border bg-panel/95 p-3 shadow-2xl backdrop-blur">
+      <div className="fixed bottom-4 right-4 z-50 max-w-[min(92vw,720px)] rounded-xl border border-border bg-panel/98 p-3 shadow-[0_12px_32px_-20px_rgba(0,0,0,0.9)]">
         <FinhayLiveControl symbols={[decoded]} />
       </div>
 
