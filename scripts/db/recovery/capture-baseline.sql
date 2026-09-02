@@ -95,7 +95,10 @@ select 'functions|' || coalesce(string_agg(
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
-  and pg_get_functiondef(p.oid) ~* '(portfolio_transactions|wyckoff_universe_memberships)';
+  and case
+    when p.prokind = 'f' then pg_get_functiondef(p.oid) ~* '(portfolio_transactions|wyckoff_universe_memberships)'
+    else false
+  end;
 
 select 'types|' || coalesce(string_agg(
   n.nspname || '.' || t.typname || ':' || t.typtype::text,
