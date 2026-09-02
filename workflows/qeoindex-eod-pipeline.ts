@@ -182,7 +182,13 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       errors: [],
     }
     for (let offset = 0; offset < ready.stocks.length; offset += 10) {
-      history = await runHistoryRefreshBatchStep(runId, ready.stocks.slice(offset, offset + 10), startedAtIso, history)
+      history = await runHistoryRefreshBatchStep(
+        runId,
+        ready.stocks.slice(offset, offset + 10),
+        startedAtIso,
+        history,
+        !historicalBackfill,
+      )
     }
     if (
       history.completedTickers + history.failedTickers !== universeCount
