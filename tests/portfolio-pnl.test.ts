@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { computePortfolioPositions, calculatePositionSizing, type RawTransaction } from '../lib/portfolio/pnl.ts'
@@ -137,10 +137,13 @@ test('QEO-20 active runtime stops depending on legacy compatibility DB columns',
 })
 
 test('QEO-20 migration is fail-closed, rewrites lease RPCs, and drops exactly approved compatibility columns', () => {
-  const migrationDir = resolve('supabase/migrations')
-  const matches = readdirSync(migrationDir).filter((name) => name.endsWith('_qeo20_compatibility_columns_cleanup.sql'))
-  assert.equal(matches.length, 1, 'expected exactly one QEO-20 compatibility cleanup migration')
-  const sql = readFileSync(resolve(migrationDir, matches[0]), 'utf8')
+  const filename = '20260902130000_qeo20_compatibility_columns_cleanup.sql'
+  const candidates = [
+    resolve('supabase/migrations', filename),
+    resolve('supabase/pending-migrations', filename),
+  ].filter((path) => existsSync(path))
+  assert.equal(candidates.length, 1, 'expected exactly one QEO-20 compatibility cleanup migration')
+  const sql = readFileSync(candidates[0], 'utf8')
 
   assert.match(sql, /target_price_1\s*=\s*target_price/i)
   assert.match(sql, /stop_loss_1\s*=\s*stop_loss/i)
