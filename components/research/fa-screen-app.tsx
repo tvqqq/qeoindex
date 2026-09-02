@@ -217,7 +217,7 @@ export function FaScreenApp() {
                 key={item}
                 type="button"
                 onClick={() => setValuation(active ? "Tất cả" : item)}
-                className={["rounded-xl border p-4 text-left transition-all", SUMMARY_STYLE[item], active ? "ring-1 ring-brand/60" : "hover:-translate-y-0.5 hover:border-border-strong"].join(" ")}
+                className={["rounded-xl border p-4 text-left transition-[color,background-color,border-color,transform] duration-150", SUMMARY_STYLE[item], active ? "ring-1 ring-brand/60" : "hover:-translate-y-0.5 hover:border-border-strong"].join(" ")}
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${VALUATION_STYLE[item]}`}>{item}</span>
@@ -274,7 +274,7 @@ export function FaScreenApp() {
         <section className="mt-5 overflow-hidden rounded-xl border border-border bg-panel">
           <div className="overflow-x-auto">
             <table className="min-w-[1380px] w-full border-collapse text-sm">
-              <thead className="sticky top-0 z-10 bg-panel-2/95 backdrop-blur">
+              <thead className="sticky top-0 z-10 bg-panel-2">
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-foreground/50">
                   <th className="px-4 py-3"><HeaderButton label="Rank" sortKey="rank" currentKey={sortKey} direction={direction} onSort={onSort} /></th>
                   <th className="px-4 py-3"><HeaderButton label="Ticker" sortKey="ticker" currentKey={sortKey} direction={direction} onSort={onSort} /></th>

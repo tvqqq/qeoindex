@@ -5,11 +5,6 @@
   text-rendering: optimizeLegibility;
 }
 
-.readable main :global(.font-ticker),
-.readable main :global(.font-mono) {
-  font-family: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif !important;
-}
-
 .readable main :global(.font-mono) {
   font-variant-numeric: tabular-nums lining-nums;
   letter-spacing: -0.018em;

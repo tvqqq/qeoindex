@@ -368,7 +368,7 @@ export function PortfolioPage() {
               <Button
                 size="sm"
                 onClick={() => handleOpenAddTx()}
-                className="h-8 gap-1.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 px-4 text-xs font-bold font-ticker text-white shadow-[0_0_15px_rgba(147,51,234,0.35)] transition-all cursor-pointer"
+                className="h-8 gap-1.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 px-4 text-xs font-bold font-ticker text-white shadow-[0_0_15px_rgba(147,51,234,0.35)] transition-colors cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Thêm giao dịch</span>

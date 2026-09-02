@@ -1,14 +1,13 @@
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono, Plus_Jakarta_Sans } from 'next/font/google'
+import { Geist_Mono, Plus_Jakarta_Sans } from 'next/font/google'
 import { AppAuthGate } from '@/components/auth/app-auth-gate'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { getServerAuthContext } from '@/lib/auth/server'
 import { BRAND } from '@/lib/brand'
 import './globals.css'
 
-const geistSans = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ['latin', 'vietnamese'],
@@ -51,7 +50,7 @@ export default async function RootLayout({
   const serverSessionAuthenticated = Boolean(await getServerAuthContext())
 
   return (
-    <html lang="vi" className={`${geistSans.variable} ${geistMono.variable} ${plusJakartaSans.variable} bg-background`}>
+    <html lang="vi" className={`${geistMono.variable} ${plusJakartaSans.variable} bg-background`}>
       <body className="font-sans antialiased">
         <TooltipProvider>
           <AppAuthGate serverSessionPresent={serverSessionAuthenticated}>{children}</AppAuthGate>
