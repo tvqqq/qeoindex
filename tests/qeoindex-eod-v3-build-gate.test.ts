@@ -86,3 +86,30 @@ test("Google Drive archive delegates to the proven Shared Drive uploader", () =>
   assert.match(legacyArchive, /GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/)
   assert.match(legacyArchive, /GOOGLE_DRIVE_ARCHIVE_FOLDER_ID/)
 })
+
+test("QEO-42 bounded per-ticker refresh failure continues to exact-session fail-closed verification", () => {
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+
+  assert.doesNotMatch(
+    steps,
+    /if \(result\.failedTickers > 0\) \{[\s\S]*?HISTORY_REFRESH failed for/,
+    "bounded provider failures must not abort before the exact-session Daily gate",
+  )
+  assert.doesNotMatch(workflow, /history\.completedTickers !== universeCount/)
+  assert.match(workflow, /history\.completedTickers \+ history\.failedTickers !== universeCount/)
+  assert.match(workflow, /history\.requestedTickers !== universeCount/)
+
+  const historyGate = workflow.indexOf("history.completedTickers + history.failedTickers")
+  const repair = workflow.indexOf("runEodNoTradeDailyRepairStep", historyGate)
+  const build = workflow.indexOf("runWyckoffBuildStep", repair)
+  assert.ok(historyGate >= 0 && repair > historyGate && build > repair, "exact-session repair must remain between refresh accounting and Wyckoff build")
+})
+
+test("QEO-42 HISTORY_REFRESH telemetry keeps bounded provider failures visible", () => {
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+
+  assert.match(steps, /failedTickers:\s*result\.failedTickers/)
+  assert.match(steps, /limitedCoverageCount:\s*result\.limitedCoverage\.length/)
+  assert.match(steps, /errors:\s*result\.errors\.slice\(0,\s*5\)/)
+})
