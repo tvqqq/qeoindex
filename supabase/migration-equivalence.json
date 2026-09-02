@@ -18,6 +18,7 @@
     {"logicalName":"restrict_orderbook_prune_trigger_execute","repositoryVersion":"20260902011846","productionVersion":"20260902011846","state":"EXACT","evidence":"function-grants-and-advisor"},
     {"logicalName":"ai_council_authenticated_readonly","repositoryVersion":"20260902084500","productionVersion":"20260902014425","state":"MAPPED","evidence":"ledger-logical-name"},
     {"logicalName":"ai_council_debate_identity_cleanup","repositoryVersion":"20260902084000","productionVersion":"20260902014432","state":"MAPPED","evidence":"ledger-logical-name"},
-    {"logicalName":"kfsp_rating_storage_refactor","repositoryVersion":"20260902020424","productionVersion":"20260902020424","state":"EXACT","evidence":"production-schema-contract","rationale":"Production ledger and schema prove the destructive refactor is already applied; source must use the production version to prevent double-apply"}
+    {"logicalName":"kfsp_rating_storage_refactor","repositoryVersion":"20260902020424","productionVersion":"20260902020424","state":"EXACT","evidence":"production-schema-contract","rationale":"Production ledger and schema prove the destructive refactor is already applied; source must use the production version to prevent double-apply"},
+    {"logicalName":"kfsp_vault_token_cache","repositoryVersion":"20260902120500","productionVersion":null,"state":"QUARANTINED","evidence":"qeo-19-preproduction-gate","rationale":"Compatibility migration must remain pending until branch verification passes and production token-cache backfill is applied"}
   ]
 }
