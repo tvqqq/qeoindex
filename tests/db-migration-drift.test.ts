@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { readFileSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import test from "node:test"
 import { parseMigrationFilename, reconcileMigrations } from "../scripts/db/migration-drift-lib.mjs"
 
@@ -62,7 +62,9 @@ test("current repository migration set reconciles against reviewed production le
   const manifest = JSON.parse(readFileSync("supabase/migration-equivalence.json", "utf8"))
   const ledger = JSON.parse(readFileSync("docs/db/evidence/production-migration-ledger-2026-09-02.json", "utf8"))
   const activeFiles = readdirSync("supabase/migrations").filter((name) => name.endsWith(".sql"))
-  const pendingFiles = readdirSync("supabase/pending-migrations").filter((name) => name.endsWith(".sql"))
+  const pendingFiles = existsSync("supabase/pending-migrations")
+    ? readdirSync("supabase/pending-migrations").filter((name) => name.endsWith(".sql"))
+    : []
   const result = reconcileMigrations({ activeFiles, pendingFiles, productionLedger: ledger.migrations, manifest })
   assert.equal(result.ok, true, result.errors.join("\n"))
 })
