@@ -88,6 +88,20 @@ test("direct Wyckoff publisher validates 2 snapshots and one raw Daily chart ser
   assert.doesNotMatch(code, /queryDataSource|Notion|WYCKOFF_V2_RUNS_DATA_SOURCE_ID/)
 })
 
+test("QEO-39 builds once, stages run-scoped artifacts, and keeps snapshots out of durable workflow output", () => {
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+
+  assert.match(steps, /loadWyckoffV2CachedHistories/)
+  assert.doesNotMatch(steps, /loadWyckoffV2CachedTickerHistory/)
+  assert.equal((steps.match(/buildAllSnapshots/g) || []).length, 2, "buildAllSnapshots should only be defined and called by WYCKOFF_BUILD")
+  assert.match(steps, /stageWyckoffV2BuildArtifacts/)
+  assert.match(steps, /loadWyckoffV2BuildArtifacts/)
+  assert.doesNotMatch(workflow, /build\.snapshots/)
+  assert.match(workflow, /runSupabaseValidateStep\([\s\S]*?runId[\s\S]*?ready\.runKey[\s\S]*?ready\.scanDate[\s\S]*?build\.validationHash[\s\S]*?\)/)
+  assert.match(workflow, /runSupabasePublishStep\([\s\S]*?runId[\s\S]*?ready\.runKey[\s\S]*?ready\.scanDate[\s\S]*?validation\.validationHash[\s\S]*?\)/)
+})
+
 test("admin EOD phase catalog exposes v3 order and dynamic Top Stocks descriptions", () => {
   const code = source("lib/admin/job-phases.ts")
   for (const phase of [

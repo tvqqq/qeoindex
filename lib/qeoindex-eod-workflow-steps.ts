@@ -5,8 +5,12 @@ import { markQeoIndexEodPhaseSkipped, runQeoIndexEodPhase } from "@/lib/admin/jo
 import { getCanonicalUniverse } from "@/lib/market-universe"
 import { refreshOhlcvHistoryBatch, type OhlcvUniverseRefreshResult } from "@/lib/ohlcv-history-store"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
+import {
+  loadWyckoffV2BuildArtifacts,
+  stageWyckoffV2BuildArtifacts,
+} from "@/lib/wyckoff-v2-build-artifacts"
 import { buildWyckoffV2TickerSnapshots, type WyckoffV2Snapshot } from "@/lib/wyckoff-v2-builder"
-import { loadWyckoffV2CachedTickerHistory } from "@/lib/wyckoff-v2-cache-read"
+import { loadWyckoffV2CachedHistories } from "@/lib/wyckoff-v2-cache-read"
 import { computeWyckoffV2ValidationHash, validateWyckoffV2SnapshotSet } from "@/lib/wyckoff-v2-contract"
 import type { WyckoffV2UniverseRow } from "@/lib/wyckoff-v2-universe"
 import { publishWyckoffV2SnapshotsDirect } from "@/lib/wyckoff-supabase-publish"
@@ -95,22 +99,23 @@ export async function runHistoryRefreshBatchStep(
 }
 
 async function buildAllSnapshots(stocks: WyckoffV2UniverseRow[], runKey: string, scanDate: string) {
-  const supabase = requiredSupabase()
-  const snapshots: WyckoffV2Snapshot[] = []
+  const histories = await loadWyckoffV2CachedHistories(
+    requiredSupabase(),
+    stocks.map((stock) => stock.ticker),
+  )
   const providers = new Set<string>()
+  const snapshots: WyckoffV2Snapshot[] = []
 
-  for (let offset = 0; offset < stocks.length; offset += 10) {
-    const batch = await Promise.all(stocks.slice(offset, offset + 10).map(async (stock) => {
-      const history = await loadWyckoffV2CachedTickerHistory(supabase, stock.ticker)
-      providers.add(history.daily.provider)
-      return buildWyckoffV2TickerSnapshots({
-        stock,
-        daily: history.daily,
-        runKey,
-        scanDate,
-      })
+  for (const stock of stocks) {
+    const history = histories.get(stock.ticker)
+    if (!history) throw new Error(`WYCKOFF_BUILD_CACHE_MISSING: ${stock.ticker}`)
+    providers.add(history.daily.provider)
+    snapshots.push(...buildWyckoffV2TickerSnapshots({
+      stock,
+      daily: history.daily,
+      runKey,
+      scanDate,
     }))
-    snapshots.push(...batch.flat())
   }
 
   const expectedSnapshots = stocks.length * 2
@@ -134,12 +139,26 @@ export async function runWyckoffBuildStep(
     phaseKey: "WYCKOFF_BUILD",
     fn: async () => {
       const built = await buildAllSnapshots(stocks, runKey, scanDate)
+      const staged = await stageWyckoffV2BuildArtifacts(requiredSupabase(), {
+        runId,
+        runKey,
+        scanDate,
+        validationHash: built.validationHash,
+        snapshots: built.snapshots,
+      })
+      if (staged.tickerCount !== stocks.length || staged.snapshotCount !== built.validation.total) {
+        throw Object.assign(
+          new Error(`WYCKOFF_BUILD artifact staging mismatch ${staged.tickerCount}/${stocks.length} tickers`),
+          { code: "WYCKOFF_BUILD_FAILED" },
+        )
+      }
       return {
         total: built.validation.total,
         complete: built.validation.complete,
         incomplete: built.validation.incomplete,
         validationHash: built.validationHash,
         providers: built.providers,
+        artifactTickerCount: staged.tickerCount,
       }
     },
     summarize: (result) => result,
@@ -151,13 +170,19 @@ export async function runSupabaseValidateStep(
   stocks: WyckoffV2UniverseRow[],
   runKey: string,
   scanDate: string,
+  expectedValidationHash: string,
 ) {
   "use step"
   return runQeoIndexEodPhase({
     runId,
     phaseKey: "SUPABASE_VALIDATE",
     fn: async () => {
-      const built = await buildAllSnapshots(stocks, runKey, scanDate)
+      const built = await loadWyckoffV2BuildArtifacts(requiredSupabase(), {
+        runId,
+        runKey,
+        scanDate,
+        expectedValidationHash,
+      })
       const canonical = await getCanonicalUniverse()
       const builtTickers = [...new Set(built.snapshots.map((snapshot) => snapshot.ticker))].sort()
       const canonicalTickers = canonical.stocks.map((stock) => stock.ticker).sort()
@@ -170,6 +195,12 @@ export async function runSupabaseValidateStep(
             + `${missing.length ? `; missing=${missing.slice(0, 20).join(",")}` : ""}`
             + `${unexpected.length ? `; unexpected=${unexpected.slice(0, 20).join(",")}` : ""}`,
           ),
+          { code: "SUPABASE_VALIDATE_FAILED" },
+        )
+      }
+      if (builtTickers.length !== stocks.length || built.tickerCount !== stocks.length) {
+        throw Object.assign(
+          new Error(`SUPABASE_VALIDATE stock payload mismatch ${builtTickers.length}/${stocks.length}`),
           { code: "SUPABASE_VALIDATE_FAILED" },
         )
       }
@@ -189,7 +220,6 @@ export async function runSupabaseValidateStep(
 
 export async function runSupabasePublishStep(
   runId: string,
-  stocks: WyckoffV2UniverseRow[],
   runKey: string,
   scanDate: string,
   expectedValidationHash: string,
@@ -199,13 +229,12 @@ export async function runSupabasePublishStep(
     runId,
     phaseKey: "SUPABASE_PUBLISH",
     fn: async () => {
-      const built = await buildAllSnapshots(stocks, runKey, scanDate)
-      if (built.validationHash !== expectedValidationHash) {
-        throw Object.assign(
-          new Error(`SUPABASE_PUBLISH validation hash changed: ${built.validationHash} != ${expectedValidationHash}`),
-          { code: "SUPABASE_PUBLISH_FAILED" },
-        )
-      }
+      const built = await loadWyckoffV2BuildArtifacts(requiredSupabase(), {
+        runId,
+        runKey,
+        scanDate,
+        expectedValidationHash,
+      })
       return publishWyckoffV2SnapshotsDirect(requiredSupabase(), {
         snapshots: built.snapshots,
         runKey,

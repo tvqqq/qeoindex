@@ -29,8 +29,28 @@ function recentRow(ticker: string, index: number): WyckoffV2RecentOhlcvRow {
   }
 }
 
+function compactRecentRow(ticker: string, index: number) {
+  const row = recentRow(ticker, index)
+  return [
+    row.bar_time,
+    row.open,
+    row.high,
+    row.low,
+    row.close,
+    row.volume,
+    row.provider,
+    row.provider_detail,
+    row.source_url,
+    row.fetched_at,
+  ]
+}
+
 function completeRows(tickers = ["AAA", "BBB"]) {
   return tickers.flatMap((ticker) => [recentRow(ticker, 2), recentRow(ticker, 0), recentRow(ticker, 1)])
+}
+
+function completeCompactRows(ticker: string) {
+  return [compactRecentRow(ticker, 2), compactRecentRow(ticker, 0), compactRecentRow(ticker, 1)]
 }
 
 test("v2 chart-series builder produces exactly one raw Daily read model per ticker", () => {
@@ -68,15 +88,14 @@ test("v2 chart-series coverage fails closed when any ticker is missing Daily ser
   )
 })
 
-test("chart-series loader keeps every RPC response below the row cap by loading one ticker per request", async () => {
+test("chart-series loader batches 100 tickers into 10 compact grouped RPC requests", async () => {
   const tickers = Array.from({ length: 100 }, (_, index) => `T${String(index + 1).padStart(3, "0")}`)
-  const calls: string[][] = []
+  const calls: Array<{ name: string; tickers: string[] }> = []
   const supabase = {
-    rpc: async (_name: string, args: { p_tickers: string[] }) => {
-      calls.push(args.p_tickers)
-      const complete = completeRows(args.p_tickers)
+    rpc: async (name: string, args: { p_tickers: string[] }) => {
+      calls.push({ name, tickers: args.p_tickers })
       return {
-        data: args.p_tickers.length > 1 ? complete.slice(0, 6) : complete,
+        data: args.p_tickers.map((ticker) => ({ ticker, rows: completeCompactRows(ticker) })),
         error: null,
       }
     },
@@ -85,7 +104,9 @@ test("chart-series loader keeps every RPC response below the row cap by loading 
   const rows = await loadWyckoffV2ChartSeriesRows(supabase, tickers, RUN_ID)
 
   assert.equal(rows.length, 100)
-  assert.equal(calls.length, 100)
-  assert.ok(calls.every((call) => call.length === 1))
+  assert.equal(calls.length, 10)
+  assert.ok(calls.every((call) => call.name === "qeo_market_ohlcv_recent_grouped"))
+  assert.ok(calls.every((call) => call.tickers.length > 0 && call.tickers.length <= 10))
+  assert.deepEqual(calls.flatMap((call) => call.tickers), tickers)
   assert.ok(rows.every((row) => row.timeframe === "1D"))
 })

@@ -4,23 +4,17 @@ import {
   WYCKOFF_V2_AGGREGATION_VERSION,
   WYCKOFF_V2_MODEL_VERSION,
 } from "./wyckoff-v2-builder.ts"
+import {
+  decodeGroupedDailyOhlcvResponse,
+  type GroupedDailyOhlcvRow,
+} from "./market-ohlcv-grouped.ts"
 import type { OhlcvBar } from "./technical-indicators.ts"
 
 export type WyckoffV2ChartSeriesTimeframe = "1D"
+export const WYCKOFF_V2_CHART_SERIES_BATCH_SIZE = 10
 
-export interface WyckoffV2RecentOhlcvRow {
-  ticker: string
+export interface WyckoffV2RecentOhlcvRow extends GroupedDailyOhlcvRow {
   timeframe: WyckoffV2ChartSeriesTimeframe
-  bar_time: string
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
-  provider: string
-  provider_detail: string
-  source_url: string
-  fetched_at: string
 }
 
 export interface WyckoffV2ChartSeriesRow {
@@ -118,17 +112,15 @@ export async function loadWyckoffV2ChartSeriesRows(
   const tickers = normalizeTickers(inputTickers)
   const rows: WyckoffV2RecentOhlcvRow[] = []
 
-  for (let offset = 0; offset < tickers.length; offset += 10) {
-    const batch = tickers.slice(offset, offset + 10)
-    const results = await Promise.all(batch.map(async (ticker) => {
-      const { data, error } = await supabase.rpc("qeo_market_ohlcv_recent", {
-        p_tickers: [ticker],
-        p_limit: 260,
-      })
-      if (error) throw new Error(`Load recent OHLCV chart series failed for ${ticker}: ${error.message}`)
-      return ((data || []) as Array<WyckoffV2RecentOhlcvRow & { timeframe: string }>).filter((row) => row.timeframe === "1D") as WyckoffV2RecentOhlcvRow[]
-    }))
-    rows.push(...results.flat())
+  for (let offset = 0; offset < tickers.length; offset += WYCKOFF_V2_CHART_SERIES_BATCH_SIZE) {
+    const batch = tickers.slice(offset, offset + WYCKOFF_V2_CHART_SERIES_BATCH_SIZE)
+    const { data, error } = await supabase.rpc("qeo_market_ohlcv_recent_grouped", {
+      p_tickers: batch,
+      p_limit: 260,
+    })
+    if (error) throw new Error(`Load recent OHLCV chart series failed for ${batch.join(",")}: ${error.message}`)
+    const grouped = decodeGroupedDailyOhlcvResponse(data, batch)
+    for (const ticker of batch) rows.push(...(grouped.get(ticker) || []) as WyckoffV2RecentOhlcvRow[])
   }
 
   const series = buildWyckoffV2ChartSeriesRows({ tickers, rows, runId })
