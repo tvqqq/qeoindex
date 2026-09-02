@@ -1,35 +1,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import type { CachedOhlcvHistory } from "./ohlcv-history-store.ts"
+import {
+  decodeGroupedDailyOhlcvResponse,
+  type GroupedDailyOhlcvRow,
+} from "./market-ohlcv-grouped.ts"
 import type { HistoricalProvider } from "./market-history-contract.ts"
 import type { OhlcvBar } from "./technical-indicators.ts"
 
 export const DAILY_V2_CACHE_LIMIT = 1700
-export const V2_CACHE_BATCH_SIZE = 10
+export const V2_CACHE_BATCH_SIZE = 5
 
-export interface StoredV2OhlcvRow {
-  ticker: string
-  timeframe: "1D"
-  bar_time: string
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
-  provider: string
-  provider_detail: string
-  source_url: string
-  fetched_at: string
-}
+export type StoredV2OhlcvRow = GroupedDailyOhlcvRow
 
 export interface WyckoffV2CachedHistory {
   daily: CachedOhlcvHistory
   hourly: CachedOhlcvHistory
-}
-
-interface GroupedRecentOhlcvRow {
-  ticker: string
-  rows: unknown
 }
 
 function normalizeTickers(input: string[]) {
@@ -77,22 +63,6 @@ export function cachedHistoryFromRows(ticker: string, inputRows: StoredV2OhlcvRo
   }
 }
 
-function groupedRowsForBatch(data: unknown, batch: string[]) {
-  const grouped = new Map<string, StoredV2OhlcvRow[]>()
-  for (const item of (Array.isArray(data) ? data : []) as GroupedRecentOhlcvRow[]) {
-    const ticker = String(item?.ticker || "").trim().toUpperCase()
-    if (!batch.includes(ticker) || grouped.has(ticker)) {
-      throw new Error(`OHLCV cache grouped response has invalid or duplicate ticker=${ticker || "missing"}`)
-    }
-    if (!Array.isArray(item.rows)) throw new Error(`OHLCV cache grouped response rows are invalid for ${ticker}`)
-    const rows = (item.rows as Array<StoredV2OhlcvRow & { timeframe?: string }>).filter(
-      (row) => row?.ticker === ticker && row?.timeframe === "1D",
-    ) as StoredV2OhlcvRow[]
-    grouped.set(ticker, rows)
-  }
-  return grouped
-}
-
 export async function loadWyckoffV2CachedHistories(
   supabase: SupabaseClient,
   inputTickers: string[],
@@ -108,7 +78,7 @@ export async function loadWyckoffV2CachedHistories(
     })
     if (error) throw new Error(`OHLCV cache batch read failed for ${batch.join(",")}: ${error.message}`)
 
-    const grouped = groupedRowsForBatch(data, batch)
+    const grouped = decodeGroupedDailyOhlcvResponse(data, batch)
     for (const ticker of batch) {
       const rows = grouped.get(ticker) || []
       if (!rows.length) throw new Error(`OHLCV cache batch missing Daily history for ${ticker}`)
