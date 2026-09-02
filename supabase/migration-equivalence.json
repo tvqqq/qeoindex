@@ -9,7 +9,7 @@
     {"logicalName":"fix_orderbook_trading_session_windows","repositoryVersion":"20260901152000","productionVersion":"20260901082239","state":"MAPPED","evidence":"ledger-logical-name"},
     {"logicalName":"prune_noncanonical_orderbook_snapshots","repositoryVersion":"20260901162500","productionVersion":"20260901093012","state":"MAPPED","evidence":"ledger-logical-name"},
     {"logicalName":"wyckoff_daily_weekly_storage_cutover","repositoryVersion":"20260901190000","productionVersion":"20260901134640","state":"MAPPED","evidence":"ledger-logical-name"},
-    {"logicalName":"clean_rebuild_top_stocks_200","repositoryVersion":"20260901144121","productionVersion":"20260901144121","state":"EXACT","evidence":"filename-ledger-equality"},
+    {"logicalName":"clean_rebuild_top_stocks_200","repositoryVersion":"20260901193000","productionVersion":"20260901144121","state":"MAPPED","evidence":"replay-order-and-production-ledger","rationale":"Repository replay must place the one-shot clean rebuild after the storage cutover that creates market_ohlcv_bootstrap_state and timeframe constraints; production ledger/history remains unchanged"},
     {"logicalName":"kfsp_canonical_rating_candidate_split","repositoryVersion":"20260901221500","productionVersion":"20260901151138","state":"MAPPED","evidence":"ledger-logical-name"},
     {"logicalName":"kfsp_manual_dispatch_rpc","repositoryVersion":"20260901224000","productionVersion":"20260901153403","state":"MAPPED","evidence":"ledger-logical-name"},
     {"logicalName":"fix_kfsp_manual_dispatch_rpc_ambiguity","repositoryVersion":"20260901224500","productionVersion":"20260901153527","state":"MAPPED","evidence":"ledger-logical-name"},
