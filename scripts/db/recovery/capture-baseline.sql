@@ -6,9 +6,8 @@
 select 'data|portfolio|' || coalesce((
   select json_build_object(
     'ticker', ticker,
-    'target_price', target_price,
+    'qeo_recovery_legacy_target', qeo_recovery_legacy_target,
     'target_price_1', target_price_1,
-    'stop_loss', stop_loss,
     'stop_loss_1', stop_loss_1,
     'quantity', quantity,
     'price', price,

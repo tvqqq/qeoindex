@@ -17,16 +17,14 @@ export interface RawTransaction {
   ticker: string
   action: TransactionAction
   quantity: number
-  price: number       // nghìn VNĐ/cổ phiếu
-  fee: number         // tổng phí + thuế (nghìn VNĐ)
-  fee_rate?: number   // % phí (ví dụ 0.15%)
+  price: number
+  fee: number
+  fee_rate?: number
   transaction_date: string
-  note: string | null
+  note?: string | null
   tags: string[]
   setup_tags?: string[]
   mistake_tags?: string[]
-  target_price?: number | null
-  stop_loss?: number | null
   target_price_1?: number | null
   target_price_2?: number | null
   target_price_3?: number | null
@@ -37,11 +35,13 @@ export interface RawTransaction {
 
 export interface PortfolioPosition {
   ticker: string
-  openQty: number           // số CP đang nắm
-  avgCost: number           // giá vốn bình quân (nghìn VNĐ/CP)
-  totalInvested: number     // tổng vốn đã đầu tư vào vị thế hiện tại (k₫)
-  realizedPnl: number       // lãi/lỗ đã chốt (nghìn VNĐ)
+  openQty: number
+  avgCost: number
+  totalInvested: number
+  realizedPnl: number
+  /** Compatibility read model derived from canonical level 1. */
   targetPrice: number | null
+  /** Compatibility read model derived from canonical level 1. */
   stopLoss: number | null
   targetPrice1: number | null
   targetPrice2: number | null
@@ -57,7 +57,6 @@ export interface PortfolioPosition {
 export interface PortfolioSummary {
   positions: PortfolioPosition[]
   totalRealizedPnl: number
-  /** Hàm tính unrealized PnL cần current prices từ ngoài */
   calcUnrealizedPnl: (currentPrices: Record<string, number>) => {
     totalUnrealizedPnl: number
     totalMarketValue: number
@@ -77,15 +76,12 @@ export interface PortfolioSummary {
 export function computePortfolioPositions(
   transactions: RawTransaction[],
 ): PortfolioSummary {
-  // state per ticker: qty, total cost basis, realized pnl
   const state = new Map<
     string,
     {
       openQty: number
       totalCost: number
       realizedPnl: number
-      targetPrice: number | null
-      stopLoss: number | null
       targetPrice1: number | null
       targetPrice2: number | null
       targetPrice3: number | null
@@ -98,7 +94,6 @@ export function computePortfolioPositions(
     }
   >()
 
-  // Sort by date ascending to process chronologically
   const sorted = [...transactions].sort((a, b) => {
     if (a.transaction_date < b.transaction_date) return -1
     if (a.transaction_date > b.transaction_date) return 1
@@ -112,8 +107,6 @@ export function computePortfolioPositions(
         openQty: 0,
         totalCost: 0,
         realizedPnl: 0,
-        targetPrice: null,
-        stopLoss: null,
         targetPrice1: null,
         targetPrice2: null,
         targetPrice3: null,
@@ -129,20 +122,12 @@ export function computePortfolioPositions(
     const pos = state.get(ticker)!
     pos.lastDate = tx.transaction_date
 
-    // Track targets & stop loss from latest transaction if provided
     if (tx.target_price_1 != null) pos.targetPrice1 = tx.target_price_1
     if (tx.target_price_2 != null) pos.targetPrice2 = tx.target_price_2
     if (tx.target_price_3 != null) pos.targetPrice3 = tx.target_price_3
     if (tx.stop_loss_1 != null) pos.stopLoss1 = tx.stop_loss_1
     if (tx.stop_loss_2 != null) pos.stopLoss2 = tx.stop_loss_2
     if (tx.stop_loss_3 != null) pos.stopLoss3 = tx.stop_loss_3
-
-    // Fallbacks for legacy single target/stoploss
-    if (tx.target_price != null) pos.targetPrice = tx.target_price
-    else if (pos.targetPrice1 != null) pos.targetPrice = pos.targetPrice1
-
-    if (tx.stop_loss != null) pos.stopLoss = tx.stop_loss
-    else if (pos.stopLoss1 != null) pos.stopLoss = pos.stopLoss1
 
     if (tx.setup_tags && tx.setup_tags.length > 0) {
       pos.setupTags = Array.from(new Set([...pos.setupTags, ...tx.setup_tags]))
@@ -153,8 +138,6 @@ export function computePortfolioPositions(
 
     switch (tx.action) {
       case "buy": {
-        // AVCO update:
-        // New total cost = old total cost + (buy price * qty) + fee
         const addCost = tx.price * tx.quantity + tx.fee
         pos.totalCost += addCost
         pos.openQty += tx.quantity
@@ -162,21 +145,17 @@ export function computePortfolioPositions(
       }
 
       case "sell": {
-        if (pos.openQty <= 0) break // guard: no position to sell
+        if (pos.openQty <= 0) break
         const sellQty = Math.min(tx.quantity, pos.openQty)
         const avgCost = pos.openQty > 0 ? pos.totalCost / pos.openQty : 0
-        // Realized PnL = (sell price - avg cost) * qty - fee
         const realized = (tx.price - avgCost) * sellQty - tx.fee
         pos.realizedPnl += realized
-        // Reduce cost basis proportionally
         pos.totalCost = avgCost * (pos.openQty - sellQty)
         pos.openQty -= sellQty
         break
       }
 
       case "dividend_cash": {
-        // Cash dividend reduces cost basis (giảm giá vốn)
-        // price field = amount per share in nghìn VNĐ
         if (pos.openQty <= 0) break
         const dividendAmount = tx.price * pos.openQty - tx.fee
         pos.totalCost = Math.max(0, pos.totalCost - dividendAmount)
@@ -184,14 +163,11 @@ export function computePortfolioPositions(
       }
 
       case "dividend_stock": {
-        // Stock dividend: increases openQty, cost basis stays the same
-        // -> reduces avgCost automatically
         pos.openQty += tx.quantity
         break
       }
 
       case "rights": {
-        // Rights issue: buying additional shares at discount price
         const addCost = tx.price * tx.quantity + tx.fee
         pos.totalCost += addCost
         pos.openQty += tx.quantity
@@ -200,7 +176,6 @@ export function computePortfolioPositions(
     }
   }
 
-  // Build positions array — only include open positions (openQty > 0)
   const openPositions: PortfolioPosition[] = []
   let totalRealizedFromClosed = 0
 
@@ -215,8 +190,8 @@ export function computePortfolioPositions(
         avgCost,
         totalInvested: pos.totalCost,
         realizedPnl: pos.realizedPnl,
-        targetPrice: pos.targetPrice,
-        stopLoss: pos.stopLoss,
+        targetPrice: pos.targetPrice1,
+        stopLoss: pos.stopLoss1,
         targetPrice1: pos.targetPrice1,
         targetPrice2: pos.targetPrice2,
         targetPrice3: pos.targetPrice3,
@@ -265,14 +240,6 @@ export function computePortfolioPositions(
   }
 }
 
-/**
- * Công thức Position Sizing chuẩn Quản trị Rủi ro (KFSP Capital Allocation)
- *
- * @param initialCapital Tổng vốn ban đầu / NAV hiện tại (VNĐ)
- * @param accountRiskPct % Cắt lỗ tối đa cho phép trên tổng tài sản (ví dụ: 1.0% hay 1.5%)
- * @param tradeStopLossPct % Cắt lỗ dự kiến trên deal tiếp theo (ví dụ: 5.0% hay 7.0%)
- * @param entryPrice Giá dự kiến mua (nghìn VNĐ / CP)
- */
 export function calculatePositionSizing({
   initialCapital,
   accountRiskPct,
