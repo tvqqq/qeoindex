@@ -48,12 +48,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Ensure PostgreSQL client is available
+      - name: Prepare PostgreSQL 17 client compatibility
         run: |
-          if ! command -v psql >/dev/null 2>&1 || ! command -v pg_dump >/dev/null 2>&1; then
+          if ! command -v psql >/dev/null 2>&1; then
             sudo apt-get update
             sudo apt-get install -y postgresql-client
           fi
+          mkdir -p "$RUNNER_TEMP/pg17-bin"
+          cat > "$RUNNER_TEMP/pg17-bin/pg_dump" <<'EOF'
+          #!/usr/bin/env bash
+          exec docker run --rm --network host postgres:17 pg_dump "$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/pg17-bin/pg_dump"
+          echo "$RUNNER_TEMP/pg17-bin" >> "$GITHUB_PATH"
       - name: Run DB safety contract tests
         run: node --test tests/db-migration-ledger.test.mjs tests/db-recovery-rehearsal.test.mjs
       - name: Verify committed migration ledger reconciliation
