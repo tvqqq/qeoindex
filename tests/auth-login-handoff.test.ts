@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { existsSync, readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 function source(path: string) {
@@ -31,12 +31,11 @@ test("login form prevents repeated submits while Supabase sign-in is in flight",
   assert.match(code, /isSubmitting \? "Đang xác thực\.\.\." : "Đăng nhập"/)
 })
 
-test("root market board has an immediate route loading state", () => {
-  const loadingUrl = new URL("../app/loading.tsx", import.meta.url)
-  assert.equal(existsSync(loadingUrl), true, "app/loading.tsx should stream a board loading state during auth refresh")
-  if (!existsSync(loadingUrl)) return
+test("auth gate exposes immediate, accessible progress while the market board refreshes", () => {
+  const code = source("components/auth/app-auth-gate.tsx")
 
-  const code = readFileSync(loadingUrl, "utf8")
-  assert.match(code, /Đang tải Bảng điện/)
+  assert.match(code, /label: "Đang thiết lập phiên"/)
+  assert.match(code, /label: "Đang tải Bảng điện"/)
   assert.match(code, /aria-live="polite"/)
+  assert.match(code, /aria-busy="true"/)
 })
