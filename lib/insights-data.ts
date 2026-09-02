@@ -116,7 +116,6 @@ type RatingDatabaseRow = {
   ticker: string
   company_name: string | null
   sector: string | null
-  industry_group: string | null
   exchange: string | null
   average_volume_50_sessions: number | null
   market_cap_billion: number | null
@@ -304,7 +303,7 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
   if (latest.error) return { rows: [], sectorSummaries: [], bubbleStocks: [], bubbleAsOfDate: null, message: `Supabase rating chưa sẵn sàng: ${latest.error.message}` }
   if (!latest.data?.as_of_date) return { rows: [], sectorSummaries: [], bubbleStocks: [], bubbleAsOfDate: null, message: "Chưa có snapshot rating được cron công bố." }
   const latestDate = String(latest.data.as_of_date)
-  const selection = "ticker,company_name,sector,industry_group,exchange,price,price_change_pct,average_volume_50_sessions,market_cap_billion,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,kfsp_stock_rrg_state,kfsp_sector_rrg_state,rs_short,rs_medium,rsi_14,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics,as_of_date,source"
+  const selection = "ticker,company_name,sector,exchange,price,price_change_pct,average_volume_50_sessions,market_cap_billion,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,kfsp_stock_rrg_state,kfsp_sector_rrg_state,rs_short,rs_medium,rsi_14,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics,as_of_date,source"
   const chunks = Array.from({ length: Math.ceil(tickers.length / 100) }, (_, index) => tickers.slice(index * 100, index * 100 + 100))
   const responses = await Promise.all(chunks.map((chunk) => supabase
     .from("insights_stock_ratings")
@@ -336,7 +335,7 @@ async function loadRatings(supabase: SupabaseClient): Promise<{ rows: InsightsRa
       ticker: row.ticker,
       companyName: row.company_name || (row.exchange ? `${row.ticker} · ${row.exchange}` : row.ticker),
       sector: row.sector || "Chưa phân ngành",
-      industryGroup: row.industry_group || row.sector || "Chưa phân ngành",
+      industryGroup: row.sector || "Chưa phân ngành",
       exchange: row.exchange,
       isTop100: true,
       top100Rank: rankByTicker.get(row.ticker) ?? null,
