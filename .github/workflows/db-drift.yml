@@ -58,7 +58,10 @@ jobs:
       - name: One-shot sync generated Database types on this feature branch
         if: steps.verify-types.outcome == 'failure'
         run: |
-          cp artifacts/qeo23/database.types.ts lib/supabase/database.types.ts
+          cp artifacts/qeo23/database.types.ts /tmp/database.types.ts
+          git fetch origin "${{ github.head_ref }}"
+          git checkout -B "${{ github.head_ref }}" "origin/${{ github.head_ref }}"
+          cp /tmp/database.types.ts lib/supabase/database.types.ts
           git config user.name "qeoindex-db-drift-bot"
           git config user.email "actions@users.noreply.github.com"
           git add lib/supabase/database.types.ts
