@@ -23,6 +23,20 @@ export function classifyServerAuthTransportFailure(error: unknown): ServerAuthTr
   return "transport"
 }
 
+export class ServerAuthTransportFailureError extends Error {
+  readonly category: ServerAuthTransportFailureCategory
+
+  constructor(category: ServerAuthTransportFailureCategory) {
+    super(`Server auth transport failure (${category})`)
+    this.name = "ServerAuthTransportFailureError"
+    this.category = category
+  }
+}
+
+export function createSanitizedServerAuthTransportFailure(error: unknown) {
+  return new ServerAuthTransportFailureError(classifyServerAuthTransportFailure(error))
+}
+
 function logServerAuthTransportFailure(event: ServerAuthTransportFailureEvent) {
   console.error(event)
 }
