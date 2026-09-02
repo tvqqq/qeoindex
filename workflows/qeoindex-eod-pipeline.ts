@@ -197,10 +197,22 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
     const build = await runWyckoffBuildStep(runId, ready.stocks, ready.runKey, ready.scanDate)
     if (build.total !== expectedSnapshots) throw new Error(`WYCKOFF_BUILD completed ${build.total}/${expectedSnapshots} snapshots`)
 
-    const validation = await runSupabaseValidateStep(runId, ready.stocks, ready.runKey, ready.scanDate)
+    const validation = await runSupabaseValidateStep(
+      runId,
+      ready.stocks,
+      ready.runKey,
+      build.snapshots,
+      build.validationHash,
+    )
     if (validation.snapshotCount !== expectedSnapshots) throw new Error(`SUPABASE_VALIDATE completed ${validation.snapshotCount}/${expectedSnapshots} snapshots`)
 
-    const publish = await runSupabasePublishStep(runId, ready.stocks, ready.runKey, ready.scanDate, validation.validationHash)
+    const publish = await runSupabasePublishStep(
+      runId,
+      ready.runKey,
+      ready.scanDate,
+      build.snapshots,
+      validation.validationHash,
+    )
     const published = publish.status === "published"
 
     const deterministic = await runDeterministicCouncilStep(runId, published, ready.scanDate)
@@ -253,7 +265,13 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       marketCloseStatus: marketClose.status,
       history,
       noTradeRepair,
-      build,
+      build: {
+        total: build.total,
+        complete: build.complete,
+        incomplete: build.incomplete,
+        validationHash: build.validationHash,
+        providers: build.providers,
+      },
       validation,
       publishStatus: publish.status,
       deterministicStatus: deterministic.status,
