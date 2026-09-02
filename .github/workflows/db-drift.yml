@@ -3,7 +3,11 @@ name: DB Drift Reconciliation
 on:
   pull_request:
     paths:
+      - ".github/workflows/db-drift.yml"
+      - "package.json"
       - "scripts/db/**"
+      - "lib/supabase/database.types.ts"
+      - "supabase/config.toml"
       - "supabase/migrations/**"
       - "supabase/pending-migrations/**"
       - "supabase/migration-equivalence.json"
@@ -19,6 +23,7 @@ permissions:
 jobs:
   drift:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -28,6 +33,30 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
       - run: pnpm install --frozen-lockfile
-      - run: node --test tests/db-migration-drift.test.ts tests/db-schema-contract.test.ts tests/kfsp-rating-storage-refactor.test.ts
-      - run: node scripts/db/verify-migration-drift.mjs
+      - name: Verify reviewed migration ledger
+        run: node scripts/db/verify-migration-drift.mjs
+      - name: Start local Supabase
+        run: supabase start
+      - name: Replay migrations from zero
+        run: pnpm db:replay:verify
+      - name: Verify generated Database types
+        run: pnpm db:types:verify
+      - name: Upload generated Database type candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo23-database-types
+          path: artifacts/qeo23/database.types.ts
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Run DB contract regressions
+        run: node --test tests/db-migration-drift.test.ts tests/db-schema-contract.test.ts tests/kfsp-rating-storage-refactor.test.ts
+      - name: Compile TypeScript
+        run: pnpm typecheck
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
