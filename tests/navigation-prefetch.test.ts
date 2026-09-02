@@ -64,6 +64,46 @@ test("top navigation restores Insights as a styled parent menu with three child 
   assert.equal(nav.includes("label: \"Tín hiệu giao dịch\""), false, "legacy research modules should stay consolidated under the research hub")
 })
 
+test("shared shell typography follows the semantic scale while preserving ticker glow", () => {
+  const layout = source("app/layout.tsx")
+  const nav = source("components/top-nav.tsx")
+  const stockIdentity = source("components/stock-identity.tsx")
+  const councilCss = source("app/insights/ai-council/ai-council.module.css")
+
+  assert.doesNotMatch(layout, /\bGeist\b/)
+  assert.doesNotMatch(layout, /geistSans/)
+  assert.match(layout, /Geist_Mono/)
+  assert.match(layout, /Plus_Jakarta_Sans/)
+
+  assert.match(nav, /font-ticker text-lg font-extrabold italic/)
+  assert.match(nav, /font-ticker text-\[11px\] font-medium text-slate-400/)
+  assert.doesNotMatch(nav, /text-\[17px\]|text-\[10\.5px\]/)
+  assert.match(nav, /py-1\.5 px-3\.5[^\"]*text-xs font-medium|px-3\.5 py-1\.5 text-xs font-medium/)
+  assert.match(nav, /text-sm font-bold tracking-tight/)
+  assert.match(nav, /text-xs font-bold transition-colors/)
+  assert.match(nav, /text-\[11px\] font-normal leading-snug/)
+
+  assert.match(stockIdentity, /bg-gradient-to-br from-white via-cyan-100 to-emerald-200/)
+  assert.match(stockIdentity, /drop-shadow-\[0_0_15px_rgba\(34,211,238,0\.2\)\]/)
+  assert.doesNotMatch(councilCss, /:global\(\.font-mono\)/)
+})
+
+test("target UI surfaces avoid broad transitions and persistent blur without touching complex runtimes", () => {
+  const button = source("components/ui/button.tsx")
+  const badge = source("components/ui/badge.tsx")
+  const tickerPage = source("app/research/[ticker]/page.tsx")
+  const fa = source("components/research/fa-screen-app.tsx")
+  const portfolioSelector = source("components/portfolio/portfolio-selector.tsx")
+  const portfolioPage = source("components/portfolio/portfolio-page.tsx")
+
+  assert.doesNotMatch(button, /transition-all/)
+  assert.doesNotMatch(badge, /transition-all/)
+  assert.doesNotMatch(tickerPage, /backdrop-blur/)
+  assert.doesNotMatch(fa, /transition-all|backdrop-blur/)
+  assert.doesNotMatch(portfolioSelector, /transition-all/)
+  assert.doesNotMatch(portfolioPage, /transition-all/)
+})
+
 test("legacy research sub-pages redirect into the single research route", () => {
   const redirects: Record<string, string> = {
     "app/research/scanner/page.tsx": "/research?view=scanner",
