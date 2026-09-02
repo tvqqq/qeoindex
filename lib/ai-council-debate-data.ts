@@ -17,7 +17,6 @@ import { AI_COUNCIL_EVIDENCE_PACKET_VERSION } from "@/lib/ai-council-prompt-evid
 import { INSIGHTS_METRIC_GUIDE_VERSION } from "@/lib/insights-metric-semantics"
 
 interface DebateRow {
-  id: string
   run_id: string
   ticker: string
   as_of_date: string
@@ -147,7 +146,7 @@ function normalize(
   const sourcePageIds = Array.isArray(researchContext?.source_page_ids) ? researchContext.source_page_ids : []
 
   return {
-    id: row.id,
+    id: row.run_id,
     runId: row.run_id,
     ticker: row.ticker,
     asOfDate: row.as_of_date,
@@ -206,7 +205,7 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
 
   const result = await supabase
     .from("ai_council_llm_debates")
-    .select("id,run_id,ticker,as_of_date,selection_reasons,status,model,model_route,prompt_version,evidence_hash,deterministic_signal,deterministic_score,deterministic_risk_status,bull_payload,bear_payload,risk_payload,chair_payload,call_audit,input_tokens,cached_input_tokens,output_tokens,reasoning_tokens,total_tokens,latency_ms,estimated_cost_usd,escalated,escalation_reason,fallback_used,error,created_at,completed_at")
+    .select("run_id,ticker,as_of_date,selection_reasons,status,model,model_route,prompt_version,evidence_hash,deterministic_signal,deterministic_score,deterministic_risk_status,bull_payload,bear_payload,risk_payload,chair_payload,call_audit,input_tokens,cached_input_tokens,output_tokens,reasoning_tokens,total_tokens,latency_ms,estimated_cost_usd,escalated,escalation_reason,fallback_used,error,created_at,completed_at")
     .order("as_of_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(80)
