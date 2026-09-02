@@ -59,13 +59,17 @@ test("no-trade repair supports the full canonical max-200 universe", () => {
   assert.doesNotMatch(repair, /1-100 unique tickers/)
 })
 
-test("archive retention remains fail-closed while implementation is delegated", () => {
+test("safe telemetry retention is active while raw-history retention stays fail-closed", () => {
   const archive = source("lib/qeoindex-eod-archive.ts")
   const legacyArchive = source("lib/qeoindex-eod-archive-legacy.ts")
   const migration = source("supabase/migrations/20260901130000_eod_archive_checkpoints.sql")
-  assert.match(archive, /runEodRetentionCleanup/)
-  assert.match(archive, /status:\s*"blocked"/)
-  assert.match(legacyArchive, /eod_archive_checkpoints/)
+
+  assert.match(archive, /qeo_run_safe_retention_cleanup/)
+  assert.match(archive, /Raw Daily OHLCV retention is intentionally disabled/i)
+  assert.doesNotMatch(archive, /\.from\("market_ohlcv_history"\)[\s\S]*?\.delete\(/i)
+
+  // Keep the proven archive coverage preflight available for a future Plan C raw
+  // retention cutover, but it is no longer allowed to suppress safe telemetry TTL.
   assert.match(legacyArchive, /qeo_archive_retention_preflight/)
   assert.match(migration, /create table if not exists public\.eod_archive_checkpoints/)
   assert.match(migration, /create or replace function public\.qeo_archive_retention_preflight/)

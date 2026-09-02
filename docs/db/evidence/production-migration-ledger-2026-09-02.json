@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-02T06:12:00Z",
+  "capturedAt": "2026-09-02T06:17:00Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
   "migrations": [
     {"version":"20260818","name":"orderbook_snapshots"},
@@ -75,6 +75,7 @@
     {"version":"20260902020424","name":"kfsp_rating_storage_refactor"},
     {"version":"20260902024536","name":"market_logo_provenance"},
     {"version":"20260902052650","name":"qeo22_watchlist_default_invariant"},
-    {"version":"20260902052909","name":"kfsp_vault_token_cache"}
+    {"version":"20260902052909","name":"kfsp_vault_token_cache"},
+    {"version":"20260902061549","name":"qeo21_safe_retention_cleanup"}
   ]
 }
