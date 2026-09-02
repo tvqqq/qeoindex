@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "npm:@supabase/supabase-js@2"
+import { isMachineRequestAuthorized } from "../_shared/machine-auth.ts"
 import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "../_shared/vn-market-calendar.ts"
 
 const corsHeaders = {
@@ -11,6 +12,19 @@ const corsHeaders = {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
+  }
+
+  if (req.method === "POST") {
+    const authorized = await isMachineRequestAuthorized(req, [
+      Deno.env.get("MARKET_SYNC_SECRET"),
+      Deno.env.get("CRON_SECRET"),
+    ])
+    if (!authorized) {
+      return new Response(
+        JSON.stringify({ ok: false, message: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      )
+    }
   }
 
   const url = new URL(req.url)
