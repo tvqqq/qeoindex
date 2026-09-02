@@ -12,8 +12,8 @@ begin
     raise exception 'QEO-26 destructive assertion failed: portfolio_transactions.target_price still exists';
   end if;
 
-  if to_regclass('public.wyckoff_universe_memberships') is not null then
-    raise exception 'QEO-26 destructive assertion failed: wyckoff_universe_memberships still exists';
+  if to_regclass('public.qeo_recovery_table_fixture') is not null then
+    raise exception 'QEO-26 destructive assertion failed: qeo_recovery_table_fixture still exists';
   end if;
 end;
 $$;
