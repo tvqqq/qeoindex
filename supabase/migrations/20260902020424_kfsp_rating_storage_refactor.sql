@@ -19,9 +19,6 @@ alter table public.kfsp_rating_raw_evidence enable row level security;
 revoke all on public.kfsp_rating_raw_evidence from public, anon, authenticated;
 grant select, insert, update, delete on public.kfsp_rating_raw_evidence to service_role;
 
--- Preserve the currently published provider payload before removing it from
--- the hot read model. Historical rows without a sync_run_id are intentionally
--- not synthesized because there is no durable run identity to attach them to.
 insert into public.kfsp_rating_raw_evidence (
   sync_run_id,
   ticker,
@@ -48,8 +45,6 @@ set as_of_date = excluded.as_of_date,
     fetched_at = excluded.fetched_at,
     expires_at = excluded.expires_at;
 
--- Replace the publisher before removing the legacy columns. Staging remains the
--- transaction boundary that carries provider raw payload into bounded evidence.
 create or replace function public.publish_kfsp_rating_snapshot(
   p_sync_run_id uuid,
   p_minimum_rows integer default 50
@@ -205,8 +200,6 @@ begin
 end;
 $function$;
 
--- Recreate score indexes against the one canonical score name before dropping
--- the legacy composite_score column they previously depended on.
 drop index if exists public.insights_stock_ratings_date_score_idx;
 drop index if exists public.insights_stock_ratings_published_date_score_idx;
 
@@ -228,8 +221,6 @@ alter table public.insights_stock_ratings
   drop column if exists industry_group,
   drop column if exists raw_payload;
 
--- Preserve the authenticated read-only boundary. The dropped column grants
--- disappear with their columns; the canonical public projection is explicit.
 revoke all on public.insights_stock_ratings from anon;
 grant select (
   as_of_date,
