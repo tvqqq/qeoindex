@@ -78,14 +78,24 @@ test("shared shell typography follows the semantic scale while preserving ticker
   assert.match(nav, /font-ticker text-lg font-extrabold italic/)
   assert.match(nav, /font-ticker text-\[11px\] font-medium text-slate-400/)
   assert.doesNotMatch(nav, /text-\[17px\]|text-\[10\.5px\]/)
-  assert.match(nav, /py-1\.5 px-3\.5[^\"]*text-xs font-medium|px-3\.5 py-1\.5 text-xs font-medium/)
+  assert.match(nav, /px-3\.5 py-1\.5 text-xs font-medium/)
   assert.match(nav, /text-sm font-bold tracking-tight/)
   assert.match(nav, /text-xs font-bold transition-colors/)
   assert.match(nav, /text-\[11px\] font-normal leading-snug/)
 
+  for (const path of [
+    "components/top-nav.tsx",
+    "components/research/research-hub-nav.tsx",
+    "components/admin/admin-header.tsx",
+    "components/portfolio/portfolio-page.tsx",
+  ]) {
+    assert.doesNotMatch(source(path), /text-\[\d+\.5px\]/, `${path} should not use unexplained half-pixel font sizes in shared shells`)
+  }
+
   assert.match(stockIdentity, /bg-gradient-to-br from-white via-cyan-100 to-emerald-200/)
   assert.match(stockIdentity, /drop-shadow-\[0_0_15px_rgba\(34,211,238,0\.2\)\]/)
-  assert.doesNotMatch(councilCss, /:global\(\.font-mono\)/)
+  assert.doesNotMatch(councilCss, /:global\(\.font-mono\)\s*\{\s*font-family:/)
+  assert.match(councilCss, /:global\(\.font-mono\)\s*\{\s*font-variant-numeric:/)
 })
 
 test("target UI surfaces avoid broad transitions and persistent blur without touching complex runtimes", () => {
