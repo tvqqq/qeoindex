@@ -15,7 +15,7 @@ export {
 }
 export type { EodArchiveCheckpoint }
 
-type SafeRetentionCleanupResult = {
+type RetentionCleanupResult = {
   status?: string
   referenceAt?: string
   durationMs?: number
@@ -26,6 +26,9 @@ type SafeRetentionCleanupResult = {
     oldestRetainedAt?: string | null
     policy?: string
   }>
+}
+
+type SafeRetentionCleanupResult = RetentionCleanupResult & {
   monitoring?: Record<string, unknown>
   rawHistoryRetention?: {
     status?: string
@@ -36,6 +39,7 @@ type SafeRetentionCleanupResult = {
 
 export type EodRetentionCleanupCheckpoint = EodArchiveCheckpoint & {
   safeCleanup?: SafeRetentionCleanupResult
+  jobTelemetryCleanup?: RetentionCleanupResult
   rawHistoryRetention?: {
     status: "blocked"
     detail: string
@@ -61,9 +65,9 @@ export async function runEodDriveArchive(
 
 /**
  * QEO-21 separates safe telemetry/staging TTL from raw market-history retention.
- * The service-role RPC is allowed to prune only bounded terminal telemetry and
- * orphan staging. It runs even if the Notion/Drive archive checkpoint is partial,
- * because those checkpoints gate raw-history deletion, not operational telemetry.
+ * QEO-29 tightens only execution telemetry: detailed phases are kept for one day
+ * and terminal run summaries for seven days. Active queued/running lifecycles are
+ * preserved by the database RPC.
  *
  * Raw Daily history remains the sole active source for both 1D and derived 1W
  * Wyckoff analysis and is never age-pruned here. Plan C cold-history hydration and
@@ -101,6 +105,29 @@ export async function runEodRetentionCleanup(
     }
   }
 
+  const jobTelemetry = await supabase.rpc("qeo_run_job_telemetry_cleanup", {
+    p_reference_at: referenceAt,
+  })
+  if (jobTelemetry.error) {
+    return {
+      status: "error",
+      detail: `Job telemetry retention failed: ${jobTelemetry.error.message}. ${rawHistoryDetail}`,
+      safeCleanup,
+      rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
+    }
+  }
+
+  const jobTelemetryCleanup = jobTelemetry.data as RetentionCleanupResult | null
+  if (!jobTelemetryCleanup || jobTelemetryCleanup.status !== "succeeded") {
+    return {
+      status: "error",
+      detail: `Job telemetry retention returned invalid status=${jobTelemetryCleanup?.status || "missing"}. ${rawHistoryDetail}`,
+      safeCleanup,
+      jobTelemetryCleanup: jobTelemetryCleanup || undefined,
+      rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
+    }
+  }
+
   const archiveContext = [
     `Notion archive=${input.notionArchive.status}`,
     `Drive archive=${input.driveArchive.status}`,
@@ -108,8 +135,9 @@ export async function runEodRetentionCleanup(
 
   return {
     status: "archived",
-    detail: `Safe telemetry/staging retention completed (${archiveContext}). ${rawHistoryDetail}`,
+    detail: `Safe telemetry/staging retention and bounded job telemetry retention completed (${archiveContext}). ${rawHistoryDetail}`,
     safeCleanup,
+    jobTelemetryCleanup,
     rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
   }
 }
