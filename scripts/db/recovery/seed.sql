@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP on
 
--- Synthetic local-only fixture for QEO-26. No production row is copied.
+-- Synthetic local-only fixture for QEO-26/QEO-19. No production row is copied.
 -- The auth user is deterministic so the rehearsal can be repeated after reset.
 insert into auth.users (
   instance_id,
@@ -83,31 +83,28 @@ set target_price = excluded.target_price,
     stop_loss_1 = excluded.stop_loss_1,
     note = excluded.note;
 
-insert into public.wyckoff_universe_memberships (
-  universe_key,
-  ticker,
-  exchange,
-  rank,
-  sector,
-  market_cap_billion,
-  effective_date,
-  active,
-  source
-)
+-- Independent table-drop fixture. It deliberately does not depend on any real
+-- legacy application table so the recovery rehearsal remains valid after QEO-19.
+create table if not exists public.qeo_recovery_table_fixture (
+  fixture_key text primary key,
+  ticker text not null,
+  rank integer not null check (rank > 0),
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.qeo_recovery_table_fixture enable row level security;
+revoke all on table public.qeo_recovery_table_fixture from anon, authenticated;
+grant select, insert, update, delete on table public.qeo_recovery_table_fixture to service_role;
+
+insert into public.qeo_recovery_table_fixture (fixture_key, ticker, rank, payload)
 values (
-  'qeo_recovery',
+  'qeo26-table-drop',
   'QEO',
-  'HOSE',
   1,
-  'Synthetic',
-  12345,
-  date '2026-09-02',
-  true,
-  'qeo26_synthetic'
+  '{"kind":"synthetic","market_cap_billion":12345}'::jsonb
 )
-on conflict (universe_key, ticker, effective_date) do update
-set rank = excluded.rank,
-    sector = excluded.sector,
-    market_cap_billion = excluded.market_cap_billion,
-    active = excluded.active,
-    source = excluded.source;
+on conflict (fixture_key) do update
+set ticker = excluded.ticker,
+    rank = excluded.rank,
+    payload = excluded.payload;
