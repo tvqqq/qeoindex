@@ -25,6 +25,12 @@ function qeo39NPlusOneMigration() {
   return source(`supabase/migrations/${matches[0]}`)
 }
 
+function qeo39GroupedRpcMigration() {
+  const matches = readdirSync("supabase/migrations").filter((name) => name.endsWith("_qeo39_grouped_ohlcv_rpc.sql"))
+  assert.equal(matches.length, 1, "expected exactly one QEO-39 grouped OHLCV migration")
+  return source(`supabase/migrations/${matches[0]}`)
+}
+
 test("QEO-23 exposes fail-closed database replay and generated type commands", () => {
   assert.equal(
     packageJson.scripts?.["db:types:generate"],
@@ -82,6 +88,20 @@ test("QEO-39 batches recent OHLCV through indexed per-ticker lateral lookups", (
   assert.match(sql, /order\s+by\s+source\.bar_time\s+desc/i)
   assert.match(sql, /least\s*\(\s*coalesce\s*\(p_limit,\s*260\),\s*1700\s*\)/i)
   assert.doesNotMatch(sql, /row_number\s*\(/i)
+})
+
+test("QEO-39 grouped RPC keeps PostgREST result rows bounded without reducing per-ticker history", () => {
+  const sql = qeo39GroupedRpcMigration()
+
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.qeo_market_ohlcv_recent_grouped/i)
+  assert.match(sql, /returns\s+table\s*\([\s\S]*?ticker\s+text\s*,[\s\S]*?rows\s+jsonb/i)
+  assert.match(sql, /jsonb_agg\s*\(/i)
+  assert.match(sql, /left\s+join\s+lateral/i)
+  assert.match(sql, /source\.ticker\s*=\s*q\.ticker/i)
+  assert.match(sql, /least\s*\(\s*coalesce\s*\(p_limit,\s*260\),\s*1700\s*\)/i)
+  assert.match(sql, /revoke\s+all\s+on\s+function\s+public\.qeo_market_ohlcv_recent_grouped[\s\S]*?anon,\s*authenticated/i)
+  assert.match(sql, /grant\s+execute\s+on\s+function\s+public\.qeo_market_ohlcv_recent_grouped[\s\S]*?service_role/i)
+  assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
 })
 
 test("QEO-39 stores large build payloads in private run-scoped artifacts with terminal one-day cleanup", () => {
