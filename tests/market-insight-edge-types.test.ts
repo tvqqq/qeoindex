@@ -134,3 +134,24 @@ test("shared Edge machine auth accepts only exact configured bearer tokens", asy
     headers: { authorization: "Bearer alpha" },
   }), []), false)
 })
+
+test("QEO-19 active Wyckoff runtime has no legacy membership-table consumer", () => {
+  for (const path of [
+    "lib/wyckoff-unified-data.ts",
+    "lib/wyckoff-unified-runner.ts",
+    "lib/wyckoff-supabase-publish.ts",
+    "lib/wyckoff-notion-ingest.ts",
+  ]) {
+    assert.doesNotMatch(source(path), /wyckoff_universe_memberships/, `${path} still consumes legacy Wyckoff memberships`)
+  }
+})
+
+test("QEO-19 active KFSP runtime has no provider-token table consumer", () => {
+  for (const path of [
+    "supabase/functions/kfsp-rating-sync/index.ts",
+    "supabase/functions/kfsp-ttai-history-sync/index.ts",
+    "supabase/functions/market-insight-eod-sync/index.ts",
+  ]) {
+    assert.doesNotMatch(source(path), /kfsp_provider_tokens/, `${path} still consumes the legacy KFSP token table`)
+  }
+})
