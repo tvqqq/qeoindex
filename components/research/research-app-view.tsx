@@ -1,7 +1,14 @@
+"use client"
+
 import type { ComponentProps } from "react"
+import nextDynamic from "next/dynamic"
 
-import { ResearchApp } from "@/components/research/research-app"
+type ResearchAppProps = ComponentProps<typeof import("@/components/research/research-app").ResearchApp>
 
-export default function ResearchAppView(props: ComponentProps<typeof ResearchApp>) {
+const ResearchApp = nextDynamic(() =>
+  import("@/components/research/research-app").then((mod) => mod.ResearchApp),
+)
+
+export default function ResearchAppView(props: ResearchAppProps) {
   return <ResearchApp {...props} />
 }

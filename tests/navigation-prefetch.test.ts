@@ -114,32 +114,42 @@ test("target UI surfaces avoid broad transitions and persistent blur without tou
   assert.doesNotMatch(portfolioPage, /transition-all/)
 })
 
-test("research hub isolates view-specific client apps behind server dynamic boundaries", () => {
+test("research hub lazy-loads heavy client apps inside client dynamic wrappers", () => {
   const page = source("app/research/page.tsx")
-  assert.match(page, /import nextDynamic from "next\/dynamic"/)
+  assert.doesNotMatch(page, /from "next\/dynamic"/)
   assert.doesNotMatch(page, /ssr:\s*false/)
 
   const boundaries = [
-    ["ResearchAppView", "research-app-view", "research-app"],
-    ["ScannerAppView", "scanner-app-view", "scanner-app"],
-    ["SignalsAppView", "signals-app-view", "signals-app"],
-    ["FaScreenAppView", "fa-screen-app-view", "fa-screen-app"],
+    ["ResearchAppView", "research-app-view", "research-app", "ResearchApp"],
+    ["ScannerAppView", "scanner-app-view", "scanner-app", "ScannerApp"],
+    ["SignalsAppView", "signals-app-view", "signals-app", "SignalsApp"],
+    ["FaScreenAppView", "fa-screen-app-view", "fa-screen-app", "FaScreenApp"],
   ] as const
 
-  for (const [componentName, wrapperName, clientName] of boundaries) {
+  for (const [componentName, wrapperName, clientName, exportName] of boundaries) {
     assert.equal(
       page.includes(`from "@/components/research/${clientName}"`),
       false,
-      `app/research/page.tsx must not statically import ${clientName}`,
+      `app/research/page.tsx must not import ${clientName}`,
     )
     assert.ok(
-      page.includes(`const ${componentName} = nextDynamic(() => import("@/components/research/${wrapperName}"))`),
-      `${componentName} should be a top-level dynamic Server Component boundary`,
+      page.includes(`import ${componentName} from "@/components/research/${wrapperName}"`),
+      `${componentName} should be a small statically imported wrapper`,
     )
 
     const wrapper = source(`components/research/${wrapperName}.tsx`)
-    assert.doesNotMatch(wrapper, /["']use client["']/, `${wrapperName} must remain a Server Component wrapper`)
-    assert.ok(wrapper.includes(`from "@/components/research/${clientName}"`), `${wrapperName} must own the client import`)
+    assert.match(wrapper, /^["']use client["']/, `${wrapperName} must be a Client Component so next/dynamic can code-split the heavy client app`)
+    assert.match(wrapper, /import nextDynamic from "next\/dynamic"/)
+    assert.equal(
+      wrapper.includes(`import { ${exportName} } from "@/components/research/${clientName}"`),
+      false,
+      `${wrapperName} must not statically import the heavy client app`,
+    )
+    assert.ok(
+      wrapper.includes(`import("@/components/research/${clientName}").then((mod) => mod.${exportName})`),
+      `${wrapperName} should dynamically import ${exportName}`,
+    )
+    assert.doesNotMatch(wrapper, /ssr:\s*false/, `${wrapperName} should preserve SSR while splitting client code`)
   }
 })
 
