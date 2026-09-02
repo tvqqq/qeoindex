@@ -114,6 +114,35 @@ test("target UI surfaces avoid broad transitions and persistent blur without tou
   assert.doesNotMatch(portfolioPage, /transition-all/)
 })
 
+test("research hub isolates view-specific client apps behind server dynamic boundaries", () => {
+  const page = source("app/research/page.tsx")
+  assert.match(page, /import nextDynamic from "next\/dynamic"/)
+  assert.doesNotMatch(page, /ssr:\s*false/)
+
+  const boundaries = [
+    ["ResearchAppView", "research-app-view", "research-app"],
+    ["ScannerAppView", "scanner-app-view", "scanner-app"],
+    ["SignalsAppView", "signals-app-view", "signals-app"],
+    ["FaScreenAppView", "fa-screen-app-view", "fa-screen-app"],
+  ] as const
+
+  for (const [componentName, wrapperName, clientName] of boundaries) {
+    assert.equal(
+      page.includes(`from "@/components/research/${clientName}"`),
+      false,
+      `app/research/page.tsx must not statically import ${clientName}`,
+    )
+    assert.ok(
+      page.includes(`const ${componentName} = nextDynamic(() => import("@/components/research/${wrapperName}"))`),
+      `${componentName} should be a top-level dynamic Server Component boundary`,
+    )
+
+    const wrapper = source(`components/research/${wrapperName}.tsx`)
+    assert.doesNotMatch(wrapper, /["']use client["']/, `${wrapperName} must remain a Server Component wrapper`)
+    assert.ok(wrapper.includes(`from "@/components/research/${clientName}"`), `${wrapperName} must own the client import`)
+  }
+})
+
 test("legacy research sub-pages redirect into the single research route", () => {
   const redirects: Record<string, string> = {
     "app/research/scanner/page.tsx": "/research?view=scanner",

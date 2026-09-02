@@ -1,13 +1,10 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
+import nextDynamic from "next/dynamic"
 
 import { TopNav } from "@/components/top-nav"
-import { FaScreenApp } from "@/components/research/fa-screen-app"
 import { FinhayLiveControl } from "@/components/research/finhay-live-control"
-import { ResearchApp } from "@/components/research/research-app"
 import { ResearchHubNav, type ResearchHubView } from "@/components/research/research-hub-nav"
-import { ScannerApp } from "@/components/research/scanner-app"
-import { SignalsApp } from "@/components/research/signals-app"
 import {
   getResearchChangesData,
   getResearchLogData,
@@ -18,6 +15,11 @@ import { withPendingReviewPlaceholders } from "@/lib/research-view-model"
 import { getScannerData } from "@/lib/scanner-data"
 import { getSignalUiData } from "@/lib/signal-data"
 import { buildRecommendationPerformance } from "@/lib/signal-performance"
+
+const ResearchAppView = nextDynamic(() => import("@/components/research/research-app-view"))
+const ScannerAppView = nextDynamic(() => import("@/components/research/scanner-app-view"))
+const SignalsAppView = nextDynamic(() => import("@/components/research/signals-app-view"))
+const FaScreenAppView = nextDynamic(() => import("@/components/research/fa-screen-app-view"))
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -72,7 +74,7 @@ export default async function ResearchPage({
     showFinhayControl = true
     content = data.connection.notionLive ? (
       <EmbeddedResearch hideResearchHeader>
-        <ResearchApp data={withPendingReviewPlaceholders(data)} mode="overview" />
+        <ResearchAppView data={withPendingReviewPlaceholders(data)} mode="overview" />
       </EmbeddedResearch>
     ) : (
       <Unavailable title="Trung tâm Nghiên cứu" detail={data.connection.message} />
@@ -81,7 +83,7 @@ export default async function ResearchPage({
     const data = await getResearchChangesData()
     content = data.connection.notionLive ? (
       <EmbeddedResearch hideResearchHeader>
-        <ResearchApp data={data} mode="changes" />
+        <ResearchAppView data={data} mode="changes" />
       </EmbeddedResearch>
     ) : (
       <Unavailable title="Thay đổi luận điểm" detail={data.connection.message} />
@@ -91,7 +93,7 @@ export default async function ResearchPage({
     content = data.connection.notionLive ? (
       <>
         <EmbeddedResearch hideResearchHeader>
-          <ResearchApp data={data} mode="log" />
+          <ResearchAppView data={data} mode="log" />
         </EmbeddedResearch>
         {data.pagination?.hasMore && data.pagination.nextCursor ? (
           <div className="mx-auto -mt-4 flex max-w-[1600px] justify-end px-4 pb-8 lg:px-6">
@@ -112,7 +114,7 @@ export default async function ResearchPage({
     const data = await getResearchReviewData()
     content = data.connection.notionLive ? (
       <EmbeddedResearch hideResearchHeader>
-        <ResearchApp data={withPendingReviewPlaceholders(data)} mode="review" />
+        <ResearchAppView data={withPendingReviewPlaceholders(data)} mode="review" />
       </EmbeddedResearch>
     ) : (
       <Unavailable title="Hậu kiểm" detail={data.connection.message} />
@@ -127,7 +129,7 @@ export default async function ResearchPage({
     }
     content = data ? (
       <EmbeddedResearch>
-        <ScannerApp data={data} />
+        <ScannerAppView data={data} />
       </EmbeddedResearch>
     ) : (
       <Unavailable title="Wyckoff Scanner" detail="Không đọc được Universe / Daily Scan từ Notion." />
@@ -151,7 +153,7 @@ export default async function ResearchPage({
     }
     content = (
       <EmbeddedResearch>
-        <SignalsApp
+        <SignalsAppView
           recommendations={recommendations}
           events={events}
           performance={buildRecommendationPerformance(recommendations)}
@@ -164,7 +166,7 @@ export default async function ResearchPage({
   } else {
     content = (
       <EmbeddedResearch>
-        <FaScreenApp />
+        <FaScreenAppView />
       </EmbeddedResearch>
     )
   }
