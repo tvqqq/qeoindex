@@ -29,12 +29,46 @@ permissions:
 jobs:
   db-safety:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Ensure PostgreSQL client is available
+        run: |
+          if ! command -v psql >/dev/null 2>&1 || ! command -v pg_dump >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
       - name: Run DB safety contract tests
         run: node --test tests/db-migration-ledger.test.mjs tests/db-recovery-rehearsal.test.mjs
       - name: Verify committed migration ledger reconciliation
         run: node scripts/verify-migration-ledger.mjs
+      - name: Rehearse destructive backup and restore on disposable non-production Postgres
+        env:
+          TARGET_ENV: rehearsal
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          RECOVERY_REHEARSAL_DIR: .tmp/qeo-26-recovery-rehearsal
+        run: bash scripts/db-recovery-rehearsal.sh
+      - name: Upload QEO-26 recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo-26-recovery-rehearsal
+          path: .tmp/qeo-26-recovery-rehearsal
+          if-no-files-found: ignore
+          retention-days: 14
