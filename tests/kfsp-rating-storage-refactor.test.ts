@@ -22,6 +22,17 @@ const legacyAliases = [
   "sector_rrg_state",
 ]
 
+function ratingSelectFragments(source: string) {
+  const fragments = [...source.matchAll(/\.from\("insights_stock_ratings"\)\s*\.select\("([^"]*)"\)/g)]
+    .map((match) => match[1])
+
+  if (/\.from\("insights_stock_ratings"\)\s*\.select\(selection\)/.test(source)) {
+    fragments.push(...[...source.matchAll(/const selection = "([^"]+)"/g)].map((match) => match[1]))
+  }
+
+  return fragments
+}
+
 test("Insights runtime no longer reads duplicate industry_group", () => {
   assert.doesNotMatch(insightsSource, /industry_group/)
 })
@@ -29,9 +40,13 @@ test("Insights runtime no longer reads duplicate industry_group", () => {
 test("active rating readers use only KFSP canonical aliases", () => {
   for (const file of runtimeRatingReaders) {
     const source = readFileSync(file, "utf8")
-    for (const alias of legacyAliases) {
-      const genericOnly = new RegExp(`(?<!kfsp_)\\b${alias}\\b`)
-      assert.doesNotMatch(source, genericOnly, `${file} must use KFSP canonical ${alias}`)
+    const ratingSelects = ratingSelectFragments(source)
+    assert.ok(ratingSelects.length > 0, `${file} must expose an insights_stock_ratings select for this regression`)
+    for (const selection of ratingSelects) {
+      for (const alias of legacyAliases) {
+        const genericOnly = new RegExp(`(?<!kfsp_)\\b${alias}\\b`)
+        assert.doesNotMatch(selection, genericOnly, `${file} must use KFSP canonical ${alias}`)
+      }
     }
   }
 })
