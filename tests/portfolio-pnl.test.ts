@@ -184,6 +184,12 @@ function callbackBeforeFirstAwait(source: string, declaration: RegExp) {
   return match[1].split(/\bawait\b/, 1)[0]
 }
 
+function callbackBody(source: string, declaration: RegExp) {
+  const match = source.match(declaration)
+  assert.ok(match?.[1], `expected callback body for ${declaration}`)
+  return match[1]
+}
+
 test('QEO-44 Portfolio Effects do not synchronously enter loading state before network I/O', () => {
   const page = readFileSync(resolve('components/portfolio/portfolio-page.tsx'), 'utf8')
   const portfoliosBeforeAwait = callbackBeforeFirstAwait(
@@ -218,4 +224,18 @@ test('QEO-44 refresh and add-transaction flows preserve immediate loading semant
   assert.match(page, /const handleRefreshTransactions = useCallback\([\s\S]*setRefreshingTxFor\(activePortfolioId\)[\s\S]*loadTransactions\(activePortfolioId\)/)
   assert.match(page, /const handleTxSuccess = useCallback\([\s\S]*setRefreshingTxFor\(activePortfolioId\)[\s\S]*loadTransactions\(activePortfolioId\)/)
   assert.match(page, /onClick=\{handleRefreshTransactions\}/)
+})
+
+test('QEO-44 Effect-triggered loaders are state-free and derived transactions are memo-stable', () => {
+  const page = readFileSync(resolve('components/portfolio/portfolio-page.tsx'), 'utf8')
+  const loaders = [
+    callbackBody(page, /const loadPortfolios = useCallback\(async \(\) => \{([\s\S]*?)\n  \}, \[\]\)/),
+    callbackBody(page, /const loadTransactions = useCallback\(async \(pid: string\) => \{([\s\S]*?)\n  \}, \[\]\)/),
+    callbackBody(page, /const loadWatchlists = useCallback\(async \(\) => \{([\s\S]*?)\n  \}, \[\]\)/),
+  ]
+
+  for (const loader of loaders) assert.doesNotMatch(loader, /\bset[A-Z][A-Za-z0-9_]*\s*\(/)
+  assert.match(page, /const transactions = useMemo\(\(\) =>/)
+  assert.match(page, /\.then\(\(result\) => \{[\s\S]*setLoadingPortfolio\(false\)/)
+  assert.match(page, /loadTransactions\(activePortfolioId\)\.then\(\(result\) =>/)
 })
