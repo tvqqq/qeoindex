@@ -83,3 +83,20 @@ test("QEO-39 batches recent OHLCV through indexed per-ticker lateral lookups", (
   assert.match(sql, /least\s*\(\s*coalesce\s*\(p_limit,\s*260\),\s*1700\s*\)/i)
   assert.doesNotMatch(sql, /row_number\s*\(/i)
 })
+
+test("QEO-39 stores large build payloads in private run-scoped artifacts with terminal one-day cleanup", () => {
+  const sql = qeo39NPlusOneMigration()
+  const active = source("lib/qeoindex-eod-archive.ts")
+
+  assert.match(sql, /create\s+table\s+if\s+not\s+exists\s+public\.wyckoff_build_artifacts/i)
+  assert.match(sql, /primary\s+key\s*\(run_id,\s*ticker\)/i)
+  assert.match(sql, /references\s+public\.system_job_runs\s*\(id\)\s+on\s+delete\s+cascade/i)
+  assert.match(sql, /jsonb_array_length\s*\(snapshots\)\s*=\s*2/i)
+  assert.match(sql, /enable\s+row\s+level\s+security/i)
+  assert.match(sql, /revoke\s+all\s+privileges\s+on\s+table\s+public\.wyckoff_build_artifacts\s+from\s+anon,\s*authenticated/i)
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.qeo_run_wyckoff_build_artifact_cleanup/i)
+  assert.match(sql, /status\s+in\s*\(\s*'succeeded'\s*,\s*'failed'\s*,\s*'skipped'\s*\)/i)
+  assert.match(sql, /p_reference_at\s*-\s*interval\s+'1 day'/i)
+  assert.match(active, /rpc\("qeo_run_wyckoff_build_artifact_cleanup"/)
+  assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
+})
