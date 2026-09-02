@@ -45,6 +45,8 @@ jobs:
         run: pnpm test:core
       - name: KFSP canonical universe regression
         run: node --test tests/kfsp-canonical-universe-sync.test.ts
+      - name: KFSP rating storage refactor regression
+        run: node --test tests/kfsp-rating-storage-refactor.test.ts
       - name: KFSP manual recovery lifecycle regression
         run: node --test tests/kfsp-manual-recovery-lifecycle.test.ts
       - name: Canonical 200 UI regression
