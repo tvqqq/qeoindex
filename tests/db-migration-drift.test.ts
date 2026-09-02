@@ -69,6 +69,25 @@ test("current repository migration set reconciles against reviewed production le
   assert.equal(result.ok, true, result.errors.join("\n"))
 })
 
+test("QEO-22 watchlist invariant is recorded as an exact production migration", () => {
+  const manifest = JSON.parse(readFileSync("supabase/migration-equivalence.json", "utf8"))
+  const ledger = JSON.parse(readFileSync("docs/db/evidence/production-migration-ledger-2026-09-02.json", "utf8"))
+  const expected = {
+    logicalName: "qeo22_watchlist_default_invariant",
+    repositoryVersion: "20260902052650",
+    productionVersion: "20260902052650",
+    state: "EXACT",
+  }
+  const mapping = manifest.migrations.find((entry: { logicalName?: string }) => entry.logicalName === expected.logicalName)
+  const production = ledger.migrations.find((entry: { name?: string }) => entry.name === expected.logicalName)
+
+  assert.ok(mapping)
+  assert.equal(mapping.repositoryVersion, expected.repositoryVersion)
+  assert.equal(mapping.productionVersion, expected.productionVersion)
+  assert.equal(mapping.state, expected.state)
+  assert.deepEqual(production, { version: expected.productionVersion, name: expected.logicalName })
+})
+
 test("db drift CLI exits zero for reviewed current state", () => {
   const run = spawnSync(process.execPath, ["scripts/db/verify-migration-drift.mjs"], { encoding: "utf8" })
   assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`)
