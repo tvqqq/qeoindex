@@ -9,6 +9,7 @@ on:
       - "supabase/migration-equivalence.json"
       - "docs/db/evidence/production-migration-ledger-*.json"
       - "tests/db-migration-drift.test.ts"
+      - "tests/db-schema-contract.test.ts"
       - "tests/kfsp-rating-storage-refactor.test.ts"
   workflow_dispatch:
 
@@ -28,5 +29,5 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node --test tests/db-migration-drift.test.ts tests/kfsp-rating-storage-refactor.test.ts
+      - run: node --test tests/db-migration-drift.test.ts tests/db-schema-contract.test.ts tests/kfsp-rating-storage-refactor.test.ts
       - run: node scripts/db/verify-migration-drift.mjs
