@@ -184,8 +184,15 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
     for (let offset = 0; offset < ready.stocks.length; offset += 10) {
       history = await runHistoryRefreshBatchStep(runId, ready.stocks.slice(offset, offset + 10), startedAtIso, history)
     }
-    if (history.completedTickers !== universeCount || history.requestedTickers !== universeCount) {
-      throw new Error(`HISTORY_REFRESH completed ${history.completedTickers}/${history.requestedTickers}; expected ${universeCount}/${universeCount}`)
+    if (
+      history.completedTickers + history.failedTickers !== universeCount
+      || history.requestedTickers !== universeCount
+    ) {
+      throw new Error(
+        `HISTORY_REFRESH accounting mismatch: `
+        + `${history.completedTickers} completed + ${history.failedTickers} failed `
+        + `/ ${history.requestedTickers} requested; expected ${universeCount}`,
+      )
     }
 
     const noTradeRepair = await runEodNoTradeDailyRepairStep(
