@@ -173,7 +173,7 @@ export async function runAiCouncilDebateOperation(supabase: SupabaseClient, rati
 
   const priorDebates = await supabase
     .from("ai_council_llm_debates")
-    .select("id", { count: "exact", head: true })
+    .select("run_id", { count: "exact", head: true })
   if (priorDebates.error) {
     throw new Error(`Load prior LLM debate count failed: ${priorDebates.error.message}`)
   }
