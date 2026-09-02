@@ -62,6 +62,17 @@ docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -
   > "$ARTIFACT_DIR/baseline.txt"
 test -s "$ARTIFACT_DIR/baseline.txt" || fail "baseline capture is empty"
 
+phase "ACL snapshot"
+docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -X -At -f - \
+  < scripts/db/recovery/capture-acl-restore.sql \
+  > "$ARTIFACT_DIR/acl-restore.sql"
+test -s "$ARTIFACT_DIR/acl-restore.sql" || fail "ACL recovery snapshot is empty"
+grep -q "revoke all privileges on table public.portfolio_transactions" "$ARTIFACT_DIR/acl-restore.sql" \
+  || fail "ACL recovery snapshot is missing portfolio reset"
+grep -q "revoke all privileges on table public.wyckoff_universe_memberships" "$ARTIFACT_DIR/acl-restore.sql" \
+  || fail "ACL recovery snapshot is missing wyckoff reset"
+sha256sum "$ARTIFACT_DIR/acl-restore.sql" > "$ARTIFACT_DIR/acl-restore.sql.sha256"
+
 phase "backup"
 docker exec "$DB_CONTAINER" pg_dump \
   -U postgres \
@@ -109,6 +120,13 @@ docker exec -i "$DB_CONTAINER" pg_restore \
   --no-owner \
   --exit-on-error \
   < "$ARTIFACT_DIR/pre-destructive.dump"
+
+# Supabase default privileges apply when pg_restore recreates tables. Archive ACL
+# entries do not reliably remove every inherited app-role grant, so replay the
+# exact pre-destructive observable ACL snapshot before strict parity comparison.
+phase "ACL restore"
+docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - \
+  < "$ARTIFACT_DIR/acl-restore.sql"
 
 phase "restored parity"
 docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - \
