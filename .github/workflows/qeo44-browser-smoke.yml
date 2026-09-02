@@ -39,6 +39,13 @@ jobs:
           new = "}) {\n  return children\n\n  const router = useRouter()"
           assert old in text
           gate.write_text(text.replace(old, new, 1))
+
+          layout = Path('app/portfolio/layout.tsx')
+          text = layout.read_text()
+          old = "  if (!auth) return <LandingLogin />"
+          new = "  if (false && !auth) return <LandingLogin />"
+          assert old in text
+          layout.write_text(text.replace(old, new, 1))
           PY
       - name: Build feature source with runner-only auth bypass
         run: pnpm exec next build
