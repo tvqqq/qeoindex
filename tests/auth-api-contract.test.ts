@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 function source(path: string) {
@@ -83,4 +83,78 @@ test("trusted Supabase infrastructure client never falls back to public anon cre
   const code = source("lib/supabase/server.ts")
   assert.match(code, /SUPABASE_SERVICE_ROLE_KEY/)
   assert.doesNotMatch(code, /NEXT_PUBLIC_SUPABASE_ANON_KEY/)
+})
+
+const SERVER_AUTH_OBSERVABILITY_URL = new URL("../lib/auth/server-observability.ts", import.meta.url)
+
+async function loadServerAuthObservability() {
+  const exists = existsSync(SERVER_AUTH_OBSERVABILITY_URL)
+  assert.equal(exists, true, "QEO-41 requires a dedicated server-auth observability helper")
+  if (!exists) return null
+  return import(SERVER_AUTH_OBSERVABILITY_URL.href)
+}
+
+test("server auth timeout observability emits only stable sanitized fields", async () => {
+  const observability = await loadServerAuthObservability()
+  if (!observability) return
+
+  const events: unknown[] = []
+  const timeoutError = Object.assign(
+    new Error("Bearer secret-access-token failed for user@example.com after timeout"),
+    { name: "TimeoutError" },
+  )
+
+  observability.reportServerAuthTransportFailure(timeoutError, (event: unknown) => events.push(event))
+
+  assert.deepEqual(events, [
+    {
+      event: "server_auth_transport_failure",
+      operation: "supabase.auth.getUser",
+      category: "timeout",
+    },
+  ])
+  const serialized = JSON.stringify(events)
+  assert.equal(serialized.includes("secret-access-token"), false)
+  assert.equal(serialized.includes("user@example.com"), false)
+  assert.equal(serialized.includes("Bearer"), false)
+})
+
+test("server auth transport observability distinguishes abort and generic transport failures", async () => {
+  const observability = await loadServerAuthObservability()
+  if (!observability) return
+
+  const events: unknown[] = []
+  const logger = (event: unknown) => events.push(event)
+
+  observability.reportServerAuthTransportFailure(
+    Object.assign(new Error("aborted with secret-access-token"), { name: "AbortError" }),
+    logger,
+  )
+  observability.reportServerAuthTransportFailure(new Error("fetch failed for user@example.com"), logger)
+
+  assert.deepEqual(events, [
+    {
+      event: "server_auth_transport_failure",
+      operation: "supabase.auth.getUser",
+      category: "abort",
+    },
+    {
+      event: "server_auth_transport_failure",
+      operation: "supabase.auth.getUser",
+      category: "transport",
+    },
+  ])
+})
+
+test("server auth verification reports thrown transport failures and preserves rethrow semantics", () => {
+  const code = source("lib/auth/server.ts")
+
+  assert.match(code, /reportServerAuthTransportFailure/)
+  assert.match(
+    code,
+    /catch\s*\(transportError\)\s*\{[\s\S]*reportServerAuthTransportFailure\(transportError\)[\s\S]*throw transportError[\s\S]*\}/,
+  )
+  assert.match(code, /if \(error \|\| !data\.user\) return null/)
+  assert.doesNotMatch(code, /reportServerAuthTransportFailure\([^)]*accessToken/)
+  assert.doesNotMatch(code, /console\.(?:error|warn|log)\([^\n]*accessToken/)
 })
