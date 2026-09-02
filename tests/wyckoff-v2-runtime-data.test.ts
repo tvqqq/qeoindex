@@ -76,14 +76,17 @@ test("cached Daily history conversion rejects empty or invalid data", () => {
   ]), /no usable/i)
 })
 
-test("cached history loader batches ticker reads instead of issuing one query per ticker", async () => {
+test("cached history loader batches ticker reads into one grouped PostgREST row per ticker", async () => {
   const tickers = Array.from({ length: 25 }, (_, index) => `T${String(index + 1).padStart(3, "0")}`)
-  const calls: Array<{ tickers: string[]; limit: number }> = []
+  const calls: Array<{ name: string; tickers: string[]; limit: number }> = []
   const supabase = {
-    rpc: async (_name: string, args: { p_tickers: string[]; p_limit: number }) => {
-      calls.push({ tickers: args.p_tickers, limit: args.p_limit })
+    rpc: async (name: string, args: { p_tickers: string[]; p_limit: number }) => {
+      calls.push({ name, tickers: args.p_tickers, limit: args.p_limit })
       return {
-        data: args.p_tickers.flatMap((ticker) => [cachedRow(ticker, 0), cachedRow(ticker, 1)]),
+        data: args.p_tickers.map((ticker) => ({
+          ticker,
+          rows: [cachedRow(ticker, 0), cachedRow(ticker, 1)],
+        })),
         error: null,
       }
     },
@@ -93,14 +96,15 @@ test("cached history loader batches ticker reads instead of issuing one query pe
 
   assert.equal(histories.size, tickers.length)
   assert.equal(calls.length, 3)
+  assert.ok(calls.every((call) => call.name === "qeo_market_ohlcv_recent_grouped"))
   assert.ok(calls.every((call) => call.tickers.length > 0 && call.tickers.length <= 10))
   assert.ok(calls.every((call) => call.limit === DAILY_V2_CACHE_LIMIT))
   assert.deepEqual(calls.flatMap((call) => call.tickers), tickers)
 })
 
-test("cached history loader fails closed when a requested ticker is absent from the batch response", async () => {
+test("cached history loader fails closed when a requested ticker is absent from grouped response", async () => {
   const supabase = {
-    rpc: async () => ({ data: [cachedRow("AAA", 0), cachedRow("AAA", 1)], error: null }),
+    rpc: async () => ({ data: [{ ticker: "AAA", rows: [cachedRow("AAA", 0), cachedRow("AAA", 1)] }], error: null }),
   } as unknown as SupabaseClient
 
   await assert.rejects(
