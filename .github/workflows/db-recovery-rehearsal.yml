@@ -1,0 +1,28 @@
+name: DB Recovery Rehearsal
+
+on:
+  pull_request:
+    paths:
+      - "scripts/db/rehearse-destructive-recovery.sh"
+      - "scripts/db/recovery/**"
+      - "tests/db-recovery-rehearsal.test.ts"
+      - ".github/workflows/db-recovery-rehearsal.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test tests/db-recovery-rehearsal.test.ts
