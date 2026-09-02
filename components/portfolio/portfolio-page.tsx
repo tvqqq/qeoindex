@@ -126,9 +126,11 @@ export function PortfolioPage() {
   }>({ portfolioId: null, transactions: [] })
   const [refreshingTxFor, setRefreshingTxFor] = useState<string | null>(null)
   const transactionRequestRef = useRef(0)
-  const transactions = transactionState.portfolioId === activePortfolioId
-    ? transactionState.transactions
-    : []
+  const transactions = useMemo(() => (
+    transactionState.portfolioId === activePortfolioId
+      ? transactionState.transactions
+      : []
+  ), [activePortfolioId, transactionState])
   const loadingTx = Boolean(
     activePortfolioId
       && (
@@ -150,36 +152,31 @@ export function PortfolioPage() {
   const [addTxTicker, setAddTxTicker] = useState<string | undefined>()
   const [guidanceOpen, setGuidanceOpen] = useState(false)
 
-  // ── Load Portfolios ──
+  // Effect-triggered loaders only fetch/parse. React state is applied from async callbacks.
   const loadPortfolios = useCallback(async () => {
     try {
       const res = await fetch("/api/portfolio", { cache: "no-store", credentials: "same-origin" })
-      setPortfolioError(null)
       if (!res.ok) {
-        if (res.status === 401) {
-          setPortfolioError("Vui lòng đăng nhập để xem danh mục.")
-          return
+        return {
+          portfolios: null as PortfolioMeta[] | null,
+          error: res.status === 401
+            ? "Vui lòng đăng nhập để xem danh mục."
+            : "Không thể tải danh mục đầu tư.",
         }
-        setPortfolioError("Không thể tải danh mục đầu tư.")
-        return
       }
       const data = (await res.json()) as { ok: boolean; portfolios?: PortfolioMeta[] }
-      if (data.ok && data.portfolios && data.portfolios.length > 0) {
-        setPortfolios(data.portfolios)
-        setActivePortfolioId((prev) => {
-          if (prev && data.portfolios!.some((p) => p.id === prev)) return prev
-          const def = data.portfolios!.find((p) => p.is_default)
-          return def ? def.id : data.portfolios![0].id
-        })
+      return {
+        portfolios: data.ok ? (data.portfolios ?? []) : [],
+        error: null as string | null,
       }
     } catch {
-      setPortfolioError("Lỗi kết nối. Vui lòng thử lại sau.")
-    } finally {
-      setLoadingPortfolio(false)
+      return {
+        portfolios: null as PortfolioMeta[] | null,
+        error: "Lỗi kết nối. Vui lòng thử lại sau.",
+      }
     }
   }, [])
 
-  // ── Load Transactions for active portfolio ──
   const loadTransactions = useCallback(async (pid: string) => {
     const requestId = ++transactionRequestRef.current
     try {
@@ -187,66 +184,87 @@ export function PortfolioPage() {
         cache: "no-store",
         credentials: "same-origin",
       })
-      if (requestId !== transactionRequestRef.current) return
       if (!res.ok) {
-        setTransactionState((current) => ({
-          portfolioId: pid,
-          transactions: current.portfolioId === pid ? current.transactions : [],
-        }))
-        return
+        return { portfolioId: pid, requestId, transactions: null as RawTransaction[] | null }
       }
       const data = (await res.json()) as { ok: boolean; transactions?: RawTransaction[] }
-      if (requestId !== transactionRequestRef.current) return
-      if (data.ok && data.transactions) {
-        setTransactionState({ portfolioId: pid, transactions: data.transactions })
-      } else {
-        setTransactionState((current) => ({
-          portfolioId: pid,
-          transactions: current.portfolioId === pid ? current.transactions : [],
-        }))
+      return {
+        portfolioId: pid,
+        requestId,
+        transactions: data.ok ? (data.transactions ?? []) : null,
       }
     } catch {
-      if (requestId !== transactionRequestRef.current) return
-      setTransactionState((current) => ({
-        portfolioId: pid,
-        transactions: current.portfolioId === pid ? current.transactions : [],
-      }))
-    } finally {
-      if (requestId === transactionRequestRef.current) {
-        setRefreshingTxFor((current) => current === pid ? null : current)
-      }
+      return { portfolioId: pid, requestId, transactions: null as RawTransaction[] | null }
     }
   }, [])
 
-  // ── Load Watchlists ──
   const loadWatchlists = useCallback(async () => {
     try {
       const res = await fetch("/api/watchlist", { cache: "no-store", credentials: "same-origin" })
-      if (!res.ok) return
+      if (!res.ok) return null
       const data = (await res.json()) as {
         ok: boolean
         watchlists?: WatchlistMeta[]
         items?: WatchlistItem[]
         activeWatchlistId?: string
       }
-      if (data.ok) {
-        if (data.watchlists) setWatchlists(data.watchlists)
-        if (data.activeWatchlistId) setActiveWatchlistId(data.activeWatchlistId)
-        if (data.items) setWatchlistItems(data.items)
+      if (!data.ok) return null
+      return {
+        watchlists: data.watchlists ?? [],
+        activeWatchlistId: data.activeWatchlistId ?? null,
+        items: data.items ?? [],
       }
     } catch {
-      // ignore
+      return null
     }
   }, [])
 
-  // Initial load
+  // Initial load: state updates happen only after the external fetch promises settle.
   useEffect(() => {
-    void loadPortfolios()
-    void loadWatchlists()
+    let cancelled = false
+
+    void loadPortfolios().then((result) => {
+      if (cancelled) return
+      setPortfolioError(result.error)
+      if (result.portfolios && result.portfolios.length > 0) {
+        setPortfolios(result.portfolios)
+        setActivePortfolioId((prev) => {
+          if (prev && result.portfolios!.some((portfolio) => portfolio.id === prev)) return prev
+          const fallback = result.portfolios!.find((portfolio) => portfolio.is_default)
+          return fallback ? fallback.id : result.portfolios![0].id
+        })
+      }
+      setLoadingPortfolio(false)
+    })
+
+    void loadWatchlists().then((result) => {
+      if (cancelled || !result) return
+      setWatchlists(result.watchlists)
+      if (result.activeWatchlistId) setActiveWatchlistId(result.activeWatchlistId)
+      setWatchlistItems(result.items)
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [loadPortfolios, loadWatchlists])
 
   useEffect(() => {
-    if (activePortfolioId) void loadTransactions(activePortfolioId)
+    if (!activePortfolioId) return
+
+    void loadTransactions(activePortfolioId).then((result) => {
+      if (result.requestId !== transactionRequestRef.current) return
+      const { portfolioId: pid } = result
+      if (result.transactions) {
+        setTransactionState({ portfolioId: pid, transactions: result.transactions })
+      } else {
+        setTransactionState((current) => ({
+          portfolioId: pid,
+          transactions: current.portfolioId === pid ? current.transactions : [],
+        }))
+      }
+      setRefreshingTxFor((current) => current === pid ? null : current)
+    })
   }, [activePortfolioId, loadTransactions])
 
   // ── Compute positions from transactions ──
@@ -335,7 +353,19 @@ export function PortfolioPage() {
   const handleRefreshTransactions = useCallback(() => {
     if (!activePortfolioId) return
     setRefreshingTxFor(activePortfolioId)
-    void loadTransactions(activePortfolioId)
+    void loadTransactions(activePortfolioId).then((result) => {
+      if (result.requestId !== transactionRequestRef.current) return
+      const { portfolioId: pid } = result
+      if (result.transactions) {
+        setTransactionState({ portfolioId: pid, transactions: result.transactions })
+      } else {
+        setTransactionState((current) => ({
+          portfolioId: pid,
+          transactions: current.portfolioId === pid ? current.transactions : [],
+        }))
+      }
+      setRefreshingTxFor((current) => current === pid ? null : current)
+    })
   }, [activePortfolioId, loadTransactions])
 
   // ── After transaction added ──
@@ -343,7 +373,19 @@ export function PortfolioPage() {
     setAddTxOpen(false)
     if (activePortfolioId) {
       setRefreshingTxFor(activePortfolioId)
-      void loadTransactions(activePortfolioId)
+      void loadTransactions(activePortfolioId).then((result) => {
+        if (result.requestId !== transactionRequestRef.current) return
+        const { portfolioId: pid } = result
+        if (result.transactions) {
+          setTransactionState({ portfolioId: pid, transactions: result.transactions })
+        } else {
+          setTransactionState((current) => ({
+            portfolioId: pid,
+            transactions: current.portfolioId === pid ? current.transactions : [],
+          }))
+        }
+        setRefreshingTxFor((current) => current === pid ? null : current)
+      })
     }
   }, [activePortfolioId, loadTransactions])
 
