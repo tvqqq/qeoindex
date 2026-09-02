@@ -177,7 +177,7 @@ test("QEO-19 active KFSP runtime has no provider-token table consumer", () => {
 
 test("QEO-19 KFSP auth uses shared Vault token cache with service-role-only RPCs", () => {
   const helperPath = "supabase/functions/_shared/kfsp-provider-auth.ts"
-  const migrationPath = "supabase/pending-migrations/20260902120500_kfsp_vault_token_cache.sql"
+  const migrationPath = "supabase/migrations/20260902052909_kfsp_vault_token_cache.sql"
   assert.equal(existsSync(helperPath), true, "shared KFSP provider auth helper must exist")
   assert.equal(existsSync(migrationPath), true, "Vault token-cache compatibility migration must exist")
   if (!existsSync(helperPath) || !existsSync(migrationPath)) return
