@@ -1,11 +1,13 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
 import type { NotionPage } from "../lib/notion/client.ts"
 import { parseWyckoffV2UniversePage } from "../lib/wyckoff-v2-universe-source.ts"
 import {
   DAILY_V2_CACHE_LIMIT,
   cachedHistoryFromRows,
+  loadWyckoffV2CachedHistories,
 } from "../lib/wyckoff-v2-cache-read.ts"
 
 function universePage(input: { ticker: string; active?: boolean; exchange?: string; rank?: number | null; sector?: string }): NotionPage {
@@ -13,11 +15,29 @@ function universePage(input: { ticker: string; active?: boolean; exchange?: stri
     id: `page-${input.ticker}`,
     properties: {
       Ticker: { title: [{ plain_text: input.ticker }] },
-      Active: { checkbox: input.active ?? true },
+      Active: { checkbox: { checked: input.active ?? true } },
       Exchange: { select: { name: input.exchange ?? "HOSE" } },
       Rank: { number: input.rank === undefined ? 1 : input.rank },
       Sector: { rich_text: [{ plain_text: input.sector ?? "Consumer" }] },
     },
+  }
+}
+
+function cachedRow(ticker: string, index: number) {
+  const barTime = new Date(Date.parse("2026-08-20T00:00:00.000Z") + index * 24 * 60 * 60 * 1000).toISOString()
+  return {
+    ticker,
+    timeframe: "1D" as const,
+    bar_time: barTime,
+    open: 60 + index,
+    high: 61 + index,
+    low: 59 + index,
+    close: 60.5 + index,
+    volume: 1_000_000 + index,
+    provider: "DNSE",
+    provider_detail: "batch",
+    source_url: "https://example.com/history",
+    fetched_at: new Date(Date.parse(barTime) + 60_000).toISOString(),
   }
 }
 
@@ -54,4 +74,37 @@ test("cached Daily history conversion rejects empty or invalid data", () => {
   assert.throws(() => cachedHistoryFromRows("MSN", [
     { ticker: "MSN", timeframe: "1D", bar_time: "bad", open: 70, high: 72, low: 69, close: 71, volume: 1, provider: "DNSE", provider_detail: "x", source_url: "https://example.com", fetched_at: "2026-08-25T08:00:00.000Z" },
   ]), /no usable/i)
+})
+
+test("cached history loader batches ticker reads instead of issuing one query per ticker", async () => {
+  const tickers = Array.from({ length: 25 }, (_, index) => `T${String(index + 1).padStart(3, "0")}`)
+  const calls: Array<{ tickers: string[]; limit: number }> = []
+  const supabase = {
+    rpc: async (_name: string, args: { p_tickers: string[]; p_limit: number }) => {
+      calls.push({ tickers: args.p_tickers, limit: args.p_limit })
+      return {
+        data: args.p_tickers.flatMap((ticker) => [cachedRow(ticker, 0), cachedRow(ticker, 1)]),
+        error: null,
+      }
+    },
+  } as unknown as SupabaseClient
+
+  const histories = await loadWyckoffV2CachedHistories(supabase, tickers)
+
+  assert.equal(histories.size, tickers.length)
+  assert.equal(calls.length, 3)
+  assert.ok(calls.every((call) => call.tickers.length > 0 && call.tickers.length <= 10))
+  assert.ok(calls.every((call) => call.limit === DAILY_V2_CACHE_LIMIT))
+  assert.deepEqual(calls.flatMap((call) => call.tickers), tickers)
+})
+
+test("cached history loader fails closed when a requested ticker is absent from the batch response", async () => {
+  const supabase = {
+    rpc: async () => ({ data: [cachedRow("AAA", 0), cachedRow("AAA", 1)], error: null }),
+  } as unknown as SupabaseClient
+
+  await assert.rejects(
+    () => loadWyckoffV2CachedHistories(supabase, ["AAA", "BBB"]),
+    /BBB/,
+  )
 })
