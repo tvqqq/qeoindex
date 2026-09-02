@@ -1,10 +1,13 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
-import nextDynamic from "next/dynamic"
 
 import { TopNav } from "@/components/top-nav"
 import { FinhayLiveControl } from "@/components/research/finhay-live-control"
+import FaScreenAppView from "@/components/research/fa-screen-app-view"
+import ResearchAppView from "@/components/research/research-app-view"
 import { ResearchHubNav, type ResearchHubView } from "@/components/research/research-hub-nav"
+import ScannerAppView from "@/components/research/scanner-app-view"
+import SignalsAppView from "@/components/research/signals-app-view"
 import {
   getResearchChangesData,
   getResearchLogData,
@@ -15,11 +18,6 @@ import { withPendingReviewPlaceholders } from "@/lib/research-view-model"
 import { getScannerData } from "@/lib/scanner-data"
 import { getSignalUiData } from "@/lib/signal-data"
 import { buildRecommendationPerformance } from "@/lib/signal-performance"
-
-const ResearchAppView = nextDynamic(() => import("@/components/research/research-app-view"))
-const ScannerAppView = nextDynamic(() => import("@/components/research/scanner-app-view"))
-const SignalsAppView = nextDynamic(() => import("@/components/research/signals-app-view"))
-const FaScreenAppView = nextDynamic(() => import("@/components/research/fa-screen-app-view"))
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
