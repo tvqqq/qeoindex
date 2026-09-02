@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2"
+import { getKfspProviderToken } from "../_shared/kfsp-provider-auth.ts"
 import {
   beginManualKfspLifecycle,
   finalizeManualKfspLifecycle,
@@ -11,11 +12,11 @@ import { isTtaiNoHistoryError, normalizeTtaiHistory } from "./normalize.ts"
 type JsonObject = Record<string, unknown>
 
 const PROVIDER_TIMEOUT_MS = 8_000
-const TOKEN_EXPIRY_SKEW_MS = 5 * 60 * 1_000
 const LOGIN_URL = Deno.env.get("KFSP_LOGIN_URL") || "https://api.kfsp.vn/api/login"
 const HISTORY_URL = Deno.env.get("KFSP_FUNDAMENTAL_HISTORY_URL") || "https://api.kfsp.vn/api/stocks/chart/fourm-canslim-point-chart"
 const DEFAULT_MAX_PER_RUN = 12
 const CONCURRENCY = 3
+const KFSP_AUTH_OPTIONS = { loginUrl: LOGIN_URL, timeoutMs: PROVIDER_TIMEOUT_MS, persistLogin: false } as const
 
 function response(body: Record<string, unknown>, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } })
@@ -43,59 +44,10 @@ function constantTimeEqual(left: string, right: string) {
   return mismatch === 0
 }
 
-function decodeTokenExpiry(token: string): Date | null {
-  try {
-    const payload = token.split(".")[1]
-    if (!payload) return null
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(payload.length / 4) * 4, "=")
-    const parsed = JSON.parse(atob(normalized))
-    return Number.isFinite(Number(parsed.exp)) ? new Date(Number(parsed.exp) * 1_000) : null
-  } catch { return null }
-}
-
-function extractToken(payload: unknown): string | null {
-  const root = asObject(payload)
-  const data = asObject(root?.data)
-  const candidates = [root?.token, root?.access_token, data?.token, data?.access_token]
-  const token = candidates.find((value) => typeof value === "string" && value.split(".").length === 3)
-  return typeof token === "string" ? token : null
-}
-
 async function fetchJson(url: string, init: RequestInit) {
   const providerResponse = await fetch(url, { ...init, signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) })
   const payload = await providerResponse.json().catch(() => null)
   return { response: providerResponse, payload }
-}
-
-async function loginAndCacheToken(supabase: SupabaseClient) {
-  const username = Deno.env.get("KFSP_USERNAME") || ""
-  const password = Deno.env.get("KFSP_PASSWORD") || ""
-  if (!username || !password) throw new Error("KFSP_CREDENTIALS_MISSING")
-  const login = await fetchJson(LOGIN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ username, password, persist_login: false }),
-  })
-  if (!login.response.ok) throw new Error(`KFSP_LOGIN_HTTP_${login.response.status}`)
-  const token = extractToken(login.payload)
-  const expiresAt = token ? decodeTokenExpiry(token) : null
-  if (!token || !expiresAt) throw new Error("KFSP_LOGIN_TOKEN_INVALID")
-  const cached = await supabase.from("kfsp_provider_tokens").upsert({
-    provider: "kfsp", access_token: token, expires_at: expiresAt.toISOString(), refreshed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-  }, { onConflict: "provider" })
-  if (cached.error) throw new Error("KFSP_TOKEN_CACHE_WRITE_FAILED")
-  return token
-}
-
-async function getProviderToken(supabase: SupabaseClient, forceRefresh = false) {
-  if (!forceRefresh) {
-    const cached = await supabase.from("kfsp_provider_tokens").select("access_token,expires_at").eq("provider", "kfsp").maybeSingle()
-    if (!cached.error && cached.data?.access_token && cached.data.expires_at) {
-      const expiry = new Date(cached.data.expires_at).getTime()
-      if (Number.isFinite(expiry) && expiry - Date.now() > TOKEN_EXPIRY_SKEW_MS) return String(cached.data.access_token)
-    }
-  }
-  return loginAndCacheToken(supabase)
 }
 
 function currentFinancialPeriod(metrics: unknown) {
@@ -235,14 +187,16 @@ Deno.serve(async (req: Request) => {
       return response({ ok: true, sync_run_id: runId, latest_rating_date: latestDate, processed: 0, failed: 0, skipped: 0, reason: "NO_NEW_FINANCIAL_PERIOD" })
     }
 
-    let token = await getProviderToken(supabase)
+    let auth = await getKfspProviderToken(supabase, KFSP_AUTH_OPTIONS)
+    let token = auth.token
     let processed = 0, failed = 0, skipped = 0
     for (let index = 0; index < candidates.length; index += CONCURRENCY) {
       const batch = candidates.slice(index, index + CONCURRENCY)
       const results = await Promise.allSettled(batch.map(async (candidate) => {
         let fetched = await fetchTickerHistory(token, candidate.ticker)
         if (fetched.response.status === 401 || fetched.response.status === 403) {
-          token = await getProviderToken(supabase, true)
+          auth = await getKfspProviderToken(supabase, KFSP_AUTH_OPTIONS, true)
+          token = auth.token
           fetched = await fetchTickerHistory(token, candidate.ticker)
         }
         if (!fetched.response.ok) throw new Error(`KFSP_TTAI_HTTP_${fetched.response.status}`)

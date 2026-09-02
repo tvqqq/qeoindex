@@ -5,4 +5,4 @@
 alter table public.portfolio_transactions
   drop column if exists target_price;
 
-drop table if exists public.wyckoff_universe_memberships cascade;
+drop table if exists public.qeo_recovery_table_fixture cascade;

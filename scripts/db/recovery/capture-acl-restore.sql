@@ -10,7 +10,7 @@ select format(
 )
 from (values
   ('public', 'portfolio_transactions'),
-  ('public', 'wyckoff_universe_memberships')
+  ('public', 'qeo_recovery_table_fixture')
 ) as target(table_schema, table_name)
 order by table_name;
 
@@ -24,6 +24,6 @@ select format(
 )
 from information_schema.table_privileges
 where table_schema = 'public'
-  and table_name in ('portfolio_transactions', 'wyckoff_universe_memberships')
+  and table_name in ('portfolio_transactions', 'qeo_recovery_table_fixture')
   and grantee in ('anon', 'authenticated', 'service_role')
 order by table_name, grantee, privilege_type;

@@ -1,10 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { getCanonicalUniverse } from "@/lib/market-universe"
 import { getWyckoffCompanyMetadata } from "@/lib/wyckoff-company-metadata"
 import type { OhlcvBar } from "@/lib/technical-indicators"
 import { buildWyckoffChartStudies, type WyckoffChartTimeframe } from "@/lib/wyckoff-chart-model"
-
-const CANONICAL_UNIVERSE_KEY = "vn_top_stocks"
 
 interface SnapshotRow {
   ticker: string
@@ -74,24 +73,13 @@ async function loadTickerSeries(supabase: SupabaseClient, ticker: string) {
 }
 
 export async function getUnifiedWyckoffData(supabase: SupabaseClient, requestedTicker: string) {
-  const { data: latestMembership, error: membershipDateError } = await supabase
-    .from("wyckoff_universe_memberships")
-    .select("effective_date")
-    .eq("universe_key", CANONICAL_UNIVERSE_KEY)
-    .eq("active", true)
-    .order("effective_date", { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (membershipDateError || !latestMembership?.effective_date) return null
-
-  const { data: memberships, error: membershipsError } = await supabase
-    .from("wyckoff_universe_memberships")
-    .select("ticker,rank,sector")
-    .eq("universe_key", CANONICAL_UNIVERSE_KEY)
-    .eq("effective_date", latestMembership.effective_date)
-    .eq("active", true)
-    .order("rank")
-  if (membershipsError || !memberships?.length) return null
+  const canonical = await getCanonicalUniverse()
+  const memberships = canonical.stocks.map((stock) => ({
+    ticker: stock.ticker,
+    rank: stock.rank,
+    sector: stock.sector,
+  }))
+  if (!memberships.length) return null
 
   const ticker = memberships.some((row) => row.ticker === requestedTicker) ? requestedTicker : memberships[0].ticker
   const tickers = memberships.map((row) => row.ticker)

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto"
 
+import { getCanonicalUniverse } from "@/lib/market-universe"
 import { queryDataSource, updatePageProperties, type NotionPage } from "@/lib/notion/client"
 import { dateText, numberValue, pageProperties, richText, richTextProperty, selectText, urlText } from "@/lib/notion/properties"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { assertCanonicalWyckoffMembership } from "@/lib/wyckoff-canonical-membership"
 import {
   WYCKOFF_V2_AGGREGATION_VERSION,
   WYCKOFF_V2_MODEL_VERSION,
@@ -179,6 +181,7 @@ async function ensureOperationalRun(supabase: NonNullable<ReturnType<typeof getS
   complete: number
   incomplete: number
   tickerCount: number
+  universeRunId: string
 }) {
   const { data: existing, error: lookupError } = await supabase.from("wyckoff_scan_runs").select("id,status").eq("id", input.runId).maybeSingle()
   if (lookupError) throw new Error(`Supabase run lookup failed: ${lookupError.message}`)
@@ -196,7 +199,7 @@ async function ensureOperationalRun(supabase: NonNullable<ReturnType<typeof getS
       completed_count: 0,
       incomplete_count: input.incomplete,
       error_count: 0,
-      diagnostics: { source: WYCKOFF_V2_OPERATIONAL_SOURCE, runKey: input.runKey, completeSnapshots: input.complete, incompleteSnapshots: input.incomplete, tickerCount: input.tickerCount },
+      diagnostics: { source: WYCKOFF_V2_OPERATIONAL_SOURCE, runKey: input.runKey, universeRunId: input.universeRunId, completeSnapshots: input.complete, incompleteSnapshots: input.incomplete, tickerCount: input.tickerCount },
       started_at: new Date().toISOString(),
     })
     if (error) throw new Error(`Supabase run insert failed: ${error.message}`)
@@ -219,6 +222,14 @@ export async function publishIngestingWyckoffV2Run(runKey: string, expectedSupab
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured")
   const payload = buildWyckoffV2SupabasePayload({ snapshots: validated.snapshots, runId: expectedSupabaseRunId, scanDate, runKey })
+  const canonical = await getCanonicalUniverse()
+  assertCanonicalWyckoffMembership(
+    canonical.stocks.map((stock) => ({ ticker: stock.ticker, rank: stock.rank })),
+    payload.memberships.map((row) => ({ ticker: row.ticker, rank: row.rank })),
+  )
+  if (canonical.selectedCount !== payload.memberships.length) {
+    throw new Error(`Canonical Wyckoff membership mismatch: selectedCount=${canonical.selectedCount}; snapshots=${payload.memberships.length}`)
+  }
   const tickers = payload.memberships.map((row) => row.ticker)
   const chartSeries = await loadWyckoffV2ChartSeriesRows(supabase, tickers, expectedSupabaseRunId)
   const expectedSeriesCount = tickers.length * 2
@@ -231,15 +242,10 @@ export async function publishIngestingWyckoffV2Run(runKey: string, expectedSupab
     complete: payload.complete,
     incomplete: payload.incomplete,
     tickerCount: tickers.length,
+    universeRunId: canonical.runId,
   })
 
   if (runState !== "published") {
-    const now = new Date().toISOString()
-    const { error: membershipError } = await supabase.from("wyckoff_universe_memberships").upsert(
-      payload.memberships.map((row) => ({ ...row, synced_at: now })), { onConflict: "universe_key,ticker,effective_date" },
-    )
-    if (membershipError) throw new Error(`Supabase membership upsert failed: ${membershipError.message}`)
-
     for (let offset = 0; offset < payload.snapshots.length; offset += 100) {
       const chunk = payload.snapshots.slice(offset, offset + 100).map((row) => ({ id: randomUUID(), ...row }))
       const { error } = await supabase.from("wyckoff_analysis_snapshots").upsert(chunk, {
@@ -264,7 +270,7 @@ export async function publishIngestingWyckoffV2Run(runKey: string, expectedSupab
       incomplete_count: payload.incomplete,
       error_count: 0,
       diagnostics: {
-        source: payload.source, runKey, completeSnapshots: payload.complete, incompleteSnapshots: payload.incomplete,
+        source: payload.source, runKey, universeRunId: canonical.runId, completeSnapshots: payload.complete, incompleteSnapshots: payload.incomplete,
         validationHash: validated.validationHash, chartSeriesCount: chartSeries.length, tickerCount: tickers.length,
       },
       finished_at: finishedAt,

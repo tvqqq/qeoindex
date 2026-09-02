@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import { resolve } from "node:path"
 
+import { assertCanonicalWyckoffMembership } from "../lib/wyckoff-canonical-membership.ts"
 import type {
   NormalizedIndexRow,
   NormalizedLeaderRow,
@@ -133,4 +134,65 @@ test("shared Edge machine auth accepts only exact configured bearer tokens", asy
   assert.equal(await isMachineRequestAuthorized(new Request("https://example.test", {
     headers: { authorization: "Bearer alpha" },
   }), []), false)
+})
+
+test("QEO-19 canonical Wyckoff membership requires exact ticker and rank parity", () => {
+  const canonical = [
+    { ticker: "AAA", rank: 1 },
+    { ticker: "BBB", rank: 2 },
+  ]
+  assert.doesNotThrow(() => assertCanonicalWyckoffMembership(canonical, [
+    { ticker: "bbb", rank: 2 },
+    { ticker: "aaa", rank: 1 },
+  ]))
+  assert.throws(() => assertCanonicalWyckoffMembership(canonical, [
+    { ticker: "AAA", rank: 2 },
+    { ticker: "BBB", rank: 1 },
+  ]), /rankMismatch/i)
+  assert.throws(() => assertCanonicalWyckoffMembership(canonical, [
+    { ticker: "AAA", rank: 1 },
+  ]), /Canonical Wyckoff membership mismatch/)
+})
+
+test("QEO-19 active Wyckoff runtime has no legacy membership-table consumer", () => {
+  for (const path of [
+    "lib/wyckoff-unified-data.ts",
+    "lib/wyckoff-unified-runner.ts",
+    "lib/wyckoff-supabase-publish.ts",
+    "lib/wyckoff-notion-ingest.ts",
+  ]) {
+    assert.doesNotMatch(source(path), /wyckoff_universe_memberships/, `${path} still consumes legacy Wyckoff memberships`)
+  }
+})
+
+test("QEO-19 active KFSP runtime has no provider-token table consumer", () => {
+  for (const path of [
+    "supabase/functions/kfsp-rating-sync/index.ts",
+    "supabase/functions/kfsp-ttai-history-sync/index.ts",
+    "supabase/functions/market-insight-eod-sync/index.ts",
+  ]) {
+    assert.doesNotMatch(source(path), /kfsp_provider_tokens/, `${path} still consumes the legacy KFSP token table`)
+  }
+})
+
+test("QEO-19 KFSP auth uses shared Vault token cache with service-role-only RPCs", () => {
+  const helperPath = "supabase/functions/_shared/kfsp-provider-auth.ts"
+  const migrationPath = "supabase/pending-migrations/20260902120500_kfsp_vault_token_cache.sql"
+  assert.equal(existsSync(helperPath), true, "shared KFSP provider auth helper must exist")
+  assert.equal(existsSync(migrationPath), true, "Vault token-cache compatibility migration must exist")
+  if (!existsSync(helperPath) || !existsSync(migrationPath)) return
+
+  const helper = source(helperPath)
+  const migration = source(migrationPath)
+  assert.match(helper, /qeo_get_kfsp_provider_token_cache/)
+  assert.match(helper, /qeo_set_kfsp_provider_token_cache/)
+  assert.match(helper, /qeo_get_kfsp_credentials/)
+  assert.doesNotMatch(helper, /kfsp_provider_tokens/)
+  assert.match(migration, /vault\.decrypted_secrets/i)
+  assert.match(migration, /vault\.create_secret/i)
+  assert.match(migration, /vault\.update_secret/i)
+  assert.match(migration, /grant execute on function public\.qeo_get_kfsp_provider_token_cache\(\) to service_role/i)
+  assert.match(migration, /grant execute on function public\.qeo_set_kfsp_provider_token_cache\(text, timestamptz\) to service_role/i)
+  assert.match(migration, /from public\.kfsp_provider_tokens/i)
+  assert.doesNotMatch(migration, /raise\s+(notice|log|info|warning).*access_token/i)
 })

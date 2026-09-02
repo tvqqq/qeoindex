@@ -10,12 +10,14 @@ Do not weaken or bypass these guards. Production is never a rollback-test enviro
 
 ## Representative destructive classes
 
-The reusable rehearsal currently covers two still-existing legacy contracts:
+The reusable rehearsal covers two destructive classes without depending on a real legacy table that may later be removed:
 
 1. compatibility column: `public.portfolio_transactions.target_price`;
-2. legacy bridge table: `public.wyckoff_universe_memberships`.
+2. independent synthetic table-drop fixture: `public.qeo_recovery_table_fixture`.
 
-The synthetic fixture uses deterministic local-only IDs and ticker `QEO`. No production rows are copied into the rehearsal database.
+The synthetic fixture is created only after local migration replay, uses deterministic local-only IDs/ticker `QEO`, has RLS and explicit service-role ACLs, and is included in the validated custom-format backup. No production rows are copied into the rehearsal database.
+
+QEO-19 intentionally moved the table-drop rehearsal away from `public.wyckoff_universe_memberships` so the recovery gate remains runnable after the real legacy bridge is removed from the application schema.
 
 ## What the gate proves
 
@@ -29,7 +31,7 @@ For each rehearsal pass the harness performs, in order:
 6. destructive column/table removal;
 7. explicit assertion that the destructive state actually occurred;
 8. restore from the validated backup;
-9. explicit restored data/RLS assertions;
+9. exact app-role ACL replay plus explicit restored data/RLS assertions;
 10. deterministic baseline-vs-restored parity diff.
 
 The captured baseline covers table data plus columns, indexes, RLS state, policies, table privileges, and functions that reference the representative objects. The targeted custom dump restores table schema/data and table-owned indexes, policies and ACLs while avoiding destructive reset of unrelated Supabase-managed schemas.
@@ -61,12 +63,14 @@ Artifacts include:
 
 - `versions.txt`;
 - `baseline.txt`;
+- `acl-restore.sql`;
+- `acl-restore.sql.sha256`;
 - `pre-destructive.dump`;
 - `pre-destructive.dump.sha256`;
 - `backup.list`;
 - `restored.txt`.
 
-A successful run ends with `recovery rehearsal: PASS`. Any failed backup validation, destructive assertion, restore assertion, or parity diff exits non-zero.
+A successful run ends with `recovery rehearsal: PASS`. Any failed backup validation, destructive assertion, restore assertion, ACL replay, or parity diff exits non-zero.
 
 ## CI acceptance
 
@@ -85,11 +89,11 @@ QEO-26 can be considered complete only when both actual passes succeed on the sa
 Before adding a new destructive migration:
 
 1. identify the exact legacy object being removed and its canonical replacement;
-2. add deterministic synthetic fixture data that exercises the legacy contract and canonical parity;
+2. add deterministic synthetic fixture data that exercises the destructive class without creating a production-only dependency;
 3. extend baseline capture with any additional schema/data contract that matters;
 4. extend the destructive assertion so CI proves the object was really removed;
 5. extend the restore assertion and baseline diff to prove exact recovery;
 6. keep the production-ref/local-port hard guard unchanged;
 7. obtain a green two-pass recovery workflow before production rollout.
 
-If an object has already been removed from production, do not fabricate it as current production state. Select a still-existing representative destructive class or restore the historical schema solely inside an isolated fixture designed for that purpose.
+If an object has already been removed from production, do not fabricate it as current production state. Use an isolated synthetic fixture such as `qeo_recovery_table_fixture` for the destructive class instead.
