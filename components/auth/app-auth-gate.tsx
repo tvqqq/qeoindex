@@ -111,15 +111,15 @@ export function AppAuthGate({
         }
 
         // A token-refresh sync can fail transiently while the current server
-        // session is still valid. Only expose app children when the server tree
-        // is already verified; a browser-only session is not enough because the
-        // current children may still be the anonymous/login render.
-        if (serverSessionPresent) {
-          setStatus("authenticated")
-          return
-        }
+        // session is still valid. Preserve a verified shell, but never expose
+        // browser-only authenticated state while the server tree is still the
+        // anonymous render from before the session handoff.
+        if (authenticatedRef.current || serverSessionPresent) {
+          if (serverSessionPresent) {
+            setStatus("authenticated")
+            return
+          }
 
-        if (authenticatedRef.current) {
           setStatus("loading-board")
           router.refresh()
           return
