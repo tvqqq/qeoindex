@@ -33,28 +33,19 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
-          layout = Path('app/layout.tsx')
-          text = layout.read_text()
-          old = "  const serverSessionAuthenticated = Boolean(await getServerAuthContext())"
-          new = "  const serverSessionAuthenticated = process.env.QEO44_BROWSER_SMOKE === '1' ? true : Boolean(await getServerAuthContext())"
-          assert old in text
-          layout.write_text(text.replace(old, new, 1))
-
           gate = Path('components/auth/app-auth-gate.tsx')
           text = gate.read_text()
-          old = "  useEffect(() => {\n    const supabase = getSupabaseBrowserClient()"
-          new = "  useEffect(() => {\n    if (serverSessionPresent && process.env.NEXT_PUBLIC_QEO44_BROWSER_SMOKE === '1') return\n\n    const supabase = getSupabaseBrowserClient()"
+          old = "}) {\n  const router = useRouter()"
+          new = "}) {\n  if (process.env.NEXT_PUBLIC_QEO44_BROWSER_SMOKE === '1') return children\n\n  const router = useRouter()"
           assert old in text
           gate.write_text(text.replace(old, new, 1))
           PY
-      - name: Build exact feature source with test-only auth harness
+      - name: Build feature source with runner-only auth bypass
         env:
-          QEO44_BROWSER_SMOKE: "1"
           NEXT_PUBLIC_QEO44_BROWSER_SMOKE: "1"
         run: pnpm exec next build
       - name: Start app
         env:
-          QEO44_BROWSER_SMOKE: "1"
           NEXT_PUBLIC_QEO44_BROWSER_SMOKE: "1"
         run: |
           pnpm exec next start -p 3000 > /tmp/qeo44-next.log 2>&1 &
@@ -86,6 +77,12 @@ jobs:
           async function runViewport(browser, viewport, label) {
             const context = await browser.newContext({ viewport })
             const page = await context.newPage()
+            const pageErrors = []
+            const consoleErrors = []
+            page.on('pageerror', (error) => pageErrors.push(String(error)))
+            page.on('console', (message) => {
+              if (message.type() === 'error') consoleErrors.push(message.text())
+            })
             let aRequests = 0
             let bRequests = 0
 
@@ -121,7 +118,13 @@ jobs:
             })
 
             await page.goto('http://127.0.0.1:3000/portfolio', { waitUntil: 'domcontentloaded' })
-            await page.getByText('Tăng trưởng A', { exact: true }).first().waitFor({ state: 'visible' })
+            try {
+              await page.getByText('Tăng trưởng A', { exact: true }).first().waitFor({ state: 'visible', timeout: 10000 })
+            } catch (error) {
+              console.log(JSON.stringify({ label, stage: 'initial-render', body: (await page.locator('body').innerText()).slice(0, 1500), pageErrors, consoleErrors }))
+              throw error
+            }
+
             assert.ok(await page.locator('.animate-pulse').count() >= 4, `${label}: expected loading skeleton after portfolio metadata`)
             assert.equal(await page.getByText('Tổng tài sản (NAV)', { exact: true }).count(), 0, `${label}: empty summary flashed before transactions resolved`)
 
@@ -130,7 +133,8 @@ jobs:
 
             await page.getByRole('button', { name: /Làm mới/i }).click()
             assert.ok(await page.locator('.animate-pulse').count() >= 4, `${label}: refresh did not enter immediate loading state`)
-            await page.getByText('MSN', { exact: true }).first().waitFor({ state: 'visible' })
+            await sleep(150)
+            assert.ok(await page.getByText('MSN', { exact: true }).count() >= 1, `${label}: refresh lost active portfolio data`)
 
             await page.getByRole('button', { name: /Tăng trưởng A/ }).click()
             await page.getByText('Phòng thủ B', { exact: true }).click()
@@ -143,6 +147,7 @@ jobs:
             await sleep(850)
             assert.equal(await page.getByText('FPT', { exact: true }).count(), 0, `${label}: stale B response overwrote active A data`)
             assert.ok(await page.getByText('MSN', { exact: true }).count() >= 1, `${label}: active A data disappeared after stale B settled`)
+            assert.deepEqual(pageErrors, [], `${label}: page errors: ${pageErrors.join(' | ')}`)
 
             console.log(JSON.stringify({ label, viewport, aRequests, bRequests, result: 'PASS' }))
             await context.close()
