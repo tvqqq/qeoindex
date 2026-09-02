@@ -88,6 +88,18 @@ phase "assert destructive state"
 docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - \
   < scripts/db/recovery/assert-destroyed.sql
 
+# pg_restore --clean replays object cleanup entries (policies/constraints) before
+# recreating a fully dropped table. PostgreSQL requires the relation to exist even
+# for DROP POLICY IF EXISTS ... ON <table>, so materialize a disposable placeholder.
+# The archive's own DROP TABLE cleanup removes this stub before restoring the real
+# table, preserving fail-fast restore semantics without suppressing pg_restore errors.
+phase "restore bootstrap"
+docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - <<'SQL'
+create table public.wyckoff_universe_memberships (
+  __qeo_restore_stub boolean
+);
+SQL
+
 phase "restore"
 docker exec -i "$DB_CONTAINER" pg_restore \
   -U postgres \
