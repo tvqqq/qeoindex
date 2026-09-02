@@ -53,6 +53,7 @@ export async function runHistoryRefreshBatchStep(
   stocks: WyckoffV2UniverseRow[],
   startedAtIso: string,
   progress: OhlcvUniverseRefreshResult,
+  allowRecoverableFailures = false,
 ) {
   "use step"
   return runQeoIndexEodPhase({
@@ -70,7 +71,18 @@ export async function runHistoryRefreshBatchStep(
         stocks.map((stock) => stock.ticker),
         new Date(startedAtIso),
       )
-      if (result.failedTickers > 0) {
+      const accountedTickers = result.completedTickers + result.failedTickers
+      if (result.requestedTickers !== stocks.length || accountedTickers !== result.requestedTickers) {
+        throw Object.assign(
+          new Error(
+            `HISTORY_REFRESH batch accounting incomplete: `
+            + `${result.completedTickers} completed + ${result.failedTickers} failed `
+            + `!= ${result.requestedTickers} requested for ${stocks.length} input tickers`,
+          ),
+          { code: "HISTORY_REFRESH_FAILED" },
+        )
+      }
+      if (result.failedTickers > 0 && !allowRecoverableFailures) {
         throw Object.assign(
           new Error(
             `HISTORY_REFRESH failed for ${result.failedTickers} ticker(s): `
@@ -79,21 +91,17 @@ export async function runHistoryRefreshBatchStep(
           { code: "HISTORY_REFRESH_FAILED" },
         )
       }
-      if (result.completedTickers !== result.requestedTickers) {
-        throw Object.assign(
-          new Error(`HISTORY_REFRESH batch completed ${result.completedTickers}/${result.requestedTickers} tickers`),
-          { code: "HISTORY_REFRESH_FAILED" },
-        )
-      }
       return mergeHistoryRefreshProgress(progress, result)
     },
     summarize: (result) => ({
       requestedTickers: result.requestedTickers,
       completedTickers: result.completedTickers,
+      failedTickers: result.failedTickers,
       dailyFetchedBars: result.dailyFetchedBars,
       backfillOperations: result.backfillOperations,
       deltaOperations: result.deltaOperations,
       limitedCoverageCount: result.limitedCoverage.length,
+      errors: result.errors.slice(0, 5),
     }),
   })
 }
