@@ -1,8 +1,10 @@
-import { readFileSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { reconcileMigrations } from "./migration-drift-lib.mjs"
 
 const activeFiles = readdirSync("supabase/migrations").filter((name) => name.endsWith(".sql"))
-const pendingFiles = readdirSync("supabase/pending-migrations").filter((name) => name.endsWith(".sql"))
+const pendingFiles = existsSync("supabase/pending-migrations")
+  ? readdirSync("supabase/pending-migrations").filter((name) => name.endsWith(".sql"))
+  : []
 const manifest = JSON.parse(readFileSync("supabase/migration-equivalence.json", "utf8"))
 const ledger = JSON.parse(readFileSync("docs/db/evidence/production-migration-ledger-2026-09-02.json", "utf8"))
 
