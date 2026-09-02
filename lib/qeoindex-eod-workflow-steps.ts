@@ -53,6 +53,7 @@ export async function runHistoryRefreshBatchStep(
   stocks: WyckoffV2UniverseRow[],
   startedAtIso: string,
   progress: OhlcvUniverseRefreshResult,
+  allowRecoverableFailures = false,
 ) {
   "use step"
   return runQeoIndexEodPhase({
@@ -77,6 +78,15 @@ export async function runHistoryRefreshBatchStep(
             `HISTORY_REFRESH batch accounting incomplete: `
             + `${result.completedTickers} completed + ${result.failedTickers} failed `
             + `!= ${result.requestedTickers} requested for ${stocks.length} input tickers`,
+          ),
+          { code: "HISTORY_REFRESH_FAILED" },
+        )
+      }
+      if (result.failedTickers > 0 && !allowRecoverableFailures) {
+        throw Object.assign(
+          new Error(
+            `HISTORY_REFRESH failed for ${result.failedTickers} ticker(s): `
+            + result.errors.slice(0, 5).map((item) => `${item.ticker}: ${item.error}`).join(" | "),
           ),
           { code: "HISTORY_REFRESH_FAILED" },
         )
