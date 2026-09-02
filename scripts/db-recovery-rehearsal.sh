@@ -83,7 +83,7 @@ VALUES
 SQL
 
 # BACKUP must happen before any representative destructive DDL.
-pg_dump --schema-only --no-owner --no-privileges --schema="${SCHEMA}" "${DATABASE_URL}" > "${SCHEMA_DUMP}"
+pg_dump --schema-only --no-owner --schema="${SCHEMA}" "${DATABASE_URL}" > "${SCHEMA_DUMP}"
 pg_dump --data-only --no-owner --schema="${SCHEMA}" "${DATABASE_URL}" > "${DATA_DUMP}"
 sha256sum "${SCHEMA_DUMP}" "${DATA_DUMP}" > "${WORK_DIR}/backup.sha256"
 
@@ -91,7 +91,7 @@ psql "${DATABASE_URL}" -At -v ON_ERROR_STOP=1 <<SQL > "${BEFORE_META}"
 SELECT 'ratings_row_count=' || count(*) FROM ${SCHEMA}.insights_stock_ratings_rehearsal;
 SELECT 'membership_row_count=' || count(*) FROM ${SCHEMA}.wyckoff_universe_memberships_rehearsal;
 SELECT 'rating_parity_mismatch=' || count(*) FROM ${SCHEMA}.insights_stock_ratings_rehearsal WHERE score_4m IS DISTINCT FROM kfsp_score_4m;
-SELECT 'rls=' || relrowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='${SCHEMA}' AND c.relname='wyckoff_universe_memberships_rehearsal';
+SELECT 'rls=' || relrowsecurity::text FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='${SCHEMA}' AND c.relname='wyckoff_universe_memberships_rehearsal';
 SELECT 'policy_count=' || count(*) FROM pg_policies WHERE schemaname='${SCHEMA}' AND tablename='wyckoff_universe_memberships_rehearsal';
 SELECT 'public_select_grant=' || count(*) FROM information_schema.role_table_grants WHERE table_schema='${SCHEMA}' AND table_name='wyckoff_universe_memberships_rehearsal' AND grantee='PUBLIC' AND privilege_type='SELECT';
 SELECT 'view_count=' || count(*) FROM information_schema.views WHERE table_schema='${SCHEMA}' AND table_name='rating_parity_view';
@@ -104,16 +104,20 @@ ALTER TABLE ${SCHEMA}.insights_stock_ratings_rehearsal DROP COLUMN score_4m CASC
 DROP TABLE ${SCHEMA}.wyckoff_universe_memberships_rehearsal CASCADE;
 SQL
 
-psql "${DATABASE_URL}" -At -v ON_ERROR_STOP=1 <<SQL
-SELECT CASE WHEN EXISTS (
-  SELECT 1 FROM information_schema.columns
-  WHERE table_schema='${SCHEMA}' AND table_name='insights_stock_ratings_rehearsal' AND column_name='score_4m'
-) THEN pg_catalog.raise_exception('legacy column was not dropped') ELSE 'destructive_column_drop=PASS' END;
-SQL
+if psql "${DATABASE_URL}" -Atqc "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='${SCHEMA}' AND table_name='insights_stock_ratings_rehearsal' AND column_name='score_4m')" | grep -qx 't'; then
+  fail "representative DROP COLUMN did not remove the legacy column"
+fi
 
 if psql "${DATABASE_URL}" -Atqc "SELECT to_regclass('${SCHEMA}.wyckoff_universe_memberships_rehearsal') IS NOT NULL" | grep -qx 't'; then
   fail "representative DROP TABLE did not remove the legacy table"
 fi
+
+if psql "${DATABASE_URL}" -Atqc "SELECT to_regclass('${SCHEMA}.rating_parity_view') IS NOT NULL" | grep -qx 't'; then
+  fail "DROP COLUMN CASCADE did not remove the dependent view"
+fi
+
+echo "destructive_column_drop=PASS"
+echo "destructive_table_drop=PASS"
 
 # RESTORE from the verified backup by recreating the fixture schema and data.
 psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -c "DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE;"
@@ -124,7 +128,7 @@ psql "${DATABASE_URL}" -At -v ON_ERROR_STOP=1 <<SQL > "${AFTER_META}"
 SELECT 'ratings_row_count=' || count(*) FROM ${SCHEMA}.insights_stock_ratings_rehearsal;
 SELECT 'membership_row_count=' || count(*) FROM ${SCHEMA}.wyckoff_universe_memberships_rehearsal;
 SELECT 'rating_parity_mismatch=' || count(*) FROM ${SCHEMA}.insights_stock_ratings_rehearsal WHERE score_4m IS DISTINCT FROM kfsp_score_4m;
-SELECT 'rls=' || relrowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='${SCHEMA}' AND c.relname='wyckoff_universe_memberships_rehearsal';
+SELECT 'rls=' || relrowsecurity::text FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='${SCHEMA}' AND c.relname='wyckoff_universe_memberships_rehearsal';
 SELECT 'policy_count=' || count(*) FROM pg_policies WHERE schemaname='${SCHEMA}' AND tablename='wyckoff_universe_memberships_rehearsal';
 SELECT 'public_select_grant=' || count(*) FROM information_schema.role_table_grants WHERE table_schema='${SCHEMA}' AND table_name='wyckoff_universe_memberships_rehearsal' AND grantee='PUBLIC' AND privilege_type='SELECT';
 SELECT 'view_count=' || count(*) FROM information_schema.views WHERE table_schema='${SCHEMA}' AND table_name='rating_parity_view';
