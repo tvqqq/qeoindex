@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "migrations": [
+    {"logicalName":"market_universe_top_stocks","repositoryVersion":"20260901090000","productionVersion":"20260901011922","state":"MAPPED","evidence":"ledger-logical-name","rationale":"Supabase production timestamp differs from repository filename"},
+    {"logicalName":"market_universe_monthly_cron","repositoryVersion":"20260901091000","productionVersion":"20260901012315","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"top100_legacy_clean_slate","repositoryVersion":"20260901100000","productionVersion":"20260901024528","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"market_universe_daily_activity_gate","repositoryVersion":"20260901123000","productionVersion":"20260901054004","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"eod_archive_checkpoints","repositoryVersion":"20260901130000","productionVersion":"20260901064844","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"fix_orderbook_trading_session_windows","repositoryVersion":"20260901152000","productionVersion":"20260901082239","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"prune_noncanonical_orderbook_snapshots","repositoryVersion":"20260901162500","productionVersion":"20260901093012","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"wyckoff_daily_weekly_storage_cutover","repositoryVersion":"20260901190000","productionVersion":"20260901134640","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"clean_rebuild_top_stocks_200","repositoryVersion":"20260901144121","productionVersion":"20260901144121","state":"EXACT","evidence":"filename-ledger-equality"},
+    {"logicalName":"kfsp_canonical_rating_candidate_split","repositoryVersion":"20260901221500","productionVersion":"20260901151138","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"kfsp_manual_dispatch_rpc","repositoryVersion":"20260901224000","productionVersion":"20260901153403","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"fix_kfsp_manual_dispatch_rpc_ambiguity","repositoryVersion":"20260901224500","productionVersion":"20260901153527","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"kfsp_manual_recovery_lifecycle","repositoryVersion":"20260902060000","productionVersion":"20260901231054","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"clean_rebuild_market_snapshot_trigger","repositoryVersion":"20260902011529","productionVersion":"20260902011529","state":"EXACT","evidence":"function-definition-and-grants"},
+    {"logicalName":"restrict_orderbook_prune_trigger_execute","repositoryVersion":"20260902011846","productionVersion":"20260902011846","state":"EXACT","evidence":"function-grants-and-advisor"},
+    {"logicalName":"ai_council_authenticated_readonly","repositoryVersion":"20260902084500","productionVersion":"20260902014425","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"ai_council_debate_identity_cleanup","repositoryVersion":"20260902084000","productionVersion":"20260902014432","state":"MAPPED","evidence":"ledger-logical-name"},
+    {"logicalName":"kfsp_rating_storage_refactor","repositoryVersion":"20260902020424","productionVersion":"20260902020424","state":"EXACT","evidence":"production-schema-contract","rationale":"Production ledger and schema prove the destructive refactor is already applied; source must use the production version to prevent double-apply"}
+  ]
+}
