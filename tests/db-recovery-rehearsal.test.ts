@@ -79,6 +79,28 @@ test("restore bootstraps a placeholder relation before pg_restore clean phase", 
   )
 })
 
+test("exact app-role ACL is snapshotted before destruction and replayed after pg_restore", () => {
+  const harness = source(harnessPath)
+  const aclCapture = source("scripts/db/recovery/capture-acl-restore.sql")
+  const capturePhase = harness.indexOf("ACL snapshot")
+  const destructive = harness.indexOf("destructive rehearsal")
+  const restore = harness.indexOf('phase "restore"')
+  const aclRestore = harness.indexOf("ACL restore")
+  const parity = harness.indexOf("restored parity")
+
+  assert.ok(capturePhase >= 0 && capturePhase < destructive, "ACL snapshot must precede destructive execution")
+  assert.ok(restore >= 0 && aclRestore > restore && parity > aclRestore, "ACL restore must run after pg_restore and before parity")
+  assert.match(harness, /acl-restore\.sql/i)
+  assert.match(aclCapture, /information_schema\.table_privileges/i)
+  assert.match(aclCapture, /portfolio_transactions/i)
+  assert.match(aclCapture, /wyckoff_universe_memberships/i)
+  assert.match(aclCapture, /anon/i)
+  assert.match(aclCapture, /authenticated/i)
+  assert.match(aclCapture, /service_role/i)
+  assert.match(aclCapture, /revoke all privileges on table/i)
+  assert.match(aclCapture, /is_grantable/i)
+})
+
 test("restored assertions require the dropped objects and synthetic values to return", () => {
   const restored = source("scripts/db/recovery/assert-restored.sql")
   assert.match(restored, /portfolio_transactions/i)
