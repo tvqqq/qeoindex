@@ -119,9 +119,23 @@ export function PortfolioPage() {
   const [loadingPortfolio, setLoadingPortfolio] = useState(true)
   const [portfolioError, setPortfolioError] = useState<string | null>(null)
 
-  // Transactions state
-  const [transactions, setTransactions] = useState<RawTransaction[]>([])
-  const [loadingTx, setLoadingTx] = useState(false)
+  // Transactions state is scoped to its owning portfolio so a switch never renders stale rows.
+  const [transactionState, setTransactionState] = useState<{
+    portfolioId: string | null
+    transactions: RawTransaction[]
+  }>({ portfolioId: null, transactions: [] })
+  const [refreshingTxFor, setRefreshingTxFor] = useState<string | null>(null)
+  const transactionRequestRef = useRef(0)
+  const transactions = transactionState.portfolioId === activePortfolioId
+    ? transactionState.transactions
+    : []
+  const loadingTx = Boolean(
+    activePortfolioId
+      && (
+        transactionState.portfolioId !== activePortfolioId
+        || refreshingTxFor === activePortfolioId
+      ),
+  )
 
   // Live market prices: { [ticker]: number }
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({})
@@ -138,10 +152,9 @@ export function PortfolioPage() {
 
   // ── Load Portfolios ──
   const loadPortfolios = useCallback(async () => {
-    setLoadingPortfolio(true)
-    setPortfolioError(null)
     try {
       const res = await fetch("/api/portfolio", { cache: "no-store", credentials: "same-origin" })
+      setPortfolioError(null)
       if (!res.ok) {
         if (res.status === 401) {
           setPortfolioError("Vui lòng đăng nhập để xem danh mục.")
@@ -168,19 +181,40 @@ export function PortfolioPage() {
 
   // ── Load Transactions for active portfolio ──
   const loadTransactions = useCallback(async (pid: string) => {
-    setLoadingTx(true)
+    const requestId = ++transactionRequestRef.current
     try {
       const res = await fetch(`/api/portfolio/${pid}/transactions`, {
         cache: "no-store",
         credentials: "same-origin",
       })
-      if (!res.ok) return
-      const data = (await res.json()) as { ok: boolean; transactions?: RawTransaction[] }
-      if (data.ok && data.transactions) {
-        setTransactions(data.transactions)
+      if (requestId !== transactionRequestRef.current) return
+      if (!res.ok) {
+        setTransactionState((current) => ({
+          portfolioId: pid,
+          transactions: current.portfolioId === pid ? current.transactions : [],
+        }))
+        return
       }
+      const data = (await res.json()) as { ok: boolean; transactions?: RawTransaction[] }
+      if (requestId !== transactionRequestRef.current) return
+      if (data.ok && data.transactions) {
+        setTransactionState({ portfolioId: pid, transactions: data.transactions })
+      } else {
+        setTransactionState((current) => ({
+          portfolioId: pid,
+          transactions: current.portfolioId === pid ? current.transactions : [],
+        }))
+      }
+    } catch {
+      if (requestId !== transactionRequestRef.current) return
+      setTransactionState((current) => ({
+        portfolioId: pid,
+        transactions: current.portfolioId === pid ? current.transactions : [],
+      }))
     } finally {
-      setLoadingTx(false)
+      if (requestId === transactionRequestRef.current) {
+        setRefreshingTxFor((current) => current === pid ? null : current)
+      }
     }
   }, [])
 
@@ -207,12 +241,12 @@ export function PortfolioPage() {
 
   // Initial load
   useEffect(() => {
-    loadPortfolios()
-    loadWatchlists()
+    void loadPortfolios()
+    void loadWatchlists()
   }, [loadPortfolios, loadWatchlists])
 
   useEffect(() => {
-    if (activePortfolioId) loadTransactions(activePortfolioId)
+    if (activePortfolioId) void loadTransactions(activePortfolioId)
   }, [activePortfolioId, loadTransactions])
 
   // ── Compute positions from transactions ──
@@ -298,11 +332,18 @@ export function PortfolioPage() {
     setAddTxOpen(true)
   }, [])
 
+  const handleRefreshTransactions = useCallback(() => {
+    if (!activePortfolioId) return
+    setRefreshingTxFor(activePortfolioId)
+    void loadTransactions(activePortfolioId)
+  }, [activePortfolioId, loadTransactions])
+
   // ── After transaction added ──
   const handleTxSuccess = useCallback(() => {
     setAddTxOpen(false)
     if (activePortfolioId) {
-      loadTransactions(activePortfolioId)
+      setRefreshingTxFor(activePortfolioId)
+      void loadTransactions(activePortfolioId)
     }
   }, [activePortfolioId, loadTransactions])
 
@@ -319,7 +360,13 @@ export function PortfolioPage() {
         alert(data.error ?? "Không thể xóa giao dịch.")
         return
       }
-      setTransactions((prev) => prev.filter((t) => t.id !== txId))
+      setTransactionState((current) => {
+        if (current.portfolioId !== activePortfolioId) return current
+        return {
+          ...current,
+          transactions: current.transactions.filter((transaction) => transaction.id !== txId),
+        }
+      })
     },
     [activePortfolioId],
   )
@@ -358,7 +405,7 @@ export function PortfolioPage() {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => activePortfolioId && loadTransactions(activePortfolioId)}
+                onClick={handleRefreshTransactions}
                 className="h-8 gap-1.5 rounded-full px-3 text-xs font-semibold font-ticker text-slate-300 hover:bg-white/[0.06] hover:text-white transition-colors"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
