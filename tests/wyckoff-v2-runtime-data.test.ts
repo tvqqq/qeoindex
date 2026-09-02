@@ -6,6 +6,7 @@ import type { NotionPage } from "../lib/notion/client.ts"
 import { parseWyckoffV2UniversePage } from "../lib/wyckoff-v2-universe-source.ts"
 import {
   DAILY_V2_CACHE_LIMIT,
+  V2_CACHE_BATCH_SIZE,
   cachedHistoryFromRows,
   loadWyckoffV2CachedHistories,
 } from "../lib/wyckoff-v2-cache-read.ts"
@@ -39,6 +40,22 @@ function cachedRow(ticker: string, index: number) {
     source_url: "https://example.com/history",
     fetched_at: new Date(Date.parse(barTime) + 60_000).toISOString(),
   }
+}
+
+function compactRow(ticker: string, index: number) {
+  const row = cachedRow(ticker, index)
+  return [
+    row.bar_time,
+    row.open,
+    row.high,
+    row.low,
+    row.close,
+    row.volume,
+    row.provider,
+    row.provider_detail,
+    row.source_url,
+    row.fetched_at,
+  ]
 }
 
 test("v2 universe source preserves missing Rank instead of dropping the ticker", () => {
@@ -76,7 +93,7 @@ test("cached Daily history conversion rejects empty or invalid data", () => {
   ]), /no usable/i)
 })
 
-test("cached history loader batches ticker reads into one grouped PostgREST row per ticker", async () => {
+test("cached history loader uses compact grouped rows and bounds long-history batches to five tickers", async () => {
   const tickers = Array.from({ length: 25 }, (_, index) => `T${String(index + 1).padStart(3, "0")}`)
   const calls: Array<{ name: string; tickers: string[]; limit: number }> = []
   const supabase = {
@@ -85,7 +102,7 @@ test("cached history loader batches ticker reads into one grouped PostgREST row 
       return {
         data: args.p_tickers.map((ticker) => ({
           ticker,
-          rows: [cachedRow(ticker, 0), cachedRow(ticker, 1)],
+          rows: [compactRow(ticker, 0), compactRow(ticker, 1)],
         })),
         error: null,
       }
@@ -94,17 +111,18 @@ test("cached history loader batches ticker reads into one grouped PostgREST row 
 
   const histories = await loadWyckoffV2CachedHistories(supabase, tickers)
 
+  assert.equal(V2_CACHE_BATCH_SIZE, 5)
   assert.equal(histories.size, tickers.length)
-  assert.equal(calls.length, 3)
+  assert.equal(calls.length, 5)
   assert.ok(calls.every((call) => call.name === "qeo_market_ohlcv_recent_grouped"))
-  assert.ok(calls.every((call) => call.tickers.length > 0 && call.tickers.length <= 10))
+  assert.ok(calls.every((call) => call.tickers.length > 0 && call.tickers.length <= V2_CACHE_BATCH_SIZE))
   assert.ok(calls.every((call) => call.limit === DAILY_V2_CACHE_LIMIT))
   assert.deepEqual(calls.flatMap((call) => call.tickers), tickers)
 })
 
 test("cached history loader fails closed when a requested ticker is absent from grouped response", async () => {
   const supabase = {
-    rpc: async () => ({ data: [{ ticker: "AAA", rows: [cachedRow("AAA", 0), cachedRow("AAA", 1)] }], error: null }),
+    rpc: async () => ({ data: [{ ticker: "AAA", rows: [compactRow("AAA", 0), compactRow("AAA", 1)] }], error: null }),
   } as unknown as SupabaseClient
 
   await assert.rejects(
