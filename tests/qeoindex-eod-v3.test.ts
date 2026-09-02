@@ -117,7 +117,7 @@ test("QEO-21 runs safe telemetry retention independently while raw OHLCV age-pru
 
   assert.match(active, /rpc\("qeo_run_safe_retention_cleanup"/)
   assert.match(active, /Raw Daily OHLCV retention is intentionally disabled/i)
-  assert.doesNotMatch(active, /\.from\("market_ohlcv_history"\).*\.delete\(/s)
+  assert.doesNotMatch(active, /\.from\("market_ohlcv_history"\)[\s\S]*?\.delete\(/)
   assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
   assert.doesNotMatch(sql, /truncate\s+(table\s+)?public\.market_ohlcv_history/i)
 })
