@@ -518,3 +518,13 @@ export function PortfolioPage() {
     </div>
   )
 }
+
+function SummaryBarSkeleton() {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="h-24 animate-pulse rounded-3xl border border-[var(--color-border)] bg-white/[0.02]" />
+      ))}
+    </div>
+  )
+}
