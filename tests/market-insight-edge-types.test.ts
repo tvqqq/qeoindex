@@ -196,3 +196,24 @@ test("QEO-19 KFSP auth uses shared Vault token cache with service-role-only RPCs
   assert.match(migration, /from public\.kfsp_provider_tokens/i)
   assert.doesNotMatch(migration, /raise\s+(notice|log|info|warning).*access_token/i)
 })
+
+test("QEO-19 physical KFSP token-table cleanup is minimal and preserves Vault RPCs", () => {
+  const migrationPath = "supabase/migrations/20260902061819_drop_kfsp_provider_tokens.sql"
+  assert.equal(existsSync(migrationPath), true, "KFSP legacy token-table drop migration must exist")
+  if (!existsSync(migrationPath)) return
+
+  const migration = source(migrationPath)
+  assert.match(migration, /drop\s+table\s+if\s+exists\s+public\.kfsp_provider_tokens/i)
+  assert.doesNotMatch(migration, /cascade/i)
+  assert.doesNotMatch(migration, /drop\s+function[\s\S]*qeo_(get|set)_kfsp_provider_token_cache/i)
+})
+
+test("QEO-19 Wyckoff legacy-table drop is staged but quarantined until production EOD smoke", () => {
+  const migrationPath = "supabase/pending-migrations/20260902133000_drop_legacy_wyckoff_universe_memberships.sql"
+  assert.equal(existsSync(migrationPath), true, "Wyckoff legacy membership drop must remain staged in pending-migrations")
+  if (!existsSync(migrationPath)) return
+
+  const migration = source(migrationPath)
+  assert.match(migration, /drop\s+table\s+if\s+exists\s+public\.wyckoff_universe_memberships/i)
+  assert.doesNotMatch(migration, /cascade/i)
+})
