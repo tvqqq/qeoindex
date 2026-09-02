@@ -23,6 +23,14 @@ test("login handoff hides stale anonymous children until the server session refr
   )
 })
 
+test("login form prevents repeated submits while Supabase sign-in is in flight", () => {
+  const code = source("components/auth/landing-login.tsx")
+
+  assert.match(code, /setIsSubmitting\(true\)/)
+  assert.match(code, /disabled=\{isSubmitting \|\| !configured\}/)
+  assert.match(code, /isSubmitting \? "Đang xác thực\.\.\." : "Đăng nhập"/)
+})
+
 test("root market board has an immediate route loading state", () => {
   const loadingUrl = new URL("../app/loading.tsx", import.meta.url)
   assert.equal(existsSync(loadingUrl), true, "app/loading.tsx should stream a board loading state during auth refresh")
