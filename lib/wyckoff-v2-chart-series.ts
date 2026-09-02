@@ -38,6 +38,11 @@ export interface WyckoffV2ChartSeriesRow {
   updated_at: string
 }
 
+interface GroupedRecentOhlcvRow {
+  ticker: string
+  rows: unknown
+}
+
 function normalizeTickers(input: string[]) {
   const tickers = [...new Set(input.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))]
   for (const ticker of tickers) {
@@ -111,6 +116,25 @@ export function buildWyckoffV2ChartSeriesRows(args: {
   return result
 }
 
+function flattenGroupedChartRows(data: unknown, batch: string[]) {
+  const result: WyckoffV2RecentOhlcvRow[] = []
+  const seen = new Set<string>()
+  for (const item of (Array.isArray(data) ? data : []) as GroupedRecentOhlcvRow[]) {
+    const ticker = String(item?.ticker || "").trim().toUpperCase()
+    if (!batch.includes(ticker) || seen.has(ticker)) {
+      throw new Error(`WYCKOFF_CHART_SERIES_GROUP_INVALID: ticker=${ticker || "missing"}`)
+    }
+    if (!Array.isArray(item.rows)) throw new Error(`WYCKOFF_CHART_SERIES_GROUP_INVALID: rows=${ticker}`)
+    seen.add(ticker)
+    for (const row of item.rows as Array<WyckoffV2RecentOhlcvRow & { timeframe?: string }>) {
+      if (row?.ticker === ticker && row?.timeframe === "1D") result.push(row as WyckoffV2RecentOhlcvRow)
+    }
+  }
+  const missing = batch.filter((ticker) => !seen.has(ticker))
+  if (missing.length) throw new Error(`WYCKOFF_CHART_SERIES_GROUP_INCOMPLETE: missing=${missing.join(",")}`)
+  return result
+}
+
 export async function loadWyckoffV2ChartSeriesRows(
   supabase: SupabaseClient,
   inputTickers: string[],
@@ -121,12 +145,12 @@ export async function loadWyckoffV2ChartSeriesRows(
 
   for (let offset = 0; offset < tickers.length; offset += WYCKOFF_V2_CHART_SERIES_BATCH_SIZE) {
     const batch = tickers.slice(offset, offset + WYCKOFF_V2_CHART_SERIES_BATCH_SIZE)
-    const { data, error } = await supabase.rpc("qeo_market_ohlcv_recent", {
+    const { data, error } = await supabase.rpc("qeo_market_ohlcv_recent_grouped", {
       p_tickers: batch,
       p_limit: 260,
     })
     if (error) throw new Error(`Load recent OHLCV chart series failed for ${batch.join(",")}: ${error.message}`)
-    rows.push(...((data || []) as Array<WyckoffV2RecentOhlcvRow & { timeframe: string }>).filter((row) => row.timeframe === "1D") as WyckoffV2RecentOhlcvRow[])
+    rows.push(...flattenGroupedChartRows(data, batch))
   }
 
   const series = buildWyckoffV2ChartSeriesRows({ tickers, rows, runId })
