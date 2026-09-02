@@ -45,7 +45,7 @@ where table_schema = 'public'
   and table_name in ('portfolio_transactions', 'wyckoff_universe_memberships');
 
 select 'constraints|' || coalesce(string_agg(
-  c.conrelid::regclass::text || ':' || c.conname || ':' || c.contype || ':' || pg_get_constraintdef(c.oid, true),
+  c.conrelid::regclass::text || ':' || c.conname || ':' || c.contype::text || ':' || pg_get_constraintdef(c.oid, true),
   ',' order by c.conrelid::regclass::text, c.conname
 ), '')
 from pg_constraint c
@@ -98,7 +98,7 @@ where n.nspname = 'public'
   and pg_get_functiondef(p.oid) ~* '(portfolio_transactions|wyckoff_universe_memberships)';
 
 select 'types|' || coalesce(string_agg(
-  n.nspname || '.' || t.typname || ':' || t.typtype,
+  n.nspname || '.' || t.typname || ':' || t.typtype::text,
   ',' order by n.nspname, t.typname
 ), '')
 from pg_type t
