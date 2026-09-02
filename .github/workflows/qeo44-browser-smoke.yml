@@ -58,7 +58,6 @@ jobs:
           NEXT_PUBLIC_QEO44_BROWSER_SMOKE: "1"
         run: |
           pnpm exec next start -p 3000 > /tmp/qeo44-next.log 2>&1 &
-          echo $! > /tmp/qeo44-next.pid
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3000/portfolio >/dev/null; then exit 0; fi
             sleep 1
@@ -67,7 +66,7 @@ jobs:
           exit 1
       - name: Desktop + narrow viewport smoke
         run: |
-          cat > /tmp/qeo44-smoke.mjs <<'EOF'
+          cat > .qeo44-smoke.mjs <<'EOF'
           import { chromium } from 'playwright'
           import assert from 'node:assert/strict'
 
@@ -81,10 +80,7 @@ jobs:
             target_price_1: null, target_price_2: null, target_price_3: null,
             stop_loss_1: null, stop_loss_2: null, stop_loss_3: null,
           })
-          const payloads = {
-            a: [tx('a-1', 'MSN', 70)],
-            b: [tx('b-1', 'FPT', 100)],
-          }
+          const payloads = { a: [tx('a-1', 'MSN', 70)], b: [tx('b-1', 'FPT', 100)] }
           const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
           async function runViewport(browser, viewport, label) {
@@ -95,9 +91,7 @@ jobs:
 
             await page.route('**/api/**', async (route) => {
               const request = route.request()
-              const url = new URL(request.url())
-              const path = url.pathname
-
+              const path = new URL(request.url()).pathname
               if (path === '/api/portfolio' && request.method() === 'GET') {
                 await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, portfolios }) })
                 return
@@ -128,21 +122,16 @@ jobs:
 
             await page.goto('http://127.0.0.1:3000/portfolio', { waitUntil: 'domcontentloaded' })
             await page.getByText('Tăng trưởng A', { exact: true }).first().waitFor({ state: 'visible' })
-
-            // Portfolio metadata is visible while transaction payload is intentionally delayed.
-            // Summary must remain in loading skeleton instead of flashing empty NAV/positions.
             assert.ok(await page.locator('.animate-pulse').count() >= 4, `${label}: expected loading skeleton after portfolio metadata`)
             assert.equal(await page.getByText('Tổng tài sản (NAV)', { exact: true }).count(), 0, `${label}: empty summary flashed before transactions resolved`)
 
             await page.getByText('MSN', { exact: true }).first().waitFor({ state: 'visible' })
             assert.equal(await page.getByText('FPT', { exact: true }).count(), 0, `${label}: wrong portfolio ticker visible after initial load`)
 
-            // Explicit refresh must enter loading immediately from the event handler.
             await page.getByRole('button', { name: /Làm mới/i }).click()
             assert.ok(await page.locator('.animate-pulse').count() >= 4, `${label}: refresh did not enter immediate loading state`)
             await page.getByText('MSN', { exact: true }).first().waitFor({ state: 'visible' })
 
-            // Rapid A -> B -> A. B is deliberately slower than the second A response.
             await page.getByRole('button', { name: /Tăng trưởng A/ }).click()
             await page.getByText('Phòng thủ B', { exact: true }).click()
             assert.equal(await page.getByText('MSN', { exact: true }).count(), 0, `${label}: stale A ticker remained visible under B`)
@@ -167,7 +156,7 @@ jobs:
             await browser.close()
           }
           EOF
-          node /tmp/qeo44-smoke.mjs
+          node .qeo44-smoke.mjs
       - name: Dump app log on failure
         if: failure()
         run: cat /tmp/qeo44-next.log || true
