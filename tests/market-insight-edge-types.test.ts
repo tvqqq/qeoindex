@@ -177,7 +177,7 @@ test("QEO-19 active KFSP runtime has no provider-token table consumer", () => {
 
 test("QEO-19 KFSP auth uses shared Vault token cache with service-role-only RPCs", () => {
   const helperPath = "supabase/functions/_shared/kfsp-provider-auth.ts"
-  const migrationPath = "supabase/pending-migrations/20260902120500_kfsp_vault_token_cache.sql"
+  const migrationPath = "supabase/migrations/20260902052909_kfsp_vault_token_cache.sql"
   assert.equal(existsSync(helperPath), true, "shared KFSP provider auth helper must exist")
   assert.equal(existsSync(migrationPath), true, "Vault token-cache compatibility migration must exist")
   if (!existsSync(helperPath) || !existsSync(migrationPath)) return
@@ -195,4 +195,15 @@ test("QEO-19 KFSP auth uses shared Vault token cache with service-role-only RPCs
   assert.match(migration, /grant execute on function public\.qeo_set_kfsp_provider_token_cache\(text, timestamptz\) to service_role/i)
   assert.match(migration, /from public\.kfsp_provider_tokens/i)
   assert.doesNotMatch(migration, /raise\s+(notice|log|info|warning).*access_token/i)
+})
+
+test("QEO-19 physical KFSP token-table cleanup is minimal and preserves Vault RPCs", () => {
+  const migrationPath = "supabase/migrations/20260902061819_drop_kfsp_provider_tokens.sql"
+  assert.equal(existsSync(migrationPath), true, "KFSP legacy token-table drop migration must exist")
+  if (!existsSync(migrationPath)) return
+
+  const migration = source(migrationPath)
+  assert.match(migration, /drop\s+table\s+if\s+exists\s+public\.kfsp_provider_tokens/i)
+  assert.doesNotMatch(migration, /cascade/i)
+  assert.doesNotMatch(migration, /drop\s+function[\s\S]*qeo_(get|set)_kfsp_provider_token_cache/i)
 })
