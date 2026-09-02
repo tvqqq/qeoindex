@@ -68,13 +68,16 @@ test("v2 chart-series coverage fails closed when any ticker is missing Daily ser
   )
 })
 
-test("chart-series loader batches 100 tickers into at most 10 RPC requests", async () => {
+test("chart-series loader batches 100 tickers into at most 10 grouped RPC requests", async () => {
   const tickers = Array.from({ length: 100 }, (_, index) => `T${String(index + 1).padStart(3, "0")}`)
-  const calls: string[][] = []
+  const calls: Array<{ name: string; tickers: string[] }> = []
   const supabase = {
-    rpc: async (_name: string, args: { p_tickers: string[] }) => {
-      calls.push(args.p_tickers)
-      return { data: completeRows(args.p_tickers), error: null }
+    rpc: async (name: string, args: { p_tickers: string[] }) => {
+      calls.push({ name, tickers: args.p_tickers })
+      return {
+        data: args.p_tickers.map((ticker) => ({ ticker, rows: completeRows([ticker]) })),
+        error: null,
+      }
     },
   } as unknown as SupabaseClient
 
@@ -82,7 +85,8 @@ test("chart-series loader batches 100 tickers into at most 10 RPC requests", asy
 
   assert.equal(rows.length, 100)
   assert.equal(calls.length, 10)
-  assert.ok(calls.every((call) => call.length > 0 && call.length <= 10))
-  assert.deepEqual(calls.flat(), tickers)
+  assert.ok(calls.every((call) => call.name === "qeo_market_ohlcv_recent_grouped"))
+  assert.ok(calls.every((call) => call.tickers.length > 0 && call.tickers.length <= 10))
+  assert.deepEqual(calls.flatMap((call) => call.tickers), tickers)
   assert.ok(rows.every((row) => row.timeframe === "1D"))
 })
