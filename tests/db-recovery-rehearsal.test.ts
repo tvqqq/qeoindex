@@ -4,6 +4,7 @@ import test from "node:test"
 
 const harnessPath = "scripts/db/rehearse-destructive-recovery.sh"
 const recoveryFixture = "qeo_recovery_table_fixture"
+const recoveryColumn = "qeo_recovery_legacy_target"
 
 function source(path: string) {
   assert.equal(existsSync(path), true, `${path} must exist`)
@@ -28,10 +29,10 @@ test("backup validation must precede destructive execution", () => {
   assert.ok(destructive > backupValidation, "destructive rehearsal must occur only after backup validation")
 })
 
-test("synthetic fixture covers a legacy compatibility column and independent table drop", () => {
+test("synthetic fixture covers a compatibility column and independent table drop", () => {
   const seed = source("scripts/db/recovery/seed.sql")
   assert.match(seed, /portfolio_transactions/i)
-  assert.match(seed, /target_price/i)
+  assert.match(seed, new RegExp(recoveryColumn, "i"))
   assert.match(seed, /target_price_1/i)
   assert.match(seed, new RegExp(recoveryFixture, "i"))
   assert.match(seed, /'QEO'/)
@@ -55,18 +56,21 @@ test("baseline captures data, schema, indexes, RLS, policies, privileges and fun
     "pg_get_functiondef must never be evaluated for aggregate/procedure catalog rows",
   )
   assert.match(baseline, /pg_type/i)
+  assert.match(baseline, new RegExp(recoveryColumn, "i"))
   assert.match(baseline, new RegExp(recoveryFixture, "i"))
   assert.doesNotMatch(baseline, /wyckoff_universe_memberships/i)
 })
 
-test("destructive fixture drops the chosen legacy column and synthetic table", () => {
+test("destructive fixture drops the synthetic compatibility column and synthetic table", () => {
   const destructive = source("scripts/db/recovery/destructive.sql")
-  assert.match(destructive, /alter table public\.portfolio_transactions\s+drop column if exists target_price/i)
+  assert.match(destructive, new RegExp(`alter table public\\.portfolio_transactions\\s+drop column if exists ${recoveryColumn}`, "i"))
   assert.match(destructive, /drop table if exists public\.qeo_recovery_table_fixture/i)
+  assert.doesNotMatch(destructive, /drop column if exists target_price\s*;/i)
   assert.doesNotMatch(destructive, /wyckoff_universe_memberships/i)
 
   const destroyed = source("scripts/db/recovery/assert-destroyed.sql")
   assert.match(destroyed, /information_schema\.columns/i)
+  assert.match(destroyed, new RegExp(recoveryColumn, "i"))
   assert.match(destroyed, /to_regclass\('public\.qeo_recovery_table_fixture'\)/i)
   assert.doesNotMatch(destroyed, /wyckoff_universe_memberships/i)
 })
@@ -112,7 +116,7 @@ test("exact app-role ACL is snapshotted before destruction and replayed after pg
 test("restored assertions require the dropped objects and synthetic values to return", () => {
   const restored = source("scripts/db/recovery/assert-restored.sql")
   assert.match(restored, /portfolio_transactions/i)
-  assert.match(restored, /target_price/i)
+  assert.match(restored, new RegExp(recoveryColumn, "i"))
   assert.match(restored, /target_price_1/i)
   assert.match(restored, new RegExp(recoveryFixture, "i"))
   assert.doesNotMatch(restored, /wyckoff_universe_memberships/i)
