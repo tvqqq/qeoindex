@@ -113,3 +113,15 @@ test("QEO-42 HISTORY_REFRESH telemetry keeps bounded provider failures visible",
   assert.match(steps, /limitedCoverageCount:\s*result\.limitedCoverage\.length/)
   assert.match(steps, /errors:\s*result\.errors\.slice\(0,\s*5\)/)
 })
+
+test("QEO-42 recoverable provider failures are current-session only; historical backfill stays fail-closed", () => {
+  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+
+  assert.match(steps, /allowRecoverableFailures\s*=\s*false/)
+  assert.match(steps, /result\.failedTickers > 0 && !allowRecoverableFailures/)
+  assert.match(
+    workflow,
+    /runHistoryRefreshBatchStep\([\s\S]*?startedAtIso,[\s\S]*?history,[\s\S]*?!historicalBackfill[\s\S]*?\)/,
+  )
+})
