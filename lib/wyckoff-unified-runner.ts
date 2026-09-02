@@ -49,23 +49,6 @@ export async function runUnifiedWyckoff({ limit = MAX_BATCH_SIZE, offset = 0 }: 
   })
   if (runError) throw new Error(`Cannot create Wyckoff run: ${runError.message}`)
 
-  const memberships = canonical.stocks.map((stock) => ({
-    universe_key: WYCKOFF_UNIVERSE_KEY,
-    ticker: stock.ticker,
-    exchange: stock.exchange || "",
-    rank: stock.rank,
-    sector: stock.sector || "",
-    market_cap_billion: stock.marketCapBillion,
-    effective_date: canonical.sourceAsOfDate,
-    active: true,
-    source: "canonical_market_universe",
-    synced_at: startedAt,
-  }))
-  const { error: membershipError } = await supabase
-    .from("wyckoff_universe_memberships")
-    .upsert(memberships, { onConflict: "universe_key,ticker,effective_date" })
-  if (membershipError) throw new Error(`Cannot sync Wyckoff universe: ${membershipError.message}`)
-
   const completed: UnifiedWyckoffRunSummary["completed"] = []
   const errors: UnifiedWyckoffRunSummary["errors"] = []
   for (const stock of targets) {
