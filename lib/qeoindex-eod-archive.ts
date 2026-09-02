@@ -15,6 +15,33 @@ export {
 }
 export type { EodArchiveCheckpoint }
 
+type SafeRetentionCleanupResult = {
+  status?: string
+  referenceAt?: string
+  durationMs?: number
+  tables?: Array<{
+    table?: string
+    cutoff?: string
+    deletedRows?: number
+    oldestRetainedAt?: string | null
+    policy?: string
+  }>
+  monitoring?: Record<string, unknown>
+  rawHistoryRetention?: {
+    status?: string
+    table?: string
+    detail?: string
+  }
+}
+
+export type EodRetentionCleanupCheckpoint = EodArchiveCheckpoint & {
+  safeCleanup?: SafeRetentionCleanupResult
+  rawHistoryRetention?: {
+    status: "blocked"
+    detail: string
+  }
+}
+
 /**
  * Daily/Weekly cutover: the active raw read/write contract is Daily-only and Weekly
  * is derived deterministically. Legacy 1H rows remain preserved until cold-archive
@@ -33,27 +60,56 @@ export async function runEodDriveArchive(
 }
 
 /**
- * Raw Daily history is the sole active source for both 1D and derived 1W Wyckoff analysis.
- * It must not be age-pruned until Plan C cold-history coverage can hydrate the model
- * without reducing the minimum 60 completed Weekly bars. Legacy intraday rows are also
- * preserved until archive coverage makes their removal explicitly safe.
+ * QEO-21 separates safe telemetry/staging TTL from raw market-history retention.
+ * The service-role RPC is allowed to prune only bounded terminal telemetry and
+ * orphan staging. It runs even if the Notion/Drive archive checkpoint is partial,
+ * because those checkpoints gate raw-history deletion, not operational telemetry.
+ *
+ * Raw Daily history remains the sole active source for both 1D and derived 1W
+ * Wyckoff analysis and is never age-pruned here. Plan C cold-history hydration and
+ * restore proof is still required before that policy can change.
  */
 export async function runEodRetentionCleanup(
-  _supabase: SupabaseClient,
+  supabase: SupabaseClient,
   input: {
     tradingDate: string
     notionArchive: EodArchiveCheckpoint
     driveArchive: EodArchiveCheckpoint
   },
-): Promise<EodArchiveCheckpoint> {
-  if (input.notionArchive.status !== "archived") {
-    return { status: "blocked", detail: `Retention blocked: Notion archive status=${input.notionArchive.status}` }
+): Promise<EodRetentionCleanupCheckpoint> {
+  const rawHistoryDetail = "Raw Daily OHLCV retention is intentionally disabled until Plan C cold-history hydration/restore is verified; no operational Daily bars were deleted."
+  const referenceAt = new Date(`${input.tradingDate}T23:59:59.999+07:00`).toISOString()
+  const cleanup = await supabase.rpc("qeo_run_safe_retention_cleanup", {
+    p_reference_at: referenceAt,
+  })
+
+  if (cleanup.error) {
+    return {
+      status: "error",
+      detail: `Safe telemetry/staging retention failed: ${cleanup.error.message}. ${rawHistoryDetail}`,
+      rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
+    }
   }
-  if (input.driveArchive.status !== "archived") {
-    return { status: "blocked", detail: `Retention blocked: Drive archive status=${input.driveArchive.status}` }
+
+  const safeCleanup = cleanup.data as SafeRetentionCleanupResult | null
+  if (!safeCleanup || safeCleanup.status !== "succeeded") {
+    return {
+      status: "error",
+      detail: `Safe telemetry/staging retention returned invalid status=${safeCleanup?.status || "missing"}. ${rawHistoryDetail}`,
+      safeCleanup: safeCleanup || undefined,
+      rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
+    }
   }
+
+  const archiveContext = [
+    `Notion archive=${input.notionArchive.status}`,
+    `Drive archive=${input.driveArchive.status}`,
+  ].join(", ")
+
   return {
-    status: "blocked",
-    detail: "Raw Daily OHLCV retention is intentionally disabled until Plan C cold-history coverage is verified; no operational Daily bars were deleted.",
+    status: "archived",
+    detail: `Safe telemetry/staging retention completed (${archiveContext}). ${rawHistoryDetail}`,
+    safeCleanup,
+    rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
   }
 }
