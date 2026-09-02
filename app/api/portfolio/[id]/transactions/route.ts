@@ -19,8 +19,16 @@ function validatePortfolioId(id: string) {
   return UUID_RE.test(id) ? id : null
 }
 
+function parseNullableNumber(value: unknown) {
+  return value != null && Number.isFinite(Number(value)) ? Number(value) : null
+}
+
+function canonicalOrLegacy(body: Record<string, unknown>, canonicalKey: string, legacyKey: string) {
+  return body[canonicalKey] !== undefined ? body[canonicalKey] : body[legacyKey]
+}
+
 const SELECT_FIELDS =
-  "id,portfolio_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,note,tags,setup_tags,mistake_tags,target_price,stop_loss,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3,created_at,updated_at"
+  "id,portfolio_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,note,tags,setup_tags,mistake_tags,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3,created_at,updated_at"
 
 /** GET /api/portfolio/[id]/transactions — list transactions for a portfolio */
 export async function GET(
@@ -34,7 +42,6 @@ export async function GET(
   const portfolioId = validatePortfolioId(id)
   if (!portfolioId) return err("Portfolio ID không hợp lệ.", 400)
 
-  // Verify ownership via RLS
   const { data, error } = await auth.context.supabase
     .from("portfolio_transactions")
     .select(SELECT_FIELDS)
@@ -63,7 +70,6 @@ export async function POST(
   const portfolioId = validatePortfolioId(id)
   if (!portfolioId) return err("Portfolio ID không hợp lệ.", 400)
 
-  // Verify portfolio belongs to user
   const { data: portfolio } = await auth.context.supabase
     .from("portfolios")
     .select("id")
@@ -76,7 +82,6 @@ export async function POST(
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
   if (!body) return err("Request body không hợp lệ.", 400)
 
-  // Support batch import
   if (Array.isArray(body.batch)) {
     const items = body.batch as Record<string, unknown>[]
     if (items.length === 0 || items.length > 100) {
@@ -94,7 +99,9 @@ export async function POST(
       const qty = Number(item.quantity)
       if (!Number.isFinite(qty) || qty <= 0) return err("Khối lượng phải lớn hơn 0.", 400)
       const price = Number(item.price ?? 0)
+      if (!Number.isFinite(price) || price < 0) return err("Giá không hợp lệ.", 400)
       const fee = Number(item.fee ?? 0)
+      if (!Number.isFinite(fee) || fee < 0) return err("Phí không hợp lệ.", 400)
       const date = String(item.transaction_date ?? "")
       if (!DATE_RE.test(date)) return err("Ngày giao dịch không hợp lệ.", 400)
 
@@ -111,6 +118,12 @@ export async function POST(
         tags: Array.isArray(item.tags) ? (item.tags as string[]).slice(0, 10) : [],
         setup_tags: Array.isArray(item.setup_tags) ? (item.setup_tags as string[]).slice(0, 10) : [],
         mistake_tags: Array.isArray(item.mistake_tags) ? (item.mistake_tags as string[]).slice(0, 10) : [],
+        target_price_1: parseNullableNumber(canonicalOrLegacy(item, "target_price_1", "target_price")),
+        target_price_2: parseNullableNumber(item.target_price_2),
+        target_price_3: parseNullableNumber(item.target_price_3),
+        stop_loss_1: parseNullableNumber(canonicalOrLegacy(item, "stop_loss_1", "stop_loss")),
+        stop_loss_2: parseNullableNumber(item.stop_loss_2),
+        stop_loss_3: parseNullableNumber(item.stop_loss_3),
       })
     }
 
@@ -127,7 +140,6 @@ export async function POST(
     return NextResponse.json({ ok: true, count: inserted.length, transactions: inserted }, { status: 201, headers: NO_STORE })
   }
 
-  // Single transaction insert
   const ticker = String(body.ticker ?? "").trim().toUpperCase()
   if (!TICKER_RE.test(ticker)) return err("Mã cổ phiếu không hợp lệ.", 400)
 
@@ -158,15 +170,12 @@ export async function POST(
     return err("Ngày giao dịch không hợp lệ (YYYY-MM-DD).", 400)
   }
 
-  const parseNum = (v: unknown) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null)
-
-  const target_price_1 = parseNum(body.target_price_1 ?? body.target_price)
-  const target_price_2 = parseNum(body.target_price_2)
-  const target_price_3 = parseNum(body.target_price_3)
-
-  const stop_loss_1 = parseNum(body.stop_loss_1 ?? body.stop_loss)
-  const stop_loss_2 = parseNum(body.stop_loss_2)
-  const stop_loss_3 = parseNum(body.stop_loss_3)
+  const target_price_1 = parseNullableNumber(canonicalOrLegacy(body, "target_price_1", "target_price"))
+  const target_price_2 = parseNullableNumber(body.target_price_2)
+  const target_price_3 = parseNullableNumber(body.target_price_3)
+  const stop_loss_1 = parseNullableNumber(canonicalOrLegacy(body, "stop_loss_1", "stop_loss"))
+  const stop_loss_2 = parseNullableNumber(body.stop_loss_2)
+  const stop_loss_3 = parseNullableNumber(body.stop_loss_3)
 
   const note = body.note ? String(body.note).slice(0, 2000) : null
   const tags = Array.isArray(body.tags)
@@ -195,8 +204,6 @@ export async function POST(
       tags,
       setup_tags,
       mistake_tags,
-      target_price: target_price_1,
-      stop_loss: stop_loss_1,
       target_price_1,
       target_price_2,
       target_price_3,

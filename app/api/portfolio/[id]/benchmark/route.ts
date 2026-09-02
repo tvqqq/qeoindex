@@ -20,10 +20,10 @@ export async function GET(
 
   const { id: portfolioId } = await params
 
-  // 1. Fetch transactions for this portfolio
+  // 1. Fetch transactions for this portfolio using canonical risk-management fields only.
   const { data: transactions, error: txErr } = await auth.context.supabase
     .from("portfolio_transactions")
-    .select("id,ticker,action,quantity,price,fee,transaction_date,tags,target_price,stop_loss")
+    .select("id,ticker,action,quantity,price,fee,transaction_date,tags,setup_tags,mistake_tags,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3")
     .eq("portfolio_id", portfolioId)
     .eq("user_id", auth.context.user.id)
     .order("transaction_date", { ascending: true })
@@ -84,7 +84,6 @@ export async function GET(
     const currentVnindex = bar.close
     const vnindexReturnPct = Number((((currentVnindex - baseIndexPrice) / baseIndexPrice) * 100).toFixed(2))
 
-    // Transactions up to this date
     const txsUpToDate = transactions.filter((t) => t.transaction_date <= dateStr) as RawTransaction[]
     const summary = computePortfolioPositions(txsUpToDate)
 
