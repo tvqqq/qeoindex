@@ -47,6 +47,11 @@ test("baseline captures data, schema, indexes, RLS, policies, privileges and fun
   assert.match(baseline, /pg_policies/i)
   assert.match(baseline, /information_schema\.table_privileges/i)
   assert.match(baseline, /pg_proc/i)
+  assert.match(
+    baseline,
+    /case\s+when\s+p\.prokind\s*=\s*'f'\s+then\s+pg_get_functiondef\(p\.oid\)/i,
+    "pg_get_functiondef must never be evaluated for aggregate/procedure catalog rows",
+  )
   assert.match(baseline, /pg_type/i)
 })
 
