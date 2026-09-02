@@ -40,6 +40,7 @@ type SafeRetentionCleanupResult = RetentionCleanupResult & {
 export type EodRetentionCleanupCheckpoint = EodArchiveCheckpoint & {
   safeCleanup?: SafeRetentionCleanupResult
   jobTelemetryCleanup?: RetentionCleanupResult
+  buildArtifactCleanup?: RetentionCleanupResult
   rawHistoryRetention?: {
     status: "blocked"
     detail: string
@@ -68,6 +69,8 @@ export async function runEodDriveArchive(
  * QEO-29 tightens only execution telemetry: detailed phases are kept for one day
  * and terminal run summaries for seven days. Active queued/running lifecycles are
  * preserved by the database RPC.
+ * QEO-39 keeps large Wyckoff build payloads out of durable Workflow state using
+ * run-scoped artifacts and removes only terminal artifacts older than one day.
  *
  * Raw Daily history remains the sole active source for both 1D and derived 1W
  * Wyckoff analysis and is never age-pruned here. Plan C cold-history hydration and
@@ -128,6 +131,31 @@ export async function runEodRetentionCleanup(
     }
   }
 
+  const artifactCleanup = await supabase.rpc("qeo_run_wyckoff_build_artifact_cleanup", {
+    p_reference_at: referenceAt,
+  })
+  if (artifactCleanup.error) {
+    return {
+      status: "error",
+      detail: `Wyckoff build-artifact retention failed: ${artifactCleanup.error.message}. ${rawHistoryDetail}`,
+      safeCleanup,
+      jobTelemetryCleanup,
+      rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
+    }
+  }
+
+  const buildArtifactCleanup = artifactCleanup.data as RetentionCleanupResult | null
+  if (!buildArtifactCleanup || buildArtifactCleanup.status !== "succeeded") {
+    return {
+      status: "error",
+      detail: `Wyckoff build-artifact retention returned invalid status=${buildArtifactCleanup?.status || "missing"}. ${rawHistoryDetail}`,
+      safeCleanup,
+      jobTelemetryCleanup,
+      buildArtifactCleanup: buildArtifactCleanup || undefined,
+      rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
+    }
+  }
+
   const archiveContext = [
     `Notion archive=${input.notionArchive.status}`,
     `Drive archive=${input.driveArchive.status}`,
@@ -135,9 +163,10 @@ export async function runEodRetentionCleanup(
 
   return {
     status: "archived",
-    detail: `Safe telemetry/staging retention and bounded job telemetry retention completed (${archiveContext}). ${rawHistoryDetail}`,
+    detail: `Safe telemetry/staging retention, bounded job telemetry retention, and terminal Wyckoff build-artifact retention completed (${archiveContext}). ${rawHistoryDetail}`,
     safeCleanup,
     jobTelemetryCleanup,
+    buildArtifactCleanup,
     rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
   }
 }
