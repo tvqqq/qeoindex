@@ -65,6 +65,20 @@ test("destructive fixture drops the chosen legacy column and bridge table", () =
   assert.match(destroyed, /to_regclass\('public\.wyckoff_universe_memberships'\)/i)
 })
 
+test("restore bootstraps a placeholder relation before pg_restore clean phase", () => {
+  const harness = source(harnessPath)
+  const bootstrap = harness.indexOf("restore bootstrap")
+  const restore = harness.indexOf("phase \"restore\"")
+
+  assert.ok(bootstrap >= 0, "restore bootstrap phase must exist")
+  assert.ok(restore > bootstrap, "restore bootstrap must run before pg_restore")
+  assert.match(
+    harness,
+    /create table public\.wyckoff_universe_memberships\s*\(\s*__qeo_restore_stub boolean\s*\)/i,
+    "fully dropped table needs a minimal placeholder so pg_restore --clean can drop policies safely",
+  )
+})
+
 test("restored assertions require the dropped objects and synthetic values to return", () => {
   const restored = source("scripts/db/recovery/assert-restored.sql")
   assert.match(restored, /portfolio_transactions/i)
