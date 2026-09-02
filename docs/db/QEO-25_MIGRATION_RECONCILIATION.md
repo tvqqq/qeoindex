@@ -53,6 +53,14 @@ pnpm db:drift:verify
 
 ## Reconciled special cases
 
+### Clean rebuild ordering
+
+Production ledger version: `20260901144121_clean_rebuild_top_stocks_200`.
+
+A clean local replay proved this one-shot migration depends on objects created later by `20260901190000_wyckoff_daily_weekly_storage_cutover`, including `market_ohlcv_bootstrap_state` and the timeframe constraints it validates. The production migration had already executed historically, so production history must not be rewritten or replayed.
+
+The repository replay filename is therefore `20260901193000_clean_rebuild_top_stocks_200.sql`, explicitly mapped to production version `20260901144121`. This preserves production history while making a from-zero repository replay deterministic and dependency-correct.
+
 ### Clean-rebuild market snapshot trigger
 
 Production ledger version: `20260902011529_clean_rebuild_market_snapshot_trigger`.
@@ -88,6 +96,10 @@ Verified production schema contract:
 - `service_role` can select it.
 
 QEO-25 therefore moves the source migration to the exact production version `20260902020424` and removes the stale pending copy. This is source-history reconciliation, not a new production migration rollout. Do not reapply it.
+
+### Market logo provenance concurrent migration
+
+During QEO-25 review, `20260902024536_market_logo_provenance` landed on `main`. The fail-closed verifier correctly rejected the stale branch evidence until production was checked. Read-only production verification confirmed the same version in the migration ledger and `public.market_logo_provenance` exists. The branch then refreshed its ledger evidence and synced the exact migration file; no exception was added.
 
 ## CI handoff
 
