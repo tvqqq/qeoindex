@@ -1,9 +1,16 @@
 import assert from "node:assert/strict"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+}
+
+function qeo21RetentionMigration() {
+  const migrationsDir = new URL("../supabase/migrations/", import.meta.url)
+  const matches = readdirSync(migrationsDir).filter((name) => name.endsWith("_qeo21_safe_retention_cleanup.sql"))
+  assert.equal(matches.length, 1, "expected exactly one QEO-21 safe retention migration")
+  return source(`supabase/migrations/${matches[0]}`)
 }
 
 test("EOD v3 publishes validated Wyckoff to Supabase before Council and archives", () => {
@@ -104,14 +111,44 @@ test("admin EOD phase catalog exposes v3 order and dynamic Top Stocks descriptio
   assert.match(code, /1D\/1W/)
 })
 
-test("retention is fail-closed behind completed Notion and Drive archive checkpoints", () => {
-  const path = "lib/qeoindex-eod-archive.ts"
-  assert.equal(existsSync(new URL(`../${path}`, import.meta.url)), true)
-  if (!existsSync(new URL(`../${path}`, import.meta.url))) return
-  const code = source(path)
-  assert.match(code, /runEodRetentionCleanup/)
-  assert.match(code, /notionArchive.*archived|Notion archive/i)
-  assert.match(code, /driveArchive.*archived|Drive archive/i)
-  assert.match(code, /blocked/i)
-  assert.doesNotMatch(code, /delete\(/i)
+test("QEO-21 runs safe telemetry retention independently while raw OHLCV age-pruning stays disabled", () => {
+  const active = source("lib/qeoindex-eod-archive.ts")
+  const sql = qeo21RetentionMigration()
+
+  assert.match(active, /rpc\("qeo_run_safe_retention_cleanup"/)
+  assert.match(active, /Raw Daily OHLCV retention is intentionally disabled/i)
+  assert.doesNotMatch(active, /\.from\("market_ohlcv_history"\).*\.delete\(/s)
+  assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
+  assert.doesNotMatch(sql, /truncate\s+(table\s+)?public\.market_ohlcv_history/i)
+})
+
+test("QEO-21 uses schema-correct AI Council TTL columns and preserves in-flight LLM work", () => {
+  const sql = qeo21RetentionMigration()
+
+  assert.match(sql, /delete\s+from\s+public\.ai_council_llm_evidence[\s\S]*?captured_at\s*</i)
+  assert.match(sql, /delete\s+from\s+public\.ai_council_llm_research_contexts[\s\S]*?captured_at\s*</i)
+  assert.match(sql, /delete\s+from\s+public\.ai_council_llm_debates[\s\S]*?created_at\s*</i)
+  assert.match(sql, /status\s+in\s*\(\s*'completed'\s*,\s*'partial'\s*,\s*'failed'\s*\)/i)
+  assert.match(sql, /status\s*=\s*'pending'/i)
+})
+
+test("QEO-21 only prunes terminal orphan parents when cascades could remove canonical evidence", () => {
+  const sql = qeo21RetentionMigration()
+
+  assert.match(sql, /delete\s+from\s+public\.wyckoff_scan_runs[\s\S]*?not exists[\s\S]*?wyckoff_analysis_snapshots[\s\S]*?not exists[\s\S]*?wyckoff_chart_series/i)
+  assert.match(sql, /delete\s+from\s+public\.ai_council_runs[\s\S]*?not exists[\s\S]*?ai_council_outcomes[\s\S]*?not exists[\s\S]*?ai_council_confirmations[\s\S]*?not exists[\s\S]*?ai_council_votes/i)
+  assert.match(sql, /delete\s+from\s+public\.system_job_runs[\s\S]*?status\s+in\s*\(\s*'succeeded'\s*,\s*'failed'\s*,\s*'skipped'\s*\)/i)
+})
+
+test("QEO-21 cleans terminal staging and reports idempotency-friendly per-table metrics", () => {
+  const sql = qeo21RetentionMigration()
+
+  assert.match(sql, /delete\s+from\s+public\.kfsp_rating_staging/i)
+  assert.match(sql, /delete\s+from\s+public\.market_insight_snapshot_staging/i)
+  assert.match(sql, /deletedRows/i)
+  assert.match(sql, /oldestRetainedAt/i)
+  assert.match(sql, /cutoff/i)
+  assert.match(sql, /durationMs/i)
+  assert.match(sql, /kfsp_rating_raw_evidence[\s\S]*?expires_at\s*</i)
+  assert.doesNotMatch(sql, /delete\s+from\s+public\.kfsp_rating_raw_evidence/i)
 })
