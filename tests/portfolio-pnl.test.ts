@@ -137,7 +137,7 @@ test('QEO-20 active runtime stops depending on legacy compatibility DB columns',
 })
 
 test('QEO-20 migration is fail-closed, rewrites lease RPCs, and drops exactly approved compatibility columns', () => {
-  const filename = '20260902130000_qeo20_compatibility_columns_cleanup.sql'
+  const filename = '20260902134500_qeo20_compatibility_columns_cleanup.sql'
   const candidates = [
     resolve('supabase/migrations', filename),
     resolve('supabase/pending-migrations', filename),
