@@ -1,8 +1,11 @@
 begin;
 
 -- QEO-39 follow-up: keep each PostgREST response below the API row cap by
--- returning one grouped JSON result row per requested ticker while preserving
--- the same bounded per-ticker Daily history and indexed LATERAL lookup.
+-- returning one grouped result row per requested ticker. Nested Daily bars use
+-- compact positional arrays to avoid repeating JSON keys/ticker/timeframe for
+-- every bar while preserving the same bounded history and indexed LATERAL read.
+-- Tuple order:
+-- [bar_time, open, high, low, close, volume, provider, provider_detail, source_url, fetched_at]
 create or replace function public.qeo_market_ohlcv_recent_grouped(
   p_tickers text[],
   p_limit integer default 260
@@ -25,28 +28,24 @@ as $$
     q.ticker,
     coalesce(
       jsonb_agg(
-        jsonb_build_object(
-          'ticker', h.ticker,
-          'timeframe', h.timeframe,
-          'bar_time', h.bar_time,
-          'open', h.open,
-          'high', h.high,
-          'low', h.low,
-          'close', h.close,
-          'volume', h.volume,
-          'provider', h.provider,
-          'provider_detail', h.provider_detail,
-          'source_url', h.source_url,
-          'fetched_at', h.fetched_at
+        jsonb_build_array(
+          h.bar_time,
+          h.open,
+          h.high,
+          h.low,
+          h.close,
+          h.volume,
+          h.provider,
+          h.provider_detail,
+          h.source_url,
+          h.fetched_at
         ) order by h.bar_time
-      ) filter (where h.ticker is not null),
+      ) filter (where h.bar_time is not null),
       '[]'::jsonb
     ) as rows
   from requested q
   left join lateral (
     select
-      source.ticker,
-      source.timeframe,
       source.bar_time,
       source.open,
       source.high,
