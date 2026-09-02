@@ -201,7 +201,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       runId,
       ready.stocks,
       ready.runKey,
-      build.snapshots,
+      ready.scanDate,
       build.validationHash,
     )
     if (validation.snapshotCount !== expectedSnapshots) throw new Error(`SUPABASE_VALIDATE completed ${validation.snapshotCount}/${expectedSnapshots} snapshots`)
@@ -210,7 +210,6 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       runId,
       ready.runKey,
       ready.scanDate,
-      build.snapshots,
       validation.validationHash,
     )
     const published = publish.status === "published"
@@ -265,13 +264,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       marketCloseStatus: marketClose.status,
       history,
       noTradeRepair,
-      build: {
-        total: build.total,
-        complete: build.complete,
-        incomplete: build.incomplete,
-        validationHash: build.validationHash,
-        providers: build.providers,
-      },
+      build,
       validation,
       publishStatus: publish.status,
       deterministicStatus: deterministic.status,
