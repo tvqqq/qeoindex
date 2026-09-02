@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 const insightsSource = readFileSync("lib/insights-data.ts", "utf8")
-const migrationPath = "supabase/pending-migrations/20260902090000_kfsp_rating_storage_refactor.sql"
-const activeMigrationPath = "supabase/migrations/20260902090000_kfsp_rating_storage_refactor.sql"
+const migrationPath = "supabase/migrations/20260902020424_kfsp_rating_storage_refactor.sql"
+const stalePendingPath = "supabase/pending-migrations/20260902090000_kfsp_rating_storage_refactor.sql"
 
 const runtimeRatingReaders = [
   "lib/insights-data.ts",
@@ -34,9 +34,9 @@ function ratingSelectFragments(source: string) {
   return fragments
 }
 
-test("destructive rating contraction remains quarantined until QEO-26 restore gate passes", () => {
-  assert.equal(existsSync(activeMigrationPath), false)
+test("production-applied rating contraction is active under the production ledger version", () => {
   assert.equal(existsSync(migrationPath), true)
+  assert.equal(existsSync(stalePendingPath), false)
 })
 
 test("Insights runtime no longer reads duplicate industry_group", () => {
