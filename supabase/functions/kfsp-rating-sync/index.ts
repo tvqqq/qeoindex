@@ -7,6 +7,7 @@ import {
   KFSP_GROUPS,
   type KfspGroupKey,
 } from "../_shared/kfsp-catalog.ts"
+import { getKfspProviderToken } from "../_shared/kfsp-provider-auth.ts"
 import {
   beginManualKfspLifecycle,
   finalizeManualKfspLifecycle,
@@ -22,11 +23,11 @@ type MetricGroups = Record<KfspGroupKey, Record<string, JsonValue>> & {
 }
 
 const PROVIDER_TIMEOUT_MS = 8_000
-const TOKEN_EXPIRY_SKEW_MS = 5 * 60 * 1_000
 const FILTER_URL = Deno.env.get("KFSP_FILTER_URL") || "https://api2.kfsp.vn/api/filter"
 const SUPPLEMENTAL_URL = Deno.env.get("KFSP_SUPPLEMENTAL_URL") || "https://api2.kfsp.vn/api/watchlist/canslim-fourm/by-mack"
 const LOGIN_URL = Deno.env.get("KFSP_LOGIN_URL") || "https://api.kfsp.vn/api/login"
 const CANDIDATE_RETENTION_DAYS = 14
+const KFSP_AUTH_OPTIONS = { loginUrl: LOGIN_URL, timeoutMs: PROVIDER_TIMEOUT_MS, persistLogin: false } as const
 
 function jsonResponse(body: JsonObject, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } })
@@ -54,59 +55,10 @@ function constantTimeEqual(left: string, right: string) {
   return mismatch === 0
 }
 
-function decodeTokenExpiry(token: string): Date | null {
-  try {
-    const payload = token.split(".")[1]
-    if (!payload) return null
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(payload.length / 4) * 4, "=")
-    const parsed = JSON.parse(atob(normalized))
-    return Number.isFinite(Number(parsed.exp)) ? new Date(Number(parsed.exp) * 1_000) : null
-  } catch { return null }
-}
-
-function extractToken(payload: unknown): string | null {
-  const root = asObject(payload)
-  const data = asObject(root?.data)
-  const candidates = [root?.token, root?.access_token, data?.token, data?.access_token]
-  const token = candidates.find((value) => typeof value === "string" && value.split(".").length === 3)
-  return typeof token === "string" ? token : null
-}
-
 async function fetchJson(url: string, init: RequestInit) {
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) })
   const payload = await response.json().catch(() => null)
   return { response, payload }
-}
-
-async function loginAndCacheToken(supabase: SupabaseClient) {
-  const username = Deno.env.get("KFSP_USERNAME") || ""
-  const password = Deno.env.get("KFSP_PASSWORD") || ""
-  if (!username || !password) throw new Error("KFSP_CREDENTIALS_MISSING")
-  const { response, payload } = await fetchJson(LOGIN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ username, password, persist_login: false }),
-  })
-  if (!response.ok) throw new Error(`KFSP_LOGIN_HTTP_${response.status}`)
-  const token = extractToken(payload)
-  const expiresAt = token ? decodeTokenExpiry(token) : null
-  if (!token || !expiresAt) throw new Error("KFSP_LOGIN_TOKEN_INVALID")
-  const cache = await supabase.from("kfsp_provider_tokens").upsert({
-    provider: "kfsp", access_token: token, expires_at: expiresAt.toISOString(), refreshed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-  }, { onConflict: "provider" })
-  if (cache.error) throw new Error("KFSP_TOKEN_CACHE_WRITE_FAILED")
-  return token
-}
-
-async function getProviderToken(supabase: SupabaseClient, forceRefresh = false) {
-  if (!forceRefresh) {
-    const cached = await supabase.from("kfsp_provider_tokens").select("access_token,expires_at").eq("provider", "kfsp").maybeSingle()
-    if (!cached.error && cached.data?.access_token && cached.data.expires_at) {
-      const expiry = new Date(cached.data.expires_at).getTime()
-      if (Number.isFinite(expiry) && expiry - Date.now() > TOKEN_EXPIRY_SKEW_MS) return { token: String(cached.data.access_token), refreshed: false }
-    }
-  }
-  return { token: await loginAndCacheToken(supabase), refreshed: true }
 }
 
 async function fetchFilterPayload(token: string) {
@@ -330,11 +282,11 @@ Deno.serve(async (req: Request) => {
     }
 
     const canonicalTickers = await loadCanonicalTickers(supabase)
-    let auth = await getProviderToken(supabase)
+    let auth = await getKfspProviderToken(supabase, KFSP_AUTH_OPTIONS)
     tokenRefreshed = auth.refreshed
     let filter = await fetchFilterPayload(auth.token)
     if (filter.response.status === 401 || filter.response.status === 403) {
-      auth = await getProviderToken(supabase, true)
+      auth = await getKfspProviderToken(supabase, KFSP_AUTH_OPTIONS, true)
       tokenRefreshed = true
       filter = await fetchFilterPayload(auth.token)
     }
