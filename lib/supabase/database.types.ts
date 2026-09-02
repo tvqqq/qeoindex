@@ -2993,6 +2993,13 @@ export type Database = {
           volume: number
         }[]
       }
+      qeo_market_ohlcv_recent_grouped: {
+        Args: { p_limit?: number; p_tickers: string[] }
+        Returns: {
+          rows: Json
+          ticker: string
+        }[]
+      }
       qeo_prune_noncanonical_orderbook_snapshots: {
         Args: { p_run_id: string }
         Returns: number
