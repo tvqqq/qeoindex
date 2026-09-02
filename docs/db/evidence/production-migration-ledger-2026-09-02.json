@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-02T06:46:00Z",
+  "capturedAt": "2026-09-02T10:17:00Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
   "migrations": [
     {"version":"20260818","name":"orderbook_snapshots"},
@@ -78,6 +78,7 @@
     {"version":"20260902052909","name":"kfsp_vault_token_cache"},
     {"version":"20260902061549","name":"qeo21_safe_retention_cleanup"},
     {"version":"20260902061819","name":"drop_kfsp_provider_tokens"},
-    {"version":"20260902064458","name":"qeo20_compatibility_columns_cleanup"}
+    {"version":"20260902064458","name":"qeo20_compatibility_columns_cleanup"},
+    {"version":"20260902101642","name":"qeo29_job_telemetry_retention"}
   ]
 }

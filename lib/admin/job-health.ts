@@ -35,6 +35,13 @@ export interface LatestRunSnapshot {
   finishedAt?: string | null
 }
 
+const JOB_HISTORY_RETENTION_DAYS = 7
+const SYSTEM_JOB_RUN_COLUMNS = "id,job_key,provider,trigger,status,actor_user_id,started_at,finished_at,duration_ms,summary,error_code,error_message,created_at"
+
+function getJobHistoryCutoff(now: Date = new Date()) {
+  return new Date(now.getTime() - JOB_HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString()
+}
+
 async function getSupabase() {
   const { getSupabaseServerClient } = await import("../supabase/server.ts")
   return getSupabaseServerClient()
@@ -147,6 +154,7 @@ export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; c
     return buildAdminJobViews(EFFECTIVE_ADMIN_JOB_CATALOG, [])
   }
 
+  const historyCutoff = getJobHistoryCutoff()
   const rawEvidence: RawEvidenceSnapshot = {
     systemJobRuns: [],
     cronSnapshots: [],
@@ -160,7 +168,8 @@ export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; c
   const [runsResult, cronResult, ratingResult, ttaiResult, orderbookResult, aiUsageResult] = await Promise.allSettled([
     supabase
       .from("system_job_runs")
-      .select("*")
+      .select(SYSTEM_JOB_RUN_COLUMNS)
+      .gte("started_at", historyCutoff)
       .order("created_at", { ascending: false })
       .order("started_at", { ascending: false })
       .limit(150),
@@ -227,11 +236,13 @@ export async function loadAdminJobHistory(jobKey?: string, limit = 50): Promise<
   if (!supabase) return []
 
   const maxLimit = Math.min(200, Math.max(1, limit))
+  const historyCutoff = getJobHistoryCutoff()
 
   try {
     let query = supabase
       .from("system_job_runs")
-      .select("*")
+      .select(SYSTEM_JOB_RUN_COLUMNS)
+      .gte("started_at", historyCutoff)
       .order("created_at", { ascending: false })
       .order("started_at", { ascending: false })
       .limit(maxLimit)
