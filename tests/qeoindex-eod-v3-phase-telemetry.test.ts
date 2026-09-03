@@ -14,12 +14,11 @@ const expected = [
   "AI_COUNCIL_LLM",
   "MARKET_SYNTHESIS",
   "NOTION_ARCHIVE",
-  "DRIVE_ARCHIVE",
   "RETENTION_CLEANUP",
   "COMPLETE",
 ]
 
-test("EOD v3 admin telemetry exposes the Supabase-first phase order", () => {
+test("EOD v3 admin telemetry exposes the Supabase-first phase order without Drive archive", () => {
   assert.deepEqual(QEOINDEX_EOD_PHASES.map((phase) => phase.key), expected)
   assert.deepEqual(QEOINDEX_EOD_PHASES.map((phase) => phase.order), expected.map((_, index) => index + 1))
 })
