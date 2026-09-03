@@ -95,6 +95,8 @@ export async function runEodRetentionCleanup(
   input: {
     tradingDate: string
     notionArchive: EodArchiveCheckpoint
+    /** @deprecated Legacy compatibility only. Ignored by active retention logic. */
+    driveArchive?: EodArchiveCheckpoint
   },
 ): Promise<EodRetentionCleanupCheckpoint> {
   const rawHistoryDetail = "Raw Daily OHLCV retention is intentionally disabled until an independently verified cold-backup hydration/restore design exists; no operational Daily bars were deleted."
