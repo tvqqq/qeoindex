@@ -48,13 +48,9 @@ export type EodRetentionCleanupCheckpoint = EodArchiveCheckpoint & {
 }
 
 /**
- * Daily/Weekly cutover: the active raw read/write contract is Daily-only and Weekly
- * is derived deterministically. Legacy 1H rows remain preserved until cold-archive
- * coverage is verified. The proven Google Drive/auth/manifest uploader is reused.
- *
- * Drive is a downstream archive boundary. Provider/auth/storage rejection must stay
- * visible as a degraded checkpoint, but must not escape as a Workflow retry/fatal;
- * raw Supabase history remains retained until archive coverage is actually proven.
+ * Legacy cold-archive adapter retained only for compatibility/recovery code paths.
+ * The active QeoIndex EOD workflow no longer calls Google Drive. Raw Daily history
+ * stays in Supabase until a separately verified cold-history/restore plan exists.
  */
 export async function runEodDriveArchive(
   supabase: SupabaseClient,
@@ -95,7 +91,7 @@ export async function runEodRetentionCleanup(
   input: {
     tradingDate: string
     notionArchive: EodArchiveCheckpoint
-    driveArchive: EodArchiveCheckpoint
+    driveArchive?: EodArchiveCheckpoint
   },
 ): Promise<EodRetentionCleanupCheckpoint> {
   const rawHistoryDetail = "Raw Daily OHLCV retention is intentionally disabled until Plan C cold-history hydration/restore is verified; no operational Daily bars were deleted."
@@ -140,7 +136,7 @@ export async function runEodRetentionCleanup(
       status: "error",
       detail: `Job telemetry retention returned invalid status=${jobTelemetryCleanup?.status || "missing"}. ${rawHistoryDetail}`,
       safeCleanup,
-      jobTelemetryCleanup: jobTelemetryCleanup || undefined,
+      jobTelemetryCleanup,
       rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
     }
   }
@@ -165,19 +161,14 @@ export async function runEodRetentionCleanup(
       detail: `Wyckoff build-artifact retention returned invalid status=${buildArtifactCleanup?.status || "missing"}. ${rawHistoryDetail}`,
       safeCleanup,
       jobTelemetryCleanup,
-      buildArtifactCleanup: buildArtifactCleanup || undefined,
+      buildArtifactCleanup,
       rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
     }
   }
 
-  const archiveContext = [
-    `Notion archive=${input.notionArchive.status}`,
-    `Drive archive=${input.driveArchive.status}`,
-  ].join(", ")
-
   return {
     status: "archived",
-    detail: `Safe telemetry/staging retention, bounded job telemetry retention, and terminal Wyckoff build-artifact retention completed (${archiveContext}). ${rawHistoryDetail}`,
+    detail: `Safe telemetry/staging retention, bounded job telemetry retention, and terminal Wyckoff build-artifact retention completed (Notion archive=${input.notionArchive.status}). ${rawHistoryDetail}`,
     safeCleanup,
     jobTelemetryCleanup,
     buildArtifactCleanup,
