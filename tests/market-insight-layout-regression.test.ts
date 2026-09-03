@@ -5,7 +5,7 @@ import path from "node:path"
 
 const read = (relativePath: string) => fs.readFileSync(path.resolve(relativePath), "utf8")
 
-test("market index cards live inside the market-intelligence panel as a compact strip", () => {
+test("market index cards live inside the market-intelligence panel as a compact 2x2 grid", () => {
   const dashboard = read("components/insights/market-close-dashboard.tsx")
   const intelligenceHeading = dashboard.indexOf("Nhịp đập thị trường & Sức khoẻ thị trường")
   const indexStrip = dashboard.indexOf("data-market-index-strip")
@@ -13,14 +13,15 @@ test("market index cards live inside the market-intelligence panel as a compact 
   const topLevelPanelCall = dashboard.indexOf("<MarketIntelligencePanel")
 
   assert.ok(intelligenceHeading >= 0, "market-intelligence heading must exist")
-  assert.ok(indexStrip > intelligenceHeading, "compact index strip must render below the market-intelligence heading")
-  assert.ok(indexStrip > intelligencePanel, "index strip must be owned by MarketIntelligencePanel")
+  assert.ok(indexStrip > intelligenceHeading, "compact index grid must render below the market-intelligence heading")
+  assert.ok(indexStrip > intelligencePanel, "index grid must be owned by MarketIntelligencePanel")
   assert.doesNotMatch(
     dashboard.slice(0, topLevelPanelCall),
     /indexes\.map\(\(item\) => <IndexTile/,
     "major indexes must no longer render above the market-intelligence panel",
   )
-  assert.match(dashboard, /data-market-index-strip[^>]*className="[^"]*grid-cols-2[^"]*xl:grid-cols-4/)
+  assert.match(dashboard, /data-market-index-strip[^>]*className="[^"]*grid-cols-2/)
+  assert.doesNotMatch(dashboard, /data-market-index-strip[^>]*xl:grid-cols-4/, "right-side index workspace must remain a 2x2 grid")
 })
 
 test("market intelligence uses a compact 35/65 pulse-to-index workspace", () => {
