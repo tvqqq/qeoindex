@@ -1,14 +1,14 @@
 # QeoIndex — Final Cron Workflow: Top Stocks 200
 
-Last updated: 2026-09-01  
+Last updated: 2026-09-03  
 Canonical universe: `vn_top_stocks`  
 Operational architecture: Supabase-first EOD v3
 
 ## 1. Purpose
 
-This document is the production runbook for the canonical Top Stocks universe, market-data collection, Wyckoff EOD build, AI Council, post-analysis archive, and retention controls.
+This document is the production runbook for the canonical Top Stocks universe, market-data collection, Wyckoff EOD build, AI Council, post-analysis Notion archive, and safe retention controls.
 
-The production contract is intentionally fail-closed. Supabase is the operational source of truth. Notion and Google Drive are downstream archive/audit systems and must never gate or rewrite already-published operational evidence.
+The production contract is fail-closed. Supabase is the operational source of truth. Notion is downstream analytical/audit storage and must never gate or rewrite already-published operational evidence. Google Drive is no longer part of the active daily EOD workflow.
 
 ## 2. Canonical Top Stocks universe
 
@@ -54,7 +54,7 @@ Supabase `pg_cron` is the scheduler owner for market/universe/EOD jobs.
 
 The two five-minute jobs call the same `orderbook-sync` Edge Function. They are separate physical schedules only because the Vietnamese trading day has a lunch break. No provider HTTP request is dispatched between 11:30 and 13:00.
 
-There are no independent production pg_cron jobs for Wyckoff ingest, AI Council deterministic, AI Council LLM, or Notion ingestion. Those are dependency phases inside the one EOD workflow.
+There are no independent production pg_cron jobs for Wyckoff ingest, AI Council deterministic, AI Council LLM, Notion ingestion, or Drive backup. Those first four are dependency phases inside the one EOD workflow; Drive backup is not active.
 
 Legacy Vercel EOD cron paths are not scheduled:
 
@@ -83,7 +83,7 @@ A failed run never replaces the current published snapshot.
 
 ## 5. EOD v3 dependency workflow
 
-The single parent job is `qeoindex.eod_pipeline`. Its operational phase order is:
+The single parent job is `qeoindex.eod_pipeline`. Its active telemetry phase order is:
 
 1. `EOD_READY`
 2. `MARKET_CLOSE_COLLECT`
@@ -95,11 +95,10 @@ The single parent job is `qeoindex.eod_pipeline`. Its operational phase order is
 8. `AI_COUNCIL_LLM`
 9. `MARKET_SYNTHESIS`
 10. `NOTION_ARCHIVE`
-11. `DRIVE_ARCHIVE`
-12. `RETENTION_CLEANUP`
-13. `COMPLETE`
+11. `RETENTION_CLEANUP`
+12. `COMPLETE`
 
-The verified no-trade Daily repair is a helper inside the history/build path rather than an independent scheduler phase.
+The exact-session Daily repair gate runs between `HISTORY_REFRESH` and `WYCKOFF_BUILD`; its historical function name references no-trade repair, but the active implementation can also repair verified traded final-session bars.
 
 ### 5.1 EOD_READY
 
@@ -111,9 +110,7 @@ Fail-closed readiness requires:
 - every canonical ticker has a sufficiently fresh final market snapshot;
 - canonical Wyckoff selection matches canonical universe membership exactly.
 
-Run key format:
-
-`WYCKOFF-YYYY-MM-DD-EOD-v3`
+Run key format: `WYCKOFF-YYYY-MM-DD-EOD-v3`.
 
 Readiness is retried up to four attempts at bounded five-minute intervals when the upstream EOD state is not ready.
 
@@ -121,37 +118,34 @@ Readiness is retried up to four attempts at bounded five-minute intervals when t
 
 This phase calls the dedicated market-close collector using a dedicated secret obtained through the service-role/Vault boundary.
 
-Transient failures are retried at +5 and +10 minutes, for a maximum of three attempts. Retryable classes include network/socket timeout, HTTP 408/429/5xx, provider readiness, and temporary validation/coverage failures.
+Transient failures are retried at +5 and +10 minutes, for a maximum of three attempts. Credential/auth failures are terminal and are not retried.
 
-Credential/auth failures are terminal and are not retried.
+### 5.3 HISTORY_REFRESH + exact-session repair
 
-### 5.3 HISTORY_REFRESH
+Persistent OHLCV is refreshed in durable batches of at most 10 tickers. The active persistent contract is **Daily-only**.
 
-Persistent OHLCV is refreshed in durable batches of at most 10 tickers.
+Provider refresh accounting may include bounded recoverable provider failures for the current session, but the following exact-session Daily gate still fails closed unless current-session coverage can be verified/repaired from final market-close snapshots.
 
-The phase requires the completed ticker count to equal the canonical universe count. Provider/runtime errors stop the operational pipeline rather than being mislabeled as incomplete analysis.
+Raw Weekly OHLCV is not stored; `1W` is derived deterministically from Daily history.
 
 ### 5.4 WYCKOFF_BUILD
 
-For every canonical ticker, the system builds five timeframes:
+For every canonical ticker, the system builds exactly two active timeframes:
 
-- `1H`
-- `4H`
 - `1D`
 - `1W`
-- `1M`
 
 Expected snapshot count is dynamic:
 
-`universe_count × 5`
+`universe_count × 2`
 
-For a full 200-stock universe this is 1,000 snapshots.
+For a full 200-stock universe this is 400 snapshots.
 
 ### 5.5 SUPABASE_VALIDATE
 
-Validation occurs before any operational publication. It verifies:
+Validation occurs before operational publication. It verifies:
 
-- snapshot count equals `universe_count × 5`;
+- snapshot count equals `universe_count × 2`;
 - exact canonical ticker membership;
 - supported exchanges;
 - deterministic validation hash;
@@ -160,38 +154,19 @@ Validation occurs before any operational publication. It verifies:
 
 ### 5.6 SUPABASE_PUBLISH
 
-Validated in-memory Wyckoff snapshots are published directly to Supabase by the direct publisher. Notion is not read during this phase.
+Validated Wyckoff artifacts are published directly to Supabase. Notion is not read during this phase.
 
-Publication writes/verifies:
-
-- `wyckoff_scan_runs`
-- `wyckoff_universe_memberships`
-- `wyckoff_analysis_snapshots`
-- `wyckoff_chart_series`
-
-Chart-series coverage is exactly two operational read models per canonical ticker:
-
-- `1H`
-- `1D`
-
-A full 200-stock universe therefore requires 400 fresh chart-series identities before the Wyckoff run can be marked `published`.
+Publication writes/verifies active Wyckoff run/snapshot/chart-series state. The chart read model is based on raw Daily series; Weekly structure is derived from Daily.
 
 ### 5.7 AI_COUNCIL_DETERMINISTIC
 
-The deterministic Council consumes the exact current canonical membership. It does not hard-code 100 or 200 as the expected stock count; the current published universe count is authoritative.
+The deterministic Council consumes the exact current canonical membership. Current published universe count is authoritative.
 
-Freshness gate verifies:
-
-- exact canonical membership, including no missing and no unexpected ticker;
-- same-session market evidence;
-- same-session or verified no-trade carry-forward Wyckoff `1D` evidence;
-- same-session VNINDEX benchmark.
-
-Deterministic output remains the final authority.
+Freshness verifies exact canonical membership, same-session market evidence, final Daily/Wyckoff evidence, and same-session VNINDEX benchmark. Deterministic output remains the final authority.
 
 ### 5.8 AI_COUNCIL_LLM
 
-LLM debate runs only after deterministic Council passes freshness. It is intentionally selective and cost-bounded; it is not required to call an LLM for all 200 stocks.
+LLM debate runs only after deterministic Council passes freshness. It is selective and cost-bounded; it is not required to call an LLM for all 200 stocks.
 
 LLM output is advisory and cannot replace deterministic signal authority.
 
@@ -206,156 +181,88 @@ Notion is a post-analysis audit/archive layer, not an operational source of trut
 Current Top Stocks databases:
 
 - `Top Stocks 200 — Universe History`
-  - data source: `af1c5fac-8e28-42ac-8e08-c322cb2dcdf7`
 - `Top Stocks 200 — EOD Archive 2026`
-  - data source: `a00636bc-4fa6-4f9a-9c1c-11ff04b1314c`
 - `Top Stocks 200 — EOD Runs`
-  - data source: `ea4f1552-dff1-434b-a647-ac7cb0330932`
 
-The archive records universe-run provenance, ticker/rank, Wyckoff evidence, Council state, validation hashes, and run-level status. Legacy v1/v2 databases are retained as historical evidence and labeled legacy/deprecated rather than rewritten.
+The archive records universe-run provenance, ticker/rank, Wyckoff evidence, Council state, validation hashes, and run-level status. Legacy v1/v2 databases remain historical evidence.
 
-### 5.11 DRIVE_ARCHIVE
+### 5.11 RETENTION_CLEANUP
 
-Google Drive is intended for raw, immutable archive packages/manifest evidence.
+Safe retention cleanup is independent of Google Drive. It removes only explicitly approved telemetry/staging/build artifacts.
 
-The production implementation authenticates with a Google **service account** and targets a folder inside a Google Workspace **Shared Drive**. Runtime requests explicitly support Shared Drives (`supportsAllDrives=true`, and list operations include `includeItemsFromAllDrives=true`).
+**Raw `market_ohlcv_history` Daily bars are not age-pruned.** This is intentional because:
 
-Required Vercel Production environment variables:
+- `1D` is the canonical raw Wyckoff source;
+- `1W` is derived from `1D`;
+- the data volume for the current 200-ticker Daily-only universe is small relative to the complexity and failure surface of daily external cold archive;
+- no external cold-history hydration/restore path has been production-proven.
 
-- `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` — complete service-account JSON key; server-only secret.
-- `GOOGLE_DRIVE_ARCHIVE_FOLDER_ID` — root archive folder ID inside the Shared Drive.
-- `GOOGLE_DRIVE_RETENTION_BACKFILL_COMPLETE` — keep `false` until the historical archive backfill and retention preflight have both been explicitly verified.
+The existing archive coverage ledger and preflight helpers remain historical/future Plan C foundations, but they do not authorize current raw-history deletion.
 
-Recommended Drive setup:
+## 6. Google Drive policy
 
-1. Enable Google Drive API in the Google Cloud project.
-2. Create a service account and JSON key.
-3. Create or select a Google Workspace Shared Drive.
-4. Create an archive root folder, e.g. `QeoIndex Raw Archive`.
-5. Add the service-account `client_email` as a Shared Drive member with permission to create/manage archive files.
-6. Set the two archive credentials in Vercel Production and redeploy once.
-7. Run an EOD archive smoke test and verify the manifest URL, SHA-256, file count and `eod_archive_checkpoints.drive_status='archived'`.
-8. Backfill every historical date that is eligible for retention.
-9. Only after `qeo_archive_retention_preflight(...)` returns safe may `GOOGLE_DRIVE_RETENTION_BACKFILL_COMPLETE=true` be enabled.
+Google Drive is **not part of daily EOD**. The old service-account uploader and its historical checkpoint schema may remain as legacy/recovery code until separately cleaned, but active EOD must not call it, display it as an active phase, or let its status influence parent success.
 
-Archive layout is generated automatically:
+Do not add Google OAuth/Picker merely to restore the old daily backup behavior.
 
-- `{YEAR}/{MONTH}/1D/{TICKER}-{DATE}.csv.gz`
-- `{YEAR}/{MONTH}/1H/{TICKER}-{DATE}.csv.gz`
-- `{YEAR}/{MONTH}/manifest-{DATE}.json`
+If future requirements justify external disaster backup, design it as a separate cold-export job, preferably coarse-grained (for example weekly incremental Daily export with manifest/checksum), with independent failure semantics and a verified restore procedure before changing raw Supabase retention.
 
-The runtime is fail-closed when Drive credentials are not configured:
-
-- Drive archive status becomes `blocked`;
-- no raw Supabase history is deleted;
-- `RETENTION_CLEANUP` remains blocked.
-
-A successful Drive archive must provide a manifest URL, SHA-256 integrity value, and positive row/file counts before retention can be considered safe.
-
-### 5.12 RETENTION_CLEANUP
-
-Retention is controlled by the private `eod_archive_checkpoints` ledger and the service-role-only function `qeo_archive_retention_preflight(date)`.
-
-Current age thresholds:
-
-- `1H` raw OHLCV: eligible only when older than 90 days;
-- `1D` raw OHLCV: eligible only when older than 480 days.
-
-Deletion is permitted only when every eligible historical session has verified Notion and Drive archive coverage. Any missing checkpoint, manifest, SHA-256, or row coverage returns `safe=false` and blocks deletion.
-
-There are no blanket truncates in the retention path.
-
-## 6. Failure semantics
+## 7. Failure semantics
 
 Operational failures before `SUPABASE_PUBLISH` stop the run and preserve the previous published operational read model.
 
-Archive failures after successful operational publication are recorded independently. A blocked Notion/Drive archive does not roll back a verified Supabase publication, but it prevents retention.
+Downstream synthesis/Notion failures are recorded independently according to their current phase contract. They do not authorize deletion of raw Daily history.
 
 Important distinction:
 
 - Operational truth: Supabase.
 - Analytical interpretation: Wyckoff/AI Council derived from verified evidence.
-- Archive/audit: Notion and Drive.
-- Retention authority: verified archive checkpoint only.
+- Analytical/audit archive: Notion.
+- Raw history retention authority: current fail-closed Supabase policy; external archive is not an active prerequisite.
 
-## 7. Admin observability
+## 8. Admin observability
 
-`/admin/jobs` shows the parent `qeoindex.eod_pipeline` plus the ordered phase timeline. Each phase records:
+`/admin/jobs` shows the parent `qeoindex.eod_pipeline` plus the active ordered phase timeline. `DRIVE_ARCHIVE` must not appear as an active phase.
 
-- status;
-- start/end timestamp;
-- duration;
-- sanitized summary;
-- error code/message when failed;
-- model/token usage where applicable.
+Each phase records status, timestamps, duration, sanitized summary/error, and model/token usage where applicable.
 
-`/admin/universe` shows:
-
-- selected count / 200;
-- universe run ID;
-- KFSP source date;
-- current selector settings;
-- next-run selector settings;
-- last and next scheduled refresh;
-- detail completeness;
-- logo coverage;
-- rank/ticker/company/exchange/sector/market-cap/AvgVol50 rows.
-
-## 8. Manual recovery runbook
+## 9. Manual recovery runbook
 
 ### Universe refresh
 
 Use the same authenticated monthly-universe execution path as the scheduler. Never insert memberships manually unless performing a documented emergency recovery.
 
-After a manual universe refresh verify:
-
-1. run status is `published`;
-2. selected count is <= 200;
-3. exact strict filters pass;
-4. activity positive days >= 4;
-5. detail count equals selected count;
-6. logo count equals selected count;
-7. rank is deterministic;
-8. runtime consumers resolve the same `run_id`.
-
 ### EOD recovery/backfill
 
 Use the authenticated `/api/qeoindex/eod` workflow entrypoint with an explicit historical session timestamp when recovering a completed prior trading day.
 
-Do not run a same-day historical-looking EOD before final market evidence exists.
-
 After a manual EOD run verify:
 
 - parent `system_job_runs` status;
-- all operational phases through `AI_COUNCIL_LLM`/`MARKET_SYNTHESIS`;
-- published Wyckoff run count;
-- `universe_count × 5` snapshot coverage;
-- `universe_count × 2` chart-series coverage;
+- exact-session Daily raw coverage;
+- `universe_count × 2` Wyckoff snapshot coverage;
 - deterministic Council coverage;
-- archive checkpoint statuses;
-- retention remains blocked unless Drive archive verification is complete.
+- real Market Synthesis and Notion statuses;
+- `RETENTION_CLEANUP` completes without deleting raw Daily OHLCV;
+- no `DRIVE_ARCHIVE` phase is created by the new run;
+- `COMPLETE` closes the parent run.
 
-## 9. Historical-data policy
+## 10. Historical-data policy
 
-Do not rewrite or delete historical thesis, Analysis Log, AI Council, Wyckoff, market, telemetry, audit, or source evidence merely because it belongs to the old Top100 era.
+Do not rewrite or delete historical thesis, Analysis Log, AI Council, Wyckoff, market, telemetry, audit, or source evidence merely because it belongs to the old Top100 or old Drive-archive era.
 
-Legacy current-membership materializations may be removed only after zero active runtime references and dependency preflight. Historical evidence remains immutable/auditable.
+Historical `DRIVE_ARCHIVE` telemetry/checkpoints remain audit evidence. Removing Drive from the active workflow does not require deleting historical rows or old backup files.
 
-## 10. Release verification checklist
+## 11. Release verification checklist
 
 A production cutover is complete only when all are true:
 
-- Supabase migrations applied;
-- required Edge Functions deployed;
-- canonical monthly universe successfully published;
-- 200/200 detail/logo coverage when 200 stocks qualify;
-- GitHub regression tests pass;
-- lint passes;
+- GitHub EOD v3/core regression tests pass;
+- lint passes, including the active retention step;
 - TypeScript passes;
 - production build passes;
 - feature PR merged once to `main`;
-- Vercel Git deployment reaches READY without a second manual production deploy;
-- production pg_cron inventory matches this runbook;
-- one completed historical/current EOD v3 smoke run proves Supabase-first phase order;
-- any missing Drive credential is surfaced as `blocked`, never silently treated as archived;
-- retention remains fail-closed until verified archive coverage exists.
+- Vercel Git deployment reaches READY;
+- Admin EOD timeline contains 12 active telemetry phases and no `DRIVE_ARCHIVE`;
+- a fresh production EOD smoke proves `NOTION_ARCHIVE → RETENTION_CLEANUP → COMPLETE` without Drive;
+- raw Daily OHLCV remains retained in Supabase.
