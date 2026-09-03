@@ -66,6 +66,30 @@ function asEodRecoveryJob(
   })
 }
 
+function asRetiredEodJob(
+  job: AdminJobDefinition,
+  label: string,
+  description: string,
+): AdminJobDefinition {
+  return withSchedulePolicy({
+    ...job,
+    provider: "machine",
+    label,
+    description,
+    scheduleUtc: undefined,
+    scheduleIct: undefined,
+    scheduleKind: "manual",
+    schedulerName: undefined,
+    scheduleDays: undefined,
+    windowStartIct: undefined,
+    windowEndIct: undefined,
+    intervalMinutes: undefined,
+    manualPolicy: "disabled",
+    manualPurpose: "maintenance",
+    automatedParentKeys: ["qeoindex.eod_pipeline"],
+  })
+}
+
 function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition {
   if (job.key === "signals.daily") {
     return withSchedulePolicy({
@@ -109,10 +133,10 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
   }
 
   if (job.key === "market.sync_eod") {
-    return asEodRecoveryJob(
+    return asRetiredEodJob(
       job,
-      "Market EOD Sync (Manual Recovery)",
-      "EOD v4 owns final market-close collection for the frozen canonical universe. Standalone 14:45/14:50 pg_cron is retired by QEO-64; this action remains only for operator recovery/backfill.",
+      "Market EOD Sync (Retired)",
+      "EOD v4 exclusively owns final market-close collection for the frozen canonical universe. Standalone 14:45/14:50 scheduling and manual dispatch are disabled; use the canonical EOD run/retry flow for recovery.",
     )
   }
 
@@ -134,9 +158,10 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
  * Canonical operational catalog after QEO-64 EOD v4 cutover.
  *
  * Exactly one post-market orchestration schedule exists: qeoindex.eod_pipeline.
- * KFSP Rating, TTAI and standalone Market EOD remain visible only as manual
- * recovery/backfill actions. Historical scheduler aliases are preserved by
- * job-schedule.ts so v3 evidence remains readable.
+ * KFSP Rating and TTAI remain manual recovery/backfill tools. The standalone
+ * Market EOD action is retained only as disabled historical/maintenance
+ * evidence because final market-close collection must preserve EOD frozen
+ * lineage. Historical scheduler aliases remain readable via job-schedule.ts.
  */
 export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
   withSchedulePolicy(QEOINDEX_EOD_PIPELINE_JOB),
