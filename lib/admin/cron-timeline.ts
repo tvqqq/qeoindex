@@ -1,4 +1,5 @@
 import { getJobTimelineLane, getPgCronNameForJobKey } from "./job-schedule.ts"
+import { isAllowlistedManualJobKey } from "./manual-job-capabilities.ts"
 import type {
   AdminJobEvidenceSource,
   AdminJobStatus,
@@ -186,7 +187,7 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
     return minA - minB
   })
   const manualJobs = allNodes
-    .filter((node) => node.manualPolicy !== "disabled")
+    .filter((node) => isAllowlistedManualJobKey(node.key) && node.manualPolicy !== "disabled")
     .map((node) => ({
       ...node,
       lane: "manual" as const,
@@ -211,7 +212,7 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
     {
       id: "manual",
       title: "Manual Recovery & Maintenance",
-      description: "Các one-shot action được allowlist để recovery/diagnostic; chúng không thay thế scheduler tự động.",
+      description: "Các one-shot action lấy trực tiếp từ dispatch allowlist để recovery/diagnostic; chúng không thay thế scheduler tự động.",
       jobs: manualJobs,
     },
     {
