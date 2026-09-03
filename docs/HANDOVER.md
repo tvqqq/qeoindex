@@ -1,6 +1,6 @@
 # QeoIndex engineering handover
 
-Last updated: 2026-09-02.
+Last updated: 2026-09-03.
 
 This document is the canonical fast-start for the active production architecture. The pre-2026-09-01 handover is preserved verbatim at [`docs/HANDOVER-LEGACY.md`](./HANDOVER-LEGACY.md) for historical context; when the two documents conflict, this file wins.
 
@@ -54,12 +54,12 @@ This behavior specifically addresses the VGI `HISTORY_REFRESH` failure observed 
 
 ## EOD v3 phase contract
 
-Canonical phase order remains:
+Canonical execution order is:
 
 1. `EOD_READY`
 2. `MARKET_CLOSE_COLLECT`
 3. `HISTORY_REFRESH`
-4. `NO_TRADE_REPAIR`
+4. exact-session Daily repair gate (`NO_TRADE_REPAIR` legacy name; also repairs verified traded snapshots)
 5. `WYCKOFF_BUILD`
 6. `SUPABASE_VALIDATE`
 7. `SUPABASE_PUBLISH`
@@ -67,26 +67,29 @@ Canonical phase order remains:
 9. `AI_COUNCIL_LLM`
 10. `MARKET_SYNTHESIS`
 11. `NOTION_ARCHIVE`
-12. `DRIVE_ARCHIVE`
-13. `RETENTION_CLEANUP`
-14. `COMPLETE`
+12. `RETENTION_CLEANUP`
+13. `COMPLETE`
+
+`DRIVE_ARCHIVE` is no longer part of the active EOD workflow. Google Drive cold backup was removed because active raw history is Daily-only, Weekly is derived, and operational Daily history is retained in Supabase rather than age-pruned.
 
 Key invariants:
 
 - EOD readiness and market-close retry behavior remain fail-closed.
 - `EOD_READY` requires fresh same-session `stock_orderbook_snapshots` for the exact canonical universe; a clean rebuild must bootstrap those snapshots before dispatching EOD.
 - `HISTORY_REFRESH` uses max-10 ticker batches and persists Daily only.
+- The exact-session Daily repair gate must reach complete current-session Daily coverage before Wyckoff build.
 - `WYCKOFF_BUILD` / validation / publish require exact canonical membership and exactly `universeCount × 2` snapshots.
 - AI Council starts only from the healthy Supabase-published Wyckoff run for the same session.
-- Notion/Drive archival is downstream of the market-analysis critical path.
+- Notion archival is downstream of the market-analysis critical path.
+- Retention cleanup is independent of Google Drive and must never delete operational Daily OHLCV under the current policy.
 
-## Storage lifecycle / Plan B and Plan C foundation
+## Storage lifecycle / Plan C foundation
 
-Supabase is the operational hot store; Google Drive is the intended cold raw archive; Notion is the compact analytical/audit store.
+Supabase is the operational source of truth for raw Daily OHLCV. Notion is the compact analytical/audit store. External cold archive is deferred and is not part of daily EOD.
 
-The 2026-09-01 storage cutover introduces `market_ohlcv_archive_ranges`, a range-level cold-archive coverage ledger with date range, row count, SHA-256 and manifest URL. This is the foundation for a future partitioned/cold-history Plan C cutover.
+The 2026-09-01 storage cutover introduced `market_ohlcv_archive_ranges`, a range-level cold-archive coverage ledger with date range, row count, SHA-256 and manifest URL. Keep it as foundation for a future, separately designed Plan C cold-history cutover; its existence does not make external archive an active EOD dependency.
 
-**Important:** raw Daily retention is intentionally fail-closed. Do not age-prune Daily bars merely by date while `1W` is derived from Daily and the active model requires at least 60 completed Weekly bars. Daily pruning can be enabled only after cold-history coverage/hydration is verified end-to-end.
+**Important:** raw Daily retention is intentionally fail-closed. Do not age-prune Daily bars merely by date while `1W` is derived from Daily and the active model requires at least 60 completed Weekly bars. Daily pruning can be enabled only after a future cold-history coverage/hydration/restore design is verified end-to-end.
 
 The approved clean rebuild is a one-shot maintenance operation, not a recurring retention rule.
 
@@ -151,12 +154,13 @@ A current-session manual smoke is accepted only when evidence shows:
 
 - `EOD_READY`: canonical universe complete for the session;
 - `MARKET_CLOSE_COLLECT`: healthy/current-session evidence;
-- `HISTORY_REFRESH`: all requested tickers complete, including VGI;
-- raw persistent OHLCV contains `1D` only and no noncanonical tickers after a clean rebuild;
+- `HISTORY_REFRESH`: all requested tickers accounted for and exact-session Daily coverage complete after repair;
+- raw persistent OHLCV contains active `1D` data and no noncanonical tickers after a clean rebuild;
 - Wyckoff expected count = `universeCount × 2`;
 - `SUPABASE_PUBLISH`: same validation hash and exact canonical ticker set;
 - deterministic AI Council completes for the canonical universe;
-- archive phases report their real state and do not fake success;
+- `NOTION_ARCHIVE` reports its real state without blocking raw-data retention safety;
+- `RETENTION_CLEANUP` prunes only approved telemetry/staging/build artifacts and leaves raw Daily OHLCV retained;
 - `COMPLETE` closes the parent run without hidden skipped critical phases.
 
 For fast troubleshooting, inspect `system_job_runs`, `system_job_phases`, latest `market_universe_runs`, `stock_orderbook_snapshots`, `wyckoff_scan_runs`, `market_ohlcv_history`, `market_ohlcv_bootstrap_state`, and `eod_archive_checkpoints` before interpreting UI state.
