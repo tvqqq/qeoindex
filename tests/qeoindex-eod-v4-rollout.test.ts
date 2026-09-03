@@ -12,6 +12,12 @@ import {
   getPgCronNameForJobKey,
 } from "../lib/admin/job-schedule.ts"
 import { EOD_PIPELINE_PHASES } from "../lib/admin/cron-timeline.ts"
+import {
+  appendTickerAttempts,
+  computeEodTickerCoverage,
+  selectRetryTickers,
+  type EodTickerAttempt,
+} from "../lib/qeoindex-eod-fault-isolation.ts"
 
 const RETIRED_ACTIVE_SCHEDULERS = [
   ["kfsp.rating_daily", "kfsp-rating-daily-7am-ict"],
@@ -69,6 +75,57 @@ test("QEO-64 cron timeline exposes the seven canonical EOD v4 business phases", 
     "COMPLETE",
   ])
   assert.equal(EOD_PIPELINE_PHASES.length, 7)
+})
+
+test("QEO-64 controlled 199/200 failure retries only the failed ticker and restores 200/200", () => {
+  const tickers = Array.from({ length: 200 }, (_, index) => `T${String(index + 1).padStart(3, "0")}`)
+  const failedTicker = tickers[137]
+  const firstAttempts: EodTickerAttempt[] = tickers.map((ticker) => ticker === failedTicker
+    ? {
+        ticker,
+        stage: "WYCKOFF_BUILD",
+        status: "failed",
+        errorClass: "ticker_local",
+        attempt: 1,
+        retryEligible: true,
+        error: "controlled QEO-64 canary failure",
+      }
+    : {
+        ticker,
+        stage: "WYCKOFF_BUILD",
+        status: "succeeded",
+        errorClass: null,
+        attempt: 1,
+        retryEligible: false,
+      })
+
+  const partial = computeEodTickerCoverage(tickers, firstAttempts)
+  assert.equal(partial.complete, false)
+  assert.equal(partial.healthyCount, 199)
+  assert.equal(partial.failedCount, 1)
+  assert.deepEqual(partial.failedTickers, [failedTicker])
+
+  const retryTargets = selectRetryTickers(firstAttempts)
+  assert.deepEqual(retryTargets, [failedTicker], "targeted retry must not rerun any of the 199 healthy tickers")
+
+  const recoveredAttempts = appendTickerAttempts(firstAttempts, [{
+    ticker: failedTicker,
+    stage: "WYCKOFF_BUILD",
+    status: "succeeded",
+    errorClass: null,
+    attempt: 2,
+    retryEligible: false,
+  }])
+  const recovered = computeEodTickerCoverage(tickers, recoveredAttempts)
+
+  assert.equal(recoveredAttempts.length, 201, "recovery must append one attempt instead of rewriting healthy or historical attempts")
+  assert.equal(recovered.complete, true)
+  assert.equal(recovered.healthyCount, 200)
+  assert.equal(recovered.failedCount, 0)
+  for (const ticker of tickers.filter((ticker) => ticker !== failedTicker)) {
+    assert.equal(recoveredAttempts.filter((attempt) => attempt.ticker === ticker).length, 1, `${ticker} must not be rerun`)
+  }
+  assert.deepEqual(recoveredAttempts.filter((attempt) => attempt.ticker === failedTicker).map((attempt) => attempt.attempt), [1, 2])
 })
 
 test("QEO-64 preserves retired pg_cron aliases for v3 telemetry but removes forward scheduler ownership", () => {
