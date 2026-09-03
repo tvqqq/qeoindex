@@ -131,7 +131,7 @@ test("Market Close keeps the main dashboard continuous and limits tabs to the th
   assert.match(dashboard, /Nỗ lực kết quả/)
   assert.match(dashboard, /Sức khoẻ thị trường/)
   assert.match(dashboard, /MarketSentimentCard/)
-  assert.match(dashboard, /xl:grid-cols-\[7fr_3fr\]/)
+  assert.match(dashboard, /xl:grid-cols-\[35fr_65fr\]/)
   assert.doesNotMatch(fs.readFileSync(path.resolve("components/insights/market-health-view.tsx"), "utf8"), /<option value="(general|retail|institutional)">/)
   for (const period of ["1D", "1W", "1M", "1Y"]) {
     assert.match(bubbles, new RegExp(`value: "${period}"`), `market bubbles must expose the ${period} time window`)
