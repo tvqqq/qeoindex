@@ -10,7 +10,7 @@ function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
-test("buildCronTimelineModel categorizes jobs into 3 lanes and models EOD dependency phases", () => {
+test("buildCronTimelineModel separates scheduled automation, manual recovery, and disabled maintenance", () => {
   const { jobs } = buildAdminJobViews(
     EFFECTIVE_ADMIN_JOB_CATALOG,
     [
@@ -38,10 +38,11 @@ test("buildCronTimelineModel categorizes jobs into 3 lanes and models EOD depend
 
   const timeline = buildCronTimelineModel(jobs)
 
-  assert.equal(timeline.lanes.length, 3)
+  assert.equal(timeline.lanes.length, 4)
   assert.equal(timeline.lanes[0].id, "vercel")
   assert.equal(timeline.lanes[1].id, "pg_cron")
   assert.equal(timeline.lanes[2].id, "manual")
+  assert.equal(timeline.lanes[3].id, "disabled")
 
   const vercelJob = timeline.lanes[0].jobs.find((j) => j.key === "signals.daily")
   assert.ok(vercelJob)
@@ -64,15 +65,36 @@ test("buildCronTimelineModel categorizes jobs into 3 lanes and models EOD depend
   assert.equal(syncEod.displayType, "point")
   assert.equal(syncEod.timeIctLabel, "14:45 ICT")
 
-  const ttai = timeline.lanes[1].jobs.find((j) => j.key === "kfsp.ttai_history")
-  assert.ok(ttai)
-  assert.equal(ttai.displayType, "point")
-  assert.equal(ttai.timeIctLabel, "07:10 ICT")
-  assert.equal(ttai.startMinuteOfDay, 430)
+  const scheduledTtai = timeline.lanes[1].jobs.find((j) => j.key === "kfsp.ttai_history")
+  assert.ok(scheduledTtai)
+  assert.equal(scheduledTtai.displayType, "point")
+  assert.equal(scheduledTtai.timeIctLabel, "07:10 ICT")
+  assert.equal(scheduledTtai.startMinuteOfDay, 430)
+
+  const recoveryKeys = timeline.lanes[2].jobs.map((job) => job.key).sort()
+  assert.deepEqual(recoveryKeys, [
+    "kfsp.rating_daily",
+    "kfsp.ttai_history",
+    "market.sync_universe",
+    "scanner.run",
+    "signals.monitor",
+    "wyckoff.ingest",
+  ])
 
   const scanner = timeline.lanes[2].jobs.find((j) => j.key === "scanner.run")
   assert.ok(scanner)
   assert.equal(scanner.displayType, "manual")
+  assert.equal(scanner.manualPurpose, "recovery")
+  assert.deepEqual(scanner.automatedParentKeys, ["signals.daily"])
+
+  const recoveryTtai = timeline.lanes[2].jobs.find((j) => j.key === "kfsp.ttai_history")
+  assert.ok(recoveryTtai)
+  assert.equal(recoveryTtai.manualPurpose, "recovery")
+  assert.equal(recoveryTtai.timeIctLabel, "07:10 ICT")
+
+  const disabledKeys = timeline.lanes[3].jobs.map((job) => job.key).sort()
+  assert.deepEqual(disabledKeys, ["market.cache_invalidate", "wyckoff.run"])
+  assert.equal(timeline.totalManual, 6)
 })
 
 test("Timeline component adheres to UI Lessons Learned performance constraints", () => {
@@ -93,6 +115,9 @@ test("Timeline component adheres to UI Lessons Learned performance constraints",
 
   assert.match(timelineComponent, /aria-label="Danh sách tác vụ tuần tự chi tiết"/)
   assert.match(timelineComponent, /<table/)
+  assert.match(timelineComponent, /Manual recovery/i)
+  assert.match(timelineComponent, /Automated by:/)
+  assert.match(timelineComponent, /Manual disabled/i)
   assert.equal(summaryComponent.includes('"HTTP 207"'), false, "Summary must not hardcode 'HTTP 207'")
   assert.match(summaryComponent, /j\.lastErrorCode/)
   assert.match(summaryComponent, /Không có tác vụ nào lỗi/)
