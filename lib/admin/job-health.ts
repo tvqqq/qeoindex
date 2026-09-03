@@ -117,6 +117,8 @@ export function buildAdminJobViews(
       intervalMinutes: def.intervalMinutes,
       dependencies: def.dependencies,
       manualPolicy: def.manualPolicy,
+      manualPurpose: def.manualPurpose,
+      automatedParentKeys: def.automatedParentKeys,
       status,
       schedulerStatus: resolved.schedulerStatus,
       schedulerLastStatus: resolved.schedulerLastStatus,
