@@ -59,6 +59,14 @@ export function classifyEodFailure(
     "POSTGRES",
     "SCHEMA CACHE",
     "OHLCV CACHE BATCH READ FAILED",
+    "OHLCV HISTORY UPSERT FAILED",
+    "OHLCV BOOTSTRAP STATE QUERY FAILED",
+    "OHLCV BOOTSTRAP STATE UPSERT FAILED",
+    "EOD TICKER ATTEMPT PERSISTENCE FAILED",
+    "WYCKOFF_BUILD_ARTIFACT_WRITE_FAILED",
+    "WYCKOFF_BUILD_ARTIFACT_VERIFY_FAILED",
+    "WYCKOFF_BUILD_ARTIFACT_READ_FAILED",
+    "WYCKOFF_BUILD_ARTIFACT_IDENTITY_MISMATCH",
   ].some((token) => code.includes(token) || normalized.includes(token))
   if (critical) return { errorClass: "critical_systemic", retryEligible: false }
 
@@ -94,6 +102,17 @@ export function latestTickerAttempts(attempts: readonly EodTickerAttempt[]) {
     const attempt: EodTickerAttempt = { ...raw, ticker: normalizeTicker(raw.ticker) }
     const current = latest.get(attempt.ticker)
     if (!current || isLaterAttempt(attempt, current)) latest.set(attempt.ticker, attempt)
+  }
+  return latest
+}
+
+export function latestTickerStageAttempts(attempts: readonly EodTickerAttempt[], stage: string) {
+  const latest = new Map<string, EodTickerAttempt>()
+  for (const raw of attempts) {
+    if (raw.stage !== stage) continue
+    const attempt: EodTickerAttempt = { ...raw, ticker: normalizeTicker(raw.ticker) }
+    const current = latest.get(attempt.ticker)
+    if (!current || attempt.attempt > current.attempt) latest.set(attempt.ticker, attempt)
   }
   return latest
 }
