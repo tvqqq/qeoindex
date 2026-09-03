@@ -51,6 +51,10 @@ export type EodRetentionCleanupCheckpoint = EodArchiveCheckpoint & {
  * Daily/Weekly cutover: the active raw read/write contract is Daily-only and Weekly
  * is derived deterministically. Legacy 1H rows remain preserved until cold-archive
  * coverage is verified. The proven Google Drive/auth/manifest uploader is reused.
+ *
+ * Drive is a downstream archive boundary. Provider/auth/storage rejection must stay
+ * visible as a degraded checkpoint, but must not escape as a Workflow retry/fatal;
+ * raw Supabase history remains retained until archive coverage is actually proven.
  */
 export async function runEodDriveArchive(
   supabase: SupabaseClient,
@@ -61,7 +65,17 @@ export async function runEodDriveArchive(
     stocks: Parameters<typeof runLegacyDriveArchive>[1]["stocks"]
   },
 ): Promise<EodArchiveCheckpoint> {
-  return runLegacyDriveArchive(supabase, input)
+  try {
+    return await runLegacyDriveArchive(supabase, input)
+  } catch (error) {
+    return {
+      status: "error",
+      requested: input.stocks.length,
+      archived: 0,
+      detail: `Google Drive archive failed: ${error instanceof Error ? error.message : String(error)}; raw Supabase history remains retained.`,
+      manifestUrl: null,
+    }
+  }
 }
 
 /**

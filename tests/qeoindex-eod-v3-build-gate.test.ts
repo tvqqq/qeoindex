@@ -144,3 +144,13 @@ test("QEO-55 partitions Notion archive work into bounded durable steps", () => {
   assert.match(steps, /archiveEodTickerBatchToNotion/)
   assert.match(steps, /stocks\.length > 8/)
 })
+
+test("QEO-57 converts rejected Drive archive promises into a degraded checkpoint", () => {
+  const archive = source("lib/qeoindex-eod-archive.ts")
+  assert.match(
+    archive,
+    /export async function runEodDriveArchive\([\s\S]*?try\s*\{[\s\S]*?return await runLegacyDriveArchive\([\s\S]*?catch\s*\(error\)[\s\S]*?status:\s*"error"[\s\S]*?manifestUrl:\s*null/,
+    "Drive API rejection must resolve as an error checkpoint before the durable step can retry/fatal",
+  )
+  assert.match(archive, /raw Supabase history remains retained/i)
+})
