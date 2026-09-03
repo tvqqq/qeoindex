@@ -91,6 +91,19 @@ export function isLockedFilterSector(sector: string) {
   return LOCKED_SECTOR_GROUP_KEYS.has(boardSectorGroupForSector(sector).key)
 }
 
+export function hasRequiredFilterSectorSelections(
+  selected: ReadonlySet<string>,
+  availableSectors: readonly string[],
+) {
+  for (const group of groupFilterSectorsByBoardColumn(availableSectors)) {
+    if (group.sectors.length === 0) continue
+    const selectedInGroup = group.sectors.filter((sector) => selected.has(sector))
+    if (selectedInGroup.length === 0) return false
+    if (group.locked && selectedInGroup.length !== group.sectors.length) return false
+  }
+  return true
+}
+
 export function canUnselectFilterSector(
   selected: ReadonlySet<string>,
   sector: string,
@@ -148,13 +161,6 @@ export function normalizeStockFilterCriteria(
   )
   const sectors = availableSectorList.filter((sector) => sectorSet.has(sector))
   if (sectors.length === 0) return null
-
-  for (const group of groupFilterSectorsByBoardColumn(availableSectorList)) {
-    if (group.sectors.length === 0) continue
-    const selectedInGroup = group.sectors.filter((sector) => sectorSet.has(sector))
-    if (selectedInGroup.length === 0) return null
-    if (group.locked && selectedInGroup.length !== group.sectors.length) return null
-  }
 
   return {
     version: 1,
@@ -247,7 +253,9 @@ export function readStockFilterFromSettings(
   if (!isPlainObject(settings)) return null
   const marketBoard = settings.marketBoard
   if (!isPlainObject(marketBoard)) return null
-  return normalizeStockFilterCriteria(marketBoard.stockFilter, availableSectors)
+  const criteria = normalizeStockFilterCriteria(marketBoard.stockFilter, availableSectors)
+  if (!criteria) return null
+  return hasRequiredFilterSectorSelections(new Set(criteria.sectors), availableSectors) ? criteria : null
 }
 
 export function mergeStockFilterIntoSettings(
