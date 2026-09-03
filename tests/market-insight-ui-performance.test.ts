@@ -163,15 +163,13 @@ test("Market Close charts use a minimal semantic palette without SVG gradients",
   assert.doesNotMatch(charts, /linearGradient|url\(#/, "chart fills must remain flat and minimal")
 })
 
-test("unified market-health children use the shared header contract", () => {
+test("market-health children keep shared headers while AI conclusion uses its dedicated compact surface", () => {
   const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
   const health = fs.readFileSync(path.resolve("components/insights/market-health-view.tsx"), "utf8")
   const header = fs.readFileSync(path.resolve("components/insights/market-widget-child-header.tsx"), "utf8")
 
   assert.match(header, /actions\?: React\.ReactNode/)
   for (const title of [
-    "AI nhận định thị trường",
-    "Tổng hợp định lượng",
     "Chỉ báo tâm lý",
     "Chỉ báo rủi ro",
     "Định giá thị trường (P/E & P/B)",
@@ -182,6 +180,9 @@ test("unified market-health children use the shared header contract", () => {
   ]) {
     assert.ok(`${dashboard}\n${health}`.includes(title), `missing child title: ${title}`)
   }
+  assert.match(dashboard, /data-market-ai-conclusion/)
+  assert.match(dashboard, /BrainCircuit/)
+  assert.doesNotMatch(dashboard, /Tổng hợp định lượng|Tóm lược định lượng, không phải AI|Chưa có AI conclusion/)
   assert.doesNotMatch(`${dashboard}\n${health}`, /Tâm lý, rủi ro và MA20|Dòng tiền theo phiên/)
   assert.match(health, /<MarketWidgetChildHeader icon=\{ShieldAlert\}[^>]*actions=/)
   assert.match(health, /<MarketWidgetChildHeader icon=\{Gauge\}/)
