@@ -145,7 +145,13 @@ export default async function AdminJobDetailPage(props: { params: Promise<{ key:
       </div>
 
       {/* EOD Pipeline Phase Timeline if applicable */}
-      {decodedKey === QEOINDEX_EOD_JOB_KEY ? <AdminJobPhaseTimeline rows={phases} /> : null}
+      {decodedKey === QEOINDEX_EOD_JOB_KEY ? (
+        <AdminJobPhaseTimeline
+          rows={phases}
+          run={latestRun ?? null}
+          aiUsage={jobView.aiUsage}
+        />
+      ) : null}
 
       {/* History table */}
       <div className="space-y-3.5">
