@@ -3,9 +3,9 @@ import "server-only"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { markQeoIndexEodPhaseSkipped, runQeoIndexEodPhase } from "@/lib/admin/job-phase-telemetry"
-import { loadMarketAiConclusion, type MarketAiConclusionView } from "@/lib/market-ai-conclusion-loader"
-import { getMarketCloseInsightData, type MarketCloseDashboardData } from "@/lib/market-insight-data"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
+import type { MarketAiConclusionView } from "@/lib/market-ai-conclusion-loader"
+import type { MarketCloseDashboardData } from "@/lib/market-insight-data"
 
 const MARKET_SYNTHESIS_POLL_INTERVAL_MS = 2_000
 const MARKET_SYNTHESIS_MAX_WAIT_MS = 90_000
@@ -38,6 +38,19 @@ function requiredSupabase() {
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+async function loadMarketAiConclusionStepInput(
+  supabase: SupabaseClient,
+  snapshot: MarketCloseDashboardData,
+) {
+  const { loadMarketAiConclusion } = await import("@/lib/market-ai-conclusion-loader")
+  return loadMarketAiConclusion(supabase, snapshot)
+}
+
+async function loadExactMarketCloseSnapshot(supabase: SupabaseClient, ratingDate: string) {
+  const { getMarketCloseInsightData } = await import("@/lib/market-insight-data")
+  return getMarketCloseInsightData(supabase, ratingDate)
 }
 
 function terminalFailure(view: MarketAiConclusionView) {
@@ -81,7 +94,7 @@ export async function awaitMarketSynthesisConclusion(
   const deadline = Date.now() + maxWaitMs
 
   while (true) {
-    const view = await loadMarketAiConclusion(supabase, snapshot)
+    const view = await loadMarketAiConclusionStepInput(supabase, snapshot)
     if (view.status === "succeeded") return toContext(view, snapshot)
     if (terminalFailure(view)) {
       throw Object.assign(
@@ -102,9 +115,9 @@ export async function awaitMarketSynthesisConclusion(
 export async function loadMarketSynthesisContext(ratingDate?: string): Promise<EodMarketSynthesisContext | null> {
   if (!ratingDate) return null
   const supabase = requiredSupabase()
-  const snapshot = await getMarketCloseInsightData(supabase, ratingDate)
+  const snapshot = await loadExactMarketCloseSnapshot(supabase, ratingDate)
   if (!snapshot || snapshot.sessionDate !== ratingDate) return null
-  const view = await loadMarketAiConclusion(supabase, snapshot)
+  const view = await loadMarketAiConclusionStepInput(supabase, snapshot)
   return view.status === "succeeded" ? toContext(view, snapshot) : null
 }
 
@@ -124,7 +137,7 @@ export async function runMarketSynthesisStep(runId: string, enabled = true, rati
     phaseKey: "MARKET_SYNTHESIS",
     fn: async (): Promise<EodMarketSynthesisResult> => {
       const supabase = requiredSupabase()
-      const snapshot = await getMarketCloseInsightData(supabase, ratingDate)
+      const snapshot = await loadExactMarketCloseSnapshot(supabase, ratingDate)
       if (!snapshot || snapshot.sessionDate !== ratingDate || !snapshot.marketInsightProvenance) {
         throw Object.assign(
           new Error(`MARKET_SYNTHESIS exact published snapshot is unavailable for ${ratingDate}`),
@@ -132,7 +145,7 @@ export async function runMarketSynthesisStep(runId: string, enabled = true, rati
         )
       }
 
-      const existing = await loadMarketAiConclusion(supabase, snapshot)
+      const existing = await loadMarketAiConclusionStepInput(supabase, snapshot)
       if (existing.status === "succeeded") {
         return {
           ok: true,
