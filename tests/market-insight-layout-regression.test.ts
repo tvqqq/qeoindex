@@ -23,6 +23,49 @@ test("market index cards live inside the market-intelligence panel as a compact 
   assert.match(dashboard, /data-market-index-strip[^>]*className="[^"]*grid-cols-2[^"]*xl:grid-cols-4/)
 })
 
+test("market intelligence uses a compact 35/65 pulse-to-index workspace", () => {
+  const dashboard = read("components/insights/market-close-dashboard.tsx")
+
+  assert.match(dashboard, /data-market-intelligence-grid[^>]*className="[^"]*xl:grid-cols-\[35fr_65fr\]/)
+  assert.match(dashboard, /data-market-summary-column/)
+  assert.match(dashboard, /data-market-index-column/)
+  assert.match(dashboard, /data-market-index-column[\s\S]*grid-cols-2[\s\S]*indexes\.map\(\(item\) => <IndexTile/)
+  assert.doesNotMatch(dashboard, /xl:grid-cols-\[7fr_3fr\]/, "the old AI/sentiment 70/30 row must not own the pulse/index layout")
+})
+
+test("sector workspace removes the redundant market-pulse marketing heading", () => {
+  const dashboard = read("components/insights/market-close-dashboard.tsx")
+
+  assert.doesNotMatch(dashboard, /Market pulse & cash flow/)
+  assert.doesNotMatch(dashboard, /title="Nhóm ngành đang dẫn nhịp"/)
+  assert.match(dashboard, /<h2 id="market-sectors-title" className="sr-only">Ngành & dòng tiền<\/h2>/)
+})
+
+test("the three highlighted section headings share one typography contract", () => {
+  const dashboard = read("components/insights/market-close-dashboard.tsx")
+  const sectorPanel = read("components/insights/sector-map-panel.tsx")
+  const insights = read("components/insights/insights-dashboard.tsx")
+
+  assert.match(sectorPanel, /function SectorPanelHeading\(/)
+  assert.ok((sectorPanel.match(/<SectorPanelHeading/g) || []).length >= 2, "both sector blocks must reuse SectorPanelHeading")
+  assert.match(dashboard, /data-market-heading-typography/)
+  assert.match(dashboard, /\[data-market-sector-workspace\] p\.font-mono \+ h3/)
+  assert.match(dashboard, /#top-stocks-title/)
+  assert.match(dashboard, /font-size:\s*1\.25rem/)
+  assert.match(dashboard, /font-size:\s*1\.5rem/)
+  assert.match(insights, /id="top-stocks-title"/)
+})
+
+test("gray supporting text in the refined market workspace is larger and higher contrast", () => {
+  const dashboard = read("components/insights/market-close-dashboard.tsx")
+
+  assert.match(dashboard, /PulseStat[\s\S]*text-xs font-medium text-slate-300/)
+  assert.match(dashboard, /text-\[10px\] text-slate-400/)
+  assert.match(dashboard, /text-\[11px\] font-mono text-slate-400/)
+  assert.match(dashboard, /text-sm[^"\n]*text-slate-300/)
+  assert.doesNotMatch(dashboard, /text-\[8px\] text-slate-600/, "index metadata must no longer use tiny low-contrast gray text")
+})
+
 test("sector rotation matrix is collapsed by default and reuses the same heading primitive", () => {
   const sectorPanel = read("components/insights/sector-map-panel.tsx")
 
