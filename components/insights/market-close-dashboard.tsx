@@ -99,15 +99,12 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
     <Card className={cn(surface, "py-12 text-center")}><CardContent className="space-y-3"><Activity className="mx-auto size-10 text-slate-600" /><CardTitle className="font-bold text-white font-sans">Chưa có dữ liệu phiên đóng cửa</CardTitle><CardDescription className="italic text-slate-400">Snapshot sau phiên được cập nhật tự động sau 15:15 vào ngày giao dịch.</CardDescription></CardContent></Card>
   )
 
-  const { sessionDate, asOf, indexes, sectors, sectorHistory = [], history } = data
+  const { sectors, sectorHistory = [], history } = data
 
   return (
     <div className="space-y-10" data-stock-analytics-dashboard data-liquid-glass-dashboard>
-      {/* 1. Market Overview Tiles & Bubbles Section */}
+      {/* 1. Market Bubbles Section */}
       <section aria-labelledby="market-overview-title" className="space-y-3">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{indexes.map((item) => <IndexTile key={item.indexCode} item={item} />)}</div>
-        <p className="px-1 text-[10px] font-mono text-slate-500">Phiên {sessionDate} · cập nhật {formatTime(asOf)} · nguồn KFSP Ngành</p>
-
         <Card className={cn(surface, "overflow-hidden py-0")}>
           <CardHeader className="flex flex-col gap-2 border-b border-white/[0.07] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3.5">
@@ -160,7 +157,6 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
           onOpenStockDetail={onOpenStockDetail}
         />
       </section>
-
     </div>
   )
 }
@@ -207,6 +203,12 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
             </div>
             <MarketSentimentCard data={data} />
           </div>
+
+          <div data-market-index-strip className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
+            {indexes.map((item) => <IndexTile key={item.indexCode} item={item} />)}
+          </div>
+          <p className="mt-2 px-1 text-[10px] font-mono text-slate-500">Phiên {data.sessionDate} · cập nhật {formatTime(data.asOf)} · nguồn KFSP Ngành</p>
+
           <div id="market-charts-title" className="mt-5">
             <h3 className="sr-only">Nội lực thị trường & Phân tích chuyên sâu</h3>
           </div>
@@ -239,7 +241,22 @@ function PulseStat({ label, value, tone }: { label: string; value: string; tone?
 function IndexTile({ item }: { item: MarketCloseDashboardData["indexes"][number] }) {
   const positive = (item.changePct ?? 0) >= 0
   const total = Math.max(1, item.advances + item.unchanged + item.declines)
-  return <Card className={cn(surface, "group py-0 transition-colors hover:border-teal-300/20")}><CardContent className="p-4"><div className="flex items-center justify-between gap-2"><div><span className="font-mono text-xs font-black text-slate-300">{item.indexCode}</span><span className="ml-2 text-[9px] text-slate-600">{item.indexCode === "VNINDEX" ? "HOSE" : item.indexCode === "VN30" ? "Rổ vốn hóa lớn" : item.indexCode}</span></div><span className={cn("font-mono text-[11px] font-bold", positive ? "text-teal-300" : "text-rose-300")}>{formatSigned(item.changePct, 2, "%")}</span></div><strong className="mt-3 block font-mono text-xl font-black text-white">{formatNumber(item.value)}</strong><div className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-slate-700/50"><span className="bg-teal-300" style={{ width: `${item.advances / total * 100}%` }} /><span className="bg-slate-500" style={{ width: `${item.unchanged / total * 100}%` }} /><span className="bg-rose-400" style={{ width: `${item.declines / total * 100}%` }} /></div><div className="mt-2 flex justify-between font-mono text-[9px] text-slate-600"><span>{item.advances} tăng</span><span>{item.declines} giảm</span></div></CardContent></Card>
+  return (
+    <Card className={cn(surface, "group py-0 transition-colors hover:border-teal-300/20")}>
+      <CardContent className="p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <span className="font-mono text-[11px] font-black text-slate-300">{item.indexCode}</span>
+            <span className="ml-1.5 text-[8px] text-slate-600">{item.indexCode === "VNINDEX" ? "HOSE" : item.indexCode === "VN30" ? "Rổ vốn hóa lớn" : item.indexCode}</span>
+          </div>
+          <span className={cn("shrink-0 font-mono text-[10px] font-bold", positive ? "text-teal-300" : "text-rose-300")}>{formatSigned(item.changePct, 2, "%")}</span>
+        </div>
+        <strong className="mt-1.5 block font-mono text-lg font-black leading-none text-white">{formatNumber(item.value)}</strong>
+        <div className="mt-2 flex h-1 overflow-hidden rounded-full bg-slate-700/50"><span className="bg-teal-300" style={{ width: `${item.advances / total * 100}%` }} /><span className="bg-slate-500" style={{ width: `${item.unchanged / total * 100}%` }} /><span className="bg-rose-400" style={{ width: `${item.declines / total * 100}%` }} /></div>
+        <div className="mt-1.5 flex justify-between font-mono text-[8px] text-slate-600"><span>{item.advances} tăng</span><span>{item.declines} giảm</span></div>
+      </CardContent>
+    </Card>
+  )
 }
 
 function ChartPanel({ icon, title, description, children }: { icon: React.ComponentType<{ className?: string }>; title: string; description: string; children: React.ReactNode }) {
