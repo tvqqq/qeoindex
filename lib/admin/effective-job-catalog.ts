@@ -45,6 +45,7 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
   if (job.key === "signals.daily") {
     return withSchedulePolicy({
       ...job,
+      scheduleIct: "07:00–07:59 T2-T6 (Vercel Hobby)",
       maxDurationMinutes: 8 * 60,
     })
   }
