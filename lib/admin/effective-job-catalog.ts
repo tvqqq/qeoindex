@@ -7,7 +7,7 @@ const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
   provider: "supabase_pg_cron_workflow",
   label: "QeoIndex EOD Pipeline",
   description:
-    "Supabase-first EOD v3: readiness → market close → OHLCV → Wyckoff → Supabase validate/publish → AI Council → synthesis → Notion/Drive archive → retention.",
+    "Supabase-first EOD v3: readiness → market close → OHLCV → Wyckoff → Supabase validate/publish → AI Council → synthesis → Notion archive → retention.",
   group: "system",
   scheduleUtc: "15 8 * * 1-5",
   scheduleIct: "15:15 T2-T6",
@@ -25,7 +25,6 @@ const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
     "AI_COUNCIL_LLM",
     "MARKET_SYNTHESIS",
     "NOTION_ARCHIVE",
-    "DRIVE_ARCHIVE",
     "RETENTION_CLEANUP",
     "COMPLETE",
   ],
