@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
 
 import { requireApiUser } from "@/lib/auth/server"
-import { fetchLiveBatchQuotes } from "@/lib/broker-live-quotes"
+import { fetchLiveBatchQuotes, type LiveBatchQuote } from "@/lib/broker-live-quotes"
 import { getCanonicalUniverse } from "@/lib/market-universe"
 import { MARKET_UNIVERSE_MAX_SIZE } from "@/lib/market-universe-selection"
+import { getCanonicalBoardOverviewSnapshots } from "@/lib/supabase/board-overview"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -39,7 +40,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "Unsupported symbol." }, { status: 400, headers: NO_STORE_HEADERS })
     }
 
-    const quotes = await fetchLiveBatchQuotes(symbols)
+    const [brokerQuotes, snapshots] = await Promise.all([
+      fetchLiveBatchQuotes(symbols),
+      getCanonicalBoardOverviewSnapshots(symbols),
+    ])
+    const quotes: Record<string, LiveBatchQuote> = { ...brokerQuotes }
+
+    for (const symbol of symbols) {
+      if (quotes[symbol]?.price && quotes[symbol].price! > 0) continue
+      const snapshot = snapshots[symbol]
+      const price = snapshot?.latest_price || snapshot?.reference_price
+      if (!snapshot || !price || price <= 0) continue
+      const reference = snapshot.reference_price || price
+      quotes[symbol] = {
+        symbol,
+        price,
+        reference,
+        ceiling: snapshot.ceiling_price,
+        floor: snapshot.floor_price,
+        change: price - reference,
+        changePercent: reference > 0 ? ((price - reference) / reference) * 100 : 0,
+        volume: snapshot.total_volume,
+      }
+    }
+
+    const missingSymbols = symbols.filter((symbol) => !quotes[symbol]?.price || Number(quotes[symbol].price) <= 0)
+    if (missingSymbols.length > 0) {
+      return NextResponse.json({
+        ok: false,
+        error: "Unable to reconcile all requested market quotes.",
+        missingSymbols,
+      }, { status: 503, headers: NO_STORE_HEADERS })
+    }
+
     return NextResponse.json({ ok: true, quotes, updatedAt: new Date().toISOString() }, { headers: NO_STORE_HEADERS })
   } catch (error) {
     console.error("[Market Board Quotes] reconcile failed", error)
