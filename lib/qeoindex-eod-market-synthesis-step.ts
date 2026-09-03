@@ -158,14 +158,19 @@ function toContext(
 
   if (
     !payload
+    || !payloadSnapshotId
+    || !payloadEvidenceHash
+    || !payloadSessionDate
+    || !payloadAsOf
+    || !posture
+    || !confidence
+    || !headline
+    || !conclusion
     || payloadSnapshotId !== row.snapshot_id
     || payloadEvidenceHash !== row.evidence_hash
     || payloadSessionDate !== snapshot.sessionDate
     || !sameInstant(payloadAsOf, snapshot.asOf)
     || posture !== row.posture
-    || !confidence
-    || !headline
-    || !conclusion
   ) {
     throw Object.assign(
       new Error(`MARKET_SYNTHESIS persisted payload identity is invalid for ${snapshot.sessionDate}`),
