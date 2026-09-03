@@ -20,6 +20,7 @@ test("QEO-58 refreshes same-session KFSP/TTAI and market close before READY", ()
     "runTtaiRefreshStep",
     "runMarketCloseCollectStep",
     "runEodReadyStep",
+    "assertReadyMatchesFrozenUniverse",
   ]
 
   let cursor = -1
@@ -31,12 +32,12 @@ test("QEO-58 refreshes same-session KFSP/TTAI and market close before READY", ()
 
   assert.match(workflow, /if \(historicalBackfill\)[\s\S]*runEodBackfillReadyStep/)
   assert.match(workflow, /runTtaiRefreshStep\([\s\S]*ratingRefresh\.universe/)
-  assert.match(workflow, /runMarketCloseCollectStep\([\s\S]*ratingRefresh\.universe\.runId/)
-  assert.match(workflow, /runEodReadyStep\([\s\S]*ratingRefresh\.universe/)
+  assert.match(workflow, /assertFrozenUniverseStillCurrent\(ratingRefresh\.universe\)[\s\S]*runMarketCloseCollectStep/)
+  assert.match(workflow, /runMarketCloseCollectStep[\s\S]*assertFrozenUniverseStillCurrent\(ratingRefresh\.universe\)/)
 })
 
 test("QEO-58 Rating refresh freezes an exact canonical universe for the session", () => {
-  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const steps = source("lib/qeoindex-eod-data-refresh-steps.ts")
 
   assert.match(steps, /export async function runKfspRatingRefreshStep/)
   assert.match(steps, /kfsp-rating-sync/)
@@ -50,24 +51,24 @@ test("QEO-58 Rating refresh freezes an exact canonical universe for the session"
 })
 
 test("QEO-58 TTAI refresh is session-bound and explicit about degraded partial failures", () => {
-  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const steps = source("lib/qeoindex-eod-data-refresh-steps.ts")
 
   assert.match(steps, /export async function runTtaiRefreshStep/)
   assert.match(steps, /kfsp-ttai-history-sync/)
   assert.match(steps, /latest_rating_date/)
-  assert.match(steps, /status:\s*"degraded"/)
+  assert.match(steps, /status:\s*failedTickers\.length\s*>\s*0\s*\?\s*"degraded"/)
   assert.match(steps, /failed/)
   assert.match(steps, /assertFrozenUniverseStillCurrent/)
 })
 
 test("QEO-58 READY validates frozen run identity and exact membership, not count only", () => {
-  const legacy = source("lib/qeoindex-eod-workflow-steps-legacy.ts")
+  const steps = source("lib/qeoindex-eod-data-refresh-steps.ts")
 
-  assert.match(legacy, /expectedUniverse/)
-  assert.match(legacy, /universe\.runId\s*!==\s*expectedUniverse\.runId/)
-  assert.match(legacy, /missing=/)
-  assert.match(legacy, /unexpected=/)
-  assert.doesNotMatch(legacy, /selection\.stocks\.length\s*!==\s*market\.ratingTickers\.length[\s\S]*return \{/)
+  assert.match(steps, /export async function assertReadyMatchesFrozenUniverse/)
+  assert.match(steps, /readyUniverseRunId\s*!==\s*expectedUniverse\.runId/)
+  assert.match(steps, /missing=/)
+  assert.match(steps, /unexpected=/)
+  assert.match(steps, /expectedUniverse\.tickers/)
 })
 
 test("QEO-58 exposes refresh phases without retiring morning recovery schedules", () => {
