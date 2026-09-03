@@ -18,6 +18,11 @@ export interface WyckoffV2CachedHistory {
   hourly: CachedOhlcvHistory
 }
 
+export interface WyckoffV2PartialCacheResult {
+  histories: Map<string, WyckoffV2CachedHistory>
+  errors: Array<{ ticker: string; error: string }>
+}
+
 function normalizeTickers(input: string[]) {
   const tickers = [...new Set(input.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))]
   if (!tickers.length) throw new Error("OHLCV cache read requires at least one ticker")
@@ -63,12 +68,13 @@ export function cachedHistoryFromRows(ticker: string, inputRows: StoredV2OhlcvRo
   }
 }
 
-export async function loadWyckoffV2CachedHistories(
+export async function loadWyckoffV2CachedHistoriesPartial(
   supabase: SupabaseClient,
   inputTickers: string[],
-): Promise<Map<string, WyckoffV2CachedHistory>> {
+): Promise<WyckoffV2PartialCacheResult> {
   const tickers = normalizeTickers(inputTickers)
-  const result = new Map<string, WyckoffV2CachedHistory>()
+  const histories = new Map<string, WyckoffV2CachedHistory>()
+  const errors: Array<{ ticker: string; error: string }> = []
 
   for (let offset = 0; offset < tickers.length; offset += V2_CACHE_BATCH_SIZE) {
     const batch = tickers.slice(offset, offset + V2_CACHE_BATCH_SIZE)
@@ -80,22 +86,38 @@ export async function loadWyckoffV2CachedHistories(
 
     const grouped = decodeGroupedDailyOhlcvResponse(data, batch)
     for (const ticker of batch) {
-      const rows = grouped.get(ticker) || []
-      if (!rows.length) throw new Error(`OHLCV cache batch missing Daily history for ${ticker}`)
-      const daily = cachedHistoryFromRows(ticker, rows)
-      result.set(ticker, {
-        daily,
-        // Compatibility alias for legacy modules during the cutover. It points to Daily data and is never persisted as intraday history.
-        hourly: daily,
-      })
+      try {
+        const rows = grouped.get(ticker) || []
+        if (!rows.length) throw new Error(`OHLCV cache batch missing Daily history for ${ticker}`)
+        const daily = cachedHistoryFromRows(ticker, rows)
+        histories.set(ticker, {
+          daily,
+          // Compatibility alias for legacy modules during the cutover. It points to Daily data and is never persisted as intraday history.
+          hourly: daily,
+        })
+      } catch (tickerError) {
+        errors.push({ ticker, error: tickerError instanceof Error ? tickerError.message : String(tickerError) })
+      }
     }
   }
 
-  if (result.size !== tickers.length) {
-    const missing = tickers.filter((ticker) => !result.has(ticker))
-    throw new Error(`OHLCV cache batch incomplete: missing=${missing.join(",") || "unknown"}`)
+  return { histories, errors }
+}
+
+export async function loadWyckoffV2CachedHistories(
+  supabase: SupabaseClient,
+  inputTickers: string[],
+): Promise<Map<string, WyckoffV2CachedHistory>> {
+  const tickers = normalizeTickers(inputTickers)
+  const result = await loadWyckoffV2CachedHistoriesPartial(supabase, tickers)
+  if (result.errors.length || result.histories.size !== tickers.length) {
+    const missing = tickers.filter((ticker) => !result.histories.has(ticker))
+    throw new Error(
+      `OHLCV cache batch incomplete: missing=${missing.join(",") || "unknown"}`
+      + `${result.errors.length ? `; errors=${result.errors.slice(0, 5).map((item) => `${item.ticker}: ${item.error}`).join(" | ")}` : ""}`,
+    )
   }
-  return result
+  return result.histories
 }
 
 export async function loadWyckoffV2CachedTickerHistory(supabase: SupabaseClient, tickerInput: string) {
