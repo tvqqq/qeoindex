@@ -14,7 +14,10 @@ import {
   normalizeOhlcvTickers,
   type OhlcvCoverage,
 } from "../lib/ohlcv-history-store.ts"
-import { buildVerifiedNoTradeDailyBar } from "../lib/qeoindex-eod-no-trade-repair-step.ts"
+import {
+  buildVerifiedFinalMarketCloseDailyBar,
+  buildVerifiedNoTradeDailyBar,
+} from "../lib/qeoindex-eod-no-trade-repair-step.ts"
 import {
   buildEodHistoryRefreshSummary,
   EodHistoryRefreshError,
@@ -161,6 +164,55 @@ test("no-trade repair rejects stale, traded, or price-drift snapshots", () => {
   assert.equal(buildVerifiedNoTradeDailyBar("LGC", "2026-08-27", { ...base, total_volume: 100 }), null)
   assert.equal(buildVerifiedNoTradeDailyBar("LGC", "2026-08-27", { ...base, latest_price: 65 }), null)
   assert.equal(buildVerifiedNoTradeDailyBar("LGC", "2026-08-27", { ...base, updated_at: "2026-08-27T07:44:59.000Z" }), null)
+})
+
+test("verified final traded snapshot repairs exact-session Daily and normalizes ATC close into high/low", () => {
+  const bar = buildVerifiedFinalMarketCloseDailyBar("VIC", "2026-09-03", {
+    symbol: "VIC",
+    session_date: "2026-09-03",
+    reference_price: 236,
+    latest_price: 244.5,
+    total_volume: 7_042_100,
+    updated_at: "2026-09-03T07:45:07.879Z",
+    latest_quote: {
+      openPrice: 232.9,
+      highPrice: 244.3,
+      lowPrice: 226,
+      matchPrice: 244.5,
+      totalVolume: 7_042_100,
+    },
+  })
+
+  assert.deepEqual(bar, {
+    time: Math.floor(new Date("2026-09-03T02:00:00.000Z").getTime() / 1000),
+    open: 232.9,
+    high: 244.5,
+    low: 226,
+    close: 244.5,
+    volume: 7_042_100,
+  })
+})
+
+test("verified final traded snapshot rejects stale or incomplete market-close evidence", () => {
+  const base = {
+    symbol: "MSN",
+    session_date: "2026-09-03",
+    reference_price: 70.2,
+    latest_price: 69,
+    total_volume: 4_764_100,
+    updated_at: "2026-09-03T07:45:07.883Z",
+    latest_quote: {
+      openPrice: 69.5,
+      highPrice: 69.6,
+      lowPrice: 68.3,
+      matchPrice: 69,
+      totalVolume: 4_764_100,
+    },
+  }
+
+  assert.equal(buildVerifiedFinalMarketCloseDailyBar("MSN", "2026-09-03", { ...base, updated_at: "2026-09-03T07:44:59.999Z" }), null)
+  assert.equal(buildVerifiedFinalMarketCloseDailyBar("MSN", "2026-09-03", { ...base, latest_quote: { ...base.latest_quote, openPrice: null } }), null)
+  assert.equal(buildVerifiedFinalMarketCloseDailyBar("MSN", "2026-09-03", { ...base, latest_quote: { ...base.latest_quote, matchPrice: 68.9 } }), null)
 })
 
 test("EOD HISTORY_REFRESH summary is compact and fail-closed on provider/runtime errors", () => {
