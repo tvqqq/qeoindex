@@ -1,5 +1,6 @@
 import { LandingLogin } from "@/components/auth/landing-login"
-import { LiveMarketBoardV2, type BoardUniverseStock, type IndexQuote } from "@/components/live-market-board-v2"
+import { MarketBoardFilterShell, type FilterBoardUniverseStock } from "@/components/market-board/market-board-filter-shell"
+import type { IndexQuote } from "@/components/live-market-board-v2"
 import { MarketUniverseVersionRefresh } from "@/components/market-universe-version-refresh"
 import { OrderBookProvider } from "@/components/orderbook/orderbook-context"
 import { OrderBookManager } from "@/components/orderbook/orderbook-manager"
@@ -24,7 +25,7 @@ const INITIAL_HISTORY_POINTS = 90
 const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v6"
 
 type InitialBoardData = {
-  universe: BoardUniverseStock[]
+  universe: FilterBoardUniverseStock[]
   initialQuotes: Record<string, LiveStockQuote | IndexQuote>
   initialHistories: Record<string, IntradayPoint[]>
 }
@@ -57,7 +58,7 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
     ? Object.fromEntries(intraday5m.rows.map((row) => [row.symbol, row]))
     : null
 
-  const universe: BoardUniverseStock[] = canonical.stocks.map((stock) => {
+  const universe: FilterBoardUniverseStock[] = canonical.stocks.map((stock) => {
     const snap = snapshots[stock.ticker]
     const live = liveQuotes[stock.ticker]
     const cachedRow = cachedRowsBySymbol?.[stock.ticker]
@@ -66,6 +67,8 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
       ticker: stock.ticker,
       rank: stock.rank,
       sector: boardSectorGroupForSector(stock.sector || sectorForTicker(stock.ticker)).sectors[0],
+      exchange: stock.exchange || "",
+      kfspSector: stock.sector || sectorForTicker(stock.ticker),
       marketCapT: stock.marketCapBillion / 1000,
       lastClose: lastClosePrice,
       lastCloseDate: snap?.session_date || "",
@@ -148,11 +151,13 @@ export default async function Page() {
         <TopNav />
         <main className="min-h-0 flex-1">
           <MarketBoardTransition className="h-full min-h-0">
-            <LiveMarketBoardV2
+            <MarketBoardFilterShell
               universe={universe}
               initialQuotes={initialQuotes}
               initialHistories={initialHistories}
               isSessionOpen={isSessionOpen}
+              userId={auth.user.id}
+              universeRunId={canonical.runId}
             />
           </MarketBoardTransition>
         </main>

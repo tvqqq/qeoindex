@@ -2,6 +2,14 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { BOARD_SECTOR_GROUPS } from "../lib/market-sectors.ts"
+import {
+  defaultStockFilterCriteria,
+  filterBoardTickers,
+  isValidDailyFilterCache,
+  mergeStockFilterIntoSettings,
+  normalizeStockFilterCriteria,
+  stockFilterHash,
+} from "../lib/market-board/stock-filter.ts"
 
 const boardSource = readFileSync(new URL("../components/live-market-board-v2.tsx", import.meta.url), "utf8")
 const stockSource = readFileSync(new URL("../components/live-market-stock.tsx", import.meta.url), "utf8")
@@ -186,3 +194,97 @@ test("stock prices render in clean white with color-toned percentage pills", () 
   assert.match(pillSource, /text-amber-400 bg-amber-500/)
 })
 
+test("market board filter defaults to all exchanges and raw sectors", () => {
+  const criteria = defaultStockFilterCriteria(["Ngân hàng", "Bất động sản"], "2026-09-03T07:00:00.000Z")
+  assert.deepEqual(criteria.exchanges, ["HOSE", "HNX", "UPCOM"])
+  assert.deepEqual(criteria.sectors, ["Bất động sản", "Ngân hàng"])
+  assert.equal(criteria.minPriceVnd, null)
+  assert.equal(criteria.minVolumeShares, null)
+})
+
+test("market board filter normalization removes unsupported values and zero thresholds", () => {
+  const criteria = normalizeStockFilterCriteria({
+    version: 1,
+    exchanges: ["HNX", "INVALID", "HNX", "HOSE"],
+    minPriceVnd: 0,
+    minVolumeShares: "0",
+    sectors: ["Ngân hàng", "Unknown", "Ngân hàng"],
+    updatedAt: "stale",
+  }, ["Ngân hàng", "Bất động sản"], "2026-09-03T07:00:00.000Z")
+
+  assert.ok(criteria)
+  assert.deepEqual(criteria.exchanges, ["HOSE", "HNX"])
+  assert.deepEqual(criteria.sectors, ["Ngân hàng"])
+  assert.equal(criteria.minPriceVnd, null)
+  assert.equal(criteria.minVolumeShares, null)
+  assert.equal(criteria.updatedAt, "2026-09-03T07:00:00.000Z")
+  assert.equal(normalizeStockFilterCriteria({ exchanges: [], sectors: ["Ngân hàng"] }, ["Ngân hàng"]), null)
+  assert.equal(normalizeStockFilterCriteria({ exchanges: ["HOSE"], sectors: [] }, ["Ngân hàng"]), null)
+})
+
+test("market board filter combines exchange price liquidity and KFSP sector", () => {
+  const stocks = [
+    { ticker: "VCB", exchange: "HOSE", kfspSector: "Ngân hàng", lastClose: 80 },
+    { ticker: "SHB", exchange: "HNX", kfspSector: "Ngân hàng", lastClose: 12 },
+    { ticker: "CEO", exchange: "HNX", kfspSector: "Bất động sản", lastClose: 18 },
+  ]
+  const quotes = {
+    VCB: { price: 81, volume: 1_500_000 },
+    SHB: { price: 12.5, volume: 8_000_000 },
+    CEO: { price: 19, volume: 900_000 },
+  }
+  const criteria = normalizeStockFilterCriteria({
+    version: 1,
+    exchanges: ["HOSE"],
+    minPriceVnd: 20,
+    minVolumeShares: 1_000_000,
+    sectors: ["Ngân hàng"],
+  }, ["Ngân hàng", "Bất động sản"], "2026-09-03T07:00:00.000Z")!
+
+  assert.deepEqual(filterBoardTickers(stocks, quotes, criteria), ["VCB"])
+})
+
+test("market board filter uses last close for price only and rejects missing live liquidity", () => {
+  const stock = [{ ticker: "VCB", exchange: "HOSE", kfspSector: "Ngân hàng", lastClose: 80 }]
+  const priceOnly = normalizeStockFilterCriteria({ exchanges: ["HOSE"], minPriceVnd: 70, sectors: ["Ngân hàng"] }, ["Ngân hàng"])!
+  const withLiquidity = normalizeStockFilterCriteria({ exchanges: ["HOSE"], minPriceVnd: 70, minVolumeShares: 1, sectors: ["Ngân hàng"] }, ["Ngân hàng"])!
+
+  assert.deepEqual(filterBoardTickers(stock, {}, priceOnly), ["VCB"])
+  assert.deepEqual(filterBoardTickers(stock, {}, withLiquidity), [])
+})
+
+test("market board filter hash ignores updatedAt and daily cache validates full identity", () => {
+  const a = normalizeStockFilterCriteria({ exchanges: ["HNX", "HOSE"], sectors: ["Ngân hàng"], updatedAt: "a" }, ["Ngân hàng"], "2026-09-03T07:00:00.000Z")!
+  const b = normalizeStockFilterCriteria({ exchanges: ["HOSE", "HNX"], sectors: ["Ngân hàng"], updatedAt: "b" }, ["Ngân hàng"], "2026-09-03T08:00:00.000Z")!
+  const filterHash = stockFilterHash(a)
+  assert.equal(filterHash, stockFilterHash(b))
+
+  const cache = {
+    version: 1,
+    userId: "user-1",
+    vietnamDate: "2026-09-03",
+    universeRunId: "run-1",
+    filterHash,
+    tickers: ["VCB"],
+    resolvedAt: "2026-09-03T07:00:00.000Z",
+  }
+  const expected = { userId: "user-1", vietnamDate: "2026-09-03", universeRunId: "run-1", filterHash, universeSymbols: ["VCB", "FPT"] }
+  assert.equal(isValidDailyFilterCache(cache, expected), true)
+  assert.equal(isValidDailyFilterCache({ ...cache, userId: "user-2" }, expected), false)
+  assert.equal(isValidDailyFilterCache({ ...cache, vietnamDate: "2026-09-04" }, expected), false)
+  assert.equal(isValidDailyFilterCache({ ...cache, universeRunId: "run-2" }, expected), false)
+  assert.equal(isValidDailyFilterCache({ ...cache, filterHash: "other" }, expected), false)
+  assert.equal(isValidDailyFilterCache({ ...cache, tickers: ["GHOST"] }, expected), false)
+})
+
+test("market board filter preference merge preserves unrelated settings", () => {
+  const criteria = defaultStockFilterCriteria(["Ngân hàng"], "2026-09-03T07:00:00.000Z")
+  const merged = mergeStockFilterIntoSettings({ theme: "dark", marketBoard: { density: "compact" } }, criteria)
+  assert.deepEqual(merged, {
+    theme: "dark",
+    marketBoard: {
+      density: "compact",
+      stockFilter: criteria,
+    },
+  })
+})
