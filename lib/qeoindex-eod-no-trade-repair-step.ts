@@ -99,13 +99,13 @@ export function buildVerifiedFinalDailyBar(
   ) return null
   if (Math.abs(quoteVolume - volume) >= 1e-9) return null
   if (Math.abs(close - latestPrice) >= 1e-9) return null
-  if (high < low || high < open || high < close || low > open || low > close) return null
+  if (high < low) return null
 
   return {
     time: dailyBarTime(sessionDate),
     open,
-    high,
-    low,
+    high: Math.max(open, high, close),
+    low: Math.min(open, low, close),
     close,
     volume: quoteVolume,
   }
@@ -196,7 +196,7 @@ export async function runEodNoTradeDailyRepairStep(
         close: bar.close,
         volume: bar.volume,
         provider: "Fallback",
-        provider_detail: "Verified final Daily repair from stock_orderbook_snapshots",
+        provider_detail: "Verified final market-close repair from stock_orderbook_snapshots",
         source_url: "internal://stock_orderbook_snapshots",
         fetched_at: fetchedAt,
       }]
