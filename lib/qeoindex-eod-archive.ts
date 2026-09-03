@@ -136,7 +136,7 @@ export async function runEodRetentionCleanup(
       status: "error",
       detail: `Job telemetry retention returned invalid status=${jobTelemetryCleanup?.status || "missing"}. ${rawHistoryDetail}`,
       safeCleanup,
-      jobTelemetryCleanup,
+      jobTelemetryCleanup: jobTelemetryCleanup || undefined,
       rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
     }
   }
@@ -161,7 +161,7 @@ export async function runEodRetentionCleanup(
       detail: `Wyckoff build-artifact retention returned invalid status=${buildArtifactCleanup?.status || "missing"}. ${rawHistoryDetail}`,
       safeCleanup,
       jobTelemetryCleanup,
-      buildArtifactCleanup,
+      buildArtifactCleanup: buildArtifactCleanup || undefined,
       rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
     }
   }
