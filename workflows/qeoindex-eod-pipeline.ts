@@ -14,13 +14,13 @@ import {
 } from "@/lib/qeoindex-eod-data-refresh-steps"
 import { failQeoIndexEodRunStep } from "@/lib/qeoindex-eod-failure-step"
 import { runEodNoTradeDailyRepairStep } from "@/lib/qeoindex-eod-no-trade-repair-step"
+import { runRetentionCleanupStep } from "@/lib/qeoindex-eod-retention-step"
 import { skipQeoIndexEodRunStep } from "@/lib/qeoindex-eod-skip-step"
 import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "@/lib/vn-market-calendar"
 import type { OhlcvUniverseRefreshResult } from "@/lib/ohlcv-history-store"
 import {
   runCompleteStep,
   runDeterministicCouncilStep,
-  runDriveArchiveStep,
   runEodReadyStep,
   runHistoryRefreshBatchStep,
   runLlmDebateStep,
@@ -29,7 +29,6 @@ import {
   runNotionArchiveFinalizeStep,
   runNotionEodArchiveBatchStep,
   runNotionUniverseArchiveBatchStep,
-  runRetentionCleanupStep,
   runSupabasePublishStep,
   runSupabaseValidateStep,
   runWyckoffBuildStep,
@@ -331,11 +330,6 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
     }
 
     const notionArchive = await runNotionArchiveFinalizeStep(runId, notionUniverseBatches, notionEodBatches)
-    const driveArchive = await runDriveArchiveStep(runId, {
-      tradingDate: ready.scanDate,
-      universeRunId: ready.market.universeRunId,
-      validationHash: validation.validationHash,
-    })
     const retention = await runRetentionCleanupStep(runId, {
       startedAtIso,
       tradingDate: ready.scanDate,
@@ -346,7 +340,6 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       validationHash: validation.validationHash,
       marketSynthesisStatus: marketSynthesis.status,
       notionArchive,
-      driveArchive,
     })
 
     const complete = await runCompleteStep(runId, {
@@ -371,7 +364,6 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       llmStatus: llm.status,
       marketSynthesisStatus: marketSynthesis.status,
       notionArchiveStatus: notionArchive.status,
-      driveArchiveStatus: driveArchive.status,
       retentionStatus: retention.status,
       validationHash: validation.validationHash,
     })
@@ -392,7 +384,6 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       llmStatus: llm.status,
       marketSynthesisStatus: marketSynthesis.status,
       notionArchiveStatus: notionArchive.status,
-      driveArchiveStatus: driveArchive.status,
       retentionStatus: retention.status,
       complete,
     }
