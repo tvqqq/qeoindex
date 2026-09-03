@@ -65,18 +65,21 @@ test("QEO-58 READY validates frozen run identity and exact membership, not count
   const steps = source("lib/qeoindex-eod-data-refresh-steps.ts")
 
   assert.match(steps, /export async function assertReadyMatchesFrozenUniverse/)
-  assert.match(steps, /readyUniverseRunId\s*!==\s*expectedUniverse\.runId/)
+  assert.match(steps, /input\.readyUniverseRunId\s*!==\s*input\.expectedUniverse\.runId/)
   assert.match(steps, /missing=/)
   assert.match(steps, /unexpected=/)
-  assert.match(steps, /expectedUniverse\.tickers/)
+  assert.match(steps, /input\.expectedUniverse\.tickers/)
 })
 
 test("QEO-58 exposes refresh phases without retiring morning recovery schedules", () => {
   const phases = source("lib/admin/job-phases.ts")
-  const catalog = source("lib/admin/effective-job-catalog.ts")
+  const effectiveCatalog = source("lib/admin/effective-job-catalog.ts")
+  const baseCatalog = source("lib/admin/catalog.ts")
+  const catalog = `${baseCatalog}\n${effectiveCatalog}`
 
   assert.match(phases, /key: "KFSP_RATING_REFRESH"/)
   assert.match(phases, /key: "TTAI_REFRESH"/)
   assert.match(catalog, /kfsp-rating-daily-7am-ict/)
   assert.match(catalog, /kfsp-ttai-history-daily-0710-ict/)
+  assert.match(effectiveCatalog, /Morning schedule.*QEO-64|morning schedule.*QEO-64/i)
 })
