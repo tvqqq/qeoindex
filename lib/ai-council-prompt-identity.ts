@@ -7,6 +7,7 @@ export interface AiCouncilPromptIdentityInput {
   rawContextHash: string | null
   researchContextHash: string | null
   promptVersion: string
+  marketSynthesisHash?: string | null
 }
 
 function canonicalize(value: unknown): unknown {
@@ -41,19 +42,26 @@ export function resolveAiCouncilPromptIdentityHash(
   stock: {
     evidenceHash: string
     llmEvidence?: { contextHash?: unknown }
-    researchContext?: { contextHash?: unknown; promptIdentityHash?: unknown }
+    researchContext?: {
+      contextHash?: unknown
+      promptIdentityHash?: unknown
+      marketSynthesis?: { evidenceHash?: unknown }
+    }
   },
   promptVersion: string,
 ) {
+  const marketSynthesisHash = hashString(stock.researchContext?.marketSynthesis?.evidenceHash)
   const computedIdentity = buildAiCouncilPromptIdentityHash({
     deterministicEvidenceHash: stock.evidenceHash,
     rawContextHash: hashString(stock.llmEvidence?.contextHash),
     researchContextHash: hashString(stock.researchContext?.contextHash),
     promptVersion,
+    ...(marketSynthesisHash ? { marketSynthesisHash } : {}),
   })
   const persistedResearchIdentity = hashString(stock.researchContext?.promptIdentityHash)
 
-  // Reuse the frozen audit identity only when it was created for the same prompt version.
-  // Failed/partial runs may be retried after a prompt bump while retaining immutable source contexts.
+  // Reuse the frozen audit identity only when it covers the exact same prompt inputs.
+  // A same-session Market Synthesis context changes the prompt/cache identity without
+  // mutating the immutable research-context audit row.
   return persistedResearchIdentity === computedIdentity ? persistedResearchIdentity : computedIdentity
 }
