@@ -13,25 +13,34 @@ function qeo21RetentionMigration() {
   return source(`supabase/migrations/${matches[0]}`)
 }
 
-test("EOD publishes same-session evidence and validated Wyckoff before Council, Notion archive, and retention", () => {
+test("EOD v4 freezes Rating, joins concurrent data refresh, then publishes same-session evidence before Council", () => {
   const workflowPath = "workflows/qeoindex-eod-pipeline.ts"
   assert.equal(existsSync(new URL(`../${workflowPath}`, import.meta.url)), true)
   const workflow = source(workflowPath)
+  const body = workflow.slice(workflow.indexOf("export async function qeoindexEodPipeline"))
+
+  const rating = body.indexOf("runKfspRatingRefreshStep")
+  const parallel = body.indexOf("Promise.all", rating)
+  const ttai = body.indexOf("runTtaiRefreshBranch", rating)
+  const market = body.indexOf("runMarketCloseBranch", rating)
+  const ready = body.indexOf("runEodReadyStep", rating)
+  assert.ok(rating >= 0 && parallel > rating)
+  assert.ok(ttai > rating && ttai < ready)
+  assert.ok(market > rating && market < ready)
+  assert.ok(ready > parallel)
+  assert.match(body.slice(rating, ready), /assertFrozenUniverseStillCurrent/)
+  assert.match(body.slice(ready), /assertReadyMatchesFrozenUniverse/)
 
   const ordered = [
-    "runKfspRatingRefreshStep",
-    "runTtaiRefreshStep",
-    "runMarketCloseCollectStep",
     "runEodReadyStep",
-    "assertReadyMatchesFrozenUniverse",
-    "runHistoryRefreshBatchStep",
+    "runHistoryRefreshWindowStep",
     "runEodNoTradeDailyRepairStep",
     "runWyckoffBuildStep",
     "runSupabaseValidateStep",
     "runSupabasePublishStep",
     "runDeterministicCouncilStep",
-    "runLlmDebateStep",
     "runMarketSynthesisStep",
+    "runLlmDebateStep",
     "runNotionUniverseArchiveBatchStep",
     "runNotionEodArchiveBatchStep",
     "runNotionArchiveFinalizeStep",
@@ -41,8 +50,8 @@ test("EOD publishes same-session evidence and validated Wyckoff before Council, 
 
   let cursor = -1
   for (const call of ordered) {
-    const next = workflow.indexOf(call, cursor + 1)
-    assert.ok(next > cursor, `${call} must appear after the prior EOD phase`)
+    const next = body.indexOf(call, cursor + 1)
+    assert.ok(next > cursor, `${call} must appear after the prior EOD dependency gate`)
     cursor = next
   }
 
@@ -110,7 +119,7 @@ test("QEO-39 builds once, stages run-scoped artifacts, and keeps snapshots out o
   assert.match(workflow, /runSupabasePublishStep\([\s\S]*?runId[\s\S]*?ready\.runKey[\s\S]*?ready\.scanDate[\s\S]*?validation\.validationHash[\s\S]*?\)/)
 })
 
-test("admin EOD phase catalog exposes transitional EOD v4 data-refresh order without Drive", () => {
+test("admin EOD phase catalog exposes internal durable steps mapped to seven v4 business phases without Drive", () => {
   const code = source("lib/admin/job-phases.ts")
   for (const phase of [
     "KFSP_RATING_REFRESH",
@@ -122,13 +131,17 @@ test("admin EOD phase catalog exposes transitional EOD v4 data-refresh order wit
     "SUPABASE_VALIDATE",
     "SUPABASE_PUBLISH",
     "AI_COUNCIL_DETERMINISTIC",
-    "AI_COUNCIL_LLM",
     "MARKET_SYNTHESIS",
+    "AI_COUNCIL_LLM",
     "NOTION_ARCHIVE",
     "RETENTION_CLEANUP",
     "COMPLETE",
   ]) assert.match(code, new RegExp(`key: "${phase}"`))
+  for (const phase of ["DATA_REFRESH", "READY_GATE", "HISTORY_PREPARE", "WYCKOFF_PUBLISH", "AI_COUNCIL", "POST_ANALYSIS", "COMPLETE"]) {
+    assert.match(code, new RegExp(`key: "${phase}"`))
+  }
 
+  assert.match(code, /QEOINDEX_EOD_INTERNAL_PHASE_TO_BUSINESS/)
   assert.doesNotMatch(code, /DRIVE_ARCHIVE|100 ticker|500 Snapshot|NOTION_STAGING|NOTION_VALIDATE|key: "INGEST"/)
   assert.match(code, /canonical|Top Stocks|universeCount|động/i)
   assert.match(code, /1D\/1W/)

@@ -1,4 +1,9 @@
-import { QEOINDEX_EOD_JOB_KEY, QEOINDEX_EOD_PHASES, type QeoIndexEodPhaseKey } from "./job-phases.ts"
+import {
+  QEOINDEX_EOD_INTERNAL_PHASE_TO_BUSINESS,
+  QEOINDEX_EOD_JOB_KEY,
+  QEOINDEX_EOD_PHASES,
+  type QeoIndexEodPhaseKey,
+} from "./job-phases.ts"
 import { sanitizeAdminValue } from "./redact.ts"
 
 export interface QeoIndexEodPhaseIo {
@@ -24,8 +29,6 @@ async function getDefaultIo(): Promise<QeoIndexEodPhaseIo> {
 
 function phaseDefinition(phaseKey: QeoIndexEodTelemetryPhaseKey) {
   if (phaseKey === "DRIVE_ARCHIVE") {
-    // QEO-57: hidden legacy/recovery telemetry only. This phase is intentionally
-    // absent from QEOINDEX_EOD_PHASES, the active workflow, and Admin business UI.
     return {
       key: "DRIVE_ARCHIVE" as const,
       order: 99,
@@ -53,6 +56,19 @@ function sanitizedSummary(value: unknown): Record<string, unknown> {
   return sanitized as Record<string, unknown>
 }
 
+function businessPhaseFor(phaseKey: QeoIndexEodTelemetryPhaseKey) {
+  return phaseKey === "DRIVE_ARCHIVE"
+    ? "POST_ANALYSIS"
+    : QEOINDEX_EOD_INTERNAL_PHASE_TO_BUSINESS[phaseKey]
+}
+
+function phaseSummary(phaseKey: QeoIndexEodTelemetryPhaseKey, value: unknown = {}) {
+  return sanitizedSummary({
+    ...sanitizedSummary(value),
+    businessPhase: businessPhaseFor(phaseKey),
+  })
+}
+
 export async function runQeoIndexEodPhase<T>(input: {
   runId: string
   phaseKey: QeoIndexEodTelemetryPhaseKey
@@ -74,7 +90,7 @@ export async function runQeoIndexEodPhase<T>(input: {
     started_at: startedAt.toISOString(),
     finished_at: null,
     duration_ms: null,
-    summary: {},
+    summary: phaseSummary(input.phaseKey),
     error_code: null,
     error_message: null,
   })
@@ -82,7 +98,7 @@ export async function runQeoIndexEodPhase<T>(input: {
   try {
     const result = await input.fn()
     const finishedAt = new Date()
-    const summary = input.summarize ? sanitizedSummary(input.summarize(result)) : {}
+    const summary = phaseSummary(input.phaseKey, input.summarize ? input.summarize(result) : {})
     await io.upsertPhase({
       run_id: input.runId,
       job_key: QEOINDEX_EOD_JOB_KEY,
@@ -109,7 +125,7 @@ export async function runQeoIndexEodPhase<T>(input: {
       started_at: startedAt.toISOString(),
       finished_at: finishedAt.toISOString(),
       duration_ms: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
-      summary: {},
+      summary: phaseSummary(input.phaseKey),
       ...details,
     })
     throw error
@@ -135,7 +151,7 @@ export async function markQeoIndexEodPhaseSkipped(input: {
     started_at: now,
     finished_at: now,
     duration_ms: 0,
-    summary: sanitizedSummary({ reason: input.reason }),
+    summary: phaseSummary(input.phaseKey, { reason: input.reason }),
     error_code: null,
     error_message: null,
   })
@@ -163,7 +179,7 @@ export async function markQeoIndexEodPhaseRetryingStep(input: {
     started_at: now,
     finished_at: null,
     duration_ms: null,
-    summary: sanitizedSummary({
+    summary: phaseSummary(input.phaseKey, {
       attemptsUsed: input.attemptsUsed,
       nextAttemptAt: input.nextAttemptAt,
       lastError: input.lastError.slice(0, 500),
@@ -188,7 +204,7 @@ export async function annotateQeoIndexEodPhaseSummaryStep(input: {
 
   const { error } = await supabase
     .from("system_job_phases")
-    .update({ summary: sanitizedSummary(input.summary) })
+    .update({ summary: phaseSummary(input.phaseKey, input.summary) })
     .eq("run_id", input.runId)
     .eq("phase_key", input.phaseKey)
 

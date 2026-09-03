@@ -113,7 +113,7 @@ test("operational Council operations request the rebuilt final EOD evidence ense
   assert.equal((operations.match(/includeEodMarketOverlay:\s*true/g) || []).length, 2)
 })
 
-test("EOD orchestration is one durable dependency workflow with active Daily-only history and Council steps", () => {
+test("EOD orchestration is one durable v4 dependency workflow with bounded Daily history and Council steps", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   const steps = source("lib/qeoindex-eod-workflow-steps.ts")
   const operations = source("lib/ai-council-operations.ts")
@@ -123,8 +123,10 @@ test("EOD orchestration is one durable dependency workflow with active Daily-onl
   assert.match(steps, /"use step"/)
   assert.match(steps, /refreshOhlcvHistoryBatch/)
   assert.doesNotMatch(steps, /refreshOhlcvHistoryUniverse|hourlyFetchedBars/)
-  assert.match(workflow, /for \(let offset = 0; offset < ready\.stocks\.length; offset \+= 10\)/)
-  assert.match(workflow, /ready\.stocks\.slice\(offset, offset \+ 10\)/)
+  assert.match(workflow, /historyWindowSize = HISTORY_REFRESH_BATCH_SIZE \* historyConcurrency/)
+  assert.match(workflow, /runHistoryRefreshWindowStep/)
+  assert.match(steps, /Promise\.all/)
+  assert.match(steps, /HISTORY_REFRESH_BATCH_SIZE = 10/)
   assert.match(steps, /buildWyckoffV2TickerSnapshots/)
   assert.match(steps, /publishWyckoffV2SnapshotsDirect/)
   assert.match(steps, /runAiCouncilDailyOperation/)
@@ -135,21 +137,22 @@ test("EOD orchestration is one durable dependency workflow with active Daily-onl
   assert.match(route, /isMachineRequestAuthorized/)
 })
 
-test("unified EOD workflow remains fail-closed in dependency order without Drive archive", () => {
+test("unified EOD workflow remains fail-closed across the v4 dependency gates without Drive archive", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   const body = workflow.slice(workflow.indexOf("export async function qeoindexEodPipeline"))
   const ordered = [
-    "runEodReadyStep", "runHistoryRefreshBatchStep", "runWyckoffBuildStep", "runSupabaseValidateStep",
-    "runSupabasePublishStep", "runDeterministicCouncilStep", "runLlmDebateStep",
-    "runNotionUniverseArchiveBatchStep", "runNotionEodArchiveBatchStep", "runNotionArchiveFinalizeStep",
-    "runRetentionCleanupStep",
+    "runKfspRatingRefreshStep", "runEodReadyStep", "runHistoryRefreshWindowStep", "runWyckoffBuildStep",
+    "runSupabaseValidateStep", "runSupabasePublishStep", "runDeterministicCouncilStep", "runMarketSynthesisStep",
+    "runLlmDebateStep", "runNotionUniverseArchiveBatchStep", "runNotionEodArchiveBatchStep",
+    "runNotionArchiveFinalizeStep", "runRetentionCleanupStep",
   ]
   let cursor = -1
   for (const call of ordered) {
     const next = body.indexOf(call, cursor + 1)
-    assert.ok(next > cursor, `${call} must remain ordered after the prior phase`)
+    assert.ok(next > cursor, `${call} must remain ordered after the prior dependency gate`)
     cursor = next
   }
+  assert.match(body, /Promise\.all\([\s\S]*?runTtaiRefreshBranch[\s\S]*?runMarketCloseBranch/)
   assert.match(body, /published && deterministic\.ok/)
   assert.match(body, /failQeoIndexEodRunStep/)
   assert.doesNotMatch(body, /runDriveArchiveStep|driveArchiveStatus/)

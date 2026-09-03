@@ -32,7 +32,7 @@ function escaped(path: string) {
   return new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
 }
 
-test("production prebuild uses the EOD v3 contract suite", () => {
+test("production prebuild keeps the existing EOD regression suite wired", () => {
   const core = pkg.scripts["test:core"] || ""
   const v3 = pkg.scripts["test:eod-v3"] || ""
   assert.match(core, /pnpm test:eod-v3/)
@@ -40,7 +40,7 @@ test("production prebuild uses the EOD v3 contract suite", () => {
   for (const path of requiredV3Tests) assert.match(v3, escaped(path), path)
 })
 
-test("production lint gate covers all EOD v3 runtime surfaces", () => {
+test("production lint gate covers all EOD runtime surfaces", () => {
   const script = pkg.scripts["lint:touched"] || ""
   for (const path of requiredLintFiles) assert.match(script, escaped(path), path)
 })
@@ -68,8 +68,6 @@ test("safe telemetry retention is active while raw-history retention stays fail-
   assert.match(archive, /Raw Daily OHLCV retention is intentionally disabled/i)
   assert.doesNotMatch(archive, /\.from\("market_ohlcv_history"\)[\s\S]*?\.delete\(/i)
 
-  // Keep the proven archive coverage preflight available for a future Plan C raw
-  // retention cutover, but it is no longer allowed to suppress safe telemetry TTL.
   assert.match(legacyArchive, /qeo_archive_retention_preflight/)
   assert.match(migration, /create table if not exists public\.eod_archive_checkpoints/)
   assert.match(migration, /create or replace function public\.qeo_archive_retention_preflight/)
@@ -114,7 +112,7 @@ test("QEO-42 HISTORY_REFRESH telemetry keeps bounded provider failures visible",
   assert.match(steps, /errors:\s*result\.errors\.slice\(0,\s*5\)/)
 })
 
-test("QEO-42 recoverable provider failures are current-session only; historical backfill stays fail-closed", () => {
+test("QEO-60 recoverable provider failures are current-session only; historical backfill stays fail-closed", () => {
   const steps = source("lib/qeoindex-eod-workflow-steps.ts")
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
 
@@ -122,8 +120,10 @@ test("QEO-42 recoverable provider failures are current-session only; historical 
   assert.match(steps, /result\.failedTickers > 0 && !allowRecoverableFailures/)
   assert.match(
     workflow,
-    /runHistoryRefreshBatchStep\([\s\S]*?startedAtIso,[\s\S]*?history,[\s\S]*?!historicalBackfill[\s\S]*?\)/,
+    /runHistoryRefreshWindowStep\([\s\S]*?startedAtIso,[\s\S]*?history,[\s\S]*?historyConcurrency,[\s\S]*?!historicalBackfill[\s\S]*?\)/,
   )
+  assert.match(workflow, /historyWindowSize = HISTORY_REFRESH_BATCH_SIZE \* historyConcurrency/)
+  assert.match(steps, /Promise\.all/)
 })
 
 test("QEO-55 partitions Notion archive work into bounded durable steps", () => {
