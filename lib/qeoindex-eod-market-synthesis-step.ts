@@ -4,11 +4,16 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { markQeoIndexEodPhaseSkipped, runQeoIndexEodPhase } from "@/lib/admin/job-phase-telemetry"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
-import type { MarketAiConclusionView } from "@/lib/market-ai-conclusion-loader"
 import type { MarketCloseDashboardData } from "@/lib/market-insight-data"
 
 const MARKET_SYNTHESIS_POLL_INTERVAL_MS = 2_000
 const MARKET_SYNTHESIS_MAX_WAIT_MS = 90_000
+
+const TERMINAL_FAILURE_STATUSES = new Set([
+  "failed",
+  "insufficient_evidence",
+  "completion_unknown",
+])
 
 export interface EodMarketSynthesisContext {
   sessionDate: string
@@ -30,6 +35,18 @@ export interface EodMarketSynthesisResult {
   context: EodMarketSynthesisContext
 }
 
+interface PersistedMarketSynthesisRow {
+  snapshot_id: string
+  evidence_hash: string
+  status: string
+  posture: string
+  session_date: string
+  as_of: string
+  conclusion_payload: unknown
+  error_code: string | null
+  completed_at: string | null
+}
+
 function requiredSupabase() {
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured")
@@ -40,12 +57,51 @@ function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
-async function loadMarketAiConclusionStepInput(
-  supabase: SupabaseClient,
-  snapshot: MarketCloseDashboardData,
-) {
-  const { loadMarketAiConclusion } = await import("@/lib/market-ai-conclusion-loader")
-  return loadMarketAiConclusion(supabase, snapshot)
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function stringField(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function stringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((item) => stringField(item)).filter((item): item is string => Boolean(item))
+    : []
+}
+
+function sameInstant(left: unknown, right: unknown) {
+  const leftMs = typeof left === "string" ? new Date(left).getTime() : Number.NaN
+  const rightMs = typeof right === "string" ? new Date(right).getTime() : Number.NaN
+  return Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs === rightMs
+}
+
+async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+async function marketSnapshotIdentity(snapshot: MarketCloseDashboardData) {
+  const provenance = snapshot.marketInsightProvenance
+  if (!provenance) {
+    throw Object.assign(
+      new Error("MARKET_SYNTHESIS requires published market snapshot provenance"),
+      { code: "MARKET_SYNTHESIS_FAILED" },
+    )
+  }
+  return sha256Hex(JSON.stringify({
+    sessionDate: snapshot.sessionDate,
+    asOf: snapshot.asOf,
+    source: "market_insight_published",
+    syncRunId: provenance.syncRunId,
+    payloadChecksum: provenance.payloadChecksum,
+    contractVersion: provenance.contractVersion,
+  }))
 }
 
 async function loadExactMarketCloseSnapshot(supabase: SupabaseClient, ratingDate: string) {
@@ -53,34 +109,79 @@ async function loadExactMarketCloseSnapshot(supabase: SupabaseClient, ratingDate
   return getMarketCloseInsightData(supabase, ratingDate)
 }
 
-function terminalFailure(view: MarketAiConclusionView) {
-  return view.status === "failed"
-    || view.status === "insufficient_evidence"
-    || view.status === "completion_unknown"
-    || view.status === "stale"
-}
+async function loadPersistedMarketSynthesis(
+  supabase: SupabaseClient,
+  snapshot: MarketCloseDashboardData,
+): Promise<PersistedMarketSynthesisRow | null> {
+  const snapshotId = await marketSnapshotIdentity(snapshot)
+  const result = await supabase
+    .from("market_ai_conclusions")
+    .select("snapshot_id,evidence_hash,status,posture,session_date,as_of,conclusion_payload,error_code,completed_at")
+    .eq("snapshot_id", snapshotId)
+    .maybeSingle()
 
-function toContext(view: MarketAiConclusionView, snapshot: MarketCloseDashboardData): EodMarketSynthesisContext {
-  if (view.status !== "succeeded" || !view.payload || !view.evidenceHash) {
-    throw Object.assign(new Error(`MARKET_SYNTHESIS terminal context is invalid: ${view.status}`), {
-      code: "MARKET_SYNTHESIS_FAILED",
-    })
-  }
-  if (view.payload.sessionDate !== snapshot.sessionDate || view.payload.asOf !== snapshot.asOf) {
+  if (result.error) {
     throw Object.assign(
-      new Error(`MARKET_SYNTHESIS identity mismatch for ${snapshot.sessionDate}`),
+      new Error(`MARKET_SYNTHESIS persisted evidence lookup failed: ${result.error.message}`),
       { code: "MARKET_SYNTHESIS_FAILED" },
     )
   }
+  return result.data as PersistedMarketSynthesisRow | null
+}
+
+function toContext(
+  row: PersistedMarketSynthesisRow,
+  snapshot: MarketCloseDashboardData,
+): EodMarketSynthesisContext {
+  if (row.status !== "succeeded" || !row.completed_at) {
+    throw Object.assign(
+      new Error(`MARKET_SYNTHESIS terminal context is invalid: ${row.status}`),
+      { code: "MARKET_SYNTHESIS_FAILED" },
+    )
+  }
+  if (row.session_date !== snapshot.sessionDate || !sameInstant(row.as_of, snapshot.asOf)) {
+    throw Object.assign(
+      new Error(`MARKET_SYNTHESIS persisted identity mismatch for ${snapshot.sessionDate}`),
+      { code: "MARKET_SYNTHESIS_FAILED" },
+    )
+  }
+
+  const payload = record(row.conclusion_payload)
+  const payloadSnapshotId = stringField(payload?.snapshotId)
+  const payloadEvidenceHash = stringField(payload?.evidenceHash)
+  const payloadSessionDate = stringField(payload?.sessionDate)
+  const payloadAsOf = stringField(payload?.asOf)
+  const confidence = stringField(payload?.confidence)
+  const headline = stringField(payload?.headline)
+  const conclusion = stringField(payload?.conclusion)
+  const posture = stringField(payload?.posture)
+
+  if (
+    !payload
+    || payloadSnapshotId !== row.snapshot_id
+    || payloadEvidenceHash !== row.evidence_hash
+    || payloadSessionDate !== snapshot.sessionDate
+    || !sameInstant(payloadAsOf, snapshot.asOf)
+    || posture !== row.posture
+    || !confidence
+    || !headline
+    || !conclusion
+  ) {
+    throw Object.assign(
+      new Error(`MARKET_SYNTHESIS persisted payload identity is invalid for ${snapshot.sessionDate}`),
+      { code: "MARKET_SYNTHESIS_FAILED" },
+    )
+  }
+
   return {
-    sessionDate: view.payload.sessionDate,
-    asOf: view.payload.asOf,
-    evidenceHash: view.evidenceHash,
-    posture: view.payload.posture,
-    confidence: view.payload.confidence,
-    headline: view.payload.headline,
-    conclusion: view.payload.conclusion,
-    risks: view.payload.risks.slice(0, 6),
+    sessionDate: payloadSessionDate,
+    asOf: payloadAsOf,
+    evidenceHash: row.evidence_hash,
+    posture,
+    confidence,
+    headline,
+    conclusion,
+    risks: stringList(payload.risks).slice(0, 6),
   }
 }
 
@@ -94,11 +195,11 @@ export async function awaitMarketSynthesisConclusion(
   const deadline = Date.now() + maxWaitMs
 
   while (true) {
-    const view = await loadMarketAiConclusionStepInput(supabase, snapshot)
-    if (view.status === "succeeded") return toContext(view, snapshot)
-    if (terminalFailure(view)) {
+    const row = await loadPersistedMarketSynthesis(supabase, snapshot)
+    if (row?.status === "succeeded") return toContext(row, snapshot)
+    if (row && TERMINAL_FAILURE_STATUSES.has(row.status)) {
       throw Object.assign(
-        new Error(`MARKET_SYNTHESIS terminal status ${view.status}: ${view.message}`),
+        new Error(`MARKET_SYNTHESIS terminal status ${row.status}${row.error_code ? ` (${row.error_code})` : ""}`),
         { code: "MARKET_SYNTHESIS_FAILED" },
       )
     }
@@ -116,9 +217,9 @@ export async function loadMarketSynthesisContext(ratingDate?: string): Promise<E
   if (!ratingDate) return null
   const supabase = requiredSupabase()
   const snapshot = await loadExactMarketCloseSnapshot(supabase, ratingDate)
-  if (!snapshot || snapshot.sessionDate !== ratingDate) return null
-  const view = await loadMarketAiConclusionStepInput(supabase, snapshot)
-  return view.status === "succeeded" ? toContext(view, snapshot) : null
+  if (!snapshot || snapshot.sessionDate !== ratingDate || !snapshot.marketInsightProvenance) return null
+  const row = await loadPersistedMarketSynthesis(supabase, snapshot)
+  return row?.status === "succeeded" ? toContext(row, snapshot) : null
 }
 
 export async function runMarketSynthesisStep(runId: string, enabled = true, ratingDate?: string) {
@@ -145,8 +246,8 @@ export async function runMarketSynthesisStep(runId: string, enabled = true, rati
         )
       }
 
-      const existing = await loadMarketAiConclusionStepInput(supabase, snapshot)
-      if (existing.status === "succeeded") {
+      const existing = await loadPersistedMarketSynthesis(supabase, snapshot)
+      if (existing?.status === "succeeded") {
         return {
           ok: true,
           status: "succeeded",
@@ -155,6 +256,12 @@ export async function runMarketSynthesisStep(runId: string, enabled = true, rati
           reused: true,
           context: toContext(existing, snapshot),
         }
+      }
+      if (existing && TERMINAL_FAILURE_STATUSES.has(existing.status)) {
+        throw Object.assign(
+          new Error(`MARKET_SYNTHESIS existing terminal status ${existing.status}`),
+          { code: "MARKET_SYNTHESIS_FAILED" },
+        )
       }
 
       const result = await supabase.rpc("dispatch_market_ai_conclusion", {
