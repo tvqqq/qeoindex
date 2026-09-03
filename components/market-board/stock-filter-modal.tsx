@@ -32,6 +32,7 @@ interface StockFilterModalProps {
   onApply: (criteria: StockFilterCriteriaV1, tickers: string[]) => void
   persistenceError?: string
   isRefreshing?: boolean
+  quoteReady?: boolean
 }
 
 function digitsOnly(value: string) {
@@ -52,6 +53,7 @@ export function StockFilterModal({
   onApply,
   persistenceError,
   isRefreshing = false,
+  quoteReady = false,
 }: StockFilterModalProps) {
   const availableSectors = useMemo(
     () => [...new Set(universe.map((stock) => stock.kfspSector.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "vi")),
@@ -195,14 +197,16 @@ export function StockFilterModal({
           <div className="mr-auto text-xs text-muted-2">
             {isRefreshing ? (
               <span className="flex items-center gap-1.5"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang cập nhật giá &amp; thanh khoản...</span>
-            ) : (
+            ) : quoteReady ? (
               <span>Đã chọn <b className="text-foreground">{previewTickers.length}</b> / {universe.length} CP</span>
+            ) : (
+              <span>Chưa có snapshot giá/thanh khoản fresh.</span>
             )}
           </div>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Hủy</Button>
           <Button
             type="button"
-            disabled={!criteria || isRefreshing}
+            disabled={!criteria || isRefreshing || !quoteReady}
             onClick={() => criteria && onApply({ ...criteria, updatedAt: new Date().toISOString() }, previewTickers)}
           >
             Áp dụng
