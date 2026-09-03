@@ -33,6 +33,8 @@ export type AdminJobStatus = "healthy" | "degraded" | "failing" | "stale" | "in_
 
 export type AdminManualPolicy = "disabled" | "allowed" | "confirm"
 
+export type AdminManualPurpose = "recovery" | "diagnostic" | "maintenance"
+
 export type AdminValidationResult =
   | { ok: true; value: unknown }
   | { ok: false; error: string }
@@ -158,6 +160,8 @@ export type AdminJobDefinition = {
   dependencies?: string[]
   evidenceSource?: AdminJobEvidenceSource
   manualPolicy: AdminManualPolicy
+  manualPurpose?: AdminManualPurpose
+  automatedParentKeys?: string[]
   freshnessMinutes: number
   maxDurationMinutes: number
   schedulePolicy?: SchedulePolicy
@@ -179,6 +183,8 @@ export type AdminJobView = {
   intervalMinutes?: number
   dependencies?: string[]
   manualPolicy: AdminManualPolicy
+  manualPurpose?: AdminManualPurpose
+  automatedParentKeys?: string[]
   status: AdminJobStatus
   schedulerStatus?: AdminSchedulerStatus
   schedulerLastStatus?: string | null
