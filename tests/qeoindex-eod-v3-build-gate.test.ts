@@ -23,6 +23,7 @@ const requiredLintFiles = [
   "lib/qeoindex-eod-archive.ts",
   "lib/qeoindex-eod-backfill-ready-step.ts",
   "lib/qeoindex-eod-no-trade-repair-step.ts",
+  "lib/qeoindex-eod-retention-step.ts",
   "lib/qeoindex-eod-workflow-steps.ts",
   "lib/wyckoff-supabase-publish.ts",
   "workflows/qeoindex-eod-pipeline.ts",
@@ -77,14 +78,17 @@ test("safe telemetry retention is active while raw-history retention stays fail-
   assert.match(migration, /missingDates/)
 })
 
-test("Google Drive archive delegates to the proven Shared Drive uploader", () => {
+test("QEO-57 removes Google Drive from the active EOD contract without enabling raw-history pruning", () => {
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const phases = source("lib/admin/job-phases.ts")
+  const retentionStep = source("lib/qeoindex-eod-retention-step.ts")
   const archive = source("lib/qeoindex-eod-archive.ts")
-  const legacyArchive = source("lib/qeoindex-eod-archive-legacy.ts")
-  assert.match(archive, /runLegacyDriveArchive/)
-  assert.match(legacyArchive, /supportsAllDrives/)
-  assert.match(legacyArchive, /includeItemsFromAllDrives/)
-  assert.match(legacyArchive, /GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/)
-  assert.match(legacyArchive, /GOOGLE_DRIVE_ARCHIVE_FOLDER_ID/)
+
+  assert.doesNotMatch(workflow, /runDriveArchiveStep|driveArchiveStatus/)
+  assert.doesNotMatch(phases, /key:\s*"DRIVE_ARCHIVE"/)
+  assert.match(retentionStep, /Google Drive archive is no longer part of the active EOD workflow/)
+  assert.match(archive, /Raw Daily OHLCV retention is intentionally disabled/i)
+  assert.doesNotMatch(archive, /\.from\("market_ohlcv_history"\)[\s\S]*?\.delete\(/i)
 })
 
 test("QEO-42 bounded per-ticker refresh failure continues to exact-session fail-closed verification", () => {
@@ -143,14 +147,4 @@ test("QEO-55 partitions Notion archive work into bounded durable steps", () => {
   assert.match(steps, /archiveCanonicalUniverseBatchToNotion/)
   assert.match(steps, /archiveEodTickerBatchToNotion/)
   assert.match(steps, /stocks\.length > 8/)
-})
-
-test("QEO-57 converts rejected Drive archive promises into a degraded checkpoint", () => {
-  const archive = source("lib/qeoindex-eod-archive.ts")
-  assert.match(
-    archive,
-    /export async function runEodDriveArchive\([\s\S]*?try\s*\{[\s\S]*?return await runLegacyDriveArchive\([\s\S]*?catch\s*\(error\)[\s\S]*?status:\s*"error"[\s\S]*?manifestUrl:\s*null/,
-    "Drive API rejection must resolve as an error checkpoint before the durable step can retry/fatal",
-  )
-  assert.match(archive, /raw Supabase history remains retained/i)
 })
