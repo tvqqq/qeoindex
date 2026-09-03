@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Activity, BarChart3, CircleDollarSign, CircleDot, Gauge, LineChart } from "lucide-react"
+import { Activity, BarChart3, BrainCircuit, CircleDollarSign, CircleDot, Gauge, LineChart } from "lucide-react"
 
 import {
   IndexBreadthChart, IndexPerformanceChart, InstitutionalFlowChart,
@@ -26,6 +26,8 @@ interface MarketCloseDashboardProps {
   marketAiConclusion?: MarketAiConclusionView
 }
 
+type PulseTone = "up" | "down" | "warning"
+
 function formatNumber(value: number | null | undefined, decimals = 2) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: decimals }).format(value)
@@ -40,6 +42,16 @@ function formatTime(iso: string) {
   try {
     return new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(iso))
   } catch { return iso }
+}
+
+function getDistributionDayGuidance(value: number | null | undefined): { message: string; tone?: PulseTone } {
+  if (value == null || !Number.isFinite(value)) return { message: "Chưa có dữ liệu" }
+
+  const days = Math.max(0, Math.trunc(value))
+  if (days <= 2) return { message: "Chưa cần hành động", tone: "up" }
+  if (days === 3) return { message: "Bắt đầu quan sát kỹ hơn", tone: "warning" }
+  if (days === 4) return { message: "Tìm kiếm tín hiệu bán", tone: "down" }
+  return { message: "Ưu tiên phòng thủ", tone: "down" }
 }
 
 const surface = "insights-glass-panel border-white/[0.09] bg-[#0a1820]/90 shadow-[0_20px_60px_-48px_rgba(45,212,191,0.55)]"
@@ -145,6 +157,8 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
 
 function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketCloseDashboardData; marketAiConclusion?: MarketAiConclusionView }) {
   const { dailySummary, indexes, history, marketRegime } = data
+  const distributionGuidance = getDistributionDayGuidance(dailySummary.distributionCount)
+
   return (
     <section aria-labelledby="market-intelligence-title" data-market-intelligence-panel>
       <Card className={cn(surface, "overflow-hidden py-0")}>
@@ -164,18 +178,21 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
           </div>
         </div>
         <CardContent className="p-5 sm:p-6">
-          <MarketWidgetChildHeader icon={Activity} title={marketAiConclusion?.status === "succeeded" ? "AI nhận định thị trường · CANSLIM/4M-inspired" : "Tổng hợp định lượng"} description={marketAiConclusion?.status === "succeeded" ? "Kết luận grounded trên bằng chứng cùng phiên" : "Tóm lược định lượng, không phải AI"} asOf={data.asOf} quality={data.qualityStatus} />
-          {marketAiConclusion?.status === "succeeded" ? (
-            <div className="mt-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.05] p-3">
-              <div className="flex items-center justify-between gap-2">
-                <strong className="text-sm text-white">{marketAiConclusion.payload?.headline}</strong>
-                <span className="text-[10px] font-mono text-cyan-300">{marketAiConclusion.payload?.posture} · {marketAiConclusion.payload?.confidence}</span>
+          {marketAiConclusion?.status === "succeeded" && (
+            <div data-market-ai-conclusion className="rounded-2xl border border-violet-400/20 bg-violet-400/[0.05] p-4">
+              <div className="flex items-start gap-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-violet-400/25 bg-violet-400/[0.08] text-violet-300 shadow-sm">
+                  <BrainCircuit className="size-5" aria-hidden="true" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <strong className="text-sm font-bold leading-6 text-white sm:text-base">{marketAiConclusion.payload?.headline}</strong>
+                    <span className="shrink-0 font-mono text-[11px] font-bold text-violet-300">{marketAiConclusion.payload?.posture} · {marketAiConclusion.payload?.confidence}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-200">{marketAiConclusion.payload?.conclusion}</p>
+                </div>
               </div>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{marketAiConclusion.payload?.conclusion}</p>
-              <p className="mt-2 text-[10px] text-slate-400">asOf {formatTime(marketAiConclusion.asOf || data.asOf)} · evidence {marketAiConclusion.evidenceHash?.slice(0, 12)}…</p>
             </div>
-          ) : (
-            <p className="mt-2 text-sm leading-6 text-slate-300">{marketAiConclusion?.message || "Chưa có AI conclusion; hiển thị các chỉ báo định lượng bên dưới."}</p>
           )}
 
           <div data-market-intelligence-overview-row className="mt-4 grid gap-4 xl:grid-cols-3 xl:items-stretch">
@@ -184,11 +201,11 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
                 <div className="flex size-20 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/[0.06] sm:size-24">
                   <strong className="px-2 text-center text-xs font-black uppercase text-amber-300 font-sans sm:text-sm">{marketRegime || "Không suy diễn"}</strong>
                 </div>
-                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
+                <div data-market-summary-stats className="grid min-w-0 flex-1 auto-rows-fr grid-cols-2 gap-2">
                   <PulseStat label="Tâm lý" value={`${formatNumber(dailySummary.sentimentScore, 0)} · ${dailySummary.sentimentLabel || "—"}`} />
                   <PulseStat label="Rủi ro" value={formatNumber(dailySummary.riskScore, 2)} tone={(dailySummary.riskScore ?? 0) >= 0.7 ? "down" : "up"} />
-                  <PulseStat label="Khối ngoại" value={`${formatSigned(dailySummary.foreignNetValue, 0)} tỷ`} tone={(dailySummary.foreignNetValue ?? 0) >= 0 ? "up" : "down"} />
-                  <PulseStat label="Phân phối" value={`${dailySummary.distributionCount ?? "—"} ngày`} />
+                  <PulseStat label="Ngày phân phối" value={`${dailySummary.distributionCount ?? "—"} ngày`} tone={distributionGuidance.tone} />
+                  <PulseStat label="Hành động" value={distributionGuidance.message} tone={distributionGuidance.tone} />
                 </div>
               </div>
             </div>
@@ -224,8 +241,18 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
   )
 }
 
-function PulseStat({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
-  return <div className="rounded-lg border border-white/[0.06] bg-white/[0.025] p-2.5 sm:p-3"><span className="text-xs font-medium text-slate-300">{label}</span><strong className={cn("mt-1 block font-mono text-sm text-white sm:text-base", tone === "up" && "text-teal-300", tone === "down" && "text-rose-300")}>{value}</strong></div>
+function PulseStat({ label, value, tone }: { label: string; value: string; tone?: PulseTone }) {
+  return (
+    <div className="flex h-full min-h-[82px] flex-col rounded-lg border border-white/[0.06] bg-white/[0.025] p-2.5 sm:p-3">
+      <span className="text-xs font-medium text-slate-300">{label}</span>
+      <strong className={cn(
+        "mt-1 block font-mono text-sm font-bold leading-5 text-white sm:text-base",
+        tone === "up" && "text-teal-300",
+        tone === "warning" && "text-amber-300",
+        tone === "down" && "text-rose-300",
+      )}>{value}</strong>
+    </div>
+  )
 }
 
 function IndexTile({ item }: { item: MarketCloseDashboardData["indexes"][number] }) {
