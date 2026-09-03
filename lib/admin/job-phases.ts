@@ -1,99 +1,166 @@
 export const QEOINDEX_EOD_JOB_KEY = "qeoindex.eod_pipeline" as const
 
+export const QEOINDEX_EOD_BUSINESS_PHASES = [
+  {
+    key: "DATA_REFRESH",
+    order: 1,
+    label: "Data Refresh",
+    description: "Refresh/freeze same-session KFSP, TTAI và market-close evidence cho canonical universe.",
+  },
+  {
+    key: "READY_GATE",
+    order: 2,
+    label: "Ready Gate",
+    description: "Xác nhận exact frozen canonical universe và same-session evidence trước downstream analysis.",
+  },
+  {
+    key: "HISTORY_PREPARE",
+    order: 3,
+    label: "History Prepare",
+    description: "Refresh/backfill raw Daily và repair exact no-trade gaps bằng bounded provider concurrency.",
+  },
+  {
+    key: "WYCKOFF_PUBLISH",
+    order: 4,
+    label: "Wyckoff Publish",
+    description: "Build → validate → publish Wyckoff facts theo atomic canonical dataset contract.",
+  },
+  {
+    key: "AI_COUNCIL",
+    order: 5,
+    label: "AI Council",
+    description: "Deterministic Council → Market Synthesis → LLM debate theo dependency order.",
+  },
+  {
+    key: "POST_ANALYSIS",
+    order: 6,
+    label: "Post Analysis",
+    description: "Analytical archive và safe retention sau critical analytical path.",
+  },
+  {
+    key: "COMPLETE",
+    order: 7,
+    label: "Complete",
+    description: "Đóng parent EOD run với exact coverage và terminal status.",
+  },
+] as const
+
+export type QeoIndexEodBusinessPhaseKey = (typeof QEOINDEX_EOD_BUSINESS_PHASES)[number]["key"]
+
 export const QEOINDEX_EOD_PHASES = [
   {
     key: "KFSP_RATING_REFRESH",
     order: 1,
+    businessPhase: "DATA_REFRESH",
     label: "KFSP Rating Refresh",
     description: "Refresh KFSP Rating cho đúng phiên EOD rồi freeze exact canonical universe run trước các evidence downstream.",
   },
   {
     key: "TTAI_REFRESH",
     order: 2,
+    businessPhase: "DATA_REFRESH",
     label: "TTAI Refresh",
     description: "Refresh TTAI theo frozen canonical universe; partial ticker failures được ghi degraded thay vì giả success.",
   },
   {
     key: "MARKET_CLOSE_COLLECT",
     order: 3,
+    businessPhase: "DATA_REFRESH",
     label: "Market Close Collect",
     description: "Thu thập snapshot thị trường sau đóng cửa trên frozen canonical universe và publish market read model cùng phiên.",
   },
   {
     key: "EOD_READY",
     order: 4,
+    businessPhase: "READY_GATE",
     label: "EOD Ready",
     description: "Xác nhận frozen canonical Top Stocks universe và toàn bộ evidence EOD cùng phiên đã sẵn sàng.",
   },
   {
     key: "HISTORY_REFRESH",
     order: 5,
+    businessPhase: "HISTORY_PREPARE",
     label: "History Refresh",
-    description: "Refresh/backfill raw OHLCV 1D cho toàn bộ canonical universe theo batch giới hạn; 1W được derive từ 1D.",
+    description: "Refresh/backfill raw OHLCV 1D cho toàn bộ canonical universe theo bounded window; 1W được derive từ 1D.",
   },
   {
     key: "WYCKOFF_BUILD",
     order: 6,
+    businessPhase: "WYCKOFF_PUBLISH",
     label: "Wyckoff Build",
     description: "Build Wyckoff 1D/1W; số snapshot kỳ vọng luôn bằng universeCount × 2.",
   },
   {
     key: "SUPABASE_VALIDATE",
     order: 7,
+    businessPhase: "WYCKOFF_PUBLISH",
     label: "Supabase Validate",
     description: "Validate exact canonical membership, snapshot contract và deterministic validation hash trước publish.",
   },
   {
     key: "SUPABASE_PUBLISH",
     order: 8,
+    businessPhase: "WYCKOFF_PUBLISH",
     label: "Supabase Publish",
     description: "Publish Wyckoff operational facts trực tiếp vào Supabase; Notion không nằm trên critical path.",
   },
   {
     key: "AI_COUNCIL_DETERMINISTIC",
     order: 9,
+    businessPhase: "AI_COUNCIL",
     label: "AI Council Deterministic",
     description: "Chạy deterministic Council trên exact frozen membership sau khi Supabase Wyckoff publish thành công.",
   },
   {
-    key: "AI_COUNCIL_LLM",
+    key: "MARKET_SYNTHESIS",
     order: 10,
-    label: "AI Council LLM",
-    description: "Chạy LLM debate trên subset được policy chọn; cost cap độc lập với quy mô canonical universe.",
+    businessPhase: "AI_COUNCIL",
+    label: "Market Synthesis",
+    description: "Dispatch market-level AI synthesis sau deterministic Council và trước LLM debate.",
   },
   {
-    key: "MARKET_SYNTHESIS",
+    key: "AI_COUNCIL_LLM",
     order: 11,
-    label: "Market Synthesis",
-    description: "Dispatch market-level AI synthesis từ published market evidence; lỗi phase này không đảo ngược Supabase publish.",
+    businessPhase: "AI_COUNCIL",
+    label: "AI Council LLM",
+    description: "Chạy LLM debate trên subset được policy chọn sau khi market context đã được dispatch.",
   },
   {
     key: "NOTION_ARCHIVE",
     order: 12,
+    businessPhase: "POST_ANALYSIS",
     label: "Notion Archive",
     description: "Archive analytical/audit output và canonical universe history sang Notion sau publication.",
   },
   {
     key: "DRIVE_ARCHIVE",
     order: 13,
+    businessPhase: "POST_ANALYSIS",
     label: "Drive Archive",
     description: "Legacy EOD v3 archive checkpoint; QEO-57 sẽ loại khỏi active EOD v4 critical path.",
   },
   {
     key: "RETENTION_CLEANUP",
     order: 14,
+    businessPhase: "POST_ANALYSIS",
     label: "Retention Cleanup",
     description: "Prune safe telemetry/staging theo retention policy; raw Daily retention vẫn fail-closed cho tới storage cutover.",
   },
   {
     key: "COMPLETE",
     order: 15,
+    businessPhase: "COMPLETE",
     label: "Complete",
     description: "Đóng parent EOD run và ghi summary của refresh, publication, Council, archive và retention.",
   },
 ] as const
 
 export type QeoIndexEodPhaseKey = (typeof QEOINDEX_EOD_PHASES)[number]["key"]
+
+export const QEOINDEX_EOD_INTERNAL_PHASE_TO_BUSINESS: Readonly<Record<QeoIndexEodPhaseKey, QeoIndexEodBusinessPhaseKey>> = Object.freeze(
+  Object.fromEntries(QEOINDEX_EOD_PHASES.map((phase) => [phase.key, phase.businessPhase])) as Record<QeoIndexEodPhaseKey, QeoIndexEodBusinessPhaseKey>,
+)
+
 export type StoredJobPhaseStatus = "queued" | "running" | "succeeded" | "failed" | "skipped"
 export type AdminJobPhaseStatus = StoredJobPhaseStatus | "pending"
 
@@ -116,6 +183,7 @@ export interface SystemJobPhaseRow {
 export interface AdminJobPhaseView {
   key: QeoIndexEodPhaseKey
   order: number
+  businessPhase: QeoIndexEodBusinessPhaseKey
   label: string
   description: string
   status: AdminJobPhaseStatus
@@ -150,6 +218,7 @@ export function buildAdminJobPhaseTimeline(rows: SystemJobPhaseRow[]): AdminJobP
     return {
       key: definition.key,
       order: definition.order,
+      businessPhase: definition.businessPhase,
       label: definition.label,
       description: definition.description,
       status: normalizePhaseStatus(row?.status),
