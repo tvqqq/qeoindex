@@ -1,0 +1,41 @@
+name: EOD v4
+
+on:
+  pull_request:
+    paths:
+      - "workflows/qeoindex-eod-*.ts"
+      - "lib/qeoindex-eod-*.ts"
+      - "lib/admin/job-phase*.ts"
+      - "lib/admin/job-phases.ts"
+      - "lib/wyckoff-v2-*.ts"
+      - "app/api/admin/qeoindex/eod/**"
+      - "supabase/migrations/**"
+      - "tests/qeoindex-eod-v4-*.test.ts"
+      - ".github/workflows/eod-v4.yml"
+  push:
+    branches: [main]
+    paths:
+      - "workflows/qeoindex-eod-*.ts"
+      - "lib/qeoindex-eod-*.ts"
+      - "lib/admin/job-phase*.ts"
+      - "lib/admin/job-phases.ts"
+      - "lib/wyckoff-v2-*.ts"
+      - "app/api/admin/qeoindex/eod/**"
+      - "supabase/migrations/**"
+      - "tests/qeoindex-eod-v4-*.test.ts"
+      - ".github/workflows/eod-v4.yml"
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test tests/qeoindex-eod-v4-orchestrator.test.ts

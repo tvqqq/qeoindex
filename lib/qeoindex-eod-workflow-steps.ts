@@ -30,6 +30,9 @@ export {
   startQeoIndexEodRunStep,
 } from "./qeoindex-eod-workflow-steps-legacy"
 
+export const HISTORY_REFRESH_BATCH_SIZE = 10
+const HISTORY_REFRESH_WINDOW_CONCURRENCY_MAX = 4
+
 function requiredSupabase() {
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured")
@@ -52,6 +55,109 @@ function mergeHistoryRefreshProgress(
   }
 }
 
+async function refreshHistoryBatch(
+  stocks: WyckoffV2UniverseRow[],
+  startedAtIso: string,
+  allowRecoverableFailures: boolean,
+) {
+  if (stocks.length < 1 || stocks.length > HISTORY_REFRESH_BATCH_SIZE) {
+    throw Object.assign(
+      new Error(`HISTORY_REFRESH batch must contain 1-${HISTORY_REFRESH_BATCH_SIZE} tickers; received ${stocks.length}`),
+      { code: "HISTORY_REFRESH_FAILED" },
+    )
+  }
+  const result = await refreshOhlcvHistoryBatch(
+    requiredSupabase(),
+    stocks.map((stock) => stock.ticker),
+    new Date(startedAtIso),
+  )
+  const accountedTickers = result.completedTickers + result.failedTickers
+  if (result.requestedTickers !== stocks.length || accountedTickers !== result.requestedTickers) {
+    throw Object.assign(
+      new Error(
+        `HISTORY_REFRESH batch accounting incomplete: `
+        + `${result.completedTickers} completed + ${result.failedTickers} failed `
+        + `!= ${result.requestedTickers} requested for ${stocks.length} input tickers`,
+      ),
+      { code: "HISTORY_REFRESH_FAILED" },
+    )
+  }
+  if (result.failedTickers > 0 && !allowRecoverableFailures) {
+    throw Object.assign(
+      new Error(
+        `HISTORY_REFRESH failed for ${result.failedTickers} ticker(s): `
+        + result.errors.slice(0, 5).map((item) => `${item.ticker}: ${item.error}`).join(" | "),
+      ),
+      { code: "HISTORY_REFRESH_FAILED" },
+    )
+  }
+  return result
+}
+
+async function refreshHistoryWindow(
+  stocks: WyckoffV2UniverseRow[],
+  startedAtIso: string,
+  progress: OhlcvUniverseRefreshResult,
+  concurrency: number,
+  allowRecoverableFailures: boolean,
+) {
+  const chunks: WyckoffV2UniverseRow[][] = []
+  for (let offset = 0; offset < stocks.length; offset += HISTORY_REFRESH_BATCH_SIZE) {
+    chunks.push(stocks.slice(offset, offset + HISTORY_REFRESH_BATCH_SIZE))
+  }
+  if (chunks.length > concurrency) {
+    throw Object.assign(
+      new Error(`HISTORY_REFRESH window fan-out ${chunks.length} exceeds bounded concurrency ${concurrency}`),
+      { code: "HISTORY_REFRESH_CONCURRENCY_INVALID" },
+    )
+  }
+  const results = await Promise.all(
+    chunks.map((chunk) => refreshHistoryBatch(chunk, startedAtIso, allowRecoverableFailures)),
+  )
+  return results.reduce(mergeHistoryRefreshProgress, progress)
+}
+
+export async function runHistoryRefreshWindowStep(
+  runId: string,
+  stocks: WyckoffV2UniverseRow[],
+  startedAtIso: string,
+  progress: OhlcvUniverseRefreshResult,
+  concurrency: number,
+  allowRecoverableFailures = false,
+) {
+  "use step"
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > HISTORY_REFRESH_WINDOW_CONCURRENCY_MAX) {
+    throw Object.assign(
+      new Error(`HISTORY_REFRESH concurrency must be 1-${HISTORY_REFRESH_WINDOW_CONCURRENCY_MAX}; received ${concurrency}`),
+      { code: "HISTORY_REFRESH_CONCURRENCY_INVALID" },
+    )
+  }
+  const maxWindowSize = HISTORY_REFRESH_BATCH_SIZE * concurrency
+  if (stocks.length < 1 || stocks.length > maxWindowSize) {
+    throw Object.assign(
+      new Error(`HISTORY_REFRESH window must contain 1-${maxWindowSize} tickers; received ${stocks.length}`),
+      { code: "HISTORY_REFRESH_FAILED" },
+    )
+  }
+  return runQeoIndexEodPhase({
+    runId,
+    phaseKey: "HISTORY_REFRESH",
+    fn: () => refreshHistoryWindow(stocks, startedAtIso, progress, concurrency, allowRecoverableFailures),
+    summarize: (result) => ({
+      requestedTickers: result.requestedTickers,
+      completedTickers: result.completedTickers,
+      failedTickers: result.failedTickers,
+      dailyFetchedBars: result.dailyFetchedBars,
+      backfillOperations: result.backfillOperations,
+      deltaOperations: result.deltaOperations,
+      limitedCoverageCount: result.limitedCoverage.length,
+      errors: result.errors.slice(0, 5),
+      boundedConcurrency: concurrency,
+      batchSize: HISTORY_REFRESH_BATCH_SIZE,
+    }),
+  })
+}
+
 export async function runHistoryRefreshBatchStep(
   runId: string,
   stocks: WyckoffV2UniverseRow[],
@@ -63,40 +169,7 @@ export async function runHistoryRefreshBatchStep(
   return runQeoIndexEodPhase({
     runId,
     phaseKey: "HISTORY_REFRESH",
-    fn: async () => {
-      if (stocks.length < 1 || stocks.length > 10) {
-        throw Object.assign(
-          new Error(`HISTORY_REFRESH batch must contain 1-10 tickers; received ${stocks.length}`),
-          { code: "HISTORY_REFRESH_FAILED" },
-        )
-      }
-      const result = await refreshOhlcvHistoryBatch(
-        requiredSupabase(),
-        stocks.map((stock) => stock.ticker),
-        new Date(startedAtIso),
-      )
-      const accountedTickers = result.completedTickers + result.failedTickers
-      if (result.requestedTickers !== stocks.length || accountedTickers !== result.requestedTickers) {
-        throw Object.assign(
-          new Error(
-            `HISTORY_REFRESH batch accounting incomplete: `
-            + `${result.completedTickers} completed + ${result.failedTickers} failed `
-            + `!= ${result.requestedTickers} requested for ${stocks.length} input tickers`,
-          ),
-          { code: "HISTORY_REFRESH_FAILED" },
-        )
-      }
-      if (result.failedTickers > 0 && !allowRecoverableFailures) {
-        throw Object.assign(
-          new Error(
-            `HISTORY_REFRESH failed for ${result.failedTickers} ticker(s): `
-            + result.errors.slice(0, 5).map((item) => `${item.ticker}: ${item.error}`).join(" | "),
-          ),
-          { code: "HISTORY_REFRESH_FAILED" },
-        )
-      }
-      return mergeHistoryRefreshProgress(progress, result)
-    },
+    fn: () => refreshHistoryWindow(stocks, startedAtIso, progress, 1, allowRecoverableFailures),
     summarize: (result) => ({
       requestedTickers: result.requestedTickers,
       completedTickers: result.completedTickers,
@@ -106,6 +179,8 @@ export async function runHistoryRefreshBatchStep(
       deltaOperations: result.deltaOperations,
       limitedCoverageCount: result.limitedCoverage.length,
       errors: result.errors.slice(0, 5),
+      boundedConcurrency: 1,
+      batchSize: HISTORY_REFRESH_BATCH_SIZE,
     }),
   })
 }

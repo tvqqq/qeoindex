@@ -13,27 +13,25 @@ function workflowBody() {
   return workflow.slice(start)
 }
 
-test("QEO-58 refreshes same-session KFSP/TTAI and market close before READY", () => {
+test("QEO-58 freezes Rating before sibling TTAI/market-close refresh and joins both before READY", () => {
   const workflow = workflowBody()
-  const ordered = [
-    "runKfspRatingRefreshStep",
-    "runTtaiRefreshStep",
-    "runMarketCloseCollectStep",
-    "runEodReadyStep",
-    "assertReadyMatchesFrozenUniverse",
-  ]
+  const rating = workflow.indexOf("runKfspRatingRefreshStep")
+  const parallel = workflow.indexOf("Promise.all", rating)
+  const ttai = workflow.indexOf("runTtaiRefreshBranch", rating)
+  const market = workflow.indexOf("runMarketCloseBranch", rating)
+  const ready = workflow.indexOf("runEodReadyStep", rating)
+  const readyMembership = workflow.indexOf("assertReadyMatchesFrozenUniverse", ready)
 
-  let cursor = -1
-  for (const call of ordered) {
-    const next = workflow.indexOf(call, cursor + 1)
-    assert.ok(next > cursor, `${call} must run after the prior same-session refresh stage`)
-    cursor = next
-  }
+  assert.ok(rating >= 0)
+  assert.ok(parallel > rating, "sibling refresh join must happen after Rating freezes the universe")
+  assert.ok(ttai > rating && ttai < ready, "TTAI branch must be scheduled before READY")
+  assert.ok(market > rating && market < ready, "market-close branch must be scheduled before READY")
+  assert.ok(ready > parallel && readyMembership > ready, "READY must join sibling refresh and validate exact membership")
 
   assert.match(workflow, /if \(historicalBackfill\)[\s\S]*runEodBackfillReadyStep/)
-  assert.match(workflow, /runTtaiRefreshStep\([\s\S]*ratingRefresh\.universe/)
-  assert.match(workflow, /assertFrozenUniverseStillCurrent\(ratingRefresh\.universe\)[\s\S]*runMarketCloseCollectStep/)
-  assert.match(workflow, /runMarketCloseCollectStep[\s\S]*assertFrozenUniverseStillCurrent\(ratingRefresh\.universe\)/)
+  assert.match(workflow, /Promise\.all\([\s\S]*runTtaiRefreshBranch[\s\S]*runMarketCloseBranch/)
+  assert.match(workflow.slice(rating, ready), /assertFrozenUniverseStillCurrent\(ratingRefresh\.universe\)/)
+  assert.match(workflow.slice(ready), /assertReadyMatchesFrozenUniverse/)
 })
 
 test("QEO-58 Rating refresh freezes an exact canonical universe for the session", () => {
@@ -52,6 +50,7 @@ test("QEO-58 Rating refresh freezes an exact canonical universe for the session"
 
 test("QEO-58 TTAI refresh is session-bound and explicit about degraded partial failures", () => {
   const steps = source("lib/qeoindex-eod-data-refresh-steps.ts")
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
 
   assert.match(steps, /export async function runTtaiRefreshStep/)
   assert.match(steps, /kfsp-ttai-history-sync/)
@@ -59,6 +58,7 @@ test("QEO-58 TTAI refresh is session-bound and explicit about degraded partial f
   assert.match(steps, /status:\s*failedTickers\.length\s*>\s*0\s*\?\s*"degraded"/)
   assert.match(steps, /failed/)
   assert.match(steps, /assertFrozenUniverseStillCurrent/)
+  assert.match(workflow, /runTtaiRefreshStep\([\s\S]*ratingRefresh\.universe/)
 })
 
 test("QEO-58 READY validates frozen run identity and exact membership, not count only", () => {
