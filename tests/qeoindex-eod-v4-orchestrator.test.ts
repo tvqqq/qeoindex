@@ -71,6 +71,27 @@ test("QEO-60 enforces Deterministic Council then Market Synthesis then LLM debat
   assert.ok(llm > synthesis, "LLM debate must consume the market synthesis stage after deterministic Council")
 })
 
+test("QEO-64 waits for terminal Market Synthesis and injects its exact-session context into LLM evidence", () => {
+  const legacySteps = source("lib/qeoindex-eod-workflow-steps-legacy.ts")
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const retryWorkflow = source("workflows/qeoindex-eod-retry.ts")
+  const operations = source("lib/ai-council-operations.ts")
+  const promptEvidence = source("lib/ai-council-prompt-evidence.ts")
+
+  const synthesisStart = legacySteps.indexOf("export async function runMarketSynthesisStep")
+  const synthesisEnd = legacySteps.indexOf("export async function", synthesisStart + 1)
+  const synthesisBody = legacySteps.slice(synthesisStart, synthesisEnd > synthesisStart ? synthesisEnd : undefined)
+
+  assert.match(synthesisBody, /awaitMarketSynthesisConclusion/, "synthesis phase must wait for an exact-session terminal conclusion")
+  assert.match(synthesisBody, /status:\s*"succeeded"/, "synthesis phase must expose terminal success, not enqueue success")
+  assert.doesNotMatch(synthesisBody, /status:\s*"queued"/, "enqueue success is not completion evidence")
+
+  assert.match(workflow, /runLlmDebateStep\([\s\S]{0,300}marketSynthesis/, "healthy EOD must pass completed synthesis into LLM")
+  assert.match(retryWorkflow, /runLlmDebateStep\([\s\S]{0,300}marketSynthesis/, "targeted recovery must preserve the same dependency")
+  assert.match(operations, /marketSynthesis/, "AI Council operation must accept market synthesis context")
+  assert.match(promptEvidence, /marketSynthesis\?\s*:/, "LLM point-in-time packet must carry market synthesis context")
+})
+
 test("QEO-60 keeps historical backfill explicit and never runs current Rating/TTAI refresh in that branch", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   const body = workflow.slice(workflow.indexOf("if (historicalBackfill)"), workflow.indexOf("if (!ready)"))
