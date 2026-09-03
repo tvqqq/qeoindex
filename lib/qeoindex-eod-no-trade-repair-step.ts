@@ -1,7 +1,7 @@
 import type { OhlcvBar } from "./technical-indicators.ts"
 
 const FINAL_ORDERBOOK_CUTOFF_HOUR_UTC = 7
-const FINAL_ORDERBOOK_CUTOFF_MINUTE_UTC = 45
+const FINAL_ORDERBOOK_CUTOFF_MINUTE_UTC = 50
 const DAILY_BAR_HOUR_UTC = 2
 const MAX_CANONICAL_UNIVERSE_SIZE = 200
 
