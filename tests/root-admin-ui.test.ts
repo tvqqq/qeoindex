@@ -167,14 +167,13 @@ test("QEO-52 merges canonical KFSP scheduled history with manual system runs and
 
 test("QEO-52 job detail uses canonical evidence and labels active workflow progress honestly", () => {
   const page = source("app/admin/jobs/[key]/page.tsx")
-  const evidence = source("lib/admin/job-evidence.ts")
   const catalog = source("lib/admin/effective-job-catalog.ts")
 
   assert.match(page, /loadAdminJobView/)
   assert.doesNotMatch(page, /buildAdminJobViews\(\[jobDefinition\], history\)/)
+  assert.match(page, /currentSummary/)
   assert.match(page, /Current stage/)
   assert.match(page, /Next wake/)
   assert.match(page, /Last completed quality/)
-  assert.match(evidence, /currentRun\.summary/)
   assert.match(catalog, /07:00–07:59/)
 })
