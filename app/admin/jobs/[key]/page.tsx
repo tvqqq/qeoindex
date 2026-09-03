@@ -7,7 +7,8 @@ import { AdminJobPhaseTimeline } from "@/components/admin/admin-job-phase-timeli
 import { getEffectiveAdminJobDefinition } from "@/lib/admin/effective-job-catalog"
 import { loadAdminJobPhases } from "@/lib/admin/job-phase-data"
 import { QEOINDEX_EOD_JOB_KEY } from "@/lib/admin/job-phases"
-import { buildAdminJobViews, loadAdminJobHistory } from "@/lib/admin/job-health"
+import { loadAdminJobHistory, loadAdminJobView } from "@/lib/admin/job-health"
+import { formatAdminDateTime } from "@/lib/admin/time"
 import { requireRootPageContext } from "@/lib/auth/root"
 
 export const dynamic = "force-dynamic"
@@ -22,16 +23,33 @@ export default async function AdminJobDetailPage(props: { params: Promise<{ key:
     notFound()
   }
 
-  const history = await loadAdminJobHistory(decodedKey, 50)
+  const [history, jobView] = await Promise.all([
+    loadAdminJobHistory(decodedKey, 50),
+    loadAdminJobView(decodedKey),
+  ])
+
+  if (!jobView) {
+    notFound()
+  }
+
   const latestRun = history[0]
   const phases = decodedKey === QEOINDEX_EOD_JOB_KEY && latestRun?.id
     ? await loadAdminJobPhases(latestRun.id)
     : []
-  const { jobs: [jobView] } = buildAdminJobViews([jobDefinition], history)
   const status = jobView.status
 
   const isHealthy = status === "healthy"
   const isFailing = status === "failing"
+  const currentRun = history.find((run) => run.status === "running" || run.status === "queued") ?? null
+  const lastCompletedRun = history.find((run) => run.status !== "running" && run.status !== "queued") ?? null
+  const currentSummary = currentRun?.summary ?? null
+  const currentStage = typeof currentSummary?.stage === "string" ? currentSummary.stage : null
+  const nextWakeAt = typeof currentSummary?.nextWakeAt === "string" ? currentSummary.nextWakeAt : null
+  const quality = jobView.domainEvidence?.quality && typeof jobView.domainEvidence.quality === "object"
+    ? jobView.domainEvidence.quality as { label?: string; details?: { limitedCoverageCount?: number } }
+    : null
+  const qualityLabel = String(quality?.label || "unknown")
+  const hasActiveExecution = Boolean(jobView.currentExecution)
 
   return (
     <div className="space-y-6">
@@ -97,8 +115,18 @@ export default async function AdminJobDetailPage(props: { params: Promise<{ key:
           <span>Health: <strong className="text-slate-200">{status}</strong></span>
           <span>Current execution: <strong className="text-slate-200">{jobView.currentExecution ? jobView.currentExecution.status : "none"}</strong></span>
           <span>Telemetry: <strong className="text-slate-200">{jobView.executionTelemetry?.source === "unavailable" ? "unavailable" : "recorded"}</strong></span>
-          <span>Data quality: <strong className="text-slate-200">{jobView.domainEvidence?.quality && typeof jobView.domainEvidence.quality === "object" ? String((jobView.domainEvidence.quality as { label?: string }).label || "unknown") : "unknown"}</strong></span>
-          {jobView.domainEvidence?.quality && typeof jobView.domainEvidence.quality === "object" && Number((jobView.domainEvidence.quality as { details?: { limitedCoverageCount?: number } }).details?.limitedCoverageCount || 0) > 0 ? <span>Coverage warning: <strong className="text-amber-300">{String((jobView.domainEvidence.quality as { details: { limitedCoverageCount: number } }).details.limitedCoverageCount)} limited</strong></span> : null}
+          {hasActiveExecution ? (
+            <>
+              <span>Current stage: <strong className="text-amber-300">{currentStage || "running"}</strong></span>
+              <span>Next wake: <strong className="text-slate-200">{nextWakeAt ? formatAdminDateTime(nextWakeAt) : "active / pending"}</strong></span>
+              <span>Current run quality: <strong className="text-slate-200">pending</strong></span>
+              <span>Last completed quality: <strong className="text-slate-200">{qualityLabel}</strong>{lastCompletedRun?.finished_at ? ` (${formatAdminDateTime(lastCompletedRun.finished_at)})` : ""}</span>
+              {decodedKey === "signals.daily" ? <span>Expected completion: <strong className="text-slate-200">~14:45 ICT</strong></span> : null}
+            </>
+          ) : (
+            <span>Data quality: <strong className="text-slate-200">{qualityLabel}</strong></span>
+          )}
+          {Number(quality?.details?.limitedCoverageCount || 0) > 0 ? <span>Coverage warning: <strong className="text-amber-300">{String(quality?.details?.limitedCoverageCount)} limited</strong></span> : null}
         </div>
       </div>
 
