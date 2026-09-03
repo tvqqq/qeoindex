@@ -46,8 +46,11 @@ test("catalog matches Supabase pg_cron migrations exactly", () => {
   assert.match(syncOrderbookMigration, /'\*\/5 6-7 \* \* 1-5'/)
   assert.match(syncOrderbookMigration, /time '13:00'/)
   assert.match(syncOrderbookMigration, /time '14:40'/)
-  assert.match(syncOrderbookMigration, /'sync-universe-eod-1445'/)
-  assert.match(syncOrderbookMigration, /'45 7 \* \* 1-5'/)
+
+  const finalEodMigration = readTextFile("supabase/pending-migrations/20260903160000_fix_final_orderbook_sync_1450.sql")
+  assert.match(finalEodMigration, /cron\.unschedule\('sync-universe-eod-1445'\)/)
+  assert.match(finalEodMigration, /'sync-universe-eod-1450'/)
+  assert.match(finalEodMigration, /'50 7 \* \* 1-5'/)
 
   const sync5mDef = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "market.sync_5m")
   assert.ok(sync5mDef)
@@ -58,14 +61,14 @@ test("catalog matches Supabase pg_cron migrations exactly", () => {
   assert.equal(sync5mDef.windowStartIct, "09:00")
   assert.equal(sync5mDef.windowEndIct, "14:40")
 
-  const syncEodDef = ADMIN_JOB_CATALOG.find((j) => j.key === "market.sync_eod")
+  const syncEodDef = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "market.sync_eod")
   assert.ok(syncEodDef)
-  assert.equal(syncEodDef.schedulerName, "sync-universe-eod-1445")
-  assert.equal(syncEodDef.scheduleUtc, "45 7 * * 1-5")
-  assert.equal(syncEodDef.scheduleIct, "14:45 T2-T6")
+  assert.equal(syncEodDef.schedulerName, "sync-universe-eod-1450")
+  assert.equal(syncEodDef.scheduleUtc, "50 7 * * 1-5")
+  assert.equal(syncEodDef.scheduleIct, "14:50 T2-T6")
   assert.equal(syncEodDef.scheduleKind, "point")
-  assert.equal(syncEodDef.windowStartIct, "14:45")
-  assert.equal(syncEodDef.windowEndIct, "14:45")
+  assert.equal(syncEodDef.windowStartIct, "14:50")
+  assert.equal(syncEodDef.windowEndIct, "14:50")
 
   const kfspRatingMigration = readTextFile("supabase/migrations/20260822112420_kfsp_rating_pipeline.sql")
   assert.match(kfspRatingMigration, /'kfsp-rating-daily-7am-ict'/)
@@ -122,7 +125,7 @@ test("exact pg_cron name mapping dictionary matches production", () => {
   assert.equal(getJobKeyForPgCron("kfsp-rating-daily-7am-ict"), "kfsp.rating_daily")
   assert.equal(getJobKeyForPgCron("kfsp-ttai-history-daily-0710-ict"), "kfsp.ttai_history")
   assert.equal(getPgCronNameForJobKey("qeoindex.eod_pipeline"), "qeoindex-eod-pipeline-1515-ict")
-  assert.equal(getPgCronNameForJobKey("market.sync_eod"), "sync-universe-eod-1445")
+  assert.equal(getPgCronNameForJobKey("market.sync_eod"), "sync-universe-eod-1450")
   assert.equal(getPgCronNameForJobKey("signals.daily"), undefined)
 })
 
@@ -137,12 +140,12 @@ test("manual jobs are distinguished from scheduled jobs", () => {
   }
 })
 
-test("resolves 14:45 non-overlapping schedule without conflicts", () => {
+test("resolves 14:50 non-overlapping schedule without conflicts when 5m ends at 14:40", () => {
   const conflicts = findScheduleConflicts(EFFECTIVE_ADMIN_JOB_CATALOG)
-  assert.equal(conflicts.length, 0, "Non-overlapping 14:45 EOD schedule must produce 0 conflicts")
+  assert.equal(conflicts.length, 0, "Non-overlapping 14:50 EOD schedule must produce 0 conflicts")
 })
 
-test("detects legacy 14:50 ICT overlap conflict when 5m runs past 14:40 and EOD is 14:50", () => {
+test("detects 14:50 ICT overlap conflict when 5m runs past 14:40 and EOD is 14:50", () => {
   const legacyCatalog = [
     {
       key: "market.sync_5m",
@@ -190,6 +193,9 @@ test("effective catalog has complete structured ICT schedule policies", () => {
     { startMinuteOfDay: 540, endMinuteOfDay: 690, cadenceMinutes: 5 },
     { startMinuteOfDay: 780, endMinuteOfDay: 880, cadenceMinutes: 5 },
   ])
+  const marketEod = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "market.sync_eod")
+  assert.equal(marketEod?.schedulePolicy?.kind, "fixed_time")
+  assert.equal((marketEod?.schedulePolicy as { minuteOfDay: number }).minuteOfDay, 890)
   assert.equal(isValidSchedulePolicy(undefined), false)
   assert.equal(isValidSchedulePolicy({ kind: "fixed_time", timezone: "UTC", cadence: "daily", minuteOfDay: 420, graceMinutes: 5 }), false)
 })
