@@ -59,6 +59,8 @@ jobs:
         run: node --test tests/canonical-200-ui.test.ts
       - name: Touched lint
         run: pnpm lint:touched
+      - name: Market board filter lint
+        run: pnpm exec eslint app/page.tsx components/market-board/stock-filter-modal.tsx lib/market-board/stock-filter.ts app/api/me/market-board-filter/route.ts tests/market-board-filter-avg50-regression.test.ts
       - name: TypeScript
         run: pnpm typecheck
       - name: Production build
