@@ -694,7 +694,7 @@ export type Database = {
           id: number
           is_published: boolean
           kfsp_canslim_score: number | null
-          kfsp_composite_score: number | null
+          kfsp_composite_score: number
           kfsp_contract_version: number
           kfsp_metrics: Json
           kfsp_price_potential: string | null
@@ -731,7 +731,7 @@ export type Database = {
           id?: number
           is_published?: boolean
           kfsp_canslim_score?: number | null
-          kfsp_composite_score?: number | null
+          kfsp_composite_score?: number
           kfsp_contract_version?: number
           kfsp_metrics?: Json
           kfsp_price_potential?: string | null
@@ -768,7 +768,7 @@ export type Database = {
           id?: number
           is_published?: boolean
           kfsp_canslim_score?: number | null
-          kfsp_composite_score?: number | null
+          kfsp_composite_score?: number
           kfsp_contract_version?: number
           kfsp_metrics?: Json
           kfsp_price_potential?: string | null
@@ -1345,7 +1345,7 @@ export type Database = {
           above_ma20_pct?: number | null
           above_ma200_pct?: number | null
           above_ma50_pct?: number | null
-          as_of?: string
+          as_of_date?: string
           contract_version?: number
           created_at?: string
           distribution_count?: number | null
@@ -2349,6 +2349,59 @@ export type Database = {
         }
         Relationships: []
       }
+      system_job_ticker_attempts: {
+        Row: {
+          attempt: number
+          created_at: string
+          error_class: string | null
+          error_code: string | null
+          error_message: string | null
+          id: number
+          job_key: string
+          retry_eligible: boolean
+          run_id: string
+          stage: string
+          status: string
+          ticker: string
+        }
+        Insert: {
+          attempt: number
+          created_at?: string
+          error_class?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: never
+          job_key: string
+          retry_eligible?: boolean
+          run_id: string
+          stage: string
+          status: string
+          ticker: string
+        }
+        Update: {
+          attempt?: number
+          created_at?: string
+          error_class?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: never
+          job_key?: string
+          retry_eligible?: boolean
+          run_id?: string
+          stage?: string
+          status?: string
+          ticker?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_job_ticker_attempts_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "system_job_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_settings: {
         Row: {
           change_reason: string
@@ -3189,7 +3242,7 @@ export type CompositeTypes<
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    ? keyof DatabaseWithoutInternals[DefaultSchemaCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
     : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
@@ -3204,4 +3257,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-
