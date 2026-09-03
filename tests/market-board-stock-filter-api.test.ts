@@ -18,12 +18,16 @@ test("market board filter preference route is authenticated and merges settings 
   assert.match(preferenceRoute, /"Cache-Control": "no-store, max-age=0"/)
 })
 
-test("market quote reconcile route is authenticated, canonical-bounded, and batch-only", () => {
+test("market quote reconcile route is authenticated, canonical-bounded, and uses bounded fallbacks", () => {
   assert.match(quoteRoute, /requireApiUser\(\)/)
   assert.match(quoteRoute, /getCanonicalUniverse\(\)/)
   assert.match(quoteRoute, /MARKET_UNIVERSE_MAX_SIZE/)
   assert.match(quoteRoute, /new Set\(canonical\.stocks\.map\(\(stock\) => stock\.ticker\)\)/)
   assert.match(quoteRoute, /fetchLiveBatchQuotes\(symbols\)/)
+  assert.match(quoteRoute, /getCanonicalBoardOverviewSnapshots\(symbols\)/)
+  assert.match(quoteRoute, /Promise\.all/)
   assert.doesNotMatch(quoteRoute, /for \([\s\S]*fetchLiveBatchQuotes/)
+  assert.match(quoteRoute, /missingSymbols/)
+  assert.match(quoteRoute, /Unable to reconcile all requested market quotes/)
   assert.match(quoteRoute, /"Cache-Control": "no-store, max-age=0"/)
 })
