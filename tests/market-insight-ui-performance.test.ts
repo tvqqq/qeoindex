@@ -140,7 +140,7 @@ test("Market Close keeps the main dashboard continuous and limits tabs to the th
   assert.doesNotMatch(bubbles, /stock\.volume[^\n]*>\s*300_000/, "bubble field must not apply a second liquidity cutoff inside the canonical universe")
   assert.match(bubbles, /slice\(0, 200\)/, "bubble solver must keep the requested Top 200 cap")
   assert.match(dashboard, /min-h-\[650px\]/, "bubble layout must reserve stable space")
-  assert.match(sectors, /Luân chuyển dòng tiền/, "sector workspace must expose the rotation view")
+  assert.match(sectors, /SECTOR ROTATION MATRIX/, "sector workspace must expose the rotation view")
   for (const sectionId of ["market-overview-title", "market-sectors-title", "market-history-title"]) {
     assert.match(dashboard, new RegExp(`id="${sectionId}"`), `${sectionId} must be visible in the continuous dashboard`)
   }
