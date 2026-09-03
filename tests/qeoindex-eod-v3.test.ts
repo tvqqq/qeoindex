@@ -13,14 +13,17 @@ function qeo21RetentionMigration() {
   return source(`supabase/migrations/${matches[0]}`)
 }
 
-test("EOD v3 publishes validated Wyckoff to Supabase before Council and archives", () => {
+test("EOD publishes same-session evidence and validated Wyckoff before Council and archives", () => {
   const workflowPath = "workflows/qeoindex-eod-pipeline.ts"
   assert.equal(existsSync(new URL(`../${workflowPath}`, import.meta.url)), true)
   const workflow = source(workflowPath)
 
   const ordered = [
-    "runEodReadyStep",
+    "runKfspRatingRefreshStep",
+    "runTtaiRefreshStep",
     "runMarketCloseCollectStep",
+    "runEodReadyStep",
+    "assertReadyMatchesFrozenUniverse",
     "runHistoryRefreshBatchStep",
     "runEodNoTradeDailyRepairStep",
     "runWyckoffBuildStep",
@@ -40,7 +43,7 @@ test("EOD v3 publishes validated Wyckoff to Supabase before Council and archives
   let cursor = -1
   for (const call of ordered) {
     const next = workflow.indexOf(call, cursor + 1)
-    assert.ok(next > cursor, `${call} must appear after the prior EOD v3 phase`)
+    assert.ok(next > cursor, `${call} must appear after the prior EOD phase`)
     cursor = next
   }
 
@@ -53,10 +56,13 @@ test("EOD v3 publishes validated Wyckoff to Supabase before Council and archives
 test("EOD readiness remains canonical-only through the delegated readiness step", () => {
   const steps = source("lib/qeoindex-eod-workflow-steps.ts")
   const legacySteps = source("lib/qeoindex-eod-workflow-steps-legacy.ts")
+  const refreshSteps = source("lib/qeoindex-eod-data-refresh-steps.ts")
   assert.match(steps, /runEodReadyStep/)
   assert.match(steps, /qeoindex-eod-workflow-steps-legacy/)
   assert.match(legacySteps, /getCanonicalUniverse/)
   assert.match(legacySteps, /loadWyckoffV2Universe/)
+  assert.match(refreshSteps, /assertReadyMatchesFrozenUniverse/)
+  assert.match(refreshSteps, /expectedUniverse\.tickers/)
   assert.doesNotMatch(legacySteps, /beginWyckoffV2NotionRun/)
   assert.doesNotMatch(legacySteps, /claimReadyWyckoffV2Run/)
   assert.doesNotMatch(legacySteps, /publishIngestingWyckoffV2Run/)
@@ -104,11 +110,13 @@ test("QEO-39 builds once, stages run-scoped artifacts, and keeps snapshots out o
   assert.match(workflow, /runSupabasePublishStep\([\s\S]*?runId[\s\S]*?ready\.runKey[\s\S]*?ready\.scanDate[\s\S]*?validation\.validationHash[\s\S]*?\)/)
 })
 
-test("admin EOD phase catalog exposes v3 order and dynamic Top Stocks descriptions", () => {
+test("admin EOD phase catalog exposes transitional EOD v4 data-refresh order", () => {
   const code = source("lib/admin/job-phases.ts")
   for (const phase of [
-    "EOD_READY",
+    "KFSP_RATING_REFRESH",
+    "TTAI_REFRESH",
     "MARKET_CLOSE_COLLECT",
+    "EOD_READY",
     "HISTORY_REFRESH",
     "WYCKOFF_BUILD",
     "SUPABASE_VALIDATE",
