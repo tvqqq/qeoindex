@@ -28,6 +28,13 @@ test("filter modal exposes exchanges, price, liquidity, KFSP sectors and preview
   assert.match(modalSource, /filterBoardTickers/)
 })
 
+test("filter apply stays disabled until a fresh quote snapshot is ready", () => {
+  assert.match(shellSource, /setQuoteReady\(false\)/)
+  assert.match(shellSource, /setQuoteReady\(true\)/)
+  assert.match(modalSource, /quoteReady/)
+  assert.match(modalSource, /disabled=\{!criteria \|\| isRefreshing \|\| !quoteReady\}/)
+})
+
 test("page preserves canonical exchange and raw KFSP sector for filtering", () => {
   assert.match(pageSource, /exchange: stock\.exchange \|\| ""/)
   assert.match(pageSource, /kfspSector: stock\.sector \|\| sectorForTicker\(stock\.ticker\)/)
