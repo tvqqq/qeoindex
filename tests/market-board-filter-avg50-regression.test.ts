@@ -13,6 +13,8 @@ import {
 
 const modalSource = readFileSync(new URL("../components/market-board/stock-filter-modal.tsx", import.meta.url), "utf8")
 const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8")
+const helperSource = readFileSync(new URL("../lib/market-board/stock-filter.ts", import.meta.url), "utf8")
+const preferenceRouteSource = readFileSync(new URL("../app/api/me/market-board-filter/route.ts", import.meta.url), "utf8")
 
 const sectors = [
   "Ngân hàng",
@@ -73,7 +75,8 @@ test("Filter CP sector rules mirror six board columns and preserve mandatory/min
 
 test("Filter CP UI wires averageVolume50d and six sector columns", () => {
   assert.match(pageSource, /averageVolume50d: stock\.averageVolume50d/)
-  assert.match(modalSource, /KLTB 50 phiên/)
+  assert.match(pageSource, /BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v7"/)
+  assert.match(modalSource, /Thanh khoản \(KLTB 50 phiên\)/)
   assert.match(modalSource, /groupFilterSectorsByBoardColumn/)
   assert.match(modalSource, /hasRequiredFilterSectorSelections/)
   assert.match(modalSource, /canUnselectFilterSector/)
@@ -81,4 +84,10 @@ test("Filter CP UI wires averageVolume50d and six sector columns", () => {
   assert.match(modalSource, /lg:grid-cols-6/)
   assert.match(modalSource, /Bắt buộc/)
   assert.doesNotMatch(modalSource, /thanh khoản theo số cổ phiếu khớp trong phiên/)
+})
+
+test("avg50 semantic change invalidates stale daily caches and invalid persisted sector selections", () => {
+  assert.match(helperSource, /liquidityBasis: "averageVolume50d"/)
+  assert.match(helperSource, /readStockFilterFromSettings[\s\S]*hasRequiredFilterSectorSelections/)
+  assert.match(preferenceRouteSource, /hasRequiredFilterSectorSelections\(new Set\(criteria\.sectors\), availableSectors\)/)
 })
