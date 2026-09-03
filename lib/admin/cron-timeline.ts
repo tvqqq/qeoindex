@@ -26,9 +26,8 @@ export const EOD_PIPELINE_PHASES: TimelinePhaseItem[] = [
   { key: "AI_COUNCIL_LLM", label: "8. LLM Debate", order: 8 },
   { key: "MARKET_SYNTHESIS", label: "9. Market Synthesis", order: 9 },
   { key: "NOTION_ARCHIVE", label: "10. Notion Archive", order: 10 },
-  { key: "DRIVE_ARCHIVE", label: "11. Drive Archive", order: 11 },
-  { key: "RETENTION_CLEANUP", label: "12. Retention", order: 12 },
-  { key: "COMPLETE", label: "13. Complete", order: 13 },
+  { key: "RETENTION_CLEANUP", label: "11. Retention", order: 11 },
+  { key: "COMPLETE", label: "12. Complete", order: 12 },
 ]
 
 export type TimelineLaneId = "vercel" | "pg_cron" | "manual" | "disabled"
