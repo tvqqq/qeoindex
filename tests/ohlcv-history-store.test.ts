@@ -178,7 +178,32 @@ test("verified final traded snapshot repairs a missing current-session Daily bar
   })
 })
 
-test("verified final traded repair rejects inconsistent volume, match price, and OHLC evidence", () => {
+test("verified final traded repair expands the range when ATC close makes a new high", () => {
+  assert.deepEqual(buildVerifiedFinalDailyBar("VIC", "2026-09-03", {
+    symbol: "VIC",
+    session_date: "2026-09-03",
+    reference_price: 236,
+    latest_price: 244.5,
+    total_volume: 7_042_100,
+    updated_at: "2026-09-03T07:45:07.879Z",
+    latest_quote: {
+      openPrice: 232.9,
+      highPrice: 244.3,
+      lowPrice: 226,
+      matchPrice: 244.5,
+      totalVolume: 7_042_100,
+    },
+  }), {
+    time: Math.floor(new Date("2026-09-03T02:00:00.000Z").getTime() / 1000),
+    open: 232.9,
+    high: 244.5,
+    low: 226,
+    close: 244.5,
+    volume: 7_042_100,
+  })
+})
+
+test("verified final traded repair rejects inconsistent volume and match price evidence", () => {
   assert.equal(buildVerifiedFinalDailyBar("FPT", "2026-09-03", {
     ...tradedSnapshot,
     latest_quote: { ...tradedSnapshot.latest_quote, totalVolume: 3_900_000 },
@@ -186,10 +211,6 @@ test("verified final traded repair rejects inconsistent volume, match price, and
   assert.equal(buildVerifiedFinalDailyBar("FPT", "2026-09-03", {
     ...tradedSnapshot,
     latest_quote: { ...tradedSnapshot.latest_quote, matchPrice: 72.1 },
-  }), null)
-  assert.equal(buildVerifiedFinalDailyBar("FPT", "2026-09-03", {
-    ...tradedSnapshot,
-    latest_quote: { ...tradedSnapshot.latest_quote, highPrice: 71.9 },
   }), null)
 })
 
