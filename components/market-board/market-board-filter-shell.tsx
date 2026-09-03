@@ -154,6 +154,7 @@ export function MarketBoardFilterShell({
   const [modalQuotes, setModalQuotes] = useState<Record<string, LiveStockQuote>>({})
   const [modalOpen, setModalOpen] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [quoteReady, setQuoteReady] = useState(false)
   const [persistenceError, setPersistenceError] = useState("")
   const [pendingModeAfterRemount, setPendingModeAfterRemount] = useState<PendingBoardMode>(null)
 
@@ -282,12 +283,14 @@ export function MarketBoardFilterShell({
   const openFilterEditor = useCallback(async (criteria: StockFilterCriteriaV1) => {
     setPersistenceError("")
     setModalCriteria(criteria)
+    setQuoteReady(false)
     setModalOpen(true)
     setIsRefreshing(true)
     try {
       const { merged, stocks } = await fetchCurrentQuotes()
       setQuoteSeed(merged)
       setModalQuotes(stocks)
+      setQuoteReady(true)
     } catch {
       setPersistenceError("Không thể cập nhật giá/thanh khoản hiện tại. Vui lòng thử lại trước khi Áp dụng.")
     } finally {
@@ -359,6 +362,7 @@ export function MarketBoardFilterShell({
     setFilteredTickers(tickers)
     writeDailyCache(criteria, tickers)
     setFilterActive(true)
+    setQuoteReady(false)
     setModalOpen(false)
     setBoardKey((key) => key + 1)
     void persistCriteria(criteria)
@@ -438,6 +442,7 @@ export function MarketBoardFilterShell({
         onApply={handleApply}
         persistenceError={persistenceError}
         isRefreshing={isRefreshing}
+        quoteReady={quoteReady}
       />
     </div>
   )
