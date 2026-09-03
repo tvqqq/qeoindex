@@ -101,6 +101,18 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
     })
   }
 
+  if (job.key === "market.sync_eod") {
+    return withSchedulePolicy({
+      ...job,
+      description: "Đồng bộ snapshot giá/orderbook final sau ATC cho canonical universe trước EOD pipeline.",
+      scheduleUtc: "50 7 * * 1-5",
+      scheduleIct: "14:50 T2-T6",
+      schedulerName: "sync-universe-eod-1450",
+      windowStartIct: "14:50",
+      windowEndIct: "14:50",
+    })
+  }
+
   return withSchedulePolicy(job)
 }
 
