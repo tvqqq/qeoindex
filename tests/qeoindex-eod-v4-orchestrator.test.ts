@@ -84,7 +84,10 @@ test("QEO-64 waits for terminal Market Synthesis and injects its exact-session c
   assert.match(synthesisStep, /status:\s*"succeeded"/, "synthesis phase must expose terminal success, not enqueue success")
   assert.doesNotMatch(synthesisStep, /status:\s*"queued"/, "enqueue success is not completion evidence")
   assert.match(synthesisStep, /getMarketCloseInsightData[\s\S]*ratingDate/, "synthesis must bind to the exact session snapshot")
-  assert.match(synthesisStep, /loadMarketAiConclusion/, "synthesis must validate the exact persisted Market AI identity")
+  assert.match(synthesisStep, /market_ai_conclusions/, "synthesis must consume persisted terminal Market AI evidence")
+  assert.match(synthesisStep, /snapshot_id/, "synthesis must bind to the persisted snapshot identity")
+  assert.match(synthesisStep, /crypto\.subtle\.digest/, "snapshot identity must remain workflow-compatible without Node crypto")
+  assert.doesNotMatch(synthesisStep, /market-ai-conclusion-loader/, "workflow path must not import the Node-only Market AI loader")
 
   assert.match(steps, /loadMarketSynthesisContext[\s\S]*runAiCouncilDebateOperation/, "LLM step must load completed synthesis before the debate operation")
   assert.match(operations, /marketSynthesis/, "AI Council operation must consume market synthesis context")
