@@ -1,5 +1,13 @@
 import { getJobTimelineLane, getPgCronNameForJobKey } from "./job-schedule.ts"
-import type { AdminJobView, AdminJobStatus, AdminSchedulerStatus, AdminJobEvidenceSource } from "./types.ts"
+import { isAllowlistedManualJobKey } from "./manual-job-capabilities.ts"
+import type {
+  AdminJobEvidenceSource,
+  AdminJobStatus,
+  AdminJobView,
+  AdminManualPolicy,
+  AdminManualPurpose,
+  AdminSchedulerStatus,
+} from "./types.ts"
 
 export interface TimelinePhaseItem {
   key: string
@@ -23,13 +31,15 @@ export const EOD_PIPELINE_PHASES: TimelinePhaseItem[] = [
   { key: "COMPLETE", label: "13. Complete", order: 13 },
 ]
 
+export type TimelineLaneId = "vercel" | "pg_cron" | "manual" | "disabled"
+
 export interface TimelineJobNode {
   key: string
   label: string
   description: string
   provider: string
   schedulerName?: string
-  lane: "vercel" | "pg_cron" | "manual"
+  lane: TimelineLaneId
   displayType: "point" | "interval" | "recurring_point" | "manual"
   timeIctLabel: string
   daysLabel: "T2-T6" | "Hàng ngày" | "Thủ công"
@@ -44,6 +54,9 @@ export interface TimelineJobNode {
   healthReason: string
   conflictWarning: string | null
   evidenceSource: AdminJobEvidenceSource
+  manualPolicy: AdminManualPolicy
+  manualPurpose?: AdminManualPurpose
+  automatedParentKeys?: string[]
   phases?: TimelinePhaseItem[]
   lastStartedAt?: string | null
   lastFinishedAt?: string | null
@@ -51,7 +64,7 @@ export interface TimelineJobNode {
 }
 
 export interface TimelineLaneGroup {
-  id: "vercel" | "pg_cron" | "manual"
+  id: TimelineLaneId
   title: string
   description: string
   jobs: TimelineJobNode[]
@@ -76,6 +89,22 @@ function minuteToPercent(minutes: number): number {
   return Math.min(100, Math.max(0, (minutes / (24 * 60)) * 100))
 }
 
+function manualContextDescription(node: TimelineJobNode) {
+  if (node.manualPurpose === "recovery") {
+    if (node.automatedParentKeys?.length) {
+      return `${node.description} Manual recovery · Automated by: ${node.automatedParentKeys.join(", ")}.`
+    }
+    if (node.lane === "vercel" || node.lane === "pg_cron") {
+      return `${node.description} Manual recovery của scheduled job ${node.key}.`
+    }
+    return `${node.description} Manual recovery one-shot.`
+  }
+  if (node.manualPurpose === "diagnostic") {
+    return `${node.description} Manual diagnostic action.`
+  }
+  return `${node.description} Manual maintenance action.`
+}
+
 export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel {
   const allNodes: TimelineJobNode[] = jobs.map((job) => {
     let lane: TimelineJobNode["lane"] = "manual"
@@ -91,7 +120,7 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
     const policy = job.schedulePolicy
     lane = getJobTimelineLane(job)
     if (!policy || policy.kind === "manual") {
-      lane = "manual"
+      lane = job.manualPolicy === "disabled" ? "disabled" : "manual"
       displayType = "manual"
       timeIctLabel = "Thủ công"
       daysLabel = "Thủ công"
@@ -141,6 +170,9 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
       healthReason: job.healthReason || "Không có ghi chú thực thi",
       conflictWarning: job.conflictWarning ?? null,
       evidenceSource: job.evidenceSource ?? "system_job_runs",
+      manualPolicy: job.manualPolicy,
+      manualPurpose: job.manualPurpose,
+      automatedParentKeys: job.automatedParentKeys,
       phases,
       lastStartedAt: job.lastStartedAt,
       lastFinishedAt: job.lastFinishedAt,
@@ -148,13 +180,21 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
     }
   })
 
-  const vercelJobs = allNodes.filter((n) => n.lane === "vercel")
-  const pgCronJobs = allNodes.filter((n) => n.lane === "pg_cron").sort((a, b) => {
-    const minA = a.startMinuteOfDay ?? 9999
-    const minB = b.startMinuteOfDay ?? 9999
+  const vercelJobs = allNodes.filter((node) => node.lane === "vercel")
+  const pgCronJobs = allNodes.filter((node) => node.lane === "pg_cron").sort((left, right) => {
+    const minA = left.startMinuteOfDay ?? 9999
+    const minB = right.startMinuteOfDay ?? 9999
     return minA - minB
   })
-  const manualJobs = allNodes.filter((n) => n.lane === "manual")
+  const manualJobs = allNodes
+    .filter((node) => isAllowlistedManualJobKey(node.key) && node.manualPolicy !== "disabled")
+    .map((node) => ({
+      ...node,
+      lane: "manual" as const,
+      displayType: "manual" as const,
+      description: manualContextDescription(node),
+    }))
+  const disabledJobs = allNodes.filter((node) => node.lane === "disabled")
 
   const lanes: TimelineLaneGroup[] = [
     {
@@ -171,18 +211,24 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
     },
     {
       id: "manual",
-      title: "Tác vụ Thủ công & Hệ thống (Allowlist)",
-      description: "Các tác vụ on-demand kích hoạt trực tiếp từ Control Plane với quyền Root Admin.",
+      title: "Manual Recovery & Maintenance",
+      description: "Các one-shot action lấy trực tiếp từ dispatch allowlist để recovery/diagnostic; chúng không thay thế scheduler tự động.",
       jobs: manualJobs,
+    },
+    {
+      id: "disabled",
+      title: "Manual Disabled / Legacy Maintenance",
+      description: "Các action giữ lại để quan sát lịch sử nhưng bị policy chặn và không thể dispatch từ Control Plane.",
+      jobs: disabledJobs,
     },
   ]
 
   const totalScheduled = vercelJobs.length + pgCronJobs.length
   const totalManual = manualJobs.length
-  const healthyCount = allNodes.filter((n) => n.executionStatus === "healthy").length
-  const failingCount = allNodes.filter((n) => n.executionStatus === "failing").length
-  const unknownCount = allNodes.filter((n) => n.executionStatus === "unknown").length
-  const conflictCount = allNodes.filter((n) => Boolean(n.conflictWarning)).length
+  const healthyCount = allNodes.filter((node) => node.executionStatus === "healthy").length
+  const failingCount = allNodes.filter((node) => node.executionStatus === "failing").length
+  const unknownCount = allNodes.filter((node) => node.executionStatus === "unknown").length
+  const conflictCount = allNodes.filter((node) => Boolean(node.conflictWarning)).length
 
   return {
     lanes,

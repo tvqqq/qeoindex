@@ -19,6 +19,7 @@ import type { AdminJobView } from "@/lib/admin/types"
 import {
   buildCronTimelineModel,
   type TimelineJobNode,
+  type TimelineLaneId,
 } from "@/lib/admin/cron-timeline"
 
 export interface AdminCronTimelineProps {
@@ -80,20 +81,25 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
 
   const timeline = buildCronTimelineModel(jobs)
 
-  const filteredNodes = timeline.allNodes.filter((node) => {
-    if (filterMode === "scheduled") return node.lane !== "manual"
+  const matchesFilter = (node: TimelineJobNode, laneId: TimelineLaneId) => {
+    if (filterMode === "scheduled") return laneId === "vercel" || laneId === "pg_cron"
     if (filterMode === "issues") return node.executionStatus === "failing" || node.executionStatus === "degraded" || Boolean(node.conflictWarning)
-    if (filterMode === "weekdays") return node.daysLabel === "T2-T6"
-    if (filterMode === "daily") return node.daysLabel === "Hàng ngày"
+    if (filterMode === "weekdays") return laneId !== "manual" && laneId !== "disabled" && node.daysLabel === "T2-T6"
+    if (filterMode === "daily") return laneId !== "manual" && laneId !== "disabled" && node.daysLabel === "Hàng ngày"
     return true
-  })
+  }
+
+  const filteredLaneRows = timeline.lanes.flatMap((lane) =>
+    lane.jobs
+      .filter((node) => matchesFilter(node, lane.id))
+      .map((node) => ({ laneId: lane.id, node })),
+  )
 
   return (
     <section
       aria-label="Sơ đồ Lịch chạy Cron & Mindmap ICT"
       className="space-y-4.5 rounded-2xl border border-white/[0.08] bg-[#0c1017] p-5 sm:p-6"
     >
-      {/* Header & Controls */}
       <div className="flex flex-col gap-3.5 border-b border-white/[0.06] pb-4.5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2.5">
@@ -106,20 +112,17 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
             </span>
           </div>
           <p className="mt-1 text-xs text-slate-400">
-            Biểu diễn trục thời gian thực thi, tách biệt trạng thái lập lịch (Scheduler) và bằng chứng kết quả (Execution Evidence).
+            Biểu diễn trục thời gian thực thi, tách biệt scheduler, manual recovery và bằng chứng kết quả.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* View mode toggle */}
           <div className="flex rounded-xl border border-white/[0.08] bg-[#080c11] p-1 text-xs">
             <button
               type="button"
               onClick={() => setViewMode("visual")}
               className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
-                viewMode === "visual"
-                  ? "bg-emerald-500/20 text-emerald-300 shadow-sm"
-                  : "text-slate-400 hover:text-white"
+                viewMode === "visual" ? "bg-emerald-500/20 text-emerald-300 shadow-sm" : "text-slate-400 hover:text-white"
               }`}
             >
               <Layers className="h-3.5 w-3.5" />
@@ -129,9 +132,7 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
               type="button"
               onClick={() => setViewMode("table")}
               className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
-                viewMode === "table"
-                  ? "bg-emerald-500/20 text-emerald-300 shadow-sm"
-                  : "text-slate-400 hover:text-white"
+                viewMode === "table" ? "bg-emerald-500/20 text-emerald-300 shadow-sm" : "text-slate-400 hover:text-white"
               }`}
             >
               <ListOrdered className="h-3.5 w-3.5" />
@@ -139,7 +140,6 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
             </button>
           </div>
 
-          {/* Filter pills */}
           <div className="flex overflow-x-auto gap-1 text-xs">
             {(
               [
@@ -167,7 +167,6 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
         </div>
       </div>
 
-      {/* 24-Hour ICT Time Spine Axis */}
       <div className="rounded-xl border border-white/[0.06] bg-[#080c11] p-3.5 text-[11px]">
         <div className="flex items-center justify-between font-mono text-slate-400">
           <span>00:00 ICT</span>
@@ -180,19 +179,16 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
           <span>24:00</span>
         </div>
         <div className="relative mt-2.5 h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
-          {/* Market hours band: 09:00 to 14:45 = 37.5% to 61.46% */}
           <div
             className="absolute top-0 bottom-0 bg-emerald-500/20"
             style={{ left: "37.5%", width: "23.96%" }}
             title="Khung giờ giao dịch thị trường HOSE (09:00 - 14:45 ICT)"
           />
-          {/* EOD sync point at 14:45: ~61.46% */}
           <div
             className="absolute top-0 bottom-0 w-1.5 bg-emerald-400"
             style={{ left: "61.46%" }}
             title="14:45 ICT: Market EOD Closing Orderbook Sync (ATC Close)"
           />
-          {/* EOD Pipeline point at 15:15: ~63.5% */}
           <div
             className="absolute top-0 bottom-0 w-1.5 bg-sky-400"
             style={{ left: "63.5%" }}
@@ -201,18 +197,14 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
         </div>
       </div>
 
-      {/* Visual Lane & Node Display */}
       {viewMode === "visual" ? (
         <div className="space-y-4">
           {timeline.lanes.map((lane) => {
-            const laneNodes = lane.jobs.filter((j) => filteredNodes.some((f) => f.key === j.key))
+            const laneNodes = lane.jobs.filter((node) => matchesFilter(node, lane.id))
             if (laneNodes.length === 0) return null
 
             return (
-              <div
-                key={lane.id}
-                className="space-y-3.5 rounded-xl border border-white/[0.06] bg-[#080c11]/80 p-4"
-              >
+              <div key={lane.id} className="space-y-3.5 rounded-xl border border-white/[0.06] bg-[#080c11]/80 p-4">
                 <div className="flex flex-col gap-1 border-b border-white/[0.04] pb-2.5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-emerald-400" />
@@ -227,7 +219,7 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
                 <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 lg:grid-cols-3">
                   {laneNodes.map((node) => (
                     <TimelineCard
-                      key={node.key}
+                      key={`${lane.id}:${node.key}`}
                       node={node}
                       expandedEod={expandedEod}
                       onToggleEod={() => setExpandedEod(!expandedEod)}
@@ -240,11 +232,7 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
         </div>
       ) : null}
 
-      {/* Accessible Ordered List & Table Fallback */}
-      <div
-        className={viewMode === "table" ? "block" : "sr-only"}
-        aria-label="Danh sách tác vụ tuần tự chi tiết"
-      >
+      <div className={viewMode === "table" ? "block" : "sr-only"} aria-label="Danh sách tác vụ tuần tự chi tiết">
         <div className="overflow-x-auto rounded-xl border border-white/[0.06] bg-[#080c11]">
           <table className="w-full text-left text-xs">
             <thead className="border-b border-white/[0.06] bg-[#05080c] text-[11px] font-medium text-slate-400">
@@ -258,27 +246,21 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.04] text-slate-300">
-              {filteredNodes.map((node) => (
-                <tr key={node.key} className="transition-colors hover:bg-white/[0.02]">
+              {filteredLaneRows.map(({ laneId, node }) => (
+                <tr key={`${laneId}:${node.key}`} className="transition-colors hover:bg-white/[0.02]">
                   <td className="whitespace-nowrap px-3.5 py-2.5 font-mono text-white">
                     <span className="font-bold">{node.timeIctLabel}</span>
                     <span className="ml-1 text-[10px] text-slate-400">({node.daysLabel})</span>
                   </td>
                   <td className="px-3.5 py-2.5 font-mono font-medium text-white">
-                    <Link
-                      href={`/admin/jobs/${node.key}`}
-                      prefetch={false}
-                      className="hover:text-emerald-400 transition-colors"
-                    >
+                    <Link href={`/admin/jobs/${node.key}`} prefetch={false} className="hover:text-emerald-400 transition-colors">
                       {node.label}
                     </Link>
                     <div className="font-mono text-[10px] font-normal text-slate-400">{node.key}</div>
                   </td>
                   <td className="px-3.5 py-2.5 text-slate-300">
                     <div className="font-mono text-[11px]">{node.provider}</div>
-                    {node.schedulerName ? (
-                      <div className="font-mono text-[10px] text-slate-400">cron: {node.schedulerName}</div>
-                    ) : null}
+                    {node.schedulerName ? <div className="font-mono text-[10px] text-slate-400">cron: {node.schedulerName}</div> : null}
                   </td>
                   <td className="px-3.5 py-2.5 font-mono text-[11px]">
                     <span
@@ -297,9 +279,7 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
                     <span
                       className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase ${
                         STATUS_BADGE_CONFIG[node.executionStatus]?.bg
-                      } ${STATUS_BADGE_CONFIG[node.executionStatus]?.border} ${
-                        STATUS_BADGE_CONFIG[node.executionStatus]?.text
-                      }`}
+                      } ${STATUS_BADGE_CONFIG[node.executionStatus]?.border} ${STATUS_BADGE_CONFIG[node.executionStatus]?.text}`}
                     >
                       {STATUS_BADGE_CONFIG[node.executionStatus]?.label || node.executionStatus}
                     </span>
@@ -346,7 +326,6 @@ function TimelineCard({
       }`}
     >
       <div>
-        {/* Top bar: Time, Frequency & Status Badge */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] font-bold text-emerald-300">
@@ -356,16 +335,12 @@ function TimelineCard({
               {node.daysLabel}
             </span>
           </div>
-
-          <span
-            className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${config.bg} ${config.border} ${config.text}`}
-          >
+          <span className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${config.bg} ${config.border} ${config.text}`}>
             <StatusIcon className="h-3 w-3" />
             <span>{config.label}</span>
           </span>
         </div>
 
-        {/* Job Identity */}
         <div className="mt-2.5">
           <div className="flex items-center justify-between">
             <Link
@@ -381,7 +356,6 @@ function TimelineCard({
           <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-slate-300">{node.description}</p>
         </div>
 
-        {/* Conflict warning banner */}
         {node.conflictWarning ? (
           <div className="mt-2.5 flex items-start gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] text-amber-300">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
@@ -392,7 +366,6 @@ function TimelineCard({
           </div>
         ) : null}
 
-        {/* Execution evidence summary */}
         <div className="mt-2.5 rounded-xl border border-white/[0.06] bg-[#080c11] p-2.5 text-[11px]">
           <div className="mb-1 flex items-center justify-between font-mono text-[10px] text-slate-400">
             <span>Bằng chứng thực thi:</span>
@@ -401,31 +374,22 @@ function TimelineCard({
           <div className="font-medium text-slate-200">{node.healthReason}</div>
         </div>
 
-        {/* Special: QeoIndex EOD Pipeline 10 Dependency Phases */}
         {node.phases ? (
           <div className="mt-2.5 rounded-xl border border-sky-500/20 bg-sky-500/5 p-2.5">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1 text-[11px] font-bold text-sky-300">
                 <Zap className="h-3 w-3" />
-                <span>10 Phân đoạn EOD tuần tự:</span>
+                <span>{node.phases.length} phân đoạn EOD tuần tự:</span>
               </span>
-              <button
-                type="button"
-                onClick={onToggleEod}
-                className="flex items-center gap-0.5 font-mono text-[10px] text-sky-400 hover:underline"
-              >
+              <button type="button" onClick={onToggleEod} className="flex items-center gap-0.5 font-mono text-[10px] text-sky-400 hover:underline">
                 <span>{expandedEod ? "Thu gọn" : "Chi tiết"}</span>
                 {expandedEod ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
               </button>
             </div>
-
             {expandedEod ? (
               <div className="mt-2 grid grid-cols-2 gap-1.5 font-mono text-[10px]">
                 {node.phases.map((phase) => (
-                  <div
-                    key={phase.key}
-                    className="rounded-lg border border-white/[0.04] bg-white/[0.03] px-2 py-1 text-slate-300"
-                  >
+                  <div key={phase.key} className="rounded-lg border border-white/[0.04] bg-white/[0.03] px-2 py-1 text-slate-300">
                     {phase.label}
                   </div>
                 ))}
@@ -435,35 +399,52 @@ function TimelineCard({
         ) : null}
       </div>
 
-      {/* Footer: Scheduler vs Execution Separation */}
       <div className="flex items-center justify-between border-t border-white/[0.06] pt-2.5 font-mono text-[10px] text-slate-400">
         <div>
-          <span>Scheduler: </span>
-          <span
-            className={`font-bold ${
-              node.schedulerStatus === "active"
-                ? "text-emerald-400"
-                : node.schedulerStatus === "unscheduled"
-                  ? "text-slate-400"
-                  : "text-rose-400"
-            }`}
-          >
-            {node.schedulerEvidence?.availability === "unavailable"
-              ? "EVIDENCE UNAVAILABLE"
-              : node.schedulerEvidence?.status === "config_only"
-                ? "CONFIGURED IN DEPLOYED REVISION"
-                : node.schedulerEvidence?.status === "live_verified"
-                  ? "LIVE VERIFIED"
-                  : node.schedulerStatus.toUpperCase()}
-          </span>
-          {node.schedulerName ? ` (${node.schedulerName})` : ""}
+          {node.lane === "manual" ? (
+            <>
+              <span className="font-bold text-emerald-400">
+                {node.manualPurpose === "maintenance" ? "Manual maintenance" : "Manual recovery"}
+              </span>
+              {node.automatedParentKeys?.length ? (
+                <span> · Automated by: {node.automatedParentKeys.join(", ")}</span>
+              ) : node.schedulerName ? (
+                <span> · Automated by: {node.key} ({node.timeIctLabel})</span>
+              ) : (
+                <span> · one-shot operator action</span>
+              )}
+            </>
+          ) : node.lane === "disabled" ? (
+            <>
+              <span className="font-bold text-slate-400">Manual disabled</span>
+              <span> · policy chặn dispatch</span>
+            </>
+          ) : (
+            <>
+              <span>Scheduler: </span>
+              <span
+                className={`font-bold ${
+                  node.schedulerStatus === "active"
+                    ? "text-emerald-400"
+                    : node.schedulerStatus === "unscheduled"
+                      ? "text-slate-400"
+                      : "text-rose-400"
+                }`}
+              >
+                {node.schedulerEvidence?.availability === "unavailable"
+                  ? "EVIDENCE UNAVAILABLE"
+                  : node.schedulerEvidence?.status === "config_only"
+                    ? "CONFIGURED IN DEPLOYED REVISION"
+                    : node.schedulerEvidence?.status === "live_verified"
+                      ? "LIVE VERIFIED"
+                      : node.schedulerStatus.toUpperCase()}
+              </span>
+              {node.schedulerName ? ` (${node.schedulerName})` : ""}
+            </>
+          )}
         </div>
 
-        <Link
-          href={`/admin/jobs/${node.key}`}
-          prefetch={false}
-          className="text-slate-400 transition-colors hover:text-emerald-400"
-        >
+        <Link href={`/admin/jobs/${node.key}`} prefetch={false} className="text-slate-400 transition-colors hover:text-emerald-400">
           Lịch sử →
         </Link>
       </div>

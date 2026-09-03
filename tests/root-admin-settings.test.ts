@@ -58,7 +58,7 @@ test("read-only settings always resolve from code/env without override", () => {
     { key: "market.universe_size", value: 50, version: 1, updated_at: "2026-08-24T00:00:00Z" },
   ], {})
 
-  assert.equal(snapshot.byKey["market.universe_size"].value, 100)
+  assert.equal(snapshot.byKey["market.universe_size"].value, 200)
   assert.equal(snapshot.byKey["market.universe_size"].resolvedFrom, "code")
   assert.equal(snapshot.byKey["market.universe_size"].editable, false)
 })

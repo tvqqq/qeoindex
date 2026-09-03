@@ -47,6 +47,80 @@ async function getSupabase() {
   return getSupabaseServerClient()
 }
 
+function historyTimestamp(row: SystemJobRunRow) {
+  const value = row.created_at || row.started_at
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY
+}
+
+export function mergeAdminJobHistory(
+  systemRows: SystemJobRunRow[],
+  canonicalRows: SystemJobRunRow[],
+  limit = 50,
+): SystemJobRunRow[] {
+  const byId = new Map<string, SystemJobRunRow>()
+
+  // system_job_runs carries the operator/trigger metadata for manual recovery.
+  // Preserve it when the canonical provider row uses the same request/run ID.
+  for (const row of systemRows) {
+    byId.set(row.id, row)
+  }
+  for (const row of canonicalRows) {
+    if (!byId.has(row.id)) byId.set(row.id, row)
+  }
+
+  return [...byId.values()]
+    .sort((a, b) => historyTimestamp(b) - historyTimestamp(a))
+    .slice(0, Math.max(1, limit))
+}
+
+function ratingHistoryRow(row: KfspRatingRunEvidence): SystemJobRunRow {
+  return {
+    id: row.id,
+    job_key: "kfsp.rating_daily",
+    provider: "kfsp",
+    trigger: "cron",
+    status: row.status === "completed" ? "succeeded" : row.status,
+    started_at: row.started_at,
+    finished_at: row.completed_at,
+    duration_ms: row.completed_at ? Math.max(0, new Date(row.completed_at).getTime() - new Date(row.started_at).getTime()) : null,
+    summary: {
+      as_of_date: row.as_of_date,
+      published_rows: row.published_row_count,
+      staged_rows: row.staged_row_count,
+    },
+    error_code: row.error_code,
+    error_message: row.error_message,
+  }
+}
+
+function ttaiHistoryRow(row: KfspTtaiRunEvidence): SystemJobRunRow {
+  return {
+    id: row.id,
+    job_key: "kfsp.ttai_history",
+    provider: "kfsp",
+    trigger: "cron",
+    status: (row.failed_count > 0 && row.processed_count === 0) || row.status === "failed"
+      ? "failed"
+      : row.status === "completed" && row.failed_count > 0
+        ? "skipped"
+        : row.status === "completed"
+          ? "succeeded"
+          : row.status,
+    started_at: row.started_at,
+    finished_at: row.completed_at,
+    duration_ms: row.completed_at ? Math.max(0, new Date(row.completed_at).getTime() - new Date(row.started_at).getTime()) : null,
+    summary: {
+      candidate_count: row.candidate_count,
+      processed_count: row.processed_count,
+      failed_count: row.failed_count,
+      latest_rating_date: row.latest_rating_date,
+    },
+    error_code: row.failed_count > 0 ? "TTAI_SYNC_HTTP_207" : null,
+    error_message: row.error_message,
+  }
+}
+
 export function deriveAdminJobStatus(
   definition: AdminJobDefinition,
   latestRun: LatestRunSnapshot | null,
@@ -117,6 +191,8 @@ export function buildAdminJobViews(
       intervalMinutes: def.intervalMinutes,
       dependencies: def.dependencies,
       manualPolicy: def.manualPolicy,
+      manualPurpose: def.manualPurpose,
+      automatedParentKeys: def.automatedParentKeys,
       status,
       schedulerStatus: resolved.schedulerStatus,
       schedulerLastStatus: resolved.schedulerLastStatus,
@@ -231,6 +307,11 @@ export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; c
   return buildAdminJobViews(EFFECTIVE_ADMIN_JOB_CATALOG, rawEvidence)
 }
 
+export async function loadAdminJobView(jobKey: string): Promise<AdminJobView | null> {
+  const snapshot = await loadAdminJobsSnapshot()
+  return snapshot.jobs.find((job) => job.key === jobKey) ?? null
+}
+
 export async function loadAdminJobHistory(jobKey?: string, limit = 50): Promise<SystemJobRunRow[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
@@ -252,75 +333,42 @@ export async function loadAdminJobHistory(jobKey?: string, limit = 50): Promise<
     }
 
     const { data, error } = await query
-    if (!error && data && data.length > 0) {
-      return (data as SystemJobRunRow[]).map((r) => ({
-        ...r,
-        summary: sanitizeAdminValue(r.summary) as Record<string, unknown> | null,
-      }))
-    }
+    const systemRows = !error && data
+      ? (data as SystemJobRunRow[]).map((row) => ({
+          ...row,
+          summary: sanitizeAdminValue(row.summary) as Record<string, unknown> | null,
+        }))
+      : []
 
     if (jobKey === "kfsp.rating_daily") {
       const { data: ratingData } = await supabase
         .from("kfsp_rating_sync_runs")
-        .select("*")
+        .select("id, as_of_date, status, published_row_count, staged_row_count, error_code, error_message, started_at, completed_at")
+        .gte("started_at", historyCutoff)
         .order("started_at", { ascending: false })
         .limit(maxLimit)
 
-      if (ratingData && ratingData.length > 0) {
-        return (ratingData as KfspRatingRunEvidence[]).map((r) => ({
-          id: r.id,
-          job_key: "kfsp.rating_daily",
-          trigger: "cron",
-          status: r.status === "completed" ? "succeeded" : r.status,
-          started_at: r.started_at,
-          finished_at: r.completed_at,
-          duration_ms: r.completed_at ? Math.max(0, new Date(r.completed_at).getTime() - new Date(r.started_at).getTime()) : null,
-          summary: {
-            as_of_date: r.as_of_date,
-            published_rows: r.published_row_count,
-            staged_rows: r.staged_row_count,
-          },
-          error_code: r.error_code,
-          error_message: r.error_message,
-        }))
-      }
+      const canonicalRows = Array.isArray(ratingData)
+        ? (ratingData as KfspRatingRunEvidence[]).map(ratingHistoryRow)
+        : []
+      return mergeAdminJobHistory(systemRows, canonicalRows, maxLimit)
     }
 
     if (jobKey === "kfsp.ttai_history") {
       const { data: ttaiData } = await supabase
         .from("kfsp_ttai_sync_runs")
-        .select("*")
+        .select("id, status, latest_rating_date, candidate_count, processed_count, failed_count, error_message, started_at, completed_at")
+        .gte("started_at", historyCutoff)
         .order("started_at", { ascending: false })
         .limit(maxLimit)
 
-      if (ttaiData && ttaiData.length > 0) {
-        return (ttaiData as KfspTtaiRunEvidence[]).map((r) => ({
-          id: r.id,
-          job_key: "kfsp.ttai_history",
-          trigger: "cron",
-          status: (r.failed_count > 0 && r.processed_count === 0) || r.status === "failed"
-            ? "failed"
-            : r.status === "completed" && r.failed_count > 0
-              ? "skipped"
-              : r.status === "completed"
-                ? "succeeded"
-                : r.status,
-          started_at: r.started_at,
-          finished_at: r.completed_at,
-          duration_ms: r.completed_at ? Math.max(0, new Date(r.completed_at).getTime() - new Date(r.started_at).getTime()) : null,
-          summary: {
-            candidate_count: r.candidate_count,
-            processed_count: r.processed_count,
-            failed_count: r.failed_count,
-            latest_rating_date: r.latest_rating_date,
-          },
-          error_code: r.failed_count > 0 ? "TTAI_SYNC_HTTP_207" : null,
-          error_message: r.error_message,
-        }))
-      }
+      const canonicalRows = Array.isArray(ttaiData)
+        ? (ttaiData as KfspTtaiRunEvidence[]).map(ttaiHistoryRow)
+        : []
+      return mergeAdminJobHistory(systemRows, canonicalRows, maxLimit)
     }
 
-    return []
+    return systemRows.slice(0, maxLimit)
   } catch {
     return []
   }

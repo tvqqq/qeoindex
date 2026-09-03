@@ -2,6 +2,8 @@ import type {
   AdminEnvironmentItem,
   AdminJobDefinition,
   AdminSettingDefinition,
+  AdminSettingGroup,
+  AdminSensitivity,
   AdminValidationResult,
 } from "./types.ts"
 
@@ -20,11 +22,8 @@ function parseTickerList(value: unknown): string[] | null {
     return null
   }
 
-  const unique = [...new Set(list.filter((t) => TICKER_PATTERN.test(t)))]
-  if (unique.length > 100) {
-    return null
-  }
-  return unique
+  const unique = [...new Set(list.filter((ticker) => TICKER_PATTERN.test(ticker)))]
+  return unique.length <= 100 ? unique : null
 }
 
 function parseBoolean(value: unknown): boolean | null {
@@ -36,14 +35,10 @@ function parseBoolean(value: unknown): boolean | null {
 
 function parseInteger(value: unknown, min: number, max: number): number | null {
   const num = typeof value === "number" ? value : Number(value)
-  if (Number.isInteger(num) && num >= min && num <= max) {
-    return num
-  }
-  return null
+  return Number.isInteger(num) && num >= min && num <= max ? num : null
 }
 
 export const ADMIN_SETTING_CATALOG: AdminSettingDefinition[] = [
-  // --- Editable Runtime Settings (7) ---
   {
     key: "admin.refresh_interval_seconds",
     group: "system",
@@ -56,11 +51,9 @@ export const ADMIN_SETTING_CATALOG: AdminSettingDefinition[] = [
     sensitivity: "public",
     impact: "low",
     requiresDeployment: false,
-    validate(val: unknown): AdminValidationResult {
-      const parsed = parseInteger(val, 15, 300)
-      return parsed !== null
-        ? { ok: true, value: parsed }
-        : { ok: false, error: "Khoảng thời gian phải là số nguyên từ 15 đến 300 giây" }
+    validate(value): AdminValidationResult {
+      const parsed = parseInteger(value, 15, 300)
+      return parsed !== null ? { ok: true, value: parsed } : { ok: false, error: "Khoảng thời gian phải là số nguyên từ 15 đến 300 giây" }
     },
   },
   {
@@ -75,30 +68,26 @@ export const ADMIN_SETTING_CATALOG: AdminSettingDefinition[] = [
     sensitivity: "public",
     impact: "low",
     requiresDeployment: false,
-    validate(val: unknown): AdminValidationResult {
-      const parsed = parseInteger(val, 20, 200)
-      return parsed !== null
-        ? { ok: true, value: parsed }
-        : { ok: false, error: "Giới hạn lịch sử job phải là số nguyên từ 20 đến 200 giây" }
+    validate(value): AdminValidationResult {
+      const parsed = parseInteger(value, 20, 200)
+      return parsed !== null ? { ok: true, value: parsed } : { ok: false, error: "Giới hạn lịch sử job phải là số nguyên từ 20 đến 200" }
     },
   },
   {
     key: "scanner.manual_run_limit",
     group: "scanner",
     label: "Scanner Manual Run Limit",
-    description: "Số lượng cổ phiếu quét tối đa cho mỗi lượt chạy scanner thủ công (1 - 100).",
+    description: "Số lượng cổ phiếu quét tối đa cho mỗi lượt scanner thủ công (1 - 200), đồng bộ với canonical universe cap.",
     type: "integer",
     source: "runtime",
-    defaultValue: 100,
+    defaultValue: 200,
     editable: true,
     sensitivity: "public",
     impact: "medium",
     requiresDeployment: false,
-    validate(val: unknown): AdminValidationResult {
-      const parsed = parseInteger(val, 1, 100)
-      return parsed !== null
-        ? { ok: true, value: parsed }
-        : { ok: false, error: "Giới hạn scanner thủ công phải từ 1 đến 100" }
+    validate(value): AdminValidationResult {
+      const parsed = parseInteger(value, 1, 200)
+      return parsed !== null ? { ok: true, value: parsed } : { ok: false, error: "Giới hạn scanner thủ công phải từ 1 đến 200" }
     },
   },
   {
@@ -114,11 +103,9 @@ export const ADMIN_SETTING_CATALOG: AdminSettingDefinition[] = [
     sensitivity: "public",
     impact: "medium",
     requiresDeployment: false,
-    validate(val: unknown): AdminValidationResult {
-      const parsed = parseBoolean(val)
-      return parsed !== null
-        ? { ok: true, value: parsed }
-        : { ok: false, error: "Giá trị phải là boolean (true/false)" }
+    validate(value): AdminValidationResult {
+      const parsed = parseBoolean(value)
+      return parsed !== null ? { ok: true, value: parsed } : { ok: false, error: "Giá trị phải là boolean (true/false)" }
     },
   },
   {
@@ -134,11 +121,9 @@ export const ADMIN_SETTING_CATALOG: AdminSettingDefinition[] = [
     sensitivity: "public",
     impact: "medium",
     requiresDeployment: false,
-    validate(val: unknown): AdminValidationResult {
-      const parsed = parseInteger(val, 1, 6)
-      return parsed !== null
-        ? { ok: true, value: parsed }
-        : { ok: false, error: "Số mã LLM debate tối đa phải từ 1 đến 6" }
+    validate(value): AdminValidationResult {
+      const parsed = parseInteger(value, 1, 6)
+      return parsed !== null ? { ok: true, value: parsed } : { ok: false, error: "Số mã LLM debate tối đa phải từ 1 đến 6" }
     },
   },
   {
@@ -154,11 +139,9 @@ export const ADMIN_SETTING_CATALOG: AdminSettingDefinition[] = [
     sensitivity: "public",
     impact: "medium",
     requiresDeployment: false,
-    validate(val: unknown): AdminValidationResult {
-      const parsed = parseTickerList(val)
-      return parsed !== null
-        ? { ok: true, value: parsed }
-        : { ok: false, error: "Danh sách mã không hợp lệ hoặc vượt quá 100 mã" }
+    validate(value): AdminValidationResult {
+      const parsed = parseTickerList(value)
+      return parsed !== null ? { ok: true, value: parsed } : { ok: false, error: "Danh sách mã không hợp lệ hoặc vượt quá 100 mã" }
     },
   },
   {
@@ -174,23 +157,19 @@ export const ADMIN_SETTING_CATALOG: AdminSettingDefinition[] = [
     sensitivity: "public",
     impact: "medium",
     requiresDeployment: false,
-    validate(val: unknown): AdminValidationResult {
-      const parsed = parseTickerList(val)
-      return parsed !== null
-        ? { ok: true, value: parsed }
-        : { ok: false, error: "Danh sách mã nghiên cứu không hợp lệ hoặc vượt quá 100 mã" }
+    validate(value): AdminValidationResult {
+      const parsed = parseTickerList(value)
+      return parsed !== null ? { ok: true, value: parsed } : { ok: false, error: "Danh sách mã nghiên cứu không hợp lệ hoặc vượt quá 100 mã" }
     },
   },
-
-  // --- Read-Only Code/Safety Contracts ---
   {
     key: "market.universe_size",
     group: "market",
-    label: "Wyckoff Universe Size",
-    description: "Quy mô danh mục Top 100 Wyckoff canonical an toàn.",
+    label: "Canonical Universe Max Size",
+    description: "Quy mô tối đa của canonical Top Stocks 200 universe; số thành viên thực tế có thể thấp hơn 200.",
     type: "integer",
     source: "code",
-    defaultValue: 100,
+    defaultValue: 200,
     editable: false,
     sensitivity: "public",
     impact: "high",
@@ -228,11 +207,11 @@ export const ADMIN_SETTING_CATALOG: AdminSettingDefinition[] = [
   {
     key: "wyckoff.required_snapshots",
     group: "wyckoff",
-    label: "Wyckoff Required Snapshots",
-    description: "Số lượng snapshot cần có đủ trong một đợt ingest Wyckoff.",
+    label: "Wyckoff Max Required Snapshots",
+    description: "Số snapshot tối đa theo canonical 200 mã × 5 timeframe; số thực tế là universeCount × 5.",
     type: "integer",
     source: "code",
-    defaultValue: 500,
+    defaultValue: 1_000,
     editable: false,
     sensitivity: "public",
     impact: "high",
@@ -260,7 +239,7 @@ export const ADMIN_SETTING_CATALOG: AdminSettingDefinition[] = [
     description: "Thời gian chờ tối đa cho request Notion (ms).",
     type: "integer",
     source: "code",
-    defaultValue: 10000,
+    defaultValue: 10_000,
     editable: false,
     sensitivity: "public",
     impact: "medium",
@@ -274,7 +253,7 @@ export const ADMIN_SETTING_CATALOG: AdminSettingDefinition[] = [
     description: "Thời gian chờ tối đa cho request OpenAI (ms).",
     type: "integer",
     source: "code",
-    defaultValue: 25000,
+    defaultValue: 25_000,
     editable: false,
     sensitivity: "public",
     impact: "medium",
@@ -312,17 +291,13 @@ export const ADMIN_SETTING_CATALOG: AdminSettingDefinition[] = [
 ]
 
 export function getAdminSettingDefinition(key: string): AdminSettingDefinition | undefined {
-  return ADMIN_SETTING_CATALOG.find((s) => s.key === key)
+  return ADMIN_SETTING_CATALOG.find((setting) => setting.key === key)
 }
 
 export function validateAdminSetting(key: string, value: unknown): AdminValidationResult {
   const definition = getAdminSettingDefinition(key)
-  if (!definition) {
-    return { ok: false, error: `Cài đặt không tồn tại trong danh mục: ${key}` }
-  }
-  if (!definition.editable) {
-    return { ok: false, error: `Cài đặt ${key} là chỉ đọc và không thể thay đổi tại runtime` }
-  }
+  if (!definition) return { ok: false, error: `Cài đặt không tồn tại trong danh mục: ${key}` }
+  if (!definition.editable) return { ok: false, error: `Cài đặt ${key} là chỉ đọc và không thể thay đổi tại runtime` }
   return definition.validate(value)
 }
 
@@ -331,25 +306,13 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
     key: "qeoindex.eod_pipeline",
     provider: "supabase_pg_cron",
     label: "QeoIndex Unified EOD Pipeline",
-    description: "Unified EOD chain: market readiness → OHLCV refresh → Wyckoff v2 → Notion staging/validation → Supabase publish → AI Council.",
+    description: "Unified EOD chain: market readiness → OHLCV refresh → Wyckoff → publish → AI Council.",
     group: "system",
     scheduleUtc: "15 8 * * 1-5",
     scheduleIct: "15:15 T2-T6",
     scheduleKind: "workflow",
     schedulerName: "qeoindex-eod-pipeline-1515-ict",
     scheduleDays: "weekdays",
-    dependencies: [
-      "EOD_READY",
-      "HISTORY_REFRESH",
-      "WYCKOFF_BUILD",
-      "NOTION_STAGING",
-      "NOTION_VALIDATE",
-      "INGEST",
-      "SUPABASE_PUBLISH",
-      "AI_COUNCIL_DETERMINISTIC",
-      "AI_COUNCIL_LLM",
-      "COMPLETE",
-    ],
     evidenceSource: "system_job_runs",
     manualPolicy: "disabled",
     freshnessMinutes: 26 * 60,
@@ -359,7 +322,7 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
     key: "signals.daily",
     provider: "vercel_cron_workflow",
     label: "Daily Signals Workflow",
-    description: "Workflow tính toán tín hiệu kỹ thuật cuối ngày và cập nhật khuyến nghị.",
+    description: "Workflow quét toàn bộ canonical universe và theo dõi tín hiệu trong phiên.",
     group: "signals",
     scheduleUtc: "0 0 * * 1-5",
     scheduleIct: "07:00 T2-T6",
@@ -374,7 +337,7 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
     key: "wyckoff.ingest",
     provider: "vercel_cron",
     label: "Wyckoff Snapshot Ingest (Legacy)",
-    description: "Nhập 500 snapshot phân tích Wyckoff từ Notion staging vào Supabase.",
+    description: "Legacy Notion-staging ingest; effective Admin contract exposes it only as confirmed manual maintenance/recovery.",
     group: "wyckoff",
     scheduleUtc: "0 10 * * 1-5",
     scheduleIct: "17:00 T2-T6",
@@ -382,6 +345,7 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
     scheduleDays: "weekdays",
     evidenceSource: "system_job_runs",
     manualPolicy: "confirm",
+    manualPurpose: "maintenance",
     freshnessMinutes: 26 * 60,
     maxDurationMinutes: 10,
   },
@@ -389,7 +353,7 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
     key: "ai_council.daily",
     provider: "vercel_cron",
     label: "AI Council Daily Synthesis (Legacy)",
-    description: "Tổng hợp đánh giá AI Council hàng ngày từ các mô hình định lượng.",
+    description: "Legacy standalone AI Council daily synthesis; canonical EOD pipeline owns current execution.",
     group: "ai_council",
     scheduleUtc: "15 10 * * 1-5",
     scheduleIct: "17:15 T2-T6",
@@ -404,7 +368,7 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
     key: "ai_council.debate_daily",
     provider: "vercel_cron",
     label: "AI Council LLM Debate (Legacy)",
-    description: "Thực hiện tranh biện đa tác tử LLM cho các mã cổ phiếu chọn lọc.",
+    description: "Legacy standalone LLM debate; canonical EOD pipeline owns current execution.",
     group: "ai_council",
     scheduleUtc: "25 10 * * 1-5",
     scheduleIct: "17:25 T2-T6",
@@ -419,7 +383,7 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
     key: "market.sync_5m",
     provider: "supabase_pg_cron",
     label: "Market 5-Minute Sync",
-    description: "Đồng bộ nến giá 5 phút và sổ lệnh trong phiên giao dịch.",
+    description: "Đồng bộ nến giá 5 phút và sổ lệnh canonical trong phiên giao dịch.",
     group: "market",
     scheduleUtc: "*/5 2-6 * * 1-5; 0-40/5 7 * * 1-5",
     scheduleIct: "Mỗi 5p (09:00-14:40 T2-T6)",
@@ -438,7 +402,7 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
     key: "market.sync_eod",
     provider: "supabase_pg_cron",
     label: "Market EOD Sync",
-    description: "Đồng bộ snapshot giá đóng cửa thị trường.",
+    description: "Đồng bộ snapshot giá/orderbook đóng cửa cho canonical universe.",
     group: "market",
     scheduleUtc: "45 7 * * 1-5",
     scheduleIct: "14:45 T2-T6",
@@ -488,11 +452,13 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
     key: "scanner.run",
     provider: "machine",
     label: "Manual Scanner Run",
-    description: "Chạy engine quét mẫu hình và xu hướng cổ phiếu với giới hạn mã chỉ định.",
+    description: "Chạy lại scanner trên canonical universe hoặc một phạm vi mã giới hạn để recovery/diagnostic.",
     group: "scanner",
     scheduleKind: "manual",
     evidenceSource: "system_job_runs",
     manualPolicy: "allowed",
+    manualPurpose: "recovery",
+    automatedParentKeys: ["signals.daily"],
     freshnessMinutes: 26 * 60,
     maxDurationMinutes: 10,
   },
@@ -500,23 +466,27 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
     key: "signals.monitor",
     provider: "machine",
     label: "Signals Health Monitor",
-    description: "Kiểm tra tình trạng dữ liệu và hoạt động của engine tín hiệu.",
+    description: "Chạy lại một lượt monitor tín hiệu khi cần recovery/diagnostic trong phiên.",
     group: "signals",
     scheduleKind: "manual",
     evidenceSource: "system_job_runs",
     manualPolicy: "confirm",
+    manualPurpose: "recovery",
+    automatedParentKeys: ["signals.daily"],
     freshnessMinutes: 60,
     maxDurationMinutes: 5,
   },
   {
     key: "market.sync_universe",
     provider: "machine",
-    label: "Market Universe Sync",
-    description: "Đồng bộ toàn bộ danh mục Top 100 cổ phiếu và chỉ số thị trường.",
+    label: "Market Canonical Universe Snapshot Sync",
+    description: "Đồng bộ quote/orderbook/foreign-flow snapshot cho current canonical universe (tối đa 200 mã); không chọn membership.",
     group: "market",
     scheduleKind: "manual",
     evidenceSource: "system_job_runs",
     manualPolicy: "confirm",
+    manualPurpose: "recovery",
+    automatedParentKeys: ["market.sync_5m", "market.sync_eod"],
     freshnessMinutes: 26 * 60,
     maxDurationMinutes: 5,
   },
@@ -524,11 +494,12 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
     key: "market.cache_invalidate",
     provider: "machine",
     label: "Market Cache Invalidation",
-    description: "Xóa toàn bộ cache thị trường (Thao tác phá hủy, bị vô hiệu hóa thủ công).",
+    description: "Xóa toàn bộ cache thị trường; destructive action bị vô hiệu hóa trong Control Plane.",
     group: "cache",
     scheduleKind: "manual",
     evidenceSource: "none",
     manualPolicy: "disabled",
+    manualPurpose: "maintenance",
     freshnessMinutes: 24 * 60,
     maxDurationMinutes: 5,
   },
@@ -536,119 +507,119 @@ export const ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
     key: "wyckoff.run",
     provider: "machine",
     label: "Wyckoff Engine Execution",
-    description: "Tính toán lại cấu trúc Wyckoff (Vô hiệu hóa thủ công để tránh xung đột Notion).",
+    description: "Legacy direct Wyckoff execution bị vô hiệu hóa để tránh xung đột canonical EOD v3.",
     group: "wyckoff",
     scheduleKind: "manual",
     evidenceSource: "system_job_runs",
     manualPolicy: "disabled",
+    manualPurpose: "maintenance",
     freshnessMinutes: 26 * 60,
     maxDurationMinutes: 15,
   },
 ]
 
 export function getAdminJobDefinition(key: string): AdminJobDefinition | undefined {
-  return ADMIN_JOB_CATALOG.find((j) => j.key === key)
+  return ADMIN_JOB_CATALOG.find((job) => job.key === key)
+}
+
+function environmentItem(
+  key: string,
+  group: AdminSettingGroup,
+  label: string,
+  sensitivity: AdminSensitivity,
+  description = label,
+): AdminEnvironmentItem {
+  return { key, group, label, description, sensitivity, isConfigured: false }
 }
 
 export const ADMIN_ENVIRONMENT_INVENTORY: AdminEnvironmentItem[] = [
-  // Notion
-  { key: "NOTION_API_KEY", group: "provider", label: "Notion API Key", description: "API Key chính xác thực với Notion workspace", sensitivity: "secret", isConfigured: false },
-  { key: "NOTION_TOKEN", group: "provider", label: "Notion Token (Legacy Alias)", description: "Alias cũ của NOTION_API_KEY", sensitivity: "secret", isConfigured: false },
-  { key: "NOTION_STOCK_THESIS_DATA_SOURCE_ID", group: "provider", label: "Notion Stock Thesis DB ID", description: "Data source ID cho luận điểm đầu tư", sensitivity: "internal", isConfigured: false },
-  { key: "NOTION_RESEARCH_SOURCES_DATA_SOURCE_ID", group: "provider", label: "Notion Research Sources DB ID", description: "Data source ID cho tài liệu nghiên cứu", sensitivity: "internal", isConfigured: false },
-  { key: "NOTION_ANALYSIS_LOG_DATA_SOURCE_ID", group: "provider", label: "Notion Analysis Log DB ID", description: "Data source ID cho nhật ký phân tích", sensitivity: "internal", isConfigured: false },
-  { key: "NOTION_WYCKOFF_UNIVERSE_DATA_SOURCE_ID", group: "provider", label: "Notion Wyckoff Universe DB ID", description: "Data source ID cho danh mục Wyckoff", sensitivity: "internal", isConfigured: false },
-  { key: "NOTION_WYCKOFF_RUNS_DATA_SOURCE_ID", group: "provider", label: "Notion Wyckoff Runs DB ID", description: "Data source ID cho đợt chạy Wyckoff", sensitivity: "internal", isConfigured: false },
-  { key: "NOTION_WYCKOFF_SNAPSHOTS_DATA_SOURCE_ID", group: "provider", label: "Notion Wyckoff Snapshots DB ID", description: "Data source ID cho snapshot phân tích", sensitivity: "internal", isConfigured: false },
-  { key: "NOTION_DAILY_WYCKOFF_SCAN_DATA_SOURCE_ID", group: "provider", label: "Notion Daily Wyckoff Scan DB ID", description: "Data source ID cho kết quả quét hàng ngày", sensitivity: "internal", isConfigured: false },
-  { key: "NOTION_TRADE_RECOMMENDATIONS_DATA_SOURCE_ID", group: "provider", label: "Notion Trade Recs DB ID", description: "Data source ID cho khuyến nghị giao dịch", sensitivity: "internal", isConfigured: false },
-  { key: "NOTION_SIGNAL_EVENTS_DATA_SOURCE_ID", group: "provider", label: "Notion Signal Events DB ID", description: "Data source ID cho sự kiện tín hiệu", sensitivity: "internal", isConfigured: false },
+  environmentItem("NOTION_API_KEY", "provider", "Notion API Key", "secret"),
+  environmentItem("NOTION_TOKEN", "provider", "Notion Token (Legacy Alias)", "secret"),
+  environmentItem("NOTION_STOCK_THESIS_DATA_SOURCE_ID", "provider", "Notion Stock Thesis DB ID", "internal"),
+  environmentItem("NOTION_RESEARCH_SOURCES_DATA_SOURCE_ID", "provider", "Notion Research Sources DB ID", "internal"),
+  environmentItem("NOTION_ANALYSIS_LOG_DATA_SOURCE_ID", "provider", "Notion Analysis Log DB ID", "internal"),
+  environmentItem("NOTION_WYCKOFF_UNIVERSE_DATA_SOURCE_ID", "provider", "Notion Wyckoff Universe DB ID", "internal"),
+  environmentItem("NOTION_WYCKOFF_RUNS_DATA_SOURCE_ID", "provider", "Notion Wyckoff Runs DB ID", "internal"),
+  environmentItem("NOTION_WYCKOFF_SNAPSHOTS_DATA_SOURCE_ID", "provider", "Notion Wyckoff Snapshots DB ID", "internal"),
+  environmentItem("NOTION_DAILY_WYCKOFF_SCAN_DATA_SOURCE_ID", "provider", "Notion Daily Wyckoff Scan DB ID", "internal"),
+  environmentItem("NOTION_TRADE_RECOMMENDATIONS_DATA_SOURCE_ID", "provider", "Notion Trade Recs DB ID", "internal"),
+  environmentItem("NOTION_SIGNAL_EVENTS_DATA_SOURCE_ID", "provider", "Notion Signal Events DB ID", "internal"),
 
-  // Finhay
-  { key: "FINHAY_MCP_URL", group: "integration", label: "Finhay MCP URL", description: "Địa chỉ endpoint Finhay Model Context Protocol", sensitivity: "internal", isConfigured: false },
-  { key: "FINHAY_OAUTH_CLIENT_ID", group: "integration", label: "Finhay OAuth Client ID", description: "Client ID cho OAuth Finhay", sensitivity: "internal", isConfigured: false },
-  { key: "FINHAY_OAUTH_CLIENT_SECRET", group: "integration", label: "Finhay OAuth Client Secret", description: "Client Secret bảo mật cho OAuth Finhay", sensitivity: "secret", isConfigured: false },
-  { key: "FINHAY_OAUTH_SCOPE", group: "integration", label: "Finhay OAuth Scope", description: "Phạm vi quyền OAuth yêu cầu", sensitivity: "internal", isConfigured: false },
+  environmentItem("FINHAY_MCP_URL", "integration", "Finhay MCP URL", "internal"),
+  environmentItem("FINHAY_OAUTH_CLIENT_ID", "integration", "Finhay OAuth Client ID", "internal"),
+  environmentItem("FINHAY_OAUTH_CLIENT_SECRET", "integration", "Finhay OAuth Client Secret", "secret"),
+  environmentItem("FINHAY_OAUTH_SCOPE", "integration", "Finhay OAuth Scope", "internal"),
 
-  // DNSE
-  { key: "DNSE_API_KEY", group: "provider", label: "DNSE API Key", description: "API Key xác thực DNSE Open API", sensitivity: "secret", isConfigured: false },
-  { key: "DNSE_API_SECRET", group: "provider", label: "DNSE API Secret", description: "API Secret xác thực DNSE Open API", sensitivity: "secret", isConfigured: false },
-  { key: "DNSE_API_BASE_URL", group: "provider", label: "DNSE REST Base URL", description: "Địa chỉ máy chủ REST API của DNSE", sensitivity: "internal", isConfigured: false },
-  { key: "DNSE_WS_URL", group: "provider", label: "DNSE WebSocket URL", description: "Địa chỉ WebSocket realtime của DNSE", sensitivity: "internal", isConfigured: false },
+  environmentItem("DNSE_API_KEY", "provider", "DNSE API Key", "secret"),
+  environmentItem("DNSE_API_SECRET", "provider", "DNSE API Secret", "secret"),
+  environmentItem("DNSE_API_BASE_URL", "provider", "DNSE REST Base URL", "internal"),
+  environmentItem("DNSE_WS_URL", "provider", "DNSE WebSocket URL", "internal"),
 
-  // Redis
-  { key: "UPSTASH_REDIS_REST_URL", group: "cache", label: "Upstash Redis REST URL", description: "Địa chỉ kết nối REST tới Upstash Redis L2 cache", sensitivity: "internal", isConfigured: false },
-  { key: "UPSTASH_REDIS_REST_TOKEN", group: "cache", label: "Upstash Redis REST Token", description: "Token xác thực Upstash Redis L2 cache", sensitivity: "secret", isConfigured: false },
+  environmentItem("UPSTASH_REDIS_REST_URL", "cache", "Upstash Redis REST URL", "internal"),
+  environmentItem("UPSTASH_REDIS_REST_TOKEN", "cache", "Upstash Redis REST Token", "secret"),
 
-  // Supabase
-  { key: "NEXT_PUBLIC_SUPABASE_URL", group: "system", label: "Supabase Public URL", description: "URL công khai của Supabase project", sensitivity: "public", isConfigured: false },
-  { key: "SUPABASE_URL", group: "system", label: "Supabase URL (Server fallback)", description: "URL server-side của Supabase project", sensitivity: "public", isConfigured: false },
-  { key: "NEXT_PUBLIC_SUPABASE_ANON_KEY", group: "system", label: "Supabase Anon Key", description: "Khóa công khai anon của Supabase", sensitivity: "public", isConfigured: false },
-  { key: "SUPABASE_SERVICE_ROLE_KEY", group: "system", label: "Supabase Service Role Key", description: "Khóa dịch vụ service role của Supabase (Server-only)", sensitivity: "secret", isConfigured: false },
+  environmentItem("NEXT_PUBLIC_SUPABASE_URL", "system", "Supabase Public URL", "public"),
+  environmentItem("SUPABASE_URL", "system", "Supabase URL (Server fallback)", "public"),
+  environmentItem("NEXT_PUBLIC_SUPABASE_ANON_KEY", "system", "Supabase Anon Key", "public"),
+  environmentItem("SUPABASE_SERVICE_ROLE_KEY", "system", "Supabase Service Role Key", "secret"),
 
-  // KFSP
-  { key: "KFSP_USERNAME", group: "provider", label: "KFSP Username", description: "Tài khoản đồng bộ dữ liệu KFSP", sensitivity: "secret", isConfigured: false },
-  { key: "KFSP_PASSWORD", group: "provider", label: "KFSP Password", description: "Mật khẩu đồng bộ dữ liệu KFSP", sensitivity: "secret", isConfigured: false },
-  { key: "KFSP_SYNC_SECRET", group: "provider", label: "KFSP Sync Secret", description: "Khóa bí mật đồng bộ KFSP Edge Function", sensitivity: "secret", isConfigured: false },
-  { key: "KFSP_MINIMUM_ROWS", group: "provider", label: "KFSP Minimum Rows Threshold", description: "Số dòng tối thiểu hợp lệ khi đồng bộ KFSP", sensitivity: "internal", isConfigured: false },
+  environmentItem("KFSP_USERNAME", "provider", "KFSP Username", "secret"),
+  environmentItem("KFSP_PASSWORD", "provider", "KFSP Password", "secret"),
+  environmentItem("KFSP_SYNC_SECRET", "provider", "KFSP Sync Secret", "secret"),
+  environmentItem("KFSP_MINIMUM_ROWS", "provider", "KFSP Minimum Rows Threshold", "internal"),
 
-  // Machine secrets
-  { key: "SCANNER_RUN_SECRET", group: "scanner", label: "Scanner Run Secret", description: "Bearer secret kích hoạt chạy scanner", sensitivity: "secret", isConfigured: false },
-  { key: "SIGNAL_MONITOR_SECRET", group: "signals", label: "Signal Monitor Secret", description: "Bearer secret giám sát tín hiệu", sensitivity: "secret", isConfigured: false },
-  { key: "AI_COUNCIL_RUN_SECRET", group: "ai_council", label: "AI Council Run Secret", description: "Bearer secret chạy AI Council", sensitivity: "secret", isConfigured: false },
-  { key: "MARKET_SYNC_SECRET", group: "market", label: "Market Sync Secret", description: "Bearer secret đồng bộ dữ liệu thị trường", sensitivity: "secret", isConfigured: false },
-  { key: "MARKET_CACHE_ADMIN_SECRET", group: "cache", label: "Market Cache Admin Secret", description: "Bearer secret xóa cache thị trường", sensitivity: "secret", isConfigured: false },
-  { key: "CRON_SECRET", group: "system", label: "Vercel Cron Secret", description: "Bearer secret Vercel Cron xác thực endpoint", sensitivity: "secret", isConfigured: false },
+  environmentItem("SCANNER_RUN_SECRET", "scanner", "Scanner Run Secret", "secret"),
+  environmentItem("SIGNAL_MONITOR_SECRET", "signals", "Signal Monitor Secret", "secret"),
+  environmentItem("AI_COUNCIL_RUN_SECRET", "ai_council", "AI Council Run Secret", "secret"),
+  environmentItem("MARKET_SYNC_SECRET", "market", "Market Sync Secret", "secret"),
+  environmentItem("MARKET_CACHE_ADMIN_SECRET", "cache", "Market Cache Admin Secret", "secret"),
+  environmentItem("CRON_SECRET", "system", "Vercel Cron Secret", "secret"),
 
-  // AI Council
-  { key: "OPENAI_API_KEY", group: "ai_council", label: "OpenAI API Key", description: "Khóa API OpenAI dùng cho AI Council debate", sensitivity: "secret", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_ENABLED", group: "ai_council", label: "AI Council LLM Enabled (Env)", description: "Bật/tắt LLM AI Council từ môi trường", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_BULL_MODEL", group: "ai_council", label: "AI Council Bull Agent Model", description: "Mô hình LLM cho tác tử Bull", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_BEAR_MODEL", group: "ai_council", label: "AI Council Bear Agent Model", description: "Mô hình LLM cho tác tử Bear", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_RISK_MODEL", group: "ai_council", label: "AI Council Risk Agent Model", description: "Mô hình LLM cho tác tử Risk", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_CHAIR_MODEL", group: "ai_council", label: "AI Council Chair Agent Model", description: "Mô hình LLM cho tác tử Chair", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_ESCALATION_MODEL", group: "ai_council", label: "AI Council Escalation Model", description: "Mô hình LLM cho trường hợp cần leo thang phân tích", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_FALLBACK_MODEL", group: "ai_council", label: "AI Council Fallback Model", description: "Mô hình LLM dự phòng khi mô hình chính gặp sự cố", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_BULL_EFFORT", group: "ai_council", label: "AI Council Bull Effort", description: "Mức độ suy luận cho Bull agent (low/medium/high)", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_BEAR_EFFORT", group: "ai_council", label: "AI Council Bear Effort", description: "Mức độ suy luận cho Bear agent (low/medium/high)", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_RISK_EFFORT", group: "ai_council", label: "AI Council Risk Effort", description: "Mức độ suy luận cho Risk agent (low/medium/high)", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_CHAIR_EFFORT", group: "ai_council", label: "AI Council Chair Effort", description: "Mức độ suy luận cho Chair agent (low/medium/high)", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_ESCALATION_EFFORT", group: "ai_council", label: "AI Council Escalation Effort", description: "Mức độ suy luận khi leo thang", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_MAX_TICKERS", group: "ai_council", label: "AI Council Max Tickers (Env)", description: "Số mã LLM debate tối đa từ môi trường", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_LLM_TICKERS", group: "ai_council", label: "AI Council LLM Tickers (Env)", description: "Danh sách mã debate từ môi trường", sensitivity: "internal", isConfigured: false },
-  { key: "AI_COUNCIL_RESEARCH_TICKERS", group: "ai_council", label: "AI Council Research Tickers (Env)", description: "Danh sách mã nghiên cứu từ môi trường", sensitivity: "internal", isConfigured: false },
+  environmentItem("OPENAI_API_KEY", "ai_council", "OpenAI API Key", "secret"),
+  environmentItem("AI_COUNCIL_LLM_ENABLED", "ai_council", "AI Council LLM Enabled (Env)", "internal"),
+  environmentItem("AI_COUNCIL_LLM_BULL_MODEL", "ai_council", "AI Council Bull Agent Model", "internal"),
+  environmentItem("AI_COUNCIL_LLM_BEAR_MODEL", "ai_council", "AI Council Bear Agent Model", "internal"),
+  environmentItem("AI_COUNCIL_LLM_RISK_MODEL", "ai_council", "AI Council Risk Agent Model", "internal"),
+  environmentItem("AI_COUNCIL_LLM_CHAIR_MODEL", "ai_council", "AI Council Chair Agent Model", "internal"),
+  environmentItem("AI_COUNCIL_LLM_ESCALATION_MODEL", "ai_council", "AI Council Escalation Model", "internal"),
+  environmentItem("AI_COUNCIL_LLM_FALLBACK_MODEL", "ai_council", "AI Council Fallback Model", "internal"),
+  environmentItem("AI_COUNCIL_LLM_BULL_EFFORT", "ai_council", "AI Council Bull Effort", "internal"),
+  environmentItem("AI_COUNCIL_LLM_BEAR_EFFORT", "ai_council", "AI Council Bear Effort", "internal"),
+  environmentItem("AI_COUNCIL_LLM_RISK_EFFORT", "ai_council", "AI Council Risk Effort", "internal"),
+  environmentItem("AI_COUNCIL_LLM_CHAIR_EFFORT", "ai_council", "AI Council Chair Effort", "internal"),
+  environmentItem("AI_COUNCIL_LLM_ESCALATION_EFFORT", "ai_council", "AI Council Escalation Effort", "internal"),
+  environmentItem("AI_COUNCIL_LLM_MAX_TICKERS", "ai_council", "AI Council Max Tickers (Env)", "internal"),
+  environmentItem("AI_COUNCIL_LLM_TICKERS", "ai_council", "AI Council LLM Tickers (Env)", "internal"),
+  environmentItem("AI_COUNCIL_RESEARCH_TICKERS", "ai_council", "AI Council Research Tickers (Env)", "internal"),
 
-  // Slack
-  { key: "SLACK_CONNECTOR", group: "integration", label: "Slack Connector Slug", description: "Slug định danh Vercel Connect Slack", sensitivity: "internal", isConfigured: false },
-  { key: "SLACK_ALERT_CHANNEL", group: "integration", label: "Slack Alert Channel Name", description: "Tên kênh Slack nhận cảnh báo", sensitivity: "internal", isConfigured: false },
-  { key: "SLACK_ALERT_CHANNEL_ID", group: "integration", label: "Slack Alert Channel ID", description: "ID kênh Slack cố định", sensitivity: "internal", isConfigured: false },
+  environmentItem("SLACK_CONNECTOR", "integration", "Slack Connector Slug", "internal"),
+  environmentItem("SLACK_ALERT_CHANNEL", "integration", "Slack Alert Channel Name", "internal"),
+  environmentItem("SLACK_ALERT_CHANNEL_ID", "integration", "Slack Alert Channel ID", "internal"),
 
-  // Root Admin & App URL
-  { key: "ROOT_ADMIN_USER_IDS", group: "system", label: "Root Admin Allowlist", description: "Danh sách UUID người dùng có quyền Root Admin", sensitivity: "secret", isConfigured: false },
-  { key: "APP_URL", group: "system", label: "Canonical Application URL", description: "URL gốc chính thức của ứng dụng", sensitivity: "public", isConfigured: false },
-  { key: "NEXT_PUBLIC_APP_URL", group: "system", label: "Next.js Public App URL", description: "URL công khai của ứng dụng", sensitivity: "public", isConfigured: false },
-  { key: "QSTASH_TOKEN", group: "system", label: "Upstash QStash Token", description: "Token xác thực QStash hàng đợi", sensitivity: "secret", isConfigured: false },
+  environmentItem("ROOT_ADMIN_USER_IDS", "system", "Root Admin Allowlist", "secret"),
+  environmentItem("APP_URL", "system", "Canonical Application URL", "public"),
+  environmentItem("NEXT_PUBLIC_APP_URL", "system", "Next.js Public App URL", "public"),
+  environmentItem("QSTASH_TOKEN", "system", "Upstash QStash Token", "secret"),
 
-  // Build & Deployment Metadata
-  { key: "NODE_ENV", group: "system", label: "Node Environment", description: "Môi trường thực thi Node.js (development/production)", sensitivity: "public", isConfigured: false },
-  { key: "VERCEL_ENV", group: "system", label: "Vercel Environment", description: "Môi trường Vercel (production/preview/development)", sensitivity: "public", isConfigured: false },
-  { key: "VERCEL_URL", group: "system", label: "Vercel Deployment URL", description: "URL bản triển khai tự động của Vercel", sensitivity: "public", isConfigured: false },
-  { key: "VERCEL_PROJECT_PRODUCTION_URL", group: "system", label: "Vercel Production Domain", description: "Tên miền chính thức của dự án trên Vercel", sensitivity: "public", isConfigured: false },
-  { key: "VERCEL_GIT_COMMIT_SHA", group: "system", label: "Vercel Git Commit SHA", description: "Mã commit Git của bản build Vercel", sensitivity: "public", isConfigured: false },
-  { key: "VERCEL_GIT_PREVIOUS_SHA", group: "system", label: "Vercel Git Previous SHA", description: "Mã commit Git trước đó", sensitivity: "public", isConfigured: false },
-  { key: "NEXT_PUBLIC_GIT_COMMIT_SHA", group: "system", label: "Public Git Commit SHA", description: "Mã commit công khai hiển thị trên UI", sensitivity: "public", isConfigured: false },
-  { key: "NEXT_PUBLIC_GIT_COMMIT_DATE", group: "system", label: "Public Git Commit Date", description: "Ngày commit công khai hiển thị trên UI", sensitivity: "public", isConfigured: false },
-  { key: "NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA", group: "system", label: "Public Vercel Commit SHA", description: "Mã commit Vercel công khai", sensitivity: "public", isConfigured: false },
+  environmentItem("NODE_ENV", "system", "Node Environment", "public"),
+  environmentItem("VERCEL_ENV", "system", "Vercel Environment", "public"),
+  environmentItem("VERCEL_URL", "system", "Vercel Deployment URL", "public"),
+  environmentItem("VERCEL_PROJECT_PRODUCTION_URL", "system", "Vercel Production Domain", "public"),
+  environmentItem("VERCEL_GIT_COMMIT_SHA", "system", "Vercel Git Commit SHA", "public"),
+  environmentItem("VERCEL_GIT_PREVIOUS_SHA", "system", "Vercel Git Previous SHA", "public"),
+  environmentItem("NEXT_PUBLIC_GIT_COMMIT_SHA", "system", "Public Git Commit SHA", "public"),
+  environmentItem("NEXT_PUBLIC_GIT_COMMIT_DATE", "system", "Public Git Commit Date", "public"),
+  environmentItem("NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA", "system", "Public Vercel Commit SHA", "public"),
 ]
 
 export function getAdminEnvironmentInventory(env: Record<string, string | undefined> = process.env): AdminEnvironmentItem[] {
   return ADMIN_ENVIRONMENT_INVENTORY.map((item) => {
-    const rawVal = env[item.key]
-    const isConfigured = rawVal !== undefined && rawVal !== ""
+    const rawValue = env[item.key]
+    const isConfigured = rawValue !== undefined && rawValue !== ""
     return {
       ...item,
       isConfigured,
-      value: item.sensitivity === "secret" ? undefined : (isConfigured ? rawVal : undefined),
+      value: item.sensitivity === "secret" ? undefined : (isConfigured ? rawValue : undefined),
     }
   })
 }

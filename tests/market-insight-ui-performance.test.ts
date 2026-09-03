@@ -2,6 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import fs from "node:fs"
 import path from "node:path"
+import "./market-insight-layout-regression.test.ts"
 
 test("UI performance invariants: market-close dashboard adheres strictly to UI_LESSONS_LEARNED", () => {
   const componentPath = path.resolve("components/insights/market-close-dashboard.tsx")
@@ -88,12 +89,11 @@ test("Market Close dashboard uses stable accessible shadcn chart composition", (
     "IndexBreadthChart",
     "MaBreadthChart",
     "InstitutionalFlowChart",
-    "MarketHistoryChart",
-    "MarketHistoryFlowChart",
   ]) {
     assert.match(dashboard, new RegExp(`<${component}\\b`), `${component} must be rendered in the dashboard`)
   }
 
+  assert.doesNotMatch(dashboard, /MarketHistoryChart|MarketHistoryFlowChart/, "removed history panels must stay removed")
   assert.match(charts, /ChartContainer/)
   assert.match(charts, /ChartTooltipContent/)
   assert.ok((charts.match(/accessibilityLayer/g) || []).length >= 10, "charts must expose Recharts accessibility layers")
@@ -124,13 +124,15 @@ test("VNINDEX hero history comes from a bounded canonical-index query", () => {
 test("Market Close keeps the main dashboard continuous and limits tabs to the three market views", () => {
   const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
   const bubbles = fs.readFileSync(path.resolve("components/insights/market-bubbles.tsx"), "utf8")
+  const sectors = fs.readFileSync(path.resolve("components/insights/sector-map-panel.tsx"), "utf8")
 
   assert.doesNotMatch(dashboard, /Tabs(Content|List|Trigger)?|activeTab|setActiveTab/, "the dashboard must not introduce a page-level tab system")
   assert.match(dashboard, /Nhịp đập thị trường/)
-  assert.match(dashboard, /Nỗ lực kết quả/)
+  assert.match(sectors, /Nỗ lực kết quả/)
   assert.match(dashboard, /Sức khoẻ thị trường/)
   assert.match(dashboard, /MarketSentimentCard/)
-  assert.match(dashboard, /xl:grid-cols-\[7fr_3fr\]/)
+  assert.match(dashboard, /data-market-intelligence-overview-row[^>]*xl:grid-cols-3/)
+  assert.match(dashboard, /data-market-health-embedded/)
   assert.doesNotMatch(fs.readFileSync(path.resolve("components/insights/market-health-view.tsx"), "utf8"), /<option value="(general|retail|institutional)">/)
   for (const period of ["1D", "1W", "1M", "1Y"]) {
     assert.match(bubbles, new RegExp(`value: "${period}"`), `market bubbles must expose the ${period} time window`)
@@ -138,13 +140,12 @@ test("Market Close keeps the main dashboard continuous and limits tabs to the th
   assert.doesNotMatch(bubbles, /stock\.volume[^\n]*>\s*300_000/, "bubble field must not apply a second liquidity cutoff inside the canonical universe")
   assert.match(bubbles, /slice\(0, 200\)/, "bubble solver must keep the requested Top 200 cap")
   assert.match(dashboard, /min-h-\[650px\]/, "bubble layout must reserve stable space")
-  assert.match(dashboard, /Luân chuyển dòng tiền/, "sector workspace must expose the rotation view")
-  for (const sectionId of ["market-overview-title", "market-sectors-title", "market-history-title"]) {
+  assert.match(sectors, /SECTOR ROTATION MATRIX/, "sector workspace must expose the rotation view")
+  for (const sectionId of ["market-overview-title", "market-sectors-title"]) {
     assert.match(dashboard, new RegExp(`id="${sectionId}"`), `${sectionId} must be visible in the continuous dashboard`)
   }
   assert.match(dashboard, /2xl:grid-cols-4/, "overview charts should use four columns on wide screens")
-  assert.match(dashboard, /MarketHistoryChart history=\{history\}/)
-  assert.match(dashboard, /MarketHistoryFlowChart history=\{history\}/)
+  assert.doesNotMatch(dashboard, /market-history-title|MarketHistoryChart|MarketHistoryFlowChart/)
   assert.match(dashboard, /data-stock-analytics-dashboard/, "the dashboard must preserve the analytics-first visual hierarchy")
   assert.match(bubbles, /node\.r \* 0\.12/, "bubble centers must reserve transformed hit-area margin")
   assert.match(bubbles, /node\.x = Math\.max\(node\.r \+ hitMargin/, "bubble x centers must stay inside the clickable field")
@@ -162,15 +163,13 @@ test("Market Close charts use a minimal semantic palette without SVG gradients",
   assert.doesNotMatch(charts, /linearGradient|url\(#/, "chart fills must remain flat and minimal")
 })
 
-test("unified market-health children use the shared header contract", () => {
+test("market-health children keep shared headers while AI conclusion uses its dedicated compact surface", () => {
   const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
   const health = fs.readFileSync(path.resolve("components/insights/market-health-view.tsx"), "utf8")
   const header = fs.readFileSync(path.resolve("components/insights/market-widget-child-header.tsx"), "utf8")
 
   assert.match(header, /actions\?: React\.ReactNode/)
   for (const title of [
-    "AI nhận định thị trường",
-    "Tổng hợp định lượng",
     "Chỉ báo tâm lý",
     "Chỉ báo rủi ro",
     "Định giá thị trường (P/E & P/B)",
@@ -178,11 +177,13 @@ test("unified market-health children use the shared header contract", () => {
     "Độ rộng thị trường",
     "Sức khỏe xu hướng",
     "Dòng tiền tổ chức",
-    "Tâm lý, rủi ro và MA20",
-    "Dòng tiền theo phiên",
   ]) {
     assert.ok(`${dashboard}\n${health}`.includes(title), `missing child title: ${title}`)
   }
+  assert.match(dashboard, /data-market-ai-conclusion/)
+  assert.match(dashboard, /BrainCircuit/)
+  assert.doesNotMatch(dashboard, /Tổng hợp định lượng|Tóm lược định lượng, không phải AI|Chưa có AI conclusion/)
+  assert.doesNotMatch(`${dashboard}\n${health}`, /Tâm lý, rủi ro và MA20|Dòng tiền theo phiên/)
   assert.match(health, /<MarketWidgetChildHeader icon=\{ShieldAlert\}[^>]*actions=/)
   assert.match(health, /<MarketWidgetChildHeader icon=\{Gauge\}/)
   assert.doesNotMatch(health, /<h3[^>]*>\s*(Chỉ báo rủi ro|Định giá thị trường)/)
