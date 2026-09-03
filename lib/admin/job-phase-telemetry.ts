@@ -5,6 +5,23 @@ export interface QeoIndexEodPhaseIo {
   upsertPhase(row: Record<string, unknown>): Promise<void>
 }
 
+type RetiredQeoIndexEodPhaseKey = "DRIVE_ARCHIVE"
+type QeoIndexEodTelemetryPhaseKey = QeoIndexEodPhaseKey | RetiredQeoIndexEodPhaseKey
+
+const RETIRED_EOD_PHASES: Record<RetiredQeoIndexEodPhaseKey, {
+  key: RetiredQeoIndexEodPhaseKey
+  order: number
+  label: string
+  description: string
+}> = {
+  DRIVE_ARCHIVE: {
+    key: "DRIVE_ARCHIVE",
+    order: 11,
+    label: "Drive Archive (retired)",
+    description: "Retired legacy phase retained only so historical/recovery code remains type-safe; the active EOD workflow never dispatches it.",
+  },
+}
+
 async function getDefaultIo(): Promise<QeoIndexEodPhaseIo> {
   const { getSupabaseServerClient } = await import("../supabase/server.ts")
   const supabase = getSupabaseServerClient()
@@ -20,10 +37,11 @@ async function getDefaultIo(): Promise<QeoIndexEodPhaseIo> {
   }
 }
 
-function phaseDefinition(phaseKey: QeoIndexEodPhaseKey) {
+function phaseDefinition(phaseKey: QeoIndexEodTelemetryPhaseKey) {
   const definition = QEOINDEX_EOD_PHASES.find((phase) => phase.key === phaseKey)
-  if (!definition) throw new Error(`Unknown QeoIndex EOD phase: ${phaseKey}`)
-  return definition
+  if (definition) return definition
+  if (phaseKey === "DRIVE_ARCHIVE") return RETIRED_EOD_PHASES.DRIVE_ARCHIVE
+  throw new Error(`Unknown QeoIndex EOD phase: ${phaseKey}`)
 }
 
 function errorDetails(error: unknown) {
@@ -43,7 +61,7 @@ function sanitizedSummary(value: unknown): Record<string, unknown> {
 
 export async function runQeoIndexEodPhase<T>(input: {
   runId: string
-  phaseKey: QeoIndexEodPhaseKey
+  phaseKey: QeoIndexEodTelemetryPhaseKey
   fn: () => Promise<T>
   summarize?: (result: T) => unknown
   io?: QeoIndexEodPhaseIo
