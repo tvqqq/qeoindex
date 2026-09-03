@@ -74,8 +74,6 @@ function supabaseFunctionsBaseUrl() {
 }
 
 async function loadKfspSyncSecret(supabase: SupabaseClient) {
-  // QEO-58 intentionally reuses the existing Vault-backed KFSP sync secret RPC.
-  // The legacy RPC name predates EOD v4 but the secret itself protects all KFSP sync Edge Functions.
   const secretResult = await supabase.rpc("qeo_get_market_close_sync_secret")
   const syncSecret = typeof secretResult.data === "string" ? secretResult.data.trim() : ""
   if (secretResult.error || !syncSecret) {
@@ -159,7 +157,7 @@ async function staleTtaiTickers(supabase: SupabaseClient, sessionDate: string, t
   })
 }
 
-export async function assertFrozenUniverseStillCurrent(expectedUniverse: FrozenEodUniverse) {
+async function ensureFrozenUniverseStillCurrent(expectedUniverse: FrozenEodUniverse) {
   const universe = await getCanonicalUniverse()
   const currentTickers = universe.stocks.map((stock) => stock.ticker)
   const { missing, unexpected } = membershipDiff(expectedUniverse.tickers, currentTickers)
@@ -181,11 +179,17 @@ export async function assertFrozenUniverseStillCurrent(expectedUniverse: FrozenE
   return expectedUniverse
 }
 
+export async function assertFrozenUniverseStillCurrent(expectedUniverse: FrozenEodUniverse) {
+  "use step"
+  return ensureFrozenUniverseStillCurrent(expectedUniverse)
+}
+
 export async function assertReadyMatchesFrozenUniverse(input: {
   readyUniverseRunId: string
   readyTickers: string[]
   expectedUniverse: FrozenEodUniverse
 }) {
+  "use step"
   const readyTickers = uniqueSortedTickers(input.readyTickers)
   const expectedTickers = uniqueSortedTickers(input.expectedUniverse.tickers)
   const { missing, unexpected } = membershipDiff(expectedTickers, readyTickers)
@@ -201,7 +205,7 @@ export async function assertReadyMatchesFrozenUniverse(input: {
         + `${missing.length ? `; missing=${missing.slice(0, 20).join(",")}` : ""}`
         + `${unexpected.length ? `; unexpected=${unexpected.slice(0, 20).join(",")}` : ""}`,
       ),
-      { code: "EOD_NOT_READY" },
+      { code: "CANONICAL_UNIVERSE_CHANGED" },
     )
   }
   return input.expectedUniverse
@@ -236,9 +240,6 @@ export async function runKfspRatingRefreshStep(runId: string, startedAtIso: stri
         )
       }
 
-      // Freeze only after the same-session Rating publish finishes. Rating sync itself publishes
-      // onto the current canonical membership; this checkpoint prevents a later membership change
-      // from mixing Rating, TTAI, market-close and Council evidence from different universes.
       const canonical = await getCanonicalUniverse()
       const universe: FrozenEodUniverse = {
         runId: canonical.runId,
@@ -323,7 +324,7 @@ export async function runTtaiRefreshStep(
         )
       }
 
-      await assertFrozenUniverseStillCurrent(universe)
+      await ensureFrozenUniverseStillCurrent(universe)
       const supabase = requiredSupabase()
       const sessionDate = vietnamDateKey(startedAtIso)
       const syncSecret = await loadKfspSyncSecret(supabase)
@@ -348,7 +349,7 @@ export async function runTtaiRefreshStep(
       }
 
       const staleAfterRefresh = await staleTtaiTickers(supabase, sessionDate, batchTickers)
-      await assertFrozenUniverseStillCurrent(universe)
+      await ensureFrozenUniverseStillCurrent(universe)
       const previous = progress || {
         status: "fresh" as const,
         latestRatingDate: sessionDate,
