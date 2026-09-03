@@ -6,13 +6,17 @@ export type SchedulerEvidence =
 
 export type ExpectedSchedulerMapping = { mappingId: string; jobKey: string; schedulerName: string; schedule: string; aliases?: string[] }
 
+/**
+ * Physical Supabase schedulers expected after QEO-64 cutover.
+ *
+ * Same-session Rating, TTAI and market-close collection are internal EOD v4
+ * phases, not independent pg_cron owners. Historical aliases remain mapped in
+ * job-schedule.ts but intentionally appear as extra inventory if still active.
+ */
 export const EXPECTED_SUPABASE_SCHEDULERS: ExpectedSchedulerMapping[] = [
   { mappingId: "supabase:qeoindex-eod-pipeline-1515-ict", jobKey: "qeoindex.eod_pipeline", schedulerName: "qeoindex-eod-pipeline-1515-ict", schedule: "15 8 * * 1-5" },
-  { mappingId: "supabase:kfsp-rating-daily-7am-ict", jobKey: "kfsp.rating_daily", schedulerName: "kfsp-rating-daily-7am-ict", schedule: "0 0 * * *" },
-  { mappingId: "supabase:kfsp-ttai-history-daily-0710-ict", jobKey: "kfsp.ttai_history", schedulerName: "kfsp-ttai-history-daily-0710-ict", schedule: "10 0 * * *", aliases: ["kfsp-ttai-history-daily-1am-ict", "kfsp-ttai-history-hourly"] },
   { mappingId: "supabase:sync-universe-5m-am", jobKey: "market.sync_5m", schedulerName: "sync-universe-5m", schedule: "*/5 2-4 * * 1-5" },
   { mappingId: "supabase:sync-universe-5m-pm", jobKey: "market.sync_5m", schedulerName: "sync-universe-5m-afternoon", schedule: "*/5 6-7 * * 1-5" },
-  { mappingId: "supabase:sync-universe-eod-1445", jobKey: "market.sync_eod", schedulerName: "sync-universe-eod-1445", schedule: "45 7 * * 1-5", aliases: ["sync-universe-eod-1450"] },
 ]
 export const EXPECTED_VERCEL_SCHEDULERS = [{ jobKey: "signals.daily", path: "/api/signals/daily", schedule: "0 0 * * 1-5" }] as const
 export type VercelCronEntry = { path: string; schedule: string }
@@ -32,9 +36,14 @@ const normalize = (value: string) => value.trim().replace(/\s+/g, " ")
 
 export function reconcileSupabaseSchedulers(evidence: SchedulerEvidence): SchedulerReconciliation {
   if (evidence.availability === "unavailable") return {
-    availability: evidence.availability, mappings: [], physicalMappings: [{ mappingId: "vercel:signals-daily", source: "vercel", jobKey: "signals.daily", status: "config_only" }], logical: [{ jobKey: "signals.daily", status: "config_only", childMappingIds: ["vercel:signals-daily"] }], extraUnmapped: [],
-    aggregate: { expected: 7, liveVerified: 0, configOnly: 1, missing: 0, drifted: 0, duplicated: 0, unavailable: 6, extraUnmapped: 0, inventoryClean: false, expectedMappingsVerified: false },
+    availability: evidence.availability,
+    mappings: [],
+    physicalMappings: [{ mappingId: "vercel:signals-daily", source: "vercel", jobKey: "signals.daily", status: "config_only" }],
+    logical: [{ jobKey: "signals.daily", status: "config_only", childMappingIds: ["vercel:signals-daily"] }],
+    extraUnmapped: [],
+    aggregate: { expected: 4, liveVerified: 0, configOnly: 1, missing: 0, drifted: 0, duplicated: 0, unavailable: 3, extraUnmapped: 0, inventoryClean: false, expectedMappingsVerified: false },
   }
+
   const mappings = EXPECTED_SUPABASE_SCHEDULERS.map((expected) => {
     const direct = evidence.rows.filter((row) => row.jobName === expected.schedulerName)
     const aliases = evidence.rows.filter((row) => expected.aliases?.includes(row.jobName))
@@ -46,13 +55,14 @@ export function reconcileSupabaseSchedulers(evidence: SchedulerEvidence): Schedu
     if (!row.active) return { ...expected, source: "supabase" as const, status: "inactive" as const, jobId: row.jobId }
     return { ...expected, source: "supabase" as const, status: "live_verified" as const, jobId: row.jobId }
   })
+
   const claimed = new Set(EXPECTED_SUPABASE_SCHEDULERS.flatMap((mapping) => [mapping.schedulerName, ...(mapping.aliases ?? [])]))
   const extraUnmapped = evidence.rows.filter((row) => !claimed.has(row.jobName)).map((row) => row.jobName)
   const liveVerified = mappings.filter((m) => m.status === "live_verified").length
   const drifted = mappings.filter((m) => m.status === "drifted").length
   const duplicated = mappings.filter((m) => m.status === "duplicated").length
   const missing = mappings.filter((m) => m.status === "missing" || m.status === "legacy_alias" || m.status === "inactive").length
-  const logical: LogicalSchedulerResult[] = ["qeoindex.eod_pipeline", "kfsp.rating_daily", "kfsp.ttai_history", "market.sync_5m", "market.sync_eod"].map((jobKey) => {
+  const logical: LogicalSchedulerResult[] = ["qeoindex.eod_pipeline", "market.sync_5m"].map((jobKey) => {
     const children = mappings.filter((mapping) => mapping.jobKey === jobKey)
     const bad = children.filter((mapping) => mapping.status !== "live_verified")
     return { jobKey, status: bad.length === 0 ? "live_verified" as const : bad.length === children.length ? "missing" as const : "partial" as const, childMappingIds: children.map((mapping) => mapping.mappingId) }
@@ -60,7 +70,26 @@ export function reconcileSupabaseSchedulers(evidence: SchedulerEvidence): Schedu
   const vercel = { mappingId: "vercel:signals-daily", source: "vercel" as const, jobKey: "signals.daily", status: "config_only" as const }
   const physicalMappings = [...mappings, vercel]
   logical.push({ jobKey: "signals.daily", status: "config_only", childMappingIds: [vercel.mappingId] })
-  return { availability: "available", mappings, physicalMappings, logical, extraUnmapped, aggregate: { expected: 7, liveVerified: liveVerified, configOnly: 1, missing, drifted, duplicated, unavailable: 0, extraUnmapped: extraUnmapped.length, inventoryClean: liveVerified === 6 && extraUnmapped.length === 0, expectedMappingsVerified: liveVerified === 6 } }
+
+  return {
+    availability: "available",
+    mappings,
+    physicalMappings,
+    logical,
+    extraUnmapped,
+    aggregate: {
+      expected: 4,
+      liveVerified,
+      configOnly: 1,
+      missing,
+      drifted,
+      duplicated,
+      unavailable: 0,
+      extraUnmapped: extraUnmapped.length,
+      inventoryClean: liveVerified === 3 && extraUnmapped.length === 0,
+      expectedMappingsVerified: liveVerified === 3,
+    },
+  }
 }
 
 export function reconcileVercelSchedulers(entries: VercelCronEntry[]) {
