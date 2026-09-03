@@ -135,14 +135,14 @@ test("EOD orchestration is one durable dependency workflow with active Daily-onl
   assert.match(route, /isMachineRequestAuthorized/)
 })
 
-test("unified EOD workflow remains fail-closed in dependency order", () => {
+test("unified EOD workflow remains fail-closed in dependency order without Drive archive", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   const body = workflow.slice(workflow.indexOf("export async function qeoindexEodPipeline"))
   const ordered = [
     "runEodReadyStep", "runHistoryRefreshBatchStep", "runWyckoffBuildStep", "runSupabaseValidateStep",
     "runSupabasePublishStep", "runDeterministicCouncilStep", "runLlmDebateStep",
     "runNotionUniverseArchiveBatchStep", "runNotionEodArchiveBatchStep", "runNotionArchiveFinalizeStep",
-    "runDriveArchiveStep", "runRetentionCleanupStep",
+    "runRetentionCleanupStep",
   ]
   let cursor = -1
   for (const call of ordered) {
@@ -152,6 +152,7 @@ test("unified EOD workflow remains fail-closed in dependency order", () => {
   }
   assert.match(body, /published && deterministic\.ok/)
   assert.match(body, /failQeoIndexEodRunStep/)
+  assert.doesNotMatch(body, /runDriveArchiveStep|driveArchiveStatus/)
   assert.doesNotMatch(body, /runNotionValidateStep|runNotionStagingBatchStep|runIngestStep/)
 })
 
