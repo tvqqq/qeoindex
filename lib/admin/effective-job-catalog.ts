@@ -7,7 +7,7 @@ const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
   provider: "supabase_pg_cron_workflow",
   label: "QeoIndex EOD Pipeline",
   description:
-    "EOD v4 data-refresh lane: same-session KFSP Rating → TTAI → market close → frozen READY → OHLCV/Wyckoff → Supabase publish → AI Council → post-analysis.",
+    "EOD v4 data-refresh lane: same-session KFSP Rating → TTAI → market close → frozen READY → OHLCV/Wyckoff → Supabase publish → AI Council → post-analysis; raw Daily stays in Supabase and Drive is not an active dependency.",
   group: "system",
   scheduleUtc: "15 8 * * 1-5",
   scheduleIct: "15:15 T2-T6",
@@ -27,7 +27,6 @@ const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
     "AI_COUNCIL_LLM",
     "MARKET_SYNTHESIS",
     "NOTION_ARCHIVE",
-    "DRIVE_ARCHIVE",
     "RETENTION_CLEANUP",
     "COMPLETE",
   ],
@@ -110,6 +109,7 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
  * Operational Admin Jobs catalog during the EOD v4 migration.
  *
  * QEO-58 makes the 15:15 EOD workflow own same-session KFSP/TTAI freshness.
+ * QEO-57 removes Google Drive from the active daily EOD dependency graph.
  * Existing morning schedulers remain independently classified until QEO-64 production smoke.
  */
 export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = [

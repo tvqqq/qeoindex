@@ -48,13 +48,12 @@ export type EodRetentionCleanupCheckpoint = EodArchiveCheckpoint & {
 }
 
 /**
- * Daily/Weekly cutover: the active raw read/write contract is Daily-only and Weekly
- * is derived deterministically. Legacy 1H rows remain preserved until cold-archive
- * coverage is verified. The proven Google Drive/auth/manifest uploader is reused.
+ * Legacy/recovery-only Drive adapter.
  *
- * Drive is a downstream archive boundary. Provider/auth/storage rejection must stay
- * visible as a degraded checkpoint, but must not escape as a Workflow retry/fatal;
- * raw Supabase history remains retained until archive coverage is actually proven.
+ * QEO-57 removes Google Drive from the active daily EOD dependency graph. This
+ * adapter stays available only as historical recovery evidence/backward
+ * compatibility. Provider/auth/storage rejection is still converted into a
+ * degraded checkpoint if an explicit legacy caller invokes it.
  */
 export async function runEodDriveArchive(
   supabase: SupabaseClient,
@@ -85,20 +84,22 @@ export async function runEodDriveArchive(
  * preserved by the database RPC.
  * QEO-39 keeps large Wyckoff build payloads out of durable Workflow state using
  * run-scoped artifacts and removes only terminal artifacts older than one day.
+ * QEO-57 makes this cleanup independent from external Drive availability.
  *
  * Raw Daily history remains the sole active source for both 1D and derived 1W
- * Wyckoff analysis and is never age-pruned here. Plan C cold-history hydration and
- * restore proof is still required before that policy can change.
+ * Wyckoff analysis and is never age-pruned here. A separately approved cold
+ * backup + restore proof is required before that policy can change.
  */
 export async function runEodRetentionCleanup(
   supabase: SupabaseClient,
   input: {
     tradingDate: string
     notionArchive: EodArchiveCheckpoint
-    driveArchive: EodArchiveCheckpoint
+    /** @deprecated Legacy compatibility only. Ignored by active retention logic. */
+    driveArchive?: EodArchiveCheckpoint
   },
 ): Promise<EodRetentionCleanupCheckpoint> {
-  const rawHistoryDetail = "Raw Daily OHLCV retention is intentionally disabled until Plan C cold-history hydration/restore is verified; no operational Daily bars were deleted."
+  const rawHistoryDetail = "Raw Daily OHLCV retention is intentionally disabled until an independently verified cold-backup hydration/restore design exists; no operational Daily bars were deleted."
   const referenceAt = new Date(`${input.tradingDate}T23:59:59.999+07:00`).toISOString()
   const cleanup = await supabase.rpc("qeo_run_safe_retention_cleanup", {
     p_reference_at: referenceAt,
@@ -170,14 +171,9 @@ export async function runEodRetentionCleanup(
     }
   }
 
-  const archiveContext = [
-    `Notion archive=${input.notionArchive.status}`,
-    `Drive archive=${input.driveArchive.status}`,
-  ].join(", ")
-
   return {
     status: "archived",
-    detail: `Safe telemetry/staging retention, bounded job telemetry retention, and terminal Wyckoff build-artifact retention completed (${archiveContext}). ${rawHistoryDetail}`,
+    detail: `Safe telemetry/staging retention, bounded job telemetry retention, and terminal Wyckoff build-artifact retention completed (Notion archive=${input.notionArchive.status}). ${rawHistoryDetail}`,
     safeCleanup,
     jobTelemetryCleanup,
     buildArtifactCleanup,

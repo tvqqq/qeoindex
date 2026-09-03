@@ -53,8 +53,9 @@ test("buildCronTimelineModel separates scheduled automation, manual recovery, an
   const eodJob = timeline.lanes[1].jobs.find((j) => j.key === "qeoindex.eod_pipeline")
   assert.ok(eodJob)
   assert.equal(eodJob.timeIctLabel, "15:15 ICT")
-  assert.equal(eodJob.phases?.length, 13)
+  assert.equal(eodJob.phases?.length, 12)
   assert.deepEqual(eodJob.phases?.map((p) => p.key), EOD_PIPELINE_PHASES.map((p) => p.key))
+  assert.equal(eodJob.phases?.some((p) => p.key === "DRIVE_ARCHIVE"), false)
 
   const sync5m = timeline.lanes[1].jobs.find((j) => j.key === "market.sync_5m")
   assert.ok(sync5m)

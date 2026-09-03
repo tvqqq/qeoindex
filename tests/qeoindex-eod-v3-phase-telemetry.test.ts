@@ -16,12 +16,11 @@ const expected = [
   "AI_COUNCIL_LLM",
   "MARKET_SYNTHESIS",
   "NOTION_ARCHIVE",
-  "DRIVE_ARCHIVE",
   "RETENTION_CLEANUP",
   "COMPLETE",
 ]
 
-test("EOD transitional v4 telemetry exposes same-session refresh before READY", () => {
+test("EOD transitional v4 telemetry exposes same-session refresh before READY without Drive", () => {
   assert.deepEqual(QEOINDEX_EOD_PHASES.map((phase) => phase.key), expected)
   assert.deepEqual(QEOINDEX_EOD_PHASES.map((phase) => phase.order), expected.map((_, index) => index + 1))
 })
@@ -46,5 +45,6 @@ test("missing EOD telemetry rows remain pending while persisted phases retain th
   assert.equal(timeline[0].status, "pending")
   assert.equal(timeline.find((phase) => phase.key === "EOD_READY")?.status, "succeeded")
   assert.equal(timeline.find((phase) => phase.key === "AI_COUNCIL_LLM")?.order, 10)
+  assert.equal(timeline.find((phase) => phase.key === "RETENTION_CLEANUP")?.order, 13)
   assert.deepEqual(timeline.find((phase) => phase.key === "EOD_READY")?.summary, { universeCount: 200 })
 })
