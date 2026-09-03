@@ -18,11 +18,12 @@ import { skipQeoIndexEodRunStep } from "@/lib/qeoindex-eod-skip-step"
 import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "@/lib/vn-market-calendar"
 import type { OhlcvUniverseRefreshResult } from "@/lib/ohlcv-history-store"
 import {
+  HISTORY_REFRESH_BATCH_SIZE,
   runCompleteStep,
   runDeterministicCouncilStep,
   runDriveArchiveStep,
   runEodReadyStep,
-  runHistoryRefreshBatchStep,
+  runHistoryRefreshWindowStep,
   runLlmDebateStep,
   runMarketCloseCollectStep,
   runMarketSynthesisStep,
@@ -44,6 +45,12 @@ const MAX_CANONICAL_UNIVERSE_SIZE = 200
 const WYCKOFF_TIMEFRAME_COUNT = 2
 const NOTION_ARCHIVE_BATCH_SIZE = 8
 const TTAI_REFRESH_BATCH_SIZE = 50
+const HISTORY_CONCURRENCY_DEFAULT = 2
+const HISTORY_CONCURRENCY_MAX = 4
+const QEOINDEX_EOD_HISTORY_CONCURRENCY = "QEOINDEX_EOD_HISTORY_CONCURRENCY"
+
+type RatingRefresh = Awaited<ReturnType<typeof runKfspRatingRefreshStep>>
+type MarketClose = Awaited<ReturnType<typeof runMarketCloseCollectStep>>
 
 function retryAt(startedAtIso: string, attempt: number, intervalMs: number) {
   const startedAt = new Date(startedAtIso).getTime()
@@ -52,6 +59,12 @@ function retryAt(startedAtIso: string, attempt: number, intervalMs: number) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
+}
+
+function historyConcurrencyLimit() {
+  const configured = Number(process.env[QEOINDEX_EOD_HISTORY_CONCURRENCY] || HISTORY_CONCURRENCY_DEFAULT)
+  if (!Number.isInteger(configured) || configured < 1) return HISTORY_CONCURRENCY_DEFAULT
+  return Math.min(HISTORY_CONCURRENCY_MAX, configured)
 }
 
 function isEodNotReady(error: unknown) {
@@ -97,6 +110,80 @@ function isRetryableMarketCloseFailure(error: unknown) {
   ].some((token) => normalized.includes(token))
 }
 
+async function runTtaiRefreshBranch(runId: string, startedAtIso: string, ratingRefresh: RatingRefresh) {
+  let progress: TtaiRefreshProgress | null = null
+  for (let offset = 0; offset < ratingRefresh.universe.tickers.length; offset += TTAI_REFRESH_BATCH_SIZE) {
+    progress = await runTtaiRefreshStep(
+      runId,
+      startedAtIso,
+      ratingRefresh.universe,
+      ratingRefresh.universe.tickers.slice(offset, offset + TTAI_REFRESH_BATCH_SIZE),
+      progress || undefined,
+    )
+  }
+  if (!progress || progress.checkedTickers !== ratingRefresh.universe.selectedCount) {
+    throw new Error(
+      `TTAI_REFRESH accounting mismatch ${progress?.checkedTickers || 0}/${ratingRefresh.universe.selectedCount}`,
+    )
+  }
+  return progress
+}
+
+async function runMarketCloseBranch(runId: string, startedAtIso: string, ratingRefresh: RatingRefresh): Promise<MarketClose> {
+  await assertFrozenUniverseStillCurrent(ratingRefresh.universe)
+  for (let attempt = 1; attempt <= MARKET_CLOSE_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const marketClose = await runMarketCloseCollectStep(runId, startedAtIso, true)
+      await assertFrozenUniverseStillCurrent(ratingRefresh.universe)
+      await annotateQeoIndexEodPhaseSummaryStep({
+        runId,
+        phaseKey: "MARKET_CLOSE_COLLECT",
+        summary: {
+          attemptsUsed: attempt,
+          status: marketClose.status,
+          sessionDate: marketClose.sessionDate,
+          qualityStatus: "qualityStatus" in marketClose ? marketClose.qualityStatus : undefined,
+          syncRunId: "syncRunId" in marketClose ? marketClose.syncRunId : undefined,
+          universeRunId: ratingRefresh.universe.runId,
+          retrying: false,
+        },
+      })
+      return marketClose
+    } catch (error) {
+      const retryable = isRetryableMarketCloseFailure(error)
+      if (!retryable || attempt === MARKET_CLOSE_MAX_ATTEMPTS) {
+        try {
+          await annotateQeoIndexEodPhaseSummaryStep({
+            runId,
+            phaseKey: "MARKET_CLOSE_COLLECT",
+            summary: {
+              attemptsUsed: attempt,
+              universeRunId: ratingRefresh.universe.runId,
+              retrying: false,
+              terminal: true,
+              lastError: errorMessage(error).slice(0, 500),
+            },
+          })
+        } catch {
+          // Preserve the collector failure as the canonical pipeline error.
+        }
+        throw error
+      }
+      const nextAttemptAt = retryAt(startedAtIso, attempt, MARKET_CLOSE_RETRY_INTERVAL_MS)
+      await markQeoIndexEodPhaseRetryingStep({
+        runId,
+        phaseKey: "MARKET_CLOSE_COLLECT",
+        attemptsUsed: attempt,
+        nextAttemptAt: nextAttemptAt.toISOString(),
+        lastError: errorMessage(error),
+      })
+      await sleep(nextAttemptAt)
+      await assertFrozenUniverseStillCurrent(ratingRefresh.universe)
+    }
+  }
+  throw new Error("MARKET_CLOSE_COLLECT did not produce a pipeline context")
+}
+
 export async function qeoindexEodPipeline(startedAtIso: string) {
   "use workflow"
 
@@ -112,8 +199,8 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       | Awaited<ReturnType<typeof runEodReadyStep>>
       | Awaited<ReturnType<typeof runEodBackfillReadyStep>>
       | null = null
-    let marketClose: Awaited<ReturnType<typeof runMarketCloseCollectStep>> | null = null
-    let ratingRefresh: Awaited<ReturnType<typeof runKfspRatingRefreshStep>> | null = null
+    let marketClose: MarketClose | null = null
+    let ratingRefresh: RatingRefresh | null = null
     let ttaiRefresh: TtaiRefreshProgress | null = null
 
     if (historicalBackfill) {
@@ -122,76 +209,13 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       marketClose = await runMarketCloseCollectStep(runId, startedAtIso, false)
     } else {
       ratingRefresh = await runKfspRatingRefreshStep(runId, startedAtIso)
-
-      for (let offset = 0; offset < ratingRefresh.universe.tickers.length; offset += TTAI_REFRESH_BATCH_SIZE) {
-        ttaiRefresh = await runTtaiRefreshStep(
-          runId,
-          startedAtIso,
-          ratingRefresh.universe,
-          ratingRefresh.universe.tickers.slice(offset, offset + TTAI_REFRESH_BATCH_SIZE),
-          ttaiRefresh || undefined,
-        )
-      }
-      if (!ttaiRefresh || ttaiRefresh.checkedTickers !== ratingRefresh.universe.selectedCount) {
-        throw new Error(
-          `TTAI_REFRESH accounting mismatch ${ttaiRefresh?.checkedTickers || 0}/${ratingRefresh.universe.selectedCount}`,
-        )
-      }
-
-      // Market Close itself reads the current canonical universe. Assert the frozen run both before
-      // and after collection so a concurrent universe publish can never leak mixed membership onward.
       await assertFrozenUniverseStillCurrent(ratingRefresh.universe)
-      for (let attempt = 1; attempt <= MARKET_CLOSE_MAX_ATTEMPTS; attempt += 1) {
-        try {
-          marketClose = await runMarketCloseCollectStep(runId, startedAtIso, true)
-          await assertFrozenUniverseStillCurrent(ratingRefresh.universe)
-          await annotateQeoIndexEodPhaseSummaryStep({
-            runId,
-            phaseKey: "MARKET_CLOSE_COLLECT",
-            summary: {
-              attemptsUsed: attempt,
-              status: marketClose.status,
-              sessionDate: marketClose.sessionDate,
-              qualityStatus: "qualityStatus" in marketClose ? marketClose.qualityStatus : undefined,
-              syncRunId: "syncRunId" in marketClose ? marketClose.syncRunId : undefined,
-              universeRunId: ratingRefresh.universe.runId,
-              retrying: false,
-            },
-          })
-          break
-        } catch (error) {
-          const retryable = isRetryableMarketCloseFailure(error)
-          if (!retryable || attempt === MARKET_CLOSE_MAX_ATTEMPTS) {
-            try {
-              await annotateQeoIndexEodPhaseSummaryStep({
-                runId,
-                phaseKey: "MARKET_CLOSE_COLLECT",
-                summary: {
-                  attemptsUsed: attempt,
-                  universeRunId: ratingRefresh.universe.runId,
-                  retrying: false,
-                  terminal: true,
-                  lastError: errorMessage(error).slice(0, 500),
-                },
-              })
-            } catch {
-              // Preserve the collector failure as the canonical pipeline error.
-            }
-            throw error
-          }
-          const nextAttemptAt = retryAt(startedAtIso, attempt, MARKET_CLOSE_RETRY_INTERVAL_MS)
-          await markQeoIndexEodPhaseRetryingStep({
-            runId,
-            phaseKey: "MARKET_CLOSE_COLLECT",
-            attemptsUsed: attempt,
-            nextAttemptAt: nextAttemptAt.toISOString(),
-            lastError: errorMessage(error),
-          })
-          await sleep(nextAttemptAt)
-          await assertFrozenUniverseStillCurrent(ratingRefresh.universe)
-        }
-      }
-      if (!marketClose) throw new Error("MARKET_CLOSE_COLLECT did not produce a pipeline context")
+
+      ;[ttaiRefresh, marketClose] = await Promise.all([
+        runTtaiRefreshBranch(runId, startedAtIso, ratingRefresh),
+        runMarketCloseBranch(runId, startedAtIso, ratingRefresh),
+      ])
+      await assertFrozenUniverseStillCurrent(ratingRefresh.universe)
 
       for (let attempt = 1; attempt <= EOD_READY_MAX_ATTEMPTS; attempt += 1) {
         try {
@@ -217,7 +241,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
               ttaiFailedTickers: ttaiRefresh.failedTickers.slice(0, 20),
               freshMarketCount: candidateReady.market.freshMarketCount,
               attemptsUsed: attempt,
-              architecture: "supabase-first-eod-v4-data-refresh",
+              architecture: "supabase-first-eod-v4-dag",
             },
           })
           break
@@ -246,12 +270,15 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       limitedCoverage: [],
       errors: [],
     }
-    for (let offset = 0; offset < ready.stocks.length; offset += 10) {
-      history = await runHistoryRefreshBatchStep(
+    const historyConcurrency = historyConcurrencyLimit()
+    const historyWindowSize = HISTORY_REFRESH_BATCH_SIZE * historyConcurrency
+    for (let offset = 0; offset < ready.stocks.length; offset += historyWindowSize) {
+      history = await runHistoryRefreshWindowStep(
         runId,
-        ready.stocks.slice(offset, offset + 10),
+        ready.stocks.slice(offset, offset + historyWindowSize),
         startedAtIso,
         history,
+        historyConcurrency,
         !historicalBackfill,
       )
     }
@@ -293,7 +320,6 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
     const published = publish.status === "published"
 
     const deterministic = await runDeterministicCouncilStep(runId, published, ready.scanDate)
-    const llm = await runLlmDebateStep(runId, published && deterministic.ok, ready.scanDate)
 
     let marketSynthesis: Awaited<ReturnType<typeof runMarketSynthesisStep>> | {
       ok: false
@@ -307,6 +333,8 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
     } catch (error) {
       marketSynthesis = { ok: false, status: "failed", requestId: null, ratingDate: ready.scanDate, error: errorMessage(error) }
     }
+
+    const llm = await runLlmDebateStep(runId, published && deterministic.ok, ready.scanDate)
 
     const notionUniverseBatches: Array<Awaited<ReturnType<typeof runNotionUniverseArchiveBatchStep>>> = []
     for (let offset = 0; offset < ready.stocks.length; offset += NOTION_ARCHIVE_BATCH_SIZE) {
@@ -362,14 +390,15 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       ttaiRefreshStatus: ttaiRefresh?.status || "historical_backfill",
       ttaiFailedTickers: ttaiRefresh?.failedTickers.slice(0, 20) || [],
       marketCloseStatus: marketClose.status,
+      historyConcurrency,
       history,
       noTradeRepair,
       build,
       validation,
       publishStatus: publish.status,
       deterministicStatus: deterministic.status,
-      llmStatus: llm.status,
       marketSynthesisStatus: marketSynthesis.status,
+      llmStatus: llm.status,
       notionArchiveStatus: notionArchive.status,
       driveArchiveStatus: driveArchive.status,
       retentionStatus: retention.status,
@@ -389,8 +418,8 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       ttaiRefreshStatus: ttaiRefresh?.status || "historical_backfill",
       publishStatus: publish.status,
       deterministicStatus: deterministic.status,
-      llmStatus: llm.status,
       marketSynthesisStatus: marketSynthesis.status,
+      llmStatus: llm.status,
       notionArchiveStatus: notionArchive.status,
       driveArchiveStatus: driveArchive.status,
       retentionStatus: retention.status,
