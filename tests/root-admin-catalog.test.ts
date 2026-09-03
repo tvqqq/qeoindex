@@ -8,6 +8,7 @@ import {
   ADMIN_SETTING_CATALOG,
   validateAdminSetting,
 } from "../lib/admin/catalog.ts"
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
 import { sanitizeAdminValue } from "../lib/admin/redact.ts"
 import { validateAdminMutationRequest, validateChangeReason } from "../lib/admin/request-security.ts"
 
@@ -30,9 +31,9 @@ test("runtime setting keys are unique and validate their documented bounds", () 
 
   // scanner.manual_run_limit
   assert.equal(validateAdminSetting("scanner.manual_run_limit", 1).ok, true)
-  assert.equal(validateAdminSetting("scanner.manual_run_limit", 100).ok, true)
+  assert.equal(validateAdminSetting("scanner.manual_run_limit", 200).ok, true)
   assert.equal(validateAdminSetting("scanner.manual_run_limit", 0).ok, false)
-  assert.equal(validateAdminSetting("scanner.manual_run_limit", 101).ok, false)
+  assert.equal(validateAdminSetting("scanner.manual_run_limit", 201).ok, false)
 
   // ai_council.llm_enabled
   assert.deepEqual(validateAdminSetting("ai_council.llm_enabled", true), { ok: true, value: true })
@@ -86,6 +87,41 @@ test("setting definitions have required metadata and valid groups", () => {
     assert.ok(setting.description.length > 0)
     assert.ok(["system", "provider", "cache", "market", "scanner", "signals", "wyckoff", "ai_council", "ui", "integration"].includes(setting.group))
   }
+})
+
+test("Top Stocks 200 admin contracts stay aligned with the canonical runtime", () => {
+  const universeSize = ADMIN_SETTING_CATALOG.find((setting) => setting.key === "market.universe_size")
+  assert.ok(universeSize)
+  assert.equal(universeSize.defaultValue, 200)
+  assert.doesNotMatch(universeSize.description, /Top\s*100/i)
+
+  const requiredSnapshots = ADMIN_SETTING_CATALOG.find((setting) => setting.key === "wyckoff.required_snapshots")
+  assert.ok(requiredSnapshots)
+  assert.equal(requiredSnapshots.defaultValue, 400)
+
+  const marketSync = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "market.sync_universe")
+  assert.ok(marketSync)
+  assert.match(marketSync.description, /canonical/i)
+  assert.doesNotMatch(marketSync.description, /Top\s*100/i)
+
+  const scanner = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "scanner.run")
+  assert.ok(scanner)
+  assert.equal(scanner.manualPurpose, "recovery")
+  assert.deepEqual(scanner.automatedParentKeys, ["signals.daily"])
+
+  const signalMonitor = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "signals.monitor")
+  assert.ok(signalMonitor)
+  assert.equal(signalMonitor.manualPurpose, "recovery")
+  assert.deepEqual(signalMonitor.automatedParentKeys, ["signals.daily"])
+
+  assert.equal(marketSync.manualPurpose, "recovery")
+  assert.deepEqual(marketSync.automatedParentKeys, ["market.sync_5m", "market.sync_eod"])
+
+  const ingest = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "wyckoff.ingest")
+  assert.ok(ingest)
+  assert.equal(ingest.scheduleKind, "manual")
+  assert.equal(ingest.manualPolicy, "confirm")
+  assert.equal(ingest.manualPurpose, "maintenance")
 })
 
 test("job catalog has all documented jobs with concrete thresholds", () => {

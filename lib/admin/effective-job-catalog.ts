@@ -37,7 +37,6 @@ const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
 
 const LEGACY_EOD_JOB_KEYS = new Set([
   "qeoindex.eod_pipeline",
-  "wyckoff.ingest",
   "ai_council.daily",
   "ai_council.debate_daily",
 ])
@@ -51,22 +50,43 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
     })
   }
 
+  if (job.key === "wyckoff.ingest") {
+    return withSchedulePolicy({
+      ...job,
+      provider: "machine",
+      label: "Wyckoff Snapshot Ingest (Manual Recovery)",
+      description: "Nhập lại snapshot từ Notion staging khi cần recovery dữ liệu legacy; EOD v3 không dùng tác vụ này làm scheduler chính.",
+      scheduleUtc: undefined,
+      scheduleIct: undefined,
+      scheduleKind: "manual",
+      schedulerName: undefined,
+      scheduleDays: undefined,
+      manualPolicy: "confirm",
+      manualPurpose: "maintenance",
+      automatedParentKeys: [],
+    })
+  }
+
   if (job.key === "kfsp.rating_daily") {
     return withSchedulePolicy({
       ...job,
-      description: "Đồng bộ lại snapshot KFSP canonical Top Stocks 200. Chạy thủ công yêu cầu xác nhận và dùng one-shot recovery dispatcher.",
+      description: "Đồng bộ snapshot KFSP canonical Top Stocks 200 lúc 07:00 ICT; manual action là one-shot recovery khi scheduled sync cần chạy lại.",
       manualPolicy: "confirm",
+      manualPurpose: "recovery",
+      automatedParentKeys: [],
     })
   }
 
   if (job.key === "kfsp.ttai_history") {
     return withSchedulePolicy({
       ...job,
-      description: "Kiểm tra/cập nhật lịch sử TTAI lúc 07:10 ICT; chạy thủ công hỗ trợ batch tối đa 50 mã và force refresh qua one-shot recovery dispatcher.",
+      description: "Kiểm tra/cập nhật lịch sử TTAI lúc 07:10 ICT; manual recovery hỗ trợ batch tối đa 50 mã và force refresh qua one-shot dispatcher.",
       scheduleUtc: "10 0 * * *",
       scheduleIct: "07:10 hàng ngày",
       schedulerName: "kfsp-ttai-history-daily-0710-ict",
       manualPolicy: "confirm",
+      manualPurpose: "recovery",
+      automatedParentKeys: [],
     })
   }
 

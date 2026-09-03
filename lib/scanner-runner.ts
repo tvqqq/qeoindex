@@ -19,7 +19,7 @@ export interface ScannerRunSummary {
 }
 
 export async function runScannerUniverse({ limit = UNIVERSE_SIZE, offset = 0 }: { limit?: number; offset?: number } = {}): Promise<ScannerRunSummary> {
-  // Operational scan decisions must always see canonical Notion state, not a UI read cache.
+  // Operational scan decisions must always see fresh canonical runtime state, not a UI read cache.
   const data = await getScannerDataFresh()
   const safeLimit = Math.max(1, Math.min(UNIVERSE_SIZE, limit))
   const safeOffset = Math.max(0, offset)
@@ -79,7 +79,7 @@ export async function runScannerUniverse({ limit = UNIVERSE_SIZE, offset = 0 }: 
     }
   }
 
-  // One invalidation per run prevents 100 cache invalidations during a full-universe scan.
+  // One invalidation per run avoids per-ticker cache churn during a full canonical-universe scan.
   if (completed.length > 0) await invalidateScannerDataCache()
 
   const summary: ScannerRunSummary = {

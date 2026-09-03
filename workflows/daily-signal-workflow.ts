@@ -11,7 +11,7 @@ import {
 
 async function refreshDailyScannerStep() {
   "use step"
-  return runScannerUniverse({ limit: 50, offset: 0 })
+  return runScannerUniverse()
 }
 
 async function monitorSignalStep() {
@@ -61,6 +61,7 @@ export async function dailySignalWorkflow(startedAtIso: string) {
     const dateKey = vietnamDateKey(startedAtIso)
     const scanner = await refreshDailyScannerStep()
     const scannerSummary = {
+      requested: scanner.requested,
       completed: scanner.completed.length,
       skipped: scanner.skipped.length,
       errors: scanner.errors.length,
