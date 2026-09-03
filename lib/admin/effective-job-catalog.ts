@@ -7,7 +7,7 @@ const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
   provider: "supabase_pg_cron_workflow",
   label: "QeoIndex EOD Pipeline",
   description:
-    "Supabase-first EOD v3: readiness → market close → OHLCV → Wyckoff → Supabase validate/publish → AI Council → synthesis → Notion/Drive archive → retention.",
+    "EOD v4 data-refresh lane: same-session KFSP Rating → TTAI → market close → frozen READY → OHLCV/Wyckoff → Supabase publish → AI Council → post-analysis.",
   group: "system",
   scheduleUtc: "15 8 * * 1-5",
   scheduleIct: "15:15 T2-T6",
@@ -15,8 +15,10 @@ const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
   schedulerName: "qeoindex-eod-pipeline-1515-ict",
   scheduleDays: "weekdays",
   dependencies: [
-    "EOD_READY",
+    "KFSP_RATING_REFRESH",
+    "TTAI_REFRESH",
     "MARKET_CLOSE_COLLECT",
+    "EOD_READY",
     "HISTORY_REFRESH",
     "WYCKOFF_BUILD",
     "SUPABASE_VALIDATE",
@@ -55,7 +57,7 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
       ...job,
       provider: "machine",
       label: "Wyckoff Snapshot Ingest (Manual Recovery)",
-      description: "Nhập lại snapshot từ Notion staging khi cần recovery dữ liệu legacy; EOD v3 không dùng tác vụ này làm scheduler chính.",
+      description: "Nhập lại snapshot từ Notion staging khi cần recovery dữ liệu legacy; canonical EOD không dùng tác vụ này làm scheduler chính.",
       scheduleUtc: undefined,
       scheduleIct: undefined,
       scheduleKind: "manual",
@@ -70,23 +72,23 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
   if (job.key === "kfsp.rating_daily") {
     return withSchedulePolicy({
       ...job,
-      description: "Đồng bộ snapshot KFSP canonical Top Stocks 200 lúc 07:00 ICT; manual action là one-shot recovery khi scheduled sync cần chạy lại.",
+      description: "Warm-up KFSP Rating lúc 07:00 ICT cho UI/pre-market. EOD 15:15 luôn refresh lại same-session Rating trước READY; morning schedule được giữ tới QEO-64 cutover/smoke.",
       manualPolicy: "confirm",
       manualPurpose: "recovery",
-      automatedParentKeys: [],
+      automatedParentKeys: ["qeoindex.eod_pipeline"],
     })
   }
 
   if (job.key === "kfsp.ttai_history") {
     return withSchedulePolicy({
       ...job,
-      description: "Kiểm tra/cập nhật lịch sử TTAI lúc 07:10 ICT; manual recovery hỗ trợ batch tối đa 50 mã và force refresh qua one-shot dispatcher.",
+      description: "Warm-up TTAI lúc 07:10 ICT. EOD 15:15 kiểm tra/refresh lại TTAI theo frozen universe; partial ticker failure được ghi degraded. Morning schedule giữ tới QEO-64.",
       scheduleUtc: "10 0 * * *",
       scheduleIct: "07:10 hàng ngày",
       schedulerName: "kfsp-ttai-history-daily-0710-ict",
       manualPolicy: "confirm",
       manualPurpose: "recovery",
-      automatedParentKeys: [],
+      automatedParentKeys: ["qeoindex.eod_pipeline"],
     })
   }
 
@@ -105,10 +107,10 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
 }
 
 /**
- * Operational Admin Jobs catalog for the canonical Top Stocks 200 / EOD v3 architecture.
+ * Operational Admin Jobs catalog during the EOD v4 migration.
  *
- * Base endpoint-level definitions are retained for compatibility, while this
- * effective catalog mirrors the actual production scheduler and workflow shape.
+ * QEO-58 makes the 15:15 EOD workflow the owner of same-session KFSP/TTAI
+ * freshness while morning schedules remain warm-up/recovery lanes until QEO-64.
  */
 export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
   withSchedulePolicy(QEOINDEX_EOD_PIPELINE_JOB),
