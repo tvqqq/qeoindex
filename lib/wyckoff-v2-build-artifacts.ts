@@ -100,14 +100,9 @@ export async function stageWyckoffV2BuildArtifacts(
   return { tickerCount: rows.length, snapshotCount: input.snapshots.length }
 }
 
-export async function loadWyckoffV2BuildArtifacts(
+async function loadArtifactRows(
   supabase: SupabaseClient,
-  input: {
-    runId: string
-    runKey: string
-    scanDate: string
-    expectedValidationHash: string
-  },
+  input: { runId: string; runKey: string; scanDate: string },
 ) {
   const loaded = await supabase
     .from("wyckoff_build_artifacts")
@@ -117,16 +112,11 @@ export async function loadWyckoffV2BuildArtifacts(
   if (loaded.error) throw new Error(`WYCKOFF_BUILD_ARTIFACT_READ_FAILED: ${loaded.error.message}`)
 
   const rows = (loaded.data || []) as StoredBuildArtifactRow[]
-  if (!rows.length) throw new Error(`WYCKOFF_BUILD_ARTIFACT_MISSING: run=${input.runId}`)
-
   const snapshots: WyckoffV2Snapshot[] = []
   const seenTickers = new Set<string>()
   for (const row of rows) {
     if (row.run_id !== input.runId || row.run_key !== input.runKey || row.scan_date !== input.scanDate) {
       throw new Error(`WYCKOFF_BUILD_ARTIFACT_IDENTITY_MISMATCH: ${row.ticker}`)
-    }
-    if (row.validation_hash !== input.expectedValidationHash) {
-      throw new Error(`WYCKOFF_BUILD_ARTIFACT_HASH_MISMATCH: ${row.ticker}`)
     }
     const ticker = normalizeTicker(row.ticker)
     if (seenTickers.has(ticker)) throw new Error(`WYCKOFF_BUILD_ARTIFACT_DUPLICATE: ${ticker}`)
@@ -136,12 +126,51 @@ export async function loadWyckoffV2BuildArtifacts(
     }
     snapshots.push(...row.snapshots as WyckoffV2Snapshot[])
   }
+  return { rows, snapshots, tickerCount: seenTickers.size }
+}
 
-  const validation = validateWyckoffV2SnapshotSet(input.runKey, snapshots)
-  const validationHash = computeWyckoffV2ValidationHash(snapshots)
+export async function loadWyckoffV2BuildArtifactsUnchecked(
+  supabase: SupabaseClient,
+  input: { runId: string; runKey: string; scanDate: string },
+) {
+  const loaded = await loadArtifactRows(supabase, input)
+  return {
+    snapshots: loaded.snapshots,
+    tickerCount: loaded.tickerCount,
+    validationHash: loaded.snapshots.length ? computeWyckoffV2ValidationHash(loaded.snapshots) : null,
+  }
+}
+
+export async function restageWyckoffV2BuildArtifacts(
+  supabase: SupabaseClient,
+  input: { runId: string; runKey: string; scanDate: string; snapshots: WyckoffV2Snapshot[] },
+) {
+  if (!input.snapshots.length) throw new Error("WYCKOFF_BUILD_ARTIFACT_RESTAGE_EMPTY")
+  const validationHash = computeWyckoffV2ValidationHash(input.snapshots)
+  const staged = await stageWyckoffV2BuildArtifacts(supabase, { ...input, validationHash })
+  return { ...staged, validationHash }
+}
+
+export async function loadWyckoffV2BuildArtifacts(
+  supabase: SupabaseClient,
+  input: {
+    runId: string
+    runKey: string
+    scanDate: string
+    expectedValidationHash: string
+  },
+) {
+  const loaded = await loadArtifactRows(supabase, input)
+  if (!loaded.rows.length) throw new Error(`WYCKOFF_BUILD_ARTIFACT_MISSING: run=${input.runId}`)
+  if (loaded.rows.some((row) => row.validation_hash !== input.expectedValidationHash)) {
+    throw new Error("WYCKOFF_BUILD_ARTIFACT_HASH_MISMATCH")
+  }
+
+  const validation = validateWyckoffV2SnapshotSet(input.runKey, loaded.snapshots)
+  const validationHash = computeWyckoffV2ValidationHash(loaded.snapshots)
   if (validationHash !== input.expectedValidationHash) {
     throw new Error(`WYCKOFF_BUILD_ARTIFACT_REPLAY_HASH_MISMATCH: ${validationHash} != ${input.expectedValidationHash}`)
   }
 
-  return { snapshots, validation, validationHash, tickerCount: seenTickers.size }
+  return { snapshots: loaded.snapshots, validation, validationHash, tickerCount: loaded.tickerCount }
 }

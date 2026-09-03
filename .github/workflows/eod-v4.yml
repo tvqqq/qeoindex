@@ -38,4 +38,4 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node --test tests/qeoindex-eod-v4-orchestrator.test.ts
+      - run: node --test tests/qeoindex-eod-v4-orchestrator.test.ts tests/qeoindex-eod-v4-fault-isolation.test.ts

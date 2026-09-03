@@ -2349,6 +2349,59 @@ export type Database = {
         }
         Relationships: []
       }
+      system_job_ticker_attempts: {
+        Row: {
+          attempt: number
+          created_at: string
+          error_class: string | null
+          error_code: string | null
+          error_message: string | null
+          id: number
+          job_key: string
+          retry_eligible: boolean
+          run_id: string
+          stage: string
+          status: string
+          ticker: string
+        }
+        Insert: {
+          attempt: number
+          created_at?: string
+          error_class?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: never
+          job_key: string
+          retry_eligible?: boolean
+          run_id: string
+          stage: string
+          status: string
+          ticker: string
+        }
+        Update: {
+          attempt?: number
+          created_at?: string
+          error_class?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: never
+          job_key?: string
+          retry_eligible?: boolean
+          run_id?: string
+          stage?: string
+          status?: string
+          ticker?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_job_ticker_attempts_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "system_job_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_settings: {
         Row: {
           change_reason: string
