@@ -97,6 +97,9 @@ export function buildVerifiedFinalDailyBar(
     open == null || high == null || low == null || close == null || quoteVolume == null
     || open <= 0 || high <= 0 || low <= 0 || close <= 0 || quoteVolume <= 0
   ) return null
+  if (Math.abs(quoteVolume - volume) >= 1e-9) return null
+  if (Math.abs(close - latestPrice) >= 1e-9) return null
+  if (high < low || high < open || high < close || low > open || low > close) return null
 
   return {
     time: dailyBarTime(sessionDate),
