@@ -145,18 +145,12 @@ test("QEO-55 partitions Notion archive work into bounded durable steps", () => {
   assert.match(steps, /stocks\.length > 8/)
 })
 
-test("QEO-57 catches rejected Drive archive promises inside the degraded checkpoint boundary", () => {
-  const steps = source("lib/qeoindex-eod-workflow-steps-legacy.ts")
-  const driveStepStart = steps.indexOf("export async function runDriveArchiveStep")
-  const retentionStepStart = steps.indexOf("export async function runRetentionCleanupStep", driveStepStart)
-  assert.ok(driveStepStart >= 0 && retentionStepStart > driveStepStart, "Drive archive step source must be present")
-
-  const driveStep = steps.slice(driveStepStart, retentionStepStart)
+test("QEO-57 converts rejected Drive archive promises into a degraded checkpoint", () => {
+  const archive = source("lib/qeoindex-eod-archive.ts")
   assert.match(
-    driveStep,
-    /try\s*\{[\s\S]*?return await runEodDriveArchive\([\s\S]*?\}\s*catch\s*\(error\)/,
-    "the Drive upload promise must be awaited inside try/catch so async rejection becomes a degraded checkpoint",
+    archive,
+    /export async function runEodDriveArchive\([\s\S]*?try\s*\{[\s\S]*?return await runLegacyDriveArchive\([\s\S]*?catch\s*\(error\)[\s\S]*?status:\s*"error"[\s\S]*?manifestUrl:\s*null/,
+    "Drive API rejection must resolve as an error checkpoint before the durable step can retry/fatal",
   )
-  assert.match(driveStep, /status:\s*"error" as const/)
-  assert.match(driveStep, /manifestUrl:\s*null/)
+  assert.match(archive, /raw Supabase history remains retained/i)
 })
