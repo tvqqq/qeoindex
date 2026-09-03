@@ -1,152 +1,113 @@
 # Market Board Stock Filter Design
 
 Date: 2026-09-03
-Status: Approved in chat; written-spec review pending
+Status: Written spec ready for review
 Branch: `feature/market-board-stock-filter`
 
 ## 1. Goal
 
-Add a third market-board mode, **Filter CP**, next to the existing **Tất cả** (`sector`) and **Top Movers** (`movers`) modes.
+Add a third market-board mode, **Filter CP**, next to **Tất cả** (`sector`) and **Top Movers** (`movers`).
 
 When the user applies a filter, the board must:
 
 - show only stocks satisfying the selected conditions;
-- persist filter criteria per authenticated user so the user does not need to configure them again on the next visit;
-- cache the resolved ticker list for the Vietnam trading day to avoid repeated database/data-source work;
-- subscribe the market WebSocket only to filtered stock symbols while Filter CP is active;
-- restore the full canonical universe subscription when the user returns to Tất cả or Top Movers;
+- persist filter criteria per authenticated user;
+- cache the resolved ticker list for the Vietnam trading day;
+- subscribe DNSE stock WebSocket channels only to filtered symbols while Filter CP is active;
+- restore the full canonical-universe subscription when the user returns to Tất cả or Top Movers;
 - keep market-index channels realtime in every mode;
-- preserve the current market-board performance architecture (ref-backed quote/history stores, ~250 ms visible quote commits, ~1 s ordering refresh).
+- preserve the current ref-backed quote/history stores, ~250 ms visible quote commits, and ~1 s ordering refresh.
 
-## 2. Current Architecture Relevant to This Change
+The feature operates on the current canonical Bảng điện universe (Top 200), not every listed Vietnamese stock.
 
-### 2.1 Server-rendered board model
+## 2. Current Architecture
 
-`app/page.tsx` currently loads the canonical market universe and builds the initial board model from bounded sources in parallel:
+### Server-rendered board model
 
-- canonical board snapshots;
-- broker batch quotes;
-- shared 5-minute intraday snapshot data.
+`app/page.tsx` loads the canonical market universe and builds the initial board model in parallel from canonical board snapshots, broker batch quotes, and the shared 5-minute intraday snapshot. Existing UI cache behavior remains unchanged.
 
-That model is cached by the existing UI cache for a short market-session TTL.
+### Canonical universe
 
-### 2.2 Canonical universe
+`lib/market-universe.ts` already exposes `ticker`, `exchange`, raw `sector`, market-cap metadata, and average-volume metadata. The client board model currently drops `exchange` and the raw sector label; this feature retains both.
 
-`lib/market-universe.ts` already exposes canonical stock metadata including:
+### User persistence
 
-- `ticker`;
-- `exchange`;
-- raw `sector`;
-- market-cap and average-volume metadata.
+`public.user_preferences.settings jsonb` is per-user and protected by ownership RLS. It is sufficient for one board-filter profile, so no new table or migration is required.
 
-The client board model currently reduces this metadata and does not retain `exchange` or the original sector label. This feature needs both values client-side.
+The generic `/api/me` route can replace the supplied `settings` object. Filter persistence therefore uses a dedicated endpoint that performs a server-side merge and cannot overwrite unrelated settings.
 
-### 2.3 User persistence
+### WebSocket
 
-`public.user_preferences` already has a per-user `settings jsonb` field protected by ownership RLS. This is sufficient for a single board-filter profile and avoids introducing another table.
-
-The generic `/api/me` settings update replaces the `settings` object passed by the client. Filter persistence therefore must use a dedicated endpoint/helper that performs a server-side merge and does not overwrite unrelated settings.
-
-### 2.4 WebSocket
-
-`components/live-market-board-v2.tsx` currently derives one `symbolList` from the entire board universe and subscribes it to DNSE stock channels such as:
-
-- `tick.G1.json`;
-- `top_price.G1.json`;
-- `ohlc.1.json`;
-- `foreign.G1.json`.
-
-Market index channels are subscribed separately and must remain active regardless of board mode.
+`components/live-market-board-v2.tsx` currently derives one full-universe `symbolList` and uses it for DNSE stock channels including `tick.G1.json`, `top_price.G1.json`, `ohlc.1.json`, and `foreign.G1.json`. Market-index channels are independent and remain active in all modes.
 
 ## 3. Product Behaviour
 
-### 3.1 Modes
-
-The mode selector becomes:
-
-1. `Tất cả`
-2. `Top Movers`
-3. `Filter CP`
-
-Internally the mode union becomes equivalent to:
+### Board modes
 
 ```ts
 type BoardMode = "sector" | "movers" | "filter"
 ```
 
-### 3.2 Opening Filter CP
+The mode selector renders:
 
-- If no saved criteria are available yet, clicking Filter CP opens the filter modal.
-- If valid saved criteria exist, clicking Filter CP immediately activates the last resolved/saved filter state.
-- The active Filter CP control exposes an edit affordance so the modal can be reopened without leaving the mode.
+1. `Tất cả`
+2. `Top Movers`
+3. `Filter CP`
 
-### 3.3 Filter modal
+### Opening Filter CP
 
-The modal contains four filter groups.
+- No valid saved criteria: clicking Filter CP opens the modal.
+- Valid saved criteria: clicking Filter CP activates the saved/daily-cached result immediately.
+- While Filter CP is active, an edit affordance reopens the modal without first switching modes.
+
+### Filter modal
 
 #### Exchange
 
-Multi-select values:
+Multi-select: `HOSE`, `HNX`, `UPCOM`.
 
-- HOSE
-- HNX
-- UPCOM
-
-Default: all selected.
-
-At least one exchange must remain selected before Apply is enabled.
+Default: all selected. Apply is disabled if none is selected.
 
 #### Price
 
-Input: `Giá cổ phiếu > ... đ`
+`Giá cổ phiếu > ... đ`
 
-Semantics:
-
-- blank or zero means no minimum-price constraint;
-- otherwise the predicate uses the latest valid board quote price at Apply time.
+- blank or zero = no minimum-price constraint;
+- otherwise use the latest valid board quote price at Apply time.
 
 #### Liquidity
 
-Input: `Thanh khoản > ... cp`
+`Thanh khoản > ... cp`
 
-Semantics:
-
-- blank or zero means no minimum-liquidity constraint;
-- otherwise the predicate uses current-session cumulative matched volume (`LiveStockQuote.volume`) at Apply time;
+- blank or zero = no minimum-liquidity constraint;
+- otherwise use current-session cumulative matched volume (`LiveStockQuote.volume`) at Apply time;
 - unit is shares, not traded value.
 
 #### KFSP sector
 
-- Options are the distinct raw sector labels from the canonical universe metadata, not the six grouped board-sector buckets used for board presentation.
-- All sectors are selected by default.
-- The user may uncheck sectors to hide them.
-- At least one sector must remain selected before Apply is enabled.
+- options are distinct raw canonical/KFSP sector labels, not the six grouped board-sector buckets;
+- all sectors selected by default;
+- user may uncheck sectors;
+- Apply disabled if no sector remains selected.
 
-### 3.4 Modal footer
+### Modal footer
 
-The modal shows a live preview count in the form:
+Show live preview count: `Đã chọn N / TOTAL CP`.
 
-`Đã chọn N / TOTAL CP`
+Actions: `Hủy`, `Áp dụng`.
 
-Actions:
-
-- `Hủy`
-- `Áp dụng`
-
-Apply updates the active filtered ticker set, persists criteria, updates the daily cache, closes the modal, and activates Filter CP mode.
+Apply re-evaluates the filter, stores the daily ticker cache, persists criteria, closes the modal, and activates Filter CP.
 
 ## 4. Data Model
 
-### 4.1 Client board universe
-
-Extend `BoardUniverseStock` / `LiveBoardStock` data supplied by the page with the metadata needed for filtering:
+Extend the client board-universe stock shape with filtering metadata:
 
 ```ts
 interface BoardUniverseStock {
   ticker: string
   rank: number
-  sector: string               // existing grouped/presentation sector
-  kfspSector: string            // raw canonical sector label
+  sector: string
+  kfspSector: string
   exchange: "HOSE" | "HNX" | "UPCOM" | string
   marketCapT: number
   lastClose: number | null
@@ -154,13 +115,9 @@ interface BoardUniverseStock {
 }
 ```
 
-`app/page.tsx` maps `canonical.stocks[].exchange` and `canonical.stocks[].sector` into these fields while preserving the current grouped `sector` used by board layout.
+`sector` remains the grouped presentation sector. `kfspSector` is the raw canonical/KFSP sector.
 
-### 4.2 Persisted criteria
-
-Store one filter profile under `user_preferences.settings.marketBoard.stockFilter`.
-
-Proposed shape:
+Persist one profile at `user_preferences.settings.marketBoard.stockFilter`:
 
 ```ts
 interface StockFilterCriteriaV1 {
@@ -173,61 +130,56 @@ interface StockFilterCriteriaV1 {
 }
 ```
 
-Validation rules:
+Validation:
 
-- exchanges are normalized/unique and restricted to supported values;
-- price and volume must be finite, non-negative numbers when present;
-- sectors are normalized/unique non-empty strings and intersected with current canonical sector options;
-- payload size remains bounded by the existing preferences settings limit.
-
-Invalid or obsolete saved criteria fail closed to safe defaults in the modal rather than breaking the board.
+- exchanges normalized, unique, and restricted to supported values;
+- price/volume finite and non-negative when present;
+- sectors normalized, unique, non-empty, and intersected with current canonical sector options;
+- invalid/obsolete saved criteria fall back to default modal values instead of breaking the board.
 
 ## 5. Persistence API
 
-Add an authenticated endpoint dedicated to the market-board filter, for example:
+Create exactly:
 
-`/api/me/market-board-filter`
+`app/api/me/market-board-filter/route.ts`
 
-### GET
+### GET `/api/me/market-board-filter`
 
-Returns the validated saved criteria or `null`.
+Returns authenticated user ID plus validated saved criteria or `null`.
 
-### PUT/PATCH
+### PUT `/api/me/market-board-filter`
 
-- validates the submitted criteria;
-- reads the current `user_preferences.settings` value;
-- merges only `settings.marketBoard.stockFilter`;
-- upserts the resulting settings object for the authenticated user;
-- never replaces unrelated settings keys.
+- authenticate user;
+- validate submitted criteria;
+- read current `user_preferences.settings`;
+- merge only `settings.marketBoard.stockFilter`;
+- upsert the merged settings object for that user;
+- return normalized persisted criteria;
+- preserve every unrelated settings key.
 
-No new database table or migration is required.
+No new Supabase schema is introduced.
 
 ## 6. Filter Evaluation
 
-Filtering is performed against data already present in the board client model.
+Filtering uses already-loaded board data.
 
 For each stock:
 
 1. exchange must be selected;
 2. raw KFSP sector must be selected;
-3. if `minPriceVnd` exists, latest valid quote price must be greater than the threshold;
-4. if `minVolumeShares` exists, current-session cumulative quote volume must be greater than the threshold.
+3. if `minPriceVnd` exists, price must be strictly greater than the threshold;
+4. if `minVolumeShares` exists, current-session volume must be strictly greater than the threshold.
 
-Price/volume fallback rule at Apply time:
+Data fallback at Apply time:
 
-- prefer current `quotesRef` / committed quote;
-- price may fall back to the stock's valid SSR `lastClose` only when no current quote is available;
-- volume has no historical fallback because the requested meaning is current-session liquidity; a missing volume does not pass a positive liquidity threshold.
+- price: current ref-backed/committed quote first, then valid SSR `lastClose` if current quote is absent;
+- volume: current-session quote volume only; missing volume fails a positive liquidity threshold.
 
-The filtered ticker set is frozen after Apply for the rest of that cache entry. Quotes for those tickers continue updating realtime, but symbols do not automatically enter/leave the result as price or volume crosses a threshold. Reopening the modal and pressing Apply re-evaluates immediately.
-
-This behaviour makes daily caching deterministic and matches the approved product assumption.
+The resolved ticker set is frozen for that cache entry after Apply. Selected tickers continue updating realtime, but symbols do not automatically enter/leave as price or volume crosses a threshold. Opening the modal and pressing Apply re-evaluates immediately.
 
 ## 7. Daily Resolved-List Cache
 
-The resolved list must not require a database query.
-
-Use a browser local-storage cache scoped by authenticated user and filter identity. A cache entry contains:
+Use browser `localStorage`; do not query the database to resolve the ticker set.
 
 ```ts
 interface StockFilterDailyCacheV1 {
@@ -241,32 +193,22 @@ interface StockFilterDailyCacheV1 {
 }
 ```
 
-Suggested key namespace:
+Key namespace:
 
 `stockos:market-board-filter:v1:<userId>`
 
-A cache hit is valid only when all of the following match:
+A cache hit requires exact match of:
 
 - authenticated user ID;
-- Vietnam date (`Asia/Ho_Chi_Minh`);
-- canonical universe `runId`;
+- Vietnam date in `Asia/Ho_Chi_Minh`;
+- canonical `universeRunId`;
 - stable hash of normalized criteria.
 
-Invalidate/recompute when:
-
-- the user changes filter criteria;
-- the Vietnam date changes;
-- canonical universe version changes;
-- cached ticker payload contains symbols no longer in the current universe;
-- cache JSON is invalid.
-
-Because resolution uses the already-loaded board universe and quote state, there is no repeated DB scan to compute the filter result.
+Invalidate/recompute on criteria change, Vietnam-date change, canonical-universe version change, invalid JSON, or cached symbols that no longer belong to the current universe.
 
 ## 8. WebSocket Subscription Design
 
-### 8.1 Active stock symbols
-
-Derive:
+### Active stock symbols
 
 ```ts
 const activeStockSymbols = mode === "filter"
@@ -274,180 +216,180 @@ const activeStockSymbols = mode === "filter"
   : fullUniverseTickers
 ```
 
-The DNSE stock-channel payload is built exclusively from `activeStockSymbols`.
+All DNSE stock-channel payloads use only `activeStockSymbols`.
 
-Market-index channels remain unchanged and are included in all modes.
+Index channels always remain active. Existing `VN30F1M` handling remains active where required by the OHLC/index-chart flow.
 
-`VN30F1M` remains included where the existing OHLC/index-chart flow requires it.
+### Resubscription strategy
 
-### 8.2 Safe resubscription
+Do not rely on browser-side dynamic DNSE unsubscribe semantics.
 
-Do not depend on undocumented/incompletely tested dynamic unsubscribe behaviour in the browser component.
+- Build a stable `activeSymbolKey` from `activeStockSymbols`.
+- Make the existing WebSocket lifecycle depend on this key.
+- When it changes, cleanly dispose the old socket/effect.
+- Reconnect/authenticate once.
+- Subscribe using the new active symbol set.
 
-Preferred implementation:
+With Filter CP active, the socket must not subscribe to stock symbols outside the filtered set.
 
-- make the existing WebSocket effect depend on a stable active-symbol key;
-- when the active symbol set changes, cleanly dispose the previous socket/effect;
-- reconnect/authenticate once;
-- subscribe using the new symbol set.
+### Returning to Tất cả / Top Movers
 
-This ensures that while Filter CP is active, the connection no longer receives realtime stock streams for symbols outside the filter.
-
-### 8.3 Returning to full-universe modes
-
-Switching from Filter CP to Tất cả or Top Movers must not treat old off-filter quotes as freshly synchronized.
-
-On active-symbol expansion:
+Switching from Filter CP back to a full-universe mode expands the active symbol set and may expose stale off-filter quote state. Therefore:
 
 1. set stream state to `CONNECTING`;
-2. reconnect the WebSocket with the full canonical universe;
-3. reconcile newly reactivated stock quotes with a bounded current quote snapshot before marking the board fully synchronized;
-4. resume normal realtime updates.
+2. reconnect WebSocket with the full canonical universe;
+3. reconcile newly reactivated symbols through the dedicated current-quote endpoint below;
+4. merge those quotes into the existing ref-backed store;
+5. only then allow the stream to be considered synchronized/LIVE according to the existing connection lifecycle.
 
-If a lightweight authenticated current-quote endpoint does not already exist, add one backed by the existing `fetchLiveBatchQuotes(symbols)` path. It should accept only symbols from the canonical board universe, bound the maximum symbol count to the universe limit, and use the same very short live-session caching principles as the board SSR path.
+Create exactly:
 
-This reconcile step prevents a symbol that had no new trade immediately after resubscription from remaining silently stale.
+`app/api/market/quotes/route.ts`
 
-### 8.4 Index correctness
+`GET /api/market/quotes?symbols=AAA,BBB,...`
 
-Index channels are independent of Filter CP and always stay realtime:
+Contract:
 
-- VNINDEX
-- VN30
-- HNX
-- UPCOM
+- authenticated market-board access required;
+- normalize/unique requested symbols;
+- reject symbols outside the current canonical board universe;
+- enforce maximum requested count equal to canonical universe limit;
+- use existing `fetchLiveBatchQuotes(symbols)`;
+- apply very short live-session cache behavior compatible with board SSR caching;
+- return a normalized quote map for requested symbols only.
 
-## 9. Rendering Behaviour
+This reconcile step prevents a stock with no immediate post-resubscription trade from silently retaining an old Filter-CP-era snapshot.
 
-### Filter CP mode
+### Empty filtered result
 
-Render only `filteredUniverse` while preserving existing stock-row/card components and quote/history stores.
+If no stock matches, stock channel lists are empty. Only index/futures channels required by existing board/index functionality are subscribed. Never fall back to the full universe.
 
-The feature should reuse the existing ref-backed quote/history architecture rather than create a second realtime state store.
+## 9. Rendering and Watchlist Behaviour
 
-### Tất cả / Top Movers
+Filter CP renders `filteredUniverse` through existing board row/card components and existing quote/history stores; it does not introduce a second realtime store.
 
-Their existing visual semantics remain unchanged except for using the full-universe active subscription again.
+Tất cả and Top Movers keep their current rendering semantics.
 
-Watchlist behaviour remains independent from filtering. If a watchlist section is rendered outside the filtered board sections, it must not force realtime subscriptions for out-of-filter symbols while Filter CP is active. Out-of-filter watchlist rows may display their last known snapshot until the user leaves Filter CP or opens a dedicated detail/orderbook flow that already manages its own subscription.
+The watchlist must not force out-of-filter symbols into the market-board WS subscription while Filter CP is active. Out-of-filter watchlist rows may show their last known snapshot until the board returns to a full-universe mode. Dedicated orderbook/detail flows keep using their own existing subscription lifecycle.
 
 ## 10. Error Handling
 
-### Preferences GET fails
+### Preference GET failure
 
-- board continues to operate normally;
-- opening Filter CP uses defaults;
-- surface a compact non-blocking error in the modal if appropriate.
+- board remains usable;
+- Filter CP opens with default criteria;
+- modal shows one compact inline error stating saved filters could not be loaded.
 
-### Preferences save fails
+### Preference PUT failure
 
-- keep the just-applied filter active locally;
-- show that persistence failed so the user knows the setting may not survive another browser/device session;
-- do not discard the local result.
+- just-applied filter stays active locally;
+- daily local cache is retained;
+- modal/toast shows that cloud persistence failed and the criteria may not restore on another browser/device.
 
-### Daily cache invalid
+### Invalid local cache
 
-Ignore and recompute locally.
+Ignore it and recompute locally without surfacing an error.
 
-### Filter matches zero symbols
+### Zero matches
 
-- Filter CP stays active;
-- render an explicit empty state;
-- WebSocket subscribes only index/futures channels needed by the board, with no stock symbols.
+Filter CP stays active and renders an explicit empty state with an edit-filter action.
 
-### WebSocket resubscription fails
+### WS/reconcile failure
 
-Use the existing reconnect/error state machinery. Do not silently fall back to receiving the full universe while Filter CP is selected.
+Use existing reconnect/error machinery and display existing stream error state. Never silently switch Filter CP back to a full-universe subscription.
 
-## 11. Performance Constraints
+## 11. Performance and Integrity Constraints
 
-Must preserve the current market-board performance protections:
+Preserve:
 
-- no full quote-map clone on every tick;
-- visible quote commit remains bounded by `MARKET_UI_COMMIT_MS` (~250 ms);
-- ordering work remains decoupled at `MARKET_ORDERING_REFRESH_MS` (~1 s);
-- no DB query per filter predicate or per rendered stock;
-- filter predicate evaluation is linear in the canonical universe size and only recomputed when criteria or required quote state changes for preview/apply;
-- daily resolved ticker cache avoids repeated filter resolution across remounts/navigation for unchanged criteria.
+- ref-backed per-symbol quote/history writes;
+- `MARKET_UI_COMMIT_MS` (~250 ms);
+- `MARKET_ORDERING_REFRESH_MS` (~1 s);
+- no full quote-map clone on every tick.
 
-## 12. Security and Data Integrity
+Add no DB/data-source N+1 pattern:
 
-- Filter preference APIs require authenticated users.
-- Persistence writes only the caller's RLS-owned `user_preferences` row.
-- Server validates and normalizes all saved settings.
-- Any current-quote reconcile endpoint restricts requested symbols to the canonical board universe and enforces a bounded symbol count.
-- Client-side cache is an optimization only; the current canonical universe is the authority for symbol validity.
+- no query per filter predicate;
+- no query per rendered stock;
+- filter evaluation is O(canonical universe size);
+- daily resolved-list cache avoids repeat resolution for unchanged criteria;
+- quote reconcile is one bounded batch request on active-symbol expansion.
 
-## 13. Expected Files / Components
+Security/data integrity:
 
-Likely implementation surface:
+- preference and quote endpoints require authenticated access;
+- filter writes remain constrained to the caller's RLS-owned preferences row;
+- current-quote endpoint accepts only canonical board symbols;
+- localStorage cache is optimization only; current canonical universe is authority for symbol validity.
 
-- `app/page.tsx` — pass raw exchange/KFSP sector, user ID, universe run ID as needed.
-- `components/live-market-board-v2.tsx` — mode, modal integration, filtered universe, active subscription set, resync lifecycle.
-- new focused filter UI component such as `components/market-board/stock-filter-modal.tsx`.
-- new pure filter/cache helpers under `lib/market-board/`.
-- `app/api/me/market-board-filter/route.ts` — validated per-user persistence with JSON merge.
-- optional lightweight current-quote reconciliation route under `app/api/market/` if no suitable existing route is available.
-- tests for filter logic, persistence merge, WS subscription contract, UI contract, and performance regressions.
+## 12. Implementation Surface
 
-Avoid unrelated refactors of the already stable market-board components.
+Expected files:
 
-## 14. Test Plan
+- `app/page.tsx` — add `exchange` and `kfspSector` to client universe; pass `auth.user.id` and `canonical.runId` to `LiveMarketBoardV2`.
+- `components/live-market-board-v2.tsx` — add filter mode, filtered universe, active symbol set, modal integration, WS lifecycle, and quote reconcile.
+- `components/market-board/stock-filter-modal.tsx` — focused modal UI.
+- `lib/market-board/stock-filter.ts` — pure criteria normalization, predicate, hash, and sector-option helpers.
+- `lib/market-board/stock-filter-cache.ts` — local daily-cache helpers.
+- `app/api/me/market-board-filter/route.ts` — GET/PUT persistence merge.
+- `app/api/market/quotes/route.ts` — bounded current-quote reconcile endpoint.
+- focused tests under `tests/`.
 
-### Pure/unit tests
+Avoid unrelated refactors of stable market-board components.
+
+## 13. Test Plan
+
+### Pure tests
 
 - criteria normalization;
-- exchange multi-select predicate;
-- price threshold predicate;
-- current-session volume threshold predicate;
-- KFSP raw-sector predicate;
-- combined filter predicate;
-- zero-result behaviour;
+- exchange, price, volume, sector predicates;
+- combined predicate;
+- missing-volume behavior;
+- zero-result behavior;
 - deterministic filter hash;
-- daily cache validation/invalidation for date, universe run, criteria change, malformed payload.
+- cache invalidation by date, universe run, criteria, malformed payload, stale symbols.
 
 ### API tests
 
 - unauthenticated access rejected;
-- valid GET returns criteria;
-- valid write merges only the stock-filter key;
-- unrelated settings survive the write;
-- invalid exchange/sector/numeric payload rejected or normalized according to contract;
-- payload-size bound preserved.
+- GET returns criteria/null;
+- PUT merges only stock-filter settings;
+- unrelated settings survive;
+- invalid criteria rejected/normalized according to contract;
+- quote endpoint rejects non-canonical symbols and oversized requests;
+- quote endpoint returns only requested canonical symbols.
 
-### WebSocket regression tests
+### WS regression tests
 
 - Filter CP stock channels contain only filtered symbols;
-- Tất cả and Top Movers contain the full canonical symbol set;
-- market-index channels remain present in all modes;
-- empty filter result does not accidentally subscribe the full universe;
-- mode expansion triggers reconnect/reconcile state rather than reusing stale off-filter data.
+- Tất cả/Top Movers use the full canonical symbols;
+- index channels remain in every mode;
+- empty result does not subscribe full universe;
+- full-universe expansion enters reconnect/reconcile state before synchronized state.
 
 ### UI contract tests
 
-- third Filter CP tab exists beside current modes;
-- modal exposes all four requested filter groups;
-- all exchanges and all KFSP sectors are selected by default;
-- preview count is rendered;
-- saved criteria can activate Filter CP without forcing first-time setup again;
-- edit flow reopens modal;
-- empty result has an explicit state.
+- Filter CP is the third mode;
+- modal contains all four requested filter groups;
+- default exchanges/sectors are all selected;
+- preview count renders;
+- saved criteria activate without repeated setup;
+- edit action reopens modal;
+- zero-result empty state is explicit.
 
 ### Regression verification
 
-Run the existing market-board visual/performance tests, relevant auth/API tests, typecheck, and production build before completion.
+Run existing market-board visual/performance tests, relevant auth/API tests, typecheck, and production build.
 
-## 15. Acceptance Criteria
-
-The feature is accepted when:
+## 14. Acceptance Criteria
 
 1. Filter CP exists next to Tất cả and Top Movers.
 2. Exchange, minimum price, minimum current-session volume, and KFSP-sector filters work together.
-3. Filter criteria persist per user and are restored on a later visit.
-4. The resolved ticker list is cached for the Vietnam day and invalidated correctly when date, universe, or criteria change.
-5. While Filter CP is active, DNSE stock realtime subscriptions contain only filtered tickers.
+3. Criteria persist per authenticated user and restore on a later visit.
+4. Resolved ticker list is cached for the Vietnam day and invalidates on date, universe, or criteria changes.
+5. Filter CP DNSE stock subscriptions contain only filtered tickers.
 6. Market indexes remain realtime in Filter CP.
-7. Returning to Tất cả/Top Movers restores the full universe and reconciles stale off-filter quotes before considering the board synchronized.
+7. Returning to Tất cả/Top Movers restores the full universe and reconciles stale off-filter quotes before synchronized state.
 8. Existing market-board render-frequency/performance protections remain intact.
 9. No N+1 database/data-source pattern is introduced.
-10. Existing board functionality continues to pass regression tests.
+10. Existing board functionality passes regression tests.
