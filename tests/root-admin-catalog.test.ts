@@ -125,6 +125,28 @@ test("Top Stocks 200 admin contracts stay aligned with the canonical runtime", (
   assert.equal(ingest.manualPurpose, "maintenance")
 })
 
+test("QEO-63 EOD v4 Admin catalog mirrors runtime dependency ownership without Drive", () => {
+  const eod = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "qeoindex.eod_pipeline")
+  assert.ok(eod)
+  assert.equal(eod.dependencies?.includes("DRIVE_ARCHIVE"), false)
+  assert.deepEqual(eod.dependencies, [
+    "KFSP_RATING_REFRESH",
+    "TTAI_REFRESH",
+    "MARKET_CLOSE_COLLECT",
+    "EOD_READY",
+    "HISTORY_REFRESH",
+    "WYCKOFF_BUILD",
+    "SUPABASE_VALIDATE",
+    "SUPABASE_PUBLISH",
+    "AI_COUNCIL_DETERMINISTIC",
+    "MARKET_SYNTHESIS",
+    "AI_COUNCIL_LLM",
+    "RETENTION_CLEANUP",
+    "NOTION_ARCHIVE",
+    "COMPLETE",
+  ])
+})
+
 test("job catalog has all documented jobs with concrete thresholds", () => {
   const jobKeys = ADMIN_JOB_CATALOG.map((j) => j.key)
   assert.equal(new Set(jobKeys).size, jobKeys.length)
