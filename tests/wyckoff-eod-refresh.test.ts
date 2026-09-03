@@ -140,7 +140,8 @@ test("unified EOD workflow remains fail-closed in dependency order", () => {
   const body = workflow.slice(workflow.indexOf("export async function qeoindexEodPipeline"))
   const ordered = [
     "runEodReadyStep", "runHistoryRefreshBatchStep", "runWyckoffBuildStep", "runSupabaseValidateStep",
-    "runSupabasePublishStep", "runDeterministicCouncilStep", "runLlmDebateStep", "runNotionArchiveStep",
+    "runSupabasePublishStep", "runDeterministicCouncilStep", "runLlmDebateStep",
+    "runNotionUniverseArchiveBatchStep", "runNotionEodArchiveBatchStep", "runNotionArchiveFinalizeStep",
     "runDriveArchiveStep", "runRetentionCleanupStep",
   ]
   let cursor = -1
