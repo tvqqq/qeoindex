@@ -2,6 +2,11 @@ import "server-only"
 
 import { runAiCouncilDailyOperation, runAiCouncilDebateOperation } from "@/lib/ai-council-operations"
 import { markQeoIndexEodPhaseSkipped, runQeoIndexEodPhase } from "@/lib/admin/job-phase-telemetry"
+import {
+  archiveCanonicalUniverseBatchToNotion,
+  archiveEodTickerBatchToNotion,
+  type EodArchiveCheckpoint,
+} from "@/lib/qeoindex-eod-archive"
 import { getCanonicalUniverse } from "@/lib/market-universe"
 import { refreshOhlcvHistoryBatch, type OhlcvUniverseRefreshResult } from "@/lib/ohlcv-history-store"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
@@ -21,7 +26,6 @@ export {
   runEodReadyStep,
   runMarketCloseCollectStep,
   runMarketSynthesisStep,
-  runNotionArchiveStep,
   runRetentionCleanupStep,
   startQeoIndexEodRunStep,
 } from "./qeoindex-eod-workflow-steps-legacy"
@@ -310,5 +314,154 @@ export async function runLlmDebateStep(runId: string, enabled = true, ratingDate
       completed: "completed" in result ? result.completed : undefined,
       totalTokens: "totalTokens" in result ? result.totalTokens : undefined,
     }),
+  })
+}
+
+function archiveFailure(error: unknown, requested: number): EodArchiveCheckpoint {
+  return {
+    status: "error",
+    archived: 0,
+    requested,
+    detail: error instanceof Error ? error.message : String(error),
+  }
+}
+
+function aggregateArchiveCheckpoints(checkpoints: EodArchiveCheckpoint[]): EodArchiveCheckpoint {
+  if (!checkpoints.length) return { status: "skipped", archived: 0, requested: 0, detail: "No archive batches" }
+  const statuses = checkpoints.map((checkpoint) => checkpoint.status)
+  const status: EodArchiveCheckpoint["status"] = statuses.every((value) => value === "archived")
+    ? "archived"
+    : statuses.some((value) => value === "error")
+      ? "error"
+      : statuses.some((value) => value === "partial")
+        ? "partial"
+        : statuses.some((value) => value === "blocked")
+          ? "blocked"
+          : "skipped"
+  return {
+    status,
+    archived: checkpoints.reduce((sum, checkpoint) => sum + Number(checkpoint.archived || 0), 0),
+    requested: checkpoints.reduce((sum, checkpoint) => sum + Number(checkpoint.requested || 0), 0),
+    detail: checkpoints.map((checkpoint) => checkpoint.detail).filter(Boolean).slice(0, 10).join(" | ") || undefined,
+  }
+}
+
+function combinedArchiveStatus(
+  universeArchive: EodArchiveCheckpoint,
+  eodArchive: EodArchiveCheckpoint,
+): EodArchiveCheckpoint["status"] {
+  const statuses = [universeArchive.status, eodArchive.status]
+  if (statuses.every((status) => status === "archived")) return "archived"
+  if (statuses.some((status) => status === "error")) return "error"
+  if (statuses.some((status) => status === "partial")) return "partial"
+  if (statuses.some((status) => status === "blocked")) return "blocked"
+  return "skipped"
+}
+
+export async function runNotionUniverseArchiveBatchStep(
+  runId: string,
+  input: { universeRunId: string },
+  stocks: WyckoffV2UniverseRow[],
+) {
+  "use step"
+  if (stocks.length < 1 || stocks.length > 8) {
+    throw Object.assign(new Error(`NOTION_ARCHIVE universe batch must contain 1-8 tickers; received ${stocks.length}`), { code: "NOTION_ARCHIVE_FAILED" })
+  }
+  return runQeoIndexEodPhase({
+    runId,
+    phaseKey: "NOTION_ARCHIVE",
+    fn: async (): Promise<EodArchiveCheckpoint> => {
+      try {
+        const canonical = await getCanonicalUniverse()
+        if (canonical.runId !== input.universeRunId) {
+          return archiveFailure(new Error(`Canonical universe changed during Notion archive: ${canonical.runId} != ${input.universeRunId}`), stocks.length)
+        }
+        const requested = new Set(stocks.map((stock) => stock.ticker))
+        const archiveStocks = canonical.stocks.filter((stock) => requested.has(stock.ticker))
+        if (archiveStocks.length !== stocks.length) {
+          return archiveFailure(new Error(`Canonical Notion universe batch mismatch ${archiveStocks.length}/${stocks.length}`), stocks.length)
+        }
+        const result = await archiveCanonicalUniverseBatchToNotion({
+          universeRunId: canonical.runId,
+          sourceDate: canonical.sourceAsOfDate,
+          minMarketCapBillion: canonical.filters.minMarketCapBillion,
+          minAverageVolume50d: canonical.filters.minAverageVolume50d,
+          stocks: archiveStocks,
+        })
+        return {
+          status: result.status,
+          archived: result.archived,
+          requested: result.requested,
+          detail: [
+            "detail" in result ? result.detail : undefined,
+            "errors" in result && Array.isArray(result.errors) ? result.errors.slice(0, 5).join(" | ") : undefined,
+          ].filter(Boolean).join(" | ") || undefined,
+        }
+      } catch (error) {
+        return archiveFailure(error, stocks.length)
+      }
+    },
+    summarize: (result) => ({ ...result, batchKind: "universe" }),
+  })
+}
+
+export async function runNotionEodArchiveBatchStep(
+  runId: string,
+  input: { tradingDate: string; universeRunId: string; validationHash: string },
+  stocks: WyckoffV2UniverseRow[],
+) {
+  "use step"
+  if (stocks.length < 1 || stocks.length > 8) {
+    throw Object.assign(new Error(`NOTION_ARCHIVE EOD batch must contain 1-8 tickers; received ${stocks.length}`), { code: "NOTION_ARCHIVE_FAILED" })
+  }
+  return runQeoIndexEodPhase({
+    runId,
+    phaseKey: "NOTION_ARCHIVE",
+    fn: async (): Promise<EodArchiveCheckpoint> => {
+      try {
+        const canonical = await getCanonicalUniverse()
+        if (canonical.runId !== input.universeRunId) {
+          return archiveFailure(new Error(`Canonical universe changed during EOD archive: ${canonical.runId} != ${input.universeRunId}`), stocks.length)
+        }
+        const requested = new Set(stocks.map((stock) => stock.ticker))
+        const archiveStocks = canonical.stocks.filter((stock) => requested.has(stock.ticker))
+        if (archiveStocks.length !== stocks.length) {
+          return archiveFailure(new Error(`Canonical EOD archive batch mismatch ${archiveStocks.length}/${stocks.length}`), stocks.length)
+        }
+        return archiveEodTickerBatchToNotion(requiredSupabase(), {
+          tradingDate: input.tradingDate,
+          universeRunId: input.universeRunId,
+          validationHash: input.validationHash,
+          stocks: archiveStocks,
+        })
+      } catch (error) {
+        return archiveFailure(error, stocks.length)
+      }
+    },
+    summarize: (result) => ({ ...result, batchKind: "eod" }),
+  })
+}
+
+export async function runNotionArchiveFinalizeStep(
+  runId: string,
+  universeBatches: EodArchiveCheckpoint[],
+  eodBatches: EodArchiveCheckpoint[],
+) {
+  "use step"
+  return runQeoIndexEodPhase({
+    runId,
+    phaseKey: "NOTION_ARCHIVE",
+    fn: async (): Promise<EodArchiveCheckpoint & { universeArchiveStatus: string }> => {
+      const universeArchive = aggregateArchiveCheckpoints(universeBatches)
+      const eodArchive = aggregateArchiveCheckpoints(eodBatches)
+      return {
+        status: combinedArchiveStatus(universeArchive, eodArchive),
+        archived: Number(universeArchive.archived || 0) + Number(eodArchive.archived || 0),
+        requested: Number(universeArchive.requested || 0) + Number(eodArchive.requested || 0),
+        universeArchiveStatus: universeArchive.status,
+        detail: [universeArchive.detail, eodArchive.detail].filter(Boolean).join(" | ") || undefined,
+      }
+    },
+    summarize: (result) => result,
   })
 }
