@@ -128,6 +128,26 @@ test("daily signals scans the full canonical universe instead of a positional To
   assert.doesNotMatch(scannerRunner, /100 cache invalidations/)
 })
 
+test("QEO-47 preserves canonical Wyckoff five-timeframe snapshot semantics", () => {
+  const catalog = source("lib/admin/catalog.ts")
+  const settings = source("lib/admin/settings.ts")
+
+  assert.doesNotMatch(catalog, /2 timeframe active/)
+  assert.doesNotMatch(settings, /2 timeframe active/)
+  assert.match(catalog, /200 mã × 5 timeframe/)
+  assert.match(settings, /200 mã × 5 timeframe/)
+  assert.match(catalog, /defaultValue:\s*1_000/)
+  assert.match(settings, /defaultValue:\s*1_000/)
+})
+
+test("Admin timeline table is built from lane rows so manual recovery duplicates remain visible", () => {
+  const timelineComponent = source("components/admin/admin-cron-timeline.tsx")
+
+  assert.match(timelineComponent, /timeline\.lanes\.flatMap/)
+  assert.match(timelineComponent, /laneId/)
+  assert.match(timelineComponent, /key=\{`\$\{laneId\}:\$\{node\.key\}`\}/)
+})
+
 test("Timeline component adheres to UI Lessons Learned performance constraints", () => {
   const timelineComponent = source("components/admin/admin-cron-timeline.tsx")
   const summaryComponent = source("components/admin/admin-job-audit-summary.tsx")
