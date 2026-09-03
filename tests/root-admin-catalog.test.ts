@@ -97,7 +97,8 @@ test("Top Stocks 200 admin contracts stay aligned with the canonical runtime", (
 
   const requiredSnapshots = ADMIN_SETTING_CATALOG.find((setting) => setting.key === "wyckoff.required_snapshots")
   assert.ok(requiredSnapshots)
-  assert.equal(requiredSnapshots.defaultValue, 400)
+  assert.equal(requiredSnapshots.defaultValue, 1_000)
+  assert.match(requiredSnapshots.description, /5 timeframe/)
 
   const marketSync = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "market.sync_universe")
   assert.ok(marketSync)

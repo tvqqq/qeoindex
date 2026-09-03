@@ -89,7 +89,11 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
     return true
   }
 
-  const filteredNodes = timeline.allNodes.filter((node) => matchesFilter(node, node.lane))
+  const filteredLaneRows = timeline.lanes.flatMap((lane) =>
+    lane.jobs
+      .filter((node) => matchesFilter(node, lane.id))
+      .map((node) => ({ laneId: lane.id, node })),
+  )
 
   return (
     <section
@@ -242,8 +246,8 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.04] text-slate-300">
-              {filteredNodes.map((node) => (
-                <tr key={node.key} className="transition-colors hover:bg-white/[0.02]">
+              {filteredLaneRows.map(({ laneId, node }) => (
+                <tr key={`${laneId}:${node.key}`} className="transition-colors hover:bg-white/[0.02]">
                   <td className="whitespace-nowrap px-3.5 py-2.5 font-mono text-white">
                     <span className="font-bold">{node.timeIctLabel}</span>
                     <span className="ml-1 text-[10px] text-slate-400">({node.daysLabel})</span>
