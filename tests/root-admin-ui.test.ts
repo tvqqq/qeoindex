@@ -96,7 +96,7 @@ test("admin job detail renders phase telemetry for the unified EOD pipeline", ()
   assert.match(page, /QEOINDEX_EOD_JOB_KEY/)
 
   const timeline = source("components/admin/admin-job-phase-timeline.tsx")
-  assert.match(timeline, /buildAdminJobPhaseTimeline/)
+  assert.match(timeline, /buildAdminEodRunView/)
   assert.match(timeline, /phase\.key/)
   assert.match(timeline, /phase\.status/)
   assert.match(timeline, /phase\.summary/)
