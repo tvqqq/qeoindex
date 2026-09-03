@@ -16,9 +16,7 @@ test("Filter CP is injected beside the existing Tất cả and Top movers contro
 })
 
 test("filter modal exposes exchanges, price, liquidity, KFSP sectors and preview", () => {
-  assert.match(modalSource, /HOSE/)
-  assert.match(modalSource, /HNX/)
-  assert.match(modalSource, /UPCOM/)
+  assert.match(modalSource, /BOARD_EXCHANGES\.map/)
   assert.match(modalSource, /Giá cổ phiếu/)
   assert.match(modalSource, /Thanh khoản/)
   assert.match(modalSource, /Ngành nghề/)
