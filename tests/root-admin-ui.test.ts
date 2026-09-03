@@ -177,3 +177,131 @@ test("QEO-52 job detail uses canonical evidence and labels active workflow progr
   assert.match(page, /Last completed quality/)
   assert.match(catalog, /07:00–07:59/)
 })
+
+test("QEO-63 groups durable EOD telemetry into seven operator phases with explicit PARTIAL retry state", async () => {
+  const module = await import("../lib/admin/job-phases.ts") as Record<string, unknown>
+  const buildRunView = module.buildAdminEodRunView as ((
+    rows: Array<Record<string, unknown>>,
+    run: Record<string, unknown> | null,
+  ) => {
+    terminalStatus: string
+    tradingDate: string | null
+    universeRunId: string | null
+    universeCount: number | null
+    healthyCount: number | null
+    failedCount: number | null
+    failedTickers: string[]
+    retryEligibleTickers: string[]
+    retryAvailable: boolean
+    phases: Array<{ key: string; status: string; children: Array<{ key: string }> }>
+  }) | undefined
+
+  assert.equal(typeof buildRunView, "function", "QEO-63 requires a grouped EOD run view model")
+  if (!buildRunView) return
+
+  const view = buildRunView(
+    [
+      {
+        id: "phase-rating",
+        run_id: "11111111-1111-4111-8111-111111111111",
+        job_key: "qeoindex.eod_pipeline",
+        phase_key: "KFSP_RATING_REFRESH",
+        phase_order: 1,
+        status: "succeeded",
+        started_at: "2026-09-03T08:15:00.000Z",
+        finished_at: "2026-09-03T08:15:03.000Z",
+        duration_ms: 3000,
+        summary: { status: "published" },
+      },
+      {
+        id: "phase-market",
+        run_id: "11111111-1111-4111-8111-111111111111",
+        job_key: "qeoindex.eod_pipeline",
+        phase_key: "MARKET_CLOSE_COLLECT",
+        phase_order: 3,
+        status: "running",
+        started_at: "2026-09-03T08:15:03.000Z",
+        summary: { retrying: true, attemptsUsed: 1, nextAttemptAt: "2026-09-03T08:20:03.000Z" },
+      },
+      {
+        id: "phase-ready",
+        run_id: "11111111-1111-4111-8111-111111111111",
+        job_key: "qeoindex.eod_pipeline",
+        phase_key: "EOD_READY",
+        phase_order: 4,
+        status: "succeeded",
+        started_at: "2026-09-03T08:20:04.000Z",
+        finished_at: "2026-09-03T08:20:05.000Z",
+        duration_ms: 1000,
+        summary: { scanDate: "2026-09-03", universeRunId: "universe-2026-09-03", universeCount: 200 },
+      },
+      {
+        id: "phase-complete",
+        run_id: "11111111-1111-4111-8111-111111111111",
+        job_key: "qeoindex.eod_pipeline",
+        phase_key: "COMPLETE",
+        phase_order: 14,
+        status: "succeeded",
+        started_at: "2026-09-03T08:30:00.000Z",
+        finished_at: "2026-09-03T08:30:01.000Z",
+        duration_ms: 1000,
+        summary: { status: "partial", healthyCount: 198, failedCount: 2 },
+      },
+    ],
+    {
+      id: "11111111-1111-4111-8111-111111111111",
+      status: "partial",
+      summary: {
+        scanDate: "2026-09-03",
+        universeRunId: "universe-2026-09-03",
+        universeCount: 200,
+        healthyCount: 198,
+        failedCount: 2,
+        failedTickers: ["AAA", "BBB"],
+        retryEligibleTickers: ["AAA"],
+        tickerAttempts: [
+          { ticker: "AAA", stage: "HISTORY_REFRESH", status: "failed", attempt: 1, errorClass: "ticker_local", retryEligible: true },
+          { ticker: "BBB", stage: "WYCKOFF_BUILD", status: "failed", attempt: 1, errorClass: "critical_systemic", retryEligible: false },
+        ],
+      },
+    },
+  )
+
+  assert.deepEqual(view.phases.map((phase) => phase.key), [
+    "DATA_REFRESH",
+    "READY_GATE",
+    "HISTORY_PREPARE",
+    "WYCKOFF_PUBLISH",
+    "AI_COUNCIL",
+    "POST_ANALYSIS",
+    "COMPLETE",
+  ])
+  assert.deepEqual(view.phases[0].children.map((child) => child.key), ["KFSP_RATING_REFRESH", "TTAI_REFRESH", "MARKET_CLOSE_COLLECT"])
+  assert.equal(view.phases[0].status, "retrying")
+  assert.equal(view.phases[6].status, "partial")
+  assert.equal(view.terminalStatus, "partial")
+  assert.equal(view.tradingDate, "2026-09-03")
+  assert.equal(view.universeRunId, "universe-2026-09-03")
+  assert.equal(view.universeCount, 200)
+  assert.equal(view.healthyCount, 198)
+  assert.equal(view.failedCount, 2)
+  assert.deepEqual(view.failedTickers, ["AAA", "BBB"])
+  assert.deepEqual(view.retryEligibleTickers, ["AAA"])
+  assert.equal(view.retryAvailable, true)
+})
+
+test("QEO-63 Admin detail renders nested business phases, AI usage, and guarded targeted retry", () => {
+  const page = source("app/admin/jobs/[key]/page.tsx")
+  const timeline = source("components/admin/admin-job-phase-timeline.tsx")
+
+  assert.match(page, /run=\{latestRun \?\? null\}/)
+  assert.match(page, /aiUsage=\{jobView\.aiUsage\}/)
+  assert.match(timeline, /buildAdminEodRunView/)
+  assert.match(timeline, /<details/)
+  assert.match(timeline, /phase\.children/)
+  assert.match(timeline, /retryAvailable/)
+  assert.match(timeline, /AdminEodRetryAction/)
+  assert.match(timeline, /formatAdminTokenCount/)
+  assert.match(timeline, /aiUsage\.models/)
+  assert.match(timeline, /failedTickers/)
+})
