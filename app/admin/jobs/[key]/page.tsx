@@ -46,10 +46,22 @@ export default async function AdminJobDetailPage(props: { params: Promise<{ key:
   const currentStage = typeof currentSummary?.stage === "string" ? currentSummary.stage : null
   const nextWakeAt = typeof currentSummary?.nextWakeAt === "string" ? currentSummary.nextWakeAt : null
   const quality = jobView.domainEvidence?.quality && typeof jobView.domainEvidence.quality === "object"
-    ? jobView.domainEvidence.quality as { label?: string; details?: { limitedCoverageCount?: number } }
+    ? jobView.domainEvidence.quality as {
+        label?: string
+        details?: {
+          limitedCoverageCount?: number
+          completed?: number
+          skipped?: number
+          errors?: number
+        }
+      }
     : null
   const qualityLabel = String(quality?.label || "unknown")
+  const signalsQualityDetails = decodedKey === "signals.daily" && quality?.details
+    ? `${Number(quality.details.completed || 0)} completed / ${Number(quality.details.skipped || 0)} skipped / ${Number(quality.details.errors || 0)} errors`
+    : null
   const hasActiveExecution = Boolean(jobView.currentExecution)
+  const isDurableWait = currentStage === "WAIT_OPEN" || currentStage === "LUNCH"
 
   return (
     <div className="space-y-6">
@@ -117,10 +129,12 @@ export default async function AdminJobDetailPage(props: { params: Promise<{ key:
           <span>Telemetry: <strong className="text-slate-200">{jobView.executionTelemetry?.source === "unavailable" ? "unavailable" : "recorded"}</strong></span>
           {hasActiveExecution ? (
             <>
+              <span>Started at: <strong className="text-slate-200">{jobView.currentExecution?.startedAt ? formatAdminDateTime(jobView.currentExecution.startedAt) : "unknown"}</strong></span>
               <span>Current stage: <strong className="text-amber-300">{currentStage || "running"}</strong></span>
               <span>Next wake: <strong className="text-slate-200">{nextWakeAt ? formatAdminDateTime(nextWakeAt) : "active / pending"}</strong></span>
+              {isDurableWait ? <span>Execution mode: <strong className="text-cyan-300">Durable wait (expected)</strong></span> : null}
               <span>Current run quality: <strong className="text-slate-200">pending</strong></span>
-              <span>Last completed quality: <strong className="text-slate-200">{qualityLabel}</strong>{lastCompletedRun?.finished_at ? ` (${formatAdminDateTime(lastCompletedRun.finished_at)})` : ""}</span>
+              <span>Last completed quality: <strong className="text-slate-200">{qualityLabel}</strong>{signalsQualityDetails ? ` — ${signalsQualityDetails}` : ""}{lastCompletedRun?.finished_at ? ` (${formatAdminDateTime(lastCompletedRun.finished_at)})` : ""}</span>
               {decodedKey === "signals.daily" ? <span>Expected completion: <strong className="text-slate-200">~14:45 ICT</strong></span> : null}
             </>
           ) : (
