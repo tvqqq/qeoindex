@@ -14,6 +14,7 @@ import {
 } from "@/lib/qeoindex-eod-data-refresh-steps"
 import { failQeoIndexEodRunStep } from "@/lib/qeoindex-eod-failure-step"
 import { runEodNoTradeDailyRepairStep } from "@/lib/qeoindex-eod-no-trade-repair-step"
+import { runNotionAnalyticalSummaryStep } from "@/lib/qeoindex-eod-notion-summary-step"
 import { runRetentionCleanupStep } from "@/lib/qeoindex-eod-retention-step"
 import { skipQeoIndexEodRunStep } from "@/lib/qeoindex-eod-skip-step"
 import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "@/lib/vn-market-calendar"
@@ -27,9 +28,6 @@ import {
   runLlmDebateStep,
   runMarketCloseCollectStep,
   runMarketSynthesisStep,
-  runNotionArchiveFinalizeStep,
-  runNotionEodArchiveBatchStep,
-  runNotionUniverseArchiveBatchStep,
   runSupabasePublishStep,
   runSupabaseValidateStep,
   runWyckoffBuildStep,
@@ -42,7 +40,6 @@ const MARKET_CLOSE_MAX_ATTEMPTS = 3
 const MARKET_CLOSE_RETRY_INTERVAL_MS = 5 * 60_000
 const MAX_CANONICAL_UNIVERSE_SIZE = 200
 const WYCKOFF_TIMEFRAME_COUNT = 2
-const NOTION_ARCHIVE_BATCH_SIZE = 8
 const TTAI_REFRESH_BATCH_SIZE = 50
 const HISTORY_CONCURRENCY_DEFAULT = 2
 const HISTORY_CONCURRENCY_MAX = 4
@@ -335,39 +332,32 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
 
     const llm = await runLlmDebateStep(runId, published && deterministic.ok, ready.scanDate)
 
-    const notionUniverseBatches: Array<Awaited<ReturnType<typeof runNotionUniverseArchiveBatchStep>>> = []
-    for (let offset = 0; offset < ready.stocks.length; offset += NOTION_ARCHIVE_BATCH_SIZE) {
-      notionUniverseBatches.push(await runNotionUniverseArchiveBatchStep(
-        runId,
-        { universeRunId: ready.market.universeRunId },
-        ready.stocks.slice(offset, offset + NOTION_ARCHIVE_BATCH_SIZE),
-      ))
-    }
-
-    const notionEodBatches: Array<Awaited<ReturnType<typeof runNotionEodArchiveBatchStep>>> = []
-    for (let offset = 0; offset < ready.stocks.length; offset += NOTION_ARCHIVE_BATCH_SIZE) {
-      notionEodBatches.push(await runNotionEodArchiveBatchStep(
-        runId,
-        {
-          tradingDate: ready.scanDate,
-          universeRunId: ready.market.universeRunId,
-          validationHash: validation.validationHash,
-        },
-        ready.stocks.slice(offset, offset + NOTION_ARCHIVE_BATCH_SIZE),
-      ))
-    }
-
-    const notionArchive = await runNotionArchiveFinalizeStep(runId, notionUniverseBatches, notionEodBatches)
-    const retention = await runRetentionCleanupStep(runId, {
-      startedAtIso,
+    const retention = await runRetentionCleanupStep(runId, { tradingDate: ready.scanDate })
+    const summaryFailedTickers = [
+      ...(ttaiRefresh?.failedTickers || []),
+      ...history.errors.map((item) => item.ticker),
+    ]
+    const summaryAnomalies = [
+      ...ready.rankWarnings.slice(0, 20),
+      ...history.errors.slice(0, 20).map((item) => `${item.ticker}: ${item.error}`),
+      ...(marketSynthesis.status === "failed" && "error" in marketSynthesis ? [`Market synthesis: ${marketSynthesis.error}`] : []),
+      ...(retention.status !== "archived" && retention.detail ? [`Retention: ${retention.detail}`] : []),
+    ]
+    const runStatus = retention.status === "archived" && marketSynthesis.status !== "failed" ? "Succeeded" as const : "Partial" as const
+    const notionArchive = await runNotionAnalyticalSummaryStep(runId, {
       tradingDate: ready.scanDate,
+      runStatus,
       universeRunId: ready.market.universeRunId,
       universeCount,
       expectedSnapshots,
       completedSnapshots: publish.snapshotCount,
       validationHash: validation.validationHash,
+      startedAt: startedAtIso,
       marketSynthesisStatus: marketSynthesis.status,
-      notionArchive,
+      tickers: ready.stocks.map((stock) => stock.ticker),
+      failedTickers: summaryFailedTickers,
+      anomalies: summaryAnomalies,
+      retention,
     })
 
     const complete = await runCompleteStep(runId, {
@@ -393,6 +383,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       marketSynthesisStatus: marketSynthesis.status,
       llmStatus: llm.status,
       notionArchiveStatus: notionArchive.status,
+      notionArchiveRows: notionArchive.rowCount ?? notionArchive.archived ?? 0,
       retentionStatus: retention.status,
       validationHash: validation.validationHash,
     })
@@ -413,6 +404,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       marketSynthesisStatus: marketSynthesis.status,
       llmStatus: llm.status,
       notionArchiveStatus: notionArchive.status,
+      notionArchiveRows: notionArchive.rowCount ?? notionArchive.archived ?? 0,
       retentionStatus: retention.status,
       complete,
     }

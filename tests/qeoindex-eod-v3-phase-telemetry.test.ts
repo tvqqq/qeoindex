@@ -20,12 +20,12 @@ const expected = [
   "AI_COUNCIL_DETERMINISTIC",
   "MARKET_SYNTHESIS",
   "AI_COUNCIL_LLM",
-  "NOTION_ARCHIVE",
   "RETENTION_CLEANUP",
+  "NOTION_ARCHIVE",
   "COMPLETE",
 ]
 
-test("EOD v4 telemetry exposes same-session refresh and deterministic business-phase mapping without Drive", () => {
+test("EOD v4 telemetry preserves seven business phases with downstream fail-open Notion summary", () => {
   assert.deepEqual(QEOINDEX_EOD_PHASES.map((phase) => phase.key), expected)
   assert.deepEqual(QEOINDEX_EOD_PHASES.map((phase) => phase.order), expected.map((_, index) => index + 1))
   assert.deepEqual(QEOINDEX_EOD_BUSINESS_PHASES.map((phase) => phase.key), [
@@ -39,6 +39,8 @@ test("EOD v4 telemetry exposes same-session refresh and deterministic business-p
   ])
   assert.equal(QEOINDEX_EOD_INTERNAL_PHASE_TO_BUSINESS.KFSP_RATING_REFRESH, "DATA_REFRESH")
   assert.equal(QEOINDEX_EOD_INTERNAL_PHASE_TO_BUSINESS.MARKET_SYNTHESIS, "AI_COUNCIL")
+  assert.equal(QEOINDEX_EOD_INTERNAL_PHASE_TO_BUSINESS.RETENTION_CLEANUP, "POST_ANALYSIS")
+  assert.equal(QEOINDEX_EOD_INTERNAL_PHASE_TO_BUSINESS.NOTION_ARCHIVE, "POST_ANALYSIS")
 })
 
 test("missing EOD telemetry rows remain pending while persisted phases retain their result", () => {
@@ -61,7 +63,8 @@ test("missing EOD telemetry rows remain pending while persisted phases retain th
   assert.equal(timeline[0].status, "pending")
   assert.equal(timeline.find((phase) => phase.key === "EOD_READY")?.status, "succeeded")
   assert.equal(timeline.find((phase) => phase.key === "AI_COUNCIL_LLM")?.order, 11)
-  assert.equal(timeline.find((phase) => phase.key === "RETENTION_CLEANUP")?.order, 13)
+  assert.equal(timeline.find((phase) => phase.key === "RETENTION_CLEANUP")?.order, 12)
+  assert.equal(timeline.find((phase) => phase.key === "NOTION_ARCHIVE")?.order, 13)
   assert.equal(timeline.find((phase) => phase.key === "EOD_READY")?.businessPhase, "READY_GATE")
   assert.deepEqual(timeline.find((phase) => phase.key === "EOD_READY")?.summary, { universeCount: 200 })
 })

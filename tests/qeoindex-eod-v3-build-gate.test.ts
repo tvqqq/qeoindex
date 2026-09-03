@@ -40,7 +40,7 @@ test("production prebuild keeps the existing EOD regression suite wired", () => 
   for (const path of requiredV3Tests) assert.match(v3, escaped(path), path)
 })
 
-test("production lint gate covers all EOD runtime surfaces", () => {
+test("production lint gate covers all existing EOD runtime surfaces", () => {
   const script = pkg.scripts["lint:touched"] || ""
   for (const path of requiredLintFiles) assert.match(script, escaped(path), path)
 })
@@ -75,14 +75,16 @@ test("safe telemetry retention is active while raw-history retention stays fail-
   assert.match(migration, /missingDates/)
 })
 
-test("Google Drive archive delegates to the proven Shared Drive uploader", () => {
+test("Google Drive archive stays legacy-only and delegates to the proven Shared Drive uploader", () => {
   const archive = source("lib/qeoindex-eod-archive.ts")
   const legacyArchive = source("lib/qeoindex-eod-archive-legacy.ts")
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   assert.match(archive, /runLegacyDriveArchive/)
   assert.match(legacyArchive, /supportsAllDrives/)
   assert.match(legacyArchive, /includeItemsFromAllDrives/)
   assert.match(legacyArchive, /GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/)
   assert.match(legacyArchive, /GOOGLE_DRIVE_ARCHIVE_FOLDER_ID/)
+  assert.doesNotMatch(workflow, /runDriveArchiveStep|driveArchive/)
 })
 
 test("QEO-42 bounded per-ticker refresh failure continues to exact-session fail-closed verification", () => {
@@ -126,23 +128,40 @@ test("QEO-60 recoverable provider failures are current-session only; historical 
   assert.match(steps, /Promise\.all/)
 })
 
-test("QEO-55 partitions Notion archive work into bounded durable steps", () => {
+test("QEO-62 replaces active per-ticker Notion batches with one analytical summary", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
-  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const summary = source("lib/qeoindex-eod-notion-summary.ts")
+  const summaryStep = source("lib/qeoindex-eod-notion-summary-step.ts")
+  const legacyArchive = source("lib/qeoindex-eod-archive-legacy.ts")
 
-  assert.match(workflow, /const NOTION_ARCHIVE_BATCH_SIZE = 8/)
-  assert.match(workflow, /runNotionUniverseArchiveBatchStep/)
-  assert.match(workflow, /runNotionEodArchiveBatchStep/)
-  assert.match(workflow, /runNotionArchiveFinalizeStep/)
-  assert.match(workflow, /offset \+= NOTION_ARCHIVE_BATCH_SIZE/)
-  assert.doesNotMatch(workflow, /\brunNotionArchiveStep\b/)
+  assert.doesNotMatch(workflow, /NOTION_ARCHIVE_BATCH_SIZE/)
+  assert.doesNotMatch(workflow, /runNotionUniverseArchiveBatchStep|runNotionEodArchiveBatchStep|runNotionArchiveFinalizeStep/)
+  assert.match(workflow, /runNotionAnalyticalSummaryStep/)
+  assert.match(summaryStep, /archiveEodAnalyticalSummaryToNotion/)
+  assert.match(summaryStep, /archiveKind:\s*"analytical_summary"/)
 
-  assert.match(steps, /export async function runNotionUniverseArchiveBatchStep/)
-  assert.match(steps, /export async function runNotionEodArchiveBatchStep/)
-  assert.match(steps, /export async function runNotionArchiveFinalizeStep/)
-  assert.match(steps, /archiveCanonicalUniverseBatchToNotion/)
-  assert.match(steps, /archiveEodTickerBatchToNotion/)
-  assert.match(steps, /stocks\.length > 8/)
+  for (const field of ["Notable Candidates", "Signal Changes", "Failed Tickers", "Anomalies", "AI Summary", "Supabase Evidence"]) {
+    assert.match(summary, new RegExp(field))
+  }
+  assert.match(summary, /requested:\s*1/)
+  assert.match(summary, /rowCount:\s*1/)
+  assert.match(legacyArchive, /export async function archiveCanonicalUniverseBatchToNotion/)
+  assert.match(legacyArchive, /export async function archiveEodTickerBatchToNotion/)
+})
+
+test("QEO-62 makes Notion a downstream fail-open sink and removes it from retention", () => {
+  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const archive = source("lib/qeoindex-eod-archive.ts")
+  const retentionStep = source("lib/qeoindex-eod-retention-step.ts")
+  const summary = source("lib/qeoindex-eod-notion-summary.ts")
+
+  const retention = workflow.indexOf("runRetentionCleanupStep")
+  const notion = workflow.indexOf("runNotionAnalyticalSummaryStep", retention)
+  const complete = workflow.indexOf("runCompleteStep", notion)
+  assert.ok(retention >= 0 && notion > retention && complete > notion, "Post Analysis must be Retention -> Notion summary -> Complete")
+  assert.doesNotMatch(retentionStep, /archiveEodRunToNotion|notionArchive|runEodDriveArchive/)
+  assert.doesNotMatch(archive, /Notion archive=\$\{input\.notionArchive\.status\}/)
+  assert.match(summary, /operational EOD evidence remains canonical in Supabase/i)
 })
 
 test("QEO-57 converts rejected Drive archive promises into a degraded checkpoint", () => {

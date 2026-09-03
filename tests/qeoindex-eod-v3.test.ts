@@ -41,10 +41,8 @@ test("EOD v4 freezes Rating, joins concurrent data refresh, then publishes same-
     "runDeterministicCouncilStep",
     "runMarketSynthesisStep",
     "runLlmDebateStep",
-    "runNotionUniverseArchiveBatchStep",
-    "runNotionEodArchiveBatchStep",
-    "runNotionArchiveFinalizeStep",
     "runRetentionCleanupStep",
+    "runNotionAnalyticalSummaryStep",
     "runCompleteStep",
   ]
 
@@ -55,10 +53,9 @@ test("EOD v4 freezes Rating, joins concurrent data refresh, then publishes same-
     cursor = next
   }
 
-  assert.doesNotMatch(workflow, /runDriveArchiveStep|driveArchiveStatus/)
-  assert.doesNotMatch(workflow, /runNotionStagingBatchStep/)
-  assert.doesNotMatch(workflow, /runNotionValidateStep/)
-  assert.doesNotMatch(workflow, /runIngestStep/)
+  assert.doesNotMatch(workflow, /runDriveArchiveStep|driveArchiveStatus|driveArchive/)
+  assert.doesNotMatch(workflow, /runNotionUniverseArchiveBatchStep|runNotionEodArchiveBatchStep|runNotionArchiveFinalizeStep/)
+  assert.doesNotMatch(workflow, /runNotionStagingBatchStep|runNotionValidateStep|runIngestStep/)
   assert.doesNotMatch(workflow, /notionAction|notionSupabaseRunId/)
 })
 
@@ -119,7 +116,7 @@ test("QEO-39 builds once, stages run-scoped artifacts, and keeps snapshots out o
   assert.match(workflow, /runSupabasePublishStep\([\s\S]*?runId[\s\S]*?ready\.runKey[\s\S]*?ready\.scanDate[\s\S]*?validation\.validationHash[\s\S]*?\)/)
 })
 
-test("admin EOD phase catalog exposes internal durable steps mapped to seven v4 business phases without Drive", () => {
+test("admin EOD phase catalog preserves seven v4 business phases and QEO-62 Post Analysis order", () => {
   const code = source("lib/admin/job-phases.ts")
   for (const phase of [
     "KFSP_RATING_REFRESH",
@@ -133,32 +130,31 @@ test("admin EOD phase catalog exposes internal durable steps mapped to seven v4 
     "AI_COUNCIL_DETERMINISTIC",
     "MARKET_SYNTHESIS",
     "AI_COUNCIL_LLM",
-    "NOTION_ARCHIVE",
     "RETENTION_CLEANUP",
+    "NOTION_ARCHIVE",
     "COMPLETE",
   ]) assert.match(code, new RegExp(`key: "${phase}"`))
   for (const phase of ["DATA_REFRESH", "READY_GATE", "HISTORY_PREPARE", "WYCKOFF_PUBLISH", "AI_COUNCIL", "POST_ANALYSIS", "COMPLETE"]) {
     assert.match(code, new RegExp(`key: "${phase}"`))
   }
 
+  assert.ok(code.indexOf('key: "RETENTION_CLEANUP"') < code.indexOf('key: "NOTION_ARCHIVE"'))
   assert.match(code, /QEOINDEX_EOD_INTERNAL_PHASE_TO_BUSINESS/)
   assert.doesNotMatch(code, /DRIVE_ARCHIVE|100 ticker|500 Snapshot|NOTION_STAGING|NOTION_VALIDATE|key: "INGEST"/)
   assert.match(code, /canonical|Top Stocks|universeCount|động/i)
   assert.match(code, /1D\/1W/)
 })
 
-test("QEO-57 active retention is independent of Drive while raw Daily OHLCV remains retained", () => {
+test("QEO-57 and QEO-62 keep active retention independent of Drive and Notion while raw Daily OHLCV remains retained", () => {
   const archive = source("lib/qeoindex-eod-archive.ts")
   const activeRetentionStep = source("lib/qeoindex-eod-retention-step.ts")
   const sql = qeo21RetentionMigration()
 
   assert.match(archive, /rpc\("qeo_run_safe_retention_cleanup"/)
   assert.match(archive, /Raw Daily OHLCV retention is intentionally disabled/i)
-  assert.doesNotMatch(archive, /driveArchive:\s*EodArchiveCheckpoint/)
-  assert.doesNotMatch(archive, /Drive archive=/)
-  assert.doesNotMatch(activeRetentionStep, /runEodDriveArchive|input\.driveArchive/)
-  assert.match(activeRetentionStep, /REMOVED_DRIVE_ARCHIVE/)
-  assert.match(activeRetentionStep, /status:\s*"skipped"/)
+  assert.doesNotMatch(activeRetentionStep, /runEodDriveArchive|input\.driveArchive|archiveEodRunToNotion|notionArchive|REMOVED_DRIVE_ARCHIVE/)
+  assert.match(activeRetentionStep, /runEodRetentionCleanup/)
+  assert.doesNotMatch(archive, /Drive archive=|Notion archive=/)
   assert.doesNotMatch(archive, /\.from\("market_ohlcv_history"\)[\s\S]*?\.delete\(/)
   assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
   assert.doesNotMatch(sql, /truncate\s+(table\s+)?public\.market_ohlcv_history/i)
