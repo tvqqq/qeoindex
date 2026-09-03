@@ -6,6 +6,7 @@ import {
   canUnselectFilterSector,
   filterBoardTickers,
   groupFilterSectorsByBoardColumn,
+  hasRequiredFilterSectorSelections,
   isLockedFilterSector,
   normalizeStockFilterCriteria,
 } from "../lib/market-board/stock-filter.ts"
@@ -55,24 +56,26 @@ test("Filter CP sector rules mirror six board columns and preserve mandatory/min
   assert.equal(isLockedFilterSector("Bất động sản"), false)
 
   const selected = new Set(sectors)
+  assert.equal(hasRequiredFilterSectorSelections(selected, sectors), true)
   assert.equal(canUnselectFilterSector(selected, "Ngân hàng", sectors), false)
   assert.equal(canUnselectFilterSector(selected, "Bất động sản", sectors), false)
   assert.equal(canUnselectFilterSector(selected, "Dầu khí", sectors), true)
 
-  assert.equal(normalizeStockFilterCriteria({
-    exchanges: ["HOSE"],
-    sectors: sectors.filter((sector) => sector !== "Bất động sản"),
-  }, sectors), null)
-  assert.equal(normalizeStockFilterCriteria({
-    exchanges: ["HOSE"],
-    sectors: sectors.filter((sector) => sector !== "Chứng khoán"),
-  }, sectors), null)
+  assert.equal(
+    hasRequiredFilterSectorSelections(new Set(sectors.filter((sector) => sector !== "Bất động sản")), sectors),
+    false,
+  )
+  assert.equal(
+    hasRequiredFilterSectorSelections(new Set(sectors.filter((sector) => sector !== "Chứng khoán")), sectors),
+    false,
+  )
 })
 
 test("Filter CP UI wires averageVolume50d and six sector columns", () => {
   assert.match(pageSource, /averageVolume50d: stock\.averageVolume50d/)
   assert.match(modalSource, /KLTB 50 phiên/)
   assert.match(modalSource, /groupFilterSectorsByBoardColumn/)
+  assert.match(modalSource, /hasRequiredFilterSectorSelections/)
   assert.match(modalSource, /canUnselectFilterSector/)
   assert.match(modalSource, /isLockedFilterSector/)
   assert.match(modalSource, /lg:grid-cols-6/)
