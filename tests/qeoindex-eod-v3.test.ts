@@ -13,7 +13,7 @@ function qeo21RetentionMigration() {
   return source(`supabase/migrations/${matches[0]}`)
 }
 
-test("EOD publishes same-session evidence and validated Wyckoff before Council and archives", () => {
+test("EOD publishes same-session evidence and validated Wyckoff before Council, Notion archive, and retention", () => {
   const workflowPath = "workflows/qeoindex-eod-pipeline.ts"
   assert.equal(existsSync(new URL(`../${workflowPath}`, import.meta.url)), true)
   const workflow = source(workflowPath)
@@ -35,7 +35,6 @@ test("EOD publishes same-session evidence and validated Wyckoff before Council a
     "runNotionUniverseArchiveBatchStep",
     "runNotionEodArchiveBatchStep",
     "runNotionArchiveFinalizeStep",
-    "runDriveArchiveStep",
     "runRetentionCleanupStep",
     "runCompleteStep",
   ]
@@ -47,6 +46,7 @@ test("EOD publishes same-session evidence and validated Wyckoff before Council a
     cursor = next
   }
 
+  assert.doesNotMatch(workflow, /runDriveArchiveStep|driveArchiveStatus/)
   assert.doesNotMatch(workflow, /runNotionStagingBatchStep/)
   assert.doesNotMatch(workflow, /runNotionValidateStep/)
   assert.doesNotMatch(workflow, /runIngestStep/)
@@ -110,7 +110,7 @@ test("QEO-39 builds once, stages run-scoped artifacts, and keeps snapshots out o
   assert.match(workflow, /runSupabasePublishStep\([\s\S]*?runId[\s\S]*?ready\.runKey[\s\S]*?ready\.scanDate[\s\S]*?validation\.validationHash[\s\S]*?\)/)
 })
 
-test("admin EOD phase catalog exposes transitional EOD v4 data-refresh order", () => {
+test("admin EOD phase catalog exposes transitional EOD v4 data-refresh order without Drive", () => {
   const code = source("lib/admin/job-phases.ts")
   for (const phase of [
     "KFSP_RATING_REFRESH",
@@ -125,22 +125,26 @@ test("admin EOD phase catalog exposes transitional EOD v4 data-refresh order", (
     "AI_COUNCIL_LLM",
     "MARKET_SYNTHESIS",
     "NOTION_ARCHIVE",
-    "DRIVE_ARCHIVE",
     "RETENTION_CLEANUP",
     "COMPLETE",
   ]) assert.match(code, new RegExp(`key: "${phase}"`))
 
-  assert.doesNotMatch(code, /100 ticker|500 Snapshot|NOTION_STAGING|NOTION_VALIDATE|key: "INGEST"/)
+  assert.doesNotMatch(code, /DRIVE_ARCHIVE|100 ticker|500 Snapshot|NOTION_STAGING|NOTION_VALIDATE|key: "INGEST"/)
   assert.match(code, /canonical|Top Stocks|universeCount|động/i)
   assert.match(code, /1D\/1W/)
 })
 
-test("QEO-21 runs safe telemetry retention independently while raw OHLCV age-pruning stays disabled", () => {
+test("QEO-57 retention is independent of Drive while raw Daily OHLCV remains retained", () => {
   const active = source("lib/qeoindex-eod-archive.ts")
+  const workflowSteps = source("lib/qeoindex-eod-workflow-steps-legacy.ts")
   const sql = qeo21RetentionMigration()
 
   assert.match(active, /rpc\("qeo_run_safe_retention_cleanup"/)
   assert.match(active, /Raw Daily OHLCV retention is intentionally disabled/i)
+  assert.doesNotMatch(active, /driveArchive:\s*EodArchiveCheckpoint/)
+  assert.doesNotMatch(active, /Drive archive=/)
+  assert.doesNotMatch(workflowSteps, /driveArchive:\s*EodArchiveCheckpoint/)
+  assert.doesNotMatch(workflowSteps, /input\.driveArchive/)
   assert.doesNotMatch(active, /\.from\("market_ohlcv_history"\)[\s\S]*?\.delete\(/)
   assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
   assert.doesNotMatch(sql, /truncate\s+(table\s+)?public\.market_ohlcv_history/i)
