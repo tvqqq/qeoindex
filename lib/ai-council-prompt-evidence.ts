@@ -306,6 +306,8 @@ function normalizeEvidenceValueForComparison(value: string, unit: string) {
     normalized = normalized.replace(/\s*x\s*$/, "")
   } else if (unit === "price_thousand_vnd") {
     normalized = normalized.replace(/\s*price_thousand_vnd\s*$/, "")
+  } else if (unit === "state") {
+    normalized = normalized.replace(/\s*state\s*$/, "")
   }
 
   return normalized.replace(/[,%\s_]/g, "")
