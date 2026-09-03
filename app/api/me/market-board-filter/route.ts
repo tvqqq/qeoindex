@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { requireApiUser } from "@/lib/auth/server"
+import { requireApiUser, type ServerAuthContext } from "@/lib/auth/server"
 import { getCanonicalUniverse } from "@/lib/market-universe"
 import {
   mergeStockFilterIntoSettings,
@@ -21,14 +21,15 @@ function availableSectorsFromUniverse(universe: Awaited<ReturnType<typeof getCan
   return [...new Set(universe.stocks.map((stock) => String(stock.sector ?? "").trim()).filter(Boolean))]
 }
 
-async function loadSettings(userId: string, supabase: Awaited<ReturnType<typeof requireApiUser>> extends { ok: true; context: infer C } ? C extends { supabase: infer S } ? S : never : never) {
-  const result = await (supabase as any)
+async function loadSettings(context: ServerAuthContext) {
+  const userId = context.user.id
+  const { data, error } = await context.supabase
     .from("user_preferences")
     .select("settings")
     .eq("user_id", userId)
     .maybeSingle()
-  if (result.error) throw result.error
-  return result.data?.settings ?? {}
+  if (error) throw error
+  return data?.settings ?? {}
 }
 
 export async function GET() {
@@ -36,10 +37,9 @@ export async function GET() {
   if (!auth.ok) return auth.response
 
   try {
-    const userId = auth.context.user.id
     const [universe, settings] = await Promise.all([
       getCanonicalUniverse(),
-      loadSettings(userId, auth.context.supabase as any),
+      loadSettings(auth.context),
     ])
     const criteria = readStockFilterFromSettings(settings, availableSectorsFromUniverse(universe))
     return NextResponse.json({ ok: true, criteria }, { headers: NO_STORE_HEADERS })
@@ -62,7 +62,7 @@ export async function PUT(request: Request) {
     const userId = auth.context.user.id
     const [universe, settings] = await Promise.all([
       getCanonicalUniverse(),
-      loadSettings(userId, auth.context.supabase as any),
+      loadSettings(auth.context),
     ])
     const criteria = normalizeStockFilterCriteria(
       (body as Record<string, unknown>).criteria,
