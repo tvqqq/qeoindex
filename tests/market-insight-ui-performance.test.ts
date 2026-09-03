@@ -125,13 +125,14 @@ test("VNINDEX hero history comes from a bounded canonical-index query", () => {
 test("Market Close keeps the main dashboard continuous and limits tabs to the three market views", () => {
   const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
   const bubbles = fs.readFileSync(path.resolve("components/insights/market-bubbles.tsx"), "utf8")
+  const sectors = fs.readFileSync(path.resolve("components/insights/sector-map-panel.tsx"), "utf8")
 
   assert.doesNotMatch(dashboard, /Tabs(Content|List|Trigger)?|activeTab|setActiveTab/, "the dashboard must not introduce a page-level tab system")
   assert.match(dashboard, /Nhịp đập thị trường/)
-  assert.match(dashboard, /Nỗ lực kết quả/)
+  assert.match(sectors, /Nỗ lực kết quả/)
   assert.match(dashboard, /Sức khoẻ thị trường/)
   assert.match(dashboard, /MarketSentimentCard/)
-  assert.match(dashboard, /xl:grid-cols-\[7fr_3fr\]/)
+  assert.match(dashboard, /xl:grid-cols-\[35fr_65fr\]/)
   assert.doesNotMatch(fs.readFileSync(path.resolve("components/insights/market-health-view.tsx"), "utf8"), /<option value="(general|retail|institutional)">/)
   for (const period of ["1D", "1W", "1M", "1Y"]) {
     assert.match(bubbles, new RegExp(`value: "${period}"`), `market bubbles must expose the ${period} time window`)
@@ -139,7 +140,7 @@ test("Market Close keeps the main dashboard continuous and limits tabs to the th
   assert.doesNotMatch(bubbles, /stock\.volume[^\n]*>\s*300_000/, "bubble field must not apply a second liquidity cutoff inside the canonical universe")
   assert.match(bubbles, /slice\(0, 200\)/, "bubble solver must keep the requested Top 200 cap")
   assert.match(dashboard, /min-h-\[650px\]/, "bubble layout must reserve stable space")
-  assert.match(dashboard, /Luân chuyển dòng tiền/, "sector workspace must expose the rotation view")
+  assert.match(sectors, /SECTOR ROTATION MATRIX/, "sector workspace must expose the rotation view")
   for (const sectionId of ["market-overview-title", "market-sectors-title", "market-history-title"]) {
     assert.match(dashboard, new RegExp(`id="${sectionId}"`), `${sectionId} must be visible in the continuous dashboard`)
   }
