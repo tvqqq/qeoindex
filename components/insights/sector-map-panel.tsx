@@ -1,12 +1,16 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 import {
+  ArrowDown,
   ArrowRight,
+  ArrowUp,
   Building2,
   CalendarDays,
   CalendarRange,
   ChevronDown,
+  ChevronsUpDown,
   CircleAlert,
   Compass,
   Cpu,
@@ -33,6 +37,7 @@ import {
   Zap,
 } from "lucide-react"
 
+import { MarketChangePill } from "@/components/market-change-pill"
 import type { MarketHistoryPoint, MarketSectorHistoryItem, MarketSectorRow } from "@/lib/market-insight-data"
 import type { InsightsRatingRow } from "@/lib/insights-data"
 import { StockLogo } from "@/components/stock-logo"
@@ -60,6 +65,11 @@ interface SectorMapPanelProps {
 }
 
 type SectorHeadingIcon = React.ComponentType<{ className?: string }>
+type PopupSortKey = keyof Pick<InsightsRatingRow,
+  "ticker" | "price" | "marketCapBillion" | "canslimScore" | "score4m" | "pricePotential" | "rsShort" | "rsMedium" |
+  "stockRrgState" | "weeklyChangePercent" | "monthlyChangePercent" | "ratingScore"
+>
+type SortDirection = "asc" | "desc"
 
 export function getSectorIcon(sector: string) {
   const normalized = (sector || "").toLowerCase()
@@ -143,6 +153,21 @@ function formatPrice(value: number | null | undefined) {
   return new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
 }
 
+function formatMarketCapBillion(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—"
+  return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)} tỷ`
+}
+
+function compareRatingValues(left: string | number | null, right: string | number | null, direction: SortDirection) {
+  if (left == null && right == null) return 0
+  if (left == null) return 1
+  if (right == null) return -1
+  const result = typeof left === "number" && typeof right === "number"
+    ? left - right
+    : String(left).localeCompare(String(right), "vi", { numeric: true, sensitivity: "base" })
+  return direction === "asc" ? result : -result
+}
+
 export const ROTATION_LABELS: Record<string, string> = {
   leading: "Dẫn dắt",
   recovering: "Phục hồi",
@@ -152,16 +177,11 @@ export const ROTATION_LABELS: Record<string, string> = {
 
 export function rotationBadgeClass(state: string) {
   switch (state) {
-    case "leading":
-      return "bg-[#059669] text-white border-[#10b981]/40"
-    case "recovering":
-      return "bg-[#0284c7] text-white border-[#38bdf8]/40"
-    case "weakening":
-      return "bg-[#d97706] text-white border-[#fbbf24]/40"
-    case "lagging":
-      return "bg-[#e11d48] text-white border-[#f43f5e]/40"
-    default:
-      return "bg-[#059669] text-white border-[#10b981]/40"
+    case "leading": return "bg-[#059669] text-white border-[#10b981]/40"
+    case "recovering": return "bg-[#0284c7] text-white border-[#38bdf8]/40"
+    case "weakening": return "bg-[#d97706] text-white border-[#fbbf24]/40"
+    case "lagging": return "bg-[#e11d48] text-white border-[#f43f5e]/40"
+    default: return "bg-[#059669] text-white border-[#10b981]/40"
   }
 }
 
@@ -185,6 +205,16 @@ function RotationBadge({ value }: { value: string | null | undefined }) {
   )
 }
 
+function PopupRrgBadge({ value }: { value: string | null | undefined }) {
+  const Icon = value === "Dẫn dắt" ? Rocket : value === "Phục hồi" ? RefreshCw : value === "Suy yếu" ? TrendingDown : value === "Đội sổ" ? CircleAlert : Radar
+  const tone = value === "Dẫn dắt" ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-300"
+    : value === "Phục hồi" ? "border-sky-300/30 bg-sky-400/15 text-sky-300"
+      : value === "Suy yếu" ? "border-amber-300/30 bg-amber-400/15 text-amber-300"
+        : value === "Đội sổ" ? "border-rose-300/30 bg-rose-400/15 text-rose-300"
+          : "border-white/10 bg-white/[0.03] text-slate-300"
+  return <span className={cn("inline-flex min-w-20 items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-xs font-bold", tone)}><Icon className="size-3.5" />{value || "—"}</span>
+}
+
 export function inferRotationState(
   item: {
     rotationState?: string | null
@@ -202,14 +232,8 @@ export function inferRotationState(
   if (
     item.rotationState &&
     item.rotationState !== "unknown" &&
-    (item.rotationState === "leading" ||
-      item.rotationState === "recovering" ||
-      item.rotationState === "weakening" ||
-      item.rotationState === "lagging")
-  ) {
-    return item.rotationState
-  }
-
+    (item.rotationState === "leading" || item.rotationState === "recovering" || item.rotationState === "weakening" || item.rotationState === "lagging")
+  ) return item.rotationState
   void sIdx
   void dIdx
   void vnindexChg
@@ -231,15 +255,27 @@ function SectorMiniSparkline({ data, positive }: { data: number[]; positive: boo
 
   return (
     <svg width={width} height={height} className="inline-block overflow-visible" aria-hidden="true">
-      <polyline
-        fill="none"
-        stroke={positive ? "#34d399" : "#f43f5e"}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        points={points}
-      />
+      <polyline fill="none" stroke={positive ? "#34d399" : "#f43f5e"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={points} />
     </svg>
+  )
+}
+
+function PopupSortHead({ label, sortKey, activeKey, direction, onSort, className }: {
+  label: string
+  sortKey: PopupSortKey
+  activeKey: PopupSortKey
+  direction: SortDirection
+  onSort: (key: PopupSortKey) => void
+  className?: string
+}) {
+  const active = activeKey === sortKey
+  const Icon = active ? (direction === "asc" ? ArrowUp : ArrowDown) : ChevronsUpDown
+  return (
+    <th className={className} aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : "none"}>
+      <button type="button" onClick={() => onSort(sortKey)} className="inline-flex items-center justify-center gap-1 rounded-md py-0.5 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50">
+        <span>{label}</span><Icon className={cn("size-3.5 shrink-0", active ? "text-brand" : "text-muted")} />
+      </button>
+    </th>
   )
 }
 
@@ -254,8 +290,8 @@ export function SectorMapPanel({
   const [hoveredEffortSector, setHoveredEffortSector] = React.useState<MarketSectorRow | null>(null)
   const [effortTooltipPos, setEffortTooltipPos] = React.useState<{ x: number; y: number } | null>(null)
   const [selectedModalSector, setSelectedModalSector] = React.useState<string | null>(null)
-  const [modalUniverse, setModalUniverse] = React.useState<"all" | "top100">("all")
   const [modalSearch, setModalSearch] = React.useState("")
+  const [modalSort, setModalSort] = React.useState<{ key: PopupSortKey; direction: SortDirection }>({ key: "ratingScore", direction: "desc" })
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -264,6 +300,13 @@ export function SectorMapPanel({
     if (!selectedModalSector) return
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [selectedModalSector])
+
+  React.useEffect(() => {
+    if (!selectedModalSector) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => { document.body.style.overflow = previousOverflow }
   }, [selectedModalSector])
 
   const currentSectors = React.useMemo(() => {
@@ -277,15 +320,8 @@ export function SectorMapPanel({
     [currentSectors],
   )
 
-  const leadingNames = currentSectors
-    .filter((sector) => sector.rotationState === "leading")
-    .slice(0, 3)
-    .map((sector) => sector.displayName)
-
-  const recoveringNames = currentSectors
-    .filter((sector) => sector.rotationState === "recovering")
-    .slice(0, 5)
-    .map((sector) => sector.displayName)
+  const leadingNames = currentSectors.filter((sector) => sector.rotationState === "leading").slice(0, 3).map((sector) => sector.displayName)
+  const recoveringNames = currentSectors.filter((sector) => sector.rotationState === "recovering").slice(0, 5).map((sector) => sector.displayName)
 
   const sessionDates = React.useMemo(() => {
     const dates = new Set<string>()
@@ -308,34 +344,32 @@ export function SectorMapPanel({
 
   const allSectorNames = React.useMemo(() => {
     const names = new Set<string>()
-    currentSectors.forEach((sector) => names.add(sector.displayName))
     ratings.forEach((row) => row.sector && names.add(row.sector))
     return Array.from(names).sort((a, b) => a.localeCompare(b, "vi"))
-  }, [currentSectors, ratings])
+  }, [ratings])
 
   const modalStocks = React.useMemo(() => {
     if (!selectedModalSector) return []
-    const target = selectedModalSector.trim().toLowerCase()
-    const query = modalSearch.trim().toLowerCase()
-
+    const normalizedQuery = modalSearch.trim().toUpperCase()
     return ratings
       .filter((row) => {
-        if (target !== "all" && target !== "tất cả ngành") {
-          const sector = (row.sector || "").trim().toLowerCase()
-          const industry = (row.industryGroup || "").toLowerCase()
-          if (!sector.includes(target) && !target.includes(sector) && !industry.includes(target)) return false
-        }
-        if (modalUniverse === "top100" && !row.isTop100) return false
-        if (query && !row.ticker.toLowerCase().includes(query) && !(row.companyName || "").toLowerCase().includes(query)) return false
-        return true
+        if (selectedModalSector !== "all" && row.sector !== selectedModalSector) return false
+        return !normalizedQuery || row.ticker.toUpperCase().includes(normalizedQuery) || (row.companyName || "").toUpperCase().includes(normalizedQuery) || row.sector.toUpperCase().includes(normalizedQuery)
       })
-      .sort((a, b) => (b.ratingScore ?? 0) - (a.ratingScore ?? 0))
-  }, [ratings, selectedModalSector, modalUniverse, modalSearch])
+      .sort((left, right) => compareRatingValues(left[modalSort.key], right[modalSort.key], modalSort.direction) || left.ticker.localeCompare(right.ticker))
+  }, [ratings, selectedModalSector, modalSearch, modalSort])
+
+  const handleModalSort = (key: PopupSortKey) => {
+    setModalSort((current) => current.key === key
+      ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+      : { key, direction: "desc" })
+  }
 
   const handleOpenSectorModal = (sectorName: string, sectorRow?: MarketSectorRow) => {
-    setSelectedModalSector(sectorName)
-    setModalUniverse("all")
+    const canonicalSector = allSectorNames.find((name) => name.localeCompare(sectorName, "vi", { sensitivity: "base" }) === 0) ?? sectorName
+    setSelectedModalSector(canonicalSector)
     setModalSearch("")
+    setModalSort({ key: "ratingScore", direction: "desc" })
     if (sectorRow) onSelectSector?.(sectorRow)
   }
 
@@ -355,223 +389,214 @@ export function SectorMapPanel({
   }
 
   const quickPills = React.useMemo(
-    () => ratings
-      .filter((row) => row.ticker && row.changePercent != null)
-      .slice(0, 10)
-      .map((row) => ({ ticker: row.ticker, change: row.changePercent ?? 0 })),
+    () => ratings.filter((row) => row.ticker && row.changePercent != null).slice(0, 10).map((row) => ({ ticker: row.ticker, change: row.changePercent ?? 0 })),
     [ratings],
   )
+
+  const rankingDialog = selectedModalSector && typeof document !== "undefined" ? createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sector-modal-title"
+      onClick={() => setSelectedModalSector(null)}
+      className="fixed inset-x-0 bottom-0 top-14 z-[60] flex items-center justify-center overflow-hidden bg-black/80 p-3 sm:p-4"
+    >
+      <div
+        data-stock-ranking-dialog
+        onClick={(event) => event.stopPropagation()}
+        className="relative flex max-h-[calc(100dvh-88px)] w-full max-w-[1180px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-panel/95 shadow-2xl"
+      >
+        <div className="border-b border-white/[0.06] bg-[#07131d] p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3.5 sm:gap-4">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-amber-400/20 bg-amber-400/[0.08] text-amber-300 shadow-sm">
+                <Crown className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-brand">Signal ranking & screener</div>
+                <h2 id="sector-modal-title" className="mt-0.5 text-xl font-bold text-white tracking-tight sm:text-2xl font-sans">Top cổ phiếu theo Qeo composite</h2>
+                <p className="mt-0.5 text-xs font-medium text-slate-400 italic">Điểm cao hỗ trợ so sánh, không phải lệnh mua.</p>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Badge variant="outline" className="h-7 border-up/30 bg-up/10 px-3 text-xs font-bold text-up">Nguồn KFSP · điểm Qeo</Badge>
+              <button type="button" onClick={() => setSelectedModalSector(null)} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white" aria-label="Đóng popup (ESC)"><X className="size-5" /></button>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-4 border-t border-white/[0.06] pt-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
+              <Badge variant="outline" className="h-10 justify-center border-brand/30 bg-brand/10 px-3 text-sm font-bold text-brand sm:min-w-28">
+                Tất cả · {ratings.length} mã
+              </Badge>
+              <Select value={selectedModalSector} onValueChange={(value) => setSelectedModalSector(value ?? "all")}>
+                <SelectTrigger aria-label="Chọn ngành" className="h-10 w-full min-w-64 border-white/10 bg-cell px-3 text-sm sm:text-base font-bold text-white hover:bg-white/[0.05] sm:w-80">
+                  <SelectValue>{selectedModalSector === "all" ? "Ngành: Tất cả ngành" : `Ngành: ${selectedModalSector}`}</SelectValue>
+                </SelectTrigger>
+                <SelectContent align="start" className="max-h-96 border border-white/10 bg-[#111724] p-1 font-ticker text-sm sm:text-base text-white shadow-2xl">
+                  <SelectGroup>
+                    <SelectLabel className="px-2 py-2 font-bold uppercase tracking-wider text-muted-2 text-xs">Danh sách ngành</SelectLabel>
+                    <SelectItem value="all" className="px-3 py-2.5 text-sm sm:text-base focus:bg-brand/15 focus:text-brand">Tất cả ngành</SelectItem>
+                    {allSectorNames.map((name) => <SelectItem key={name} value={name} className="px-3 py-2.5 text-sm sm:text-base focus:bg-brand/15 focus:text-brand">Ngành: {name}</SelectItem>)}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="relative w-full lg:w-80">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+              <Input value={modalSearch} onChange={(event) => setModalSearch(event.target.value)} placeholder="Tìm mã hoặc tên..." aria-label="Tìm mã cổ phiếu" className="h-10 border-white/10 bg-cell pl-9 text-sm sm:text-base text-white placeholder:text-muted focus-visible:border-brand/50 focus-visible:ring-brand/20" />
+            </div>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-auto bg-[#07101a]/35">
+          <table className="w-full table-fixed font-ticker">
+            <colgroup><col className="w-[18%]" /><col className="w-[7%]" /><col className="w-[9%]" /><col className="w-[7%]" /><col className="w-[7%]" /><col className="w-[8%]" /><col className="w-[5%]" /><col className="w-[5%]" /><col className="w-[9%]" /><col className="w-[7%]" /><col className="w-[7%]" /><col className="w-[11%]" /></colgroup>
+            <thead className="sticky top-0 z-20 bg-[#05090f]">
+              <tr className="border-b border-white/[0.08] text-xs font-extrabold uppercase text-muted-2">
+                <PopupSortHead label="# · Cổ phiếu / Ngành" sortKey="ticker" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="h-14 px-2 text-left" />
+                <PopupSortHead label="Giá" sortKey="price" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center" />
+                <PopupSortHead label="Vốn hóa" sortKey="marketCapBillion" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-cyan-200" />
+                <PopupSortHead label="Điểm CANSLIM" sortKey="canslimScore" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-emerald-300" />
+                <PopupSortHead label="Điểm 4M" sortKey="score4m" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-amber-300" />
+                <PopupSortHead label="Tiềm năng giá" sortKey="pricePotential" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-ref" />
+                <PopupSortHead label="RSs" sortKey="rsShort" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-cyan-300" />
+                <PopupSortHead label="RSm" sortKey="rsMedium" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-violet-300" />
+                <PopupSortHead label="RRG cổ phiếu" sortKey="stockRrgState" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-cyan-300" />
+                <PopupSortHead label="Biến động tuần" sortKey="weeklyChangePercent" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-cyan-200" />
+                <PopupSortHead label="Biến động tháng" sortKey="monthlyChangePercent" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-violet-200" />
+                <PopupSortHead label="Qeo composite" sortKey="ratingScore" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-brand" />
+              </tr>
+            </thead>
+            <tbody>
+              {modalStocks.map((stock, index) => {
+                const SectorIcon = getSectorIcon(stock.sector)
+                const priceTone = (stock.changePercent ?? 0) > 0 ? "up" : (stock.changePercent ?? 0) < 0 ? "down" : "ref"
+                const pricePositive = (stock.changePercent ?? 0) > 0
+                return (
+                  <tr
+                    key={`${stock.ticker}-${stock.asOfDate}`}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Mở hồ sơ rating ${stock.ticker}`}
+                    onClick={() => { onOpenStockDetail?.(stock.ticker); setSelectedModalSector(null) }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        onOpenStockDetail?.(stock.ticker)
+                        setSelectedModalSector(null)
+                      }
+                    }}
+                    className="group cursor-pointer border-b border-white/[0.065] bg-[#07101a]/35 outline-none transition-colors hover:bg-cyan-300/[0.035] hover:shadow-[inset_3px_0_0_rgba(103,232,249,.7),0_0_24px_-16px_rgba(103,232,249,.7)] focus-visible:bg-cyan-300/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50"
+                  >
+                    <td className="px-2 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-white/[0.07] bg-white/[0.025] font-mono text-xs font-bold text-muted">{String(index + 1).padStart(2, "0")}</span>
+                        <StockLogo symbol={stock.ticker} size={36} className="shrink-0 rounded-full group-hover:shadow-[0_0_20px_-5px_rgba(103,232,249,.75)]" />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1 font-ticker text-[16px] font-extrabold leading-none tracking-tight text-white group-hover:text-cyan-200">{stock.ticker}</div>
+                          <div className="mt-1 flex items-center gap-1 text-[11px] font-bold uppercase text-cyan-300/80"><SectorIcon className="size-3 shrink-0" /><span className="truncate">{stock.sector}</span></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-1 text-center">
+                      <div className={cn("font-mono text-[14px] font-bold leading-tight tracking-tight", pricePositive ? "text-up" : (stock.changePercent ?? 0) < 0 ? "text-down" : "text-ref")}>{formatPrice(stock.price)}</div>
+                      <div className="mt-1 flex justify-center"><MarketChangePill value={stock.changePercent} tone={priceTone} compact /></div>
+                    </td>
+                    <td className="px-1 text-center font-mono text-xs font-bold text-cyan-100">{formatMarketCapBillion(stock.marketCapBillion)}</td>
+                    <td className="px-1 text-center"><span className="inline-flex h-8 min-w-13 items-center justify-center gap-1 rounded-md border border-emerald-300/35 bg-emerald-300/[0.09] px-1.5 font-mono text-xs font-black text-emerald-300 sm:text-sm"><Target className="size-3 sm:size-3.5" />{stock.canslimScore == null ? "—" : Math.round(stock.canslimScore)}</span></td>
+                    <td className="px-1 text-center"><span className="inline-flex h-8 min-w-13 items-center justify-center gap-1 rounded-md border border-amber-300/35 bg-amber-300/[0.09] px-1.5 font-mono text-xs font-black text-amber-300 sm:text-sm">⊛ {stock.score4m == null ? "—" : Math.round(stock.score4m)}</span></td>
+                    <td className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-xs font-bold", stock.pricePotential?.startsWith("Tăng") ? "text-up" : stock.pricePotential?.startsWith("Giảm") ? "text-down" : "text-ref")}>{stock.pricePotential?.startsWith("Giảm") ? <TrendingDown className="size-3.5" /> : <TrendingUp className="size-3.5" />}{stock.pricePotential || "—"}</span></td>
+                    <td className="px-1 text-center"><span className="inline-flex h-8 min-w-13 items-center justify-center gap-1 rounded-md border border-cyan-300/35 bg-cyan-300/[0.09] px-1.5 font-mono text-xs font-black text-cyan-300 sm:text-sm"><Zap className="size-3.5" />{stock.rsShort ?? stock.scoreComponents.momentum ?? "—"}</span></td>
+                    <td className="px-1 text-center"><span className="inline-flex h-8 min-w-13 items-center justify-center rounded-md border border-violet-400/35 bg-violet-400/[0.09] px-1.5 font-mono text-xs font-black text-violet-300 sm:text-sm">{stock.rsMedium ?? stock.scoreComponents.moneyFlow ?? "—"}</span></td>
+                    <td className="px-1 text-center"><PopupRrgBadge value={stock.stockRrgState} /></td>
+                    <td className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-bold sm:text-sm", (stock.weeklyChangePercent ?? 0) >= 0 ? "text-up" : "text-down")}><CalendarDays className="size-3.5" />{formatSigned(stock.weeklyChangePercent, 2, "%")}</span></td>
+                    <td className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-bold sm:text-sm", (stock.monthlyChangePercent ?? 0) >= 0 ? "text-up" : "text-down")}><CalendarRange className="size-3.5" />{formatSigned(stock.monthlyChangePercent, 2, "%")}</span></td>
+                    <td className="px-1 text-center"><div className="flex items-center justify-center gap-1"><strong className={cn("flex size-9 items-center justify-center rounded-lg border font-mono text-base font-black sm:size-10", stock.ratingScore >= 80 ? "border-up/35 bg-up/10 text-up" : stock.ratingScore >= 65 ? "border-ref/35 bg-ref/10 text-ref" : "border-down/35 bg-down/10 text-down")}>{stock.ratingScore}</strong><ArrowRight className="size-3.5 text-muted transition-transform group-hover:translate-x-1 group-hover:text-cyan-300" /></div></td>
+                  </tr>
+                )
+              })}
+              {modalStocks.length === 0 ? <tr><td colSpan={12} className="py-8 text-center font-sans text-sm text-slate-400">Không tìm thấy cổ phiếu nào phù hợp bộ lọc trong ngành này.</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-white/[0.08] bg-[#050b12] px-5 py-3 font-sans text-xs text-slate-400 sm:px-6">
+          <span className="font-mono">Hiển thị <strong className="text-white">{modalStocks.length}</strong> / {ratings.length} mã</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => setSelectedModalSector(null)} className="h-8 border-white/10 text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white">Đóng (ESC)</Button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  ) : null
 
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-5 shadow-xl sm:p-6">
-        <SectorPanelHeading
-          icon={Layers}
-          eyebrow="TOP LEADING SECTORS"
-          title="Ngành nghề nổi bật & Sức mạnh dòng tiền"
-        />
+        <SectorPanelHeading icon={Layers} eyebrow="TOP LEADING SECTORS" title="Ngành nghề nổi bật & Sức mạnh dòng tiền" />
 
         <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {topPodiumSectors.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-6 text-center text-sm text-slate-400 sm:col-span-2 lg:col-span-3">
-              KFSP chưa có dữ liệu Kết quả ngành hợp lệ cho snapshot này.
-            </div>
+            <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-6 text-center text-sm text-slate-400 sm:col-span-2 lg:col-span-3">KFSP chưa có dữ liệu Kết quả ngành hợp lệ cho snapshot này.</div>
           ) : null}
-
           {topPodiumSectors.map((sector, index) => {
             const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"
             const changePct = sector.averageChangePct ?? 0
             const positive = changePct >= 0
             const SectorIcon = getSectorIcon(sector.displayName)
             const breadthTotal = Math.max(1, sector.advances + sector.unchanged + sector.declines)
-
             return (
-              <button
-                key={sector.sectorKey}
-                type="button"
-                onClick={() => handleOpenSectorModal(sector.displayName, sector)}
-                className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b1b26]/90 p-4 text-left transition-transform duration-150 hover:scale-[1.01] hover:border-teal-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400"
-              >
+              <button key={sector.sectorKey} type="button" onClick={() => handleOpenSectorModal(sector.displayName, sector)} className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b1b26]/90 p-4 text-left transition-transform duration-150 hover:scale-[1.01] hover:border-teal-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-2 font-mono text-xs font-black uppercase text-slate-200">
-                    <span className="text-base">{medal}</span>
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-cyan-400/20 bg-cyan-400/10">
-                      <SectorIcon className="size-3.5 text-cyan-400" />
-                    </span>
-                    <span className="truncate">{sector.displayName}</span>
-                  </div>
-                  {sector.rsScore != null ? (
-                    <span className="shrink-0 rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] font-bold text-teal-300">
-                      RS {formatNumber(sector.rsScore, 2)}
-                    </span>
-                  ) : null}
+                  <div className="flex min-w-0 items-center gap-2 font-mono text-xs font-black uppercase text-slate-200"><span className="text-base">{medal}</span><span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-cyan-400/20 bg-cyan-400/10"><SectorIcon className="size-3.5 text-cyan-400" /></span><span className="truncate">{sector.displayName}</span></div>
+                  {sector.rsScore != null ? <span className="shrink-0 rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] font-bold text-teal-300">RS {formatNumber(sector.rsScore, 2)}</span> : null}
                 </div>
-
                 <div className="my-3 text-center">
-                  <strong className={cn("font-mono text-2xl font-black tracking-tight sm:text-3xl", positive ? "text-emerald-400" : "text-rose-400")}>
-                    {formatSigned(changePct, 2, "%")}
-                  </strong>
-                  {sector.tradedValue != null && sector.tradedValue > 0 ? (
-                    <p className="mt-0.5 font-mono text-xs text-slate-400">
-                      GTGD: <strong className="font-bold text-white">{formatNumber(sector.tradedValue, 0)}</strong> tỷ
-                    </p>
-                  ) : null}
+                  <strong className={cn("font-mono text-2xl font-black tracking-tight sm:text-3xl", positive ? "text-emerald-400" : "text-rose-400")}>{formatSigned(changePct, 2, "%")}</strong>
+                  {sector.tradedValue != null && sector.tradedValue > 0 ? <p className="mt-0.5 font-mono text-xs text-slate-400">GTGD: <strong className="font-bold text-white">{formatNumber(sector.tradedValue, 0)}</strong> tỷ</p> : null}
                 </div>
-
-                <div className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-                  <span className="h-full bg-emerald-400" style={{ width: `${sector.advances / breadthTotal * 100}%` }} />
-                  <span className="h-full bg-amber-400" style={{ width: `${sector.unchanged / breadthTotal * 100}%` }} />
-                  <span className="h-full bg-rose-500" style={{ width: `${sector.declines / breadthTotal * 100}%` }} />
-                </div>
+                <div className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-slate-800"><span className="h-full bg-emerald-400" style={{ width: `${sector.advances / breadthTotal * 100}%` }} /><span className="h-full bg-amber-400" style={{ width: `${sector.unchanged / breadthTotal * 100}%` }} /><span className="h-full bg-rose-500" style={{ width: `${sector.declines / breadthTotal * 100}%` }} /></div>
               </button>
             )
           })}
         </div>
 
         <div className="mt-6 space-y-3 font-sans text-xs leading-relaxed text-slate-300 sm:text-sm">
-          <p>
-            Trạng thái <strong className="font-bold text-white">Dẫn dắt</strong> do KFSP trả về hiện gồm{" "}
-            <strong className="font-bold text-white">{leadingNames.length > 0 ? leadingNames.join(", ") : "chưa có trạng thái Dẫn dắt từ KFSP"}</strong>.
-          </p>
-          <div className="flex items-start gap-2 pt-1">
-            <Rocket className="mt-0.5 size-4 shrink-0 text-cyan-400" />
-            <div>
-              <strong className="mb-1 block font-bold text-white">Chuyển động sức mạnh Ngành:</strong>
-              <p className="text-slate-300">
-                Trạng thái <strong className="font-bold text-white">Phục hồi</strong> do KFSP trả về hiện gồm{" "}
-                <strong className="font-bold text-white">{recoveringNames.length > 0 ? recoveringNames.join(", ") : "chưa có ngành Phục hồi trong snapshot"}</strong>.
-              </p>
-            </div>
-          </div>
+          <p>Trạng thái <strong className="font-bold text-white">Dẫn dắt</strong> do KFSP trả về hiện gồm <strong className="font-bold text-white">{leadingNames.length > 0 ? leadingNames.join(", ") : "chưa có trạng thái Dẫn dắt từ KFSP"}</strong>.</p>
+          <div className="flex items-start gap-2 pt-1"><Rocket className="mt-0.5 size-4 shrink-0 text-cyan-400" /><div><strong className="mb-1 block font-bold text-white">Chuyển động sức mạnh Ngành:</strong><p className="text-slate-300">Trạng thái <strong className="font-bold text-white">Phục hồi</strong> do KFSP trả về hiện gồm <strong className="font-bold text-white">{recoveringNames.length > 0 ? recoveringNames.join(", ") : "chưa có ngành Phục hồi trong snapshot"}</strong>.</p></div></div>
         </div>
 
-        {quickPills.length > 0 ? (
-          <div className="mt-5 flex flex-wrap gap-2 border-t border-white/[0.06] pt-3">
-            {quickPills.map((pill) => (
-              <button
-                key={pill.ticker}
-                type="button"
-                onClick={() => onOpenStockDetail?.(pill.ticker)}
-                className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#0c1d29] px-2.5 py-1 font-mono text-xs font-bold transition-colors hover:border-teal-400/40 hover:bg-[#122736]"
-              >
-                <span className="text-slate-300">{pill.ticker}</span>
-                <span className={pill.change >= 0 ? "text-emerald-400" : "text-rose-400"}>{formatSigned(pill.change, 1, "%")}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
+        {quickPills.length > 0 ? <div className="mt-5 flex flex-wrap gap-2 border-t border-white/[0.06] pt-3">{quickPills.map((pill) => <button key={pill.ticker} type="button" onClick={() => onOpenStockDetail?.(pill.ticker)} className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#0c1d29] px-2.5 py-1 font-mono text-xs font-bold transition-colors hover:border-teal-400/40 hover:bg-[#122736]"><span className="text-slate-300">{pill.ticker}</span><span className={pill.change >= 0 ? "text-emerald-400" : "text-rose-400"}>{formatSigned(pill.change, 1, "%")}</span></button>)}</div> : null}
       </section>
 
       <details
         data-sector-rotation-matrix
         className="group overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07131d]/95 shadow-xl"
       >
-        <summary
-          data-sector-rotation-summary
-          className="flex cursor-pointer list-none items-center justify-between gap-4 bg-[#050e16] px-4 py-3.5 outline-none marker:hidden focus-visible:ring-2 focus-visible:ring-purple-400/40 sm:px-5"
-        >
-          <SectorPanelHeading
-            icon={RefreshCw}
-            eyebrow="SECTOR ROTATION MATRIX"
-            title="Luân chuyển & Nỗ lực kết quả dòng tiền"
-            description="Rê chuột vào cột Nỗ lực / Kết quả để xem chi tiết"
-          />
+        <summary data-sector-rotation-summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-[#050e16] px-4 py-3.5 outline-none marker:hidden focus-visible:ring-2 focus-visible:ring-purple-400/40 sm:px-5">
+          <SectorPanelHeading icon={RefreshCw} eyebrow="SECTOR ROTATION MATRIX" title="Luân chuyển & Nỗ lực kết quả dòng tiền" description="Rê chuột vào cột Nỗ lực / Kết quả để xem chi tiết" />
           <ChevronDown className="size-5 shrink-0 text-slate-500 transition-transform duration-200 group-open:rotate-180" />
         </summary>
 
         <div className="overflow-x-auto border-t border-white/[0.08]">
           <table className="w-full min-w-[1050px] border-collapse text-sm">
-            <thead className="border-b border-white/[0.08] bg-[#050e16] font-sans text-xs font-bold text-slate-300">
-              <tr>
-                <th className="sticky left-0 z-20 w-52 bg-[#050e16] px-4 py-3.5 text-left">Tên ngành</th>
-                <th className="w-36 px-3 py-3.5 text-center">Nỗ lực / Kết quả</th>
-                <th className="w-14 px-2 py-3.5 text-center">Xu hướng</th>
-                {sessionDates.map((date) => (
-                  <th key={date} className="px-2 py-3.5 text-center font-mono">
-                    <span>{date.slice(5)} ↑</span>
-                  </th>
-                ))}
-                <th className="w-10 px-2 py-3.5 text-center">MA10</th>
-                <th className="w-10 px-2 py-3.5 text-center">MA20</th>
-                <th className="w-10 px-2 py-3.5 text-center">MA50</th>
-              </tr>
-            </thead>
+            <thead className="border-b border-white/[0.08] bg-[#050e16] font-sans text-xs font-bold text-slate-300"><tr><th className="sticky left-0 z-20 w-52 bg-[#050e16] px-4 py-3.5 text-left">Tên ngành</th><th className="w-36 px-3 py-3.5 text-center">Nỗ lực / Kết quả</th><th className="w-14 px-2 py-3.5 text-center">Xu hướng</th>{sessionDates.map((date) => <th key={date} className="px-2 py-3.5 text-center font-mono"><span>{date.slice(5)} ↑</span></th>)}<th className="w-10 px-2 py-3.5 text-center">MA10</th><th className="w-10 px-2 py-3.5 text-center">MA20</th><th className="w-10 px-2 py-3.5 text-center">MA50</th></tr></thead>
             <tbody className="divide-y divide-white/[0.04]">
-              <tr className="bg-[#0b1c28]/80 font-mono font-bold text-white">
-                <td className="sticky left-0 z-10 bg-[#0b1c28] px-4 py-2.5 uppercase text-teal-300">
-                  <div className="flex items-center gap-2"><span className="flex size-5 items-center justify-center rounded bg-teal-400/10"><LineChart className="size-3.5" /></span>VNINDEX</div>
-                </td>
-                <td className="px-3 py-2 text-center text-[10px] text-slate-400">— / {formatSigned(marketHistory.at(-1)?.vnindexChangePct, 2, "%")}</td>
-                <td className="px-2 py-2.5 text-center">
-                  <SectorMiniSparkline data={marketHistory.flatMap((item) => item.vnindexChangePct == null ? [] : [item.vnindexChangePct])} positive={(marketHistory.at(-1)?.vnindexChangePct ?? 0) >= 0} />
-                </td>
-                {sessionDates.map((date) => {
-                  const change = marketByDate.get(date)?.vnindexChangePct
-                  return <td key={date} className={cn("px-2 py-2 text-center", (change ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400")}>{formatSigned(change, 2, "%")}</td>
-                })}
-                <td className="px-2 py-2.5 text-center text-slate-500">—</td>
-                <td className="px-2 py-2.5 text-center text-slate-500">—</td>
-                <td className="px-2 py-2.5 text-center text-slate-500">—</td>
-              </tr>
-
-              <tr className="bg-[#091721]/80 font-mono text-[11px] text-slate-300">
-                <td className="sticky left-0 z-10 bg-[#091721] px-4 py-2 text-slate-400">
-                  <div className="flex items-center gap-2"><span className="flex size-5 items-center justify-center rounded bg-cyan-400/10 text-cyan-300"><LineChart className="size-3.5" /></span>Thanh khoản VNINDEX</div>
-                </td>
-                <td className="px-3 py-2 text-center text-[10px] text-slate-400"><span title="Đơn vị nguồn chưa xác minh">GTGD: {formatNumber(marketHistory.at(-1)?.totalTradedValue, 2)}</span></td>
-                <td className="px-2 py-2" />
-                {sessionDates.map((date) => {
-                  const point = marketByDate.get(date)
-                  return <td key={date} className={cn("px-2 py-2 text-center", (point?.vnindexChangePct ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400")}>{point?.totalTradedValue != null ? formatNumber(point.totalTradedValue, 2) : "—"}</td>
-                })}
-                <td className="px-2 py-2 text-center text-slate-500">—</td>
-                <td className="px-2 py-2 text-center text-slate-500">—</td>
-                <td className="px-2 py-2 text-center text-slate-500">—</td>
-              </tr>
-
+              <tr className="bg-[#0b1c28]/80 font-mono font-bold text-white"><td className="sticky left-0 z-10 bg-[#0b1c28] px-4 py-2.5 uppercase text-teal-300"><div className="flex items-center gap-2"><span className="flex size-5 items-center justify-center rounded bg-teal-400/10"><LineChart className="size-3.5" /></span>VNINDEX</div></td><td className="px-3 py-2 text-center text-[10px] text-slate-400">— / {formatSigned(marketHistory.at(-1)?.vnindexChangePct, 2, "%")}</td><td className="px-2 py-2.5 text-center"><SectorMiniSparkline data={marketHistory.flatMap((item) => item.vnindexChangePct == null ? [] : [item.vnindexChangePct])} positive={(marketHistory.at(-1)?.vnindexChangePct ?? 0) >= 0} /></td>{sessionDates.map((date) => { const change = marketByDate.get(date)?.vnindexChangePct; return <td key={date} className={cn("px-2 py-2 text-center", (change ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400")}>{formatSigned(change, 2, "%")}</td> })}<td className="px-2 py-2.5 text-center text-slate-500">—</td><td className="px-2 py-2.5 text-center text-slate-500">—</td><td className="px-2 py-2.5 text-center text-slate-500">—</td></tr>
+              <tr className="bg-[#091721]/80 font-mono text-[11px] text-slate-300"><td className="sticky left-0 z-10 bg-[#091721] px-4 py-2 text-slate-400"><div className="flex items-center gap-2"><span className="flex size-5 items-center justify-center rounded bg-cyan-400/10 text-cyan-300"><LineChart className="size-3.5" /></span>Thanh khoản VNINDEX</div></td><td className="px-3 py-2 text-center text-[10px] text-slate-400"><span title="Đơn vị nguồn chưa xác minh">GTGD: {formatNumber(marketHistory.at(-1)?.totalTradedValue, 2)}</span></td><td className="px-2 py-2" />{sessionDates.map((date) => { const point = marketByDate.get(date); return <td key={date} className={cn("px-2 py-2 text-center", (point?.vnindexChangePct ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400")}>{point?.totalTradedValue != null ? formatNumber(point.totalTradedValue, 2) : "—"}</td> })}<td className="px-2 py-2 text-center text-slate-500">—</td><td className="px-2 py-2 text-center text-slate-500">—</td><td className="px-2 py-2 text-center text-slate-500">—</td></tr>
               {currentSectors.map((sector) => {
-                const sparkValues = sessionDates.flatMap((date) => {
-                  const item = historyMatrixMap.get(`${sector.sectorKey}:${date}`)
-                  return item?.closePrice == null ? [] : [item.closePrice]
-                })
+                const sparkValues = sessionDates.flatMap((date) => { const item = historyMatrixMap.get(`${sector.sectorKey}:${date}`); return item?.closePrice == null ? [] : [item.closePrice] })
                 const metrics = getSectorEffortMetrics(sector)
                 const effortBarWidth = metrics.effortPct == null ? 0 : Math.min(100, Math.max(8, Math.abs(metrics.effortPct) * 0.5))
-
                 return (
                   <tr key={sector.sectorKey} onClick={() => handleOpenSectorModal(sector.displayName, sector)} className="group cursor-pointer transition-colors hover:bg-white/[0.04]">
-                    <td className="sticky left-0 z-10 bg-[#07131d] px-4 py-2.5 font-sans text-sm font-semibold text-white transition-colors group-hover:bg-[#0c1e2d]">
-                      <div className="flex items-center justify-between gap-2"><SectorLabel name={sector.displayName} /><ArrowRight className="size-3 shrink-0 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100" /></div>
-                    </td>
-                    <td
-                      className="px-3 py-2 text-center"
-                      onMouseEnter={(event) => {
-                        const rect = event.currentTarget.getBoundingClientRect()
-                        setHoveredEffortSector(sector)
-                        setEffortTooltipPos({ x: rect.left + rect.width / 2, y: rect.top - 6 })
-                      }}
-                      onMouseLeave={() => {
-                        setHoveredEffortSector(null)
-                        setEffortTooltipPos(null)
-                      }}
-                    >
-                      <div className="mx-auto flex w-28 flex-col gap-1" aria-label={`Nỗ lực ${formatSigned(metrics.effortPct, 2, "%")}; Kết quả ${formatSigned(metrics.resultPct, 2, "%")}`}>
-                        <div className="flex items-center justify-between gap-1.5 text-xs">
-                          <span className="sr-only">Nỗ lực</span>
-                          <div className="h-2 flex-1 overflow-hidden rounded-sm bg-slate-900">
-                            <span className={cn("block h-full rounded-sm", (metrics.effortPct ?? 0) >= 0 ? "bg-emerald-500" : "bg-rose-500")} style={{ width: `${effortBarWidth}%` }} />
-                          </div>
-                          <span className={cn("w-11 shrink-0 text-right font-bold", (metrics.effortPct ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400")}>{formatSigned(metrics.effortPct, 1, "%")}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-1.5 text-xs"><span className="text-slate-400">Kết quả:</span><span className={cn("font-bold", (metrics.resultPct ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300")}>{formatSigned(metrics.resultPct, 2, "%")}</span></div>
-                      </div>
+                    <td className="sticky left-0 z-10 bg-[#07131d] px-4 py-2.5 font-sans text-sm font-semibold text-white transition-colors group-hover:bg-[#0c1e2d]"><div className="flex items-center justify-between gap-2"><SectorLabel name={sector.displayName} /><ArrowRight className="size-3 shrink-0 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100" /></div></td>
+                    <td className="px-3 py-2 text-center" onMouseEnter={(event) => { const rect = event.currentTarget.getBoundingClientRect(); setHoveredEffortSector(sector); setEffortTooltipPos({ x: rect.left + rect.width / 2, y: rect.top - 6 }) }} onMouseLeave={() => { setHoveredEffortSector(null); setEffortTooltipPos(null) }}>
+                      <div className="mx-auto flex w-28 flex-col gap-1" aria-label={`Nỗ lực ${formatSigned(metrics.effortPct, 2, "%")}; Kết quả ${formatSigned(metrics.resultPct, 2, "%")}`}><div className="flex items-center justify-between gap-1.5 text-xs"><span className="sr-only">Nỗ lực</span><div className="h-2 flex-1 overflow-hidden rounded-sm bg-slate-900"><span className={cn("block h-full rounded-sm", (metrics.effortPct ?? 0) >= 0 ? "bg-emerald-500" : "bg-rose-500")} style={{ width: `${effortBarWidth}%` }} /></div><span className={cn("w-11 shrink-0 text-right font-bold", (metrics.effortPct ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400")}>{formatSigned(metrics.effortPct, 1, "%")}</span></div><div className="flex items-center justify-between gap-1.5 text-xs"><span className="text-slate-400">Kết quả:</span><span className={cn("font-bold", (metrics.resultPct ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300")}>{formatSigned(metrics.resultPct, 2, "%")}</span></div></div>
                     </td>
                     <td className="px-2 py-2.5 text-center"><SectorMiniSparkline data={sparkValues} positive={(sector.averageChangePct ?? 0) >= 0} /></td>
                     {sessionDates.map((date) => <td key={date} className="p-1 text-center"><RotationBadge value={historyMatrixMap.get(`${sector.sectorKey}:${date}`)?.rotationState ?? "unknown"} /></td>)}
-                    {[sector.ma10State, sector.ma20State, sector.ma50State].map((state, index) => (
-                      <td key={index} className="px-2 py-2.5 text-center font-mono text-xs font-bold">
-                        {state === "up" ? <span className="text-emerald-400">▲</span> : state === "down" ? <span className="text-rose-400">▼</span> : <span className="text-slate-500">—</span>}
-                      </td>
-                    ))}
+                    {[sector.ma10State, sector.ma20State, sector.ma50State].map((state, index) => <td key={index} className="px-2 py-2.5 text-center font-mono text-xs font-bold">{state === "up" ? <span className="text-emerald-400">▲</span> : state === "down" ? <span className="text-rose-400">▼</span> : <span className="text-slate-500">—</span>}</td>)}
                   </tr>
                 )
               })}
@@ -581,130 +606,13 @@ export function SectorMapPanel({
       </details>
 
       {hoveredEffortSector && effortTooltipPos ? (
-        <div
-          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full overflow-hidden rounded-xl border border-purple-500/50 bg-[#08151f] shadow-2xl"
-          style={{ left: `${effortTooltipPos.x}px`, top: `${effortTooltipPos.y}px`, minWidth: "260px" }}
-        >
+        <div className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full overflow-hidden rounded-xl border border-purple-500/50 bg-[#08151f] shadow-2xl" style={{ left: `${effortTooltipPos.x}px`, top: `${effortTooltipPos.y}px`, minWidth: "260px" }}>
           <div className="bg-[#4c0d64] px-4 py-2 text-center"><strong className="font-mono text-xs font-black uppercase tracking-wider text-white">{hoveredEffortSector.displayName}</strong></div>
-          {(() => {
-            const metrics = getSectorEffortMetrics(hoveredEffortSector)
-            return (
-              <>
-                <div className="grid grid-cols-2 gap-3 bg-[#0d3420] p-3 font-mono text-xs">
-                  <div className="space-y-1"><strong className="mb-1 block text-white">Nỗ lực:</strong><p className="text-[11px] text-slate-200">Trước đó: <b>{formatNumber(metrics.prevVal, 2)} tỷ</b></p><p className="text-[11px] text-slate-200">Hiện tại: <b>{formatNumber(metrics.currVal, 2)} tỷ</b></p><p className="text-[11px] font-bold text-emerald-300">%Thay đổi: {formatSigned(metrics.effortPct, 2, "%")}</p><p className="text-[11px] text-slate-200">Thay đổi ròng: <b>{formatSigned(metrics.netChange, 2)} tỷ</b></p></div>
-                  <div className="space-y-1"><strong className="mb-1 block text-white">Kết quả:</strong><p className="text-[11px] text-slate-200">%Thay đổi: <span className={cn("font-bold", (metrics.resultPct ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300")}>{formatSigned(metrics.resultPct, 2, "%")}</span></p></div>
-                </div>
-                <div className="flex items-center justify-center gap-4 bg-white px-3 py-1.5 text-center font-mono text-xs font-bold text-slate-900"><span className="text-emerald-600">▲ {metrics.advances}</span><span className="text-amber-500">■ {metrics.unchanged}</span><span className="text-rose-600">▼ {metrics.declines}</span></div>
-              </>
-            )
-          })()}
+          {(() => { const metrics = getSectorEffortMetrics(hoveredEffortSector); return <><div className="grid grid-cols-2 gap-3 bg-[#0d3420] p-3 font-mono text-xs"><div className="space-y-1"><strong className="mb-1 block text-white">Nỗ lực:</strong><p className="text-[11px] text-slate-200">Trước đó: <b>{formatNumber(metrics.prevVal, 2)} tỷ</b></p><p className="text-[11px] text-slate-200">Hiện tại: <b>{formatNumber(metrics.currVal, 2)} tỷ</b></p><p className="text-[11px] font-bold text-emerald-300">%Thay đổi: {formatSigned(metrics.effortPct, 2, "%")}</p><p className="text-[11px] text-slate-200">Thay đổi ròng: <b>{formatSigned(metrics.netChange, 2)} tỷ</b></p></div><div className="space-y-1"><strong className="mb-1 block text-white">Kết quả:</strong><p className="text-[11px] text-slate-200">%Thay đổi: <span className={cn("font-bold", (metrics.resultPct ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300")}>{formatSigned(metrics.resultPct, 2, "%")}</span></p></div></div><div className="flex items-center justify-center gap-4 bg-white px-3 py-1.5 text-center font-mono text-xs font-bold text-slate-900"><span className="text-emerald-600">▲ {metrics.advances}</span><span className="text-amber-500">■ {metrics.unchanged}</span><span className="text-rose-600">▼ {metrics.declines}</span></div></> })()}
         </div>
       ) : null}
 
-      {selectedModalSector ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="sector-modal-title"
-          onClick={() => setSelectedModalSector(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/80 p-2 sm:p-4"
-        >
-          <div
-            data-stock-ranking-dialog
-            onClick={(event) => event.stopPropagation()}
-            className="relative flex max-h-[calc(100vh-32px)] w-full max-w-[1280px] flex-col overflow-hidden rounded-[22px] border border-white/10 bg-[#070e17] shadow-2xl"
-          >
-            <div className="border-b border-white/[0.08] bg-[#050b12] px-5 py-4 sm:px-6 sm:py-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <span className="font-mono text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">SIGNAL RANKING</span>
-                  <h2 id="sector-modal-title" className="mt-0.5 text-xl font-black text-white sm:text-2xl">Top cổ phiếu theo Qeo composite</h2>
-                  <p className="mt-0.5 text-xs text-slate-400">Điểm cao hỗ trợ so sánh, không phải lệnh mua. (Nhấn ESC để đóng)</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <Badge variant="outline" className="border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 font-mono text-xs font-bold text-emerald-300">Supabase live</Badge>
-                  <button type="button" onClick={() => setSelectedModalSector(null)} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white" aria-label="Đóng popup (ESC)"><X className="size-5" /></button>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <div className="flex rounded-xl border border-white/10 bg-white/[0.03] p-1 font-mono text-xs">
-                    <button type="button" onClick={() => setModalUniverse("top100")} className={cn("flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold transition-colors", modalUniverse === "top100" ? "bg-teal-400/20 text-teal-200" : "text-slate-400 hover:text-white")}><Crown className="size-3 text-amber-400" />Top 100</button>
-                    <button type="button" onClick={() => setModalUniverse("all")} className={cn("rounded-lg px-3 py-1.5 font-bold transition-colors", modalUniverse === "all" ? "bg-teal-400/20 text-teal-200" : "text-slate-400 hover:text-white")}>Tất cả</button>
-                  </div>
-
-                  <Select value={selectedModalSector} onValueChange={(value) => value && setSelectedModalSector(value)}>
-                    <SelectTrigger aria-label="Chọn ngành" className="h-9 min-w-[220px] border-white/10 bg-[#091522] text-xs font-bold text-white hover:bg-white/[0.05] sm:text-sm">
-                      <SelectValue>{selectedModalSector === "all" ? "Ngành: Tất cả ngành" : `Ngành: ${selectedModalSector.toUpperCase()}`}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent align="start" className="max-h-80 border border-white/10 bg-[#07131f] text-white">
-                      <SelectGroup>
-                        <SelectLabel className="px-2 py-1.5 text-[10px] font-bold uppercase text-slate-500">Danh sách ngành</SelectLabel>
-                        <SelectItem value="all" className="text-xs font-bold">Tất cả ngành</SelectItem>
-                        {allSectorNames.map((name) => <SelectItem key={name} value={name} className="text-xs font-bold">Ngành: {name.toUpperCase()}</SelectItem>)}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="relative w-full sm:w-72">
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
-                  <Input value={modalSearch} onChange={(event) => setModalSearch(event.target.value)} placeholder="Tìm mã hoặc tên..." className="h-9 border-white/10 bg-white/[0.03] pl-8 text-xs text-white placeholder:text-slate-500 focus-visible:border-teal-400" />
-                </div>
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1160px] border-collapse text-xs">
-                <thead className="sticky top-0 z-10 border-b border-white/[0.08] bg-[#050b12] font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  <tr>
-                    <th className="w-48 px-4 py-3 text-left"># · Cổ phiếu / Ngành</th>
-                    <th className="w-24 px-2 py-3 text-center">Giá</th>
-                    <th className="w-28 px-2 py-3 text-center text-emerald-400">Điểm CANSLIM</th>
-                    <th className="w-24 px-2 py-3 text-center text-amber-400">Điểm 4M</th>
-                    <th className="w-28 px-2 py-3 text-center text-rose-300">Tiềm năng giá</th>
-                    <th className="w-20 px-2 py-3 text-center text-cyan-300">RSs</th>
-                    <th className="w-20 px-2 py-3 text-center text-purple-300">RSm</th>
-                    <th className="w-28 px-2 py-3 text-center text-amber-300">RRG cổ phiếu</th>
-                    <th className="w-28 px-2 py-3 text-center text-cyan-200">Biến động tuần</th>
-                    <th className="w-28 px-2 py-3 text-center text-purple-200">Biến động tháng</th>
-                    <th className="w-28 px-4 py-3 text-center text-rose-400">Qeo composite</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/[0.04] font-mono">
-                  {modalStocks.map((stock, index) => {
-                    const pricePositive = (stock.changePercent ?? 0) >= 0
-                    const weeklyPositive = (stock.weeklyChangePercent ?? 0) >= 0
-                    const monthlyPositive = (stock.monthlyChangePercent ?? 0) >= 0
-                    return (
-                      <tr key={stock.ticker} onClick={() => { onOpenStockDetail?.(stock.ticker); setSelectedModalSector(null) }} className="group cursor-pointer transition-colors hover:bg-white/[0.03]">
-                        <td className="px-4 py-3"><div className="flex items-center gap-2.5"><span className="w-4 text-[10px] font-bold text-slate-500">{String(index + 1).padStart(2, "0")}</span><StockLogo symbol={stock.ticker} size={26} fallback="none" /><div className="min-w-0"><div className="flex items-center gap-1 font-mono text-sm font-bold text-white"><span>{stock.ticker}</span>{stock.isTop100 ? <Crown className="size-3 text-amber-400" /> : null}</div><SectorLabel name={stock.sector} compact /></div></div></td>
-                        <td className="px-2 py-3 text-center"><strong className={cn("block text-xs font-black", pricePositive ? "text-emerald-400" : "text-rose-400")}>{formatPrice(stock.price)}</strong><span className={cn("block text-[10px] font-bold", pricePositive ? "text-emerald-400" : "text-rose-400")}>{formatSigned(stock.changePercent, 2, "%")}</span></td>
-                        <td className="px-2 py-3 text-center"><span className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 font-bold text-emerald-300"><Target className="size-3" />{stock.canslimScore ?? "—"}</span></td>
-                        <td className="px-2 py-3 text-center"><span className="inline-flex items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 font-bold text-amber-300">⊛ {stock.score4m ?? "—"}</span></td>
-                        <td className="px-2 py-3 text-center"><span className={cn("inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-sans text-[10px] font-bold", stock.pricePotential?.startsWith("Tăng") ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" : "border-rose-400/30 bg-rose-400/10 text-rose-300")}>{stock.pricePotential?.startsWith("Tăng") ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}{stock.pricePotential || "—"}</span></td>
-                        <td className="px-2 py-3 text-center"><span className="inline-flex items-center gap-0.5 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 font-bold text-cyan-300"><Zap className="size-3" />{stock.rsShort ?? stock.scoreComponents?.momentum ?? "—"}</span></td>
-                        <td className="px-2 py-3 text-center"><span className="inline-flex items-center rounded-md border border-purple-400/30 bg-purple-400/10 px-2 py-0.5 font-bold text-purple-300">{stock.rsMedium ?? stock.scoreComponents?.moneyFlow ?? "—"}</span></td>
-                        <td className="px-2 py-3 text-center"><RotationBadge value={stock.stockRrgState} /></td>
-                        <td className="px-2 py-3 text-center"><span className={cn("inline-flex items-center gap-1 font-bold", weeklyPositive ? "text-emerald-400" : "text-rose-400")}><CalendarDays className="size-3 text-slate-500" />{formatSigned(stock.weeklyChangePercent, 2, "%")}</span></td>
-                        <td className="px-2 py-3 text-center"><span className={cn("inline-flex items-center gap-1 font-bold", monthlyPositive ? "text-emerald-400" : "text-rose-400")}><CalendarRange className="size-3 text-slate-500" />{formatSigned(stock.monthlyChangePercent, 2, "%")}</span></td>
-                        <td className="px-4 py-3 text-center"><div className="flex items-center justify-center gap-1.5"><strong className={cn("flex size-7 items-center justify-center rounded-md border text-xs font-bold", stock.ratingScore >= 70 ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-300" : stock.ratingScore >= 50 ? "border-rose-400/40 bg-rose-400/15 text-rose-300" : "border-rose-500/40 bg-rose-500/15 text-rose-400")}>{stock.ratingScore}</strong><ArrowRight className="size-3 text-slate-500 transition-colors group-hover:text-cyan-300" /></div></td>
-                      </tr>
-                    )
-                  })}
-                  {modalStocks.length === 0 ? <tr><td colSpan={11} className="py-8 text-center font-sans text-xs text-slate-500">Không tìm thấy cổ phiếu nào phù hợp bộ lọc trong ngành này.</td></tr> : null}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex items-center justify-between border-t border-white/[0.08] bg-[#050b12] px-5 py-3 font-sans text-xs text-slate-400 sm:px-6">
-              <span className="font-mono">Hiển thị <strong className="text-white">{modalStocks.length}</strong> / {ratings.length} mã</span>
-              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedModalSector(null)} className="h-8 border-white/10 text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white">Đóng (ESC)</Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {rankingDialog}
     </div>
   )
 }
