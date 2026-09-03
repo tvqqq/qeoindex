@@ -3,7 +3,7 @@ import { getEffectiveAdminJobDefinition } from "./effective-job-catalog.ts"
 import { executeSystemJob } from "./job-telemetry.ts"
 import { sanitizeAdminValue } from "./redact.ts"
 import { validateChangeReason } from "./request-security.ts"
-import type { AdminJobGroup, AdminManualPolicy } from "./types.ts"
+import type { AdminJobGroup, AdminManualPolicy, AdminManualPurpose } from "./types.ts"
 
 export const ALLOWLISTED_MANUAL_JOB_KEYS = [
   "market.sync_universe",
@@ -21,6 +21,8 @@ export interface ManualJobCapability {
   label: string
   description: string
   manualPolicy: AdminManualPolicy
+  manualPurpose?: AdminManualPurpose
+  automatedParentKeys?: string[]
   group: AdminJobGroup
 }
 
@@ -67,6 +69,8 @@ export function getManualJobCapabilities(): ManualJobCapability[] {
       label: def?.label ?? key,
       description: def?.description ?? "",
       manualPolicy: def?.manualPolicy ?? "allowed",
+      manualPurpose: def?.manualPurpose,
+      automatedParentKeys: def?.automatedParentKeys,
       group: (def?.group ?? "system") as AdminJobGroup,
     }
   })
@@ -112,6 +116,7 @@ async function runScannerJob(params?: ManualJobParams): Promise<Record<string, u
   return {
     ok: result.ok,
     universeDate: result.universeDate,
+    requested: result.requested,
     completed: result.completed.length,
     skipped: result.skipped.length,
     errors: result.errors.length,
@@ -157,9 +162,7 @@ async function runKfspRecoveryDispatch(input: DispatchManualAdminJobInput): Prom
     p_actor_user_id: input.actorUserId,
     p_max_duration_minutes: maxDurationMinutes,
   })
-  if (error) {
-    throw new Error(`KFSP recovery dispatch thất bại (${error.code || "unknown"}).`)
-  }
+  if (error) throw new Error(`KFSP recovery dispatch thất bại (${error.code || "unknown"}).`)
 
   const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
   if (!row || !row.request_id || !row.net_request_id || !row.system_job_run_id) {
@@ -266,9 +269,7 @@ export async function dispatchManualAdminJob(input: DispatchManualAdminJobInput)
           const { runMarketUniverseSync } = await import("../market-sync-universe.ts")
           return await runMarketUniverseSync()
         }
-        if (input.key === "scanner.run") {
-          return await runScannerJob(input.params)
-        }
+        if (input.key === "scanner.run") return await runScannerJob(input.params)
         if (input.key === "signals.monitor") {
           const { runSignalMonitor } = await import("../signal-monitor.ts")
           return await runSignalMonitor({ force: true })
@@ -279,7 +280,7 @@ export async function dispatchManualAdminJob(input: DispatchManualAdminJobInput)
         }
         throw new Error(`Unhandled job: ${input.key}`)
       },
-      extractSummary: (res) => sanitizeAdminValue(res) as Record<string, unknown>,
+      extractSummary: (result) => sanitizeAdminValue(result) as Record<string, unknown>,
     })
 
     const sanitizedSummary = sanitizeAdminValue(result) as Record<string, unknown>
