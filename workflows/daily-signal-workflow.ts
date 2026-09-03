@@ -104,7 +104,10 @@ export async function dailySignalWorkflow(startedAtIso: string) {
       scanner: scannerSummary,
       openBeforeAfternoon: openCount,
     })
-    openCount = await monitorWindow(dateKey, 13 * 60, 14 * 60 + 30, openCount)
+    const afternoonOpening = await monitorSignalStep()
+    openCount = afternoonOpening.openAfter ?? openCount
+    const nextAfternoonMinute = 13 * 60 + nextSignalMonitorIntervalMinutes(openCount, afternoonOpening.bullishCandidates ?? 0)
+    openCount = await monitorWindow(dateKey, nextAfternoonMinute, 14 * 60 + 30, openCount)
 
     // Capture the ATC closing print so end-of-day alpha and exits are not based
     // on the last continuous-auction tick.
