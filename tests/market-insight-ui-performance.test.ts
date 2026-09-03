@@ -2,7 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import fs from "node:fs"
 import path from "node:path"
-import "./market-insight-layout-regression.test"
+import "./market-insight-layout-regression.test.ts"
 
 test("UI performance invariants: market-close dashboard adheres strictly to UI_LESSONS_LEARNED", () => {
   const componentPath = path.resolve("components/insights/market-close-dashboard.tsx")
