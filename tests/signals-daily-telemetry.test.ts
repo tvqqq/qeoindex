@@ -31,6 +31,44 @@ test("startSignalsDailyRunStep persists running run with canonical job metadata"
   assert.equal(insertCalls[0].started_at, "2026-08-26T00:00:00.000Z")
 })
 
+test("signals daily stage telemetry persists meaningful durable-wait progress", async () => {
+  const telemetry = await import("../lib/signals-daily-telemetry.ts") as Record<string, unknown>
+  const updateStage = telemetry.updateSignalsDailyStageStep as ((
+    runId: string,
+    stage: string,
+    details: Record<string, unknown>,
+    io: SignalsDailyTelemetryIo,
+  ) => Promise<unknown>) | undefined
+
+  assert.equal(typeof updateStage, "function")
+
+  const updateCalls: Array<{ runId: string; updates: Record<string, unknown> }> = []
+  const io: SignalsDailyTelemetryIo = {
+    insertRun: async () => "run-id",
+    updateRun: async (runId, updates) => {
+      updateCalls.push({ runId, updates: structuredClone(updates) })
+    },
+  }
+
+  await updateStage!(
+    "signals-run-stage",
+    "WAIT_OPEN",
+    {
+      nextWakeAt: "2026-08-26T02:15:05.000Z",
+      scanner: { completed: 48, skipped: 1, errors: 1 },
+    },
+    io,
+  )
+
+  assert.equal(updateCalls.length, 1)
+  assert.equal(updateCalls[0].runId, "signals-run-stage")
+  assert.deepEqual(updateCalls[0].updates.summary, {
+    stage: "WAIT_OPEN",
+    nextWakeAt: "2026-08-26T02:15:05.000Z",
+    scanner: { completed: 48, skipped: 1, errors: 1 },
+  })
+})
+
 test("finishSignalsDailyRunStep updates run to succeeded with sanitized summary and duration", async () => {
   const updateCalls: Array<{ runId: string; updates: Record<string, unknown> }> = []
   const io: SignalsDailyTelemetryIo = {
