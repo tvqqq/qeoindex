@@ -5,6 +5,14 @@ const FINAL_ORDERBOOK_CUTOFF_MINUTE_UTC = 45
 const DAILY_BAR_HOUR_UTC = 2
 const MAX_CANONICAL_UNIVERSE_SIZE = 200
 
+export interface FinalOrderbookQuote {
+  openPrice: number | string | null
+  highPrice: number | string | null
+  lowPrice: number | string | null
+  matchPrice: number | string | null
+  totalVolume: number | string | null
+}
+
 export interface FinalOrderbookSnapshot {
   symbol: string
   session_date: string
@@ -12,6 +20,7 @@ export interface FinalOrderbookSnapshot {
   latest_price: number | string | null
   total_volume: number | string | null
   updated_at: string | null
+  latest_quote?: FinalOrderbookQuote | null
 }
 
 function finiteNumber(value: unknown) {
@@ -40,7 +49,13 @@ function nextSessionBoundary(sessionDate: string) {
   return next.toISOString()
 }
 
-export function buildVerifiedNoTradeDailyBar(
+function dailyBarTime(sessionDate: string) {
+  return Math.floor(
+    new Date(`${sessionDate}T${String(DAILY_BAR_HOUR_UTC).padStart(2, "0")}:00:00.000Z`).getTime() / 1000,
+  )
+}
+
+export function buildVerifiedFinalDailyBar(
   tickerInput: string,
   sessionDate: string,
   snapshot: FinalOrderbookSnapshot,
@@ -53,22 +68,55 @@ export function buildVerifiedNoTradeDailyBar(
   const updatedAt = new Date(snapshot.updated_at).getTime()
   if (!Number.isFinite(updatedAt) || updatedAt < cutoffMs(sessionDate)) return null
 
-  const referencePrice = finiteNumber(snapshot.reference_price)
   const latestPrice = finiteNumber(snapshot.latest_price)
   const volume = finiteNumber(snapshot.total_volume)
-  if (referencePrice == null || latestPrice == null || referencePrice <= 0 || latestPrice <= 0) return null
-  if (volume !== 0) return null
-  if (Math.abs(latestPrice - referencePrice) >= 1e-9) return null
+  if (latestPrice == null || latestPrice <= 0 || volume == null || volume < 0) return null
 
-  const time = Math.floor(new Date(`${sessionDate}T${String(DAILY_BAR_HOUR_UTC).padStart(2, "0")}:00:00.000Z`).getTime() / 1000)
-  return {
-    time,
-    open: latestPrice,
-    high: latestPrice,
-    low: latestPrice,
-    close: latestPrice,
-    volume: 0,
+  if (volume === 0) {
+    const referencePrice = finiteNumber(snapshot.reference_price)
+    if (referencePrice == null || referencePrice <= 0) return null
+    if (Math.abs(latestPrice - referencePrice) >= 1e-9) return null
+    return {
+      time: dailyBarTime(sessionDate),
+      open: latestPrice,
+      high: latestPrice,
+      low: latestPrice,
+      close: latestPrice,
+      volume: 0,
+    }
   }
+
+  const quote = snapshot.latest_quote
+  if (!quote) return null
+  const open = finiteNumber(quote.openPrice)
+  const high = finiteNumber(quote.highPrice)
+  const low = finiteNumber(quote.lowPrice)
+  const close = finiteNumber(quote.matchPrice)
+  const quoteVolume = finiteNumber(quote.totalVolume)
+  if (
+    open == null || high == null || low == null || close == null || quoteVolume == null
+    || open <= 0 || high <= 0 || low <= 0 || close <= 0 || quoteVolume <= 0
+  ) return null
+  if (Math.abs(quoteVolume - volume) >= 1e-9) return null
+  if (Math.abs(close - latestPrice) >= 1e-9) return null
+  if (high < low || high < open || high < close || low > open || low > close) return null
+
+  return {
+    time: dailyBarTime(sessionDate),
+    open,
+    high,
+    low,
+    close,
+    volume: quoteVolume,
+  }
+}
+
+export function buildVerifiedNoTradeDailyBar(
+  tickerInput: string,
+  sessionDate: string,
+  snapshot: FinalOrderbookSnapshot,
+) {
+  return buildVerifiedFinalDailyBar(tickerInput, sessionDate, snapshot)
 }
 
 export async function runEodNoTradeDailyRepairStep(
@@ -89,12 +137,12 @@ export async function runEodNoTradeDailyRepairStep(
       repairedTickers: [] as string[],
     }
   }
-  if (!validSessionDate(sessionDate)) throw new Error(`Invalid EOD no-trade repair session date: ${sessionDate}`)
+  if (!validSessionDate(sessionDate)) throw new Error(`Invalid EOD final Daily repair session date: ${sessionDate}`)
 
   const tickers = [...new Set(inputTickers.map(normalizeTicker).filter(Boolean))]
   if (!tickers.length || tickers.length > MAX_CANONICAL_UNIVERSE_SIZE) {
     throw new Error(
-      `EOD no-trade repair requires 1-${MAX_CANONICAL_UNIVERSE_SIZE} unique tickers; received ${tickers.length}`,
+      `EOD final Daily repair requires 1-${MAX_CANONICAL_UNIVERSE_SIZE} unique tickers; received ${tickers.length}`,
     )
   }
 
@@ -124,10 +172,10 @@ export async function runEodNoTradeDailyRepairStep(
   if (missingTickers.length) {
     const snapshots = await supabase
       .from("stock_orderbook_snapshots")
-      .select("symbol,session_date,reference_price,latest_price,total_volume,updated_at")
+      .select("symbol,session_date,reference_price,latest_price,total_volume,updated_at,latest_quote")
       .eq("session_date", sessionDate)
       .in("symbol", missingTickers)
-    if (snapshots.error) throw new Error(`Load final no-trade orderbook evidence failed: ${snapshots.error.message}`)
+    if (snapshots.error) throw new Error(`Load final orderbook evidence failed: ${snapshots.error.message}`)
 
     const snapshotByTicker = new Map(
       ((snapshots.data || []) as FinalOrderbookSnapshot[]).map((row) => [normalizeTicker(row.symbol), row]),
@@ -135,7 +183,7 @@ export async function runEodNoTradeDailyRepairStep(
     const fetchedAt = new Date().toISOString()
     const rows = missingTickers.flatMap((ticker) => {
       const snapshot = snapshotByTicker.get(ticker)
-      const bar = snapshot ? buildVerifiedNoTradeDailyBar(ticker, sessionDate, snapshot) : null
+      const bar = snapshot ? buildVerifiedFinalDailyBar(ticker, sessionDate, snapshot) : null
       if (!bar) return []
       repairedTickers.push(ticker)
       return [{
@@ -148,7 +196,7 @@ export async function runEodNoTradeDailyRepairStep(
         close: bar.close,
         volume: bar.volume,
         provider: "Fallback",
-        provider_detail: "Verified final no-trade repair from stock_orderbook_snapshots",
+        provider_detail: "Verified final Daily repair from stock_orderbook_snapshots",
         source_url: "internal://stock_orderbook_snapshots",
         fetched_at: fetchedAt,
       }]
@@ -158,7 +206,7 @@ export async function runEodNoTradeDailyRepairStep(
       const upsert = await supabase
         .from("market_ohlcv_history")
         .upsert(rows, { onConflict: "ticker,timeframe,bar_time" })
-      if (upsert.error) throw new Error(`Persist verified no-trade Daily repair failed: ${upsert.error.message}`)
+      if (upsert.error) throw new Error(`Persist verified final Daily repair failed: ${upsert.error.message}`)
     }
   }
 
@@ -179,7 +227,7 @@ export async function runEodNoTradeDailyRepairStep(
   const stillMissing = tickers.filter((ticker) => !finalTickers.has(ticker))
   if (stillMissing.length) {
     throw new Error(
-      `Exact EOD Daily bars incomplete after verified no-trade repair: ${finalTickers.size}/${tickers.length}`
+      `Exact EOD Daily bars incomplete after verified final repair: ${finalTickers.size}/${tickers.length}`
       + `; missing ${stillMissing.join(", ")}`,
     )
   }
