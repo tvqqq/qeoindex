@@ -4,7 +4,7 @@ import test from "node:test"
 
 const moduleUrl = new URL("../lib/admin/job-phase-telemetry.ts", import.meta.url)
 
-test("QeoIndex EOD phase telemetry persists running then succeeded with canonical metadata", async () => {
+test("QeoIndex EOD phase telemetry persists business phase metadata with running then succeeded", async () => {
   assert.equal(existsSync(moduleUrl), true, "job-phase-telemetry.ts must exist")
   if (!existsSync(moduleUrl)) return
 
@@ -28,15 +28,16 @@ test("QeoIndex EOD phase telemetry persists running then succeeded with canonica
   assert.deepEqual(writes.map((row) => row.status), ["running", "succeeded"])
   assert.equal(writes[0].job_key, "qeoindex.eod_pipeline")
   assert.equal(writes[0].phase_key, "WYCKOFF_BUILD")
-  assert.equal(writes[0].phase_order, 4)
-  assert.deepEqual(writes[1].summary, { snapshots: 500 })
+  assert.equal(writes[0].phase_order, 6)
+  assert.deepEqual(writes[0].summary, { businessPhase: "WYCKOFF_PUBLISH" })
+  assert.deepEqual(writes[1].summary, { snapshots: 500, businessPhase: "WYCKOFF_PUBLISH" })
   assert.equal(typeof writes[1].finished_at, "string")
   assert.equal(typeof writes[1].duration_ms, "number")
   assert.equal(writes[1].error_code, null)
   assert.equal(writes[1].error_message, null)
 })
 
-test("QeoIndex EOD phase telemetry records failure and rethrows the original error", async () => {
+test("QeoIndex EOD phase telemetry records failure, business phase, and rethrows the original error", async () => {
   assert.equal(existsSync(moduleUrl), true, "job-phase-telemetry.ts must exist")
   if (!existsSync(moduleUrl)) return
 
@@ -58,10 +59,11 @@ test("QeoIndex EOD phase telemetry records failure and rethrows the original err
   assert.deepEqual(writes.map((row) => row.status), ["running", "failed"])
   assert.equal(writes[1].error_code, "UPSTREAM_STALE")
   assert.equal(writes[1].error_message, "provider failed")
-  assert.equal(writes[1].phase_order, 3)
+  assert.equal(writes[1].phase_order, 5)
+  assert.deepEqual(writes[1].summary, { businessPhase: "HISTORY_PREPARE" })
 })
 
-test("QeoIndex EOD phase telemetry can mark skipped phases without executing work", async () => {
+test("QeoIndex EOD phase telemetry can mark skipped phases with stable business metadata", async () => {
   assert.equal(existsSync(moduleUrl), true, "job-phase-telemetry.ts must exist")
   if (!existsSync(moduleUrl)) return
 
@@ -78,8 +80,8 @@ test("QeoIndex EOD phase telemetry can mark skipped phases without executing wor
 
   assert.equal(writes.length, 1)
   assert.equal(writes[0].status, "skipped")
-  assert.equal(writes[0].phase_order, 10)
-  assert.deepEqual(writes[0].summary, { reason: "deterministic gate did not pass" })
+  assert.equal(writes[0].phase_order, 11)
+  assert.deepEqual(writes[0].summary, { reason: "deterministic gate did not pass", businessPhase: "AI_COUNCIL" })
 })
 
 test("QeoIndex EOD phase telemetry fails closed when telemetry persistence fails", async () => {
