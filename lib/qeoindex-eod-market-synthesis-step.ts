@@ -100,7 +100,6 @@ export async function awaitMarketSynthesisConclusion(
 }
 
 export async function loadMarketSynthesisContext(ratingDate?: string): Promise<EodMarketSynthesisContext | null> {
-  "use step"
   if (!ratingDate) return null
   const supabase = requiredSupabase()
   const snapshot = await getMarketCloseInsightData(supabase, ratingDate)
