@@ -5,6 +5,8 @@ export interface QeoIndexEodPhaseIo {
   upsertPhase(row: Record<string, unknown>): Promise<void>
 }
 
+type QeoIndexEodTelemetryPhaseKey = QeoIndexEodPhaseKey | "DRIVE_ARCHIVE"
+
 async function getDefaultIo(): Promise<QeoIndexEodPhaseIo> {
   const { getSupabaseServerClient } = await import("../supabase/server.ts")
   const supabase = getSupabaseServerClient()
@@ -20,7 +22,17 @@ async function getDefaultIo(): Promise<QeoIndexEodPhaseIo> {
   }
 }
 
-function phaseDefinition(phaseKey: QeoIndexEodPhaseKey) {
+function phaseDefinition(phaseKey: QeoIndexEodTelemetryPhaseKey) {
+  if (phaseKey === "DRIVE_ARCHIVE") {
+    // QEO-57: hidden legacy/recovery telemetry only. This phase is intentionally
+    // absent from QEOINDEX_EOD_PHASES, the active workflow, and Admin business UI.
+    return {
+      key: "DRIVE_ARCHIVE" as const,
+      order: 99,
+      label: "Legacy Drive Archive",
+      description: "Legacy recovery-only Drive checkpoint; not part of active EOD v4.",
+    }
+  }
   const definition = QEOINDEX_EOD_PHASES.find((phase) => phase.key === phaseKey)
   if (!definition) throw new Error(`Unknown QeoIndex EOD phase: ${phaseKey}`)
   return definition
@@ -43,7 +55,7 @@ function sanitizedSummary(value: unknown): Record<string, unknown> {
 
 export async function runQeoIndexEodPhase<T>(input: {
   runId: string
-  phaseKey: QeoIndexEodPhaseKey
+  phaseKey: QeoIndexEodTelemetryPhaseKey
   fn: () => Promise<T>
   summarize?: (result: T) => unknown
   io?: QeoIndexEodPhaseIo
