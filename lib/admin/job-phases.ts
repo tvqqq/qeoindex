@@ -74,20 +74,14 @@ export const QEOINDEX_EOD_PHASES = [
     description: "Archive analytical/audit output và canonical universe history sang Notion sau publication.",
   },
   {
-    key: "DRIVE_ARCHIVE",
-    order: 13,
-    label: "Drive Archive",
-    description: "Legacy EOD v3 archive checkpoint; QEO-57 sẽ loại khỏi active EOD v4 critical path.",
-  },
-  {
     key: "RETENTION_CLEANUP",
-    order: 14,
+    order: 13,
     label: "Retention Cleanup",
-    description: "Prune safe telemetry/staging theo retention policy; raw Daily retention vẫn fail-closed cho tới storage cutover.",
+    description: "Prune safe telemetry/staging theo retention policy; raw Daily OHLCV tiếp tục được giữ trong Supabase và không age-prune.",
   },
   {
     key: "COMPLETE",
-    order: 15,
+    order: 14,
     label: "Complete",
     description: "Đóng parent EOD run và ghi summary của refresh, publication, Council, archive và retention.",
   },
