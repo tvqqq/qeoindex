@@ -694,7 +694,7 @@ export type Database = {
           id: number
           is_published: boolean
           kfsp_canslim_score: number | null
-          kfsp_composite_score: number
+          kfsp_composite_score: number | null
           kfsp_contract_version: number
           kfsp_metrics: Json
           kfsp_price_potential: string | null
@@ -731,7 +731,7 @@ export type Database = {
           id?: number
           is_published?: boolean
           kfsp_canslim_score?: number | null
-          kfsp_composite_score?: number
+          kfsp_composite_score?: number | null
           kfsp_contract_version?: number
           kfsp_metrics?: Json
           kfsp_price_potential?: string | null
@@ -768,7 +768,7 @@ export type Database = {
           id?: number
           is_published?: boolean
           kfsp_canslim_score?: number | null
-          kfsp_composite_score?: number
+          kfsp_composite_score?: number | null
           kfsp_contract_version?: number
           kfsp_metrics?: Json
           kfsp_price_potential?: string | null
@@ -1345,7 +1345,7 @@ export type Database = {
           above_ma20_pct?: number | null
           above_ma200_pct?: number | null
           above_ma50_pct?: number | null
-          as_of_date?: string
+          as_of?: string
           contract_version?: number
           created_at?: string
           distribution_count?: number | null
@@ -3242,7 +3242,7 @@ export type CompositeTypes<
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
     : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
@@ -3257,3 +3257,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
