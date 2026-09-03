@@ -24,10 +24,10 @@ const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
     "SUPABASE_VALIDATE",
     "SUPABASE_PUBLISH",
     "AI_COUNCIL_DETERMINISTIC",
-    "AI_COUNCIL_LLM",
     "MARKET_SYNTHESIS",
-    "NOTION_ARCHIVE",
+    "AI_COUNCIL_LLM",
     "RETENTION_CLEANUP",
+    "NOTION_ARCHIVE",
     "COMPLETE",
   ],
   evidenceSource: "system_job_runs",
@@ -71,7 +71,7 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
   if (job.key === "kfsp.rating_daily") {
     return withSchedulePolicy({
       ...job,
-      description: "Scheduler KFSP Rating 07:00 ICT vẫn giữ nguyên trong QEO-58. EOD 15:15 refresh lại same-session Rating trước READY; QEO-64 mới quyết định retire/reclassify sau production smoke.",
+      description: "Scheduler KFSP Rating 07:00 ICT vẫn giữ nguyên trong QEO-58. EOD 15:15 refresh lại same-session Rating trước READY; manual run chỉ dùng cho recovery/backfill. QEO-64 mới quyết định retire/reclassify scheduler sau production smoke.",
       manualPolicy: "confirm",
       manualPurpose: "recovery",
       automatedParentKeys: [],
@@ -81,7 +81,7 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
   if (job.key === "kfsp.ttai_history") {
     return withSchedulePolicy({
       ...job,
-      description: "Scheduler TTAI 07:10 ICT vẫn giữ nguyên trong QEO-58. EOD 15:15 kiểm tra/refresh lại TTAI theo frozen universe; QEO-64 mới quyết định retire/reclassify sau production smoke.",
+      description: "Scheduler TTAI 07:10 ICT vẫn giữ nguyên trong QEO-58. EOD 15:15 kiểm tra/refresh lại TTAI theo frozen universe; manual run chỉ dùng cho recovery/backfill. QEO-64 mới quyết định retire/reclassify scheduler sau production smoke.",
       scheduleUtc: "10 0 * * *",
       scheduleIct: "07:10 hàng ngày",
       schedulerName: "kfsp-ttai-history-daily-0710-ict",
