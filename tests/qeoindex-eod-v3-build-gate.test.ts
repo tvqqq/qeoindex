@@ -144,3 +144,21 @@ test("QEO-55 partitions Notion archive work into bounded durable steps", () => {
   assert.match(steps, /archiveEodTickerBatchToNotion/)
   assert.match(steps, /stocks\.length > 8/)
 })
+
+test("QEO-55 reconciles only inactive stale EOD telemetry before inserting a new run", () => {
+  const steps = source("lib/qeoindex-eod-workflow-steps-legacy.ts")
+
+  assert.match(steps, /QEOINDEX_EOD_STALE_ACTIVITY_MS\s*=\s*30 \* 60_000/)
+  assert.match(steps, /reconcileStaleQeoIndexEodRuns/)
+  assert.match(steps, /\.from\("system_job_runs"\)[\s\S]*?\.eq\("job_key", QEOINDEX_EOD_JOB_KEY\)[\s\S]*?\.eq\("status", "running"\)/)
+  assert.match(steps, /\.from\("system_job_phases"\)/)
+  assert.match(steps, /latestActivityAt/)
+  assert.match(steps, /WORKFLOW_STALE_RECOVERED/)
+  assert.match(steps, /status:\s*"failed"/)
+  assert.match(steps, /finished_at/)
+
+  const start = steps.indexOf("export async function startQeoIndexEodRunStep")
+  const reconcile = steps.indexOf("reconcileStaleQeoIndexEodRuns", start)
+  const insert = steps.indexOf('.from("system_job_runs").insert', start)
+  assert.ok(start >= 0 && reconcile > start && insert > reconcile, "stale reconciliation must complete before the new running row is inserted")
+})
