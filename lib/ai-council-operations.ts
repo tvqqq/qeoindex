@@ -15,6 +15,7 @@ import { enrichCouncilStocksForDebate } from "@/lib/ai-council-pre-market-eviden
 import { configuredCouncilResearchTickers } from "@/lib/ai-council-research-context"
 import { getAiCouncilRuntimeData } from "@/lib/ai-council-runtime"
 import { getAiCouncilRuntimeConfig } from "@/lib/admin/settings"
+import type { EodMarketSynthesisContext } from "@/lib/qeoindex-eod-market-synthesis-step"
 
 function firstValidationTicker(
   stocks: Awaited<ReturnType<typeof getAiCouncilRuntimeData>>["data"]["stocks"],
@@ -121,7 +122,11 @@ export async function runAiCouncilDailyOperation(supabase: SupabaseClient, now =
   }
 }
 
-export async function runAiCouncilDebateOperation(supabase: SupabaseClient, ratingDate?: string) {
+export async function runAiCouncilDebateOperation(
+  supabase: SupabaseClient,
+  ratingDate?: string,
+  marketSynthesis?: EodMarketSynthesisContext | null,
+) {
   const runtimeConfig = await getAiCouncilRuntimeConfig()
   const runtimeData = await getAiCouncilRuntimeData(supabase, {
     includeHistory: false,
@@ -169,7 +174,21 @@ export async function runAiCouncilDebateOperation(supabase: SupabaseClient, rati
     stocks: runtimeData.data.stocks,
     promptVersion: AI_COUNCIL_LLM_PROMPT_VERSION,
   })
-  const debateStocks = evidenceFidelity.stocks
+  const debateStocks = marketSynthesis
+    ? evidenceFidelity.stocks.map((stock) => {
+        const existingResearch = (stock as unknown as { researchContext?: Record<string, unknown> }).researchContext
+        return {
+          ...stock,
+          researchContext: {
+            ...(existingResearch || {}),
+            marketSynthesis: {
+              purpose: "Same-session market-level AI context for advisory debate only; deterministic Council remains final authority.",
+              ...marketSynthesis,
+            },
+          },
+        }
+      })
+    : evidenceFidelity.stocks
 
   const priorDebates = await supabase
     .from("ai_council_llm_debates")
@@ -221,6 +240,13 @@ export async function runAiCouncilDebateOperation(supabase: SupabaseClient, rati
     ...result,
     freshness,
     ratingDate: runtimeData.data.ratingDate,
+    marketSynthesis: marketSynthesis ? {
+      sessionDate: marketSynthesis.sessionDate,
+      asOf: marketSynthesis.asOf,
+      evidenceHash: marketSynthesis.evidenceHash,
+      posture: marketSynthesis.posture,
+      confidence: marketSynthesis.confidence,
+    } : null,
     evidenceFidelity: {
       contextVersion: evidenceFidelity.contextVersion,
       contextsBuilt: evidenceFidelity.contextsBuilt,
