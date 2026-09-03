@@ -64,7 +64,8 @@ test("source catalog retains historical pg_cron definitions while effective cata
   assert.ok(syncEodEffective)
   assert.equal(syncEodEffective.scheduleKind, "manual")
   assert.equal(syncEodEffective.schedulerName, undefined)
-  assert.equal(syncEodEffective.manualPurpose, "recovery")
+  assert.equal(syncEodEffective.manualPolicy, "disabled")
+  assert.equal(syncEodEffective.manualPurpose, "maintenance")
 
   const kfspRatingMigration = readTextFile("supabase/migrations/20260822112420_kfsp_rating_pipeline.sql")
   assert.match(kfspRatingMigration, /'kfsp-rating-daily-7am-ict'/)
@@ -179,7 +180,7 @@ test("effective catalog has complete structured ICT schedule policies after QEO-
   assert.equal(ingest.manualPolicy, "confirm")
   assert.equal(ingest.manualPurpose, "maintenance")
 
-  for (const key of ["kfsp.rating_daily", "kfsp.ttai_history", "market.sync_eod"]) {
+  for (const key of ["kfsp.rating_daily", "kfsp.ttai_history"]) {
     const job = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === key)
     assert.ok(job)
     assert.equal(job.schedulePolicy?.kind, "manual")
@@ -187,6 +188,13 @@ test("effective catalog has complete structured ICT schedule policies after QEO-
     assert.equal(job.manualPurpose, "recovery")
     assert.deepEqual(job.automatedParentKeys, ["qeoindex.eod_pipeline"])
   }
+
+  const marketEod = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "market.sync_eod")
+  assert.ok(marketEod)
+  assert.equal(marketEod.schedulePolicy?.kind, "manual")
+  assert.equal(marketEod.manualPolicy, "disabled")
+  assert.equal(marketEod.manualPurpose, "maintenance")
+  assert.deepEqual(marketEod.automatedParentKeys, ["qeoindex.eod_pipeline"])
 
   const market = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "market.sync_5m")
   const windows = (market?.schedulePolicy as { windows: Array<{ startMinuteOfDay: number; endMinuteOfDay: number; cadenceMinutes: number }> }).windows
