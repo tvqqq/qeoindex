@@ -43,6 +43,8 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
       - name: Core regression suite
         run: pnpm test:core
+      - name: Market board filter regression
+        run: node --test tests/market-board-filter-avg50-regression.test.ts tests/market-board-stock-filter-ui.test.ts tests/market-board-stock-filter-api.test.ts
       - name: Login handoff regression
         run: node --test tests/auth-login-handoff.test.ts
       - name: Orderbook prune security regression
@@ -57,6 +59,8 @@ jobs:
         run: node --test tests/canonical-200-ui.test.ts
       - name: Touched lint
         run: pnpm lint:touched
+      - name: Market board filter lint
+        run: pnpm exec eslint app/page.tsx components/market-board/stock-filter-modal.tsx lib/market-board/stock-filter.ts app/api/me/market-board-filter/route.ts tests/market-board-filter-avg50-regression.test.ts
       - name: TypeScript
         run: pnpm typecheck
       - name: Production build

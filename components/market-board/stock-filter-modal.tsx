@@ -15,7 +15,11 @@ import {
 import { Input } from "@/components/ui/input"
 import {
   BOARD_EXCHANGES,
+  canUnselectFilterSector,
   filterBoardTickers,
+  groupFilterSectorsByBoardColumn,
+  hasRequiredFilterSectorSelections,
+  isLockedFilterSector,
   normalizeStockFilterCriteria,
   type BoardExchange,
   type FilterableBoardStock,
@@ -59,6 +63,10 @@ export function StockFilterModal({
     () => [...new Set(universe.map((stock) => stock.kfspSector.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "vi")),
     [universe],
   )
+  const sectorColumns = useMemo(
+    () => groupFilterSectorsByBoardColumn(availableSectors),
+    [availableSectors],
+  )
   const [exchanges, setExchanges] = useState<Set<BoardExchange>>(() => new Set(initialCriteria.exchanges))
   const [sectors, setSectors] = useState<Set<string>>(() => new Set(initialCriteria.sectors))
   const [minPrice, setMinPrice] = useState(() => inputValue(initialCriteria.minPriceVnd))
@@ -72,13 +80,17 @@ export function StockFilterModal({
     setMinVolume(inputValue(initialCriteria.minVolumeShares))
   }, [initialCriteria, open])
 
-  const criteria = useMemo(() => normalizeStockFilterCriteria({
-    version: 1,
-    exchanges: [...exchanges],
-    minPriceVnd: digitsOnly(minPrice),
-    minVolumeShares: digitsOnly(minVolume),
-    sectors: [...sectors],
-  }, availableSectors), [availableSectors, exchanges, minPrice, minVolume, sectors])
+  const criteria = useMemo(() => {
+    const normalized = normalizeStockFilterCriteria({
+      version: 1,
+      exchanges: [...exchanges],
+      minPriceVnd: digitsOnly(minPrice),
+      minVolumeShares: digitsOnly(minVolume),
+      sectors: [...sectors],
+    }, availableSectors)
+    if (!normalized) return null
+    return hasRequiredFilterSectorSelections(new Set(normalized.sectors), availableSectors) ? normalized : null
+  }, [availableSectors, exchanges, minPrice, minVolume, sectors])
 
   const previewTickers = useMemo(
     () => criteria ? filterBoardTickers(universe, quotes, criteria) : [],
@@ -97,19 +109,23 @@ export function StockFilterModal({
   const toggleSector = (sector: string) => {
     setSectors((current) => {
       const next = new Set(current)
-      if (next.has(sector)) next.delete(sector)
-      else next.add(sector)
+      if (next.has(sector)) {
+        if (!canUnselectFilterSector(current, sector, availableSectors)) return current
+        next.delete(sector)
+      } else {
+        next.add(sector)
+      }
       return next
     })
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] overflow-hidden border-white/[0.12] bg-[#0b0f14] p-0 sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] overflow-hidden border-white/[0.12] bg-[#0b0f14] p-0 sm:max-w-[96vw] xl:max-w-[1320px]">
         <DialogHeader className="border-b border-white/[0.08] px-5 py-4">
           <DialogTitle className="text-base font-bold text-foreground">Filter CP</DialogTitle>
           <DialogDescription>
-            Lọc cổ phiếu trong universe hiện tại. Giá nhập theo đồng, thanh khoản theo số cổ phiếu khớp trong phiên.
+            Giá dùng snapshot hiện tại; KLTB 50 phiên lấy từ canonical universe và tính theo số cổ phiếu mỗi phiên.
           </DialogDescription>
         </DialogHeader>
 
@@ -146,7 +162,7 @@ export function StockFilterModal({
               </div>
             </label>
             <label className="space-y-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-2">Thanh khoản &gt;</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-2">Thanh khoản (KLTB 50 phiên) &gt;</span>
               <div className="relative">
                 <Input
                   inputMode="numeric"
@@ -162,7 +178,10 @@ export function StockFilterModal({
 
           <section className="space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-2">Ngành nghề (KFSP)</div>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-2">Ngành nghề (KFSP)</div>
+                <div className="mt-1 text-[11px] text-muted-2">Mỗi cột Bảng điện phải giữ ít nhất 1 ngành được chọn.</div>
+              </div>
               <button
                 type="button"
                 onClick={() => setSectors(new Set(availableSectors))}
@@ -171,17 +190,49 @@ export function StockFilterModal({
                 Chọn tất cả
               </button>
             </div>
-            <div className="grid max-h-64 gap-2 overflow-y-auto rounded-xl border border-white/[0.08] bg-black/10 p-3 sm:grid-cols-2">
-              {availableSectors.map((sector) => (
-                <label key={sector} className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground hover:bg-white/[0.04]">
-                  <input
-                    type="checkbox"
-                    checked={sectors.has(sector)}
-                    onChange={() => toggleSector(sector)}
-                    className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-500"
-                  />
-                  <span>{sector}</span>
-                </label>
+
+            <div className="grid max-h-[46vh] gap-2 overflow-y-auto rounded-xl border border-white/[0.08] bg-black/10 p-3 sm:grid-cols-2 lg:grid-cols-6">
+              {sectorColumns.map((column) => (
+                <div key={column.key} className="min-w-0 rounded-xl border border-white/[0.08] bg-white/[0.025] p-2.5">
+                  <div className="mb-2 flex min-h-8 items-start justify-between gap-1 border-b border-white/[0.06] pb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-foreground">{column.label}</span>
+                    {column.locked ? (
+                      <span className="shrink-0 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-300">
+                        Bắt buộc
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-[9px] text-muted-2">≥ 1</span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    {column.sectors.map((sector) => {
+                      const locked = isLockedFilterSector(sector)
+                      const protectedSelection = sectors.has(sector) && !canUnselectFilterSector(sectors, sector, availableSectors)
+                      return (
+                        <label
+                          key={sector}
+                          title={locked ? "Ngành bắt buộc, không thể bỏ chọn" : protectedSelection ? "Mỗi cột phải còn ít nhất 1 ngành được chọn" : undefined}
+                          className={`flex items-start gap-2 rounded-lg px-1.5 py-1.5 text-[12px] leading-4 text-foreground ${
+                            protectedSelection ? "cursor-not-allowed opacity-80" : "cursor-pointer hover:bg-white/[0.04]"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={sectors.has(sector)}
+                            disabled={protectedSelection}
+                            onChange={() => toggleSector(sector)}
+                            className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-500 disabled:cursor-not-allowed"
+                          />
+                          <span className="break-words">{sector}</span>
+                        </label>
+                      )
+                    })}
+                    {column.sectors.length === 0 ? (
+                      <div className="px-1.5 py-2 text-[10px] text-muted-2">Chưa có ngành trong universe.</div>
+                    ) : null}
+                  </div>
+                </div>
               ))}
             </div>
           </section>
@@ -196,11 +247,11 @@ export function StockFilterModal({
         <DialogFooter className="m-0 items-center justify-between rounded-none border-white/[0.08] bg-white/[0.025] px-5 py-3 sm:flex-row">
           <div className="mr-auto text-xs text-muted-2">
             {isRefreshing ? (
-              <span className="flex items-center gap-1.5"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang cập nhật giá &amp; thanh khoản...</span>
+              <span className="flex items-center gap-1.5"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang cập nhật giá hiện tại...</span>
             ) : quoteReady ? (
               <span>Đã chọn <b className="text-foreground">{previewTickers.length}</b> / {universe.length} CP</span>
             ) : (
-              <span>Chưa có snapshot giá/thanh khoản fresh.</span>
+              <span>Chưa có snapshot giá fresh.</span>
             )}
           </div>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Hủy</Button>

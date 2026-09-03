@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { requireApiUser, type ServerAuthContext } from "@/lib/auth/server"
 import { getCanonicalUniverse } from "@/lib/market-universe"
 import {
+  hasRequiredFilterSectorSelections,
   mergeStockFilterIntoSettings,
   normalizeStockFilterCriteria,
   readStockFilterFromSettings,
@@ -64,12 +65,13 @@ export async function PUT(request: Request) {
       getCanonicalUniverse(),
       loadSettings(auth.context),
     ])
+    const availableSectors = availableSectorsFromUniverse(universe)
     const criteria = normalizeStockFilterCriteria(
       (body as Record<string, unknown>).criteria,
-      availableSectorsFromUniverse(universe),
+      availableSectors,
       new Date().toISOString(),
     )
-    if (!criteria) {
+    if (!criteria || !hasRequiredFilterSectorSelections(new Set(criteria.sectors), availableSectors)) {
       return NextResponse.json({ ok: false, error: "Invalid stock filter criteria." }, { status: 400, headers: NO_STORE_HEADERS })
     }
 

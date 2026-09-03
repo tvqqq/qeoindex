@@ -22,12 +22,14 @@ Supported criteria:
 
 - exchange: HOSE / HNX / UPCOM, multi-select;
 - minimum stock price in VND;
-- minimum current-session cumulative matched volume in shares;
-- raw canonical/KFSP sector labels, all selected by default.
+- minimum canonical 50-session average volume (`averageVolume50d`) in shares per session;
+- raw canonical/KFSP sector labels grouped into the same six columns as the market board.
 
-Board quotes are normalized internally in thousands of VND (for example `66.1` means `66,100 VND`). The filter helper converts those values to VND before applying the user-entered price threshold. A positive liquidity threshold requires current-session volume; missing volume does not pass by falling back to a historical average.
+Board quotes are normalized internally in thousands of VND (for example `66.1` means `66,100 VND`). The filter helper converts those values to VND before applying the user-entered price threshold. Liquidity does **not** use the current-session matched volume: the threshold is evaluated from the canonical universe's `averageVolume50d`, so the same filter remains stable regardless of what time the user opens the board.
 
-Criteria persist per authenticated user at `user_preferences.settings.marketBoard.stockFilter`. The dedicated `/api/me/market-board-filter` route validates the payload and server-merges only the stock-filter key so unrelated preference settings survive the write.
+The KFSP sector editor follows `BOARD_SECTOR_GROUPS` in board order: `Ngân hàng`, `Chứng khoán`, `Bán lẻ`, `Bất động sản`, `Công nghiệp`, `Còn lại`. Each raw KFSP sector is assigned with `boardSectorGroupForSector`. All available sectors are selected by default. Bank and securities sectors are mandatory and cannot be unchecked; every other non-empty board column must retain at least one selected raw sector. Saved criteria that violate these invariants are treated as invalid and the editor falls back to defaults.
+
+Criteria persist per authenticated user at `user_preferences.settings.marketBoard.stockFilter`. The dedicated `/api/me/market-board-filter` route validates the payload and server-merges only the stock-filter key so unrelated preference settings survive the write. The existing `minVolumeShares` JSON key remains backward compatible, but its product meaning is now minimum 50-session average volume rather than current-session volume.
 
 The resolved ticker list is cached in browser local storage under a per-user namespace. A cache entry is valid only when all of these identities still match:
 
@@ -37,7 +39,7 @@ The resolved ticker list is cached in browser local storage under a per-user nam
 - deterministic hash of normalized criteria;
 - every cached ticker still belongs to the current canonical universe.
 
-Ticker membership is frozen for that valid daily cache entry. Quotes for the selected tickers remain realtime. Opening the editor and pressing `Áp dụng` recomputes membership from a fresh quote snapshot.
+Ticker membership is frozen for that valid daily cache entry. Quotes for the selected tickers remain realtime. Opening the editor and pressing `Áp dụng` recomputes membership from a fresh price snapshot while the KLTB 50-session criterion comes from the already-loaded canonical universe.
 
 The filter shell deliberately passes only the filtered universe to the existing `LiveMarketBoardV2`. The board therefore derives its existing DNSE `symbolList` from only those tickers, so stock channels (`tick`, `top_price`, `ohlc`, `foreign`) stop receiving off-filter symbols while Filter CP is active. Market-index channels remain present independently.
 
@@ -108,6 +110,7 @@ Do **not** reintroduce `content-visibility` or naive row virtualization without 
 - Strong gainers use a static border highlight; permanent pulse animation is avoided.
 - The watchlist is a horizontal section above the sector grid and remains compatible with full-board screenshots.
 - Filter CP reuses the same row/card components and does not introduce a second quote/history state store.
+- Filter CP's KFSP sector editor mirrors the same six board columns and enforces mandatory/minimum-one selection rules locally.
 
 ## Current performance status
 
@@ -128,6 +131,7 @@ If production is still hot after this change, profile before adding more throttl
 - `pnpm test:board-contract` covers layout, reference-price semantics, WebSocket buffering, 250ms quote commits, 1s ordering snapshots, SSR history reuse, low-composite rendering, and sparkline memo behavior.
 - `tests/market-board-stock-filter-api.test.ts` covers authenticated persistence, settings merge, canonical symbol bounds, batch reconcile, and bounded snapshot fallback.
 - `tests/market-board-stock-filter-ui.test.ts` covers portal placement, modal controls, daily cache identity, filtered WS scoping, fresh-quote gating, and full-board reconcile/remount behavior.
+- `tests/market-board-filter-avg50-regression.test.ts` locks KLTB 50-session liquidity semantics, six-column KFSP grouping, bank/securities mandatory selection, and minimum-one-per-column behavior.
 - `pnpm test:intraday` covers bucket replacement/rollover, replay ordering, unit normalization, and latest-session fallback.
 - `pnpm test:supabase` covers final snapshot RLS and Auth/API security contracts.
 - GitHub `Verify` also runs the production Next.js build before a PR can be considered release-ready.

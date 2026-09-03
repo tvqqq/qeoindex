@@ -22,7 +22,7 @@ import styles from "./market-board-performance.module.css"
 export const dynamic = "force-dynamic"
 
 const INITIAL_HISTORY_POINTS = 90
-const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v6"
+const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v7"
 
 type InitialBoardData = {
   universe: FilterBoardUniverseStock[]
@@ -69,6 +69,7 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
       sector: boardSectorGroupForSector(stock.sector || sectorForTicker(stock.ticker)).sectors[0],
       exchange: stock.exchange || "",
       kfspSector: stock.sector || sectorForTicker(stock.ticker),
+      averageVolume50d: stock.averageVolume50d,
       marketCapT: stock.marketCapBillion / 1000,
       lastClose: lastClosePrice,
       lastCloseDate: snap?.session_date || "",

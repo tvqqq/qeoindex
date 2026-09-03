@@ -222,16 +222,16 @@ test("market board filter normalization removes unsupported values and zero thre
   assert.equal(normalizeStockFilterCriteria({ exchanges: ["HOSE"], sectors: [] }, ["Ngân hàng"]), null)
 })
 
-test("market board filter combines exchange price liquidity and KFSP sector", () => {
+test("market board filter combines exchange price avg50 liquidity and KFSP sector", () => {
   const stocks = [
-    { ticker: "VCB", exchange: "HOSE", kfspSector: "Ngân hàng", lastClose: 80 },
-    { ticker: "SHB", exchange: "HNX", kfspSector: "Ngân hàng", lastClose: 12 },
-    { ticker: "CEO", exchange: "HNX", kfspSector: "Bất động sản", lastClose: 18 },
+    { ticker: "VCB", exchange: "HOSE", kfspSector: "Ngân hàng", lastClose: 80, averageVolume50d: 1_500_000 },
+    { ticker: "SHB", exchange: "HNX", kfspSector: "Ngân hàng", lastClose: 12, averageVolume50d: 900_000 },
+    { ticker: "CEO", exchange: "HNX", kfspSector: "Bất động sản", lastClose: 18, averageVolume50d: 2_000_000 },
   ]
   const quotes = {
-    VCB: { price: 81, volume: 1_500_000 },
+    VCB: { price: 81, volume: 10_000 },
     SHB: { price: 12.5, volume: 8_000_000 },
-    CEO: { price: 19, volume: 900_000 },
+    CEO: { price: 19, volume: 9_000_000 },
   }
   const criteria = normalizeStockFilterCriteria({
     version: 1,
@@ -244,7 +244,7 @@ test("market board filter combines exchange price liquidity and KFSP sector", ()
   assert.deepEqual(filterBoardTickers(stocks, quotes, criteria), ["VCB"])
 })
 
-test("market board filter uses last close for price only and rejects missing live liquidity", () => {
+test("market board filter uses last close for price only and rejects missing avg50 liquidity", () => {
   const stock = [{ ticker: "VCB", exchange: "HOSE", kfspSector: "Ngân hàng", lastClose: 80 }]
   const priceOnly = normalizeStockFilterCriteria({ exchanges: ["HOSE"], minPriceVnd: 70, sectors: ["Ngân hàng"] }, ["Ngân hàng"])!
   const withLiquidity = normalizeStockFilterCriteria({ exchanges: ["HOSE"], minPriceVnd: 70, minVolumeShares: 1, sectors: ["Ngân hàng"] }, ["Ngân hàng"])!

@@ -1,11 +1,16 @@
+import { BOARD_SECTOR_GROUPS, boardSectorGroupForSector } from "../market-sectors.ts"
+
 export const BOARD_EXCHANGES = ["HOSE", "HNX", "UPCOM"] as const
 
 export type BoardExchange = (typeof BOARD_EXCHANGES)[number]
+
+const LOCKED_SECTOR_GROUP_KEYS = new Set(["bank", "securities"])
 
 export interface StockFilterCriteriaV1 {
   version: 1
   exchanges: BoardExchange[]
   minPriceVnd: number | null
+  // Backward-compatible persisted key: minimum 50-session average volume in shares/session.
   minVolumeShares: number | null
   sectors: string[]
   updatedAt: string
@@ -16,6 +21,7 @@ export interface FilterableBoardStock {
   exchange: string
   kfspSector: string
   lastClose?: number | null
+  averageVolume50d?: number | null
 }
 
 export interface FilterQuote {
@@ -41,6 +47,13 @@ export interface DailyFilterCacheExpectation {
   universeSymbols: readonly string[]
 }
 
+export interface FilterSectorColumn {
+  key: string
+  label: string
+  sectors: string[]
+  locked: boolean
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
@@ -60,6 +73,51 @@ function normalizeUpdatedAt(value: unknown, nowIso?: string) {
   if (nowIso) return nowIso
   if (typeof value === "string" && value.trim()) return value
   return new Date().toISOString()
+}
+
+export function groupFilterSectorsByBoardColumn(
+  availableSectors: readonly string[],
+): FilterSectorColumn[] {
+  const sectors = normalizedSectors(availableSectors)
+  return BOARD_SECTOR_GROUPS.map((group) => ({
+    key: group.key,
+    label: group.label,
+    sectors: sectors.filter((sector) => boardSectorGroupForSector(sector).key === group.key),
+    locked: LOCKED_SECTOR_GROUP_KEYS.has(group.key),
+  }))
+}
+
+export function isLockedFilterSector(sector: string) {
+  return LOCKED_SECTOR_GROUP_KEYS.has(boardSectorGroupForSector(sector).key)
+}
+
+export function hasRequiredFilterSectorSelections(
+  selected: ReadonlySet<string>,
+  availableSectors: readonly string[],
+) {
+  for (const group of groupFilterSectorsByBoardColumn(availableSectors)) {
+    if (group.sectors.length === 0) continue
+    const selectedInGroup = group.sectors.filter((sector) => selected.has(sector))
+    if (selectedInGroup.length === 0) return false
+    if (group.locked && selectedInGroup.length !== group.sectors.length) return false
+  }
+  return true
+}
+
+export function canUnselectFilterSector(
+  selected: ReadonlySet<string>,
+  sector: string,
+  availableSectors: readonly string[],
+) {
+  if (!selected.has(sector)) return true
+  if (isLockedFilterSector(sector)) return false
+
+  const groupKey = boardSectorGroupForSector(sector).key
+  const group = groupFilterSectorsByBoardColumn(availableSectors)
+    .find((item) => item.key === groupKey)
+  if (!group) return false
+
+  return group.sectors.filter((candidate) => selected.has(candidate)).length > 1
 }
 
 export function defaultStockFilterCriteria(
@@ -141,8 +199,8 @@ export function filterBoardTickers(
       }
 
       if (criteria.minVolumeShares != null) {
-        const volume = Number(quotes[stock.ticker]?.volume)
-        if (!Number.isFinite(volume) || volume <= criteria.minVolumeShares) return false
+        const averageVolume50d = Number(stock.averageVolume50d)
+        if (!Number.isFinite(averageVolume50d) || averageVolume50d <= criteria.minVolumeShares) return false
       }
 
       return true
@@ -153,6 +211,7 @@ export function filterBoardTickers(
 function stableCriteriaPayload(criteria: StockFilterCriteriaV1) {
   return JSON.stringify({
     version: 1,
+    liquidityBasis: "averageVolume50d",
     exchanges: [...criteria.exchanges].sort(),
     minPriceVnd: criteria.minPriceVnd,
     minVolumeShares: criteria.minVolumeShares,
@@ -195,7 +254,9 @@ export function readStockFilterFromSettings(
   if (!isPlainObject(settings)) return null
   const marketBoard = settings.marketBoard
   if (!isPlainObject(marketBoard)) return null
-  return normalizeStockFilterCriteria(marketBoard.stockFilter, availableSectors)
+  const criteria = normalizeStockFilterCriteria(marketBoard.stockFilter, availableSectors)
+  if (!criteria) return null
+  return hasRequiredFilterSectorSelections(new Set(criteria.sectors), availableSectors) ? criteria : null
 }
 
 export function mergeStockFilterIntoSettings(
