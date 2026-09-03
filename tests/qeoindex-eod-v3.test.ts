@@ -13,7 +13,7 @@ function qeo21RetentionMigration() {
   return source(`supabase/migrations/${matches[0]}`)
 }
 
-test("EOD v3 publishes validated Wyckoff to Supabase before Council and archives", () => {
+test("EOD v3 publishes validated Wyckoff to Supabase before Council, Notion archive, and retention", () => {
   const workflowPath = "workflows/qeoindex-eod-pipeline.ts"
   assert.equal(existsSync(new URL(`../${workflowPath}`, import.meta.url)), true)
   const workflow = source(workflowPath)
@@ -32,7 +32,6 @@ test("EOD v3 publishes validated Wyckoff to Supabase before Council and archives
     "runNotionUniverseArchiveBatchStep",
     "runNotionEodArchiveBatchStep",
     "runNotionArchiveFinalizeStep",
-    "runDriveArchiveStep",
     "runRetentionCleanupStep",
     "runCompleteStep",
   ]
@@ -44,6 +43,7 @@ test("EOD v3 publishes validated Wyckoff to Supabase before Council and archives
     cursor = next
   }
 
+  assert.doesNotMatch(workflow, /runDriveArchiveStep|driveArchiveStatus/)
   assert.doesNotMatch(workflow, /runNotionStagingBatchStep/)
   assert.doesNotMatch(workflow, /runNotionValidateStep/)
   assert.doesNotMatch(workflow, /runIngestStep/)
@@ -117,12 +117,11 @@ test("admin EOD phase catalog exposes v3 order and dynamic Top Stocks descriptio
     "AI_COUNCIL_LLM",
     "MARKET_SYNTHESIS",
     "NOTION_ARCHIVE",
-    "DRIVE_ARCHIVE",
     "RETENTION_CLEANUP",
     "COMPLETE",
   ]) assert.match(code, new RegExp(`key: "${phase}"`))
 
-  assert.doesNotMatch(code, /100 ticker|500 Snapshot|NOTION_STAGING|NOTION_VALIDATE|key: "INGEST"/)
+  assert.doesNotMatch(code, /DRIVE_ARCHIVE|100 ticker|500 Snapshot|NOTION_STAGING|NOTION_VALIDATE|key: "INGEST"/)
   assert.match(code, /canonical|Top Stocks|universeCount|động/i)
   assert.match(code, /1D\/1W/)
 })
