@@ -13,7 +13,17 @@ import {
   type TtaiRefreshProgress,
 } from "@/lib/qeoindex-eod-data-refresh-steps"
 import { failQeoIndexEodRunStep } from "@/lib/qeoindex-eod-failure-step"
+import {
+  persistHistoryTickerAttemptsStep,
+  runWyckoffBuildIsolatedStep,
+} from "@/lib/qeoindex-eod-fault-steps"
+import {
+  appendTickerAttempts,
+  computeEodTickerCoverage,
+  type EodTickerAttempt,
+} from "@/lib/qeoindex-eod-fault-isolation"
 import { runEodNoTradeDailyRepairStep } from "@/lib/qeoindex-eod-no-trade-repair-step"
+import { completeQeoIndexEodPartialStep } from "@/lib/qeoindex-eod-partial-step"
 import { runRetentionCleanupStep } from "@/lib/qeoindex-eod-retention-step"
 import { skipQeoIndexEodRunStep } from "@/lib/qeoindex-eod-skip-step"
 import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "@/lib/vn-market-calendar"
@@ -292,14 +302,63 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       )
     }
 
+    let tickerAttempts: EodTickerAttempt[] = []
+    if (!historicalBackfill) {
+      const historyAttempts = await persistHistoryTickerAttemptsStep(
+        runId,
+        ready.stocks.map((stock) => stock.ticker),
+        history.errors,
+      )
+      tickerAttempts = appendTickerAttempts(tickerAttempts, historyAttempts)
+    }
+
     const noTradeRepair = await runEodNoTradeDailyRepairStep(
       ready.stocks.map((stock) => stock.ticker),
       ready.scanDate,
       !historicalBackfill,
     )
 
-    const build = await runWyckoffBuildStep(runId, ready.stocks, ready.runKey, ready.scanDate)
-    if (build.total !== expectedSnapshots) throw new Error(`WYCKOFF_BUILD completed ${build.total}/${expectedSnapshots} snapshots`)
+    const build = historicalBackfill
+      ? await runWyckoffBuildStep(runId, ready.stocks, ready.runKey, ready.scanDate)
+      : await runWyckoffBuildIsolatedStep(runId, ready.stocks, ready.runKey, ready.scanDate, true)
+
+    if (!historicalBackfill && "tickerAttempts" in build) {
+      tickerAttempts = appendTickerAttempts(tickerAttempts, build.tickerAttempts)
+      const coverage = computeEodTickerCoverage(
+        ready.stocks.map((stock) => stock.ticker),
+        tickerAttempts,
+      )
+      if (build.failedTickers.length > 0 || !coverage.complete) {
+        return await completeQeoIndexEodPartialStep({
+          runId,
+          runKey: ready.runKey,
+          scanDate: ready.scanDate,
+          universeRunId: ready.market.universeRunId,
+          coverage,
+          tickerAttempts,
+          summary: {
+            universeCount,
+            expectedSnapshots,
+            historicalBackfill,
+            historyConcurrency,
+            history,
+            noTradeRepair,
+            build,
+            healthyCount: coverage.healthyCount,
+            failedCount: coverage.failedCount,
+            ratingRefreshStatus: ratingRefresh?.status || null,
+            ratingSyncRunId: ratingRefresh?.syncRunId || null,
+            ttaiRefreshStatus: ttaiRefresh?.status || null,
+            ttaiFailedTickers: ttaiRefresh?.failedTickers.slice(0, 20) || [],
+            marketCloseStatus: marketClose.status,
+          },
+        })
+      }
+    }
+
+    if (build.total !== expectedSnapshots || !build.validationHash) {
+      throw new Error(`WYCKOFF_BUILD completed ${build.total}/${expectedSnapshots} snapshots`)
+    }
 
     const validation = await runSupabaseValidateStep(
       runId,
@@ -387,6 +446,9 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       history,
       noTradeRepair,
       build,
+      tickerAttempts,
+      healthyCount: universeCount,
+      failedCount: 0,
       validation,
       publishStatus: publish.status,
       deterministicStatus: deterministic.status,
@@ -406,6 +468,8 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       universeCount,
       expectedSnapshots,
       historicalBackfill,
+      healthyCount: universeCount,
+      failedCount: 0,
       ratingRefreshStatus: ratingRefresh?.status || "historical_backfill",
       ttaiRefreshStatus: ttaiRefresh?.status || "historical_backfill",
       publishStatus: publish.status,
