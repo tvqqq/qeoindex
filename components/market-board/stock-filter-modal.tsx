@@ -162,7 +162,7 @@ export function StockFilterModal({
               </div>
             </label>
             <label className="space-y-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-2">KLTB 50 phiên &gt;</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-2">Thanh khoản (KLTB 50 phiên) &gt;</span>
               <div className="relative">
                 <Input
                   inputMode="numeric"
