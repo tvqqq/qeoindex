@@ -36,6 +36,35 @@ test("market intelligence uses one equal-height three-column overview row", () =
   assert.doesNotMatch(dashboard, /xl:grid-cols-\[35fr_65fr\]/, "the previous two-column pulse/index row must be removed")
 })
 
+test("KFSP distribution-day guidance replaces foreign flow without breaking equal stat rows", () => {
+  const dashboard = read("components/insights/market-close-dashboard.tsx")
+
+  assert.match(dashboard, /function getDistributionDayGuidance\(/)
+  assert.match(dashboard, /days <= 2[\s\S]*Chưa cần hành động/)
+  assert.match(dashboard, /days === 3[\s\S]*Bắt đầu quan sát kỹ hơn/)
+  assert.match(dashboard, /days === 4[\s\S]*Tìm kiếm tín hiệu bán/)
+  assert.match(dashboard, /Ưu tiên phòng thủ/)
+  assert.match(dashboard, /data-market-summary-stats[^>]*className="[^"]*auto-rows-fr/)
+  assert.match(dashboard, /<PulseStat label="Ngày phân phối"[^>]*dailySummary\.distributionCount/)
+  assert.match(dashboard, /<PulseStat label="Hành động"[^>]*distributionGuidance\.message/)
+  assert.doesNotMatch(dashboard, /<PulseStat label="Khối ngoại"/)
+})
+
+test("market AI surface renders only succeeded conclusion content with an AI analysis icon", () => {
+  const dashboard = read("components/insights/market-close-dashboard.tsx")
+
+  assert.match(dashboard, /BrainCircuit/)
+  assert.match(dashboard, /marketAiConclusion\?\.status === "succeeded" &&/)
+  assert.match(dashboard, /data-market-ai-conclusion/)
+  assert.match(dashboard, /<BrainCircuit className="size-5"/)
+  assert.match(dashboard, /marketAiConclusion\.payload\?\.headline/)
+  assert.match(dashboard, /marketAiConclusion\.payload\?\.conclusion/)
+  assert.doesNotMatch(dashboard, /Tổng hợp định lượng/)
+  assert.doesNotMatch(dashboard, /Tóm lược định lượng, không phải AI/)
+  assert.doesNotMatch(dashboard, /Chưa có AI conclusion|Chưa có market AI conclusion/)
+  assert.doesNotMatch(dashboard, /evidenceHash|asOf \{formatTime\(marketAiConclusion/)
+})
+
 test("risk and valuation stay inside market intelligence while redundant history panels are removed", () => {
   const dashboard = read("components/insights/market-close-dashboard.tsx")
 
