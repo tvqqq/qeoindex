@@ -88,6 +88,35 @@ test("QEO-22 watchlist invariant is recorded as an exact production migration", 
   assert.deepEqual(production, { version: expected.productionVersion, name: expected.logicalName })
 })
 
+test("QEO-19 Wyckoff legacy-table DROP is promoted as an exact production migration", () => {
+  const logicalName = "drop_legacy_wyckoff_universe_memberships"
+  const manifest = JSON.parse(readFileSync("supabase/migration-equivalence.json", "utf8"))
+  const ledger = JSON.parse(readFileSync("docs/db/evidence/production-migration-ledger-2026-09-02.json", "utf8"))
+  const mapping = manifest.migrations.find((entry: { logicalName?: string }) => entry.logicalName === logicalName)
+  const production = ledger.migrations.find((entry: { name?: string }) => entry.name === logicalName)
+  const pendingFiles = existsSync("supabase/pending-migrations")
+    ? readdirSync("supabase/pending-migrations").filter((name) => name.endsWith(".sql"))
+    : []
+
+  assert.ok(mapping, "QEO-19 migration mapping must exist")
+  assert.equal(mapping.state, "EXACT", "QEO-19 physical DROP must leave quarantine only after production acceptance")
+  assert.match(mapping.productionVersion ?? "", /^\d{14}$/, "QEO-19 production migration version must be recorded")
+  assert.equal(mapping.repositoryVersion, mapping.productionVersion, "EXACT migration must use the production version in source history")
+  assert.deepEqual(production, { version: mapping.productionVersion, name: logicalName })
+  assert.equal(
+    pendingFiles.some((name) => name.endsWith(`_${logicalName}.sql`)),
+    false,
+    "production-applied QEO-19 DROP must not remain under pending-migrations",
+  )
+
+  const migrationPath = `supabase/migrations/${mapping.productionVersion}_${logicalName}.sql`
+  assert.equal(existsSync(migrationPath), true, "exact QEO-19 production migration source must exist")
+  if (!existsSync(migrationPath)) return
+  const migration = readFileSync(migrationPath, "utf8")
+  assert.match(migration, /drop\s+table\s+if\s+exists\s+public\.wyckoff_universe_memberships/i)
+  assert.doesNotMatch(migration, /cascade/i)
+})
+
 test("db drift CLI exits zero for reviewed current state", () => {
   const run = spawnSync(process.execPath, ["scripts/db/verify-migration-drift.mjs"], { encoding: "utf8" })
   assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`)
