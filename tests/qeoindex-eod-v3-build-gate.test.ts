@@ -154,3 +154,15 @@ test("QEO-57 converts rejected Drive archive promises into a degraded checkpoint
   )
   assert.match(archive, /raw Supabase history remains retained/i)
 })
+
+test("QEO-56 uses one Vault-backed credential for Market AI dispatch and Edge auth", () => {
+  const edge = source("supabase/functions/market-ai-conclusion/index.ts")
+  const migration = source("supabase/migrations/20260903113000_qeo56_market_ai_dispatch_vault_auth.sql")
+
+  assert.match(migration, /qeo_verify_market_ai_dispatch_secret/)
+  assert.match(migration, /market_ai_conclusion_secret/)
+  assert.match(migration, /market_ai_supabase_url/)
+  assert.doesNotMatch(migration, /app\.settings\.supabase_url/)
+  assert.match(edge, /qeo_verify_market_ai_dispatch_secret/)
+  assert.doesNotMatch(edge, /Deno\.env\.get\("MARKET_AI_CONCLUSION_SECRET"\)/)
+})

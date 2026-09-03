@@ -87,9 +87,10 @@ test("market AI first claimant owns the row it inserts", () => {
 test("market AI Edge Function is machine-authenticated, bounded and idempotent", () => {
   const source = fs.readFileSync(path.resolve("supabase/functions/market-ai-conclusion/index.ts"), "utf8")
   const shared = fs.readFileSync(path.resolve("supabase/functions/_shared/market-ai-conclusion.ts"), "utf8")
-  assert.match(source, /MARKET_AI_CONCLUSION_SECRET/)
+  assert.doesNotMatch(source, /MARKET_AI_CONCLUSION_SECRET/)
   assert.doesNotMatch(source, /KFSP_SYNC_SECRET/)
-  assert.match(source, /constantTimeEqual/)
+  assert.match(source, /qeo_verify_market_ai_dispatch_secret/)
+  assert.match(source, /DISPATCH_AUTH_UNAVAILABLE/)
   assert.match(source, /mode !== "latest" && mode !== "session"/)
   assert.match(source, /market_insight_daily/)
   assert.match(source, /market_insight_indexes/)

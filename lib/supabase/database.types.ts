@@ -3055,6 +3055,10 @@ export type Database = {
         Args: { p_secret: string }
         Returns: boolean
       }
+      qeo_verify_market_ai_dispatch_secret: {
+        Args: { p_secret: string }
+        Returns: boolean
+      }
       refresh_ai_council_agent_stats: {
         Args: { p_as_of_date?: string }
         Returns: number
