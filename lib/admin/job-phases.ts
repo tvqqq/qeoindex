@@ -62,22 +62,16 @@ export const QEOINDEX_EOD_PHASES = [
     description: "Archive analytical/audit output và canonical universe history sang Notion sau publication.",
   },
   {
-    key: "DRIVE_ARCHIVE",
-    order: 11,
-    label: "Drive Archive",
-    description: "Archive raw OHLCV 1D sang Google Drive với manifest/hash; thiếu credential hoặc coverage sẽ fail closed.",
-  },
-  {
     key: "RETENTION_CLEANUP",
-    order: 12,
+    order: 11,
     label: "Retention Cleanup",
-    description: "Chỉ prune hot Supabase sau khi Notion + Drive archive checkpoint và historical coverage preflight đều pass.",
+    description: "Prune telemetry/staging/build artifacts an toàn; raw Daily OHLCV tiếp tục được giữ trong Supabase và không phụ thuộc external cold archive.",
   },
   {
     key: "COMPLETE",
-    order: 13,
+    order: 12,
     label: "Complete",
-    description: "Đóng parent EOD run và ghi summary của publication, Council, archive và retention.",
+    description: "Đóng parent EOD run và ghi summary của publication, Council, Notion archive và retention.",
   },
 ] as const
 
