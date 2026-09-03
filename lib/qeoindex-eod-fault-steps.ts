@@ -43,6 +43,15 @@ function successAttempt(ticker: string, stage: string, attempt = 1): EodTickerAt
   return { ticker, stage, status: "succeeded", errorClass: null, attempt, retryEligible: false }
 }
 
+function throwIfCriticalTickerFailure(attempts: readonly EodTickerAttempt[]) {
+  const critical = attempts.find((attempt) => attempt.status === "failed" && attempt.errorClass === "critical_systemic")
+  if (!critical) return
+  throw Object.assign(
+    new Error(`${critical.stage} critical systemic failure for ${critical.ticker}: ${critical.error || critical.errorCode || "unknown"}`),
+    { code: critical.errorCode || "EOD_CRITICAL_SYSTEMIC_FAILURE" },
+  )
+}
+
 export async function persistHistoryTickerAttemptsStep(runId: string, tickers: string[], errors: OhlcvRefreshError[]) {
   "use step"
   const failures = new Map(errors.map((item) => [item.ticker, item.error]))
@@ -53,6 +62,7 @@ export async function persistHistoryTickerAttemptsStep(runId: string, tickers: s
       : successAttempt(ticker, "HISTORY_REFRESH")
   })
   await persistEodTickerAttempts(requiredSupabase(), runId, attempts)
+  throwIfCriticalTickerFailure(attempts)
   return attempts
 }
 
@@ -99,6 +109,7 @@ export async function runWyckoffBuildIsolatedStep(
       }
 
       await persistEodTickerAttempts(requiredSupabase(), runId, attempts)
+      throwIfCriticalTickerFailure(attempts)
       const failedTickers = attempts.filter((attempt) => attempt.status === "failed").map((attempt) => attempt.ticker).sort()
       if (failedTickers.length && !allowTickerFailures) {
         throw Object.assign(new Error(`WYCKOFF_BUILD failed for ${failedTickers.join(",")}`), { code: "WYCKOFF_BUILD_FAILED" })
@@ -157,6 +168,7 @@ export async function runTargetedHistoryRetryStep(
     }
   }
   await persistEodTickerAttempts(requiredSupabase(), runId, allAttempts)
+  throwIfCriticalTickerFailure(allAttempts)
   return {
     tickerAttempts: allAttempts,
     succeededTickers: allAttempts.filter((attempt) => attempt.status === "succeeded").map((attempt) => attempt.ticker),
@@ -203,6 +215,7 @@ export async function runTargetedWyckoffRetryStep(
     }
   }
   await persistEodTickerAttempts(requiredSupabase(), runId, retryAttempts)
+  throwIfCriticalTickerFailure(retryAttempts)
 
   const existingByTicker = new Map<string, WyckoffV2Snapshot[]>()
   for (const snapshot of existing.snapshots) {
