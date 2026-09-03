@@ -11,6 +11,7 @@ import {
   getJobKeyForPgCron,
   getPgCronNameForJobKey,
 } from "../lib/admin/job-schedule.ts"
+import { EOD_PIPELINE_PHASES } from "../lib/admin/cron-timeline.ts"
 
 const RETIRED_ACTIVE_SCHEDULERS = [
   ["kfsp.rating_daily", "kfsp-rating-daily-7am-ict"],
@@ -28,21 +29,46 @@ function migrationSource() {
   return readFileSync(new URL(`../supabase/migrations/${matches[0]}`, import.meta.url), "utf8")
 }
 
-test("QEO-64 reclassifies standalone EOD freshness jobs as manual recovery after cutover", () => {
+test("QEO-64 removes standalone EOD freshness scheduler ownership", () => {
   for (const [jobKey] of RETIRED_ACTIVE_SCHEDULERS) {
     const job = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === jobKey)
-    assert.ok(job, `${jobKey} must remain visible for historical evidence and manual recovery`)
+    assert.ok(job, `${jobKey} must remain visible as operational/historical catalog evidence`)
     assert.equal(job.scheduleKind, "manual", `${jobKey} must no longer own a production schedule`)
     assert.equal(job.scheduleUtc, undefined)
     assert.equal(job.scheduleIct, undefined)
     assert.equal(job.schedulerName, undefined)
-    assert.equal(job.manualPolicy, "confirm")
-    assert.equal(job.manualPurpose, "recovery")
     assert.equal(job.schedulePolicy?.kind, "manual")
   }
 
+  for (const jobKey of ["kfsp.rating_daily", "kfsp.ttai_history"]) {
+    const job = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === jobKey)
+    assert.ok(job)
+    assert.equal(job.manualPolicy, "confirm")
+    assert.equal(job.manualPurpose, "recovery")
+    assert.deepEqual(job.automatedParentKeys, ["qeoindex.eod_pipeline"])
+  }
+
+  const legacyMarketEod = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === "market.sync_eod")
+  assert.ok(legacyMarketEod)
+  assert.equal(legacyMarketEod.manualPolicy, "disabled", "final market-close collection must only run through the canonical EOD owner")
+  assert.equal(legacyMarketEod.manualPurpose, "maintenance")
+  assert.deepEqual(legacyMarketEod.automatedParentKeys, ["qeoindex.eod_pipeline"])
+
   assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 9)
   assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 3)
+})
+
+test("QEO-64 cron timeline exposes the seven canonical EOD v4 business phases", () => {
+  assert.deepEqual(EOD_PIPELINE_PHASES.map((phase) => phase.key), [
+    "DATA_REFRESH",
+    "READY_GATE",
+    "HISTORY_PREPARE",
+    "WYCKOFF_PUBLISH",
+    "AI_COUNCIL",
+    "POST_ANALYSIS",
+    "COMPLETE",
+  ])
+  assert.equal(EOD_PIPELINE_PHASES.length, 7)
 })
 
 test("QEO-64 preserves retired pg_cron aliases for v3 telemetry but removes forward scheduler ownership", () => {
