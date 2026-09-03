@@ -3,14 +3,9 @@
 import * as React from "react"
 import { createPortal } from "react-dom"
 import {
-  ArrowDown,
   ArrowRight,
-  ArrowUp,
   Building2,
-  CalendarDays,
-  CalendarRange,
   ChevronDown,
-  ChevronsUpDown,
   CircleAlert,
   Compass,
   Cpu,
@@ -28,19 +23,14 @@ import {
   Search,
   ShieldCheck,
   ShoppingBag,
-  Target,
   TrendingDown,
-  TrendingUp,
   Truck,
   Utensils,
   X,
-  Zap,
 } from "lucide-react"
 
-import { MarketChangePill } from "@/components/market-change-pill"
 import type { MarketHistoryPoint, MarketSectorHistoryItem, MarketSectorRow } from "@/lib/market-insight-data"
 import type { InsightsRatingRow } from "@/lib/insights-data"
-import { StockLogo } from "@/components/stock-logo"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -53,6 +43,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  StockRankingTable,
+  compareStockRankingValues,
+  type StockRankingSortDirection,
+  type StockRankingSortKey,
+} from "@/components/insights/stock-ranking-table"
 import { cn } from "@/lib/utils"
 
 interface SectorMapPanelProps {
@@ -65,11 +61,6 @@ interface SectorMapPanelProps {
 }
 
 type SectorHeadingIcon = React.ComponentType<{ className?: string }>
-type PopupSortKey = keyof Pick<InsightsRatingRow,
-  "ticker" | "price" | "marketCapBillion" | "canslimScore" | "score4m" | "pricePotential" | "rsShort" | "rsMedium" |
-  "stockRrgState" | "weeklyChangePercent" | "monthlyChangePercent" | "ratingScore"
->
-type SortDirection = "asc" | "desc"
 
 export function getSectorIcon(sector: string) {
   const normalized = (sector || "").toLowerCase()
@@ -119,17 +110,9 @@ function SectorPanelHeading({
         <Icon className="size-4 sm:size-5" />
       </span>
       <div className="min-w-0">
-        <p className="font-mono text-[10px] font-black uppercase tracking-[0.2em] text-purple-400">
-          {eyebrow}
-        </p>
-        <h3 className="mt-0.5 text-base font-bold tracking-wide text-white sm:text-lg">
-          {title}
-        </h3>
-        {description ? (
-          <p className="mt-0.5 text-[11px] font-medium italic text-slate-400">
-            {description}
-          </p>
-        ) : null}
+        <p className="font-mono text-[10px] font-black uppercase tracking-[0.2em] text-purple-400">{eyebrow}</p>
+        <h3 className="mt-0.5 text-base font-bold tracking-wide text-white sm:text-lg">{title}</h3>
+        {description ? <p className="mt-0.5 text-[11px] font-medium italic text-slate-400">{description}</p> : null}
       </div>
     </div>
   )
@@ -146,26 +129,6 @@ function formatNumber(value: number | null | undefined, decimals = 0) {
 function formatSigned(value: number | null | undefined, decimals = 2, suffix = "") {
   if (value == null || !Number.isFinite(value)) return "—"
   return `${value > 0 ? "+" : ""}${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: decimals }).format(value)}${suffix}`
-}
-
-function formatPrice(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return "—"
-  return new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
-}
-
-function formatMarketCapBillion(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return "—"
-  return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)} tỷ`
-}
-
-function compareRatingValues(left: string | number | null, right: string | number | null, direction: SortDirection) {
-  if (left == null && right == null) return 0
-  if (left == null) return 1
-  if (right == null) return -1
-  const result = typeof left === "number" && typeof right === "number"
-    ? left - right
-    : String(left).localeCompare(String(right), "vi", { numeric: true, sensitivity: "base" })
-  return direction === "asc" ? result : -result
 }
 
 export const ROTATION_LABELS: Record<string, string> = {
@@ -203,16 +166,6 @@ function RotationBadge({ value }: { value: string | null | undefined }) {
       {label}
     </span>
   )
-}
-
-function PopupRrgBadge({ value }: { value: string | null | undefined }) {
-  const Icon = value === "Dẫn dắt" ? Rocket : value === "Phục hồi" ? RefreshCw : value === "Suy yếu" ? TrendingDown : value === "Đội sổ" ? CircleAlert : Radar
-  const tone = value === "Dẫn dắt" ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-300"
-    : value === "Phục hồi" ? "border-sky-300/30 bg-sky-400/15 text-sky-300"
-      : value === "Suy yếu" ? "border-amber-300/30 bg-amber-400/15 text-amber-300"
-        : value === "Đội sổ" ? "border-rose-300/30 bg-rose-400/15 text-rose-300"
-          : "border-white/10 bg-white/[0.03] text-slate-300"
-  return <span className={cn("inline-flex min-w-20 items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-xs font-bold", tone)}><Icon className="size-3.5" />{value || "—"}</span>
 }
 
 export function inferRotationState(
@@ -260,25 +213,6 @@ function SectorMiniSparkline({ data, positive }: { data: number[]; positive: boo
   )
 }
 
-function PopupSortHead({ label, sortKey, activeKey, direction, onSort, className }: {
-  label: string
-  sortKey: PopupSortKey
-  activeKey: PopupSortKey
-  direction: SortDirection
-  onSort: (key: PopupSortKey) => void
-  className?: string
-}) {
-  const active = activeKey === sortKey
-  const Icon = active ? (direction === "asc" ? ArrowUp : ArrowDown) : ChevronsUpDown
-  return (
-    <th className={className} aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : "none"}>
-      <button type="button" onClick={() => onSort(sortKey)} className="inline-flex items-center justify-center gap-1 rounded-md py-0.5 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50">
-        <span>{label}</span><Icon className={cn("size-3.5 shrink-0", active ? "text-brand" : "text-muted")} />
-      </button>
-    </th>
-  )
-}
-
 export function SectorMapPanel({
   sectors,
   ratings = [],
@@ -291,7 +225,7 @@ export function SectorMapPanel({
   const [effortTooltipPos, setEffortTooltipPos] = React.useState<{ x: number; y: number } | null>(null)
   const [selectedModalSector, setSelectedModalSector] = React.useState<string | null>(null)
   const [modalSearch, setModalSearch] = React.useState("")
-  const [modalSort, setModalSort] = React.useState<{ key: PopupSortKey; direction: SortDirection }>({ key: "ratingScore", direction: "desc" })
+  const [modalSort, setModalSort] = React.useState<{ key: StockRankingSortKey; direction: StockRankingSortDirection }>({ key: "ratingScore", direction: "desc" })
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -356,10 +290,10 @@ export function SectorMapPanel({
         if (selectedModalSector !== "all" && row.sector !== selectedModalSector) return false
         return !normalizedQuery || row.ticker.toUpperCase().includes(normalizedQuery) || (row.companyName || "").toUpperCase().includes(normalizedQuery) || row.sector.toUpperCase().includes(normalizedQuery)
       })
-      .sort((left, right) => compareRatingValues(left[modalSort.key], right[modalSort.key], modalSort.direction) || left.ticker.localeCompare(right.ticker))
+      .sort((left, right) => compareStockRankingValues(left[modalSort.key], right[modalSort.key], modalSort.direction) || left.ticker.localeCompare(right.ticker))
   }, [ratings, selectedModalSector, modalSearch, modalSort])
 
-  const handleModalSort = (key: PopupSortKey) => {
+  const handleModalSort = (key: StockRankingSortKey) => {
     setModalSort((current) => current.key === key
       ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
       : { key, direction: "desc" })
@@ -404,7 +338,7 @@ export function SectorMapPanel({
       <div
         data-stock-ranking-dialog
         onClick={(event) => event.stopPropagation()}
-        className="relative flex max-h-[calc(100dvh-88px)] w-full max-w-[1180px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-panel/95 shadow-2xl"
+        className="relative flex max-h-[calc(100dvh-88px)] w-full max-w-[min(1600px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-panel/95 shadow-2xl"
       >
         <div className="border-b border-white/[0.06] bg-[#07131d] p-4 sm:p-5">
           <div className="flex items-start justify-between gap-4">
@@ -426,11 +360,9 @@ export function SectorMapPanel({
 
           <div className="mt-4 flex flex-col gap-4 border-t border-white/[0.06] pt-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
-              <Badge variant="outline" className="h-10 justify-center border-brand/30 bg-brand/10 px-3 text-sm font-bold text-brand sm:min-w-28">
-                Tất cả · {ratings.length} mã
-              </Badge>
+              <Badge variant="outline" className="h-10 justify-center border-brand/30 bg-brand/10 px-3 text-sm font-bold text-brand sm:min-w-28">Tất cả · {ratings.length} mã</Badge>
               <Select value={selectedModalSector} onValueChange={(value) => setSelectedModalSector(value ?? "all")}>
-                <SelectTrigger aria-label="Chọn ngành" className="h-10 w-full min-w-64 border-white/10 bg-cell px-3 text-sm sm:text-base font-bold text-white hover:bg-white/[0.05] sm:w-80">
+                <SelectTrigger aria-label="Lọc theo ngành" className="h-10 w-full min-w-64 border-white/10 bg-cell px-3 text-sm sm:text-base font-bold text-white hover:bg-white/[0.05] sm:w-80">
                   <SelectValue>{selectedModalSector === "all" ? "Ngành: Tất cả ngành" : `Ngành: ${selectedModalSector}`}</SelectValue>
                 </SelectTrigger>
                 <SelectContent align="start" className="max-h-96 border border-white/10 bg-[#111724] p-1 font-ticker text-sm sm:text-base text-white shadow-2xl">
@@ -449,76 +381,17 @@ export function SectorMapPanel({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto bg-[#07101a]/35">
-          <table className="w-full table-fixed font-ticker">
-            <colgroup><col className="w-[18%]" /><col className="w-[7%]" /><col className="w-[9%]" /><col className="w-[7%]" /><col className="w-[7%]" /><col className="w-[8%]" /><col className="w-[5%]" /><col className="w-[5%]" /><col className="w-[9%]" /><col className="w-[7%]" /><col className="w-[7%]" /><col className="w-[11%]" /></colgroup>
-            <thead className="sticky top-0 z-20 bg-[#05090f]">
-              <tr className="border-b border-white/[0.08] text-xs font-extrabold uppercase text-muted-2">
-                <PopupSortHead label="# · Cổ phiếu / Ngành" sortKey="ticker" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="h-14 px-2 text-left" />
-                <PopupSortHead label="Giá" sortKey="price" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center" />
-                <PopupSortHead label="Vốn hóa" sortKey="marketCapBillion" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-cyan-200" />
-                <PopupSortHead label="Điểm CANSLIM" sortKey="canslimScore" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-emerald-300" />
-                <PopupSortHead label="Điểm 4M" sortKey="score4m" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-amber-300" />
-                <PopupSortHead label="Tiềm năng giá" sortKey="pricePotential" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-ref" />
-                <PopupSortHead label="RSs" sortKey="rsShort" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-cyan-300" />
-                <PopupSortHead label="RSm" sortKey="rsMedium" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-violet-300" />
-                <PopupSortHead label="RRG cổ phiếu" sortKey="stockRrgState" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-cyan-300" />
-                <PopupSortHead label="Biến động tuần" sortKey="weeklyChangePercent" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-cyan-200" />
-                <PopupSortHead label="Biến động tháng" sortKey="monthlyChangePercent" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-violet-200" />
-                <PopupSortHead label="Qeo composite" sortKey="ratingScore" activeKey={modalSort.key} direction={modalSort.direction} onSort={handleModalSort} className="px-1 text-center text-brand" />
-              </tr>
-            </thead>
-            <tbody>
-              {modalStocks.map((stock, index) => {
-                const SectorIcon = getSectorIcon(stock.sector)
-                const priceTone = (stock.changePercent ?? 0) > 0 ? "up" : (stock.changePercent ?? 0) < 0 ? "down" : "ref"
-                const pricePositive = (stock.changePercent ?? 0) > 0
-                return (
-                  <tr
-                    key={`${stock.ticker}-${stock.asOfDate}`}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`Mở hồ sơ rating ${stock.ticker}`}
-                    onClick={() => { onOpenStockDetail?.(stock.ticker); setSelectedModalSector(null) }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault()
-                        onOpenStockDetail?.(stock.ticker)
-                        setSelectedModalSector(null)
-                      }
-                    }}
-                    className="group cursor-pointer border-b border-white/[0.065] bg-[#07101a]/35 outline-none transition-colors hover:bg-cyan-300/[0.035] hover:shadow-[inset_3px_0_0_rgba(103,232,249,.7),0_0_24px_-16px_rgba(103,232,249,.7)] focus-visible:bg-cyan-300/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-300/50"
-                  >
-                    <td className="px-2 py-3.5">
-                      <div className="flex items-center gap-2">
-                        <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-white/[0.07] bg-white/[0.025] font-mono text-xs font-bold text-muted">{String(index + 1).padStart(2, "0")}</span>
-                        <StockLogo symbol={stock.ticker} size={36} className="shrink-0 rounded-full group-hover:shadow-[0_0_20px_-5px_rgba(103,232,249,.75)]" />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1 font-ticker text-[16px] font-extrabold leading-none tracking-tight text-white group-hover:text-cyan-200">{stock.ticker}</div>
-                          <div className="mt-1 flex items-center gap-1 text-[11px] font-bold uppercase text-cyan-300/80"><SectorIcon className="size-3 shrink-0" /><span className="truncate">{stock.sector}</span></div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-1 text-center">
-                      <div className={cn("font-mono text-[14px] font-bold leading-tight tracking-tight", pricePositive ? "text-up" : (stock.changePercent ?? 0) < 0 ? "text-down" : "text-ref")}>{formatPrice(stock.price)}</div>
-                      <div className="mt-1 flex justify-center"><MarketChangePill value={stock.changePercent} tone={priceTone} compact /></div>
-                    </td>
-                    <td className="px-1 text-center font-mono text-xs font-bold text-cyan-100">{formatMarketCapBillion(stock.marketCapBillion)}</td>
-                    <td className="px-1 text-center"><span className="inline-flex h-8 min-w-13 items-center justify-center gap-1 rounded-md border border-emerald-300/35 bg-emerald-300/[0.09] px-1.5 font-mono text-xs font-black text-emerald-300 sm:text-sm"><Target className="size-3 sm:size-3.5" />{stock.canslimScore == null ? "—" : Math.round(stock.canslimScore)}</span></td>
-                    <td className="px-1 text-center"><span className="inline-flex h-8 min-w-13 items-center justify-center gap-1 rounded-md border border-amber-300/35 bg-amber-300/[0.09] px-1.5 font-mono text-xs font-black text-amber-300 sm:text-sm">⊛ {stock.score4m == null ? "—" : Math.round(stock.score4m)}</span></td>
-                    <td className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-xs font-bold", stock.pricePotential?.startsWith("Tăng") ? "text-up" : stock.pricePotential?.startsWith("Giảm") ? "text-down" : "text-ref")}>{stock.pricePotential?.startsWith("Giảm") ? <TrendingDown className="size-3.5" /> : <TrendingUp className="size-3.5" />}{stock.pricePotential || "—"}</span></td>
-                    <td className="px-1 text-center"><span className="inline-flex h-8 min-w-13 items-center justify-center gap-1 rounded-md border border-cyan-300/35 bg-cyan-300/[0.09] px-1.5 font-mono text-xs font-black text-cyan-300 sm:text-sm"><Zap className="size-3.5" />{stock.rsShort ?? stock.scoreComponents.momentum ?? "—"}</span></td>
-                    <td className="px-1 text-center"><span className="inline-flex h-8 min-w-13 items-center justify-center rounded-md border border-violet-400/35 bg-violet-400/[0.09] px-1.5 font-mono text-xs font-black text-violet-300 sm:text-sm">{stock.rsMedium ?? stock.scoreComponents.moneyFlow ?? "—"}</span></td>
-                    <td className="px-1 text-center"><PopupRrgBadge value={stock.stockRrgState} /></td>
-                    <td className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-bold sm:text-sm", (stock.weeklyChangePercent ?? 0) >= 0 ? "text-up" : "text-down")}><CalendarDays className="size-3.5" />{formatSigned(stock.weeklyChangePercent, 2, "%")}</span></td>
-                    <td className="px-1 text-center"><span className={cn("inline-flex items-center gap-1 font-mono text-xs font-bold sm:text-sm", (stock.monthlyChangePercent ?? 0) >= 0 ? "text-up" : "text-down")}><CalendarRange className="size-3.5" />{formatSigned(stock.monthlyChangePercent, 2, "%")}</span></td>
-                    <td className="px-1 text-center"><div className="flex items-center justify-center gap-1"><strong className={cn("flex size-9 items-center justify-center rounded-lg border font-mono text-base font-black sm:size-10", stock.ratingScore >= 80 ? "border-up/35 bg-up/10 text-up" : stock.ratingScore >= 65 ? "border-ref/35 bg-ref/10 text-ref" : "border-down/35 bg-down/10 text-down")}>{stock.ratingScore}</strong><ArrowRight className="size-3.5 text-muted transition-transform group-hover:translate-x-1 group-hover:text-cyan-300" /></div></td>
-                  </tr>
-                )
-              })}
-              {modalStocks.length === 0 ? <tr><td colSpan={12} className="py-8 text-center font-sans text-sm text-slate-400">Không tìm thấy cổ phiếu nào phù hợp bộ lọc trong ngành này.</td></tr> : null}
-            </tbody>
-          </table>
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto bg-[#07101a]/35">
+          <StockRankingTable
+            rows={modalStocks}
+            sort={modalSort}
+            onSort={handleModalSort}
+            onOpenStock={(row) => {
+              onOpenStockDetail?.(row.ticker)
+              setSelectedModalSector(null)
+            }}
+            emptyMessage="Không tìm thấy cổ phiếu nào phù hợp bộ lọc trong ngành này."
+          />
         </div>
 
         <div className="flex items-center justify-between border-t border-white/[0.08] bg-[#050b12] px-5 py-3 font-sans text-xs text-slate-400 sm:px-6">
@@ -569,10 +442,7 @@ export function SectorMapPanel({
         {quickPills.length > 0 ? <div className="mt-5 flex flex-wrap gap-2 border-t border-white/[0.06] pt-3">{quickPills.map((pill) => <button key={pill.ticker} type="button" onClick={() => onOpenStockDetail?.(pill.ticker)} className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#0c1d29] px-2.5 py-1 font-mono text-xs font-bold transition-colors hover:border-teal-400/40 hover:bg-[#122736]"><span className="text-slate-300">{pill.ticker}</span><span className={pill.change >= 0 ? "text-emerald-400" : "text-rose-400"}>{formatSigned(pill.change, 1, "%")}</span></button>)}</div> : null}
       </section>
 
-      <details
-        data-sector-rotation-matrix
-        className="group overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07131d]/95 shadow-xl"
-      >
+      <details data-sector-rotation-matrix className="group overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07131d]/95 shadow-xl">
         <summary data-sector-rotation-summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-[#050e16] px-4 py-3.5 outline-none marker:hidden focus-visible:ring-2 focus-visible:ring-purple-400/40 sm:px-5">
           <SectorPanelHeading icon={RefreshCw} eyebrow="SECTOR ROTATION MATRIX" title="Luân chuyển & Nỗ lực kết quả dòng tiền" description="Rê chuột vào cột Nỗ lực / Kết quả để xem chi tiết" />
           <ChevronDown className="size-5 shrink-0 text-slate-500 transition-transform duration-200 group-open:rotate-180" />

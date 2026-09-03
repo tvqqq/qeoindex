@@ -125,37 +125,27 @@ test("leading-sector RS badge is formatted to exactly two decimals", () => {
   assert.doesNotMatch(sectorPanel, /RS \{sector\.rsScore\}/)
 })
 
-test("sector stock popup matches the canonical Top cổ phiếu data and visual contract", () => {
+test("sector stock popup keeps canonical toolbar semantics and delegates table UI", () => {
   const sectorPanel = read("components/insights/sector-map-panel.tsx")
-  const insights = read("components/insights/insights-dashboard.tsx")
+  const rankingTable = read("components/insights/stock-ranking-table.tsx")
 
   assert.match(sectorPanel, /createPortal/)
   assert.match(sectorPanel, /document\.body/)
   assert.match(sectorPanel, /fixed inset-x-0 bottom-0 top-14/)
   assert.match(sectorPanel, /max-h-\[calc\(100dvh-88px\)\]/)
-  assert.match(sectorPanel, /max-w-\[1180px\]/)
+  assert.match(sectorPanel, /max-w-\[min\(1600px,calc\(100vw-2rem\)\)\]/)
 
   assert.doesNotMatch(sectorPanel, /modalUniverse|Top 100/, "sector popup must not keep the obsolete Top 100 switch")
   assert.match(sectorPanel, /Tất cả · \{ratings\.length\} mã/)
   assert.match(sectorPanel, /Nguồn KFSP · điểm Qeo/)
-  assert.match(sectorPanel, /SelectTrigger aria-label="Chọn ngành" className="h-10 w-full min-w-64 border-white\/10 bg-cell px-3 text-sm sm:text-base font-bold text-white hover:bg-white\/\[0\.05\] sm:w-80"/)
+  assert.match(sectorPanel, /SelectTrigger aria-label="Lọc theo ngành" className="h-10 w-full min-w-64 border-white\/10 bg-cell px-3 text-sm sm:text-base font-bold text-white hover:bg-white\/\[0\.05\] sm:w-80"/)
   assert.match(sectorPanel, /placeholder="Tìm mã hoặc tên\.\.\."[^>]*className="h-10 border-white\/10 bg-cell pl-9 text-sm sm:text-base text-white placeholder:text-muted focus-visible:border-brand\/50 focus-visible:ring-brand\/20"/)
-
-  assert.match(sectorPanel, /className="w-full table-fixed font-ticker"/)
-  assert.match(sectorPanel, /Vốn hóa/)
-  assert.match(sectorPanel, /formatMarketCapBillion\(stock\.marketCapBillion\)/)
-  assert.match(sectorPanel, /StockLogo symbol=\{stock\.ticker\} size=\{36\}/)
-  assert.match(sectorPanel, /font-ticker text-\[16px\] font-extrabold/)
+  assert.match(sectorPanel, /<StockRankingTable\b/)
+  assert.match(sectorPanel, /overflow-x-auto/)
+  assert.match(rankingTable, /Vốn hóa/)
+  assert.match(rankingTable, /className="w-full min-w-\[1400px\] table-fixed font-ticker"/)
+  assert.match(rankingTable, /StockLogo symbol=\{row\.ticker\} size=\{36\}/)
+  assert.match(rankingTable, /font-ticker text-\[16px\] font-extrabold/)
   assert.match(sectorPanel, /Đóng \(ESC\)/)
-
-  for (const canonicalClass of [
-    "h-10 w-full min-w-64 border-white/10 bg-cell px-3 text-sm sm:text-base font-bold text-white hover:bg-white/[0.05] sm:w-80",
-    "h-10 border-white/10 bg-cell pl-9 text-sm sm:text-base text-white placeholder:text-muted focus-visible:border-brand/50 focus-visible:ring-brand/20",
-    "w-full table-fixed font-ticker",
-  ]) {
-    assert.ok(insights.includes(canonicalClass), `canonical Top cổ phiếu must retain shared class: ${canonicalClass}`)
-    assert.ok(sectorPanel.includes(canonicalClass), `sector popup must match canonical class: ${canonicalClass}`)
-  }
-
   assert.doesNotMatch(sectorPanel, /backdrop-blur/, "ranking popup must stay compositor-safe without backdrop blur")
 })
