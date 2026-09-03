@@ -69,6 +69,7 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
       sector: boardSectorGroupForSector(stock.sector || sectorForTicker(stock.ticker)).sectors[0],
       exchange: stock.exchange || "",
       kfspSector: stock.sector || sectorForTicker(stock.ticker),
+      averageVolume50d: stock.averageVolume50d,
       marketCapT: stock.marketCapBillion / 1000,
       lastClose: lastClosePrice,
       lastCloseDate: snap?.session_date || "",
