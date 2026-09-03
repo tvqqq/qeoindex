@@ -5,6 +5,13 @@ import {
   markQeoIndexEodPhaseRetryingStep,
 } from "@/lib/admin/job-phase-telemetry"
 import { runEodBackfillReadyStep } from "@/lib/qeoindex-eod-backfill-ready-step"
+import {
+  assertFrozenUniverseStillCurrent,
+  assertReadyMatchesFrozenUniverse,
+  runKfspRatingRefreshStep,
+  runTtaiRefreshStep,
+  type TtaiRefreshProgress,
+} from "@/lib/qeoindex-eod-data-refresh-steps"
 import { failQeoIndexEodRunStep } from "@/lib/qeoindex-eod-failure-step"
 import { runEodNoTradeDailyRepairStep } from "@/lib/qeoindex-eod-no-trade-repair-step"
 import { skipQeoIndexEodRunStep } from "@/lib/qeoindex-eod-skip-step"
@@ -36,6 +43,7 @@ const MARKET_CLOSE_RETRY_INTERVAL_MS = 5 * 60_000
 const MAX_CANONICAL_UNIVERSE_SIZE = 200
 const WYCKOFF_TIMEFRAME_COUNT = 2
 const NOTION_ARCHIVE_BATCH_SIZE = 8
+const TTAI_REFRESH_BATCH_SIZE = 50
 
 function retryAt(startedAtIso: string, attempt: number, intervalMs: number) {
   const startedAt = new Date(startedAtIso).getTime()
@@ -104,35 +112,39 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       | Awaited<ReturnType<typeof runEodReadyStep>>
       | Awaited<ReturnType<typeof runEodBackfillReadyStep>>
       | null = null
-
-    if (historicalBackfill) {
-      ready = await runEodBackfillReadyStep(runId, startedAtIso)
-    } else {
-      for (let attempt = 1; attempt <= EOD_READY_MAX_ATTEMPTS; attempt += 1) {
-        try {
-          ready = await runEodReadyStep(runId, startedAtIso)
-          break
-        } catch (error) {
-          if (!isEodNotReady(error) || attempt === EOD_READY_MAX_ATTEMPTS) throw error
-          await sleep(retryAt(startedAtIso, attempt, EOD_READY_RETRY_INTERVAL_MS))
-        }
-      }
-    }
-    if (!ready) throw new Error("EOD_READY did not produce a pipeline context")
-
-    const universeCount = ready.stocks.length
-    if (universeCount < 1 || universeCount > MAX_CANONICAL_UNIVERSE_SIZE) {
-      throw new Error(`Canonical universe count ${universeCount} is outside 1-${MAX_CANONICAL_UNIVERSE_SIZE}`)
-    }
-    const expectedSnapshots = universeCount * WYCKOFF_TIMEFRAME_COUNT
-
     let marketClose: Awaited<ReturnType<typeof runMarketCloseCollectStep>> | null = null
+    let ratingRefresh: Awaited<ReturnType<typeof runKfspRatingRefreshStep>> | null = null
+    let ttaiRefresh: TtaiRefreshProgress | null = null
+
     if (historicalBackfill) {
+      // Historical backfills stay Supabase-only: never substitute today's provider data into a past session.
+      ready = await runEodBackfillReadyStep(runId, startedAtIso)
       marketClose = await runMarketCloseCollectStep(runId, startedAtIso, false)
     } else {
+      ratingRefresh = await runKfspRatingRefreshStep(runId, startedAtIso)
+
+      for (let offset = 0; offset < ratingRefresh.universe.tickers.length; offset += TTAI_REFRESH_BATCH_SIZE) {
+        ttaiRefresh = await runTtaiRefreshStep(
+          runId,
+          startedAtIso,
+          ratingRefresh.universe,
+          ratingRefresh.universe.tickers.slice(offset, offset + TTAI_REFRESH_BATCH_SIZE),
+          ttaiRefresh || undefined,
+        )
+      }
+      if (!ttaiRefresh || ttaiRefresh.checkedTickers !== ratingRefresh.universe.selectedCount) {
+        throw new Error(
+          `TTAI_REFRESH accounting mismatch ${ttaiRefresh?.checkedTickers || 0}/${ratingRefresh.universe.selectedCount}`,
+        )
+      }
+
+      // Market Close itself reads the current canonical universe. Assert the frozen run both before
+      // and after collection so a concurrent universe publish can never leak mixed membership onward.
+      await assertFrozenUniverseStillCurrent(ratingRefresh.universe)
       for (let attempt = 1; attempt <= MARKET_CLOSE_MAX_ATTEMPTS; attempt += 1) {
         try {
           marketClose = await runMarketCloseCollectStep(runId, startedAtIso, true)
+          await assertFrozenUniverseStillCurrent(ratingRefresh.universe)
           await annotateQeoIndexEodPhaseSummaryStep({
             runId,
             phaseKey: "MARKET_CLOSE_COLLECT",
@@ -142,6 +154,7 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
               sessionDate: marketClose.sessionDate,
               qualityStatus: "qualityStatus" in marketClose ? marketClose.qualityStatus : undefined,
               syncRunId: "syncRunId" in marketClose ? marketClose.syncRunId : undefined,
+              universeRunId: ratingRefresh.universe.runId,
               retrying: false,
             },
           })
@@ -153,7 +166,13 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
               await annotateQeoIndexEodPhaseSummaryStep({
                 runId,
                 phaseKey: "MARKET_CLOSE_COLLECT",
-                summary: { attemptsUsed: attempt, retrying: false, terminal: true, lastError: errorMessage(error).slice(0, 500) },
+                summary: {
+                  attemptsUsed: attempt,
+                  universeRunId: ratingRefresh.universe.runId,
+                  retrying: false,
+                  terminal: true,
+                  lastError: errorMessage(error).slice(0, 500),
+                },
               })
             } catch {
               // Preserve the collector failure as the canonical pipeline error.
@@ -169,10 +188,53 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
             lastError: errorMessage(error),
           })
           await sleep(nextAttemptAt)
+          await assertFrozenUniverseStillCurrent(ratingRefresh.universe)
+        }
+      }
+      if (!marketClose) throw new Error("MARKET_CLOSE_COLLECT did not produce a pipeline context")
+
+      for (let attempt = 1; attempt <= EOD_READY_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          const candidateReady = await runEodReadyStep(runId, startedAtIso)
+          await assertReadyMatchesFrozenUniverse({
+            readyUniverseRunId: candidateReady.market.universeRunId,
+            readyTickers: candidateReady.stocks.map((stock) => stock.ticker),
+            expectedUniverse: ratingRefresh.universe,
+          })
+          ready = candidateReady
+          await annotateQeoIndexEodPhaseSummaryStep({
+            runId,
+            phaseKey: "EOD_READY",
+            summary: {
+              runKey: candidateReady.runKey,
+              scanDate: candidateReady.scanDate,
+              universeCount: candidateReady.stocks.length,
+              universeRunId: ratingRefresh.universe.runId,
+              ratingDate: ratingRefresh.ratingDate,
+              ratingSyncRunId: ratingRefresh.syncRunId,
+              ttaiStatus: ttaiRefresh.status,
+              ttaiSyncRunIds: ttaiRefresh.syncRunIds,
+              ttaiFailedTickers: ttaiRefresh.failedTickers.slice(0, 20),
+              freshMarketCount: candidateReady.market.freshMarketCount,
+              attemptsUsed: attempt,
+              architecture: "supabase-first-eod-v4-data-refresh",
+            },
+          })
+          break
+        } catch (error) {
+          if (!isEodNotReady(error) || attempt === EOD_READY_MAX_ATTEMPTS) throw error
+          await sleep(retryAt(startedAtIso, attempt, EOD_READY_RETRY_INTERVAL_MS))
         }
       }
     }
+    if (!ready) throw new Error("EOD_READY did not produce a pipeline context")
     if (!marketClose) throw new Error("MARKET_CLOSE_COLLECT did not produce a pipeline context")
+
+    const universeCount = ready.stocks.length
+    if (universeCount < 1 || universeCount > MAX_CANONICAL_UNIVERSE_SIZE) {
+      throw new Error(`Canonical universe count ${universeCount} is outside 1-${MAX_CANONICAL_UNIVERSE_SIZE}`)
+    }
+    const expectedSnapshots = universeCount * WYCKOFF_TIMEFRAME_COUNT
 
     let history: OhlcvUniverseRefreshResult = {
       requestedTickers: 0,
@@ -295,6 +357,10 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       expectedSnapshots,
       historicalBackfill,
       rankWarnings: ready.rankWarnings.slice(0, 10),
+      ratingRefreshStatus: ratingRefresh?.status || "historical_backfill",
+      ratingSyncRunId: ratingRefresh?.syncRunId || null,
+      ttaiRefreshStatus: ttaiRefresh?.status || "historical_backfill",
+      ttaiFailedTickers: ttaiRefresh?.failedTickers.slice(0, 20) || [],
       marketCloseStatus: marketClose.status,
       history,
       noTradeRepair,
@@ -319,6 +385,8 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       universeCount,
       expectedSnapshots,
       historicalBackfill,
+      ratingRefreshStatus: ratingRefresh?.status || "historical_backfill",
+      ttaiRefreshStatus: ttaiRefresh?.status || "historical_backfill",
       publishStatus: publish.status,
       deterministicStatus: deterministic.status,
       llmStatus: llm.status,
