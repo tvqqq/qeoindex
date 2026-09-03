@@ -57,7 +57,7 @@ export const ADMIN_SETTING_CATALOG_WITH_UNIVERSE: AdminSettingDefinition[] = [
   ...ADMIN_SETTING_CATALOG.map((definition) => definition.key === "market.universe_size"
     ? { ...definition, label: "Top Stocks Universe Size", description: "Quy mô tối đa của canonical Top Stocks universe.", defaultValue: 200 }
     : definition.key === "wyckoff.required_snapshots"
-      ? { ...definition, label: "Wyckoff Max Required Snapshots", description: "Số snapshot Wyckoff tối đa theo 200 mã × 2 timeframe active (1D, 1W); số thực tế là universeCount × 2.", defaultValue: 400 }
+      ? { ...definition, label: "Wyckoff Max Required Snapshots", description: "Số snapshot Wyckoff tối đa theo 200 mã × 5 timeframe; số thực tế là universeCount × 5.", defaultValue: 1_000 }
       : definition),
   ...MARKET_UNIVERSE_SETTING_DEFINITIONS,
 ]
