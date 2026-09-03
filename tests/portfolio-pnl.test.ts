@@ -177,3 +177,65 @@ test('QEO-20 keeps the destructive recovery rehearsal reusable after legacy colu
   assert.match(restored, /qeo_recovery_legacy_target/i)
   assert.doesNotMatch(destructive, /drop column if exists target_price\s*;/i)
 })
+
+function callbackBeforeFirstAwait(source: string, declaration: RegExp) {
+  const match = source.match(declaration)
+  assert.ok(match?.[1], `expected callback body for ${declaration}`)
+  return match[1].split(/\bawait\b/, 1)[0]
+}
+
+function callbackBody(source: string, declaration: RegExp) {
+  const match = source.match(declaration)
+  assert.ok(match?.[1], `expected callback body for ${declaration}`)
+  return match[1]
+}
+
+test('QEO-44 Portfolio Effects do not synchronously enter loading state before network I/O', () => {
+  const page = readFileSync(resolve('components/portfolio/portfolio-page.tsx'), 'utf8')
+  const portfoliosBeforeAwait = callbackBeforeFirstAwait(
+    page,
+    /const loadPortfolios = useCallback\(async \(\) => \{([\s\S]*?)\n  \}, \[\]\)/,
+  )
+  const transactionsBeforeAwait = callbackBeforeFirstAwait(
+    page,
+    /const loadTransactions = useCallback\(async \(pid: string\) => \{([\s\S]*?)\n  \}, \[\]\)/,
+  )
+
+  assert.match(page, /const \[loadingPortfolio, setLoadingPortfolio\] = useState\(true\)/)
+  assert.doesNotMatch(portfoliosBeforeAwait, /setLoadingPortfolio\(|setPortfolioError\(/)
+  assert.doesNotMatch(transactionsBeforeAwait, /setLoadingTx\(|setTransactions\(/)
+})
+
+test('QEO-44 transaction rendering is request-scoped to the active portfolio and rejects stale responses', () => {
+  const page = readFileSync(resolve('components/portfolio/portfolio-page.tsx'), 'utf8')
+
+  assert.match(page, /transactionRequestRef/)
+  assert.match(page, /requestId\s*!==\s*transactionRequestRef\.current/)
+  assert.match(page, /transactionState\.portfolioId\s*===\s*activePortfolioId/)
+  assert.match(page, /transactionState\.portfolioId\s*!==\s*activePortfolioId/)
+  assert.match(page, /setTransactionState\(\{\s*portfolioId:\s*pid,\s*transactions:/)
+})
+
+test('QEO-44 refresh and add-transaction flows preserve immediate loading semantics outside Effects', () => {
+  const page = readFileSync(resolve('components/portfolio/portfolio-page.tsx'), 'utf8')
+
+  assert.match(page, /const \[refreshingTxFor, setRefreshingTxFor\] = useState<string \| null>\(null\)/)
+  assert.match(page, /const loadingTx\s*=\s*Boolean\([\s\S]*refreshingTxFor\s*===\s*activePortfolioId/)
+  assert.match(page, /const handleRefreshTransactions = useCallback\([\s\S]*setRefreshingTxFor\(activePortfolioId\)[\s\S]*loadTransactions\(activePortfolioId\)/)
+  assert.match(page, /const handleTxSuccess = useCallback\([\s\S]*setRefreshingTxFor\(activePortfolioId\)[\s\S]*loadTransactions\(activePortfolioId\)/)
+  assert.match(page, /onClick=\{handleRefreshTransactions\}/)
+})
+
+test('QEO-44 Effect-triggered loaders are state-free and derived transactions are memo-stable', () => {
+  const page = readFileSync(resolve('components/portfolio/portfolio-page.tsx'), 'utf8')
+  const loaders = [
+    callbackBody(page, /const loadPortfolios = useCallback\(async \(\) => \{([\s\S]*?)\n  \}, \[\]\)/),
+    callbackBody(page, /const loadTransactions = useCallback\(async \(pid: string\) => \{([\s\S]*?)\n  \}, \[\]\)/),
+    callbackBody(page, /const loadWatchlists = useCallback\(async \(\) => \{([\s\S]*?)\n  \}, \[\]\)/),
+  ]
+
+  for (const loader of loaders) assert.doesNotMatch(loader, /\bset[A-Z][A-Za-z0-9_]*\s*\(/)
+  assert.match(page, /const transactions = useMemo\(\(\) =>/)
+  assert.match(page, /\.then\(\(result\) => \{[\s\S]*setLoadingPortfolio\(false\)/)
+  assert.match(page, /loadTransactions\(activePortfolioId\)\.then\(\(result\) =>/)
+})

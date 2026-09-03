@@ -119,9 +119,25 @@ export function PortfolioPage() {
   const [loadingPortfolio, setLoadingPortfolio] = useState(true)
   const [portfolioError, setPortfolioError] = useState<string | null>(null)
 
-  // Transactions state
-  const [transactions, setTransactions] = useState<RawTransaction[]>([])
-  const [loadingTx, setLoadingTx] = useState(false)
+  // Transactions state is scoped to its owning portfolio so a switch never renders stale rows.
+  const [transactionState, setTransactionState] = useState<{
+    portfolioId: string | null
+    transactions: RawTransaction[]
+  }>({ portfolioId: null, transactions: [] })
+  const [refreshingTxFor, setRefreshingTxFor] = useState<string | null>(null)
+  const transactionRequestRef = useRef(0)
+  const transactions = useMemo(() => (
+    transactionState.portfolioId === activePortfolioId
+      ? transactionState.transactions
+      : []
+  ), [activePortfolioId, transactionState])
+  const loadingTx = Boolean(
+    activePortfolioId
+      && (
+        transactionState.portfolioId !== activePortfolioId
+        || refreshingTxFor === activePortfolioId
+      ),
+  )
 
   // Live market prices: { [ticker]: number }
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({})
@@ -136,83 +152,119 @@ export function PortfolioPage() {
   const [addTxTicker, setAddTxTicker] = useState<string | undefined>()
   const [guidanceOpen, setGuidanceOpen] = useState(false)
 
-  // ── Load Portfolios ──
+  // Effect-triggered loaders only fetch/parse. React state is applied from async callbacks.
   const loadPortfolios = useCallback(async () => {
-    setLoadingPortfolio(true)
-    setPortfolioError(null)
     try {
       const res = await fetch("/api/portfolio", { cache: "no-store", credentials: "same-origin" })
       if (!res.ok) {
-        if (res.status === 401) {
-          setPortfolioError("Vui lòng đăng nhập để xem danh mục.")
-          return
+        return {
+          portfolios: null as PortfolioMeta[] | null,
+          error: res.status === 401
+            ? "Vui lòng đăng nhập để xem danh mục."
+            : "Không thể tải danh mục đầu tư.",
         }
-        setPortfolioError("Không thể tải danh mục đầu tư.")
-        return
       }
       const data = (await res.json()) as { ok: boolean; portfolios?: PortfolioMeta[] }
-      if (data.ok && data.portfolios && data.portfolios.length > 0) {
-        setPortfolios(data.portfolios)
-        setActivePortfolioId((prev) => {
-          if (prev && data.portfolios!.some((p) => p.id === prev)) return prev
-          const def = data.portfolios!.find((p) => p.is_default)
-          return def ? def.id : data.portfolios![0].id
-        })
+      return {
+        portfolios: data.ok ? (data.portfolios ?? []) : [],
+        error: null as string | null,
       }
     } catch {
-      setPortfolioError("Lỗi kết nối. Vui lòng thử lại sau.")
-    } finally {
-      setLoadingPortfolio(false)
+      return {
+        portfolios: null as PortfolioMeta[] | null,
+        error: "Lỗi kết nối. Vui lòng thử lại sau.",
+      }
     }
   }, [])
 
-  // ── Load Transactions for active portfolio ──
   const loadTransactions = useCallback(async (pid: string) => {
-    setLoadingTx(true)
+    const requestId = ++transactionRequestRef.current
     try {
       const res = await fetch(`/api/portfolio/${pid}/transactions`, {
         cache: "no-store",
         credentials: "same-origin",
       })
-      if (!res.ok) return
-      const data = (await res.json()) as { ok: boolean; transactions?: RawTransaction[] }
-      if (data.ok && data.transactions) {
-        setTransactions(data.transactions)
+      if (!res.ok) {
+        return { portfolioId: pid, requestId, transactions: null as RawTransaction[] | null }
       }
-    } finally {
-      setLoadingTx(false)
+      const data = (await res.json()) as { ok: boolean; transactions?: RawTransaction[] }
+      return {
+        portfolioId: pid,
+        requestId,
+        transactions: data.ok ? (data.transactions ?? []) : null,
+      }
+    } catch {
+      return { portfolioId: pid, requestId, transactions: null as RawTransaction[] | null }
     }
   }, [])
 
-  // ── Load Watchlists ──
   const loadWatchlists = useCallback(async () => {
     try {
       const res = await fetch("/api/watchlist", { cache: "no-store", credentials: "same-origin" })
-      if (!res.ok) return
+      if (!res.ok) return null
       const data = (await res.json()) as {
         ok: boolean
         watchlists?: WatchlistMeta[]
         items?: WatchlistItem[]
         activeWatchlistId?: string
       }
-      if (data.ok) {
-        if (data.watchlists) setWatchlists(data.watchlists)
-        if (data.activeWatchlistId) setActiveWatchlistId(data.activeWatchlistId)
-        if (data.items) setWatchlistItems(data.items)
+      if (!data.ok) return null
+      return {
+        watchlists: data.watchlists ?? [],
+        activeWatchlistId: data.activeWatchlistId ?? null,
+        items: data.items ?? [],
       }
     } catch {
-      // ignore
+      return null
     }
   }, [])
 
-  // Initial load
+  // Initial load: state updates happen only after the external fetch promises settle.
   useEffect(() => {
-    loadPortfolios()
-    loadWatchlists()
+    let cancelled = false
+
+    void loadPortfolios().then((result) => {
+      if (cancelled) return
+      setPortfolioError(result.error)
+      if (result.portfolios && result.portfolios.length > 0) {
+        setPortfolios(result.portfolios)
+        setActivePortfolioId((prev) => {
+          if (prev && result.portfolios!.some((portfolio) => portfolio.id === prev)) return prev
+          const fallback = result.portfolios!.find((portfolio) => portfolio.is_default)
+          return fallback ? fallback.id : result.portfolios![0].id
+        })
+      }
+      setLoadingPortfolio(false)
+    })
+
+    void loadWatchlists().then((result) => {
+      if (cancelled || !result) return
+      setWatchlists(result.watchlists)
+      if (result.activeWatchlistId) setActiveWatchlistId(result.activeWatchlistId)
+      setWatchlistItems(result.items)
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [loadPortfolios, loadWatchlists])
 
   useEffect(() => {
-    if (activePortfolioId) loadTransactions(activePortfolioId)
+    if (!activePortfolioId) return
+
+    void loadTransactions(activePortfolioId).then((result) => {
+      if (result.requestId !== transactionRequestRef.current) return
+      const { portfolioId: pid } = result
+      if (result.transactions) {
+        setTransactionState({ portfolioId: pid, transactions: result.transactions })
+      } else {
+        setTransactionState((current) => ({
+          portfolioId: pid,
+          transactions: current.portfolioId === pid ? current.transactions : [],
+        }))
+      }
+      setRefreshingTxFor((current) => current === pid ? null : current)
+    })
   }, [activePortfolioId, loadTransactions])
 
   // ── Compute positions from transactions ──
@@ -298,11 +350,42 @@ export function PortfolioPage() {
     setAddTxOpen(true)
   }, [])
 
+  const handleRefreshTransactions = useCallback(() => {
+    if (!activePortfolioId) return
+    setRefreshingTxFor(activePortfolioId)
+    void loadTransactions(activePortfolioId).then((result) => {
+      if (result.requestId !== transactionRequestRef.current) return
+      const { portfolioId: pid } = result
+      if (result.transactions) {
+        setTransactionState({ portfolioId: pid, transactions: result.transactions })
+      } else {
+        setTransactionState((current) => ({
+          portfolioId: pid,
+          transactions: current.portfolioId === pid ? current.transactions : [],
+        }))
+      }
+      setRefreshingTxFor((current) => current === pid ? null : current)
+    })
+  }, [activePortfolioId, loadTransactions])
+
   // ── After transaction added ──
   const handleTxSuccess = useCallback(() => {
     setAddTxOpen(false)
     if (activePortfolioId) {
-      loadTransactions(activePortfolioId)
+      setRefreshingTxFor(activePortfolioId)
+      void loadTransactions(activePortfolioId).then((result) => {
+        if (result.requestId !== transactionRequestRef.current) return
+        const { portfolioId: pid } = result
+        if (result.transactions) {
+          setTransactionState({ portfolioId: pid, transactions: result.transactions })
+        } else {
+          setTransactionState((current) => ({
+            portfolioId: pid,
+            transactions: current.portfolioId === pid ? current.transactions : [],
+          }))
+        }
+        setRefreshingTxFor((current) => current === pid ? null : current)
+      })
     }
   }, [activePortfolioId, loadTransactions])
 
@@ -319,7 +402,13 @@ export function PortfolioPage() {
         alert(data.error ?? "Không thể xóa giao dịch.")
         return
       }
-      setTransactions((prev) => prev.filter((t) => t.id !== txId))
+      setTransactionState((current) => {
+        if (current.portfolioId !== activePortfolioId) return current
+        return {
+          ...current,
+          transactions: current.transactions.filter((transaction) => transaction.id !== txId),
+        }
+      })
     },
     [activePortfolioId],
   )
@@ -358,7 +447,7 @@ export function PortfolioPage() {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => activePortfolioId && loadTransactions(activePortfolioId)}
+                onClick={handleRefreshTransactions}
                 className="h-8 gap-1.5 rounded-full px-3 text-xs font-semibold font-ticker text-slate-300 hover:bg-white/[0.06] hover:text-white transition-colors"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
