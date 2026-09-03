@@ -1,20 +1,16 @@
 import { getAdminJobDefinition } from "./catalog.ts"
 import { getEffectiveAdminJobDefinition } from "./effective-job-catalog.ts"
 import { executeSystemJob } from "./job-telemetry.ts"
+import {
+  ALLOWLISTED_MANUAL_JOB_KEYS,
+  isAllowlistedManualJobKey,
+  type AllowlistedManualJobKey,
+} from "./manual-job-capabilities.ts"
 import { sanitizeAdminValue } from "./redact.ts"
 import { validateChangeReason } from "./request-security.ts"
 import type { AdminJobGroup, AdminManualPolicy, AdminManualPurpose } from "./types.ts"
 
-export const ALLOWLISTED_MANUAL_JOB_KEYS = [
-  "market.sync_universe",
-  "scanner.run",
-  "signals.monitor",
-  "wyckoff.ingest",
-  "kfsp.rating_daily",
-  "kfsp.ttai_history",
-] as const
-
-export type AllowlistedManualJobKey = (typeof ALLOWLISTED_MANUAL_JOB_KEYS)[number]
+export { ALLOWLISTED_MANUAL_JOB_KEYS, type AllowlistedManualJobKey }
 
 export interface ManualJobCapability {
   key: string
@@ -58,7 +54,7 @@ function getManualAdminJobDefinition(key: string) {
 }
 
 export function isManualJobAllowed(jobKey: string): boolean {
-  return (ALLOWLISTED_MANUAL_JOB_KEYS as readonly string[]).includes(jobKey)
+  return isAllowlistedManualJobKey(jobKey)
 }
 
 export function getManualJobCapabilities(): ManualJobCapability[] {
