@@ -211,6 +211,7 @@ export function filterBoardTickers(
 function stableCriteriaPayload(criteria: StockFilterCriteriaV1) {
   return JSON.stringify({
     version: 1,
+    liquidityBasis: "averageVolume50d",
     exchanges: [...criteria.exchanges].sort(),
     minPriceVnd: criteria.minPriceVnd,
     minVolumeShares: criteria.minVolumeShares,
