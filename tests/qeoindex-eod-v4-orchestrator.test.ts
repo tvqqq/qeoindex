@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+import { resolveAiCouncilPromptIdentityHash } from "../lib/ai-council-prompt-identity.ts"
+
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
@@ -89,6 +91,33 @@ test("QEO-64 waits for terminal Market Synthesis and injects its exact-session c
   assert.match(promptEvidence, /researchContext/, "LLM point-in-time packet must retain the context layer that carries synthesis")
   assert.match(promptIdentity, /marketSynthesisHash/, "prompt/cache identity must change when synthesis evidence changes")
   assert.match(promptIdentity, /marketSynthesis[\s\S]*evidenceHash/, "identity must bind to the persisted synthesis evidence hash")
+})
+
+test("QEO-64 Market Synthesis evidence hash participates in prompt/cache identity", () => {
+  const base = {
+    evidenceHash: "1".repeat(64),
+    llmEvidence: { contextHash: "2".repeat(64) },
+    researchContext: {
+      contextHash: "3".repeat(64),
+      marketSynthesis: { evidenceHash: "4".repeat(64) },
+    },
+  }
+  const first = resolveAiCouncilPromptIdentityHash(base, "llm-debate-v3-first-class-context")
+  const second = resolveAiCouncilPromptIdentityHash({
+    ...base,
+    researchContext: {
+      ...base.researchContext,
+      marketSynthesis: { evidenceHash: "5".repeat(64) },
+    },
+  }, "llm-debate-v3-first-class-context")
+  const withoutSynthesis = resolveAiCouncilPromptIdentityHash({
+    evidenceHash: base.evidenceHash,
+    llmEvidence: base.llmEvidence,
+    researchContext: { contextHash: base.researchContext.contextHash },
+  }, "llm-debate-v3-first-class-context")
+
+  assert.notEqual(first, second)
+  assert.notEqual(first, withoutSynthesis)
 })
 
 test("QEO-60 keeps historical backfill explicit and never runs current Rating/TTAI refresh in that branch", () => {
