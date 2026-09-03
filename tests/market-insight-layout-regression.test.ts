@@ -24,14 +24,28 @@ test("market index cards live inside the market-intelligence panel as a compact 
   assert.doesNotMatch(dashboard, /data-market-index-strip[^>]*xl:grid-cols-4/, "right-side index workspace must remain a 2x2 grid")
 })
 
-test("market intelligence uses a compact 35/65 pulse-to-index workspace", () => {
+test("market intelligence uses one equal-height three-column overview row", () => {
+  const dashboard = read("components/insights/market-close-dashboard.tsx")
+  const health = read("components/insights/market-health-view.tsx")
+
+  assert.match(dashboard, /data-market-intelligence-overview-row[^>]*className="[^"]*xl:grid-cols-3[^"]*xl:items-stretch/)
+  assert.match(dashboard, /data-market-summary-column[^>]*className="[^"]*h-full/)
+  assert.match(dashboard, /data-market-sentiment-column[^>]*className="[^"]*h-full/)
+  assert.match(dashboard, /data-market-index-column[^>]*className="[^"]*h-full/)
+  assert.match(dashboard, /data-market-sentiment-column[\s\S]*<MarketSentimentCard data=\{data\}/)
+  assert.match(dashboard, /data-market-index-column[\s\S]*grid-cols-2[\s\S]*indexes\.map\(\(item\) => <IndexTile/)
+  assert.match(health, /export function MarketSentimentCard[\s\S]*className="[^"]*h-full/)
+  assert.doesNotMatch(dashboard, /xl:grid-cols-\[35fr_65fr\]/, "the previous two-column pulse/index row must be removed")
+})
+
+test("risk and valuation stay inside market intelligence while redundant history panels are removed", () => {
   const dashboard = read("components/insights/market-close-dashboard.tsx")
 
-  assert.match(dashboard, /data-market-intelligence-grid[^>]*className="[^"]*xl:grid-cols-\[35fr_65fr\]/)
-  assert.match(dashboard, /data-market-summary-column/)
-  assert.match(dashboard, /data-market-index-column/)
-  assert.match(dashboard, /data-market-index-column[\s\S]*grid-cols-2[\s\S]*indexes\.map\(\(item\) => <IndexTile/)
-  assert.doesNotMatch(dashboard, /xl:grid-cols-\[7fr_3fr\]/, "the old AI/sentiment 70/30 row must not own the pulse/index layout")
+  assert.match(dashboard, /data-market-health-embedded[\s\S]*<MarketHealthView data=\{data\} history=\{history\}/)
+  assert.doesNotMatch(dashboard, /MarketHistoryChart|MarketHistoryFlowChart/)
+  assert.doesNotMatch(dashboard, /Tâm lý, rủi ro và MA20|Dòng tiền theo phiên/)
+  assert.doesNotMatch(dashboard, /Dữ liệu tổng quan phiên/)
+  assert.doesNotMatch(dashboard, /id="market-history-title"/)
 })
 
 test("sector workspace removes the redundant market-pulse marketing heading", () => {
