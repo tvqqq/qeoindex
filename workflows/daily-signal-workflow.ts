@@ -6,6 +6,7 @@ import {
   failSignalsDailyRunStep,
   finishSignalsDailyRunStep,
   startSignalsDailyRunStep,
+  updateSignalsDailyStageStep,
 } from "@/lib/signals-daily-telemetry"
 
 async function refreshDailyScannerStep() {
@@ -59,10 +60,22 @@ export async function dailySignalWorkflow(startedAtIso: string) {
   try {
     const dateKey = vietnamDateKey(startedAtIso)
     const scanner = await refreshDailyScannerStep()
+    const scannerSummary = {
+      requested: scanner.requested,
+      completed: scanner.completed.length,
+      skipped: scanner.skipped.length,
+      errors: scanner.errors.length,
+    }
 
     // HOSE ATO is 09:00-09:15. Trade ticks are only treated as actionable once
     // the opening print is available, avoiding a fake fill from the previous close.
-    await sleep(atVietnamTime(dateKey, 9, 15, 5))
+    const openingWakeAt = atVietnamTime(dateKey, 9, 15, 5)
+    await updateSignalsDailyStageStep(runId, "WAIT_OPEN", {
+      nextWakeAt: openingWakeAt.toISOString(),
+      scanner: scannerSummary,
+    })
+    await sleep(openingWakeAt)
+    await updateSignalsDailyStageStep(runId, "OPENING", { scanner: scannerSummary })
     let opening = await monitorSignalStep()
 
     // Retry the opening action a few times when the first DNSE snapshot has not
@@ -74,23 +87,44 @@ export async function dailySignalWorkflow(startedAtIso: string) {
     }
 
     let openCount = opening.openAfter ?? opening.openBefore ?? 0
+    await updateSignalsDailyStageStep(runId, "MORNING", {
+      scanner: scannerSummary,
+      opening: { openAfter: opening.openAfter },
+    })
     openCount = await monitorWindow(dateKey, 9 * 60 + 20, 11 * 60 + 30, openCount)
-    openCount = await monitorWindow(dateKey, 13 * 60, 14 * 60 + 30, openCount)
+
+    const afternoonWakeAt = atVietnamTime(dateKey, 13, 0)
+    await updateSignalsDailyStageStep(runId, "LUNCH", {
+      nextWakeAt: afternoonWakeAt.toISOString(),
+      scanner: scannerSummary,
+      opening: { openAfter: opening.openAfter },
+      openBeforeLunch: openCount,
+    })
+    await sleep(afternoonWakeAt)
+    await updateSignalsDailyStageStep(runId, "AFTERNOON", {
+      scanner: scannerSummary,
+      openBeforeAfternoon: openCount,
+    })
+    const afternoonOpening = await monitorSignalStep()
+    openCount = afternoonOpening.openAfter ?? openCount
+    const nextAfternoonMinute = 13 * 60 + nextSignalMonitorIntervalMinutes(openCount, afternoonOpening.bullishCandidates ?? 0)
+    openCount = await monitorWindow(dateKey, nextAfternoonMinute, 14 * 60 + 30, openCount)
 
     // Capture the ATC closing print so end-of-day alpha and exits are not based
     // on the last continuous-auction tick.
-    await sleep(atVietnamTime(dateKey, 14, 45, 5))
+    const closingWakeAt = atVietnamTime(dateKey, 14, 45, 5)
+    await updateSignalsDailyStageStep(runId, "CLOSING", {
+      nextWakeAt: closingWakeAt.toISOString(),
+      scanner: scannerSummary,
+      openBeforeClose: openCount,
+    })
+    await sleep(closingWakeAt)
     const closing = await monitorSignalStep()
     openCount = closing.openAfter ?? openCount
 
     const result = {
       dateKey,
-      scanner: {
-        requested: scanner.requested,
-        completed: scanner.completed.length,
-        skipped: scanner.skipped.length,
-        errors: scanner.errors.length,
-      },
+      scanner: scannerSummary,
       opening: {
         openAfter: opening.openAfter,
       },
