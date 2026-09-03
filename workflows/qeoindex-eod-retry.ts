@@ -9,6 +9,7 @@ import {
   runTargetedHistoryRetryStep,
   runTargetedWyckoffRetryStep,
 } from "@/lib/qeoindex-eod-fault-steps"
+import { runNotionAnalyticalSummaryStep } from "@/lib/qeoindex-eod-notion-summary-step"
 import { completeQeoIndexEodPartialStep } from "@/lib/qeoindex-eod-partial-step"
 import { completeRecoveredEodRunStep, loadEodRetryContextStep } from "@/lib/qeoindex-eod-retry-steps"
 import { runRetentionCleanupStep } from "@/lib/qeoindex-eod-retention-step"
@@ -16,13 +17,9 @@ import {
   runDeterministicCouncilStep,
   runLlmDebateStep,
   runMarketSynthesisStep,
-  runNotionArchiveFinalizeStep,
-  runNotionEodArchiveBatchStep,
-  runNotionUniverseArchiveBatchStep,
   runSupabasePublishStep,
 } from "@/lib/qeoindex-eod-workflow-steps"
 
-const NOTION_ARCHIVE_BATCH_SIZE = 8
 const WYCKOFF_TIMEFRAME_COUNT = 2
 
 function errorMessage(error: unknown) {
@@ -135,40 +132,26 @@ export async function qeoindexEodRetry(input: { runId: string; tickers?: string[
   }
 
   const llm = await runLlmDebateStep(context.runId, deterministic.ok, context.scanDate)
-
-  const notionUniverseBatches: Array<Awaited<ReturnType<typeof runNotionUniverseArchiveBatchStep>>> = []
-  for (let offset = 0; offset < context.canonicalStocks.length; offset += NOTION_ARCHIVE_BATCH_SIZE) {
-    notionUniverseBatches.push(await runNotionUniverseArchiveBatchStep(
-      context.runId,
-      { universeRunId: context.universeRunId },
-      context.canonicalStocks.slice(offset, offset + NOTION_ARCHIVE_BATCH_SIZE),
-    ))
-  }
-
-  const notionEodBatches: Array<Awaited<ReturnType<typeof runNotionEodArchiveBatchStep>>> = []
-  for (let offset = 0; offset < context.canonicalStocks.length; offset += NOTION_ARCHIVE_BATCH_SIZE) {
-    notionEodBatches.push(await runNotionEodArchiveBatchStep(
-      context.runId,
-      {
-        tradingDate: context.scanDate,
-        universeRunId: context.universeRunId,
-        validationHash: validation.validationHash,
-      },
-      context.canonicalStocks.slice(offset, offset + NOTION_ARCHIVE_BATCH_SIZE),
-    ))
-  }
-
-  const notionArchive = await runNotionArchiveFinalizeStep(context.runId, notionUniverseBatches, notionEodBatches)
-  const retention = await runRetentionCleanupStep(context.runId, {
-    startedAtIso: context.startedAtIso,
+  const retention = await runRetentionCleanupStep(context.runId, { tradingDate: context.scanDate })
+  const anomalies = [
+    ...(marketSynthesis.status === "failed" && "error" in marketSynthesis ? [`Market synthesis: ${marketSynthesis.error}`] : []),
+    ...(retention.status !== "archived" && retention.detail ? [`Retention: ${retention.detail}`] : []),
+  ]
+  const runStatus = retention.status === "archived" && marketSynthesis.status !== "failed" ? "Succeeded" as const : "Partial" as const
+  const notionArchive = await runNotionAnalyticalSummaryStep(context.runId, {
     tradingDate: context.scanDate,
+    runStatus,
     universeRunId: context.universeRunId,
     universeCount: context.expectedCount,
     expectedSnapshots,
     completedSnapshots: publish.snapshotCount,
     validationHash: validation.validationHash,
+    startedAt: context.startedAtIso,
     marketSynthesisStatus: marketSynthesis.status,
-    notionArchive,
+    tickers: context.canonicalStocks.map((stock) => stock.ticker),
+    failedTickers: [],
+    anomalies,
+    retention,
   })
 
   const complete = await completeRecoveredEodRunStep({
