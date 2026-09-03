@@ -97,6 +97,15 @@ test("buildCronTimelineModel separates scheduled automation, manual recovery, an
   assert.equal(timeline.totalManual, 6)
 })
 
+test("daily signals scans the full canonical universe instead of a positional Top50 subset", () => {
+  const workflow = source("workflows/daily-signal-workflow.ts")
+  const scannerRunner = source("lib/scanner-runner.ts")
+
+  assert.match(workflow, /return runScannerUniverse\(\)/)
+  assert.doesNotMatch(workflow, /runScannerUniverse\(\{\s*limit:\s*50/)
+  assert.doesNotMatch(scannerRunner, /100 cache invalidations/)
+})
+
 test("Timeline component adheres to UI Lessons Learned performance constraints", () => {
   const timelineComponent = source("components/admin/admin-cron-timeline.tsx")
   const summaryComponent = source("components/admin/admin-job-audit-summary.tsx")
