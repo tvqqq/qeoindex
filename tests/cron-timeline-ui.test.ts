@@ -11,7 +11,7 @@ function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
-test("buildCronTimelineModel separates scheduled automation, manual recovery, and disabled maintenance", () => {
+test("buildCronTimelineModel separates v4 scheduled ownership, recovery, and retired maintenance", () => {
   const { jobs } = buildAdminJobViews(
     EFFECTIVE_ADMIN_JOB_CATALOG,
     [
@@ -20,8 +20,8 @@ test("buildCronTimelineModel separates scheduled automation, manual recovery, an
         job_key: "qeoindex.eod_pipeline",
         trigger: "workflow",
         status: "succeeded",
-        started_at: "2026-08-25T08:15:00.000Z",
-        finished_at: "2026-08-25T08:20:00.000Z",
+        started_at: "2026-09-03T08:15:00.000Z",
+        finished_at: "2026-09-03T08:20:00.000Z",
       },
     ],
     [
@@ -31,8 +31,8 @@ test("buildCronTimelineModel separates scheduled automation, manual recovery, an
         schedule: "15 8 * * 1-5",
         active: true,
         lastStatus: "succeeded",
-        lastStartedAt: "2026-08-25T08:15:00.000Z",
-        lastFinishedAt: "2026-08-25T08:15:02.000Z",
+        lastStartedAt: "2026-09-03T08:15:00.000Z",
+        lastFinishedAt: "2026-09-03T08:15:02.000Z",
       },
     ],
   )
@@ -53,25 +53,27 @@ test("buildCronTimelineModel separates scheduled automation, manual recovery, an
   const eodJob = timeline.lanes[1].jobs.find((j) => j.key === "qeoindex.eod_pipeline")
   assert.ok(eodJob)
   assert.equal(eodJob.timeIctLabel, "15:15 ICT")
-  assert.equal(eodJob.phases?.length, 12)
+  assert.equal(eodJob.phases?.length, 7)
   assert.deepEqual(eodJob.phases?.map((p) => p.key), EOD_PIPELINE_PHASES.map((p) => p.key))
-  assert.equal(eodJob.phases?.some((p) => p.key === "DRIVE_ARCHIVE"), false)
+  assert.deepEqual(eodJob.phases?.map((p) => p.key), [
+    "DATA_REFRESH",
+    "READY_GATE",
+    "HISTORY_PREPARE",
+    "WYCKOFF_PUBLISH",
+    "AI_COUNCIL",
+    "POST_ANALYSIS",
+    "COMPLETE",
+  ])
 
   const sync5m = timeline.lanes[1].jobs.find((j) => j.key === "market.sync_5m")
   assert.ok(sync5m)
   assert.equal(sync5m.displayType, "interval")
   assert.match(sync5m.timeIctLabel, /09:00.*11:30.*13:00.*14:40/)
 
-  const syncEod = timeline.lanes[1].jobs.find((j) => j.key === "market.sync_eod")
-  assert.ok(syncEod)
-  assert.equal(syncEod.displayType, "point")
-  assert.equal(syncEod.timeIctLabel, "14:45 ICT")
-
-  const scheduledTtai = timeline.lanes[1].jobs.find((j) => j.key === "kfsp.ttai_history")
-  assert.ok(scheduledTtai)
-  assert.equal(scheduledTtai.displayType, "point")
-  assert.equal(scheduledTtai.timeIctLabel, "07:10 ICT")
-  assert.equal(scheduledTtai.startMinuteOfDay, 430)
+  assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "market.sync_eod"), false)
+  assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "kfsp.rating_daily"), false)
+  assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "kfsp.ttai_history"), false)
+  assert.equal(timeline.totalScheduled, 3, "signals + canonical EOD + intraday market sync")
 
   const recoveryKeys = timeline.lanes[2].jobs.map((job) => job.key).sort()
   assert.deepEqual(recoveryKeys, [
@@ -92,10 +94,17 @@ test("buildCronTimelineModel separates scheduled automation, manual recovery, an
   const recoveryTtai = timeline.lanes[2].jobs.find((j) => j.key === "kfsp.ttai_history")
   assert.ok(recoveryTtai)
   assert.equal(recoveryTtai.manualPurpose, "recovery")
-  assert.equal(recoveryTtai.timeIctLabel, "07:10 ICT")
+  assert.equal(recoveryTtai.timeIctLabel, "Thủ công")
+  assert.equal(recoveryTtai.schedulerName, undefined)
+  assert.deepEqual(recoveryTtai.automatedParentKeys, ["qeoindex.eod_pipeline"])
 
   const disabledKeys = timeline.lanes[3].jobs.map((job) => job.key).sort()
-  assert.deepEqual(disabledKeys, ["market.cache_invalidate", "wyckoff.run"])
+  assert.deepEqual(disabledKeys, ["market.cache_invalidate", "market.sync_eod", "wyckoff.run"])
+  const retiredMarketEod = timeline.lanes[3].jobs.find((job) => job.key === "market.sync_eod")
+  assert.ok(retiredMarketEod)
+  assert.equal(retiredMarketEod.displayType, "manual")
+  assert.equal(retiredMarketEod.manualPolicy, "disabled")
+  assert.deepEqual(retiredMarketEod.automatedParentKeys, ["qeoindex.eod_pipeline"])
   assert.equal(timeline.totalManual, 6)
 })
 

@@ -1,4 +1,5 @@
 import { getJobTimelineLane, getPgCronNameForJobKey } from "./job-schedule.ts"
+import { QEOINDEX_EOD_BUSINESS_PHASES } from "./job-phases.ts"
 import { isAllowlistedManualJobKey } from "./manual-job-capabilities.ts"
 import type {
   AdminJobEvidenceSource,
@@ -15,20 +16,11 @@ export interface TimelinePhaseItem {
   order: number
 }
 
-export const EOD_PIPELINE_PHASES: TimelinePhaseItem[] = [
-  { key: "EOD_READY", label: "1. EOD Ready", order: 1 },
-  { key: "MARKET_CLOSE_COLLECT", label: "2. Market Close", order: 2 },
-  { key: "HISTORY_REFRESH", label: "3. History Refresh", order: 3 },
-  { key: "WYCKOFF_BUILD", label: "4. Wyckoff Build", order: 4 },
-  { key: "SUPABASE_VALIDATE", label: "5. Supabase Validate", order: 5 },
-  { key: "SUPABASE_PUBLISH", label: "6. Supabase Publish", order: 6 },
-  { key: "AI_COUNCIL_DETERMINISTIC", label: "7. Council Rules", order: 7 },
-  { key: "AI_COUNCIL_LLM", label: "8. LLM Debate", order: 8 },
-  { key: "MARKET_SYNTHESIS", label: "9. Market Synthesis", order: 9 },
-  { key: "NOTION_ARCHIVE", label: "10. Notion Archive", order: 10 },
-  { key: "RETENTION_CLEANUP", label: "11. Retention", order: 11 },
-  { key: "COMPLETE", label: "12. Complete", order: 12 },
-]
+export const EOD_PIPELINE_PHASES: TimelinePhaseItem[] = QEOINDEX_EOD_BUSINESS_PHASES.map((phase) => ({
+  key: phase.key,
+  label: `${phase.order}. ${phase.label}`,
+  order: phase.order,
+}))
 
 export type TimelineLaneId = "vercel" | "pg_cron" | "manual" | "disabled"
 
@@ -191,6 +183,13 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
       ...node,
       lane: "manual" as const,
       displayType: "manual" as const,
+      timeIctLabel: "Thủ công",
+      daysLabel: "Thủ công" as const,
+      startMinuteOfDay: undefined,
+      endMinuteOfDay: undefined,
+      startPercent: undefined,
+      endPercent: undefined,
+      schedulerName: undefined,
       description: manualContextDescription(node),
     }))
   const disabledJobs = allNodes.filter((node) => node.lane === "disabled")

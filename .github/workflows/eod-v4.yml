@@ -7,10 +7,14 @@ on:
       - "lib/qeoindex-eod-*.ts"
       - "lib/admin/job-phase*.ts"
       - "lib/admin/job-phases.ts"
+      - "lib/admin/effective-job-catalog.ts"
+      - "lib/admin/job-schedule.ts"
+      - "lib/admin/scheduler-reconciliation.ts"
       - "lib/wyckoff-v2-*.ts"
       - "app/api/admin/qeoindex/eod/**"
       - "supabase/migrations/**"
       - "tests/qeoindex-eod-v4-*.test.ts"
+      - "tests/scheduler-reconciliation.test.ts"
       - ".github/workflows/eod-v4.yml"
   push:
     branches: [main]
@@ -19,10 +23,14 @@ on:
       - "lib/qeoindex-eod-*.ts"
       - "lib/admin/job-phase*.ts"
       - "lib/admin/job-phases.ts"
+      - "lib/admin/effective-job-catalog.ts"
+      - "lib/admin/job-schedule.ts"
+      - "lib/admin/scheduler-reconciliation.ts"
       - "lib/wyckoff-v2-*.ts"
       - "app/api/admin/qeoindex/eod/**"
       - "supabase/migrations/**"
       - "tests/qeoindex-eod-v4-*.test.ts"
+      - "tests/scheduler-reconciliation.test.ts"
       - ".github/workflows/eod-v4.yml"
 
 jobs:
@@ -38,4 +46,4 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node --test tests/qeoindex-eod-v4-orchestrator.test.ts tests/qeoindex-eod-v4-fault-isolation.test.ts
+      - run: node --test tests/qeoindex-eod-v4-orchestrator.test.ts tests/qeoindex-eod-v4-fault-isolation.test.ts tests/qeoindex-eod-v4-rollout.test.ts tests/scheduler-reconciliation.test.ts

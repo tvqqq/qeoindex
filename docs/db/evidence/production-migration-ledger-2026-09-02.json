@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-03T14:58:38Z",
+  "capturedAt": "2026-09-03T16:04:37Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
   "migrations": [
     {"version":"20260818","name":"orderbook_snapshots"},
@@ -83,6 +83,7 @@
     {"version":"20260902120822","name":"qeo39_wyckoff_n_plus_one"},
     {"version":"20260902125303","name":"qeo39_grouped_ohlcv_rpc"},
     {"version":"20260903113501","name":"qeo56_market_ai_dispatch_vault_auth"},
-    {"version":"20260903145838","name":"qeo61_eod_partial_status"}
+    {"version":"20260903145838","name":"qeo61_eod_partial_status"},
+    {"version":"20260903160437","name":"qeo64_eod_v4_scheduler_cutover"}
   ]
 }

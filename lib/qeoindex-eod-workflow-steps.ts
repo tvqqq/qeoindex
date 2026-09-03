@@ -9,6 +9,7 @@ import {
 } from "@/lib/qeoindex-eod-archive"
 import { getCanonicalUniverse } from "@/lib/market-universe"
 import { refreshOhlcvHistoryBatch, type OhlcvUniverseRefreshResult } from "@/lib/ohlcv-history-store"
+import { loadMarketSynthesisContext } from "@/lib/qeoindex-eod-market-synthesis-step"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import {
   loadWyckoffV2BuildArtifacts,
@@ -25,10 +26,10 @@ export {
   runDriveArchiveStep,
   runEodReadyStep,
   runMarketCloseCollectStep,
-  runMarketSynthesisStep,
   runRetentionCleanupStep,
   startQeoIndexEodRunStep,
 } from "./qeoindex-eod-workflow-steps-legacy"
+export { runMarketSynthesisStep } from "./qeoindex-eod-market-synthesis-step"
 
 export const HISTORY_REFRESH_BATCH_SIZE = 10
 const HISTORY_REFRESH_WINDOW_CONCURRENCY_MAX = 4
@@ -376,10 +377,11 @@ export async function runLlmDebateStep(runId: string, enabled = true, ratingDate
     })
     return { ok: false as const, status: "skipped" as const, reason: "DETERMINISTIC_NOT_READY" as const }
   }
+  const marketSynthesis = await loadMarketSynthesisContext(ratingDate)
   return runQeoIndexEodPhase({
     runId,
     phaseKey: "AI_COUNCIL_LLM",
-    fn: () => runAiCouncilDebateOperation(requiredSupabase(), ratingDate),
+    fn: () => runAiCouncilDebateOperation(requiredSupabase(), ratingDate, marketSynthesis),
     summarize: (result) => ({
       ok: result.ok,
       status: result.status,
@@ -388,6 +390,8 @@ export async function runLlmDebateStep(runId: string, enabled = true, ratingDate
       selected: "selected" in result ? result.selected : undefined,
       completed: "completed" in result ? result.completed : undefined,
       totalTokens: "totalTokens" in result ? result.totalTokens : undefined,
+      marketSynthesisEvidenceHash: marketSynthesis?.evidenceHash,
+      marketSynthesisPosture: marketSynthesis?.posture,
     }),
   })
 }

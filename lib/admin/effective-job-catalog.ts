@@ -7,7 +7,7 @@ const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
   provider: "supabase_pg_cron_workflow",
   label: "QeoIndex EOD Pipeline",
   description:
-    "EOD v4 data-refresh lane: same-session KFSP Rating → TTAI → market close → frozen READY → OHLCV/Wyckoff → Supabase publish → AI Council → post-analysis; raw Daily stays in Supabase and Drive is not an active dependency.",
+    "Canonical EOD v4 owner: same-session KFSP Rating → concurrent TTAI + market close → frozen READY → OHLCV/Wyckoff → Supabase publish → deterministic Council → Market Synthesis → LLM → post-analysis.",
   group: "system",
   scheduleUtc: "15 8 * * 1-5",
   scheduleIct: "15:15 T2-T6",
@@ -42,6 +42,54 @@ const LEGACY_EOD_JOB_KEYS = new Set([
   "ai_council.debate_daily",
 ])
 
+function asEodRecoveryJob(
+  job: AdminJobDefinition,
+  label: string,
+  description: string,
+): AdminJobDefinition {
+  return withSchedulePolicy({
+    ...job,
+    provider: "machine",
+    label,
+    description,
+    scheduleUtc: undefined,
+    scheduleIct: undefined,
+    scheduleKind: "manual",
+    schedulerName: undefined,
+    scheduleDays: undefined,
+    windowStartIct: undefined,
+    windowEndIct: undefined,
+    intervalMinutes: undefined,
+    manualPolicy: "confirm",
+    manualPurpose: "recovery",
+    automatedParentKeys: ["qeoindex.eod_pipeline"],
+  })
+}
+
+function asRetiredEodJob(
+  job: AdminJobDefinition,
+  label: string,
+  description: string,
+): AdminJobDefinition {
+  return withSchedulePolicy({
+    ...job,
+    provider: "machine",
+    label,
+    description,
+    scheduleUtc: undefined,
+    scheduleIct: undefined,
+    scheduleKind: "manual",
+    schedulerName: undefined,
+    scheduleDays: undefined,
+    windowStartIct: undefined,
+    windowEndIct: undefined,
+    intervalMinutes: undefined,
+    manualPolicy: "disabled",
+    manualPurpose: "maintenance",
+    automatedParentKeys: ["qeoindex.eod_pipeline"],
+  })
+}
+
 function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition {
   if (job.key === "signals.daily") {
     return withSchedulePolicy({
@@ -69,26 +117,27 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
   }
 
   if (job.key === "kfsp.rating_daily") {
-    return withSchedulePolicy({
-      ...job,
-      description: "Scheduler KFSP Rating 07:00 ICT vẫn giữ nguyên trong QEO-58. EOD 15:15 refresh lại same-session Rating trước READY; manual run chỉ dùng cho recovery/backfill. QEO-64 mới quyết định retire/reclassify scheduler sau production smoke.",
-      manualPolicy: "confirm",
-      manualPurpose: "recovery",
-      automatedParentKeys: [],
-    })
+    return asEodRecoveryJob(
+      job,
+      "KFSP Rating Refresh (Manual Recovery)",
+      "EOD v4 15:15 owns same-session KFSP Rating before READY. Standalone 07:00 pg_cron is retired by QEO-64; this action remains only for operator recovery/backfill.",
+    )
   }
 
   if (job.key === "kfsp.ttai_history") {
-    return withSchedulePolicy({
-      ...job,
-      description: "Scheduler TTAI 07:10 ICT vẫn giữ nguyên trong QEO-58. EOD 15:15 kiểm tra/refresh lại TTAI theo frozen universe; manual run chỉ dùng cho recovery/backfill. QEO-64 mới quyết định retire/reclassify scheduler sau production smoke.",
-      scheduleUtc: "10 0 * * *",
-      scheduleIct: "07:10 hàng ngày",
-      schedulerName: "kfsp-ttai-history-daily-0710-ict",
-      manualPolicy: "confirm",
-      manualPurpose: "recovery",
-      automatedParentKeys: [],
-    })
+    return asEodRecoveryJob(
+      job,
+      "KFSP TTAI History (Manual Recovery)",
+      "EOD v4 owns same-session TTAI after Rating and before READY. Standalone 07:10 pg_cron is retired by QEO-64; this action remains only for operator recovery/backfill.",
+    )
+  }
+
+  if (job.key === "market.sync_eod") {
+    return asRetiredEodJob(
+      job,
+      "Market EOD Sync (Retired)",
+      "EOD v4 exclusively owns final market-close collection for the frozen canonical universe. Standalone 14:45/14:50 scheduling and manual dispatch are disabled; use the canonical EOD run/retry flow for recovery.",
+    )
   }
 
   if (job.key === "market.sync_5m") {
@@ -106,11 +155,13 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
 }
 
 /**
- * Operational Admin Jobs catalog during the EOD v4 migration.
+ * Canonical operational catalog after QEO-64 EOD v4 cutover.
  *
- * QEO-58 makes the 15:15 EOD workflow own same-session KFSP/TTAI freshness.
- * QEO-57 removes Google Drive from the active daily EOD dependency graph.
- * Existing morning schedulers remain independently classified until QEO-64 production smoke.
+ * Exactly one post-market orchestration schedule exists: qeoindex.eod_pipeline.
+ * KFSP Rating and TTAI remain manual recovery/backfill tools. The standalone
+ * Market EOD action is retained only as disabled historical/maintenance
+ * evidence because final market-close collection must preserve EOD frozen
+ * lineage. Historical scheduler aliases remain readable via job-schedule.ts.
  */
 export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
   withSchedulePolicy(QEOINDEX_EOD_PIPELINE_JOB),

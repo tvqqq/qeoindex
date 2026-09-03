@@ -1,28 +1,27 @@
 import type { AdminJobDefinition, AdminJobView } from "./types.ts"
 
 /**
- * Explicit 1-to-1 mapping between Supabase pg_cron job names (cron.job.jobname)
- * and canonical QeoIndex AdminJobDefinition keys.
+ * Historical pg_cron name → logical job mapping.
  *
- * NEVER infer scheduler names by string replacement or regex.
+ * Keep retired names here so v3 cron snapshots and audit evidence remain readable
+ * after QEO-64. Active ownership is expressed only by JOB_KEY_TO_PG_CRON_NAME.
  */
 export const PG_CRON_NAME_TO_JOB_KEY: Readonly<Record<string, string>> = Object.freeze({
   "qeoindex-eod-pipeline-1515-ict": "qeoindex.eod_pipeline",
   "kfsp-rating-daily-7am-ict": "kfsp.rating_daily",
   "kfsp-ttai-history-daily-1am-ict": "kfsp.ttai_history",
   "kfsp-ttai-history-daily-0710-ict": "kfsp.ttai_history",
+  "kfsp-ttai-history-hourly": "kfsp.ttai_history",
   "sync-universe-5m": "market.sync_5m",
   "sync-universe-5m-afternoon": "market.sync_5m",
   "sync-universe-eod-1445": "market.sync_eod",
   "sync-universe-eod-1450": "market.sync_eod",
 })
 
+/** Active pg_cron ownership after QEO-64 cutover. */
 export const JOB_KEY_TO_PG_CRON_NAME: Readonly<Record<string, string>> = Object.freeze({
   "qeoindex.eod_pipeline": "qeoindex-eod-pipeline-1515-ict",
-  "kfsp.rating_daily": "kfsp-rating-daily-7am-ict",
-  "kfsp.ttai_history": "kfsp-ttai-history-daily-0710-ict",
   "market.sync_5m": "sync-universe-5m",
-  "market.sync_eod": "sync-universe-eod-1445",
 })
 
 export function getJobKeyForPgCron(jobName: string): string | undefined {
@@ -56,7 +55,8 @@ export interface ScheduleConflict {
 
 /**
  * Statically detects known operational schedule overlaps from job metadata.
- * Detects if 5m sync and EOD sync fire at the same time (e.g. at 14:50 ICT).
+ * Retained for legacy catalog/audit inputs; the effective QEO-64 catalog no
+ * longer exposes a scheduled standalone market EOD job.
  */
 export function findScheduleConflicts(jobs: (AdminJobDefinition | AdminJobView)[]): ScheduleConflict[] {
   const conflicts: ScheduleConflict[] = []

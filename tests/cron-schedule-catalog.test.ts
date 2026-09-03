@@ -36,7 +36,7 @@ test("catalog matches vercel.json cron schedules exactly", () => {
   assert.equal(signalsDef.scheduleDays, "weekdays")
 })
 
-test("catalog matches Supabase pg_cron migrations exactly", () => {
+test("source catalog retains historical pg_cron definitions while effective catalog reflects QEO-64 cutover", () => {
   const syncOrderbookMigration = readTextFile("supabase/migrations/20260901152000_fix_orderbook_trading_session_windows.sql")
   assert.match(syncOrderbookMigration, /'sync-universe-5m'/)
   assert.match(syncOrderbookMigration, /'\*\/5 2-4 \* \* 1-5'/)
@@ -47,7 +47,6 @@ test("catalog matches Supabase pg_cron migrations exactly", () => {
   assert.match(syncOrderbookMigration, /time '13:00'/)
   assert.match(syncOrderbookMigration, /time '14:40'/)
   assert.match(syncOrderbookMigration, /'sync-universe-eod-1445'/)
-  assert.match(syncOrderbookMigration, /'45 7 \* \* 1-5'/)
 
   const sync5mDef = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "market.sync_5m")
   assert.ok(sync5mDef)
@@ -58,44 +57,40 @@ test("catalog matches Supabase pg_cron migrations exactly", () => {
   assert.equal(sync5mDef.windowStartIct, "09:00")
   assert.equal(sync5mDef.windowEndIct, "14:40")
 
-  const syncEodDef = ADMIN_JOB_CATALOG.find((j) => j.key === "market.sync_eod")
-  assert.ok(syncEodDef)
-  assert.equal(syncEodDef.schedulerName, "sync-universe-eod-1445")
-  assert.equal(syncEodDef.scheduleUtc, "45 7 * * 1-5")
-  assert.equal(syncEodDef.scheduleIct, "14:45 T2-T6")
-  assert.equal(syncEodDef.scheduleKind, "point")
-  assert.equal(syncEodDef.windowStartIct, "14:45")
-  assert.equal(syncEodDef.windowEndIct, "14:45")
+  const syncEodSource = ADMIN_JOB_CATALOG.find((j) => j.key === "market.sync_eod")
+  assert.ok(syncEodSource)
+  assert.equal(syncEodSource.schedulerName, "sync-universe-eod-1445")
+  const syncEodEffective = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "market.sync_eod")
+  assert.ok(syncEodEffective)
+  assert.equal(syncEodEffective.scheduleKind, "manual")
+  assert.equal(syncEodEffective.schedulerName, undefined)
+  assert.equal(syncEodEffective.manualPolicy, "disabled")
+  assert.equal(syncEodEffective.manualPurpose, "maintenance")
 
   const kfspRatingMigration = readTextFile("supabase/migrations/20260822112420_kfsp_rating_pipeline.sql")
   assert.match(kfspRatingMigration, /'kfsp-rating-daily-7am-ict'/)
   assert.match(kfspRatingMigration, /'0 0 \* \* \*'/)
-
-  const ratingDef = ADMIN_JOB_CATALOG.find((j) => j.key === "kfsp.rating_daily")
-  assert.ok(ratingDef)
-  assert.equal(ratingDef.schedulerName, "kfsp-rating-daily-7am-ict")
-  assert.equal(ratingDef.scheduleUtc, "0 0 * * *")
-  assert.equal(ratingDef.scheduleDays, "daily")
-  assert.equal(ratingDef.scheduleKind, "point")
+  const ratingSource = ADMIN_JOB_CATALOG.find((j) => j.key === "kfsp.rating_daily")
+  assert.ok(ratingSource)
+  assert.equal(ratingSource.schedulerName, "kfsp-rating-daily-7am-ict")
+  const ratingEffective = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "kfsp.rating_daily")
+  assert.ok(ratingEffective)
+  assert.equal(ratingEffective.scheduleKind, "manual")
+  assert.equal(ratingEffective.schedulerName, undefined)
 
   const ttaiMigration = readTextFile("supabase/migrations/20260827135500_reschedule_kfsp_ttai_daily_0710_ict.sql")
   assert.match(ttaiMigration, /cron\.unschedule\('kfsp-ttai-history-daily-1am-ict'\)/)
   assert.match(ttaiMigration, /'kfsp-ttai-history-daily-0710-ict'/)
   assert.match(ttaiMigration, /'10 0 \* \* \*'/)
-
-  const ttaiDef = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "kfsp.ttai_history")
-  assert.ok(ttaiDef)
-  assert.equal(ttaiDef.schedulerName, "kfsp-ttai-history-daily-0710-ict")
-  assert.equal(ttaiDef.scheduleUtc, "10 0 * * *")
-  assert.equal(ttaiDef.scheduleIct, "07:10 hàng ngày")
-  assert.equal(ttaiDef.scheduleDays, "daily")
-  assert.equal(ttaiDef.intervalMinutes, undefined)
-  assert.equal(ttaiDef.scheduleKind, "point")
+  const ttaiEffective = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "kfsp.ttai_history")
+  assert.ok(ttaiEffective)
+  assert.equal(ttaiEffective.scheduleKind, "manual")
+  assert.equal(ttaiEffective.scheduleUtc, undefined)
+  assert.equal(ttaiEffective.schedulerName, undefined)
 
   const eodPipelineMigration = readTextFile("supabase/migrations/20260825174500_qeoindex_eod_pipeline_cron.sql")
   assert.match(eodPipelineMigration, /'qeoindex-eod-pipeline-1515-ict'/)
   assert.match(eodPipelineMigration, /'15 8 \* \* 1-5'/)
-
   const eodDef = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "qeoindex.eod_pipeline")
   assert.ok(eodDef)
   assert.equal(eodDef.schedulerName, "qeoindex-eod-pipeline-1515-ict")
@@ -104,12 +99,13 @@ test("catalog matches Supabase pg_cron migrations exactly", () => {
   assert.equal(eodDef.scheduleKind, "workflow")
 })
 
-test("exact pg_cron name mapping dictionary matches production", () => {
+test("historical pg_cron dictionary remains readable while active forward ownership is v4-only", () => {
   assert.deepEqual(PG_CRON_NAME_TO_JOB_KEY, {
     "qeoindex-eod-pipeline-1515-ict": "qeoindex.eod_pipeline",
     "kfsp-rating-daily-7am-ict": "kfsp.rating_daily",
     "kfsp-ttai-history-daily-1am-ict": "kfsp.ttai_history",
     "kfsp-ttai-history-daily-0710-ict": "kfsp.ttai_history",
+    "kfsp-ttai-history-hourly": "kfsp.ttai_history",
     "sync-universe-5m": "market.sync_5m",
     "sync-universe-5m-afternoon": "market.sync_5m",
     "sync-universe-eod-1445": "market.sync_eod",
@@ -122,11 +118,14 @@ test("exact pg_cron name mapping dictionary matches production", () => {
   assert.equal(getJobKeyForPgCron("kfsp-rating-daily-7am-ict"), "kfsp.rating_daily")
   assert.equal(getJobKeyForPgCron("kfsp-ttai-history-daily-0710-ict"), "kfsp.ttai_history")
   assert.equal(getPgCronNameForJobKey("qeoindex.eod_pipeline"), "qeoindex-eod-pipeline-1515-ict")
-  assert.equal(getPgCronNameForJobKey("market.sync_eod"), "sync-universe-eod-1445")
+  assert.equal(getPgCronNameForJobKey("market.sync_5m"), "sync-universe-5m")
+  assert.equal(getPgCronNameForJobKey("market.sync_eod"), undefined)
+  assert.equal(getPgCronNameForJobKey("kfsp.rating_daily"), undefined)
+  assert.equal(getPgCronNameForJobKey("kfsp.ttai_history"), undefined)
   assert.equal(getPgCronNameForJobKey("signals.daily"), undefined)
 })
 
-test("manual jobs are distinguished from scheduled jobs", () => {
+test("source manual jobs are distinguished from scheduled jobs", () => {
   const manualKeys = ["scanner.run", "signals.monitor", "market.sync_universe", "market.cache_invalidate", "wyckoff.run"]
   for (const key of manualKeys) {
     const def = ADMIN_JOB_CATALOG.find((j) => j.key === key)
@@ -137,12 +136,12 @@ test("manual jobs are distinguished from scheduled jobs", () => {
   }
 })
 
-test("resolves 14:45 non-overlapping schedule without conflicts", () => {
+test("effective QEO-64 catalog has no legacy market EOD overlap", () => {
   const conflicts = findScheduleConflicts(EFFECTIVE_ADMIN_JOB_CATALOG)
-  assert.equal(conflicts.length, 0, "Non-overlapping 14:45 EOD schedule must produce 0 conflicts")
+  assert.equal(conflicts.length, 0)
 })
 
-test("detects legacy 14:50 ICT overlap conflict when 5m runs past 14:40 and EOD is 14:50", () => {
+test("detects legacy 14:50 ICT overlap conflict for historical catalog inputs", () => {
   const legacyCatalog = [
     {
       key: "market.sync_5m",
@@ -169,10 +168,10 @@ test("detects legacy 14:50 ICT overlap conflict when 5m runs past 14:40 and EOD 
   assert.match(conflicts[0].reason, /14:50 ICT/)
 })
 
-test("effective catalog has complete structured ICT schedule policies", () => {
+test("effective catalog has complete structured ICT schedule policies after QEO-64 cutover", () => {
   assert.equal(new Set(EFFECTIVE_ADMIN_JOB_CATALOG.map((job) => job.key)).size, 12)
-  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 6)
-  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 6)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 9)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 3)
   assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => !isValidSchedulePolicy(job.schedulePolicy)).length, 0)
 
   const ingest = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "wyckoff.ingest")
@@ -181,11 +180,24 @@ test("effective catalog has complete structured ICT schedule policies", () => {
   assert.equal(ingest.manualPolicy, "confirm")
   assert.equal(ingest.manualPurpose, "maintenance")
 
-  const ttai = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "kfsp.ttai_history")
-  assert.equal(ttai?.schedulePolicy?.kind, "fixed_time")
-  assert.equal((ttai?.schedulePolicy as { minuteOfDay: number }).minuteOfDay, 430)
+  for (const key of ["kfsp.rating_daily", "kfsp.ttai_history"]) {
+    const job = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === key)
+    assert.ok(job)
+    assert.equal(job.schedulePolicy?.kind, "manual")
+    assert.equal(job.manualPolicy, "confirm")
+    assert.equal(job.manualPurpose, "recovery")
+    assert.deepEqual(job.automatedParentKeys, ["qeoindex.eod_pipeline"])
+  }
+
+  const marketEod = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "market.sync_eod")
+  assert.ok(marketEod)
+  assert.equal(marketEod.schedulePolicy?.kind, "manual")
+  assert.equal(marketEod.manualPolicy, "disabled")
+  assert.equal(marketEod.manualPurpose, "maintenance")
+  assert.deepEqual(marketEod.automatedParentKeys, ["qeoindex.eod_pipeline"])
+
   const market = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "market.sync_5m")
-  const windows = (market?.schedulePolicy as { windows: Array<{ startMinuteOfDay: number; endMinuteOfDay: number }> }).windows
+  const windows = (market?.schedulePolicy as { windows: Array<{ startMinuteOfDay: number; endMinuteOfDay: number; cadenceMinutes: number }> }).windows
   assert.deepEqual(windows, [
     { startMinuteOfDay: 540, endMinuteOfDay: 690, cadenceMinutes: 5 },
     { startMinuteOfDay: 780, endMinuteOfDay: 880, cadenceMinutes: 5 },

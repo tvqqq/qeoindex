@@ -23,6 +23,12 @@ export function schedulePolicyForJobKey(key: string): SchedulePolicy | null {
 }
 
 export function withSchedulePolicy(job: AdminJobDefinition): AdminJobDefinition {
+  // scheduleKind is the operational source of truth. A job can be reclassified
+  // from a historical scheduled definition to manual recovery (QEO-64), so a
+  // previously derived fixed-time policy must never survive that override.
+  if (job.scheduleKind === "manual") {
+    return { ...job, schedulePolicy: { kind: "manual", timezone: ICT_TIMEZONE } }
+  }
   return { ...job, schedulePolicy: job.schedulePolicy ?? schedulePolicyForJobKey(job.key) ?? undefined }
 }
 
