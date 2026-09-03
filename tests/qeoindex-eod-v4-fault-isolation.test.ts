@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import test from "node:test"
 
+// QEO-61 regression contract: partial runs must remain observable and recover only through exact targeted retry.
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
