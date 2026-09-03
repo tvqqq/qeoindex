@@ -72,23 +72,23 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
   if (job.key === "kfsp.rating_daily") {
     return withSchedulePolicy({
       ...job,
-      description: "Warm-up KFSP Rating lúc 07:00 ICT cho UI/pre-market. EOD 15:15 luôn refresh lại same-session Rating trước READY; morning schedule được giữ tới QEO-64 cutover/smoke.",
+      description: "Scheduler KFSP Rating 07:00 ICT vẫn giữ nguyên trong QEO-58. EOD 15:15 refresh lại same-session Rating trước READY; QEO-64 mới quyết định retire/reclassify sau production smoke.",
       manualPolicy: "confirm",
       manualPurpose: "recovery",
-      automatedParentKeys: ["qeoindex.eod_pipeline"],
+      automatedParentKeys: [],
     })
   }
 
   if (job.key === "kfsp.ttai_history") {
     return withSchedulePolicy({
       ...job,
-      description: "Warm-up TTAI lúc 07:10 ICT. EOD 15:15 kiểm tra/refresh lại TTAI theo frozen universe; partial ticker failure được ghi degraded. Morning schedule giữ tới QEO-64.",
+      description: "Scheduler TTAI 07:10 ICT vẫn giữ nguyên trong QEO-58. EOD 15:15 kiểm tra/refresh lại TTAI theo frozen universe; QEO-64 mới quyết định retire/reclassify sau production smoke.",
       scheduleUtc: "10 0 * * *",
       scheduleIct: "07:10 hàng ngày",
       schedulerName: "kfsp-ttai-history-daily-0710-ict",
       manualPolicy: "confirm",
       manualPurpose: "recovery",
-      automatedParentKeys: ["qeoindex.eod_pipeline"],
+      automatedParentKeys: [],
     })
   }
 
@@ -109,8 +109,8 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
 /**
  * Operational Admin Jobs catalog during the EOD v4 migration.
  *
- * QEO-58 makes the 15:15 EOD workflow the owner of same-session KFSP/TTAI
- * freshness while morning schedules remain warm-up/recovery lanes until QEO-64.
+ * QEO-58 makes the 15:15 EOD workflow own same-session KFSP/TTAI freshness.
+ * Existing morning schedulers remain independently classified until QEO-64 production smoke.
  */
 export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
   withSchedulePolicy(QEOINDEX_EOD_PIPELINE_JOB),
