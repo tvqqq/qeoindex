@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
+
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
@@ -71,15 +73,23 @@ test("QEO-58 READY validates frozen run identity and exact membership, not count
   assert.match(steps, /input\.expectedUniverse\.tickers/)
 })
 
-test("QEO-58 exposes refresh phases without retiring morning recovery schedules", () => {
+test("QEO-64 retires QEO-58 morning schedulers while preserving explicit recovery capability", () => {
   const phases = source("lib/admin/job-phases.ts")
-  const effectiveCatalog = source("lib/admin/effective-job-catalog.ts")
   const baseCatalog = source("lib/admin/catalog.ts")
-  const catalog = `${baseCatalog}\n${effectiveCatalog}`
 
   assert.match(phases, /key: "KFSP_RATING_REFRESH"/)
   assert.match(phases, /key: "TTAI_REFRESH"/)
-  assert.match(catalog, /kfsp-rating-daily-7am-ict/)
-  assert.match(catalog, /kfsp-ttai-history-daily-0710-ict/)
-  assert.match(effectiveCatalog, /Morning schedule.*QEO-64|morning schedule.*QEO-64/i)
+  assert.match(baseCatalog, /kfsp-rating-daily-7am-ict/, "historical source definition remains auditable")
+  assert.match(baseCatalog, /kfsp-ttai-history-daily-0710-ict/, "historical source definition remains auditable")
+
+  for (const key of ["kfsp.rating_daily", "kfsp.ttai_history"]) {
+    const job = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === key)
+    assert.ok(job)
+    assert.equal(job.scheduleKind, "manual")
+    assert.equal(job.scheduleUtc, undefined)
+    assert.equal(job.schedulerName, undefined)
+    assert.equal(job.manualPolicy, "confirm")
+    assert.equal(job.manualPurpose, "recovery")
+    assert.deepEqual(job.automatedParentKeys, ["qeoindex.eod_pipeline"])
+  }
 })
