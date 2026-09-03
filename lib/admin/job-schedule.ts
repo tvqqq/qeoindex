@@ -22,7 +22,7 @@ export const JOB_KEY_TO_PG_CRON_NAME: Readonly<Record<string, string>> = Object.
   "kfsp.rating_daily": "kfsp-rating-daily-7am-ict",
   "kfsp.ttai_history": "kfsp-ttai-history-daily-0710-ict",
   "market.sync_5m": "sync-universe-5m",
-  "market.sync_eod": "sync-universe-eod-1445",
+  "market.sync_eod": "sync-universe-eod-1450",
 })
 
 export function getJobKeyForPgCron(jobName: string): string | undefined {
