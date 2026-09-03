@@ -6,6 +6,7 @@ import { getCanonicalUniverse } from "./market-universe.ts"
 import type { EodTickerAttempt } from "./qeoindex-eod-fault-isolation.ts"
 import { loadEodTickerAttempts } from "./qeoindex-eod-ticker-telemetry.ts"
 import { getSupabaseServerClient } from "./supabase/server.ts"
+import type { WyckoffV2UniverseRow } from "./wyckoff-v2-universe.ts"
 
 interface StoredEodRunRow {
   id: string
@@ -14,6 +15,8 @@ interface StoredEodRunRow {
   started_at: string
   summary: unknown
 }
+
+const SUPPORTED_EXCHANGES = new Set(["HOSE", "HNX", "UPCOM"])
 
 function requiredSupabase() {
   const supabase = getSupabaseServerClient()
@@ -31,6 +34,22 @@ function requiredSummaryString(summary: Record<string, unknown>, key: string) {
   const value = String(summary[key] || "").trim()
   if (!value) throw new Error(`EOD retry context is missing ${key}`)
   return value
+}
+
+function toRetryUniverseStocks(stocks: Awaited<ReturnType<typeof getCanonicalUniverse>>["stocks"]): WyckoffV2UniverseRow[] {
+  return stocks.map((stock) => {
+    const exchange = String(stock.exchange || "").trim().toUpperCase()
+    if (!SUPPORTED_EXCHANGES.has(exchange)) {
+      throw new Error(`EOD retry canonical exchange is invalid for ${stock.ticker}: ${exchange || "missing"}`)
+    }
+    return {
+      ticker: stock.ticker,
+      active: true,
+      exchange,
+      rank: stock.rank,
+      sector: String(stock.sector || "").trim(),
+    }
+  })
 }
 
 export async function loadEodRetryContextStep(runId: string) {
@@ -63,6 +82,7 @@ export async function loadEodRetryContextStep(runId: string) {
   if (canonical.selectedCount !== expectedCount || canonical.stocks.length !== expectedCount) {
     throw new Error(`EOD retry canonical count changed: ${canonical.stocks.length}/${expectedCount}`)
   }
+  const canonicalStocks = toRetryUniverseStocks(canonical.stocks)
 
   const tickerAttempts = await loadEodTickerAttempts(supabase, runId)
   if (!tickerAttempts.length) throw new Error(`EOD retry run ${runId} has no persisted ticker attempts`)
@@ -74,7 +94,7 @@ export async function loadEodRetryContextStep(runId: string) {
     scanDate,
     universeRunId,
     expectedCount,
-    canonicalStocks: canonical.stocks,
+    canonicalStocks,
     tickerAttempts,
   }
 }
