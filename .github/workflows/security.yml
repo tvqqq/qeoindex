@@ -43,6 +43,8 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
       - name: Core regression suite
         run: pnpm test:core
+      - name: QEO-19 EOD final snapshot repair regression
+        run: node --test tests/qeoindex-eod-final-snapshot-repair.test.ts
       - name: Login handoff regression
         run: node --test tests/auth-login-handoff.test.ts
       - name: Orderbook prune security regression
