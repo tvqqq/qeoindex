@@ -40,16 +40,6 @@ function serviceRoleKey() {
   }
 }
 
-function constantTimeEqual(left: string, right: string) {
-  const encoder = new TextEncoder()
-  const a = encoder.encode(left)
-  const b = encoder.encode(right)
-  let mismatch = a.length ^ b.length
-  const length = Math.max(a.length, b.length)
-  for (let index = 0; index < length; index += 1) mismatch |= (a[index] ?? 0) ^ (b[index] ?? 0)
-  return mismatch === 0
-}
-
 function requestToken(req: Request) {
   return (req.headers.get("x-market-ai-secret") || "").trim()
 }
@@ -295,14 +285,18 @@ async function complete(supabase: SupabaseClient, id: string, claimToken: string
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return jsonResponse({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405)
-  const expectedSecret = Deno.env.get("MARKET_AI_CONCLUSION_SECRET") || ""
-  if (!expectedSecret) return jsonResponse({ ok: false, error: "SYNC_SECRET_NOT_CONFIGURED" }, 503)
-  if (!constantTimeEqual(expectedSecret, requestToken(req))) return jsonResponse({ ok: false, error: "UNAUTHORIZED" }, 401)
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || ""
   const supabaseKey = serviceRoleKey()
   if (!supabaseUrl || !supabaseKey) return jsonResponse({ ok: false, error: "SUPABASE_NOT_CONFIGURED" }, 503)
   const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } })
+
+  const token = requestToken(req)
+  if (!token) return jsonResponse({ ok: false, error: "UNAUTHORIZED" }, 401)
+  const auth = await supabase.rpc("qeo_verify_market_ai_dispatch_secret", { p_secret: token })
+  if (auth.error) return jsonResponse({ ok: false, error: "DISPATCH_AUTH_UNAVAILABLE" }, 503)
+  if (auth.data !== true) return jsonResponse({ ok: false, error: "UNAUTHORIZED" }, 401)
+
   const body = await req.json().catch(() => ({})) as JsonObject
   const mode = body.mode == null ? "latest" : String(body.mode)
   if (mode !== "latest" && mode !== "session") return jsonResponse({ ok: false, error: "INVALID_MODE" }, 400)
