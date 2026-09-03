@@ -26,15 +26,13 @@ test("market index cards live inside the market-intelligence panel as a compact 
 
 test("market intelligence uses one equal-height three-column overview row", () => {
   const dashboard = read("components/insights/market-close-dashboard.tsx")
-  const health = read("components/insights/market-health-view.tsx")
 
   assert.match(dashboard, /data-market-intelligence-overview-row[^>]*className="[^"]*xl:grid-cols-3[^"]*xl:items-stretch/)
   assert.match(dashboard, /data-market-summary-column[^>]*className="[^"]*h-full/)
-  assert.match(dashboard, /data-market-sentiment-column[^>]*className="[^"]*h-full/)
+  assert.match(dashboard, /data-market-sentiment-column[^>]*className="[^"]*h-full[^"]*\[&>\*\]:h-full/)
   assert.match(dashboard, /data-market-index-column[^>]*className="[^"]*h-full/)
   assert.match(dashboard, /data-market-sentiment-column[\s\S]*<MarketSentimentCard data=\{data\}/)
   assert.match(dashboard, /data-market-index-column[\s\S]*grid-cols-2[\s\S]*indexes\.map\(\(item\) => <IndexTile/)
-  assert.match(health, /export function MarketSentimentCard[\s\S]*className="[^"]*h-full/)
   assert.doesNotMatch(dashboard, /xl:grid-cols-\[35fr_65fr\]/, "the previous two-column pulse/index row must be removed")
 })
 
