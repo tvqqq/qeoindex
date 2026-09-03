@@ -19,7 +19,9 @@ import {
   runLlmDebateStep,
   runMarketCloseCollectStep,
   runMarketSynthesisStep,
-  runNotionArchiveStep,
+  runNotionArchiveFinalizeStep,
+  runNotionEodArchiveBatchStep,
+  runNotionUniverseArchiveBatchStep,
   runRetentionCleanupStep,
   runSupabasePublishStep,
   runSupabaseValidateStep,
@@ -33,6 +35,7 @@ const MARKET_CLOSE_MAX_ATTEMPTS = 3
 const MARKET_CLOSE_RETRY_INTERVAL_MS = 5 * 60_000
 const MAX_CANONICAL_UNIVERSE_SIZE = 200
 const WYCKOFF_TIMEFRAME_COUNT = 2
+const NOTION_ARCHIVE_BATCH_SIZE = 8
 
 function retryAt(startedAtIso: string, attempt: number, intervalMs: number) {
   const startedAt = new Date(startedAtIso).getTime()
@@ -243,11 +246,29 @@ export async function qeoindexEodPipeline(startedAtIso: string) {
       marketSynthesis = { ok: false, status: "failed", requestId: null, ratingDate: ready.scanDate, error: errorMessage(error) }
     }
 
-    const notionArchive = await runNotionArchiveStep(runId, {
-      tradingDate: ready.scanDate,
-      universeRunId: ready.market.universeRunId,
-      validationHash: validation.validationHash,
-    })
+    const notionUniverseBatches: Array<Awaited<ReturnType<typeof runNotionUniverseArchiveBatchStep>>> = []
+    for (let offset = 0; offset < ready.stocks.length; offset += NOTION_ARCHIVE_BATCH_SIZE) {
+      notionUniverseBatches.push(await runNotionUniverseArchiveBatchStep(
+        runId,
+        { universeRunId: ready.market.universeRunId },
+        ready.stocks.slice(offset, offset + NOTION_ARCHIVE_BATCH_SIZE),
+      ))
+    }
+
+    const notionEodBatches: Array<Awaited<ReturnType<typeof runNotionEodArchiveBatchStep>>> = []
+    for (let offset = 0; offset < ready.stocks.length; offset += NOTION_ARCHIVE_BATCH_SIZE) {
+      notionEodBatches.push(await runNotionEodArchiveBatchStep(
+        runId,
+        {
+          tradingDate: ready.scanDate,
+          universeRunId: ready.market.universeRunId,
+          validationHash: validation.validationHash,
+        },
+        ready.stocks.slice(offset, offset + NOTION_ARCHIVE_BATCH_SIZE),
+      ))
+    }
+
+    const notionArchive = await runNotionArchiveFinalizeStep(runId, notionUniverseBatches, notionEodBatches)
     const driveArchive = await runDriveArchiveStep(runId, {
       tradingDate: ready.scanDate,
       universeRunId: ready.market.universeRunId,
