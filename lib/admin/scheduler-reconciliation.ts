@@ -12,7 +12,7 @@ export const EXPECTED_SUPABASE_SCHEDULERS: ExpectedSchedulerMapping[] = [
   { mappingId: "supabase:kfsp-ttai-history-daily-0710-ict", jobKey: "kfsp.ttai_history", schedulerName: "kfsp-ttai-history-daily-0710-ict", schedule: "10 0 * * *", aliases: ["kfsp-ttai-history-daily-1am-ict", "kfsp-ttai-history-hourly"] },
   { mappingId: "supabase:sync-universe-5m-am", jobKey: "market.sync_5m", schedulerName: "sync-universe-5m", schedule: "*/5 2-4 * * 1-5" },
   { mappingId: "supabase:sync-universe-5m-pm", jobKey: "market.sync_5m", schedulerName: "sync-universe-5m-afternoon", schedule: "*/5 6-7 * * 1-5" },
-  { mappingId: "supabase:sync-universe-eod-1445", jobKey: "market.sync_eod", schedulerName: "sync-universe-eod-1445", schedule: "45 7 * * 1-5", aliases: ["sync-universe-eod-1450"] },
+  { mappingId: "supabase:sync-universe-eod-1450", jobKey: "market.sync_eod", schedulerName: "sync-universe-eod-1450", schedule: "50 7 * * 1-5", aliases: ["sync-universe-eod-1445"] },
 ]
 export const EXPECTED_VERCEL_SCHEDULERS = [{ jobKey: "signals.daily", path: "/api/signals/daily", schedule: "0 0 * * 1-5" }] as const
 export type VercelCronEntry = { path: string; schedule: string }
