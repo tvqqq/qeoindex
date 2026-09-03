@@ -137,14 +137,13 @@ test("EOD orchestration is one durable v4 dependency workflow with bounded Daily
   assert.match(route, /isMachineRequestAuthorized/)
 })
 
-test("unified EOD workflow remains fail-closed across the v4 dependency gates without Drive archive", () => {
+test("unified EOD keeps QEO-60 gates and QEO-62 downstream summary without Drive", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   const body = workflow.slice(workflow.indexOf("export async function qeoindexEodPipeline"))
   const ordered = [
     "runKfspRatingRefreshStep", "runEodReadyStep", "runHistoryRefreshWindowStep", "runWyckoffBuildStep",
     "runSupabaseValidateStep", "runSupabasePublishStep", "runDeterministicCouncilStep", "runMarketSynthesisStep",
-    "runLlmDebateStep", "runNotionUniverseArchiveBatchStep", "runNotionEodArchiveBatchStep",
-    "runNotionArchiveFinalizeStep", "runRetentionCleanupStep",
+    "runLlmDebateStep", "runRetentionCleanupStep", "runNotionAnalyticalSummaryStep", "runCompleteStep",
   ]
   let cursor = -1
   for (const call of ordered) {
@@ -155,7 +154,8 @@ test("unified EOD workflow remains fail-closed across the v4 dependency gates wi
   assert.match(body, /Promise\.all\([\s\S]*?runTtaiRefreshBranch[\s\S]*?runMarketCloseBranch/)
   assert.match(body, /published && deterministic\.ok/)
   assert.match(body, /failQeoIndexEodRunStep/)
-  assert.doesNotMatch(body, /runDriveArchiveStep|driveArchiveStatus/)
+  assert.doesNotMatch(body, /runDriveArchiveStep|driveArchiveStatus|driveArchive/)
+  assert.doesNotMatch(body, /runNotionUniverseArchiveBatchStep|runNotionEodArchiveBatchStep|runNotionArchiveFinalizeStep/)
   assert.doesNotMatch(body, /runNotionValidateStep|runNotionStagingBatchStep|runIngestStep/)
 })
 
