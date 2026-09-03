@@ -3,7 +3,7 @@ import { Activity, BarChart3, CircleDollarSign, CircleDot, Gauge, LineChart } fr
 
 import {
   IndexBreadthChart, IndexPerformanceChart, InstitutionalFlowChart,
-  MaBreadthChart, MarketHistoryChart, MarketHistoryFlowChart,
+  MaBreadthChart,
 } from "@/components/insights/market-close-charts"
 import { MarketBubbles, type MarketBubbleStock } from "@/components/insights/market-bubbles"
 import { SectorMapPanel } from "@/components/insights/sector-map-panel"
@@ -146,25 +146,22 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
 function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketCloseDashboardData; marketAiConclusion?: MarketAiConclusionView }) {
   const { dailySummary, indexes, history, marketRegime } = data
   return (
-    <section aria-labelledby="market-intelligence-title" className="space-y-6" data-market-intelligence-panel>
+    <section aria-labelledby="market-intelligence-title" data-market-intelligence-panel>
       <Card className={cn(surface, "overflow-hidden py-0")}>
-        <div className="border-b border-white/[0.07] bg-black/10 px-4 sm:px-5 py-3.5 flex items-center justify-between">
+        <div className="flex items-center border-b border-white/[0.07] bg-black/10 px-4 py-3.5 sm:px-5">
           <div className="flex items-center gap-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300 shadow-sm">
               <Activity className="size-4 sm:size-5" />
             </span>
             <div>
-              <span id="market-intelligence-title" className="text-base font-bold text-white tracking-wide font-sans block">
+              <span id="market-intelligence-title" className="block text-base font-bold tracking-wide text-white font-sans">
                 Nhịp đập thị trường & Sức khoẻ thị trường
               </span>
-              <span className="text-sm font-sans italic text-slate-300 font-medium">
-                Dữ liệu tổng quan phiên & chỉ báo sức khỏe
+              <span className="text-sm font-medium italic text-slate-300 font-sans">
+                Chỉ báo sức khỏe & bối cảnh thị trường
               </span>
             </div>
           </div>
-          <span className="hidden text-xs font-mono font-bold text-slate-300 sm:inline">
-            Dữ liệu tổng quan phiên
-          </span>
         </div>
         <CardContent className="p-5 sm:p-6">
           <MarketWidgetChildHeader icon={Activity} title={marketAiConclusion?.status === "succeeded" ? "AI nhận định thị trường · CANSLIM/4M-inspired" : "Tổng hợp định lượng"} description={marketAiConclusion?.status === "succeeded" ? "Kết luận grounded trên bằng chứng cùng phiên" : "Tóm lược định lượng, không phải AI"} asOf={data.asOf} quality={data.qualityStatus} />
@@ -181,9 +178,9 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
             <p className="mt-2 text-sm leading-6 text-slate-300">{marketAiConclusion?.message || "Chưa có AI conclusion; hiển thị các chỉ báo định lượng bên dưới."}</p>
           )}
 
-          <div data-market-intelligence-grid className="mt-4 grid gap-4 xl:grid-cols-[35fr_65fr]">
-            <div data-market-summary-column className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3 sm:p-4">
-              <div className="flex items-center gap-3">
+          <div data-market-intelligence-overview-row className="mt-4 grid gap-4 xl:grid-cols-3 xl:items-stretch">
+            <div data-market-summary-column className="flex h-full items-center rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 shadow-xl sm:p-5">
+              <div className="flex w-full items-center gap-3">
                 <div className="flex size-20 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/[0.06] sm:size-24">
                   <strong className="px-2 text-center text-xs font-black uppercase text-amber-300 font-sans sm:text-sm">{marketRegime || "Không suy diễn"}</strong>
                 </div>
@@ -196,16 +193,20 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
               </div>
             </div>
 
-            <div data-market-index-column className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3 sm:p-4">
-              <div data-market-index-strip className="grid grid-cols-2 gap-2">
+            <div data-market-sentiment-column className="h-full [&>*]:h-full">
+              <MarketSentimentCard data={data} />
+            </div>
+
+            <div data-market-index-column className="flex h-full flex-col rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 shadow-xl sm:p-5">
+              <div data-market-index-strip className="grid flex-1 grid-cols-2 gap-2">
                 {indexes.map((item) => <IndexTile key={item.indexCode} item={item} />)}
               </div>
               <p className="mt-2 px-1 text-[11px] font-mono text-slate-400">Phiên {data.sessionDate} · cập nhật {formatTime(data.asOf)} · nguồn KFSP Ngành</p>
             </div>
           </div>
 
-          <div className="mt-4">
-            <MarketSentimentCard data={data} />
+          <div data-market-health-embedded className="mt-5 border-t border-white/[0.07] pt-5">
+            <MarketHealthView data={data} history={history} />
           </div>
 
           <div id="market-charts-title" className="mt-5">
@@ -219,16 +220,6 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
           </div>
         </CardContent>
       </Card>
-
-      {/* Khối Sức khoẻ thị trường (Chỉ báo tâm lý + Chỉ báo rủi ro trên 1 row + Định giá) */}
-      <MarketHealthView data={data} history={history} />
-      <div id="market-history-title">
-        <h3 className="sr-only">Bối cảnh trước khi ra quyết định</h3>
-      </div>
-      <div className="grid gap-3 xl:grid-cols-2" data-market-close-chart-grid>
-        <ChartPanel icon={Gauge} title="Tâm lý, rủi ro và MA20" description="Bối cảnh 20 phiên gần nhất"><MarketHistoryChart history={history} /></ChartPanel>
-        <ChartPanel icon={CircleDollarSign} title="Dòng tiền theo phiên" description="Dòng tiền 20 phiên gần nhất"><MarketHistoryFlowChart history={history} /></ChartPanel>
-      </div>
     </section>
   )
 }
