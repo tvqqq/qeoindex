@@ -5,6 +5,7 @@ import test from "node:test"
 import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
 import { buildAdminJobViews } from "../lib/admin/job-health.ts"
 import { buildCronTimelineModel, EOD_PIPELINE_PHASES } from "../lib/admin/cron-timeline.ts"
+import type { AdminJobView } from "../lib/admin/types.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -95,6 +96,27 @@ test("buildCronTimelineModel separates scheduled automation, manual recovery, an
   const disabledKeys = timeline.lanes[3].jobs.map((job) => job.key).sort()
   assert.deepEqual(disabledKeys, ["market.cache_invalidate", "wyckoff.run"])
   assert.equal(timeline.totalManual, 6)
+})
+
+test("manual recovery lane is backed by the dispatch allowlist, not manualPolicy alone", () => {
+  const fakeManualJob: AdminJobView = {
+    key: "internal.not_allowlisted",
+    provider: "machine",
+    label: "Internal Test Job",
+    description: "Must not render as runnable recovery.",
+    group: "system",
+    scheduleKind: "manual",
+    manualPolicy: "allowed",
+    manualPurpose: "recovery",
+    status: "unknown",
+    schedulerStatus: "unscheduled",
+    evidenceSource: "none",
+    schedulePolicy: { kind: "manual", timezone: "Asia/Ho_Chi_Minh" },
+  }
+
+  const timeline = buildCronTimelineModel([fakeManualJob])
+  assert.equal(timeline.lanes.find((lane) => lane.id === "manual")?.jobs.length, 0)
+  assert.equal(timeline.totalManual, 0)
 })
 
 test("daily signals scans the full canonical universe instead of a positional Top50 subset", () => {
