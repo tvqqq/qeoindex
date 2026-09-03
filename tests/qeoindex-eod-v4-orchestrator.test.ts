@@ -76,6 +76,7 @@ test("QEO-64 waits for terminal Market Synthesis and injects its exact-session c
   const steps = source("lib/qeoindex-eod-workflow-steps.ts")
   const operations = source("lib/ai-council-operations.ts")
   const promptEvidence = source("lib/ai-council-prompt-evidence.ts")
+  const promptIdentity = source("lib/ai-council-prompt-identity.ts")
 
   assert.match(synthesisStep, /awaitMarketSynthesisConclusion/, "synthesis phase must wait for an exact-session terminal conclusion")
   assert.match(synthesisStep, /status:\s*"succeeded"/, "synthesis phase must expose terminal success, not enqueue success")
@@ -86,6 +87,8 @@ test("QEO-64 waits for terminal Market Synthesis and injects its exact-session c
   assert.match(steps, /loadMarketSynthesisContext[\s\S]*runAiCouncilDebateOperation/, "LLM step must load completed synthesis before the debate operation")
   assert.match(operations, /marketSynthesis/, "AI Council operation must consume market synthesis context")
   assert.match(promptEvidence, /researchContext/, "LLM point-in-time packet must retain the context layer that carries synthesis")
+  assert.match(promptIdentity, /marketSynthesisHash/, "prompt/cache identity must change when synthesis evidence changes")
+  assert.match(promptIdentity, /marketSynthesis[\s\S]*evidenceHash/, "identity must bind to the persisted synthesis evidence hash")
 })
 
 test("QEO-60 keeps historical backfill explicit and never runs current Rating/TTAI refresh in that branch", () => {
