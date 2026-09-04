@@ -93,7 +93,7 @@ test("selector preserves non-HOSE exchange and does not mutate source rows", () 
   assert.equal((hnx as MarketUniverseSelectionRow & { rank?: number }).rank, undefined)
 })
 
-test("canonical universe persistence and runtime boundaries exist", () => {
+test("canonical universe persistence and run-scoped runtime boundaries exist", () => {
   const migration = "supabase/migrations/20260901090000_market_universe_top_stocks.sql"
   const service = "lib/market-universe.ts"
   assert.equal(existsSync(new URL(`../${migration}`, import.meta.url)), true)
@@ -107,7 +107,8 @@ test("canonical universe persistence and runtime boundaries exist", () => {
   assert.match(sql, /rank[^\n]*between 1 and 200/i)
   assert.match(sql, /qeo_current_market_universe/i)
   assert.match(sql, /qeo_publish_market_universe_run/i)
-  assert.match(runtime, /market-universe:v1/)
+  assert.match(runtime, /CACHE_NAMESPACE\s*=\s*"market-universe:v2"/)
+  assert.match(runtime, /key:\s*`run:\$\{version\.runId\}`/)
   assert.match(runtime, /readThroughUiCache/)
 })
 

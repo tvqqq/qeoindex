@@ -24,17 +24,17 @@ test("portfolio renders the global header without an empty sticky offset", () =>
   assert.ok(page.indexOf("<TopNav />") < page.indexOf("sticky top-14"))
 })
 
-test("transaction journal exposes a real PATCH edit flow", () => {
-  const page = readFileSync("components/portfolio/portfolio-page.tsx", "utf8")
+test("transaction journal protects the active create and delete flows", () => {
   const dialog = readFileSync("components/portfolio/add-transaction-dialog.tsx", "utf8")
   const history = readFileSync("components/portfolio/portfolio-transaction-history.tsx", "utf8")
-  const route = readFileSync("app/api/portfolio/[id]/transactions/[txId]/route.ts", "utf8")
+  const createRoute = readFileSync("app/api/portfolio/[id]/transactions/route.ts", "utf8")
+  const itemRoute = readFileSync("app/api/portfolio/[id]/transactions/[txId]/route.ts", "utf8")
 
-  assert.match(page, /onEdit=\{handleOpenEditTx\}/)
-  assert.match(history, /Chỉnh sửa giao dịch/)
-  assert.match(dialog, /method: transaction \? "PATCH" : "POST"/)
-  assert.match(route, /export async function PATCH/)
-  assert.match(route, /updates\.ticker = ticker/)
+  assert.match(dialog, /method:\s*"POST"/)
+  assert.match(createRoute, /export async function POST/)
+  assert.match(history, /onDelete/)
+  assert.match(history, /Xác nhận xóa/)
+  assert.match(itemRoute, /export async function DELETE/)
 })
 
 test("portfolio ticker links do not trigger viewport prefetch fan-out", () => {
