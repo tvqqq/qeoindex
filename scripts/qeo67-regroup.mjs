@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
-const repo = process.cwd()
 const tracked = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" }).split("\0").filter(Boolean)
 const oldFiles = new Set(tracked)
 const moves = new Map()
@@ -78,6 +77,11 @@ function stripCodeExt(p) {
   return p.replace(/\.(?:tsx?|jsx?|mjs|cjs)$/, "")
 }
 
+function codeExt(p) {
+  const match = p.match(/\.(?:tsx?|jsx?|mjs|cjs)$/)
+  return match?.[0] || ""
+}
+
 const reverse = new Map([...moves].map(([oldPath, newPath]) => [newPath, oldPath]))
 
 for (const [oldPath, newPath] of moves) {
@@ -118,11 +122,25 @@ function resolveOldRelative(originFile, specifier) {
 }
 
 function toSpecifier(fromFile, targetFile, originalSpecifier) {
-  let target = stripCodeExt(targetFile)
-  if (/\/index$/.test(target) && !/\/index$/.test(originalSpecifier)) target = target.slice(0, -6)
+  const explicitExt = codeExt(originalSpecifier)
+  let target = explicitExt ? targetFile : stripCodeExt(targetFile)
+  if (/\/index(?:\.(?:tsx?|jsx?|mjs|cjs))?$/.test(target) && !/\/index(?:\.(?:tsx?|jsx?|mjs|cjs))?$/.test(originalSpecifier)) {
+    target = target.replace(/\/index(?:\.(?:tsx?|jsx?|mjs|cjs))?$/, explicitExt || "")
+  }
   let rel = path.posix.relative(path.posix.dirname(fromFile), target)
   if (!rel.startsWith(".")) rel = `./${rel}`
   return rel
+}
+
+function rewriteRelative(full, prefix, specifier, quote, file) {
+  const origin = reverse.get(file) || file
+  const oldTarget = resolveOldRelative(origin, specifier)
+  if (!oldTarget) return full
+  const originMoved = origin !== file
+  const targetMoved = moves.has(oldTarget)
+  if (!originMoved && !targetMoved) return full
+  const newTarget = moves.get(oldTarget) || oldTarget
+  return `${prefix}${toSpecifier(file, newTarget, specifier)}${quote}`
 }
 
 for (const file of [...new Set(textFiles)]) {
@@ -130,19 +148,8 @@ for (const file of [...new Set(textFiles)]) {
   for (const [from, to] of replacements) content = content.split(from).join(to)
 
   if (/\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(file)) {
-    const origin = reverse.get(file) || file
-    content = content.replace(/((?:from\s+|import\s*\(\s*|require\s*\(\s*)["'])(\.[^"']+)(["'])/g, (full, prefix, specifier, quote) => {
-      const oldTarget = resolveOldRelative(origin, specifier)
-      if (!oldTarget) return full
-      const newTarget = moves.get(oldTarget) || oldTarget
-      return `${prefix}${toSpecifier(file, newTarget, specifier)}${quote}`
-    })
-    content = content.replace(/(export\s+[^"']*?from\s+["'])(\.[^"']+)(["'])/g, (full, prefix, specifier, quote) => {
-      const oldTarget = resolveOldRelative(origin, specifier)
-      if (!oldTarget) return full
-      const newTarget = moves.get(oldTarget) || oldTarget
-      return `${prefix}${toSpecifier(file, newTarget, specifier)}${quote}`
-    })
+    content = content.replace(/((?:from\s+|import\s*\(\s*|require\s*\(\s*)["'])(\.[^"']+)(["'])/g, (full, prefix, specifier, quote) => rewriteRelative(full, prefix, specifier, quote, file))
+    content = content.replace(/(export\s+[^"']*?from\s+["'])(\.[^"']+)(["'])/g, (full, prefix, specifier, quote) => rewriteRelative(full, prefix, specifier, quote, file))
   }
   writeFileSync(file, content)
 }
