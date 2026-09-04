@@ -69,19 +69,22 @@ interface UsageAccumulator {
 }
 
 class ReportAiProviderError extends Error {
-  constructor(
-    message: string,
-    readonly retryable: boolean,
-  ) {
+  readonly retryable: boolean
+
+  constructor(message: string, retryable: boolean) {
     super(message)
     this.name = "ReportAiProviderError"
+    this.retryable = retryable
   }
 }
 
 class ReportAiIncompleteError extends Error {
-  constructor(readonly inspection: OpenAiResponseEnvelopeInspection) {
+  readonly inspection: OpenAiResponseEnvelopeInspection
+
+  constructor(inspection: OpenAiResponseEnvelopeInspection) {
     super(`OpenAI response incomplete: ${inspection.incompleteReason ?? inspection.status ?? "unknown"}`)
     this.name = "ReportAiIncompleteError"
+    this.inspection = inspection
   }
 }
 
