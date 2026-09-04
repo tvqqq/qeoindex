@@ -6,10 +6,10 @@
   "packageManager": "pnpm@10.28.0",
   "scripts": {
     "dev": "next dev",
-    "prebuild": "pnpm verify:build",
     "build": "next build",
     "start": "next start",
-    "verify:build": "pnpm test:core && pnpm db:drift:verify && pnpm lint:touched && pnpm scan:secrets",
+    "verify:pr": "pnpm scan:secrets && pnpm test:manifest && pnpm test:current && pnpm lint:touched && pnpm typecheck",
+    "verify:full": "pnpm verify:pr && pnpm db:drift:verify && pnpm db:replay:verify && pnpm db:types:verify && pnpm test:db-drift",
     "db:drift:verify": "node scripts/db/verify-migration-drift.mjs",
     "db:types:generate": "supabase gen types typescript --local --schema public > lib/supabase/database.types.ts",
     "db:types:verify": "node scripts/db/verify-generated-types.mjs",
