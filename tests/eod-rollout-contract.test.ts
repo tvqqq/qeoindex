@@ -1,0 +1,191 @@
+import assert from "node:assert/strict"
+import { readdirSync, readFileSync } from "node:fs"
+import test from "node:test"
+
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
+import {
+  EXPECTED_SUPABASE_SCHEDULERS,
+  reconcileSupabaseSchedulers,
+} from "../lib/admin/scheduler-reconciliation.ts"
+import {
+  getJobKeyForPgCron,
+  getPgCronNameForJobKey,
+} from "../lib/admin/job-schedule.ts"
+import { EOD_PIPELINE_PHASES } from "../lib/admin/cron-timeline.ts"
+import {
+  appendTickerAttempts,
+  computeEodTickerCoverage,
+  selectRetryTickers,
+  type EodTickerAttempt,
+} from "../lib/qeoindex-eod-fault-isolation.ts"
+
+const RETIRED_ACTIVE_SCHEDULERS = [
+  ["kfsp.rating_daily", "kfsp-rating-daily-7am-ict"],
+  ["kfsp.ttai_history", "kfsp-ttai-history-daily-0710-ict"],
+  ["market.sync_eod", "sync-universe-eod-1445"],
+] as const
+
+function migrationSource() {
+  const migrationsDir = new URL("../supabase/migrations/", import.meta.url)
+  const matches = readdirSync(migrationsDir).filter((name) =>
+    name.endsWith("_qeo64_eod_v4_scheduler_cutover.sql"),
+  )
+  assert.equal(matches.length, 1, "expected exactly one QEO-64 scheduler-cutover migration")
+  if (matches.length !== 1) return null
+  return readFileSync(new URL(`../supabase/migrations/${matches[0]}`, import.meta.url), "utf8")
+}
+
+test("QEO-64 removes standalone EOD freshness scheduler ownership", () => {
+  for (const [jobKey] of RETIRED_ACTIVE_SCHEDULERS) {
+    const job = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === jobKey)
+    assert.ok(job, `${jobKey} must remain visible as operational/historical catalog evidence`)
+    assert.equal(job.scheduleKind, "manual", `${jobKey} must no longer own a production schedule`)
+    assert.equal(job.scheduleUtc, undefined)
+    assert.equal(job.scheduleIct, undefined)
+    assert.equal(job.schedulerName, undefined)
+    assert.equal(job.schedulePolicy?.kind, "manual")
+  }
+
+  for (const jobKey of ["kfsp.rating_daily", "kfsp.ttai_history"]) {
+    const job = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === jobKey)
+    assert.ok(job)
+    assert.equal(job.manualPolicy, "confirm")
+    assert.equal(job.manualPurpose, "recovery")
+    assert.deepEqual(job.automatedParentKeys, ["qeoindex.eod_pipeline"])
+  }
+
+  const legacyMarketEod = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === "market.sync_eod")
+  assert.ok(legacyMarketEod)
+  assert.equal(legacyMarketEod.manualPolicy, "disabled", "final market-close collection must only run through the canonical EOD owner")
+  assert.equal(legacyMarketEod.manualPurpose, "maintenance")
+  assert.deepEqual(legacyMarketEod.automatedParentKeys, ["qeoindex.eod_pipeline"])
+
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 9)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 3)
+})
+
+test("QEO-64 cron timeline exposes the seven canonical EOD v4 business phases", () => {
+  assert.deepEqual(EOD_PIPELINE_PHASES.map((phase) => phase.key), [
+    "DATA_REFRESH",
+    "READY_GATE",
+    "HISTORY_PREPARE",
+    "WYCKOFF_PUBLISH",
+    "AI_COUNCIL",
+    "POST_ANALYSIS",
+    "COMPLETE",
+  ])
+  assert.equal(EOD_PIPELINE_PHASES.length, 7)
+})
+
+test("QEO-64 controlled 199/200 failure retries only the failed ticker and restores 200/200", () => {
+  const tickers = Array.from({ length: 200 }, (_, index) => `T${String(index + 1).padStart(3, "0")}`)
+  const failedTicker = tickers[137]
+  const firstAttempts: EodTickerAttempt[] = tickers.map((ticker) => ticker === failedTicker
+    ? {
+        ticker,
+        stage: "WYCKOFF_BUILD",
+        status: "failed",
+        errorClass: "ticker_local",
+        attempt: 1,
+        retryEligible: true,
+        error: "controlled QEO-64 canary failure",
+      }
+    : {
+        ticker,
+        stage: "WYCKOFF_BUILD",
+        status: "succeeded",
+        errorClass: null,
+        attempt: 1,
+        retryEligible: false,
+      })
+
+  const partial = computeEodTickerCoverage(tickers, firstAttempts)
+  assert.equal(partial.complete, false)
+  assert.equal(partial.healthyCount, 199)
+  assert.equal(partial.failedCount, 1)
+  assert.deepEqual(partial.failedTickers, [failedTicker])
+
+  const retryTargets = selectRetryTickers(firstAttempts)
+  assert.deepEqual(retryTargets, [failedTicker], "targeted retry must not rerun any of the 199 healthy tickers")
+
+  const recoveredAttempts = appendTickerAttempts(firstAttempts, [{
+    ticker: failedTicker,
+    stage: "WYCKOFF_BUILD",
+    status: "succeeded",
+    errorClass: null,
+    attempt: 2,
+    retryEligible: false,
+  }])
+  const recovered = computeEodTickerCoverage(tickers, recoveredAttempts)
+
+  assert.equal(recoveredAttempts.length, 201, "recovery must append one attempt instead of rewriting healthy or historical attempts")
+  assert.equal(recovered.complete, true)
+  assert.equal(recovered.healthyCount, 200)
+  assert.equal(recovered.failedCount, 0)
+  for (const ticker of tickers.filter((ticker) => ticker !== failedTicker)) {
+    assert.equal(recoveredAttempts.filter((attempt) => attempt.ticker === ticker).length, 1, `${ticker} must not be rerun`)
+  }
+  assert.deepEqual(recoveredAttempts.filter((attempt) => attempt.ticker === failedTicker).map((attempt) => attempt.attempt), [1, 2])
+})
+
+test("QEO-64 preserves retired pg_cron aliases for v3 telemetry but removes forward scheduler ownership", () => {
+  for (const [jobKey, schedulerName] of RETIRED_ACTIVE_SCHEDULERS) {
+    assert.equal(getJobKeyForPgCron(schedulerName), jobKey, `${schedulerName} must remain readable as historical evidence`)
+    assert.equal(getPgCronNameForJobKey(jobKey), undefined, `${jobKey} must not advertise an active pg_cron owner`)
+  }
+
+  assert.equal(getJobKeyForPgCron("kfsp-ttai-history-daily-1am-ict"), "kfsp.ttai_history")
+  assert.equal(getJobKeyForPgCron("sync-universe-eod-1450"), "market.sync_eod")
+})
+
+test("QEO-64 scheduler reconciliation expects only canonical EOD plus intraday AM/PM Supabase schedules", () => {
+  assert.deepEqual(
+    EXPECTED_SUPABASE_SCHEDULERS.map((mapping) => mapping.schedulerName),
+    [
+      "qeoindex-eod-pipeline-1515-ict",
+      "sync-universe-5m",
+      "sync-universe-5m-afternoon",
+    ],
+  )
+
+  const rows = EXPECTED_SUPABASE_SCHEDULERS.map((mapping, index) => ({
+    jobId: index + 1,
+    jobName: mapping.schedulerName,
+    schedule: mapping.schedule,
+    active: true,
+    lastStatus: "succeeded",
+    lastStartedAt: null,
+    lastFinishedAt: null,
+  }))
+  const reconciled = reconcileSupabaseSchedulers({ availability: "available", rows })
+  assert.equal(reconciled.aggregate.expected, 4, "three Supabase schedules + one Vercel config-only schedule")
+  assert.equal(reconciled.aggregate.liveVerified, 3)
+  assert.equal(reconciled.aggregate.missing, 0)
+  assert.equal(reconciled.aggregate.inventoryClean, true)
+  assert.equal(reconciled.aggregate.expectedMappingsVerified, true)
+  assert.deepEqual(
+    reconciled.logical.map((mapping) => mapping.jobKey),
+    ["qeoindex.eod_pipeline", "market.sync_5m", "signals.daily"],
+  )
+})
+
+test("QEO-64 migration retires standalone freshness schedulers and reasserts one canonical EOD owner", () => {
+  const sql = migrationSource()
+  if (!sql) return
+
+  for (const schedulerName of [
+    "kfsp-rating-daily-7am-ict",
+    "kfsp-ttai-history-daily-1am-ict",
+    "kfsp-ttai-history-daily-0710-ict",
+    "kfsp-ttai-history-hourly",
+    "sync-universe-eod-1445",
+    "sync-universe-eod-1450",
+  ]) {
+    assert.match(sql, new RegExp(`cron\\.unschedule\\('${schedulerName}'\\)`), `${schedulerName} must be retired idempotently`)
+  }
+
+  assert.match(sql, /cron\.unschedule\('qeoindex-eod-pipeline-1515-ict'\)/)
+  assert.match(sql, /cron\.schedule\([\s\S]*'qeoindex-eod-pipeline-1515-ict'[\s\S]*'15 8 \* \* 1-5'/)
+  assert.doesNotMatch(sql, /cron\.unschedule\('sync-universe-5m'\)/)
+  assert.doesNotMatch(sql, /cron\.unschedule\('sync-universe-5m-afternoon'\)/)
+})
