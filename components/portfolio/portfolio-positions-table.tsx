@@ -4,7 +4,7 @@ import React, { memo, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { PlusIcon, ArrowUpIcon, ArrowDownIcon, MinusIcon } from 'lucide-react'
 
-import { PortfolioPosition } from '@/lib/portfolio/pnl'
+import { PortfolioPosition } from '@/modules/portfolio/pnl'
 import {
   Table,
   TableBody,

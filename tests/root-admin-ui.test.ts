@@ -104,7 +104,7 @@ test("admin job detail renders phase telemetry for the unified EOD pipeline", ()
 
 test("Admin Jobs table renders AI usage and human-readable workflow durations", () => {
   const table = source("components/admin/admin-jobs-table.tsx")
-  const time = source("lib/admin/time.ts")
+  const time = source("modules/admin/time.ts")
   assert.match(table, />AI Usage</)
   assert.match(table, /job\.aiUsage/)
   assert.match(table, /formatAdminDuration\(job\.lastDurationMs\)/)
@@ -114,7 +114,7 @@ test("Admin Jobs table renders AI usage and human-readable workflow durations", 
 })
 
 test("QEO-52 merges canonical KFSP scheduled history with manual system runs and dedupes IDs", async () => {
-  const module = await import("../lib/admin/job-health.ts") as Record<string, unknown>
+  const module = await import("../modules/admin/job-health.ts") as Record<string, unknown>
   const merge = module.mergeAdminJobHistory as ((
     systemRows: Array<Record<string, unknown>>,
     canonicalRows: Array<Record<string, unknown>>,
@@ -167,7 +167,7 @@ test("QEO-52 merges canonical KFSP scheduled history with manual system runs and
 
 test("QEO-52 job detail uses canonical evidence and labels active workflow progress honestly", () => {
   const page = source("app/admin/jobs/[key]/page.tsx")
-  const catalog = source("lib/admin/effective-job-catalog.ts")
+  const catalog = source("modules/admin/effective-job-catalog.ts")
 
   assert.match(page, /loadAdminJobView/)
   assert.doesNotMatch(page, /buildAdminJobViews\(\[jobDefinition\], history\)/)
@@ -179,7 +179,7 @@ test("QEO-52 job detail uses canonical evidence and labels active workflow progr
 })
 
 test("QEO-63 groups durable EOD telemetry into seven operator phases with explicit PARTIAL retry state", async () => {
-  const module = await import("../lib/admin/job-phases.ts") as Record<string, unknown>
+  const module = await import("../modules/admin/job-phases.ts") as Record<string, unknown>
   const buildRunView = module.buildAdminEodRunView as ((
     rows: Array<Record<string, unknown>>,
     run: Record<string, unknown> | null,

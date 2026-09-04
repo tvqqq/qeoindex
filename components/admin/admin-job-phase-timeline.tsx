@@ -14,14 +14,14 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { formatAdminModelLabel, type AdminAiUsage } from "@/lib/admin/job-ai-usage"
+import { formatAdminModelLabel, type AdminAiUsage } from "@/modules/admin/job-ai-usage"
 import {
   buildAdminEodRunView,
   type AdminEodBusinessPhaseStatus,
   type AdminEodRunSnapshot,
   type SystemJobPhaseRow,
-} from "@/lib/admin/job-phases"
-import { formatAdminDateTime, formatAdminDuration, formatAdminTokenCount } from "@/lib/admin/time"
+} from "@/modules/admin/job-phases"
+import { formatAdminDateTime, formatAdminDuration, formatAdminTokenCount } from "@/modules/admin/time"
 
 export interface AdminJobPhaseTimelineProps {
   rows: SystemJobPhaseRow[]

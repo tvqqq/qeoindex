@@ -28,7 +28,7 @@ This is the architecture overview. Supporting documents:
 
 ## QeoIndex state model
 
-`lib/insights-rating-model.ts` owns the pure, tested calculation. All outputs are clamped to 0–100:
+`modules/research/insights/rating-model.ts` owns the pure, tested calculation. All outputs are clamped to 0–100:
 
 - **Trend:** RSs/RSm, weekly/monthly returns, price potential, and stock RRG.
 - **Accumulation:** CANSLIM/4M quality, RS/RRG support, and a preference for controlled rather than extreme heat.

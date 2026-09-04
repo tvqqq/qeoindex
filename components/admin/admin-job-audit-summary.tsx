@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { AlertCircle, AlertTriangle, CheckCircle2, Clock, ShieldCheck } from "lucide-react"
 
-import type { AdminJobView } from "@/lib/admin/types"
+import type { AdminJobView } from "@/modules/admin/types"
 
 export interface AdminJobAuditSummaryProps {
   jobs: AdminJobView[]

@@ -4,13 +4,13 @@ import test from "node:test"
 import {
   computeWyckoffV2ValidationHash,
   validateWyckoffV2SnapshotSet,
-} from "../lib/wyckoff-v2-contract.ts"
+} from "../modules/wyckoff/eod-contract.ts"
 import {
   buildWyckoffV2RunProperties,
   buildWyckoffV2SnapshotProperties,
   chunkedRichTextProperty,
-} from "../lib/wyckoff-v2-notion-staging.ts"
-import type { WyckoffV2Snapshot } from "../lib/wyckoff-v2-builder.ts"
+} from "../modules/wyckoff/eod-notion-staging.ts"
+import type { WyckoffV2Snapshot } from "../modules/wyckoff/eod-builder.ts"
 
 function snapshot(ticker: string, timeframe: WyckoffV2Snapshot["timeframe"], rank: number | null): WyckoffV2Snapshot {
   const runKey = "WYCKOFF-2026-09-01-EOD-v3"

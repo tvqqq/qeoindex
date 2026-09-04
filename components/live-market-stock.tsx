@@ -3,7 +3,7 @@ import { ExternalLink, Star } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { Sparkline } from "@/components/sparkline"
 import { TickerResearchLink } from "@/components/ticker-research-link"
-import { normalizeMarketPrice } from "@/lib/intraday-5m"
+import { normalizeMarketPrice } from "@/modules/market/realtime/intraday-5m"
 import {
   marketToneFromChange,
   marketToneFromPrice,

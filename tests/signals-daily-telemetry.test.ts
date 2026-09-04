@@ -8,7 +8,7 @@ import {
   SIGNALS_DAILY_PROVIDER,
   startSignalsDailyRunStep,
   type SignalsDailyTelemetryIo,
-} from "../lib/signals-daily-telemetry.ts"
+} from "../modules/signals/daily-telemetry.ts"
 
 test("startSignalsDailyRunStep persists running run with canonical job metadata", async () => {
   const insertCalls: Array<Record<string, unknown>> = []
@@ -32,7 +32,7 @@ test("startSignalsDailyRunStep persists running run with canonical job metadata"
 })
 
 test("signals daily stage telemetry persists meaningful durable-wait progress", async () => {
-  const telemetry = await import("../lib/signals-daily-telemetry.ts") as Record<string, unknown>
+  const telemetry = await import("../modules/signals/daily-telemetry.ts") as Record<string, unknown>
   const updateStage = telemetry.updateSignalsDailyStageStep as ((
     runId: string,
     stage: string,

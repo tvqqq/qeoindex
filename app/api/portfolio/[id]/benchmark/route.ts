@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 
-import { requireApiUser } from "@/lib/auth/server"
-import { computePortfolioPositions, RawTransaction } from "@/lib/portfolio/pnl"
-import { fetchDnseIndexCandleHistory } from "@/lib/dnse-index-candles"
-import { CandleBar } from "@/lib/index-candles"
+import { requireApiUser } from "@/modules/auth/server"
+import { computePortfolioPositions, RawTransaction } from "@/modules/portfolio/pnl"
+import { fetchDnseIndexCandleHistory } from "@/modules/market/providers/dnse/index-candles"
+import { CandleBar } from "@/modules/market/realtime/index-candles"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

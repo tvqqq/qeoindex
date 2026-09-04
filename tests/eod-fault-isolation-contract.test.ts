@@ -7,7 +7,7 @@ function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
-const faultModuleUrl = new URL("../lib/qeoindex-eod-fault-isolation.ts", import.meta.url)
+const faultModuleUrl = new URL("../modules/eod/fault-isolation.ts", import.meta.url)
 const retryWorkflowUrl = new URL("../workflows/qeoindex-eod-retry.ts", import.meta.url)
 const retryRouteUrl = new URL("../app/api/admin/qeoindex/eod/retry/route.ts", import.meta.url)
 
@@ -15,7 +15,7 @@ test("QEO-61 classifies ticker-local versus systemic failures without downgradin
   assert.equal(existsSync(faultModuleUrl), true, "fault-isolation policy module must exist")
   if (!existsSync(faultModuleUrl)) return
 
-  const { classifyEodFailure } = await import("../lib/qeoindex-eod-fault-isolation.ts")
+  const { classifyEodFailure } = await import("../modules/eod/fault-isolation.ts")
   assert.deepEqual(
     classifyEodFailure(new Error("Provider returned no usable completed Daily bars"), { stage: "HISTORY_REFRESH", ticker: "VGI" }),
     { errorClass: "ticker_local", retryEligible: true },
@@ -34,7 +34,7 @@ test("QEO-61 computes exact latest-attempt coverage and keeps prior attempts app
   assert.equal(existsSync(faultModuleUrl), true, "fault-isolation policy module must exist")
   if (!existsSync(faultModuleUrl)) return
 
-  const { appendTickerAttempts, computeEodTickerCoverage } = await import("../lib/qeoindex-eod-fault-isolation.ts")
+  const { appendTickerAttempts, computeEodTickerCoverage } = await import("../modules/eod/fault-isolation.ts")
   const first = [
     { ticker: "AAA", stage: "WYCKOFF_BUILD", status: "succeeded", errorClass: null, attempt: 1, retryEligible: false },
     { ticker: "BBB", stage: "WYCKOFF_BUILD", status: "failed", errorClass: "ticker_local", attempt: 1, retryEligible: true, error: "bad cache" },
@@ -58,7 +58,7 @@ test("QEO-61 targeted retry only accepts persisted retry-eligible failed tickers
   assert.equal(existsSync(faultModuleUrl), true, "fault-isolation policy module must exist")
   if (!existsSync(faultModuleUrl)) return
 
-  const { selectRetryTickers } = await import("../lib/qeoindex-eod-fault-isolation.ts")
+  const { selectRetryTickers } = await import("../modules/eod/fault-isolation.ts")
   const attempts = [
     { ticker: "AAA", stage: "WYCKOFF_BUILD", status: "succeeded", errorClass: null, attempt: 1, retryEligible: false },
     { ticker: "BBB", stage: "WYCKOFF_BUILD", status: "failed", errorClass: "ticker_local", attempt: 1, retryEligible: true },

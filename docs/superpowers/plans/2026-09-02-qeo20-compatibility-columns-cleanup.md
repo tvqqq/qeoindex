@@ -36,7 +36,7 @@
 - Modify: `app/api/portfolio/[id]/transactions/route.ts`
 - Modify: `app/api/portfolio/[id]/transactions/[txId]/route.ts`
 - Modify: `app/api/portfolio/[id]/benchmark/route.ts`
-- Modify: `lib/portfolio/pnl.ts`
+- Modify: `modules/portfolio/pnl.ts`
 - Modify: `tests/portfolio-pnl.test.ts`
 
 - [ ] Remove legacy DB columns from SELECT/INSERT/UPDATE paths.

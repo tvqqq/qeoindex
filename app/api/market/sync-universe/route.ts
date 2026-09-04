@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { isMachineRequestAuthorized } from "@/lib/auth/machine"
-import { executeSystemJob } from "@/lib/admin/job-telemetry"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
+import { executeSystemJob } from "@/modules/admin/job-telemetry"
 import { runMarketUniverseSync } from "@/lib/market-sync-universe"
 
 export const runtime = "nodejs"

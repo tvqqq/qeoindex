@@ -35,7 +35,7 @@ Complete the canonical `vn_top_stocks` migration so every universe-dependent run
 
 **Files**
 - Modify: `tests/market-universe.test.ts`
-- Modify: `lib/market-universe-selection.ts`
+- Modify: `modules/market/universe/selection.ts`
 - Create: `supabase/migrations/20260901123000_market_universe_daily_activity_gate.sql`
 - Modify: `supabase/functions/market-universe-sync/index.ts`
 
@@ -65,8 +65,8 @@ Complete the canonical `vn_top_stocks` migration so every universe-dependent run
 - Modify: `app/api/insights/wyckoff/route.ts`
 - Create/Modify: `components/insights/wyckoff-deferred-dashboard.tsx`
 - Modify: active Wyckoff dashboard components/tests
-- Modify: `lib/scanner-data.ts`
-- Modify: `lib/wyckoff-unified-runner.ts`
+- Modify: `modules/signals/scanner/data.ts`
+- Modify: `modules/wyckoff/unified-runner.ts`
 
 **RED**
 1. Test SSR page no longer calls Notion/scanner/OHLCV before first render.
@@ -90,10 +90,10 @@ Complete the canonical `vn_top_stocks` migration so every universe-dependent run
 ## Task 3 — AI Council exact canonical membership
 
 **Files**
-- Modify: `lib/ai-council-freshness.ts`
-- Modify: `lib/ai-council-data.ts`
-- Modify: `lib/ai-council-eod-workflow-steps.ts`
-- Modify: `lib/ai-council-llm-evidence.ts`
+- Modify: `modules/ai-council/freshness.ts`
+- Modify: `modules/ai-council/data.ts`
+- Modify: `modules/ai-council/eod-workflow-steps.ts`
+- Modify: `modules/ai-council/llm-evidence.ts`
 - Modify: related tests
 
 **RED**
@@ -116,9 +116,9 @@ Complete the canonical `vn_top_stocks` migration so every universe-dependent run
 
 **Files**
 - Modify: `lib/qeoindex-eod-workflow.ts`
-- Modify: `lib/qeoindex-eod-workflow-steps.ts`
-- Modify: `lib/qeoindex-eod-backfill-ready-step.ts`
-- Modify: `lib/wyckoff-eod-refresh.ts`
+- Modify: `modules/eod/workflow-steps.ts`
+- Modify: `modules/eod/backfill-ready-step.ts`
+- Modify: `modules/wyckoff/eod-refresh.ts`
 - Modify: system job/admin catalog/tests/docs as required
 
 **Invariant order**

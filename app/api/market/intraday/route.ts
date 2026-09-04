@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 
-import { requireApiFeature } from "@/lib/auth/server"
+import { requireApiFeature } from "@/modules/auth/server"
 import {
   parseSymbols,
   getCachedIntraday5mSnapshot,
   getIntraday5mSnapshot,
-} from "@/lib/intraday-5m-service"
+} from "@/modules/market/realtime/intraday-5m-service"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

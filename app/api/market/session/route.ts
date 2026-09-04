@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { requireApiFeature } from "@/lib/auth/server"
-import { fetchDnseSessionHistory } from "@/lib/dnse-market-runtime"
+import { requireApiFeature } from "@/modules/auth/server"
+import { fetchDnseSessionHistory } from "@/modules/market/providers/dnse/market-runtime"
 import { getOrderbookSnapshotFromSupabase, upsertOrderbookSnapshotToSupabase } from "@/lib/supabase/orderbook"
 import { isTradingSessionOpen } from "@/lib/session-countdown"
 

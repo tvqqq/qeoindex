@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import { resolve } from "node:path"
 
-import { assertCanonicalWyckoffMembership } from "../lib/wyckoff-canonical-membership.ts"
+import { assertCanonicalWyckoffMembership } from "../modules/wyckoff/canonical-membership.ts"
 import type {
   NormalizedIndexRow,
   NormalizedLeaderRow,
@@ -156,10 +156,10 @@ test("QEO-19 canonical Wyckoff membership requires exact ticker and rank parity"
 
 test("QEO-19 active Wyckoff runtime has no legacy membership-table consumer", () => {
   for (const path of [
-    "lib/wyckoff-unified-data.ts",
-    "lib/wyckoff-unified-runner.ts",
-    "lib/wyckoff-supabase-publish.ts",
-    "lib/wyckoff-notion-ingest.ts",
+    "modules/wyckoff/unified-data.ts",
+    "modules/wyckoff/unified-runner.ts",
+    "modules/wyckoff/supabase-publish.ts",
+    "modules/wyckoff/notion-ingest.ts",
   ]) {
     assert.doesNotMatch(source(path), /wyckoff_universe_memberships/, `${path} still consumes legacy Wyckoff memberships`)
   }

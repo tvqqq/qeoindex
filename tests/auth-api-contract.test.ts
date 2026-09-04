@@ -51,7 +51,7 @@ test("server-rendered app surfaces verify the server session", () => {
 })
 
 test("machine endpoints share constant-time bearer authorization", () => {
-  const machineAuth = source("lib/auth/machine.ts")
+  const machineAuth = source("modules/auth/machine.ts")
   assert.match(machineAuth, /timingSafeEqual/)
   assert.match(machineAuth, /createHash\("sha256"\)/)
 
@@ -85,7 +85,7 @@ test("trusted Supabase infrastructure client never falls back to public anon cre
   assert.doesNotMatch(code, /NEXT_PUBLIC_SUPABASE_ANON_KEY/)
 })
 
-const SERVER_AUTH_OBSERVABILITY_URL = new URL("../lib/auth/server-observability.ts", import.meta.url)
+const SERVER_AUTH_OBSERVABILITY_URL = new URL("../modules/auth/server-observability.ts", import.meta.url)
 
 async function loadServerAuthObservability() {
   const exists = existsSync(SERVER_AUTH_OBSERVABILITY_URL)
@@ -147,7 +147,7 @@ test("server auth transport observability distinguishes abort and generic transp
 })
 
 test("server auth verification reports thrown transport failures and preserves throw semantics", () => {
-  const code = source("lib/auth/server.ts")
+  const code = source("modules/auth/server.ts")
 
   assert.match(code, /reportServerAuthTransportFailure/)
   assert.match(code, /if \(error \|\| !data\.user\) return null/)

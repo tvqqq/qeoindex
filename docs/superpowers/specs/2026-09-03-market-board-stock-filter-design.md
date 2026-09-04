@@ -28,7 +28,7 @@ The feature operates on the current canonical Bảng điện universe (Top 200),
 
 ### Canonical universe
 
-`lib/market-universe.ts` already exposes `ticker`, `exchange`, raw `sector`, market-cap metadata, and average-volume metadata. The client board model currently drops `exchange` and the raw sector label; this feature retains both.
+`modules/market/universe/index.ts` already exposes `ticker`, `exchange`, raw `sector`, market-cap metadata, and average-volume metadata. The client board model currently drops `exchange` and the raw sector label; this feature retains both.
 
 ### User persistence
 

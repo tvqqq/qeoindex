@@ -19,7 +19,7 @@ import {
   INSIGHTS_METRIC_GUIDE_VERSION,
   getMetricSemantic,
   type MetricSource,
-} from "@/lib/insights-metric-semantics"
+} from "@/modules/research/insights/metric-semantics"
 import { cn } from "@/lib/utils"
 
 export interface MetricGuideDialogProps {

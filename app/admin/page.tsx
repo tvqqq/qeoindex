@@ -1,9 +1,9 @@
 import { AdminOverviewDashboard } from "@/components/admin/admin-overview-dashboard"
-import { getAdminEnvironmentInventory } from "@/lib/admin/catalog"
-import { loadAdminJobsSnapshot } from "@/lib/admin/job-health"
-import { loadAdminSettingsSnapshot, loadRecentAuditLogs } from "@/lib/admin/settings"
-import type { AdminSourceHealth, AdminSystemOverview } from "@/lib/admin/types"
-import { requireRootPageContext } from "@/lib/auth/root"
+import { getAdminEnvironmentInventory } from "@/modules/admin/catalog"
+import { loadAdminJobsSnapshot } from "@/modules/admin/job-health"
+import { loadAdminSettingsSnapshot, loadRecentAuditLogs } from "@/modules/admin/settings"
+import type { AdminSourceHealth, AdminSystemOverview } from "@/modules/admin/types"
+import { requireRootPageContext } from "@/modules/auth/root"
 
 export const dynamic = "force-dynamic"
 

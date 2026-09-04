@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { requireApiUser, type ServerAuthContext } from "@/lib/auth/server"
-import { getCanonicalUniverse } from "@/lib/market-universe"
+import { requireApiUser, type ServerAuthContext } from "@/modules/auth/server"
+import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import {
   hasRequiredFilterSectorSelections,
   mergeStockFilterIntoSettings,

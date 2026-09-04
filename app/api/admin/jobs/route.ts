@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { loadAdminJobHistory, loadAdminJobsSnapshot } from "@/lib/admin/job-health"
-import { requireApiRoot } from "@/lib/auth/root"
+import { loadAdminJobHistory, loadAdminJobsSnapshot } from "@/modules/admin/job-health"
+import { requireApiRoot } from "@/modules/auth/root"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

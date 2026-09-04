@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { Search } from "lucide-react"
 
 import { StockLogo } from "@/components/stock-logo"
-import type { CanonicalUniverseStock } from "@/lib/market-universe"
+import type { CanonicalUniverseStock } from "@/modules/market/universe/index"
 
 const nf = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 })
 

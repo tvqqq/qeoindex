@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { start } from "workflow/api"
 
-import { isMachineRequestAuthorized } from "@/lib/auth/machine"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { notifyOpsError } from "@/lib/ops-alerts"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { qeoindexEodPipeline } from "@/workflows/qeoindex-eod-pipeline"

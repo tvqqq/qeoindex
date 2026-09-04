@@ -8,17 +8,17 @@ function source(path: string) {
 
 const wyckoffPage = source("app/insights/wyckoff/page.tsx")
 const wyckoffApi = source("app/api/insights/wyckoff/route.ts")
-const wyckoffRunner = source("lib/wyckoff-unified-runner.ts")
+const wyckoffRunner = source("modules/wyckoff/unified-runner.ts")
 const deferredDashboard = source("components/insights/wyckoff-deferred-dashboard.tsx")
 const obsoleteDashboard = source("components/insights/wyckoff-chart-dashboard.tsx")
-const aiFreshness = source("lib/ai-council-freshness.ts")
+const aiFreshness = source("modules/ai-council/freshness.ts")
 const realtime = source("lib/supabase/realtime.ts")
-const intraday = source("lib/intraday-5m-service.ts")
-const ratingModel = source("lib/insights-rating-model.ts")
-const notionStaging = source("lib/wyckoff-v2-notion-staging.ts")
+const intraday = source("modules/market/realtime/intraday-5m-service.ts")
+const ratingModel = source("modules/research/insights/rating-model.ts")
+const notionStaging = source("modules/wyckoff/eod-notion-staging.ts")
 const schedulePrompt = source("scripts/chatgpt-plus-wyckoff-schedule-prompt.md")
-const marketSelection = source("lib/market-universe-selection.ts")
-const marketUniverse = source("lib/market-universe.ts")
+const marketSelection = source("modules/market/universe/selection.ts")
+const marketUniverse = source("modules/market/universe/index.ts")
 const marketSectors = source("lib/market-sectors.ts")
 const boardStore = source("lib/supabase/board-overview.ts")
 const boardPage = source("app/page.tsx")
@@ -128,9 +128,9 @@ test("board sector taxonomy follows requested grouping rules", () => {
 })
 
 test("Insights normalizes ticker-specific sectors and removes empty sector groups", () => {
-  assert.equal(existsSync("lib/insights-sector-normalization.ts"), true)
-  if (!existsSync("lib/insights-sector-normalization.ts")) return
-  const normalizer = source("lib/insights-sector-normalization.ts")
+  assert.equal(existsSync("modules/research/insights/sector-normalization.ts"), true)
+  if (!existsSync("modules/research/insights/sector-normalization.ts")) return
+  const normalizer = source("modules/research/insights/sector-normalization.ts")
   assert.match(normalizer, /YEG:\s*"Dịch vụ công ích"/)
   assert.match(normalizer, /TVC:\s*"Chứng khoán"/)
   assert.match(normalizer, /stockCount > 0/)

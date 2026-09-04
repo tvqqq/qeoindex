@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
-import { selectMarketUniverse, type MarketUniverseSelectionRow } from "../lib/market-universe-selection.ts"
+import { selectMarketUniverse, type MarketUniverseSelectionRow } from "../modules/market/universe/selection.ts"
 
 type ActivityRow = MarketUniverseSelectionRow & {
   tradingObservationDays: number
@@ -95,7 +95,7 @@ test("selector preserves non-HOSE exchange and does not mutate source rows", () 
 
 test("canonical universe persistence and run-scoped runtime boundaries exist", () => {
   const migration = "supabase/migrations/20260901090000_market_universe_top_stocks.sql"
-  const service = "lib/market-universe.ts"
+  const service = "modules/market/universe/index.ts"
   assert.equal(existsSync(new URL(`../${migration}`, import.meta.url)), true)
   assert.equal(existsSync(new URL(`../${service}`, import.meta.url)), true)
   if (!existsSync(new URL(`../${migration}`, import.meta.url)) || !existsSync(new URL(`../${service}`, import.meta.url))) return
@@ -128,7 +128,7 @@ test("monthly sync contract guarantees Storage object before publication", () =>
 })
 
 test("Top100 static aliases are no longer the canonical runtime universe", () => {
-  const universe = source("lib/wyckoff-universe.ts")
+  const universe = source("modules/wyckoff/universe.ts")
   assert.doesNotMatch(universe, /CANONICAL_TOP100_TICKERS/)
   assert.match(universe, /UNIVERSE_SIZE\s*=\s*200/)
 })

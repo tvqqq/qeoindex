@@ -17,7 +17,7 @@ import {
   type IndexQuote,
 } from "@/components/live-market-board-v2"
 import type { LiveStockQuote } from "@/components/live-market-stock"
-import type { IntradayPoint } from "@/lib/intraday-5m"
+import type { IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import {
   defaultStockFilterCriteria,
   filterBoardTickers,

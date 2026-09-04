@@ -116,10 +116,10 @@ Persistent Wyckoff raw history is Daily-only; Weekly is derived deterministicall
 
 The current tree contains, among others:
 
-- `lib/qeoindex-eod-archive-legacy.ts` — old per-ticker Notion archive and Google Drive service-account / signing / gzip / upload behavior.
-- `lib/qeoindex-eod-workflow-steps-legacy.ts` — old EOD flow/shared compatibility implementation, including superseded phase/version semantics.
-- `lib/qeoindex-eod-archive.ts` — current wrapper that still imports/re-exports legacy archive APIs and carries deprecated compatibility inputs.
-- `lib/qeoindex-eod-workflow-steps.ts` — current implementation that still re-exports selected functions from the legacy workflow file.
+- `modules/eod/archive-legacy.ts` — old per-ticker Notion archive and Google Drive service-account / signing / gzip / upload behavior.
+- `modules/eod/workflow-steps-legacy.ts` — old EOD flow/shared compatibility implementation, including superseded phase/version semantics.
+- `modules/eod/archive.ts` — current wrapper that still imports/re-exports legacy archive APIs and carries deprecated compatibility inputs.
+- `modules/eod/workflow-steps.ts` — current implementation that still re-exports selected functions from the legacy workflow file.
 
 These are candidates, not automatic deletions. Surviving current behavior must first be lifted into current modules, then unused legacy implementation is removed.
 

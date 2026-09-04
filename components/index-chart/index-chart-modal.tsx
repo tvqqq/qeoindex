@@ -20,7 +20,7 @@ import {
   type CandleBar,
   type IndexChartResolution,
   type IndexChartSymbol,
-} from "@/lib/index-candles"
+} from "@/modules/market/realtime/index-candles"
 
 const PRICE_FORMATTER = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 1, maximumFractionDigits: 2 })
 const VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 })
@@ -173,15 +173,30 @@ function initialPosition(size: { width: number; height: number }) {
 export function IndexChartModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [resolution, setResolution] = useState<IndexChartResolution>("1")
   const { candles, isLoading, isRefreshing, errors, generatedAt, lastLiveAt, refresh } = useIndexCandles(open, resolution)
-  const firstSizeRef = useRef(initialSize())
-  const [size, setSize] = useState(firstSizeRef.current)
-  const [pos, setPos] = useState(() => initialPosition(firstSizeRef.current))
+  const [initialLayout] = useState(() => {
+    const firstSize = initialSize()
+    return { size: firstSize, pos: initialPosition(firstSize) }
+  })
+  const [size, setSize] = useState(initialLayout.size)
+  const [pos, setPos] = useState(initialLayout.pos)
   const [isMaximized, setIsMaximized] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
+  const [liveClock, setLiveClock] = useState(lastLiveAt)
 
-  const isLive = lastLiveAt > 0 && Date.now() - lastLiveAt < 20_000
+  const isLive = lastLiveAt > 0 && liveClock >= lastLiveAt && liveClock - lastLiveAt < 20_000
   const hasAnyData = candles.VNINDEX.length > 0 || candles.VN30F1M.length > 0
+
+  useEffect(() => {
+    if (!open) return
+    const updateClock = () => setLiveClock(Date.now())
+    const initialTimer = window.setTimeout(updateClock, 0)
+    const interval = window.setInterval(updateClock, 5_000)
+    return () => {
+      window.clearTimeout(initialTimer)
+      window.clearInterval(interval)
+    }
+  }, [open, lastLiveAt])
 
   useEffect(() => {
     if (!open) return

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { requireApiUser } from "@/lib/auth/server"
+import { requireApiUser } from "@/modules/auth/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

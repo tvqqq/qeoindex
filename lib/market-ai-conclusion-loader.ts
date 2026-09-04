@@ -2,7 +2,7 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { buildMarketAiEvidencePacket, hashMarketAiEvidence, type MarketAiConclusionPayload } from "@/lib/market-ai-conclusion"
-import type { MarketCloseDashboardData } from "@/lib/market-insight-data"
+import type { MarketCloseDashboardData } from "@/modules/research/market-insight/data"
 
 export interface MarketAiConclusionView {
   status: "succeeded" | "pending" | "failed" | "insufficient_evidence" | "completion_unknown" | "stale" | "none"

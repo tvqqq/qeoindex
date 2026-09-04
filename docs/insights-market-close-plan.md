@@ -197,7 +197,7 @@ Create a `publish_market_insight_snapshot(run_id)` transaction that locks the ru
 
 ## Deterministic market observations
 
-Create a pure module such as `lib/market-insight-model.ts`. It produces 3-5 short observations with explicit evidence references, for example:
+Create a pure module such as `modules/research/market-insight/model.ts`. It produces 3-5 short observations with explicit evidence references, for example:
 
 - index direction confirmed or contradicted by breadth;
 - liquidity expansion/contraction versus the previous session;
@@ -320,9 +320,9 @@ Acceptance: a complete real post-close run publishes atomically; an intentionall
 
 ### PR 2 - Read model, semantics, and deterministic observations
 
-1. Add `lib/market-insight-data.ts` with bounded authenticated queries.
-2. Add pure `lib/market-insight-model.ts` rules and exact evidence references.
-3. Extend `lib/insights-metric-semantics.ts` and increment its guide version.
+1. Add `modules/research/market-insight/data.ts` with bounded authenticated queries.
+2. Add pure `modules/research/market-insight/model.ts` rules and exact evidence references.
+3. Extend `modules/research/insights/metric-semantics.ts` and increment its guide version.
 4. Add stale/degraded/missing-data handling and server-side cache policy.
 5. Connect point-in-time evidence to AI Council only after exact `as_of` and value validation.
 

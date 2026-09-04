@@ -1,13 +1,13 @@
 import { sleep } from "workflow"
 
-import { runScannerUniverse } from "@/lib/scanner-runner"
-import { runSignalMonitor } from "@/lib/signal-monitor"
+import { runScannerUniverse } from "@/modules/signals/scanner/runner"
+import { runSignalMonitor } from "@/modules/signals/monitor"
 import {
   failSignalsDailyRunStep,
   finishSignalsDailyRunStep,
   startSignalsDailyRunStep,
   updateSignalsDailyStageStep,
-} from "@/lib/signals-daily-telemetry"
+} from "@/modules/signals/daily-telemetry"
 
 async function refreshDailyScannerStep() {
   "use step"

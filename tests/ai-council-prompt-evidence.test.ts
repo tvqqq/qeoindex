@@ -6,11 +6,11 @@ import {
   buildAiCouncilEvidencePacketV2,
   validateCouncilEvidenceRefs,
   type LlmEvidenceRef,
-} from "../lib/ai-council-prompt-evidence.ts"
-import { INSIGHTS_METRIC_GUIDE_VERSION } from "../lib/insights-metric-semantics.ts"
-import type { CouncilBenchmarkContext } from "../lib/ai-council-market"
-import type { CouncilWeightProfile } from "../lib/ai-council-calibration"
-import { buildAiCouncilPromptCacheKey, buildAiCouncilPromptIdentityHash, resolveAiCouncilPromptIdentityHash } from "../lib/ai-council-prompt-identity.ts"
+} from "../modules/ai-council/prompt-evidence.ts"
+import { INSIGHTS_METRIC_GUIDE_VERSION } from "../modules/research/insights/metric-semantics.ts"
+import type { CouncilBenchmarkContext } from "../modules/ai-council/market"
+import type { CouncilWeightProfile } from "../modules/ai-council/calibration"
+import { buildAiCouncilPromptCacheKey, buildAiCouncilPromptIdentityHash, resolveAiCouncilPromptIdentityHash } from "../modules/ai-council/prompt-identity.ts"
 
 const mockBenchmark: CouncilBenchmarkContext = {
   symbol: "VNINDEX",
@@ -460,7 +460,7 @@ test("prompt identity recomputes when immutable research context predates the cu
 })
 
 test("AI Council LLM router respects runtimeConfig overrides without mutating env", () => {
-  const code = readFileSync(new URL("../lib/ai-council-llm.ts", import.meta.url), "utf8")
+  const code = readFileSync(new URL("../modules/ai-council/llm.ts", import.meta.url), "utf8")
   assert.match(code, /runtimeConfig\?: AiCouncilRuntimeConfig/)
   assert.match(code, /params\.runtimeConfig\?\.llmEnabled/)
   assert.match(code, /runtimeConfig\?\.tickers/)

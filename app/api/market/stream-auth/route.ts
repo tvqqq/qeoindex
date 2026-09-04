@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { requireApiFeature } from "@/lib/auth/server"
-import { createDnseStreamAuth } from "@/lib/dnse-stream-auth"
+import { requireApiFeature } from "@/modules/auth/server"
+import { createDnseStreamAuth } from "@/modules/market/providers/dnse/stream-auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

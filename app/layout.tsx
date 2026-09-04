@@ -4,7 +4,7 @@ import type { Metadata, Viewport } from 'next'
 import { Geist_Mono, Plus_Jakarta_Sans } from 'next/font/google'
 import { AppAuthGate } from '@/components/auth/app-auth-gate'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { getServerAuthContext } from '@/lib/auth/server'
+import { getServerAuthContext } from '@/modules/auth/server'
 import { BRAND } from '@/lib/brand'
 import './globals.css'
 

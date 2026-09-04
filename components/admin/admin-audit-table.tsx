@@ -3,8 +3,8 @@
 import { useState } from "react"
 import { Search } from "lucide-react"
 
-import { formatAdminDateTime } from "@/lib/admin/time"
-import type { AdminAuditView } from "@/lib/admin/types"
+import { formatAdminDateTime } from "@/modules/admin/time"
+import type { AdminAuditView } from "@/modules/admin/types"
 
 export interface AdminAuditTableProps {
   logs: AdminAuditView[]

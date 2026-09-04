@@ -37,7 +37,7 @@ Supabase Auth session
 
 ### Root helpers
 
-`lib/auth/root.ts` owns strict parsing and authorization:
+`modules/auth/root.ts` owns strict parsing and authorization:
 
 - `parseRootAdminUserIds(raw?: string): Set<string>` accepts canonical UUIDs only and ignores invalid entries.
 - `isRootAdminUserId(userId: string, raw?: string): boolean` performs an exact membership check and fails closed when unconfigured.
@@ -57,7 +57,7 @@ The root boolean may be passed from the root server layout into the existing cli
 
 ## Control-Plane Catalog
 
-`lib/admin/catalog.ts` is the source of truth for configuration and job metadata. It is code-reviewed and cannot be extended through the UI.
+`modules/admin/catalog.ts` is the source of truth for configuration and job metadata. It is code-reviewed and cannot be extended through the UI.
 
 ### Configuration entry
 
@@ -107,7 +107,7 @@ valid Supabase override -> environment value -> code default
 
 For read-only entries, the catalog reports the environment/build/code source without creating an override. Secret entries return readiness only.
 
-`lib/admin/settings.ts` loads all overrides in one service-role query, validates stored values again, and produces a typed snapshot. The snapshot is cached briefly and invalidated after a successful update. A Supabase read failure falls back to environment/code defaults and marks the snapshot `degraded`; it never prevents protected product pages from loading.
+`modules/admin/settings.ts` loads all overrides in one service-role query, validates stored values again, and produces a typed snapshot. The snapshot is cached briefly and invalidated after a successful update. A Supabase read failure falls back to environment/code defaults and marks the snapshot `degraded`; it never prevents protected product pages from loading.
 
 Runtime consumers use focused helpers rather than accessing the generic catalog. For example, AI Council uses `getAiCouncilRuntimeConfig()` and the admin page uses `getAdminUiConfig()`. Existing defaults must remain byte-for-byte equivalent when no override exists.
 

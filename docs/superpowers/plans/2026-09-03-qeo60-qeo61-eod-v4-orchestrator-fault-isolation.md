@@ -52,9 +52,9 @@ Expected RED: current serial workflow, old AI ordering, and phase summaries do n
 
 **Modify:**
 - `workflows/qeoindex-eod-pipeline.ts`
-- `lib/qeoindex-eod-workflow-steps.ts`
-- `lib/admin/job-phases.ts`
-- `lib/admin/job-phase-telemetry.ts`
+- `modules/eod/workflow-steps.ts`
+- `modules/admin/job-phases.ts`
+- `modules/admin/job-phase-telemetry.ts`
 - `docs/HANDOVER.md`
 
 Implementation:
@@ -100,16 +100,16 @@ Expected RED: current full-universe build throws, parent status cannot be `parti
 
 **Create:**
 - `supabase/migrations/20260903xxxxxx_qeo61_eod_partial_status.sql`
-- `lib/qeoindex-eod-fault-isolation.ts`
-- `lib/qeoindex-eod-retry-steps.ts`
+- `modules/eod/fault-isolation.ts`
+- `modules/eod/retry-steps.ts`
 - `workflows/qeoindex-eod-retry.ts`
 - `app/api/admin/qeoindex/eod/retry/route.ts`
 
 **Modify:**
-- `lib/qeoindex-eod-workflow-steps.ts`
-- `lib/qeoindex-eod-workflow-steps-legacy.ts`
-- `lib/wyckoff-v2-cache-read.ts`
-- `lib/wyckoff-v2-build-artifacts.ts`
+- `modules/eod/workflow-steps.ts`
+- `modules/eod/workflow-steps-legacy.ts`
+- `modules/wyckoff/eod-cache-read.ts`
+- `modules/wyckoff/eod-build-artifacts.ts`
 - `workflows/qeoindex-eod-pipeline.ts`
 
 Persistence policy:

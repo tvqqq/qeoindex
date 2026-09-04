@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { isMachineRequestAuthorized } from "@/lib/auth/machine"
-import { runUnifiedWyckoff } from "@/lib/wyckoff-unified-runner"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
+import { runUnifiedWyckoff } from "@/modules/wyckoff/unified-runner"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

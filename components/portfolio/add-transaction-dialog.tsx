@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { TransactionAction } from "@/lib/portfolio/pnl"
+import { TransactionAction } from "@/modules/portfolio/pnl"
 import { cn } from "@/lib/utils"
 
 interface PortfolioItem {

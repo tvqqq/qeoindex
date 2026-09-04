@@ -2,14 +2,14 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { overlayCouncilRatingWithEodSnapshot } from "../lib/ai-council-eod-market.ts"
-import type { CouncilRatingEvidence } from "../lib/ai-council-model.ts"
+import { overlayCouncilRatingWithEodSnapshot } from "../modules/ai-council/eod-market.ts"
+import type { CouncilRatingEvidence } from "../modules/ai-council/model.ts"
 import {
   WYCKOFF_EOD_BATCH_SIZE,
   WYCKOFF_EOD_MAX_STOCKS,
   buildWyckoffEodBatchOffsets,
   validateWyckoffEodDailyRows,
-} from "../lib/wyckoff-eod-refresh.ts"
+} from "../modules/wyckoff/eod-refresh.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -65,7 +65,7 @@ test("EOD refresh accepts an exact same-session 1D snapshot set", () => {
 })
 
 test("operational Wyckoff runner uses long Daily history only and bypasses UI caches", () => {
-  const runner = source("lib/wyckoff-unified-runner.ts")
+  const runner = source("modules/wyckoff/unified-runner.ts")
   assert.match(runner, /fetchLongDailyMarketHistory/)
   assert.doesNotMatch(runner, /fetchHourlyMarketHistory/)
   assert.doesNotMatch(runner, /getCachedLongDailyHistory|getCachedHourlyHistory|request-cache/)
@@ -100,9 +100,9 @@ test("Council EOD overlay refuses stale or pre-final snapshots", () => {
 })
 
 test("operational Council operations request the rebuilt final EOD evidence ensemble", () => {
-  const eodData = source("lib/ai-council-eod-data.ts")
-  const runtime = source("lib/ai-council-runtime.ts")
-  const operations = source("lib/ai-council-operations.ts")
+  const eodData = source("modules/ai-council/eod-data.ts")
+  const runtime = source("modules/ai-council/runtime.ts")
+  const operations = source("modules/ai-council/operations.ts")
   const daily = source("app/api/ai-council/daily/route.ts")
   const debate = source("app/api/ai-council/debate-daily/route.ts")
   assert.match(eodData, /stock_orderbook_snapshots/)
@@ -115,8 +115,8 @@ test("operational Council operations request the rebuilt final EOD evidence ense
 
 test("EOD orchestration is one durable v4 dependency workflow with bounded Daily history and Council steps", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
-  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
-  const operations = source("lib/ai-council-operations.ts")
+  const steps = source("modules/eod/workflow-steps.ts")
+  const operations = source("modules/ai-council/operations.ts")
   const route = source("app/api/qeoindex/eod/route.ts")
   assert.match(workflow, /"use workflow"/)
   assert.doesNotMatch(workflow, /"use step"/)

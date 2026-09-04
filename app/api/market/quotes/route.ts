@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 
-import { requireApiUser } from "@/lib/auth/server"
-import { fetchLiveBatchQuotes, type LiveBatchQuote } from "@/lib/broker-live-quotes"
-import { getCanonicalUniverse } from "@/lib/market-universe"
-import { MARKET_UNIVERSE_MAX_SIZE } from "@/lib/market-universe-selection"
+import { requireApiUser } from "@/modules/auth/server"
+import { fetchLiveBatchQuotes, type LiveBatchQuote } from "@/modules/market/realtime/broker-live-quotes"
+import { getCanonicalUniverse } from "@/modules/market/universe/index"
+import { MARKET_UNIVERSE_MAX_SIZE } from "@/modules/market/universe/selection"
 import { getCanonicalBoardOverviewSnapshots } from "@/lib/supabase/board-overview"
 
 export const runtime = "nodejs"

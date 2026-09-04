@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { isMachineRequestAuthorized } from "@/lib/auth/machine"
-import { executeSystemJob } from "@/lib/admin/job-telemetry"
-import { runSignalMonitor } from "@/lib/signal-monitor"
-import { SIGNAL_ENGINE_VERSION } from "@/lib/signal-engine"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
+import { executeSystemJob } from "@/modules/admin/job-telemetry"
+import { runSignalMonitor } from "@/modules/signals/monitor"
+import { SIGNAL_ENGINE_VERSION } from "@/modules/signals/engine"
 import { notifyOpsError } from "@/lib/ops-alerts"
 
 export const runtime = "nodejs"

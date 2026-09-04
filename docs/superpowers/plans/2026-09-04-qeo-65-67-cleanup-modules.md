@@ -27,12 +27,12 @@
 ### Task 1: Remove EOD archive/workflow legacy source paths
 
 **Files:**
-- Create: `lib/qeoindex-eod-runtime-steps.ts`
-- Modify: `lib/qeoindex-eod-workflow-steps.ts`
-- Modify: `lib/qeoindex-eod-archive.ts`
-- Modify: `lib/qeoindex-eod-backfill-ready-step.ts`
-- Delete: `lib/qeoindex-eod-workflow-steps-legacy.ts`
-- Delete: `lib/qeoindex-eod-archive-legacy.ts`
+- Create: `modules/eod/runtime-steps.ts`
+- Modify: `modules/eod/workflow-steps.ts`
+- Modify: `modules/eod/archive.ts`
+- Modify: `modules/eod/backfill-ready-step.ts`
+- Delete: `modules/eod/workflow-steps-legacy.ts`
+- Delete: `modules/eod/archive-legacy.ts`
 - Delete: `tests/legacy-eod-archive-compat.test.ts`
 - Modify: `tests/eod-data-refresh-contract.test.ts`
 - Modify: `tests/kfsp-rating-storage-refactor.test.ts`

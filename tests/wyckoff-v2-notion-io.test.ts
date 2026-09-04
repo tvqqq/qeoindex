@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import type { NotionPage, NotionProperties, NotionQueryOptions, NotionQueryResult } from "../lib/notion/client.ts"
-import { stageWyckoffV2SnapshotBatch } from "../lib/wyckoff-v2-notion-batch.ts"
+import type { NotionPage, NotionProperties, NotionQueryOptions, NotionQueryResult } from "../modules/notion/client.ts"
+import { stageWyckoffV2SnapshotBatch } from "../modules/wyckoff/eod-notion-batch.ts"
 import {
   beginWyckoffV2NotionRun,
   stageWyckoffV2Snapshots,
@@ -10,8 +10,8 @@ import {
   WYCKOFF_V2_RUNS_DATA_SOURCE_ID,
   WYCKOFF_V2_SNAPSHOTS_DATA_SOURCE_ID,
   type WyckoffV2NotionIo,
-} from "../lib/wyckoff-v2-notion-staging.ts"
-import type { WyckoffV2Snapshot } from "../lib/wyckoff-v2-builder.ts"
+} from "../modules/wyckoff/eod-notion-staging.ts"
+import type { WyckoffV2Snapshot } from "../modules/wyckoff/eod-builder.ts"
 
 function rich(property: unknown) {
   const value = property as { rich_text?: Array<{ text?: { content?: string } }> }

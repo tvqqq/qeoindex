@@ -25,13 +25,13 @@ import {
 } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { marketToneFromPrice, marketToneHex, marketToneText } from "@/lib/market-tone"
-import { normalizeEpochSeconds, normalizeMarketPrice } from "@/lib/intraday-5m"
+import { normalizeEpochSeconds, normalizeMarketPrice } from "@/modules/market/realtime/intraday-5m"
 import { getMarketUiPhase, MARKET_SESSION_RESET_EVENT, shouldAcceptRealtimeMiniChart } from "@/lib/market-session-ui"
 import { useFlashAnimation, usePriceFlashAnimation } from "@/lib/use-flash-animation"
 import { useWhaleConfetti, ConfettiOverlay } from "@/components/orderbook/confetti"
 import { playWhaleSound, unlockAudioContext } from "@/lib/sound-engine"
 import { calculateSessionCountdown } from "@/lib/session-countdown"
-import { calculateForeignRoomPercent, getEodForeignRoom } from "@/lib/eod-shares"
+import { calculateForeignRoomPercent, getEodForeignRoom } from "@/modules/eod/shares"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
 import { fetchOrderbookFromSupabaseDirect, subscribeToOrderbookRealtime } from "@/lib/supabase/browser-orderbook"
 import { StockLogo } from "@/components/stock-logo"
@@ -426,7 +426,7 @@ function nextQuote(symbol: string, data: Record<string, unknown>, current: Stock
   }
 
   const explicitPrice = firstPositive(data, ["matchPrice", "price", "lastPrice", "matchedPrice", "expectedMatchedPrice", "expectedPrice"])
-  let rawPrice = explicitPrice
+  const rawPrice = explicitPrice
     ? (explicitPrice > 1000 ? explicitPrice / 1000 : explicitPrice)
     : (current?.price ? (current.price > 1000 ? current.price / 1000 : current.price) : rawReference || 0)
   if (rawPrice <= 0 && rawReference <= 0) return current

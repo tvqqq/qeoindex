@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
-import type { MarketCloseDashboardData } from "@/lib/market-insight-data"
-import type { MarketObservation } from "@/lib/market-insight-model"
+import type { MarketCloseDashboardData } from "@/modules/research/market-insight/data"
+import type { MarketObservation } from "@/modules/research/market-insight/model"
 
 export const MARKET_AI_CONCLUSION_VERSION = "market-ai-conclusion-v2"
 export const MARKET_AI_POLICY_VERSION = "market-ai-policy-v2"

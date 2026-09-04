@@ -21,7 +21,7 @@ test("runtime, build configuration, and operational script changes still build",
   const files = [
     "app/page.tsx",
     "components/live-market-board-v2.tsx",
-    "lib/ui-data-cache.ts",
+    "modules/shared/cache/ui-data-cache.ts",
     "workflows/daily-signal-workflow.ts",
     "scripts/scan-secrets.sh",
     "package.json",
@@ -35,7 +35,7 @@ test("runtime, build configuration, and operational script changes still build",
 })
 
 test("mixed commits build when any runtime-relevant file changes", () => {
-  assert.equal(needsVercelBuild(["docs/HANDOVER.md", "lib/scanner-data.ts"]), true)
+  assert.equal(needsVercelBuild(["docs/HANDOVER.md", "modules/signals/scanner/data.ts"]), true)
 })
 
 test("unknown or empty diffs build conservatively", () => {

@@ -1,6 +1,6 @@
 # Insights rating and market-state model
 
-The canonical implementation is `lib/insights-rating-model.ts`. This document explains the current formula; code and tests remain executable truth.
+The canonical implementation is `modules/research/insights/rating-model.ts`. This document explains the current formula; code and tests remain executable truth.
 
 ## Scope and disclaimer
 
@@ -189,7 +189,7 @@ No interpolation, forward fill beyond the on-or-before rule, or synthetic daily 
 
 Any change to mapping, scale, weight, threshold, missing-value behavior, or state precedence must include:
 
-1. an update to `lib/insights-rating-model.ts`;
+1. an update to `modules/research/insights/rating-model.ts`;
 2. boundary and regression tests in `tests/insights-rating-model.test.ts`;
 3. updates to this document and UI explanations;
 4. a model-version decision if derived values will be persisted;

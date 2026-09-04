@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { FA_SCREEN_ROWS, FA_VALUATION_ORDER, type FaValuation } from "../lib/fa-screen-data.ts"
+import { FA_SCREEN_ROWS, FA_VALUATION_ORDER, type FaValuation } from "../modules/research/fa-screen-data.ts"
 
 test("FA screen snapshot keeps the 99-stock ex-MSN contract", () => {
   assert.equal(FA_SCREEN_ROWS.length, 99)

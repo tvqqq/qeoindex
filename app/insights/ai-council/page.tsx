@@ -4,8 +4,8 @@ import { BarChart3, Swords } from "lucide-react"
 
 import { LandingLogin } from "@/components/auth/landing-login"
 import { AiCouncilDashboard } from "@/components/insights/ai-council-dashboard"
-import { getServerAuthContext } from "@/lib/auth/server"
-import { getAiCouncilRuntimeData } from "@/lib/ai-council-runtime"
+import { getServerAuthContext } from "@/modules/auth/server"
+import { getAiCouncilRuntimeData } from "@/modules/ai-council/runtime"
 
 export const dynamic = "force-dynamic"
 

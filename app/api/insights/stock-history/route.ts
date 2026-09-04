@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { requireApiUser } from "@/lib/auth/server"
+import { requireApiUser } from "@/modules/auth/server"
 
 const TICKER_PATTERN = /^[A-Z0-9]{2,12}$/
 const DAILY_HISTORY_LIMIT = 180

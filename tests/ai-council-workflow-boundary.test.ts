@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { validateCouncilEvidenceRefs } from "../lib/ai-council-prompt-evidence.ts"
+import { validateCouncilEvidenceRefs } from "../modules/ai-council/prompt-evidence.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -10,9 +10,9 @@ function source(path: string) {
 
 test("EOD workflow keeps Node-only Council and Wyckoff work behind cross-file steps", () => {
   const workflow = source("workflows/ai-council-eod-workflow.ts")
-  const steps = source("lib/ai-council-eod-workflow-steps.ts")
+  const steps = source("modules/ai-council/eod-workflow-steps.ts")
 
-  assert.match(workflow, /from "@\/lib\/ai-council-eod-workflow-steps"/)
+  assert.match(workflow, /from "@\/modules\/ai-council\/eod-workflow-steps"/)
   assert.match(workflow, /"use workflow"/)
   assert.doesNotMatch(workflow, /"use step"/)
   assert.doesNotMatch(workflow, /ai-council-operations|wyckoff-unified-runner|supabase\/server/)
@@ -29,8 +29,8 @@ test("EOD workflow keeps Node-only Council and Wyckoff work behind cross-file st
     assert.match(steps.slice(start, start + 220), /"use step"/)
   }
 
-  assert.match(steps, /from "@\/lib\/ai-council-operations"/)
-  assert.match(steps, /from "@\/lib\/wyckoff-unified-runner"/)
+  assert.match(steps, /from "@\/modules\/ai-council\/operations"/)
+  assert.match(steps, /from "@\/modules\/wyckoff\/unified-runner"/)
   assert.match(steps, /from "@\/lib\/supabase\/server"/)
 })
 

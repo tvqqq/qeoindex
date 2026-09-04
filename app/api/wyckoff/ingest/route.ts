@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { isMachineRequestAuthorized } from "@/lib/auth/machine"
-import { executeSystemJob } from "@/lib/admin/job-telemetry"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
+import { executeSystemJob } from "@/modules/admin/job-telemetry"
 import { notifyOpsError } from "@/lib/ops-alerts"
-import { ingestLatestReadyWyckoffRun } from "@/lib/wyckoff-notion-ingest"
+import { ingestLatestReadyWyckoffRun } from "@/modules/wyckoff/notion-ingest"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

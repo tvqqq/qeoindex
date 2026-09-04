@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { ADMIN_SETTING_CATALOG } from "../lib/admin/catalog.ts"
-import { resolveAdminSettings } from "../lib/admin/settings.ts"
+import { ADMIN_SETTING_CATALOG } from "../modules/admin/catalog.ts"
+import { resolveAdminSettings } from "../modules/admin/settings.ts"
 
 test("runtime overrides beat environment and defaults", () => {
   const snapshot = resolveAdminSettings(ADMIN_SETTING_CATALOG, [

@@ -1,5 +1,5 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server"
-import type { DnseSessionHistory } from "@/lib/dnse-market-runtime"
+import type { DnseSessionHistory } from "@/modules/market/providers/dnse/market-runtime"
 import {
   normalizeToKiloPrice,
   normalizeVolume,

@@ -4,7 +4,7 @@ import { useActionState, useState } from "react"
 import { AlertCircle, Edit2, RotateCcw, Search, X } from "lucide-react"
 
 import { resetSettingAction, saveSettingAction, type AdminActionResult } from "@/app/admin/actions"
-import type { ResolvedAdminSetting } from "@/lib/admin/types"
+import type { ResolvedAdminSetting } from "@/modules/admin/types"
 
 export interface AdminSettingsTableProps {
   settings: ResolvedAdminSetting[]

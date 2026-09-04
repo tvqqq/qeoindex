@@ -6,7 +6,7 @@ let serverClient: SupabaseClient | null = null
 
 /**
  * Trusted infrastructure client for server-side snapshot ingestion/cache access.
- * User-owned data must use the user-scoped client from lib/auth/server so RLS
+ * User-owned data must use the user-scoped client from modules/auth/server so RLS
  * continues to enforce auth.uid(). This client intentionally fails closed when
  * the service-role credential is unavailable.
  */

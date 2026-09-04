@@ -6,7 +6,7 @@ import {
   runWyckoffBatchStep,
   startAiCouncilEodTelemetryStep,
   validateWyckoffTop100Step,
-} from "@/lib/ai-council-eod-workflow-steps"
+} from "@/modules/ai-council/eod-workflow-steps"
 
 const WYCKOFF_EOD_BATCH_OFFSETS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90] as const
 

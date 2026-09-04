@@ -41,10 +41,10 @@ const root = process.cwd()
 const source = (path: string) => readFileSync(`${root}/${path}`, "utf8")
 
 const wyckoffRuntime = [
-  "lib/wyckoff-unified-data.ts",
-  "lib/wyckoff-unified-runner.ts",
-  "lib/wyckoff-supabase-publish.ts",
-  "lib/wyckoff-notion-ingest.ts",
+  "modules/wyckoff/unified-data.ts",
+  "modules/wyckoff/unified-runner.ts",
+  "modules/wyckoff/supabase-publish.ts",
+  "modules/wyckoff/notion-ingest.ts",
 ]
 
 test("QEO-19 active Wyckoff runtime has no legacy membership-table consumer", () => {
@@ -72,7 +72,7 @@ git commit -m "test(QEO-19): forbid legacy runtime consumers"
 ### Task 2: Cut the read path to canonical universe
 
 **Files:**
-- Modify: `lib/wyckoff-unified-data.ts`
+- Modify: `modules/wyckoff/unified-data.ts`
 - Test: `tests/qeo-19-legacy-cutover.test.ts`
 
 **Interfaces:**
@@ -82,7 +82,7 @@ git commit -m "test(QEO-19): forbid legacy runtime consumers"
 - [ ] **Step 1: Add a contract assertion to the RED test**
 
 ```ts
-const unifiedData = source("lib/wyckoff-unified-data.ts")
+const unifiedData = source("modules/wyckoff/unified-data.ts")
 assert.match(unifiedData, /getCanonicalUniverse/)
 assert.doesNotMatch(unifiedData, /effective_date/)
 ```
@@ -122,8 +122,8 @@ Expected: PASS for the reader assertions; remaining QEO-19 test still fails on w
 ### Task 3: Remove duplicate membership writes from direct runner/publisher
 
 **Files:**
-- Modify: `lib/wyckoff-unified-runner.ts`
-- Modify: `lib/wyckoff-supabase-publish.ts`
+- Modify: `modules/wyckoff/unified-runner.ts`
+- Modify: `modules/wyckoff/supabase-publish.ts`
 - Test: `tests/qeo-19-legacy-cutover.test.ts`
 
 **Interfaces:**
@@ -133,7 +133,7 @@ Expected: PASS for the reader assertions; remaining QEO-19 test still fails on w
 - [ ] **Step 1: Extend RED assertions**
 
 ```ts
-for (const path of ["lib/wyckoff-unified-runner.ts", "lib/wyckoff-supabase-publish.ts"]) {
+for (const path of ["modules/wyckoff/unified-runner.ts", "modules/wyckoff/supabase-publish.ts"]) {
   assert.doesNotMatch(source(path), /\.from\("wyckoff_universe_memberships"\)/)
 }
 ```
@@ -166,9 +166,9 @@ node --test tests/qeo-19-legacy-cutover.test.ts tests/wyckoff-v2-ingest.test.ts 
 ### Task 4: Fail closed on canonical rank parity in Notion ingest
 
 **Files:**
-- Create: `lib/wyckoff-canonical-membership.ts`
-- Modify: `lib/wyckoff-supabase-publish.ts`
-- Modify: `lib/wyckoff-notion-ingest.ts`
+- Create: `modules/wyckoff/canonical-membership.ts`
+- Modify: `modules/wyckoff/supabase-publish.ts`
+- Modify: `modules/wyckoff/notion-ingest.ts`
 - Test: `tests/qeo-19-legacy-cutover.test.ts`
 
 **Interfaces:**

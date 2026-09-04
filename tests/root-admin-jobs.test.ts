@@ -6,7 +6,7 @@ import {
   ALLOWLISTED_MANUAL_JOB_KEYS,
   getManualJobCapabilities,
   isManualJobAllowed,
-} from "../lib/admin/jobs.ts"
+} from "../modules/admin/jobs.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -58,7 +58,7 @@ test("getManualJobCapabilities returns metadata for the 6 manual-safe jobs", () 
 })
 
 test("KFSP manual recovery is confirmation-gated and wired to the one-shot RPC", () => {
-  const jobs = source("lib/admin/jobs.ts")
+  const jobs = source("modules/admin/jobs.ts")
   const actions = source("app/admin/actions.ts")
   const api = source("app/api/admin/jobs/[key]/run/route.ts")
   const modal = source("components/admin/admin-manual-job-modal.tsx")
@@ -81,7 +81,7 @@ test("KFSP manual recovery is confirmation-gated and wired to the one-shot RPC",
 })
 
 test("dispatchManualAdminJob rejects un-allowlisted jobs with error", async () => {
-  const { dispatchManualAdminJob } = await import("../lib/admin/jobs.ts")
+  const { dispatchManualAdminJob } = await import("../modules/admin/jobs.ts")
   const result = await dispatchManualAdminJob({
     key: "ai_council.daily",
     actorUserId: "00000000-0000-4000-8000-000000000001",
@@ -94,7 +94,7 @@ test("dispatchManualAdminJob rejects un-allowlisted jobs with error", async () =
 })
 
 test("dispatchManualAdminJob rejects short change reason", async () => {
-  const { dispatchManualAdminJob } = await import("../lib/admin/jobs.ts")
+  const { dispatchManualAdminJob } = await import("../modules/admin/jobs.ts")
   const result = await dispatchManualAdminJob({
     key: "scanner.run",
     actorUserId: "00000000-0000-4000-8000-000000000001",
@@ -109,7 +109,7 @@ test("dispatchManualAdminJob rejects short change reason", async () => {
 test("AI Council operations hard-stop on stale EOD upstream evidence before persistence or LLM freeze", () => {
   const daily = source("app/api/ai-council/daily/route.ts")
   const debate = source("app/api/ai-council/debate-daily/route.ts")
-  const operations = source("lib/ai-council-operations.ts")
+  const operations = source("modules/ai-council/operations.ts")
 
   assert.match(daily, /runAiCouncilDailyOperation/)
   assert.match(debate, /runAiCouncilDebateOperation/)
@@ -150,14 +150,14 @@ test("machine manual domain routes persist one bounded system-job lifecycle", ()
 })
 
 test("telemetry wrapper keeps unsuccessful results out of succeeded state", () => {
-  const telemetry = source("lib/admin/job-telemetry.ts")
+  const telemetry = source("modules/admin/job-telemetry.ts")
   assert.match(telemetry, /isSuccess\?: \(result: T\) => boolean/)
   assert.match(telemetry, /input\.isSuccess && !input\.isSuccess\(result\)/)
   assert.match(telemetry, /Job success telemetry could not be persisted/)
 })
 
 test("telemetry lifecycle inserts once and finalizes once for success, result failure, and throw", async () => {
-  const { executeSystemJob } = await import("../lib/admin/job-telemetry.ts")
+  const { executeSystemJob } = await import("../modules/admin/job-telemetry.ts")
   const makeClient = (opts: { insertError?: boolean; updateError?: boolean } = {}) => {
     const calls: string[] = []
     const client = {
@@ -196,7 +196,7 @@ test("telemetry lifecycle inserts once and finalizes once for success, result fa
 })
 
 test("Signals Monitor preserves a successful domain response when terminal telemetry update fails", async () => {
-  const { executeSystemJob } = await import("../lib/admin/job-telemetry.ts")
+  const { executeSystemJob } = await import("../modules/admin/job-telemetry.ts")
   const calls: string[] = []
   let domainCalls = 0
   const warnings: unknown[] = []

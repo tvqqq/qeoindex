@@ -32,7 +32,7 @@ test("QeoIndex EOD route starts only the canonical durable workflow behind machi
 })
 
 test("admin catalog exposes one canonical 15:15 ICT EOD pipeline definition", () => {
-  const catalog = source("lib/admin/catalog.ts")
+  const catalog = source("modules/admin/catalog.ts")
   const start = catalog.indexOf('key: "qeoindex.eod_pipeline"')
   assert.ok(start >= 0, "admin catalog must define qeoindex.eod_pipeline")
   const block = catalog.slice(start, start + 1_000)
@@ -44,7 +44,7 @@ test("admin catalog exposes one canonical 15:15 ICT EOD pipeline definition", ()
 
 test("parent workflow failure closes orphaned running phase telemetry before terminalizing", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
-  const failure = source("lib/qeoindex-eod-failure-step.ts")
+  const failure = source("modules/eod/failure-step.ts")
 
   assert.match(workflow, /failQeoIndexEodRunStep/)
   const orphanUpdate = failure.indexOf('.from("system_job_phases")')

@@ -7,7 +7,7 @@ import {
   NOTION_API_VERSION,
   queryDataSource,
   updatePageProperties,
-} from "../lib/notion/client.ts"
+} from "../modules/notion/client.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -109,21 +109,21 @@ test("shared Notion write adapter uses data-source parents and page PATCH", asyn
 
 test("domain modules depend on the shared Notion adapter instead of duplicating transport", () => {
   const domainFiles = [
-    "lib/research-data.ts",
-    "lib/scanner-data.ts",
-    "lib/signal-data.ts",
+    "modules/research/data.ts",
+    "modules/signals/scanner/data.ts",
+    "modules/signals/data.ts",
     "lib/notion-promote.ts",
   ]
 
   for (const path of domainFiles) {
     const contents = source(path)
-    assert.match(contents, /@\/lib\/notion\//, path)
+    assert.match(contents, /@\/modules\/notion\//, path)
     assert.doesNotMatch(contents, /api\.notion\.com\/v1/, path)
     assert.doesNotMatch(contents, /const NOTION_VERSION/, path)
     assert.doesNotMatch(contents, /function headers\(/, path)
   }
 
-  const client = source("lib/notion/client.ts")
+  const client = source("modules/notion/client.ts")
   assert.match(client, /https:\/\/api\.notion\.com\/v1/)
   assert.match(client, /NOTION_API_VERSION = "2026-03-11"/)
   assert.match(client, /AbortSignal\.timeout/)

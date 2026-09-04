@@ -25,8 +25,8 @@ import {
 
 import { AiCouncilInvestorReport } from "@/components/insights/ai-council-investor-report"
 import { TopNav } from "@/components/top-nav"
-import type { AiCouncilData, AiCouncilHistoryEntry } from "@/lib/ai-council-data"
-import type { AiCouncilStock, CouncilAgentOpinion, CouncilSignal } from "@/lib/ai-council-model"
+import type { AiCouncilData, AiCouncilHistoryEntry } from "@/modules/ai-council/data"
+import type { AiCouncilStock, CouncilAgentOpinion, CouncilSignal } from "@/modules/ai-council/model"
 import { cn } from "@/lib/utils"
 
 const DATE_FORMAT = new Intl.DateTimeFormat("vi-VN", {

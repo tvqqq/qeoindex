@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
-import type { AdminJobDefinition } from "../lib/admin/types.ts"
-import { buildAdminJobViews, deriveAdminJobStatus } from "../lib/admin/job-health.ts"
-import { deriveScheduleDueState, resolveJobEvidence } from "../lib/admin/job-evidence.ts"
-import { interpretEodQuality, interpretRatingQuality, interpretSignalsDailyQuality, interpretTtaiQuality } from "../lib/admin/job-quality.ts"
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../modules/admin/effective-job-catalog.ts"
+import type { AdminJobDefinition } from "../modules/admin/types.ts"
+import { buildAdminJobViews, deriveAdminJobStatus } from "../modules/admin/job-health.ts"
+import { deriveScheduleDueState, resolveJobEvidence } from "../modules/admin/job-evidence.ts"
+import { interpretEodQuality, interpretRatingQuality, interpretSignalsDailyQuality, interpretTtaiQuality } from "../modules/admin/job-quality.ts"
 
 test("quality interpreters preserve reported scalar counts and honest unknowns", () => {
   assert.equal(interpretEodQuality({ total: 500, complete: 383, incomplete: 117, validationAgreement: true, limitedCoverageCount: 26 }).status, "partial_by_reported_counts")

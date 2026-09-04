@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { requireApiUser } from "@/lib/auth/server"
-import { getCanonicalUniverseVersion } from "@/lib/market-universe"
+import { requireApiUser } from "@/modules/auth/server"
+import { getCanonicalUniverseVersion } from "@/modules/market/universe/index"
 
 export async function GET() {
   const auth = await requireApiUser()

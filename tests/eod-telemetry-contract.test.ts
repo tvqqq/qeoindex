@@ -6,7 +6,7 @@ import {
   QEOINDEX_EOD_BUSINESS_PHASES,
   QEOINDEX_EOD_INTERNAL_PHASE_TO_BUSINESS,
   QEOINDEX_EOD_PHASES,
-} from "../lib/admin/job-phases.ts"
+} from "../modules/admin/job-phases.ts"
 
 const expected = [
   "KFSP_RATING_REFRESH",

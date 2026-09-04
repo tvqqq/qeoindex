@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { extractPortfolioMarketPrices } from "../lib/portfolio/market-prices.ts"
+import { extractPortfolioMarketPrices } from "../modules/portfolio/market-prices.ts"
 
 test("portfolio prices follow the intraday histories contract", () => {
   assert.deepEqual(extractPortfolioMarketPrices({

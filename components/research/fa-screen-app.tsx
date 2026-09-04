@@ -24,7 +24,7 @@ import {
   FA_VALUATION_ORDER,
   type FaScreenRow,
   type FaValuation,
-} from "@/lib/fa-screen-data"
+} from "@/modules/research/fa-screen-data"
 
 type SortKey = "rank" | "ticker" | "pe" | "pb" | "roe" | "grade" | "valuation"
 type SortDirection = "asc" | "desc"

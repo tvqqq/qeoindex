@@ -2,7 +2,7 @@ import {
   isVietnamSecuritiesTradingDay,
   nextVietnamSecuritiesTradingDateKey,
   vietnamDateKey,
-} from "./vn-market-calendar.ts"
+} from "../modules/market/calendar.ts"
 
 export function getVnTimeSeconds(date: Date = new Date()): { dayOfWeek: number; totalSeconds: number } {
   const utcMs = date.getTime() + date.getTimezoneOffset() * 60000

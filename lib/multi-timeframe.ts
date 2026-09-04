@@ -1,5 +1,5 @@
 import { aggregateWeekly, calculateTechnicalSnapshot, type OhlcvBar, type TechnicalSnapshot } from "@/lib/technical-indicators"
-import { scanWyckoff, type ScannerBias, type ScannerConfidence, type WyckoffScanResult } from "@/lib/wyckoff-engine"
+import { scanWyckoff, type ScannerBias, type ScannerConfidence, type WyckoffScanResult } from "@/modules/wyckoff/engine"
 
 export type TimeframeKey = "Weekly" | "Daily" | "4H" | "1H"
 

@@ -1,7 +1,7 @@
 import type { PromotionDraft } from "@/lib/multi-timeframe"
-import { createDataSourcePage } from "@/lib/notion/client"
-import { richTextProperty, titleProperty } from "@/lib/notion/properties"
-import type { MarketRegime } from "@/lib/research-types"
+import { createDataSourcePage } from "@/modules/notion/client"
+import { richTextProperty, titleProperty } from "@/modules/notion/properties"
+import type { MarketRegime } from "@/modules/research/types"
 
 const STOCK_THESIS_DATA_SOURCE_ID = process.env.NOTION_STOCK_THESIS_DATA_SOURCE_ID ?? "fa161c1b-3f37-4ee2-8d75-0ca64a05ee90"
 const ANALYSIS_LOG_DATA_SOURCE_ID = process.env.NOTION_ANALYSIS_LOG_DATA_SOURCE_ID ?? "3642cc21-8280-44e2-bad6-93f9472ce793"

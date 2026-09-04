@@ -29,7 +29,7 @@ Supabase Auth
 
 ## Machine-only API rules
 
-Machine endpoints use `lib/auth/machine.ts`, which compares bearer secrets with a constant-time digest comparison.
+Machine endpoints use `modules/auth/machine.ts`, which compares bearer secrets with a constant-time digest comparison.
 
 | Endpoint | Required secret |
 | --- | --- |

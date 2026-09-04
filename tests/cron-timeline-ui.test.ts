@@ -2,10 +2,10 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
-import { buildAdminJobViews } from "../lib/admin/job-health.ts"
-import { buildCronTimelineModel, EOD_PIPELINE_PHASES } from "../lib/admin/cron-timeline.ts"
-import type { AdminJobView } from "../lib/admin/types.ts"
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../modules/admin/effective-job-catalog.ts"
+import { buildAdminJobViews } from "../modules/admin/job-health.ts"
+import { buildCronTimelineModel, EOD_PIPELINE_PHASES } from "../modules/admin/cron-timeline.ts"
+import type { AdminJobView } from "../modules/admin/types.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -131,7 +131,7 @@ test("manual recovery lane is backed by the dispatch allowlist, not manualPolicy
 
 test("daily signals scans the full canonical universe instead of a positional Top50 subset", () => {
   const workflow = source("workflows/daily-signal-workflow.ts")
-  const scannerRunner = source("lib/scanner-runner.ts")
+  const scannerRunner = source("modules/signals/scanner/runner.ts")
 
   assert.match(workflow, /return runScannerUniverse\(\)/)
   assert.doesNotMatch(workflow, /runScannerUniverse\(\{\s*limit:\s*50/)
@@ -139,8 +139,8 @@ test("daily signals scans the full canonical universe instead of a positional To
 })
 
 test("QEO-47 preserves canonical Wyckoff five-timeframe snapshot semantics", () => {
-  const catalog = source("lib/admin/catalog.ts")
-  const settings = source("lib/admin/settings.ts")
+  const catalog = source("modules/admin/catalog.ts")
+  const settings = source("modules/admin/settings.ts")
 
   assert.doesNotMatch(catalog, /2 timeframe active/)
   assert.doesNotMatch(settings, /2 timeframe active/)

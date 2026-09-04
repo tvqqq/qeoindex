@@ -8,8 +8,8 @@ function source(path: string) {
 
 test("LLM debate identity is normalized to the deterministic Council run", () => {
   const migration = source("supabase/migrations/20260902084000_ai_council_debate_identity_cleanup.sql")
-  const dashboard = source("lib/ai-council-debate-data.ts")
-  const operations = source("lib/ai-council-operations.ts")
+  const dashboard = source("modules/ai-council/debate-data.ts")
+  const operations = source("modules/ai-council/operations.ts")
 
   assert.match(migration, /drop column if exists id/)
   assert.match(migration, /primary key \(run_id\)/)

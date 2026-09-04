@@ -4,7 +4,7 @@ import React, { useState, useMemo, memo } from "react"
 import { ShieldCheck, PieChart, ArrowRight, TrendingDown, DollarSign } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
-import { PortfolioPosition } from "@/lib/portfolio/pnl"
+import { PortfolioPosition } from "@/modules/portfolio/pnl"
 import { PortfolioMeta } from "@/components/portfolio/portfolio-selector"
 import { cn } from "@/lib/utils"
 

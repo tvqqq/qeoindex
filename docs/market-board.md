@@ -49,7 +49,7 @@ A failed persistence write never disables the locally active filter. A failed fu
 
 ## Intraday history cache
 
-`lib/intraday-5m-service.ts` keeps the complete canonical-universe history snapshot as one cache object:
+`modules/market/realtime/intraday-5m-service.ts` keeps the complete canonical-universe history snapshot as one cache object:
 
 1. Vercel Runtime Cache exact session bucket.
 2. Upstash Redis exact session bucket when configured.

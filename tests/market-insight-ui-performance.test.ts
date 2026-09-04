@@ -115,7 +115,7 @@ test("Liquid Glass Insights styling stays compositor-safe around charts", () => 
 })
 
 test("VNINDEX hero history comes from a bounded canonical-index query", () => {
-  const dataSource = fs.readFileSync(path.resolve("lib/market-insight-data.ts"), "utf8")
+  const dataSource = fs.readFileSync(path.resolve("modules/research/market-insight/data.ts"), "utf8")
 
   assert.match(dataSource, /\.from\("market_insight_indexes"\)[\s\S]*\.eq\("index_code", "VNINDEX"\)[\s\S]*\.limit\(20\)/)
   assert.match(dataSource, /vnindexHistoryByDate/)

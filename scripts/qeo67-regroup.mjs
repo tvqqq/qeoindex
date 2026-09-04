@@ -6,10 +6,10 @@ const tracked = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" }).sp
 const oldFiles = new Set(tracked)
 const moves = new Map()
 const treeMoves = [
-  ["lib/admin/", "modules/admin/"],
-  ["lib/auth/", "modules/auth/"],
-  ["lib/notion/", "modules/notion/"],
-  ["lib/portfolio/", "modules/portfolio/"],
+  ["modules/admin/", "modules/admin/"],
+  ["modules/auth/", "modules/auth/"],
+  ["modules/notion/", "modules/notion/"],
+  ["modules/portfolio/", "modules/portfolio/"],
 ]
 
 function moveTree(oldPrefix, newPrefix) {

@@ -11,8 +11,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { WatchlistPanel, type WatchlistMeta, type WatchlistItem } from "@/components/portfolio/watchlist-panel"
 import { TopNav } from "@/components/top-nav"
-import { computePortfolioPositions, type RawTransaction } from "@/lib/portfolio/pnl"
-import { extractPortfolioMarketPrices, type PortfolioIntradayPayload } from "@/lib/portfolio/market-prices"
+import { computePortfolioPositions, type RawTransaction } from "@/modules/portfolio/pnl"
+import { extractPortfolioMarketPrices, type PortfolioIntradayPayload } from "@/modules/portfolio/market-prices"
 import { AnimatedTabs, type AnimatedTab } from "@/components/smoothui/animated-tabs"
 import styles from "@/components/portfolio/portfolio-theme.module.css"
 

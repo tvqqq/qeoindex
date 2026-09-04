@@ -2,8 +2,8 @@ import Link from "next/link"
 import { Activity, ChartNoAxesCombined, Clock3, ShieldAlert, Target, Trophy } from "lucide-react"
 import { TickerResearchLink } from "@/components/ticker-research-link"
 import { TopNav } from "@/components/top-nav"
-import type { SignalEventRow, TradeRecommendation } from "@/lib/signal-data"
-import type { RecommendationPerformance } from "@/lib/signal-performance"
+import type { SignalEventRow, TradeRecommendation } from "@/modules/signals/data"
+import type { RecommendationPerformance } from "@/modules/signals/performance"
 
 function pct(value: number | null | undefined) { return value == null || !Number.isFinite(value) ? "—" : `${value >= 0 ? "+" : ""}${value.toFixed(2)}%` }
 function num(value: number | null | undefined) { return value == null || !Number.isFinite(value) ? "—" : value.toLocaleString("en-US", { maximumFractionDigits: 2 }) }

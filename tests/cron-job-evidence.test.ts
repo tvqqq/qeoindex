@@ -1,9 +1,9 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
-import { buildAdminJobViews } from "../lib/admin/job-health.ts"
-import { resolveJobEvidence, type RawEvidenceSnapshot } from "../lib/admin/job-evidence.ts"
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../modules/admin/effective-job-catalog.ts"
+import { buildAdminJobViews } from "../modules/admin/job-health.ts"
+import { resolveJobEvidence, type RawEvidenceSnapshot } from "../modules/admin/job-evidence.ts"
 
 test("pg_cron enqueue success does not override execution failure for TTAI", () => {
   const ttaiDef = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "kfsp.ttai_history")!

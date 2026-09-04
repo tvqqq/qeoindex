@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { requireApiUser } from "@/lib/auth/server"
-import { fetchYahooDailyOhlcv } from "@/lib/yahoo-history"
+import { requireApiUser } from "@/modules/auth/server"
+import { fetchYahooDailyOhlcv } from "@/modules/market/providers/yahoo/history"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

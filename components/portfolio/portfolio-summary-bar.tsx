@@ -3,7 +3,7 @@
 import React, { useMemo } from "react"
 import { TrendingUp, TrendingDown, DollarSign, PieChart, Wallet } from "lucide-react"
 
-import { PortfolioPosition } from "@/lib/portfolio/pnl"
+import { PortfolioPosition } from "@/modules/portfolio/pnl"
 import { cn } from "@/lib/utils"
 
 function formatVND(kVND: number): string {

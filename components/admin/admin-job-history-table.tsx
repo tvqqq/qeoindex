@@ -1,5 +1,5 @@
-import type { SystemJobRunRow } from "@/lib/admin/job-health"
-import { formatAdminDateTime } from "@/lib/admin/time"
+import type { SystemJobRunRow } from "@/modules/admin/job-health"
+import { formatAdminDateTime } from "@/modules/admin/time"
 
 export interface AdminJobHistoryTableProps {
   runs: SystemJobRunRow[]

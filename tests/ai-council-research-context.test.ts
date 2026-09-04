@@ -5,7 +5,7 @@ import test from "node:test"
 import {
   NOTION_API_VERSION,
   retrieveBlockChildren,
-} from "../lib/notion/client.ts"
+} from "../modules/notion/client.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -71,7 +71,7 @@ test("Notion adapter retrieves paginated block children with no-store GET", asyn
 })
 
 test("pre-market Research Context is MSN-pilot, point-in-time filtered, source-ranked and bounded", () => {
-  const research = source("lib/ai-council-research-context.ts")
+  const research = source("modules/ai-council/research-context.ts")
 
   assert.match(research, /AI_COUNCIL_RESEARCH_CONTEXT_VERSION = "notion-research-context-v1"/)
   assert.match(research, /DEFAULT_PILOT_TICKERS = "MSN"/)
@@ -93,9 +93,9 @@ test("pre-market Research Context is MSN-pilot, point-in-time filtered, source-r
 })
 
 test("pre-market wrapper combines frozen raw evidence with immutable Notion research audit identity", () => {
-  const wrapper = source("lib/ai-council-pre-market-evidence.ts")
+  const wrapper = source("modules/ai-council/pre-market-evidence.ts")
   const migration = source("supabase/migrations/20260824080500_ai_council_llm_research_context.sql")
-  const operations = source("lib/ai-council-operations.ts")
+  const operations = source("modules/ai-council/operations.ts")
   const route = source("app/api/ai-council/debate-daily/route.ts")
 
   assert.match(wrapper, /enrichCouncilStocksWithLlmEvidence/)
@@ -103,7 +103,7 @@ test("pre-market wrapper combines frozen raw evidence with immutable Notion rese
   assert.match(wrapper, /ai_council_llm_evidence/)
   assert.doesNotMatch(wrapper, /\[P4\.3_NOTION_RESEARCH_CONTEXT\]/)
   assert.match(wrapper, /researchContext: \{/)
-  const rawEvidence = source("lib/ai-council-llm-evidence.ts")
+  const rawEvidence = source("modules/ai-council/llm-evidence.ts")
   assert.match(rawEvidence, /llmEvidence: \{/)
   assert.doesNotMatch(rawEvidence, /P4\.3_EVIDENCE_FIDELITY_CONTEXT/)
   assert.match(wrapper, /promptIdentityHash/)
@@ -129,7 +129,7 @@ test("pre-market wrapper combines frozen raw evidence with immutable Notion rese
 })
 
 test("configuredCouncilResearchTickers accepts explicit runtime lists without mutating env", () => {
-  const code = source("lib/ai-council-research-context.ts")
+  const code = source("modules/ai-council/research-context.ts")
   assert.match(code, /export function configuredCouncilResearchTickers\(raw\?: string \| string\[\]\)/)
   assert.match(code, /Array\.isArray\(raw\)/)
   assert.match(code, /isCouncilResearchTickerEnabled\(ticker: string, raw\?: string \| string\[\]\)/)

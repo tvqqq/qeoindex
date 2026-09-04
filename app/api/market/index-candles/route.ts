@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { requireApiFeature } from "@/lib/auth/server"
-import { fetchDnseIndexCandleHistory } from "@/lib/dnse-index-candles"
+import { requireApiFeature } from "@/modules/auth/server"
+import { fetchDnseIndexCandleHistory } from "@/modules/market/providers/dnse/index-candles"
 import {
   INDEX_CHART_SYMBOLS,
   isIndexChartResolution,
   type CandleBar,
   type IndexChartResolution,
   type IndexChartSymbol,
-} from "@/lib/index-candles"
+} from "@/modules/market/realtime/index-candles"
 import { isTradingSessionOpen } from "@/lib/session-countdown"
 
 export const runtime = "nodejs"

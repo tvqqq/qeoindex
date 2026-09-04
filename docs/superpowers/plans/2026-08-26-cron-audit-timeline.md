@@ -30,7 +30,7 @@ Implement accurate observability, source/catalog corrections, Signals telemetry,
 
 ## Phase 1 — Canonical schedule and evidence model
 
-Files: `lib/admin/types.ts`, `lib/admin/catalog.ts`, `lib/admin/effective-job-catalog.ts`, and a focused new helper such as `lib/admin/job-schedule.ts`.
+Files: `modules/admin/types.ts`, `modules/admin/catalog.ts`, `modules/admin/effective-job-catalog.ts`, and a focused new helper such as `modules/admin/job-schedule.ts`.
 
 1. Extend `AdminJobDefinition` with explicit optional scheduler metadata:
    - `schedulerName` for exact `cron.jobname` matching.
@@ -46,7 +46,7 @@ Files: `lib/admin/types.ts`, `lib/admin/catalog.ts`, `lib/admin/effective-job-ca
 
 ## Phase 2 — Truthful health aggregation
 
-Files: `lib/admin/job-health.ts`, a new evidence adapter module such as `lib/admin/job-evidence.ts`, existing telemetry helpers, and tests.
+Files: `modules/admin/job-health.ts`, a new evidence adapter module such as `modules/admin/job-evidence.ts`, existing telemetry helpers, and tests.
 
 1. Separate two concepts in the view model:
    - scheduler health: active/inactive, last dispatch, configured schedule;
@@ -74,7 +74,7 @@ Files: `workflows/daily-signal-workflow.ts`, a small step-safe telemetry helper,
 
 ## Phase 4 — ICT mindmap timeline widget
 
-Files: new `components/admin/admin-cron-timeline.tsx`, optional pure layout helper `lib/admin/cron-timeline.ts`, `app/admin/jobs/page.tsx`, and UI tests.
+Files: new `components/admin/admin-cron-timeline.tsx`, optional pure layout helper `modules/admin/cron-timeline.ts`, `app/admin/jobs/page.tsx`, and UI tests.
 
 Design requirements:
 

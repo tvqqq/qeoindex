@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { runAiCouncilDailyOperation } from "@/lib/ai-council-operations"
-import { isMachineRequestAuthorized } from "@/lib/auth/machine"
+import { runAiCouncilDailyOperation } from "@/modules/ai-council/operations"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { notifyOpsError } from "@/lib/ops-alerts"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 

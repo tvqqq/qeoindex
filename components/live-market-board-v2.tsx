@@ -32,7 +32,7 @@ import { BOARD_SECTOR_GROUPS } from "@/lib/market-sectors"
 import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
-import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/lib/intraday-5m"
+import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { isTradingSessionOpen, isLunchBreak } from "@/lib/session-countdown"
 import {
   getMarketUiPhase,
@@ -42,7 +42,7 @@ import {
   type MarketUiPhase,
 } from "@/lib/market-session-ui"
 import { setSoundEnabled, playWhaleSound } from "@/lib/sound-engine"
-import { publishDnseMarketFrame } from "@/lib/dnse-market-stream"
+import { publishDnseMarketFrame } from "@/modules/market/providers/dnse/market-stream"
 import { captureMarketBoardScreenshot, copyBlobToClipboard } from "@/lib/screenshot"
 
 export type BoardUniverseStock = LiveBoardStock

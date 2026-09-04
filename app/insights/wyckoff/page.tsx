@@ -3,9 +3,9 @@ import type { Metadata } from "next"
 import { LandingLogin } from "@/components/auth/landing-login"
 import { WyckoffDeferredDashboard } from "@/components/insights/wyckoff-deferred-dashboard"
 import type { WyckoffListItem } from "@/components/insights/wyckoff-chart-dashboard"
-import { getServerAuthContext } from "@/lib/auth/server"
-import { getCanonicalUniverse } from "@/lib/market-universe"
-import { isWyckoffChartTimeframe, type WyckoffChartTimeframe } from "@/lib/wyckoff-chart-model"
+import { getServerAuthContext } from "@/modules/auth/server"
+import { getCanonicalUniverse } from "@/modules/market/universe/index"
+import { isWyckoffChartTimeframe, type WyckoffChartTimeframe } from "@/modules/wyckoff/chart-model"
 
 export const dynamic = "force-dynamic"
 

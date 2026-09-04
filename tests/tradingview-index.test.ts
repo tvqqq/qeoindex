@@ -11,11 +11,11 @@ import {
   normalizeDnseOhlcFrame,
   resampleCandleSeries,
   timeframeBucketKey,
-} from "../lib/index-candles.ts"
+} from "../modules/market/realtime/index-candles.ts"
 
 const modalSource = readFileSync(new URL("../components/index-chart/index-chart-modal.tsx", import.meta.url), "utf8")
 const minuteChartSource = readFileSync(new URL("../components/index-chart/index-minute-chart.tsx", import.meta.url), "utf8")
-const historySource = readFileSync(new URL("../lib/dnse-index-candles.ts", import.meta.url), "utf8")
+const historySource = readFileSync(new URL("../modules/market/providers/dnse/index-candles.ts", import.meta.url), "utf8")
 const routeSource = readFileSync(new URL("../app/api/market/index-candles/route.ts", import.meta.url), "utf8")
 
 const epoch = (iso: string) => Math.floor(Date.parse(iso) / 1000)

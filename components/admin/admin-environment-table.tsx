@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Lock, Search } from "lucide-react"
 
-import type { AdminEnvironmentItem } from "@/lib/admin/types"
+import type { AdminEnvironmentItem } from "@/modules/admin/types"
 
 export interface AdminEnvironmentTableProps {
   environment: AdminEnvironmentItem[]

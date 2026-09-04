@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { fiveMinuteBucket, intradaySnapshot, mergeFiveMinuteClose, normalizeEpochSeconds, normalizeFiveMinuteBars, normalizeMarketPrice, previousSessionClose, selectLatestSession } from "../lib/intraday-5m.ts"
+import { fiveMinuteBucket, intradaySnapshot, mergeFiveMinuteClose, normalizeEpochSeconds, normalizeFiveMinuteBars, normalizeMarketPrice, previousSessionClose, selectLatestSession } from "../modules/market/realtime/intraday-5m.ts"
 
 test("five-minute buckets keep minute bars in the same candle", () => {
   const start = Date.UTC(2026, 7, 17, 2, 0, 0) / 1000
@@ -121,7 +121,7 @@ test("EOD history falls back to the latest available trading session", () => {
 })
 
 test("at 9:00 AM on a trading day, session starts and reference anchors to previous EOD close", async () => {
-  const { isTradingSessionActiveOrPastOpen, vietnamSessionStartSeconds } = await import("../lib/yahoo-history.ts")
+  const { isTradingSessionActiveOrPastOpen, vietnamSessionStartSeconds } = await import("../modules/market/providers/yahoo/history.ts")
   // Tuesday at 08:59:59 AM ICT -> not yet active open
   const tuesdayBefore9 = new Date("2026-08-18T08:59:59+07:00")
   assert.equal(isTradingSessionActiveOrPastOpen(tuesdayBefore9), false)

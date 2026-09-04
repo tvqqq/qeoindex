@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { requireApiUser } from "@/lib/auth/server"
+import { requireApiUser } from "@/modules/auth/server"
 import { getSlackOpsHealth } from "@/lib/ops-alerts"
 
 export const runtime = "nodejs"

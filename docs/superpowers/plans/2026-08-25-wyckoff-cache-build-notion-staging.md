@@ -47,7 +47,7 @@
 ### Task 2: Deterministic v2 universe selection
 
 **Files:**
-- Create: `lib/wyckoff-v2-universe.ts`
+- Create: `modules/wyckoff/eod-universe.ts`
 - Test: `tests/wyckoff-v2-staging.test.ts`
 
 **Interfaces:**
@@ -62,8 +62,8 @@
 ### Task 3: Cached five-timeframe contract builder
 
 **Files:**
-- Create: `lib/wyckoff-v2-builder.ts`
-- Modify: `lib/wyckoff-chart-model.ts` only if 4H aggregation must be corrected/exposed for `vn-session-v1`.
+- Create: `modules/wyckoff/eod-builder.ts`
+- Modify: `modules/wyckoff/chart-model.ts` only if 4H aggregation must be corrected/exposed for `vn-session-v1`.
 - Test: `tests/wyckoff-v2-staging.test.ts`
 
 **Interfaces:**
@@ -80,7 +80,7 @@
 ### Task 4: Server-side Notion Run/Snapshot writer
 
 **Files:**
-- Create: `lib/wyckoff-v2-notion-staging.ts`
+- Create: `modules/wyckoff/eod-notion-staging.ts`
 - Test: `tests/wyckoff-v2-staging.test.ts`
 
 **Interfaces:**
@@ -100,7 +100,7 @@
 
 **Files:**
 - Create: `lib/wyckoff-v2-build-service.ts`
-- Modify: `lib/wyckoff-notion-ingest.ts`
+- Modify: `modules/wyckoff/notion-ingest.ts`
 - Test: `tests/wyckoff-v2-staging.test.ts`
 - Modify: `tests/wyckoff-eod-refresh.test.ts` only where old assumptions conflict.
 

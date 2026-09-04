@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../modules/admin/effective-job-catalog.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -36,7 +36,7 @@ test("Rating freezes before sibling TTAI/market-close refresh and both join befo
 })
 
 test("Rating refresh freezes an exact canonical universe for the session", () => {
-  const steps = source("lib/qeoindex-eod-data-refresh-steps.ts")
+  const steps = source("modules/eod/data-refresh-steps.ts")
   assert.match(steps, /export async function runKfspRatingRefreshStep/)
   assert.match(steps, /kfsp-rating-sync/)
   assert.match(steps, /x-kfsp-sync-secret/i)
@@ -49,7 +49,7 @@ test("Rating refresh freezes an exact canonical universe for the session", () =>
 })
 
 test("TTAI refresh is session-bound and explicit about degraded partial failures", () => {
-  const steps = source("lib/qeoindex-eod-data-refresh-steps.ts")
+  const steps = source("modules/eod/data-refresh-steps.ts")
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
   assert.match(steps, /export async function runTtaiRefreshStep/)
   assert.match(steps, /kfsp-ttai-history-sync/)
@@ -61,9 +61,9 @@ test("TTAI refresh is session-bound and explicit about degraded partial failures
 })
 
 test("READY validates frozen run identity and exact membership, not count only", () => {
-  const steps = source("lib/qeoindex-eod-data-refresh-steps.ts")
-  const delegated = source("lib/qeoindex-eod-workflow-steps.ts")
-  const runtimeSteps = source("lib/qeoindex-eod-runtime-steps.ts")
+  const steps = source("modules/eod/data-refresh-steps.ts")
+  const delegated = source("modules/eod/workflow-steps.ts")
+  const runtimeSteps = source("modules/eod/runtime-steps.ts")
 
   assert.match(steps, /export async function assertReadyMatchesFrozenUniverse/)
   assert.match(steps, /input\.readyUniverseRunId\s*!==\s*input\.expectedUniverse\.runId/)
@@ -90,8 +90,8 @@ test("READY retries bounded known not-ready states even when wrapper error codes
 })
 
 test("morning freshness schedulers are retired while explicit recovery capability remains", () => {
-  const phases = source("lib/admin/job-phases.ts")
-  const baseCatalog = source("lib/admin/catalog.ts")
+  const phases = source("modules/admin/job-phases.ts")
+  const baseCatalog = source("modules/admin/catalog.ts")
   assert.match(phases, /key: "KFSP_RATING_REFRESH"/)
   assert.match(phases, /key: "TTAI_REFRESH"/)
   assert.match(baseCatalog, /kfsp-rating-daily-7am-ict/)

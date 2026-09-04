@@ -9,8 +9,8 @@ import {
   type LightweightPriceLineApi,
   type LightweightSeriesApi,
   type LightweightSeriesMarkersApi,
-} from "@/lib/lightweight-charts-runtime"
-import type { WyckoffChartStudy } from "@/lib/wyckoff-chart-model"
+} from "@/modules/shared/charts/lightweight-charts-runtime"
+import type { WyckoffChartStudy } from "@/modules/wyckoff/chart-model"
 
 function pricePrecision(value: number) {
   if (value >= 1000) return { precision: 0, minMove: 1 }

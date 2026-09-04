@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import type { OhlcvBar } from "../lib/technical-indicators.ts"
-import { buildWyckoffChartStudies, isWyckoffChartTimeframe, type WyckoffScenario } from "../lib/wyckoff-chart-model.ts"
+import { buildWyckoffChartStudies, isWyckoffChartTimeframe, type WyckoffScenario } from "../modules/wyckoff/chart-model.ts"
 
 function bars(count: number, interval: number, start: number): OhlcvBar[] {
   return Array.from({ length: count }, (_, index) => {

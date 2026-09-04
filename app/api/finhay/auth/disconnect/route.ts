@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { requireApiFeature } from "@/lib/auth/server"
-import { clearFinhaySession } from "@/lib/finhay-session"
+import { requireApiFeature } from "@/modules/auth/server"
+import { clearFinhaySession } from "@/modules/market/providers/finhay/session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

@@ -3,7 +3,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { BRAND } from "@/lib/brand"
-import { syncServerSession } from "@/lib/auth/client-session"
+import { syncServerSession } from "@/modules/auth/client-session"
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { LandingLogin } from "@/components/auth/landing-login"
 

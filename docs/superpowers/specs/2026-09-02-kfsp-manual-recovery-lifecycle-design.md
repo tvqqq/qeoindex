@@ -187,7 +187,7 @@ After CI is green:
 - `supabase/functions/_shared/kfsp-manual-lifecycle.ts`
 - `supabase/functions/kfsp-rating-sync/index.ts`
 - `supabase/functions/kfsp-ttai-history-sync/index.ts`
-- `lib/admin/jobs.ts`
+- `modules/admin/jobs.ts`
 - `app/api/admin/jobs/[key]/run/route.ts` only if response-state wording/status handling needs adjustment
 - `tests/kfsp-canonical-universe-sync.test.ts` and/or a focused QEO-14 regression test
 - `tests/root-admin-jobs.test.ts`

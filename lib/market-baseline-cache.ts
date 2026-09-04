@@ -1,4 +1,4 @@
-import { readThroughUiCache } from "./ui-data-cache.ts"
+import { readThroughUiCache } from "../modules/shared/cache/ui-data-cache.ts"
 
 export interface MarketBaseline {
   date: string

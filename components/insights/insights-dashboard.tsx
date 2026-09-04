@@ -68,9 +68,9 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import type { InsightsDashboardData, InsightsModuleSummary, InsightsRatingRow, InsightsSectorSummary, KfspMetricValue } from "@/lib/insights-data"
-import { getMetricSemantic } from "@/lib/insights-metric-semantics"
-import { calculateRatingModel, historyDelta, type RatingDimension, type RatingModelSnapshot } from "@/lib/insights-rating-model"
+import type { InsightsDashboardData, InsightsModuleSummary, InsightsRatingRow, InsightsSectorSummary, KfspMetricValue } from "@/modules/research/insights/data"
+import { getMetricSemantic } from "@/modules/research/insights/metric-semantics"
+import { calculateRatingModel, historyDelta, type RatingDimension, type RatingModelSnapshot } from "@/modules/research/insights/rating-model"
 import { cn } from "@/lib/utils"
 import {
   KFSP_FIELD_CATALOG,

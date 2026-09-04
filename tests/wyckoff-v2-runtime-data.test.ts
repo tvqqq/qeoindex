@@ -2,14 +2,14 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { NotionPage } from "../lib/notion/client.ts"
-import { parseWyckoffV2UniversePage } from "../lib/wyckoff-v2-universe-source.ts"
+import type { NotionPage } from "../modules/notion/client.ts"
+import { parseWyckoffV2UniversePage } from "../modules/wyckoff/eod-universe-source.ts"
 import {
   DAILY_V2_CACHE_LIMIT,
   V2_CACHE_BATCH_SIZE,
   cachedHistoryFromRows,
   loadWyckoffV2CachedHistories,
-} from "../lib/wyckoff-v2-cache-read.ts"
+} from "../modules/wyckoff/eod-cache-read.ts"
 
 function universePage(input: { ticker: string; active?: boolean; exchange?: string; rank?: number | null; sector?: string }): NotionPage {
   return {
