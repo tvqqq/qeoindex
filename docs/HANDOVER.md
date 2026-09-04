@@ -4,6 +4,8 @@ Last updated: 2026-09-04.
 
 This document is the canonical fast-start for the active production architecture. Historical architecture is preserved in Git history and explicitly historical design/plan documents; when historical material conflicts with this file, this file wins.
 
+Read `AGENTS.md` first and `docs/README.md` for the complete documentation map. Linear owns current work status; this file owns durable architecture and operations, not mutable task/branch state.
+
 ## Production
 
 - Product: QeoIndex.
@@ -13,7 +15,7 @@ This document is the canonical fast-start for the active production architecture
 - Canonical stock universe: latest published `vn_top_stocks`, maximum 200 tickers.
 - Canonical EOD scheduler: Supabase `pg_cron` job `qeoindex-eod-pipeline-1515-ict` (`15 8 * * 1-5`, 15:15 ICT).
 
-Read `AGENTS.md` before edits. Scheduler dispatch is not execution success; use `system_job_runs` and `system_job_phases` for durable EOD evidence.
+Scheduler dispatch is not execution success; use `system_job_runs` and `system_job_phases` for durable EOD evidence.
 
 ## Active Wyckoff contract — 1D + 1W only
 
@@ -39,6 +41,8 @@ Persistent Wyckoff raw OHLCV stores `1D` only in `market_ohlcv_history`. Weekly 
 A ticker with genuine listing history shorter than the normal bootstrap horizon must transition to bounded Daily delta refresh after a successful full bootstrap rather than repeating a full-history request every EOD. `market_ohlcv_bootstrap_state` records that bootstrap completion state.
 
 The DNSE Daily bootstrap keeps the 366-day fast request window for normal tickers. Retry splitting is limited to transient network/timeout/408/425/429/5xx failures and does not recursively retry auth/permission or explicit non-transient 4xx failures.
+
+See `docs/wyckoff-chart-unified-data.md` for the domain-specific storage/read contract.
 
 ## EOD v4 DAG contract
 
@@ -139,13 +143,15 @@ For fast troubleshooting, inspect `system_job_runs`, `system_job_phases`, latest
 
 ## Required release gates
 
-For normal source changes:
+For normal source/docs changes:
 
 - `pnpm test:manifest`
 - `pnpm test:current`
 - `pnpm lint:touched`
 - `pnpm typecheck`
 - `pnpm build`
+
+`pnpm verify:pr` runs the PR-level secret scan, manifest/current tests, touched lint and typecheck as one command.
 
 For DB-changing releases, additionally run:
 
@@ -155,3 +161,12 @@ For DB-changing releases, additionally run:
 - DB safety tests/rehearsal required by the touched migration class.
 
 Production acceptance requires the verified GitHub head to be green, the Vercel production deployment to reach READY, and runtime smoke evidence from the deployed architecture.
+
+## Documentation lifecycle
+
+- `docs/HANDOVER.md` is the sole repo-wide architecture handover.
+- `docs/README.md` is the navigation/lifecycle index.
+- Domain docs may own detailed contracts, but must link back to the canonical architecture rather than duplicate mutable task status.
+- Linear owns current task/priority/blocker state. Git history and explicit historical specs/plans preserve old implementation context.
+- Do not create `NEXT_AGENT_HANDOFF.md`, `HANDOVER-LEGACY.md`, or similar competing repo-wide status snapshots.
+- When architecture changes, update the affected Active docs in the same PR; do not rewrite historical plans to make them look current.
