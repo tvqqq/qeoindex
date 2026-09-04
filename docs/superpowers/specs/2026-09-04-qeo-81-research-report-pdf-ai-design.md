@@ -11,7 +11,7 @@ Implement the report-processing stage that starts from normalized report metadat
 
 Canonical processing flow:
 
-`report metadata → secure PDF fetch → SHA-256 content hash → page text extraction → page-aware chunks → structured AI extraction → runtime validation → persistence`
+`report metadata → secure PDF fetch → SHA-256 content hash → page text extraction → page-aware chunks → structured AI extraction → runtime validation → atomic persistence`
 
 This design intentionally excludes user-facing pages, chat Q&A, cron orchestration, and AI Council consumption.
 
@@ -52,11 +52,11 @@ The fetcher accepts only the `pdf_url` already persisted for a report. It must f
 - scheme is `https`;
 - host is on an explicit allowlist for approved report-CDN/provider hosts;
 - credentials are absent from the URL;
-- no IP-literal, localhost, loopback, private-network, link-local, or metadata-service target is allowed;
+- IP-literal, localhost, loopback, private-network, link-local, and metadata-service targets are rejected;
 - redirect count is bounded;
 - every redirect target is revalidated against the same rules.
 
-The allowlist is configuration, not business logic embedded in parser code.
+The allowlist is configuration, not business logic embedded in parser code. The initial configured host set must include the actual TOPI/Wigroup CDN host required by QEO-79 fixtures, while remaining overrideable through environment/runtime configuration.
 
 ### 3.2 Download limits
 
@@ -91,7 +91,7 @@ Whitespace may be normalized for readability, but the parser must avoid transfor
 
 The parser does not claim OCR capability in QEO-81.
 
-### 4.1 Usable-text gate
+### 4.1 Usable-text gate and status mapping
 
 After parsing, classify the document:
 
@@ -102,6 +102,14 @@ After parsing, classify the document:
 
 No AI call is allowed for `needs_ocr`, `unsupported`, or `failed` documents.
 
+QEO-80's pending schema does not currently include `needs_ocr`. QEO-81 therefore adds a narrowly scoped pending schema delta so `market_research_reports.ingestion_status` accepts `needs_ocr`. For a scanned/image-only report:
+
+- `ingestion_status = 'needs_ocr'`;
+- `analysis_status = 'unsupported'` for QEO-81, because no supported analysis path is available yet;
+- the record remains eligible for a future OCR/vision feature to explicitly reprocess it.
+
+This is a product state, not an operational exception, so it must not enter an infinite retry loop.
+
 ## 5. Chunking contract
 
 Chunks are retrieval/evidence units, not arbitrary token slices. Every chunk keeps:
@@ -111,11 +119,12 @@ Chunks are retrieval/evidence units, not arbitrary token slices. Every chunk kee
 - `page_number`;
 - deterministic `chunk_index` within the page;
 - normalized text;
-- `chunk_hash`.
+- `chunk_hash`;
+- `chunk_version`.
 
-Chunking must never merge text from two pages into one chunk. This keeps page citations deterministic for QEO-81 and prepares QEO-82 Q&A without requiring a schema change.
+Chunking must never merge text from two pages into one chunk. This keeps page citations deterministic for QEO-81 and prepares QEO-82 Q&A without requiring a redesign.
 
-Chunk generation is deterministic for a fixed parser/chunker version. If chunk semantics later change materially, that change must be versioned rather than silently rewriting evidence history.
+QEO-81 adds `chunk_version` to the pending schema before the report schema is promoted to production. Chunk generation is deterministic for a fixed chunk version. A future material chunking change increments the version rather than silently overwriting evidence identity.
 
 ## 6. Structured AI analysis
 
@@ -174,7 +183,7 @@ QEO-81 introduces a small shared `modules/ai/openai-response.ts` boundary only f
 
 Existing AI Council imports are updated with regression coverage so its observable behavior is unchanged.
 
-Pricing logic is shared only if the existing implementation can be extracted without importing Council-specific policy. Otherwise QEO-81 may persist token telemetry and a nullable cost field until a genuinely shared pricing boundary is introduced.
+Pricing logic is shared only if the existing implementation can be extracted without importing Council-specific policy. Otherwise QEO-81 persists token telemetry and a nullable cost field until a genuinely shared pricing boundary is introduced.
 
 ## 8. Idempotency and versioning
 
@@ -195,7 +204,7 @@ A metadata-only refresh with unchanged `content_hash` does not trigger AI reproc
 
 ## 9. Persistence and consistency
 
-QEO-80 already defines report, analysis, ticker-mention, and chunk tables. QEO-81 uses those contracts and may make a narrowly scoped pending-migration amendment only when implementation proves the schema cannot represent an acceptance criterion.
+QEO-80 already defines report, analysis, ticker-mention, and chunk tables. QEO-81 uses those contracts and adds only the schema changes explicitly required by this design: `needs_ocr`, `chunk_version`, and the atomic publish function described below.
 
 Persistence order:
 
@@ -204,8 +213,19 @@ Persistence order:
 3. check successful-analysis idempotency;
 4. call AI when required;
 5. validate structured output and citations;
-6. persist content hash, chunks, analysis, and ticker mentions with a transaction/RPC boundary that prevents partially published analysis evidence;
-7. update report ingestion/analysis status only after the corresponding stage is durable.
+6. atomically publish content hash, chunks, analysis, ticker mentions, and terminal report statuses through one service-role-only Postgres RPC transaction;
+7. return the published analysis identity to the caller.
+
+The RPC is the only path that publishes a successful analysis bundle. It must:
+
+- run in one database transaction;
+- use the existing unique constraints as idempotency backstops;
+- reject mismatched `report_id`/`content_hash` inputs;
+- write chunks, analysis, and ticker mentions consistently;
+- update the report's terminal ingestion/analysis status only after all analysis evidence writes succeed;
+- be executable by `service_role` only; authenticated clients remain read-only.
+
+Operational stage/status updates before final publication may use ordinary server-side repository writes, but they must never make an incomplete analysis appear `ready`.
 
 A failed report must not corrupt previously successful analysis rows. A retry may resume from durable content/chunk state when identity matches.
 
@@ -257,10 +277,10 @@ QEO-81 is implemented test-first.
 Required tests:
 
 1. Text-native multi-page fixture parses in page order with stable page numbers.
-2. Empty/image-only fixture returns `needs_ocr` and makes zero AI calls.
-3. URL validation rejects non-HTTPS, unapproved hosts, private-network targets, and unsafe redirects.
+2. Empty/image-only fixture returns `needs_ocr`, maps analysis to unsupported, and makes zero AI calls.
+3. URL validation rejects non-HTTPS, unapproved hosts, IP/private-network targets, and unsafe redirects.
 4. Fetch rejects excessive size and invalid content type/signature.
-5. Chunking never crosses page boundaries and is deterministic.
+5. Chunking never crosses page boundaries, is deterministic, and carries `chunk_version`.
 6. Strict structured schema rejects malformed field shapes.
 7. Ticker stance/recommendation/target extracted from report body requires valid page evidence.
 8. Missing target price remains `null`.
@@ -268,9 +288,11 @@ Required tests:
 10. Evidence snippet not grounded in cited page text is rejected.
 11. Prompt-injection text embedded in the PDF remains document data and does not alter extraction instructions/output contract.
 12. Second run with identical content/version/model route performs zero additional AI calls.
-13. One report failure leaves already successful records valid and retryable.
-14. AI Council regression tests pass after shared OpenAI helper extraction.
-15. TypeScript, touched lint, current contracts, production build, DB drift/replay/contracts remain green as applicable.
+13. Atomic publish rollback prevents a partial analysis bundle from becoming visible/ready.
+14. One report failure leaves previously successful records valid and retryable.
+15. AI Council regression tests pass after shared OpenAI helper extraction.
+16. RLS/RPC contracts prove authenticated users cannot execute the publish function.
+17. TypeScript, touched lint, current contracts, production build, DB drift/replay/contracts remain green as applicable.
 
 Fixtures should be synthetic or repository-safe. Do not commit copyrighted third-party research PDFs unless the repository is licensed to redistribute them.
 
@@ -280,10 +302,11 @@ Fixtures should be synthetic or repository-safe. Do not commit copyrighted third
 - Structured-schema rejection: section 6, test case 6.
 - No target hallucination: section 6.2, test case 8.
 - Scanned/empty PDF graceful failure: section 4.1, test case 2.
-- Bounded retry and isolated report failure: sections 9–10, test case 13.
+- Bounded retry and isolated report failure: sections 9–10, test case 14.
 - Zero-cost rerun for identical identity: section 8, test case 12.
 - Token/model/cost telemetry compatibility: section 11.
 - Prompt-injection defense: section 6.3, test case 11.
+- Atomic evidence publication: section 9, test cases 13/16.
 
 ## 14. Out of scope
 
