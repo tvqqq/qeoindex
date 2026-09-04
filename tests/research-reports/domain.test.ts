@@ -64,11 +64,16 @@ test("QEO-80 parses TOPI metadata into a stable provider report identity", () =>
 
 test("QEO-80 TOPI discovery paginates until a known report boundary and sends only server-relevant headers", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = []
-  const pageOneNew = { ...sampleTopiReport, reportId: 72735, name: "New report" }
+  const firstNew = { ...sampleTopiReport, reportId: 72736, name: "Newest report" }
+  const secondNew = { ...sampleTopiReport, reportId: 72735, name: "Second newest report" }
 
   const fetchImpl = (async (input: URL | RequestInfo, init?: RequestInit) => {
     calls.push({ url: String(input), init })
-    return new Response(JSON.stringify({ data: { list: [pageOneNew, sampleTopiReport] } }), {
+    const requestBody = JSON.parse(String(init?.body)) as { page: number }
+    const list = requestBody.page === 1
+      ? [firstNew, secondNew]
+      : [sampleTopiReport]
+    return new Response(JSON.stringify({ data: { list } }), {
       status: 200,
       headers: { "content-type": "application/json" },
     })
@@ -77,14 +82,14 @@ test("QEO-80 TOPI discovery paginates until a known report boundary and sends on
   const result = await discoverTopiReports({
     knownExternalReportIds: new Set(["72734"]),
     fetchImpl,
-    pageSize: 15,
+    pageSize: 2,
     maxPages: 5,
   })
 
-  assert.deepEqual(result.reports.map((report) => report.externalReportId), ["72735"])
-  assert.equal(result.pagesFetched, 1)
+  assert.deepEqual(result.reports.map((report) => report.externalReportId), ["72736", "72735"])
+  assert.equal(result.pagesFetched, 2)
   assert.equal(result.stoppedAtKnownBoundary, true)
-  assert.equal(calls.length, 1)
+  assert.equal(calls.length, 2)
   assert.equal(calls[0].url, "https://apiclient.topi.vn/api-web/AnalysisReport")
   assert.equal(calls[0].init?.method, "POST")
   const headers = new Headers(calls[0].init?.headers)
@@ -94,10 +99,10 @@ test("QEO-80 TOPI discovery paginates until a known report boundary and sends on
   assert.equal(headers.has("sec-ch-ua"), false)
   assert.equal(headers.has("accept-language"), false)
 
-  const body = JSON.parse(String(calls[0].init?.body)) as Record<string, unknown>
-  assert.deepEqual(body, {
+  const firstBody = JSON.parse(String(calls[0].init?.body)) as Record<string, unknown>
+  assert.deepEqual(firstBody, {
     page: 1,
-    limit: 15,
+    limit: 2,
     from_date: "",
     to_date: "",
     type: 0,
@@ -105,6 +110,9 @@ test("QEO-80 TOPI discovery paginates until a known report boundary and sends on
     sectorId: "",
     platform: "Web",
   })
+  const secondBody = JSON.parse(String(calls[1].init?.body)) as Record<string, unknown>
+  assert.equal(secondBody.page, 2)
+  assert.equal(secondBody.limit, 2)
 })
 
 test("QEO-80 upserts by provider plus external report id so metadata refreshes do not duplicate report identity", async () => {
