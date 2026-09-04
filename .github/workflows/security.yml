@@ -53,7 +53,39 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: "false"
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
       - name: Scan all fetched Git refs for secrets
-        run: gitleaks detect --source . --redact --no-banner --exit-code=2 --log-opts="--all"
+        env:
+          GITLEAKS_HISTORY_REPORT: ${{ runner.temp }}/gitleaks-history.json
+        run: |
+          set +e
+          gitleaks detect --source . --redact --no-banner --exit-code=2 --log-opts="--all" --report-format=json --report-path="$GITLEAKS_HISTORY_REPORT"
+          scan_status=$?
+          set -e
+
+          if [[ -f "$GITLEAKS_HISTORY_REPORT" ]]; then
+            node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs"
+
+          const reportPath = process.env.GITLEAKS_HISTORY_REPORT
+          const findings = JSON.parse(readFileSync(reportPath, "utf8"))
+          const clean = (value) => String(value ?? "unknown").replace(/[\r\n\t]/g, " ")
+          const unique = new Set()
+
+          console.log(`Historical secret findings: ${findings.length}`)
+          for (const finding of findings) {
+            const record = [
+              clean(finding.RuleID),
+              clean(finding.File),
+              clean(finding.Commit),
+              `line:${clean(finding.StartLine)}`,
+            ].join("\t")
+            if (unique.has(record)) continue
+            unique.add(record)
+            console.log(record)
+          }
+          NODE
+          fi
+
+          exit "$scan_status"
       - name: Current contracts
         run: pnpm test:current
       - name: Touched lint
