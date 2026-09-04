@@ -13,8 +13,11 @@ on:
       - "lib/wyckoff-v2-*.ts"
       - "app/api/admin/qeoindex/eod/**"
       - "supabase/migrations/**"
-      - "tests/qeoindex-eod-v4-*.test.ts"
+      - "tests/eod-*.test.ts"
+      - "tests/qeoindex-eod-*.test.ts"
       - "tests/scheduler-reconciliation.test.ts"
+      - "tests/test-contracts.json"
+      - "scripts/run-test-suite.mjs"
       - ".github/workflows/eod-v4.yml"
   push:
     branches: [main]
@@ -29,8 +32,11 @@ on:
       - "lib/wyckoff-v2-*.ts"
       - "app/api/admin/qeoindex/eod/**"
       - "supabase/migrations/**"
-      - "tests/qeoindex-eod-v4-*.test.ts"
+      - "tests/eod-*.test.ts"
+      - "tests/qeoindex-eod-*.test.ts"
       - "tests/scheduler-reconciliation.test.ts"
+      - "tests/test-contracts.json"
+      - "scripts/run-test-suite.mjs"
       - ".github/workflows/eod-v4.yml"
 
 jobs:
@@ -43,7 +49,7 @@ jobs:
           version: 10.28.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node --test tests/qeoindex-eod-v4-orchestrator.test.ts tests/qeoindex-eod-v4-fault-isolation.test.ts tests/qeoindex-eod-v4-rollout.test.ts tests/scheduler-reconciliation.test.ts
+      - run: pnpm test:eod
