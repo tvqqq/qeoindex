@@ -23,7 +23,9 @@ test("one canonical EOD v4 workflow owns the active Supabase-first graph", () =>
 test("QeoIndex EOD route starts only the canonical durable workflow behind machine auth", () => {
   const route = source("app/api/qeoindex/eod/route.ts")
 
-  assert.match(route, /verifyMachineRequest\(request\)/)
+  assert.match(route, /isMachineRequestAuthorized\(request/)
+  assert.match(route, /qeo_verify_eod_scheduler_secret/)
+  assert.match(route, /isQeoIndexSchedulerAuthorized\(request\)/)
   assert.match(route, /start\(qeoindexEodPipeline,\s*\[startedAt\]\)/)
   assert.match(route, /workflowRunId:\s*run\.runId/)
   assert.doesNotMatch(route, /aiCouncilEodWorkflow|qeoindexEodPipelineV[123]|runUnifiedWyckoff/)
@@ -45,10 +47,12 @@ test("parent workflow failure closes orphaned running phase telemetry before ter
   const failure = source("lib/qeoindex-eod-failure-step.ts")
 
   assert.match(workflow, /failQeoIndexEodRunStep/)
-  assert.match(failure, /closeRunningQeoIndexEodPhases/)
-  assert.match(failure, /PARENT_TERMINAL_FAILURE/)
-  assert.match(failure, /failQeoIndexEodRun/)
-  assert.match(failure, /TELEMETRY_PERSIST_FAILED/)
+  const orphanUpdate = failure.indexOf('.from("system_job_phases")')
+  const parentUpdate = failure.indexOf('.from("system_job_runs")')
+  assert.ok(orphanUpdate >= 0 && parentUpdate > orphanUpdate, "running phase telemetry must close before the parent run")
+  assert.match(failure, /\.eq\("run_id",\s*runId\)[\s\S]*?\.eq\("status",\s*"running"\)/)
+  assert.match(failure, /error_code:\s*"QEOINDEX_EOD_FAILED"/)
+  assert.match(failure, /markQeoIndexEodPhaseSkipped/)
 })
 
 test("MARKET_CLOSE_COLLECT uses bounded transient retry with five-minute spacing", () => {
