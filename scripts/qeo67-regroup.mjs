@@ -135,8 +135,8 @@ function resolveOldRelative(originFile, specifier) {
 function toSpecifier(fromFile, targetFile, originalSpecifier) {
   const explicitExt = codeExt(originalSpecifier)
   let target = explicitExt ? targetFile : stripCodeExt(targetFile)
-  if (/\/index(?:\.(?:tsx?|jsx?|mjs|cjs))?$/.test(target) && !/\/index(?:\.(?:tsx?|jsx?|mjs|cjs))?$/.test(originalSpecifier)) {
-    target = target.replace(/\/index(?:\.(?:tsx?|jsx?|mjs|cjs))?$/, explicitExt || "")
+  if (!explicitExt && /\/index$/.test(target) && !/\/index$/.test(originalSpecifier)) {
+    target = target.slice(0, -6)
   }
   let rel = path.posix.relative(path.posix.dirname(fromFile), target)
   if (!rel.startsWith(".")) rel = `./${rel}`
