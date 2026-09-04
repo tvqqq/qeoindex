@@ -5,7 +5,7 @@ import {
   getServerAuthContext,
   isServerAuthConfigured,
   verifySupabaseAccessToken,
-} from "@/lib/auth/server"
+} from "@/modules/auth/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

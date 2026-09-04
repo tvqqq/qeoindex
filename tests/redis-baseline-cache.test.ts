@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import { getMarketBaselineCached, getEodReferencePricesCached, type MarketBaseline, type EodReferenceMap } from "../lib/market-baseline-cache.ts"
+import { getMarketBaselineCached, getEodReferencePricesCached, type MarketBaseline, type EodReferenceMap } from "../modules/market/realtime/baseline-cache.ts"
 
 test("getMarketBaselineCached executes loader on cache miss and returns valid baseline", async () => {
   const date = "2026-08-18"

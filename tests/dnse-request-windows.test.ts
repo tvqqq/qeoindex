@@ -7,7 +7,7 @@ import {
   dnseWindowSpanDays,
   isRetryableDnseWindowError,
   splitDnseRequestWindow,
-} from "../lib/dnse-request-windows.ts"
+} from "../modules/market/providers/dnse/request-windows.ts"
 
 test("DNSE Daily bootstrap keeps a 366-day fast path", () => {
   const from = 1_535_281_948
@@ -51,7 +51,7 @@ test("adaptive DNSE split retries only transient failures", () => {
 })
 
 test("Daily transient retry floor is small enough to recover a VGI-like 23-day timeout", () => {
-  const historySource = readFileSync("lib/dnse-history.ts", "utf8")
+  const historySource = readFileSync("modules/market/providers/dnse/history.ts", "utf8")
   assert.match(historySource, /DAILY_MIN_RETRY_WINDOW_DAYS\s*=\s*7/)
   assert.doesNotMatch(historySource, /DAILY_MIN_RETRY_WINDOW_DAYS\s*=\s*45/)
 })

@@ -7,7 +7,7 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
 }
 
 const workflowPath = ".github/workflows/db-drift.yml"
-const generatedTypesPath = "lib/supabase/database.types.ts"
+const generatedTypesPath = "modules/shared/supabase/database.types.ts"
 
 function source(path: string) {
   return readFileSync(path, "utf8")
@@ -34,7 +34,7 @@ function qeo39GroupedRpcMigration() {
 test("QEO-23 exposes fail-closed database replay and generated type commands", () => {
   assert.equal(
     packageJson.scripts?.["db:types:generate"],
-    "supabase gen types typescript --local --schema public > lib/supabase/database.types.ts",
+    "supabase gen types typescript --local --schema public > modules/shared/supabase/database.types.ts",
   )
   assert.equal(packageJson.scripts?.["db:types:verify"], "node scripts/db/verify-generated-types.mjs")
   assert.equal(packageJson.scripts?.["db:replay:verify"], "bash scripts/db/verify-local-replay.sh")
@@ -59,7 +59,7 @@ test("DB drift workflow runs clean replay, generated type drift verification, cu
 
 test("QEO-29 keeps phase detail for 1 day and terminal run summaries for 7 days", () => {
   const sql = qeo29RetentionMigration()
-  const active = source("lib/qeoindex-eod-archive.ts")
+  const active = source("modules/eod/archive.ts")
 
   assert.match(sql, /v_phase_cutoff\s+timestamptz\s*:=\s*p_reference_at\s*-\s*interval\s+'1 day'/i)
   assert.match(sql, /v_job_cutoff\s+timestamptz\s*:=\s*p_reference_at\s*-\s*interval\s+'7 days'/i)
@@ -71,7 +71,7 @@ test("QEO-29 keeps phase detail for 1 day and terminal run summaries for 7 days"
 })
 
 test("QEO-30 admin job UI reads only bounded 7-day execution telemetry fields", () => {
-  const code = source("lib/admin/job-health.ts")
+  const code = source("modules/admin/job-health.ts")
 
   assert.doesNotMatch(code, /from\("system_job_runs"\)[\s\S]{0,100}select\("\*"\)/)
   assert.match(code, /SYSTEM_JOB_RUN_COLUMNS/)
@@ -107,7 +107,7 @@ test("QEO-39 grouped RPC keeps PostgREST result rows bounded without reducing pe
 
 test("QEO-39 stores large build payloads in private run-scoped artifacts with terminal one-day cleanup", () => {
   const sql = qeo39NPlusOneMigration()
-  const active = source("lib/qeoindex-eod-archive.ts")
+  const active = source("modules/eod/archive.ts")
 
   assert.match(sql, /create\s+table\s+if\s+not\s+exists\s+public\.wyckoff_build_artifacts/i)
   assert.match(sql, /primary\s+key\s*\(run_id,\s*ticker\)/i)

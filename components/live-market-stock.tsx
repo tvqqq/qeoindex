@@ -3,15 +3,15 @@ import { ExternalLink, Star } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { Sparkline } from "@/components/sparkline"
 import { TickerResearchLink } from "@/components/ticker-research-link"
-import { normalizeMarketPrice } from "@/lib/intraday-5m"
+import { normalizeMarketPrice } from "@/modules/market/realtime/intraday-5m"
 import {
   marketToneFromChange,
   marketToneFromPrice,
   marketToneHex,
   marketToneText,
   type MarketTone,
-} from "@/lib/market-tone"
-import { usePriceFlashAnimation } from "@/lib/use-flash-animation"
+} from "@/modules/market/tone"
+import { usePriceFlashAnimation } from "@/modules/shared/ui/use-flash-animation"
 
 export interface LiveBoardStock {
   ticker: string

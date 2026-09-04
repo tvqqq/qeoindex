@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js/TypeScript, Supabase Postgres/PostgREST, DNSE OpenAPI, Yahoo fallback, Node test runner.
 
-**Spec:** Approved `notion-unified-v2` Option A design in project conversation; Admin phase contract implemented by `lib/admin/job-phases.ts`.
+**Spec:** Approved `notion-unified-v2` Option A design in project conversation; Admin phase contract implemented by `modules/admin/job-phases.ts`.
 
 ## Global Constraints
 
@@ -44,9 +44,9 @@
 ### Task 2: Provider window metadata
 
 **Files:**
-- Modify: `lib/dnse-history.ts`
-- Modify: `lib/yahoo-history.ts`
-- Modify: `lib/market-history.ts`
+- Modify: `modules/market/providers/dnse/history.ts`
+- Modify: `modules/market/providers/yahoo/history.ts`
+- Modify: `modules/market/history/index.ts`
 - Test: `tests/ohlcv-history-store.test.ts`
 
 **Interfaces:**
@@ -61,7 +61,7 @@
 ### Task 3: Persistent history store and refresh planner
 
 **Files:**
-- Create: `lib/ohlcv-history-store.ts`
+- Create: `modules/market/history/ohlcv-store.ts`
 - Test: `tests/ohlcv-history-store.test.ts`
 
 **Interfaces:**
@@ -79,7 +79,7 @@
 ### Task 4: HISTORY_REFRESH phase-facing service and verification
 
 **Files:**
-- Create: `lib/eod-history-refresh.ts`
+- Create: `modules/eod/history-refresh.ts`
 - Modify: `package.json`
 - Modify: `tests/root-admin-ui.test.ts` only if needed for touched-file performance inventory.
 - Test: `tests/ohlcv-history-store.test.ts`

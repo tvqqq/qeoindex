@@ -1,9 +1,9 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { EXPECTED_SUPABASE_SCHEDULERS, reconcileSupabaseSchedulers, reconcileVercelSchedulers, type SchedulerEvidence } from "../lib/admin/scheduler-reconciliation.ts"
-import { buildAdminJobViews } from "../lib/admin/job-health.ts"
-import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
+import { EXPECTED_SUPABASE_SCHEDULERS, reconcileSupabaseSchedulers, reconcileVercelSchedulers, type SchedulerEvidence } from "../modules/admin/scheduler-reconciliation.ts"
+import { buildAdminJobViews } from "../modules/admin/job-health.ts"
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../modules/admin/effective-job-catalog.ts"
 
 const rows = EXPECTED_SUPABASE_SCHEDULERS.map((mapping, index) => ({ jobId: index + 1, jobName: mapping.schedulerName, schedule: mapping.schedule, active: true, lastStatus: "succeeded", lastStartedAt: null, lastFinishedAt: null }))
 

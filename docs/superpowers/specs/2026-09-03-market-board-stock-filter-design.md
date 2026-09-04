@@ -28,7 +28,7 @@ The feature operates on the current canonical Bảng điện universe (Top 200),
 
 ### Canonical universe
 
-`lib/market-universe.ts` already exposes `ticker`, `exchange`, raw `sector`, market-cap metadata, and average-volume metadata. The client board model currently drops `exchange` and the raw sector label; this feature retains both.
+`modules/market/universe/index.ts` already exposes `ticker`, `exchange`, raw `sector`, market-cap metadata, and average-volume metadata. The client board model currently drops `exchange` and the raw sector label; this feature retains both.
 
 ### User persistence
 
@@ -329,8 +329,8 @@ Expected files:
 - `app/page.tsx` — add `exchange` and `kfspSector` to client universe; pass `auth.user.id` and `canonical.runId` to `LiveMarketBoardV2`.
 - `components/live-market-board-v2.tsx` — add filter mode, filtered universe, active symbol set, modal integration, WS lifecycle, and quote reconcile.
 - `components/market-board/stock-filter-modal.tsx` — focused modal UI.
-- `lib/market-board/stock-filter.ts` — pure criteria normalization, predicate, hash, and sector-option helpers.
-- `lib/market-board/stock-filter-cache.ts` — local daily-cache helpers.
+- `modules/market/board/stock-filter.ts` — pure criteria normalization, predicate, hash, and sector-option helpers.
+- `modules/market/board/stock-filter-cache.ts` — local daily-cache helpers.
 - `app/api/me/market-board-filter/route.ts` — GET/PUT persistence merge.
 - `app/api/market/quotes/route.ts` — bounded current-quote reconcile endpoint.
 - focused tests under `tests/`.

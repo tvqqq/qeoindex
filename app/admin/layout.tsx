@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 
 import { AdminHeader } from "@/components/admin/admin-header"
 import { AdminNav } from "@/components/admin/admin-nav"
-import { getRootPageContext } from "@/lib/auth/root"
+import { getRootPageContext } from "@/modules/auth/root"
 
 export const dynamic = "force-dynamic"
 

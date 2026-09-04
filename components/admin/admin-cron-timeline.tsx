@@ -15,12 +15,12 @@ import {
   Zap,
 } from "lucide-react"
 
-import type { AdminJobView } from "@/lib/admin/types"
+import type { AdminJobView } from "@/modules/admin/types"
 import {
   buildCronTimelineModel,
   type TimelineJobNode,
   type TimelineLaneId,
-} from "@/lib/admin/cron-timeline"
+} from "@/modules/admin/cron-timeline"
 
 export interface AdminCronTimelineProps {
   jobs: AdminJobView[]

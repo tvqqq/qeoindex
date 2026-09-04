@@ -1,16 +1,55 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import test from "node:test"
 
-import { resolveAiCouncilPromptIdentityHash } from "../lib/ai-council-prompt-identity.ts"
+import { resolveAiCouncilPromptIdentityHash } from "../modules/ai-council/prompt-identity.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
+function moduleSources(root: string) {
+  const files: string[] = []
+  const walk = (relative: string) => {
+    const directory = new URL(`../${relative}/`, import.meta.url)
+    for (const entry of readdirSync(directory)) {
+      const child = `${relative}/${entry}`
+      const childUrl = new URL(`../${child}`, import.meta.url)
+      if (statSync(childUrl).isDirectory()) walk(child)
+      else if (/\.(?:ts|tsx)$/.test(entry)) files.push(source(child))
+    }
+  }
+  walk(root)
+  return files
+}
+
+test("QEO-67 workflows consume EOD through one deliberate public module boundary", () => {
+  const eodIndexUrl = new URL("../modules/eod/index.ts", import.meta.url)
+  assert.ok(existsSync(eodIndexUrl), "modules/eod/index.ts must define the public EOD API")
+
+  const eodIndex = readFileSync(eodIndexUrl, "utf8")
+  const pipeline = source("workflows/qeoindex-eod-pipeline.ts")
+  const retry = source("workflows/qeoindex-eod-retry.ts")
+
+  assert.doesNotMatch(eodIndex, /export\s+\*/, "EOD public API must be deliberate, not a blind barrel")
+  assert.match(pipeline, /from ["']@\/modules\/eod["']/)
+  assert.match(retry, /from ["']@\/modules\/eod["']/)
+  assert.doesNotMatch(pipeline, /from ["']@\/modules\/eod\//, "pipeline must not deep-import EOD internals")
+  assert.doesNotMatch(retry, /from ["']@\/modules\/eod\//, "retry workflow must not deep-import EOD internals")
+})
+
+test("QEO-67 lower-level domains never depend on EOD or workflow implementations", () => {
+  for (const domain of ["modules/market", "modules/wyckoff", "modules/ai-council", "modules/signals"]) {
+    for (const text of moduleSources(domain)) {
+      assert.doesNotMatch(text, /from ["']@\/modules\/eod(?:\/|["'])/, `${domain} must not import EOD`)
+      assert.doesNotMatch(text, /from ["']@\/workflows\//, `${domain} must not import workflow implementations`)
+    }
+  }
+})
+
 test("QEO-60 exposes seven stable business phases while retaining internal durable phases", () => {
-  const phases = source("lib/admin/job-phases.ts")
-  const telemetry = source("lib/admin/job-phase-telemetry.ts")
+  const phases = source("modules/admin/job-phases.ts")
+  const telemetry = source("modules/admin/job-phase-telemetry.ts")
 
   for (const phase of [
     "DATA_REFRESH",
@@ -49,7 +88,7 @@ test("QEO-60 runs TTAI and Market Close as sibling branches only after Rating an
 
 test("QEO-60 bounds provider history concurrency with a configurable hard cap", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
-  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const steps = source("modules/eod/workflow-steps.ts")
 
   assert.match(workflow, /QEOINDEX_EOD_HISTORY_CONCURRENCY/)
   assert.match(workflow, /HISTORY_CONCURRENCY_MAX/)
@@ -74,11 +113,11 @@ test("QEO-60 enforces Deterministic Council then Market Synthesis then LLM debat
 })
 
 test("QEO-64 waits for terminal Market Synthesis and injects its exact-session context into LLM evidence", () => {
-  const synthesisStep = source("lib/qeoindex-eod-market-synthesis-step.ts")
-  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
-  const operations = source("lib/ai-council-operations.ts")
-  const promptEvidence = source("lib/ai-council-prompt-evidence.ts")
-  const promptIdentity = source("lib/ai-council-prompt-identity.ts")
+  const synthesisStep = source("modules/eod/market-synthesis-step.ts")
+  const steps = source("modules/eod/workflow-steps.ts")
+  const operations = source("modules/ai-council/operations.ts")
+  const promptEvidence = source("modules/ai-council/prompt-evidence.ts")
+  const promptIdentity = source("modules/ai-council/prompt-identity.ts")
 
   assert.match(synthesisStep, /awaitMarketSynthesisConclusion/, "synthesis phase must wait for an exact-session terminal conclusion")
   assert.match(synthesisStep, /status:\s*"succeeded"/, "synthesis phase must expose terminal success, not enqueue success")

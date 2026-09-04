@@ -14,8 +14,8 @@ function retentionMigration() {
 }
 
 test("active EOD retention is Supabase-first and never deletes canonical raw Daily OHLCV", () => {
-  const archive = source("lib/qeoindex-eod-archive.ts")
-  const step = source("lib/qeoindex-eod-retention-step.ts")
+  const archive = source("modules/eod/archive.ts")
+  const step = source("modules/eod/retention-step.ts")
   const sql = retentionMigration()
 
   assert.match(archive, /qeo_run_safe_retention_cleanup/)
@@ -51,7 +51,7 @@ test("safe retention deletes terminal orphan parents only when canonical evidenc
 })
 
 test("Wyckoff build stages run-scoped artifacts and validates/publishes by hash instead of durable workflow payload", () => {
-  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const steps = source("modules/eod/workflow-steps.ts")
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
 
   assert.match(steps, /loadWyckoffV2CachedHistories/)
@@ -65,7 +65,7 @@ test("Wyckoff build stages run-scoped artifacts and validates/publishes by hash 
 })
 
 test("direct Wyckoff publish keeps two analysis snapshots and one raw Daily chart series per ticker", () => {
-  const path = "lib/wyckoff-supabase-publish.ts"
+  const path = "modules/wyckoff/supabase-publish.ts"
   assert.equal(existsSync(new URL(`../${path}`, import.meta.url)), true)
   const code = source(path)
 
@@ -82,8 +82,8 @@ test("direct Wyckoff publish keeps two analysis snapshots and one raw Daily char
 
 test("Notion is a downstream analytical summary, not operational retention state", () => {
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
-  const summary = source("lib/qeoindex-eod-notion-summary.ts")
-  const summaryStep = source("lib/qeoindex-eod-notion-summary-step.ts")
+  const summary = source("modules/eod/notion-summary.ts")
+  const summaryStep = source("modules/eod/notion-summary-step.ts")
 
   const retention = workflow.indexOf("runRetentionCleanupStep")
   const notion = workflow.indexOf("runNotionAnalyticalSummaryStep", retention)

@@ -4,7 +4,7 @@ import React, { memo, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { PlusIcon, ArrowUpIcon, ArrowDownIcon, MinusIcon } from 'lucide-react'
 
-import { PortfolioPosition } from '@/lib/portfolio/pnl'
+import { PortfolioPosition } from '@/modules/portfolio/pnl'
 import {
   Table,
   TableBody,
@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { cn } from '@/modules/shared/ui/cn'
 
 // ---------------------------------------------------------------------------
 // Helpers

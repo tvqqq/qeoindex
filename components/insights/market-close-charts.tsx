@@ -28,7 +28,7 @@ import type {
   MarketIndexCard,
   MarketLeaderItem,
   MarketSectorRow,
-} from "@/lib/market-insight-data"
+} from "@/modules/research/market-insight/data"
 
 const GRID = "rgba(148,163,184,0.10)"
 const AXIS = "rgba(148,163,184,0.62)"

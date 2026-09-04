@@ -4,7 +4,7 @@ import { useActionState } from "react"
 import { AlertCircle, CheckCircle2, Play, X } from "lucide-react"
 
 import { runJobAction, type AdminActionResult } from "@/app/admin/actions"
-import type { AdminJobView } from "@/lib/admin/types"
+import type { AdminJobView } from "@/modules/admin/types"
 
 export interface AdminManualJobModalProps {
   job: AdminJobView

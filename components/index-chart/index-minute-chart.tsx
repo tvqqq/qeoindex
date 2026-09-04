@@ -1,14 +1,14 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { loadLightweightCharts, type LightweightChartApi, type LightweightSeriesApi } from "@/lib/lightweight-charts-runtime"
+import { loadLightweightCharts, type LightweightChartApi, type LightweightSeriesApi } from "@/modules/shared/charts/lightweight-charts-runtime"
 import {
   candleDateKey,
   isSessionSeparatorResolution,
   type CandleBar,
   type IndexChartResolution,
   type IndexChartSymbol,
-} from "@/lib/index-candles"
+} from "@/modules/market/realtime/index-candles"
 
 const UP_COLOR = "#22c98a"
 const DOWN_COLOR = "#ff4757"

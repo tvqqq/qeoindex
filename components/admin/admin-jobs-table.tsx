@@ -4,9 +4,9 @@ import { useState } from "react"
 import Link from "next/link"
 import { AlertTriangle, ExternalLink, Play, Search } from "lucide-react"
 
-import { formatAdminModelLabel } from "@/lib/admin/job-ai-usage"
-import { formatAdminDate, formatAdminDuration, formatAdminTime, formatAdminTokenCount } from "@/lib/admin/time"
-import type { AdminJobView } from "@/lib/admin/types"
+import { formatAdminModelLabel } from "@/modules/admin/job-ai-usage"
+import { formatAdminDate, formatAdminDuration, formatAdminTime, formatAdminTokenCount } from "@/modules/admin/time"
+import type { AdminJobView } from "@/modules/admin/types"
 import { AdminManualJobModal } from "./admin-manual-job-modal"
 
 export interface AdminJobsTableProps {

@@ -4,8 +4,8 @@ import test from "node:test"
 import {
   buildWyckoffV2SupabasePayload,
   validateWyckoffV2Memberships,
-} from "../lib/wyckoff-v2-ingest.ts"
-import type { WyckoffV2Snapshot } from "../lib/wyckoff-v2-builder.ts"
+} from "../modules/wyckoff/eod-ingest.ts"
+import type { WyckoffV2Snapshot } from "../modules/wyckoff/eod-builder.ts"
 
 function completeSnapshot(ticker: string, timeframe: WyckoffV2Snapshot["timeframe"], rank: number | null): WyckoffV2Snapshot {
   const runKey = "WYCKOFF-2026-08-25-EOD-v3"

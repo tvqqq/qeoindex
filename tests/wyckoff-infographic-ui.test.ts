@@ -10,7 +10,7 @@ const page = source("app/insights/wyckoff/page.tsx")
 const deferred = source("components/insights/wyckoff-deferred-dashboard.tsx")
 const dashboard = source("components/insights/wyckoff-daily-weekly-dashboard.tsx")
 const chart = source("components/insights/wyckoff-lightweight-chart.tsx")
-const unified = source("lib/wyckoff-unified-data.ts")
+const unified = source("modules/wyckoff/unified-data.ts")
 
 test("standalone Wyckoff page renders canonical shell and defers the Daily Weekly dashboard", () => {
   assert.match(page, /WyckoffDeferredDashboard/)

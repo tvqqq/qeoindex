@@ -4,12 +4,12 @@ import { ArrowLeft, Clock, Cpu, History, Timer } from "lucide-react"
 
 import { AdminJobHistoryTable } from "@/components/admin/admin-job-history-table"
 import { AdminJobPhaseTimeline } from "@/components/admin/admin-job-phase-timeline"
-import { getEffectiveAdminJobDefinition } from "@/lib/admin/effective-job-catalog"
-import { loadAdminJobPhases } from "@/lib/admin/job-phase-data"
-import { QEOINDEX_EOD_JOB_KEY } from "@/lib/admin/job-phases"
-import { loadAdminJobHistory, loadAdminJobView } from "@/lib/admin/job-health"
-import { formatAdminDateTime } from "@/lib/admin/time"
-import { requireRootPageContext } from "@/lib/auth/root"
+import { getEffectiveAdminJobDefinition } from "@/modules/admin/effective-job-catalog"
+import { loadAdminJobPhases } from "@/modules/admin/job-phase-data"
+import { QEOINDEX_EOD_JOB_KEY } from "@/modules/admin/job-phases"
+import { loadAdminJobHistory, loadAdminJobView } from "@/modules/admin/job-health"
+import { formatAdminDateTime } from "@/modules/admin/time"
+import { requireRootPageContext } from "@/modules/auth/root"
 
 export const dynamic = "force-dynamic"
 

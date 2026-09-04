@@ -2,15 +2,15 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { ADMIN_JOB_CATALOG } from "../lib/admin/catalog.ts"
-import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
+import { ADMIN_JOB_CATALOG } from "../modules/admin/catalog.ts"
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../modules/admin/effective-job-catalog.ts"
 import {
   findScheduleConflicts,
   getJobKeyForPgCron,
   getPgCronNameForJobKey,
   PG_CRON_NAME_TO_JOB_KEY,
-} from "../lib/admin/job-schedule.ts"
-import { isValidSchedulePolicy } from "../lib/admin/schedule-policy.ts"
+} from "../modules/admin/job-schedule.ts"
+import { isValidSchedulePolicy } from "../modules/admin/schedule-policy.ts"
 
 function readJsonFile(path: string) {
   return JSON.parse(readFileSync(new URL(`../${path}`, import.meta.url), "utf8"))

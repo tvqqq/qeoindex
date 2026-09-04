@@ -1,4 +1,4 @@
-import type { WyckoffChartStudy } from "@/lib/wyckoff-chart-model"
+import type { WyckoffChartStudy } from "@/modules/wyckoff/chart-model"
 
 /** Shared payload types for the active Daily/Weekly Wyckoff UI. */
 export interface WyckoffListItem {

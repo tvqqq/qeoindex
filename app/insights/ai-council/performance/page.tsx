@@ -4,9 +4,9 @@ import { ArrowLeft, BarChart3, BrainCircuit, Gauge, ShieldCheck, Target, Trendin
 
 import { LandingLogin } from "@/components/auth/landing-login"
 import { TopNav } from "@/components/top-nav"
-import { getAiCouncilPerformanceData, type CouncilAgentStat } from "@/lib/ai-council-learning"
-import { getServerAuthContext } from "@/lib/auth/server"
-import { cn } from "@/lib/utils"
+import { getAiCouncilPerformanceData, type CouncilAgentStat } from "@/modules/ai-council/learning"
+import { getServerAuthContext } from "@/modules/auth/server"
+import { cn } from "@/modules/shared/ui/cn"
 
 export const dynamic = "force-dynamic"
 

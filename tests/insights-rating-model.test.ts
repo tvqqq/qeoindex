@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { calculateRatingModel, historyDelta, type RatingModelSnapshot } from "../lib/insights-rating-model.ts"
+import { calculateRatingModel, historyDelta, type RatingModelSnapshot } from "../modules/research/insights/rating-model.ts"
 
 const base: RatingModelSnapshot = {
   asOfDate: "2026-08-23", ratingScore: 78, score4m: 76, canslimScore: 82,

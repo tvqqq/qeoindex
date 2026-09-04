@@ -1,6 +1,6 @@
 import { AdminAuditTable } from "@/components/admin/admin-audit-table"
-import { loadRecentAuditLogs } from "@/lib/admin/settings"
-import { requireRootPageContext } from "@/lib/auth/root"
+import { loadRecentAuditLogs } from "@/modules/admin/settings"
+import { requireRootPageContext } from "@/modules/auth/root"
 
 export const dynamic = "force-dynamic"
 

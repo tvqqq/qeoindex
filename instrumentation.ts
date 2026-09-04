@@ -14,7 +14,7 @@ export const onRequestError: Instrumentation.onRequestError = async (error, requ
   if (process.env.NEXT_RUNTIME !== "nodejs" || process.env.VERCEL_ENV !== "production") return
 
   try {
-    const { notifyOpsError } = await import("@/lib/ops-alerts")
+    const { notifyOpsError } = await import("@/modules/admin/ops-alerts")
     await notifyOpsError({
       source: `Next.js ${context.routeType}`,
       message,

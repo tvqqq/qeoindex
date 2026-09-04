@@ -23,11 +23,11 @@ import {
   getCachedScannerData,
   getCachedDailyHistory,
   getCachedHourlyHistory,
-} from "@/lib/request-cache"
-import { buildMultiTimeframeStudies } from "@/lib/multi-timeframe"
-import type { AnalysisLog, MarketRegime, ProbabilitySet } from "@/lib/research-types"
-import type { DailyScanRow } from "@/lib/scanner-data"
-import type { OhlcvBar } from "@/lib/technical-indicators"
+} from "@/modules/shared/cache/request-cache"
+import { buildMultiTimeframeStudies } from "@/modules/research/multi-timeframe"
+import type { AnalysisLog, MarketRegime, ProbabilitySet } from "@/modules/research/types"
+import type { DailyScanRow } from "@/modules/signals/scanner/data"
+import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 
 // ─── Utility helpers ───────────────────────────────────────────────────────
 

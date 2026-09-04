@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { BOARD_SECTOR_GROUPS, boardSectorGroupForSector, sectorForTicker } from "../lib/market-sectors.ts"
-import { UNIVERSE_SIZE } from "../lib/wyckoff-universe.ts"
+import { BOARD_SECTOR_GROUPS, boardSectorGroupForSector, sectorForTicker } from "../modules/market/sectors.ts"
+import { UNIVERSE_SIZE } from "../modules/wyckoff/universe.ts"
 
 const NEW_TICKERS = "GEL VCI VND NAB FRT KDH VPI SBT PNJ HAG VGC PVD DCM DGC CRV DPM KDC VBB SJS DXG LGC TAL DHG SIP BMP PDR BAF NLG VCG VHC TCH VSH CTR KLB BWE DSE CII EVF PVT VTP HPA ORS DGW HAH HSG PC1 DIG FTS VAB BVB".split(" ")
 

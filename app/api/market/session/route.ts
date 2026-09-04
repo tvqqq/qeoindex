@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 
-import { requireApiFeature } from "@/lib/auth/server"
-import { fetchDnseSessionHistory } from "@/lib/dnse-market-runtime"
-import { getOrderbookSnapshotFromSupabase, upsertOrderbookSnapshotToSupabase } from "@/lib/supabase/orderbook"
-import { isTradingSessionOpen } from "@/lib/session-countdown"
+import { requireApiFeature } from "@/modules/auth/server"
+import { fetchDnseSessionHistory } from "@/modules/market/providers/dnse/market-runtime"
+import { getOrderbookSnapshotFromSupabase, upsertOrderbookSnapshotToSupabase } from "@/modules/shared/supabase/orderbook"
+import { isTradingSessionOpen } from "@/modules/market/realtime/session-countdown"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

@@ -55,10 +55,10 @@
 
 **Files:**
 - Create: `supabase/migrations/20260901090000_market_universe_top_stocks.sql`
-- Create: `lib/market-universe-selection.ts`
-- Create: `lib/market-universe.ts`
-- Modify: `lib/admin/catalog.ts`
-- Modify: `lib/admin/settings.ts`
+- Create: `modules/market/universe/selection.ts`
+- Create: `modules/market/universe/index.ts`
+- Modify: `modules/admin/catalog.ts`
+- Modify: `modules/admin/settings.ts`
 
 **Interfaces:**
 - `selectMarketUniverse(rows, filters): MarketUniverseCandidate[]`
@@ -96,16 +96,16 @@
 ### Task 4: Root Admin universe control plane
 
 **Files:**
-- Create: `lib/admin/universe.ts`
+- Create: `modules/admin/universe.ts`
 - Create: `app/admin/universe/page.tsx`
 - Create: `components/admin/admin-universe-table.tsx`
 - Modify: `components/admin/admin-nav.tsx`
-- Modify: `lib/admin/catalog.ts`
-- Modify: `lib/admin/jobs.ts`
-- Modify: `lib/admin/effective-job-catalog.ts`
-- Modify: `lib/admin/job-schedule.ts`
-- Modify: `lib/admin/schedule-policy.ts`
-- Modify: `lib/admin/cron-timeline.ts`
+- Modify: `modules/admin/catalog.ts`
+- Modify: `modules/admin/jobs.ts`
+- Modify: `modules/admin/effective-job-catalog.ts`
+- Modify: `modules/admin/job-schedule.ts`
+- Modify: `modules/admin/schedule-policy.ts`
+- Modify: `modules/admin/cron-timeline.ts`
 - Modify: `app/admin/actions.ts`
 
 **Interfaces:**
@@ -120,13 +120,13 @@
 ### Task 5: Logo runtime cutover and market-board consumers
 
 **Files:**
-- Create: `lib/stock-logo-url.ts`
+- Create: `modules/market/stock-logo-url.ts`
 - Modify: `components/stock-logo.tsx`
 - Modify: `app/page.tsx`
-- Modify: `lib/market-sync-universe.ts`
-- Modify: `lib/eod-shares.ts`
-- Modify: `lib/intraday-5m-service.ts`
-- Modify: `lib/supabase/realtime.ts`
+- Modify: `modules/market/universe/sync.ts`
+- Modify: `modules/eod/shares.ts`
+- Modify: `modules/market/realtime/intraday-5m-service.ts`
+- Modify: `modules/shared/supabase/realtime.ts`
 - Modify: `supabase/functions/orderbook-sync/index.ts`
 - Modify: operational scripts that import the static universe.
 
@@ -143,7 +143,7 @@
 ### Task 6: Insights/Bubbles/Qeo Composite/detail migration
 
 **Files:**
-- Modify: `lib/insights-data.ts`
+- Modify: `modules/research/insights/data.ts`
 - Modify: `components/insights/insights-dashboard.tsx`
 - Modify: related detail/popup components and docs/tests.
 
@@ -159,16 +159,16 @@
 ### Task 7: Scanner/Wyckoff dynamic-universe migration
 
 **Files:**
-- Modify: `lib/scanner-data.ts`
-- Modify: `lib/scanner-runner.ts`
+- Modify: `modules/signals/scanner/data.ts`
+- Modify: `modules/signals/scanner/runner.ts`
 - Modify: `app/api/scanner/run/route.ts`
-- Modify: `lib/wyckoff-v2-universe.ts`
-- Modify: `lib/wyckoff-v2-universe-source.ts`
-- Modify: `lib/wyckoff-v2-contract.ts`
-- Modify: `lib/wyckoff-v2-ingest.ts`
-- Modify: `lib/wyckoff-v2-notion-staging.ts`
-- Modify: `lib/wyckoff-unified-data.ts`
-- Modify: `lib/wyckoff-notion-ingest.ts`
+- Modify: `modules/wyckoff/eod-universe.ts`
+- Modify: `modules/wyckoff/eod-universe-source.ts`
+- Modify: `modules/wyckoff/eod-contract.ts`
+- Modify: `modules/wyckoff/eod-ingest.ts`
+- Modify: `modules/wyckoff/eod-notion-staging.ts`
+- Modify: `modules/wyckoff/unified-data.ts`
+- Modify: `modules/wyckoff/notion-ingest.ts`
 - Modify: `app/insights/wyckoff/page.tsx`
 - Modify: EOD workflow/steps/tests.
 
@@ -186,11 +186,11 @@
 ### Task 8: AI Council/EOD readiness migration
 
 **Files:**
-- Modify: `lib/ai-council-data.ts`
-- Modify: `lib/ai-council-eod-workflow-steps.ts`
+- Modify: `modules/ai-council/data.ts`
+- Modify: `modules/ai-council/eod-workflow-steps.ts`
 - Modify: `workflows/ai-council-eod-workflow.ts`
-- Modify: `lib/qeoindex-eod-backfill-ready-step.ts`
-- Modify: `lib/qeoindex-eod-workflow-steps.ts`
+- Modify: `modules/eod/backfill-ready-step.ts`
+- Modify: `modules/eod/workflow-steps.ts`
 - Modify: `workflows/qeoindex-eod-pipeline.ts`
 
 **Interfaces:**

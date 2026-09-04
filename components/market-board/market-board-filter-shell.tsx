@@ -12,12 +12,12 @@ import { createPortal } from "react-dom"
 import { Loader2, SlidersHorizontal } from "lucide-react"
 
 import {
-  LiveMarketBoardV2,
+  LiveMarketBoard,
   type BoardUniverseStock,
   type IndexQuote,
-} from "@/components/live-market-board-v2"
+} from "@/components/live-market-board"
 import type { LiveStockQuote } from "@/components/live-market-stock"
-import type { IntradayPoint } from "@/lib/intraday-5m"
+import type { IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import {
   defaultStockFilterCriteria,
   filterBoardTickers,
@@ -25,7 +25,7 @@ import {
   stockFilterHash,
   type StockFilterCriteriaV1,
   type StockFilterDailyCacheV1,
-} from "@/lib/market-board/stock-filter"
+} from "@/modules/market/board/stock-filter"
 import { StockFilterModal } from "@/components/market-board/stock-filter-modal"
 
 export type FilterBoardUniverseStock = BoardUniverseStock & {
@@ -400,7 +400,7 @@ export function MarketBoardFilterShell({
 
   return (
     <div ref={rootRef} onClickCapture={handleBoardClickCapture} className="relative h-full min-h-0">
-      <LiveMarketBoardV2
+      <LiveMarketBoard
         key={boardKey}
         universe={activeUniverse}
         initialQuotes={quoteSeed}

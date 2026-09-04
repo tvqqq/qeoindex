@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react"
 
-import type { OhlcvBar } from "@/lib/technical-indicators"
-import type { WyckoffScanResult } from "@/lib/wyckoff-engine"
+import type { OhlcvBar } from "@/modules/shared/technical/indicators"
+import type { WyckoffScanResult } from "@/modules/wyckoff/engine"
 
 function sma(values: number[], period: number) {
   const out: Array<number | null> = Array(values.length).fill(null)

@@ -32,11 +32,16 @@ test("browser-facing API routes enforce server auth and feature access", () => {
 })
 
 test("per-user account, watchlist, and insights APIs derive access from server auth", () => {
-  for (const path of ["app/api/me/route.ts", "app/api/watchlist/route.ts"]) {
-    const code = source(path)
-    assert.match(code, /requireApiUser/)
-    assert.match(code, /auth\.context\.user\.id/)
-  }
+  const me = source("app/api/me/route.ts")
+  assert.match(me, /requireApiUser/)
+  assert.match(me, /auth\.context\.user\.id/)
+
+  const watchlistServer = source("modules/portfolio/watchlist/server.ts")
+  assert.match(watchlistServer, /requireApiUser/)
+  assert.match(watchlistServer, /auth\.context\.user\.id/)
+
+  const watchlistRoute = source("app/api/watchlist/route.ts")
+  assert.match(watchlistRoute, /@\/modules\/portfolio\/watchlist\/server/)
 
   const wyckoff = source("app/api/insights/wyckoff/route.ts")
   assert.match(wyckoff, /requireApiUser/)
@@ -51,7 +56,7 @@ test("server-rendered app surfaces verify the server session", () => {
 })
 
 test("machine endpoints share constant-time bearer authorization", () => {
-  const machineAuth = source("lib/auth/machine.ts")
+  const machineAuth = source("modules/auth/machine.ts")
   assert.match(machineAuth, /timingSafeEqual/)
   assert.match(machineAuth, /createHash\("sha256"\)/)
 
@@ -80,12 +85,12 @@ test("destructive market maintenance endpoints are POST-only", () => {
 })
 
 test("trusted Supabase infrastructure client never falls back to public anon credentials", () => {
-  const code = source("lib/supabase/server.ts")
+  const code = source("modules/shared/supabase/server.ts")
   assert.match(code, /SUPABASE_SERVICE_ROLE_KEY/)
   assert.doesNotMatch(code, /NEXT_PUBLIC_SUPABASE_ANON_KEY/)
 })
 
-const SERVER_AUTH_OBSERVABILITY_URL = new URL("../lib/auth/server-observability.ts", import.meta.url)
+const SERVER_AUTH_OBSERVABILITY_URL = new URL("../modules/auth/server-observability.ts", import.meta.url)
 
 async function loadServerAuthObservability() {
   const exists = existsSync(SERVER_AUTH_OBSERVABILITY_URL)
@@ -147,7 +152,7 @@ test("server auth transport observability distinguishes abort and generic transp
 })
 
 test("server auth verification reports thrown transport failures and preserves throw semantics", () => {
-  const code = source("lib/auth/server.ts")
+  const code = source("modules/auth/server.ts")
 
   assert.match(code, /reportServerAuthTransportFailure/)
   assert.match(code, /if \(error \|\| !data\.user\) return null/)

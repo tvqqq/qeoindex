@@ -2,7 +2,7 @@
 
 import React, { useMemo, memo } from "react"
 
-import { PortfolioPosition } from "@/lib/portfolio/pnl"
+import { PortfolioPosition } from "@/modules/portfolio/pnl"
 
 // Vibrant, distinct palette for dark financial UI
 const SLICE_COLORS = [

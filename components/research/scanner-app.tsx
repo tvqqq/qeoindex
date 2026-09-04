@@ -5,7 +5,7 @@ import { useMemo, useState } from "react"
 import { Activity, AlertTriangle, Database, Search, ShieldCheck } from "lucide-react"
 import { TickerResearchLink } from "@/components/ticker-research-link"
 import { TopNav } from "@/components/top-nav"
-import type { DailyScanRow, ScannerData } from "@/lib/scanner-data"
+import type { DailyScanRow, ScannerData } from "@/modules/signals/scanner/data"
 
 function n(value: number | null | undefined, digits = 1) { return typeof value === "number" ? value.toLocaleString("en-US", { maximumFractionDigits: digits }) : "—" }
 function biasClass(bias: string) { return bias === "Bullish" ? "text-up" : bias === "Bearish" ? "text-down" : bias === "Mixed" ? "text-ref" : "text-foreground/70" }

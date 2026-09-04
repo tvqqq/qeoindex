@@ -2,13 +2,13 @@ import assert from "node:assert/strict"
 import { existsSync } from "node:fs"
 import test from "node:test"
 
-const moduleUrl = new URL("../lib/admin/job-phase-telemetry.ts", import.meta.url)
+const moduleUrl = new URL("../modules/admin/job-phase-telemetry.ts", import.meta.url)
 
 test("QeoIndex EOD phase telemetry persists business phase metadata with running then succeeded", async () => {
   assert.equal(existsSync(moduleUrl), true, "job-phase-telemetry.ts must exist")
   if (!existsSync(moduleUrl)) return
 
-  const { runQeoIndexEodPhase } = await import("../lib/admin/job-phase-telemetry.ts")
+  const { runQeoIndexEodPhase } = await import("../modules/admin/job-phase-telemetry.ts")
   const writes: Array<Record<string, unknown>> = []
   const io = {
     upsertPhase: async (row: Record<string, unknown>) => {
@@ -41,7 +41,7 @@ test("QeoIndex EOD phase telemetry records failure, business phase, and rethrows
   assert.equal(existsSync(moduleUrl), true, "job-phase-telemetry.ts must exist")
   if (!existsSync(moduleUrl)) return
 
-  const { runQeoIndexEodPhase } = await import("../lib/admin/job-phase-telemetry.ts")
+  const { runQeoIndexEodPhase } = await import("../modules/admin/job-phase-telemetry.ts")
   const writes: Array<Record<string, unknown>> = []
   const io = { upsertPhase: async (row: Record<string, unknown>) => { writes.push(structuredClone(row)) } }
   const failure = Object.assign(new Error("provider failed"), { code: "UPSTREAM_STALE" })
@@ -67,7 +67,7 @@ test("QeoIndex EOD phase telemetry can mark skipped phases with stable business 
   assert.equal(existsSync(moduleUrl), true, "job-phase-telemetry.ts must exist")
   if (!existsSync(moduleUrl)) return
 
-  const { markQeoIndexEodPhaseSkipped } = await import("../lib/admin/job-phase-telemetry.ts")
+  const { markQeoIndexEodPhaseSkipped } = await import("../modules/admin/job-phase-telemetry.ts")
   const writes: Array<Record<string, unknown>> = []
   const io = { upsertPhase: async (row: Record<string, unknown>) => { writes.push(structuredClone(row)) } }
 
@@ -88,7 +88,7 @@ test("QeoIndex EOD phase telemetry fails closed when telemetry persistence fails
   assert.equal(existsSync(moduleUrl), true, "job-phase-telemetry.ts must exist")
   if (!existsSync(moduleUrl)) return
 
-  const { runQeoIndexEodPhase } = await import("../lib/admin/job-phase-telemetry.ts")
+  const { runQeoIndexEodPhase } = await import("../modules/admin/job-phase-telemetry.ts")
   let executed = false
   const io = { upsertPhase: async () => { throw new Error("telemetry unavailable") } }
 

@@ -8,7 +8,7 @@ import type { WyckoffListItem, WyckoffTickerPayload } from "@/components/insight
 import { TopNav } from "@/components/top-nav"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import type { WyckoffChartTimeframe } from "@/lib/wyckoff-chart-model"
+import type { WyckoffChartTimeframe } from "@/modules/wyckoff/chart-model"
 
 const WyckoffDailyWeeklyDashboard = dynamic(
   () => import("@/components/insights/wyckoff-daily-weekly-dashboard").then((module) => module.WyckoffDailyWeeklyDashboard),

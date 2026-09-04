@@ -5,10 +5,10 @@ import { ArrowLeft, BrainCircuit, CircleAlert, Coins, Gauge, Scale, ShieldCheck,
 
 import { LandingLogin } from "@/components/auth/landing-login"
 import { TopNav } from "@/components/top-nav"
-import { getAiCouncilDebateDashboardData } from "@/lib/ai-council-debate-data"
-import type { AiCouncilLlmDebateRecord, DebateSelectionReason } from "@/lib/ai-council-llm"
-import { getServerAuthContext } from "@/lib/auth/server"
-import { cn } from "@/lib/utils"
+import { getAiCouncilDebateDashboardData } from "@/modules/ai-council/debate-data"
+import type { AiCouncilLlmDebateRecord, DebateSelectionReason } from "@/modules/ai-council/llm"
+import { getServerAuthContext } from "@/modules/auth/server"
+import { cn } from "@/modules/shared/ui/cn"
 
 export const dynamic = "force-dynamic"
 

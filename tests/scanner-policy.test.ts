@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { scannerHistoryPolicy, shouldSkipSameDateScan } from "../lib/scanner-policy.ts"
+import { scannerHistoryPolicy, shouldSkipSameDateScan } from "../modules/signals/scanner/policy.ts"
 
 test("scanner rejects fewer than 60 completed Daily bars", () => {
   assert.throws(() => scannerHistoryPolicy(59), /need >=60/)

@@ -407,7 +407,7 @@ git commit -m "feat: correlate TTAI recovery outcome"
 ### Task 6: Make Root Admin KFSP dispatch explicitly asynchronous
 
 **Files:**
-- Modify: `lib/admin/jobs.ts`
+- Modify: `modules/admin/jobs.ts`
 - Modify: `app/api/admin/jobs/[key]/run/route.ts` only if response shape requires explicit queued state
 - Modify: `tests/root-admin-jobs.test.ts`
 
@@ -471,7 +471,7 @@ Expected: all PASS.
 - [ ] **Step 6: Commit Root Admin async path**
 
 ```bash
-git add lib/admin/jobs.ts app/api/admin/jobs/[key]/run/route.ts tests/root-admin-jobs.test.ts tests/kfsp-manual-recovery-lifecycle.test.ts
+git add modules/admin/jobs.ts app/api/admin/jobs/[key]/run/route.ts tests/root-admin-jobs.test.ts tests/kfsp-manual-recovery-lifecycle.test.ts
 git commit -m "fix: keep KFSP manual recovery queued until provider completion"
 ```
 

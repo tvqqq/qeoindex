@@ -14,8 +14,8 @@ import {
   type IndexChartResolution,
   type IndexChartSymbol,
   type VnIndexAccumulatorState,
-} from "@/lib/index-candles"
-import { subscribeDnseMarketFrames } from "@/lib/dnse-market-stream"
+} from "@/modules/market/realtime/index-candles"
+import { subscribeDnseMarketFrames } from "@/modules/market/providers/dnse/market-stream"
 
 type CandleMap = Record<IndexChartSymbol, CandleBar[]>
 type ErrorMap = Partial<Record<IndexChartSymbol, string>>

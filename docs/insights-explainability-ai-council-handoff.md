@@ -59,13 +59,13 @@ Nguồn tham khảo công khai:
 - `components/insights/insights-dashboard.tsx` đã có `MetricLabel`, `ScorePill` và tooltip trên nhiều header/cell.
 - Các mô tả trong `supabase/functions/_shared/kfsp-catalog.ts` chủ yếu là một câu định nghĩa. Chúng chưa hướng dẫn đọc kết hợp và chưa nói rõ anti-meaning.
 - Hover tooltip không phải learning surface tốt cho touch/mobile; user mới phải dò từng cột trong một bảng 11 cột.
-- `Risk score` trên homepage là heuristic QeoIndex cụ thể trong `lib/insights-data.ts`, nhưng UI chưa nói công thức/giới hạn.
+- `Risk score` trên homepage là heuristic QeoIndex cụ thể trong `modules/research/insights/data.ts`, nhưng UI chưa nói công thức/giới hạn.
 - `Rating tổng hợp` là mean của các provider score có dữ liệu; user có thể hiểu nhầm thành signal hoặc xác suất tăng.
 
 ### AI Council
 
-- `lib/ai-council-data.ts` normalize nhiều field gốc vào `CouncilRatingEvidence` rồi `buildCouncilStock()` làm mất raw rating evidence khỏi `AiCouncilStock` trả về.
-- `lib/ai-council-llm.ts::evidencePacket()` hiện gửi deterministic decision, agent summaries, benchmark và weight profile, nhưng không gửi raw indicator packet kèm semantics.
+- `modules/ai-council/data.ts` normalize nhiều field gốc vào `CouncilRatingEvidence` rồi `buildCouncilStock()` làm mất raw rating evidence khỏi `AiCouncilStock` trả về.
+- `modules/ai-council/llm.ts::evidencePacket()` hiện gửi deterministic decision, agent summaries, benchmark và weight profile, nhưng không gửi raw indicator packet kèm semantics.
 - Prompt hiện có guardrail tốt về no-browse/no-invention/advisory-only, nhưng model vẫn phải đoán ý nghĩa chính xác, unit, horizon và quan hệ giữa field.
 - `evidenceHash` đã hash rating + Wyckoff evidence. Giữ nguyên tính point-in-time này; semantic guide version phải được audit riêng.
 
@@ -151,7 +151,7 @@ Không render toàn bộ 70+ provider fields trong MVP. Guide MVP chỉ bao ph�
 Tạo một module pure TypeScript, không React, không `server-only`:
 
 ```text
-lib/insights-metric-semantics.ts
+modules/research/insights/metric-semantics.ts
 ```
 
 Không copy nguyên `KFSP_FIELD_CATALOG`. Registry mới bổ sung lớp product semantics cho một tập core key và tham chiếu stable read-model key hiện có.
@@ -263,7 +263,7 @@ Benchmark semantics:
 
 - `close > sma20` chỉ là vị trí so với trend trung hạn, không tự chứng minh risk-on.
 - `return20dPct` là biến động 20 phiên của VNIndex.
-- `regime` hiện được derive từ close/SMA20 và ngưỡng ±2% return20d; ghi đúng formula owner `lib/ai-council-market.ts`.
+- `regime` hiện được derive từ close/SMA20 và ngưỡng ±2% return20d; ghi đúng formula owner `modules/ai-council/market.ts`.
 - Không đưa breadth/liquidity homepage vào Council cho tới khi có persisted point-in-time evidence cùng ngày. Semantic definition không thay thế observation.
 
 ### 3. Prompt rules bắt buộc
@@ -322,7 +322,7 @@ Historical V1 debate rows là immutable. V2 chỉ áp dụng cho run mới; khô
 
 ### P0 — Semantic truth và tests
 
-1. Add `lib/insights-metric-semantics.ts`.
+1. Add `modules/research/insights/metric-semantics.ts`.
 2. Add `tests/insights-metric-semantics.test.ts`.
 3. Test unique keys, required copy, valid units/source, core key coverage và registry lookup.
 4. Test anti-confusion strings cho RS/RSI/RRG, null policy, proprietary-score caveat và rating formula ownership.
@@ -337,11 +337,11 @@ Historical V1 debate rows là immutable. V2 chỉ áp dụng cho run mới; khô
 
 ### P2 — AI prompt V2
 
-1. `lib/ai-council-data.ts`: giữ sanitized prompt evidence chỉ khi option bật.
-2. `lib/ai-council-runtime.ts`: propagate option mà không làm đổi page payload.
+1. `modules/ai-council/data.ts`: giữ sanitized prompt evidence chỉ khi option bật.
+2. `modules/ai-council/runtime.ts`: propagate option mà không làm đổi page payload.
 3. `app/api/ai-council/debate-daily/route.ts`: bật prompt evidence.
-4. `lib/ai-council-llm.ts`: packet V2, dictionary, instructions, structured evidence refs, validator và prompt version.
-5. Nếu cần type sạch, add `lib/ai-council-prompt-evidence.ts`; tránh làm `ai-council-llm.ts` phình thêm một registry thứ hai.
+4. `modules/ai-council/llm.ts`: packet V2, dictionary, instructions, structured evidence refs, validator và prompt version.
+5. Nếu cần type sạch, add `modules/ai-council/prompt-evidence.ts`; tránh làm `ai-council-llm.ts` phình thêm một registry thứ hai.
 6. `tests/ai-council-persistence.test.ts`: giữ guardrail cũ và thêm V2 assertions.
 7. Add focused pure tests cho packet/validator; export pure helpers từ module không `server-only` nếu Node test runner cần.
 

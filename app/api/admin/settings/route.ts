@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 
-import { validateAdminMutationRequest } from "@/lib/admin/request-security"
-import { loadAdminSettingsSnapshot, setAdminSetting } from "@/lib/admin/settings"
-import { requireApiRoot } from "@/lib/auth/root"
+import { validateAdminMutationRequest } from "@/modules/admin/request-security"
+import { loadAdminSettingsSnapshot, setAdminSetting } from "@/modules/admin/settings"
+import { requireApiRoot } from "@/modules/auth/root"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

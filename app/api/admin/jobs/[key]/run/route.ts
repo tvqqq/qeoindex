@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 
-import { dispatchManualAdminJob } from "@/lib/admin/jobs"
-import { validateAdminMutationRequest } from "@/lib/admin/request-security"
-import { requireApiRoot } from "@/lib/auth/root"
+import { dispatchManualAdminJob } from "@/modules/admin/jobs"
+import { validateAdminMutationRequest } from "@/modules/admin/request-security"
+import { requireApiRoot } from "@/modules/auth/root"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

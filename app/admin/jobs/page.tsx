@@ -3,8 +3,8 @@ import { Activity } from "lucide-react"
 import { AdminCronTimeline } from "@/components/admin/admin-cron-timeline"
 import { AdminJobAuditSummary } from "@/components/admin/admin-job-audit-summary"
 import { AdminJobsTable } from "@/components/admin/admin-jobs-table"
-import { loadAdminJobsSnapshot } from "@/lib/admin/job-health"
-import { requireRootPageContext } from "@/lib/auth/root"
+import { loadAdminJobsSnapshot } from "@/modules/admin/job-health"
+import { requireRootPageContext } from "@/modules/auth/root"
 
 export const dynamic = "force-dynamic"
 

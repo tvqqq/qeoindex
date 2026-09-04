@@ -30,17 +30,17 @@
 
 | Path | Responsibility |
 | --- | --- |
-| `lib/auth/root-id.ts` | Pure UUID parsing and membership logic. |
-| `lib/auth/root.ts` | Server-only root page/API authorization. |
-| `lib/admin/types.ts` | Serializable admin setting, job, audit, and overview contracts. |
-| `lib/admin/catalog.ts` | Code-reviewed setting/environment/job inventory and validation. |
-| `lib/admin/redact.ts` | Bounded recursive sanitizer for persisted/returned diagnostics. |
-| `lib/admin/request-security.ts` | Same-origin and mutation-reason validation. |
-| `lib/admin/settings.ts` | Service-role runtime resolution and atomic setting mutation RPC calls. |
-| `lib/admin/job-health.ts` | Pure job state/freshness derivation. |
-| `lib/admin/job-telemetry.ts` | Best-effort/required normalized run lifecycle. |
-| `lib/admin/manual-jobs.ts` | Explicit root-manual dispatch allowlist. |
-| `lib/admin/system-overview.ts` | Partial-failure source adapters and sanitized overview assembly. |
+| `modules/auth/root-id.ts` | Pure UUID parsing and membership logic. |
+| `modules/auth/root.ts` | Server-only root page/API authorization. |
+| `modules/admin/types.ts` | Serializable admin setting, job, audit, and overview contracts. |
+| `modules/admin/catalog.ts` | Code-reviewed setting/environment/job inventory and validation. |
+| `modules/admin/redact.ts` | Bounded recursive sanitizer for persisted/returned diagnostics. |
+| `modules/admin/request-security.ts` | Same-origin and mutation-reason validation. |
+| `modules/admin/settings.ts` | Service-role runtime resolution and atomic setting mutation RPC calls. |
+| `modules/admin/job-health.ts` | Pure job state/freshness derivation. |
+| `modules/admin/job-telemetry.ts` | Best-effort/required normalized run lifecycle. |
+| `modules/admin/manual-jobs.ts` | Explicit root-manual dispatch allowlist. |
+| `modules/admin/system-overview.ts` | Partial-failure source adapters and sanitized overview assembly. |
 | `lib/jobs/market-sync-universe.ts` | Reusable market sync business operation extracted from its route. |
 | `app/api/admin/system/route.ts` | Root-only read model. |
 | `app/api/admin/settings/[key]/route.ts` | Root-only typed upsert/reset endpoints. |
@@ -60,10 +60,10 @@
 ### Task 1: Establish the root authorization boundary
 
 **Files:**
-- Create: `lib/auth/root-id.ts`
-- Create: `lib/auth/root.ts`
+- Create: `modules/auth/root-id.ts`
+- Create: `modules/auth/root.ts`
 - Modify: `.env.example`
-- Modify: `lib/auth/server.ts`
+- Modify: `modules/auth/server.ts`
 - Test: `tests/root-admin-auth.test.ts`
 - Modify: `package.json`
 
@@ -94,7 +94,7 @@ Create `tests/root-admin-auth.test.ts` with these cases:
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { isRootAdminUserId, parseRootAdminUserIds } from "../lib/auth/root-id.ts"
+import { isRootAdminUserId, parseRootAdminUserIds } from "../modules/auth/root-id.ts"
 
 const ROOT = "11111111-1111-4111-8111-111111111111"
 const OTHER = "22222222-2222-4222-8222-222222222222"
@@ -120,11 +120,11 @@ Run:
 node --test tests/root-admin-auth.test.ts
 ```
 
-Expected: FAIL because `lib/auth/root-id.ts` does not exist.
+Expected: FAIL because `modules/auth/root-id.ts` does not exist.
 
 - [ ] **Step 4: Implement pure UUID parsing**
 
-Create `lib/auth/root-id.ts`:
+Create `modules/auth/root-id.ts`:
 
 ```ts
 const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
@@ -140,14 +140,14 @@ export function isRootAdminUserId(userId: string, raw = ""): boolean {
 
 - [ ] **Step 5: Add the server-only root data-access layer**
 
-Create `lib/auth/root.ts` using this control flow:
+Create `modules/auth/root.ts` using this control flow:
 
 ```ts
 import "server-only"
 
 import { NextResponse } from "next/server"
-import { getServerAuthContext, requireApiUser, type ServerAuthContext } from "@/lib/auth/server"
-import { isRootAdminUserId } from "@/lib/auth/root-id"
+import { getServerAuthContext, requireApiUser, type ServerAuthContext } from "@/modules/auth/server"
+import { isRootAdminUserId } from "@/modules/auth/root-id"
 
 const NO_STORE = { "Cache-Control": "private, no-store, max-age=0" }
 
@@ -187,7 +187,7 @@ ROOT_ADMIN_USER_IDS=
 APP_URL=https://qeoindex.qeoqeo.com
 ```
 
-Add `lib/auth/root-id.ts` and `lib/auth/root.ts` to `lint:touched`. Add `tests/root-admin-auth.test.ts` to `test:core` and `test:supabase`.
+Add `modules/auth/root-id.ts` and `modules/auth/root.ts` to `lint:touched`. Add `tests/root-admin-auth.test.ts` to `test:core` and `test:supabase`.
 
 - [ ] **Step 7: Run the focused and security tests**
 
@@ -204,7 +204,7 @@ Expected: all pass.
 - [ ] **Step 8: Commit the root boundary**
 
 ```bash
-git add .env.example lib/auth/root-id.ts lib/auth/root.ts package.json tests/root-admin-auth.test.ts
+git add .env.example modules/auth/root-id.ts modules/auth/root.ts package.json tests/root-admin-auth.test.ts
 git commit -m "feat(admin): add root authorization boundary"
 ```
 
@@ -402,10 +402,10 @@ git commit -m "feat(admin): add private control-plane persistence"
 ### Task 3: Build the typed inventory, validation, and redaction layer
 
 **Files:**
-- Create: `lib/admin/types.ts`
-- Create: `lib/admin/catalog.ts`
-- Create: `lib/admin/redact.ts`
-- Create: `lib/admin/request-security.ts`
+- Create: `modules/admin/types.ts`
+- Create: `modules/admin/catalog.ts`
+- Create: `modules/admin/redact.ts`
+- Create: `modules/admin/request-security.ts`
 - Create: `tests/root-admin-catalog.test.ts`
 - Modify: `package.json`
 
@@ -450,7 +450,7 @@ Expected: FAIL because the admin modules do not exist.
 
 - [ ] **Step 3: Implement shared serializable types**
 
-Define exact unions in `lib/admin/types.ts`:
+Define exact unions in `modules/admin/types.ts`:
 
 ```ts
 export type AdminSettingGroup = "system" | "provider" | "cache" | "market" | "scanner" | "signals" | "wyckoff" | "ai_council" | "ui" | "integration"
@@ -513,7 +513,7 @@ Expected: all pass and the inventory test proves no current `.env.example` key i
 - [ ] **Step 8: Commit the catalog layer**
 
 ```bash
-git add lib/admin/types.ts lib/admin/catalog.ts lib/admin/redact.ts lib/admin/request-security.ts tests/root-admin-catalog.test.ts package.json
+git add modules/admin/types.ts modules/admin/catalog.ts modules/admin/redact.ts modules/admin/request-security.ts tests/root-admin-catalog.test.ts package.json
 git commit -m "feat(admin): add typed control-plane catalog"
 ```
 
@@ -522,10 +522,10 @@ git commit -m "feat(admin): add typed control-plane catalog"
 ### Task 4: Resolve and mutate runtime settings safely
 
 **Files:**
-- Create: `lib/admin/settings.ts`
+- Create: `modules/admin/settings.ts`
 - Create: `tests/root-admin-settings.test.ts`
-- Modify: `lib/ai-council-llm.ts`
-- Modify: `lib/ai-council-research-context.ts`
+- Modify: `modules/ai-council/llm.ts`
+- Modify: `modules/ai-council/research-context.ts`
 - Modify: `app/api/ai-council/debate-daily/route.ts`
 - Modify: `tests/ai-council-prompt-evidence.test.ts`
 - Modify: `tests/ai-council-research-context.test.ts`
@@ -566,7 +566,7 @@ test("invalid persisted values degrade and fall back", () => {
 node --test tests/root-admin-settings.test.ts
 ```
 
-Expected: FAIL because `lib/admin/settings.ts` is absent.
+Expected: FAIL because `modules/admin/settings.ts` is absent.
 
 - [ ] **Step 3: Implement one-query resolution and fail-safe caching**
 
@@ -630,7 +630,7 @@ Expected: all pass; no override preserves current Council behavior.
 - [ ] **Step 8: Commit runtime settings**
 
 ```bash
-git add lib/admin/settings.ts lib/ai-council-llm.ts lib/ai-council-research-context.ts app/api/ai-council/debate-daily/route.ts tests/root-admin-settings.test.ts tests/ai-council-prompt-evidence.test.ts tests/ai-council-research-context.test.ts package.json
+git add modules/admin/settings.ts modules/ai-council/llm.ts modules/ai-council/research-context.ts app/api/ai-council/debate-daily/route.ts tests/root-admin-settings.test.ts tests/ai-council-prompt-evidence.test.ts tests/ai-council-research-context.test.ts package.json
 git commit -m "feat(admin): add typed runtime settings"
 ```
 
@@ -639,10 +639,10 @@ git commit -m "feat(admin): add typed runtime settings"
 ### Task 5: Normalize job health and telemetry
 
 **Files:**
-- Create: `lib/admin/job-health.ts`
-- Create: `lib/admin/job-telemetry.ts`
+- Create: `modules/admin/job-health.ts`
+- Create: `modules/admin/job-telemetry.ts`
 - Create: `tests/root-admin-job-health.test.ts`
-- Modify: `lib/admin/catalog.ts`
+- Modify: `modules/admin/catalog.ts`
 - Modify: `package.json`
 
 **Interfaces:**
@@ -742,7 +742,7 @@ Expected: all pass.
 - [ ] **Step 7: Commit telemetry primitives**
 
 ```bash
-git add lib/admin/catalog.ts lib/admin/job-health.ts lib/admin/job-telemetry.ts tests/root-admin-job-health.test.ts package.json
+git add modules/admin/catalog.ts modules/admin/job-health.ts modules/admin/job-telemetry.ts tests/root-admin-job-health.test.ts package.json
 git commit -m "feat(admin): add normalized job telemetry"
 ```
 
@@ -752,7 +752,7 @@ git commit -m "feat(admin): add normalized job telemetry"
 
 **Files:**
 - Create: `lib/jobs/market-sync-universe.ts`
-- Create: `lib/admin/manual-jobs.ts`
+- Create: `modules/admin/manual-jobs.ts`
 - Modify: `app/api/signals/daily/route.ts`
 - Modify: `app/api/wyckoff/ingest/route.ts`
 - Modify: `app/api/ai-council/daily/route.ts`
@@ -839,7 +839,7 @@ Expected: all pass; machine endpoint responses remain compatible.
 - [ ] **Step 8: Commit job integration**
 
 ```bash
-git add lib/jobs/market-sync-universe.ts lib/admin/manual-jobs.ts app/api/signals/daily/route.ts app/api/wyckoff/ingest/route.ts app/api/ai-council/daily/route.ts app/api/ai-council/debate-daily/route.ts app/api/scanner/run/route.ts app/api/signals/monitor/route.ts app/api/market/sync-universe/route.ts tests/root-admin-manual-jobs.test.ts tests/auth-api-contract.test.ts package.json
+git add lib/jobs/market-sync-universe.ts modules/admin/manual-jobs.ts app/api/signals/daily/route.ts app/api/wyckoff/ingest/route.ts app/api/ai-council/daily/route.ts app/api/ai-council/debate-daily/route.ts app/api/scanner/run/route.ts app/api/signals/monitor/route.ts app/api/market/sync-universe/route.ts tests/root-admin-manual-jobs.test.ts tests/auth-api-contract.test.ts package.json
 git commit -m "feat(admin): instrument jobs and manual reruns"
 ```
 
@@ -848,7 +848,7 @@ git commit -m "feat(admin): instrument jobs and manual reruns"
 ### Task 7: Assemble the sanitized overview and root APIs
 
 **Files:**
-- Create: `lib/admin/system-overview.ts`
+- Create: `modules/admin/system-overview.ts`
 - Create: `app/api/admin/system/route.ts`
 - Create: `app/api/admin/settings/[key]/route.ts`
 - Create: `app/api/admin/jobs/[key]/run/route.ts`
@@ -950,7 +950,7 @@ Expected: all pass.
 - [ ] **Step 8: Commit root APIs**
 
 ```bash
-git add lib/admin/system-overview.ts app/api/admin/system/route.ts app/api/admin/settings/'[key]'/route.ts app/api/admin/jobs/'[key]'/run/route.ts tests/root-admin-api-contract.test.ts package.json
+git add modules/admin/system-overview.ts app/api/admin/system/route.ts app/api/admin/settings/'[key]'/route.ts app/api/admin/jobs/'[key]'/run/route.ts tests/root-admin-api-contract.test.ts package.json
 git commit -m "feat(admin): add root control-plane APIs"
 ```
 
@@ -1092,7 +1092,7 @@ Never paste a real user UUID, token, credential, cookie, provider payload, or pr
 
 - [ ] **Step 2: Update canonical handover/auth/UI lessons**
 
-Add `/admin`, `lib/auth/root.ts`, admin APIs and private tables to `docs/HANDOVER.md` and `docs/auth.md`. Record the UI lesson that operations dashboards poll only while visible, clamp intervals, avoid repaint-heavy effects, and preserve partial source results.
+Add `/admin`, `modules/auth/root.ts`, admin APIs and private tables to `docs/HANDOVER.md` and `docs/auth.md`. Record the UI lesson that operations dashboards poll only while visible, clamp intervals, avoid repaint-heavy effects, and preserve partial source results.
 
 - [ ] **Step 3: Run the complete repository validation matrix**
 

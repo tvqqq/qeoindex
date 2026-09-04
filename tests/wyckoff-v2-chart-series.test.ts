@@ -7,7 +7,7 @@ import {
   buildWyckoffV2ChartSeriesRows,
   loadWyckoffV2ChartSeriesRows,
   type WyckoffV2RecentOhlcvRow,
-} from "../lib/wyckoff-v2-chart-series.ts"
+} from "../modules/wyckoff/eod-chart-series.ts"
 
 const RUN_ID = "11111111-1111-4111-8111-111111111111"
 

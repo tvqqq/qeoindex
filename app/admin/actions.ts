@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache"
 
-import { dispatchManualAdminJob } from "@/lib/admin/jobs"
-import { resetAdminSetting, setAdminSetting } from "@/lib/admin/settings"
-import { getRootPageContext } from "@/lib/auth/root"
+import { dispatchManualAdminJob } from "@/modules/admin/jobs"
+import { resetAdminSetting, setAdminSetting } from "@/modules/admin/settings"
+import { getRootPageContext } from "@/modules/auth/root"
 
 export interface AdminActionResult {
   ok: boolean

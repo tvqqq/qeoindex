@@ -6,7 +6,7 @@ import {
   INSIGHTS_METRIC_SEMANTICS,
   getMetricSemantic,
   buildAiMetricDictionary,
-} from "../lib/insights-metric-semantics.ts"
+} from "../modules/research/insights/metric-semantics.ts"
 
 const CORE_REQUIRED_KEYS = [
   "market_breadth",
@@ -143,13 +143,13 @@ test("anti-confusion rules enforce explicit boundaries between RS, RSI, RRG and 
 
 test("derived metrics identify exact formula ownership", () => {
   const riskScore = getMetricSemantic("market_risk_score")
-  assert.ok(riskScore?.provenanceNote.includes("lib/insights-data.ts"))
+  assert.ok(riskScore?.provenanceNote.includes("modules/research/insights/data.ts"))
 
   const composite = getMetricSemantic("kfsp_composite_score")
   assert.ok(composite?.provenanceNote.includes("supabase/functions/kfsp-rating-sync/index.ts"))
 
   const regime = getMetricSemantic("vnindex_regime")
-  assert.ok(regime?.provenanceNote.includes("lib/ai-council-market.ts"))
+  assert.ok(regime?.provenanceNote.includes("modules/ai-council/market.ts"))
 })
 
 test("buildAiMetricDictionary compacts and deduplicates entries", () => {

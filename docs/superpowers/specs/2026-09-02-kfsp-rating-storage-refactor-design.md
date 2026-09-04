@@ -163,11 +163,11 @@ Raw evidence insertion must be idempotent for the same `(sync_run_id,ticker)`. A
 
 ## 5. Consumer migration
 
-Repository audit shows active runtime consumers already use canonical `kfsp_*` fields for scores/RRG. `lib/insights-data.ts` is the active consumer that still selects `industry_group`; its mapping already falls back to `sector`.
+Repository audit shows active runtime consumers already use canonical `kfsp_*` fields for scores/RRG. `modules/research/insights/data.ts` is the active consumer that still selects `industry_group`; its mapping already falls back to `sector`.
 
 Runtime changes therefore include:
 
-- remove `industry_group` from `RatingRow`/selection/mapping in `lib/insights-data.ts` and use `sector` as the current industry grouping label;
+- remove `industry_group` from `RatingRow`/selection/mapping in `modules/research/insights/data.ts` and use `sector` as the current industry grouping label;
 - ensure AI Council, LLM evidence, EOD archive, Insights UI and metric semantics continue to use `kfsp_*` canonical fields;
 - add a regression scan that fails if production runtime code reintroduces the dropped generic aliases or `industry_group` from `insights_stock_ratings`;
 - update documentation that still describes legacy aliases as current storage.
@@ -201,7 +201,7 @@ The critical compatibility rule is: **new readers before destructive schema**.
 ### Phase A — application compatibility deployment
 
 1. Add tests that require canonical-only runtime consumption.
-2. Update `lib/insights-data.ts` and any discovered runtime consumer to stop selecting `industry_group` or generic aliases.
+2. Update `modules/research/insights/data.ts` and any discovered runtime consumer to stop selecting `industry_group` or generic aliases.
 3. Merge and deploy the application to Vercel while the old DB schema is still a superset.
 4. Verify production app/Admin routes are READY.
 

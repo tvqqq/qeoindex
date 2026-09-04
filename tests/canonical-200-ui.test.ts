@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { boardSectorGroupForSector } from "../lib/market-sectors.ts"
+import { boardSectorGroupForSector } from "../modules/market/sectors.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")

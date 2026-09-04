@@ -11,8 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import type { WyckoffChartStudy, WyckoffChartTimeframe } from "@/lib/wyckoff-chart-model"
-import { cn } from "@/lib/utils"
+import type { WyckoffChartStudy, WyckoffChartTimeframe } from "@/modules/wyckoff/chart-model"
+import { cn } from "@/modules/shared/ui/cn"
 
 interface TickerResponse {
   ok: boolean

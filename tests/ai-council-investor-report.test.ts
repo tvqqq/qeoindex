@@ -3,9 +3,9 @@ import { existsSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import test from "node:test"
 
-import type { AiCouncilStock } from "../lib/ai-council-model.ts"
+import type { AiCouncilStock } from "../modules/ai-council/model.ts"
 
-const moduleUrl = new URL("../lib/ai-council-investor-report.ts", import.meta.url)
+const moduleUrl = new URL("../modules/ai-council/investor-report.ts", import.meta.url)
 
 const stock: AiCouncilStock = {
   ticker: "MSN",
@@ -120,7 +120,7 @@ async function loadReportModule() {
 
 test("investor report presents the deterministic Council in investor-facing Vietnamese", async () => {
   const reportModule = await loadReportModule()
-  assert.ok(reportModule, "lib/ai-council-investor-report.ts should exist")
+  assert.ok(reportModule, "modules/ai-council/investor-report.ts should exist")
   if (!reportModule) return
 
   const report = reportModule.buildInvestorCouncilReport(stock)
@@ -137,7 +137,7 @@ test("investor report presents the deterministic Council in investor-facing Viet
 
 test("investor report projects the six specialist scores into five readable pillars without changing the Council score", async () => {
   const reportModule = await loadReportModule()
-  assert.ok(reportModule, "lib/ai-council-investor-report.ts should exist")
+  assert.ok(reportModule, "modules/ai-council/investor-report.ts should exist")
   if (!reportModule) return
 
   const report = reportModule.buildInvestorCouncilReport(stock)
@@ -153,7 +153,7 @@ test("investor report projects the six specialist scores into five readable pill
 
 test("investor report keeps evidence concise and removes internal agent prefixes from the simple narrative", async () => {
   const reportModule = await loadReportModule()
-  assert.ok(reportModule, "lib/ai-council-investor-report.ts should exist")
+  assert.ok(reportModule, "modules/ai-council/investor-report.ts should exist")
   if (!reportModule) return
 
   const report = reportModule.buildInvestorCouncilReport(stock)
@@ -166,7 +166,7 @@ test("investor report keeps evidence concise and removes internal agent prefixes
 
 test("investor recommendation labels remain deterministic across all Council signals", async () => {
   const reportModule = await loadReportModule()
-  assert.ok(reportModule, "lib/ai-council-investor-report.ts should exist")
+  assert.ok(reportModule, "modules/ai-council/investor-report.ts should exist")
   if (!reportModule) return
 
   const expected = {

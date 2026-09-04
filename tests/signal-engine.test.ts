@@ -7,7 +7,7 @@ import {
   marketSessionProgress,
   type LiveQuote,
   type SignalDailyScan,
-} from "../lib/signal-engine.ts"
+} from "../modules/signals/engine.ts"
 
 const scan: SignalDailyScan = {
   ticker: "HPG",

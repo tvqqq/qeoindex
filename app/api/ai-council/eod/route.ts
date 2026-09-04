@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { start } from "workflow/api"
 
-import { isMachineRequestAuthorized } from "@/lib/auth/machine"
-import { notifyOpsError } from "@/lib/ops-alerts"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
+import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { aiCouncilEodWorkflow } from "@/workflows/ai-council-eod-workflow"
 
 export const runtime = "nodejs"

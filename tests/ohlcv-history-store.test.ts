@@ -8,28 +8,28 @@ import {
   DAILY_DELTA_DAYS,
   HOURLY_BACKFILL_DAYS,
   HOURLY_DELTA_DAYS,
-} from "../lib/market-history-contract.ts"
+} from "../modules/market/history/contract.ts"
 import {
   buildOhlcvRefreshPlan,
   normalizeOhlcvTickers,
   type OhlcvCoverage,
-} from "../lib/ohlcv-history-store.ts"
+} from "../modules/market/history/ohlcv-store.ts"
 import {
   buildVerifiedFinalDailyBar,
   buildVerifiedNoTradeDailyBar,
-} from "../lib/qeoindex-eod-no-trade-repair-step.ts"
+} from "../modules/eod/no-trade-repair-step.ts"
 import {
   buildEodHistoryRefreshSummary,
   EodHistoryRefreshError,
   type OhlcvUniverseRefreshResult,
-} from "../lib/eod-history-refresh.ts"
+} from "../modules/eod/history-refresh.ts"
 
 const NOW = new Date("2026-08-25T08:35:00.000Z")
-const dnseHistorySource = readFileSync("lib/dnse-history.ts", "utf8")
-const yahooHistorySource = readFileSync("lib/yahoo-history.ts", "utf8")
-const marketHistorySource = readFileSync("lib/market-history.ts", "utf8")
-const marketHistoryContractSource = readFileSync("lib/market-history-contract.ts", "utf8")
-const vndirectHistoryPath = "lib/vndirect-history.ts"
+const dnseHistorySource = readFileSync("modules/market/providers/dnse/history.ts", "utf8")
+const yahooHistorySource = readFileSync("modules/market/providers/yahoo/history.ts", "utf8")
+const marketHistorySource = readFileSync("modules/market/history/index.ts", "utf8")
+const marketHistoryContractSource = readFileSync("modules/market/history/contract.ts", "utf8")
+const vndirectHistoryPath = "modules/market/providers/vndirect/history.ts"
 
 test("historical source URLs are deterministic and contain no credentials", () => {
   const dnse = buildHistoricalSourceUrl("DNSE", "msn", "1D", 14, NOW)

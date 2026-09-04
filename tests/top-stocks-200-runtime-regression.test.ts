@@ -8,19 +8,19 @@ function source(path: string) {
 
 const wyckoffPage = source("app/insights/wyckoff/page.tsx")
 const wyckoffApi = source("app/api/insights/wyckoff/route.ts")
-const wyckoffRunner = source("lib/wyckoff-unified-runner.ts")
+const wyckoffRunner = source("modules/wyckoff/unified-runner.ts")
 const deferredDashboard = source("components/insights/wyckoff-deferred-dashboard.tsx")
 const obsoleteDashboard = source("components/insights/wyckoff-chart-dashboard.tsx")
-const aiFreshness = source("lib/ai-council-freshness.ts")
-const realtime = source("lib/supabase/realtime.ts")
-const intraday = source("lib/intraday-5m-service.ts")
-const ratingModel = source("lib/insights-rating-model.ts")
-const notionStaging = source("lib/wyckoff-v2-notion-staging.ts")
+const aiFreshness = source("modules/ai-council/freshness.ts")
+const realtime = source("modules/shared/supabase/realtime.ts")
+const intraday = source("modules/market/realtime/intraday-5m-service.ts")
+const ratingModel = source("modules/research/insights/rating-model.ts")
+const notionStaging = source("modules/wyckoff/eod-notion-staging.ts")
 const schedulePrompt = source("scripts/chatgpt-plus-wyckoff-schedule-prompt.md")
-const marketSelection = source("lib/market-universe-selection.ts")
-const marketUniverse = source("lib/market-universe.ts")
-const marketSectors = source("lib/market-sectors.ts")
-const boardStore = source("lib/supabase/board-overview.ts")
+const marketSelection = source("modules/market/universe/selection.ts")
+const marketUniverse = source("modules/market/universe/index.ts")
+const marketSectors = source("modules/market/sectors.ts")
+const boardStore = source("modules/shared/supabase/board-overview.ts")
 const boardPage = source("app/page.tsx")
 const boardRefresh = source("components/market-universe-version-refresh.tsx")
 const universeVersionRoute = source("app/api/market-universe/version/route.ts")
@@ -29,10 +29,10 @@ const cleanRebuildMigrationPath = "supabase/migrations/20260901193000_clean_rebu
 const cleanRebuildMarketSyncMigrationPath = "supabase/migrations/20260902011529_clean_rebuild_market_snapshot_trigger.sql"
 const logoProvenanceMigrationPath = "supabase/migrations/20260902024536_market_logo_provenance.sql"
 const insightsPage = source("app/insights/page.tsx")
-const marketSyncUniverse = source("lib/market-sync-universe.ts")
+const marketSyncUniverse = source("modules/market/universe/sync.ts")
 const marketUniverseEdge = source("supabase/functions/market-universe-sync/index.ts")
 const orderbookSync = source("supabase/functions/orderbook-sync/index.ts")
-const sessionCountdown = source("lib/session-countdown.ts")
+const sessionCountdown = source("modules/market/realtime/session-countdown.ts")
 const eodWorkflow = source("workflows/qeoindex-eod-pipeline.ts")
 
 test("Wyckoff runtime reads canonical Supabase universe instead of Notion Top100", () => {
@@ -128,9 +128,9 @@ test("board sector taxonomy follows requested grouping rules", () => {
 })
 
 test("Insights normalizes ticker-specific sectors and removes empty sector groups", () => {
-  assert.equal(existsSync("lib/insights-sector-normalization.ts"), true)
-  if (!existsSync("lib/insights-sector-normalization.ts")) return
-  const normalizer = source("lib/insights-sector-normalization.ts")
+  assert.equal(existsSync("modules/research/insights/sector-normalization.ts"), true)
+  if (!existsSync("modules/research/insights/sector-normalization.ts")) return
+  const normalizer = source("modules/research/insights/sector-normalization.ts")
   assert.match(normalizer, /YEG:\s*"Dịch vụ công ích"/)
   assert.match(normalizer, /TVC:\s*"Chứng khoán"/)
   assert.match(normalizer, /stockCount > 0/)

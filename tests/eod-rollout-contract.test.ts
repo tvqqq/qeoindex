@@ -2,22 +2,22 @@ import assert from "node:assert/strict"
 import { readdirSync, readFileSync } from "node:fs"
 import test from "node:test"
 
-import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../modules/admin/effective-job-catalog.ts"
 import {
   EXPECTED_SUPABASE_SCHEDULERS,
   reconcileSupabaseSchedulers,
-} from "../lib/admin/scheduler-reconciliation.ts"
+} from "../modules/admin/scheduler-reconciliation.ts"
 import {
   getJobKeyForPgCron,
   getPgCronNameForJobKey,
-} from "../lib/admin/job-schedule.ts"
-import { EOD_PIPELINE_PHASES } from "../lib/admin/cron-timeline.ts"
+} from "../modules/admin/job-schedule.ts"
+import { EOD_PIPELINE_PHASES } from "../modules/admin/cron-timeline.ts"
 import {
   appendTickerAttempts,
   computeEodTickerCoverage,
   selectRetryTickers,
   type EodTickerAttempt,
-} from "../lib/qeoindex-eod-fault-isolation.ts"
+} from "../modules/eod/fault-isolation.ts"
 
 const RETIRED_ACTIVE_SCHEDULERS = [
   ["kfsp.rating_daily", "kfsp-rating-daily-7am-ict"],

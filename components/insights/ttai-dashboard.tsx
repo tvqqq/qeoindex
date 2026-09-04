@@ -28,8 +28,8 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import type { InsightsRatingRow } from "@/lib/insights-data"
-import { cn } from "@/lib/utils"
+import type { InsightsRatingRow } from "@/modules/research/insights/data"
+import { cn } from "@/modules/shared/ui/cn"
 
 type DailyHistoryPoint = {
   asOfDate: string

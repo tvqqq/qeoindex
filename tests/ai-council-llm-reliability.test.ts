@@ -5,12 +5,12 @@ import { readFileSync } from "node:fs"
 import {
   inspectOpenAiResponseEnvelope,
   nextMaxOutputTokensAfterIncomplete,
-} from "../lib/ai-council-openai-response.ts"
+} from "../modules/ai-council/openai-response.ts"
 import {
   validateCouncilEvidenceRefs,
   type AiCouncilEvidencePacketV2,
   type LlmEvidenceRef,
-} from "../lib/ai-council-prompt-evidence.ts"
+} from "../modules/ai-council/prompt-evidence.ts"
 
 function packetWithIndicator(key: string, value: number, unit: string): AiCouncilEvidencePacketV2 {
   return {
@@ -117,7 +117,7 @@ test("evidenceRef still rejects a second metric smuggled into one observedValue"
 })
 
 test("LLM runtime inspects incomplete_details and retries max-output truncation once before fallback", () => {
-  const code = readFileSync(new URL("../lib/ai-council-llm.ts", import.meta.url), "utf8")
+  const code = readFileSync(new URL("../modules/ai-council/llm.ts", import.meta.url), "utf8")
   assert.match(code, /inspectOpenAiResponseEnvelope/)
   assert.match(code, /nextMaxOutputTokensAfterIncomplete/)
   assert.match(code, /callModelWithOutputRetry/)
@@ -128,7 +128,7 @@ test("LLM runtime inspects incomplete_details and retries max-output truncation 
 })
 
 test("specialist validation failure gets one bounded evidenceRef repair retry", () => {
-  const code = readFileSync(new URL("../lib/ai-council-llm.ts", import.meta.url), "utf8")
+  const code = readFileSync(new URL("../modules/ai-council/llm.ts", import.meta.url), "utf8")
   const start = code.indexOf("async function settleRole")
   const end = code.indexOf("function reasonCounts", start)
   assert.ok(start >= 0 && end > start)
@@ -142,7 +142,7 @@ test("specialist validation failure gets one bounded evidenceRef repair retry", 
 })
 
 test("invalid escalation never erases a previously validated initial Chair", () => {
-  const code = readFileSync(new URL("../lib/ai-council-llm.ts", import.meta.url), "utf8")
+  const code = readFileSync(new URL("../modules/ai-council/llm.ts", import.meta.url), "utf8")
   const start = code.indexOf('schemaName: "qeoindex_llm_escalation_chair"')
   const end = code.indexOf("const audits =", start)
   assert.ok(start >= 0 && end > start)

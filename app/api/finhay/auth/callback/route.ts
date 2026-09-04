@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 
-import { requireApiFeature } from "@/lib/auth/server"
-import { discoverFinhayOAuth, exchangeFinhayCode } from "@/lib/finhay-live"
-import { clearFinhayOAuthAttempt, getFinhayOAuthAttempt, setFinhayTokens } from "@/lib/finhay-session"
+import { requireApiFeature } from "@/modules/auth/server"
+import { discoverFinhayOAuth, exchangeFinhayCode } from "@/modules/market/providers/finhay/live"
+import { clearFinhayOAuthAttempt, getFinhayOAuthAttempt, setFinhayTokens } from "@/modules/market/providers/finhay/session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

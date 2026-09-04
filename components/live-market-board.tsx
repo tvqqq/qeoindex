@@ -1,0 +1,1886 @@
+"use client"
+
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  Activity,
+  BarChart3,
+  Building2,
+  Camera,
+  ChartNoAxesCombined,
+  Check,
+  ChevronUp,
+  CircleAlert,
+  Coins,
+  Factory,
+  Globe2,
+  Landmark,
+  Layers,
+  LayoutGrid,
+  Loader2,
+  RefreshCw,
+  Search,
+  ShoppingBag,
+  Star,
+  TrendingDown,
+  TrendingUp,
+  Volume2,
+  VolumeX,
+} from "lucide-react"
+import { MarketChangePill } from "@/components/market-change-pill"
+import { IndexChartModal } from "@/components/index-chart/index-chart-modal"
+import { BOARD_SECTOR_GROUPS } from "@/modules/market/sectors"
+import { marketToneFromChange, marketToneText } from "@/modules/market/tone"
+import { useOrderBooks } from "@/components/orderbook/orderbook-context"
+import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
+import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/modules/market/realtime/intraday-5m"
+import { isTradingSessionOpen, isLunchBreak } from "@/modules/market/realtime/session-countdown"
+import {
+  getMarketUiPhase,
+  MARKET_SESSION_RESET_EVENT,
+  newSessionReferencePoint,
+  shouldAcceptRealtimeMiniChart,
+  type MarketUiPhase,
+} from "@/modules/market/realtime/session-ui"
+import { setSoundEnabled, playWhaleSound } from "@/modules/shared/ui/sound-engine"
+import { publishDnseMarketFrame } from "@/modules/market/providers/dnse/market-stream"
+import { captureMarketBoardScreenshot, copyBlobToClipboard } from "@/modules/shared/media/screenshot"
+
+export type BoardUniverseStock = LiveBoardStock
+export type IndexQuote = {
+  symbol: string
+  value: number
+  change?: number
+  changePercent: number
+  volume?: number
+  valueTraded?: number
+  valueChangePercent?: number
+  advances?: number
+  declines?: number
+  unchanged?: number
+  updatedAt: string
+}
+type BoardMode = "sector" | "movers"
+
+const BOARD_VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 })
+const BOARD_TRADED_VALUE_FORMATTER = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const BOARD_MARKET_VALUE_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 })
+const MARKET_UI_COMMIT_MS = 250
+const MARKET_ORDERING_REFRESH_MS = 1000
+const SSR_HISTORY_COVERAGE_MIN = 0.95
+const EMPTY_HISTORY: number[] = []
+
+function formatExactVolume(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
+  return BOARD_VOLUME_FORMATTER.format(value)
+}
+
+function formatExactTradedValue(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
+  const billions = value / 1_000_000_000
+  return `${BOARD_TRADED_VALUE_FORMATTER.format(billions)} tỷ`
+}
+
+function formatCompactVolume(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)} tỷ`
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)} tr`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)} k`
+  return BOARD_VOLUME_FORMATTER.format(value)
+}
+
+function formatMarketValue(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value === 0) return "—"
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000_000) {
+    const billions = abs / 1_000_000_000
+    return `${billions >= 100 ? billions.toFixed(0) : billions.toFixed(1)}b`
+  }
+  if (abs >= 1_000_000) {
+    const millions = abs / 1_000_000
+    return `${BOARD_MARKET_VALUE_FORMATTER.format(millions)}m`
+  }
+  return BOARD_VOLUME_FORMATTER.format(abs)
+}
+
+type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
+type DnseAuthPayload = { action: string; api_key: string; signature: string; timestamp: number; nonce: string }
+type DnseAuthResponse = { ok: boolean; url?: string; auth?: DnseAuthPayload; message?: string }
+type IntradayHistoryResponse = {
+  ok: boolean
+  histories?: Record<string, { symbol: string; provider: "Yahoo" | null; points: IntradayPoint[]; reference: number | null; price: number | null; change: number | null; changePercent: number | null; lastBarAt: number | null; error: string | null }>
+}
+type IndexHistoryResponse = { ok: boolean; quotes?: Record<string, IndexQuote> }
+
+const INDEXES = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"]
+const INDEX_LABELS: Record<string, string> = { VNINDEX: "VN-INDEX", VN30: "VN30", HNXINDEX: "HNX-INDEX", UPCOMINDEX: "UPCOM-INDEX" }
+const INDEX_CHANNELS = ["VNINDEX", "VN30", "HNX", "UPCOM"]
+const STOCK_REFERENCE_KEYS = ["referencePrice", "refPrice", "reference", "basicPrice", "previousClose", "prevClose", "priorClose"]
+const INDEX_REFERENCE_KEYS = ["referenceIndex", "referenceValue", "reference", "previousClose", "prevClose", "priorClose"]
+const STREAM_STALE_MS = 60_000
+const WATCHLIST_KEY = "stockos:watchlist:v1"
+
+const SECTOR_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  bank: Landmark,
+  securities: TrendingUp,
+  consumer: ShoppingBag,
+  "real-estate": Building2,
+  "industrial-tech": Factory,
+  other: Layers,
+}
+
+const SECTOR_BORDER_ACCENTS: Record<string, string> = {
+  bank: "border-t-cyan-400 shadow-[0_-1px_12px_rgba(34,184,207,0.25)]",
+  securities: "border-t-purple-400 shadow-[0_-1px_12px_rgba(168,85,247,0.25)]",
+  consumer: "border-t-rose-400 shadow-[0_-1px_12px_rgba(244,63,94,0.25)]",
+  "real-estate": "border-t-amber-400 shadow-[0_-1px_12px_rgba(245,158,11,0.25)]",
+  "industrial-tech": "border-t-emerald-400 shadow-[0_-1px_12px_rgba(16,185,129,0.25)]",
+  other: "border-t-indigo-400 shadow-[0_-1px_12px_rgba(99,102,241,0.25)]",
+}
+
+const SECTOR_ICON_BADGES: Record<string, string> = {
+  bank: "bg-cyan-500/20 text-cyan-300 border-cyan-400/40 shadow-[0_0_10px_rgba(34,184,207,0.35)]",
+  securities: "bg-purple-500/20 text-purple-300 border-purple-400/40 shadow-[0_0_10px_rgba(168,85,247,0.35)]",
+  consumer: "bg-rose-500/20 text-rose-300 border-rose-400/40 shadow-[0_0_10px_rgba(244,63,94,0.35)]",
+  "real-estate": "bg-amber-500/20 text-amber-300 border-amber-400/40 shadow-[0_0_10px_rgba(245,158,11,0.35)]",
+  "industrial-tech": "bg-emerald-500/20 text-emerald-300 border-emerald-400/40 shadow-[0_0_10px_rgba(16,185,129,0.35)]",
+  other: "bg-indigo-500/20 text-indigo-300 border-indigo-400/40 shadow-[0_0_10px_rgba(99,102,241,0.35)]",
+}
+
+function numeric(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function firstPositive(data: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = numeric(data[key])
+    if (value > 0) return value
+  }
+  return 0
+}
+
+function vietnamSessionDay(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date)
+}
+
+function normalizeIndexName(value: unknown) {
+  const name = String(value ?? "").trim().toUpperCase().replace(/[-_ ]/g, "")
+  if (name === "VNINDEX") return "VNINDEX"
+  if (name === "VN30") return "VN30"
+  if (name === "HNX" || name === "HNXINDEX") return "HNXINDEX"
+  if (name === "UPCOM" || name === "UPCOMINDEX") return "UPCOMINDEX"
+  return ""
+}
+
+function compareByPerformance(a: BoardUniverseStock, b: BoardUniverseStock, quotes: Record<string, LiveStockQuote | IndexQuote>) {
+  const aq = quotes[a.ticker] as LiveStockQuote | undefined
+  const bq = quotes[b.ticker] as LiveStockQuote | undefined
+  if (aq && bq) {
+    if (bq.changePercent !== aq.changePercent) return bq.changePercent - aq.changePercent
+    if (bq.volume && aq.volume && bq.volume !== aq.volume) return bq.volume - aq.volume
+    return a.rank - b.rank
+  }
+  if (aq) return -1
+  if (bq) return 1
+  return a.rank - b.rank
+}
+
+const WatchlistSection = memo(function WatchlistSection({
+  watchedStocks,
+  quotes,
+  priceHistoryCloses,
+  whaleAlerts,
+  onToggleWatch,
+  onOpen,
+  showCharts,
+}: {
+  watchedStocks: BoardUniverseStock[]
+  quotes: Record<string, LiveStockQuote | IndexQuote | undefined>
+  priceHistoryCloses: Record<string, number[]>
+  whaleAlerts: Record<string, boolean>
+  onToggleWatch: (ticker: string) => void
+  onOpen: (ticker: string) => void
+  showCharts: boolean
+}) {
+  if (watchedStocks.length === 0) return null
+  return (
+    <div className="mb-3 rounded-2xl border border-amber-500/25 bg-[#141008]/85 p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+      <div className="mb-2 flex items-center justify-between px-1">
+        <div className="flex items-center gap-1.5">
+          <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+          <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">Danh sách theo dõi</span>
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">{watchedStocks.length}</span>
+        </div>
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-thin">
+        {watchedStocks.map((stock) => (
+          <div key={stock.ticker} className="min-w-[180px] max-w-[220px] flex-1 shrink-0">
+            <LiveStockRow
+              stock={stock}
+              quote={quotes[stock.ticker] as LiveStockQuote | undefined}
+              history={priceHistoryCloses[stock.ticker] ?? EMPTY_HISTORY}
+              showChart={showCharts}
+              onOpen={() => onOpen(stock.ticker)}
+              isWatched
+              isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
+              onToggleWatch={(e) => { e.stopPropagation(); onToggleWatch(stock.ticker) }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+})
+
+const IndexStrip = memo(function IndexStrip({
+  quotes,
+  onOpenChart,
+}: {
+  quotes: Record<string, LiveStockQuote | IndexQuote | undefined>
+  onOpenChart: () => void
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2 p-2 border-b border-white/[0.07] bg-[#080c10]/80 backdrop-blur-2xl sm:grid-cols-4">
+      {INDEXES.map((symbol) => {
+        const quote = quotes[symbol] as IndexQuote | undefined
+        const tone = marketToneFromChange(quote?.changePercent)
+        const text = quote ? marketToneText(tone) : "text-muted-2"
+        const isUp = (quote?.changePercent ?? 0) >= 0
+        const isChartTrigger = symbol === "VNINDEX"
+
+        return (
+          <div
+            key={symbol}
+            role={isChartTrigger ? "button" : undefined}
+            tabIndex={isChartTrigger ? 0 : undefined}
+            aria-label={isChartTrigger ? "Mở biểu đồ VN-INDEX và VN30F1M 1 phút" : undefined}
+            onClick={isChartTrigger ? onOpenChart : undefined}
+            onKeyDown={isChartTrigger ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault()
+                onOpenChart()
+              }
+            } : undefined}
+            className={`group relative flex items-center justify-between overflow-hidden rounded-2xl border px-3.5 py-2.5 backdrop-blur-xl transition-all duration-300 ${
+              isChartTrigger ? "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/55" : ""
+            } ${
+              tone === "up"
+                ? "border-emerald-500/25 bg-[#081510]/60 shadow-[0_8px_24px_-6px_rgba(34,201,138,0.15),inset_0_1px_0_0_rgba(255,255,255,0.08)] hover:border-emerald-500/40 hover:bg-[#0b1d16]/75"
+                : tone === "down"
+                  ? "border-rose-500/25 bg-[#160a0c]/60 shadow-[0_8px_24px_-6px_rgba(255,71,87,0.15),inset_0_1px_0_0_rgba(255,255,255,0.08)] hover:border-rose-500/40 hover:bg-[#200e11]/75"
+                  : "border-white/[0.08] bg-white/[0.025] shadow-[0_8px_24px_-6px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.07)] hover:border-white/[0.14] hover:bg-white/[0.045]"
+            }`}
+          >
+            <svg
+              className={`absolute -right-2 -bottom-2 h-16 w-32 pointer-events-none transition-opacity duration-500 ${
+                isUp ? "text-emerald-500/15 group-hover:text-emerald-500/25" : "text-rose-500/15 group-hover:text-rose-500/25"
+              }`}
+              viewBox="0 0 120 50"
+              fill="none"
+              aria-hidden="true"
+            >
+              <defs>
+                <linearGradient id={`idx-grad-${symbol}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="currentColor" stopOpacity="0.7" />
+                  <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {isUp ? (
+                <>
+                  <path d="M0,45 C20,42 40,48 60,30 C80,12 100,20 120,5 L120,50 L0,50 Z" fill={`url(#idx-grad-${symbol})`} />
+                  <path d="M0,45 C20,42 40,48 60,30 C80,12 100,20 120,5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                </>
+              ) : (
+                <>
+                  <path d="M0,8 C20,12 40,5 60,25 C80,45 100,35 120,48 L120,50 L0,50 Z" fill={`url(#idx-grad-${symbol})`} />
+                  <path d="M0,8 C20,12 40,5 60,25 C80,45 100,35 120,48" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                </>
+              )}
+            </svg>
+
+            <div className="relative z-10 flex items-center gap-2.5 min-w-0">
+              <div
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)] transition-transform duration-300 group-hover:scale-105 ${
+                  tone === "up"
+                    ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-400"
+                    : tone === "down"
+                      ? "border-rose-500/35 bg-rose-500/15 text-rose-400"
+                      : "border-amber-500/35 bg-amber-500/15 text-amber-400"
+                }`}
+              >
+                {tone === "up" ? (
+                  <TrendingUp className="h-4 w-4 drop-shadow-[0_0_6px_rgba(34,201,138,0.5)]" />
+                ) : tone === "down" ? (
+                  <TrendingDown className="h-4 w-4 drop-shadow-[0_0_6px_rgba(255,71,87,0.5)]" />
+                ) : (
+                  <Activity className="h-4 w-4 drop-shadow-[0_0_6px_rgba(226,185,59,0.5)]" />
+                )}
+              </div>
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold tracking-wider text-foreground/90 uppercase font-sans">
+                    {INDEX_LABELS[symbol]}
+                  </span>
+                  {isChartTrigger ? (
+                    <span className="rounded border border-cyan-400/20 bg-cyan-400/8 px-1 py-px font-mono text-[8px] font-bold text-cyan-300">1m</span>
+                  ) : null}
+                  {quote?.volume && (
+                    <span className="hidden xl:inline-block font-mono text-[9.5px] font-medium text-muted-2">
+                      · {formatCompactVolume(quote.volume)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`text-[15px] font-extrabold font-mono tracking-tight ${text}`}>
+                    {formatBoardPrice(quote?.value)}
+                  </span>
+                  {quote?.change !== undefined && (
+                    <span className={`text-[11px] font-mono font-bold ${text}`}>
+                      {quote.change > 0 ? "+" : ""}{quote.change.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="relative z-10 shrink-0">
+              {quote ? <MarketChangePill value={quote.changePercent} tone={tone} /> : null}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+})
+
+const FloatingMarketStatus = memo(function FloatingMarketStatus({
+  streamState,
+  streamError,
+  liveCount,
+  pricedCount,
+  historyCount,
+  universeLength,
+  advances,
+  declines,
+  lastMessageAt,
+  soundEnabled,
+  isLunch,
+  sessionOpen,
+  onToggleSound,
+  onReconnect,
+  onCaptureScreenshot,
+  isCapturing,
+  copiedToast,
+}: {
+  streamState: StreamState
+  streamError: string
+  liveCount: number
+  pricedCount: number
+  historyCount: number
+  universeLength: number
+  advances: number
+  declines: number
+  lastMessageAt: string
+  soundEnabled: boolean
+  isLunch?: boolean
+  sessionOpen?: boolean
+  onToggleSound: () => void
+  onReconnect: () => void
+  onCaptureScreenshot: () => void
+  isCapturing?: boolean
+  copiedToast?: boolean
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="fixed bottom-3 right-3 z-30 flex flex-col items-end select-none" data-screenshot-exclude="true">
+      {copiedToast ? (
+        <div className="mb-2 flex items-center gap-2 rounded-full border border-emerald-500/40 bg-[#091811]/95 px-3.5 py-1.5 text-xs text-emerald-300 shadow-[0_10px_30px_rgba(16,185,129,0.35),inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-2xl animate-in fade-in slide-in-from-bottom-2 duration-200 select-none">
+          <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+          <span className="font-semibold">Đã sao chép ảnh bảng điện vào Clipboard!</span>
+        </div>
+      ) : null}
+
+      {expanded ? (
+        <div className="mb-2 w-72 rounded-2xl border border-white/[0.12] bg-[#0b0f14]/95 p-3.5 shadow-[0_20px_60px_rgba(0,0,0,0.9),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-xs space-y-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="flex items-center justify-between border-b border-white/[0.08] pb-2">
+            <span className="font-bold text-foreground flex items-center gap-1.5">
+              <Activity className="h-3.5 w-3.5 text-brand" />
+              <span>Trạng thái Hệ thống</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="text-muted-2 hover:text-foreground text-[10px] px-1.5 py-0.5 rounded-full hover:bg-white/[0.06] transition-colors"
+            >
+              Đóng ✕
+            </button>
+          </div>
+
+          <div className="space-y-1.5 font-mono text-[11px] text-muted-2">
+            <div className="flex justify-between">
+              <span>Nguồn dữ liệu:</span>
+              <span className="text-foreground font-sans">Yahoo 5m + DNSE</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Độ rộng TT:</span>
+              <span>
+                <b className="text-up">▲ {advances}</b> · <b className="text-down">▼ {declines}</b>
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Có giá / Top 100:</span>
+              <span className="text-foreground font-bold">{pricedCount}/{universeLength}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Biểu đồ nến:</span>
+              <span className="text-foreground">{historyCount}/{universeLength}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>WS Feed live:</span>
+              <span className={`font-bold ${isLunch ? "text-amber-400 font-sans" : "text-foreground"}`}>
+                {isLunch ? "Giờ nghỉ trưa (Tạm dừng)" : `${liveCount}/${universeLength}`}
+              </span>
+            </div>
+            {lastMessageAt ? (
+              <div className="flex justify-between">
+                <span>Cập nhật cuối:</span>
+                <span className="text-foreground">
+                  {new Date(lastMessageAt).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
+                </span>
+              </div>
+            ) : null}
+          </div>
+
+          {streamError ? (
+            <div className="rounded-xl bg-ref/10 border border-ref/30 p-2 text-[10px] text-ref leading-tight">
+              {streamError}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={onReconnect}
+            className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] py-1.5 text-[11px] font-semibold text-foreground hover:bg-white/[0.08] transition-colors shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin text-ref" : ""}`} />
+            <span>Kết nối lại DNSE Feed</span>
+          </button>
+        </div>
+      ) : null}
+
+      <div className="flex items-center gap-1 rounded-full border border-white/[0.12] bg-[#0c1015]/90 pl-1.5 pr-3 py-1 shadow-[0_12px_36px_rgba(0,0,0,0.75),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl text-[11px]">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleSound()
+          }}
+          className={`flex h-6 w-6 items-center justify-center rounded-full transition-all ${
+            soundEnabled
+              ? "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
+              : "text-muted-2 hover:text-foreground hover:bg-white/[0.08]"
+          }`}
+          title={soundEnabled ? "Âm thanh Lệnh Cá Mập: Đang BẬT (Click để tắt)" : "Âm thanh Lệnh Cá Mập: Đang TẮT (Click để bật)"}
+        >
+          {soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-amber-400" /> : <VolumeX className="h-3.5 w-3.5" />}
+        </button>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onCaptureScreenshot()
+          }}
+          disabled={isCapturing}
+          className={`flex h-6 w-6 items-center justify-center rounded-full transition-all ${
+            copiedToast
+              ? "bg-emerald-500/25 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.4)]"
+              : isCapturing
+                ? "bg-white/[0.08] text-white animate-pulse cursor-wait"
+                : "text-muted-2 hover:text-foreground hover:bg-white/[0.08]"
+          }`}
+          title="Chụp ảnh toàn bộ bảng điện (Tự động kèm logo chìm QeoIndex và sao chép vào Clipboard)"
+        >
+          {copiedToast ? (
+            <Check className="h-3.5 w-3.5 text-emerald-400" />
+          ) : isCapturing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+          ) : (
+            <Camera className="h-3.5 w-3.5" />
+          )}
+        </button>
+
+        <span className="h-3 w-[1px] bg-white/[0.12]" />
+
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-2 pl-1 hover:opacity-90 transition-opacity"
+          title={isLunch ? "Đang trong giờ nghỉ trưa (11:30 - 13:00) — Tạm dừng cập nhật giá & nến" : "Bấm để xem chi tiết trạng thái hệ thống"}
+        >
+          <span
+            className={`h-2 w-2 rounded-full ${
+              isLunch
+                ? "bg-amber-400"
+                : streamState === "LIVE"
+                  ? "bg-up animate-pulse"
+                  : streamState === "CONNECTING"
+                    ? "bg-ref"
+                    : streamState === "CLOSED"
+                      ? "bg-white/40"
+                      : "bg-down"
+            }`}
+          />
+          <span className="font-semibold text-foreground">
+            {isLunch
+              ? "Giờ nghỉ trưa"
+              : streamState === "LIVE"
+                ? "DNSE LIVE"
+                : streamState === "CONNECTING"
+                  ? "Đang kết nối"
+                  : streamState === "CLOSED" || !sessionOpen
+                    ? "Ngoài giờ giao dịch realtime"
+                    : "Mất kết nối"}
+          </span>
+          <span className="text-muted-2">·</span>
+          <span className="font-mono text-up font-bold">▲{advances}</span>
+          <span className="font-mono text-down font-bold">▼{declines}</span>
+          <ChevronUp className={`h-3 w-3 text-muted-2 transition-transform duration-150 ${expanded ? "rotate-180" : ""}`} />
+        </button>
+      </div>
+    </div>
+  )
+})
+
+function extractInitialRefs(quotes?: Record<string, LiveStockQuote | IndexQuote>): Record<string, number> {
+  const refs: Record<string, number> = {}
+  if (!quotes) return refs
+  for (const [sym, q] of Object.entries(quotes)) {
+    if (q && "reference" in q && typeof q.reference === "number" && q.reference > 0) {
+      refs[sym] = q.reference
+    }
+  }
+  return refs
+}
+
+export function LiveMarketBoard({
+  universe,
+  initialQuotes,
+  initialHistories,
+  isSessionOpen,
+}: {
+  universe: BoardUniverseStock[]
+  initialQuotes?: Record<string, LiveStockQuote | IndexQuote>
+  initialHistories?: Record<string, IntradayPoint[]>
+  isSessionOpen?: boolean
+}) {
+  const [sessionOpen, setSessionOpen] = useState<boolean>(() => isSessionOpen ?? isTradingSessionOpen())
+  const [isLunch, setIsLunch] = useState<boolean>(() => isLunchBreak())
+  const [indexChartOpen, setIndexChartOpen] = useState(false)
+  const { open: openOrderBook } = useOrderBooks()
+  const [quotes, setQuotes] = useState<Record<string, LiveStockQuote | IndexQuote>>(() => {
+    const initial: Record<string, LiveStockQuote | IndexQuote> = initialQuotes ? { ...initialQuotes } : {}
+    for (const stock of universe) {
+      if (!initial[stock.ticker] && stock.lastClose && stock.lastClose > 0) {
+        initial[stock.ticker] = {
+          symbol: stock.ticker,
+          price: stock.lastClose,
+          reference: stock.lastClose,
+          change: 0,
+          changePercent: 0,
+          volume: 0,
+          updatedAt: stock.lastCloseDate || new Date().toISOString(),
+        }
+      }
+    }
+    return initial
+  })
+  const [orderingQuotes, setOrderingQuotes] = useState<Record<string, LiveStockQuote | IndexQuote>>(() => quotes)
+  const [streamState, setStreamState] = useState<StreamState>(() => sessionOpen ? "CONNECTING" : "CLOSED")
+  const [streamError, setStreamError] = useState("")
+  const [lastMessageAt, setLastMessageAt] = useState("")
+  const [reconnectKey, setReconnectKey] = useState(0)
+  const [historyReloadKey, setHistoryReloadKey] = useState(0)
+  const [marketUiPhase, setMarketUiPhase] = useState<MarketUiPhase>(() => getMarketUiPhase())
+  const [showSessionOpenAlert, setShowSessionOpenAlert] = useState(false)
+  const [query, setQuery] = useState("")
+  const [mode, setMode] = useState<BoardMode>("sector")
+  const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>(() => initialHistories ? { ...initialHistories } : {})
+  const [whaleAlerts, setWhaleAlerts] = useState<Record<string, boolean>>({})
+  const [showWatchlist, setShowWatchlist] = useState<boolean>(() => {
+    try {
+      return typeof window !== "undefined" ? localStorage.getItem("qeoindex_show_watchlist") !== "false" : true
+    } catch {
+      return true
+    }
+  })
+
+  const toggleShowWatchlist = useCallback(() => {
+    setShowWatchlist((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem("qeoindex_show_watchlist", String(next))
+      } catch {}
+      return next
+    })
+  }, [])
+
+  const [soundEnabled, setSoundEnabledState] = useState<boolean>(() => {
+    try {
+      return typeof window !== "undefined" && localStorage.getItem("qeoindex_sound_fx_enabled") === "true"
+    } catch {
+      return false
+    }
+  })
+
+  const boardContainerRef = useRef<HTMLDivElement>(null)
+  const [isCapturing, setIsCapturing] = useState(false)
+  const [copiedToast, setCopiedToast] = useState(false)
+  const [showFlash, setShowFlash] = useState(false)
+
+  const handleCaptureScreenshot = useCallback(async () => {
+    if (isCapturing || !boardContainerRef.current) return
+    setIsCapturing(true)
+    setShowFlash(true)
+    try {
+      const blob = await captureMarketBoardScreenshot(boardContainerRef.current, { pixelRatio: 2 })
+      if (blob) {
+        await copyBlobToClipboard(blob)
+        setCopiedToast(true)
+        setTimeout(() => setCopiedToast(false), 3000)
+      }
+    } catch (err) {
+      console.error("Screenshot capture error:", err)
+    } finally {
+      setIsCapturing(false)
+    }
+  }, [isCapturing])
+
+  const quotesRef = useRef<Record<string, LiveStockQuote | IndexQuote>>({ ...quotes })
+  const priceHistoryRef = useRef<Record<string, IntradayPoint[]>>({ ...priceHistory })
+  const latestCommittedQuotesRef = useRef(quotes)
+  const quotesDirtyRef = useRef(false)
+  const historyDirtyRef = useRef(false)
+  const marketUiCommitTimer = useRef<number | null>(null)
+  const marketOrderingTimer = useRef<number | null>(null)
+  const lastOrderingRefreshAt = useRef(0)
+  const lastMessageAtRef = useRef("")
+  const whaleTimeouts = useRef<Record<string, NodeJS.Timeout>>({})
+  const dailyReferences = useRef<Record<string, number>>(extractInitialRefs(initialQuotes))
+  const indexReferences = useRef<Record<string, number>>({})
+  const marketUiPhaseRef = useRef<MarketUiPhase>(marketUiPhase)
+  const sessionOpenAlertTimer = useRef<number | null>(null)
+  const eodReloadTimers = useRef<number[]>([])
+  const didResetCurrentAto = useRef(false)
+  const lastFrameAt = useRef(0)
+
+  const scheduleMarketOrderingRefresh = useCallback((snapshot: Record<string, LiveStockQuote | IndexQuote>) => {
+    latestCommittedQuotesRef.current = snapshot
+    const now = Date.now()
+    const elapsed = now - lastOrderingRefreshAt.current
+
+    if (elapsed >= MARKET_ORDERING_REFRESH_MS) {
+      if (marketOrderingTimer.current !== null) {
+        window.clearTimeout(marketOrderingTimer.current)
+        marketOrderingTimer.current = null
+      }
+      lastOrderingRefreshAt.current = now
+      setOrderingQuotes(snapshot)
+      return
+    }
+
+    if (marketOrderingTimer.current !== null) return
+    marketOrderingTimer.current = window.setTimeout(() => {
+      marketOrderingTimer.current = null
+      lastOrderingRefreshAt.current = Date.now()
+      setOrderingQuotes(latestCommittedQuotesRef.current)
+    }, MARKET_ORDERING_REFRESH_MS - elapsed)
+  }, [])
+
+  const scheduleMarketUiCommit = useCallback(() => {
+    if (marketUiCommitTimer.current !== null) return
+    marketUiCommitTimer.current = window.setTimeout(() => {
+      marketUiCommitTimer.current = null
+
+      if (quotesDirtyRef.current) {
+        quotesDirtyRef.current = false
+        const quoteSnapshot = { ...quotesRef.current }
+        setQuotes(quoteSnapshot)
+        scheduleMarketOrderingRefresh(quoteSnapshot)
+      }
+
+      if (historyDirtyRef.current) {
+        historyDirtyRef.current = false
+        setPriceHistory({ ...priceHistoryRef.current })
+      }
+
+      const messageAt = lastMessageAtRef.current
+      if (messageAt) {
+        setLastMessageAt((previous) => previous === messageAt ? previous : messageAt)
+      }
+    }, MARKET_UI_COMMIT_MS)
+  }, [scheduleMarketOrderingRefresh])
+
+  const updateLiveQuote = useCallback((
+    symbol: string,
+    updater: (current: LiveStockQuote | IndexQuote | undefined) => LiveStockQuote | IndexQuote | undefined,
+  ) => {
+    const current = quotesRef.current[symbol]
+    const next = updater(current)
+    if (!next || next === current) return
+    quotesRef.current[symbol] = next
+    quotesDirtyRef.current = true
+    scheduleMarketUiCommit()
+  }, [scheduleMarketUiCommit])
+
+  const updateLiveHistory = useCallback((
+    ticker: string,
+    updater: (current: IntradayPoint[]) => IntradayPoint[],
+  ) => {
+    const current = priceHistoryRef.current[ticker] ?? []
+    const next = updater(current)
+    if (next === current) return
+    priceHistoryRef.current[ticker] = next
+    historyDirtyRef.current = true
+    scheduleMarketUiCommit()
+  }, [scheduleMarketUiCommit])
+
+  const resetForNewTradingSession = useCallback((now = new Date(), notify = true) => {
+    didResetCurrentAto.current = true
+    const resetQuotes: Record<string, LiveStockQuote | IndexQuote> = {}
+    for (const [symbol, current] of Object.entries(quotesRef.current)) {
+      if ("value" in current) {
+        const reference = indexReferences.current[symbol] || current.value - (current.change ?? 0)
+        resetQuotes[symbol] = {
+          ...current,
+          value: reference > 0 ? reference : current.value,
+          change: 0,
+          changePercent: 0,
+          volume: 0,
+          valueTraded: 0,
+          advances: 0,
+          declines: 0,
+          unchanged: 0,
+          updatedAt: now.toISOString(),
+        }
+        continue
+      }
+      const fallback = universe.find((stock) => stock.ticker === symbol)?.lastClose
+      const reference = dailyReferences.current[symbol] || current.reference || fallback || current.price
+      if (reference > 0) dailyReferences.current[symbol] = reference
+      resetQuotes[symbol] = {
+        ...current,
+        price: reference,
+        reference,
+        change: 0,
+        changePercent: 0,
+        volume: 0,
+        foreignBuyVolume: 0,
+        foreignSellVolume: 0,
+        foreignBuyValue: 0,
+        foreignSellValue: 0,
+        foreignNetValue: 0,
+        updatedAt: now.toISOString(),
+      }
+    }
+
+    const resetHistory: Record<string, IntradayPoint[]> = {}
+    for (const stock of universe) {
+      const reference = dailyReferences.current[stock.ticker] || stock.lastClose || 0
+      resetHistory[stock.ticker] = newSessionReferencePoint(reference, now)
+    }
+    quotesRef.current = resetQuotes
+    latestCommittedQuotesRef.current = resetQuotes
+    priceHistoryRef.current = resetHistory
+    quotesDirtyRef.current = false
+    historyDirtyRef.current = false
+    setQuotes(resetQuotes)
+    setOrderingQuotes(resetQuotes)
+    setPriceHistory(resetHistory)
+    setWhaleAlerts({})
+    setLastMessageAt("")
+    lastMessageAtRef.current = ""
+    window.dispatchEvent(new CustomEvent(MARKET_SESSION_RESET_EVENT, {
+      detail: { sessionDate: vietnamSessionDay(now) },
+    }))
+    setReconnectKey((key) => key + 1)
+    for (const timer of eodReloadTimers.current) window.clearTimeout(timer)
+    eodReloadTimers.current = []
+    if (notify) {
+      setShowSessionOpenAlert(true)
+      if (sessionOpenAlertTimer.current !== null) window.clearTimeout(sessionOpenAlertTimer.current)
+      sessionOpenAlertTimer.current = window.setTimeout(() => setShowSessionOpenAlert(false), 8_000)
+    }
+  }, [universe])
+
+  useEffect(() => {
+    return () => {
+      if (marketUiCommitTimer.current !== null) {
+        window.clearTimeout(marketUiCommitTimer.current)
+        marketUiCommitTimer.current = null
+      }
+      if (marketOrderingTimer.current !== null) {
+        window.clearTimeout(marketOrderingTimer.current)
+        marketOrderingTimer.current = null
+      }
+      if (sessionOpenAlertTimer.current !== null) window.clearTimeout(sessionOpenAlertTimer.current)
+      for (const timer of eodReloadTimers.current) window.clearTimeout(timer)
+      eodReloadTimers.current = []
+    }
+  }, [])
+
+  const handleToggleSound = useCallback(() => {
+    const next = !soundEnabled
+    setSoundEnabled(next)
+    setSoundEnabledState(next)
+    if (next) {
+      playWhaleSound("BUY")
+    }
+  }, [soundEnabled])
+
+  const triggerWhaleAlert = useCallback((ticker: string) => {
+    setWhaleAlerts((prev) => ({ ...prev, [ticker]: true }))
+    if (whaleTimeouts.current[ticker]) {
+      clearTimeout(whaleTimeouts.current[ticker])
+    }
+    whaleTimeouts.current[ticker] = setTimeout(() => {
+      setWhaleAlerts((prev) => {
+        if (!prev[ticker]) return prev
+        const next = { ...prev }
+        delete next[ticker]
+        return next
+      })
+    }, 1500)
+  }, [])
+
+  const [watchlist, setWatchlist] = useState<Set<string>>(() => {
+    try {
+      const stored = typeof window !== "undefined" ? localStorage.getItem(WATCHLIST_KEY) : null
+      return stored ? new Set<string>(JSON.parse(stored) as string[]) : new Set<string>()
+    } catch {
+      return new Set<string>()
+    }
+  })
+
+  const toggleWatch = useCallback((ticker: string) => {
+    setWatchlist((prev) => {
+      const next = new Set(prev)
+      if (next.has(ticker)) next.delete(ticker)
+      else next.add(ticker)
+      try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...next])) } catch { /* ignore */ }
+      return next
+    })
+  }, [])
+
+  const symbolList = useMemo(() => universe.map((stock) => stock.ticker), [universe])
+  const symbolKey = symbolList.join(",")
+  const trackedSymbols = useMemo(() => new Set(symbolList), [symbolList])
+  const hasSufficientSsrHistory = useMemo(() => {
+    if (!initialHistories || symbolList.length === 0) return false
+    let covered = 0
+    for (const symbol of symbolList) {
+      const points = initialHistories[symbol]
+      if (points && points.length >= 2) covered += 1
+    }
+    return covered / symbolList.length >= SSR_HISTORY_COVERAGE_MIN
+  }, [initialHistories, symbolList])
+
+  useEffect(() => {
+    if (!symbolList.length) return
+    if (marketUiPhase === "ATO") return
+    if (historyReloadKey === 0 && hasSufficientSsrHistory) return
+
+    const controller = new AbortController()
+    let disposed = false
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/market/intraday?symbols=${encodeURIComponent(symbolKey)}`, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        })
+        const payload = await response.json() as IntradayHistoryResponse
+        if (disposed || !payload.histories || getMarketUiPhase() === "ATO") return
+        const receivedAt = new Date().toISOString()
+        const nextHistory: Record<string, IntradayPoint[]> = { ...priceHistoryRef.current }
+        for (const symbol of symbolList) {
+          const points = payload.histories?.[symbol]?.points?.filter((point) => Number.isFinite(point.time) && point.time > 0 && Number.isFinite(point.close) && point.close > 0) ?? []
+          if (points.length) {
+            nextHistory[symbol] = points.slice(-90)
+          }
+        }
+        priceHistoryRef.current = { ...nextHistory }
+        historyDirtyRef.current = false
+        setPriceHistory(nextHistory)
+
+        const currentQuotes = quotesRef.current
+        const nextQuotes = { ...currentQuotes }
+        for (const symbol of symbolList) {
+          const history = payload.histories?.[symbol]
+          if (!history?.reference) continue
+          dailyReferences.current[symbol] = history.reference
+          const existing = currentQuotes[symbol] as LiveStockQuote | undefined
+          const ref = history.reference
+          const hasLiveQuote = Boolean(
+            existing &&
+            existing.price &&
+            existing.price > 0 &&
+            (existing.price !== ref || (existing.volume && existing.volume > 0))
+          )
+          const price = hasLiveQuote ? (existing!.price) : (history.price || existing?.price || ref)
+          const change = price - ref
+          const changePercent = ref > 0 ? (change / ref) * 100 : (history.changePercent ?? 0)
+          const volume = hasLiveQuote ? (existing!.volume || 0) : (existing?.volume || 0)
+          nextQuotes[symbol] = {
+            ...(existing ?? {}),
+            symbol,
+            price,
+            reference: ref,
+            change,
+            changePercent,
+            volume,
+            updatedAt: hasLiveQuote && existing?.updatedAt ? existing.updatedAt : (history.lastBarAt ? new Date(history.lastBarAt * 1000).toISOString() : receivedAt),
+          }
+        }
+        quotesRef.current = { ...nextQuotes }
+        quotesDirtyRef.current = false
+        latestCommittedQuotesRef.current = nextQuotes
+        lastOrderingRefreshAt.current = Date.now()
+        if (marketOrderingTimer.current !== null) {
+          window.clearTimeout(marketOrderingTimer.current)
+          marketOrderingTimer.current = null
+        }
+        setQuotes(nextQuotes)
+        setOrderingQuotes(nextQuotes)
+      } catch (error) {
+        if (!disposed && !(error instanceof DOMException && error.name === "AbortError")) {
+          console.warn("Market board 5m bootstrap unavailable", error)
+        }
+      }
+    })()
+
+    return () => {
+      disposed = true
+      controller.abort()
+    }
+  }, [symbolKey, historyReloadKey, symbolList, sessionOpen, hasSufficientSsrHistory, marketUiPhase])
+
+  useEffect(() => {
+    if (marketUiPhase === "ATO") return
+    const controller = new AbortController()
+    void (async () => {
+      try {
+        const response = await fetch("/api/market/indexes", { cache: "no-store", signal: controller.signal })
+        const payload = await response.json() as IndexHistoryResponse
+        if (!payload.quotes || getMarketUiPhase() === "ATO") return
+        const current = quotesRef.current
+        const next = { ...current }
+        for (const [symbol, quote] of Object.entries(payload.quotes ?? {})) {
+          const derivedReference = typeof quote.change === "number"
+            ? quote.value - quote.change
+            : quote.changePercent !== -100 ? quote.value / (1 + quote.changePercent / 100) : 0
+          if (derivedReference > 0) indexReferences.current[symbol] = derivedReference
+          const existing = current[symbol] as IndexQuote | undefined
+          if (existing?.value && derivedReference > 0) {
+            next[symbol] = {
+              ...existing,
+              change: existing.value - derivedReference,
+              changePercent: ((existing.value - derivedReference) / derivedReference) * 100,
+            }
+          } else if (!existing) {
+            next[symbol] = quote
+          }
+        }
+        quotesRef.current = { ...next }
+        quotesDirtyRef.current = false
+        latestCommittedQuotesRef.current = next
+        setQuotes(next)
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) console.warn("Index EOD bootstrap unavailable", error)
+      }
+    })()
+    return () => controller.abort()
+  }, [historyReloadKey, marketUiPhase])
+
+  const pushFiveMinuteClose = useCallback((ticker: string, close: number, timestampSeconds: number) => {
+    if (!shouldAcceptRealtimeMiniChart(timestampSeconds) || isLunchBreak(new Date(timestampSeconds * 1000))) return
+    updateLiveHistory(ticker, (current) => {
+      const normalizedClose = normalizeMarketPrice(close, current.at(-1)?.close)
+      if (!normalizedClose) return current
+      return mergeFiveMinuteClose(current, normalizedClose, timestampSeconds)
+    })
+  }, [updateLiveHistory])
+
+  useEffect(() => {
+    const checkSession = () => {
+      const now = new Date()
+      const isOpen = isTradingSessionOpen(now)
+      const lunch = isLunchBreak(now)
+      setSessionOpen((prev) => (prev !== isOpen ? isOpen : prev))
+      setIsLunch((prev) => (prev !== lunch ? lunch : prev))
+
+      const nextPhase = getMarketUiPhase(now)
+      if (marketUiPhaseRef.current !== nextPhase) {
+        const previousPhase = marketUiPhaseRef.current
+        marketUiPhaseRef.current = nextPhase
+        setMarketUiPhase(nextPhase)
+        if (nextPhase === "ATO") {
+          resetForNewTradingSession(now)
+        } else if (nextPhase === "CONTINUOUS" || nextPhase === "EOD") {
+          setHistoryReloadKey((key) => key + 1)
+          if (nextPhase === "EOD") {
+            for (const timer of eodReloadTimers.current) window.clearTimeout(timer)
+            eodReloadTimers.current = [4 * 60_000, 14 * 60_000].map((delay) => window.setTimeout(() => {
+              setHistoryReloadKey((key) => key + 1)
+            }, delay))
+          }
+          if (previousPhase === "PRE_MARKET") setReconnectKey((key) => key + 1)
+        } else if (nextPhase === "PRE_MARKET") {
+          didResetCurrentAto.current = false
+        }
+      }
+    }
+
+    checkSession()
+    const timer = window.setInterval(checkSession, 1000)
+    const handleVisibility = () => { if (document.visibilityState === "visible") checkSession() }
+    document.addEventListener("visibilitychange", handleVisibility)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener("visibilitychange", handleVisibility)
+    }
+  }, [resetForNewTradingSession])
+
+  useEffect(() => {
+    if (marketUiPhase !== "ATO" || didResetCurrentAto.current) return
+    const mountReset = marketUiPhase === "ATO"
+      ? window.setTimeout(() => resetForNewTradingSession(new Date(), false), 0)
+      : null
+    // Mount-only guard: a user entering during ATO must never hydrate yesterday's snapshot.
+    return () => { if (mountReset !== null) window.clearTimeout(mountReset) }
+  }, [marketUiPhase, resetForNewTradingSession])
+
+  useEffect(() => {
+    let disposed = false
+    let socket: WebSocket | null = null
+    let reconnectTimer: number | null = null
+    let pingTimer: number | null = null
+    let watchdogTimer: number | null = null
+    let attempts = 0
+    let messageQueue: string[] = []
+    let messageFrame: number | null = null
+
+    const flushMessageQueue = () => {
+      messageFrame = null
+      const queued = messageQueue
+      messageQueue = []
+      for (const raw of queued) {
+        if (disposed) return
+        let data: Record<string, unknown>
+        try { data = JSON.parse(raw) as Record<string, unknown> } catch { continue }
+
+        const action = String(data.action ?? data.a ?? "")
+        if (action === "ping") {
+          if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "pong", timestamp: data.timestamp }))
+          continue
+        }
+        if (action === "welcome" || data.session_id || data.sid) {
+          if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(authJsonRef.current?.auth ?? {}))
+          continue
+        }
+        if (action === "auth_success") {
+          attempts = 0
+          setStreamState("LIVE")
+          setStreamError("")
+          socket?.send(JSON.stringify(authJsonRef.current?.auth ?? {}))
+          socket?.send(JSON.stringify({
+            action: "subscribe",
+            channels: [
+              { name: "tick.G1.json", symbols: symbolList },
+              { name: "top_price.G1.json", symbols: symbolList },
+              { name: "ohlc.1.json", symbols: [...symbolList, "VN30F1M"] },
+              { name: "foreign.G1.json", symbols: symbolList },
+              ...INDEX_CHANNELS.map((name) => ({ name: `market_index.${name}.json` })),
+            ],
+          }))
+          pingTimer = window.setInterval(() => {
+            if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "ping", timestamp: Date.now() }))
+          }, 15_000)
+          watchdogTimer = window.setInterval(() => {
+            if (socket?.readyState === WebSocket.OPEN && Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
+              setStreamError("Luồng DNSE im lặng quá 60 giây; đang tự kết nối lại.")
+              forceReconnect("stale DNSE stream")
+            }
+          }, 10_000)
+          continue
+        }
+        if (action === "auth_error" || action === "error") {
+          const message = String(data.message ?? data.msg ?? "DNSE WebSocket error")
+          setStreamState("ERROR")
+          setStreamError(message)
+          forceReconnect("DNSE auth/subscription error")
+          continue
+        }
+
+        const now = new Date()
+        const receivedAt = now.toISOString()
+        lastMessageAtRef.current = receivedAt
+        publishDnseMarketFrame(data)
+
+        // Pause market data processing during lunch break (11:30 - 13:00)
+        if (isLunchBreak(now)) {
+          continue
+        }
+
+        const type = String(data.T ?? "")
+        if (type === "b" && data.symbol) {
+          const ticker = String(data.symbol).toUpperCase()
+          if (!trackedSymbols.has(ticker)) continue
+          const close = firstPositive(data, ["close", "c", "closePrice"])
+          const timestamp = normalizeEpochSeconds(data.time ?? data.t ?? data.timestamp ?? data.ts, now.getTime() / 1000)
+          if (close > 0) pushFiveMinuteClose(ticker, close, timestamp)
+          continue
+        }
+
+        if (type === "t" && data.symbol) {
+          const ticker = String(data.symbol).toUpperCase()
+          if (!trackedSymbols.has(ticker)) continue
+          const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
+          if (price <= 0) continue
+          const totalVolume = firstPositive(data, ["totalVolumeTraded", "totalVolume", "volume"])
+          const matchVol = firstPositive(data, ["matchQtty", "matchVolume", "matchQuantity", "qtty", "q", "vol"])
+          const normalizedPrice = price > 1000 ? price / 1000 : price
+          const whaleThreshold = normalizedPrice >= 50 ? 30_000 : 50_000
+          if (matchVol >= whaleThreshold) {
+            triggerWhaleAlert(ticker)
+          }
+
+          const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
+          const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
+          const floor = firstPositive(data, ["floorPrice", "floor"])
+          updateLiveQuote(ticker, (currentQuote) => {
+            const previous = currentQuote as LiveStockQuote | undefined
+            const rawRef = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
+            const rawReference = rawRef > 1000 ? rawRef / 1000 : rawRef
+            const reference = normalizeMarketPrice(rawReference, price) ?? (rawReference > 1000 ? rawReference / 1000 : rawReference)
+            if (reference > 0) dailyReferences.current[ticker] = reference
+            const change = reference > 0 ? price - reference : previous?.change
+            const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : previous?.changePercent ?? 0
+            return {
+              ...previous,
+              symbol: ticker,
+              price,
+              reference: reference || undefined,
+              ceiling: ceiling ? (ceiling > 1000 ? ceiling / 1000 : ceiling) : previous?.ceiling,
+              floor: floor ? (floor > 1000 ? floor / 1000 : floor) : previous?.floor,
+              change,
+              changePercent,
+              volume: totalVolume || previous?.volume,
+              updatedAt: receivedAt,
+            }
+          })
+          continue
+        }
+
+        if (type === "q" && data.symbol) {
+          const ticker = String(data.symbol).toUpperCase()
+          if (!trackedSymbols.has(ticker)) continue
+          const explicitReference = firstPositive(data, STOCK_REFERENCE_KEYS)
+          const ceiling = firstPositive(data, ["ceilingPrice", "ceiling"])
+          const floor = firstPositive(data, ["floorPrice", "floor"])
+          const price = firstPositive(data, ["matchPrice", "price", "lastPrice"])
+          updateLiveQuote(ticker, (currentQuote) => {
+            const previous = currentQuote as LiveStockQuote | undefined
+            const livePrice = price ? (price > 1000 ? price / 1000 : price) : previous?.price
+            if (!livePrice) return previous
+            const rawRef = explicitReference || dailyReferences.current[ticker] || previous?.reference || 0
+            const rawReference = rawRef > 1000 ? rawRef / 1000 : rawRef
+            const reference = normalizeMarketPrice(rawReference, livePrice) ?? (rawReference > 1000 ? rawReference / 1000 : rawReference)
+            if (reference > 0) dailyReferences.current[ticker] = reference
+            return {
+              ...previous,
+              symbol: ticker,
+              price: livePrice,
+              reference: reference || undefined,
+              ceiling: ceiling ? (ceiling > 1000 ? ceiling / 1000 : ceiling) : previous?.ceiling,
+              floor: floor ? (floor > 1000 ? floor / 1000 : floor) : previous?.floor,
+              change: reference > 0 ? livePrice - reference : previous?.change,
+              changePercent: reference > 0 ? ((livePrice - reference) / reference) * 100 : previous?.changePercent ?? 0,
+              volume: previous?.volume,
+              updatedAt: receivedAt,
+            }
+          })
+          continue
+        }
+
+        if (type === "mi") {
+          const symbol = normalizeIndexName(data.indexName ?? data.symbol)
+          const value = firstPositive(data, ["valueIndexes", "value", "indexValue"])
+          if (!symbol || value <= 0) continue
+          const explicitReference = firstPositive(data, INDEX_REFERENCE_KEYS)
+          if (explicitReference > 0) indexReferences.current[symbol] = explicitReference
+          const vol = firstPositive(data, ["totalVolumeTraded", "totalVolume", "totalQtty", "allQtty", "vol", "v"])
+          const rawVal = firstPositive(data, ["totalValueTraded", "totalValue", "totalAmount", "allValue", "val"])
+          const val = rawVal > 0 ? (rawVal < 100_000 ? rawVal * 1_000_000_000 : rawVal < 100_000_000 ? rawVal * 1_000_000 : rawVal) : 0
+          updateLiveQuote(symbol, (currentQuote) => {
+            const previous = currentQuote as IndexQuote | undefined
+            const previousDerivedReference = previous && typeof previous.change === "number" ? previous.value - previous.change : 0
+            const reference = indexReferences.current[symbol] || previousDerivedReference
+            if (reference > 0) indexReferences.current[symbol] = reference
+            const change = reference > 0 ? value - reference : previous?.change
+            const changePercent = reference > 0 ? ((value - reference) / reference) * 100 : previous?.changePercent ?? 0
+            return {
+              symbol,
+              value,
+              change,
+              changePercent,
+              volume: vol || previous?.volume,
+              valueTraded: val || previous?.valueTraded,
+              updatedAt: receivedAt,
+            }
+          })
+          continue
+        }
+
+        if (type === "f" && data.symbol) {
+          const symbol = String(data.symbol).toUpperCase()
+          if (!trackedSymbols.has(symbol)) continue
+          const totalBuyVal = numeric(data.totalBuyTradedAmount ?? data.totalBuyValue ?? data.foreignBuyValue)
+          const totalSellVal = numeric(data.totalSellTradedAmount ?? data.totalSellValue ?? data.foreignSellValue)
+          const totalBuyVol = numeric(data.totalBuyVolume ?? data.totalBuyQtty ?? data.foreignBuyVolume)
+          const totalSellVol = numeric(data.totalSellVolume ?? data.totalSellQtty ?? data.foreignSellVolume)
+          const buyVal = numeric(data.buyTradedAmount)
+          const sellVal = numeric(data.sellTradedAmount)
+          const buyVol = numeric(data.buyVolume)
+          const sellVol = numeric(data.sellVolume)
+
+          updateLiveQuote(symbol, (currentQuote) => {
+            const previous = currentQuote as LiveStockQuote | undefined
+            if (!previous) return previous
+
+            const prevBuyVal = previous.foreignBuyValue ?? 0
+            const prevSellVal = previous.foreignSellValue ?? 0
+            const nextBuyVal = totalBuyVal || (buyVal > 0 ? prevBuyVal + buyVal : prevBuyVal)
+            const nextSellVal = totalSellVal || (sellVal > 0 ? prevSellVal + sellVal : prevSellVal)
+            const prevBuyVol = previous.foreignBuyVolume ?? 0
+            const prevSellVol = previous.foreignSellVolume ?? 0
+            const nextBuyVol = totalBuyVol || (buyVol > 0 ? prevBuyVol + buyVol : prevBuyVol)
+            const nextSellVol = totalSellVol || (sellVol > 0 ? prevSellVol + sellVol : prevSellVol)
+
+            let foreignNetValue: number | undefined
+            if (nextBuyVal > 0 || nextSellVal > 0) {
+              foreignNetValue = nextBuyVal - nextSellVal
+            } else if (nextBuyVol > 0 || nextSellVol > 0) {
+              foreignNetValue = (nextBuyVol - nextSellVol) * (previous.price || 0)
+            }
+
+            return {
+              ...previous,
+              foreignBuyValue: nextBuyVal || undefined,
+              foreignSellValue: nextSellVal || undefined,
+              foreignBuyVolume: nextBuyVol || undefined,
+              foreignSellVolume: nextSellVol || undefined,
+              foreignNetValue,
+              updatedAt: receivedAt,
+            }
+          })
+          continue
+        }
+      }
+    }
+
+    const scheduleMessage = (raw: string) => {
+      messageQueue.push(raw)
+      if (messageFrame === null) messageFrame = window.requestAnimationFrame(flushMessageQueue)
+    }
+
+    const clearMessageQueue = () => {
+      if (messageFrame !== null) window.cancelAnimationFrame(messageFrame)
+      messageFrame = null
+      messageQueue = []
+    }
+
+    const closeConnectionTimers = () => {
+      if (pingTimer) window.clearInterval(pingTimer)
+      if (watchdogTimer) window.clearInterval(watchdogTimer)
+      pingTimer = null
+      watchdogTimer = null
+    }
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimer) window.clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+
+    const scheduleReconnect = () => {
+      if (disposed || reconnectTimer) return
+      attempts += 1
+      const base = Math.min(750 * 2 ** Math.min(attempts - 1, 4), 10_000)
+      const delay = base + Math.floor(Math.random() * 500)
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null
+        void connect()
+      }, delay)
+    }
+
+    const forceReconnect = (reason: string) => {
+      if (disposed) return
+      clearMessageQueue()
+      closeConnectionTimers()
+      if (socket && socket.readyState < WebSocket.CLOSING) {
+        try { socket.close(4000, reason.slice(0, 120)) } catch { scheduleReconnect() }
+      } else {
+        scheduleReconnect()
+      }
+    }
+
+    const authJsonRef: { current: DnseAuthResponse | null } = { current: null }
+
+    const connect = async () => {
+      clearReconnectTimer()
+      clearMessageQueue()
+      closeConnectionTimers()
+      if (disposed) return
+      setStreamState("CONNECTING")
+      lastFrameAt.current = Date.now()
+
+      try {
+        const response = await fetch("/api/market/stream-auth", { cache: "no-store", headers: { Accept: "application/json" } })
+        const authJson = await response.json() as DnseAuthResponse
+        authJsonRef.current = authJson
+        if (!response.ok || !authJson.ok || !authJson.url || !authJson.auth) throw new Error(authJson.message ?? `DNSE stream auth ${response.status}`)
+        if (disposed) return
+
+        socket = new WebSocket(authJson.url)
+        socket.onopen = () => {
+          lastFrameAt.current = Date.now()
+          setStreamState("CONNECTING")
+        }
+        socket.onmessage = (event) => {
+          if (disposed || typeof event.data !== "string") return
+          lastFrameAt.current = Date.now()
+          scheduleMessage(event.data)
+        }
+
+        socket.onerror = () => {
+          if (!disposed) {
+            setStreamState("ERROR")
+            setStreamError("Kết nối DNSE WebSocket gặp lỗi; đang tự khôi phục.")
+            forceReconnect("DNSE websocket error")
+          }
+        }
+        socket.onclose = () => {
+          closeConnectionTimers()
+          if (disposed) return
+          setStreamState("CLOSED")
+          scheduleReconnect()
+        }
+      } catch (error) {
+        if (disposed) return
+        setStreamState("ERROR")
+        setStreamError(error instanceof Error ? error.message : String(error))
+        scheduleReconnect()
+      }
+    }
+
+    const recoverIfNeeded = () => {
+      if (document.visibilityState !== "visible") return
+      if (!socket || socket.readyState !== WebSocket.OPEN || Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
+        forceReconnect("browser resumed")
+      }
+    }
+    const onVisibilityChange = () => recoverIfNeeded()
+    const onOnline = () => recoverIfNeeded()
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    window.addEventListener("online", onOnline)
+
+    if (sessionOpen) {
+      void connect()
+    }
+    return () => {
+      disposed = true
+      clearReconnectTimer()
+      clearMessageQueue()
+      closeConnectionTimers()
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+      window.removeEventListener("online", onOnline)
+      if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "board closed")
+    }
+  }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols, sessionOpen, triggerWhaleAlert, updateLiveQuote])
+
+  const normalizedQuery = query.trim().toUpperCase()
+  const currentSessionDay = useMemo(() => vietnamSessionDay(), [])
+  const displayQuotes = useMemo(() => {
+    let next: Record<string, LiveStockQuote | IndexQuote> | null = null
+    for (const stock of universe) {
+      if (quotes[stock.ticker]) continue
+      const history = priceHistory[stock.ticker] ?? []
+      const price = history.at(-1)?.close ?? stock.lastClose
+      if (!price || price <= 0) continue
+      const priorNotionClose = stock.lastCloseDate && stock.lastCloseDate < currentSessionDay ? stock.lastClose : null
+      const reference = priorNotionClose ?? price
+      if (!next) next = { ...quotes }
+      next[stock.ticker] = {
+        symbol: stock.ticker,
+        price,
+        reference,
+        change: price - reference,
+        changePercent: reference > 0 ? ((price - reference) / reference) * 100 : 0,
+        updatedAt: stock.lastCloseDate ?? new Date().toISOString(),
+      }
+    }
+    return next ?? quotes
+  }, [currentSessionDay, priceHistory, quotes, universe])
+
+  const priceHistoryCloses = useMemo(() => {
+    const out: Record<string, number[]> = {}
+    void marketUiPhase
+    for (const [ticker, pts] of Object.entries(priceHistory)) {
+      out[ticker] = pts.map((p) => p.close)
+    }
+    return out
+  }, [priceHistory, marketUiPhase])
+
+  const watchedStocks = useMemo(() => {
+    if (watchlist.size === 0) return []
+    return universe.filter((s) => watchlist.has(s.ticker))
+  }, [universe, watchlist])
+
+  const watchedQuotes = useMemo(() => {
+    if (watchedStocks.length === 0) return {}
+    const out: Record<string, LiveStockQuote | IndexQuote | undefined> = {}
+    for (const s of watchedStocks) {
+      out[s.ticker] = displayQuotes[s.ticker]
+    }
+    return out
+  }, [watchedStocks, displayQuotes])
+
+  const filtered = useMemo(() => universe.filter((stock) => (!normalizedQuery || stock.ticker.includes(normalizedQuery))), [universe, normalizedQuery])
+  const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, orderingQuotes)), [orderingQuotes, filtered])
+  const grouped = useMemo(() => BOARD_SECTOR_GROUPS.map((group) => {
+    const stocks = filtered
+      .filter((stock) => group.sectors.some((sector) => sector === stock.sector))
+      .sort((a, b) => compareByPerformance(a, b, orderingQuotes))
+    const sectorQuotes = stocks
+      .map((stock) => orderingQuotes[stock.ticker] as LiveStockQuote | undefined)
+      .filter(Boolean) as LiveStockQuote[]
+    const avg = sectorQuotes.length
+      ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length
+      : undefined
+    const avgTone = marketToneFromChange(avg)
+    return {
+      ...group,
+      stocks,
+      avg,
+      avgTone,
+    }
+  }), [orderingQuotes, filtered])
+
+  const { liveCount, pricedCount, historyCount, advances, declines } = useMemo(() => {
+    let live = 0
+    let priced = 0
+    let history = 0
+    let adv = 0
+    let dec = 0
+    for (const stock of universe) {
+      if (quotes[stock.ticker]) live++
+      const dq = displayQuotes[stock.ticker] as LiveStockQuote | undefined
+      if (dq) {
+        priced++
+        const pct = dq.changePercent ?? 0
+        if (pct > 0) adv++
+        else if (pct < 0) dec++
+      }
+      if ((priceHistory[stock.ticker]?.length ?? 0) > 1) history++
+    }
+    return { liveCount: live, pricedCount: priced, historyCount: history, advances: adv, declines: dec }
+  }, [universe, quotes, displayQuotes, priceHistory])
+
+  const openBook = useCallback(
+    (ticker: string) => {
+      const q = displayQuotes[ticker] as LiveStockQuote | undefined
+      const s = universe.find((st) => st.ticker === ticker)
+      const h = priceHistoryCloses[ticker] ?? EMPTY_HISTORY
+      const rawRef = dailyReferences.current[ticker] || q?.reference || s?.lastClose
+      const ref = rawRef ? (rawRef > 1000 ? rawRef / 1000 : rawRef) : undefined
+      const rawPrice = q?.price || ref
+      const price = rawPrice ? (rawPrice > 1000 ? rawPrice / 1000 : rawPrice) : undefined
+      const rawCeil = q?.ceiling
+      const ceiling = rawCeil ? (rawCeil > 1000 ? rawCeil / 1000 : rawCeil) : (ref ? Math.round(ref * 1.07 * 100) / 100 : undefined)
+      const rawFloor = q?.floor
+      const floor = rawFloor ? (rawFloor > 1000 ? rawFloor / 1000 : rawFloor) : (ref ? Math.round(ref * 0.93 * 100) / 100 : undefined)
+      openOrderBook(`board:${ticker}`, ticker, {
+        sector: s?.sector,
+        price,
+        reference: ref,
+        ceiling,
+        floor,
+        changePercent: q?.changePercent,
+        volume: q?.volume,
+        foreignBuyVolume: q?.foreignBuyVolume,
+        foreignSellVolume: q?.foreignSellVolume,
+        foreignBuyValue: q?.foreignBuyValue,
+        foreignSellValue: q?.foreignSellValue,
+        foreignNetValue: q?.foreignNetValue,
+        foreignRoom: q?.foreignRoom,
+        history: h,
+      })
+    },
+    [displayQuotes, universe, priceHistoryCloses, openOrderBook],
+  )
+  const reconnect = useCallback(() => setReconnectKey((key) => key + 1), [])
+  const openIndexChart = useCallback(() => setIndexChartOpen(true), [])
+
+  const { totalUniverseVolume, totalUniverseValue, totalForeignNet } = useMemo(() => {
+    let vol = 0
+    let val = 0
+    let net = 0
+    for (const stock of universe) {
+      const q = displayQuotes[stock.ticker] as LiveStockQuote | undefined
+      if (q) {
+        if (q.volume && q.volume > 0) {
+          vol += q.volume
+          if (q.price && q.price > 0) {
+            val += q.volume * q.price * 1000
+          }
+        }
+        if (typeof q.foreignNetValue === "number" && Number.isFinite(q.foreignNetValue)) {
+          net += q.foreignNetValue
+        }
+      }
+    }
+    return { totalUniverseVolume: vol, totalUniverseValue: val, totalForeignNet: net }
+  }, [universe, displayQuotes])
+
+  const vnindexQuote = quotes.VNINDEX as IndexQuote | undefined
+  const vnindexVolume = vnindexQuote?.volume ?? (totalUniverseVolume > 0 ? totalUniverseVolume : undefined)
+  const vnindexValue = vnindexQuote?.valueTraded ?? (totalUniverseValue > 0 ? totalUniverseValue : undefined)
+
+  const vnindexAdv = vnindexQuote?.advances ?? advances
+  const vnindexDec = vnindexQuote?.declines ?? declines
+  const vnindexUnc = vnindexQuote?.unchanged ?? Math.max(0, universe.length - advances - declines)
+
+  const indexQuotes = useMemo(() => ({
+    VNINDEX: quotes.VNINDEX,
+    VN30: quotes.VN30,
+    HNXINDEX: quotes.HNXINDEX,
+    UPCOMINDEX: quotes.UPCOMINDEX,
+  }), [quotes.VNINDEX, quotes.VN30, quotes.HNXINDEX, quotes.UPCOMINDEX])
+
+  return (
+    <div ref={boardContainerRef} className="relative flex h-full min-h-0 flex-col bg-background">
+      <IndexStrip quotes={indexQuotes} onOpenChart={openIndexChart} />
+      <IndexChartModal open={indexChartOpen} onOpenChange={setIndexChartOpen} />
+
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-white/[0.07] bg-[#090d12]/85 backdrop-blur-2xl px-3.5 py-2 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.35)]">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
+              <Coins className="h-3 w-3" />
+            </div>
+            <div className="flex items-center gap-1.5 font-mono text-xs">
+              <span className="text-[11px] text-muted-2 font-sans font-medium">Tổng KL</span>
+              <span className="font-bold text-foreground">
+                {vnindexVolume !== undefined ? formatExactVolume(vnindexVolume) : "—"}
+              </span>
+            </div>
+            <div className="h-3 w-px bg-white/[0.1] hidden sm:block" />
+            <div className="flex items-center gap-1.5 font-mono text-xs">
+              <span className="text-[11px] text-muted-2 font-sans font-medium">Tổng GT</span>
+              <span className="font-bold text-foreground">
+                {vnindexValue !== undefined ? formatExactTradedValue(vnindexValue) : "—"}
+              </span>
+              {vnindexQuote?.valueChangePercent !== undefined && vnindexQuote.valueChangePercent !== null && (
+                <span
+                  className={`font-bold font-mono text-xs ${
+                    vnindexQuote.valueChangePercent > 0
+                      ? "text-up"
+                      : vnindexQuote.valueChangePercent < 0
+                        ? "text-down"
+                        : "text-ref"
+                  }`}
+                  title="So sánh Tổng GT với phiên hôm qua"
+                >
+                  ({vnindexQuote.valueChangePercent > 0 ? "+" : ""}{vnindexQuote.valueChangePercent.toFixed(1)}%)
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
+              <BarChart3 className="h-3 w-3" />
+            </div>
+            <div className="flex items-center gap-2 font-mono text-xs">
+              <span className="text-[11px] text-muted-2 font-sans font-medium">Độ rộng</span>
+              <span className="font-bold text-up flex items-center gap-0.5" title="Mã tăng">
+                ▲ {vnindexAdv}
+              </span>
+              <span className="font-bold text-ref flex items-center gap-0.5" title="Mã tham chiếu">
+                ■ {vnindexUnc}
+              </span>
+              <span className="font-bold text-down flex items-center gap-0.5" title="Mã giảm">
+                ▼ {vnindexDec}
+              </span>
+            </div>
+          </div>
+
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
+              <Globe2 className="h-3 w-3" />
+            </div>
+            <div className="flex items-center gap-1.5 font-mono text-xs">
+              <span className="text-[11px] text-muted-2 font-sans font-medium">Khối ngoại</span>
+              <span
+                className={`font-bold ${
+                  totalForeignNet > 0
+                    ? "text-up"
+                    : totalForeignNet < 0
+                      ? "text-down"
+                      : "text-muted-2"
+                }`}
+              >
+                {totalForeignNet !== 0 ? `${totalForeignNet > 0 ? "+" : "-"}${formatMarketValue(totalForeignNet)}` : "0b"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Watchlist Toggle Button: nằm ngang với thanh search bar để không tốn 1 row mới */}
+          <button
+            type="button"
+            onClick={toggleShowWatchlist}
+            className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-all select-none ${
+              showWatchlist && watchedStocks.length > 0
+                ? "border-amber-500/50 bg-amber-500/15 text-amber-300 font-bold shadow-[0_0_12px_rgba(245,158,11,0.25),inset_0_1px_0_0_rgba(255,255,255,0.15)]"
+                : showWatchlist
+                  ? "border-white/[0.12] bg-white/[0.05] text-slate-300 hover:text-amber-300 hover:border-amber-500/30"
+                  : "border-white/[0.08] bg-white/[0.02] text-muted-2 hover:text-foreground hover:border-white/20"
+            }`}
+            title={showWatchlist ? "Ẩn danh sách theo dõi" : "Hiện danh sách theo dõi"}
+          >
+            <Star
+              className={`h-3.5 w-3.5 transition-transform ${
+                showWatchlist && watchedStocks.length > 0
+                  ? "fill-amber-400 text-amber-400 scale-110"
+                  : "text-slate-400"
+              }`}
+            />
+            <span className="hidden sm:inline">Theo dõi</span>
+            {watchedStocks.length > 0 ? (
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                  showWatchlist
+                    ? "bg-amber-400 text-black font-black"
+                    : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                }`}
+              >
+                {watchedStocks.length}
+              </span>
+            ) : null}
+          </button>
+
+          <div className="relative min-w-[140px] sm:w-[180px]">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-2" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Tìm mã CP..."
+              className="h-8 w-full rounded-full border border-white/[0.08] bg-white/[0.03] pl-9 pr-3 text-xs text-foreground placeholder:text-muted outline-none focus:border-brand/60 focus:bg-white/[0.06] transition-all shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
+            />
+          </div>
+
+          <div className="flex items-center rounded-full border border-white/[0.08] bg-white/[0.03] p-0.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
+            <button
+              onClick={() => setMode("sector")}
+              className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-all ${
+                mode === "sector"
+                  ? "bg-white/[0.1] text-white font-semibold shadow-[0_2px_8px_rgba(0,0,0,0.25),inset_0_1px_0_0_rgba(255,255,255,0.15)] border border-white/[0.12]"
+                  : "text-muted-2 hover:text-foreground hover:bg-white/[0.04]"
+              }`}
+            >
+              <LayoutGrid className="h-3 w-3" />
+              <span>Tất cả</span>
+            </button>
+            <button
+              onClick={() => setMode("movers")}
+              className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-all ${
+                mode === "movers"
+                  ? "bg-white/[0.1] text-white font-semibold shadow-[0_2px_8px_rgba(0,0,0,0.25),inset_0_1px_0_0_rgba(255,255,255,0.15)] border border-white/[0.12]"
+                  : "text-muted-2 hover:text-foreground hover:bg-white/[0.04]"
+              }`}
+            >
+              <ChartNoAxesCombined className="h-3 w-3" />
+              <span>Top movers</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {streamState !== "LIVE" && streamError ? (
+        <div className="flex items-center gap-2 border-b border-ref/30 bg-ref/5 px-3.5 py-1.5 text-xs text-ref backdrop-blur-md">
+          <CircleAlert className="h-3.5 w-3.5 shrink-0 text-ref" />
+          <span>{streamError}</span>
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 overflow-auto p-2.5">
+        {showWatchlist && watchedStocks.length > 0 && (
+          <WatchlistSection
+            watchedStocks={watchedStocks}
+            quotes={watchedQuotes}
+            priceHistoryCloses={priceHistoryCloses}
+            whaleAlerts={whaleAlerts}
+            onToggleWatch={toggleWatch}
+            onOpen={openBook}
+            showCharts={marketUiPhase !== "ATO"}
+          />
+        )}
+        {mode === "sector" ? (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            {grouped.map(({ key, label, stocks, avg, avgTone }) => {
+              const SectorIcon = SECTOR_ICONS[key] ?? Layers
+              return (
+                <section
+                  key={key}
+                  className={`flex min-w-0 flex-col rounded-2xl border border-white/[0.08] border-t-2 bg-[#0b0f14] shadow-[0_4px_20px_rgba(0,0,0,0.35)] transition-colors hover:border-white/[0.14] ${SECTOR_BORDER_ACCENTS[key] ?? "border-t-emerald-400"}`}
+                >
+                  <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2.5 overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3.5 py-2 select-none">
+                    {/* Left: Icon matching border-top color + Tên ngành (Wrap xuống hàng nếu dài) */}
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border transition-transform duration-200 shadow-sm ${
+                          SECTOR_ICON_BADGES[key] ?? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40"
+                        }`}
+                      >
+                        <SectorIcon className="h-4 w-4 drop-shadow-sm" />
+                      </div>
+                      <h2
+                        className="font-ticker font-extrabold italic text-xs sm:text-sm lg:text-[13px] xl:text-[13.5px] 2xl:text-[14.5px] tracking-tight bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent drop-shadow-[0_0_12px_rgba(34,211,238,0.25)] leading-tight line-clamp-2 min-w-0 select-none"
+                        title={label}
+                      >
+                        {label}
+                      </h2>
+                    </div>
+
+                    {/* Right: Chỉ có % tăng giảm (SemiBold 600 Italic) */}
+                    <div className="shrink-0 flex items-center justify-end pl-1">
+                      {typeof avg === "number" ? (
+                        <span
+                          className={`font-ticker font-semibold italic text-lg sm:text-xl md:text-2xl leading-none tracking-tight ${
+                            avgTone === "ceiling"
+                              ? "text-purple-400 drop-shadow-[0_0_10px_rgba(192,132,252,0.4)]"
+                              : avgTone === "floor"
+                                ? "text-cyan-400 drop-shadow-[0_0_10px_rgba(34,184,207,0.4)]"
+                                : avgTone === "up"
+                                  ? "text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.4)]"
+                                  : avgTone === "down"
+                                    ? "text-rose-400 drop-shadow-[0_0_10px_rgba(244,63,94,0.4)]"
+                                    : "text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.4)]"
+                          }`}
+                          title="Biến động trung bình ngành"
+                        >
+                          {avg > 0 ? "+" : ""}{avg.toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="font-mono text-base font-bold text-muted-2">—</span>
+                      )}
+                    </div>
+                  </header>
+                <div className="space-y-1.5 p-1.5">
+                  {stocks.length ? (
+                    stocks.map((stock) => (
+                      <LiveStockRow
+                        key={stock.ticker}
+                        stock={stock}
+                        quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined}
+                        history={priceHistoryCloses[stock.ticker] ?? EMPTY_HISTORY}
+                        showChart={marketUiPhase !== "ATO"}
+                        onOpen={() => openBook(stock.ticker)}
+                        isWatched={watchlist.has(stock.ticker)}
+                        isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
+                        onToggleWatch={(e) => {
+                          e.stopPropagation()
+                          toggleWatch(stock.ticker)
+                        }}
+                      />
+                    ))
+                  ) : (
+                    <div className="px-2 py-5 text-center text-[10px] text-muted">Không có mã phù hợp bộ lọc</div>
+                  )}
+                </div>
+              </section>
+            )})}
+          </div>
+        ) : (
+          <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {movers.map((stock) => (
+              <LiveMoverCard
+                key={stock.ticker}
+                stock={stock}
+                quote={displayQuotes[stock.ticker] as LiveStockQuote | undefined}
+                history={priceHistoryCloses[stock.ticker] ?? EMPTY_HISTORY}
+                showChart={marketUiPhase !== "ATO"}
+                onOpen={() => openBook(stock.ticker)}
+                isWatched={watchlist.has(stock.ticker)}
+                isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
+                onToggleWatch={(e) => {
+                  e.stopPropagation()
+                  toggleWatch(stock.ticker)
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showSessionOpenAlert ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed left-1/2 top-20 z-50 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-emerald-400/40 bg-[#0b1713] px-4 py-3 text-sm font-semibold text-emerald-200 shadow-[0_10px_30px_rgba(0,0,0,0.45)] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2"
+        >
+          <CircleAlert className="h-4 w-4 shrink-0 text-emerald-400" />
+          Phiên giao dịch mới đã bắt đầu — dữ liệu bảng điện vừa được reset.
+        </div>
+      ) : null}
+
+      <FloatingMarketStatus
+        streamState={streamState}
+        streamError={streamError}
+        liveCount={liveCount}
+        pricedCount={pricedCount}
+        historyCount={historyCount}
+        universeLength={universe.length}
+        advances={advances}
+        declines={declines}
+        lastMessageAt={lastMessageAt}
+        soundEnabled={soundEnabled}
+        isLunch={isLunch}
+        sessionOpen={sessionOpen}
+        onToggleSound={handleToggleSound}
+        onReconnect={reconnect}
+        onCaptureScreenshot={handleCaptureScreenshot}
+        isCapturing={isCapturing}
+        copiedToast={copiedToast}
+      />
+
+      {showFlash && (
+        <div
+          data-screenshot-exclude="true"
+          className="fixed inset-0 z-50 pointer-events-none bg-white/75 backdrop-blur-sm animate-camera-flash select-none"
+          onAnimationEnd={() => setShowFlash(false)}
+        />
+      )}
+    </div>
+  )
+}

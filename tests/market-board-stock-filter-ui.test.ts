@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs"
 const shellSource = readFileSync(new URL("../components/market-board/market-board-filter-shell.tsx", import.meta.url), "utf8")
 const modalSource = readFileSync(new URL("../components/market-board/stock-filter-modal.tsx", import.meta.url), "utf8")
 const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8")
-const boardSource = readFileSync(new URL("../components/live-market-board-v2.tsx", import.meta.url), "utf8")
+const boardSource = readFileSync(new URL("../components/live-market-board.tsx", import.meta.url), "utf8")
 
 test("Filter CP is injected beside the existing Tất cả and Top movers controls", () => {
   assert.match(shellSource, /createPortal/)

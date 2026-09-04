@@ -32,7 +32,7 @@
 - Modify: `.github/workflows/security.yml`
 
 **Interfaces:**
-- Consumes: current `lib/insights-data.ts`, the planned migration path, and current CI Verify workflow.
+- Consumes: current `modules/research/insights/data.ts`, the planned migration path, and current CI Verify workflow.
 - Produces: a focused regression suite named `tests/kfsp-rating-storage-refactor.test.ts` that gates runtime compatibility and the migration contract.
 
 - [ ] **Step 1: Write the failing regression test**
@@ -42,7 +42,7 @@ Create `tests/kfsp-rating-storage-refactor.test.ts` using `node:test`, `node:ass
 The test must read:
 
 ```ts
-const insightsSource = readFileSync("lib/insights-data.ts", "utf8")
+const insightsSource = readFileSync("modules/research/insights/data.ts", "utf8")
 const migrationPath = "supabase/migrations/20260902090000_kfsp_rating_storage_refactor.sql"
 ```
 
@@ -95,10 +95,10 @@ Also scan active runtime files only, not historical migrations, to ensure generi
 
 ```ts
 const runtimeRatingReaders = [
-  "lib/insights-data.ts",
-  "lib/ai-council-data.ts",
-  "lib/ai-council-llm-evidence.ts",
-  "lib/qeoindex-eod-archive-legacy.ts",
+  "modules/research/insights/data.ts",
+  "modules/ai-council/data.ts",
+  "modules/ai-council/llm-evidence.ts",
+  "modules/eod/archive-legacy.ts",
 ]
 
 for (const file of runtimeRatingReaders) {
@@ -138,7 +138,7 @@ node --test tests/kfsp-rating-storage-refactor.test.ts
 ```
 
 Expected failures:
-- `industry_group` is still present in `lib/insights-data.ts`;
+- `industry_group` is still present in `modules/research/insights/data.ts`;
 - migration file `20260902090000_kfsp_rating_storage_refactor.sql` does not yet exist.
 
 Do not proceed if the test fails for unrelated syntax/import reasons.
@@ -155,7 +155,7 @@ git commit -m "test: define KFSP rating storage contraction"
 ### Task 2: Make application readers compatible with contracted schema
 
 **Files:**
-- Modify: `lib/insights-data.ts`
+- Modify: `modules/research/insights/data.ts`
 - Test: `tests/kfsp-rating-storage-refactor.test.ts`
 
 **Interfaces:**
@@ -215,7 +215,7 @@ Expected: PASS.
 - [ ] **Step 4: Commit reader compatibility**
 
 ```bash
-git add lib/insights-data.ts
+git add modules/research/insights/data.ts
 git commit -m "refactor: use sector as canonical rating taxonomy"
 ```
 
@@ -419,7 +419,7 @@ git commit -m "refactor: contract KFSP rating storage"
 ### Task 4: Verify branch and prepare application-first production rollout
 
 **Files:**
-- Modify only if required by test failures: `.github/workflows/security.yml`, `lib/insights-data.ts`, migration/test files from Tasks 1–3.
+- Modify only if required by test failures: `.github/workflows/security.yml`, `modules/research/insights/data.ts`, migration/test files from Tasks 1–3.
 
 **Interfaces:**
 - Consumes: completed branch implementation.

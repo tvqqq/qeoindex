@@ -7,10 +7,10 @@ import {
   ADMIN_JOB_CATALOG,
   ADMIN_SETTING_CATALOG,
   validateAdminSetting,
-} from "../lib/admin/catalog.ts"
-import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../lib/admin/effective-job-catalog.ts"
-import { sanitizeAdminValue } from "../lib/admin/redact.ts"
-import { validateAdminMutationRequest, validateChangeReason } from "../lib/admin/request-security.ts"
+} from "../modules/admin/catalog.ts"
+import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../modules/admin/effective-job-catalog.ts"
+import { sanitizeAdminValue } from "../modules/admin/redact.ts"
+import { validateAdminMutationRequest, validateChangeReason } from "../modules/admin/request-security.ts"
 
 test("runtime setting keys are unique and validate their documented bounds", () => {
   const keys = ADMIN_SETTING_CATALOG.map((entry) => entry.key)

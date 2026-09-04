@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation"
 import { Activity, ArrowUpRight, BarChart3, CheckCircle2, GitCompareArrows, ShieldCheck } from "lucide-react"
 
 import { TradingWorkstationChart } from "@/components/research/trading-workstation-chart"
-import type { TimeframeKey, TimeframeStudy } from "@/lib/multi-timeframe"
-import type { OhlcvBar } from "@/lib/technical-indicators"
+import type { TimeframeKey, TimeframeStudy } from "@/modules/research/multi-timeframe"
+import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 
 const ORDER: TimeframeKey[] = ["Weekly", "Daily", "4H", "1H"]
 

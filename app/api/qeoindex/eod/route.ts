@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { start } from "workflow/api"
 
-import { isMachineRequestAuthorized } from "@/lib/auth/machine"
-import { notifyOpsError } from "@/lib/ops-alerts"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
+import { notifyOpsError } from "@/modules/admin/ops-alerts"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { qeoindexEodPipeline } from "@/workflows/qeoindex-eod-pipeline"
 
 export const runtime = "nodejs"

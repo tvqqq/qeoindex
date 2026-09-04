@@ -6,7 +6,7 @@ const lifecycleMigrationPath = "supabase/migrations/20260902060000_kfsp_manual_r
 const helperPath = "supabase/functions/_shared/kfsp-manual-lifecycle.ts"
 const ratingPath = "supabase/functions/kfsp-rating-sync/index.ts"
 const ttaiPath = "supabase/functions/kfsp-ttai-history-sync/index.ts"
-const jobsPath = "lib/admin/jobs.ts"
+const jobsPath = "modules/admin/jobs.ts"
 
 function source(path: string) {
   assert.ok(existsSync(path), `${path} must exist`)

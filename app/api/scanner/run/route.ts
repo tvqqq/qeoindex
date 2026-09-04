@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { isMachineRequestAuthorized } from "@/lib/auth/machine"
-import { executeSystemJob } from "@/lib/admin/job-telemetry"
-import { runScannerUniverse } from "@/lib/scanner-runner"
-import { UNIVERSE_SIZE } from "@/lib/wyckoff-universe"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
+import { executeSystemJob } from "@/modules/admin/job-telemetry"
+import { runScannerUniverse } from "@/modules/signals/scanner/runner"
+import { UNIVERSE_SIZE } from "@/modules/wyckoff/universe"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

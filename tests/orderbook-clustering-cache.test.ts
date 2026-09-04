@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import { clusterTrades, parseTradeSeconds } from "../lib/trade-clustering.ts"
+import { clusterTrades, parseTradeSeconds } from "../modules/market/realtime/trade-clustering.ts"
 
 test("parseTradeSeconds correctly parses and sorts trade time strings", () => {
   const times = ["09:15:00", "10:55:46", "09:30:15", "11:02:00"]
@@ -70,7 +70,7 @@ test("clusterTrades groups sweeping trades within <=1s with highest price for BU
 })
 
 test("calculateSessionCountdown handles ATO (09:00 - 09:15) and ATC (14:30 - 14:45) exact boundaries", async () => {
-  const { calculateSessionCountdown } = await import("../lib/session-countdown.ts")
+  const { calculateSessionCountdown } = await import("../modules/market/realtime/session-countdown.ts")
 
   // Monday: 2026-08-17 (UTC 02:00:00 = VN 09:00:00)
   const dAtoStart = new Date("2026-08-17T02:00:00.000Z") // VN 09:00:00

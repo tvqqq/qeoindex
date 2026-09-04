@@ -77,7 +77,7 @@ mean(các giá trị có mặt trong [KFSP 4M, KFSP CANSLIM, KFSP stock RS-S, KF
 
 Null bị loại khỏi mean; nếu cả bốn null thì composite null. UI phải ghi “Qeo composite” hoặc “Nguồn KFSP · điểm Qeo”, không gọi đây là model/composite của KFSP.
 
-`QeoIndex state radar` là heuristic UI riêng, owner tại `lib/insights-rating-model.ts`; công thức/weights nằm trong file và UI ghi rõ đây không phải logic proprietary của KFSP. Nếu thay đổi công thức phải cập nhật tests và metric guide trong cùng commit.
+`QeoIndex state radar` là heuristic UI riêng, owner tại `modules/research/insights/rating-model.ts`; công thức/weights nằm trong file và UI ghi rõ đây không phải logic proprietary của KFSP. Nếu thay đổi công thức phải cập nhật tests và metric guide trong cùng commit.
 
 ## 4. Storage contract v2
 

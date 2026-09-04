@@ -14,8 +14,8 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { formatAdminDateTime, formatAdminTime } from "@/lib/admin/time"
-import type { AdminSystemOverview } from "@/lib/admin/types"
+import { formatAdminDateTime, formatAdminTime } from "@/modules/admin/time"
+import type { AdminSystemOverview } from "@/modules/admin/types"
 import { AdminStatCard } from "./admin-stat-card"
 
 export interface AdminOverviewDashboardProps {

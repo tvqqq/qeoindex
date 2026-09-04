@@ -1,24 +1,21 @@
 import {
   appendTickerAttempts,
+  completeQeoIndexEodPartialStep,
+  completeRecoveredEodRunStep,
   computeEodTickerCoverage,
   latestTickerStageAttempts,
-  selectRetryTickers,
-} from "@/lib/qeoindex-eod-fault-isolation"
-import {
+  loadEodRetryContextStep,
   revalidateFullCanonicalArtifactsStep,
-  runTargetedHistoryRetryStep,
-  runTargetedWyckoffRetryStep,
-} from "@/lib/qeoindex-eod-fault-steps"
-import { runNotionAnalyticalSummaryStep } from "@/lib/qeoindex-eod-notion-summary-step"
-import { completeQeoIndexEodPartialStep } from "@/lib/qeoindex-eod-partial-step"
-import { completeRecoveredEodRunStep, loadEodRetryContextStep } from "@/lib/qeoindex-eod-retry-steps"
-import { runRetentionCleanupStep } from "@/lib/qeoindex-eod-retention-step"
-import {
   runDeterministicCouncilStep,
   runLlmDebateStep,
   runMarketSynthesisStep,
+  runNotionAnalyticalSummaryStep,
+  runRetentionCleanupStep,
   runSupabasePublishStep,
-} from "@/lib/qeoindex-eod-workflow-steps"
+  runTargetedHistoryRetryStep,
+  runTargetedWyckoffRetryStep,
+  selectRetryTickers,
+} from "@/modules/eod"
 
 const WYCKOFF_TIMEFRAME_COUNT = 2
 

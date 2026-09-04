@@ -7,9 +7,9 @@ function source(path: string) {
 }
 
 test("Wyckoff runtime supports exactly Daily and Weekly timeframes", () => {
-  const model = source("lib/wyckoff-chart-model.ts")
-  const contract = source("lib/wyckoff-v2-contract.ts")
-  const builder = source("lib/wyckoff-v2-builder.ts")
+  const model = source("modules/wyckoff/chart-model.ts")
+  const contract = source("modules/wyckoff/eod-contract.ts")
+  const builder = source("modules/wyckoff/eod-builder.ts")
 
   assert.match(model, /WYCKOFF_CHART_TIMEFRAMES\s*=\s*\["1D",\s*"1W"\]/)
   assert.match(contract, /TIMEFRAMES\s*=\s*\["1D",\s*"1W"\]/)
@@ -17,8 +17,8 @@ test("Wyckoff runtime supports exactly Daily and Weekly timeframes", () => {
 })
 
 test("persistent Wyckoff OHLCV accepts new Daily writes only without deleting legacy history", () => {
-  const history = source("lib/ohlcv-history-store.ts")
-  const cache = source("lib/wyckoff-v2-cache-read.ts")
+  const history = source("modules/market/history/ohlcv-store.ts")
+  const cache = source("modules/wyckoff/eod-cache-read.ts")
   const migration = source("supabase/migrations/20260901190000_wyckoff_daily_weekly_storage_cutover.sql")
 
   assert.doesNotMatch(history, /fetchHourlyMarketHistoryWindow/)
@@ -32,8 +32,8 @@ test("persistent Wyckoff OHLCV accepts new Daily writes only without deleting le
 })
 
 test("EOD builds two Wyckoff snapshots per canonical ticker", () => {
-  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
-  const phases = source("lib/admin/job-phases.ts")
+  const steps = source("modules/eod/workflow-steps.ts")
+  const phases = source("modules/admin/job-phases.ts")
 
   assert.match(steps, /expectedSnapshots\s*=\s*stocks\.length \* 2/)
   assert.doesNotMatch(steps, /hourlyFetchedBars/)
@@ -42,9 +42,9 @@ test("EOD builds two Wyckoff snapshots per canonical ticker", () => {
 })
 
 test("Notion mirror and ingest accept exactly Daily and Weekly snapshots", () => {
-  const staging = source("lib/wyckoff-v2-notion-staging.ts")
-  const batch = source("lib/wyckoff-v2-notion-batch.ts")
-  const ingest = source("lib/wyckoff-notion-ingest.ts")
+  const staging = source("modules/wyckoff/eod-notion-staging.ts")
+  const batch = source("modules/wyckoff/eod-notion-batch.ts")
+  const ingest = source("modules/wyckoff/notion-ingest.ts")
 
   assert.match(staging, /TIMEFRAME_COUNT\s*=\s*2/)
   assert.match(batch, /TIMEFRAMES\s*=\s*\["1D",\s*"1W"\]/)
@@ -68,7 +68,7 @@ test("active Wyckoff API and UI contract expose only Daily and Weekly", () => {
 })
 
 test("archive and handoff document the Daily Weekly storage contract", () => {
-  const archive = source("lib/qeoindex-eod-archive.ts")
+  const archive = source("modules/eod/archive.ts")
   const handoff = source("docs/HANDOVER.md")
 
   assert.doesNotMatch(archive, /timeframe:\s*"1D" \| "1H"|\["1D",\s*"1H"\]/)

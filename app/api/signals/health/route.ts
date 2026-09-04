@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 
-import { requireApiFeature } from "@/lib/auth/server"
-import { getScannerData } from "@/lib/scanner-data"
-import { getOpenRecommendations } from "@/lib/signal-data"
-import { marketSessionProgress, SIGNAL_ENGINE_VERSION } from "@/lib/signal-engine"
+import { requireApiFeature } from "@/modules/auth/server"
+import { getScannerData } from "@/modules/signals/scanner/data"
+import { getOpenRecommendations } from "@/modules/signals/data"
+import { marketSessionProgress, SIGNAL_ENGINE_VERSION } from "@/modules/signals/engine"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0

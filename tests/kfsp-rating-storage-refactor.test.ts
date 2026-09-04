@@ -2,15 +2,14 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
-const insightsSource = readFileSync("lib/insights-data.ts", "utf8")
+const insightsSource = readFileSync("modules/research/insights/data.ts", "utf8")
 const migrationPath = "supabase/migrations/20260902020424_kfsp_rating_storage_refactor.sql"
 const stalePendingMigrationPath = "supabase/pending-migrations/20260902090000_kfsp_rating_storage_refactor.sql"
 
 const runtimeRatingReaders = [
-  "lib/insights-data.ts",
-  "lib/ai-council-data.ts",
-  "lib/ai-council-llm-evidence.ts",
-  "lib/qeoindex-eod-archive-legacy.ts",
+  "modules/research/insights/data.ts",
+  "modules/ai-council/data.ts",
+  "modules/ai-council/llm-evidence.ts",
 ]
 
 const legacyAliases = [

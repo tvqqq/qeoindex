@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { isConfiguredRootUserId } from "@/lib/auth/root"
-import { requireApiUser, type ServerAuthContext } from "@/lib/auth/server"
+import { isConfiguredRootUserId } from "@/modules/auth/root"
+import { requireApiUser, type ServerAuthContext } from "@/modules/auth/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

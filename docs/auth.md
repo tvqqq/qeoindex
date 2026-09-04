@@ -8,7 +8,7 @@ Last updated: 2026-08-21
 
 The authenticated browser session is synchronized to the server through `/api/auth/session`. The server verifies the Supabase access token with `auth.getUser()` before storing it in the `qeoindex_access_token` cookie (`HttpOnly`, `SameSite=Lax`, `Secure` in production).
 
-Protected server pages and browser-facing API routes verify that server session through `lib/auth/server.ts` before loading protected data.
+Protected server pages and browser-facing API routes verify that server session through `modules/auth/server.ts` before loading protected data.
 
 ## RLS data flow
 
@@ -42,7 +42,7 @@ Browser-facing routes use server-side feature checks:
 - `signals`: signal health UI route.
 - `finhay_live`: Finhay connect/status/quote/disconnect and OAuth callback routes.
 
-Machine endpoints use dedicated bearer-secret authorization through `lib/auth/machine.ts` and do not depend on a browser session. Current secrets are `CRON_SECRET`, `SCANNER_RUN_SECRET`, `SIGNAL_MONITOR_SECRET`, `MARKET_SYNC_SECRET`, and `MARKET_CACHE_ADMIN_SECRET`.
+Machine endpoints use dedicated bearer-secret authorization through `modules/auth/machine.ts` and do not depend on a browser session. Current secrets are `CRON_SECRET`, `SCANNER_RUN_SECRET`, `SIGNAL_MONITOR_SECRET`, `MARKET_SYNC_SECRET`, and `MARKET_CACHE_ADMIN_SECRET`.
 
 ## Market snapshot access
 

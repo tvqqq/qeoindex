@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
-const adminTimeUrl = new URL("../lib/admin/time.ts", import.meta.url)
+const adminTimeUrl = new URL("../modules/admin/time.ts", import.meta.url)
 const ttaiNormalizeUrl = new URL("../supabase/functions/kfsp-ttai-history-sync/normalize.ts", import.meta.url)
 const ttaiSyncSource = readFileSync(new URL("../supabase/functions/kfsp-ttai-history-sync/index.ts", import.meta.url), "utf8")
 
@@ -24,7 +24,7 @@ const ACE_SENTINEL_PAYLOAD = {
 }
 
 test("admin timestamps are formatted in Vietnam time independent of runtime timezone", async () => {
-  assert.equal(existsSync(adminTimeUrl), true, "lib/admin/time.ts must centralize the admin timezone")
+  assert.equal(existsSync(adminTimeUrl), true, "modules/admin/time.ts must centralize the admin timezone")
   const { ADMIN_TIME_ZONE, formatAdminDateTime } = await import(adminTimeUrl.href)
   assert.equal(ADMIN_TIME_ZONE, "Asia/Ho_Chi_Minh")
   const formatted = formatAdminDateTime("2026-08-26T01:17:01.000Z")
@@ -44,7 +44,7 @@ test("admin timestamp surfaces use the single shared Vietnam timezone formatter"
   for (const path of timestampSurfaces) {
     const code = readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
     assert.doesNotMatch(code, /\.toLocale(?:String|TimeString|DateString)\(/, `${path} must not use runtime-local timezone formatting`)
-    assert.doesNotMatch(code, /timeZone:\s*["']Asia\/Ho_Chi_Minh["']/, `${path} must not hardcode the timezone outside lib/admin/time.ts`)
+    assert.doesNotMatch(code, /timeZone:\s*["']Asia\/Ho_Chi_Minh["']/, `${path} must not hardcode the timezone outside modules/admin/time.ts`)
   }
 })
 

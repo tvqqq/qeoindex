@@ -4,8 +4,8 @@ import React, { useState, useMemo } from "react"
 import Link from "next/link"
 import { Check, Trash2, X } from "lucide-react"
 
-import { RawTransaction, TransactionAction } from "@/lib/portfolio/pnl"
-import { cn } from "@/lib/utils"
+import { RawTransaction, TransactionAction } from "@/modules/portfolio/pnl"
+import { cn } from "@/modules/shared/ui/cn"
 import { Button } from "@/components/ui/button"
 import {
   Table,

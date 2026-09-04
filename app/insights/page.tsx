@@ -2,9 +2,9 @@ import type { Metadata } from "next"
 
 import { LandingLogin } from "@/components/auth/landing-login"
 import { InsightsDashboard } from "@/components/insights/insights-dashboard"
-import { getServerAuthContext } from "@/lib/auth/server"
-import { getInsightsDashboardData } from "@/lib/insights-data"
-import { normalizeInsightsDashboardSectors } from "@/lib/insights-sector-normalization"
+import { getServerAuthContext } from "@/modules/auth/server"
+import { getInsightsDashboardData } from "@/modules/research/insights/data"
+import { normalizeInsightsDashboardSectors } from "@/modules/research/insights/sector-normalization"
 
 export const dynamic = "force-dynamic"
 

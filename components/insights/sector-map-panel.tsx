@@ -29,8 +29,8 @@ import {
   X,
 } from "lucide-react"
 
-import type { MarketHistoryPoint, MarketSectorHistoryItem, MarketSectorRow } from "@/lib/market-insight-data"
-import type { InsightsRatingRow } from "@/lib/insights-data"
+import type { MarketHistoryPoint, MarketSectorHistoryItem, MarketSectorRow } from "@/modules/research/market-insight/data"
+import type { InsightsRatingRow } from "@/modules/research/insights/data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -49,7 +49,7 @@ import {
   type StockRankingSortDirection,
   type StockRankingSortKey,
 } from "@/components/insights/stock-ranking-table"
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 
 interface SectorMapPanelProps {
   sectors: MarketSectorRow[]
@@ -80,14 +80,30 @@ export function getSectorIcon(sector: string) {
   return Layers3
 }
 
+function SectorGlyph({ name, className }: { name: string; className?: string }) {
+  const normalized = (name || "").toLowerCase()
+  if (normalized.includes("ngân hàng") || normalized.includes("bank")) return <Landmark className={className} />
+  if (normalized.includes("chứng khoán") || normalized.includes("tài chính")) return <LineChart className={className} />
+  if (normalized.includes("bất động sản") || normalized.includes("xây dựng") || normalized.includes("đầu tư xây dựng")) return <Building2 className={className} />
+  if (normalized.includes("công nghệ") || normalized.includes("it") || normalized.includes("viễn thông")) return <Cpu className={className} />
+  if (normalized.includes("bán lẻ") || normalized.includes("tiêu dùng") || normalized.includes("sản xuất kinh doanh")) return <ShoppingBag className={className} />
+  if (normalized.includes("dầu khí") || normalized.includes("năng lượng") || normalized.includes("tiện ích") || normalized.includes("điện")) return <Flame className={className} />
+  if (normalized.includes("thực phẩm") || normalized.includes("đồ uống") || normalized.includes("nông nghiệp") || normalized.includes("nông - lâm - ngư")) return <Utensils className={className} />
+  if (normalized.includes("y tế") || normalized.includes("dược")) return <HeartPulse className={className} />
+  if (normalized.includes("hóa chất") || normalized.includes("phân bón")) return <FlaskConical className={className} />
+  if (normalized.includes("vận tải") || normalized.includes("logistics") || normalized.includes("cảng") || normalized.includes("hàng không")) return <Truck className={className} />
+  if (normalized.includes("bảo hiểm")) return <ShieldCheck className={className} />
+  if (normalized.includes("du lịch") || normalized.includes("dịch vụ")) return <Compass className={className} />
+  return <Layers3 className={className} />
+}
+
 function SectorLabel({ name, compact = false }: { name: string; compact?: boolean }) {
-  const Icon = getSectorIcon(name)
   return (
     <span className={cn(
       "inline-flex max-w-full items-center gap-1.5 rounded-md border border-cyan-400/25 bg-cyan-400/10 px-1.5 py-0.5 font-sans font-bold text-cyan-300",
       compact ? "text-[10px]" : "text-xs",
     )}>
-      <Icon className={cn(compact ? "size-3" : "size-3.5", "shrink-0")} />
+      <SectorGlyph name={name} className={cn(compact ? "size-3" : "size-3.5", "shrink-0")} />
       <span className="truncate">{name}</span>
     </span>
   )

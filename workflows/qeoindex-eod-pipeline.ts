@@ -1,48 +1,43 @@
 import { sleep } from "workflow"
 
 import {
-  annotateQeoIndexEodPhaseSummaryStep,
-  markQeoIndexEodPhaseRetryingStep,
-} from "@/lib/admin/job-phase-telemetry"
-import { runEodBackfillReadyStep } from "@/lib/qeoindex-eod-backfill-ready-step"
-import {
+  HISTORY_REFRESH_BATCH_SIZE,
+  appendTickerAttempts,
   assertFrozenUniverseStillCurrent,
   assertReadyMatchesFrozenUniverse,
-  runKfspRatingRefreshStep,
-  runTtaiRefreshStep,
-  type TtaiRefreshProgress,
-} from "@/lib/qeoindex-eod-data-refresh-steps"
-import { failQeoIndexEodRunStep } from "@/lib/qeoindex-eod-failure-step"
-import {
-  persistHistoryTickerAttemptsStep,
-  runWyckoffBuildIsolatedStep,
-} from "@/lib/qeoindex-eod-fault-steps"
-import {
-  appendTickerAttempts,
+  completeQeoIndexEodPartialStep,
   computeEodTickerCoverage,
-  type EodTickerAttempt,
-} from "@/lib/qeoindex-eod-fault-isolation"
-import { runEodNoTradeDailyRepairStep } from "@/lib/qeoindex-eod-no-trade-repair-step"
-import { runNotionAnalyticalSummaryStep } from "@/lib/qeoindex-eod-notion-summary-step"
-import { completeQeoIndexEodPartialStep } from "@/lib/qeoindex-eod-partial-step"
-import { runRetentionCleanupStep } from "@/lib/qeoindex-eod-retention-step"
-import { skipQeoIndexEodRunStep } from "@/lib/qeoindex-eod-skip-step"
-import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "@/lib/vn-market-calendar"
-import type { OhlcvUniverseRefreshResult } from "@/lib/ohlcv-history-store"
-import {
-  HISTORY_REFRESH_BATCH_SIZE,
+  failQeoIndexEodRunStep,
+  persistHistoryTickerAttemptsStep,
   runCompleteStep,
   runDeterministicCouncilStep,
+  runEodBackfillReadyStep,
+  runEodNoTradeDailyRepairStep,
   runEodReadyStep,
   runHistoryRefreshWindowStep,
+  runKfspRatingRefreshStep,
   runLlmDebateStep,
   runMarketCloseCollectStep,
   runMarketSynthesisStep,
+  runNotionAnalyticalSummaryStep,
+  runRetentionCleanupStep,
   runSupabasePublishStep,
   runSupabaseValidateStep,
+  runTtaiRefreshStep,
+  runWyckoffBuildIsolatedStep,
   runWyckoffBuildStep,
+  skipQeoIndexEodRunStep,
   startQeoIndexEodRunStep,
-} from "@/lib/qeoindex-eod-workflow-steps"
+  type EodTickerAttempt,
+  type TtaiRefreshProgress,
+} from "@/modules/eod"
+
+import {
+  annotateQeoIndexEodPhaseSummaryStep,
+  markQeoIndexEodPhaseRetryingStep,
+} from "@/modules/admin/job-phase-telemetry"
+import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "@/modules/market/calendar"
+import type { OhlcvUniverseRefreshResult } from "@/modules/market/history/ohlcv-store"
 
 const EOD_READY_MAX_ATTEMPTS = 4
 const EOD_READY_RETRY_INTERVAL_MS = 5 * 60_000

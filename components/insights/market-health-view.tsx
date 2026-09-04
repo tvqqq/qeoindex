@@ -15,7 +15,7 @@ import {
 } from "recharts"
 import { ChevronDown, Gauge, HeartPulse, ShieldAlert } from "lucide-react"
 
-import type { MarketCloseDashboardData, MarketHistoryPoint } from "@/lib/market-insight-data"
+import type { MarketCloseDashboardData, MarketHistoryPoint } from "@/modules/research/market-insight/data"
 import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
 
 interface MarketHealthViewProps {

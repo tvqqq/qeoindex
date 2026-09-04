@@ -10,10 +10,10 @@ const page = source("app/insights/wyckoff/page.tsx")
 const deferred = source("components/insights/wyckoff-deferred-dashboard.tsx")
 const dashboard = source("components/insights/wyckoff-daily-weekly-dashboard.tsx")
 const chart = source("components/insights/wyckoff-lightweight-chart.tsx")
-const chartRuntime = source("lib/lightweight-charts-runtime.ts")
+const chartRuntime = source("modules/shared/charts/lightweight-charts-runtime.ts")
 const tickerApi = source("app/api/insights/wyckoff/route.ts")
-const unifiedData = source("lib/wyckoff-unified-data.ts")
-const metadata = source("lib/wyckoff-company-metadata.ts")
+const unifiedData = source("modules/wyckoff/unified-data.ts")
+const metadata = source("modules/wyckoff/company-metadata.ts")
 
 test("Wyckoff header uses canonical stock identity and no legacy back row", () => {
   assert.match(dashboard, /import \{ StockIdentity \}/)

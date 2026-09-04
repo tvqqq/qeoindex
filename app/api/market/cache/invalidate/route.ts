@@ -3,8 +3,8 @@ import { Redis } from "@upstash/redis"
 import { getCache } from "@vercel/functions"
 
 import { clearServerSessionCache } from "@/app/api/market/session/route"
-import { isMachineRequestAuthorized } from "@/lib/auth/machine"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

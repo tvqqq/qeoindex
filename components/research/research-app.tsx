@@ -26,7 +26,7 @@ import type {
   ProbabilitySet,
   ResearchData,
   Thesis,
-} from "@/lib/research-types"
+} from "@/modules/research/types"
 
 type Mode = "overview" | "changes" | "log" | "review" | "ticker"
 

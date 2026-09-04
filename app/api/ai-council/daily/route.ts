@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { runAiCouncilDailyOperation } from "@/lib/ai-council-operations"
-import { isMachineRequestAuthorized } from "@/lib/auth/machine"
-import { notifyOpsError } from "@/lib/ops-alerts"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { runAiCouncilDailyOperation } from "@/modules/ai-council/operations"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
+import { notifyOpsError } from "@/modules/admin/ops-alerts"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

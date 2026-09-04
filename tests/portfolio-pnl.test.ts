@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { computePortfolioPositions, calculatePositionSizing, type RawTransaction } from '../lib/portfolio/pnl.ts'
+import { computePortfolioPositions, calculatePositionSizing, type RawTransaction } from '../modules/portfolio/pnl.ts'
 
 test('AVCO P&L Engine: Single Buy transaction', () => {
   const txs: RawTransaction[] = [
@@ -121,7 +121,7 @@ test('QEO-20 active runtime stops depending on legacy compatibility DB columns',
   const transactions = readFileSync(resolve('app/api/portfolio/[id]/transactions/route.ts'), 'utf8')
   const transaction = readFileSync(resolve('app/api/portfolio/[id]/transactions/[txId]/route.ts'), 'utf8')
   const benchmark = readFileSync(resolve('app/api/portfolio/[id]/benchmark/route.ts'), 'utf8')
-  const pnl = readFileSync(resolve('lib/portfolio/pnl.ts'), 'utf8')
+  const pnl = readFileSync(resolve('modules/portfolio/pnl.ts'), 'utf8')
 
   assert.doesNotMatch(transactions, /,target_price,stop_loss,/)
   assert.doesNotMatch(transactions, /\btarget_price:\s*target_price_1\b/)

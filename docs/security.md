@@ -29,7 +29,7 @@ Supabase Auth
 
 ## Machine-only API rules
 
-Machine endpoints use `lib/auth/machine.ts`, which compares bearer secrets with a constant-time digest comparison.
+Machine endpoints use `modules/auth/machine.ts`, which compares bearer secrets with a constant-time digest comparison.
 
 | Endpoint | Required secret |
 | --- | --- |
@@ -55,7 +55,7 @@ User-owned tables are protected by RLS and ownership is derived from `auth.uid()
 
 `stock_orderbook_snapshots` no longer has anonymous Data API read access. Direct table reads are limited to the `authenticated` role; trusted ingestion uses the service-role server client.
 
-`lib/supabase/server.ts` is infrastructure-only and intentionally fails closed unless `SUPABASE_SERVICE_ROLE_KEY` is configured. It must never fall back to `NEXT_PUBLIC_SUPABASE_ANON_KEY` for writes or trusted snapshot operations.
+`modules/shared/supabase/server.ts` is infrastructure-only and intentionally fails closed unless `SUPABASE_SERVICE_ROLE_KEY` is configured. It must never fall back to `NEXT_PUBLIC_SUPABASE_ANON_KEY` for writes or trusted snapshot operations.
 
 Relevant migrations:
 

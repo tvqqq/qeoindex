@@ -4,7 +4,7 @@ import assert from "node:assert/strict"
 import {
   generateMarketObservations,
   type MarketObservationSnapshotInput,
-} from "../lib/market-insight-model.ts"
+} from "../modules/research/market-insight/model.ts"
 
 const sampleInput: MarketObservationSnapshotInput = {
   sessionDate: "2026-08-26",

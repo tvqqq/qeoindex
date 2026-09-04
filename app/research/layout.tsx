@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 
 import { LandingLogin } from "@/components/auth/landing-login"
-import { getServerAuthContext } from "@/lib/auth/server"
+import { getServerAuthContext } from "@/modules/auth/server"
 
 export const dynamic = "force-dynamic"
 

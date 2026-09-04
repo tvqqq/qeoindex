@@ -2,7 +2,7 @@
 
 import React, { memo, useEffect, useState } from "react"
 
-import { stockLogoUrl } from "@/lib/stock-logo-url"
+import { stockLogoUrl } from "@/modules/market/stock-logo-url"
 
 export interface StockLogoProps {
   symbol: string

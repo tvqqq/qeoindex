@@ -4,7 +4,7 @@ import test from "node:test"
 import {
   validateCouncilEvidenceRefs,
   type AiCouncilEvidencePacketV2,
-} from "../lib/ai-council-prompt-evidence.ts"
+} from "../modules/ai-council/prompt-evidence.ts"
 
 const packet = {
   observedIndicators: {

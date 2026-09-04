@@ -1,6 +1,6 @@
 import { AdminSettingsTable } from "@/components/admin/admin-settings-table"
 import { AdminUniverseTable } from "@/components/admin/admin-universe-table"
-import { loadAdminUniverseView } from "@/lib/admin/universe"
+import { loadAdminUniverseView } from "@/modules/admin/universe"
 
 export const dynamic = "force-dynamic"
 

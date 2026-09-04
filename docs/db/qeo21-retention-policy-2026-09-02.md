@@ -89,7 +89,7 @@ At the same checkpoint, `system_job_runs` still contained one `running` row, pro
 
 ## Runtime behavior
 
-`lib/qeoindex-eod-archive.ts::runEodRetentionCleanup()` calls the safe retention RPC even when Notion/Drive archive checkpoints are incomplete. Those archive checkpoints are relevant to future raw-history deletion, not to bounded telemetry cleanup.
+`modules/eod/archive.ts::runEodRetentionCleanup()` calls the safe retention RPC even when Notion/Drive archive checkpoints are incomplete. Those archive checkpoints are relevant to future raw-history deletion, not to bounded telemetry cleanup.
 
 A successful safe cleanup returns the EOD retention phase as completed while explicitly carrying `rawHistoryRetention.status = blocked`. Thus an intentionally disabled raw-history policy no longer makes the EOD job partial by itself.
 

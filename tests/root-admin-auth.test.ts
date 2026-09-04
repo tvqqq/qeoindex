@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { isRootAdminUserId, parseRootAdminUserIds } from "../lib/auth/root-id.ts"
+import { isRootAdminUserId, parseRootAdminUserIds } from "../modules/auth/root-id.ts"
 
 const ROOT = "aaaaaaaa-1111-4111-8111-111111111111"
 const OTHER = "bbbbbbbb-2222-4222-8222-222222222222"

@@ -19,8 +19,8 @@ import {
   INSIGHTS_METRIC_GUIDE_VERSION,
   getMetricSemantic,
   type MetricSource,
-} from "@/lib/insights-metric-semantics"
-import { cn } from "@/lib/utils"
+} from "@/modules/research/insights/metric-semantics"
+import { cn } from "@/modules/shared/ui/cn"
 
 export interface MetricGuideDialogProps {
   open: boolean

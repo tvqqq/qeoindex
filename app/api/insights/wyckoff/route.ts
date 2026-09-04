@@ -1,11 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
-import { requireApiUser } from "@/lib/auth/server"
-import { getCanonicalUniverse, type CanonicalUniverseSnapshot } from "@/lib/market-universe"
-import { getCachedDailyHistory, getCachedLongDailyHistory } from "@/lib/request-cache"
-import { buildWyckoffChartStudies } from "@/lib/wyckoff-chart-model"
-import { getUnifiedWyckoffTickerData } from "@/lib/wyckoff-unified-data"
+import { requireApiUser } from "@/modules/auth/server"
+import { getCanonicalUniverse, type CanonicalUniverseSnapshot } from "@/modules/market/universe/index"
+import { getCachedDailyHistory, getCachedLongDailyHistory } from "@/modules/shared/cache/request-cache"
+import { buildWyckoffChartStudies } from "@/modules/wyckoff/chart-model"
+import { getUnifiedWyckoffTickerData } from "@/modules/wyckoff/unified-data"
 
 const TICKER_PATTERN = /^[A-Z0-9]{2,12}$/
 const QUERY_CHUNK_SIZE = 100

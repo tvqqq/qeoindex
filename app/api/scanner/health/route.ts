@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireApiFeature } from "@/lib/auth/server"
-import { vietnamDateKey } from "@/lib/dnse-history"
-import { fetchDailyMarketHistory } from "@/lib/market-history"
-import { getScannerData } from "@/lib/scanner-data"
-import { scannerHistoryPolicy, type ScannerHistoryStatus } from "@/lib/scanner-policy"
+import { requireApiFeature } from "@/modules/auth/server"
+import { vietnamDateKey } from "@/modules/market/providers/dnse/history"
+import { fetchDailyMarketHistory } from "@/modules/market/history/index"
+import { getScannerData } from "@/modules/signals/scanner/data"
+import { scannerHistoryPolicy, type ScannerHistoryStatus } from "@/modules/signals/scanner/policy"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60

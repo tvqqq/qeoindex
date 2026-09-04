@@ -24,7 +24,7 @@ import {
   getCachedHourlyHistory,
   getCachedResearchData,
   getCachedScannerData,
-} from "@/lib/request-cache"
+} from "@/modules/shared/cache/request-cache"
 
 export const dynamic = "force-dynamic"
 

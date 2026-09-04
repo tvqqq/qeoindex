@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
-import { requireApiFeature } from "@/lib/auth/server"
-import { createPkce, discoverFinhayOAuth, registerFinhayClient } from "@/lib/finhay-live"
-import { setFinhayOAuthAttempt } from "@/lib/finhay-session"
+import { requireApiFeature } from "@/modules/auth/server"
+import { createPkce, discoverFinhayOAuth, registerFinhayClient } from "@/modules/market/providers/finhay/live"
+import { setFinhayOAuthAttempt } from "@/modules/market/providers/finhay/session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

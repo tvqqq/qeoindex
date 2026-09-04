@@ -59,9 +59,9 @@ test("P3 outcome refresh computes VNINDEX alpha and calibration stays sample-gat
 
 test("daily Council P3 operation is machine-authorized and runs inside the unified EOD dependency chain", () => {
   const route = source("app/api/ai-council/daily/route.ts")
-  const operations = source("lib/ai-council-operations.ts")
+  const operations = source("modules/ai-council/operations.ts")
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
-  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const steps = source("modules/eod/workflow-steps.ts")
   const scheduler = source("supabase/migrations/20260825174500_qeoindex_eod_pipeline_cron.sql")
   const vercel = JSON.parse(source("vercel.json")) as { crons: Array<{ path: string; schedule: string }> }
   const legacyEodCron = vercel.crons.find((cron) => cron.path === "/api/ai-council/eod")
@@ -83,10 +83,10 @@ test("daily Council P3 operation is machine-authorized and runs inside the unifi
 })
 
 test("Council v2 keeps deterministic evidence hashes and exposes bounded adaptive calibration", () => {
-  const data = source("lib/ai-council-data.ts")
-  const persistence = source("lib/ai-council-persistence.ts")
-  const calibration = source("lib/ai-council-calibration.ts")
-  const learning = source("lib/ai-council-learning.ts")
+  const data = source("modules/ai-council/data.ts")
+  const persistence = source("modules/ai-council/persistence.ts")
+  const calibration = source("modules/ai-council/calibration.ts")
+  const learning = source("modules/ai-council/learning.ts")
   const performance = source("app/insights/ai-council/performance/page.tsx")
   const dashboard = source("components/insights/ai-council-dashboard.tsx")
 
@@ -122,7 +122,7 @@ test("P4 persists advisory LLM debates without granting signal authority", () =>
 })
 
 test("P4 event selector caps spend and escalates only material deterministic events", () => {
-  const llm = source("lib/ai-council-llm.ts")
+  const llm = source("modules/ai-council/llm.ts")
 
   for (const reason of ["explicit_watchlist", "signal_changed", "high_disagreement", "breakout_watch", "risk_conflict"]) {
     assert.match(llm, new RegExp(`"${reason}"`))
@@ -136,7 +136,7 @@ test("P4 event selector caps spend and escalates only material deterministic eve
 })
 
 test("P4.1 routes roles to Luna/Terra/Sol with bounded fallback and reasoning effort", () => {
-  const llm = source("lib/ai-council-llm.ts")
+  const llm = source("modules/ai-council/llm.ts")
   const env = source(".env.example")
 
   assert.match(llm, /DEFAULT_BULL_MODEL = "gpt-5\.6-luna"/)
@@ -154,8 +154,8 @@ test("P4.1 routes roles to Luna/Terra/Sol with bounded fallback and reasoning ef
 })
 
 test("P4.1 uses Responses Structured Outputs, stable prompt-cache keys, and token telemetry", () => {
-  const llm = source("lib/ai-council-llm.ts")
-  const responseEnvelope = source("lib/ai-council-openai-response.ts")
+  const llm = source("modules/ai-council/llm.ts")
+  const responseEnvelope = source("modules/ai-council/openai-response.ts")
   const migration = source("supabase/migrations/20260823195500_ai_council_llm_router_telemetry.sql")
 
   assert.match(llm, /https:\/\/api\.openai\.com\/v1\/responses/)
@@ -178,7 +178,7 @@ test("P4.1 uses Responses Structured Outputs, stable prompt-cache keys, and toke
 })
 
 test("P4.1 severe-conflict gate reserves Sol escalation for compound disagreement", () => {
-  const llm = source("lib/ai-council-llm.ts")
+  const llm = source("modules/ai-council/llm.ts")
 
   assert.match(llm, /reasons\.has\("signal_changed"\) && reasons\.has\("risk_conflict"\)/)
   assert.match(llm, /selection\.stock\.consensus <= 55/)
@@ -189,11 +189,11 @@ test("P4.1 severe-conflict gate reserves Sol escalation for compound disagreemen
 })
 
 test("P4.3 freezes raw KFSP, TTAI history and Wyckoff context without changing deterministic authority", () => {
-  const evidence = source("lib/ai-council-llm-evidence.ts")
+  const evidence = source("modules/ai-council/llm-evidence.ts")
   const migration = source("supabase/migrations/20260823214500_ai_council_llm_evidence_fidelity.sql")
-  const preMarket = source("lib/ai-council-pre-market-evidence.ts")
+  const preMarket = source("modules/ai-council/pre-market-evidence.ts")
   const route = source("app/api/ai-council/debate-daily/route.ts")
-  const operations = source("lib/ai-council-operations.ts")
+  const operations = source("modules/ai-council/operations.ts")
 
   assert.match(evidence, /AI_COUNCIL_LLM_EVIDENCE_VERSION = "llm-evidence-fidelity-v1"/)
   assert.match(evidence, /"price_volatility"/)
@@ -227,9 +227,9 @@ test("P4.3 freezes raw KFSP, TTAI history and Wyckoff context without changing d
 
 test("P4 debate stage is isolated behind an authenticated endpoint and the unified dependency-driven EOD workflow", () => {
   const route = source("app/api/ai-council/debate-daily/route.ts")
-  const operations = source("lib/ai-council-operations.ts")
+  const operations = source("modules/ai-council/operations.ts")
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
-  const steps = source("lib/qeoindex-eod-workflow-steps.ts")
+  const steps = source("modules/eod/workflow-steps.ts")
   const scheduler = source("supabase/migrations/20260825174500_qeoindex_eod_pipeline_cron.sql")
   const page = source("app/insights/ai-council/debates/page.tsx")
   const councilPage = source("app/insights/ai-council/page.tsx")
@@ -256,11 +256,11 @@ test("P4 debate stage is isolated behind an authenticated endpoint and the unifi
 })
 
 test("P2 AI Council V2 applies semantic grounding, Packet V2 and structured evidenceRefs validation", () => {
-  const llm = source("lib/ai-council-llm.ts")
-  const promptEvidence = source("lib/ai-council-prompt-evidence.ts")
-  const data = source("lib/ai-council-data.ts")
+  const llm = source("modules/ai-council/llm.ts")
+  const promptEvidence = source("modules/ai-council/prompt-evidence.ts")
+  const data = source("modules/ai-council/data.ts")
   const route = source("app/api/ai-council/debate-daily/route.ts")
-  const operations = source("lib/ai-council-operations.ts")
+  const operations = source("modules/ai-council/operations.ts")
 
   assert.match(llm, /AI_COUNCIL_LLM_PROMPT_VERSION = "llm-debate-v3-first-class-context"/)
   assert.match(llm, /evidenceRefs/)

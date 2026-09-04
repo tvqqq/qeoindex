@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { start } from "workflow/api"
 
-import { validateAdminMutationRequest } from "@/lib/admin/request-security"
-import { requireApiRoot } from "@/lib/auth/root"
+import { validateAdminMutationRequest } from "@/modules/admin/request-security"
+import { requireApiRoot } from "@/modules/auth/root"
 import { qeoindexEodRetry } from "@/workflows/qeoindex-eod-retry"
 
 export const runtime = "nodejs"

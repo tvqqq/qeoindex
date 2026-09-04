@@ -9,10 +9,10 @@ import { MarketBubbles, type MarketBubbleStock } from "@/components/insights/mar
 import { SectorMapPanel } from "@/components/insights/sector-map-panel"
 import { MarketHealthView, MarketSentimentCard } from "@/components/insights/market-health-view"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import type { MarketCloseDashboardData } from "@/lib/market-insight-data"
-import type { InsightsRatingRow } from "@/lib/insights-data"
-import type { MarketAiConclusionView } from "@/lib/market-ai-conclusion-loader"
-import { cn } from "@/lib/utils"
+import type { MarketCloseDashboardData } from "@/modules/research/market-insight/data"
+import type { InsightsRatingRow } from "@/modules/research/insights/data"
+import type { MarketAiConclusionView } from "@/modules/research/market-insight/ai-conclusion-loader"
+import { cn } from "@/modules/shared/ui/cn"
 import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
 
 export type { MarketBubbleStock }

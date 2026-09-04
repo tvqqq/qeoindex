@@ -2,7 +2,7 @@
  * Deno-safe market AI contract.
  *
  * Keep this file deliberately free of Next.js/node imports. The synchronous
- * shape and canonicalization mirror lib/market-ai-conclusion.ts; hashing is
+ * shape and canonicalization mirror modules/research/market-insight/ai-conclusion.ts; hashing is
  * async here because Edge Runtime exposes Web Crypto instead of node:crypto.
  */
 

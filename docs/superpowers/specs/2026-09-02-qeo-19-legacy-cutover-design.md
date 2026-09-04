@@ -15,10 +15,10 @@ The two lanes are independently releasable. A destructive DROP is allowed only a
 - Production canonical `vn_top_stocks` currently has 200 memberships.
 - `wyckoff_universe_memberships` and `kfsp_provider_tokens` both still exist.
 - Active Wyckoff runtime still references the legacy membership table in:
-  - `lib/wyckoff-unified-data.ts`
-  - `lib/wyckoff-unified-runner.ts`
-  - `lib/wyckoff-supabase-publish.ts`
-  - `lib/wyckoff-notion-ingest.ts`
+  - `modules/wyckoff/unified-data.ts`
+  - `modules/wyckoff/unified-runner.ts`
+  - `modules/wyckoff/supabase-publish.ts`
+  - `modules/wyckoff/notion-ingest.ts`
 - Active KFSP Edge Functions still read/write `kfsp_provider_tokens` in:
   - `supabase/functions/kfsp-rating-sync/index.ts`
   - `supabase/functions/kfsp-ttai-history-sync/index.ts`

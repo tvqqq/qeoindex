@@ -1,6 +1,6 @@
 import { AdminEnvironmentTable } from "@/components/admin/admin-environment-table"
-import { getAdminEnvironmentInventory } from "@/lib/admin/catalog"
-import { requireRootPageContext } from "@/lib/auth/root"
+import { getAdminEnvironmentInventory } from "@/modules/admin/catalog"
+import { requireRootPageContext } from "@/modules/auth/root"
 
 export const dynamic = "force-dynamic"
 

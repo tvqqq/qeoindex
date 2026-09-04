@@ -31,12 +31,12 @@ Important files:
 
 | Path | Responsibility |
 | --- | --- |
-| `lib/auth/server.ts` | Verify Supabase access tokens, read HttpOnly session, enforce typed user feature gates. |
-| `lib/auth/machine.ts` | Constant-time bearer-secret authorization for machine/admin endpoints. |
+| `modules/auth/server.ts` | Verify Supabase access tokens, read HttpOnly session, enforce typed user feature gates. |
+| `modules/auth/machine.ts` | Constant-time bearer-secret authorization for machine/admin endpoints. |
 | `app/api/auth/session/route.ts` | Synchronize the browser Supabase session to the verified server cookie. |
 | `app/api/me/route.ts` | User profile/preferences API; user ID always comes from server auth. |
 | `app/api/watchlist/route.ts` | Per-user default watchlist API; ownership enforced again by RLS. |
-| `lib/supabase/server.ts` | Trusted infrastructure-only service-role client. It fails closed without `SUPABASE_SERVICE_ROLE_KEY`. |
+| `modules/shared/supabase/server.ts` | Trusted infrastructure-only service-role client. It fails closed without `SUPABASE_SERVICE_ROLE_KEY`. |
 | `docs/auth.md` | Full Auth/RLS architecture and verification checklist. |
 | `docs/security.md` | Current security audit, endpoint policy, headers, and remaining actions. |
 
@@ -79,7 +79,7 @@ The two destructive market maintenance routes are POST-only. Do not restore unau
 
 | Concern | Runtime source | Important rule |
 | --- | --- | --- |
-| Board universe | `lib/wyckoff-universe.ts` canonical Top 100 constants | Keep the 100-symbol safety cap and deterministic sector/rank metadata. |
+| Board universe | `modules/wyckoff/universe.ts` canonical Top 100 constants | Keep the 100-symbol safety cap and deterministic sector/rank metadata. |
 | Persistent research/thesis/scans | Notion canonical workspace | Fail visibly if the canonical research source is unavailable; market feeds are not research persistence. |
 | Initial stock quotes | Broker batch quotes + Supabase snapshots | SSR should render usable values before WebSocket connect. |
 | Intraday mini charts | Shared 5m snapshot service: DNSE chart first, Yahoo fallback | Keep provider concurrency bounded; prefer valid cached history to blocking a browser request. |
@@ -294,7 +294,7 @@ See `docs/market-board.md` and `docs/perf-market-board-state-buffer.md` for the 
 ## Portfolio workspace
 
 - `/portfolio` combines a Simplize-style overview (market value, unrealized/realized P&L, allocation) with a KFSP-style trading journal (transaction history, notes/tags, target and stop-loss) and multi-list watchlists with price alerts.
-- Market prices must be read from `/api/market/intraday` at `histories[symbol].price`, with the latest valid point close as a fallback. `lib/portfolio/market-prices.ts` owns this boundary; never treat the response as a flat ticker map.
+- Market prices must be read from `/api/market/intraday` at `histories[symbol].price`, with the latest valid point close as a fallback. `modules/portfolio/market-prices.ts` owns this boundary; never treat the response as a flat ticker map.
 - Portfolio switching is race-guarded so a slower response from the previous portfolio cannot replace the active portfolio's transaction state.
 - The portfolio shell renders `TopNav` before its `top-14` sticky workspace bar; omitting `TopNav` creates a visible 56px header gap. Transaction rows support edit as well as delete: the shared dialog prefills the selected row and persists through the user-scoped `PATCH /api/portfolio/[id]/transactions/[txId]` route.
 - The dashboard's “Kỷ luật giao dịch” values are descriptive coverage metrics only. They must not be presented as advice, signal quality, or a win-rate estimate without a canonical closed-trade model.

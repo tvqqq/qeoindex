@@ -13,11 +13,11 @@ import {
   getResearchLogData,
   getResearchOverviewData,
   getResearchReviewData,
-} from "@/lib/research-data"
-import { withPendingReviewPlaceholders } from "@/lib/research-view-model"
-import { getScannerData } from "@/lib/scanner-data"
-import { getSignalUiData } from "@/lib/signal-data"
-import { buildRecommendationPerformance } from "@/lib/signal-performance"
+} from "@/modules/research/data"
+import { withPendingReviewPlaceholders } from "@/modules/research/view-model"
+import { getScannerData } from "@/modules/signals/scanner/data"
+import { getSignalUiData } from "@/modules/signals/data"
+import { buildRecommendationPerformance } from "@/modules/signals/performance"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0

@@ -2,8 +2,8 @@
 
 import { type FormEvent, useState } from "react"
 import { ArrowRight, ArrowUpRight, Eye, EyeOff, LineChart, Radar, RadioTower } from "lucide-react"
-import { BRAND } from "@/lib/brand"
-import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client"
+import { BRAND } from "@/modules/shared/brand"
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/modules/shared/supabase/client"
 
 const FEATURES = [
   { label: "Bảng điện realtime", icon: LineChart },

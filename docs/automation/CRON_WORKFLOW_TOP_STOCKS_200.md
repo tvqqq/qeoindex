@@ -1,361 +1,162 @@
-# QeoIndex — Final Cron Workflow: Top Stocks 200
+# QeoIndex — Canonical Top Stocks 200 EOD Runbook
 
-Last updated: 2026-09-01  
+Last updated: 2026-09-04  
 Canonical universe: `vn_top_stocks`  
-Operational architecture: Supabase-first EOD v3
+Operational architecture: `supabase-first-eod-v4-dag`
 
-## 1. Purpose
+## 1. Source of truth
 
-This document is the production runbook for the canonical Top Stocks universe, market-data collection, Wyckoff EOD build, AI Council, post-analysis archive, and retention controls.
+- Supabase is the operational source of truth for canonical universe membership, raw Daily OHLCV, Wyckoff publication, AI Council evidence and durable job telemetry.
+- Notion is a downstream analytical/audit summary only. It does not gate EOD publication or retention.
+- Google Drive is not part of the active EOD runtime graph.
+- Scheduler dispatch is not proof of execution success; use `system_job_runs` and `system_job_phases`.
 
-The production contract is intentionally fail-closed. Supabase is the operational source of truth. Notion and Google Drive are downstream archive/audit systems and must never gate or rewrite already-published operational evidence.
+## 2. Canonical universe
 
-## 2. Canonical Top Stocks universe
+The current stock set is the latest successfully published `vn_top_stocks` run, with a maximum of 200 tickers.
 
-A stock is eligible only when all selector gates pass:
+Runtime consumers must use the exact same published membership. A failed universe refresh preserves the previous successfully published run.
 
-- `average_volume_50_sessions > 250000`
-- `market_cap_billion > 10`
-- at least 4 of the latest 5 weekday observations have verified trading volume `> 0`
-- supported exchange: HOSE, HNX, or UPCOM
+## 3. Scheduler ownership
 
-Selection order:
+The canonical scheduled parent is Supabase `pg_cron` job:
 
-1. `market_cap_billion DESC`
-2. `average_volume_50_sessions DESC`
-3. `ticker ASC`
-4. maximum 200 stocks
+- `qeoindex-eod-pipeline-1515-ict`
+- schedule: `15 8 * * 1-5`
+- effective dispatch: 15:15 ICT on trading weekdays
 
-The list is published monthly and remains fixed between successful monthly refreshes. A failed monthly run preserves the previous successfully published universe.
+KFSP Rating and TTAI refresh are dependencies inside the EOD v4 workflow. Their standalone admin entries are manual recovery capabilities rather than independent daily scheduler ownership.
 
-Canonical identity:
+The active scheduler/admin catalog is authoritative for other market/universe maintenance jobs. Legacy Vercel EOD cron paths are not scheduler owners.
 
-- Universe key: `vn_top_stocks`
-- Maximum size: `200`
-- Runtime cache namespace: `market-universe:v1`
-- Logo bucket: `stock-logo`
-- Logo object contract: `stock-logo/{TICKER}.png`
+## 4. EOD v4 dependency DAG
 
-All runtime consumers use the same membership: market board, orderbook, bubbles, Qeo Composite, rating/detail views, scanner/Wyckoff, AI Council, and EOD workflows.
+### Current session
 
-## 3. Production scheduler inventory
-
-Supabase `pg_cron` is the scheduler owner for market/universe/EOD jobs.
-
-| Job | UTC schedule | Effective ICT dispatch window | Purpose |
-| --- | --- | --- | --- |
-| `kfsp-rating-daily-7am-ict` | `0 0 * * *` | 07:00 daily | Publish current KFSP/TTAI rating snapshot used as selector/detail evidence. |
-| `kfsp-ttai-history-daily-0710-ict` | `10 0 * * *` | 07:10 daily | Refresh TTAI historical evidence. |
-| `market-universe-monthly-0710-ict` | `10 0 1 * *` | 07:10 on day 1 monthly | Recompute and atomically publish `vn_top_stocks`. |
-| `sync-universe-5m` | `*/5 2-4 * * 1-5` | **09:00–11:30 Mon–Fri** | Morning canonical-universe market/orderbook synchronization. SQL time guard prevents provider calls after the morning close. |
-| `sync-universe-5m-afternoon` | `*/5 6-7 * * 1-5` | **13:00–14:40 Mon–Fri** | Afternoon canonical-universe synchronization. SQL time guard prevents calls before 13:00 or after 14:40. |
-| `sync-universe-eod-1445` | `45 7 * * 1-5` | 14:45 Mon–Fri | Final orderbook/EOD snapshot collection before analytical EOD workflow. |
-| `qeoindex-eod-pipeline-1515-ict` | `15 8 * * 1-5` | 15:15 Mon–Fri | Start the single durable EOD v3 dependency workflow. |
-
-The two five-minute jobs call the same `orderbook-sync` Edge Function. They are separate physical schedules only because the Vietnamese trading day has a lunch break. No provider HTTP request is dispatched between 11:30 and 13:00.
-
-There are no independent production pg_cron jobs for Wyckoff ingest, AI Council deterministic, AI Council LLM, or Notion ingestion. Those are dependency phases inside the one EOD workflow.
-
-Legacy Vercel EOD cron paths are not scheduled:
-
-- `/api/ai-council/eod`
-- `/api/wyckoff/ingest`
-- `/api/ai-council/daily`
-- `/api/ai-council/debate-daily`
-
-## 4. Monthly universe workflow
-
-`market-universe-monthly-0710-ict` executes the following contract:
-
-1. Load the latest successfully published KFSP snapshot.
-2. Apply market-cap and AvgVol50 strict filters.
-3. Apply the 4-of-5 positive-volume activity gate.
-4. Deterministically sort candidates.
-5. Select at most 200.
-6. Resolve complete stock detail metadata.
-7. Guarantee a logo object for every selected ticker in Supabase Storage.
-8. Write the candidate run and memberships.
-9. Verify count, rank uniqueness, detail completeness, and logo coverage.
-10. Atomically mark the new run `published`.
-11. Invalidate canonical-universe cache only after successful publication.
-
-A failed run never replaces the current published snapshot.
-
-## 5. EOD v3 dependency workflow
-
-The single parent job is `qeoindex.eod_pipeline`. Its operational phase order is:
-
-1. `EOD_READY`
-2. `MARKET_CLOSE_COLLECT`
-3. `HISTORY_REFRESH`
-4. `WYCKOFF_BUILD`
-5. `SUPABASE_VALIDATE`
-6. `SUPABASE_PUBLISH`
-7. `AI_COUNCIL_DETERMINISTIC`
-8. `AI_COUNCIL_LLM`
-9. `MARKET_SYNTHESIS`
-10. `NOTION_ARCHIVE`
-11. `DRIVE_ARCHIVE`
+1. `KFSP_RATING_REFRESH`
+   - refresh the current rating snapshot;
+   - freeze exact canonical universe identity for the run.
+2. Run two bounded sibling branches in parallel:
+   - `TTAI_REFRESH` for the frozen universe;
+   - `MARKET_CLOSE_COLLECT` for same-session final market evidence.
+3. `EOD_READY`
+   - validate the frozen `universeRunId` and exact ticker membership;
+   - require same-session rating and final market evidence;
+   - bounded retry for known not-ready conditions.
+4. `HISTORY_REFRESH`
+   - persist Daily-only OHLCV;
+   - batch size 10 with bounded concurrency;
+   - account for every requested ticker.
+5. Verified no-trade Daily repair when required.
+6. `WYCKOFF_BUILD`
+   - exactly `1D + 1W`;
+   - `1W` is derived from Daily;
+   - current-session ticker failures are isolated by the v4 fault-isolation contract.
+7. `SUPABASE_VALIDATE`
+   - exact canonical membership;
+   - exact snapshot count;
+   - deterministic validation hash.
+8. `SUPABASE_PUBLISH`
+   - publish the canonical operational Wyckoff read model.
+9. `AI_COUNCIL_DETERMINISTIC`.
+10. `MARKET_SYNTHESIS`.
+11. `AI_COUNCIL_LLM`
+    - selective and cost-bounded;
+    - deterministic Council remains the signal authority.
 12. `RETENTION_CLEANUP`
-13. `COMPLETE`
+    - Supabase-only safe cleanup of approved transient/terminal evidence;
+    - never age-prunes canonical raw Daily history.
+13. Notion analytical summary
+    - one downstream run-level analytical/audit summary;
+    - not operational state.
+14. `COMPLETE`
+    - closes the parent run with `architecture = supabase-first-eod-v4-dag`.
 
-The verified no-trade Daily repair is a helper inside the history/build path rather than an independent scheduler phase.
+### Historical backfill
 
-### 5.1 EOD_READY
+Historical recovery stays Supabase-only:
 
-Fail-closed readiness requires:
-
-- current canonical membership is non-empty and no larger than 200;
-- current published KFSP rating date equals the requested EOD session;
-- every canonical ticker has same-session rating evidence;
-- every canonical ticker has a sufficiently fresh final market snapshot;
-- canonical Wyckoff selection matches canonical universe membership exactly.
+- it verifies the historical session against persistent ratings and `market_ohlcv_history`;
+- it never substitutes today's provider market data for the historical session;
+- market-close collection is explicitly skipped;
+- the active run-key suffix is still `EOD-v4`.
 
 Run key format:
 
-`WYCKOFF-YYYY-MM-DD-EOD-v3`
+`WYCKOFF-YYYY-MM-DD-EOD-v4`
 
-Readiness is retried up to four attempts at bounded five-minute intervals when the upstream EOD state is not ready.
+## 5. Active Wyckoff/storage contract
 
-### 5.2 MARKET_CLOSE_COLLECT
+For `N` canonical tickers:
 
-This phase calls the dedicated market-close collector using a dedicated secret obtained through the service-role/Vault boundary.
+- expected Wyckoff snapshots = `N × 2`;
+- active timeframes = `1D`, `1W`;
+- persistent raw OHLCV = `1D` only;
+- `1H`, `4H`, and `1M` are not active Wyckoff persistence contracts.
 
-Transient failures are retried at +5 and +10 minutes, for a maximum of three attempts. Retryable classes include network/socket timeout, HTTP 408/429/5xx, provider readiness, and temporary validation/coverage failures.
+At the current maximum universe of 200 tickers, a healthy EOD run expects 400 Wyckoff snapshots.
 
-Credential/auth failures are terminal and are not retried.
+## 6. Retry and failure semantics
 
-### 5.3 HISTORY_REFRESH
+### MARKET_CLOSE_COLLECT
 
-Persistent OHLCV is refreshed in durable batches of at most 10 tickers.
+Retryable classes include transient network/socket errors, timeout/readiness conditions, HTTP 408/429 and provider 5xx responses.
 
-The phase requires the completed ticker count to equal the canonical universe count. Provider/runtime errors stop the operational pipeline rather than being mislabeled as incomplete analysis.
+The current branch uses bounded attempts with five-minute spacing. Credential/authentication failures are terminal and are not retried as provider-readiness failures.
 
-### 5.4 WYCKOFF_BUILD
+### EOD_READY
 
-For every canonical ticker, the system builds five timeframes:
+READY uses bounded retry for known not-ready conditions. It must not be weakened to accept stale or incomplete membership/evidence.
 
-- `1H`
-- `4H`
-- `1D`
-- `1W`
-- `1M`
+### Ticker-local failures
 
-Expected snapshot count is dynamic:
+Current-session history/build failures may be isolated per ticker. A run with unresolved ticker failures terminates as explicit partial coverage rather than reporting false full success.
 
-`universe_count × 5`
+### Publication
 
-For a full 200-stock universe this is 1,000 snapshots.
+Failures before verified Supabase publication preserve the previous healthy published operational read model.
 
-### 5.5 SUPABASE_VALIDATE
+## 7. Retention contract
 
-Validation occurs before any operational publication. It verifies:
+The active retention path is Supabase-only and calls approved cleanup RPCs for telemetry/staging/raw-evidence/build-artifact classes.
 
-- snapshot count equals `universe_count × 5`;
-- exact canonical ticker membership;
-- supported exchanges;
-- deterministic validation hash;
-- valid history/probability/scenario contracts;
-- no accidental dependence on legacy Notion staging.
+It must not delete `market_ohlcv_history` Daily bars merely because they are old. Weekly analysis is derived from Daily, and no independently verified cold-history hydration/restore path is currently part of the production EOD graph.
 
-### 5.6 SUPABASE_PUBLISH
+Legacy archive concepts are not retention authority:
 
-Validated in-memory Wyckoff snapshots are published directly to Supabase by the direct publisher. Notion is not read during this phase.
+- `eod_archive_checkpoints`;
+- `market_ohlcv_archive_ranges`;
+- Drive manifest/SHA archive state;
+- per-ticker Notion operational archive state.
 
-Publication writes/verifies:
+Those objects are QEO-65 deletion candidates only after zero-consumer dependency proof.
 
-- `wyckoff_scan_runs`
-- `wyckoff_universe_memberships`
-- `wyckoff_analysis_snapshots`
-- `wyckoff_chart_series`
+## 8. Manual recovery acceptance
 
-Chart-series coverage is exactly two operational read models per canonical ticker:
+After a manual current-session or historical EOD run, verify:
 
-- `1H`
-- `1D`
-
-A full 200-stock universe therefore requires 400 fresh chart-series identities before the Wyckoff run can be marked `published`.
-
-### 5.7 AI_COUNCIL_DETERMINISTIC
-
-The deterministic Council consumes the exact current canonical membership. It does not hard-code 100 or 200 as the expected stock count; the current published universe count is authoritative.
-
-Freshness gate verifies:
-
-- exact canonical membership, including no missing and no unexpected ticker;
-- same-session market evidence;
-- same-session or verified no-trade carry-forward Wyckoff `1D` evidence;
-- same-session VNINDEX benchmark.
-
-Deterministic output remains the final authority.
-
-### 5.8 AI_COUNCIL_LLM
-
-LLM debate runs only after deterministic Council passes freshness. It is intentionally selective and cost-bounded; it is not required to call an LLM for all 200 stocks.
-
-LLM output is advisory and cannot replace deterministic signal authority.
-
-### 5.9 MARKET_SYNTHESIS
-
-This phase dispatches the same-session market-level AI conclusion after stock-level Council evidence is available. It is downstream of operational publication.
-
-### 5.10 NOTION_ARCHIVE
-
-Notion is a post-analysis audit/archive layer, not an operational source of truth.
-
-Current Top Stocks databases:
-
-- `Top Stocks 200 — Universe History`
-  - data source: `af1c5fac-8e28-42ac-8e08-c322cb2dcdf7`
-- `Top Stocks 200 — EOD Archive 2026`
-  - data source: `a00636bc-4fa6-4f9a-9c1c-11ff04b1314c`
-- `Top Stocks 200 — EOD Runs`
-  - data source: `ea4f1552-dff1-434b-a647-ac7cb0330932`
-
-The archive records universe-run provenance, ticker/rank, Wyckoff evidence, Council state, validation hashes, and run-level status. Legacy v1/v2 databases are retained as historical evidence and labeled legacy/deprecated rather than rewritten.
-
-### 5.11 DRIVE_ARCHIVE
-
-Google Drive is intended for raw, immutable archive packages/manifest evidence.
-
-The production implementation authenticates with a Google **service account** and targets a folder inside a Google Workspace **Shared Drive**. Runtime requests explicitly support Shared Drives (`supportsAllDrives=true`, and list operations include `includeItemsFromAllDrives=true`).
-
-Required Vercel Production environment variables:
-
-- `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` — complete service-account JSON key; server-only secret.
-- `GOOGLE_DRIVE_ARCHIVE_FOLDER_ID` — root archive folder ID inside the Shared Drive.
-- `GOOGLE_DRIVE_RETENTION_BACKFILL_COMPLETE` — keep `false` until the historical archive backfill and retention preflight have both been explicitly verified.
-
-Recommended Drive setup:
-
-1. Enable Google Drive API in the Google Cloud project.
-2. Create a service account and JSON key.
-3. Create or select a Google Workspace Shared Drive.
-4. Create an archive root folder, e.g. `QeoIndex Raw Archive`.
-5. Add the service-account `client_email` as a Shared Drive member with permission to create/manage archive files.
-6. Set the two archive credentials in Vercel Production and redeploy once.
-7. Run an EOD archive smoke test and verify the manifest URL, SHA-256, file count and `eod_archive_checkpoints.drive_status='archived'`.
-8. Backfill every historical date that is eligible for retention.
-9. Only after `qeo_archive_retention_preflight(...)` returns safe may `GOOGLE_DRIVE_RETENTION_BACKFILL_COMPLETE=true` be enabled.
-
-Archive layout is generated automatically:
-
-- `{YEAR}/{MONTH}/1D/{TICKER}-{DATE}.csv.gz`
-- `{YEAR}/{MONTH}/1H/{TICKER}-{DATE}.csv.gz`
-- `{YEAR}/{MONTH}/manifest-{DATE}.json`
-
-The runtime is fail-closed when Drive credentials are not configured:
-
-- Drive archive status becomes `blocked`;
-- no raw Supabase history is deleted;
-- `RETENTION_CLEANUP` remains blocked.
-
-A successful Drive archive must provide a manifest URL, SHA-256 integrity value, and positive row/file counts before retention can be considered safe.
-
-### 5.12 RETENTION_CLEANUP
-
-Retention is controlled by the private `eod_archive_checkpoints` ledger and the service-role-only function `qeo_archive_retention_preflight(date)`.
-
-Current age thresholds:
-
-- `1H` raw OHLCV: eligible only when older than 90 days;
-- `1D` raw OHLCV: eligible only when older than 480 days.
-
-Deletion is permitted only when every eligible historical session has verified Notion and Drive archive coverage. Any missing checkpoint, manifest, SHA-256, or row coverage returns `safe=false` and blocks deletion.
-
-There are no blanket truncates in the retention path.
-
-## 6. Failure semantics
-
-Operational failures before `SUPABASE_PUBLISH` stop the run and preserve the previous published operational read model.
-
-Archive failures after successful operational publication are recorded independently. A blocked Notion/Drive archive does not roll back a verified Supabase publication, but it prevents retention.
-
-Important distinction:
-
-- Operational truth: Supabase.
-- Analytical interpretation: Wyckoff/AI Council derived from verified evidence.
-- Archive/audit: Notion and Drive.
-- Retention authority: verified archive checkpoint only.
-
-## 7. Admin observability
-
-`/admin/jobs` shows the parent `qeoindex.eod_pipeline` plus the ordered phase timeline. Each phase records:
-
-- status;
-- start/end timestamp;
-- duration;
-- sanitized summary;
-- error code/message when failed;
-- model/token usage where applicable.
-
-`/admin/universe` shows:
-
-- selected count / 200;
-- universe run ID;
-- KFSP source date;
-- current selector settings;
-- next-run selector settings;
-- last and next scheduled refresh;
-- detail completeness;
-- logo coverage;
-- rank/ticker/company/exchange/sector/market-cap/AvgVol50 rows.
-
-## 8. Manual recovery runbook
-
-### Universe refresh
-
-Use the same authenticated monthly-universe execution path as the scheduler. Never insert memberships manually unless performing a documented emergency recovery.
-
-After a manual universe refresh verify:
-
-1. run status is `published`;
-2. selected count is <= 200;
-3. exact strict filters pass;
-4. activity positive days >= 4;
-5. detail count equals selected count;
-6. logo count equals selected count;
-7. rank is deterministic;
-8. runtime consumers resolve the same `run_id`.
-
-### EOD recovery/backfill
-
-Use the authenticated `/api/qeoindex/eod` workflow entrypoint with an explicit historical session timestamp when recovering a completed prior trading day.
-
-Do not run a same-day historical-looking EOD before final market evidence exists.
-
-After a manual EOD run verify:
-
-- parent `system_job_runs` status;
-- all operational phases through `AI_COUNCIL_LLM`/`MARKET_SYNTHESIS`;
-- published Wyckoff run count;
-- `universe_count × 5` snapshot coverage;
-- `universe_count × 2` chart-series coverage;
+- parent `system_job_runs` terminal state;
+- phase-level status/summary in `system_job_phases`;
+- exact canonical universe identity;
+- Daily history accounting for every requested ticker;
+- Wyckoff snapshot count = `universeCount × 2`;
+- Supabase publish validation hash and exact ticker membership;
 - deterministic Council coverage;
-- archive checkpoint statuses;
-- retention remains blocked unless Drive archive verification is complete.
+- market synthesis real status;
+- LLM debate real status;
+- retention real status;
+- downstream Notion analytical-summary status;
+- `COMPLETE` telemetry contains `supabase-first-eod-v4-dag`.
 
-## 9. Historical-data policy
+## 9. Release verification
 
-Do not rewrite or delete historical thesis, Analysis Log, AI Council, Wyckoff, market, telemetry, audit, or source evidence merely because it belongs to the old Top100 era.
+Before merge/deploy:
 
-Legacy current-membership materializations may be removed only after zero active runtime references and dependency preflight. Historical evidence remains immutable/auditable.
+- `pnpm test:manifest`;
+- `pnpm test:current`;
+- `pnpm lint:touched`;
+- `pnpm typecheck`;
+- `pnpm build`;
+- DB-changing releases additionally require drift, replay and generated-type gates.
 
-## 10. Release verification checklist
-
-A production cutover is complete only when all are true:
-
-- Supabase migrations applied;
-- required Edge Functions deployed;
-- canonical monthly universe successfully published;
-- 200/200 detail/logo coverage when 200 stocks qualify;
-- GitHub regression tests pass;
-- lint passes;
-- TypeScript passes;
-- production build passes;
-- feature PR merged once to `main`;
-- Vercel Git deployment reaches READY without a second manual production deploy;
-- production pg_cron inventory matches this runbook;
-- one completed historical/current EOD v3 smoke run proves Supabase-first phase order;
-- any missing Drive credential is surfaced as `blocked`, never silently treated as archived;
-- retention remains fail-closed until verified archive coverage exists.
+Production acceptance requires the verified GitHub head to be green, Vercel production deployment to reach READY, and runtime smoke evidence from the deployed architecture.
