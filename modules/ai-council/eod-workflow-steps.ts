@@ -1,6 +1,6 @@
 import { runAiCouncilDailyOperation, runAiCouncilDebateOperation } from "@/modules/ai-council/operations"
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { WYCKOFF_EOD_BATCH_SIZE, validateWyckoffEodDailyRows } from "@/modules/wyckoff/eod-refresh"
 import { runUnifiedWyckoff } from "@/modules/wyckoff/unified-runner"
 

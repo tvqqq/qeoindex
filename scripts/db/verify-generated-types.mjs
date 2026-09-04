@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 
-const committedPath = "lib/supabase/database.types.ts"
+const committedPath = "modules/shared/supabase/database.types.ts"
 const candidatePath = "artifacts/qeo23/database.types.ts"
 
 const run = spawnSync(

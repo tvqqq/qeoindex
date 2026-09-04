@@ -1,7 +1,7 @@
 "use client"
 
 import { useSyncExternalStore } from "react"
-import { marketStore, type Stock, type MarketIndex, type WSStatus } from "./market-data"
+import { marketStore, type Stock, type MarketIndex, type WSStatus } from "../data"
 
 export function useStock(key: string): Stock {
   return useSyncExternalStore(

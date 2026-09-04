@@ -2,7 +2,7 @@ import "server-only"
 
 import { runQeoIndexEodPhase } from "@/modules/admin/job-phase-telemetry"
 import { runEodRetentionCleanup } from "@/modules/eod/archive"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
 function requiredSupabase() {
   const supabase = getSupabaseServerClient()

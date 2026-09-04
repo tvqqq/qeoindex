@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
-import { BOARD_SECTOR_GROUPS } from "../lib/market-sectors.ts"
+import { BOARD_SECTOR_GROUPS } from "../modules/market/sectors.ts"
 import {
   defaultStockFilterCriteria,
   filterBoardTickers,
@@ -9,7 +9,7 @@ import {
   mergeStockFilterIntoSettings,
   normalizeStockFilterCriteria,
   stockFilterHash,
-} from "../lib/market-board/stock-filter.ts"
+} from "../modules/market/board/stock-filter.ts"
 
 const boardSource = readFileSync(new URL("../components/live-market-board-v2.tsx", import.meta.url), "utf8")
 const stockSource = readFileSync(new URL("../components/live-market-stock.tsx", import.meta.url), "utf8")

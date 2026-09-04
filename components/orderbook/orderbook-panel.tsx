@@ -9,8 +9,8 @@ import {
   generateOrderBook,
   type OrderBook,
   type Trend,
-} from "@/lib/market-data"
-import { useStock } from "@/lib/use-market"
+} from "@/modules/market/data"
+import { useStock } from "@/modules/market/realtime/use-market"
 import { Sparkline } from "@/components/sparkline"
 import { StockLogo } from "@/components/stock-logo"
 

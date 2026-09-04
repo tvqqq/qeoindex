@@ -71,7 +71,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { InsightsDashboardData, InsightsModuleSummary, InsightsRatingRow, InsightsSectorSummary, KfspMetricValue } from "@/modules/research/insights/data"
 import { getMetricSemantic } from "@/modules/research/insights/metric-semantics"
 import { calculateRatingModel, historyDelta, type RatingDimension, type RatingModelSnapshot } from "@/modules/research/insights/rating-model"
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 import {
   KFSP_FIELD_CATALOG,
   KFSP_GROUPS,

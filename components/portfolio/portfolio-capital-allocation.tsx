@@ -6,7 +6,7 @@ import { ShieldCheck, PieChart, ArrowRight, TrendingDown, DollarSign } from "luc
 import { Input } from "@/components/ui/input"
 import { PortfolioPosition } from "@/modules/portfolio/pnl"
 import { PortfolioMeta } from "@/components/portfolio/portfolio-selector"
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 
 interface PortfolioCapitalAllocationProps {
   portfolios: PortfolioMeta[]

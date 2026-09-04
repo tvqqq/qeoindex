@@ -1,6 +1,6 @@
 import "server-only"
 import { createHmac, randomUUID } from "node:crypto"
-import type { OhlcvBar } from "@/lib/technical-indicators"
+import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import {
   buildDnseRequestWindows,
   dnseWindowSpanDays,

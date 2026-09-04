@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import { getWyckoffCompanyMetadata } from "@/modules/wyckoff/company-metadata"
-import type { OhlcvBar } from "@/lib/technical-indicators"
+import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { buildWyckoffChartStudies, type WyckoffChartTimeframe } from "@/modules/wyckoff/chart-model"
 
 interface SnapshotRow {

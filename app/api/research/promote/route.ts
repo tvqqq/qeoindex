@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireApiFeature } from "@/modules/auth/server"
 import { fetchDailyMarketHistory, fetchHourlyMarketHistory } from "@/modules/market/history/index"
-import { buildMultiTimeframeStudies, buildPromotionDraft } from "@/lib/multi-timeframe"
-import { promoteDraftToNotion } from "@/lib/notion-promote"
+import { buildMultiTimeframeStudies, buildPromotionDraft } from "@/modules/research/multi-timeframe"
+import { promoteDraftToNotion } from "@/modules/notion/promote"
 import { getResearchDataFresh, invalidateResearchDataCache } from "@/modules/research/data"
 import { getScannerDataFresh } from "@/modules/signals/scanner/data"
 

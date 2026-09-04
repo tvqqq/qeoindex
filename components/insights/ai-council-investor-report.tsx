@@ -10,7 +10,7 @@ import {
 import { StockIdentity } from "@/components/stock-identity"
 import { buildInvestorCouncilReport } from "@/modules/ai-council/investor-report"
 import type { AiCouncilStock, CouncilSignal } from "@/modules/ai-council/model"
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 
 const SIGNAL_TONE: Record<CouncilSignal, string> = {
   BUY: "border-emerald-400/35 bg-emerald-400/10 text-emerald-300",

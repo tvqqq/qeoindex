@@ -1,4 +1,4 @@
-import type { PromotionDraft } from "@/lib/multi-timeframe"
+import type { PromotionDraft } from "@/modules/research/multi-timeframe"
 import { createDataSourcePage } from "@/modules/notion/client"
 import { richTextProperty, titleProperty } from "@/modules/notion/properties"
 import type { MarketRegime } from "@/modules/research/types"

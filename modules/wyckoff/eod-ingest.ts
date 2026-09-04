@@ -1,4 +1,4 @@
-import type { OhlcvBar } from "../../lib/technical-indicators.ts"
+import type { OhlcvBar } from "../../modules/shared/technical/indicators.ts"
 import type { WyckoffV2Snapshot } from "./eod-builder.ts"
 import { validateWyckoffV2SnapshotSet } from "./eod-contract.ts"
 

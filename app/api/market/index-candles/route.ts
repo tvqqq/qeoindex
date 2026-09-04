@@ -9,7 +9,7 @@ import {
   type IndexChartResolution,
   type IndexChartSymbol,
 } from "@/modules/market/realtime/index-candles"
-import { isTradingSessionOpen } from "@/lib/session-countdown"
+import { isTradingSessionOpen } from "@/modules/market/realtime/session-countdown"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

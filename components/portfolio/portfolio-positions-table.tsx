@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { cn } from '@/modules/shared/ui/cn'
 
 // ---------------------------------------------------------------------------
 // Helpers

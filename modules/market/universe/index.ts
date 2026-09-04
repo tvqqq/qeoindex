@@ -1,6 +1,6 @@
 import "server-only"
 
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { invalidateUiCache, readThroughUiCache } from "@/modules/shared/cache/ui-data-cache"
 import { MARKET_UNIVERSE_KEY, MARKET_UNIVERSE_MAX_SIZE } from "@/modules/market/universe/selection"
 

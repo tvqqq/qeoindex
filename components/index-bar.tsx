@@ -2,9 +2,9 @@
 
 import { LayoutGrid, TrendingDown, TrendingUp } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
-import { useIndices } from "@/lib/use-market"
-import { formatSigned } from "@/lib/market-data"
-import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
+import { useIndices } from "@/modules/market/realtime/use-market"
+import { formatSigned } from "@/modules/market/data"
+import { marketToneFromChange, marketToneText } from "@/modules/market/tone"
 
 export function IndexBar() {
   const indices = useIndices()

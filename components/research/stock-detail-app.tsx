@@ -4,10 +4,10 @@ import { Activity, ArrowLeft, ArrowRight, BarChart3, ExternalLink, Gauge, Shield
 
 import { MultiTimeframeWorkstation } from "@/components/research/multi-timeframe-workstation"
 import { TopNav } from "@/components/top-nav"
-import type { TimeframeStudy } from "@/lib/multi-timeframe"
+import type { TimeframeStudy } from "@/modules/research/multi-timeframe"
 import type { DailyScanRow, UniverseRow } from "@/modules/signals/scanner/data"
 import type { AnalysisLog, MarketRegime, ProbabilitySet, Thesis } from "@/modules/research/types"
-import type { OhlcvBar } from "@/lib/technical-indicators"
+import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 
 type HistoryMeta = { provider: string; detail: string }
 

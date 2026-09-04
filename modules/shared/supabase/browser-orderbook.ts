@@ -1,6 +1,6 @@
-import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client"
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/modules/shared/supabase/client"
 import type { DnseSessionHistory } from "@/modules/market/providers/dnse/market-runtime"
-import { toCanonicalOrderbookSnapshot } from "@/lib/market-data-contract"
+import { toCanonicalOrderbookSnapshot } from "@/modules/market/data-contract"
 
 export async function fetchOrderbookFromSupabaseDirect(symbol: string): Promise<DnseSessionHistory | null> {
   if (!isSupabaseConfigured()) return null

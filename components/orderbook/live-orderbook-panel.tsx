@@ -24,16 +24,16 @@ import {
   X,
 } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
-import { marketToneFromPrice, marketToneHex, marketToneText } from "@/lib/market-tone"
+import { marketToneFromPrice, marketToneHex, marketToneText } from "@/modules/market/tone"
 import { normalizeEpochSeconds, normalizeMarketPrice } from "@/modules/market/realtime/intraday-5m"
-import { getMarketUiPhase, MARKET_SESSION_RESET_EVENT, shouldAcceptRealtimeMiniChart } from "@/lib/market-session-ui"
-import { useFlashAnimation, usePriceFlashAnimation } from "@/lib/use-flash-animation"
+import { getMarketUiPhase, MARKET_SESSION_RESET_EVENT, shouldAcceptRealtimeMiniChart } from "@/modules/market/realtime/session-ui"
+import { useFlashAnimation, usePriceFlashAnimation } from "@/modules/shared/ui/use-flash-animation"
 import { useWhaleConfetti, ConfettiOverlay } from "@/components/orderbook/confetti"
-import { playWhaleSound, unlockAudioContext } from "@/lib/sound-engine"
-import { calculateSessionCountdown } from "@/lib/session-countdown"
+import { playWhaleSound, unlockAudioContext } from "@/modules/shared/ui/sound-engine"
+import { calculateSessionCountdown } from "@/modules/market/realtime/session-countdown"
 import { calculateForeignRoomPercent, getEodForeignRoom } from "@/modules/eod/shares"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
-import { fetchOrderbookFromSupabaseDirect, subscribeToOrderbookRealtime } from "@/lib/supabase/browser-orderbook"
+import { fetchOrderbookFromSupabaseDirect, subscribeToOrderbookRealtime } from "@/modules/shared/supabase/browser-orderbook"
 import { StockLogo } from "@/components/stock-logo"
 
 export type DepthLevel = { price: number; volume: number }
@@ -474,7 +474,7 @@ function nextQuote(symbol: string, data: Record<string, unknown>, current: Stock
   }
 }
 
-import { clusterTrades, parseTradeSeconds, type ClusteredTrade } from "@/lib/trade-clustering"
+import { clusterTrades, parseTradeSeconds, type ClusteredTrade } from "@/modules/market/realtime/trade-clustering"
 
 export type { ClusteredTrade }
 

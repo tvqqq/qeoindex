@@ -40,7 +40,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { InsightsRatingRow } from "@/modules/research/insights/data"
 import { getMetricSemantic } from "@/modules/research/insights/metric-semantics"
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 import { KFSP_FIELD_CATALOG, type KfspFieldDefinition } from "@/supabase/functions/_shared/kfsp-catalog"
 
 export type StockRankingSortKey = keyof Pick<InsightsRatingRow,

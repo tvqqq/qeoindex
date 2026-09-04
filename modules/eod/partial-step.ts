@@ -2,7 +2,7 @@ import "server-only"
 
 import { markQeoIndexEodPhaseSkipped, runQeoIndexEodPhase } from "../admin/job-phase-telemetry.ts"
 import type { EodTickerAttempt, EodTickerCoverage } from "./fault-isolation.ts"
-import { getSupabaseServerClient } from "../../lib/supabase/server.ts"
+import { getSupabaseServerClient } from "../../modules/shared/supabase/server.ts"
 
 function requiredSupabase() {
   const supabase = getSupabaseServerClient()

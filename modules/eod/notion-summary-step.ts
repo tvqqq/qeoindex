@@ -6,7 +6,7 @@ import {
   archiveEodAnalyticalSummaryToNotion,
   type EodAnalyticalSummaryInput,
 } from "@/modules/eod/notion-summary"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
 function requiredSupabase() {
   const supabase = getSupabaseServerClient()

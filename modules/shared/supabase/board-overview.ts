@@ -4,8 +4,8 @@ import {
   normalizeForeignFlow,
   normalizeToKiloPrice,
   normalizeVolume,
-} from "@/lib/market-data-contract"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+} from "@/modules/market/data-contract"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
 export interface BoardOverviewRow {
   symbol: string

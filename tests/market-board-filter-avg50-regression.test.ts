@@ -9,11 +9,11 @@ import {
   hasRequiredFilterSectorSelections,
   isLockedFilterSector,
   normalizeStockFilterCriteria,
-} from "../lib/market-board/stock-filter.ts"
+} from "../modules/market/board/stock-filter.ts"
 
 const modalSource = readFileSync(new URL("../components/market-board/stock-filter-modal.tsx", import.meta.url), "utf8")
 const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8")
-const helperSource = readFileSync(new URL("../lib/market-board/stock-filter.ts", import.meta.url), "utf8")
+const helperSource = readFileSync(new URL("../modules/market/board/stock-filter.ts", import.meta.url), "utf8")
 const preferenceRouteSource = readFileSync(new URL("../app/api/me/market-board-filter/route.ts", import.meta.url), "utf8")
 
 const sectors = [

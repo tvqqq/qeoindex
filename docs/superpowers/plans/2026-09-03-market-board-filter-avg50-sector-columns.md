@@ -25,7 +25,7 @@
 ### Task 1: Update pure filter semantics and invariants
 
 **Files:**
-- Modify: `lib/market-board/stock-filter.ts`
+- Modify: `modules/market/board/stock-filter.ts`
 - Modify/Test: `tests/market-board-visual-contract.test.ts`
 
 **Interfaces:**

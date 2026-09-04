@@ -3,8 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { runAiCouncilDebateOperation } from "@/modules/ai-council/operations"
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
-import { notifyOpsError } from "@/lib/ops-alerts"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { notifyOpsError } from "@/modules/admin/ops-alerts"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

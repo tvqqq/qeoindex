@@ -1,5 +1,5 @@
 import { memo } from "react"
-import { type MarketTone } from "@/lib/market-tone"
+import { type MarketTone } from "@/modules/market/tone"
 
 export const MarketChangePill = memo(function MarketChangePill({
   value,

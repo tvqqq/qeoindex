@@ -1,4 +1,4 @@
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { buildWyckoffV2TickerSnapshots } from "@/modules/wyckoff/eod-builder"
 import { loadWyckoffV2CachedTickerHistory } from "@/modules/wyckoff/eod-cache-read"
 import { stageWyckoffV2SnapshotBatch } from "@/modules/wyckoff/eod-notion-batch"

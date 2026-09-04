@@ -36,7 +36,7 @@ Important files:
 | `app/api/auth/session/route.ts` | Synchronize the browser Supabase session to the verified server cookie. |
 | `app/api/me/route.ts` | User profile/preferences API; user ID always comes from server auth. |
 | `app/api/watchlist/route.ts` | Per-user default watchlist API; ownership enforced again by RLS. |
-| `lib/supabase/server.ts` | Trusted infrastructure-only service-role client. It fails closed without `SUPABASE_SERVICE_ROLE_KEY`. |
+| `modules/shared/supabase/server.ts` | Trusted infrastructure-only service-role client. It fails closed without `SUPABASE_SERVICE_ROLE_KEY`. |
 | `docs/auth.md` | Full Auth/RLS architecture and verification checklist. |
 | `docs/security.md` | Current security audit, endpoint policy, headers, and remaining actions. |
 

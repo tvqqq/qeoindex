@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { runQeoIndexEodPhase } from "@/modules/admin/job-phase-telemetry"
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { vietnamDateKey } from "@/modules/market/calendar"
 
 const TTAI_BATCH_SIZE = 50

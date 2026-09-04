@@ -1,4 +1,4 @@
-import { BOARD_SECTOR_GROUPS, boardSectorGroupForSector } from "../market-sectors.ts"
+import { BOARD_SECTOR_GROUPS, boardSectorGroupForSector } from "../sectors.ts"
 
 export const BOARD_EXCHANGES = ["HOSE", "HNX", "UPCOM"] as const
 

@@ -9,7 +9,7 @@ import {
   normalizeDepthLevels,
   normalizeForeignFlow,
   toCanonicalOrderbookSnapshot,
-} from "../lib/market-data-contract.ts"
+} from "../modules/market/data-contract.ts"
 
 test("price normalizer enforces consistent kilo format (21.85) across all price shapes", () => {
   // Raw Dong prices (>= 500)

@@ -1,5 +1,5 @@
 import { markQeoIndexEodPhaseSkipped } from "@/modules/admin/job-phase-telemetry"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
 function requiredSupabase() {
   const supabase = getSupabaseServerClient()

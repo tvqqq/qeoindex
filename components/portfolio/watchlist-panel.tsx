@@ -7,7 +7,7 @@ import { Eye, Plus, Trash2, Star, TrendingUp, TrendingDown, Minus, Bell } from "
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 
 export interface WatchlistMeta {
   id: string

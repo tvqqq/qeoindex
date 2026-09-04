@@ -4,7 +4,7 @@ import { requireApiUser } from "@/modules/auth/server"
 import { fetchLiveBatchQuotes, type LiveBatchQuote } from "@/modules/market/realtime/broker-live-quotes"
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import { MARKET_UNIVERSE_MAX_SIZE } from "@/modules/market/universe/selection"
-import { getCanonicalBoardOverviewSnapshots } from "@/lib/supabase/board-overview"
+import { getCanonicalBoardOverviewSnapshots } from "@/modules/shared/supabase/board-overview"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

@@ -20,7 +20,7 @@ import {
   getMetricSemantic,
   type MetricSource,
 } from "@/modules/research/insights/metric-semantics"
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 
 export interface MetricGuideDialogProps {
   open: boolean

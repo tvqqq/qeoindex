@@ -4,7 +4,7 @@ import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { executeSystemJob } from "@/modules/admin/job-telemetry"
 import { runSignalMonitor } from "@/modules/signals/monitor"
 import { SIGNAL_ENGINE_VERSION } from "@/modules/signals/engine"
-import { notifyOpsError } from "@/lib/ops-alerts"
+import { notifyOpsError } from "@/modules/admin/ops-alerts"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

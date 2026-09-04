@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { executeSystemJob } from "@/modules/admin/job-telemetry"
-import { notifyOpsError } from "@/lib/ops-alerts"
+import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { ingestLatestReadyWyckoffRun } from "@/modules/wyckoff/notion-ingest"
 
 export const runtime = "nodejs"

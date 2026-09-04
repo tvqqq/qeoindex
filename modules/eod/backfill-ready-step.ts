@@ -1,7 +1,7 @@
 import { runQeoIndexEodPhase } from "@/modules/admin/job-phase-telemetry"
 import { loadPersistentCouncilEodSnapshots } from "@/modules/ai-council/eod-market"
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { loadWyckoffV2Universe } from "@/modules/wyckoff/eod-universe-source"
 import { vietnamDateKey } from "@/modules/market/calendar"
 

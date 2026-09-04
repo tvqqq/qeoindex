@@ -12,7 +12,7 @@ import {
 
 import { AnimatedTabs, type AnimatedTab } from "@/components/smoothui/animated-tabs"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 import { getSectorIcon } from "@/components/insights/sector-map-panel"
 
 export interface MarketBubbleStock {

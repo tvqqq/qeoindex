@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { start } from "workflow/api"
 
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
-import { notifyOpsError } from "@/lib/ops-alerts"
+import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { dailySignalWorkflow } from "@/workflows/daily-signal-workflow"
 
 export const runtime = "nodejs"

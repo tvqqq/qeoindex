@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import { fetchLongDailyMarketHistory } from "@/modules/market/history/index"
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { buildWyckoffChartStudies } from "@/modules/wyckoff/chart-model"
 
 export const WYCKOFF_MODEL_VERSION = "qeo-wyckoff-rule-v1"

@@ -4,8 +4,8 @@ import { getCache } from "@vercel/functions"
 import { intradaySnapshot, type IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { fetchYahooFiveMinuteSnapshot } from "@/modules/market/providers/yahoo/history"
 import { MARKET_UNIVERSE_MAX_SIZE } from "@/modules/market/universe/selection"
-import { getMarketSessionStatus, getVnTimeSeconds } from "@/lib/session-countdown"
-import { sessionTimestampSeconds, shouldAcceptRealtimeMiniChart } from "@/lib/market-session-ui"
+import { getMarketSessionStatus, getVnTimeSeconds } from "@/modules/market/realtime/session-countdown"
+import { sessionTimestampSeconds, shouldAcceptRealtimeMiniChart } from "@/modules/market/realtime/session-ui"
 import { fetchLiveBatchQuotes } from "@/modules/market/realtime/broker-live-quotes"
 
 export const FETCH_CONCURRENCY = 12

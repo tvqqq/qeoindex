@@ -1,6 +1,6 @@
 import { vietnamDateKey } from "@/modules/market/providers/dnse/history"
 import { fetchDailyMarketHistory } from "@/modules/market/history/index"
-import { notifyOpsError } from "@/lib/ops-alerts"
+import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { getScannerDataFresh, invalidateScannerDataCache, rowToPreviousResult, writeDailyScan } from "@/modules/signals/scanner/data"
 import { scannerHistoryPolicy, shouldSkipSameDateScan, type ScannerHistoryStatus } from "@/modules/signals/scanner/policy"
 import { scanWyckoff } from "@/modules/wyckoff/engine"

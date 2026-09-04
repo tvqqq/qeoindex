@@ -25,7 +25,7 @@ import {
   type FilterableBoardStock,
   type FilterQuote,
   type StockFilterCriteriaV1,
-} from "@/lib/market-board/stock-filter"
+} from "@/modules/market/board/stock-filter"
 
 interface StockFilterModalProps {
   open: boolean

@@ -7,7 +7,7 @@ import {
   mergeStockFilterIntoSettings,
   normalizeStockFilterCriteria,
   readStockFilterFromSettings,
-} from "@/lib/market-board/stock-filter"
+} from "@/modules/market/board/stock-filter"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

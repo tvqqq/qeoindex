@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import fs from "node:fs"
 import path from "node:path"
-import { buildMarketAiEvidencePacket, hashMarketAiEvidence, validateMarketAiConclusion } from "../lib/market-ai-conclusion.ts"
+import { buildMarketAiEvidencePacket, hashMarketAiEvidence, validateMarketAiConclusion } from "../modules/research/market-insight/ai-conclusion.ts"
 import { buildMarketAiEvidencePacket as buildEdgePacket, hashMarketAiEvidence as hashEdgeEvidence } from "../supabase/functions/_shared/market-ai-conclusion.ts"
 
 function fixture() {

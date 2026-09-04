@@ -28,22 +28,22 @@ import {
 } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { IndexChartModal } from "@/components/index-chart/index-chart-modal"
-import { BOARD_SECTOR_GROUPS } from "@/lib/market-sectors"
-import { marketToneFromChange, marketToneText } from "@/lib/market-tone"
+import { BOARD_SECTOR_GROUPS } from "@/modules/market/sectors"
+import { marketToneFromChange, marketToneText } from "@/modules/market/tone"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/modules/market/realtime/intraday-5m"
-import { isTradingSessionOpen, isLunchBreak } from "@/lib/session-countdown"
+import { isTradingSessionOpen, isLunchBreak } from "@/modules/market/realtime/session-countdown"
 import {
   getMarketUiPhase,
   MARKET_SESSION_RESET_EVENT,
   newSessionReferencePoint,
   shouldAcceptRealtimeMiniChart,
   type MarketUiPhase,
-} from "@/lib/market-session-ui"
-import { setSoundEnabled, playWhaleSound } from "@/lib/sound-engine"
+} from "@/modules/market/realtime/session-ui"
+import { setSoundEnabled, playWhaleSound } from "@/modules/shared/ui/sound-engine"
 import { publishDnseMarketFrame } from "@/modules/market/providers/dnse/market-stream"
-import { captureMarketBoardScreenshot, copyBlobToClipboard } from "@/lib/screenshot"
+import { captureMarketBoardScreenshot, copyBlobToClipboard } from "@/modules/shared/media/screenshot"
 
 export type BoardUniverseStock = LiveBoardStock
 export type IndexQuote = {

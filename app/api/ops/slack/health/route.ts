@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { requireApiUser } from "@/modules/auth/server"
-import { getSlackOpsHealth } from "@/lib/ops-alerts"
+import { getSlackOpsHealth } from "@/modules/admin/ops-alerts"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

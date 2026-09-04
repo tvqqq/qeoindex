@@ -27,7 +27,7 @@ import { AiCouncilInvestorReport } from "@/components/insights/ai-council-invest
 import { TopNav } from "@/components/top-nav"
 import type { AiCouncilData, AiCouncilHistoryEntry } from "@/modules/ai-council/data"
 import type { AiCouncilStock, CouncilAgentOpinion, CouncilSignal } from "@/modules/ai-council/model"
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 
 const DATE_FORMAT = new Intl.DateTimeFormat("vi-VN", {
   weekday: "short",

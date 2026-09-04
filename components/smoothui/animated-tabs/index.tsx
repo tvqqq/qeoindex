@@ -3,7 +3,7 @@
 import { useId, useRef } from "react"
 import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 
 export interface AnimatedTab<T extends string = string> {
   value: T

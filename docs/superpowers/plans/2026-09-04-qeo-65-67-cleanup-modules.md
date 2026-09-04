@@ -90,7 +90,7 @@
 
 **Files:**
 - Create: one timestamped Supabase migration for reviewed destructive cleanup.
-- Modify/regenerate: `lib/supabase/database.types.ts`.
+- Modify/regenerate: `modules/shared/supabase/database.types.ts`.
 - Update tests/contracts when generated type changes require it.
 
 **Candidates:**

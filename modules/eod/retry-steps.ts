@@ -5,7 +5,7 @@ import { QEOINDEX_EOD_JOB_KEY } from "../admin/job-phases.ts"
 import { getCanonicalUniverse } from "../market/universe/index.ts"
 import type { EodTickerAttempt } from "./fault-isolation.ts"
 import { loadEodTickerAttempts } from "./ticker-telemetry.ts"
-import { getSupabaseServerClient } from "../../lib/supabase/server.ts"
+import { getSupabaseServerClient } from "../../modules/shared/supabase/server.ts"
 import type { WyckoffV2UniverseRow } from "../wyckoff/eod-universe.ts"
 
 interface StoredEodRunRow {

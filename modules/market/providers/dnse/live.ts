@@ -2,7 +2,7 @@ import "server-only"
 import { createHmac } from "node:crypto"
 
 import type { LiveQuote } from "@/modules/signals/engine"
-import { normalizeToKiloPrice, normalizeVolume } from "@/lib/market-data-contract"
+import { normalizeToKiloPrice, normalizeVolume } from "@/modules/market/data-contract"
 
 const WS_URL = process.env.DNSE_WS_URL ?? "wss://ws-openapi.dnse.com.vn/v1/stream?encoding=json"
 

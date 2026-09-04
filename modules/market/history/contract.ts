@@ -1,4 +1,4 @@
-import type { OhlcvBar } from "../../../lib/technical-indicators.ts"
+import type { OhlcvBar } from "../../../modules/shared/technical/indicators.ts"
 
 export type HistoricalProvider = "DNSE" | "Fallback" | "VNDirect"
 export type RawHistoryTimeframe = "1D" | "1H"

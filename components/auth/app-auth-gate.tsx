@@ -2,9 +2,9 @@
 
 import { type ReactNode, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { BRAND } from "@/lib/brand"
+import { BRAND } from "@/modules/shared/brand"
 import { syncServerSession } from "@/modules/auth/client-session"
-import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client"
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/modules/shared/supabase/client"
 import { LandingLogin } from "@/components/auth/landing-login"
 
 type AuthStatus =

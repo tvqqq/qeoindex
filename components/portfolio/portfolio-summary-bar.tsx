@@ -4,7 +4,7 @@ import React, { useMemo } from "react"
 import { TrendingUp, TrendingDown, DollarSign, PieChart, Wallet } from "lucide-react"
 
 import { PortfolioPosition } from "@/modules/portfolio/pnl"
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 
 function formatVND(kVND: number): string {
   const abs = Math.abs(kVND)

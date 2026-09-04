@@ -80,7 +80,7 @@ test("destructive market maintenance endpoints are POST-only", () => {
 })
 
 test("trusted Supabase infrastructure client never falls back to public anon credentials", () => {
-  const code = source("lib/supabase/server.ts")
+  const code = source("modules/shared/supabase/server.ts")
   assert.match(code, /SUPABASE_SERVICE_ROLE_KEY/)
   assert.doesNotMatch(code, /NEXT_PUBLIC_SUPABASE_ANON_KEY/)
 })

@@ -167,7 +167,7 @@ for (const file of [...new Set(textFiles)]) {
 
 const packagePath = "package.json"
 const pkg = JSON.parse(readFileSync(packagePath, "utf8"))
-pkg.scripts["lint:touched"] = "eslint --cache --cache-strategy content --cache-location .next/cache/eslint/.eslintcache app components modules workflows lib --ignore-pattern lib/supabase/database.types.ts"
+pkg.scripts["lint:touched"] = "eslint --cache --cache-strategy content --cache-location .next/cache/eslint/.eslintcache app components modules workflows lib --ignore-pattern modules/shared/supabase/database.types.ts"
 writeFileSync(packagePath, `${JSON.stringify(pkg, null, 2)}\n`)
 
 const contracts = {

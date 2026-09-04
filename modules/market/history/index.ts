@@ -1,6 +1,6 @@
-import type { OhlcvBar } from "@/lib/technical-indicators"
+import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { fetchDailyOhlcv as fetchDnseDailyOhlcv, fetchHourlyOhlcv as fetchDnseHourlyOhlcv } from "@/modules/market/providers/dnse/history"
-import { fetchVnDirectDailyOhlcv } from "@/lib/vndirect-history"
+import { fetchVnDirectDailyOhlcv } from "@/modules/market/providers/vndirect/history"
 import { fetchYahooDailyOhlcv, fetchYahooHourlyOhlcv } from "@/modules/market/providers/yahoo/history"
 import { readThroughUiCache } from "@/modules/shared/cache/ui-data-cache"
 import {

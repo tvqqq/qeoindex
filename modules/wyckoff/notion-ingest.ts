@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import { queryDataSource, updatePageProperties, type NotionPage } from "@/modules/notion/client"
 import { dateText, numberValue, pageProperties, richText, richTextProperty, selectText, urlText } from "@/modules/notion/properties"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { assertCanonicalWyckoffMembership } from "@/modules/wyckoff/canonical-membership"
 import {
   WYCKOFF_V2_AGGREGATION_VERSION,

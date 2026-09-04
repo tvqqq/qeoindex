@@ -4,7 +4,7 @@ import test from "node:test"
 import type { CachedOhlcvHistory } from "../modules/market/history/ohlcv-store.ts"
 import { buildWyckoffV2TickerSnapshots, type WyckoffV2Snapshot } from "../modules/wyckoff/eod-builder.ts"
 import { selectWyckoffV2Universe, type WyckoffV2UniverseRow } from "../modules/wyckoff/eod-universe.ts"
-import type { OhlcvBar } from "../lib/technical-indicators.ts"
+import type { OhlcvBar } from "../modules/shared/technical/indicators.ts"
 
 function universe(count = 200): WyckoffV2UniverseRow[] {
   return Array.from({ length: count }, (_, index) => ({

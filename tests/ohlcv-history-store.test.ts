@@ -29,7 +29,7 @@ const dnseHistorySource = readFileSync("modules/market/providers/dnse/history.ts
 const yahooHistorySource = readFileSync("modules/market/providers/yahoo/history.ts", "utf8")
 const marketHistorySource = readFileSync("modules/market/history/index.ts", "utf8")
 const marketHistoryContractSource = readFileSync("modules/market/history/contract.ts", "utf8")
-const vndirectHistoryPath = "lib/vndirect-history.ts"
+const vndirectHistoryPath = "modules/market/providers/vndirect/history.ts"
 
 test("historical source URLs are deterministic and contain no credentials", () => {
   const dnse = buildHistoricalSourceUrl("DNSE", "msn", "1D", 14, NOW)

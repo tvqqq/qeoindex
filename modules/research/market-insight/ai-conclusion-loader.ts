@@ -1,7 +1,7 @@
 import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { buildMarketAiEvidencePacket, hashMarketAiEvidence, type MarketAiConclusionPayload } from "@/lib/market-ai-conclusion"
+import { buildMarketAiEvidencePacket, hashMarketAiEvidence, type MarketAiConclusionPayload } from "@/modules/research/market-insight/ai-conclusion"
 import type { MarketCloseDashboardData } from "@/modules/research/market-insight/data"
 
 export interface MarketAiConclusionView {

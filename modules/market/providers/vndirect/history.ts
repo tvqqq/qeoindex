@@ -1,6 +1,6 @@
 import "server-only"
 
-import type { OhlcvBar } from "@/lib/technical-indicators"
+import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 
 const VNDIRECT_STOCK_PRICES_URL = "https://api-finfo.vndirect.com.vn/v4/stock_prices"
 const VNDIRECT_REQUEST_TIMEOUT_MS = 15_000

@@ -5,7 +5,7 @@ import { markQeoIndexEodPhaseSkipped, runQeoIndexEodPhase } from "@/modules/admi
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import { refreshOhlcvHistoryBatch, type OhlcvUniverseRefreshResult } from "@/modules/market/history/ohlcv-store"
 import { loadMarketSynthesisContext } from "@/modules/eod/market-synthesis-step"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import {
   loadWyckoffV2BuildArtifacts,
   stageWyckoffV2BuildArtifacts,

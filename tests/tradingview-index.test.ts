@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { parseTradingViewIndexes } from "../lib/tradingview-index.ts"
+import { parseTradingViewIndexes } from "../modules/market/providers/tradingview/index.ts"
 import {
   EMPTY_VNINDEX_ACCUMULATOR,
   accumulateVnindexFrame,

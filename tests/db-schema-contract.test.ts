@@ -7,7 +7,7 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
 }
 
 const workflowPath = ".github/workflows/db-drift.yml"
-const generatedTypesPath = "lib/supabase/database.types.ts"
+const generatedTypesPath = "modules/shared/supabase/database.types.ts"
 
 function source(path: string) {
   return readFileSync(path, "utf8")
@@ -34,7 +34,7 @@ function qeo39GroupedRpcMigration() {
 test("QEO-23 exposes fail-closed database replay and generated type commands", () => {
   assert.equal(
     packageJson.scripts?.["db:types:generate"],
-    "supabase gen types typescript --local --schema public > lib/supabase/database.types.ts",
+    "supabase gen types typescript --local --schema public > modules/shared/supabase/database.types.ts",
   )
   assert.equal(packageJson.scripts?.["db:types:verify"], "node scripts/db/verify-generated-types.mjs")
   assert.equal(packageJson.scripts?.["db:replay:verify"], "bash scripts/db/verify-local-replay.sh")

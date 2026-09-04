@@ -120,13 +120,13 @@
 ### Task 5: Logo runtime cutover and market-board consumers
 
 **Files:**
-- Create: `lib/stock-logo-url.ts`
+- Create: `modules/market/stock-logo-url.ts`
 - Modify: `components/stock-logo.tsx`
 - Modify: `app/page.tsx`
-- Modify: `lib/market-sync-universe.ts`
+- Modify: `modules/market/universe/sync.ts`
 - Modify: `modules/eod/shares.ts`
 - Modify: `modules/market/realtime/intraday-5m-service.ts`
-- Modify: `lib/supabase/realtime.ts`
+- Modify: `modules/shared/supabase/realtime.ts`
 - Modify: `supabase/functions/orderbook-sync/index.ts`
 - Modify: operational scripts that import the static universe.
 

@@ -49,7 +49,7 @@ import {
   type StockRankingSortDirection,
   type StockRankingSortKey,
 } from "@/components/insights/stock-ranking-table"
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 
 interface SectorMapPanelProps {
   sectors: MarketSectorRow[]

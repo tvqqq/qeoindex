@@ -1,4 +1,4 @@
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import type { DnseSessionHistory } from "@/modules/market/providers/dnse/market-runtime"
 import {
   normalizeToKiloPrice,
@@ -9,7 +9,7 @@ import {
   normalizeForeignFlow,
   toCanonicalOrderbookSnapshot,
   type CanonicalOrderbookSnapshot,
-} from "@/lib/market-data-contract"
+} from "@/modules/market/data-contract"
 
 export { normalizeToKiloPrice, normalizeVolume, normalizeTradeSide, formatSessionTradeTime }
 

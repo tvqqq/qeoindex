@@ -1,5 +1,5 @@
 import { markQeoIndexEodPhaseSkipped } from "@/modules/admin/job-phase-telemetry"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
 export async function skipQeoIndexEodRunStep(runId: string, scanDate: string, reason = "NON_TRADING_DAY") {
   "use step"

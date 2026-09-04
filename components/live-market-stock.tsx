@@ -10,8 +10,8 @@ import {
   marketToneHex,
   marketToneText,
   type MarketTone,
-} from "@/lib/market-tone"
-import { usePriceFlashAnimation } from "@/lib/use-flash-animation"
+} from "@/modules/market/tone"
+import { usePriceFlashAnimation } from "@/modules/shared/ui/use-flash-animation"
 
 export interface LiveBoardStock {
   ticker: string

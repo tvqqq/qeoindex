@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import { BrainCircuit, Briefcase, CandlestickChart, ChevronDown, Compass, GitCommit, LayoutDashboard, Sparkles, Terminal } from "lucide-react"
 
-import { BRAND } from "@/lib/brand"
+import { BRAND } from "@/modules/shared/brand"
 
 const COMMIT_SHA = process.env.NEXT_PUBLIC_GIT_COMMIT_SHA || ""
 const COMMIT_DATE = process.env.NEXT_PUBLIC_GIT_COMMIT_DATE || ""

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 
-import type { OhlcvBar } from "@/lib/technical-indicators"
+import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import type { WyckoffScanResult } from "@/modules/wyckoff/engine"
 
 function sma(values: number[], period: number) {

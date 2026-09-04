@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 
 import { requireApiFeature } from "@/modules/auth/server"
-import { fetchTradingViewIndexes } from "@/lib/tradingview-index"
+import { fetchTradingViewIndexes } from "@/modules/market/providers/tradingview/index"
 import { readThroughUiCache } from "@/modules/shared/cache/ui-data-cache"
-import { getMarketSessionStatus } from "@/lib/session-countdown"
+import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

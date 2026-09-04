@@ -3,7 +3,7 @@ import "server-only"
 import { markQeoIndexEodPhaseSkipped, runQeoIndexEodPhase } from "@/modules/admin/job-phase-telemetry"
 import { QEOINDEX_EOD_JOB_KEY } from "@/modules/admin/job-phases"
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { vietnamDateKey } from "@/modules/market/calendar"
 import { loadWyckoffV2Universe } from "@/modules/wyckoff/eod-universe-source"
 

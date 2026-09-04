@@ -112,7 +112,7 @@ test("domain modules depend on the shared Notion adapter instead of duplicating 
     "modules/research/data.ts",
     "modules/signals/scanner/data.ts",
     "modules/signals/data.ts",
-    "lib/notion-promote.ts",
+    "modules/notion/promote.ts",
   ]
 
   for (const path of domainFiles) {

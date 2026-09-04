@@ -8,7 +8,7 @@ import {
   type HistoricalProvider,
   type RawHistoryTimeframe,
 } from "./contract.ts"
-import type { OhlcvBar } from "../../../lib/technical-indicators.ts"
+import type { OhlcvBar } from "../../../modules/shared/technical/indicators.ts"
 
 export const OHLCV_BATCH_SIZE = 10
 export const OHLCV_PROVIDER_CONCURRENCY = 4

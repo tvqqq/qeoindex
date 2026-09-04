@@ -37,7 +37,7 @@ export interface SignalsDailyTelemetryIo {
 }
 
 async function getDefaultIo(): Promise<SignalsDailyTelemetryIo> {
-  const { getSupabaseServerClient } = await import("../../lib/supabase/server.ts")
+  const { getSupabaseServerClient } = await import("../../modules/shared/supabase/server.ts")
   const supabase = getSupabaseServerClient()
   if (!supabase) {
     throw new Error("Supabase service role is not configured for Signals Daily telemetry")

@@ -1,9 +1,9 @@
 "use client"
 
 import { MarketChangePill } from "@/components/market-change-pill"
-import { formatPrice, formatVolume } from "@/lib/market-data"
-import { marketToneHex, marketToneText, type MarketTone } from "@/lib/market-tone"
-import { useStock } from "@/lib/use-market"
+import { formatPrice, formatVolume } from "@/modules/market/data"
+import { marketToneHex, marketToneText, type MarketTone } from "@/modules/market/tone"
+import { useStock } from "@/modules/market/realtime/use-market"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { Sparkline } from "@/components/sparkline"
 

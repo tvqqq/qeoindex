@@ -25,7 +25,7 @@ import {
   stockFilterHash,
   type StockFilterCriteriaV1,
   type StockFilterDailyCacheV1,
-} from "@/lib/market-board/stock-filter"
+} from "@/modules/market/board/stock-filter"
 import { StockFilterModal } from "@/components/market-board/stock-filter-modal"
 
 export type FilterBoardUniverseStock = BoardUniverseStock & {

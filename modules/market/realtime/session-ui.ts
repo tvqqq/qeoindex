@@ -1,5 +1,5 @@
 import { getVnTimeSeconds } from "./session-countdown.ts"
-import type { IntradayPoint } from "../modules/market/realtime/intraday-5m.ts"
+import type { IntradayPoint } from "./intraday-5m.ts"
 
 export const MARKET_SESSION_RESET_EVENT = "qeoindex:market-session-reset"
 

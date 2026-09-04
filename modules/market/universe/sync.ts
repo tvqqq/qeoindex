@@ -1,5 +1,5 @@
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { isVietnamSecuritiesTradingDay, vietnamDateKey } from "@/modules/market/calendar"
 
 function parseGroupLevel(raw: string | undefined): { price: number; volume: number } | null {

@@ -4,7 +4,7 @@
 
 **Goal:** Add a persisted `Filter CP` market-board mode that filters the canonical Top 200 universe by exchange, current price, current-session liquidity, and raw KFSP sector while reducing DNSE realtime stock subscriptions to only the active filtered symbols.
 
-**Architecture:** Keep filtering and daily cache validation in pure helpers under `lib/market-board/`, persist only normalized criteria in the existing per-user `user_preferences.settings` JSON, and reuse the existing SSR quote/universe model. The client board derives an active stock-symbol set from mode; the WebSocket effect reconnects whenever that set changes, while a bounded authenticated quote-reconcile endpoint refreshes reactivated symbols before full-universe mode is treated as synchronized.
+**Architecture:** Keep filtering and daily cache validation in pure helpers under `modules/market/board/`, persist only normalized criteria in the existing per-user `user_preferences.settings` JSON, and reuse the existing SSR quote/universe model. The client board derives an active stock-symbol set from mode; the WebSocket effect reconnects whenever that set changes, while a bounded authenticated quote-reconcile endpoint refreshes reactivated symbols before full-universe mode is treated as synchronized.
 
 **Tech Stack:** Next.js 16 App Router, React 19, TypeScript 5.7, Supabase auth/RLS, DNSE browser WebSocket, existing VPS broker batch quote fetcher, Node built-in test runner.
 
@@ -28,7 +28,7 @@
 ### Task 1: Pure stock-filter domain and daily cache
 
 **Files:**
-- Create: `lib/market-board/stock-filter.ts`
+- Create: `modules/market/board/stock-filter.ts`
 - Modify/Test: `tests/market-board-visual-contract.test.ts`
 
 **Interfaces:**
@@ -84,7 +84,7 @@ Run:
 node --test tests/market-board-visual-contract.test.ts
 ```
 
-Expected: FAIL because `lib/market-board/stock-filter.ts` does not exist / exported helpers are missing.
+Expected: FAIL because `modules/market/board/stock-filter.ts` does not exist / exported helpers are missing.
 
 - [ ] **Step 3: Implement the minimal pure helper**
 
@@ -101,7 +101,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add lib/market-board/stock-filter.ts tests/market-board-visual-contract.test.ts
+git add modules/market/board/stock-filter.ts tests/market-board-visual-contract.test.ts
 git commit -m "feat: add market board stock filter domain"
 ```
 
@@ -244,7 +244,7 @@ git commit -m "feat: add market board filter UI"
 ### Task 4: Scope DNSE subscriptions to active symbols and reconcile expansion
 
 **Files:**
-- Create: `lib/market-board/dnse-subscriptions.ts`
+- Create: `modules/market/board/dnse-subscriptions.ts`
 - Modify: `components/live-market-board-v2.tsx`
 - Modify/Test: `tests/market-board-visual-contract.test.ts`
 
@@ -306,7 +306,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add lib/market-board/dnse-subscriptions.ts components/live-market-board-v2.tsx tests/market-board-visual-contract.test.ts
+git add modules/market/board/dnse-subscriptions.ts components/live-market-board-v2.tsx tests/market-board-visual-contract.test.ts
 git commit -m "perf: scope market board realtime subscriptions"
 ```
 
@@ -343,7 +343,7 @@ Expected: PASS.
 - [ ] **Step 4: Lint touched feature files**
 
 ```bash
-pnpm eslint app/page.tsx components/live-market-stock.tsx components/live-market-board-v2.tsx components/market-board/stock-filter-modal.tsx lib/market-board/stock-filter.ts lib/market-board/dnse-subscriptions.ts app/api/me/market-board-filter/route.ts app/api/market/quotes/route.ts tests/market-board-visual-contract.test.ts
+pnpm eslint app/page.tsx components/live-market-stock.tsx components/live-market-board-v2.tsx components/market-board/stock-filter-modal.tsx modules/market/board/stock-filter.ts modules/market/board/dnse-subscriptions.ts app/api/me/market-board-filter/route.ts app/api/market/quotes/route.ts tests/market-board-visual-contract.test.ts
 ```
 
 Expected: PASS.

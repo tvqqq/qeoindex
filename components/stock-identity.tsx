@@ -1,5 +1,5 @@
 import { StockLogo } from "@/components/stock-logo"
-import { cn } from "@/lib/utils"
+import { cn } from "@/modules/shared/ui/cn"
 
 export const STOCK_IDENTITY_LOGO_CLASS =
   "shrink-0 rounded-full border-white/40 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"

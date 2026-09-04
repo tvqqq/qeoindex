@@ -1,6 +1,6 @@
 "use client"
 
-import { GROUPS, marketStore } from "@/lib/market-data"
+import { GROUPS, marketStore } from "@/modules/market/data"
 import { StockCell } from "@/components/stock-cell"
 
 const HEADER_PCT: Record<string, number> = {

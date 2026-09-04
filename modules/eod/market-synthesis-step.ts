@@ -3,7 +3,7 @@ import "server-only"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { markQeoIndexEodPhaseSkipped, runQeoIndexEodPhase } from "@/modules/admin/job-phase-telemetry"
-import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import type { MarketCloseDashboardData } from "@/modules/research/market-insight/data"
 
 const MARKET_SYNTHESIS_POLL_INTERVAL_MS = 2_000
