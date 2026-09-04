@@ -21,22 +21,19 @@ function bars(count: number, interval: number, start: number): OhlcvBar[] {
   })
 }
 
-test("Wyckoff chart builds one unified study for every requested timeframe", () => {
+test("Wyckoff chart builds exactly the active Daily and derived Weekly studies", () => {
   const studies = buildWyckoffChartStudies({
     dailyBars: bars(2_920, 86_400, 1_514_764_800),
-    hourlyBars: bars(900, 3_600, 1_775_000_000),
     dailyProvider: "DNSE",
     dailyDetail: "Daily test bars",
-    hourlyProvider: "DNSE",
-    hourlyDetail: "Hourly test bars",
   })
 
-  assert.deepEqual(studies.map((study) => study.timeframe), ["1H", "4H", "1D", "1W", "1M"])
+  assert.deepEqual(studies.map((study) => study.timeframe), ["1D", "1W"])
+  assert.equal(studies[0].derived, false)
+  assert.equal(studies[1].derived, true)
   assert.equal(studies.every((study) => study.bars.length <= 260), true)
   assert.equal(studies.every((study) => study.analysis !== null), true)
   assert.equal(studies.every((study) => study.scenarios.length === 3), true)
-  assert.equal(studies.every((study) => study.outlooks.length === 3), true)
-  assert.deepEqual(studies[0].outlooks.map((outlook) => outlook.sourceTimeframe), ["1D", "1W", "1M"])
 
   for (const study of studies) {
     assert.equal(study.scenarios.reduce((sum, scenario) => sum + scenario.probability, 0), 100)
@@ -44,9 +41,8 @@ test("Wyckoff chart builds one unified study for every requested timeframe", () 
   }
 })
 
-test("scanner-published markers and scenarios override runtime projections", () => {
+test("scanner-published Daily markers and scenarios override runtime projections", () => {
   const dailyBars = bars(2_920, 86_400, 1_514_764_800)
-  const hourlyBars = bars(900, 3_600, 1_775_000_000)
   const last = dailyBars.at(-1)!
   const published = ([
     { key: "bull", label: "Bull published", probability: 45, color: "#22c98a", target: last.close + 3, path: [{ time: last.time + 86_400, value: last.close }, { time: last.time + 172_800, value: last.close + 3 }], description: "Published bull", horizon: "week" },
@@ -56,11 +52,8 @@ test("scanner-published markers and scenarios override runtime projections", () 
 
   const studies = buildWyckoffChartStudies({
     dailyBars,
-    hourlyBars,
     dailyProvider: "DNSE",
     dailyDetail: "Daily test bars",
-    hourlyProvider: "DNSE",
-    hourlyDetail: "Hourly test bars",
     markerOverrides: { "1D": [{ time: last.time, label: "TEST", tone: "neutral", detail: "Scanner Test marker" }] },
     scenarioOverrides: { "1D": published },
   })
@@ -69,27 +62,22 @@ test("scanner-published markers and scenarios override runtime projections", () 
   assert.equal(daily.markers[0].label, "TEST")
   assert.equal(daily.scenarios[0].label, "Bull published")
   assert.equal(daily.scenarios[0].horizon, "week")
-  assert.equal(daily.outlooks.find((outlook) => outlook.key === "week")?.scenarios[0].label, "Bull published")
 })
 
-test("Wyckoff chart validates shareable timeframe query values", () => {
-  for (const value of ["1H", "4H", "1D", "1W", "1M"]) assert.equal(isWyckoffChartTimeframe(value), true)
-  for (const value of ["D", "5m", "daily", "", null]) assert.equal(isWyckoffChartTimeframe(value), false)
+test("Wyckoff chart accepts only shareable Daily and Weekly timeframe values", () => {
+  for (const value of ["1D", "1W"]) assert.equal(isWyckoffChartTimeframe(value), true)
+  for (const value of ["1H", "4H", "1M", "D", "5m", "daily", "", null]) assert.equal(isWyckoffChartTimeframe(value), false)
 })
 
-test("chart route exposes query links, attribution, markers, scenario lines, and insight panels", () => {
-  const dashboard = readFileSync(new URL("../components/insights/wyckoff-chart-dashboard.tsx", import.meta.url), "utf8")
+test("active chart surface preserves attribution, markers, scenario lines and insight panels", () => {
   const chart = readFileSync(new URL("../components/insights/wyckoff-lightweight-chart.tsx", import.meta.url), "utf8")
-  const page = readFileSync(new URL("../app/insights/wyckoff/page.tsx", import.meta.url), "utf8")
+  const dashboardTypes = readFileSync(new URL("../components/insights/wyckoff-chart-dashboard.tsx", import.meta.url), "utf8")
 
-  assert.match(dashboard, /\/insights\/wyckoff\?ticker=/)
-  assert.match(dashboard, /timeframe=\$\{activeTimeframe\}/)
-  assert.match(page, /searchParams: Promise/)
+  assert.match(dashboardTypes, /active Daily\/Weekly Wyckoff UI/)
   assert.match(chart, /attributionLogo: true/)
   assert.match(chart, /createSeriesMarkers/)
   assert.match(chart, /lwc\.LineSeries/)
   assert.match(chart, /data-wyckoff-signal-panel/)
   assert.match(chart, /data-wyckoff-key-levels/)
   assert.match(chart, /data-wyckoff-horizon-outlook/)
-  assert.match(dashboard, /không phải dữ liệu giá tương lai/)
 })
