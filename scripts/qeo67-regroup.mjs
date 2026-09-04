@@ -5,6 +5,12 @@ import path from "node:path"
 const tracked = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" }).split("\0").filter(Boolean)
 const oldFiles = new Set(tracked)
 const moves = new Map()
+const treeMoves = [
+  ["lib/admin/", "modules/admin/"],
+  ["lib/auth/", "modules/auth/"],
+  ["lib/notion/", "modules/notion/"],
+  ["lib/portfolio/", "modules/portfolio/"],
+]
 
 function moveTree(oldPrefix, newPrefix) {
   for (const file of tracked) {
@@ -12,10 +18,7 @@ function moveTree(oldPrefix, newPrefix) {
   }
 }
 
-moveTree("lib/admin/", "modules/admin/")
-moveTree("lib/auth/", "modules/auth/")
-moveTree("lib/notion/", "modules/notion/")
-moveTree("lib/portfolio/", "modules/portfolio/")
+for (const [oldPrefix, newPrefix] of treeMoves) moveTree(oldPrefix, newPrefix)
 
 function rootTarget(file) {
   if (!file.startsWith("lib/") || file.slice(4).includes("/")) return null
@@ -112,6 +115,10 @@ for (const [oldPath, newPath] of moves) {
   addReplacement(oldPath, newPath)
   addReplacement(stripCodeExt(oldPath), stripCodeExt(newPath))
   addReplacement(`@/${stripCodeExt(oldPath)}`, `@/${stripCodeExt(newPath)}`)
+}
+for (const [oldPrefix, newPrefix] of treeMoves) {
+  addReplacement(oldPrefix, newPrefix)
+  addReplacement(`@/${oldPrefix}`, `@/${newPrefix}`)
 }
 replacements.sort((a, b) => b[0].length - a[0].length)
 
