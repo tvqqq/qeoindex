@@ -27,7 +27,7 @@ function rootTarget(file) {
 
   const rules = [
     [/^ai-council-(.+)$/, (_, rest) => `modules/ai-council/${rest}${ext}`],
-    [/^wyckoff-v2-(.+)$/, (_, rest) => `modules/wyckoff/${rest}${ext}`],
+    [/^wyckoff-v2-(.+)$/, (_, rest) => `modules/wyckoff/eod-${rest}${ext}`],
     [/^wyckoff-(.+)$/, (_, rest) => `modules/wyckoff/${rest}${ext}`],
     [/^qeoindex-eod-(.+)$/, (_, rest) => `modules/eod/${rest}${ext}`],
     [/^eod-(.+)$/, (_, rest) => `modules/eod/${rest}${ext}`],
