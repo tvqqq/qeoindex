@@ -9,17 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Print remaining dependency edges
+      - name: Print exact current dependency tree
         shell: bash
         run: |
           set -euo pipefail
-          for f in \
-            modules/kfsp/eod-rating-step.ts \
-            modules/market/history/eod-history-refresh.ts \
-            modules/market/providers/eod-ttai-refresh.ts \
-            modules/eod/index.ts; do
-            echo "===== $f ====="
-            sed -n '1,260p' "$f"
-          done
-          echo "===== workflow imports/references ====="
-          rg -n "eod-rating-step|eod-history-refresh|eod-ttai-refresh|@/workflows" modules workflows || true
+          echo "HEAD=$(git rev-parse HEAD)"
+          echo "===== relevant files ====="
+          find modules workflows -type f | sort | grep -E 'eod-rating|eod-history|eod-ttai|modules/eod/index|kfsp|market/history|market/providers' || true
+          echo "===== workflow dependency edges ====="
+          rg -n "@/workflows|from ['\"]\.\./.*workflows|eod-rating-step|eod-history-refresh|eod-ttai-refresh" modules workflows || true
+          echo "===== EOD entrypoint ====="
+          [ -f modules/eod/index.ts ] && sed -n '1,260p' modules/eod/index.ts || true
