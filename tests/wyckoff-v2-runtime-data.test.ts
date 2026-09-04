@@ -1,28 +1,14 @@
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import test from "node:test"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { NotionPage } from "../modules/notion/client.ts"
-import { parseWyckoffV2UniversePage } from "../modules/wyckoff/eod-universe-source.ts"
 import {
   DAILY_V2_CACHE_LIMIT,
   V2_CACHE_BATCH_SIZE,
   cachedHistoryFromRows,
   loadWyckoffV2CachedHistories,
 } from "../modules/wyckoff/eod-cache-read.ts"
-
-function universePage(input: { ticker: string; active?: boolean; exchange?: string; rank?: number | null; sector?: string }): NotionPage {
-  return {
-    id: `page-${input.ticker}`,
-    properties: {
-      Ticker: { title: [{ plain_text: input.ticker }] },
-      Active: { checkbox: input.active ?? true },
-      Exchange: { select: { name: input.exchange ?? "HOSE" } },
-      Rank: { number: input.rank === undefined ? 1 : input.rank },
-      Sector: { rich_text: [{ plain_text: input.sector ?? "Consumer" }] },
-    },
-  }
-}
 
 function cachedRow(ticker: string, index: number) {
   const barTime = new Date(Date.parse("2026-08-20T00:00:00.000Z") + index * 24 * 60 * 60 * 1000).toISOString()
@@ -58,14 +44,10 @@ function compactRow(ticker: string, index: number) {
   ]
 }
 
-test("v2 universe source preserves missing Rank instead of dropping the ticker", () => {
-  const row = parseWyckoffV2UniversePage(universePage({ ticker: "TCX", rank: null }))
-  assert.deepEqual(row, { ticker: "TCX", active: true, exchange: "HOSE", rank: null, sector: "Consumer" })
-})
-
-test("v2 universe source preserves explicit exchange and active state for hard-stop validation", () => {
-  const row = parseWyckoffV2UniversePage(universePage({ ticker: "ABC", active: false, exchange: "HNX", rank: 12, sector: "Banks" }))
-  assert.deepEqual(row, { ticker: "ABC", active: false, exchange: "HNX", rank: 12, sector: "Banks" })
+test("v2 universe source is canonical-market-only and has no legacy Notion parser compatibility", async () => {
+  const body = await readFile(new URL("../modules/wyckoff/eod-universe-source.ts", import.meta.url), "utf8")
+  assert.match(body, /getCanonicalUniverse/)
+  assert.doesNotMatch(body, /NotionPage|NOTION_WYCKOFF_UNIVERSE_DATA_SOURCE_ID|parseWyckoffV2UniversePage|notion\/properties/)
 })
 
 test("bounded Daily cache budget is sufficient to derive at least 60 completed Weekly bars", () => {
