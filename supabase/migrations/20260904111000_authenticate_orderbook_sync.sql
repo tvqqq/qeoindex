@@ -2,22 +2,9 @@ begin;
 
 -- QEO-77: protect every active privileged orderbook-sync caller with the same
 -- Vault-backed machine credential already used by the canonical EOD runtime.
--- Never persist the decrypted value in migration history or scheduler metadata.
-do $$
-declare
-  v_secret text;
-begin
-  select s.decrypted_secret
-    into v_secret
-  from vault.decrypted_secrets as s
-  where s.name = 'kfsp_sync_secret'
-  limit 1;
-
-  if nullif(btrim(coalesce(v_secret, '')), '') is null then
-    raise exception 'MARKET_CLOSE_SYNC_SECRET_NOT_CONFIGURED';
-  end if;
-end
-$$;
+-- The migration itself must stay replayable on a fresh database where runtime
+-- secrets are intentionally absent. At execution time the service-role-only
+-- qeo_get_market_close_sync_secret() RPC fails closed when the secret is missing.
 
 -- Keep only the QEO-64 active intraday scheduler ownership. The standalone
 -- 14:45/14:50 EOD jobs remain retired; final market-close collection is owned
