@@ -284,8 +284,8 @@ async function callWithIncompleteRetry(
       if (attempt > 0 || !error.inspection.shouldRetryWithMoreOutput) {
         throw new ReportAiProviderError("OpenAI Responses remained incomplete after bounded retry", true)
       }
-      const nextBudget = nextMaxOutputTokensAfterIncomplete(maxOutputTokens, error.inspection)
-      if (nextBudget <= maxOutputTokens) {
+      const nextBudget = nextMaxOutputTokensAfterIncomplete(maxOutputTokens)
+      if (nextBudget === null || nextBudget <= maxOutputTokens) {
         throw new ReportAiProviderError("OpenAI Responses max-output retry budget is exhausted", true)
       }
       maxOutputTokens = nextBudget
