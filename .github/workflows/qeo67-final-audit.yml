@@ -1,0 +1,114 @@
+name: QEO-67 Final Audit
+
+on:
+  push:
+    branches:
+      - qeo-65-67-cleanup-modules
+  workflow_dispatch:
+
+jobs:
+  architecture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit QEO-67 architecture boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const roots = ['app', 'components', 'modules', 'workflows', 'lib'];
+          const files = [];
+          function walk(root) {
+            if (!fs.existsSync(root)) return;
+            for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+              const full = path.join(root, entry.name);
+              if (entry.isDirectory()) walk(full);
+              else if (/\.(?:ts|tsx|js|mjs)$/.test(entry.name)) files.push(full.replaceAll('\\', '/'));
+            }
+          }
+          roots.forEach(walk);
+
+          const violations = [];
+          const namingToken = /(^|[\/_.-])(legacy|v2|v3)(?=$|[\/_.-])/i;
+          const moduleImport = /(?:from\s+|import\s*\(\s*)['"]@\/modules\/([^/'"]+)(\/[^'"]+)?['"]/g;
+
+          for (const file of files) {
+            if (namingToken.test(file)) violations.push(`ACCIDENTAL_VERSIONED_PATH ${file}`);
+
+            if (/^lib\/[^/]+\.(?:ts|tsx)$/.test(file)) {
+              violations.push(`ROOT_LIB_SOURCE ${file}`);
+            }
+
+            const text = fs.readFileSync(file, 'utf8');
+            const consumer = file.startsWith('modules/') ? file.split('/')[1] : null;
+            const isRoute = file.startsWith('app/') && /\/route\.ts$/.test(file);
+
+            for (const match of text.matchAll(moduleImport)) {
+              const provider = match[1];
+              const rest = match[2] || '';
+              if (consumer && provider !== consumer && rest) {
+                violations.push(`CROSS_MODULE_DEEP_IMPORT ${file}: ${match[0]}`);
+              }
+              if (consumer && consumer !== 'eod' && provider === 'eod') {
+                violations.push(`LOWER_LEVEL_TO_EOD ${file}: ${match[0]}`);
+              }
+              if (isRoute && rest) {
+                violations.push(`ROUTE_DEEP_MODULE_IMPORT ${file}: ${match[0]}`);
+              }
+            }
+
+            if (consumer && /(?:from\s+|import\s*\(\s*)['"]@\/workflows(?:\/|['"])/.test(text)) {
+              violations.push(`MODULE_TO_WORKFLOW ${file}`);
+            }
+
+            if (/(?:from\s+|import\s*\(\s*)['"]@\/lib\//.test(text)) {
+              violations.push(`ACTIVE_LIB_IMPORT ${file}`);
+            }
+          }
+
+          const qeo67Tooling = [];
+          function scanTemp(root) {
+            if (!fs.existsSync(root)) return;
+            for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+              const full = path.join(root, entry.name).replaceAll('\\', '/');
+              if (entry.isDirectory()) scanTemp(full);
+              else if (/qeo67/i.test(entry.name) && full !== '.github/workflows/qeo67-final-audit.yml') qeo67Tooling.push(full);
+            }
+          }
+          scanTemp('scripts');
+          scanTemp('.github/workflows');
+          for (const file of qeo67Tooling) violations.push(`TEMP_QEO67_TOOLING ${file}`);
+
+          const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lintTouched = packageJson.scripts?.['lint:touched'] || '';
+          console.log(`lint:touched=${lintTouched}`);
+          if (!/\b(app|components|modules|workflows)\b/.test(lintTouched) || /lib\/[\w./-]+\.tsx?/.test(lintTouched)) {
+            violations.push(`LINT_TARGET_NOT_DIRECTORY_BASED ${lintTouched}`);
+          }
+
+          const routeFiles = files.filter((file) => file.startsWith('app/') && /\/route\.ts$/.test(file));
+          const publicApis = files.filter((file) => /^modules\/[^/]+\/index\.ts$/.test(file));
+          console.log(`QEO67_AUDIT_COUNTS source_files=${files.length} routes=${routeFiles.length} module_public_apis=${publicApis.length}`);
+          console.log(`QEO67_PUBLIC_APIS ${publicApis.join(' ')}`);
+
+          if (violations.length) {
+            console.error(`QEO67_AUDIT_FAIL count=${violations.length}`);
+            for (const violation of violations) console.error(violation);
+            process.exit(1);
+          }
+          console.log('QEO67_AUDIT_PASS');
+          NODE
+
+      - name: Full QEO-67 verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm test:current
+          pnpm lint:touched
+          pnpm typecheck
+          pnpm build
