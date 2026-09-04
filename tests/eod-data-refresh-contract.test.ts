@@ -63,7 +63,7 @@ test("TTAI refresh is session-bound and explicit about degraded partial failures
 test("READY validates frozen run identity and exact membership, not count only", () => {
   const steps = source("lib/qeoindex-eod-data-refresh-steps.ts")
   const delegated = source("lib/qeoindex-eod-workflow-steps.ts")
-  const legacyDelegated = source("lib/qeoindex-eod-workflow-steps-legacy.ts")
+  const runtimeSteps = source("lib/qeoindex-eod-runtime-steps.ts")
 
   assert.match(steps, /export async function assertReadyMatchesFrozenUniverse/)
   assert.match(steps, /input\.readyUniverseRunId\s*!==\s*input\.expectedUniverse\.runId/)
@@ -71,9 +71,11 @@ test("READY validates frozen run identity and exact membership, not count only",
   assert.match(steps, /unexpected=/)
   assert.match(steps, /input\.expectedUniverse\.tickers/)
   assert.match(delegated, /runEodReadyStep/)
-  assert.match(legacyDelegated, /getCanonicalUniverse/)
-  assert.match(legacyDelegated, /loadWyckoffV2Universe/)
-  assert.doesNotMatch(legacyDelegated, /beginWyckoffV2NotionRun|claimReadyWyckoffV2Run|publishIngestingWyckoffV2Run/)
+  assert.match(runtimeSteps, /getCanonicalUniverse/)
+  assert.match(runtimeSteps, /loadWyckoffV2Universe/)
+  assert.match(runtimeSteps, /supabase-first-eod-v4-dag/)
+  assert.doesNotMatch(delegated, /workflow-steps-legacy/)
+  assert.doesNotMatch(runtimeSteps, /beginWyckoffV2NotionRun|claimReadyWyckoffV2Run|publishIngestingWyckoffV2Run|DRIVE_ARCHIVE|NOTION_ARCHIVE/)
 })
 
 test("READY retries bounded known not-ready states even when wrapper error codes are lost", () => {

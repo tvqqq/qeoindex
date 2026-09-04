@@ -10,7 +10,6 @@ const runtimeRatingReaders = [
   "lib/insights-data.ts",
   "lib/ai-council-data.ts",
   "lib/ai-council-llm-evidence.ts",
-  "lib/qeoindex-eod-archive-legacy.ts",
 ]
 
 const legacyAliases = [

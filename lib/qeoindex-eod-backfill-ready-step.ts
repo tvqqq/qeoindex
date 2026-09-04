@@ -3,6 +3,7 @@ import { loadPersistentCouncilEodSnapshots } from "@/lib/ai-council-eod-market"
 import { getCanonicalUniverse } from "@/lib/market-universe"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { loadWyckoffV2Universe } from "@/lib/wyckoff-v2-universe-source"
+import { vietnamDateKey } from "@/lib/vn-market-calendar"
 
 function requiredSupabase() {
   const supabase = getSupabaseServerClient()
@@ -10,14 +11,6 @@ function requiredSupabase() {
   return supabase
 }
 
-function vietnamDateKey(iso: string) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(iso))
-}
 
 export async function runEodBackfillReadyStep(runId: string, startedAtIso: string) {
   "use step"
@@ -83,7 +76,7 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
         )
       }
       const scanDate = expectedSessionDate
-      const runKey = `WYCKOFF-${scanDate}-EOD-v3`
+      const runKey = `WYCKOFF-${scanDate}-EOD-v4`
 
       return {
         runKey,
@@ -110,7 +103,7 @@ export async function runEodBackfillReadyStep(runId: string, startedAtIso: strin
       marketSource: result.market.source,
       historicalBackfill: true,
       universeRunId: result.market.universeRunId,
-      architecture: "supabase-first-eod-v3",
+      architecture: "supabase-first-eod-v4-dag",
     }),
   })
 }

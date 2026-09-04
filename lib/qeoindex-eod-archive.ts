@@ -1,19 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import {
-  archiveCanonicalUniverseBatchToNotion,
-  archiveEodRunToNotion,
-  archiveEodTickerBatchToNotion,
-  runEodDriveArchive as runLegacyDriveArchive,
-  type EodArchiveCheckpoint,
-} from "./qeoindex-eod-archive-legacy"
-
-export {
-  archiveCanonicalUniverseBatchToNotion,
-  archiveEodRunToNotion,
-  archiveEodTickerBatchToNotion,
+export interface EodArchiveCheckpoint {
+  status: "archived" | "partial" | "blocked" | "skipped" | "error"
+  archived?: number
+  requested?: number
+  rowCount?: number
+  detail?: string
+  manifestUrl?: string | null
+  manifestSha256?: string | null
 }
-export type { EodArchiveCheckpoint }
 
 type RetentionCleanupResult = {
   status?: string
@@ -32,21 +27,6 @@ export type EodRetentionCleanupCheckpoint = EodArchiveCheckpoint & {
   rawHistoryRetention?: { status: "blocked"; detail: string }
 }
 
-/** Legacy/recovery-only Drive adapter; QEO-57 keeps it off the active daily graph. */
-export async function runEodDriveArchive(
-  supabase: SupabaseClient,
-  input: { tradingDate: string; universeRunId: string; validationHash: string; stocks: Parameters<typeof runLegacyDriveArchive>[1]["stocks"] },
-): Promise<EodArchiveCheckpoint> {
-  try {
-    return await runLegacyDriveArchive(supabase, input)
-  } catch (error) {
-    return {
-      status: "error", requested: input.stocks.length, archived: 0,
-      detail: `Google Drive archive failed: ${error instanceof Error ? error.message : String(error)}; raw Supabase history remains retained.`, manifestUrl: null,
-    }
-  }
-}
-
 /**
  * Safe telemetry/staging retention is operational and Supabase-only.
  * QEO-57 removes Drive; QEO-62 removes Notion from this dependency boundary.
@@ -54,13 +34,7 @@ export async function runEodDriveArchive(
  */
 export async function runEodRetentionCleanup(
   supabase: SupabaseClient,
-  input: {
-    tradingDate: string
-    /** @deprecated Legacy caller compatibility only; ignored by retention logic. */
-    notionArchive?: EodArchiveCheckpoint
-    /** @deprecated Legacy caller compatibility only; ignored by retention logic. */
-    driveArchive?: EodArchiveCheckpoint
-  },
+  input: { tradingDate: string },
 ): Promise<EodRetentionCleanupCheckpoint> {
   const rawHistoryDetail = "Raw Daily OHLCV retention is intentionally disabled until an independently verified cold-backup hydration/restore design exists; no operational Daily bars were deleted."
   const referenceAt = new Date(`${input.tradingDate}T23:59:59.999+07:00`).toISOString()
