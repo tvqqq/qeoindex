@@ -8,6 +8,7 @@ on:
       - "scripts/db/**"
       - "scripts/run-test-suite.mjs"
       - "tests/test-contracts.json"
+      # QEO-67 moved the canonical generated Supabase types under modules/shared.
       - "modules/shared/supabase/database.types.ts"
       - "supabase/config.toml"
       - "supabase/migrations/**"
