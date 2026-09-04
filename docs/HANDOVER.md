@@ -1,8 +1,8 @@
 # QeoIndex engineering handover
 
-Last updated: 2026-09-02.
+Last updated: 2026-09-04.
 
-This document is the canonical fast-start for the active production architecture. The pre-2026-09-01 handover is preserved verbatim at [`docs/HANDOVER-LEGACY.md`](./HANDOVER-LEGACY.md) for historical context; when the two documents conflict, this file wins.
+This document is the canonical fast-start for the active production architecture. Historical architecture is preserved in Git history and explicitly historical design/plan documents; when historical material conflicts with this file, this file wins.
 
 ## Production
 
@@ -13,7 +13,7 @@ This document is the canonical fast-start for the active production architecture
 - Canonical stock universe: latest published `vn_top_stocks`, maximum 200 tickers.
 - Canonical EOD scheduler: Supabase `pg_cron` job `qeoindex-eod-pipeline-1515-ict` (`15 8 * * 1-5`, 15:15 ICT).
 
-Read `AGENTS.md` before edits. Do not treat scheduler dispatch as execution success; use `system_job_runs` and `system_job_phases` for EOD execution evidence.
+Read `AGENTS.md` before edits. Scheduler dispatch is not execution success; use `system_job_runs` and `system_job_phases` for durable EOD evidence.
 
 ## Active Wyckoff contract — 1D + 1W only
 
@@ -22,7 +22,7 @@ Wyckoff operational analysis supports exactly two completed-bar timeframes:
 - `1D`: canonical raw timeframe.
 - `1W`: deterministic weekly aggregation derived from raw Daily bars.
 
-`1H`, `4H`, and `1M` are not active Wyckoff timeframes. They must not be written to active Wyckoff snapshots, chart-series read models, UI tabs, watchlist columns, or EOD expected-count calculations.
+`1H`, `4H`, and `1M` are not active Wyckoff persistence contracts. They must not be written to active Wyckoff snapshots, chart-series read models, UI tabs, watchlist columns, or EOD expected-count calculations.
 
 For `N` canonical stocks:
 
@@ -34,129 +34,124 @@ At the current maximum universe of 200 tickers this is 400 snapshots per healthy
 
 ### Raw OHLCV storage
 
-Persistent Wyckoff raw OHLCV stores `1D` only in `market_ohlcv_history`. Weekly bars are derived; raw OHLCV `1H` is no longer required by Wyckoff.
+Persistent Wyckoff raw OHLCV stores `1D` only in `market_ohlcv_history`. Weekly bars are derived from Daily.
 
-The 19:00 storage-contract migration rejects new non-Daily writes with a `NOT VALID` check but intentionally preserves historical legacy rows until an explicitly approved destructive cleanup. The one-shot clean-rebuild migration removes that preserved legacy state and validates the Daily-only constraint.
+A ticker with genuine listing history shorter than the normal bootstrap horizon must transition to bounded Daily delta refresh after a successful full bootstrap rather than repeating a full-history request every EOD. `market_ohlcv_bootstrap_state` records that bootstrap completion state.
 
-The active history refresh therefore fetches/persists Daily only. Other non-Wyckoff features may still fetch intraday data directly through their own bounded provider paths, but they must not repopulate `market_ohlcv_history` with `1H`.
+The DNSE Daily bootstrap keeps the 366-day fast request window for normal tickers. Retry splitting is limited to transient network/timeout/408/425/429/5xx failures and does not recursively retry auth/permission or explicit non-transient 4xx failures.
 
-### Newly listed / limited-history tickers
+## EOD v4 DAG contract
 
-`market_ohlcv_bootstrap_state` records that a full provider bootstrap has completed. A ticker with genuine listing history shorter than 60 months must transition to bounded Daily delta refresh after a successful full bootstrap instead of repeating an eight-year request every EOD.
+Current-session dependency flow:
 
-## P0 DNSE history reliability
+1. `KFSP_RATING_REFRESH` refreshes rating data and freezes the exact canonical universe identity.
+2. `TTAI_REFRESH` and `MARKET_CLOSE_COLLECT` run as bounded sibling branches.
+3. `EOD_READY` verifies exact frozen membership and same-session rating/final-market evidence.
+4. `HISTORY_REFRESH` persists Daily-only history in bounded batches/concurrency.
+5. Verified no-trade Daily repair runs when required.
+6. `WYCKOFF_BUILD` produces exactly `universeCount × 2` 1D/1W snapshots; current-session failures are ticker-isolated where the v4 fault-isolation contract permits it.
+7. `SUPABASE_VALIDATE` and `SUPABASE_PUBLISH` verify/publish the canonical operational read model.
+8. `AI_COUNCIL_DETERMINISTIC` consumes the healthy published session.
+9. `MARKET_SYNTHESIS` runs downstream of deterministic Council.
+10. `AI_COUNCIL_LLM` runs selectively/cost-bounded; deterministic Council remains authority.
+11. `RETENTION_CLEANUP` runs Supabase-only safe retention and never age-prunes canonical raw Daily history.
+12. Notion receives one downstream analytical/audit summary; it is not operational state.
+13. `COMPLETE` closes the parent run with `architecture = supabase-first-eod-v4-dag`.
 
-Daily bootstrap keeps the 366-day fast request window for normal tickers. A transient failure on one large window is retried adaptively by recursively splitting only that failed branch down to the current 7-day retry floor.
+Run key format:
 
-Adaptive splitting is limited to transient failures such as timeout/abort/network errors, HTTP 408/425/429 and 5xx. Auth/permission errors and explicit non-transient 4xx such as 404 are not recursively retried. Empty pre-listing subwindows are allowed; successful bars are merged and de-duplicated deterministically before fallback is considered.
+`WYCKOFF-YYYY-MM-DD-EOD-v4`
 
-This behavior specifically addresses the VGI `HISTORY_REFRESH` failure observed on the old 366-day DNSE request while avoiding a global increase in request count for healthy tickers.
+Historical backfills remain Supabase-only. They verify persistent historical rating/OHLCV evidence and never substitute today's provider market data for a past session.
 
-## EOD v3 phase contract
+### EOD invariants
 
-Canonical phase order remains:
+- READY and market-close retry behavior remain fail-closed.
+- Exact universe identity/membership matters; count-only equality is insufficient.
+- `HISTORY_REFRESH` accounts for every requested ticker and persists Daily only.
+- Wyckoff expected count is exactly `universeCount × 2`.
+- Operational publication is Supabase-first.
+- Google Drive is not part of the active EOD graph.
+- Per-ticker Notion operational archive is not part of the active EOD graph.
+- Notion analytical summary is downstream and cannot rewrite already-published operational evidence.
 
-1. `EOD_READY`
-2. `MARKET_CLOSE_COLLECT`
-3. `HISTORY_REFRESH`
-4. `NO_TRADE_REPAIR`
-5. `WYCKOFF_BUILD`
-6. `SUPABASE_VALIDATE`
-7. `SUPABASE_PUBLISH`
-8. `AI_COUNCIL_DETERMINISTIC`
-9. `AI_COUNCIL_LLM`
-10. `MARKET_SYNTHESIS`
-11. `NOTION_ARCHIVE`
-12. `DRIVE_ARCHIVE`
-13. `RETENTION_CLEANUP`
-14. `COMPLETE`
+See `docs/automation/CRON_WORKFLOW_TOP_STOCKS_200.md` for the canonical EOD runbook.
 
-Key invariants:
+## Storage lifecycle
 
-- EOD readiness and market-close retry behavior remain fail-closed.
-- `EOD_READY` requires fresh same-session `stock_orderbook_snapshots` for the exact canonical universe; a clean rebuild must bootstrap those snapshots before dispatching EOD.
-- `HISTORY_REFRESH` uses max-10 ticker batches and persists Daily only.
-- `WYCKOFF_BUILD` / validation / publish require exact canonical membership and exactly `universeCount × 2` snapshots.
-- AI Council starts only from the healthy Supabase-published Wyckoff run for the same session.
-- Notion/Drive archival is downstream of the market-analysis critical path.
+Supabase is the operational hot store. Notion is a compact analytical/audit sink only.
 
-## Storage lifecycle / Plan B and Plan C foundation
+Raw Daily retention is intentionally fail-closed while Weekly analysis is derived from Daily and no independently verified cold-history hydration/restore path is part of the active architecture.
 
-Supabase is the operational hot store; Google Drive is the intended cold raw archive; Notion is the compact analytical/audit store.
+The active retention implementation only calls approved Supabase cleanup RPCs for transient/terminal evidence such as telemetry, staging, expired raw evidence and build artifacts. It must not delete `market_ohlcv_history` Daily bars merely by age.
 
-The 2026-09-01 storage cutover introduces `market_ohlcv_archive_ranges`, a range-level cold-archive coverage ledger with date range, row count, SHA-256 and manifest URL. This is the foundation for a future partitioned/cold-history Plan C cutover.
+Legacy archive-ledger concepts such as `eod_archive_checkpoints`, `market_ohlcv_archive_ranges`, Drive manifests/SHA coverage and per-ticker Notion archive status are not active retention authority. Under QEO-65 they may be physically dropped only after zero-consumer repository + production dependency proof and a no-`CASCADE` migration.
 
-**Important:** raw Daily retention is intentionally fail-closed. Do not age-prune Daily bars merely by date while `1W` is derived from Daily and the active model requires at least 60 completed Weekly bars. Daily pruning can be enabled only after cold-history coverage/hydration is verified end-to-end.
+## Database migration safety
 
-The approved clean rebuild is a one-shot maintenance operation, not a recurring retention rule.
+Database changes must preserve these gates:
 
-## Database migrations
+- migration drift reconciliation;
+- clean local replay;
+- generated Supabase type parity;
+- destructive recovery rehearsal where applicable;
+- no unexplained production/repository ledger divergence;
+- no `CASCADE` for QEO-65 legacy-object deletion.
 
-### Storage-contract foundation
+Important existing migration contracts include:
 
-`supabase/migrations/20260901190000_wyckoff_daily_weekly_storage_cutover.sql`
+- `20260901190000_wyckoff_daily_weekly_storage_cutover.sql`: active raw `1D`, active Wyckoff `1D/1W`, bootstrap state and storage constraints.
+- `20260901193000_clean_rebuild_top_stocks_200.sql`: approved one-shot rebuild of rebuildable operational state; its production ledger timestamp is reconciled through `supabase/migration-equivalence.json`.
+- `20260902011529_clean_rebuild_market_snapshot_trigger.sql`: service-role-only bootstrap of fresh canonical market snapshots after destructive rebuild.
 
-It:
+Do not replay SQL merely to make timestamps look identical. `pnpm db:drift:verify` is the reviewed reconciliation gate.
 
-- changes the active raw write contract to `timeframe = '1D'` without deleting historical legacy rows;
-- changes active Wyckoff snapshot/chart-series writes to `1D/1W` without deleting historical legacy rows;
-- creates `market_ohlcv_bootstrap_state`;
-- changes `qeo_market_ohlcv_recent` to Daily only;
-- creates the Plan C archive-range ledger;
-- intentionally leaves the new timeframe checks `NOT VALID` while preserved legacy rows still exist.
+## Clean-rebuild acceptance sequence
 
-### Approved clean rebuild
+After an explicitly approved one-shot rebuild:
 
-`supabase/migrations/20260901193000_clean_rebuild_top_stocks_200.sql`
+1. trigger and verify a new published canonical universe;
+2. verify exact membership;
+3. bootstrap fresh canonical market snapshots;
+4. verify exact same-session snapshot coverage;
+5. dispatch EOD only after READY prerequisites exist;
+6. verify Daily-only persistent history;
+7. verify `universeCount × 2` Wyckoff snapshots;
+8. verify downstream phases report their real status.
 
-Production originally applied this logical migration as version `20260901144121`. The repository filename is intentionally later than the 19:00 storage cutover because clean replay proved the rebuild depends on `market_ohlcv_bootstrap_state` and the timeframe constraints created by that cutover. `supabase/migration-equivalence.json` maps the repository replay version to the unchanged production ledger version; do not replay it in production merely because the timestamps differ.
-
-This is the explicit destructive cutover for rebuildable stock operational state. It:
-
-- refuses to run while `market.universe_monthly` or `qeoindex.eod_pipeline` is active;
-- purges old/current raw OHLCV and bootstrap state;
-- purges canonical universe runs/memberships so the next universe is selected from source evidence again;
-- purges active Wyckoff, current orderbook, AI Council run output, market synthesis conclusion and EOD archive checkpoint materializations;
-- preserves KFSP ratings/provider history, TTAI quarterly history, auth/user/config data, job audit telemetry, calibration history and verified `market_ohlcv_archive_ranges` cold-archive evidence;
-- validates the raw `1D` and Wyckoff `1D/1W` physical constraints after the purge.
-
-### Clean-rebuild market snapshot bootstrap
-
-`supabase/migrations/20260902011529_clean_rebuild_market_snapshot_trigger.sql`
-
-It creates service-role-only `qeo_trigger_market_snapshot_bootstrap()`, which reuses the existing canonical `orderbook-sync` Edge Function already used by production pg_cron. The function exists specifically because the destructive clean rebuild removes `stock_orderbook_snapshots` while `EOD_READY` requires fresh final snapshots before the later `MARKET_CLOSE_COLLECT` phase can run.
-
-Do not bypass or weaken `EOD_READY`. Bootstrap fresh market evidence first and verify it before EOD dispatch.
-
-After applying the one-shot clean rebuild, execute in this order:
-
-1. `qeo_trigger_market_universe_monthly()` and verify a new published `vn_top_stocks` run.
-2. Verify exact canonical membership (target 200 under current eligibility/settings).
-3. `qeo_trigger_market_snapshot_bootstrap()` and verify its pg_net response succeeds.
-4. Verify `stock_orderbook_snapshots` contains the exact canonical ticker set for the current session and every row is fresh enough for `EOD_READY`.
-5. `qeo_trigger_eod_pipeline()` for the current completed session.
-6. Verify fresh Daily raw history for the exact canonical ticker set.
-7. Verify Wyckoff exact membership and `universeCount × 2` snapshots.
-8. Verify downstream phases report their real success/failure state.
-
-## Migration reconciliation guard
-
-Production migration timestamps can differ from earlier repository-planned filenames. `supabase/migration-equivalence.json` is the reviewed mapping contract and `pnpm db:drift:verify` fails closed on unexplained active-repository or production-ledger drift. Never replay SQL merely to make timestamps match.
-
-`kfsp_rating_storage_refactor` is already applied in production as `20260902020424_kfsp_rating_storage_refactor`; source uses that production version so it is not applied a second time.
+Do not bypass or weaken `EOD_READY` to make a rebuild appear healthy.
 
 ## Manual EOD acceptance
 
 A current-session manual smoke is accepted only when evidence shows:
 
-- `EOD_READY`: canonical universe complete for the session;
-- `MARKET_CLOSE_COLLECT`: healthy/current-session evidence;
-- `HISTORY_REFRESH`: all requested tickers complete, including VGI;
-- raw persistent OHLCV contains `1D` only and no noncanonical tickers after a clean rebuild;
+- `EOD_READY`: exact canonical universe complete for the session;
+- `MARKET_CLOSE_COLLECT`: healthy same-session evidence;
+- `HISTORY_REFRESH`: complete accounting for every requested ticker;
+- persistent raw OHLCV contains `1D` only after a clean rebuild;
 - Wyckoff expected count = `universeCount × 2`;
-- `SUPABASE_PUBLISH`: same validation hash and exact canonical ticker set;
-- deterministic AI Council completes for the canonical universe;
-- archive phases report their real state and do not fake success;
-- `COMPLETE` closes the parent run without hidden skipped critical phases.
+- `SUPABASE_PUBLISH`: same validation hash and exact ticker set;
+- deterministic AI Council completes for the healthy canonical universe;
+- market synthesis / LLM / retention / analytical summary report their real states;
+- `COMPLETE` closes the parent run without hidden skipped critical phases and records `supabase-first-eod-v4-dag`.
 
-For fast troubleshooting, inspect `system_job_runs`, `system_job_phases`, latest `market_universe_runs`, `stock_orderbook_snapshots`, `wyckoff_scan_runs`, `market_ohlcv_history`, `market_ohlcv_bootstrap_state`, and `eod_archive_checkpoints` before interpreting UI state.
+For fast troubleshooting, inspect `system_job_runs`, `system_job_phases`, latest `market_universe_runs`, `stock_orderbook_snapshots`, `wyckoff_scan_runs`, `market_ohlcv_history`, and `market_ohlcv_bootstrap_state` before interpreting UI state.
+
+## Required release gates
+
+For normal source changes:
+
+- `pnpm test:manifest`
+- `pnpm test:current`
+- `pnpm lint:touched`
+- `pnpm typecheck`
+- `pnpm build`
+
+For DB-changing releases, additionally run:
+
+- `pnpm db:drift:verify`
+- `pnpm db:replay:verify`
+- `pnpm db:types:verify`
+- DB safety tests/rehearsal required by the touched migration class.
+
+Production acceptance requires the verified GitHub head to be green, the Vercel production deployment to reach READY, and runtime smoke evidence from the deployed architecture.
