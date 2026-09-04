@@ -104,10 +104,14 @@ for (const root of textRoots) walk(root)
 for (const p of ["package.json", "tsconfig.json", "AGENTS.md", "README.md"]) if (existsSync(p)) textFiles.push(p)
 
 const replacements = []
+function addReplacement(from, to) {
+  replacements.push([from, to])
+  replacements.push([from.replaceAll("/", "\\/"), to.replaceAll("/", "\\/")])
+}
 for (const [oldPath, newPath] of moves) {
-  replacements.push([oldPath, newPath])
-  replacements.push([stripCodeExt(oldPath), stripCodeExt(newPath)])
-  replacements.push([`@/${stripCodeExt(oldPath)}`, `@/${stripCodeExt(newPath)}`])
+  addReplacement(oldPath, newPath)
+  addReplacement(stripCodeExt(oldPath), stripCodeExt(newPath))
+  addReplacement(`@/${stripCodeExt(oldPath)}`, `@/${stripCodeExt(newPath)}`)
 }
 replacements.sort((a, b) => b[0].length - a[0].length)
 
