@@ -6,7 +6,9 @@ import { join } from "node:path"
 const EXECUTABLE_SUITES = new Set(["fast", "eod", "ai", "db", "ui-contracts"])
 
 export function filesForSuite(manifest, suite) {
-  const requested = suite === "current" ? new Set(["fast", "eod", "ai", "ui-contracts"]) : new Set([suite])
+  const requested = suite === "current"
+    ? new Set(["fast", "eod", "ai", "db", "ui-contracts"])
+    : new Set([suite])
   for (const name of requested) {
     if (!EXECUTABLE_SUITES.has(name)) throw new Error(`Unknown test suite: ${name}`)
   }
