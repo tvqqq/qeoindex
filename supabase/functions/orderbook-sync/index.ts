@@ -97,7 +97,10 @@ Deno.serve(async (req: Request) => {
   }
 
   if (!(await isOrderbookSyncAuthorized(req))) {
-    return jsonResponse({ ok: false, error: "UNAUTHORIZED" }, 401)
+    return new Response(JSON.stringify({ ok: false, error: "UNAUTHORIZED" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    })
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
