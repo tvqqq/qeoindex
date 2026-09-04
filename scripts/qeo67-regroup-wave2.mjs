@@ -65,7 +65,7 @@ for (const [oldPath, newPath] of moves) {
   renameSync(oldPath, newPath)
 }
 
-const textRoots = [".github", "app", "components", "lib", "modules", "workflows", "tests", "scripts", "docs", "supabase"]
+const textRoots = ["app", "components", "lib", "modules", "workflows", "tests", "scripts", "docs", "supabase"]
 const textFiles = []
 function walk(current) {
   if (!existsSync(current)) return
