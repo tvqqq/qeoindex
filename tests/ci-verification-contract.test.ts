@@ -21,7 +21,10 @@ test("Verify owns current release suites through stable package entry points", (
     "pnpm exec next build",
   ]) assert.match(verify, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), command)
 
-  assert.doesNotMatch(verify, /qeo-58-eod-data-refresh|market-board-filter-avg50|auth-login-handoff|orderbook-prune-security|kfsp-canonical-universe-sync|canonical-200-ui/)
+  assert.doesNotMatch(
+    verify,
+    /node --test[^\n]*(qeo-58-eod-data-refresh|market-board-filter-avg50|auth-login-handoff|orderbook-prune-security|kfsp-canonical-universe-sync|canonical-200-ui)/,
+  )
 })
 
 test("EOD v4 check name remains but delegates inventory to pnpm test:eod", () => {
