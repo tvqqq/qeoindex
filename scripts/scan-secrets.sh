@@ -8,10 +8,15 @@ failed=0
 check_pattern() {
   local description="$1"
   local pattern="$2"
+  local excluded_path="${3:-}"
   local matches
+  local pathspecs=(. ':!scripts/scan-secrets.sh')
 
-  matches="$(git grep -I -l -E "$pattern" -- . \
-    ':!scripts/scan-secrets.sh' || true)"
+  if [[ -n "$excluded_path" ]]; then
+    pathspecs+=(":!${excluded_path}")
+  fi
+
+  matches="$(git grep -I -l -E "$pattern" -- "${pathspecs[@]}" || true)"
 
   if [[ -n "$matches" ]]; then
     echo "Secret scan failed: $description"
@@ -26,7 +31,12 @@ check_pattern "hard-coded sensitive environment value" '(DNSE_API_(KEY|SECRET)|A
 check_pattern "committed dotenv-style sensitive value" '^[[:space:]]*(DNSE_API_(KEY|SECRET)|TELEGRAM_BOT_TOKEN|NOTION_API_KEY|FINHAY_OAUTH_CLIENT_SECRET|SUPABASE_SERVICE_ROLE_KEY|UPSTASH_REDIS_REST_TOKEN|KFSP_PASSWORD|KFSP_SYNC_SECRET|MARKET_SYNC_SECRET|MARKET_SYNC_SECRET_PREVIOUS|MARKET_CACHE_ADMIN_SECRET|AI_COUNCIL_RUN_SECRET|CRON_SECRET|SCANNER_RUN_SECRET|SIGNAL_MONITOR_SECRET|QSTASH_TOKEN|QSTASH_CURRENT_SIGNING_KEY|QSTASH_NEXT_SIGNING_KEY)[[:space:]]*=[[:space:]]*[^[:space:]#][^[:space:]]*'
 check_pattern "private key material" '[B]EGIN (RSA |EC |OPENSSH )?PRIVATE KEY'
 check_pattern "known provider token prefix" '(ghp_|github_pat_|glpat-|sk_live_|sk_test_|xox[baprs]-|sb_secret_)[A-Za-z0-9_-]{12,}'
-check_pattern "PostgreSQL credential URL" 'postgres(ql)?://[^[:space:]/:@]+:[^[:space:]@]+@[^[:space:]]+'
+
+# QEO-26 intentionally contains the standard local Supabase fixture
+# postgresql://postgres:postgres@127.0.0.1:54322/postgres and independently
+# hard-blocks non-local targets. Exempt only that reviewed recovery harness from
+# this URL rule; all other secret rules still scan the file.
+check_pattern "PostgreSQL credential URL" 'postgres(ql)?://[^[:space:]/:@]+:[^[:space:]@]+@[^[:space:]]+' 'scripts/db/rehearse-destructive-recovery.sh'
 
 if (( failed )); then
   echo "Only filenames are shown to avoid echoing credential values into CI logs."
