@@ -77,7 +77,7 @@ function walk(current) {
   if (/\.(?:ts|tsx|js|jsx|mjs|cjs|json|md|yml|yaml|sh)$/.test(current)) textFiles.push(current.replaceAll("\\", "/"))
 }
 for (const root of textRoots) walk(root)
-for (const file of ["package.json", "tsconfig.json", "AGENTS.md", "README.md"]) if (existsSync(file)) textFiles.push(file)
+for (const file of ["package.json", "tsconfig.json", "AGENTS.md", "README.md", "instrumentation.ts", "next.config.mjs"]) if (existsSync(file)) textFiles.push(file)
 
 const replacements = []
 function addReplacement(from, to) {
