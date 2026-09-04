@@ -17,8 +17,6 @@ jobs:
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10.16.1
 
       - uses: actions/setup-node@v4
         with:
@@ -28,7 +26,7 @@ jobs:
       - name: Measure baseline and regrouped tree
         shell: bash
         env:
-          BASE_SHA: 8821dc6e2da87761b54d656814cc7752b491574f
+          BASE_SHA: 18f2a53b8e170587b7885d7a010f22add1e6ed53
         run: |
           set -euo pipefail
           HEAD_SHA="$(git rev-parse HEAD)"
@@ -43,10 +41,15 @@ jobs:
             corepack enable
             pnpm install --frozen-lockfile >/dev/null
 
+            local roots=()
+            for root in app components modules workflows lib; do
+              [ -e "$root" ] && roots+=("$root")
+            done
+
             local files
-            files=$(find app components modules workflows lib -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.mjs' \) 2>/dev/null | wc -l | tr -d ' ')
+            files=$(find "${roots[@]}" -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.mjs' \) | wc -l | tr -d ' ')
             local loc
-            loc=$(find app components modules workflows lib -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.mjs' \) -print0 2>/dev/null | xargs -0 cat | wc -l | tr -d ' ')
+            loc=$(find "${roots[@]}" -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 cat | wc -l | tr -d ' ')
             echo "METRIC|${label}|source_files|${files}"
             echo "METRIC|${label}|source_loc|${loc}"
 
