@@ -12,7 +12,7 @@ const wyckoffRunner = source("modules/wyckoff/unified-runner.ts")
 const deferredDashboard = source("components/insights/wyckoff-deferred-dashboard.tsx")
 const obsoleteDashboard = source("components/insights/wyckoff-chart-dashboard.tsx")
 const aiFreshness = source("modules/ai-council/freshness.ts")
-const realtime = source("modules/shared/supabase/realtime.ts")
+const legacyRealtimeShimPath = "modules/shared/supabase/realtime.ts"
 const intraday = source("modules/market/realtime/intraday-5m-service.ts")
 const ratingModel = source("modules/research/insights/rating-model.ts")
 const notionStaging = source("modules/wyckoff/eod-notion-staging.ts")
@@ -66,8 +66,8 @@ test("AI Council freshness validates against current canonical membership instea
   assert.match(aiFreshness, /missingCanonical/)
 })
 
-test("runtime cache and realtime naming contain no Top100 membership semantics", () => {
-  assert.doesNotMatch(realtime, /market:top100/)
+test("runtime cache naming has no Top100 membership semantics and the legacy realtime shim is absent", () => {
+  assert.equal(existsSync(legacyRealtimeShimPath), false)
   assert.doesNotMatch(intraday, /top100:v/)
   assert.doesNotMatch(intraday, /Top 100 5m/)
 })
