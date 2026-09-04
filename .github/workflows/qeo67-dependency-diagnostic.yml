@@ -1,0 +1,25 @@
+name: QEO-67 Dependency Diagnostic
+on:
+  push:
+    branches: [qeo-65-67-cleanup-modules]
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print remaining dependency edges
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in \
+            modules/kfsp/eod-rating-step.ts \
+            modules/market/history/eod-history-refresh.ts \
+            modules/market/providers/eod-ttai-refresh.ts \
+            modules/eod/index.ts; do
+            echo "===== $f ====="
+            sed -n '1,260p' "$f"
+          done
+          echo "===== workflow imports/references ====="
+          rg -n "eod-rating-step|eod-history-refresh|eod-ttai-refresh|@/workflows" modules workflows || true
