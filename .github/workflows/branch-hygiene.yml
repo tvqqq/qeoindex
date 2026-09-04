@@ -1,0 +1,75 @@
+name: Branch hygiene
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      execute:
+        description: Delete branches classified SAFE_TO_DELETE
+        required: true
+        type: boolean
+        default: false
+      include_contained:
+        description: Also consider stale branches fully contained in main
+        required: true
+        type: boolean
+        default: false
+      stale_days:
+        description: Minimum age for --include-contained branches
+        required: true
+        type: string
+        default: "14"
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: branch-hygiene-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Audit and clean merged branches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Audit or clean branches
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          args=("--manifest=branch-cleanup-manifest.json")
+          stale_days="${{ inputs.stale_days }}"
+          if [[ -z "$stale_days" ]]; then stale_days=14; fi
+          args+=("--stale-days=$stale_days")
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" || "${{ inputs.execute }}" == "true" ]]; then
+            args+=("--execute")
+          fi
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "${{ inputs.include_contained }}" == "true" ]]; then
+            args+=("--include-contained")
+          fi
+
+          node scripts/repo/cleanup-branches.mjs "${args[@]}"
+
+      - name: Upload branch cleanup manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: branch-cleanup-manifest-${{ github.run_id }}
+          path: branch-cleanup-manifest.json
+          if-no-files-found: warn
+          retention-days: 30
