@@ -195,7 +195,10 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
 
       const orderbookResponse = await fetch(`${cleanUrl}/functions/v1/orderbook-sync`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${syncSecret}`,
+        },
         body: JSON.stringify({
           action: "eod_final_snapshot",
           source: "qeoindex_eod_pipeline",

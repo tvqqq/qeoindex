@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-04T07:48:28Z",
+  "capturedAt": "2026-09-04T11:22:45Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
   "migrations": [
     {"version":"20260818","name":"orderbook_snapshots"},
@@ -86,6 +86,7 @@
     {"version":"20260903145838","name":"qeo61_eod_partial_status"},
     {"version":"20260903160437","name":"qeo64_eod_v4_scheduler_cutover"},
     {"version":"20260903231253","name":"drop_legacy_wyckoff_universe_memberships"},
-    {"version":"20260904074828","name":"qeo65_drop_legacy_archive_ledgers"}
+    {"version":"20260904074828","name":"qeo65_drop_legacy_archive_ledgers"},
+    {"version":"20260904112245","name":"authenticate_orderbook_sync"}
   ]
 }
