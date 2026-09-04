@@ -19,6 +19,15 @@ test("legacy Drive archive compatibility remains isolated from the active EOD gr
   assert.doesNotMatch(workflow, /runDriveArchiveStep|driveArchiveStatus|driveArchive/)
 })
 
+test("legacy Drive API rejection resolves to an isolated degraded checkpoint instead of deleting raw history", () => {
+  const active = source("lib/qeoindex-eod-archive.ts")
+  assert.match(
+    active,
+    /export async function runEodDriveArchive\([\s\S]*?try\s*\{[\s\S]*?return await runLegacyDriveArchive\([\s\S]*?catch\s*\(error\)[\s\S]*?status:\s*"error"[\s\S]*?manifestUrl:\s*null/,
+  )
+  assert.match(active, /raw Supabase history remains retained/i)
+})
+
 test("legacy per-ticker Notion archive compatibility remains isolated from the active EOD graph", () => {
   const legacy = source("lib/qeoindex-eod-archive-legacy.ts")
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
@@ -36,4 +45,6 @@ test("legacy archive checkpoint preflight remains available only while QEO-65 co
   assert.match(legacy, /qeo_archive_retention_preflight/)
   assert.match(migration, /create table if not exists public\.eod_archive_checkpoints/)
   assert.match(migration, /create or replace function public\.qeo_archive_retention_preflight/)
+  assert.match(migration, /safe/)
+  assert.match(migration, /missingDates/)
 })
