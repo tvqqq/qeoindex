@@ -1,6 +1,6 @@
 # Security
 
-Last audited: 2026-08-21
+Last audited: 2026-09-04
 
 ## Security boundary
 
@@ -16,6 +16,21 @@ Supabase Auth
 ```
 
 `AppAuthGate` must never be used as the security boundary for an API route or server data loader.
+
+## Repository merge controls
+
+The canonical merge contract for `main` is:
+
+- changes reach `main` through a pull request under GitHub branch protection or an equivalent repository ruleset;
+- the required GitHub Actions status check is `Verify / verify`;
+- the protected branch must reject force-pushes and branch deletion;
+- `.github/workflows/security.yml` runs on every pull request and again on every push to `main`;
+- the pull-request run is the pre-merge gate; the `push: main` run is defense-in-depth and must not be treated as a substitute for branch protection;
+- feature branches may be deleted automatically after merge once `delete_branch_on_merge` is enabled. This must never weaken protection for `main`.
+
+The `Verify / verify` job executes the tracked-source secret scan, current contract tests, touched lint, Market Board regression lint, TypeScript validation, and the production Next.js build. Keep this job name stable while it is configured as a required status check.
+
+Emergency changes must still preserve an auditable pull request and successful verification unless a deliberately documented repository-admin break-glass procedure is used.
 
 ## Browser-facing API rules
 
@@ -82,7 +97,7 @@ A strict CSP is intentionally not enabled yet. QeoIndex has WebSocket and extern
 - Keep DNSE, Notion, Finhay OAuth, scheduler, market-admin, Supabase service-role, Redis, and infrastructure credentials in server-side environment variables.
 - Never add a `NEXT_PUBLIC_` prefix to a credential. The only Supabase browser credential is the publishable/anon key.
 - Commit only empty examples such as `.env.example`.
-- Run `pnpm scan:secrets` before committing. CI runs the same scanner for every pull request and push to `main`.
+- Run `pnpm scan:secrets` before committing. CI runs the same scanner for every pull request and again on every push to `main`.
 - The scanner reports filenames only so an accidental credential is not copied into CI logs.
 
 ## Remaining security action
