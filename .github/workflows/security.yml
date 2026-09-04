@@ -46,12 +46,14 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
       - name: Scan tracked source for secrets
         run: pnpm scan:secrets
-      - name: Scan Git history for secrets
+      - name: Scan pull request commits for secrets
         uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "false"
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+      - name: Scan all fetched Git refs for secrets
+        run: gitleaks detect --source . --redact --no-banner --exit-code=2 --log-opts="--all"
       - name: Current contracts
         run: pnpm test:current
       - name: Touched lint
