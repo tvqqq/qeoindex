@@ -6,15 +6,18 @@ on:
       - ".github/workflows/db-drift.yml"
       - "package.json"
       - "scripts/db/**"
+      - "scripts/run-test-suite.mjs"
+      - "tests/test-contracts.json"
       - "lib/supabase/database.types.ts"
       - "supabase/config.toml"
       - "supabase/migrations/**"
       - "supabase/pending-migrations/**"
       - "supabase/migration-equivalence.json"
       - "docs/db/evidence/production-migration-ledger-*.json"
-      - "tests/db-migration-drift.test.ts"
-      - "tests/db-schema-contract.test.ts"
+      - "tests/db-*.test.ts"
       - "tests/kfsp-rating-storage-refactor.test.ts"
+      - "tests/orderbook-prune-security.test.ts"
+      - "tests/supabase-*.test.ts"
   workflow_dispatch:
 
 permissions:
@@ -31,7 +34,7 @@ jobs:
           version: 10.28.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
       - uses: supabase/setup-cli@v1
         with:
@@ -53,8 +56,8 @@ jobs:
           path: artifacts/qeo23/database.types.ts
           if-no-files-found: ignore
           retention-days: 3
-      - name: Run DB contract regressions
-        run: node --test tests/db-migration-drift.test.ts tests/db-schema-contract.test.ts tests/kfsp-rating-storage-refactor.test.ts
+      - name: Run current DB contracts
+        run: pnpm test:db
       - name: Compile TypeScript
         run: pnpm typecheck
       - name: Stop local Supabase
