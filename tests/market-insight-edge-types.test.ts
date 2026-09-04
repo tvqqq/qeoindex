@@ -104,7 +104,7 @@ test("market-session requires machine auth before all privileged service-role ac
   assert.match(marketSession, /MARKET_SYNC_SECRET/)
   assert.match(marketSession, /CRON_SECRET/)
   assert.match(marketSession, /isMachineRequestAuthorized/)
-  assert.match(marketSession, /status\s*[:=]\s*401|jsonResponse\([^,]+,\s*401\)/s)
+  assert.match(marketSession, /status\s*[:=]\s*401|jsonResponse\([^,]+,\s*401\)/)
 
   const authGate = marketSession.indexOf("await isMachineRequestAuthorized(")
   const postGate = marketSession.indexOf('if (req.method === "POST")')
