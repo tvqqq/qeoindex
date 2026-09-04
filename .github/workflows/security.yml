@@ -17,8 +17,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Scan tracked source for secrets
-        run: bash scripts/scan-secrets.sh
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -41,26 +39,20 @@ jobs:
             qeoindex-tooling-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
-      - name: QEO-66 manifest RED gate
-        run: node --test tests/test-contract-manifest.test.ts
-      - name: Core regression suite
-        run: pnpm test:core
-      - name: QEO-58 same-session data refresh regression
-        run: node --test tests/qeo-58-eod-data-refresh.test.ts
-      - name: Market board filter regression
-        run: node --test tests/market-board-filter-avg50-regression.test.ts tests/market-board-stock-filter-ui.test.ts tests/market-board-stock-filter-api.test.ts
-      - name: Login handoff regression
-        run: node --test tests/auth-login-handoff.test.ts
-      - name: Orderbook prune security regression
-        run: node --test tests/orderbook-prune-security.test.ts
-      - name: KFSP canonical universe regression
-        run: node --test tests/kfsp-canonical-universe-sync.test.ts
-      - name: KFSP rating storage refactor regression
-        run: node --test tests/kfsp-rating-storage-refactor.test.ts
-      - name: KFSP manual recovery lifecycle regression
-        run: node --test tests/kfsp-manual-recovery-lifecycle.test.ts
-      - name: Canonical 200 UI regression
-        run: node --test tests/canonical-200-ui.test.ts
+      - name: Scan tracked source for secrets
+        run: pnpm scan:secrets
+      - name: Verify test manifest
+        run: pnpm test:manifest
+      - name: Fast contracts
+        run: pnpm test:fast
+      - name: EOD contracts
+        run: pnpm test:eod
+      - name: AI contracts
+        run: pnpm test:ai
+      - name: DB contracts
+        run: pnpm test:db
+      - name: UI contracts
+        run: pnpm test:ui-contracts
       - name: Touched lint
         run: pnpm lint:touched
       - name: Market board filter lint
