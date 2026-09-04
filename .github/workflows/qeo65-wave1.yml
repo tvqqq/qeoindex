@@ -1,0 +1,65 @@
+name: QEO-65 Wave 1 Cleanup
+
+on:
+  push:
+    branches:
+      - qeo-65-67-cleanup-modules
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply QEO-65 Wave 1 codemod
+        run: node scripts/qeo65-wave1-cleanup.mjs
+
+      - name: Verify EOD contracts
+        run: pnpm test:eod
+
+      - name: Verify current suite
+        run: pnpm test:current
+
+      - name: Verify new runtime lint
+        run: pnpm exec eslint lib/qeoindex-eod-runtime-steps.ts
+
+      - name: Verify PR gates
+        run: pnpm verify:pr
+
+      - name: Verify production build
+        run: pnpm build
+
+      - name: Commit verified cleanup
+        shell: bash
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No cleanup diff produced"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "refactor(QEO-65): remove legacy EOD archive architecture"
+          git push origin HEAD:qeo-65-67-cleanup-modules
