@@ -27,6 +27,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Apply domain regroup codemod
         run: node scripts/qeo67-regroup.mjs
+      - name: Apply lint cleanup exposed by broad module-aware lint
+        run: node scripts/qeo67-lint-cleanup.mjs
       - name: Verify test manifest and current contracts
         run: pnpm test:current
       - name: Verify module-aware lint
