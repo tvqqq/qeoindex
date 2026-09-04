@@ -166,8 +166,8 @@ test("QEO-77 orderbook-sync requires machine auth before privileged work", () =>
 
   if (existsSync(migrationPath)) {
     const sql = source(migrationPath)
-    assert.match(sql, /vault\.decrypted_secrets/i)
-    assert.match(sql, /kfsp_sync_secret/i)
+    assert.match(sql, /qeo_get_market_close_sync_secret/i)
+    assert.doesNotMatch(sql, /MARKET_CLOSE_SYNC_SECRET_NOT_CONFIGURED/)
     assert.match(sql, /Authorization/i)
     assert.match(sql, /Bearer/i)
     assert.match(sql, /sync-universe-5m/i)
