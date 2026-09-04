@@ -22,7 +22,6 @@ function looksUnsupported(error: unknown) {
 export async function parseResearchReportPdf(bytes: Uint8Array): Promise<ParsedResearchReportPdf> {
   const loadingTask = getDocument({
     data: new Uint8Array(bytes),
-    isEvalSupported: false,
     useSystemFonts: true,
   })
 
