@@ -159,9 +159,9 @@ test("QEO-77 orderbook-sync requires machine auth before privileged work", () =>
   assert.ok(upsert > authGate, "auth must run before writes")
 
   const runtime = source("modules/eod/runtime-steps.ts")
+  assert.match(runtime, /qeo_get_market_close_sync_secret/)
   const orderbookCall = runtime.indexOf("/functions/v1/orderbook-sync")
   const call = runtime.slice(Math.max(0, orderbookCall - 1000), orderbookCall + 1800)
-  assert.match(call, /qeo_get_market_close_sync_secret/)
   assert.match(call, /Authorization:\s*`Bearer \$\{syncSecret\}`/)
 
   if (existsSync(migrationPath)) {
