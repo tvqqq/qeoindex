@@ -41,6 +41,8 @@ jobs:
             qeoindex-tooling-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
+      - name: QEO-66 manifest RED gate
+        run: node --test tests/test-contract-manifest.test.ts
       - name: Core regression suite
         run: pnpm test:core
       - name: QEO-58 same-session data refresh regression
