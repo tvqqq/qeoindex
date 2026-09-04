@@ -81,3 +81,12 @@ export interface StructuredResearchReportAnalysis {
     flags: string[]
   }
 }
+
+export interface ProcessResearchReportResult {
+  reportId: string
+  status: "ready" | "needs_ocr" | "unsupported" | "failed" | "skipped_existing"
+  contentHash: string | null
+  analysisId: string | null
+  aiCalled: boolean
+  detail: string
+}
