@@ -15,7 +15,7 @@ import { enrichCouncilStocksForDebate } from "@/modules/ai-council/pre-market-ev
 import { configuredCouncilResearchTickers } from "@/modules/ai-council/research-context"
 import { getAiCouncilRuntimeData } from "@/modules/ai-council/runtime"
 import { getAiCouncilRuntimeConfig } from "@/modules/admin/settings"
-import type { EodMarketSynthesisContext } from "@/modules/eod/market-synthesis-step"
+import type { AiCouncilMarketSynthesisContext } from "@/modules/ai-council/market-synthesis-context"
 
 function firstValidationTicker(
   stocks: Awaited<ReturnType<typeof getAiCouncilRuntimeData>>["data"]["stocks"],
@@ -125,7 +125,7 @@ export async function runAiCouncilDailyOperation(supabase: SupabaseClient, now =
 export async function runAiCouncilDebateOperation(
   supabase: SupabaseClient,
   ratingDate?: string,
-  marketSynthesis?: EodMarketSynthesisContext | null,
+  marketSynthesis?: AiCouncilMarketSynthesisContext | null,
 ) {
   const runtimeConfig = await getAiCouncilRuntimeConfig()
   const runtimeData = await getAiCouncilRuntimeData(supabase, {

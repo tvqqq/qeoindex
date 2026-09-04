@@ -2,6 +2,8 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import type { AiCouncilMarketSynthesisContext } from "@/modules/ai-council/market-synthesis-context"
+
 import { markQeoIndexEodPhaseSkipped, runQeoIndexEodPhase } from "@/modules/admin/job-phase-telemetry"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import type { MarketCloseDashboardData } from "@/modules/research/market-insight/data"
@@ -15,16 +17,7 @@ const TERMINAL_FAILURE_STATUSES = new Set([
   "completion_unknown",
 ])
 
-export interface EodMarketSynthesisContext {
-  sessionDate: string
-  asOf: string
-  evidenceHash: string
-  posture: string
-  confidence: string
-  headline: string
-  conclusion: string
-  risks: string[]
-}
+export type EodMarketSynthesisContext = AiCouncilMarketSynthesisContext
 
 export interface EodMarketSynthesisResult {
   ok: true
