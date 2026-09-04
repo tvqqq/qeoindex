@@ -184,6 +184,62 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
 
       const cleanUrl = supabaseUrl.endsWith("/") ? supabaseUrl.slice(0, -1) : supabaseUrl
       const sessionDate = vietnamDateKey(startedAtIso)
+      const canonicalUniverse = await getCanonicalUniverse()
+      const expectedUniverseCount = canonicalUniverse.stocks.length
+      if (!canonicalUniverse.runId || expectedUniverseCount < 1) {
+        throw Object.assign(
+          new Error("MARKET_CLOSE_COLLECT ORDERBOOK_VALIDATION_FAILED: canonical universe is unavailable"),
+          { code: "MARKET_CLOSE_COLLECT_FAILED" },
+        )
+      }
+
+      const orderbookResponse = await fetch(`${cleanUrl}/functions/v1/orderbook-sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "eod_final_snapshot",
+          source: "qeoindex_eod_pipeline",
+          startedAt: startedAtIso,
+          sessionDate,
+          universeRunId: canonicalUniverse.runId,
+        }),
+        signal: AbortSignal.timeout(60_000),
+      }).catch((error) => ({
+        ok: false,
+        status: 500,
+        json: async () => ({ message: error instanceof Error ? error.message : String(error) }),
+      } as unknown as Response))
+      const orderbookPayload = await orderbookResponse.json().catch(() => ({})) as Record<string, unknown>
+      if (!orderbookResponse.ok || orderbookPayload.ok === false) {
+        const errorCode = String(orderbookPayload.message || orderbookPayload.error || `HTTP_${orderbookResponse.status}`)
+        throw Object.assign(
+          new Error(`MARKET_CLOSE_COLLECT failed: ORDERBOOK_${errorCode}`),
+          { code: "MARKET_CLOSE_COLLECT_FAILED", status: orderbookResponse.status },
+        )
+      }
+
+      const orderbookSessionDate = String(orderbookPayload.session_date || "")
+      const orderbookUniverseRunId = String(orderbookPayload.universeRunId || "")
+      const orderbookCount = Number(orderbookPayload.count)
+      const orderbookUniverseCount = Number(orderbookPayload.universeCount)
+      const validOrderbookSnapshot = orderbookSessionDate === sessionDate
+        && orderbookUniverseRunId === canonicalUniverse.runId
+        && Number.isInteger(orderbookCount)
+        && orderbookCount === expectedUniverseCount
+        && Number.isInteger(orderbookUniverseCount)
+        && orderbookUniverseCount === expectedUniverseCount
+      if (!validOrderbookSnapshot) {
+        throw Object.assign(
+          new Error(
+            `MARKET_CLOSE_COLLECT ORDERBOOK_VALIDATION_FAILED: session=${orderbookSessionDate || "missing"}/${sessionDate}`
+            + ` run=${orderbookUniverseRunId || "missing"}/${canonicalUniverse.runId}`
+            + ` count=${orderbookCount}/${expectedUniverseCount}`
+            + ` universeCount=${orderbookUniverseCount}/${expectedUniverseCount}`,
+          ),
+          { code: "MARKET_CLOSE_COLLECT_FAILED", status: 500 },
+        )
+      }
+
       const response = await fetch(`${cleanUrl}/functions/v1/market-insight-eod-sync`, {
         method: "POST",
         headers: {
@@ -212,6 +268,9 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
         sessionDate: String(payload.session_date || sessionDate),
         qualityStatus: String(payload.quality_status || "healthy"),
         published: payload.published,
+        orderbookCount,
+        orderbookUniverseCount,
+        orderbookUniverseRunId,
       }
     },
     summarize: (result) => ({
@@ -219,6 +278,9 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
       sessionDate: result.sessionDate,
       qualityStatus: "qualityStatus" in result ? result.qualityStatus : "unknown",
       syncRunId: "syncRunId" in result ? result.syncRunId : undefined,
+      orderbookCount: "orderbookCount" in result ? result.orderbookCount : undefined,
+      orderbookUniverseCount: "orderbookUniverseCount" in result ? result.orderbookUniverseCount : undefined,
+      orderbookUniverseRunId: "orderbookUniverseRunId" in result ? result.orderbookUniverseRunId : undefined,
     }),
   })
 }
