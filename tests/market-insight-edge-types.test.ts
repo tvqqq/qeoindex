@@ -136,6 +136,47 @@ test("shared Edge machine auth accepts only exact configured bearer tokens", asy
   }), []), false)
 })
 
+test("QEO-77 orderbook-sync requires machine auth before privileged work", () => {
+  const migrationPath = "supabase/migrations/20260904111000_authenticate_orderbook_sync.sql"
+  assert.equal(existsSync(migrationPath), true, "QEO-77 auth migration must exist")
+
+  const edge = source("supabase/functions/orderbook-sync/index.ts")
+  assert.match(edge, /_shared\/machine-auth\.ts/)
+  assert.match(edge, /MARKET_SYNC_SECRET/)
+  assert.match(edge, /MARKET_SYNC_SECRET_PREVIOUS/)
+  assert.match(edge, /KFSP_SYNC_SECRET/)
+  assert.match(edge, /CRON_SECRET/)
+  assert.match(edge, /isMachineRequestAuthorized/)
+  assert.match(edge, /status:\s*401/)
+
+  const authGate = edge.indexOf("await isMachineRequestAuthorized(")
+  const serviceClient = edge.indexOf("createClient(")
+  const providerFetch = edge.indexOf('fetch("https://bgapidatafeed.vps.com.vn/')
+  const upsert = edge.indexOf('.from("stock_orderbook_snapshots").upsert(')
+  assert.ok(authGate >= 0, "orderbook-sync must authorize every GET/POST request")
+  assert.ok(serviceClient > authGate, "auth must run before service-role client construction")
+  assert.ok(providerFetch > authGate, "auth must run before provider calls")
+  assert.ok(upsert > authGate, "auth must run before writes")
+
+  const runtime = source("modules/eod/runtime-steps.ts")
+  const orderbookCall = runtime.indexOf("/functions/v1/orderbook-sync")
+  const call = runtime.slice(Math.max(0, orderbookCall - 1000), orderbookCall + 1800)
+  assert.match(call, /qeo_get_market_close_sync_secret/)
+  assert.match(call, /Authorization:\s*`Bearer \$\{syncSecret\}`/)
+
+  if (existsSync(migrationPath)) {
+    const sql = source(migrationPath)
+    assert.match(sql, /vault\.decrypted_secrets/i)
+    assert.match(sql, /kfsp_sync_secret/i)
+    assert.match(sql, /Authorization/i)
+    assert.match(sql, /Bearer/i)
+    assert.match(sql, /sync-universe-5m/i)
+    assert.match(sql, /sync-universe-5m-afternoon/i)
+    assert.match(sql, /qeo_trigger_market_snapshot_bootstrap/i)
+    assert.doesNotMatch(sql, /Bearer\s+[A-Za-z0-9._-]{16,}/i)
+  }
+})
+
 test("QEO-19 canonical Wyckoff membership requires exact ticker and rank parity", () => {
   const canonical = [
     { ticker: "AAA", rank: 1 },
