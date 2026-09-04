@@ -11,7 +11,7 @@ export type SystemJobTelemetryClient = {
 }
 
 async function getSupabase() {
-  const { getSupabaseServerClient } = await import("../../modules/shared/supabase/server.ts")
+  const { getSupabaseServerClient } = await import("../shared/supabase/server.ts")
   return getSupabaseServerClient()
 }
 

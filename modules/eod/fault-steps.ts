@@ -5,7 +5,7 @@ import { getCanonicalUniverse } from "../market/universe/index.ts"
 import { refreshOhlcvHistoryBatch, type OhlcvRefreshError } from "../market/history/ohlcv-store.ts"
 import { classifyEodFailure, type EodTickerAttempt } from "./fault-isolation.ts"
 import { nextTickerAttemptNumber, persistEodTickerAttempts } from "./ticker-telemetry.ts"
-import { getSupabaseServerClient } from "../../modules/shared/supabase/server.ts"
+import { getSupabaseServerClient } from "../shared/supabase/server.ts"
 import {
   loadWyckoffV2BuildArtifacts,
   loadWyckoffV2BuildArtifactsUnchecked,

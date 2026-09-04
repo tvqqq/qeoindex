@@ -1,4 +1,4 @@
-import { aggregateWeekly, type OhlcvBar } from "../../modules/shared/technical/indicators.ts"
+import { aggregateWeekly, type OhlcvBar } from "../shared/technical/indicators.ts"
 import { scanWyckoff, type WyckoffScanResult } from "./engine.ts"
 
 export const WYCKOFF_CHART_TIMEFRAMES = ["1D", "1W"] as const

@@ -1,4 +1,4 @@
-import type { OhlcvBar } from "../../modules/shared/technical/indicators.ts"
+import type { OhlcvBar } from "../shared/technical/indicators.ts"
 
 const FINAL_ORDERBOOK_CUTOFF_HOUR_UTC = 7
 const FINAL_ORDERBOOK_CUTOFF_MINUTE_UTC = 45
@@ -146,7 +146,7 @@ export async function runEodNoTradeDailyRepairStep(
     )
   }
 
-  const { getSupabaseServerClient } = await import("../../modules/shared/supabase/server.ts")
+  const { getSupabaseServerClient } = await import("../shared/supabase/server.ts")
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured")
 

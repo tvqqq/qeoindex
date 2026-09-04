@@ -85,7 +85,7 @@ async function writeAuditLog(entry: {
   errorMessage?: string
 }) {
   try {
-    const { getSupabaseServerClient } = await import("../../modules/shared/supabase/server.ts")
+    const { getSupabaseServerClient } = await import("../shared/supabase/server.ts")
     const supabase = getSupabaseServerClient()
     if (!supabase) return
 
@@ -144,7 +144,7 @@ async function runKfspRecoveryDispatch(input: DispatchManualAdminJobInput): Prom
   const definition = getManualAdminJobDefinition(input.key)
   const maxDurationMinutes = Math.max(1, Math.min(240, definition?.maxDurationMinutes ?? 15))
 
-  const { getSupabaseServerClient } = await import("../../modules/shared/supabase/server.ts")
+  const { getSupabaseServerClient } = await import("../shared/supabase/server.ts")
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service client chưa được cấu hình.")
 
@@ -262,7 +262,7 @@ export async function dispatchManualAdminJob(input: DispatchManualAdminJobInput)
       telemetry: "required",
       fn: async () => {
         if (input.key === "market.sync_universe") {
-          const { runMarketUniverseSync } = await import("../../modules/market/universe/sync.ts")
+          const { runMarketUniverseSync } = await import("../market/universe/sync.ts")
           return await runMarketUniverseSync()
         }
         if (input.key === "scanner.run") return await runScannerJob(input.params)

@@ -4,9 +4,9 @@ import type { CachedOhlcvHistory } from "../market/history/ohlcv-store.ts"
 import {
   decodeGroupedDailyOhlcvResponse,
   type GroupedDailyOhlcvRow,
-} from "../../modules/market/history/ohlcv-grouped.ts"
+} from "../market/history/ohlcv-grouped.ts"
 import type { HistoricalProvider } from "../market/history/contract.ts"
-import type { OhlcvBar } from "../../modules/shared/technical/indicators.ts"
+import type { OhlcvBar } from "../shared/technical/indicators.ts"
 
 export const DAILY_V2_CACHE_LIMIT = 1700
 export const V2_CACHE_BATCH_SIZE = 5

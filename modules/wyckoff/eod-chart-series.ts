@@ -7,8 +7,8 @@ import {
 import {
   decodeGroupedDailyOhlcvResponse,
   type GroupedDailyOhlcvRow,
-} from "../../modules/market/history/ohlcv-grouped.ts"
-import type { OhlcvBar } from "../../modules/shared/technical/indicators.ts"
+} from "../market/history/ohlcv-grouped.ts"
+import type { OhlcvBar } from "../shared/technical/indicators.ts"
 
 export type WyckoffV2ChartSeriesTimeframe = "1D"
 export const WYCKOFF_V2_CHART_SERIES_BATCH_SIZE = 10

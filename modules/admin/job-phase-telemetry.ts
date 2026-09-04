@@ -13,7 +13,7 @@ export interface QeoIndexEodPhaseIo {
 type QeoIndexEodTelemetryPhaseKey = QeoIndexEodPhaseKey | "DRIVE_ARCHIVE"
 
 async function getDefaultIo(): Promise<QeoIndexEodPhaseIo> {
-  const { getSupabaseServerClient } = await import("../../modules/shared/supabase/server.ts")
+  const { getSupabaseServerClient } = await import("../shared/supabase/server.ts")
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured for phase telemetry")
 
@@ -198,7 +198,7 @@ export async function annotateQeoIndexEodPhaseSummaryStep(input: {
   summary: Record<string, unknown>
 }) {
   "use step"
-  const { getSupabaseServerClient } = await import("../../modules/shared/supabase/server.ts")
+  const { getSupabaseServerClient } = await import("../shared/supabase/server.ts")
   const supabase = getSupabaseServerClient()
   if (!supabase) throw new Error("Supabase service role is not configured for phase telemetry")
 

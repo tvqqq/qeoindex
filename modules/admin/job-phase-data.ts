@@ -2,7 +2,7 @@ import { sanitizeAdminValue } from "./redact.ts"
 import type { SystemJobPhaseRow } from "./job-phases.ts"
 
 async function getSupabase() {
-  const { getSupabaseServerClient } = await import("../../modules/shared/supabase/server.ts")
+  const { getSupabaseServerClient } = await import("../shared/supabase/server.ts")
   return getSupabaseServerClient()
 }
 

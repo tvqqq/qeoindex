@@ -1,5 +1,5 @@
 import type { CachedOhlcvHistory } from "../market/history/ohlcv-store.ts"
-import { aggregateWeekly, type OhlcvBar, type TechnicalSnapshot } from "../../modules/shared/technical/indicators.ts"
+import { aggregateWeekly, type OhlcvBar, type TechnicalSnapshot } from "../shared/technical/indicators.ts"
 import {
   buildWyckoffChartStudies,
   type WyckoffEventMarker,

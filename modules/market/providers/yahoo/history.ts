@@ -1,6 +1,6 @@
-import type { OhlcvBar } from "../../../../modules/shared/technical/indicators.ts"
+import type { OhlcvBar } from "../../../shared/technical/indicators.ts"
 import { normalizeFiveMinuteBars, previousSessionClose, selectLatestSession } from "../../realtime/intraday-5m.ts"
-import { normalizeToKiloPrice, normalizeVolume } from "../../../../modules/market/data-contract.ts"
+import { normalizeToKiloPrice, normalizeVolume } from "../../data-contract.ts"
 
 const DEFAULT_LOOKBACK_DAYS = 620
 const DEFAULT_HOURLY_LOOKBACK_DAYS = 180

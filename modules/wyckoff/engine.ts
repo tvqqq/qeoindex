@@ -1,4 +1,4 @@
-import { aggregateWeekly, calculateTechnicalSnapshot, type OhlcvBar, type TechnicalSnapshot } from "../../modules/shared/technical/indicators.ts"
+import { aggregateWeekly, calculateTechnicalSnapshot, type OhlcvBar, type TechnicalSnapshot } from "../shared/technical/indicators.ts"
 
 export type ScannerBias = "Bullish" | "Neutral" | "Bearish" | "Mixed"
 export type ScannerConfidence = "HIGH" | "MEDIUM" | "LOW"

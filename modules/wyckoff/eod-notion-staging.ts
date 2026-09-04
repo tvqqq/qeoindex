@@ -15,7 +15,7 @@ import {
   type WyckoffV2Snapshot,
 } from "./eod-builder.ts"
 import { computeWyckoffV2ValidationHash, validateWyckoffV2SnapshotSet } from "./eod-contract.ts"
-import type { TechnicalSnapshot } from "../../modules/shared/technical/indicators.ts"
+import type { TechnicalSnapshot } from "../shared/technical/indicators.ts"
 import type { WyckoffEventMarker, WyckoffScenario } from "./chart-model.ts"
 
 export const WYCKOFF_V2_RUNS_DATA_SOURCE_ID = process.env.NOTION_WYCKOFF_RUNS_DATA_SOURCE_ID ?? "4efe8131-196a-4b4e-8a9c-dea48c51a554"

@@ -43,7 +43,7 @@ function getJobHistoryCutoff(now: Date = new Date()) {
 }
 
 async function getSupabase() {
-  const { getSupabaseServerClient } = await import("../../modules/shared/supabase/server.ts")
+  const { getSupabaseServerClient } = await import("../shared/supabase/server.ts")
   return getSupabaseServerClient()
 }
 
