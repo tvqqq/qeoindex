@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   public: {
     Tables: {
       ai_council_agent_stats: {
@@ -627,60 +632,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      eod_archive_checkpoints: {
-        Row: {
-          archived_at: string | null
-          created_at: string
-          drive_file_count: number | null
-          drive_manifest_sha256: string | null
-          drive_manifest_url: string | null
-          drive_row_count: number | null
-          drive_status: string
-          notion_status: string
-          retention_completed_at: string | null
-          retention_status: string
-          trading_date: string
-          universe_count: number | null
-          universe_run_id: string | null
-          updated_at: string
-          validation_hash: string | null
-        }
-        Insert: {
-          archived_at?: string | null
-          created_at?: string
-          drive_file_count?: number | null
-          drive_manifest_sha256?: string | null
-          drive_manifest_url?: string | null
-          drive_row_count?: number | null
-          drive_status?: string
-          notion_status?: string
-          retention_completed_at?: string | null
-          retention_status?: string
-          trading_date: string
-          universe_count?: number | null
-          universe_run_id?: string | null
-          updated_at?: string
-          validation_hash?: string | null
-        }
-        Update: {
-          archived_at?: string | null
-          created_at?: string
-          drive_file_count?: number | null
-          drive_manifest_sha256?: string | null
-          drive_manifest_url?: string | null
-          drive_row_count?: number | null
-          drive_status?: string
-          notion_status?: string
-          retention_completed_at?: string | null
-          retention_status?: string
-          trading_date?: string
-          universe_count?: number | null
-          universe_run_id?: string | null
-          updated_at?: string
-          validation_hash?: string | null
-        }
-        Relationships: []
       }
       insights_stock_ratings: {
         Row: {
@@ -1767,48 +1718,6 @@ export type Database = {
           source?: string
           ticker?: string
           updated_at?: string
-        }
-        Relationships: []
-      }
-      market_ohlcv_archive_ranges: {
-        Row: {
-          archive_format: string
-          created_at: string
-          id: string
-          manifest_url: string
-          range_end: string
-          range_start: string
-          row_count: number
-          sha256: string
-          ticker: string
-          timeframe: string
-          verified_at: string
-        }
-        Insert: {
-          archive_format?: string
-          created_at?: string
-          id?: string
-          manifest_url: string
-          range_end: string
-          range_start: string
-          row_count: number
-          sha256: string
-          ticker: string
-          timeframe: string
-          verified_at?: string
-        }
-        Update: {
-          archive_format?: string
-          created_at?: string
-          id?: string
-          manifest_url?: string
-          range_end?: string
-          range_start?: string
-          row_count?: number
-          sha256?: string
-          ticker?: string
-          timeframe?: string
-          verified_at?: string
         }
         Relationships: []
       }
@@ -2931,10 +2840,6 @@ export type Database = {
         }
         Returns: Json
       }
-      qeo_archive_retention_preflight: {
-        Args: { p_reference_date: string }
-        Returns: Json
-      }
       qeo_begin_kfsp_manual_lifecycle: {
         Args: { p_job_key: string; p_request_id: string; p_sync_run_id: string }
         Returns: Json
@@ -3058,6 +2963,10 @@ export type Database = {
         Args: { p_access_token: string; p_expires_at: string }
         Returns: undefined
       }
+      qeo_trigger_ai_council_debate_backfill: {
+        Args: { p_rating_date: string }
+        Returns: number
+      }
       qeo_trigger_eod_pipeline: { Args: never; Returns: number }
       qeo_trigger_eod_pipeline_backfill: {
         Args: { p_session_date: string }
@@ -3104,12 +3013,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3133,11 +3042,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3158,11 +3067,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3183,11 +3092,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3200,11 +3109,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3218,4 +3127,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-
