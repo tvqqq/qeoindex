@@ -166,7 +166,7 @@ test("QEO-80 migration creates report evidence tables, idempotency constraints, 
   assert.match(sql, /unique\s*\(provider,\s*external_report_id\)/i)
   assert.match(sql, /category\s+text\s+not\s+null\s+check\s*\(category\s+in\s*\('macro',\s*'strategy',\s*'sector',\s*'other'\)\)/i)
   assert.match(sql, /target_source\s+text[\s\S]*?'topi_metadata'[\s\S]*?'report_extracted'/i)
-  assert.match(sql, /broker recommendation[^;]*source opinion/i)
+  assert.match(sql, /broker recommendation[^']*source opinion/i)
   assert.match(sql, /grant\s+select\s+on\s+table[\s\S]*market_research_reports[\s\S]*to\s+authenticated/i)
   assert.match(sql, /grant\s+all\s+privileges\s+on\s+table[\s\S]*market_research_reports[\s\S]*to\s+service_role/i)
   assert.match(sql, /revoke\s+all[^;]*market_research_reports[^;]*from\s+anon/i)
