@@ -211,6 +211,7 @@ test("QEO-75 canonical Verify scans tracked source and full Git history", () => 
   assert.match(workflow, /gitleaks\/gitleaks-action@v3/)
   assert.match(workflow, /GITLEAKS_ENABLE_COMMENTS/)
   assert.match(workflow, /GITLEAKS_ENABLE_UPLOAD_ARTIFACT/)
+  assert.match(workflow, /gitleaks detect --source \. --redact --no-banner --exit-code=2 --log-opts="--all"/)
 
   for (const pattern of [
     /SUPABASE_SERVICE_ROLE_KEY/,
