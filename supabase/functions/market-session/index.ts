@@ -30,7 +30,10 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("CRON_SECRET"),
   ])
   if (!authorized) {
-    return jsonResponse({ ok: false, error: "UNAUTHORIZED" }, 401)
+    return new Response(JSON.stringify({ ok: false, error: "UNAUTHORIZED" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    })
   }
 
   const url = new URL(req.url)
