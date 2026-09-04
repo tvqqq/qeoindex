@@ -41,18 +41,8 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
       - name: Scan tracked source for secrets
         run: pnpm scan:secrets
-      - name: Verify test manifest
-        run: pnpm test:manifest
-      - name: Fast contracts
-        run: pnpm test:fast
-      - name: EOD contracts
-        run: pnpm test:eod
-      - name: AI contracts
-        run: pnpm test:ai
-      - name: DB contracts
-        run: pnpm test:db
-      - name: UI contracts
-        run: pnpm test:ui-contracts
+      - name: Current contracts
+        run: pnpm test:current
       - name: Touched lint
         run: pnpm lint:touched
       - name: Market board filter lint
