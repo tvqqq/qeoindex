@@ -208,9 +208,14 @@ test("QEO-19 physical KFSP token-table cleanup is minimal and preserves Vault RP
   assert.doesNotMatch(migration, /drop\s+function[\s\S]*qeo_(get|set)_kfsp_provider_token_cache/i)
 })
 
-test("QEO-19 Wyckoff legacy-table drop is staged but quarantined until production EOD smoke", () => {
-  const migrationPath = "supabase/pending-migrations/20260902133000_drop_legacy_wyckoff_universe_memberships.sql"
-  assert.equal(existsSync(migrationPath), true, "Wyckoff legacy membership drop must remain staged in pending-migrations")
+test("QEO-19 Wyckoff legacy-table cleanup is promoted after EOD v4 production acceptance", () => {
+  const migrationPath = "supabase/migrations/20260903231253_drop_legacy_wyckoff_universe_memberships.sql"
+  assert.equal(existsSync(migrationPath), true, "Wyckoff legacy membership DROP must be recorded in active migration history")
+  assert.equal(
+    existsSync("supabase/pending-migrations/20260902133000_drop_legacy_wyckoff_universe_memberships.sql"),
+    false,
+    "production-applied Wyckoff legacy membership DROP must leave quarantine",
+  )
   if (!existsSync(migrationPath)) return
 
   const migration = source(migrationPath)
