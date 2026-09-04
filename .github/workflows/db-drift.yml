@@ -8,7 +8,7 @@ on:
       - "scripts/db/**"
       - "scripts/run-test-suite.mjs"
       - "tests/test-contracts.json"
-      - "lib/supabase/database.types.ts"
+      - "modules/shared/supabase/database.types.ts"
       - "supabase/config.toml"
       - "supabase/migrations/**"
       - "supabase/pending-migrations/**"
