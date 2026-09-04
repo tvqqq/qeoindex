@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2"
+import { isMachineRequestAuthorized } from "../_shared/machine-auth.ts"
 import {
   isVietnamSecuritiesTradingDateKey,
   isVietnamSecuritiesTradingDay,
@@ -9,8 +10,35 @@ import {
 const UNIVERSE_KEY = "vn_top_stocks"
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, upstash-signature, upstash-message-id",
+  "Access-Control-Allow-Headers": "authorization, x-market-sync-secret, x-client-info, apikey, content-type, upstash-signature, upstash-message-id",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+}
+
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  })
+}
+
+async function isOrderbookSyncAuthorized(req: Request) {
+  const secrets = [
+    Deno.env.get("MARKET_SYNC_SECRET"),
+    Deno.env.get("MARKET_SYNC_SECRET_PREVIOUS"),
+    Deno.env.get("KFSP_SYNC_SECRET"),
+    Deno.env.get("CRON_SECRET"),
+  ]
+
+  if (await isMachineRequestAuthorized(req, secrets)) return true
+
+  // Transitional compatibility for callers that already use the dedicated
+  // market-sync header. New server/cron callers should prefer Bearer auth.
+  const customSecret = req.headers.get("x-market-sync-secret")?.trim() ?? ""
+  if (!customSecret) return false
+
+  return isMachineRequestAuthorized(new Request(req.url, {
+    headers: { authorization: `Bearer ${customSecret}` },
+  }), secrets)
 }
 
 function normalizePrice(price: number | null | undefined): number | null {
@@ -64,13 +92,18 @@ async function loadCanonicalTickers(supabase: SupabaseClient) {
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders })
+  if (req.method !== "GET" && req.method !== "POST") {
+    return jsonResponse({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405)
+  }
+
+  if (!(await isOrderbookSyncAuthorized(req))) {
+    return jsonResponse({ ok: false, error: "UNAUTHORIZED" }, 401)
+  }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? ""
   if (!supabaseUrl || !supabaseKey) {
-    return new Response(JSON.stringify({ ok: false, message: "Supabase environment not configured." }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    })
+    return jsonResponse({ ok: false, message: "Supabase environment not configured." }, 500)
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey)
@@ -90,14 +123,14 @@ Deno.serve(async (req: Request) => {
     } else isAutomated = true
 
     if ((isAutomated || rawSnapshots.length === 0) && !isVietnamSecuritiesTradingDay(now)) {
-      return new Response(JSON.stringify({
+      return jsonResponse({
         ok: true,
         skipped: true,
         reason: "NON_TRADING_DAY",
         session_date: today,
         count: 0,
         synced_at: now.toISOString(),
-      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+      })
     }
 
     const { tickers, runId } = await loadCanonicalTickers(supabase)
@@ -202,10 +235,10 @@ Deno.serve(async (req: Request) => {
         if (error) throw new Error(`Orderbook persistence failed: ${error.message}`)
       }
 
-      return new Response(JSON.stringify({
+      return jsonResponse({
         ok: true, skipped: false, source: "vps_full_deep_sync", universeRunId: runId, universeCount: tickers.length,
         count: records.length, session_date: today, synced_at: new Date().toISOString(),
-      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+      })
     }
 
     const records = rawSnapshots.map((item) => {
@@ -225,21 +258,17 @@ Deno.serve(async (req: Request) => {
     }).filter((record) => tickerSet.has(record.symbol) && isVietnamSecuritiesTradingDateKey(record.session_date))
 
     if (!records.length) {
-      return new Response(JSON.stringify({ ok: false, message: "No canonical trading-session snapshots supplied" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
+      return jsonResponse({ ok: false, message: "No canonical trading-session snapshots supplied" }, 400)
     }
 
     const { data, error } = await supabase.from("stock_orderbook_snapshots").upsert(records, { onConflict: "symbol" }).select("symbol, updated_at")
     if (error) throw new Error(error.message)
-    return new Response(JSON.stringify({
+    return jsonResponse({
       ok: true, skipped: false, universeRunId: runId, count: records.length,
       synced: data?.map((d: Record<string, unknown>) => d.symbol) ?? records.map((record) => record.symbol), updated_at: new Date().toISOString(),
-    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+    })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    return new Response(JSON.stringify({ ok: false, message: msg }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    })
+    return jsonResponse({ ok: false, message: msg }, 500)
   }
 })
