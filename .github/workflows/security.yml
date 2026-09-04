@@ -95,6 +95,8 @@ jobs:
           fi
 
           exit "$scan_status"
+      - name: Repo hygiene contracts
+        run: pnpm test:repo-hygiene
       - name: Current contracts
         run: pnpm test:current
       - name: Touched lint
