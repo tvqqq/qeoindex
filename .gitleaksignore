@@ -1,5 +1,5 @@
-# QEO-75 reviewed historical false positives only.
-# Do NOT add the historical DNSE API_KEY / API_SECRET fingerprints here until rotation/revocation is verified.
+# QEO-75 reviewed historical findings only.
+# 54 historical false positives plus 2 DNSE fingerprints added only after provider-side rotation was confirmed on 2026-09-04.
 dda6e3b7e2b52cfc670faef6aef38b8b97b4f06a:tests/wyckoff-v2-notion-staging.test.ts:generic-api-key:16
 671013c363d0b2d6c7955bf11f9587d441a186ea:tests/wyckoff-v2-notion-io.test.ts:generic-api-key:22
 671013c363d0b2d6c7955bf11f9587d441a186ea:tests/wyckoff-v2-ingest.test.ts:generic-api-key:11
@@ -54,3 +54,5 @@ db7c00024f2e178121db6b1e53195abbb1422379:lib/insights-metric-semantics.ts:generi
 db7c00024f2e178121db6b1e53195abbb1422379:lib/insights-metric-semantics.ts:generic-api-key:739
 db7c00024f2e178121db6b1e53195abbb1422379:lib/insights-metric-semantics.ts:generic-api-key:761
 db7c00024f2e178121db6b1e53195abbb1422379:lib/insights-metric-semantics.ts:generic-api-key:859
+00143d18cedc8338f1b13694a24bccda730efe90:dnse_ws_client.py:generic-api-key:17
+00143d18cedc8338f1b13694a24bccda730efe90:dnse_ws_client.py:generic-api-key:18
