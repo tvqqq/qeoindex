@@ -1,0 +1,87 @@
+name: QEO-67 Acceptance Metrics
+
+on:
+  push:
+    branches: [qeo-65-67-cleanup-modules]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  metrics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.16.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Measure baseline and regrouped tree
+        shell: bash
+        env:
+          BASE_SHA: 8821dc6e2da87761b54d656814cc7752b491574f
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(git rev-parse HEAD)"
+          mkdir -p /tmp/qeo67-metrics
+          git worktree add --detach /tmp/qeo67-metrics/base "$BASE_SHA"
+          git worktree add --detach /tmp/qeo67-metrics/head "$HEAD_SHA"
+
+          measure_case() {
+            local label="$1"
+            local dir="$2"
+            cd "$dir"
+            corepack enable
+            pnpm install --frozen-lockfile >/dev/null
+
+            local files
+            files=$(find app components modules workflows lib -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.mjs' \) 2>/dev/null | wc -l | tr -d ' ')
+            local loc
+            loc=$(find app components modules workflows lib -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.mjs' \) -print0 2>/dev/null | xargs -0 cat | wc -l | tr -d ' ')
+            echo "METRIC|${label}|source_files|${files}"
+            echo "METRIC|${label}|source_loc|${loc}"
+
+            run_timed() {
+              local metric="$1"
+              shift
+              rm -rf .next .eslintcache
+              find . -maxdepth 2 -name '*.tsbuildinfo' -delete 2>/dev/null || true
+              local start end elapsed
+              start=$(date +%s%3N)
+              "$@"
+              end=$(date +%s%3N)
+              elapsed=$((end-start))
+              echo "METRIC|${label}|${metric}_ms|${elapsed}"
+            }
+
+            run_timed test_current pnpm test:current
+            run_timed lint_touched pnpm lint:touched
+            run_timed typecheck pnpm typecheck
+            run_timed build pnpm build
+          }
+
+          measure_case BASE /tmp/qeo67-metrics/base
+          measure_case HEAD /tmp/qeo67-metrics/head
+
+          echo "BASE_SHA=${BASE_SHA}"
+          echo "MEASURED_HEAD_SHA=${HEAD_SHA}"
+
+      - name: Self-clean benchmark workflow
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/qeo67-acceptance-metrics.yml
+          git commit -m "chore(QEO-67): remove acceptance benchmark workflow"
+          git push origin HEAD:qeo-65-67-cleanup-modules
