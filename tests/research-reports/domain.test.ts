@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFileSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -11,9 +11,14 @@ import {
 } from "../../modules/research-reports/index.ts"
 
 function qeo80Migration() {
-  const matches = readdirSync("supabase/migrations").filter((name) => name.endsWith("_qeo80_research_reports.sql"))
+  const directories = ["supabase/migrations", "supabase/pending-migrations"].filter(existsSync)
+  const matches = directories.flatMap((directory) =>
+    readdirSync(directory)
+      .filter((name) => name.endsWith("_qeo80_research_reports.sql"))
+      .map((name) => `${directory}/${name}`),
+  )
   assert.equal(matches.length, 1, "expected exactly one QEO-80 research reports migration")
-  return readFileSync(`supabase/migrations/${matches[0]}`, "utf8")
+  return readFileSync(matches[0], "utf8")
 }
 
 const sampleTopiReport = {
@@ -133,6 +138,8 @@ test("QEO-80 upserts by provider plus external report id so metadata refreshes d
   assert.equal(firstRow.external_report_id, "72734")
   assert.equal(secondRow.external_report_id, "72734")
   assert.equal(secondRow.title, "Thách thức liên tiếp — updated metadata")
+  assert.equal("content_hash" in secondRow, false, "metadata refresh must preserve the parsed PDF identity")
+  assert.equal("analysis_status" in secondRow, false, "metadata refresh must not reset downstream AI state")
 })
 
 test("QEO-80 migration creates report evidence tables, idempotency constraints, and authenticated read-only RLS", () => {
