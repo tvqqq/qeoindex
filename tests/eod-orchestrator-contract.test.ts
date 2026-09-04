@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import test from "node:test"
 
 import { resolveAiCouncilPromptIdentityHash } from "../modules/ai-council/prompt-identity.ts"
@@ -7,6 +7,45 @@ import { resolveAiCouncilPromptIdentityHash } from "../modules/ai-council/prompt
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
+
+function moduleSources(root: string) {
+  const files: string[] = []
+  const walk = (relative: string) => {
+    const directory = new URL(`../${relative}/`, import.meta.url)
+    for (const entry of readdirSync(directory)) {
+      const child = `${relative}/${entry}`
+      const childUrl = new URL(`../${child}`, import.meta.url)
+      if (statSync(childUrl).isDirectory()) walk(child)
+      else if (/\.(?:ts|tsx)$/.test(entry)) files.push(source(child))
+    }
+  }
+  walk(root)
+  return files
+}
+
+test("QEO-67 workflows consume EOD through one deliberate public module boundary", () => {
+  const eodIndexUrl = new URL("../modules/eod/index.ts", import.meta.url)
+  assert.ok(existsSync(eodIndexUrl), "modules/eod/index.ts must define the public EOD API")
+
+  const eodIndex = readFileSync(eodIndexUrl, "utf8")
+  const pipeline = source("workflows/qeoindex-eod-pipeline.ts")
+  const retry = source("workflows/qeoindex-eod-retry.ts")
+
+  assert.doesNotMatch(eodIndex, /export\s+\*/, "EOD public API must be deliberate, not a blind barrel")
+  assert.match(pipeline, /from ["']@\/modules\/eod["']/)
+  assert.match(retry, /from ["']@\/modules\/eod["']/)
+  assert.doesNotMatch(pipeline, /from ["']@\/modules\/eod\//, "pipeline must not deep-import EOD internals")
+  assert.doesNotMatch(retry, /from ["']@\/modules\/eod\//, "retry workflow must not deep-import EOD internals")
+})
+
+test("QEO-67 lower-level domains never depend on EOD or workflow implementations", () => {
+  for (const domain of ["modules/market", "modules/wyckoff", "modules/ai-council", "modules/signals"]) {
+    for (const text of moduleSources(domain)) {
+      assert.doesNotMatch(text, /from ["']@\/modules\/eod(?:\/|["'])/, `${domain} must not import EOD`)
+      assert.doesNotMatch(text, /from ["']@\/workflows\//, `${domain} must not import workflow implementations`)
+    }
+  }
+})
 
 test("QEO-60 exposes seven stable business phases while retaining internal durable phases", () => {
   const phases = source("modules/admin/job-phases.ts")
