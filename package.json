@@ -54,7 +54,7 @@
     "@vercel/speed-insights": "^2.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "html-to-image": "^11.11.13",
+    "html-to-image": "^1.11.13",
     "lottie-react": "^3.1.0",
     "lucide-react": "^1.16.0",
     "motion": "^13.1.1",
