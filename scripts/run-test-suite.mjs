@@ -5,22 +5,27 @@ import { join } from "node:path"
 
 const EXECUTABLE_SUITES = new Set(["fast", "eod", "ai", "db", "ui-contracts"])
 
-export function resolveSuiteTests(suite, rootUrl = new URL("../", import.meta.url)) {
-  const root = fileURLToPath(rootUrl)
-  const manifest = JSON.parse(readFileSync(join(root, "tests", "test-contracts.json"), "utf8"))
+export function filesForSuite(manifest, suite) {
   const requested = suite === "current" ? new Set(["fast", "eod", "ai", "ui-contracts"]) : new Set([suite])
   for (const name of requested) {
     if (!EXECUTABLE_SUITES.has(name)) throw new Error(`Unknown test suite: ${name}`)
   }
-  return [...new Set(manifest.entries
+  const files = [...new Set((manifest.entries || [])
     .filter((entry) => !["duplicate", "superseded"].includes(entry.bucket))
-    .filter((entry) => entry.suites.some((name) => requested.has(name)))
+    .filter((entry) => Array.isArray(entry.suites) && entry.suites.some((name) => requested.has(name)))
     .map((entry) => entry.path))].sort()
+  if (files.length === 0) throw new Error(`Suite ${suite} resolved to zero tests`)
+  return files
+}
+
+export function resolveSuiteTests(suite, rootUrl = new URL("../", import.meta.url)) {
+  const root = fileURLToPath(rootUrl)
+  const manifest = JSON.parse(readFileSync(join(root, "tests", "test-contracts.json"), "utf8"))
+  return filesForSuite(manifest, suite)
 }
 
 export function runSuite(suite, rootUrl = new URL("../", import.meta.url)) {
   const files = resolveSuiteTests(suite, rootUrl)
-  if (files.length === 0) throw new Error(`Suite ${suite} resolved to zero tests`)
   console.log(`[test-suite] ${suite}: ${files.length} files`)
   const result = spawnSync(process.execPath, ["--test", ...files], {
     cwd: fileURLToPath(rootUrl),
