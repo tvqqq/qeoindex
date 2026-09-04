@@ -25,10 +25,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Apply domain regroup codemod
-        run: node scripts/qeo67-regroup.mjs
-      - name: Apply lint cleanup exposed by broad module-aware lint
-        run: node scripts/qeo67-lint-cleanup.mjs
+      - name: Apply remaining domain regroup codemod
+        run: node scripts/qeo67-regroup-wave2.mjs
       - name: Verify test manifest and current contracts
         run: pnpm test:current
       - name: Verify module-aware lint
@@ -43,5 +41,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "refactor(QEO-67): regroup surviving code by domain"
+          git commit -m "refactor(QEO-67): finish domain ownership regroup"
           git push origin HEAD:qeo-65-67-cleanup-modules
