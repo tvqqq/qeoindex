@@ -45,20 +45,16 @@ test("artifact build is Next-only while release verification remains explicit", 
   }
 })
 
-test("GitHub verification delegates test ownership to stable package suites", () => {
+test("GitHub verification runs the deduplicated current suite while targeted workflows retain domain gates", () => {
   const verify = source(".github/workflows/security.yml")
   for (const command of [
-    "pnpm test:manifest",
-    "pnpm test:fast",
-    "pnpm test:eod",
-    "pnpm test:ai",
-    "pnpm test:db",
-    "pnpm test:ui-contracts",
+    "pnpm test:current",
     "pnpm lint:touched",
     "pnpm typecheck",
     "pnpm scan:secrets",
     "pnpm exec next build",
   ]) assert.match(verify, escaped(command), command)
+  assert.doesNotMatch(verify, /pnpm test:(?:manifest|fast|eod|ai|db|ui-contracts)\b/)
   assert.doesNotMatch(
     verify,
     /node --test[^\n]*(qeo-58-eod-data-refresh|market-board-filter-avg50|auth-login-handoff|orderbook-prune-security|kfsp-canonical-universe-sync|canonical-200-ui)/,
