@@ -10,9 +10,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## QeoIndex project orientation
 
-- Read `docs/HANDOVER.md` after this file. It is the canonical architecture, source-of-truth, validation, deployment, and troubleshooting guide.
+- Read `docs/README.md` after this file for the documentation map and source-of-truth hierarchy.
+- Read `docs/HANDOVER.md` before material implementation. It is the canonical active architecture, source-of-truth, validation, deployment, and troubleshooting guide.
 - Use `docs/market-board.md` for the detailed realtime/EOD market-board data flow.
 - Before any UI/design implementation or review, read `docs/UI_LESSONS_LEARNED.md`. Its UI performance rules are mandatory for all agents.
+- Treat Linear as the current work-state source. Do not add repo-wide `NEXT_AGENT_*`, `*-LEGACY` handoffs, or copy-ready status dumps; update canonical docs when architecture changes and use Git history for historical context.
 
 ## Mandatory UI design and performance invariants
 
@@ -42,4 +44,3 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Whenever changes are made to Supabase resources:
   - Database schema / migrations in `supabase/migrations/`: immediately run `npx supabase db push` to apply migrations to Supabase production database.
   - Edge Functions in `supabase/functions/<name>/`: immediately run `npx supabase functions deploy <name> --no-verify-jwt` to deploy Edge Functions to Supabase production.
-
