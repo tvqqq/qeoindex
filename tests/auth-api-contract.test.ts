@@ -186,3 +186,52 @@ test("server auth escaping transport error is sanitized and does not retain raw 
     assert.equal(serialized.includes(secret), false, `sanitized runtime error leaked ${secret}`)
   }
 })
+
+test("QEO-75 market-session authenticates every privileged GET/POST request", () => {
+  const code = source("supabase/functions/market-session/index.ts")
+  const authGate = code.indexOf("await isMachineRequestAuthorized(")
+  const postHandler = code.indexOf('if (req.method === "POST")')
+  const serviceClient = code.indexOf("createClient(")
+  const snapshotAccess = code.indexOf('.from("stock_orderbook_snapshots")')
+
+  assert.ok(authGate >= 0, "market-session must have a machine authorization gate")
+  assert.ok(postHandler > authGate, "authorization must cover GET as well as POST")
+  assert.ok(serviceClient > authGate, "authorization must run before service-role client construction")
+  assert.ok(snapshotAccess > authGate, "authorization must run before snapshot reads/writes")
+  assert.match(code, /req\.method !== "GET" && req\.method !== "POST"/)
+  assert.match(code, /METHOD_NOT_ALLOWED/)
+})
+
+test("QEO-75 canonical Verify scans tracked source and full Git history", () => {
+  const workflow = source(".github/workflows/security.yml")
+  const scanner = source("scripts/scan-secrets.sh")
+
+  assert.match(workflow, /actions\/checkout@v6/)
+  assert.match(workflow, /fetch-depth:\s*0/)
+  assert.match(workflow, /gitleaks\/gitleaks-action@v3/)
+  assert.match(workflow, /GITLEAKS_ENABLE_COMMENTS/)
+  assert.match(workflow, /GITLEAKS_ENABLE_UPLOAD_ARTIFACT/)
+  assert.match(workflow, /gitleaks detect --source \. --redact --no-banner --exit-code=2 --log-opts="--all"/)
+
+  for (const pattern of [
+    /SUPABASE_SERVICE_ROLE_KEY/,
+    /UPSTASH_REDIS_REST_TOKEN/,
+    /KFSP_PASSWORD/,
+    /KFSP_SYNC_SECRET/,
+    /MARKET_SYNC_SECRET/,
+    /MARKET_CACHE_ADMIN_SECRET/,
+    /AI_COUNCIL_RUN_SECRET/,
+    /CRON_SECRET/,
+    /QSTASH_TOKEN/,
+  ]) {
+    assert.match(scanner, pattern)
+  }
+  assert.match(scanner, /postgres(?:ql)?/i)
+})
+
+test("QEO-75 env example stays generic instead of publishing production coupling", () => {
+  const example = source(".env.example")
+  assert.doesNotMatch(example, /QeoIndex persistent data source: Notion only/)
+  assert.doesNotMatch(example, /NOTION_[A-Z_]+_DATA_SOURCE_ID=[0-9a-f]{8}-[0-9a-f-]{27,}/i)
+  assert.doesNotMatch(example, /APP_URL=https:\/\/qeoindex\.qeoqeo\.com/)
+})

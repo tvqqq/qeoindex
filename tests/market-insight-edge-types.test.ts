@@ -96,7 +96,7 @@ test("direct market snapshot writer fails closed on Vietnam securities holidays"
   assert.match(marketSession, /NON_TRADING_DAY/)
 })
 
-test("market-session writer requires machine auth before service-role access", () => {
+test("market-session requires machine auth before all privileged service-role access", () => {
   const helperPath = resolve("supabase/functions/_shared/machine-auth.ts")
   assert.equal(existsSync(helperPath), true, "expected shared Edge machine-auth helper")
 
@@ -104,13 +104,15 @@ test("market-session writer requires machine auth before service-role access", (
   assert.match(marketSession, /MARKET_SYNC_SECRET/)
   assert.match(marketSession, /CRON_SECRET/)
   assert.match(marketSession, /isMachineRequestAuthorized/)
-  assert.match(marketSession, /status:\s*401/)
+  assert.match(marketSession, /status\s*[:=]\s*401|jsonResponse\([^,]+,\s*401\)/)
 
-  const postGate = marketSession.indexOf('if (req.method === "POST")')
   const authGate = marketSession.indexOf("await isMachineRequestAuthorized(")
+  const postGate = marketSession.indexOf('if (req.method === "POST")')
   const serviceClient = marketSession.indexOf("createClient(")
-  assert.ok(postGate >= 0 && authGate > postGate, "POST auth must be scoped to writer path")
+  assert.ok(authGate >= 0, "market-session must authorize every GET/POST request")
+  assert.ok(postGate > authGate, "authorization must cover GET as well as POST")
   assert.ok(serviceClient > authGate, "auth must run before service-role client construction")
+  assert.match(marketSession, /req\.method !== "GET" && req\.method !== "POST"/)
 })
 
 test("shared Edge machine auth accepts only exact configured bearer tokens", async () => {
