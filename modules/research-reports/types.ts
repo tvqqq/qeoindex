@@ -29,3 +29,24 @@ export interface ResearchReportDiscoveryResult {
 export interface ResearchReportUpsertResult {
   upserted: number
 }
+
+export interface ParsedReportPage {
+  pageNumber: number
+  text: string
+}
+
+export type PdfTextStatus = "parsed" | "needs_ocr" | "unsupported"
+
+export interface ParsedResearchReportPdf {
+  status: PdfTextStatus
+  pages: ParsedReportPage[]
+  pageCount: number
+}
+
+export interface ResearchReportChunk {
+  pageNumber: number
+  chunkIndex: number
+  content: string
+  chunkHash: string
+  chunkVersion: string
+}
