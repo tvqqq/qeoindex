@@ -25,6 +25,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Disambiguate current Wyckoff EOD names
+        run: sed -i 's#modules/wyckoff/${rest}${ext}#modules/wyckoff/eod-${rest}${ext}#' scripts/qeo67-regroup.mjs
       - name: Apply domain regroup codemod
         run: node scripts/qeo67-regroup.mjs
       - name: Verify test manifest and current contracts
