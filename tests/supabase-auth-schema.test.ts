@@ -7,8 +7,8 @@ const migration = readFileSync(
   "utf8",
 )
 
-const watchlistRoute = readFileSync(
-  new URL("../app/api/watchlist/route.ts", import.meta.url),
+const watchlistServer = readFileSync(
+  new URL("../modules/portfolio/watchlist/server.ts", import.meta.url),
   "utf8",
 )
 
@@ -61,8 +61,8 @@ test("QEO-22 enforces at most one default watchlist per user at the database bou
 })
 
 test("QEO-22 keeps the API loser path race-safe after a unique-index conflict", () => {
-  assert.match(watchlistRoute, /if \(!inserted\.error && inserted\.data\) return inserted\.data/)
-  assert.match(watchlistRoute, /const fallback = await context\.supabase/)
-  assert.match(watchlistRoute, /\.eq\("is_default", true\)\s*\.single\(\)/)
-  assert.match(watchlistRoute, /if \(fallback\.error\) throw inserted\.error \?\? fallback\.error/)
+  assert.match(watchlistServer, /if \(!inserted\.error && inserted\.data\) return inserted\.data/)
+  assert.match(watchlistServer, /const fallback = await context\.supabase/)
+  assert.match(watchlistServer, /\.eq\("is_default", true\)\s*\.single\(\)/)
+  assert.match(watchlistServer, /if \(fallback\.error\) throw inserted\.error \?\? fallback\.error/)
 })

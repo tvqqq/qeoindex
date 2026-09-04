@@ -23,7 +23,7 @@ const SECTOR_PANEL_SELECTOR = "section"
  * participates in the animation path.
  *
  * MarketBoardFilterShell adds one wrapper between this transition scope and
- * LiveMarketBoardV2. Narrow the legacy board selector to its first child
+ * LiveMarketBoard. Narrow the legacy board selector to its first child
  * (IndexStrip) before selecting the four index cards, otherwise the selector
  * would animate multiple board-level blocks after the shell was introduced.
  */

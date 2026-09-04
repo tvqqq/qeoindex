@@ -1,6 +1,6 @@
 import { LandingLogin } from "@/components/auth/landing-login"
 import { MarketBoardFilterShell, type FilterBoardUniverseStock } from "@/components/market-board/market-board-filter-shell"
-import type { IndexQuote } from "@/components/live-market-board-v2"
+import type { IndexQuote } from "@/components/live-market-board"
 import { MarketUniverseVersionRefresh } from "@/components/market-universe-version-refresh"
 import { OrderBookProvider } from "@/components/orderbook/orderbook-context"
 import { OrderBookManager } from "@/components/orderbook/orderbook-manager"

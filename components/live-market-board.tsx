@@ -570,7 +570,7 @@ function extractInitialRefs(quotes?: Record<string, LiveStockQuote | IndexQuote>
   return refs
 }
 
-export function LiveMarketBoardV2({
+export function LiveMarketBoard({
   universe,
   initialQuotes,
   initialHistories,

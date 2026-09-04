@@ -91,7 +91,7 @@ test("P2 Singapore runtime and bounded DNSE UI batching remain enabled", () => {
   const vercel = JSON.parse(source("vercel.json")) as { regions?: string[] }
   assert.deepEqual(vercel.regions, ["sin1"])
 
-  const board = source("components/live-market-board-v2.tsx")
+  const board = source("components/live-market-board.tsx")
   assert.match(board, /const MARKET_UI_COMMIT_MS = 250/)
   assert.match(board, /const MARKET_ORDERING_REFRESH_MS = 1000/)
   assert.match(board, /const updateLiveQuote = useCallback/)

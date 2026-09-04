@@ -32,11 +32,16 @@ test("browser-facing API routes enforce server auth and feature access", () => {
 })
 
 test("per-user account, watchlist, and insights APIs derive access from server auth", () => {
-  for (const path of ["app/api/me/route.ts", "app/api/watchlist/route.ts"]) {
-    const code = source(path)
-    assert.match(code, /requireApiUser/)
-    assert.match(code, /auth\.context\.user\.id/)
-  }
+  const me = source("app/api/me/route.ts")
+  assert.match(me, /requireApiUser/)
+  assert.match(me, /auth\.context\.user\.id/)
+
+  const watchlistServer = source("modules/portfolio/watchlist/server.ts")
+  assert.match(watchlistServer, /requireApiUser/)
+  assert.match(watchlistServer, /auth\.context\.user\.id/)
+
+  const watchlistRoute = source("app/api/watchlist/route.ts")
+  assert.match(watchlistRoute, /@\/modules\/portfolio\/watchlist\/server/)
 
   const wyckoff = source("app/api/insights/wyckoff/route.ts")
   assert.match(wyckoff, /requireApiUser/)

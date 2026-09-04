@@ -20,7 +20,7 @@ test("documentation and verification-only changes do not require a Vercel runtim
 test("runtime, build configuration, and operational script changes still build", () => {
   const files = [
     "app/page.tsx",
-    "components/live-market-board-v2.tsx",
+    "components/live-market-board.tsx",
     "modules/shared/cache/ui-data-cache.ts",
     "workflows/daily-signal-workflow.ts",
     "scripts/scan-secrets.sh",

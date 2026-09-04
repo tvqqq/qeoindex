@@ -11,7 +11,7 @@ import {
   stockFilterHash,
 } from "../modules/market/board/stock-filter.ts"
 
-const boardSource = readFileSync(new URL("../components/live-market-board-v2.tsx", import.meta.url), "utf8")
+const boardSource = readFileSync(new URL("../components/live-market-board.tsx", import.meta.url), "utf8")
 const stockSource = readFileSync(new URL("../components/live-market-stock.tsx", import.meta.url), "utf8")
 const sparklineSource = readFileSync(new URL("../components/sparkline.tsx", import.meta.url), "utf8")
 const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8")

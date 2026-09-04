@@ -41,7 +41,7 @@ The resolved ticker list is cached in browser local storage under a per-user nam
 
 Ticker membership is frozen for that valid daily cache entry. Quotes for the selected tickers remain realtime. Opening the editor and pressing `Áp dụng` recomputes membership from a fresh price snapshot while the KLTB 50-session criterion comes from the already-loaded canonical universe.
 
-The filter shell deliberately passes only the filtered universe to the existing `LiveMarketBoardV2`. The board therefore derives its existing DNSE `symbolList` from only those tickers, so stock channels (`tick`, `top_price`, `ohlc`, `foreign`) stop receiving off-filter symbols while Filter CP is active. Market-index channels remain present independently.
+The filter shell deliberately passes only the filtered universe to the existing `LiveMarketBoard`. The board therefore derives its existing DNSE `symbolList` from only those tickers, so stock channels (`tick`, `top_price`, `ohlc`, `foreign`) stop receiving off-filter symbols while Filter CP is active. Market-index channels remain present independently.
 
 Returning to `Tất cả` or `Top movers` is guarded by `/api/market/quotes`: broker batch quotes and one bounded canonical snapshot query run in parallel, and the transition is rejected if any requested symbol still lacks a valid quote. After a successful reconcile the shell remounts the board with the full canonical universe and clears the history seed, forcing the existing intraday bootstrap instead of treating off-filter history as fresh.
 

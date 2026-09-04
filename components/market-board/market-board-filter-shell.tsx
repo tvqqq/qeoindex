@@ -12,10 +12,10 @@ import { createPortal } from "react-dom"
 import { Loader2, SlidersHorizontal } from "lucide-react"
 
 import {
-  LiveMarketBoardV2,
+  LiveMarketBoard,
   type BoardUniverseStock,
   type IndexQuote,
-} from "@/components/live-market-board-v2"
+} from "@/components/live-market-board"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import {
@@ -400,7 +400,7 @@ export function MarketBoardFilterShell({
 
   return (
     <div ref={rootRef} onClickCapture={handleBoardClickCapture} className="relative h-full min-h-0">
-      <LiveMarketBoardV2
+      <LiveMarketBoard
         key={boardKey}
         universe={activeUniverse}
         initialQuotes={quoteSeed}

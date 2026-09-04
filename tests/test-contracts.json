@@ -1,1 +1,941 @@
-{"version":1,"entries":[{"path":"tests/admin-timezone-ttai-regression.test.ts","owner":"admin","invariant":"Preserve the current admin timezone ttai regression contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/ai-council-evidence-state-unit.test.ts","owner":"ai","invariant":"Preserve the current ai council evidence state unit contract.","bucket":"canonical","suites":["fast","ai"]},{"path":"tests/ai-council-investor-report.test.ts","owner":"ai","invariant":"Preserve the current ai council investor report contract.","bucket":"canonical","suites":["fast","ai"]},{"path":"tests/ai-council-investor-ui.test.ts","owner":"ai","invariant":"Preserve the current ai council investor ui contract.","bucket":"canonical","suites":["fast","ai"]},{"path":"tests/ai-council-llm-reliability.test.ts","owner":"ai","invariant":"Preserve the current ai council llm reliability contract.","bucket":"canonical","suites":["fast","ai"]},{"path":"tests/ai-council-persistence.test.ts","owner":"ai","invariant":"Preserve the current ai council persistence contract.","bucket":"canonical","suites":["fast","ai"]},{"path":"tests/ai-council-prompt-evidence.test.ts","owner":"ai","invariant":"Preserve the current ai council prompt evidence contract.","bucket":"canonical","suites":["fast","ai"]},{"path":"tests/ai-council-research-context.test.ts","owner":"ai","invariant":"Preserve the current ai council research context contract.","bucket":"canonical","suites":["fast","ai"]},{"path":"tests/ai-council-schema-cleanup.test.ts","owner":"ai","invariant":"Preserve the current ai council schema cleanup contract.","bucket":"canonical","suites":["fast","ai"]},{"path":"tests/ai-council-workflow-boundary.test.ts","owner":"ai","invariant":"Preserve the current ai council workflow boundary contract.","bucket":"canonical","suites":["fast","ai"]},{"path":"tests/auth-api-contract.test.ts","owner":"auth","invariant":"Preserve the current auth api contract contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/auth-login-handoff.test.ts","owner":"auth","invariant":"Preserve the current auth login handoff contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/build-impact.test.ts","owner":"tooling","invariant":"Preserve the current build impact contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/canonical-200-ui.test.ts","owner":"ui","invariant":"Preserve the current canonical 200 ui contract.","bucket":"canonical","suites":["fast","ui-contracts"]},{"path":"tests/cron-job-evidence.test.ts","owner":"admin","invariant":"Preserve the current cron job evidence contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/cron-schedule-catalog.test.ts","owner":"admin","invariant":"Preserve the current cron schedule catalog contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/cron-timeline-ui.test.ts","owner":"admin","invariant":"Preserve the current cron timeline ui contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/db-migration-drift.test.ts","owner":"db","invariant":"Preserve the current db migration drift contract.","bucket":"deep-safety","suites":["db"]},{"path":"tests/db-recovery-rehearsal.test.ts","owner":"db","invariant":"Preserve the current db recovery rehearsal contract.","bucket":"deep-safety","suites":["db"]},{"path":"tests/db-schema-contract.test.ts","owner":"db","invariant":"Preserve the current db schema contract contract.","bucket":"deep-safety","suites":["db"]},{"path":"tests/dnse-request-windows.test.ts","owner":"market","invariant":"Preserve the current dnse request windows contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/eod-data-refresh-contract.test.ts","owner":"eod","invariant":"Preserve same-session Rating/TTAI/Market Close lineage and bounded READY retries.","bucket":"canonical","suites":["fast","eod"]},{"path":"tests/eod-fault-isolation-contract.test.ts","owner":"eod","invariant":"Preserve ticker-local isolation, PARTIAL completion, append-only attempts, and targeted retry.","bucket":"canonical","suites":["fast","eod"]},{"path":"tests/eod-orchestrator-contract.test.ts","owner":"eod","invariant":"Preserve the current EOD dependency DAG, bounded concurrency, and Council ordering.","bucket":"canonical","suites":["fast","eod"]},{"path":"tests/eod-recovery-contract.test.ts","owner":"eod","invariant":"Preserve persistent-history recovery, no-trade repair, and current-session provider failure semantics.","bucket":"canonical","suites":["fast","eod"]},{"path":"tests/eod-rollout-contract.test.ts","owner":"eod","invariant":"Preserve canonical 15:15 scheduler ownership, 199/200 targeted recovery, and rollout guards.","bucket":"canonical","suites":["fast","eod"]},{"path":"tests/eod-storage-retention-contract.test.ts","owner":"eod","invariant":"Preserve Supabase-first artifact lineage, raw Daily OHLCV, and safe retention semantics.","bucket":"canonical","suites":["fast","eod"]},{"path":"tests/eod-telemetry-contract.test.ts","owner":"eod","invariant":"Preserve durable internal EOD telemetry and the seven business-phase mapping.","bucket":"canonical","suites":["fast","eod"]},{"path":"tests/fa-screen-data.test.ts","owner":"research","invariant":"Preserve the current fa screen data contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/insights-metric-semantics.test.ts","owner":"ui","invariant":"Preserve the current insights metric semantics contract.","bucket":"canonical","suites":["fast","ui-contracts"]},{"path":"tests/insights-rating-model.test.ts","owner":"ui","invariant":"Preserve the current insights rating model contract.","bucket":"canonical","suites":["fast","ui-contracts"]},{"path":"tests/insights-schema.test.ts","owner":"ui","invariant":"Preserve the current insights schema contract.","bucket":"canonical","suites":["fast","ui-contracts"]},{"path":"tests/intraday-5m.test.ts","owner":"market","invariant":"Preserve the current intraday 5m contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/kfsp-canonical-universe-sync.test.ts","owner":"kfsp","invariant":"Preserve the current kfsp canonical universe sync contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/kfsp-manual-recovery-lifecycle.test.ts","owner":"kfsp","invariant":"Preserve the current kfsp manual recovery lifecycle contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/kfsp-rating-storage-refactor.test.ts","owner":"kfsp","invariant":"Preserve the current kfsp rating storage refactor contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-ai-conclusion.test.ts","owner":"ai","invariant":"Preserve the current market ai conclusion contract.","bucket":"canonical","suites":["fast","ai"]},{"path":"tests/market-ai-dispatch-auth.test.ts","owner":"ai","invariant":"Preserve the Vault-backed Market AI dispatch and Edge authentication contract.","bucket":"canonical","suites":["fast","ai"]},{"path":"tests/market-board-filter-avg50-regression.test.ts","owner":"market","invariant":"Preserve the current market board filter avg50 regression contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-board-stock-filter-api.test.ts","owner":"market","invariant":"Preserve the current market board stock filter api contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-board-stock-filter-ui.test.ts","owner":"market","invariant":"Preserve the current market board stock filter ui contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-board-visual-contract.test.ts","owner":"market","invariant":"Preserve the current market board visual contract contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-close-sector-breadth.test.ts","owner":"market","invariant":"Preserve the current market close sector breadth contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-data-contract.test.ts","owner":"market","invariant":"Preserve the current market data contract contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-insight-edge-types.test.ts","owner":"market","invariant":"Preserve the current market insight edge types contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-insight-layout-regression.test.ts","owner":"market","invariant":"Preserve the current market insight layout regression contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-insight-model.test.ts","owner":"market","invariant":"Preserve the current market insight model contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-insight-schema.test.ts","owner":"market","invariant":"Preserve the current market insight schema contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-insight-socket-collector.test.ts","owner":"market","invariant":"Preserve the current market insight socket collector contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-insight-ui-performance.test.ts","owner":"market","invariant":"Preserve the current market insight ui performance contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-insight-validation-base.test.ts","owner":"market","invariant":"Preserve the current market insight validation base contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-insight-validation.test.ts","owner":"market","invariant":"Aggregate wrapper duplicates the canonical Market Insight validation tests.","bucket":"duplicate","suites":["none"],"replacement":"tests/market-insight-validation-base.test.ts"},{"path":"tests/market-session.test.ts","owner":"market","invariant":"Preserve the current market session contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/market-universe.test.ts","owner":"market","invariant":"Preserve the current market universe contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/navigation-prefetch.test.ts","owner":"ui","invariant":"Preserve the current navigation prefetch contract.","bucket":"canonical","suites":["fast","ui-contracts"]},{"path":"tests/notion-adapter.test.ts","owner":"notion","invariant":"Preserve the current notion adapter contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/ohlcv-history-store.test.ts","owner":"market","invariant":"Preserve the current ohlcv history store contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/orderbook-clustering-cache.test.ts","owner":"market","invariant":"Preserve the current orderbook clustering cache contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/orderbook-prune-security.test.ts","owner":"db","invariant":"Preserve the current orderbook prune security contract.","bucket":"canonical","suites":["fast","db"]},{"path":"tests/portfolio-market-prices.test.ts","owner":"portfolio","invariant":"Preserve the current portfolio market prices contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/portfolio-pnl.test.ts","owner":"portfolio","invariant":"Preserve the current portfolio pnl contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/portfolio-ui-performance.test.ts","owner":"portfolio","invariant":"Preserve the current portfolio ui performance contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/qeoindex-eod-phase-telemetry.test.ts","owner":"eod","invariant":"Preserve the current qeoindex eod phase telemetry contract.","bucket":"canonical","suites":["fast","eod"]},{"path":"tests/qeoindex-eod-pipeline.test.ts","owner":"eod","invariant":"Preserve the current qeoindex eod pipeline contract.","bucket":"canonical","suites":["fast","eod"]},{"path":"tests/qeoindex-eod-scheduler.test.ts","owner":"eod","invariant":"Preserve the current qeoindex eod scheduler contract.","bucket":"canonical","suites":["fast","eod"]},{"path":"tests/redis-baseline-cache.test.ts","owner":"market","invariant":"Preserve the current redis baseline cache contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/root-admin-api.test.ts","owner":"admin","invariant":"Preserve the current root admin api contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/root-admin-auth.test.ts","owner":"admin","invariant":"Preserve the current root admin auth contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/root-admin-catalog.test.ts","owner":"admin","invariant":"Preserve the current root admin catalog contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/root-admin-job-health.test.ts","owner":"admin","invariant":"Preserve the current root admin job health contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/root-admin-jobs.test.ts","owner":"admin","invariant":"Preserve the current root admin jobs contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/root-admin-schema.test.ts","owner":"admin","invariant":"Preserve the current root admin schema contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/root-admin-settings.test.ts","owner":"admin","invariant":"Preserve the current root admin settings contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/root-admin-ui.test.ts","owner":"admin","invariant":"Preserve the current root admin ui contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/scanner-policy.test.ts","owner":"signals","invariant":"Preserve the current scanner policy contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/scheduler-reconciliation.test.ts","owner":"admin","invariant":"Preserve the current scheduler reconciliation contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/sector-popup-canonical-parity.test.ts","owner":"ui","invariant":"Preserve the current sector popup canonical parity contract.","bucket":"canonical","suites":["fast","ui-contracts"]},{"path":"tests/signal-engine.test.ts","owner":"signals","invariant":"Preserve the current signal engine contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/signals-daily-telemetry.test.ts","owner":"signals","invariant":"Preserve the current signals daily telemetry contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/supabase-auth-schema.test.ts","owner":"db","invariant":"Preserve the current supabase auth schema contract.","bucket":"canonical","suites":["fast","db"]},{"path":"tests/supabase-orderbook-schema.test.ts","owner":"db","invariant":"Preserve the current supabase orderbook schema contract.","bucket":"canonical","suites":["fast","db"]},{"path":"tests/test-contract-manifest.test.ts","owner":"tooling","invariant":"Require an explicit Spec-Driven ownership and suite decision for every top-level test.","bucket":"canonical","suites":["fast"]},{"path":"tests/test-suite-runner.test.ts","owner":"tooling","invariant":"Preserve deterministic manifest-driven test-suite selection and quarantine exclusion.","bucket":"canonical","suites":["fast"]},{"path":"tests/top-stocks-200-runtime-regression.test.ts","owner":"signals","invariant":"Preserve the current top stocks 200 runtime regression contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/tradingview-index.test.ts","owner":"market","invariant":"Preserve the current tradingview index contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/ui-read-cache.test.ts","owner":"ui","invariant":"Preserve the current ui read cache contract.","bucket":"canonical","suites":["fast","ui-contracts"]},{"path":"tests/wyckoff-chart-model.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff chart model contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/wyckoff-daily-weekly-contract.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff daily weekly contract contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/wyckoff-eod-refresh.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff eod refresh contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/wyckoff-infographic-ui.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff infographic ui contract.","bucket":"canonical","suites":["fast","ui-contracts"]},{"path":"tests/wyckoff-ui-performance.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff ui performance contract.","bucket":"canonical","suites":["fast","ui-contracts"]},{"path":"tests/wyckoff-unified-schema.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff unified schema contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/wyckoff-universe.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff universe contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/wyckoff-v2-chart-series.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff v2 chart series contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/wyckoff-v2-ingest.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff v2 ingest contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/wyckoff-v2-notion-io.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff v2 notion io contract.","bucket":"superseded","suites":["none"],"deleteWith":"QEO-65 legacy Notion compatibility deletion"},{"path":"tests/wyckoff-v2-notion-staging.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff v2 notion staging contract.","bucket":"superseded","suites":["none"],"deleteWith":"QEO-65 legacy Notion compatibility deletion"},{"path":"tests/wyckoff-v2-runtime-data.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff v2 runtime data contract.","bucket":"canonical","suites":["fast"]},{"path":"tests/wyckoff-v2-staging.test.ts","owner":"wyckoff","invariant":"Preserve the current wyckoff v2 staging contract.","bucket":"canonical","suites":["fast"]}]}
+{
+  "version": 1,
+  "entries": [
+    {
+      "path": "tests/admin-timezone-ttai-regression.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current admin timezone ttai regression contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/ai-council-evidence-state-unit.test.ts",
+      "owner": "ai",
+      "invariant": "Preserve the current ai council evidence state unit contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ai"
+      ]
+    },
+    {
+      "path": "tests/ai-council-investor-report.test.ts",
+      "owner": "ai",
+      "invariant": "Preserve the current ai council investor report contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ai"
+      ]
+    },
+    {
+      "path": "tests/ai-council-investor-ui.test.ts",
+      "owner": "ai",
+      "invariant": "Preserve the current ai council investor ui contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ai"
+      ]
+    },
+    {
+      "path": "tests/ai-council-llm-reliability.test.ts",
+      "owner": "ai",
+      "invariant": "Preserve the current ai council llm reliability contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ai"
+      ]
+    },
+    {
+      "path": "tests/ai-council-persistence.test.ts",
+      "owner": "ai",
+      "invariant": "Preserve the current ai council persistence contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ai"
+      ]
+    },
+    {
+      "path": "tests/ai-council-prompt-evidence.test.ts",
+      "owner": "ai",
+      "invariant": "Preserve the current ai council prompt evidence contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ai"
+      ]
+    },
+    {
+      "path": "tests/ai-council-research-context.test.ts",
+      "owner": "ai",
+      "invariant": "Preserve the current ai council research context contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ai"
+      ]
+    },
+    {
+      "path": "tests/ai-council-schema-cleanup.test.ts",
+      "owner": "ai",
+      "invariant": "Preserve the current ai council schema cleanup contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ai"
+      ]
+    },
+    {
+      "path": "tests/ai-council-workflow-boundary.test.ts",
+      "owner": "ai",
+      "invariant": "Preserve the current ai council workflow boundary contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ai"
+      ]
+    },
+    {
+      "path": "tests/auth-api-contract.test.ts",
+      "owner": "auth",
+      "invariant": "Preserve the current auth api contract contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/auth-login-handoff.test.ts",
+      "owner": "auth",
+      "invariant": "Preserve the current auth login handoff contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/build-impact.test.ts",
+      "owner": "tooling",
+      "invariant": "Preserve the current build impact contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/canonical-200-ui.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve the current canonical 200 ui contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/cron-job-evidence.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current cron job evidence contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/cron-schedule-catalog.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current cron schedule catalog contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/cron-timeline-ui.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current cron timeline ui contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/db-migration-drift.test.ts",
+      "owner": "db",
+      "invariant": "Preserve the current db migration drift contract.",
+      "bucket": "deep-safety",
+      "suites": [
+        "db"
+      ]
+    },
+    {
+      "path": "tests/db-recovery-rehearsal.test.ts",
+      "owner": "db",
+      "invariant": "Preserve the current db recovery rehearsal contract.",
+      "bucket": "deep-safety",
+      "suites": [
+        "db"
+      ]
+    },
+    {
+      "path": "tests/db-schema-contract.test.ts",
+      "owner": "db",
+      "invariant": "Preserve the current db schema contract contract.",
+      "bucket": "deep-safety",
+      "suites": [
+        "db"
+      ]
+    },
+    {
+      "path": "tests/dnse-request-windows.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current dnse request windows contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/eod-data-refresh-contract.test.ts",
+      "owner": "eod",
+      "invariant": "Preserve same-session Rating/TTAI/Market Close lineage and bounded READY retries.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "eod"
+      ]
+    },
+    {
+      "path": "tests/eod-fault-isolation-contract.test.ts",
+      "owner": "eod",
+      "invariant": "Preserve ticker-local isolation, PARTIAL completion, append-only attempts, and targeted retry.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "eod"
+      ]
+    },
+    {
+      "path": "tests/eod-orchestrator-contract.test.ts",
+      "owner": "eod",
+      "invariant": "Preserve the current EOD dependency DAG, bounded concurrency, and Council ordering.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "eod"
+      ]
+    },
+    {
+      "path": "tests/eod-recovery-contract.test.ts",
+      "owner": "eod",
+      "invariant": "Preserve persistent-history recovery, no-trade repair, and current-session provider failure semantics.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "eod"
+      ]
+    },
+    {
+      "path": "tests/eod-rollout-contract.test.ts",
+      "owner": "eod",
+      "invariant": "Preserve canonical 15:15 scheduler ownership, 199/200 targeted recovery, and rollout guards.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "eod"
+      ]
+    },
+    {
+      "path": "tests/eod-storage-retention-contract.test.ts",
+      "owner": "eod",
+      "invariant": "Preserve Supabase-first artifact lineage, raw Daily OHLCV, and safe retention semantics.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "eod"
+      ]
+    },
+    {
+      "path": "tests/eod-telemetry-contract.test.ts",
+      "owner": "eod",
+      "invariant": "Preserve durable internal EOD telemetry and the seven business-phase mapping.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "eod"
+      ]
+    },
+    {
+      "path": "tests/fa-screen-data.test.ts",
+      "owner": "research",
+      "invariant": "Preserve the current fa screen data contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/insights-metric-semantics.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve the current insights metric semantics contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/insights-rating-model.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve the current insights rating model contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/insights-schema.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve the current insights schema contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/intraday-5m.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current intraday 5m contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/kfsp-canonical-universe-sync.test.ts",
+      "owner": "kfsp",
+      "invariant": "Preserve the current kfsp canonical universe sync contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/kfsp-manual-recovery-lifecycle.test.ts",
+      "owner": "kfsp",
+      "invariant": "Preserve the current kfsp manual recovery lifecycle contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/kfsp-rating-storage-refactor.test.ts",
+      "owner": "kfsp",
+      "invariant": "Preserve the current kfsp rating storage refactor contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-ai-conclusion.test.ts",
+      "owner": "ai",
+      "invariant": "Preserve the current market ai conclusion contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ai"
+      ]
+    },
+    {
+      "path": "tests/market-ai-dispatch-auth.test.ts",
+      "owner": "ai",
+      "invariant": "Preserve the Vault-backed Market AI dispatch and Edge authentication contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ai"
+      ]
+    },
+    {
+      "path": "tests/market-board-filter-avg50-regression.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market board filter avg50 regression contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-board-stock-filter-api.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market board stock filter api contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-board-stock-filter-ui.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market board stock filter ui contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-board-visual-contract.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market board visual contract contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-close-sector-breadth.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market close sector breadth contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-data-contract.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market data contract contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-insight-edge-types.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market insight edge types contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-insight-layout-regression.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market insight layout regression contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-insight-model.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market insight model contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-insight-schema.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market insight schema contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-insight-socket-collector.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market insight socket collector contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-insight-ui-performance.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market insight ui performance contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-insight-validation-base.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market insight validation base contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-insight-validation.test.ts",
+      "owner": "market",
+      "invariant": "Aggregate wrapper duplicates the canonical Market Insight validation tests.",
+      "bucket": "duplicate",
+      "suites": [
+        "none"
+      ],
+      "replacement": "tests/market-insight-validation-base.test.ts"
+    },
+    {
+      "path": "tests/market-session.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market session contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-universe.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current market universe contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/module-architecture-contract.test.ts",
+      "owner": "tooling",
+      "invariant": "Preserve QEO-67 domain ownership, unversioned active naming, orchestration direction, deliberate public contracts, server-only boundaries, and thin route adapters.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/navigation-prefetch.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve the current navigation prefetch contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/notion-adapter.test.ts",
+      "owner": "notion",
+      "invariant": "Preserve the current notion adapter contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/ohlcv-history-store.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current ohlcv history store contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/orderbook-clustering-cache.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current orderbook clustering cache contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/orderbook-prune-security.test.ts",
+      "owner": "db",
+      "invariant": "Preserve the current orderbook prune security contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "db"
+      ]
+    },
+    {
+      "path": "tests/portfolio-market-prices.test.ts",
+      "owner": "portfolio",
+      "invariant": "Preserve the current portfolio market prices contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/portfolio-pnl.test.ts",
+      "owner": "portfolio",
+      "invariant": "Preserve the current portfolio pnl contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/portfolio-ui-performance.test.ts",
+      "owner": "portfolio",
+      "invariant": "Preserve the current portfolio ui performance contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/qeoindex-eod-phase-telemetry.test.ts",
+      "owner": "eod",
+      "invariant": "Preserve the current qeoindex eod phase telemetry contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "eod"
+      ]
+    },
+    {
+      "path": "tests/qeoindex-eod-pipeline.test.ts",
+      "owner": "eod",
+      "invariant": "Preserve the current qeoindex eod pipeline contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "eod"
+      ]
+    },
+    {
+      "path": "tests/qeoindex-eod-scheduler.test.ts",
+      "owner": "eod",
+      "invariant": "Preserve the current qeoindex eod scheduler contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "eod"
+      ]
+    },
+    {
+      "path": "tests/redis-baseline-cache.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current redis baseline cache contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/root-admin-api.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current root admin api contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/root-admin-auth.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current root admin auth contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/root-admin-catalog.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current root admin catalog contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/root-admin-job-health.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current root admin job health contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/root-admin-jobs.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current root admin jobs contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/root-admin-schema.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current root admin schema contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/root-admin-settings.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current root admin settings contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/root-admin-ui.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current root admin ui contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/scanner-policy.test.ts",
+      "owner": "signals",
+      "invariant": "Preserve the current scanner policy contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/scheduler-reconciliation.test.ts",
+      "owner": "admin",
+      "invariant": "Preserve the current scheduler reconciliation contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/sector-popup-canonical-parity.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve the current sector popup canonical parity contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/signal-engine.test.ts",
+      "owner": "signals",
+      "invariant": "Preserve the current signal engine contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/signals-daily-telemetry.test.ts",
+      "owner": "signals",
+      "invariant": "Preserve the current signals daily telemetry contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/supabase-auth-schema.test.ts",
+      "owner": "db",
+      "invariant": "Preserve the current supabase auth schema contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "db"
+      ]
+    },
+    {
+      "path": "tests/supabase-orderbook-schema.test.ts",
+      "owner": "db",
+      "invariant": "Preserve the current supabase orderbook schema contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "db"
+      ]
+    },
+    {
+      "path": "tests/test-contract-manifest.test.ts",
+      "owner": "tooling",
+      "invariant": "Require an explicit Spec-Driven ownership and suite decision for every top-level test.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/test-suite-runner.test.ts",
+      "owner": "tooling",
+      "invariant": "Preserve deterministic manifest-driven test-suite selection and quarantine exclusion.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/top-stocks-200-runtime-regression.test.ts",
+      "owner": "signals",
+      "invariant": "Preserve the current top stocks 200 runtime regression contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/tradingview-index.test.ts",
+      "owner": "market",
+      "invariant": "Preserve the current tradingview index contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/ui-read-cache.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve the current ui read cache contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/wyckoff-chart-model.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff chart model contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/wyckoff-daily-weekly-contract.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff daily weekly contract contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/wyckoff-eod-refresh.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff eod refresh contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/wyckoff-infographic-ui.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff infographic ui contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/wyckoff-ui-performance.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff ui performance contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/wyckoff-unified-schema.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff unified schema contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/wyckoff-universe.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff universe contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/wyckoff-v2-chart-series.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff v2 chart series contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/wyckoff-v2-ingest.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff v2 ingest contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/wyckoff-v2-notion-io.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff v2 notion io contract.",
+      "bucket": "superseded",
+      "suites": [
+        "none"
+      ],
+      "deleteWith": "QEO-65 legacy Notion compatibility deletion"
+    },
+    {
+      "path": "tests/wyckoff-v2-notion-staging.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff v2 notion staging contract.",
+      "bucket": "superseded",
+      "suites": [
+        "none"
+      ],
+      "deleteWith": "QEO-65 legacy Notion compatibility deletion"
+    },
+    {
+      "path": "tests/wyckoff-v2-runtime-data.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff v2 runtime data contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/wyckoff-v2-staging.test.ts",
+      "owner": "wyckoff",
+      "invariant": "Preserve the current wyckoff v2 staging contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    }
+  ]
+}
