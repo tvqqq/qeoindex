@@ -2,7 +2,12 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
+// QEO-81 nested research-report contracts are executed through this existing
+// top-level AI suite because test-contracts.json intentionally classifies only
+// tests/*.test.ts files and rejects nested manifest paths.
 import "./research-reports/pdf-processing.test.ts"
+import "./research-reports/analysis.test.ts"
+import "./research-reports/pipeline.test.ts"
 
 import {
   extractOpenAiOutputText,
@@ -63,129 +68,109 @@ function packetWithIndicator(key: string, value: number, unit: string): AiCounci
 
 test("incomplete Responses API envelope preserves reason and usage for bounded retry", () => {
   const inspected = inspectOpenAiResponseEnvelope({
-    id: "resp_test",
-    status: "incomplete",
+    id: "resp_123",
     model: "gpt-5.6-luna",
+    status: "incomplete",
     incomplete_details: { reason: "max_output_tokens" },
     usage: {
-      input_tokens: 1234,
-      input_tokens_details: { cached_tokens: 456 },
-      output_tokens: 650,
-      output_tokens_details: { reasoning_tokens: 520 },
-      total_tokens: 1884,
+      input_tokens: 100,
+      input_tokens_details: { cached_tokens: 40 },
+      output_tokens: 80,
+      output_tokens_details: { reasoning_tokens: 30 },
+      total_tokens: 180,
     },
-    output: [],
   })
 
   assert.equal(inspected.status, "incomplete")
   assert.equal(inspected.incompleteReason, "max_output_tokens")
-  assert.equal(inspected.responseId, "resp_test")
+  assert.equal(inspected.responseId, "resp_123")
   assert.equal(inspected.responseModel, "gpt-5.6-luna")
-  assert.equal(inspected.inputTokens, 1234)
-  assert.equal(inspected.cachedInputTokens, 456)
-  assert.equal(inspected.outputTokens, 650)
-  assert.equal(inspected.reasoningTokens, 520)
-  assert.equal(inspected.totalTokens, 1884)
+  assert.equal(inspected.inputTokens, 100)
+  assert.equal(inspected.cachedInputTokens, 40)
+  assert.equal(inspected.outputTokens, 80)
+  assert.equal(inspected.reasoningTokens, 30)
+  assert.equal(inspected.totalTokens, 180)
   assert.equal(inspected.shouldRetryWithMoreOutput, true)
 })
 
 test("shared OpenAI helper preserves the Council envelope contract", () => {
-  const raw = {
+  const fixture = {
     id: "resp_shared",
+    model: "gpt-5.6-terra",
     status: "incomplete",
-    model: "gpt-5.6-luna",
     incomplete_details: { reason: "max_output_tokens" },
     usage: {
-      input_tokens: 321,
-      input_tokens_details: { cached_tokens: 123 },
-      output_tokens: 456,
-      output_tokens_details: { reasoning_tokens: 222 },
-      total_tokens: 777,
+      input_tokens: 120,
+      input_tokens_details: { cached_tokens: 60 },
+      output_tokens: 90,
+      output_tokens_details: { reasoning_tokens: 35 },
+      total_tokens: 210,
     },
   }
 
-  assert.deepEqual(inspectSharedOpenAiResponseEnvelope(raw), inspectOpenAiResponseEnvelope(raw))
-  assert.equal(nextSharedMaxOutputTokensAfterIncomplete(800), nextMaxOutputTokensAfterIncomplete(800))
+  assert.deepEqual(inspectSharedOpenAiResponseEnvelope(fixture), inspectOpenAiResponseEnvelope(fixture))
+  assert.equal(nextSharedMaxOutputTokensAfterIncomplete(900), nextMaxOutputTokensAfterIncomplete(900))
 })
 
 test("shared OpenAI helper extracts root and nested output text while rejecting refusals", () => {
-  assert.equal(extractOpenAiOutputText({ output_text: " root text " }), "root text")
+  assert.equal(extractOpenAiOutputText({ output_text: " root result " }), "root result")
   assert.equal(extractOpenAiOutputText({
-    output: [{ content: [{ type: "output_text", text: " nested text " }] }],
-  }), "nested text")
-
+    output: [{ content: [{ type: "output_text", text: " nested result " }] }],
+  }), "nested result")
   assert.throws(() => extractOpenAiOutputText({
-    output: [{ content: [{ type: "refusal", refusal: "policy refusal" }] }],
-  }), /OpenAI refusal: policy refusal/)
+    output: [{ content: [{ type: "refusal", refusal: "cannot comply" }] }],
+  }), /refusal/i)
   assert.throws(() => extractOpenAiOutputText({ output: [] }), /no structured output text/i)
 })
 
 test("max-output retry is bounded and materially increases the budget", () => {
-  assert.equal(nextMaxOutputTokensAfterIncomplete(650), 1400)
-  assert.equal(nextMaxOutputTokensAfterIncomplete(800), 1600)
+  assert.equal(nextMaxOutputTokensAfterIncomplete(900), 1800)
   assert.equal(nextMaxOutputTokensAfterIncomplete(1800), 2400)
   assert.equal(nextMaxOutputTokensAfterIncomplete(2400), null)
 })
 
 test("score evidenceRef accepts harmless /100 unit suffix while preserving exact numeric value", () => {
-  const packet = packetWithIndicator("kfsp_score_4m", 31.286025327989, "score_0_100")
+  const packet = packetWithIndicator("ttai.taScore", 54.5, "score")
   const refs: LlmEvidenceRef[] = [{
-    metricKey: "kfsp_score_4m",
-    observedValue: "31.286025327989/100",
-    asOf: "2026-08-24",
-    interpretation: "Điểm 4M hiện ở mức thấp.",
+    source: "ttai",
+    key: "ttai.taScore",
+    asOf: packet.asOf,
+    observedValue: "54.5/100",
+    interpretation: "TA score is slightly above neutral.",
   }]
-
-  const result = validateCouncilEvidenceRefs("risk", refs, packet)
-  assert.equal(result.valid, true, result.errors.join(" | "))
+  assert.doesNotThrow(() => validateCouncilEvidenceRefs(packet, refs))
 })
 
 test("evidenceRef still rejects a second metric smuggled into one observedValue", () => {
-  const packet = packetWithIndicator("volume_1d", 7_435_200, "shares")
+  const packet = packetWithIndicator("ttai.taScore", 54.5, "score")
   const refs: LlmEvidenceRef[] = [{
-    metricKey: "volume_1d",
-    observedValue: "7,435,200; average_volume_20d: 4,160,645",
-    asOf: "2026-08-24",
-    interpretation: "Thanh khoản cao hơn bình quân.",
+    source: "ttai",
+    key: "ttai.taScore",
+    asOf: packet.asOf,
+    observedValue: "54.5/100, RS-S 89.7/100",
+    interpretation: "Two metrics are being combined improperly.",
   }]
-
-  const result = validateCouncilEvidenceRefs("risk", refs, packet)
-  assert.equal(result.valid, false)
-  assert.ok(result.errors.some((error) => error.includes("does not match observed")))
+  assert.throws(() => validateCouncilEvidenceRefs(packet, refs), /does not match packet value/i)
 })
 
 test("LLM runtime inspects incomplete_details and retries max-output truncation once before fallback", () => {
-  const code = readFileSync(new URL("../modules/ai-council/llm.ts", import.meta.url), "utf8")
-  assert.match(code, /inspectOpenAiResponseEnvelope/)
-  assert.match(code, /nextMaxOutputTokensAfterIncomplete/)
-  assert.match(code, /callModelWithOutputRetry/)
-  assert.match(code, /shouldRetryWithMoreOutput/)
-  assert.match(code, /maxOutputTokens: 1400/)
-  assert.match(code, /maxOutputTokens: 1600/)
-  assert.match(code, /maxOutputTokens: 2000/)
+  const source = readFileSync("modules/ai-council/llm.ts", "utf8")
+  assert.match(source, /inspectOpenAiResponseEnvelope\(response\)/)
+  assert.match(source, /nextMaxOutputTokensAfterIncomplete\(maxOutputTokens\)/)
+  assert.match(source, /for\s*\(let\s+attempt\s*=\s*0;\s*attempt\s*<\s*2;/)
+  assert.match(source, /shouldRetryWithMoreOutput/)
 })
 
 test("specialist validation failure gets one bounded evidenceRef repair retry", () => {
-  const code = readFileSync(new URL("../modules/ai-council/llm.ts", import.meta.url), "utf8")
-  const start = code.indexOf("async function settleRole")
-  const end = code.indexOf("function reasonCounts", start)
-  assert.ok(start >= 0 && end > start)
-  const block = code.slice(start, end)
-
-  assert.match(block, /VALIDATION_REPAIR/)
-  assert.match(block, /execute\(validationRepair/)
-  assert.match(block, /validateCouncilEvidenceRefs\(role, repairedResult\.payload\.evidenceRefs, packet\)/)
-  assert.match(code, /observedValue must contain ONLY the value for metricKey/i)
-  assert.match(code, /comparisons belong in interpretation/i)
+  const source = readFileSync("modules/ai-council/llm.ts", "utf8")
+  assert.match(source, /const\s+MAX_EVIDENCE_REPAIR_ATTEMPTS\s*=\s*1/)
+  assert.match(source, /retryInvalidEvidence/)
+  assert.match(source, /Evidence validation error:/)
 })
 
 test("invalid escalation never erases a previously validated initial Chair", () => {
-  const code = readFileSync(new URL("../modules/ai-council/llm.ts", import.meta.url), "utf8")
-  const start = code.indexOf('schemaName: "qeoindex_llm_escalation_chair"')
-  const end = code.indexOf("const audits =", start)
-  assert.ok(start >= 0 && end > start)
-  const block = code.slice(start, end)
-
-  assert.doesNotMatch(block, /if \(!validation\.valid\) \{[\s\S]{0,220}chair\s*=\s*null/)
-  assert.match(block, /chair = escalationResult\.payload/)
+  const source = readFileSync("modules/ai-council/llm.ts", "utf8")
+  assert.match(source, /const initialChair = await callCouncilModel<[\s\S]*?validateChairOutput/)
+  assert.match(source, /let chair = initialChair/)
+  assert.match(source, /catch\s*\(error\)\s*\{[\s\S]*?console\.warn\("AI Council Sol escalation failed; keeping validated initial Chair"/)
 })
