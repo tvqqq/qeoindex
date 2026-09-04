@@ -47,13 +47,14 @@ test("QEO-23 commits the canonical generated Supabase Database contract", () => 
   assert.match(generated, /public:\s*\{/)
 })
 
-test("DB drift workflow runs clean replay, generated type drift verification, and typecheck", () => {
+test("DB drift workflow runs clean replay, generated type drift verification, current DB suite, and typecheck", () => {
   const workflow = readFileSync(workflowPath, "utf8")
   assert.match(workflow, /supabase\/setup-cli@v1/)
   assert.match(workflow, /pnpm db:replay:verify/)
   assert.match(workflow, /pnpm db:types:verify/)
+  assert.match(workflow, /pnpm test:db/)
   assert.match(workflow, /pnpm typecheck/)
-  assert.match(workflow, /tests\/db-schema-contract\.test\.ts/)
+  assert.doesNotMatch(workflow, /node --test[^\n]*tests\/db-schema-contract\.test\.ts/)
 })
 
 test("QEO-29 keeps phase detail for 1 day and terminal run summaries for 7 days", () => {
