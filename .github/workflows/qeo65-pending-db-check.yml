@@ -1,0 +1,49 @@
+name: QEO-65 Pending DB Check
+
+on:
+  push:
+    branches:
+      - qeo-65-67-cleanup-modules
+
+permissions:
+  contents: read
+
+jobs:
+  pending-drop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - run: pnpm install --frozen-lockfile
+      - name: Verify production ledger reconciliation
+        run: pnpm db:drift:verify
+      - name: Activate pending QEO-65 migration only inside CI workspace
+        run: cp supabase/pending-migrations/20260904114500_qeo65_drop_legacy_archive_ledgers.sql supabase/migrations/20260904114500_qeo65_drop_legacy_archive_ledgers.sql
+      - name: Start local Supabase
+        run: supabase start
+      - name: Replay migrations from zero with pending drop
+        run: pnpm db:replay:verify
+      - name: Verify post-drop generated schema
+        shell: bash
+        run: |
+          supabase gen types typescript --local --schema public > /tmp/qeo65-post-drop.types.ts
+          ! grep -q 'eod_archive_checkpoints' /tmp/qeo65-post-drop.types.ts
+          ! grep -q 'market_ohlcv_archive_ranges' /tmp/qeo65-post-drop.types.ts
+          ! grep -q 'qeo_archive_retention_preflight' /tmp/qeo65-post-drop.types.ts
+      - name: Verify current DB contracts and TypeScript
+        run: |
+          pnpm test:db
+          pnpm typecheck
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
