@@ -2812,45 +2812,6 @@ export type Database = {
         }
         Relationships: []
       }
-      wyckoff_universe_memberships: {
-        Row: {
-          active: boolean
-          effective_date: string
-          exchange: string
-          market_cap_billion: number | null
-          rank: number | null
-          sector: string
-          source: string
-          synced_at: string
-          ticker: string
-          universe_key: string
-        }
-        Insert: {
-          active?: boolean
-          effective_date: string
-          exchange?: string
-          market_cap_billion?: number | null
-          rank?: number | null
-          sector?: string
-          source?: string
-          synced_at?: string
-          ticker: string
-          universe_key?: string
-        }
-        Update: {
-          active?: boolean
-          effective_date?: string
-          exchange?: string
-          market_cap_billion?: number | null
-          rank?: number | null
-          sector?: string
-          source?: string
-          synced_at?: string
-          ticker?: string
-          universe_key?: string
-        }
-        Relationships: []
-      }
     }
     Views: {
       wyckoff_latest_by_timeframe: {
