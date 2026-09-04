@@ -2,6 +2,8 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
+import "./research-reports/pdf-processing.test.ts"
+
 import {
   extractOpenAiOutputText,
   inspectOpenAiResponseEnvelope as inspectSharedOpenAiResponseEnvelope,
