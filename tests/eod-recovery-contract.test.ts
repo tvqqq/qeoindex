@@ -13,8 +13,10 @@ test("historical EOD recovery reads persistent Daily OHLCV rather than mutable o
   const freshness = source("lib/ai-council-freshness.ts")
   const operations = source("lib/ai-council-operations.ts")
 
-  assert.match(backfill, /market_ohlcv_history/)
+  assert.match(backfill, /market_ohlcv_history|loadPersistentCouncilEodSnapshots/)
+  assert.match(backfill, /getCanonicalUniverse/)
   assert.doesNotMatch(backfill, /stock_orderbook_snapshots/)
+  assert.doesNotMatch(backfill, /beginWyckoffV2NotionRun|notionAction|notionSupabaseRunId/)
   assert.match(eodMarket, /loadPersistentCouncilEodSnapshots/)
   assert.match(eodData, /loadPersistentCouncilEodSnapshots/)
   assert.match(freshness, /persistent_ohlcv/)
@@ -41,10 +43,24 @@ test("recoverable history failures remain observable before exact-session repair
   const steps = source("lib/qeoindex-eod-workflow-steps.ts")
   const workflow = source("workflows/qeoindex-eod-pipeline.ts")
 
+  assert.doesNotMatch(steps, /if \(result\.failedTickers > 0\) \{[\s\S]*?HISTORY_REFRESH failed for/)
   assert.match(steps, /allowRecoverableFailures\s*=\s*false/)
   assert.match(steps, /result\.failedTickers > 0 && !allowRecoverableFailures/)
   assert.match(steps, /failedTickers:\s*result\.failedTickers/)
   assert.match(steps, /limitedCoverageCount:\s*result\.limitedCoverage\.length/)
+  assert.match(steps, /errors:\s*result\.errors\.slice\(0,\s*5\)/)
+  assert.doesNotMatch(workflow, /history\.completedTickers !== universeCount/)
   assert.match(workflow, /history\.completedTickers \+ history\.failedTickers !== universeCount/)
-  assert.match(workflow, /runEodNoTradeDailyRepairStep/)
+  assert.match(workflow, /history\.requestedTickers !== universeCount/)
+  assert.match(workflow, /historyWindowSize = HISTORY_REFRESH_BATCH_SIZE \* historyConcurrency/)
+  assert.match(steps, /Promise\.all/)
+
+  const historyGate = workflow.indexOf("history.completedTickers + history.failedTickers")
+  const repair = workflow.indexOf("runEodNoTradeDailyRepairStep", historyGate)
+  const build = workflow.indexOf("runWyckoffBuildStep", repair)
+  assert.ok(historyGate >= 0 && repair > historyGate && build > repair)
+  assert.match(
+    workflow,
+    /runHistoryRefreshWindowStep\([\s\S]*?startedAtIso,[\s\S]*?history,[\s\S]*?historyConcurrency,[\s\S]*?!historicalBackfill[\s\S]*?\)/,
+  )
 })
