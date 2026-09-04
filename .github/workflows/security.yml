@@ -68,6 +68,11 @@ jobs:
           const reportPath = process.env.GITLEAKS_HISTORY_REPORT
           const findings = JSON.parse(readFileSync(reportPath, "utf8"))
           const clean = (value) => String(value ?? "unknown").replace(/[\r\n\t]/g, " ")
+          const safeIdentifier = (match) => {
+            const raw = String(match ?? "")
+            const candidate = raw.match(/([A-Za-z_][A-Za-z0-9_.-]{1,63})\s*(?:=|:)/)?.[1] ?? "unknown"
+            return /^[A-Za-z_][A-Za-z0-9_.-]{1,63}$/.test(candidate) ? candidate : "unknown"
+          }
           const unique = new Set()
 
           console.log(`Historical secret findings: ${findings.length}`)
@@ -77,6 +82,8 @@ jobs:
               clean(finding.File),
               clean(finding.Commit),
               `line:${clean(finding.StartLine)}`,
+              `field:${safeIdentifier(finding.Match)}`,
+              `fingerprint:${clean(finding.Fingerprint)}`,
             ].join("\t")
             if (unique.has(record)) continue
             unique.add(record)
