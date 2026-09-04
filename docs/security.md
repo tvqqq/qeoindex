@@ -17,6 +17,8 @@ Supabase Auth
 
 `AppAuthGate` must never be used as the security boundary for an API route or server data loader.
 
+Public identifiers are not credentials. Repository-visible domains, provider endpoints, Supabase project URLs/refs, and publishable/anon keys may identify infrastructure, but authorization, RLS, server-only secrets, and least-privilege service access are the security boundary. Do not rely on hiding a hostname or project ref as a substitute for access control.
+
 ## Repository merge controls
 
 The canonical merge contract for `main` is:
@@ -28,7 +30,7 @@ The canonical merge contract for `main` is:
 - the pull-request run is the pre-merge gate; the `push: main` run is defense-in-depth and must not be treated as a substitute for branch protection;
 - feature branches may be deleted automatically after merge once `delete_branch_on_merge` is enabled. This must never weaken protection for `main`.
 
-The `Verify / verify` job executes the tracked-source secret scan, current contract tests, touched lint, Market Board regression lint, TypeScript validation, and the production Next.js build. Keep this job name stable while it is configured as a required status check.
+The `Verify / verify` job executes both the fast project-aware tracked-source secret scan and a full-history Gitleaks scan, followed by current contract tests, touched lint, Market Board regression lint, TypeScript validation, and the production Next.js build. Keep this job name stable while it is configured as a required status check.
 
 Emergency changes must still preserve an auditable pull request and successful verification unless a deliberately documented repository-admin break-glass procedure is used.
 
@@ -44,7 +46,7 @@ Emergency changes must still preserve an auditable pull request and successful v
 
 ## Machine-only API rules
 
-Machine endpoints use `modules/auth/machine.ts`, which compares bearer secrets with a constant-time digest comparison.
+Next.js machine endpoints use `modules/auth/machine.ts`, which compares bearer secrets with a constant-time digest comparison.
 
 | Endpoint | Required secret |
 | --- | --- |
@@ -55,6 +57,15 @@ Machine endpoints use `modules/auth/machine.ts`, which compares bearer secrets w
 | `/api/market/cache/invalidate` | `MARKET_CACHE_ADMIN_SECRET` or `CRON_SECRET` |
 
 The destructive market maintenance endpoints are POST-only. They must not expose unauthenticated GET aliases.
+
+Supabase Edge machine functions use `supabase/functions/_shared/machine-auth.ts`. Authentication must occur before service-role client construction, provider calls, or database access.
+
+| Edge Function | Required machine authorization |
+| --- | --- |
+| `orderbook-sync` | dedicated/fallback machine secret accepted by the shared helper |
+| `market-session` | `MARKET_SYNC_SECRET` or `CRON_SECRET` for every GET/POST |
+
+`OPTIONS` may remain unauthenticated for CORS preflight. Unsupported methods fail with `405`; unauthenticated GET/POST requests fail with `401`. Browser-facing reads must go through authenticated application APIs rather than directly consuming service-role Edge reads.
 
 ## Supabase and RLS
 
@@ -94,11 +105,13 @@ A strict CSP is intentionally not enabled yet. QeoIndex has WebSocket and extern
 
 ## Secret handling
 
-- Keep DNSE, Notion, Finhay OAuth, scheduler, market-admin, Supabase service-role, Redis, and infrastructure credentials in server-side environment variables.
+- Keep DNSE, Notion, Finhay OAuth, scheduler, market-admin, Supabase service-role, Redis, QStash, KFSP, and infrastructure credentials in server-side environment variables.
 - Never add a `NEXT_PUBLIC_` prefix to a credential. The only Supabase browser credential is the publishable/anon key.
-- Commit only empty examples such as `.env.example`.
-- Run `pnpm scan:secrets` before committing. CI runs the same scanner for every pull request and again on every push to `main`.
-- The scanner reports filenames only so an accidental credential is not copied into CI logs.
+- Commit only empty/environment-neutral examples such as `.env.example`.
+- Run `pnpm scan:secrets` before committing. This fast scanner detects project-specific credential assignments and reports filenames only so an accidental credential is not copied into CI logs.
+- CI additionally checks the reachable Git history with Gitleaks after a full-history checkout. Pull-request comments and secret-report artifacts are disabled for this gate.
+- A historical secret finding is not remediated by deleting the current file or disabling its detection rule. Revoke/rotate the credential first. Only after that remediation may a reviewed historical fingerprint be allowlisted when retaining shared history is operationally required.
+- Never copy a detected secret value into an issue, PR comment, CI summary, screenshot, or audit document. Evidence should use provider/rule class, path, commit/fingerprint metadata, and remediation state only.
 
 ## Remaining security action
 
@@ -106,14 +119,14 @@ Supabase Security Advisor currently reports one hosted-Auth warning: **Leaked Pa
 
 Remediation reference: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
 
-After enabling it, rerun the Supabase Security Advisor and expect no remaining database/Auth warnings relevant to this audit.
+After enabling it, rerun the Supabase Security Advisor and expect no remaining database/Auth warnings relevant to this audit. If the setting cannot be changed through the current automation connector, track it explicitly as a hosted-setting follow-up rather than claiming source code fixed it.
 
-## DNSE credential rotation
+## Credential rotation
 
-Any DNSE credential that was ever committed to Git history must be treated as compromised:
+Any credential that was ever committed to Git history must be treated as compromised:
 
-1. Revoke or rotate the old credential in DNSE.
-2. Update `DNSE_API_KEY` and `DNSE_API_SECRET` in the server environment only.
-3. Redeploy the application so every server runtime uses the rotated credential.
-4. Confirm the old credential is rejected and `/api/market/stream-auth` works only after QeoIndex server authentication and `market_board` entitlement checks.
+1. Revoke or rotate the old credential at its provider.
+2. Update the replacement only in the server/deployment secret store.
+3. Redeploy every runtime that consumes the credential.
+4. Confirm the old credential is rejected and the authorized application path still works.
 5. Do not rewrite shared Git history until collaborators and deployment owners agree on the operational plan; rotation is required even if history is later rewritten.
