@@ -50,3 +50,34 @@ export interface ResearchReportChunk {
   chunkHash: string
   chunkVersion: string
 }
+
+export type ResearchReportTickerStance = "positive" | "negative" | "neutral" | "mixed"
+
+export interface ResearchReportEvidenceRef {
+  page: number
+  snippet: string
+}
+
+export interface StructuredResearchReportTickerMention {
+  ticker: string
+  stance: ResearchReportTickerStance
+  recommendationText: string | null
+  targetPrice: number | null
+  targetCurrency: string | null
+  rationale: string
+  evidence: ResearchReportEvidenceRef[]
+}
+
+export interface StructuredResearchReportAnalysis {
+  executiveSummary: string
+  keyPoints: string[]
+  marketView: string | null
+  sectorOutlook: string | null
+  catalysts: string[]
+  risks: string[]
+  tickerMentions: StructuredResearchReportTickerMention[]
+  confidence: {
+    score: number
+    flags: string[]
+  }
+}

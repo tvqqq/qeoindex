@@ -26,9 +26,8 @@ export async function parseResearchReportPdf(bytes: Uint8Array): Promise<ParsedR
     useSystemFonts: true,
   })
 
-  let document: Awaited<typeof loadingTask.promise> | null = null
   try {
-    document = await loadingTask.promise
+    const document = await loadingTask.promise
     const pages: ParsedReportPage[] = []
 
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
@@ -57,7 +56,6 @@ export async function parseResearchReportPdf(bytes: Uint8Array): Promise<ParsedR
     }
     throw error
   } finally {
-    if (document) await document.destroy()
-    else await loadingTask.destroy()
+    await loadingTask.destroy()
   }
 }
