@@ -628,60 +628,6 @@ export type Database = {
           },
         ]
       }
-      eod_archive_checkpoints: {
-        Row: {
-          archived_at: string | null
-          created_at: string
-          drive_file_count: number | null
-          drive_manifest_sha256: string | null
-          drive_manifest_url: string | null
-          drive_row_count: number | null
-          drive_status: string
-          notion_status: string
-          retention_completed_at: string | null
-          retention_status: string
-          trading_date: string
-          universe_count: number | null
-          universe_run_id: string | null
-          updated_at: string
-          validation_hash: string | null
-        }
-        Insert: {
-          archived_at?: string | null
-          created_at?: string
-          drive_file_count?: number | null
-          drive_manifest_sha256?: string | null
-          drive_manifest_url?: string | null
-          drive_row_count?: number | null
-          drive_status?: string
-          notion_status?: string
-          retention_completed_at?: string | null
-          retention_status?: string
-          trading_date: string
-          universe_count?: number | null
-          universe_run_id?: string | null
-          updated_at?: string
-          validation_hash?: string | null
-        }
-        Update: {
-          archived_at?: string | null
-          created_at?: string
-          drive_file_count?: number | null
-          drive_manifest_sha256?: string | null
-          drive_manifest_url?: string | null
-          drive_row_count?: number | null
-          drive_status?: string
-          notion_status?: string
-          retention_completed_at?: string | null
-          retention_status?: string
-          trading_date?: string
-          universe_count?: number | null
-          universe_run_id?: string | null
-          updated_at?: string
-          validation_hash?: string | null
-        }
-        Relationships: []
-      }
       insights_stock_ratings: {
         Row: {
           as_of_date: string
@@ -1767,48 +1713,6 @@ export type Database = {
           source?: string
           ticker?: string
           updated_at?: string
-        }
-        Relationships: []
-      }
-      market_ohlcv_archive_ranges: {
-        Row: {
-          archive_format: string
-          created_at: string
-          id: string
-          manifest_url: string
-          range_end: string
-          range_start: string
-          row_count: number
-          sha256: string
-          ticker: string
-          timeframe: string
-          verified_at: string
-        }
-        Insert: {
-          archive_format?: string
-          created_at?: string
-          id?: string
-          manifest_url: string
-          range_end: string
-          range_start: string
-          row_count: number
-          sha256: string
-          ticker: string
-          timeframe: string
-          verified_at?: string
-        }
-        Update: {
-          archive_format?: string
-          created_at?: string
-          id?: string
-          manifest_url?: string
-          range_end?: string
-          range_start?: string
-          row_count?: number
-          sha256?: string
-          ticker?: string
-          timeframe?: string
-          verified_at?: string
         }
         Relationships: []
       }
@@ -2929,10 +2833,6 @@ export type Database = {
           p_request_id: string
           p_value: Json
         }
-        Returns: Json
-      }
-      qeo_archive_retention_preflight: {
-        Args: { p_reference_date: string }
         Returns: Json
       }
       qeo_begin_kfsp_manual_lifecycle: {

@@ -89,6 +89,23 @@ test("READY retries bounded known not-ready states even when wrapper error codes
   assert.match(workflow, /KFSP\/TTAI RATING DATE/)
 })
 
+test("MARKET_CLOSE_COLLECT produces final orderbook snapshots before READY consumes them", () => {
+  const runtimeSteps = source("modules/eod/runtime-steps.ts")
+  const start = runtimeSteps.indexOf("export async function runMarketCloseCollectStep")
+  const end = runtimeSteps.indexOf("export async function runCompleteStep", start)
+  assert.ok(start >= 0 && end > start, "MARKET_CLOSE_COLLECT runtime step must exist")
+
+  const marketCloseStep = runtimeSteps.slice(start, end)
+  const finalOrderbook = marketCloseStep.indexOf("/functions/v1/orderbook-sync")
+  const marketInsight = marketCloseStep.indexOf("/functions/v1/market-insight-eod-sync")
+
+  assert.ok(finalOrderbook >= 0, "MARKET_CLOSE_COLLECT must refresh the final canonical orderbook snapshot")
+  assert.ok(marketInsight > finalOrderbook, "final orderbook refresh must finish before market insight collection")
+  assert.match(marketCloseStep, /session_date/)
+  assert.match(marketCloseStep, /universeRunId/)
+  assert.match(marketCloseStep, /count/)
+})
+
 test("morning freshness schedulers are retired while explicit recovery capability remains", () => {
   const phases = source("modules/admin/job-phases.ts")
   const baseCatalog = source("modules/admin/catalog.ts")

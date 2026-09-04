@@ -4,6 +4,8 @@ import { existsSync, readFileSync, readdirSync } from "node:fs"
 import test from "node:test"
 import { parseMigrationFilename, reconcileMigrations } from "../scripts/db/migration-drift-lib.mjs"
 
+const reviewedLedgerPath = "docs/db/evidence/production-migration-ledger-2026-09-04.json"
+
 test("parseMigrationFilename extracts version and logical name", () => {
   assert.deepEqual(
     parseMigrationFilename("20260902011529_clean_rebuild_market_snapshot_trigger.sql"),
@@ -60,7 +62,7 @@ test("duplicate manifest logical names fail", () => {
 
 test("current repository migration set reconciles against reviewed production ledger", () => {
   const manifest = JSON.parse(readFileSync("supabase/migration-equivalence.json", "utf8"))
-  const ledger = JSON.parse(readFileSync("docs/db/evidence/production-migration-ledger-2026-09-02.json", "utf8"))
+  const ledger = JSON.parse(readFileSync(reviewedLedgerPath, "utf8"))
   const activeFiles = readdirSync("supabase/migrations").filter((name) => name.endsWith(".sql"))
   const pendingFiles = existsSync("supabase/pending-migrations")
     ? readdirSync("supabase/pending-migrations").filter((name) => name.endsWith(".sql"))
@@ -71,7 +73,7 @@ test("current repository migration set reconciles against reviewed production le
 
 test("QEO-22 watchlist invariant is recorded as an exact production migration", () => {
   const manifest = JSON.parse(readFileSync("supabase/migration-equivalence.json", "utf8"))
-  const ledger = JSON.parse(readFileSync("docs/db/evidence/production-migration-ledger-2026-09-02.json", "utf8"))
+  const ledger = JSON.parse(readFileSync(reviewedLedgerPath, "utf8"))
   const expected = {
     logicalName: "qeo22_watchlist_default_invariant",
     repositoryVersion: "20260902052650",
@@ -91,7 +93,7 @@ test("QEO-22 watchlist invariant is recorded as an exact production migration", 
 test("QEO-19 Wyckoff legacy-table DROP is promoted as an exact production migration", () => {
   const logicalName = "drop_legacy_wyckoff_universe_memberships"
   const manifest = JSON.parse(readFileSync("supabase/migration-equivalence.json", "utf8"))
-  const ledger = JSON.parse(readFileSync("docs/db/evidence/production-migration-ledger-2026-09-02.json", "utf8"))
+  const ledger = JSON.parse(readFileSync(reviewedLedgerPath, "utf8"))
   const mapping = manifest.migrations.find((entry: { logicalName?: string }) => entry.logicalName === logicalName)
   const production = ledger.migrations.find((entry: { name?: string }) => entry.name === logicalName)
   const pendingFiles = existsSync("supabase/pending-migrations")
@@ -114,6 +116,35 @@ test("QEO-19 Wyckoff legacy-table DROP is promoted as an exact production migrat
   if (!existsSync(migrationPath)) return
   const migration = readFileSync(migrationPath, "utf8")
   assert.match(migration, /drop\s+table\s+if\s+exists\s+public\.wyckoff_universe_memberships/i)
+  assert.doesNotMatch(migration, /cascade/i)
+})
+
+test("QEO-65 legacy archive-ledger DROP is promoted after production activation", () => {
+  const logicalName = "qeo65_drop_legacy_archive_ledgers"
+  const manifest = JSON.parse(readFileSync("supabase/migration-equivalence.json", "utf8"))
+  const ledger = JSON.parse(readFileSync(reviewedLedgerPath, "utf8"))
+  const mapping = manifest.migrations.find((entry: { logicalName?: string }) => entry.logicalName === logicalName)
+  const production = ledger.migrations.find((entry: { name?: string }) => entry.name === logicalName)
+  const pendingFiles = existsSync("supabase/pending-migrations")
+    ? readdirSync("supabase/pending-migrations").filter((name) => name.endsWith(".sql"))
+    : []
+
+  assert.ok(mapping, "QEO-65 migration mapping must exist")
+  assert.equal(mapping.state, "MAPPED", "production-applied QEO-65 DROP must leave quarantine")
+  assert.equal(mapping.productionVersion, "20260904074828")
+  assert.deepEqual(production, { version: "20260904074828", name: logicalName })
+  assert.equal(
+    pendingFiles.some((name) => name.endsWith(`_${logicalName}.sql`)),
+    false,
+    "production-applied QEO-65 DROP must not remain under pending-migrations",
+  )
+
+  const migrationPath = `supabase/migrations/${mapping.repositoryVersion}_${logicalName}.sql`
+  assert.equal(existsSync(migrationPath), true, "QEO-65 replay migration source must be active")
+  if (!existsSync(migrationPath)) return
+  const migration = readFileSync(migrationPath, "utf8")
+  assert.match(migration, /drop\s+table\s+if\s+exists\s+public\.eod_archive_checkpoints/i)
+  assert.match(migration, /drop\s+table\s+if\s+exists\s+public\.market_ohlcv_archive_ranges/i)
   assert.doesNotMatch(migration, /cascade/i)
 })
 

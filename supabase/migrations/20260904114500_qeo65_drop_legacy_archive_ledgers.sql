@@ -5,8 +5,8 @@
 -- - qeo_archive_retention_preflight(date) is the only remaining database function
 --   that references the old eod_archive_checkpoints/Drive+Notion retention model.
 --
--- Keep this migration quarantined until the source/runtime cutover has deployed.
--- Activation is explicit after production smoke. This migration does not use CASCADE.
+-- Source/runtime cutover and production smoke are complete.
+-- Activation uses only the explicit DROP statements below.
 
 begin;
 
