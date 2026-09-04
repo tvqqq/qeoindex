@@ -53,6 +53,8 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: "false"
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
       - name: Scan all fetched Git refs for secrets
+        id: historical-secret-scan
+        continue-on-error: true
         env:
           GITLEAKS_HISTORY_REPORT: ${{ runner.temp }}/gitleaks-history.json
         run: |
@@ -103,3 +105,8 @@ jobs:
         run: pnpm typecheck
       - name: Production build
         run: pnpm exec next build
+      - name: Enforce historical secret gate
+        if: always() && steps.historical-secret-scan.outcome == 'failure'
+        run: |
+          echo "Historical secret scan failed. Remediate the reviewed historical credentials before merging; do not bypass this gate with broad allowlists."
+          exit 1
