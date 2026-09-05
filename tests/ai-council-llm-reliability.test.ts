@@ -20,6 +20,7 @@ import "./research-reports/pdf-viewer.test.ts"
 import "./research-reports/detail-analysis-ui.test.ts"
 import "./research-reports/detail-chat-ui.test.ts"
 import "./research-reports/detail-page.test.ts"
+import "./research-reports/council-evidence.test.ts"
 
 import {
   extractOpenAiOutputText,
