@@ -11,7 +11,6 @@ import {
   Flag,
   Lock,
   Minus,
-  Palette,
   Square,
   Star,
   Target,
@@ -21,6 +20,7 @@ import {
   Type,
   Unlock,
   AlertTriangle,
+  Layers,
 } from "lucide-react"
 import { cn } from "@/modules/shared/ui/cn"
 import type { DrawingIconType, DrawingTool } from "./stock-chart-types"
@@ -39,7 +39,12 @@ interface DrawingToolsProps {
   isHidden: boolean
   onToggleHide: () => void
   onClearAll: () => void
+  onToggleObjectManager?: () => void
+  isObjectManagerOpen?: boolean
+  drawingsCount?: number
+  saveStatus?: "saved" | "saving" | "offline"
 }
+
 
 const PALETTE_COLORS = [
   { hex: "#00f0ff", label: "Cyan" },
@@ -64,6 +69,10 @@ export function StockChartDrawingTools({
   isHidden,
   onToggleHide,
   onClearAll,
+  onToggleObjectManager,
+  isObjectManagerOpen = false,
+  drawingsCount = 0,
+  saveStatus = "saved",
 }: DrawingToolsProps) {
   const [showPalette, setShowPalette] = useState(false)
   const [showIconPicker, setShowIconPicker] = useState(false)
@@ -279,6 +288,30 @@ export function StockChartDrawingTools({
         {isHidden ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
       </button>
 
+      {/* Object Tree / Layers Management Button */}
+      {onToggleObjectManager && (
+        <div className="relative">
+          <button
+            type="button"
+            title={`Quản lý đối tượng (${drawingsCount})`}
+            onClick={onToggleObjectManager}
+            className={cn(
+              "flex size-7 items-center justify-center rounded-lg transition-colors relative",
+              isObjectManagerOpen
+                ? "border border-cyan-400/40 bg-cyan-400/20 text-cyan-300 shadow-[0_0_8px_rgba(0,240,255,0.3)]"
+                : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
+            )}
+          >
+            <Layers className="size-3.5" />
+            {drawingsCount > 0 && (
+              <span className="absolute -top-1 -right-1 size-3.5 rounded-full bg-cyan-400 text-[9px] font-bold text-black flex items-center justify-center font-mono">
+                {drawingsCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Clear All Drawings */}
       <button
         type="button"
@@ -288,6 +321,23 @@ export function StockChartDrawingTools({
       >
         <Trash2 className="size-3.5" />
       </button>
+
+      {/* Cloud Save Indicator */}
+      <div
+        className="mt-1 flex size-5 items-center justify-center"
+        title={saveStatus === "saved" ? "Đã lưu đám mây" : saveStatus === "saving" ? "Đang lưu..." : "Lưu trên thiết bị (Offline)"}
+      >
+        <span
+          className={cn(
+            "size-1.5 rounded-full transition-all",
+            saveStatus === "saved"
+              ? "bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.8)]"
+              : saveStatus === "saving"
+              ? "bg-amber-400 animate-pulse"
+              : "bg-slate-500",
+          )}
+        />
+      </div>
     </aside>
   )
 }

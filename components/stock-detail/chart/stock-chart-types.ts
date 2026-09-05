@@ -59,9 +59,21 @@ export interface DrawingObject {
   color: string
   lineWidth: number
   text?: string
+  fontSize?: number
   iconType?: DrawingIconType
   locked?: boolean
+  hidden?: boolean
 }
+
+export interface UserChartSettingsPayload {
+  ticker: string
+  timeframe: ChartTimeframe
+  chartStyle: ChartStyle
+  indicators: IndicatorConfig
+  drawings: DrawingObject[]
+  updatedAt?: string
+}
+
 
 export interface IndicatorConfig {
   showMa: boolean

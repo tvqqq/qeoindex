@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo, useState } from "react"
+import React, { useCallback, useMemo, useRef, useState } from "react"
 import {
   Camera,
   ChevronDown,
@@ -14,6 +14,8 @@ import { cn } from "@/modules/shared/ui/cn"
 import { StockChartDrawingCanvas } from "./chart/stock-chart-drawing-canvas"
 import { StockChartDrawingTools } from "./chart/stock-chart-drawing-tools"
 import { StockChartIndicatorModal } from "./chart/stock-chart-indicator-modal"
+import { StockChartObjectManager } from "./chart/stock-chart-object-manager"
+import { StockChartTextEditor } from "./chart/stock-chart-text-editor"
 import {
   calculateBollingerBands,
   calculateIchimokuSeries,
@@ -27,13 +29,10 @@ import {
   ALL_TIMEFRAMES,
   DEFAULT_INDICATOR_CONFIG,
   QUICK_TIMEFRAMES,
-  type ChartStyle,
-  type ChartTimeframe,
   type DrawingIconType,
-  type DrawingObject,
   type DrawingTool,
-  type IndicatorConfig,
 } from "./chart/stock-chart-types"
+import { useUserChartSync } from "./chart/use-user-chart-sync"
 
 interface StockTradingViewChartProps {
   ticker: string
@@ -54,14 +53,30 @@ export function StockTradingViewChart({
   currentPrice,
   changePct,
 }: StockTradingViewChartProps) {
-  // Chart view configuration
-  const [timeframe, setTimeframe] = useState<ChartTimeframe>("1D")
-  const [showTfDropdown, setShowTfDropdown] = useState(false)
-  const [chartStyle, setChartStyle] = useState<ChartStyle>("candles")
-  const [showStyleDropdown, setShowStyleDropdown] = useState(false)
+  // 1. Persistent User Chart Settings & Drawings Hook
+  const {
+    timeframe,
+    setTimeframe,
+    chartStyle,
+    setChartStyle,
+    indicators,
+    setIndicators,
+    drawings,
+    addDrawing,
+    modifyDrawing,
+    deleteDrawing,
+    clearAllDrawings,
+    saveStatus,
+  } = useUserChartSync({
+    ticker,
+    defaultTimeframe: "1D",
+    defaultChartStyle: "candles",
+    defaultIndicators: DEFAULT_INDICATOR_CONFIG,
+  })
 
-  // Indicator modal state
-  const [indicators, setIndicators] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG)
+  // Dropdown states
+  const [showTfDropdown, setShowTfDropdown] = useState(false)
+  const [showStyleDropdown, setShowStyleDropdown] = useState(false)
   const [showIndicatorModal, setShowIndicatorModal] = useState(false)
 
   // Drawing tools state
@@ -69,11 +84,22 @@ export function StockTradingViewChart({
   const [activeColor, setActiveColor] = useState<string>("#00f0ff")
   const [lineWidth, setLineWidth] = useState<number>(2)
   const [selectedIconType, setSelectedIconType] = useState<DrawingIconType>("flag")
-  const [drawings, setDrawings] = useState<DrawingObject[]>([])
   const [isDrawingsLocked, setIsDrawingsLocked] = useState(false)
   const [isDrawingsHidden, setIsDrawingsHidden] = useState(false)
 
-  // Hover state
+  // Interactive selection, Object Manager & Text Editor states
+  const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null)
+  const [isObjectManagerOpen, setIsObjectManagerOpen] = useState(false)
+  const [editingTextDrawingId, setEditingTextDrawingId] = useState<string | null>(null)
+
+  // Viewport zoom and scroll state (TradingView style)
+  const [visibleBarsCount, setVisibleBarsCount] = useState<number>(75)
+  const [scrollOffset, setScrollOffset] = useState<number>(0) // 0 = rightmost recent bars; >0 = scrolled left into history
+  const isPanningRef = useRef(false)
+  const panStartXRef = useRef(0)
+  const panStartOffsetRef = useRef(0)
+
+  // Hover crosshair state
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
   // Aggregated bars based on selected timeframe
@@ -81,32 +107,78 @@ export function StockTradingViewChart({
     return aggregateBarsByTimeframe(bars, hourlyBars, timeframe)
   }, [bars, hourlyBars, timeframe])
 
-  // Technical Indicators calculations
-  const ma20 = useMemo(() => calculateSma(displayBars, 20), [displayBars])
-  const ma50 = useMemo(() => calculateSma(displayBars, 50), [displayBars])
-  const ma200 = useMemo(() => calculateSma(displayBars, 200), [displayBars])
+  // Compute visible slice of bars based on scrollOffset & visibleBarsCount
+  const totalBars = displayBars.length
+  const maxScrollOffset = Math.max(0, totalBars - 15)
+  const clampedScrollOffset = Math.max(0, Math.min(maxScrollOffset, scrollOffset))
+  const endIdx = Math.max(15, totalBars - clampedScrollOffset)
+  const startIdx = Math.max(0, endIdx - visibleBarsCount)
 
-  const rsiSeries = useMemo(() => {
+  const visibleBars = useMemo(() => {
+    if (displayBars.length === 0) return []
+    return displayBars.slice(startIdx, endIdx)
+  }, [displayBars, startIdx, endIdx])
+
+  // Technical Indicators calculations on full displayBars, then mapped
+  const ma20All = useMemo(() => calculateSma(displayBars, 20), [displayBars])
+  const ma50All = useMemo(() => calculateSma(displayBars, 50), [displayBars])
+  const ma200All = useMemo(() => calculateSma(displayBars, 200), [displayBars])
+
+  const rsiSeriesAll = useMemo(() => {
     return isMaximized && indicators.showRsi ? calculateRsiSeries(displayBars, 14) : []
   }, [displayBars, isMaximized, indicators.showRsi])
 
-  const macdSeries = useMemo(() => {
+  const macdSeriesAll = useMemo(() => {
     return isMaximized && indicators.showMacd ? calculateMacdSeries(displayBars) : null
   }, [displayBars, isMaximized, indicators.showMacd])
 
-  const ichimoku = useMemo(() => {
+  const ichimokuAll = useMemo(() => {
     return isMaximized && indicators.showIchimoku ? calculateIchimokuSeries(displayBars) : null
   }, [displayBars, isMaximized, indicators.showIchimoku])
 
-  const bollinger = useMemo(() => {
+  const bollingerAll = useMemo(() => {
     return isMaximized && indicators.showBollinger ? calculateBollingerBands(displayBars, 20, 2) : null
   }, [displayBars, isMaximized, indicators.showBollinger])
 
-  const volumeProfile = useMemo(() => {
-    return isMaximized && indicators.showVolumeProfile ? calculateVolumeProfile(displayBars, 24) : null
-  }, [displayBars, isMaximized, indicators.showVolumeProfile])
+  // Visible slices of indicators
+  const ma20 = useMemo(() => ma20All.slice(startIdx, endIdx), [ma20All, startIdx, endIdx])
+  const ma50 = useMemo(() => ma50All.slice(startIdx, endIdx), [ma50All, startIdx, endIdx])
+  const ma200 = useMemo(() => ma200All.slice(startIdx, endIdx), [ma200All, startIdx, endIdx])
+  const rsiSeries = useMemo(() => rsiSeriesAll.slice(startIdx, endIdx), [rsiSeriesAll, startIdx, endIdx])
 
-  // Calculate layout geometry
+  const macdSeries = useMemo(() => {
+    if (!macdSeriesAll) return null
+    return {
+      macd: macdSeriesAll.macd.slice(startIdx, endIdx),
+      signal: macdSeriesAll.signal.slice(startIdx, endIdx),
+      histogram: macdSeriesAll.histogram.slice(startIdx, endIdx),
+    }
+  }, [macdSeriesAll, startIdx, endIdx])
+
+  const ichimoku = useMemo(() => {
+    if (!ichimokuAll) return null
+    return {
+      tenkan: ichimokuAll.tenkan.slice(startIdx, endIdx),
+      kijun: ichimokuAll.kijun.slice(startIdx, endIdx),
+      spanA: ichimokuAll.spanA.slice(startIdx, endIdx),
+      spanB: ichimokuAll.spanB.slice(startIdx, endIdx),
+    }
+  }, [ichimokuAll, startIdx, endIdx])
+
+  const bollinger = useMemo(() => {
+    if (!bollingerAll) return null
+    return {
+      upper: bollingerAll.upper.slice(startIdx, endIdx),
+      middle: bollingerAll.middle.slice(startIdx, endIdx),
+      lower: bollingerAll.lower.slice(startIdx, endIdx),
+    }
+  }, [bollingerAll, startIdx, endIdx])
+
+  const volumeProfile = useMemo(() => {
+    return isMaximized && indicators.showVolumeProfile ? calculateVolumeProfile(visibleBars, 24) : null
+  }, [visibleBars, isMaximized, indicators.showVolumeProfile])
+
+  // Layout Geometry
   const width = 1000
   const height = isMaximized ? 640 : 310
   const padLeft = 20
@@ -114,7 +186,6 @@ export function StockTradingViewChart({
   const padTop = 20
   const plotWidth = width - padLeft - padRight
 
-  // Pane heights depending on active indicators
   const hasRsi = isMaximized && indicators.showRsi
   const hasMacd = isMaximized && indicators.showMacd
   const subpaneCount = (hasRsi ? 1 : 0) + (hasMacd ? 1 : 0)
@@ -124,17 +195,17 @@ export function StockTradingViewChart({
   const mainPriceHeight = height - padTop - volHeight - 25 - subpaneCount * subpaneHeight
   const volTop = padTop + mainPriceHeight + 10
   const rsiTop = volTop + volHeight + 10
-  const macdTop = (hasRsi ? rsiTop + subpaneHeight + 10 : volTop + volHeight + 10)
+  const macdTop = hasRsi ? rsiTop + subpaneHeight + 10 : volTop + volHeight + 10
 
-  // Chart metrics for price scaling
+  // Chart metrics based on VISIBLE bars for auto-scaling
   const chartMetrics = useMemo(() => {
-    if (displayBars.length === 0) return null
+    if (visibleBars.length === 0) return null
 
     let minPrice = Infinity
     let maxPrice = -Infinity
     let maxVol = 0
 
-    displayBars.forEach((bar) => {
+    visibleBars.forEach((bar) => {
       if (bar.low < minPrice) minPrice = bar.low
       if (bar.high > maxPrice) maxPrice = bar.high
       if (bar.volume > maxVol) maxVol = bar.volume
@@ -158,45 +229,133 @@ export function StockTradingViewChart({
       range: priceRange,
       maxVol: Math.max(maxVol, 1),
     }
-  }, [displayBars, bollinger])
+  }, [visibleBars, bollinger])
 
-  const activeBar = hoverIndex !== null && displayBars[hoverIndex] ? displayBars[hoverIndex] : displayBars.at(-1)
+  // Coordinate Mapping
+  const getX = useCallback(
+    (idx: number) => padLeft + (idx / Math.max(1, visibleBars.length - 1)) * plotWidth,
+    [padLeft, visibleBars.length, plotWidth],
+  )
+  const getY = useCallback(
+    (price: number) => {
+      if (!chartMetrics) return 0
+      return padTop + ((chartMetrics.max - price) / chartMetrics.range) * mainPriceHeight
+    },
+    [chartMetrics, padTop, mainPriceHeight],
+  )
 
-  const getX = (idx: number) => padLeft + (idx / Math.max(1, displayBars.length - 1)) * plotWidth
-  const getY = (price: number) => {
+  const priceToY = (price: number) => getY(price)
+  const yToPrice = (y: number) => {
     if (!chartMetrics) return 0
-    return padTop + ((chartMetrics.max - price) / chartMetrics.range) * mainPriceHeight
+    return chartMetrics.max - ((y - padTop) / mainPriceHeight) * chartMetrics.range
   }
 
-  const makeLinePath = (series: Array<number | null>) => {
-    let path = ""
-    series.forEach((val, i) => {
-      if (val === null) return
-      const x = getX(i)
-      const y = getY(val)
-      path += path === "" ? `M ${x} ${y}` : ` L ${x} ${y}`
-    })
-    return path
+  const timeToX = (time: number) => {
+    if (visibleBars.length === 0) return 0
+    if (time < visibleBars[0].time) return -60 // offscreen left
+    if (time > visibleBars.at(-1)!.time) return width + 60 // offscreen right
+
+    // Exact or closest interpolation
+    for (let i = 0; i < visibleBars.length; i++) {
+      if (visibleBars[i].time >= time) {
+        if (i === 0 || visibleBars[i].time === time) return getX(i)
+        const t0 = visibleBars[i - 1].time
+        const t1 = visibleBars[i].time
+        const frac = (time - t0) / Math.max(1, t1 - t0)
+        return getX(i - 1) + frac * (getX(i) - getX(i - 1))
+      }
+    }
+    return getX(visibleBars.length - 1)
   }
 
-  const ma20Path = useMemo(() => makeLinePath(ma20), [ma20, chartMetrics])
-  const ma50Path = useMemo(() => makeLinePath(ma50), [ma50, chartMetrics])
-  const ma200Path = useMemo(() => makeLinePath(ma200), [ma200, chartMetrics])
+  const xToTime = (x: number) => {
+    if (visibleBars.length === 0) return 0
+    const ratio = Math.max(0, Math.min(1, (x - padLeft) / plotWidth))
+    const idx = Math.round(ratio * (visibleBars.length - 1))
+    return visibleBars[idx]?.time || visibleBars.at(-1)?.time || 0
+  }
 
-  if (!displayBars.length || !chartMetrics) {
+  const makeLinePath = useCallback(
+    (series: Array<number | null>) => {
+      let path = ""
+      series.forEach((val, i) => {
+        if (val === null) return
+        const x = getX(i)
+        const y = getY(val)
+        path += path === "" ? `M ${x} ${y}` : ` L ${x} ${y}`
+      })
+      return path
+    },
+    [getX, getY],
+  )
+
+  const ma20Path = useMemo(() => makeLinePath(ma20), [ma20, makeLinePath])
+  const ma50Path = useMemo(() => makeLinePath(ma50), [ma50, makeLinePath])
+  const ma200Path = useMemo(() => makeLinePath(ma200), [ma200, makeLinePath])
+
+  // Mouse wheel Zooming (exact TradingView mechanics)
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const zoomDir = e.deltaY > 0 ? 1 : -1 // wheel down = zoom out; wheel up = zoom in
+    const step = Math.max(3, Math.round(visibleBarsCount * 0.1))
+    const nextCount = Math.min(Math.max(15, visibleBarsCount + zoomDir * step), displayBars.length)
+    setVisibleBarsCount(nextCount)
+  }
+
+  // Mouse Panning & Scrolling
+  const handleMouseDownCanvas = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (activeTool === "cursor") {
+      isPanningRef.current = true
+      panStartXRef.current = e.clientX
+      panStartOffsetRef.current = scrollOffset
+    }
+  }
+
+  const handleMouseMoveCanvas = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isPanningRef.current) {
+      const dx = e.clientX - panStartXRef.current
+      const deltaBars = Math.round((dx / plotWidth) * visibleBarsCount)
+      const nextOffset = Math.max(0, Math.min(maxScrollOffset, panStartOffsetRef.current + deltaBars))
+      setScrollOffset(nextOffset)
+      return
+    }
+
+    if (activeTool === "cursor") {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const relX = e.clientX - rect.left - (padLeft * rect.width) / width
+      const effectiveWidth = (plotWidth * rect.width) / width
+      const ratio = Math.max(0, Math.min(1, relX / effectiveWidth))
+      const idx = Math.round(ratio * (visibleBars.length - 1))
+      setHoverIndex(idx)
+    }
+  }
+
+  const handleMouseUpCanvas = () => {
+    isPanningRef.current = false
+  }
+
+  const handleResetView = () => {
+    setScrollOffset(0)
+    setVisibleBarsCount(75)
+  }
+
+  const activeBar = hoverIndex !== null && visibleBars[hoverIndex] ? visibleBars[hoverIndex] : visibleBars.at(-1)
+
+  if (!displayBars.length || !chartMetrics || visibleBars.length === 0) {
     return (
-      <div className="flex h-[310px] items-center justify-center rounded-2xl border border-white/[0.08] bg-[#080d13] p-6 text-sm text-slate-500">
+      <div className="flex h-[310px] items-center justify-center rounded-2xl border border-white/[0.08] bg-[#080d13] p-6 text-sm text-slate-500 font-ticker">
         Đang nạp dữ liệu nến TradingView {ticker}...
       </div>
     )
   }
 
   const activeIndicatorsCount = Object.values(indicators).filter(Boolean).length
+  const editingDrawing = drawings.find((d) => d.id === editingTextDrawingId)
 
   return (
     <div
       className={cn(
-        "relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13] shadow-[0_8px_32px_rgba(0,0,0,0.6)]",
+        "relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13] shadow-[0_8px_32px_rgba(0,0,0,0.6)] font-ticker",
         isMaximized ? "h-full min-h-[620px]" : "h-auto",
       )}
     >
@@ -306,7 +465,15 @@ export function StockTradingViewChart({
                 onClick={() => setShowStyleDropdown((prev) => !prev)}
                 className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] text-slate-300 hover:bg-white/[0.05] transition-colors"
               >
-                <span>{chartStyle === "candles" ? "Nến Nhật" : chartStyle === "line" ? "Đường Line" : chartStyle === "area" ? "Vùng Area" : "Nến Rỗng"}</span>
+                <span>
+                  {chartStyle === "candles"
+                    ? "Nến Nhật"
+                    : chartStyle === "line"
+                    ? "Đường Line"
+                    : chartStyle === "area"
+                    ? "Vùng Area"
+                    : "Nến Rỗng"}
+                </span>
                 <ChevronDown className="size-3 text-slate-400" />
               </button>
 
@@ -322,10 +489,18 @@ export function StockTradingViewChart({
                       }}
                       className={cn(
                         "w-full rounded px-2.5 py-1 text-left text-[11px] transition-colors",
-                        chartStyle === st ? "bg-cyan-400/20 text-cyan-300 font-bold" : "text-slate-400 hover:text-white hover:bg-white/[0.04]",
+                        chartStyle === st
+                          ? "bg-cyan-400/20 text-cyan-300 font-bold"
+                          : "text-slate-400 hover:text-white hover:bg-white/[0.04]",
                       )}
                     >
-                      {st === "candles" ? "Nến Nhật" : st === "line" ? "Đường Line" : st === "area" ? "Vùng Area" : "Nến Rỗng"}
+                      {st === "candles"
+                        ? "Nến Nhật"
+                        : st === "line"
+                        ? "Đường Line"
+                        : st === "area"
+                        ? "Vùng Area"
+                        : "Nến Rỗng"}
                     </button>
                   ))}
                 </div>
@@ -366,7 +541,7 @@ export function StockTradingViewChart({
           )}
         </div>
 
-        {/* Right Section: OHLCV Readout & Maximize / Minimize Button */}
+        {/* Right Section: OHLCV Readout, Zoom/Pan Reset & Maximize/Minimize */}
         <div className="flex items-center gap-3">
           {/* OHLCV live readout */}
           {activeBar && (
@@ -381,23 +556,24 @@ export function StockTradingViewChart({
               <span>O: <b className="text-slate-200">{activeBar.open.toLocaleString()}</b></span>
               <span>H: <b className="text-emerald-300">{activeBar.high.toLocaleString()}</b></span>
               <span>L: <b className="text-rose-300">{activeBar.low.toLocaleString()}</b></span>
-              <span>C: <b className={activeBar.close >= activeBar.open ? "text-emerald-300" : "text-rose-300"}>{activeBar.close.toLocaleString()}</b></span>
+              <span>
+                C:{" "}
+                <b className={activeBar.close >= activeBar.open ? "text-emerald-300" : "text-rose-300"}>
+                  {activeBar.close.toLocaleString()}
+                </b>
+              </span>
               <span>V: <b className="text-slate-200">{(activeBar.volume / 1_000_000).toFixed(2)}M</b></span>
             </div>
           )}
 
-          {/* Action Buttons: Screenshot, Reset, Maximize/Minimize */}
+          {/* Action Buttons: Reset View, Screenshot, Maximize/Minimize */}
           <div className="flex items-center gap-1">
             {isMaximized && (
               <>
                 <button
                   type="button"
-                  title="Đặt lại góc nhìn"
-                  onClick={() => {
-                    setTimeframe("1D")
-                    setIndicators(DEFAULT_INDICATOR_CONFIG)
-                    setDrawings([])
-                  }}
+                  title="Đặt lại góc nhìn (Reset View & Zoom)"
+                  onClick={handleResetView}
                   className="rounded-md p-1.5 text-slate-400 hover:bg-white/[0.06] hover:text-white transition-colors"
                 >
                   <RotateCcw className="size-3.5" />
@@ -443,22 +619,21 @@ export function StockTradingViewChart({
       </div>
 
       {/* ========================================================================= */}
-      {/* CHART MAIN CANVAS & DRAWING SUITE                                         */}
+      {/* CHART MAIN CANVAS & DRAWING SUITE (SCROLL & ZOOMABLE)                     */}
       {/* ========================================================================= */}
       <div
         className={cn(
-          "relative w-full flex-1 cursor-crosshair select-none",
+          "relative w-full flex-1 select-none overflow-hidden",
           isMaximized ? "min-h-[560px]" : "min-h-[260px]",
+          activeTool === "cursor" ? "cursor-grab active:cursor-grabbing" : "cursor-crosshair",
         )}
-        onMouseLeave={() => setHoverIndex(null)}
-        onMouseMove={(e) => {
-          if (activeTool !== "cursor") return
-          const rect = e.currentTarget.getBoundingClientRect()
-          const relX = e.clientX - rect.left - (padLeft * rect.width) / width
-          const effectiveWidth = (plotWidth * rect.width) / width
-          const ratio = Math.max(0, Math.min(1, relX / effectiveWidth))
-          const idx = Math.round(ratio * (displayBars.length - 1))
-          setHoverIndex(idx)
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDownCanvas}
+        onMouseMove={handleMouseMoveCanvas}
+        onMouseUp={handleMouseUpCanvas}
+        onMouseLeave={() => {
+          isPanningRef.current = false
+          setHoverIndex(null)
         }}
       >
         {/* Floating Drawing Toolbar on the Left (Only in Maximized Mode) */}
@@ -476,7 +651,59 @@ export function StockTradingViewChart({
             onToggleLock={() => setIsDrawingsLocked((p) => !p)}
             isHidden={isDrawingsHidden}
             onToggleHide={() => setIsDrawingsHidden((p) => !p)}
-            onClearAll={() => setDrawings([])}
+            onClearAll={clearAllDrawings}
+            onToggleObjectManager={() => setIsObjectManagerOpen((prev) => !prev)}
+            isObjectManagerOpen={isObjectManagerOpen}
+            drawingsCount={drawings.length}
+            saveStatus={saveStatus}
+          />
+        )}
+
+        {/* Object Management Panel (Object Tree / Layers) */}
+        {isMaximized && isObjectManagerOpen && (
+          <StockChartObjectManager
+            drawings={drawings}
+            selectedId={selectedDrawingId}
+            onSelect={(id) => setSelectedDrawingId(id)}
+            onToggleHide={(id) => {
+              const target = drawings.find((d) => d.id === id)
+              if (target) modifyDrawing(id, { hidden: !target.hidden })
+            }}
+            onToggleLock={(id) => {
+              const target = drawings.find((d) => d.id === id)
+              if (target) modifyDrawing(id, { locked: !target.locked })
+            }}
+            onDelete={(id) => {
+              deleteDrawing(id)
+              if (selectedDrawingId === id) setSelectedDrawingId(null)
+            }}
+            onEditText={(id) => setEditingTextDrawingId(id)}
+            onClearAll={clearAllDrawings}
+            onClose={() => setIsObjectManagerOpen(false)}
+          />
+        )}
+
+        {/* Text Edit Modal / Popover */}
+        {editingDrawing && editingDrawing.tool === "text" && (
+          <StockChartTextEditor
+            initialText={editingDrawing.text || ""}
+            initialColor={editingDrawing.color}
+            initialFontSize={editingDrawing.fontSize || 13}
+            position={{
+              x: timeToX(editingDrawing.points[0]?.time || 0) || editingDrawing.points[0]?.x || width / 2,
+              y: priceToY(editingDrawing.points[0]?.price || 0) || editingDrawing.points[0]?.y || height / 2,
+            }}
+            containerWidth={width}
+            containerHeight={height}
+            onSave={(newText, newColor, newFontSize) => {
+              modifyDrawing(editingDrawing.id, {
+                text: newText,
+                color: newColor,
+                fontSize: newFontSize,
+              })
+              setEditingTextDrawingId(null)
+            }}
+            onCancel={() => setEditingTextDrawingId(null)}
           />
         )}
 
@@ -530,7 +757,7 @@ export function StockTradingViewChart({
           {/* 2. Ichimoku Cloud (if enabled) */}
           {ichimoku && (
             <g opacity="0.35">
-              {displayBars.map((_, i) => {
+              {visibleBars.map((_, i) => {
                 if (i === 0) return null
                 const spanA1 = ichimoku.spanA[i - 1]
                 const spanB1 = ichimoku.spanB[i - 1]
@@ -561,7 +788,7 @@ export function StockTradingViewChart({
           {/* 3. Bollinger Bands Shaded Area (if enabled) */}
           {bollinger && (
             <g opacity="0.25">
-              {displayBars.map((_, i) => {
+              {visibleBars.map((_, i) => {
                 if (i === 0) return null
                 const u1 = bollinger.upper[i - 1]
                 const l1 = bollinger.lower[i - 1]
@@ -578,11 +805,11 @@ export function StockTradingViewChart({
           )}
 
           {/* 4. Volume Bars (Standard Volume Pane) */}
-          {displayBars.map((bar, i) => {
+          {visibleBars.map((bar, i) => {
             const x = getX(i)
             const vH = (bar.volume / chartMetrics.maxVol) * volHeight
             const isBull = bar.close >= bar.open
-            const barW = Math.max(2, plotWidth / displayBars.length - 1.5)
+            const barW = Math.max(2, plotWidth / visibleBars.length - 1.5)
             return (
               <rect
                 key={`v-${bar.time}-${i}`}
@@ -599,7 +826,7 @@ export function StockTradingViewChart({
 
           {/* 5. Main Candlesticks / Line Chart */}
           {chartStyle === "candles" || chartStyle === "hollow" ? (
-            displayBars.map((bar, i) => {
+            visibleBars.map((bar, i) => {
               const x = getX(i)
               const isBull = bar.close >= bar.open
               const color = isBull ? "#10b981" : "#f43f5e"
@@ -609,7 +836,7 @@ export function StockTradingViewChart({
               const closeY = getY(bar.close)
               const bodyTop = Math.min(openY, closeY)
               const bodyHeight = Math.max(1.5, Math.abs(closeY - openY))
-              const candleW = Math.max(3, plotWidth / displayBars.length - 2)
+              const candleW = Math.max(2, plotWidth / visibleBars.length - 2)
 
               return (
                 <g key={`c-${bar.time}-${i}`}>
@@ -631,14 +858,14 @@ export function StockTradingViewChart({
             // Line or Area Chart
             <g>
               <path
-                d={makeLinePath(displayBars.map((b) => b.close))}
+                d={makeLinePath(visibleBars.map((b) => b.close))}
                 fill="none"
                 stroke="#00f0ff"
                 strokeWidth="2"
               />
               {chartStyle === "area" && (
                 <path
-                  d={`${makeLinePath(displayBars.map((b) => b.close))} L ${width - padRight} ${padTop + mainPriceHeight} L ${padLeft} ${padTop + mainPriceHeight} Z`}
+                  d={`${makeLinePath(visibleBars.map((b) => b.close))} L ${width - padRight} ${padTop + mainPriceHeight} L ${padLeft} ${padTop + mainPriceHeight} Z`}
                   fill="url(#area-gradient)"
                   opacity="0.3"
                 />
@@ -646,7 +873,7 @@ export function StockTradingViewChart({
             </g>
           )}
 
-          {/* Moving Averages (only if MA indicator enabled or standard mode) */}
+          {/* Moving Averages (only if MA indicator enabled) */}
           {(isMaximized ? indicators.showMa : false) && (
             <>
               <path d={ma20Path} fill="none" stroke="#10b981" strokeWidth="1.6" opacity="0.85" />
@@ -769,19 +996,22 @@ export function StockTradingViewChart({
             </g>
           )}
 
-          {/* Price Axis Labels on the right */}
-          <text x={width - padRight + 8} y={padTop + 6} fill="#8a9ba7" fontSize="10" fontFamily="monospace">
-            {chartMetrics.max.toFixed(1)}
-          </text>
-          <text x={width - padRight + 8} y={padTop + mainPriceHeight * 0.5 + 4} fill="#8a9ba7" fontSize="10" fontFamily="monospace">
-            {(chartMetrics.min + chartMetrics.range * 0.5).toFixed(1)}
-          </text>
-          <text x={width - padRight + 8} y={padTop + mainPriceHeight + 4} fill="#8a9ba7" fontSize="10" fontFamily="monospace">
-            {chartMetrics.min.toFixed(1)}
-          </text>
-          <text x={width - padRight + 8} y={volTop + volHeight} fill="#62727d" fontSize="9" fontFamily="monospace">
-            Vol
-          </text>
+          {/* Price Axis Labels on the right (Click to Reset View) */}
+          <g className="cursor-pointer" onDoubleClick={handleResetView}>
+            <title>Nhấn đúp để đặt lại tỷ lệ giá (Reset Auto Scale)</title>
+            <text x={width - padRight + 8} y={padTop + 6} fill="#8a9ba7" fontSize="10" fontFamily="monospace">
+              {chartMetrics.max.toFixed(1)}
+            </text>
+            <text x={width - padRight + 8} y={padTop + mainPriceHeight * 0.5 + 4} fill="#8a9ba7" fontSize="10" fontFamily="monospace">
+              {(chartMetrics.min + chartMetrics.range * 0.5).toFixed(1)}
+            </text>
+            <text x={width - padRight + 8} y={padTop + mainPriceHeight + 4} fill="#8a9ba7" fontSize="10" fontFamily="monospace">
+              {chartMetrics.min.toFixed(1)}
+            </text>
+            <text x={width - padRight + 8} y={volTop + volHeight} fill="#62727d" fontSize="9" fontFamily="monospace">
+              Vol
+            </text>
+          </g>
 
           {/* Area gradient definition */}
           <defs>
@@ -792,26 +1022,38 @@ export function StockTradingViewChart({
           </defs>
         </svg>
 
-        {/* Interactive Drawing Canvas Layer (Active in Maximized Mode) */}
+        {/* Interactive Drawing Canvas Layer with Handles, Coordinates & Selection */}
         {isMaximized && (
           <StockChartDrawingCanvas
             width={width}
             height={height}
             drawings={drawings}
-            onAddDrawing={(newDraw) => setDrawings((prev) => [...prev, newDraw])}
-            onDeleteDrawing={(id) => setDrawings((prev) => prev.filter((d) => d.id !== id))}
+            selectedId={selectedDrawingId}
+            onSelectDrawing={(id) => setSelectedDrawingId(id)}
+            onAddDrawing={addDrawing}
+            onUpdateDrawing={modifyDrawing}
+            onDeleteDrawing={deleteDrawing}
+            onEditText={(id) => setEditingTextDrawingId(id)}
             activeTool={activeTool}
             activeColor={activeColor}
             lineWidth={lineWidth}
             selectedIconType={selectedIconType}
             isLocked={isDrawingsLocked}
             isHidden={isDrawingsHidden}
+            priceToY={priceToY}
+            yToPrice={yToPrice}
+            timeToX={timeToX}
+            xToTime={xToTime}
           />
         )}
 
-        {/* Engine branding watermark */}
-        <div className="pointer-events-none absolute bottom-1.5 right-3 text-[9px] font-mono text-slate-500">
-          TradingView Lightweight Visual Engine v2
+        {/* Engine branding & View navigation watermark */}
+        <div className="pointer-events-none absolute bottom-1.5 right-3 flex items-center gap-2 text-[9px] font-mono text-slate-500">
+          <span>{visibleBars.length} nến ({clampedScrollOffset > 0 ? `Lịch sử -${clampedScrollOffset}` : "Thời gian thực"})</span>
+          <span>·</span>
+          <span>Lăn chuột: Zoom · Kéo chuột: Scroll</span>
+          <span>·</span>
+          <span>TradingView Visual Engine v2</span>
         </div>
       </div>
     </div>
