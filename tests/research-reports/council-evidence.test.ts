@@ -21,10 +21,13 @@ type Fixture = {
 }
 
 class FixtureQuery implements PromiseLike<{ data: Row[]; error: null }> {
-  private filters: Array<(row: Row) => boolean> = []
-  private rowLimit: number | null = null
+  filters: Array<(row: Row) => boolean> = []
+  rowLimit: number | null = null
+  rows: Row[]
 
-  constructor(private readonly rows: Row[]) {}
+  constructor(rows: Row[]) {
+    this.rows = rows
+  }
 
   select(_columns: string) { return this }
   eq(column: string, value: unknown) {
@@ -62,8 +65,11 @@ class FixtureQuery implements PromiseLike<{ data: Row[]; error: null }> {
 
 class FixtureClient {
   readonly touchedTables: string[] = []
+  fixture: Fixture
 
-  constructor(private readonly fixture: Fixture) {}
+  constructor(fixture: Fixture) {
+    this.fixture = fixture
+  }
 
   from(table: string) {
     this.touchedTables.push(table)
