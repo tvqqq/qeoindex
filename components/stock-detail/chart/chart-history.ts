@@ -1,21 +1,26 @@
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
+import {
+  chartHistoryClass,
+  chartHistoryFloor,
+  maxChartHistorySeconds,
+} from "@/modules/market/chart-data/history-policy"
 import type { ChartTimeframe } from "./stock-chart-types"
 
 const DAY_SECONDS = 86400
 
-const HISTORY_WINDOW_SECONDS: Record<ChartTimeframe, number> = {
+const INITIAL_HISTORY_WINDOW_SECONDS: Record<ChartTimeframe, number> = {
   "1m": 5 * DAY_SECONDS,
   "15m": 21 * DAY_SECONDS,
-  "30m": 45 * DAY_SECONDS,
+  "30m": 31 * DAY_SECONDS,
   "1h": 90 * DAY_SECONDS,
   "2h": 150 * DAY_SECONDS,
   "4h": 186 * DAY_SECONDS,
-  "1D": 2 * 366 * DAY_SECONDS,
-  "3D": 5 * 366 * DAY_SECONDS,
-  "1W": 8 * 366 * DAY_SECONDS,
-  "1M": 30 * 366 * DAY_SECONDS,
-  "1Q": 30 * 366 * DAY_SECONDS,
-  "1Y": 30 * 366 * DAY_SECONDS,
+  "1D": 0,
+  "3D": 0,
+  "1W": 0,
+  "1M": 0,
+  "1Q": 0,
+  "1Y": 0,
 }
 
 export interface ChartHistoryResponse {
@@ -44,7 +49,24 @@ type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respo
 const inFlight = new Map<string, Promise<ChartHistoryResponse>>()
 
 export function historyWindowSeconds(timeframe: ChartTimeframe) {
-  return HISTORY_WINDOW_SECONDS[timeframe]
+  return INITIAL_HISTORY_WINDOW_SECONDS[timeframe]
+}
+
+export function initialChartHistoryRange(timeframe: ChartTimeframe, to: number) {
+  if (chartHistoryClass(timeframe) === "LONG") return { from: 1, to }
+  const window = historyWindowSeconds(timeframe)
+  const maxSpan = maxChartHistorySeconds(timeframe)
+  const boundedWindow = maxSpan == null ? window : Math.min(window, maxSpan)
+  return { from: Math.max(chartHistoryFloor(timeframe, to), to - boundedWindow), to }
+}
+
+export function olderChartHistoryRange(timeframe: ChartTimeframe, earliest: number, horizonTo: number) {
+  const floor = chartHistoryFloor(timeframe, horizonTo)
+  if (earliest <= floor + 1) return null
+  const to = earliest - 1
+  if (chartHistoryClass(timeframe) === "LONG") return { from: 1, to }
+  const from = Math.max(floor, to - historyWindowSeconds(timeframe))
+  return from < to ? { from, to } : null
 }
 
 export function mergeChartBars(existing: OhlcvBar[], incoming: OhlcvBar[]) {
