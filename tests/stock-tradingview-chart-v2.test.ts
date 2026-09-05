@@ -160,6 +160,14 @@ test("StockTradingViewChart implements standard compact mode and full maximized 
   assert.match(code, /<StockChartDrawingCanvas/)
 })
 
+test("StockTradingViewChart renders explicit unavailable state for unsupported intraday timeframes", () => {
+  const code = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.match(code, /displayBars\.length\s*===\s*0/)
+  assert.match(code, /Dữ liệu timeframe này chưa sẵn sàng/)
+  assert.match(code, /QEO-93/)
+})
+
 test("StockDetailWorkstation handles isChartMaximized and hides sidebar/tabs", () => {
   const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
 
