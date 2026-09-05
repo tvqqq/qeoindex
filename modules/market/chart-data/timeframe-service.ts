@@ -11,6 +11,7 @@ import type {
   ChartOhlcvResult,
 } from "./contract"
 import { ChartDataRequestError, isChartResolution } from "./contract"
+import { clampChartHistoryRange } from "./history-policy"
 import { getCanonicalChartOhlcv, type ChartDataServiceDeps } from "./service"
 import {
   aggregateChartTimeframe,
@@ -18,10 +19,6 @@ import {
   sourceRangeForResolution,
   splitCanonicalSourceRange,
 } from "./timeframes"
-
-const DAY_SECONDS = 86400
-const MAX_DERIVED_INTRADAY_SPAN_SECONDS = 186 * DAY_SECONDS
-const MAX_DERIVED_DAILY_SPAN_SECONDS = 40 * 366 * DAY_SECONDS
 
 type CanonicalLoader = (request: CanonicalChartOhlcvRequest) => Promise<CanonicalChartOhlcvResult>
 
@@ -38,14 +35,8 @@ function normalizePublicRequest(input: ChartOhlcvRequest): ChartOhlcvRequest {
     throw new ChartDataRequestError("Invalid chart range")
   }
 
-  const sourceResolution = canonicalSourceResolution(resolution)
-  if (resolution !== sourceResolution) {
-    const span = input.to - input.from
-    const maxSpan = sourceResolution === "1m" ? MAX_DERIVED_INTRADAY_SPAN_SECONDS : MAX_DERIVED_DAILY_SPAN_SECONDS
-    if (span > maxSpan) throw new ChartDataRequestError("Derived chart range is too large")
-  }
-
-  return { ticker, resolution, from: input.from, to: input.to }
+  const range = clampChartHistoryRange({ resolution, from: input.from, to: input.to })
+  return { ticker, resolution, from: range.from, to: range.to }
 }
 
 function mergeBars(results: CanonicalChartOhlcvResult[]) {
