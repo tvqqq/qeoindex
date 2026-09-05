@@ -255,3 +255,25 @@ test("stock detail workstation integrates insights rating tabs and removes metho
   assert.match(stockDetailData, /buildFallbackRatingRow/)
 })
 
+test("stock detail workstation pins sidebars and allows center column scrolling on desktop", () => {
+  const workstation = readFileSync("components/stock-detail/stock-detail-workstation.tsx", "utf8")
+  const watchlist = readFileSync("components/stock-detail/stock-watchlist-sidebar.tsx", "utf8")
+
+  // Root clamped to viewport on desktop
+  assert.match(workstation, /lg:h-screen lg:overflow-hidden/)
+  assert.match(workstation, /lg:overflow-hidden min-h-0/)
+
+  // Left sidebar is pinned (scrollable internally if needed)
+  assert.match(workstation, /lg:h-full lg:overflow-y-auto no-scrollbar/)
+
+  // Center column is the only scrollable workstation pane on desktop
+  assert.match(workstation, /ref=\{centerColumnRef\}/)
+  assert.match(workstation, /lg:h-full lg:overflow-y-auto pr-1 pb-10/)
+  assert.match(workstation, /centerColumnRef\.current\?\.scrollTo\(\{ top: 0, behavior: "smooth" \}\)/)
+
+  // Right sidebar is pinned with internal list scroll
+  assert.match(workstation, /<aside className="w-full lg:h-full lg:overflow-hidden">/)
+  assert.match(watchlist, /min-h-\[500px\] lg:min-h-0 flex-col overflow-hidden/)
+  assert.match(watchlist, /overflow-y-auto/)
+})
+

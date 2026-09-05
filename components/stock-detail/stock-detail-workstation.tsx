@@ -22,6 +22,7 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
     [initialData.ticker.toUpperCase()]: initialData,
   })
   const abortControllerRef = useRef<AbortController | null>(null)
+  const centerColumnRef = useRef<HTMLElement>(null)
 
   const handleSelectTicker = useCallback(
     async (ticker: string) => {
@@ -37,6 +38,9 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
       window.history.pushState(null, "", `/insights/${sym.toLowerCase()}`)
       document.title = `${sym} — Chi tiết Cổ phiếu — QeoIndex`
       setActiveTicker(sym)
+
+      // Scroll center column to top on new ticker selection
+      centerColumnRef.current?.scrollTo({ top: 0, behavior: "smooth" })
 
       // 1. Instant switch if data is already in client cache
       if (cacheRef.current[sym]) {
@@ -93,68 +97,72 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
   }, [activeTicker, handleSelectTicker])
 
   return (
-    <div className="min-h-screen w-full bg-[#06090d] text-white">
+    <div className="min-h-screen w-full bg-[#06090d] text-white lg:h-screen lg:overflow-hidden flex flex-col">
       {/* Top Navigation Bar */}
       <TopNav />
 
       {/* Main Full-Width Workstation Container */}
-      <main className="w-full px-2.5 py-3 sm:px-4 lg:px-5 2xl:px-6">
+      <main className="w-full flex-1 px-2.5 py-2.5 sm:px-4 lg:px-5 2xl:px-6 lg:overflow-hidden min-h-0">
         {/* 3 Columns Master Layout */}
-        <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[330px_minmax(0,1fr)_270px] 2xl:grid-cols-[360px_minmax(0,1fr)_300px] items-start">
+        <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[300px_minmax(0,1fr)_260px] xl:grid-cols-[330px_minmax(0,1fr)_270px] 2xl:grid-cols-[360px_minmax(0,1fr)_300px] h-full lg:overflow-hidden items-stretch">
           {/* ========================================================= */}
-          {/* COLUMNS 1 & 2 WRAPPER: WITH SMOOTHUI LOADING TRANSITION  */}
+          {/* COLUMN 1: BÊN TRÁI (~25% WIDTH) - CỐ ĐỊNH                 */}
+          {/* AI Council tổng quan & Quick chatbox với AI               */}
           {/* ========================================================= */}
-          <div className="relative col-span-1 lg:col-span-2 xl:col-span-2 grid grid-cols-1 gap-3.5 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[330px_minmax(0,1fr)] 2xl:grid-cols-[360px_minmax(0,1fr)] items-start">
+          <aside
+            className={cn(
+              "w-full transition-opacity duration-200 ease-out lg:h-full lg:overflow-y-auto no-scrollbar",
+              isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
+            )}
+          >
+            <StockAiSidebar data={currentData} />
+          </aside>
+
+          {/* ========================================================= */}
+          {/* COLUMN 2: GIỮA (~60% WIDTH) - SCROLL ĐƯỢC                 */}
+          {/* Thông tin công ty, Chart & Tabs (Scroll duy nhất ở desktop) */}
+          {/* ========================================================= */}
+          <section
+            ref={centerColumnRef}
+            className={cn(
+              "relative min-w-0 space-y-3.5 transition-opacity duration-200 ease-out lg:h-full lg:overflow-y-auto pr-1 pb-10",
+              isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
+            )}
+          >
             {/* SmoothUI Floating Loading Indicator */}
             <div
               className={cn(
-                "pointer-events-none absolute inset-x-0 top-6 z-40 flex justify-center transition-all duration-300",
-                isTransitioning ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2",
+                "pointer-events-none sticky top-2.5 z-40 flex justify-center transition-all duration-300",
+                isTransitioning ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none",
               )}
             >
-              <div className="rounded-2xl border border-cyan-400/30 bg-[#0b1017]/95 px-4 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.8),0_0_24px_rgba(34,211,238,0.2)] backdrop-blur-md">
+              <div className="rounded-2xl border border-cyan-400/30 bg-[#0b1017]/95 px-4 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.8),0_0_24px_rgba(34,211,238,0.2)] backdrop-blur-md">
                 <AiLoader label={`Hội đồng AI đang cập nhật dữ liệu ${activeTicker}...`} />
               </div>
             </div>
 
-            {/* COLUMN 1: BÊN TRÁI (~25% WIDTH) */}
-            <div
-              className={cn(
-                "transition-opacity duration-200 ease-out",
-                isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
-              )}
-            >
-              <StockAiSidebar data={currentData} />
-            </div>
+            {/* Thông tin công ty & Giá realtime */}
+            <StockCompanyHeader data={currentData} />
 
-            {/* COLUMN 2: GIỮA (~60% WIDTH) */}
-            <section
-              className={cn(
-                "min-w-0 space-y-3.5 transition-opacity duration-200 ease-out",
-                isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
-              )}
-            >
-              {/* Thông tin công ty & Giá realtime */}
-              <StockCompanyHeader data={currentData} />
+            {/* TradingView Lightweight Candlestick Chart */}
+            <StockTradingViewChart ticker={currentData.ticker} bars={currentData.bars} />
 
-              {/* TradingView Lightweight Candlestick Chart */}
-              <StockTradingViewChart ticker={currentData.ticker} bars={currentData.bars} />
-
-              {/* 4 Tabs Panel: Tổng quan, DN, TA, AI Council */}
-              <StockTabsPanel data={currentData} />
-            </section>
-          </div>
+            {/* 4 Tabs Panel: Tổng quan, DN, TA, AI Council */}
+            <StockTabsPanel data={currentData} />
+          </section>
 
           {/* ========================================================= */}
-          {/* COLUMN 3: BÊN PHẢI (~15% WIDTH)                           */}
-          {/* Watchlist cổ phiếu (Cố định, không reload khi chọn mã)   */}
+          {/* COLUMN 3: BÊN PHẢI (~15% WIDTH) - CỐ ĐỊNH                 */}
+          {/* Watchlist cổ phiếu (Cố định, search & filter nội bộ)     */}
           {/* ========================================================= */}
-          <StockWatchlistSidebar
-            currentTicker={activeTicker}
-            items={currentData.watchlist}
-            onSelectTicker={handleSelectTicker}
-            isTransitioning={isTransitioning}
-          />
+          <aside className="w-full lg:h-full lg:overflow-hidden">
+            <StockWatchlistSidebar
+              currentTicker={activeTicker}
+              items={currentData.watchlist}
+              onSelectTicker={handleSelectTicker}
+              isTransitioning={isTransitioning}
+            />
+          </aside>
         </div>
       </main>
     </div>

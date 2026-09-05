@@ -47,8 +47,8 @@ export function StockWatchlistSidebar({
   }
 
   return (
-    <aside className="xl:sticky xl:top-[72px] xl:h-[calc(100vh-88px)] w-full">
-      <div className="flex h-full min-h-[560px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13]">
+    <aside className="h-full w-full">
+      <div className="flex h-full min-h-[500px] lg:min-h-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13]">
         {/* Top Header & Search */}
         <div className="shrink-0 space-y-3 border-b border-white/[0.06] bg-[#0a0f16] p-3.5">
           <div className="flex items-center justify-between">
