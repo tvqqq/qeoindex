@@ -12,6 +12,7 @@ import type {
 } from "./contract"
 import { ChartDataRequestError, ChartDataUnavailableError } from "./contract"
 import { readHotIntradayRange, readProviderRequestCoverage, upsertHotIntradayBars } from "./hot-store"
+import { activeMinuteStart, partitionLiveMinuteBars } from "./live-session"
 import { detectTradingSessionGaps, normalizeCanonicalBars } from "./normalize"
 import {
   createPrimaryChartOhlcvProvider,
@@ -105,7 +106,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   const errors: ChartDataError[] = []
   const now = deps.now ?? new Date()
   const nowSeconds = Math.floor(now.getTime() / 1000)
-  const currentMinuteStart = Math.floor(nowSeconds / 60) * 60
+  const currentMinuteStart = activeMinuteStart(nowSeconds)
   const session = getMarketSessionStatus(now)
 
   const [hotRead, coldRead, coverageRead] = await Promise.allSettled([
@@ -169,22 +170,21 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
         }),
         "CUSTOM",
       )
-      const providerBars = providerResult.bars
-      if (providerBars.length) latestProvider = providerResult.provider
+      const partition = partitionLiveMinuteBars(providerResult.bars, currentMinuteStart, session.isLiveSession)
+      const providerBars = partition.responseBars
+      if (!providerBars.length) throw new Error("Provider returned no usable 1m bars")
+      latestProvider = providerResult.provider
       tagged.push(...providerBars.map((bar) => ({ source: "provider" as const, bar })))
       normalized = normalizeCanonicalBars(tagged)
 
-      const completedBars = session.isLiveSession
-        ? providerBars.filter((bar) => bar.time < currentMinuteStart)
-        : providerBars
-      if (completedBars.length) {
+      if (partition.completedBars.length) {
         try {
           const completedRequestedTo = session.isLiveSession
             ? Math.min(range.to, currentMinuteStart - 1)
             : range.to
           await upsertHotIntradayBars(deps.supabase, {
             ticker: request.ticker,
-            bars: completedBars,
+            bars: partition.completedBars,
             provider: providerResult.provider,
             fetchedAt: now.toISOString(),
             detail: {
@@ -194,7 +194,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
               liveTail: session.isLiveSession,
             },
           })
-          durablePersistedThrough = laterTime(durablePersistedThrough, completedBars)
+          durablePersistedThrough = laterTime(durablePersistedThrough, partition.completedBars)
         } catch {
           errors.push({ code: "STORAGE_UNAVAILABLE" })
         }
