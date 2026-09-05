@@ -11,9 +11,9 @@ const MAX_PROMPT_CACHE_KEY_LENGTH = 64
 async function captureRejectedRequest(
   invoke: (fetchImpl: typeof fetch) => Promise<unknown>,
 ) {
-  let body: Record<string, unknown> | null = null
+  const captured: { body: Record<string, unknown> | null } = { body: null }
   const fetchImpl = (async (_url: URL | RequestInfo, init?: RequestInit) => {
-    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    captured.body = JSON.parse(String(init?.body)) as Record<string, unknown>
     return new Response(JSON.stringify({ error: { message: "stop after request capture" } }), {
       status: 401,
       headers: { "content-type": "application/json" },
@@ -21,7 +21,8 @@ async function captureRejectedRequest(
   }) as typeof fetch
 
   await assert.rejects(() => invoke(fetchImpl), /401|stop after request capture|OpenAI/i)
-  assert.ok(body)
+  const body = captured.body
+  if (!body) throw new Error("OpenAI request body was not captured")
   return body
 }
 
