@@ -1,5 +1,3 @@
-import "server-only"
-
 import type { CanonicalOhlcvBar } from "@/modules/market/chart-data/contract"
 
 export const MARKET_DATA_PROBE_PROVIDERS = ["SSI_IBOARD", "DNSE", "VCI", "KBS"] as const
@@ -47,13 +45,14 @@ export interface MarketDataProbeProvider {
 export type ProviderResolver = (name: MarketDataProbeProviderName) => MarketDataProbeProvider
 
 export class ProviderProbeError extends Error {
-  constructor(
-    public readonly provider: MarketDataProbeProviderName,
-    public readonly errorClass: ProviderErrorClass,
-    message: string,
-  ) {
+  readonly provider: MarketDataProbeProviderName
+  readonly errorClass: ProviderErrorClass
+
+  constructor(provider: MarketDataProbeProviderName, errorClass: ProviderErrorClass, message: string) {
     super(message)
     this.name = "ProviderProbeError"
+    this.provider = provider
+    this.errorClass = errorClass
   }
 }
 
