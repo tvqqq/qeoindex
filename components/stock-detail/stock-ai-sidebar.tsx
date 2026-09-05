@@ -24,53 +24,42 @@ interface Message {
 
 function scoreTone(score: number | null) {
   if (score == null) return "text-slate-500"
-  if (score >= 65) return "text-emerald-300"
-  if (score <= 40) return "text-rose-300"
-  if (score < 55) return "text-amber-300"
-  return "text-white"
+  if (score >= 65) return "text-emerald-400"
+  if (score <= 40) return "text-rose-400"
+  return "text-slate-300"
 }
 
 const RADIUS = 72
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
 function getConsensusStyle(rate: number) {
-  if (rate >= 80) {
+  if (rate >= 70) {
     return {
       gradientId: "consensus-grad-high",
-      fromColor: "#00f0ff",
-      toColor: "#22c98a",
-      glowColor: "rgba(0, 240, 255, 0.45)",
-      badgeColor: "border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
-      dotColor: "bg-cyan-400",
+      fromColor: "#10b981",
+      toColor: "#059669",
+      glowColor: "rgba(16, 185, 129, 0.2)",
+      badgeColor: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
+      dotColor: "bg-emerald-400",
     }
   }
-  if (rate >= 65) {
+  if (rate <= 40) {
     return {
-      gradientId: "consensus-grad-med-high",
-      fromColor: "#38bdf8",
-      toColor: "#06b6d4",
-      glowColor: "rgba(56, 189, 248, 0.35)",
-      badgeColor: "border-sky-400/30 bg-sky-400/10 text-sky-300",
-      dotColor: "bg-sky-400",
-    }
-  }
-  if (rate >= 50) {
-    return {
-      gradientId: "consensus-grad-neutral",
-      fromColor: "#f59e0b",
-      toColor: "#eab308",
-      glowColor: "rgba(245, 158, 11, 0.3)",
-      badgeColor: "border-amber-400/30 bg-amber-400/10 text-amber-300",
-      dotColor: "bg-amber-400",
+      gradientId: "consensus-grad-low",
+      fromColor: "#f43f5e",
+      toColor: "#e11d48",
+      glowColor: "rgba(244, 63, 94, 0.2)",
+      badgeColor: "border-rose-500/25 bg-rose-500/10 text-rose-300",
+      dotColor: "bg-rose-400",
     }
   }
   return {
-    gradientId: "consensus-grad-low",
-    fromColor: "#f43f5e",
-    toColor: "#e11d48",
-    glowColor: "rgba(244, 63, 94, 0.3)",
-    badgeColor: "border-rose-400/30 bg-rose-400/10 text-rose-300",
-    dotColor: "bg-rose-400",
+    gradientId: "consensus-grad-neutral",
+    fromColor: "#94a3b8",
+    toColor: "#cbd5e1",
+    glowColor: "rgba(148, 163, 184, 0.15)",
+    badgeColor: "border-white/15 bg-white/[0.06] text-slate-200",
+    dotColor: "bg-slate-300",
   }
 }
 
@@ -165,7 +154,6 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
     {
       label: "Cơ bản",
       score: fa?.roe ? Math.min(95, Math.round(fa.roe * 2.5 + 30)) : 75,
-      gradient: "from-blue-500 to-cyan-400",
     },
     {
       label: "Kỹ thuật",
@@ -174,24 +162,28 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
           ? 86
           : 55
         : 80,
-      gradient: "from-cyan-500 to-emerald-400",
     },
     {
       label: "Dòng tiền",
       score: scan?.relVolume ? Math.min(96, Math.round(scan.relVolume * 50)) : 82,
-      gradient: "from-emerald-500 to-teal-400",
     },
     {
       label: "Bối cảnh",
       score: thesis?.marketRegime === "Risk-On" ? 85 : 70,
-      gradient: "from-violet-500 to-purple-400",
     },
     {
       label: "Quản trị",
       score: 78,
-      gradient: "from-amber-500 to-yellow-400",
     },
-  ]
+  ].map((p) => ({
+    ...p,
+    gradient:
+      p.score >= 75
+        ? "from-emerald-500 to-emerald-400"
+        : p.score < 50
+        ? "from-rose-500 to-rose-400"
+        : "from-slate-400 to-slate-200",
+  }))
 
   const signalText =
     signal === "BUY"
@@ -206,11 +198,11 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
 
   const signalTone =
     signal === "BUY"
-      ? "text-emerald-300 drop-shadow-[0_0_12px_rgba(34,201,138,0.5)]"
+      ? "text-emerald-400"
       : signal === "BUY_ON_CONFIRMATION"
-      ? "text-cyan-200 drop-shadow-[0_0_12px_rgba(34,211,238,0.5)]"
+      ? "text-emerald-300"
       : signal === "REDUCE" || signal === "SELL"
-      ? "text-rose-300 drop-shadow-[0_0_12px_rgba(244,63,94,0.5)]"
+      ? "text-rose-400"
       : "text-slate-200"
 
   const consensusStyle = getConsensusStyle(consensus)
@@ -289,15 +281,15 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
   return (
     <div className="space-y-3.5 w-full pb-8">
       {/* AI Council Overview Card */}
-      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b1119] p-4 sm:p-5 space-y-4">
+      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13] p-4 sm:p-5 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-xl border border-violet-400/20 bg-violet-400/[0.08] text-violet-300">
+            <div className="flex size-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-slate-300">
               <BrainCircuit className="size-4" />
             </div>
             <div>
-              <h2 className="text-sm font-extrabold text-white">Góc nhìn AI Council</h2>
+              <h2 className="text-sm font-bold text-slate-200">Góc nhìn AI Council</h2>
               <p className="text-[10px] text-slate-500 font-mono">Consensus V1.4</p>
             </div>
           </div>
@@ -315,7 +307,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
                   <stop offset="100%" stopColor={consensusStyle.toColor} />
                 </linearGradient>
                 <filter id="consensus-ring-glow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feGaussianBlur stdDeviation="1.5" result="blur" />
                   <feMerge>
                     <feMergeNode in="blur" />
                     <feMergeNode in="SourceGraphic" />
@@ -328,7 +320,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
                 cy="100"
                 r={RADIUS}
                 fill="none"
-                stroke="rgba(255, 255, 255, 0.07)"
+                stroke="rgba(255, 255, 255, 0.08)"
                 strokeWidth="14"
               />
               {/* Progress Arc */}
@@ -414,7 +406,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
         <div className="space-y-2 pt-1">
           <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
             <span className="flex items-center gap-1.5">
-              <Gauge className="size-3.5 text-cyan-400" />
+              <Gauge className="size-3.5 text-slate-400" />
               5 Trụ cột đánh giá từ AI Council
             </span>
           </div>
@@ -423,7 +415,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
               <div key={p.label} className="space-y-1">
                 <div className="text-[11px] font-medium text-slate-400">{p.label}</div>
                 <div className="flex items-center gap-2.5">
-                  <span className="w-11 font-mono text-xs font-bold text-white shrink-0">
+                  <span className="w-11 font-mono text-xs font-bold text-slate-200 shrink-0">
                     {p.score} %
                   </span>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
@@ -444,7 +436,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
         {/* Chat Header */}
         <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#0a0f16] px-3.5 py-2.5">
           <div className="flex items-center gap-2">
-            <Sparkles className="size-3.5 text-cyan-400" />
+            <Sparkles className="size-3.5 text-slate-400" />
             <span className="text-xs font-bold text-slate-200">Quick AI Assistant</span>
           </div>
           <span className="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 font-mono text-[9px] text-slate-400">
@@ -463,7 +455,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
                 className={cn(
                   "max-w-[85%] rounded-2xl p-2.5 text-[11px] leading-relaxed",
                   m.sender === "user"
-                    ? "rounded-tr-none border border-cyan-400/30 bg-cyan-400/10 text-slate-100"
+                    ? "rounded-tr-none border border-white/10 bg-white/[0.06] text-slate-100"
                     : "rounded-tl-none border border-white/[0.08] bg-black/20 text-slate-300"
                 )}
               >
@@ -474,13 +466,13 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
 
           {isTyping && (
             <div className="flex gap-2">
-              <div className="flex size-5 shrink-0 items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-400/10 text-[9px] font-black text-cyan-200">
+              <div className="flex size-5 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/[0.08] text-[9px] font-black text-slate-300">
                 AI
               </div>
               <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-none border border-white/[0.08] bg-black/20 px-3 py-1.5 text-xs text-slate-400">
-                <span className="size-1.5 rounded-full bg-cyan-400 animate-bounce" />
-                <span className="size-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:0.2s]" />
-                <span className="size-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:0.4s]" />
+                <span className="size-1.5 rounded-full bg-slate-400 animate-bounce" />
+                <span className="size-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:0.2s]" />
+                <span className="size-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:0.4s]" />
               </div>
             </div>
           )}
@@ -492,21 +484,21 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
           <button
             type="button"
             onClick={() => handleSend("Đánh giá dòng tiền lớn hôm nay?")}
-            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
+            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-white/20 hover:bg-white/[0.06] hover:text-slate-100"
           >
             ⚡ Dòng tiền?
           </button>
           <button
             type="button"
             onClick={() => handleSend("Hỗ trợ kháng cự gần nhất?")}
-            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
+            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-white/20 hover:bg-white/[0.06] hover:text-slate-100"
           >
             🎯 Hỗ trợ / Kháng cự?
           </button>
           <button
             type="button"
             onClick={() => handleSend("Rủi ro lớn nhất là gì?")}
-            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
+            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-white/20 hover:bg-white/[0.06] hover:text-slate-100"
           >
             ⚠️ Rủi ro?
           </button>
@@ -526,12 +518,12 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               placeholder="Hỏi AI về cổ phiếu..."
-              className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-1.5 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-cyan-400/40 focus:outline-none"
+              className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-1.5 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-white/30 focus:outline-none"
             />
             <button
               type="submit"
               disabled={!inputVal.trim() || isTyping}
-              className="absolute right-1.5 rounded-lg p-1 text-cyan-400 transition-colors hover:text-cyan-300 disabled:opacity-30"
+              className="absolute right-1.5 rounded-lg p-1 text-slate-400 transition-colors hover:text-slate-200 disabled:opacity-30"
             >
               <Send className="size-3.5" />
             </button>

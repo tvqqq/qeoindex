@@ -103,7 +103,7 @@ export function StockChartIndicatorModal({ config, onChange, onClose }: Indicato
               className={cn(
                 "flex w-full items-start gap-2.5 rounded-xl p-2 text-left transition-colors border",
                 isEnabled
-                  ? "border-cyan-400/30 bg-cyan-400/10 text-white"
+                  ? "border-white/25 bg-white/10 text-slate-100"
                   : "border-transparent text-slate-400 hover:bg-white/[0.04] hover:text-slate-200",
               )}
             >
@@ -114,7 +114,7 @@ export function StockChartIndicatorModal({ config, onChange, onClose }: Indicato
                   <div
                     className={cn(
                       "flex size-4 items-center justify-center rounded border transition-colors",
-                      isEnabled ? "border-cyan-400 bg-cyan-500 text-black" : "border-white/20",
+                      isEnabled ? "border-white bg-white text-black" : "border-white/20",
                     )}
                   >
                     {isEnabled && <Check className="size-3 stroke-[3]" />}

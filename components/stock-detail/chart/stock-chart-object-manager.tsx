@@ -86,8 +86,8 @@ export function StockChartObjectManager({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-white/[0.08] bg-[#0c1624] px-3.5 py-2.5">
         <div className="flex items-center gap-2">
-          <Layers className="size-4 text-cyan-400" />
-          <span className="text-xs font-black uppercase tracking-wider text-white font-mono">
+          <Layers className="size-4 text-slate-400" />
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-200 font-mono">
             Quản lý đối tượng ({drawings.length})
           </span>
         </div>
@@ -118,7 +118,7 @@ export function StockChartObjectManager({
                 className={cn(
                   "group flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors cursor-pointer",
                   isSelected
-                    ? "bg-cyan-400/15 border border-cyan-400/30 text-white"
+                    ? "bg-white/15 border border-white/25 text-slate-100"
                     : "hover:bg-white/[0.04] text-slate-300",
                   draw.hidden ? "opacity-40" : "opacity-100",
                 )}

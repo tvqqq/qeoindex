@@ -462,7 +462,7 @@ export function StockTradingViewChart({
                 className={cn(
                   "rounded-md px-2 py-0.5 font-mono text-[11px] font-bold transition-colors",
                   timeframe === tf
-                    ? "border border-cyan-400/40 bg-cyan-400/20 text-cyan-200 shadow-[0_0_8px_rgba(0,240,255,0.25)]"
+                    ? "border border-white/25 bg-white/15 text-slate-100 font-bold"
                     : "text-slate-400 hover:bg-white/[0.05] hover:text-slate-200",
                 )}
               >
@@ -478,10 +478,10 @@ export function StockTradingViewChart({
                 className={cn(
                   "flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px] transition-colors",
                   !QUICK_TIMEFRAMES.includes(timeframe)
-                    ? "border border-cyan-400/40 bg-cyan-400/20 text-cyan-200 font-bold shadow-[0_0_8px_rgba(0,240,255,0.25)]"
+                    ? "border border-white/25 bg-white/15 text-slate-100 font-bold"
                     : showTfDropdown
-                    ? "bg-white/[0.08] text-white"
-                    : "text-slate-400 hover:bg-white/[0.05] hover:text-white",
+                    ? "bg-white/[0.08] text-slate-200"
+                    : "text-slate-400 hover:bg-white/[0.05] hover:text-slate-200",
                 )}
                 title="Tất cả các khung thời gian"
               >
@@ -529,8 +529,8 @@ export function StockTradingViewChart({
                                     className={cn(
                                       "w-full flex items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors group",
                                       isActive
-                                        ? "bg-cyan-500/15 text-cyan-300 font-semibold"
-                                        : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
+                                        ? "bg-white/15 text-slate-100 font-semibold"
+                                        : "text-slate-300 hover:bg-white/[0.06] hover:text-slate-100",
                                     )}
                                   >
                                     <div className="flex items-center gap-2 min-w-0">
@@ -538,7 +538,7 @@ export function StockTradingViewChart({
                                         className={cn(
                                           "font-mono text-[11px] font-bold w-8 text-left shrink-0",
                                           isActive
-                                            ? "text-cyan-300"
+                                            ? "text-slate-100"
                                             : "text-slate-400 group-hover:text-slate-200",
                                         )}
                                       >
@@ -602,8 +602,8 @@ export function StockTradingViewChart({
                         className={cn(
                           "w-full flex items-center justify-between rounded px-2.5 py-1.5 text-left text-[11px] transition-colors",
                           chartStyle === st
-                            ? "bg-cyan-500/15 text-cyan-300 font-bold"
-                            : "text-slate-400 hover:text-white hover:bg-white/[0.04]",
+                            ? "bg-white/15 text-slate-100 font-bold"
+                            : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]",
                         )}
                       >
                         <span>
@@ -615,7 +615,7 @@ export function StockTradingViewChart({
                             ? "Vùng Area"
                             : "Nến Rỗng"}
                         </span>
-                        {chartStyle === st && <Check className="size-3.5 text-cyan-400 shrink-0" />}
+                        {chartStyle === st && <Check className="size-3.5 text-slate-200 shrink-0" />}
                       </button>
                     ))}
                   </div>
@@ -633,14 +633,14 @@ export function StockTradingViewChart({
                 className={cn(
                   "flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-[11px] font-semibold transition-colors border",
                   activeIndicatorsCount > 0
-                    ? "border-cyan-400/40 bg-cyan-400/15 text-cyan-200"
+                    ? "border-white/25 bg-white/15 text-slate-100"
                     : "border-white/[0.08] text-slate-300 hover:bg-white/[0.06]",
                 )}
               >
                 <SlidersHorizontal className="size-3" />
                 <span>Chỉ báo</span>
                 {activeIndicatorsCount > 0 && (
-                  <span className="size-4 rounded-full bg-cyan-400 text-[10px] font-bold text-black flex items-center justify-center">
+                  <span className="size-4 rounded-full bg-white/20 border border-white/30 text-[10px] font-bold text-slate-100 flex items-center justify-center">
                     {activeIndicatorsCount}
                   </span>
                 )}
@@ -712,9 +712,7 @@ export function StockTradingViewChart({
                 title={isMaximized ? "Thu nhỏ chart" : "Phóng to chart"}
                 className={cn(
                   "flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold font-mono transition-all border",
-                  isMaximized
-                    ? "border-amber-400/40 bg-amber-400/20 text-amber-300 hover:bg-amber-400/30"
-                    : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400/20 shadow-[0_0_12px_rgba(0,240,255,0.2)]",
+                  "border-white/20 bg-white/10 text-slate-200 hover:bg-white/15 hover:text-white",
                 )}
               >
                 {isMaximized ? (
@@ -1101,7 +1099,7 @@ export function StockTradingViewChart({
               <path
                 d={makeLinePath(visibleBars.map((b) => b.close))}
                 fill="none"
-                stroke="#00f0ff"
+                stroke="#cbd5e1"
                 strokeWidth="2"
               />
               {chartStyle === "area" && (
@@ -1166,7 +1164,7 @@ export function StockTradingViewChart({
                 y1={padTop}
                 x2={getX(hoverIndex)}
                 y2={height - padBottom}
-                stroke="#00f0ff"
+                stroke="#64748b"
                 strokeWidth="1"
                 strokeDasharray="3 3"
                 opacity="0.75"
@@ -1180,7 +1178,7 @@ export function StockTradingViewChart({
                     y1={hoverY}
                     x2={width - padRight}
                     y2={hoverY}
-                    stroke="#00f0ff"
+                    stroke="#64748b"
                     strokeWidth="1"
                     strokeDasharray="3 3"
                     opacity="0.75"
@@ -1190,15 +1188,15 @@ export function StockTradingViewChart({
                     y={hoverY - 8.5}
                     width={padRight - 2}
                     height={17}
-                    fill="#182330"
-                    stroke="#00f0ff"
+                    fill="#111827"
+                    stroke="rgba(255,255,255,0.2)"
                     strokeWidth="1"
                     rx="2"
                   />
                   <text
                     x={width - padRight + 6}
                     y={hoverY + 3.5}
-                    fill="#00f0ff"
+                    fill="#e2e8f0"
                     fontSize="10"
                     fontWeight="bold"
                     fontFamily="monospace"
@@ -1226,8 +1224,8 @@ export function StockTradingViewChart({
                       y={height - padBottom + 3}
                       width={pillW}
                       height={18}
-                      fill="#182330"
-                      stroke="#00f0ff"
+                      fill="#111827"
+                      stroke="rgba(255,255,255,0.2)"
                       strokeWidth="1"
                       rx="2"
                     />
@@ -1235,7 +1233,7 @@ export function StockTradingViewChart({
                       x={pillX + pillW / 2}
                       y={height - padBottom + 15}
                       textAnchor="middle"
-                      fill="#00f0ff"
+                      fill="#e2e8f0"
                       fontSize="9"
                       fontWeight="bold"
                       fontFamily="monospace"
@@ -1328,8 +1326,8 @@ export function StockTradingViewChart({
           {/* Area gradient definition */}
           <defs>
             <linearGradient id="area-gradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#00f0ff" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#00f0ff" stopOpacity="0" />
+              <stop offset="0%" stopColor="#cbd5e1" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="#cbd5e1" stopOpacity="0" />
             </linearGradient>
           </defs>
         </svg>
@@ -1382,7 +1380,7 @@ export function StockTradingViewChart({
               className={cn(
                 "rounded px-2 py-0.5 font-bold transition-colors",
                 scrollOffset === 0 && Math.abs(visibleBarsCount - preset.bars) <= 5
-                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                  ? "bg-white/15 text-slate-100 border border-white/25"
                   : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
               )}
             >
@@ -1397,7 +1395,7 @@ export function StockTradingViewChart({
             type="button"
             title="Tự căn khung nhìn vừa dữ liệu (Auto Fit)"
             onClick={handleResetView}
-            className="rounded px-2 py-0.5 font-bold text-slate-400 hover:bg-white/[0.06] hover:text-cyan-300 transition-colors"
+            className="rounded px-2 py-0.5 font-bold text-slate-400 hover:bg-white/[0.06] hover:text-slate-200 transition-colors"
           >
             Tự động
           </button>
