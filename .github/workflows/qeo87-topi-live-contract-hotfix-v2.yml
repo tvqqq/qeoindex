@@ -188,7 +188,7 @@ jobs:
             assert.equal(result.reachedSafetyLimit, false)
           })
           ''' + '\n'
-          test_path.write_text(tests)
+          test_path.write_text(tests.rstrip() + '\n')
           PY
           git diff --check
 
@@ -200,9 +200,9 @@ jobs:
           node --test tests/research-reports/topi.test.ts tests/research-reports/domain.test.ts
           pnpm typecheck
 
-      - name: Commit hotfix without helper workflows
+      - name: Commit hotfix without helper workflow
         run: |
-          git rm .github/workflows/qeo87-topi-live-contract-hotfix.yml .github/workflows/qeo87-topi-live-contract-hotfix-v2.yml
+          git rm .github/workflows/qeo87-topi-live-contract-hotfix-v2.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add modules/research-reports/providers/topi.ts tests/research-reports/topi.test.ts
