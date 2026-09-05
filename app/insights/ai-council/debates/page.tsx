@@ -5,8 +5,8 @@ import { ArrowLeft, BrainCircuit, CircleAlert, Coins, Gauge, Scale, ShieldCheck,
 
 import { LandingLogin } from "@/components/auth/landing-login"
 import { TopNav } from "@/components/top-nav"
-import { getAiCouncilDebateDashboardData } from "@/modules/ai-council/debate-data"
-import type { AiCouncilLlmDebateRecord, DebateSelectionReason } from "@/modules/ai-council/llm"
+import { getAiCouncilDebateDashboardData, type AiCouncilDebateDashboardRow } from "@/modules/ai-council/debate-data"
+import type { DebateSelectionReason } from "@/modules/ai-council/llm"
 import { getServerAuthContext } from "@/modules/auth/server"
 import { cn } from "@/modules/shared/ui/cn"
 
@@ -26,7 +26,7 @@ const REASON_LABEL: Record<DebateSelectionReason, string> = {
   risk_conflict: "Risk conflict",
 }
 
-function statusTone(status: AiCouncilLlmDebateRecord["status"]) {
+function statusTone(status: AiCouncilDebateDashboardRow["status"]) {
   if (status === "completed") return "border-emerald-400/25 bg-emerald-400/[0.06] text-emerald-300"
   if (status === "partial") return "border-amber-400/25 bg-amber-400/[0.06] text-amber-300"
   if (status === "failed") return "border-rose-400/25 bg-rose-400/[0.06] text-rose-300"
@@ -76,7 +76,7 @@ function RolePanel({
   )
 }
 
-function DebateCard({ row }: { row: AiCouncilLlmDebateRecord }) {
+function DebateCard({ row }: { row: AiCouncilDebateDashboardRow }) {
   const cacheRate = row.inputTokens > 0 ? Math.min(100, (row.cachedInputTokens / row.inputTokens) * 100) : 0
   return (
     <article className="overflow-hidden rounded-3xl border border-white/[0.08] bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,.09),transparent_30%),#080d13]">
@@ -106,12 +106,39 @@ function DebateCard({ row }: { row: AiCouncilLlmDebateRecord }) {
             <div className="text-[9px] font-black uppercase tracking-wider text-cyan-300">Evidence Provenance</div>
             <div className="font-mono text-[8px] text-slate-600">{row.evidenceProvenance.cacheIdentityMode}</div>
           </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
             <div className="rounded-xl border border-white/[0.06] bg-black/15 p-2.5"><div className="text-[8px] font-black uppercase text-slate-600">Semantic packet</div><p className="mt-1 font-mono text-[9px] text-slate-400">{row.evidenceProvenance.packetVersion}</p><p className="mt-0.5 text-[8px] text-slate-600">{row.evidenceProvenance.semanticGuideVersion}</p></div>
             <div className="rounded-xl border border-white/[0.06] bg-black/15 p-2.5"><div className="text-[8px] font-black uppercase text-slate-600">Deterministic evidence</div><p className="mt-1 font-mono text-[9px] text-slate-400">{shortHash(row.evidenceProvenance.deterministicEvidenceHash)}</p></div>
             <div className="rounded-xl border border-white/[0.06] bg-black/15 p-2.5"><div className="text-[8px] font-black uppercase text-slate-600">Raw KFSP/TTAI/Wyckoff</div><p className="mt-1 font-mono text-[9px] text-slate-400">{shortHash(row.evidenceProvenance.rawContextHash)}</p><p className="mt-0.5 text-[8px] text-slate-600">{row.evidenceProvenance.rawContextVersion || "not frozen"}</p></div>
             <div className="rounded-xl border border-white/[0.06] bg-black/15 p-2.5"><div className="text-[8px] font-black uppercase text-slate-600">Notion research</div><p className="mt-1 font-mono text-[9px] text-slate-400">{shortHash(row.evidenceProvenance.researchContextHash)}</p><p className="mt-0.5 text-[8px] text-slate-600">{row.evidenceProvenance.researchStatus ? `${row.evidenceProvenance.researchStatus} · ${row.evidenceProvenance.researchSourceCount} pages` : "not enabled"}</p></div>
-            <div className="rounded-xl border border-white/[0.06] bg-black/15 p-2.5"><div className="text-[8px] font-black uppercase text-slate-600">OpenAI cache identity</div><p className="mt-1 font-mono text-[9px] text-cyan-300">{shortHash(row.evidenceProvenance.promptIdentityHash)}</p><p className="mt-0.5 text-[8px] text-slate-600">deterministic + raw + research + prompt</p></div>
+            <div className="rounded-xl border border-white/[0.06] bg-black/15 p-2.5"><div className="text-[8px] font-black uppercase text-slate-600">Research Reports</div><p className="mt-1 font-mono text-[9px] text-slate-400">{shortHash(row.evidenceProvenance.reportContextHash)}</p><p className="mt-0.5 text-[8px] text-slate-600">{row.evidenceProvenance.reportStatus ? `${row.evidenceProvenance.reportStatus} · ${row.evidenceProvenance.reportCount} reports` : "not frozen"}</p><p className="mt-0.5 truncate text-[8px] text-slate-700">{row.evidenceProvenance.reportContextVersion || "—"} · {row.evidenceProvenance.reportCapturedAt || "—"}</p></div>
+            <div className="rounded-xl border border-white/[0.06] bg-black/15 p-2.5"><div className="text-[8px] font-black uppercase text-slate-600">OpenAI cache identity</div><p className="mt-1 font-mono text-[9px] text-cyan-300">{shortHash(row.evidenceProvenance.promptIdentityHash)}</p><p className="mt-0.5 text-[8px] text-slate-600">deterministic + raw + research + reports + prompt</p></div>
+          </div>
+        </section>
+      ) : null}
+
+      {row.relatedReports.length ? (
+        <section className="mx-4 mt-3 rounded-2xl border border-amber-400/10 bg-amber-400/[0.025] p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[9px] font-black uppercase tracking-wider text-amber-300">Báo cáo liên quan</div>
+            <div className="text-[8px] font-bold uppercase tracking-wider text-slate-600">Source opinion · frozen Research Reports</div>
+          </div>
+          <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {row.relatedReports.map((report) => (
+              <Link
+                key={report.reportId}
+                href={`/research/reports/${report.reportId}`}
+                prefetch={false}
+                className="rounded-xl border border-white/[0.06] bg-black/15 p-3 transition-colors hover:border-amber-300/20 hover:bg-amber-300/[0.025]"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="line-clamp-2 text-[10px] font-bold leading-4 text-slate-300">{report.title}</p>
+                  {report.tickerStance ? <span className="shrink-0 rounded-full border border-amber-400/15 px-1.5 py-0.5 text-[7px] font-black uppercase text-amber-300">{report.tickerStance}</span> : null}
+                </div>
+                <p className="mt-1.5 text-[8px] text-slate-600">{report.sourceName} · {report.publishDate || "unknown date"}</p>
+                <p className="mt-0.5 text-[8px] uppercase tracking-wide text-slate-700">{report.category} · Source opinion</p>
+              </Link>
+            ))}
           </div>
         </section>
       ) : null}
