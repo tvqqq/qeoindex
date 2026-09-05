@@ -1,0 +1,211 @@
+name: QEO-87 TOPI live contract hotfix v2
+
+on:
+  push:
+    branches:
+      - qeo-87-topi-live-contract
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Apply production-contract fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('modules/research-reports/providers/topi.ts')
+          text = path.read_text()
+
+          def replace_once(old: str, new: str, label: str):
+              global text
+              if old not in text:
+                  raise SystemExit(f'{label} not found')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+          '''function findReportRows(value: unknown, depth = 0): unknown[] | null {
+            if (Array.isArray(value)) return value
+            if (depth > 4) return null
+            const record = asRecord(value)
+            if (!record) return null
+
+            for (const key of ["list", "items", "results", "records", "data", "result"]) {
+              if (!(key in record)) continue
+              const rows = findReportRows(record[key], depth + 1)
+              if (rows) return rows
+            }
+            return null
+          }
+          ''',
+          '''function findReportRows(value: unknown, depth = 0): unknown[] | null {
+            if (Array.isArray(value)) return value
+            if (depth > 4) return null
+            const record = asRecord(value)
+            if (!record) return null
+
+            const entries = Object.entries(record)
+            for (const key of ["list", "items", "results", "records", "reports", "data", "result"]) {
+              const entry = entries.find(([candidate]) => candidate.toLowerCase() === key)
+              if (!entry) continue
+              const rows = findReportRows(entry[1], depth + 1)
+              if (rows) return rows
+            }
+            return null
+          }
+
+          interface TopiReportsPageResult {
+            reports: ResearchReportSourceRecord[]
+            sourceRowCount: number
+          }
+
+          function isTopiReportWithoutPdf(value: unknown) {
+            const record = asRecord(value)
+            return record ? readString(record.url) === null : false
+          }
+          ''', 'findReportRows')
+
+          replace_once(
+            '}: Required<Pick<FetchTopiReportsPageOptions, "page" | "limit" | "fetchImpl" | "timeoutMs">> & Pick<FetchTopiReportsPageOptions, "fromDate" | "toDate">): Promise<ResearchReportSourceRecord[]> {',
+            '}: Required<Pick<FetchTopiReportsPageOptions, "page" | "limit" | "fetchImpl" | "timeoutMs">> & Pick<FetchTopiReportsPageOptions, "fromDate" | "toDate">): Promise<TopiReportsPageResult> {',
+            'page-once return type')
+
+          replace_once(
+          '''  const rows = findReportRows(payload)
+            if (!rows) throw new Error("TOPI AnalysisReport response does not contain a report list")
+            return rows.map(parseTopiReport)
+          }
+          ''',
+          '''  const rows = findReportRows(payload)
+            if (!rows) throw new Error("TOPI AnalysisReport response does not contain a report list")
+            const reports = rows
+              .filter((row) => !isTopiReportWithoutPdf(row))
+              .map(parseTopiReport)
+            return { reports, sourceRowCount: rows.length }
+          }
+          ''', 'page parse result')
+
+          replace_once(
+          '''export async function fetchTopiReportsPage({
+            page,
+            limit = DEFAULT_PAGE_SIZE,
+            fromDate,
+            toDate,
+            fetchImpl = fetch,
+            timeoutMs = DEFAULT_TIMEOUT_MS,
+            transientAttempts = DEFAULT_TRANSIENT_ATTEMPTS,
+          }: FetchTopiReportsPageOptions): Promise<ResearchReportSourceRecord[]> {''',
+          '''async function fetchTopiReportsPageResult({
+            page,
+            limit = DEFAULT_PAGE_SIZE,
+            fromDate,
+            toDate,
+            fetchImpl = fetch,
+            timeoutMs = DEFAULT_TIMEOUT_MS,
+            transientAttempts = DEFAULT_TRANSIENT_ATTEMPTS,
+          }: FetchTopiReportsPageOptions): Promise<TopiReportsPageResult> {''', 'page result function')
+
+          replace_once(
+          '''  throw lastError
+          }
+
+          export interface DiscoverTopiReportsOptions {''',
+          '''  throw lastError
+          }
+
+          export async function fetchTopiReportsPage(options: FetchTopiReportsPageOptions): Promise<ResearchReportSourceRecord[]> {
+            return (await fetchTopiReportsPageResult(options)).reports
+          }
+
+          export interface DiscoverTopiReportsOptions {''', 'public wrapper')
+
+          replace_once(
+            '    const pageReports = await fetchTopiReportsPage({ page, limit: pageSize, fromDate, toDate, fetchImpl, timeoutMs })',
+            '    const pageResult = await fetchTopiReportsPageResult({ page, limit: pageSize, fromDate, toDate, fetchImpl, timeoutMs })\n    const pageReports = pageResult.reports',
+            'discovery fetch')
+          replace_once('    lastPageWasFull = pageReports.length >= pageSize', '    lastPageWasFull = pageResult.sourceRowCount >= pageSize', 'full page check')
+          replace_once('    if (pageReports.length === 0) {', '    if (pageResult.sourceRowCount === 0) {', 'empty page check')
+          text = text.replace('    if (pageReports.length < pageSize) {', '    if (pageResult.sourceRowCount < pageSize) {')
+          replace_once(
+            '    const knownOldBoundary = pageReports.length >= pageSize && pageReports.every((report) =>',
+            '    const knownOldBoundary = pageResult.sourceRowCount >= pageSize && pageReports.length > 0 && pageReports.every((report) =>',
+            'known old boundary')
+
+          path.write_text(text)
+
+          test_path = Path('tests/research-reports/topi.test.ts')
+          tests = test_path.read_text()
+          if 'QEO-87 TOPI adapter accepts the live Data.Reports envelope' not in tests:
+              tests = tests.rstrip() + r'''
+
+          test("QEO-87 TOPI adapter accepts the live Data.Reports envelope and PDF gaps do not truncate pagination", async () => {
+            const calls: number[] = []
+            const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+              const body = JSON.parse(String(init?.body)) as { page: number }
+              calls.push(body.page)
+              const rows = body.page === 1
+                ? [report(940, "05/09/2026"), { ...report(939, "05/09/2026"), url: "" }]
+                : [report(938, "04/09/2026")]
+              return new Response(JSON.stringify({
+                message: "OK",
+                code: 200,
+                data: { Data: { Reports: rows, TotalData: 3 }, Code: 0, Message: "success" },
+                success: 1,
+                errors: [],
+              }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              })
+            }) as typeof fetch
+
+            const result = await discoverTopiReports({
+              knownExternalReportIds: new Set<string>(),
+              recentPublishDateFloor: "2026-08-01",
+              pageSize: 2,
+              maxPages: 3,
+              fetchImpl,
+            })
+
+            assert.deepEqual(result.reports.map((item) => item.externalReportId), ["940", "938"])
+            assert.deepEqual(calls, [1, 2])
+            assert.equal(result.pagesFetched, 2)
+            assert.equal(result.boundaryReason, "short_page")
+            assert.equal(result.reachedSafetyLimit, false)
+          })
+          ''' + '\n'
+          test_path.write_text(tests)
+          PY
+          git diff --check
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify targeted production contract
+        run: |
+          node --test tests/research-reports/topi.test.ts tests/research-reports/domain.test.ts
+          pnpm typecheck
+
+      - name: Commit hotfix without helper workflows
+        run: |
+          git rm .github/workflows/qeo87-topi-live-contract-hotfix.yml .github/workflows/qeo87-topi-live-contract-hotfix-v2.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add modules/research-reports/providers/topi.ts tests/research-reports/topi.test.ts
+          git diff --cached --check
+          git commit -m "fix(QEO-87): align TOPI adapter with live response contract"
+          git push origin HEAD:${GITHUB_REF_NAME}
