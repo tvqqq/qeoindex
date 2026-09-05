@@ -26,6 +26,9 @@ const SECURITY_HEADERS = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Keep Node-only PDF.js package layout intact so its fake worker can resolve
+  // `./pdf.worker.mjs` at runtime instead of from a bundled `.next/server/chunks` path.
+  serverExternalPackages: ["pdfjs-dist"],
   // Keep production builds type-safe. Do not hide TypeScript failures on Vercel.
   env: {
     NEXT_PUBLIC_GIT_COMMIT_SHA: commitHash || "",
