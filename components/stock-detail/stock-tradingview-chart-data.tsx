@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { cn } from "@/modules/shared/ui/cn"
 import { CanonicalMinuteBarsContext } from "./chart/use-canonical-minute-bars"
@@ -45,14 +45,36 @@ function HistoryBoundChart({
     loadOlder,
   } = useChartHistory({ ticker, timeframe, seedDailyBars })
 
-  // QEO-100 P0: 1m has a bounded 31-day product horizon. Hydrate it
-  // progressively after the fast initial window so completeness never depends
-  // on mouse/trackpad gesture direction. QEO-103 will make this hot/cold path
-  // cache-efficient; longer derived timeframes remain lazy.
+  const dragStartXRef = useRef<number | null>(null)
+  const requestOlder = useCallback(() => {
+    if (!loading && !loadingOlder && hasMore) void loadOlder()
+  }, [hasMore, loadOlder, loading, loadingOlder])
+
+  // QEO-100 P0: raw 1m has a bounded 31-day product horizon. Hydrate it
+  // progressively after the fast initial window so completeness does not
+  // depend on mouse/trackpad gesture direction. QEO-103 will make this path
+  // cache-efficient with hot/cold storage.
   useEffect(() => {
     if (timeframe !== "1m" || loading || loadingOlder || !hasMore) return
     void loadOlder()
   }, [hasMore, loadOlder, loading, loadingOlder, timeframe])
+
+  // Keep the pre-existing lazy gesture behavior for non-1m timeframes. QEO-100
+  // only changes the raw 1m completeness contract.
+  const handleMouseDownCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (timeframe === "1m") return
+    if (event.button === 0) dragStartXRef.current = event.clientX
+  }
+
+  const handleMouseMoveCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (timeframe === "1m") return
+    const start = dragStartXRef.current
+    if (start == null || (event.buttons & 1) === 0) return
+    if (event.clientX - start >= 80) {
+      requestOlder()
+      dragStartXRef.current = event.clientX
+    }
+  }
 
   const resolvedBars = bars.length ? bars : timeframe === "1D" ? seedDailyBars : []
   const canonicalMinuteOverride = {
@@ -61,7 +83,16 @@ function HistoryBoundChart({
   }
 
   return (
-    <div className="relative">
+    <div
+      className="relative"
+      onMouseDownCapture={handleMouseDownCapture}
+      onMouseMoveCapture={handleMouseMoveCapture}
+      onMouseUpCapture={() => { dragStartXRef.current = null }}
+      onMouseLeave={() => { dragStartXRef.current = null }}
+      onWheelCapture={(event) => {
+        if (timeframe !== "1m" && event.deltaY > 0) requestOlder()
+      }}
+    >
       <CanonicalMinuteBarsContext.Provider value={canonicalMinuteOverride}>
         <StockTradingViewChart
           ticker={ticker}
