@@ -5,6 +5,7 @@ import type { TimeframeStudy } from "@/modules/research/multi-timeframe"
 import type { DailyScanRow, UniverseRow } from "@/modules/signals/scanner/data"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import type { FaScreenRow } from "@/modules/research/fa-screen-data"
+import type { InsightsRatingRow } from "@/modules/research/insights/data"
 
 export interface StockWatchlistItem {
   ticker: string
@@ -46,4 +47,5 @@ export interface StockDetailData {
   studies?: TimeframeStudy[]
   logs?: AnalysisLog[]
   watchlist: StockWatchlistItem[]
+  ratingRow?: InsightsRatingRow | null
 }

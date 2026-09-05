@@ -495,3 +495,95 @@ export async function getInsightsDashboardData(supabase: SupabaseClient): Promis
     bubbleAsOfDate,
   }
 }
+
+export async function getInsightsRatingForTicker(
+  supabase: SupabaseClient,
+  ticker: string,
+): Promise<InsightsRatingRow | null> {
+  const normTicker = ticker.trim().toUpperCase()
+  const universe = await getCanonicalUniverse()
+  const universeItem = universe.stocks.find((s) => s.ticker === normTicker)
+
+  const latest = await supabase
+    .from("insights_stock_ratings")
+    .select("as_of_date")
+    .eq("is_published", true)
+    .eq("source", "kfsp")
+    .eq("ticker", normTicker)
+    .order("as_of_date", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (latest.error || !latest.data?.as_of_date) return null
+  const latestDate = String(latest.data.as_of_date)
+
+  const selection =
+    "ticker,company_name,sector,exchange,price,price_change_pct,average_volume_50_sessions,market_cap_billion,kfsp_composite_score,kfsp_score_4m,kfsp_canslim_score,kfsp_price_potential,kfsp_stock_rs_score,kfsp_sector_rs_score,kfsp_stock_rrg_state,kfsp_sector_rrg_state,rs_short,rs_medium,rsi_14,weekly_change_pct,monthly_change_pct,beta,pe_ttm,pb_ttm,kfsp_metrics,as_of_date,source"
+
+  const response = await supabase
+    .from("insights_stock_ratings")
+    .select(selection)
+    .eq("is_published", true)
+    .eq("as_of_date", latestDate)
+    .eq("source", "kfsp")
+    .eq("ticker", normTicker)
+    .maybeSingle()
+
+  if (response.error || !response.data) return null
+  const row = response.data as RatingDatabaseRow
+  if (row.kfsp_composite_score == null) return null
+
+  const ratingScore = componentScore(row.kfsp_composite_score)
+  if (ratingScore == null) return null
+  const technical = componentScore(row.kfsp_score_4m)
+  const momentum = componentScore(row.kfsp_stock_rs_score)
+  const moneyFlow = componentScore(row.kfsp_sector_rs_score)
+  const fundamental = componentScore(row.kfsp_canslim_score)
+  const metricGroups = parseMetricGroups(row.kfsp_metrics)
+  const metricRsi = metricGroups.technical?.rsi_14
+
+  const baseRow: InsightsRatingRow = {
+    ticker: row.ticker,
+    companyName: row.company_name || (row.exchange ? `${row.ticker} · ${row.exchange}` : row.ticker),
+    sector: row.sector || "Chưa phân ngành",
+    industryGroup: row.sector || "Chưa phân ngành",
+    exchange: row.exchange,
+    isTop100: universeItem != null,
+    top100Rank: universeItem?.rank ?? null,
+    ratingScore,
+    price: nullableNumber(row.price),
+    changePercent: nullableNumber(row.price_change_pct),
+    volume: nullableNumber(row.average_volume_50_sessions),
+    marketCapBillion: nullableNumber(row.market_cap_billion),
+    score4m: technical,
+    canslimScore: fundamental,
+    pricePotential: row.kfsp_price_potential,
+    rsShort: nullableNumber(row.rs_short),
+    rsMedium: nullableNumber(row.rs_medium),
+    stockRrgState: row.kfsp_stock_rrg_state,
+    sectorRrgState: row.kfsp_sector_rrg_state,
+    rsi14: row.rsi_14 == null ? (typeof metricRsi === "number" || typeof metricRsi === "string" ? metricRsi : null) : Number(row.rsi_14),
+    weeklyChangePercent: nullableNumber(row.weekly_change_pct),
+    monthlyChangePercent: nullableNumber(row.monthly_change_pct),
+    beta: nullableNumber(row.beta),
+    peTtm: nullableNumber(row.pe_ttm),
+    pbTtm: nullableNumber(row.pb_ttm),
+    asOfDate: row.as_of_date,
+    provider: row.source,
+    metricGroups,
+    scoreComponents: { technical, momentum, moneyFlow, fundamental },
+    scoreHistory: [],
+  }
+
+  const historyDates = await loadHistoryDates(supabase, latestDate)
+  if (historyDates.length) {
+    const historyByTicker = await loadRatingHistory(supabase, [normTicker], historyDates)
+    baseRow.scoreHistory = [toHistorySnapshot(baseRow), ...(historyByTicker.get(normTicker) || [])]
+      .filter((item, index, list) => list.findIndex((candidate) => candidate.asOfDate === item.asOfDate) === index)
+      .sort((left, right) => right.asOfDate.localeCompare(left.asOfDate))
+  } else {
+    baseRow.scoreHistory = [toHistorySnapshot(baseRow)]
+  }
+
+  return baseRow
+}
