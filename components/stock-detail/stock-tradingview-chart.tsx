@@ -19,6 +19,7 @@ import { StockChartObjectManager } from "./chart/stock-chart-object-manager"
 import { StockChartTextEditor } from "./chart/stock-chart-text-editor"
 import {
   calculateBollingerBands,
+  calculateIchimokuBaseSeries,
   calculateIchimokuSeries,
   calculateMacdSeries,
   calculateRsiSeries,
@@ -161,6 +162,10 @@ export function StockTradingViewChart({
     return isMaximized && indicators.showBollinger ? calculateBollingerBands(displayBars, 20, 2) : null
   }, [displayBars, isMaximized, indicators.showBollinger])
 
+  const qeoBase129All = useMemo(() => {
+    return isMaximized && indicators.showQeoBase129 ? calculateIchimokuBaseSeries(displayBars, 129) : []
+  }, [displayBars, isMaximized, indicators.showQeoBase129])
+
   // Visible slices of indicators
   const ma20 = useMemo(() => ma20All.slice(startIdx, endIdx), [ma20All, startIdx, endIdx])
   const ma50 = useMemo(() => ma50All.slice(startIdx, endIdx), [ma50All, startIdx, endIdx])
@@ -186,6 +191,11 @@ export function StockTradingViewChart({
       lower: bollingerAll.lower.slice(startIdx, endIdx),
     }
   }, [bollingerAll, startIdx, endIdx])
+
+  const qeoBase129 = useMemo(
+    () => qeoBase129All.slice(startIdx, endIdx),
+    [qeoBase129All, startIdx, endIdx],
+  )
 
   const volumeProfile = useMemo(() => {
     return isMaximized && indicators.showVolumeProfile ? calculateVolumeProfile(visibleBars, 24) : null
@@ -359,6 +369,11 @@ export function StockTradingViewChart({
   const ma20Path = useMemo(() => makeLinePath(ma20), [ma20, makeLinePath])
   const ma50Path = useMemo(() => makeLinePath(ma50), [ma50, makeLinePath])
   const ma200Path = useMemo(() => makeLinePath(ma200), [ma200, makeLinePath])
+  const ichimokuSpanAPath = useMemo(() => makeLinePath(ichimoku?.spanA ?? []), [ichimoku, makeLinePath])
+  const ichimokuSpanBPath = useMemo(() => makeLinePath(ichimoku?.spanB ?? []), [ichimoku, makeLinePath])
+  const bollingerUpperPath = useMemo(() => makeLinePath(bollinger?.upper ?? []), [bollinger, makeLinePath])
+  const bollingerLowerPath = useMemo(() => makeLinePath(bollinger?.lower ?? []), [bollinger, makeLinePath])
+  const qeoBase129Path = useMemo(() => makeLinePath(qeoBase129), [qeoBase129, makeLinePath])
 
   // Mouse wheel Zooming (cursor-centered X zoom + TradingView-style Y-axis scaling)
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -1032,9 +1047,9 @@ export function StockTradingViewChart({
             Vol
           </text>
 
-          {/* 1. Volume Profile Bars (POC) on Price Chart (if enabled) */}
+          {/* 1. Volume Profile Bars + explicit POC price badge */}
           {volumeProfile && (
-            <g opacity="0.65">
+            <g opacity="0.78">
               {volumeProfile.buckets.map((b, idx) => {
                 const bY = getY(b.price)
                 const barLen = (b.volume / volumeProfile.maxBucketVol) * (plotWidth * 0.22)
@@ -1047,7 +1062,7 @@ export function StockTradingViewChart({
                       width={barLen}
                       height={8}
                       fill={isPoc ? "#f43f5e" : "#3b82f6"}
-                      fillOpacity={isPoc ? 0.45 : 0.2}
+                      fillOpacity={isPoc ? 0.45 : 0.18}
                       stroke={isPoc ? "#f43f5e" : "none"}
                       strokeWidth={1}
                     />
@@ -1065,12 +1080,40 @@ export function StockTradingViewChart({
                   </g>
                 )
               })}
+              {(() => {
+                const pocY = getY(volumeProfile.pocPrice)
+                const badgeY = Math.max(padTop + 1, Math.min(padTop + mainPriceHeight - 15, pocY - 7))
+                return (
+                  <g>
+                    <rect
+                      x={width - padRight + 1}
+                      y={badgeY}
+                      width={padRight - 2}
+                      height={14}
+                      rx="2"
+                      fill="#be123c"
+                      stroke="#fb7185"
+                      strokeWidth="0.8"
+                    />
+                    <text
+                      x={width - padRight + 5}
+                      y={badgeY + 9.5}
+                      fill="#fff1f2"
+                      fontFamily="monospace"
+                      fontWeight="bold"
+                      fontSize="7.2"
+                    >
+                      POC {volumeProfile.pocPrice.toFixed(1)}
+                    </text>
+                  </g>
+                )
+              })()}
             </g>
           )}
 
-          {/* 2. Ichimoku Cloud (if enabled) */}
+          {/* 2. Ichimoku Cloud — muted TradingView-like bull/bear colors + Span A/B outlines */}
           {ichimoku && (
-            <g opacity="0.35">
+            <g>
               {visibleBars.map((_, i) => {
                 if (i === 0) return null
                 const spanA1 = ichimoku.spanA[i - 1]
@@ -1091,30 +1134,45 @@ export function StockTradingViewChart({
                   <polygon
                     key={`kumo-${i}`}
                     points={cloudPoints}
-                    fill={isBull ? "#10b981" : "#f43f5e"}
-                    fillOpacity="0.25"
+                    fill={isBull ? "#214a39" : "#4a2b29"}
+                    fillOpacity="0.42"
                   />
                 )
               })}
+              <path
+                d={ichimokuSpanAPath}
+                fill="none"
+                stroke="#9ad7b8"
+                strokeWidth="1"
+                opacity="0.9"
+              />
+              <path
+                d={ichimokuSpanBPath}
+                fill="none"
+                stroke="#d9a184"
+                strokeWidth="1"
+                opacity="0.9"
+              />
             </g>
           )}
 
-          {/* 3. Bollinger Bands Shaded Area (if enabled) */}
+          {/* 3. Bollinger Bands — upper/lower white dashed lines only */}
           {bollinger && (
-            <g opacity="0.25">
-              {visibleBars.map((_, i) => {
-                if (i === 0) return null
-                const u1 = bollinger.upper[i - 1]
-                const l1 = bollinger.lower[i - 1]
-                const u2 = bollinger.upper[i]
-                const l2 = bollinger.lower[i]
-                if (u1 == null || l1 == null || u2 == null || l2 == null) return null
-
-                const x1 = getX(i - 1)
-                const x2 = getX(i)
-                const points = `${x1},${getY(u1)} ${x2},${getY(u2)} ${x2},${getY(l2)} ${x1},${getY(l1)}`
-                return <polygon key={`bb-${i}`} points={points} fill="#38bdf8" fillOpacity="0.15" />
-              })}
+            <g opacity="0.78">
+              <path
+                d={bollingerUpperPath}
+                fill="none"
+                stroke="#f8fafc"
+                strokeWidth="1"
+                strokeDasharray="6 4"
+              />
+              <path
+                d={bollingerLowerPath}
+                fill="none"
+                stroke="#f8fafc"
+                strokeWidth="1"
+                strokeDasharray="6 4"
+              />
             </g>
           )}
 
@@ -1187,12 +1245,37 @@ export function StockTradingViewChart({
             </g>
           )}
 
-          {/* Moving Averages (only if MA indicator enabled) */}
+          {/* Moving Averages — requested visual hierarchy */}
           {(isMaximized ? indicators.showMa : false) && (
             <>
-              <path d={ma20Path} fill="none" stroke="#10b981" strokeWidth="1.6" opacity="0.85" />
-              <path d={ma50Path} fill="none" stroke="#f59e0b" strokeWidth="1.6" opacity="0.75" />
-              <path d={ma200Path} fill="none" stroke="#a855f7" strokeWidth="1.6" opacity="0.75" />
+              <path d={ma20Path} fill="none" stroke="#f8fafc" strokeWidth="1" opacity="0.95" />
+              <path d={ma50Path} fill="none" stroke="#8b5cf6" strokeWidth="2" opacity="0.95" />
+              <path d={ma200Path} fill="none" stroke="#facc15" strokeWidth="3" opacity="0.95" />
+            </>
+          )}
+
+          {/* QeoIndex proprietary 129-bar Ichimoku base line */}
+          {isMaximized && indicators.showQeoBase129 && qeoBase129Path && (
+            <>
+              <path
+                d={qeoBase129Path}
+                fill="none"
+                stroke="#f472b6"
+                strokeWidth="8"
+                opacity="0.18"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                filter={`url(#qeo-base-glow-${ticker})`}
+              />
+              <path
+                d={qeoBase129Path}
+                fill="none"
+                stroke="#ff4da6"
+                strokeWidth="3"
+                opacity="0.98"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </>
           )}
 
@@ -1321,67 +1404,201 @@ export function StockTradingViewChart({
             </g>
           )}
 
-          {/* 6. RSI Subpane (if enabled in Maximized mode) */}
+          {/* 6. RSI Subpane — TradingView-like 30–70 band and current value badge */}
           {hasRsi && (
             <g>
-              {/* RSI Boundaries */}
-              <line x1={padLeft} y1={rsiTop} x2={width - padRight} y2={rsiTop} stroke="#334155" strokeDasharray="2 2" opacity="0.5" />
-              <line x1={padLeft} y1={rsiTop + subpaneHeight * 0.3} x2={width - padRight} y2={rsiTop + subpaneHeight * 0.3} stroke="#7c3aed" strokeDasharray="3 3" opacity="0.6" />
-              <line x1={padLeft} y1={rsiTop + subpaneHeight * 0.7} x2={width - padRight} y2={rsiTop + subpaneHeight * 0.7} stroke="#7c3aed" strokeDasharray="3 3" opacity="0.6" />
-              <line x1={padLeft} y1={rsiTop + subpaneHeight} x2={width - padRight} y2={rsiTop + subpaneHeight} stroke="#334155" strokeDasharray="2 2" opacity="0.5" />
-
-              {/* RSI Curve */}
               {(() => {
+                const yForRsi = (value: number) => rsiTop + ((100 - value) / 100) * subpaneHeight
+                const rsi70Y = yForRsi(70)
+                const rsi30Y = yForRsi(30)
+                const latestRsi = rsiSeries.at(-1)
                 let rsiPath = ""
                 rsiSeries.forEach((val, i) => {
                   if (val == null) return
                   const x = getX(i)
-                  const y = rsiTop + ((100 - val) / 100) * subpaneHeight
+                  const y = yForRsi(val)
                   rsiPath += rsiPath === "" ? `M ${x} ${y}` : ` L ${x} ${y}`
                 })
-                return <path d={rsiPath} fill="none" stroke="#a855f7" strokeWidth="1.8" />
-              })()}
 
-              <text x={padLeft + 8} y={rsiTop + 12} fill="#c084fc" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                RSI (14): {rsiSeries.at(-1)?.toFixed(1) || "—"}
-              </text>
-              <text x={width - padRight + 8} y={rsiTop + subpaneHeight * 0.3 + 3} fill="#94a3b8" fontSize="8" fontFamily="monospace">
-                70
-              </text>
-              <text x={width - padRight + 8} y={rsiTop + subpaneHeight * 0.7 + 3} fill="#94a3b8" fontSize="8" fontFamily="monospace">
-                30
-              </text>
+                return (
+                  <>
+                    <rect
+                      x={padLeft}
+                      y={rsi70Y}
+                      width={plotWidth}
+                      height={rsi30Y - rsi70Y}
+                      fill="#7c3aed"
+                      fillOpacity="0.08"
+                    />
+                    <line x1={padLeft} y1={rsiTop} x2={width - padRight} y2={rsiTop} stroke="#334155" opacity="0.7" />
+                    <line x1={padLeft} y1={rsi70Y} x2={width - padRight} y2={rsi70Y} stroke="#a78bfa" strokeDasharray="5 5" opacity="0.55" />
+                    <line x1={padLeft} y1={rsi30Y} x2={width - padRight} y2={rsi30Y} stroke="#a78bfa" strokeDasharray="5 5" opacity="0.55" />
+                    <line x1={padLeft} y1={rsiTop + subpaneHeight} x2={width - padRight} y2={rsiTop + subpaneHeight} stroke="#334155" opacity="0.7" />
+
+                    {[80, 60, 40, 20].map((tick) => (
+                      <text
+                        key={`rsi-tick-${tick}`}
+                        x={width - padRight + 8}
+                        y={yForRsi(tick) + 3}
+                        fill="#94a3b8"
+                        fontSize="8"
+                        fontFamily="monospace"
+                      >
+                        {tick}
+                      </text>
+                    ))}
+
+                    <path d={rsiPath} fill="none" stroke="#8b5cf6" strokeWidth="1" />
+
+                    <text x={padLeft + 8} y={rsiTop + 12} fill="#cbd5e1" fontSize="9" fontFamily="monospace">
+                      RSI 14
+                    </text>
+                    <text x={padLeft + 48} y={rsiTop + 12} fill="#8b5cf6" fontSize="9" fontFamily="monospace" fontWeight="bold">
+                      {latestRsi?.toFixed(2) ?? "—"}
+                    </text>
+
+                    {typeof latestRsi === "number" && (
+                      <g>
+                        <rect
+                          x={width - padRight + 1}
+                          y={Math.max(rsiTop + 1, Math.min(rsiTop + subpaneHeight - 15, yForRsi(latestRsi) - 7))}
+                          width={padRight - 2}
+                          height={14}
+                          fill="#7c3aed"
+                          rx="2"
+                        />
+                        <text
+                          x={width - padRight + 7}
+                          y={Math.max(rsiTop + 1, Math.min(rsiTop + subpaneHeight - 15, yForRsi(latestRsi) - 7)) + 9.5}
+                          fill="#f5f3ff"
+                          fontSize="8"
+                          fontFamily="monospace"
+                          fontWeight="bold"
+                        >
+                          {latestRsi.toFixed(2)}
+                        </text>
+                      </g>
+                    )}
+                  </>
+                )
+              })()}
             </g>
           )}
 
-          {/* 7. MACD Subpane (if enabled in Maximized mode) */}
+          {/* 7. MACD Subpane — independent symmetric scale, line/signal and momentum histogram */}
           {hasMacd && macdSeries && (
             <g>
-              <line x1={padLeft} y1={macdTop + subpaneHeight / 2} x2={width - padRight} y2={macdTop + subpaneHeight / 2} stroke="#334155" opacity="0.8" />
-
-              {/* MACD Histogram */}
-              {macdSeries.histogram.map((val, i) => {
-                if (val == null) return null
-                const x = getX(i)
+              {(() => {
+                const numericValues = [
+                  ...macdSeries.macd,
+                  ...macdSeries.signal,
+                  ...macdSeries.histogram,
+                ].filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+                const maxAbs = Math.max(0.0001, ...numericValues.map((value) => Math.abs(value)))
                 const zeroY = macdTop + subpaneHeight / 2
-                const barH = Math.min(subpaneHeight / 2, Math.abs(val) * 10)
-                const isBull = val >= 0
-                return (
-                  <rect
-                    key={`macd-hist-${i}`}
-                    x={x - 1.5}
-                    y={isBull ? zeroY - barH : zeroY}
-                    width={3}
-                    height={barH}
-                    fill={isBull ? "#10b981" : "#f43f5e"}
-                    opacity="0.6"
-                  />
-                )
-              })}
+                const yForMacd = (value: number) => zeroY - (value / maxAbs) * (subpaneHeight * 0.42)
+                const makeMacdPath = (series: Array<number | null>) => {
+                  let path = ""
+                  series.forEach((value, i) => {
+                    if (value == null) return
+                    const x = getX(i)
+                    const y = yForMacd(value)
+                    path += path === "" ? `M ${x} ${y}` : ` L ${x} ${y}`
+                  })
+                  return path
+                }
+                const latestMacd = macdSeries.macd.at(-1)
+                const latestSignal = macdSeries.signal.at(-1)
+                const latestHist = macdSeries.histogram.at(-1)
 
-              <text x={padLeft + 8} y={macdTop + 12} fill="#38bdf8" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                MACD (12, 26, 9)
-              </text>
+                const badges = [
+                  typeof latestSignal === "number" ? { key: "signal", value: latestSignal, color: "#f97316" } : null,
+                  typeof latestMacd === "number" ? { key: "macd", value: latestMacd, color: "#2196f3" } : null,
+                  typeof latestHist === "number" ? { key: "hist", value: latestHist, color: latestHist >= 0 ? "#0f9f91" : "#ef4444" } : null,
+                ].filter((item): item is { key: string; value: number; color: string } => item !== null)
+
+                return (
+                  <>
+                    <line x1={padLeft} y1={macdTop} x2={width - padRight} y2={macdTop} stroke="#334155" opacity="0.65" />
+                    <line x1={padLeft} y1={zeroY} x2={width - padRight} y2={zeroY} stroke="#64748b" strokeWidth="1" opacity="0.7" />
+                    <line x1={padLeft} y1={macdTop + subpaneHeight} x2={width - padRight} y2={macdTop + subpaneHeight} stroke="#334155" opacity="0.65" />
+
+                    {macdSeries.histogram.map((val, i) => {
+                      if (val == null) return null
+                      const x = getX(i)
+                      const valueY = yForMacd(val)
+                      const prev = macdSeries.histogram[i - 1]
+                      const strengthening =
+                        typeof prev === "number" &&
+                        Math.sign(prev) === Math.sign(val) &&
+                        Math.abs(val) >= Math.abs(prev)
+                      const fill = val >= 0
+                        ? strengthening ? "#22b8a7" : "#9adfd5"
+                        : strengthening ? "#ff5252" : "#f4b5b5"
+                      return (
+                        <rect
+                          key={`macd-hist-${i}`}
+                          x={x - 2}
+                          y={Math.min(zeroY, valueY)}
+                          width={4}
+                          height={Math.max(0.8, Math.abs(valueY - zeroY))}
+                          fill={fill}
+                          opacity="0.95"
+                        />
+                      )
+                    })}
+
+                    <path d={makeMacdPath(macdSeries.macd)} fill="none" stroke="#2196f3" strokeWidth="1" />
+                    <path d={makeMacdPath(macdSeries.signal)} fill="none" stroke="#f97316" strokeWidth="1" />
+
+                    <text x={padLeft + 8} y={macdTop + 12} fill="#cbd5e1" fontSize="8.5" fontFamily="monospace">
+                      MACD 12 26 close 9
+                    </text>
+                    {typeof latestHist === "number" && (
+                      <text x={padLeft + 116} y={macdTop + 12} fill={latestHist >= 0 ? "#22b8a7" : "#ff5252"} fontSize="8.5" fontFamily="monospace">
+                        {latestHist.toFixed(2)}
+                      </text>
+                    )}
+                    {typeof latestMacd === "number" && (
+                      <text x={padLeft + 148} y={macdTop + 12} fill="#2196f3" fontSize="8.5" fontFamily="monospace">
+                        {latestMacd.toFixed(2)}
+                      </text>
+                    )}
+                    {typeof latestSignal === "number" && (
+                      <text x={padLeft + 180} y={macdTop + 12} fill="#f97316" fontSize="8.5" fontFamily="monospace">
+                        {latestSignal.toFixed(2)}
+                      </text>
+                    )}
+
+                    {badges.map((badge) => {
+                      const rawY = yForMacd(badge.value)
+                      const badgeY = Math.max(macdTop + 1, Math.min(macdTop + subpaneHeight - 15, rawY - 7))
+                      return (
+                        <g key={`macd-badge-${badge.key}`}>
+                          <rect
+                            x={width - padRight + 1}
+                            y={badgeY}
+                            width={padRight - 2}
+                            height={14}
+                            fill={badge.color}
+                            rx="1.5"
+                          />
+                          <text
+                            x={width - padRight + 7}
+                            y={badgeY + 9.5}
+                            fill="#ffffff"
+                            fontSize="8"
+                            fontFamily="monospace"
+                            fontWeight="bold"
+                          >
+                            {badge.value.toFixed(2)}
+                          </text>
+                        </g>
+                      )
+                    })}
+                  </>
+                )
+              })()}
             </g>
           )}
 
@@ -1398,12 +1615,15 @@ export function StockTradingViewChart({
             <title>Lăn chuột để thu/phóng trục giá · Nhấn đúp để Auto Scale</title>
           </rect>
 
-          {/* Area gradient definition */}
+          {/* Shared SVG definitions */}
           <defs>
             <linearGradient id="area-gradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#cbd5e1" stopOpacity="0.5" />
               <stop offset="100%" stopColor="#cbd5e1" stopOpacity="0" />
             </linearGradient>
+            <filter id={`qeo-base-glow-${ticker}`} x="-20%" y="-60%" width="140%" height="220%">
+              <feGaussianBlur stdDeviation="3" />
+            </filter>
           </defs>
         </svg>
 
