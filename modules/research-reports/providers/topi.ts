@@ -1,5 +1,6 @@
 import type {
   ResearchReportCategory,
+  ResearchReportDiscoveryBoundaryReason,
   ResearchReportDiscoveryResult,
   ResearchReportSourceRecord,
 } from "../types.ts"
@@ -9,6 +10,7 @@ export const TOPI_ANALYSIS_REPORT_URL = "https://apiclient.topi.vn/api-web/Analy
 const DEFAULT_PAGE_SIZE = 15
 const DEFAULT_MAX_PAGES = 20
 const DEFAULT_TIMEOUT_MS = 10_000
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -171,14 +173,26 @@ export async function fetchTopiReportsPage({
 
 export interface DiscoverTopiReportsOptions {
   knownExternalReportIds?: ReadonlySet<string>
+  recentPublishDateFloor?: string
   fetchImpl?: typeof fetch
   pageSize?: number
   maxPages?: number
   timeoutMs?: number
 }
 
+function discoveryResult(
+  reports: ResearchReportSourceRecord[],
+  pagesFetched: number,
+  stoppedAtKnownBoundary: boolean,
+  boundaryReason: ResearchReportDiscoveryBoundaryReason,
+  reachedSafetyLimit = false,
+): ResearchReportDiscoveryResult {
+  return { reports, pagesFetched, stoppedAtKnownBoundary, boundaryReason, reachedSafetyLimit }
+}
+
 export async function discoverTopiReports({
   knownExternalReportIds = new Set<string>(),
+  recentPublishDateFloor,
   fetchImpl = fetch,
   pageSize = DEFAULT_PAGE_SIZE,
   maxPages = DEFAULT_MAX_PAGES,
@@ -187,28 +201,59 @@ export async function discoverTopiReports({
   if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 100) {
     throw new Error("TOPI maxPages must be between 1 and 100")
   }
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+    throw new Error("TOPI pageSize must be between 1 and 100")
+  }
+  if (recentPublishDateFloor && !ISO_DATE_RE.test(recentPublishDateFloor)) {
+    throw new Error("TOPI recentPublishDateFloor must be YYYY-MM-DD")
+  }
 
   const reports: ResearchReportSourceRecord[] = []
   const seen = new Set<string>()
   let pagesFetched = 0
-  let stoppedAtKnownBoundary = false
+  let lastPageWasFull = false
 
   for (let page = 1; page <= maxPages; page += 1) {
     const pageReports = await fetchTopiReportsPage({ page, limit: pageSize, fetchImpl, timeoutMs })
     pagesFetched += 1
+    lastPageWasFull = pageReports.length >= pageSize
+
+    if (pageReports.length === 0) {
+      return discoveryResult(reports, pagesFetched, false, "empty_page")
+    }
+
+    if (!recentPublishDateFloor) {
+      for (const report of pageReports) {
+        if (knownExternalReportIds.has(report.externalReportId)) {
+          return discoveryResult(reports, pagesFetched, true, "known_id")
+        }
+        if (seen.has(report.externalReportId)) continue
+        seen.add(report.externalReportId)
+        reports.push(report)
+      }
+      if (pageReports.length < pageSize) {
+        return discoveryResult(reports, pagesFetched, false, "short_page")
+      }
+      continue
+    }
+
+    const knownOldBoundary = pageReports.length >= pageSize && pageReports.every((report) =>
+      knownExternalReportIds.has(report.externalReportId) && report.publishDate < recentPublishDateFloor)
+
+    if (knownOldBoundary) {
+      return discoveryResult(reports, pagesFetched, true, "known_old_page")
+    }
 
     for (const report of pageReports) {
-      if (knownExternalReportIds.has(report.externalReportId)) {
-        stoppedAtKnownBoundary = true
-        break
-      }
       if (seen.has(report.externalReportId)) continue
       seen.add(report.externalReportId)
       reports.push(report)
     }
 
-    if (stoppedAtKnownBoundary || pageReports.length < pageSize) break
+    if (pageReports.length < pageSize) {
+      return discoveryResult(reports, pagesFetched, false, "short_page")
+    }
   }
 
-  return { reports, pagesFetched, stoppedAtKnownBoundary }
+  return discoveryResult(reports, pagesFetched, false, "max_pages", lastPageWasFull)
 }
