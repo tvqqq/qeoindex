@@ -110,6 +110,46 @@ Provider data is normalized through the same canonical validation path before it
 
 Provider backfill does not weaken archive integrity: data that QeoIndex has chosen to retain must pass the local verified cold lifecycle before hot deletion.
 
+## QEO-107 canonical-200 intraday bootstrap
+
+The active bootstrap path exists because the QEO-103 lifecycle can only archive raw minutes that already exist. It cannot create missing canonical coverage for a ticker that has never been requested.
+
+`chartIntradayBootstrapWorkflow` freezes the latest published **200-stock** canonical universe and processes bounded provider windows in this order:
+
+```text
+31-day newest chunk for ticker 1..200
+  -> next older 31-day chunk for ticker 1..200
+  -> ...
+  -> bounded 366-day target horizon
+```
+
+This ordering makes recoverable Hot coverage available across the universe before spending provider capacity on older history.
+
+For each successful provider window:
+
+- real canonical `1m` at/after the Hot cutoff is upserted into `chart_ohlcv_intraday`;
+- older real `1m` is grouped by Vietnam trading date and written directly to verified immutable Cold objects;
+- each verified old partition immediately rebuilds deterministic `1h` cache rows;
+- only after Hot/Cold/derived persistence succeeds is the QEO-107 request recorded as a successful provenance window.
+
+For provider failures:
+
+- `RATE_LIMIT`, `TIMEOUT`, and `NETWORK` remain retryable evidence;
+- a range is a terminal `provider_gap` only when every configured provider reports `EMPTY_COVERAGE`;
+- auth/config/permanent errors are explicit failures, never reclassified as retention gaps;
+- zero-row failure/gap provenance is intentionally excluded from canonical provider coverage calculations.
+
+The workflow is idempotent through request-range provenance. Reruns skip only successful windows and explicit terminal provider gaps; retryable/permanent failures remain eligible after the provider condition is fixed. Consecutive failure circuit breakers stop a damaged run instead of hammering all 200 tickers.
+
+Operational modes on the authenticated QeoIndex EOD route:
+
+| Mode | Method | Purpose |
+| --- | --- | --- |
+| `chart-bootstrap` | `POST` | Starts the durable canonical-200 QEO-107 workflow and returns its workflow run id. |
+| `chart-coverage` | `GET` or `POST` | Returns one coverage row per current canonical ticker: Hot rows/range, verified Cold manifests/rows/range, derived `1h` rows/range, successful provider windows, provider gaps, retryable failures and permanent failures. |
+
+The coverage report is the release gate for QEO-98. A provider retention gap is accepted only as explicit evidence; it must never be represented as fabricated source coverage or a silently complete timeframe.
+
 ## Unified API
 
 Browser-facing reads use authenticated `GET /api/market/ohlcv`.
@@ -129,5 +169,6 @@ Material changes to this subsystem must preserve:
 - service-role-only fail-closed prune authority;
 - authenticated browser boundary;
 - Daily-only `market_ohlcv_history` invariant;
+- canonical-200 QEO-107 coverage report before QEO-98 production acceptance;
 - migration drift reconciliation, clean replay, and generated Supabase type parity;
 - current tests, touched lint, TypeScript, and production build gates.

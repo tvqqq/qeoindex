@@ -139,3 +139,59 @@ test("QEO-100 SSI iBoard parser rejects misaligned arrays as MALFORMED_RESPONSE"
     (error: unknown) => error instanceof ProviderProbeError && error.errorClass === "MALFORMED_RESPONSE",
   )
 })
+
+test("QEO-107 provider waterfall exposes retryable failures and terminal retention gaps", () => {
+  const provider = source("modules/market/chart-data/provider.ts")
+  assert.match(provider, /export class ChartOhlcvProviderWaterfallError/)
+  assert.match(provider, /terminalCoverageGap = failures\.length > 0 && failures\.every\(\(failure\) => failure\.code === "EMPTY_COVERAGE"\)/)
+  assert.match(provider, /retryable = failures\.some\(\(failure\) => isTransientFailure\(failure\.code\)\)/)
+  assert.match(provider, /throw new ChartOhlcvProviderWaterfallError\(failures\)/)
+})
+
+test("QEO-107 provenance gaps are resumable but never canonical provider coverage", () => {
+  const hotStore = source("modules/market/chart-data/hot-store.ts")
+  assert.match(hotStore, /if \(\(finite\(row\.row_count\) \?\? 0\) <= 0\) return null/)
+  assert.match(hotStore, /readQeo107TerminalAttemptRanges/)
+  assert.match(hotStore, /detail\.outcome === "provider_gap"/)
+  assert.match(hotStore, /recordProvenance\?: boolean/)
+  assert.match(hotStore, /input\.recordProvenance === false/)
+})
+
+test("QEO-107 bootstrap prioritizes hot 31d then archives real old 1m before deterministic hourly cache", () => {
+  const bootstrap = source("modules/market/chart-data/bootstrap.ts")
+  assert.match(bootstrap, /QEO107_INTRADAY_TARGET_DAYS = 366/)
+  assert.match(bootstrap, /QEO107_PROVIDER_CHUNK_DAYS = 31/)
+  assert.match(bootstrap, /class: index === 0 \? "HOT_FIRST" : "COLD_BACKFILL"/)
+  assert.match(bootstrap, /const hotBars = bars\.filter\(\(bar\) => bar\.time >= hotCutoff\)/)
+  assert.match(bootstrap, /const coldBars = bars\.filter\(\(bar\) => bar\.time < hotCutoff\)/)
+  assert.match(bootstrap, /recordProvenance: false/)
+  assert.match(bootstrap, /archiveVerifiedPartition\(\{ ticker, bars: partition\.bars \}\)/)
+  assert.match(bootstrap, /aggregateChartTimeframe\(partition\.bars, "1h"\)/)
+  assert.match(bootstrap, /upsertDerivedHourlyBars/)
+  assert.ok(bootstrap.lastIndexOf("archiveVerifiedPartition") < bootstrap.lastIndexOf("recordChartProviderAttempt"))
+})
+
+test("QEO-107 durable workflow covers canonical 200 chunk-first and stops safely on provider failure storms", () => {
+  const steps = source("modules/market/chart-data/bootstrap-workflow-steps.ts")
+  const workflow = source("workflows/chart-intraday-bootstrap.ts")
+  assert.match(steps, /CANONICAL_QEO107_UNIVERSE_SIZE = 200/)
+  assert.match(steps, /"use step"/)
+  assert.match(workflow, /"use workflow"/)
+  assert.ok(workflow.indexOf("for (const chunk of context.target.chunks)") < workflow.indexOf("for (const stock of context.stocks)"))
+  assert.match(workflow, /MAX_CONSECUTIVE_RETRYABLE_FAILURES = 5/)
+  assert.match(workflow, /MAX_CONSECUTIVE_PERMANENT_FAILURES = 3/)
+  assert.match(workflow, /rerun resumes from provenance/)
+})
+
+test("QEO-107 operations expose authenticated bootstrap and canonical-200 coverage report", () => {
+  const route = source("app/api/qeoindex/eod/route.ts")
+  const migration = source("supabase/migrations/20260905213000_qeo107_chart_intraday_coverage_report.sql")
+  assert.match(route, /mode === "chart-bootstrap"/)
+  assert.match(route, /start\(chartIntradayBootstrapWorkflow, \[startedAt\]\)/)
+  assert.match(route, /mode === "chart-coverage"/)
+  assert.match(route, /readChartIntradayCoverageReport/)
+  assert.match(migration, /qeo_chart_intraday_coverage/)
+  assert.match(migration, /provider_gap_count/)
+  assert.match(migration, /retryable_failure_count/)
+  assert.match(migration, /detail ->> 'workflow' = 'QEO-107'/)
+})
