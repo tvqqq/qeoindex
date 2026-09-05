@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireApiFeature } from "@/modules/auth/server"
+import { requireApiUser } from "@/modules/auth/server"
 import { ChartDataRequestError, ChartDataUnavailableError, type CanonicalChartResolution } from "@/modules/market/chart-data/contract"
 import { getCanonicalChartOhlcv } from "@/modules/market/chart-data/service"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
@@ -15,7 +15,7 @@ function parseEpoch(value: string | null) {
 }
 
 export async function GET(request: Request) {
-  const auth = await requireApiFeature("research")
+  const auth = await requireApiUser()
   if (!auth.ok) return auth.response
 
   const supabase = getSupabaseServerClient()
