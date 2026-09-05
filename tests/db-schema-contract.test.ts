@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import test from "node:test"
 
+import "./research-reports/domain.test.ts"
+
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
   scripts?: Record<string, string>
 }
