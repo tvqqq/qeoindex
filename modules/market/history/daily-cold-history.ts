@@ -7,6 +7,7 @@ import {
   listVerifiedColdManifests,
 } from "@/modules/market/chart-data/cold-store"
 import type { CanonicalOhlcvBar } from "@/modules/market/chart-data/contract"
+import { isCanonicalDailyHotRowUsable } from "@/modules/market/chart-data/daily-authority"
 import { DAILY_BACKFILL_DAYS } from "@/modules/market/history/contract"
 import { fetchDailyMarketHistoryWindow } from "@/modules/market/history/index"
 
@@ -24,6 +25,8 @@ type StoredDailyRow = {
   close?: unknown
   volume?: unknown
   provider?: unknown
+  provider_detail?: unknown
+  source_url?: unknown
 }
 
 export type DailyLeftEdgeStatus = "IN_PROGRESS" | "PROVIDER_BOUNDARY" | "LISTING_BOUNDARY" | "UNRECOVERABLE" | "RETRYABLE_ERROR"
@@ -168,7 +171,7 @@ export async function archiveExpiredDailyHotHistory(supabase: SupabaseClient, ti
   const cutoff = new Date(now.getTime() - DAILY_BACKFILL_DAYS * DAY_MS)
   const { data, error } = await supabase
     .from("market_ohlcv_history")
-    .select("bar_time,open,high,low,close,volume,provider")
+    .select("bar_time,open,high,low,close,volume,provider,provider_detail,source_url")
     .eq("ticker", ticker)
     .eq("timeframe", "1D")
     .lt("bar_time", cutoff.toISOString())
@@ -177,12 +180,20 @@ export async function archiveExpiredDailyHotHistory(supabase: SupabaseClient, ti
   if (error) throw new Error(`Load expired Daily hot rows failed for ${ticker}: ${error.message}`)
 
   const rows = (data || []) as StoredDailyRow[]
-  const bars = validTradingBars(rows.map(toBar).filter((bar): bar is CanonicalOhlcvBar => Boolean(bar)))
-  if (!bars.length) return { rows: 0, manifests: [] as string[] }
+  const parsedRows = rows.map((row) => ({ row, bar: toBar(row) }))
+    .filter((item): item is { row: StoredDailyRow; bar: CanonicalOhlcvBar } => Boolean(item.bar))
+  if (!parsedRows.length) return { rows: 0, manifests: [] as string[] }
 
-  const firstYear = vietnamDateKey(bars[0].time * 1000).slice(0, 4)
-  const partition = bars.filter((bar) => vietnamDateKey(bar.time * 1000).startsWith(firstYear))
-  const providers = [...new Set(rows.map((row) => String(row.provider || "")).filter(Boolean))]
+  const firstYear = vietnamDateKey(parsedRows[0].bar.time * 1000).slice(0, 4)
+  const firstYearRows = parsedRows.filter(({ bar }) => vietnamDateKey(bar.time * 1000).startsWith(firstYear))
+  const unresolved = firstYearRows.filter(({ row }) => !isCanonicalDailyHotRowUsable(row))
+  if (unresolved.length) {
+    throw new Error(`Unresolved Daily hot evidence prevents archive for ${ticker} year=${firstYear} rows=${unresolved.length}`)
+  }
+
+  const partition = validTradingBars(firstYearRows.map(({ bar }) => bar))
+  if (!partition.length) return { rows: 0, manifests: [] as string[] }
+  const providers = [...new Set(firstYearRows.map(({ row }) => String(row.provider || "")).filter(Boolean))]
   const coldStorage = createSupabaseDailyColdOhlcvStorage(supabase)
   const archived = await coldStorage.archiveVerifiedPartition({
     ticker,

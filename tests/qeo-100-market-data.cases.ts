@@ -148,6 +148,14 @@ test("QEO-106 canonical Daily merges Hot PostgreSQL + verified Cold Storage and 
   assert.match(normalize, /cold: 2/)
 })
 
+test("QEO-106 Hot aging blocks unresolved Daily evidence before immutable Cold archive", () => {
+  const history = source("modules/market/history/daily-cold-history.ts")
+  assert.match(history, /isCanonicalDailyHotRowUsable/)
+  assert.match(history, /Unresolved Daily hot evidence prevents archive/)
+  assert.ok(history.indexOf("Unresolved Daily hot evidence prevents archive") < history.indexOf("archiveVerifiedPartition"))
+  assert.match(history, /provider_detail,source_url/)
+})
+
 test("QEO-106 deep Daily history is resumable, bounded, provider-backed and archive-before-prune", () => {
   const history = source("modules/market/history/daily-cold-history.ts")
   const route = source("app/api/admin/market/daily-history/backfill/route.ts")
