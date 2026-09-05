@@ -1,0 +1,125 @@
+.terminalSurface {
+  position: relative;
+  min-width: 0;
+  isolation: isolate;
+}
+
+.terminalSurface > div {
+  overflow: hidden;
+  border-radius: 10px;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: #080b10;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+/* Trading terminal top bar: compact, single-line, no layout jump when controls appear. */
+.terminalSurface > div > div:first-child {
+  min-height: 38px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow: visible;
+  border-color: rgba(255, 255, 255, 0.085);
+  background: #0d1118;
+  padding: 5px 8px;
+}
+
+.terminalSurface > div > div:first-child > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.terminalSurface > div > div:first-child > div:last-child {
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.terminalSurface > div > div:first-child button {
+  border-radius: 4px;
+}
+
+/* Price canvas: flat terminal surface, with stronger rail separation. */
+.terminalSurface > div > div:nth-child(2) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.012), rgba(255, 255, 255, 0) 22%),
+    #080b10;
+}
+
+/* Turn the drawing toolbox into a compact TradingView-style rail instead of a floating card. */
+.terminalSurface > div > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] {
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0;
+  gap: 2px !important;
+  overflow-y: auto;
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+  border-left: 0 !important;
+  border-radius: 0 !important;
+  border-color: rgba(255, 255, 255, 0.085) !important;
+  background: rgba(13, 17, 24, 0.97) !important;
+  padding: 5px 4px !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(8px);
+}
+
+.terminalSurface > div > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] button {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px !important;
+}
+
+/* Bottom range/status rail: dense and visually distinct from the plotting surface. */
+.terminalSurface > div > div:last-child {
+  min-height: 28px;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  border-color: rgba(255, 255, 255, 0.085);
+  background: #0a0e14;
+  padding: 4px 8px;
+  scrollbar-width: none;
+}
+
+.terminalSurface > div > div:last-child::-webkit-scrollbar {
+  display: none;
+}
+
+.terminalSurface > div > div:last-child button {
+  border-radius: 3px;
+}
+
+.maximized > div {
+  border-radius: 8px;
+}
+
+.maximized > div > div:first-child {
+  position: relative;
+  z-index: 35;
+}
+
+@media (max-width: 1279px) {
+  .terminalSurface > div > div:first-child {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .terminalSurface > div > div:first-child > div:first-child {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 767px) {
+  .terminalSurface > div {
+    border-radius: 8px;
+  }
+
+  .terminalSurface > div > div:first-child {
+    padding-inline: 6px;
+  }
+
+  .terminalSurface > div > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] {
+    max-height: 100%;
+  }
+}
