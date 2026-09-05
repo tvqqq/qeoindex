@@ -256,7 +256,7 @@ test("QEO-93 workstation uses unified history wrapper and lazy-load intent", () 
 
   assert.match(wrapper, /useChartHistory/)
   assert.match(wrapper, /loadOlder/)
-  assert.match(wrapper, /timeframe !== "1m"/)
+  assert.match(wrapper, /onMouseMoveCapture/)
   assert.match(wrapper, /loadingOlder/)
   assert.match(workstation, /StockTradingViewChartData/)
   assert.doesNotMatch(timeframeSource, /groupBars|aggregateWeekly|aggregateMonthly|aggregateQuarterly|aggregateYearly/)

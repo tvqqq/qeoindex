@@ -10,6 +10,7 @@ import {
   CHART_TIMEFRAME_EVENT,
   readStoredChartTimeframe,
 } from "./chart/use-user-chart-sync"
+import styles from "./chart/stock-chart-terminal-shell.module.css"
 import { StockTradingViewChart } from "./stock-tradingview-chart"
 
 interface StockTradingViewChartDataProps {
@@ -52,15 +53,15 @@ function HistoryBoundChart({
 
   // QEO-100 P0: raw 1m has a bounded 31-day product horizon. Hydrate it
   // progressively after the fast initial window so completeness does not
-  // depend on mouse/trackpad gesture direction. QEO-103 will make this path
-  // cache-efficient with hot/cold storage.
+  // depend on mouse/trackpad gesture direction. Stop automatic progression on
+  // a transport failure; a reload can retry instead of creating a retry loop.
   useEffect(() => {
-    if (timeframe !== "1m" || loading || loadingOlder || !hasMore) return
+    if (timeframe !== "1m" || loading || loadingOlder || !hasMore || error) return
     void loadOlder()
-  }, [hasMore, loadOlder, loading, loadingOlder, timeframe])
+  }, [error, hasMore, loadOlder, loading, loadingOlder, timeframe])
 
-  // Keep the pre-existing lazy gesture behavior for non-1m timeframes. QEO-100
-  // only changes the raw 1m completeness contract.
+  // Preserve lazy gesture loading for non-1m timeframes. QEO-100 only changes
+  // the raw 1m completeness contract; QEO-103 owns cache/retention optimization.
   const handleMouseDownCapture = (event: React.MouseEvent<HTMLDivElement>) => {
     if (timeframe === "1m") return
     if (event.button === 0) dragStartXRef.current = event.clientX
@@ -84,7 +85,9 @@ function HistoryBoundChart({
 
   return (
     <div
-      className="relative"
+      className={cn("relative min-w-0", styles.terminalSurface, isMaximized && styles.maximized)}
+      data-chart-terminal="true"
+      data-chart-maximized={isMaximized ? "true" : "false"}
       onMouseDownCapture={handleMouseDownCapture}
       onMouseMoveCapture={handleMouseMoveCapture}
       onMouseUpCapture={() => { dragStartXRef.current = null }}
@@ -106,21 +109,21 @@ function HistoryBoundChart({
       </CanonicalMinuteBarsContext.Provider>
 
       {loadingOlder && (
-        <div className="pointer-events-none absolute right-3 top-12 z-30 rounded-md border border-white/10 bg-[#0c131c]/90 px-2 py-1 text-[10px] font-medium text-slate-400 shadow-lg">
+        <div className="pointer-events-none absolute right-3 top-12 z-30 rounded border border-white/10 bg-[#0c131c]/95 px-2 py-1 font-mono text-[10px] font-medium text-slate-400 shadow-lg">
           Đang tải thêm lịch sử…
         </div>
       )}
 
       {!loading && coverage?.state === "PARTIAL" && (
-        <div className="pointer-events-none absolute left-3 top-12 z-30 rounded-md border border-amber-300/20 bg-[#17130b]/90 px-2 py-1 text-[10px] font-medium text-amber-200/80">
+        <div className="pointer-events-none absolute left-12 top-12 z-30 rounded border border-amber-300/20 bg-[#17130b]/95 px-2 py-1 font-mono text-[10px] font-medium text-amber-200/80">
           Dữ liệu chưa đầy đủ
         </div>
       )}
 
       {!loading && error && resolvedBars.length > 0 && (
         <div className={cn(
-          "pointer-events-none absolute bottom-3 left-3 z-30 max-w-[70%] rounded-md border border-rose-300/20",
-          "bg-[#180d11]/90 px-2 py-1 text-[10px] text-rose-200/80",
+          "pointer-events-none absolute bottom-9 left-12 z-30 max-w-[70%] rounded border border-rose-300/20",
+          "bg-[#180d11]/95 px-2 py-1 font-mono text-[10px] text-rose-200/80",
         )}>
           Không thể tải thêm lịch sử: {error}
         </div>

@@ -1,6 +1,6 @@
 import type { OhlcvBar } from "../../shared/technical/indicators.ts"
 
-export type HistoricalProvider = "DNSE" | "Fallback" | "VNDirect"
+export type HistoricalProvider = "DNSE" | "Fallback" | "VNDirect" | "VCI"
 export type RawHistoryTimeframe = "1D" | "1H"
 
 export interface HistoricalBarsResult {
@@ -45,6 +45,16 @@ export function buildHistoricalSourceUrl(
 ) {
   const ticker = normalizedTicker(symbol)
   const { from, to } = windowSeconds(lookbackDays, now)
+
+  if (provider === "VCI") {
+    if (timeframe !== "1D") throw new Error(`VCI canonical history provider does not support ${timeframe}`)
+    const url = new URL("https://trading.vietcap.com.vn/api/chart/OHLCChart/gap-chart")
+    url.searchParams.set("timeFrame", "ONE_DAY")
+    url.searchParams.set("symbol", ticker)
+    url.searchParams.set("to", String(to))
+    url.searchParams.set("countBack", String(Math.min(15000, Math.max(30, Math.floor(lookbackDays) + 10))))
+    return url.toString()
+  }
 
   if (provider === "DNSE") {
     const baseUrl = (options.dnseBaseUrl || "https://openapi.dnse.com.vn").replace(/\/$/, "")
