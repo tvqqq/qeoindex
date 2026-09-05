@@ -9,9 +9,12 @@ const BUCKET = "chart-ohlcv"
 const ARCHIVE_FORMAT_VERSION = 1
 const VERIFIED_MANIFEST_READ_LIMIT = 1_000
 
+type ColdBaseResolution = "1m" | "1D"
+
 type ManifestRow = {
   id?: unknown
   ticker?: unknown
+  base_resolution?: unknown
   object_path?: unknown
   range_start?: unknown
   range_end?: unknown
@@ -26,6 +29,7 @@ type ManifestRow = {
 export interface VerifiedColdManifest {
   id: string
   ticker: string
+  baseResolution: ColdBaseResolution
   objectPath: string
   rangeStart: number
   rangeEnd: number
@@ -52,7 +56,12 @@ export interface ColdArchiveResult {
 
 export interface ColdOhlcvStorage {
   readIntersectingRange(input: { ticker: string; from: number; to: number }): Promise<ColdReadResult>
-  archiveVerifiedPartition(input: { ticker: string; bars: CanonicalOhlcvBar[]; provenanceBatchId?: string | null }): Promise<ColdArchiveResult>
+  archiveVerifiedPartition(input: {
+    ticker: string
+    bars: CanonicalOhlcvBar[]
+    provenanceBatchId?: string | null
+    provenance?: Record<string, unknown>
+  }): Promise<ColdArchiveResult>
 }
 
 function hash(bytes: Uint8Array) {
@@ -72,13 +81,14 @@ function deserializeBars(bytes: Uint8Array): CanonicalOhlcvBar[] {
   })
 }
 
-function archivePath(ticker: string, bars: CanonicalOhlcvBar[], checksum: string) {
+function archivePath(baseResolution: "1m" | "1D", ticker: string, bars: CanonicalOhlcvBar[], checksum: string) {
   const first = bars[0]
   const last = bars.at(-1)!
   const date = new Date(first.time * 1000)
   const year = new Intl.DateTimeFormat("en", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric" }).format(date)
   const month = new Intl.DateTimeFormat("en", { timeZone: "Asia/Ho_Chi_Minh", month: "2-digit" }).format(date)
-  return `1m/ticker=${ticker}/year=${year}/month=${month}/${first.time}-${last.time}-${checksum}.ndjson.gz`
+  const partition = baseResolution === "1m" ? `/month=${month}` : ""
+  return `${baseResolution}/ticker=${ticker}/year=${year}${partition}/${first.time}-${last.time}-${checksum}.ndjson.gz`
 }
 
 async function blobBytes(blob: Blob) {
@@ -102,6 +112,7 @@ function finiteEpoch(value: unknown) {
 function manifestFromRow(raw: ManifestRow): VerifiedColdManifest | null {
   const id = String(raw.id || "")
   const ticker = String(raw.ticker || "").trim().toUpperCase()
+  const baseResolution = String(raw.base_resolution || "") as ColdBaseResolution
   const objectPath = String(raw.object_path || "")
   const rangeStart = finiteEpoch(raw.range_start)
   const rangeEnd = finiteEpoch(raw.range_end)
@@ -109,13 +120,14 @@ function manifestFromRow(raw: ManifestRow): VerifiedColdManifest | null {
   const sha256 = String(raw.sha256 || "")
   const formatVersion = Number(raw.format_version ?? ARCHIVE_FORMAT_VERSION)
   const byteCountValue = raw.byte_count == null ? null : Number(raw.byte_count)
-  if (!id || !ticker || !objectPath || rangeStart == null || rangeEnd == null || rangeEnd < rangeStart) return null
+  if (!id || !ticker || (baseResolution !== "1m" && baseResolution !== "1D") || !objectPath || rangeStart == null || rangeEnd == null || rangeEnd < rangeStart) return null
   if (!Number.isInteger(rowCount) || rowCount <= 0 || !/^[a-f0-9]{64}$/.test(sha256)) return null
   if (raw.archive_format !== "ndjson.gz" || !raw.verified_at || formatVersion !== ARCHIVE_FORMAT_VERSION) return null
   if (byteCountValue != null && (!Number.isFinite(byteCountValue) || byteCountValue <= 0)) return null
   return {
     id,
     ticker,
+    baseResolution,
     objectPath,
     rangeStart,
     rangeEnd,
@@ -129,13 +141,14 @@ function manifestFromRow(raw: ManifestRow): VerifiedColdManifest | null {
 
 export async function listVerifiedColdManifests(
   supabase: SupabaseClient,
-  input: { ticker?: string; from?: number; to?: number; limit?: number; offset?: number } = {},
+  input: { ticker?: string; from?: number; to?: number; limit?: number; offset?: number; baseResolution?: ColdBaseResolution } = {},
 ): Promise<VerifiedColdManifest[]> {
   const limit = Math.max(1, Math.min(VERIFIED_MANIFEST_READ_LIMIT, Math.floor(input.limit ?? VERIFIED_MANIFEST_READ_LIMIT)))
   const offset = Math.max(0, Math.floor(input.offset ?? 0))
+  const baseResolution = input.baseResolution ?? "1m"
   let query = supabase.from("chart_ohlcv_cold_manifests")
-    .select("id,ticker,object_path,range_start,range_end,row_count,sha256,archive_format,verified_at,format_version,byte_count")
-    .eq("base_resolution", "1m")
+    .select("id,ticker,base_resolution,object_path,range_start,range_end,row_count,sha256,archive_format,verified_at,format_version,byte_count")
+    .eq("base_resolution", baseResolution)
     .not("verified_at", "is", null)
     .order("range_start", { ascending: true })
     .range(offset, offset + limit - 1)
@@ -163,10 +176,10 @@ export async function readVerifiedColdManifest(
   return { bars, byteCount: bytes.byteLength }
 }
 
-export function createSupabaseColdOhlcvStorage(supabase: SupabaseClient): ColdOhlcvStorage {
+function createResolutionColdOhlcvStorage(supabase: SupabaseClient, baseResolution: "1m" | "1D"): ColdOhlcvStorage {
   return {
     async readIntersectingRange({ ticker, from, to }) {
-      const manifests = await listVerifiedColdManifests(supabase, { ticker, from, to })
+      const manifests = await listVerifiedColdManifests(supabase, { ticker, from, to, baseResolution })
       const bars: CanonicalOhlcvBar[] = []
       let manifestsRead = 0
       for (const manifest of manifests) {
@@ -177,23 +190,28 @@ export function createSupabaseColdOhlcvStorage(supabase: SupabaseClient): ColdOh
       return { bars, manifestsRead }
     },
 
-    async archiveVerifiedPartition({ ticker, bars, provenanceBatchId = null }) {
+    async archiveVerifiedPartition({ ticker, bars, provenanceBatchId = null, provenance = {} }) {
       if (!bars.length) throw new Error("Cannot archive an empty chart partition")
       const sorted = [...bars].sort((a, b) => a.time - b.time)
       const bytes = serializeBars(sorted)
       const checksum = hash(bytes)
-      const objectPath = archivePath(ticker, sorted, checksum)
+      const objectPath = archivePath(baseResolution, ticker, sorted, checksum)
       const rangeStart = new Date(sorted[0].time * 1000).toISOString()
       const rangeEnd = new Date(sorted.at(-1)!.time * 1000).toISOString()
 
       const { data: existingRows, error: lookupError } = await supabase.from("chart_ohlcv_cold_manifests")
         .select("id,object_path,row_count,sha256")
-        .eq("ticker", ticker).eq("base_resolution", "1m").eq("range_start", rangeStart).eq("range_end", rangeEnd).eq("sha256", checksum).limit(1)
+        .eq("ticker", ticker).eq("base_resolution", baseResolution).eq("range_start", rangeStart).eq("range_end", rangeEnd).eq("sha256", checksum).limit(1)
       if (lookupError) throw new Error(`Chart cold manifest lookup failed: ${lookupError.message}`)
       const existing = (existingRows || [])[0] as ManifestRow | undefined
       if (existing?.id && existing.object_path) {
         await verifyStoredObject(supabase, { objectPath: String(existing.object_path), checksum, rowCount: sorted.length })
-        const { error: refreshError } = await supabase.from("chart_ohlcv_cold_manifests").update({ verified_at: new Date().toISOString(), format_version: ARCHIVE_FORMAT_VERSION, byte_count: bytes.byteLength }).eq("id", String(existing.id))
+        const { error: refreshError } = await supabase.from("chart_ohlcv_cold_manifests").update({
+          verified_at: new Date().toISOString(),
+          format_version: ARCHIVE_FORMAT_VERSION,
+          byte_count: bytes.byteLength,
+          provenance,
+        }).eq("id", String(existing.id))
         if (refreshError) throw new Error(`Chart cold manifest refresh failed: ${refreshError.message}`)
         return { manifestId: String(existing.id), objectPath: String(existing.object_path), sha256: checksum, rowCount: sorted.length, byteCount: bytes.byteLength, reused: true }
       }
@@ -212,12 +230,30 @@ export function createSupabaseColdOhlcvStorage(supabase: SupabaseClient): ColdOh
       }
 
       const { data: manifest, error: manifestError } = await supabase.from("chart_ohlcv_cold_manifests").upsert({
-        ticker, base_resolution: "1m", range_start: rangeStart, range_end: rangeEnd, object_path: objectPath,
-        archive_format: "ndjson.gz", format_version: ARCHIVE_FORMAT_VERSION, byte_count: bytes.byteLength,
-        row_count: sorted.length, sha256: checksum, provenance_batch_id: provenanceBatchId, verified_at: new Date().toISOString(),
+        ticker,
+        base_resolution: baseResolution,
+        range_start: rangeStart,
+        range_end: rangeEnd,
+        object_path: objectPath,
+        archive_format: "ndjson.gz",
+        format_version: ARCHIVE_FORMAT_VERSION,
+        byte_count: bytes.byteLength,
+        row_count: sorted.length,
+        sha256: checksum,
+        provenance_batch_id: provenanceBatchId,
+        provenance,
+        verified_at: new Date().toISOString(),
       }, { onConflict: "ticker,base_resolution,range_start,range_end,sha256" }).select("id").single()
       if (manifestError || !manifest?.id) throw new Error(`Chart cold manifest upsert failed: ${manifestError?.message ?? "missing manifest id"}`)
       return { manifestId: String(manifest.id), objectPath, sha256: checksum, rowCount: sorted.length, byteCount: bytes.byteLength, reused }
     },
   }
+}
+
+export function createSupabaseColdOhlcvStorage(supabase: SupabaseClient): ColdOhlcvStorage {
+  return createResolutionColdOhlcvStorage(supabase, "1m")
+}
+
+export function createSupabaseDailyColdOhlcvStorage(supabase: SupabaseClient): ColdOhlcvStorage {
+  return createResolutionColdOhlcvStorage(supabase, "1D")
 }
