@@ -45,6 +45,7 @@ export function calculateEma(values: (number | null)[], period: number): Array<n
 
 /**
  * Calculate Relative Strength Index (RSI) series over given period (default 14)
+ * using Wilder's smoothed average gain/loss definition.
  */
 export function calculateRsiSeries(bars: OhlcvBar[], period = 14): Array<number | null> {
   const result: Array<number | null> = Array(bars.length).fill(null)
@@ -61,8 +62,14 @@ export function calculateRsiSeries(bars: OhlcvBar[], period = 14): Array<number 
   avgGain /= period
   avgLoss /= period
 
-  const rs = avgLoss === 0 ? 100 : avgGain / avgLoss
-  result[period] = 100 - 100 / (1 + rs)
+  if (avgLoss === 0) {
+    result[period] = avgGain === 0 ? 50 : 100
+  } else if (avgGain === 0) {
+    result[period] = 0
+  } else {
+    const rs = avgGain / avgLoss
+    result[period] = 100 - 100 / (1 + rs)
+  }
 
   for (let i = period + 1; i < bars.length; i += 1) {
     const diff = bars[i].close - bars[i - 1].close
@@ -72,7 +79,9 @@ export function calculateRsiSeries(bars: OhlcvBar[], period = 14): Array<number 
     avgLoss = (avgLoss * (period - 1) + loss) / period
 
     if (avgLoss === 0) {
-      result[i] = 100
+      result[i] = avgGain === 0 ? 50 : 100
+    } else if (avgGain === 0) {
+      result[i] = 0
     } else {
       const currentRs = avgGain / avgLoss
       result[i] = 100 - 100 / (1 + currentRs)
@@ -108,8 +117,12 @@ export function calculateMacdSeries(bars: OhlcvBar[]) {
   return { macd: macdLine, signal: signalLine, histogram }
 }
 
+export const ICHIMOKU_DISPLACEMENT = 26
+
 /**
- * Calculate Ichimoku Kinko Hyo (9, 26, 52)
+ * Calculate Ichimoku Kinko Hyo (9, 26, 52).
+ * Senkou spans are displaced 26 bars forward and Chikou is displaced 26 bars
+ * backward in the returned arrays so index alignment matches rendered time.
  */
 export function calculateIchimokuSeries(bars: OhlcvBar[]) {
   const n = bars.length
@@ -129,30 +142,30 @@ export function calculateIchimokuSeries(bars: OhlcvBar[]) {
     return (high + low) / 2
   }
 
-  // Tenkan-sen (9)
   for (let i = 8; i < n; i += 1) {
     tenkan[i] = hlAvg(i - 8, 9)
   }
 
-  // Kijun-sen (26)
   for (let i = 25; i < n; i += 1) {
     kijun[i] = hlAvg(i - 25, 26)
   }
 
-  // Senkou Span A & B
   for (let i = 25; i < n; i += 1) {
+    const target = i + ICHIMOKU_DISPLACEMENT
+    if (target >= n) break
     if (tenkan[i] != null && kijun[i] != null) {
-      spanA[i] = ((tenkan[i] as number) + (kijun[i] as number)) / 2
+      spanA[target] = ((tenkan[i] as number) + (kijun[i] as number)) / 2
     }
   }
 
   for (let i = 51; i < n; i += 1) {
-    spanB[i] = hlAvg(i - 51, 52)
+    const target = i + ICHIMOKU_DISPLACEMENT
+    if (target >= n) break
+    spanB[target] = hlAvg(i - 51, 52)
   }
 
-  // Chikou Span (lagged by 26 bars)
-  for (let i = 0; i < n - 26; i += 1) {
-    chikou[i] = bars[i + 26].close
+  for (let i = 0; i < n - ICHIMOKU_DISPLACEMENT; i += 1) {
+    chikou[i] = bars[i + ICHIMOKU_DISPLACEMENT].close
   }
 
   return { tenkan, kijun, spanA, spanB, chikou }
@@ -183,7 +196,9 @@ export function calculateBollingerBands(bars: OhlcvBar[], period = 20, multiplie
 }
 
 /**
- * Calculate Volume Profile and Point of Control (POC)
+ * Calculate Volume Profile and Point of Control (POC) for the bars supplied by
+ * the caller. The production chart passes only visibleBars, keeping the range
+ * semantics explicit and excluding indicator warm-up history.
  */
 export function calculateVolumeProfile(bars: OhlcvBar[], numBuckets = 20): VolumeProfileData {
   if (bars.length === 0) {
