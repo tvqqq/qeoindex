@@ -84,7 +84,7 @@ export interface StructuredResearchReportAnalysis {
 
 export interface ProcessResearchReportResult {
   reportId: string
-  status: "ready" | "needs_ocr" | "unsupported" | "failed" | "skipped_existing"
+  status: "ready" | "needs_ocr" | "unsupported" | "failed" | "skipped_existing" | "skipped_concurrent"
   contentHash: string | null
   analysisId: string | null
   aiCalled: boolean
