@@ -8,6 +8,7 @@ import type { AdminJobDefinition, AdminJobView } from "./types.ts"
  */
 export const PG_CRON_NAME_TO_JOB_KEY: Readonly<Record<string, string>> = Object.freeze({
   "qeoindex-eod-pipeline-1515-ict": "qeoindex.eod_pipeline",
+  "research-reports-daily-0705-ict": "research_reports.daily",
   "kfsp-rating-daily-7am-ict": "kfsp.rating_daily",
   "kfsp-ttai-history-daily-1am-ict": "kfsp.ttai_history",
   "kfsp-ttai-history-daily-0710-ict": "kfsp.ttai_history",
@@ -18,9 +19,10 @@ export const PG_CRON_NAME_TO_JOB_KEY: Readonly<Record<string, string>> = Object.
   "sync-universe-eod-1450": "market.sync_eod",
 })
 
-/** Active pg_cron ownership after QEO-64 cutover. */
+/** Active pg_cron ownership after QEO-64/QEO-85 cutovers. */
 export const JOB_KEY_TO_PG_CRON_NAME: Readonly<Record<string, string>> = Object.freeze({
   "qeoindex.eod_pipeline": "qeoindex-eod-pipeline-1515-ict",
+  "research_reports.daily": "research-reports-daily-0705-ict",
   "market.sync_5m": "sync-universe-5m",
 })
 
@@ -35,7 +37,7 @@ export function getPgCronNameForJobKey(jobKey: string): string | undefined {
 export type TimelineLane = "vercel" | "pg_cron" | "manual"
 
 export function getJobTimelineLane(job: { provider: string; scheduleKind?: string }): TimelineLane {
-  if (job.scheduleKind === "manual" || job.provider === "machine") {
+  if (job.scheduleKind === "manual" || job.provider === "machine" || job.provider === "manual") {
     return "manual"
   }
   if (job.provider.startsWith("vercel_cron")) {

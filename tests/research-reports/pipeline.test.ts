@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { processResearchReport } from "../../modules/research-reports/analysis/pipeline.ts"
+import { RESEARCH_REPORT_PRICING_VERSION } from "../../modules/research-reports/analysis/pricing.ts"
 import {
   findSuccessfulResearchReportAnalysis,
   markResearchReportStatus,
@@ -134,12 +135,13 @@ function successfulDeps(analyzeCalls: { count: number; pages?: unknown }) {
           responseId: "resp-1",
           inputTokens: 100,
           cachedInputTokens: 20,
+          cacheWriteTokens: 5,
           outputTokens: 50,
           reasoningTokens: 10,
           totalTokens: 150,
           latencyMs: 1234,
-          estimatedCostUsd: null,
-          pricingVersion: null,
+          estimatedCostUsd: 0.0001,
+          pricingVersion: RESEARCH_REPORT_PRICING_VERSION,
         },
       }
     },
@@ -241,12 +243,13 @@ test("QEO-81 atomic publish adapter calls only the canonical service-role RPC", 
     responseId: "resp-1",
     inputTokens: 100,
     cachedInputTokens: 20,
+    cacheWriteTokens: 5,
     outputTokens: 50,
     reasoningTokens: 10,
     totalTokens: 150,
     latencyMs: 1234,
-    estimatedCostUsd: null,
-    pricingVersion: null,
+    estimatedCostUsd: 0.0001,
+    pricingVersion: RESEARCH_REPORT_PRICING_VERSION,
     analysis: structuredAnalysis,
     chunks: [{
       pageNumber: 1,
@@ -267,6 +270,9 @@ test("QEO-81 atomic publish adapter calls only the canonical service-role RPC", 
   assert.equal(analysis.model_route_key, identity.modelRouteKey)
   assert.equal(analysis.reasoning_effort, "medium")
   assert.equal(analysis.chunk_version, "page-safe-v1")
+  assert.equal(analysis.cache_write_tokens, 5)
+  assert.equal(analysis.estimated_cost_usd, 0.0001)
+  assert.equal(analysis.pricing_version, RESEARCH_REPORT_PRICING_VERSION)
   assert.deepEqual(rpcCalls[0].args.p_chunks, [{
     page_number: 1,
     chunk_index: 0,

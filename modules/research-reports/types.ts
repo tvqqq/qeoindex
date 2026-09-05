@@ -20,10 +20,19 @@ export interface ResearchReportSourceRecord {
   sourcePayload: Record<string, unknown>
 }
 
+export type ResearchReportDiscoveryBoundaryReason =
+  | "known_id"
+  | "known_old_page"
+  | "short_page"
+  | "empty_page"
+  | "max_pages"
+
 export interface ResearchReportDiscoveryResult {
   reports: ResearchReportSourceRecord[]
   pagesFetched: number
   stoppedAtKnownBoundary: boolean
+  boundaryReason: ResearchReportDiscoveryBoundaryReason
+  reachedSafetyLimit: boolean
 }
 
 export interface ResearchReportUpsertResult {
@@ -84,7 +93,7 @@ export interface StructuredResearchReportAnalysis {
 
 export interface ProcessResearchReportResult {
   reportId: string
-  status: "ready" | "needs_ocr" | "unsupported" | "failed" | "skipped_existing"
+  status: "ready" | "needs_ocr" | "unsupported" | "failed" | "skipped_existing" | "skipped_concurrent"
   contentHash: string | null
   analysisId: string | null
   aiCalled: boolean

@@ -1,19 +1,27 @@
 import {
+  acquireResearchReportAnalysisLease,
   findSuccessfulResearchReportAnalysis,
   markResearchReportStatus,
   publishResearchReportAnalysis,
+  releaseResearchReportAnalysisLease,
   type ResearchReportAnalysisIdentity,
 } from "../repository.ts"
 import type { ProcessResearchReportResult } from "../types.ts"
 import { chunkResearchReportPages, REPORT_CHUNK_VERSION } from "../pdf/chunk.ts"
 import { parseResearchReportPdf } from "../pdf/parse.ts"
 import { fetchResearchReportPdf } from "../pdf/secure-fetch.ts"
-import { analyzeResearchReportPages, getResearchReportAiModelRoute } from "./openai.ts"
+import type { ResearchReportAiBudget } from "./budget.ts"
+import {
+  analyzeResearchReportPages,
+  getResearchReportAiModelRoute,
+  type ResearchReportAiRequestAuditEvent,
+} from "./openai.ts"
 import { REPORT_ANALYSIS_VERSION, REPORT_PROMPT_VERSION } from "./prompt.ts"
 
 type AnalysisLookupClient = Parameters<typeof findSuccessfulResearchReportAnalysis>[0]
 type ReportStatusClient = Parameters<typeof markResearchReportStatus>[0]
 type ReportPublishClient = Parameters<typeof publishResearchReportAnalysis>[0]
+type ReportLeaseClient = Parameters<typeof acquireResearchReportAnalysisLease>[0]
 
 export interface ResearchReportProcessingClient {
   from(table: string): unknown
@@ -23,10 +31,30 @@ export interface ResearchReportProcessingClient {
   }>
 }
 
+export interface ResearchReportRequestUsageAccumulator {
+  attemptedModels: string[]
+  aiRequestCount: number
+  inputTokens: number
+  cachedInputTokens: number
+  cacheWriteTokens: number
+  outputTokens: number
+  reasoningTokens: number
+  totalTokens: number
+  unknownUsageAttempts: number
+  estimatedCostUsd: number
+  pricingVersion: string
+}
+
 export interface ResearchReportProcessingDependencies {
   fetchPdf?: typeof fetchResearchReportPdf
   parsePdf?: typeof parseResearchReportPdf
   analyzePages?: typeof analyzeResearchReportPages
+  runId?: string
+  acquireLease?: typeof acquireResearchReportAnalysisLease
+  releaseLease?: typeof releaseResearchReportAnalysisLease
+  aiBudget?: ResearchReportAiBudget
+  requestUsage?: ResearchReportRequestUsageAccumulator
+  onRequestAudit?: (event: ResearchReportAiRequestAuditEvent) => Promise<void> | void
 }
 
 interface ResearchReportProcessingInput {
@@ -58,6 +86,30 @@ function publishClient(client: ResearchReportProcessingClient) {
   return client as unknown as ReportPublishClient
 }
 
+function leaseClient(client: ResearchReportProcessingClient) {
+  return client as unknown as ReportLeaseClient
+}
+
+function addRequestUsage(
+  target: ResearchReportRequestUsageAccumulator | undefined,
+  event: ResearchReportAiRequestAuditEvent,
+) {
+  if (!target) return
+  target.aiRequestCount += 1
+  if (!target.attemptedModels.includes(event.model)) target.attemptedModels.push(event.model)
+  if (event.outcome === "unknown_usage") target.unknownUsageAttempts += 1
+  target.inputTokens += event.inputTokens
+  target.cachedInputTokens += event.cachedInputTokens
+  target.cacheWriteTokens += event.cacheWriteTokens
+  target.outputTokens += event.outputTokens
+  target.reasoningTokens += event.reasoningTokens
+  target.totalTokens += event.totalTokens
+  if (event.estimatedCostUsd !== null) {
+    target.estimatedCostUsd = Number((target.estimatedCostUsd + event.estimatedCostUsd).toFixed(12))
+  }
+  if (event.pricingVersion) target.pricingVersion = event.pricingVersion
+}
+
 export async function processResearchReport(
   client: ResearchReportProcessingClient,
   report: ResearchReportProcessingInput,
@@ -66,10 +118,13 @@ export async function processResearchReport(
   const fetchPdf = deps.fetchPdf ?? fetchResearchReportPdf
   const parsePdf = deps.parsePdf ?? parseResearchReportPdf
   const analyzePages = deps.analyzePages ?? analyzeResearchReportPages
+  const acquireLease = deps.acquireLease ?? acquireResearchReportAnalysisLease
+  const releaseLease = deps.releaseLease ?? releaseResearchReportAnalysisLease
 
   let contentHash: string | null = null
   let aiCalled = false
   let stage: ProcessingStage = "fetch"
+  let ownedLeaseToken: string | null = null
 
   try {
     await markResearchReportStatus(statusClient(client), report.id, {
@@ -155,6 +210,35 @@ export async function processResearchReport(
       }
     }
 
+    if (deps.runId) {
+      const lease = await acquireLease(leaseClient(client), {
+        ...identity,
+        runId: deps.runId,
+        ttlSeconds: 900,
+      })
+      if (lease.outcome === "existing_success") {
+        return {
+          reportId: report.id,
+          status: "skipped_existing",
+          contentHash,
+          analysisId: lease.analysisId,
+          aiCalled: false,
+          detail: "Identical successful analysis completed before lease acquisition",
+        }
+      }
+      if (lease.outcome === "busy") {
+        return {
+          reportId: report.id,
+          status: "skipped_concurrent",
+          contentHash,
+          analysisId: null,
+          aiCalled: false,
+          detail: "Identical analysis is already owned by another active workflow",
+        }
+      }
+      ownedLeaseToken = lease.leaseToken
+    }
+
     stage = "analysis"
     await markResearchReportStatus(statusClient(client), report.id, {
       analysisStatus: "processing",
@@ -162,7 +246,13 @@ export async function processResearchReport(
     })
 
     aiCalled = true
-    const analyzed = await analyzePages(parsed.pages)
+    const analyzed = await analyzePages(parsed.pages, {
+      budget: deps.aiBudget,
+      onRequestAudit: async (event) => {
+        addRequestUsage(deps.requestUsage, event)
+        await deps.onRequestAudit?.(event)
+      },
+    })
     if (analyzed.route.modelRouteKey !== identity.modelRouteKey) {
       throw new Error("Research report AI route changed during processing")
     }
@@ -178,6 +268,7 @@ export async function processResearchReport(
       responseId: analyzed.audit.responseId,
       inputTokens: analyzed.audit.inputTokens,
       cachedInputTokens: analyzed.audit.cachedInputTokens,
+      cacheWriteTokens: analyzed.audit.cacheWriteTokens,
       outputTokens: analyzed.audit.outputTokens,
       reasoningTokens: analyzed.audit.reasoningTokens,
       totalTokens: analyzed.audit.totalTokens,
@@ -187,6 +278,14 @@ export async function processResearchReport(
       analysis: analyzed.analysis,
       chunks,
     })
+
+    if (ownedLeaseToken) {
+      await releaseLease(leaseClient(client), {
+        leaseToken: ownedLeaseToken,
+        terminalOutcome: "ready",
+      })
+      ownedLeaseToken = null
+    }
 
     return {
       reportId: report.id,
@@ -199,6 +298,18 @@ export async function processResearchReport(
   } catch (error) {
     const detail = safeFailureDetail(error)
     const ingestionFailed = stage === "fetch" || stage === "parse"
+
+    if (ownedLeaseToken) {
+      try {
+        await releaseLease(leaseClient(client), {
+          leaseToken: ownedLeaseToken,
+          terminalOutcome: "failed",
+        })
+      } catch {
+        // Lease expiry/takeover provides recovery; preserve the original report failure.
+      }
+      ownedLeaseToken = null
+    }
 
     await markResearchReportStatus(statusClient(client), report.id, ingestionFailed
       ? {

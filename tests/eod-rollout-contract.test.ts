@@ -35,7 +35,7 @@ function migrationSource() {
   return readFileSync(new URL(`../supabase/migrations/${matches[0]}`, import.meta.url), "utf8")
 }
 
-test("QEO-64 removes standalone EOD freshness scheduler ownership", () => {
+test("QEO-64 removes standalone EOD freshness scheduler ownership while QEO-85 remains independent", () => {
   for (const [jobKey] of RETIRED_ACTIVE_SCHEDULERS) {
     const job = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === jobKey)
     assert.ok(job, `${jobKey} must remain visible as operational/historical catalog evidence`)
@@ -60,8 +60,13 @@ test("QEO-64 removes standalone EOD freshness scheduler ownership", () => {
   assert.equal(legacyMarketEod.manualPurpose, "maintenance")
   assert.deepEqual(legacyMarketEod.automatedParentKeys, ["qeoindex.eod_pipeline"])
 
-  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 9)
-  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 3)
+  const research = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === "research_reports.daily")
+  assert.ok(research)
+  assert.equal(research.schedulePolicy?.kind, "fixed_time")
+  assert.equal(research.schedulerName, "research-reports-daily-0705-ict")
+
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 10)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 4)
 })
 
 test("QEO-64 cron timeline exposes the seven canonical EOD v4 business phases", () => {
@@ -128,7 +133,7 @@ test("QEO-64 controlled 199/200 failure retries only the failed ticker and resto
   assert.deepEqual(recoveredAttempts.filter((attempt) => attempt.ticker === failedTicker).map((attempt) => attempt.attempt), [1, 2])
 })
 
-test("QEO-64 preserves retired pg_cron aliases for v3 telemetry but removes forward scheduler ownership", () => {
+test("QEO-64 preserves retired pg_cron aliases for v3 telemetry but removes forward EOD child ownership", () => {
   for (const [jobKey, schedulerName] of RETIRED_ACTIVE_SCHEDULERS) {
     assert.equal(getJobKeyForPgCron(schedulerName), jobKey, `${schedulerName} must remain readable as historical evidence`)
     assert.equal(getPgCronNameForJobKey(jobKey), undefined, `${jobKey} must not advertise an active pg_cron owner`)
@@ -136,13 +141,15 @@ test("QEO-64 preserves retired pg_cron aliases for v3 telemetry but removes forw
 
   assert.equal(getJobKeyForPgCron("kfsp-ttai-history-daily-1am-ict"), "kfsp.ttai_history")
   assert.equal(getJobKeyForPgCron("sync-universe-eod-1450"), "market.sync_eod")
+  assert.equal(getPgCronNameForJobKey("research_reports.daily"), "research-reports-daily-0705-ict")
 })
 
-test("QEO-64 scheduler reconciliation expects only canonical EOD plus intraday AM/PM Supabase schedules", () => {
+test("scheduler reconciliation keeps one EOD owner plus independent Research Reports and intraday AM/PM", () => {
   assert.deepEqual(
     EXPECTED_SUPABASE_SCHEDULERS.map((mapping) => mapping.schedulerName),
     [
       "qeoindex-eod-pipeline-1515-ict",
+      "research-reports-daily-0705-ict",
       "sync-universe-5m",
       "sync-universe-5m-afternoon",
     ],
@@ -158,14 +165,14 @@ test("QEO-64 scheduler reconciliation expects only canonical EOD plus intraday A
     lastFinishedAt: null,
   }))
   const reconciled = reconcileSupabaseSchedulers({ availability: "available", rows })
-  assert.equal(reconciled.aggregate.expected, 4, "three Supabase schedules + one Vercel config-only schedule")
-  assert.equal(reconciled.aggregate.liveVerified, 3)
+  assert.equal(reconciled.aggregate.expected, 5, "four Supabase schedules + one Vercel config-only schedule")
+  assert.equal(reconciled.aggregate.liveVerified, 4)
   assert.equal(reconciled.aggregate.missing, 0)
   assert.equal(reconciled.aggregate.inventoryClean, true)
   assert.equal(reconciled.aggregate.expectedMappingsVerified, true)
   assert.deepEqual(
     reconciled.logical.map((mapping) => mapping.jobKey),
-    ["qeoindex.eod_pipeline", "market.sync_5m", "signals.daily"],
+    ["qeoindex.eod_pipeline", "research_reports.daily", "market.sync_5m", "signals.daily"],
   )
 })
 

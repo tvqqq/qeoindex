@@ -5,6 +5,7 @@ export interface OpenAiResponseEnvelopeInspection {
   responseModel: string | null
   inputTokens: number
   cachedInputTokens: number
+  cacheWriteTokens: number
   outputTokens: number
   reasoningTokens: number
   totalTokens: number
@@ -47,6 +48,7 @@ export function inspectOpenAiResponseEnvelope(raw: unknown): OpenAiResponseEnvel
     responseModel: typeof root.model === "string" ? root.model : null,
     inputTokens: finiteToken(usage.input_tokens),
     cachedInputTokens: finiteToken(inputDetails.cached_tokens),
+    cacheWriteTokens: finiteToken(inputDetails.cache_write_tokens),
     outputTokens: finiteToken(usage.output_tokens),
     reasoningTokens: finiteToken(outputDetails.reasoning_tokens),
     totalTokens: finiteToken(usage.total_tokens),

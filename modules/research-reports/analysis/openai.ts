@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer"
 import { createHash } from "node:crypto"
 
 import {
@@ -8,11 +9,17 @@ import {
   type OpenAiResponseEnvelopeInspection,
 } from "../../ai/openai-response.ts"
 import type { ParsedReportPage, StructuredResearchReportAnalysis } from "../types.ts"
+import type { ResearchReportAiBudget } from "./budget.ts"
 import {
   REPORT_PROMPT_VERSION,
   RESEARCH_REPORT_ANALYSIS_INSTRUCTIONS,
   buildResearchReportAnalysisInput,
 } from "./prompt.ts"
+import {
+  RESEARCH_REPORT_PRICING_VERSION,
+  estimateResearchReportUsageCost,
+  reserveResearchReportRequestCost,
+} from "./pricing.ts"
 import {
   RESEARCH_REPORT_ANALYSIS_JSON_SCHEMA,
   validateResearchReportAnalysis,
@@ -43,16 +50,36 @@ export interface ReportAiCallAudit {
   responseId: string
   inputTokens: number
   cachedInputTokens: number
+  cacheWriteTokens: number
   outputTokens: number
   reasoningTokens: number
   totalTokens: number
   latencyMs: number
-  estimatedCostUsd: null
-  pricingVersion: null
+  estimatedCostUsd: number
+  pricingVersion: typeof RESEARCH_REPORT_PRICING_VERSION
+}
+
+export interface ResearchReportAiRequestAuditEvent {
+  model: string
+  requestAttempt: number
+  outcome: "response" | "unknown_usage"
+  repair: boolean
+  httpStatus: number | null
+  providerStatus: string | null
+  inputTokens: number
+  cachedInputTokens: number
+  cacheWriteTokens: number
+  outputTokens: number
+  reasoningTokens: number
+  totalTokens: number
+  estimatedCostUsd: number | null
+  pricingVersion: typeof RESEARCH_REPORT_PRICING_VERSION | null
 }
 
 export interface ReportAiDependencies {
   fetchImpl?: typeof fetch
+  budget?: ResearchReportAiBudget
+  onRequestAudit?: (event: ResearchReportAiRequestAuditEvent) => Promise<void> | void
 }
 
 interface ProviderCallResult {
@@ -63,9 +90,11 @@ interface ProviderCallResult {
 interface UsageAccumulator {
   inputTokens: number
   cachedInputTokens: number
+  cacheWriteTokens: number
   outputTokens: number
   reasoningTokens: number
   totalTokens: number
+  estimatedCostUsd: number
 }
 
 class ReportAiProviderError extends Error {
@@ -143,12 +172,24 @@ function safeProviderMessage(value: unknown) {
   return message.replace(/\s+/g, " ").trim().slice(0, 300) || null
 }
 
-function addUsage(total: UsageAccumulator, inspection: OpenAiResponseEnvelopeInspection) {
+function responseHasUsage(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const usage = (value as { usage?: unknown }).usage
+  return Boolean(usage && typeof usage === "object" && !Array.isArray(usage))
+}
+
+function addUsage(
+  total: UsageAccumulator,
+  inspection: OpenAiResponseEnvelopeInspection,
+  estimatedCostUsd: number,
+) {
   total.inputTokens += inspection.inputTokens
   total.cachedInputTokens += inspection.cachedInputTokens
+  total.cacheWriteTokens += inspection.cacheWriteTokens
   total.outputTokens += inspection.outputTokens
   total.reasoningTokens += inspection.reasoningTokens
   total.totalTokens += inspection.totalTokens
+  total.estimatedCostUsd = Number((total.estimatedCostUsd + estimatedCostUsd).toFixed(12))
 }
 
 function parseValidatedAnalysis(outputText: string, pages: readonly ParsedReportPage[]) {
@@ -176,6 +217,8 @@ async function callOpenAiOnce(
   maxOutputTokens: number,
   repair: boolean,
   usage: UsageAccumulator,
+  budget?: ResearchReportAiBudget,
+  onRequestAudit?: ReportAiDependencies["onRequestAudit"],
 ): Promise<ProviderCallResult> {
   const body = {
     model,
@@ -197,6 +240,37 @@ async function callOpenAiOnce(
     store: false,
     tools: [],
   }
+  const serializedBody = JSON.stringify(body)
+  const reservedCostUsd = reserveResearchReportRequestCost({
+    model,
+    inputUtf8Bytes: Buffer.byteLength(serializedBody, "utf8"),
+    maxOutputTokens,
+  })
+
+  // Consume the attempt before network dispatch. A timeout or lost response is
+  // still a provider request attempt and therefore cannot bypass the run cap.
+  budget?.beforeRequest({ reservedCostUsd })
+  const requestAttempt = budget?.snapshot().requestAttempts ?? 0
+
+  const emitUnknownUsage = async (httpStatus: number | null) => {
+    budget?.recordUnknownUsage()
+    await onRequestAudit?.({
+      model,
+      requestAttempt,
+      outcome: "unknown_usage",
+      repair,
+      httpStatus,
+      providerStatus: null,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      totalTokens: 0,
+      estimatedCostUsd: null,
+      pricingVersion: null,
+    })
+  }
 
   let response: Response
   try {
@@ -206,11 +280,12 @@ async function callOpenAiOnce(
         authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: serializedBody,
       cache: "no-store",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     })
   } catch (error) {
+    await emitUnknownUsage(null)
     const name = error instanceof Error ? error.name : "transport_error"
     throw new ReportAiProviderError(`OpenAI Responses request failed: ${name}`, true)
   }
@@ -220,10 +295,42 @@ async function callOpenAiOnce(
   try {
     envelope = rawText ? JSON.parse(rawText) : {}
   } catch {
+    await emitUnknownUsage(response.status)
     throw new ReportAiProviderError(
       `OpenAI Responses API ${response.status} returned an invalid response envelope`,
       response.status === 429 || response.status >= 500,
     )
+  }
+
+  const inspection = inspectOpenAiResponseEnvelope(envelope)
+  if (responseHasUsage(envelope)) {
+    const cost = estimateResearchReportUsageCost({
+      model,
+      inputTokens: inspection.inputTokens,
+      cachedInputTokens: inspection.cachedInputTokens,
+      cacheWriteTokens: inspection.cacheWriteTokens,
+      outputTokens: inspection.outputTokens,
+    })
+    addUsage(usage, inspection, cost.estimatedCostUsd)
+    budget?.recordResponseCost(cost.estimatedCostUsd)
+    await onRequestAudit?.({
+      model,
+      requestAttempt,
+      outcome: "response",
+      repair,
+      httpStatus: response.status,
+      providerStatus: inspection.status ?? null,
+      inputTokens: inspection.inputTokens,
+      cachedInputTokens: inspection.cachedInputTokens,
+      cacheWriteTokens: inspection.cacheWriteTokens,
+      outputTokens: inspection.outputTokens,
+      reasoningTokens: inspection.reasoningTokens,
+      totalTokens: inspection.totalTokens,
+      estimatedCostUsd: cost.estimatedCostUsd,
+      pricingVersion: cost.pricingVersion,
+    })
+  } else {
+    await emitUnknownUsage(response.status)
   }
 
   if (!response.ok) {
@@ -234,9 +341,6 @@ async function callOpenAiOnce(
       response.status === 429 || response.status >= 500,
     )
   }
-
-  const inspection = inspectOpenAiResponseEnvelope(envelope)
-  addUsage(usage, inspection)
 
   if (inspection.status === "incomplete") {
     throw new ReportAiIncompleteError(inspection)
@@ -267,6 +371,8 @@ async function callWithIncompleteRetry(
   fetchImpl: typeof fetch,
   repair: boolean,
   usage: UsageAccumulator,
+  budget?: ResearchReportAiBudget,
+  onRequestAudit?: ReportAiDependencies["onRequestAudit"],
 ) {
   let maxOutputTokens = INITIAL_MAX_OUTPUT_TOKENS
 
@@ -281,6 +387,8 @@ async function callWithIncompleteRetry(
         maxOutputTokens,
         repair,
         usage,
+        budget,
+        onRequestAudit,
       )
     } catch (error) {
       if (!(error instanceof ReportAiIncompleteError)) throw error
@@ -305,6 +413,8 @@ async function analyzeWithModel(
   apiKey: string,
   fetchImpl: typeof fetch,
   usage: UsageAccumulator,
+  budget?: ResearchReportAiBudget,
+  onRequestAudit?: ReportAiDependencies["onRequestAudit"],
 ): Promise<{ analysis: StructuredResearchReportAnalysis; call: ProviderCallResult }> {
   const first = await callWithIncompleteRetry(
     model,
@@ -314,6 +424,8 @@ async function analyzeWithModel(
     fetchImpl,
     false,
     usage,
+    budget,
+    onRequestAudit,
   )
 
   try {
@@ -330,6 +442,8 @@ async function analyzeWithModel(
     fetchImpl,
     true,
     usage,
+    budget,
+    onRequestAudit,
   )
   return { analysis: parseValidatedAnalysis(repaired.outputText, pages), call: repaired }
 }
@@ -349,9 +463,11 @@ export async function analyzeResearchReportPages(
   const usage: UsageAccumulator = {
     inputTokens: 0,
     cachedInputTokens: 0,
+    cacheWriteTokens: 0,
     outputTokens: 0,
     reasoningTokens: 0,
     totalTokens: 0,
+    estimatedCostUsd: 0,
   }
   const startedAt = Date.now()
   const models = route.fallbackModel === route.model
@@ -365,7 +481,16 @@ export async function analyzeResearchReportPages(
   for (const model of models) {
     attemptedModels.push(model)
     try {
-      finalResult = await analyzeWithModel(model, route, pages, apiKey, fetchImpl, usage)
+      finalResult = await analyzeWithModel(
+        model,
+        route,
+        pages,
+        apiKey,
+        fetchImpl,
+        usage,
+        deps.budget,
+        deps.onRequestAudit,
+      )
       finalModel = model
       break
     } catch (error) {
@@ -392,12 +517,13 @@ export async function analyzeResearchReportPages(
       responseId: inspection.responseId || "",
       inputTokens: usage.inputTokens,
       cachedInputTokens: usage.cachedInputTokens,
+      cacheWriteTokens: usage.cacheWriteTokens,
       outputTokens: usage.outputTokens,
       reasoningTokens: usage.reasoningTokens,
       totalTokens: usage.totalTokens,
       latencyMs: Math.max(0, Date.now() - startedAt),
-      estimatedCostUsd: null,
-      pricingVersion: null,
+      estimatedCostUsd: usage.estimatedCostUsd,
+      pricingVersion: RESEARCH_REPORT_PRICING_VERSION,
     },
   }
 }

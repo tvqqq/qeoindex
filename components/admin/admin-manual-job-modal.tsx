@@ -25,7 +25,7 @@ export function AdminManualJobModal({ job, onClose }: AdminManualJobModalProps) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-white/[0.12] bg-[#0c1017] p-5 sm:p-6 shadow-2xl">
+      <div className="w-full max-w-md rounded-2xl border border-white/[0.12] bg-[#0c1017] p-5 shadow-2xl sm:p-6">
         <div className="flex items-center justify-between border-b border-white/[0.08] pb-3.5">
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
@@ -117,6 +117,44 @@ export function AdminManualJobModal({ job, onClose }: AdminManualJobModalProps) 
                   <span className="mt-0.5 block text-[10px] text-slate-500">Bỏ qua financial-period state hiện tại và fetch lại lịch sử cho batch đã nhập.</span>
                 </span>
               </label>
+            </div>
+          ) : null}
+
+          {job.key === "research_reports.backfill" ? (
+            <div className="space-y-3 rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-3">
+              <div className="grid grid-cols-2 gap-2.5">
+                <label className="text-xs font-medium text-slate-300">
+                  Từ ngày
+                  <input
+                    type="date"
+                    name="fromDate"
+                    required
+                    className="mt-1.5 w-full rounded-xl border border-white/[0.1] bg-[#080c11] px-3 py-2 text-xs text-white focus:border-violet-500/50 focus:outline-none"
+                  />
+                </label>
+                <label className="text-xs font-medium text-slate-300">
+                  Đến ngày
+                  <input
+                    type="date"
+                    name="toDate"
+                    required
+                    className="mt-1.5 w-full rounded-xl border border-white/[0.1] bg-[#080c11] px-3 py-2 text-xs text-white focus:border-violet-500/50 focus:outline-none"
+                  />
+                </label>
+              </div>
+              <label className="block text-xs font-medium text-slate-300">
+                Số báo cáo tối đa
+                <input
+                  type="number"
+                  name="maxReports"
+                  min={1}
+                  max={100}
+                  defaultValue={20}
+                  required
+                  className="mt-1.5 w-full rounded-xl border border-white/[0.1] bg-[#080c11] px-3 py-2 font-mono text-xs text-white focus:border-violet-500/50 focus:outline-none"
+                />
+              </label>
+              <p className="text-[10px] text-slate-500">Khoảng ngày tối đa 90 ngày. Backfill dùng cùng hash identity, pre-AI lease và budget 20 request / $1; không có force bypass.</p>
             </div>
           ) : null}
 

@@ -7,14 +7,15 @@ export type SchedulerEvidence =
 export type ExpectedSchedulerMapping = { mappingId: string; jobKey: string; schedulerName: string; schedule: string; aliases?: string[] }
 
 /**
- * Physical Supabase schedulers expected after QEO-64 cutover.
+ * Physical Supabase schedulers expected after QEO-64/QEO-85 cutovers.
  *
  * Same-session Rating, TTAI and market-close collection are internal EOD v4
- * phases, not independent pg_cron owners. Historical aliases remain mapped in
- * job-schedule.ts but intentionally appear as extra inventory if still active.
+ * phases, not independent pg_cron owners. Research Reports is independent of
+ * trading-session state and therefore owns its exact 07:05 daily scheduler.
  */
 export const EXPECTED_SUPABASE_SCHEDULERS: ExpectedSchedulerMapping[] = [
   { mappingId: "supabase:qeoindex-eod-pipeline-1515-ict", jobKey: "qeoindex.eod_pipeline", schedulerName: "qeoindex-eod-pipeline-1515-ict", schedule: "15 8 * * 1-5" },
+  { mappingId: "supabase:research-reports-daily-0705-ict", jobKey: "research_reports.daily", schedulerName: "research-reports-daily-0705-ict", schedule: "5 0 * * *" },
   { mappingId: "supabase:sync-universe-5m-am", jobKey: "market.sync_5m", schedulerName: "sync-universe-5m", schedule: "*/5 2-4 * * 1-5" },
   { mappingId: "supabase:sync-universe-5m-pm", jobKey: "market.sync_5m", schedulerName: "sync-universe-5m-afternoon", schedule: "*/5 6-7 * * 1-5" },
 ]
@@ -41,7 +42,7 @@ export function reconcileSupabaseSchedulers(evidence: SchedulerEvidence): Schedu
     physicalMappings: [{ mappingId: "vercel:signals-daily", source: "vercel", jobKey: "signals.daily", status: "config_only" }],
     logical: [{ jobKey: "signals.daily", status: "config_only", childMappingIds: ["vercel:signals-daily"] }],
     extraUnmapped: [],
-    aggregate: { expected: 4, liveVerified: 0, configOnly: 1, missing: 0, drifted: 0, duplicated: 0, unavailable: 3, extraUnmapped: 0, inventoryClean: false, expectedMappingsVerified: false },
+    aggregate: { expected: 5, liveVerified: 0, configOnly: 1, missing: 0, drifted: 0, duplicated: 0, unavailable: 4, extraUnmapped: 0, inventoryClean: false, expectedMappingsVerified: false },
   }
 
   const mappings = EXPECTED_SUPABASE_SCHEDULERS.map((expected) => {
@@ -62,7 +63,7 @@ export function reconcileSupabaseSchedulers(evidence: SchedulerEvidence): Schedu
   const drifted = mappings.filter((m) => m.status === "drifted").length
   const duplicated = mappings.filter((m) => m.status === "duplicated").length
   const missing = mappings.filter((m) => m.status === "missing" || m.status === "legacy_alias" || m.status === "inactive").length
-  const logical: LogicalSchedulerResult[] = ["qeoindex.eod_pipeline", "market.sync_5m"].map((jobKey) => {
+  const logical: LogicalSchedulerResult[] = ["qeoindex.eod_pipeline", "research_reports.daily", "market.sync_5m"].map((jobKey) => {
     const children = mappings.filter((mapping) => mapping.jobKey === jobKey)
     const bad = children.filter((mapping) => mapping.status !== "live_verified")
     return { jobKey, status: bad.length === 0 ? "live_verified" as const : bad.length === children.length ? "missing" as const : "partial" as const, childMappingIds: children.map((mapping) => mapping.mappingId) }
@@ -78,7 +79,7 @@ export function reconcileSupabaseSchedulers(evidence: SchedulerEvidence): Schedu
     logical,
     extraUnmapped,
     aggregate: {
-      expected: 4,
+      expected: 5,
       liveVerified,
       configOnly: 1,
       missing,
@@ -86,8 +87,8 @@ export function reconcileSupabaseSchedulers(evidence: SchedulerEvidence): Schedu
       duplicated,
       unavailable: 0,
       extraUnmapped: extraUnmapped.length,
-      inventoryClean: liveVerified === 3 && extraUnmapped.length === 0,
-      expectedMappingsVerified: liveVerified === 3,
+      inventoryClean: liveVerified === 4 && extraUnmapped.length === 0,
+      expectedMappingsVerified: liveVerified === 4,
     },
   }
 }

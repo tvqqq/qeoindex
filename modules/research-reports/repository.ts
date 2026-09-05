@@ -9,6 +9,8 @@ const REPORT_TABLE = "market_research_reports"
 const ANALYSIS_TABLE = "market_research_report_analyses"
 const REPORT_CONFLICT_TARGET = "provider,external_report_id"
 const PUBLISH_RPC = "qeo_publish_research_report_analysis"
+const ACQUIRE_LEASE_RPC = "qeo_acquire_research_report_analysis_lease"
+const RELEASE_LEASE_RPC = "qeo_release_research_report_analysis_lease"
 const MAX_PERSISTED_ERROR_CHARS = 800
 
 interface ResearchReportUpsertClient {
@@ -57,6 +59,13 @@ interface ReportPublishClient {
   }>
 }
 
+export interface ResearchReportLeaseClient {
+  rpc(name: string, args: Record<string, unknown>): PromiseLike<{
+    data: unknown
+    error: { message?: string } | null
+  }>
+}
+
 export interface ResearchReportAnalysisIdentity {
   reportId: string
   contentHash: string
@@ -68,6 +77,11 @@ export interface ResearchReportAnalysisIdentity {
 export interface ExistingResearchReportAnalysis extends ResearchReportAnalysisIdentity {
   id: string
 }
+
+export type ResearchReportAnalysisLeaseResult =
+  | { outcome: "acquired"; leaseToken: string; expiresAt: string }
+  | { outcome: "existing_success"; analysisId: string }
+  | { outcome: "busy"; expiresAt: string }
 
 export type ResearchReportIngestionStatus =
   | "discovered"
@@ -104,6 +118,7 @@ export interface ResearchReportPublishPayload {
   responseId: string
   inputTokens: number
   cachedInputTokens: number
+  cacheWriteTokens: number
   outputTokens: number
   reasoningTokens: number
   totalTokens: number
@@ -133,6 +148,18 @@ function sanitizePersistedError(value: string | null | undefined): string | null
 function supabaseError(prefix: string, error: { message?: string } | null): Error {
   const detail = sanitizePersistedError(error?.message) || "unknown Supabase error"
   return new Error(`${prefix}: ${detail}`.slice(0, MAX_PERSISTED_ERROR_CHARS))
+}
+
+function firstRpcRow(data: unknown): Record<string, unknown> | null {
+  if (Array.isArray(data)) {
+    const value = data[0]
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null
+  }
+  return data && typeof data === "object" && !Array.isArray(data)
+    ? data as Record<string, unknown>
+    : null
 }
 
 export function toResearchReportUpsertRow(report: ResearchReportSourceRecord): Record<string, unknown> {
@@ -201,6 +228,62 @@ export async function findSuccessfulResearchReportAnalysis(
   }
 }
 
+export async function acquireResearchReportAnalysisLease(
+  client: ResearchReportLeaseClient,
+  input: ResearchReportAnalysisIdentity & { runId: string; ttlSeconds?: number },
+): Promise<ResearchReportAnalysisLeaseResult> {
+  const result = await client.rpc(ACQUIRE_LEASE_RPC, {
+    p_report_id: input.reportId,
+    p_content_hash: input.contentHash,
+    p_analysis_version: input.analysisVersion,
+    p_prompt_version: input.promptVersion,
+    p_model_route_key: input.modelRouteKey,
+    p_run_id: input.runId,
+    p_ttl_seconds: input.ttlSeconds ?? 900,
+  })
+  if (result.error) throw supabaseError("Research report analysis lease acquisition failed", result.error)
+
+  const row = firstRpcRow(result.data)
+  const outcome = row?.outcome
+  if (outcome === "acquired") {
+    const leaseToken = row?.lease_token
+    const expiresAt = row?.expires_at
+    if (typeof leaseToken !== "string" || typeof expiresAt !== "string") {
+      throw new Error("Research report analysis lease acquisition failed: malformed acquired lease")
+    }
+    return { outcome, leaseToken, expiresAt }
+  }
+  if (outcome === "existing_success") {
+    const analysisId = row?.analysis_id
+    if (typeof analysisId !== "string" || !analysisId) {
+      throw new Error("Research report analysis lease acquisition failed: malformed existing analysis")
+    }
+    return { outcome, analysisId }
+  }
+  if (outcome === "busy") {
+    const expiresAt = row?.expires_at
+    if (typeof expiresAt !== "string") {
+      throw new Error("Research report analysis lease acquisition failed: malformed busy lease")
+    }
+    return { outcome, expiresAt }
+  }
+  throw new Error("Research report analysis lease acquisition failed: unknown outcome")
+}
+
+export async function releaseResearchReportAnalysisLease(
+  client: ResearchReportLeaseClient,
+  input: { leaseToken: string; terminalOutcome: "ready" | "failed" },
+): Promise<void> {
+  const result = await client.rpc(RELEASE_LEASE_RPC, {
+    p_lease_token: input.leaseToken,
+    p_terminal_outcome: input.terminalOutcome,
+  })
+  if (result.error) throw supabaseError("Research report analysis lease release failed", result.error)
+  if (result.data !== true) {
+    throw new Error("Research report analysis lease release failed: lease token was not owned")
+  }
+}
+
 export async function markResearchReportStatus(
   client: ReportStatusClient,
   reportId: string,
@@ -239,6 +322,7 @@ function serializedAnalysis(payload: ResearchReportPublishPayload): Record<strin
     response_id: payload.responseId,
     input_tokens: payload.inputTokens,
     cached_input_tokens: payload.cachedInputTokens,
+    cache_write_tokens: payload.cacheWriteTokens,
     output_tokens: payload.outputTokens,
     reasoning_tokens: payload.reasoningTokens,
     total_tokens: payload.totalTokens,
