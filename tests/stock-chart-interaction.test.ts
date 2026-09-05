@@ -88,3 +88,20 @@ test("useUserChartSync manages database persistence and local cache fallback", (
   assert.match(syncCode, /method: "POST"/)
   assert.match(syncCode, /saveStatus/)
 })
+
+test("StockTradingViewChart renders TradingView-style single-row timeframe panel with checkmark", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  // Single-column row per timeframe without broken 2-column grid
+  assert.doesNotMatch(chartCode, /grid grid-cols-2 gap-1/)
+  assert.match(chartCode, /flex flex-col space-y-0\.5/)
+
+  // Full-width row with fixed-width timeframe ID, label, and active checkmark
+  assert.match(chartCode, /w-full flex items-center justify-between px-3 py-1\.5/)
+  assert.match(chartCode, /font-mono text-\[11px\] font-bold w-8 text-left shrink-0/)
+  assert.match(chartCode, /Check className="size-3\.5 text-cyan-400 shrink-0"/)
+
+  // Backdrop overlay to close when clicking outside
+  assert.match(chartCode, /fixed inset-0 z-40/)
+})
+

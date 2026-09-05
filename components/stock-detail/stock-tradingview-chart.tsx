@@ -3,6 +3,7 @@
 import React, { useCallback, useMemo, useRef, useState } from "react"
 import {
   Camera,
+  Check,
   ChevronDown,
   Maximize2,
   Minimize2,
@@ -411,47 +412,77 @@ export function StockTradingViewChart({
               <button
                 type="button"
                 onClick={() => setShowTfDropdown((prev) => !prev)}
-                className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-mono text-[11px] text-slate-400 hover:bg-white/[0.05] hover:text-white transition-colors"
+                className={cn(
+                  "flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px] transition-colors",
+                  !QUICK_TIMEFRAMES.includes(timeframe)
+                    ? "border border-cyan-400/40 bg-cyan-400/20 text-cyan-200 font-bold shadow-[0_0_8px_rgba(0,240,255,0.25)]"
+                    : showTfDropdown
+                    ? "bg-white/[0.08] text-white"
+                    : "text-slate-400 hover:bg-white/[0.05] hover:text-white",
+                )}
                 title="Tất cả các khung thời gian"
               >
-                <span>{!QUICK_TIMEFRAMES.includes(timeframe) ? timeframe : ""}</span>
-                <ChevronDown className="size-3" />
+                {!QUICK_TIMEFRAMES.includes(timeframe) && <span>{timeframe}</span>}
+                <ChevronDown className={cn("size-3 transition-transform duration-150", showTfDropdown && "rotate-180")} />
               </button>
 
               {showTfDropdown && (
-                <div className="absolute left-0 top-8 z-50 w-44 rounded-xl border border-white/[0.1] bg-[#0c131c] p-2 shadow-2xl backdrop-blur-xl">
-                  {["Phút", "Giờ", "Ngày / Tuần", "Tháng / Quý / Năm"].map((grp) => {
-                    const items = ALL_TIMEFRAMES.filter((t) => t.group === grp)
-                    return (
-                      <div key={grp} className="mb-2 last:mb-0">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block px-1.5 mb-1 font-mono">
-                          {grp}
-                        </span>
-                        <div className="grid grid-cols-2 gap-1">
-                          {items.map((it) => (
-                            <button
-                              key={it.id}
-                              type="button"
-                              onClick={() => {
-                                setTimeframe(it.id)
-                                setShowTfDropdown(false)
-                              }}
-                              className={cn(
-                                "flex items-center justify-between rounded px-2 py-1 text-left font-mono text-[11px] font-semibold transition-colors",
-                                timeframe === it.id
-                                  ? "bg-cyan-400/20 text-cyan-300 font-bold"
-                                  : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
-                              )}
-                            >
-                              <span>{it.id}</span>
-                              <span className="text-[10px] text-slate-500">{it.label}</span>
-                            </button>
-                          ))}
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowTfDropdown(false)}
+                  />
+                  <div className="absolute left-0 top-8 z-50 w-56 max-h-[420px] overflow-y-auto rounded-xl border border-white/[0.12] bg-[#0c131c] py-1.5 shadow-2xl divide-y divide-white/[0.06]">
+                    {["Phút", "Giờ", "Ngày / Tuần", "Tháng / Quý / Năm"].map((grp) => {
+                      const items = ALL_TIMEFRAMES.filter((t) => t.group === grp)
+                      return (
+                        <div key={grp} className="py-1 first:pt-0.5 last:pb-0.5">
+                          <span className="block px-3 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">
+                            {grp}
+                          </span>
+                          <div className="flex flex-col space-y-0.5">
+                            {items.map((it) => {
+                              const isActive = timeframe === it.id
+                              return (
+                                <button
+                                  key={it.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setTimeframe(it.id)
+                                    setShowTfDropdown(false)
+                                  }}
+                                  className={cn(
+                                    "w-full flex items-center justify-between px-3 py-1.5 text-left transition-colors group",
+                                    isActive
+                                      ? "bg-cyan-500/15 text-cyan-300 font-semibold"
+                                      : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
+                                  )}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span
+                                      className={cn(
+                                        "font-mono text-[11px] font-bold w-8 text-left shrink-0",
+                                        isActive
+                                          ? "text-cyan-300"
+                                          : "text-slate-400 group-hover:text-slate-200",
+                                      )}
+                                    >
+                                      {it.id}
+                                    </span>
+                                    <span className="text-[12px]">{it.label}</span>
+                                  </div>
+                                  {isActive && (
+                                    <Check className="size-3.5 text-cyan-400 shrink-0" />
+                                  )}
+                                </button>
+                              )
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
+                      )
+                    })}
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -478,32 +509,41 @@ export function StockTradingViewChart({
               </button>
 
               {showStyleDropdown && (
-                <div className="absolute left-0 top-8 z-50 w-32 rounded-xl border border-white/[0.1] bg-[#0c131c] p-1.5 shadow-2xl">
-                  {(["candles", "line", "area", "hollow"] as const).map((st) => (
-                    <button
-                      key={st}
-                      type="button"
-                      onClick={() => {
-                        setChartStyle(st)
-                        setShowStyleDropdown(false)
-                      }}
-                      className={cn(
-                        "w-full rounded px-2.5 py-1 text-left text-[11px] transition-colors",
-                        chartStyle === st
-                          ? "bg-cyan-400/20 text-cyan-300 font-bold"
-                          : "text-slate-400 hover:text-white hover:bg-white/[0.04]",
-                      )}
-                    >
-                      {st === "candles"
-                        ? "Nến Nhật"
-                        : st === "line"
-                        ? "Đường Line"
-                        : st === "area"
-                        ? "Vùng Area"
-                        : "Nến Rỗng"}
-                    </button>
-                  ))}
-                </div>
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowStyleDropdown(false)}
+                  />
+                  <div className="absolute left-0 top-8 z-50 w-36 rounded-xl border border-white/[0.12] bg-[#0c131c] p-1.5 shadow-2xl">
+                    {(["candles", "line", "area", "hollow"] as const).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => {
+                          setChartStyle(st)
+                          setShowStyleDropdown(false)
+                        }}
+                        className={cn(
+                          "w-full flex items-center justify-between rounded px-2.5 py-1.5 text-left text-[11px] transition-colors",
+                          chartStyle === st
+                            ? "bg-cyan-500/15 text-cyan-300 font-bold"
+                            : "text-slate-400 hover:text-white hover:bg-white/[0.04]",
+                        )}
+                      >
+                        <span>
+                          {st === "candles"
+                            ? "Nến Nhật"
+                            : st === "line"
+                            ? "Đường Line"
+                            : st === "area"
+                            ? "Vùng Area"
+                            : "Nến Rỗng"}
+                        </span>
+                        {chartStyle === st && <Check className="size-3.5 text-cyan-400 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           )}
