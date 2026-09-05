@@ -21,7 +21,7 @@ import {
 
 export { type LlmEvidenceRef }
 
-export const AI_COUNCIL_LLM_PROMPT_VERSION = "llm-debate-v3-first-class-context"
+export const AI_COUNCIL_LLM_PROMPT_VERSION = "llm-debate-v4-research-report-evidence"
 export const AI_COUNCIL_LLM_ENGINE = "openai-responses-router-v2"
 export const AI_COUNCIL_LLM_PRICING_VERSION = "openai-standard-2026-08-23"
 
@@ -360,6 +360,9 @@ const COMMON_INSTRUCTIONS = [
   "Do not attempt to invent, reverse-engineer, or state proprietary weights or formulas for KFSP 4M, CANSLIM, price potential, or RS score.",
   "Treat raw TTAI component labels and history as provider observations; do not invent component semantics, weights, or formulas unless indicatorDictionary explicitly defines them.",
   "When researchContext is present, respect source hierarchy S>A>B>C>D; broker forecasts, recommendations, and target prices are source opinions rather than verified company facts.",
+  "When reportEvidence is present, every Research Report conclusion, recommendation, forecast, valuation, and target is SOURCE OPINION rather than verified company fact; use only the frozen curated evidence supplied in the packet.",
+  "Surface any material contradiction between Research Report evidence and deterministic price, trend, liquidity, flow, Wyckoff, or risk evidence instead of silently resolving the conflict in favor of the narrative.",
+  "Research Report evidence must not upgrade or downgrade the deterministic Council signal; the deterministic QeoIndex policy remains the final decision authority and all LLM output is advisory-only.",
   "Do not confuse RSs/RSm (0-100 score) with RRG RS/RM (centered at 100). Do not confuse RS with RSI.",
   "RRG state is a point-in-time quadrant snapshot; do not assert rotation direction or vector history unless explicit in packet.",
   "High liquidity or net flow does not prove institutional accumulation without price-volume confirmation.",
