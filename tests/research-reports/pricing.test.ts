@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   RESEARCH_REPORT_PRICING_VERSION,
   estimateResearchReportUsageCost,
+  reserveResearchReportRequestCost,
 } from "../../modules/research-reports/analysis/pricing.ts"
 import { inspectOpenAiResponseEnvelope } from "../../modules/ai/openai-response.ts"
 
@@ -61,6 +62,25 @@ test("QEO-85 applies the long-context multiplier to the full request above 272K 
   })
 
   assert.equal(result.estimatedCostUsd, 0.138)
+})
+
+test("QEO-85 reserves conservatively using byte upper bound and selected model rates", () => {
+  assert.equal(
+    reserveResearchReportRequestCost({
+      model: "gpt-5.6-luna",
+      inputUtf8Bytes: 10_000,
+      maxOutputTokens: 2_000,
+    }),
+    0.0049,
+  )
+  assert.equal(
+    reserveResearchReportRequestCost({
+      model: "gpt-5.6-terra",
+      inputUtf8Bytes: 10_000,
+      maxOutputTokens: 2_000,
+    }),
+    0.049,
+  )
 })
 
 test("QEO-85 rejects unsupported pricing models instead of silently estimating with the wrong rate", () => {
