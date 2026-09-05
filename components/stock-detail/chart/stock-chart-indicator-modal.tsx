@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Check, Activity, BarChart2, TrendingUp, Layers, Compass, X } from "lucide-react"
+import { Check, Activity, BarChart2, TrendingUp, Layers, Compass, Sparkles, X } from "lucide-react"
 import { cn } from "@/modules/shared/ui/cn"
 import type { IndicatorConfig } from "./stock-chart-types"
 
@@ -48,6 +48,13 @@ export function StockChartIndicatorModal({ config, onChange, onClose }: Indicato
       icon: <Layers className="size-3.5 text-amber-400" />,
     },
     {
+      key: "showQeoBase129",
+      title: "QeoIndex Base Line 129",
+      code: "QEO Base (129)",
+      desc: "Ichimoku base line 129 — tín hiệu chu kỳ riêng QeoIndex",
+      icon: <Sparkles className="size-3.5 text-pink-400" />,
+    },
+    {
       key: "showBollinger",
       title: "Dải biến động Bollinger Bands",
       code: "BB (20, 2)",
@@ -78,7 +85,7 @@ export function StockChartIndicatorModal({ config, onChange, onClose }: Indicato
         <div className="flex items-center gap-2 font-mono">
           <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-300">Indicators</span>
           <span className="rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[9px] text-slate-500">
-            {enabledCount}/6 active
+            {enabledCount}/{indicators.length} active
           </span>
         </div>
         <button
@@ -91,9 +98,9 @@ export function StockChartIndicatorModal({ config, onChange, onClose }: Indicato
         </button>
       </div>
 
-      <div className="max-h-[360px] space-y-0.5 overflow-y-auto p-1.5">
+      <div className="max-h-[400px] space-y-0.5 overflow-y-auto p-1.5">
         {indicators.map((ind) => {
-          const isEnabled = config[ind.key]
+          const isEnabled = Boolean(config[ind.key])
           return (
             <button
               key={ind.key}

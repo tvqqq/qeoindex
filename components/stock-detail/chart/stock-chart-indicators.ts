@@ -172,6 +172,27 @@ export function calculateIchimokuSeries(bars: OhlcvBar[]) {
 }
 
 /**
+ * Calculate an Ichimoku base/Kijun-style line over an arbitrary lookback.
+ * QeoIndex uses period=129 as a proprietary cycle baseline with no displacement.
+ */
+export function calculateIchimokuBaseSeries(bars: OhlcvBar[], period = 129): Array<number | null> {
+  const result: Array<number | null> = Array(bars.length).fill(null)
+  if (!Number.isInteger(period) || period <= 0 || bars.length < period) return result
+
+  for (let i = period - 1; i < bars.length; i += 1) {
+    let highestHigh = -Infinity
+    let lowestLow = Infinity
+    for (let j = i - period + 1; j <= i; j += 1) {
+      if (bars[j].high > highestHigh) highestHigh = bars[j].high
+      if (bars[j].low < lowestLow) lowestLow = bars[j].low
+    }
+    result[i] = (highestHigh + lowestLow) / 2
+  }
+
+  return result
+}
+
+/**
  * Calculate Bollinger Bands (period 20, stdDev multiplier 2)
  */
 export function calculateBollingerBands(bars: OhlcvBar[], period = 20, multiplier = 2) {

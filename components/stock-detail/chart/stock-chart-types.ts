@@ -82,6 +82,8 @@ export interface IndicatorConfig {
   showIchimoku: boolean
   showBollinger: boolean
   showVolumeProfile: boolean
+  /** QeoIndex-only 129-bar Ichimoku base line. Optional keeps old persisted payloads source-compatible. */
+  showQeoBase129?: boolean
 }
 
 export const DEFAULT_INDICATOR_CONFIG: IndicatorConfig = {
@@ -91,6 +93,7 @@ export const DEFAULT_INDICATOR_CONFIG: IndicatorConfig = {
   showIchimoku: false,
   showBollinger: false,
   showVolumeProfile: false,
+  showQeoBase129: false,
 }
 
 export interface VolumeProfileBucket {
