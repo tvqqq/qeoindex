@@ -9,11 +9,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
-  if (!isMachineRequestAuthorized(
-    request,
-    [process.env.CRON_SECRET],
-    { allowUnconfiguredInDevelopment: true },
-  )) {
+  if (!isMachineRequestAuthorized(request, [process.env.CRON_SECRET], { allowUnconfiguredInDevelopment: true })) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
   }
 

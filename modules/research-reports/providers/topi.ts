@@ -10,6 +10,7 @@ export const TOPI_ANALYSIS_REPORT_URL = "https://apiclient.topi.vn/api-web/Analy
 const DEFAULT_PAGE_SIZE = 15
 const DEFAULT_MAX_PAGES = 20
 const DEFAULT_TIMEOUT_MS = 10_000
+const DEFAULT_TRANSIENT_ATTEMPTS = 3
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -131,19 +132,34 @@ function findReportRows(value: unknown, depth = 0): unknown[] | null {
 export interface FetchTopiReportsPageOptions {
   page: number
   limit?: number
+  fromDate?: string
+  toDate?: string
   fetchImpl?: typeof fetch
   timeoutMs?: number
+  transientAttempts?: number
 }
 
-export async function fetchTopiReportsPage({
-  page,
-  limit = DEFAULT_PAGE_SIZE,
-  fetchImpl = fetch,
-  timeoutMs = DEFAULT_TIMEOUT_MS,
-}: FetchTopiReportsPageOptions): Promise<ResearchReportSourceRecord[]> {
-  if (!Number.isInteger(page) || page < 1) throw new Error("TOPI page must be a positive integer")
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("TOPI limit must be between 1 and 100")
+function validateOptionalDate(value: string | undefined, name: string) {
+  if (value && !ISO_DATE_RE.test(value)) throw new Error(`TOPI ${name} must be YYYY-MM-DD`)
+}
 
+function isRetryableTopiError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /\b(408|429|5\d\d)\b|timeout|timed out|AbortError|fetch failed|network|ECONNRESET|ENETUNREACH|EAI_AGAIN/i.test(message)
+}
+
+async function transientDelay(attempt: number) {
+  await new Promise<void>((resolve) => setTimeout(resolve, Math.min(2_000, 300 * 2 ** Math.max(0, attempt - 1))))
+}
+
+async function fetchTopiReportsPageOnce({
+  page,
+  limit,
+  fromDate,
+  toDate,
+  fetchImpl,
+  timeoutMs,
+}: Required<Pick<FetchTopiReportsPageOptions, "page" | "limit" | "fetchImpl" | "timeoutMs">> & Pick<FetchTopiReportsPageOptions, "fromDate" | "toDate">): Promise<ResearchReportSourceRecord[]> {
   const response = await fetchImpl(TOPI_ANALYSIS_REPORT_URL, {
     method: "POST",
     headers: {
@@ -155,8 +171,8 @@ export async function fetchTopiReportsPage({
     body: JSON.stringify({
       page,
       limit,
-      from_date: "",
-      to_date: "",
+      from_date: fromDate ?? "",
+      to_date: toDate ?? "",
       type: 0,
       source_name: "",
       sectorId: "",
@@ -171,9 +187,41 @@ export async function fetchTopiReportsPage({
   return rows.map(parseTopiReport)
 }
 
+export async function fetchTopiReportsPage({
+  page,
+  limit = DEFAULT_PAGE_SIZE,
+  fromDate,
+  toDate,
+  fetchImpl = fetch,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  transientAttempts = DEFAULT_TRANSIENT_ATTEMPTS,
+}: FetchTopiReportsPageOptions): Promise<ResearchReportSourceRecord[]> {
+  if (!Number.isInteger(page) || page < 1) throw new Error("TOPI page must be a positive integer")
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("TOPI limit must be between 1 and 100")
+  if (!Number.isInteger(transientAttempts) || transientAttempts < 1 || transientAttempts > 5) {
+    throw new Error("TOPI transientAttempts must be between 1 and 5")
+  }
+  validateOptionalDate(fromDate, "fromDate")
+  validateOptionalDate(toDate, "toDate")
+
+  let lastError: unknown
+  for (let attempt = 1; attempt <= transientAttempts; attempt += 1) {
+    try {
+      return await fetchTopiReportsPageOnce({ page, limit, fromDate, toDate, fetchImpl, timeoutMs })
+    } catch (error) {
+      lastError = error
+      if (!isRetryableTopiError(error) || attempt === transientAttempts) throw error
+      await transientDelay(attempt)
+    }
+  }
+  throw lastError
+}
+
 export interface DiscoverTopiReportsOptions {
   knownExternalReportIds?: ReadonlySet<string>
   recentPublishDateFloor?: string
+  fromDate?: string
+  toDate?: string
   fetchImpl?: typeof fetch
   pageSize?: number
   maxPages?: number
@@ -193,6 +241,8 @@ function discoveryResult(
 export async function discoverTopiReports({
   knownExternalReportIds = new Set<string>(),
   recentPublishDateFloor,
+  fromDate,
+  toDate,
   fetchImpl = fetch,
   pageSize = DEFAULT_PAGE_SIZE,
   maxPages = DEFAULT_MAX_PAGES,
@@ -207,6 +257,8 @@ export async function discoverTopiReports({
   if (recentPublishDateFloor && !ISO_DATE_RE.test(recentPublishDateFloor)) {
     throw new Error("TOPI recentPublishDateFloor must be YYYY-MM-DD")
   }
+  validateOptionalDate(fromDate, "fromDate")
+  validateOptionalDate(toDate, "toDate")
 
   const reports: ResearchReportSourceRecord[] = []
   const seen = new Set<string>()
@@ -214,7 +266,7 @@ export async function discoverTopiReports({
   let lastPageWasFull = false
 
   for (let page = 1; page <= maxPages; page += 1) {
-    const pageReports = await fetchTopiReportsPage({ page, limit: pageSize, fetchImpl, timeoutMs })
+    const pageReports = await fetchTopiReportsPage({ page, limit: pageSize, fromDate, toDate, fetchImpl, timeoutMs })
     pagesFetched += 1
     lastPageWasFull = pageReports.length >= pageSize
 

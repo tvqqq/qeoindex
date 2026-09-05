@@ -13,6 +13,9 @@ type ManualJobApiParams = {
   offset?: number
   tickers?: string[]
   force?: boolean
+  fromDate?: string
+  toDate?: string
+  maxReports?: number
 }
 
 export async function POST(

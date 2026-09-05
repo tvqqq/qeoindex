@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { discoverTopiReports } from "../../modules/research-reports/providers/topi.ts"
+import { discoverTopiReports, fetchTopiReportsPage } from "../../modules/research-reports/providers/topi.ts"
 
 function report(reportId: number, publishDate: string) {
   return {
@@ -28,6 +28,37 @@ function pageFetch(pages: Record<number, unknown[]>) {
     })
   }) as typeof fetch
 }
+
+test("QEO-85 TOPI backfill sends bounded provider dates and retries a transient failure", async () => {
+  let calls = 0
+  const bodies: Array<Record<string, unknown>> = []
+  const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+    calls += 1
+    bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+    if (calls === 1) return new Response("temporary", { status: 503 })
+    return new Response(JSON.stringify({ data: { list: [report(930, "05/09/2026")] } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })
+  }) as typeof fetch
+
+  const rows = await fetchTopiReportsPage({
+    page: 1,
+    limit: 15,
+    fromDate: "2026-08-01",
+    toDate: "2026-09-05",
+    transientAttempts: 2,
+    fetchImpl,
+  })
+
+  assert.equal(calls, 2)
+  assert.equal(rows[0]?.externalReportId, "930")
+  for (const body of bodies) {
+    assert.equal(body.from_date, "2026-08-01")
+    assert.equal(body.to_date, "2026-09-05")
+    assert.equal(body.page, 1)
+  }
+})
 
 test("QEO-85 discovery does not stop at the first known id when a reordered unseen report follows", async () => {
   const result = await discoverTopiReports({

@@ -9,7 +9,8 @@ function source(path: string) {
 function jobBlock(catalog: string, key: string) {
   const start = catalog.indexOf(`key: "${key}"`)
   assert.ok(start >= 0, `missing admin job ${key}`)
-  return catalog.slice(start, start + 1_200)
+  const next = catalog.indexOf("\nconst ", start + 1)
+  return catalog.slice(start, next >= 0 ? next : undefined)
 }
 
 test("QEO-85 effective Admin catalog separates scheduled daily ownership from confirmed backfill recovery", () => {
@@ -35,7 +36,9 @@ test("QEO-85 manual capability allowlists backfill only and exposes bounded date
   const capabilities = source("modules/admin/manual-job-capabilities.ts")
   const jobs = source("modules/admin/jobs.ts")
   const actions = source("app/admin/actions.ts")
+  const api = source("app/api/admin/jobs/[key]/run/route.ts")
   const modal = source("components/admin/admin-manual-job-modal.tsx")
+  const workflow = source("workflows/research-reports-backfill-workflow.ts")
 
   assert.match(capabilities, /"research_reports\.backfill"/)
   assert.doesNotMatch(capabilities, /"research_reports\.daily"/)
@@ -44,23 +47,53 @@ test("QEO-85 manual capability allowlists backfill only and exposes bounded date
   assert.match(jobs, /toDate\?: string/)
   assert.match(jobs, /maxReports\?: number/)
   assert.match(jobs, /input\.key === "research_reports\.backfill"/)
-  assert.match(jobs, /100/)
-  assert.match(jobs, /90/)
-  assert.doesNotMatch(jobs.slice(jobs.indexOf('input.key === "research_reports.backfill"'), jobs.indexOf('input.key === "research_reports.backfill"') + 2_500), /force/)
+  assert.match(jobs, /RESEARCH_BACKFILL_MAX_REPORTS = 100/)
+  assert.match(jobs, /RESEARCH_BACKFILL_MAX_DAYS = 90/)
+  const backfillDispatch = jobs.slice(jobs.indexOf('if (input.key === "research_reports.backfill")'), jobs.indexOf('if (input.key === "research_reports.backfill")') + 1_500)
+  assert.doesNotMatch(backfillDispatch, /force/)
+  assert.match(jobs, /start\(researchReportsBackfillWorkflow/)
 
   assert.match(actions, /formData\.get\("fromDate"\)/)
   assert.match(actions, /formData\.get\("toDate"\)/)
   assert.match(actions, /formData\.get\("maxReports"\)/)
+  assert.match(api, /fromDate\?: string/)
+  assert.match(api, /toDate\?: string/)
+  assert.match(api, /maxReports\?: number/)
   assert.match(modal, /job\.key === "research_reports\.backfill"/)
   assert.match(modal, /name="fromDate"/)
   assert.match(modal, /name="toDate"/)
   assert.match(modal, /name="maxReports"/)
   assert.match(modal, /max=\{100\}/)
+
+  assert.match(workflow, /"use workflow"/)
+  assert.match(workflow, /mode:\s*"backfill"/)
+  assert.match(workflow, /RESEARCH_REPORTS_BACKFILL_JOB_KEY/)
+  assert.match(workflow, /trigger:\s*"manual"/)
+  assert.doesNotMatch(workflow, /force/)
 })
 
 test("QEO-85 scheduler reconciliation owns the exact Supabase research cron", () => {
   const scheduler = source("modules/admin/scheduler-reconciliation.ts")
+  const schedulePolicy = source("modules/admin/schedule-policy.ts")
+  const jobSchedule = source("modules/admin/job-schedule.ts")
   assert.match(scheduler, /jobKey:\s*"research_reports\.daily"/)
   assert.match(scheduler, /schedulerName:\s*"research-reports-daily-0705-ict"/)
   assert.match(scheduler, /schedule:\s*"5 0 \* \* \*"/)
+  assert.match(schedulePolicy, /"research_reports\.daily":\s*425/)
+  assert.match(jobSchedule, /"research-reports-daily-0705-ict":\s*"research_reports\.daily"/)
+})
+
+test("QEO-85 Admin AI usage reads persisted Research Reports run summary with model tokens and cost", () => {
+  const workflow = source("workflows/research-reports-daily-workflow.ts")
+  const health = source("modules/admin/job-health.ts")
+  const table = source("components/admin/admin-jobs-table.tsx")
+
+  assert.match(workflow, /aiModels:\s*usage\.attemptedModels/)
+  assert.match(workflow, /inputTokens:\s*usage\.inputTokens/)
+  assert.match(workflow, /reasoningTokens:\s*usage\.reasoningTokens/)
+  assert.match(workflow, /totalTokens:\s*usage\.totalTokens/)
+  assert.match(health, /researchReportsAiUsage/)
+  assert.match(health, /summary\.estimatedCostUsd/)
+  assert.match(table, /AI requests/)
+  assert.match(table, /formatEstimatedCost\(job\.aiUsage\.estimatedCostUsd\)/)
 })

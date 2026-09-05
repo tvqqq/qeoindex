@@ -7,12 +7,20 @@ import {
 import {
   failResearchReportsRunStep,
   finishResearchReportsRunStep,
-  RESEARCH_REPORTS_DAILY_JOB_KEY,
-  RESEARCH_REPORTS_DAILY_PROVIDER,
+  RESEARCH_REPORTS_BACKFILL_JOB_KEY,
+  RESEARCH_REPORTS_BACKFILL_PROVIDER,
   startResearchReportsRunStep,
   updateResearchReportsPhaseStep,
   type ResearchReportAttemptUsage,
 } from "@/modules/research-reports/daily/telemetry"
+
+export interface ResearchReportsBackfillWorkflowInput {
+  startedAt: string
+  actorUserId: string
+  fromDate?: string
+  toDate?: string
+  maxReports?: number
+}
 
 interface WorkflowCounts {
   processed: number
@@ -26,16 +34,7 @@ interface WorkflowCounts {
 }
 
 function emptyCounts(): WorkflowCounts {
-  return {
-    processed: 0,
-    ready: 0,
-    skippedExisting: 0,
-    skippedConcurrent: 0,
-    needsOcr: 0,
-    unsupported: 0,
-    failed: 0,
-    deferredBudget: 0,
-  }
+  return { processed: 0, ready: 0, skippedExisting: 0, skippedConcurrent: 0, needsOcr: 0, unsupported: 0, failed: 0, deferredBudget: 0 }
 }
 
 function emptyUsage(): ResearchReportAttemptUsage {
@@ -71,21 +70,25 @@ function addOutcome(counts: WorkflowCounts, outcome: string) {
   else if (outcome === "failed") counts.failed += 1
 }
 
-export async function researchReportsDailyWorkflow(startedAtIso: string) {
+export async function researchReportsBackfillWorkflow(input: ResearchReportsBackfillWorkflowInput) {
   "use workflow"
 
   const runId = await startResearchReportsRunStep({
-    jobKey: RESEARCH_REPORTS_DAILY_JOB_KEY,
-    provider: RESEARCH_REPORTS_DAILY_PROVIDER,
-    trigger: "workflow",
-    startedAt: startedAtIso,
+    jobKey: RESEARCH_REPORTS_BACKFILL_JOB_KEY,
+    provider: RESEARCH_REPORTS_BACKFILL_PROVIDER,
+    trigger: "manual",
+    actorUserId: input.actorUserId,
+    startedAt: input.startedAt,
   })
 
   try {
     const prepared = await prepareResearchReportsRunStep({
       runId,
-      startedAt: startedAtIso,
-      mode: "daily",
+      startedAt: input.startedAt,
+      mode: "backfill",
+      fromDate: input.fromDate,
+      toDate: input.toDate,
+      maxReports: input.maxReports,
     })
 
     await updateResearchReportsPhaseStep({ runId, phase: "FETCH_PARSE", status: "running" })
@@ -100,7 +103,7 @@ export async function researchReportsDailyWorkflow(startedAtIso: string) {
       if (budgetSnapshot.budgetExhausted) {
         await deferResearchReportRunStep({
           runId,
-          jobKey: RESEARCH_REPORTS_DAILY_JOB_KEY,
+          jobKey: RESEARCH_REPORTS_BACKFILL_JOB_KEY,
           candidate,
           outcome: "deferred_budget",
           budgetSnapshot,
@@ -112,7 +115,7 @@ export async function researchReportsDailyWorkflow(startedAtIso: string) {
 
       const processed = await processResearchReportRunStep({
         runId,
-        jobKey: RESEARCH_REPORTS_DAILY_JOB_KEY,
+        jobKey: RESEARCH_REPORTS_BACKFILL_JOB_KEY,
         candidate,
         budgetSnapshot,
       })
@@ -158,7 +161,11 @@ export async function researchReportsDailyWorkflow(startedAtIso: string) {
       ? "partial" as const
       : "succeeded" as const
     const summary = {
-      runDate: startedAtIso.slice(0, 10),
+      runDate: input.startedAt.slice(0, 10),
+      mode: "backfill",
+      fromDate: input.fromDate ?? null,
+      toDate: input.toDate ?? null,
+      maxReports: input.maxReports ?? 20,
       pagesFetched: prepared.pagesFetched,
       boundaryReason: prepared.boundaryReason,
       hitDiscoverySafetyLimit: prepared.hitDiscoverySafetyLimit,
@@ -190,7 +197,7 @@ export async function researchReportsDailyWorkflow(startedAtIso: string) {
     await updateResearchReportsPhaseStep({ runId, phase: "FINALIZE", status: "succeeded", summary: { ...summary, status } })
     await finishResearchReportsRunStep({
       runId,
-      startedAt: startedAtIso,
+      startedAt: input.startedAt,
       status,
       summary,
       budgetSnapshot,
@@ -204,13 +211,13 @@ export async function researchReportsDailyWorkflow(startedAtIso: string) {
         runId,
         phase: "FINALIZE",
         status: "failed",
-        errorCode: "RESEARCH_REPORTS_DAILY_FAILED",
+        errorCode: "RESEARCH_REPORTS_BACKFILL_FAILED",
         errorMessage: message,
       })
     } catch {
       // Parent failure telemetry below remains the required terminal evidence.
     }
-    await failResearchReportsRunStep({ runId, startedAt: startedAtIso, errorMessage: message })
+    await failResearchReportsRunStep({ runId, startedAt: input.startedAt, errorMessage: message, errorCode: "RESEARCH_REPORTS_BACKFILL_FAILED" })
     throw error
   }
 }

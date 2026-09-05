@@ -51,7 +51,6 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
 
   return (
     <div className="space-y-4">
-      {/* Search & Filter Bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
@@ -64,7 +63,7 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
           />
         </div>
 
-        <div className="flex overflow-x-auto gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto">
           {groups.map((group) => (
             <button
               key={group}
@@ -82,7 +81,6 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
         </div>
       </div>
 
-      {/* Modern Data Table */}
       <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0c1017]">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -102,6 +100,7 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                 const isManualAllowed = job.manualPolicy !== "disabled"
                 const badgeStyle = STATUS_BADGE_STYLES[job.status] || STATUS_BADGE_STYLES.unknown
                 const lastRunAt = job.lastFinishedAt || job.lastStartedAt
+                const aiUsageUnit = job.key.startsWith("research_reports.") ? "AI requests" : "debates"
 
                 return (
                   <tr key={job.key} className="text-slate-300 transition-colors hover:bg-white/[0.02]">
@@ -119,15 +118,9 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                         </span>
                       </div>
                       <p className="mt-0.5 text-[11px] text-slate-400">{job.description}</p>
-                      {job.healthReason ? (
-                        <p className="mt-1 text-[11px] font-medium text-slate-300">{job.healthReason}</p>
-                      ) : null}
-                      {job.currentExecution ? (
-                        <p className="mt-1 text-[10px] font-medium text-cyan-300">Execution: {job.currentExecution.status}</p>
-                      ) : null}
-                      {job.executionTelemetry?.source === "unavailable" ? (
-                        <p className="mt-1 text-[10px] font-medium text-slate-500">Execution telemetry: unavailable</p>
-                      ) : null}
+                      {job.healthReason ? <p className="mt-1 text-[11px] font-medium text-slate-300">{job.healthReason}</p> : null}
+                      {job.currentExecution ? <p className="mt-1 text-[10px] font-medium text-cyan-300">Execution: {job.currentExecution.status}</p> : null}
+                      {job.executionTelemetry?.source === "unavailable" ? <p className="mt-1 text-[10px] font-medium text-slate-500">Execution telemetry: unavailable</p> : null}
                       {job.domainEvidence?.quality && typeof job.domainEvidence.quality === "object" ? (
                         (() => {
                           const quality = job.domainEvidence.quality as { label?: string; details?: { limitedCoverageCount?: number } }
@@ -152,15 +145,7 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                       {job.schedulerStatus && job.schedulerStatus !== "unscheduled" ? (
                         <div className="mt-0.5 text-[10px] text-slate-400">
                           Scheduler:{" "}
-                          <span
-                            className={
-                              job.schedulerEvidence?.status === "live_verified"
-                                ? "font-bold text-emerald-400"
-                                : job.schedulerEvidence?.status === "config_only"
-                                  ? "font-bold text-sky-300"
-                                  : "font-bold text-amber-300"
-                            }
-                          >
+                          <span className={job.schedulerEvidence?.status === "live_verified" ? "font-bold text-emerald-400" : job.schedulerEvidence?.status === "config_only" ? "font-bold text-sky-300" : "font-bold text-amber-300"}>
                             {job.schedulerEvidence?.availability === "unavailable"
                               ? "EVIDENCE UNAVAILABLE"
                               : job.schedulerEvidence?.status === "config_only"
@@ -174,20 +159,8 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                     </td>
 
                     <td className="px-4 py-3.5">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badgeStyle}`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            job.status === "healthy"
-                              ? "bg-emerald-400"
-                              : job.status === "failing"
-                                ? "bg-rose-400"
-                                : job.status === "in_progress"
-                                  ? "bg-cyan-300"
-                                : "bg-amber-400"
-                          }`}
-                        />
+                      <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badgeStyle}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${job.status === "healthy" ? "bg-emerald-400" : job.status === "failing" ? "bg-rose-400" : job.status === "in_progress" ? "bg-cyan-300" : "bg-amber-400"}`} />
                         {job.status}
                       </span>
                     </td>
@@ -198,55 +171,31 @@ export function AdminJobsTable({ jobs }: AdminJobsTableProps) {
                           <div className="font-medium text-slate-200">{formatAdminTime(lastRunAt)}</div>
                           <div className="text-[10px] text-slate-400">{formatAdminDate(lastRunAt)}</div>
                         </div>
-                      ) : (
-                        "—"
-                      )}
+                      ) : "—"}
                     </td>
 
-                    <td className="px-4 py-3.5 font-mono text-slate-300">
-                      {formatAdminDuration(job.lastDurationMs)}
-                    </td>
+                    <td className="px-4 py-3.5 font-mono text-slate-300">{formatAdminDuration(job.lastDurationMs)}</td>
 
                     <td className="min-w-[150px] px-4 py-3.5">
                       {job.aiUsage ? (
-                        <div
-                          className="space-y-0.5"
-                          title={`${job.aiUsage.models.join(" · ")} | input ${job.aiUsage.inputTokens}, output ${job.aiUsage.outputTokens}, reasoning ${job.aiUsage.reasoningTokens}, cost ${formatEstimatedCost(job.aiUsage.estimatedCostUsd)}`}
-                        >
-                          <div className="font-mono font-semibold text-emerald-300">
-                            {formatAdminTokenCount(job.aiUsage.totalTokens)} tokens
-                          </div>
-                          <div className="text-[10px] text-slate-400">
-                            {job.aiUsage.models.map(formatAdminModelLabel).join(" · ") || "Model chưa ghi nhận"}
-                          </div>
-                          <div className="text-[9px] text-slate-500">
-                            {job.aiUsage.debates} debates · {formatDateKey(job.aiUsage.asOfDate)}
-                          </div>
+                        <div className="space-y-0.5" title={`${job.aiUsage.models.join(" · ")} | input ${job.aiUsage.inputTokens}, output ${job.aiUsage.outputTokens}, reasoning ${job.aiUsage.reasoningTokens}, cost ${formatEstimatedCost(job.aiUsage.estimatedCostUsd)}`}>
+                          <div className="font-mono font-semibold text-emerald-300">{formatAdminTokenCount(job.aiUsage.totalTokens)} tokens</div>
+                          <div className="text-[10px] text-slate-400">{job.aiUsage.models.map(formatAdminModelLabel).join(" · ") || "Model chưa ghi nhận"}</div>
+                          <div className="text-[9px] text-slate-500">{job.aiUsage.debates} {aiUsageUnit} · {formatDateKey(job.aiUsage.asOfDate)}</div>
+                          <div className="font-mono text-[9px] text-violet-300">{formatEstimatedCost(job.aiUsage.estimatedCostUsd)}</div>
                         </div>
-                      ) : (
-                        "—"
-                      )}
+                      ) : "—"}
                     </td>
 
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {isManualAllowed ? (
-                          <button
-                            type="button"
-                            onClick={() => setRunningJob(job)}
-                            className="flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25"
-                          >
+                          <button type="button" onClick={() => setRunningJob(job)} className="flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25">
                             <Play className="h-3 w-3" />
                             <span>Chạy</span>
                           </button>
                         ) : null}
-
-                        <Link
-                          href={`/admin/jobs/${job.key}`}
-                          prefetch={false}
-                          className="flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-xs text-slate-300 transition-colors hover:border-white/[0.15] hover:text-white"
-                          title="Xem lịch sử chạy"
-                        >
+                        <Link href={`/admin/jobs/${job.key}`} prefetch={false} className="flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-xs text-slate-300 transition-colors hover:border-white/[0.15] hover:text-white" title="Xem lịch sử chạy">
                           <ExternalLink className="h-3 w-3" />
                           <span>Chi tiết</span>
                         </Link>

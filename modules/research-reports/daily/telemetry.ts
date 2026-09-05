@@ -238,17 +238,33 @@ export async function failResearchReportsRunStep(input: {
   runId: string
   startedAt: string
   errorMessage: string
+  errorCode?: string
 }): Promise<void> {
   "use step"
   const db = await getTelemetryDb()
   const finishedAt = new Date().toISOString()
+  const errorCode = input.errorCode ?? "RESEARCH_REPORTS_DAILY_FAILED"
+  const errorMessage = input.errorMessage.slice(0, 800)
+
+  const running = await db.from("system_job_phases")
+    .update({ status: "failed", finished_at: finishedAt, error_code: errorCode, error_message: errorMessage })
+    .eq("run_id", input.runId)
+    .eq("status", "running")
+  if (running.error) throw new Error(`Research Reports running phase cleanup failed: ${running.error.message || "unknown"}`)
+
+  const queued = await db.from("system_job_phases")
+    .update({ status: "skipped", finished_at: finishedAt, error_code: errorCode, error_message: "Skipped because the parent workflow failed" })
+    .eq("run_id", input.runId)
+    .eq("status", "queued")
+  if (queued.error) throw new Error(`Research Reports queued phase cleanup failed: ${queued.error.message || "unknown"}`)
+
   const result = await db.from("system_job_runs").update({
     status: "failed",
     finished_at: finishedAt,
     duration_ms: durationMs(input.startedAt, finishedAt),
     summary: { stage: "FAILED" },
-    error_code: "RESEARCH_REPORTS_DAILY_FAILED",
-    error_message: input.errorMessage.slice(0, 800),
+    error_code: errorCode,
+    error_message: errorMessage,
   }).eq("id", input.runId)
   if (result.error) throw new Error(`Research Reports run telemetry failure update failed: ${result.error.message || "unknown"}`)
 }

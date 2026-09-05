@@ -128,10 +128,20 @@ export async function runJobAction(
     .map((ticker) => ticker.trim().toUpperCase())
     .filter(Boolean)
   const force = formData.get("force") === "true" || formData.get("force") === "on"
+  const fromDate = String(formData.get("fromDate") || "").trim() || undefined
+  const toDate = String(formData.get("toDate") || "").trim() || undefined
+  const rawMaxReports = String(formData.get("maxReports") || "").trim()
+  const maxReports = rawMaxReports ? Number(rawMaxReports) : undefined
 
   if (!key) {
     return { ok: false, error: "Key tác vụ không được để trống." }
   }
+
+  const params = key === "kfsp.ttai_history"
+    ? { tickers, force }
+    : key === "research_reports.backfill"
+      ? { fromDate, toDate, maxReports }
+      : undefined
 
   const requestId = crypto.randomUUID()
   const result = await dispatchManualAdminJob({
@@ -140,7 +150,7 @@ export async function runJobAction(
     reason,
     requestId,
     confirmed,
-    params: key === "kfsp.ttai_history" ? { tickers, force } : undefined,
+    params,
   })
 
   if (!result.ok) {
@@ -150,7 +160,9 @@ export async function runJobAction(
   revalidatePath("/admin")
   return {
     ok: true,
-    message: `Đã thực thi tác vụ ${key} thành công (${result.durationMs}ms).`,
+    message: result.summary?.queued === true
+      ? `Đã xếp hàng tác vụ ${key} (${result.durationMs}ms).`
+      : `Đã thực thi tác vụ ${key} thành công (${result.durationMs}ms).`,
     summary: result.summary,
   }
 }

@@ -1,4 +1,4 @@
-import { aggregateAiCouncilUsage, type AiCouncilLlmUsageRow } from "./job-ai-usage.ts"
+import { aggregateAiCouncilUsage, type AdminAiUsage, type AiCouncilLlmUsageRow } from "./job-ai-usage.ts"
 import { EFFECTIVE_ADMIN_JOB_CATALOG } from "./effective-job-catalog.ts"
 import { sanitizeAdminValue } from "./redact.ts"
 import { findScheduleConflicts, getScheduleConflictWarning } from "./job-schedule.ts"
@@ -51,6 +51,40 @@ function historyTimestamp(row: SystemJobRunRow) {
   const value = row.created_at || row.started_at
   const timestamp = new Date(value).getTime()
   return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY
+}
+
+function finiteSummaryNumber(value: unknown) {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function researchReportsAiUsage(summary: Record<string, unknown> | null | undefined, startedAt: string | null | undefined): AdminAiUsage | null {
+  if (!summary) return null
+  const aiRequestCount = Math.max(0, Math.floor(finiteSummaryNumber(summary.aiRequestCount)))
+  const inputTokens = finiteSummaryNumber(summary.inputTokens)
+  const outputTokens = finiteSummaryNumber(summary.outputTokens)
+  const totalTokens = finiteSummaryNumber(summary.totalTokens)
+  const cachedInputTokens = finiteSummaryNumber(summary.cachedInputTokens)
+  const reasoningTokens = finiteSummaryNumber(summary.reasoningTokens)
+  const estimatedCostUsd = finiteSummaryNumber(summary.estimatedCostUsd)
+  const models = Array.isArray(summary.aiModels)
+    ? [...new Set(summary.aiModels.map((value) => String(value || "").trim()).filter(Boolean))]
+    : []
+  if (aiRequestCount === 0 && totalTokens === 0 && estimatedCostUsd === 0 && models.length === 0) return null
+
+  const rawDate = typeof summary.runDate === "string" ? summary.runDate : startedAt?.slice(0, 10)
+  const asOfDate = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : "unknown"
+  return {
+    asOfDate,
+    debates: aiRequestCount,
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    cachedInputTokens,
+    reasoningTokens,
+    estimatedCostUsd: Number(estimatedCostUsd.toFixed(6)),
+    models,
+  }
 }
 
 export function mergeAdminJobHistory(
@@ -171,7 +205,11 @@ export function buildAdminJobViews(
     const conflictWarning = getScheduleConflictWarning(def.key, conflicts)
     const status = resolved.executionStatus
     const scanDate = typeof resolved.lastSummary?.scanDate === "string" ? resolved.lastSummary.scanDate : null
-    const aiUsage = def.key === "qeoindex.eod_pipeline" && scanDate ? aiUsageByDate[scanDate] ?? null : null
+    const aiUsage = def.key === "qeoindex.eod_pipeline" && scanDate
+      ? aiUsageByDate[scanDate] ?? null
+      : def.key === "research_reports.daily" || def.key === "research_reports.backfill"
+        ? researchReportsAiUsage(resolved.lastSummary, resolved.lastStartedAt)
+        : null
 
     counts[status] += 1
 
@@ -221,7 +259,7 @@ export function buildAdminJobViews(
     }
   })
 
-  return { jobs, counts, scheduler: rawEvidence.schedulerReconciliation?.aggregate ?? { expected: 7, liveVerified: 0, configOnly: 1, missing: 0, drifted: 0, duplicated: 0, unavailable: 6, extraUnmapped: 0, inventoryClean: false, expectedMappingsVerified: false } }
+  return { jobs, counts, scheduler: rawEvidence.schedulerReconciliation?.aggregate ?? { expected: 5, liveVerified: 0, configOnly: 1, missing: 0, drifted: 0, duplicated: 0, unavailable: 4, extraUnmapped: 0, inventoryClean: false, expectedMappingsVerified: false } }
 }
 
 export async function loadAdminJobsSnapshot(): Promise<{ jobs: AdminJobView[]; counts: AdminSystemOverview["jobCounts"]; scheduler: AdminSystemOverview["scheduler"] }> {

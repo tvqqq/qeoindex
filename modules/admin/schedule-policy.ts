@@ -5,11 +5,13 @@ export const ICT_TIMEZONE = "Asia/Ho_Chi_Minh" as const
 const DAILY_FIXED: Record<string, number> = {
   "kfsp.rating_daily": 420,
   "kfsp.ttai_history": 430,
+  "research_reports.daily": 425,
 }
 
 export function schedulePolicyForJobKey(key: string): SchedulePolicy | null {
   if (key === "qeoindex.eod_pipeline") return { kind: "fixed_time", timezone: ICT_TIMEZONE, cadence: "weekdays", minuteOfDay: 915, completionDeadlineMinuteOfDay: 1435, graceMinutes: 30 }
   if (key === "signals.daily") return { kind: "fixed_time", timezone: ICT_TIMEZONE, cadence: "weekdays", minuteOfDay: 420, completionDeadlineMinuteOfDay: 840, graceMinutes: 30 }
+  if (key === "research_reports.daily") return { kind: "fixed_time", timezone: ICT_TIMEZONE, cadence: "daily", minuteOfDay: DAILY_FIXED[key], graceMinutes: 30 }
   if (key === "kfsp.rating_daily" || key === "kfsp.ttai_history") return { kind: "fixed_time", timezone: ICT_TIMEZONE, cadence: "daily", minuteOfDay: DAILY_FIXED[key], graceMinutes: 30 }
   if (key === "market.sync_eod") return { kind: "fixed_time", timezone: ICT_TIMEZONE, cadence: "weekdays", minuteOfDay: 885, completionDeadlineMinuteOfDay: 900, graceMinutes: 15 }
   if (key === "market.sync_5m") return {

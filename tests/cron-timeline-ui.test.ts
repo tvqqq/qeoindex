@@ -11,7 +11,7 @@ function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
-test("buildCronTimelineModel separates v4 scheduled ownership, recovery, and retired maintenance", () => {
+test("buildCronTimelineModel separates v4 scheduled ownership, research automation, recovery, and retired maintenance", () => {
   const { jobs } = buildAdminJobViews(
     EFFECTIVE_ADMIN_JOB_CATALOG,
     [
@@ -34,6 +34,15 @@ test("buildCronTimelineModel separates v4 scheduled ownership, recovery, and ret
         lastStartedAt: "2026-09-03T08:15:00.000Z",
         lastFinishedAt: "2026-09-03T08:15:02.000Z",
       },
+      {
+        jobId: 21,
+        jobName: "research-reports-daily-0705-ict",
+        schedule: "5 0 * * *",
+        active: true,
+        lastStatus: "succeeded",
+        lastStartedAt: "2026-09-03T00:05:00.000Z",
+        lastFinishedAt: "2026-09-03T00:05:01.000Z",
+      },
     ],
   )
 
@@ -49,6 +58,12 @@ test("buildCronTimelineModel separates v4 scheduled ownership, recovery, and ret
   assert.ok(vercelJob)
   assert.equal(vercelJob.timeIctLabel, "07:00 ICT")
   assert.equal(vercelJob.daysLabel, "T2-T6")
+
+  const research = timeline.lanes[1].jobs.find((j) => j.key === "research_reports.daily")
+  assert.ok(research)
+  assert.equal(research.timeIctLabel, "07:05 ICT")
+  assert.equal(research.daysLabel, "Hàng ngày")
+  assert.equal(research.schedulerName, "research-reports-daily-0705-ict")
 
   const eodJob = timeline.lanes[1].jobs.find((j) => j.key === "qeoindex.eod_pipeline")
   assert.ok(eodJob)
@@ -73,13 +88,14 @@ test("buildCronTimelineModel separates v4 scheduled ownership, recovery, and ret
   assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "market.sync_eod"), false)
   assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "kfsp.rating_daily"), false)
   assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "kfsp.ttai_history"), false)
-  assert.equal(timeline.totalScheduled, 3, "signals + canonical EOD + intraday market sync")
+  assert.equal(timeline.totalScheduled, 4, "signals + research reports + canonical EOD + intraday market sync")
 
   const recoveryKeys = timeline.lanes[2].jobs.map((job) => job.key).sort()
   assert.deepEqual(recoveryKeys, [
     "kfsp.rating_daily",
     "kfsp.ttai_history",
     "market.sync_universe",
+    "research_reports.backfill",
     "scanner.run",
     "signals.monitor",
     "wyckoff.ingest",
@@ -98,6 +114,12 @@ test("buildCronTimelineModel separates v4 scheduled ownership, recovery, and ret
   assert.equal(recoveryTtai.schedulerName, undefined)
   assert.deepEqual(recoveryTtai.automatedParentKeys, ["qeoindex.eod_pipeline"])
 
+  const backfill = timeline.lanes[2].jobs.find((j) => j.key === "research_reports.backfill")
+  assert.ok(backfill)
+  assert.equal(backfill.manualPurpose, "recovery")
+  assert.equal(backfill.timeIctLabel, "Thủ công")
+  assert.equal(backfill.schedulerName, undefined)
+
   const disabledKeys = timeline.lanes[3].jobs.map((job) => job.key).sort()
   assert.deepEqual(disabledKeys, ["market.cache_invalidate", "market.sync_eod", "wyckoff.run"])
   const retiredMarketEod = timeline.lanes[3].jobs.find((job) => job.key === "market.sync_eod")
@@ -105,7 +127,7 @@ test("buildCronTimelineModel separates v4 scheduled ownership, recovery, and ret
   assert.equal(retiredMarketEod.displayType, "manual")
   assert.equal(retiredMarketEod.manualPolicy, "disabled")
   assert.deepEqual(retiredMarketEod.automatedParentKeys, ["qeoindex.eod_pipeline"])
-  assert.equal(timeline.totalManual, 6)
+  assert.equal(timeline.totalManual, 7)
 })
 
 test("manual recovery lane is backed by the dispatch allowlist, not manualPolicy alone", () => {

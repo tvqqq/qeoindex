@@ -12,11 +12,12 @@ function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
-test("only the 6 allowlisted jobs are manual-safe", () => {
+test("only the 7 allowlisted jobs are manual-safe", () => {
   assert.deepEqual([...ALLOWLISTED_MANUAL_JOB_KEYS].sort(), [
     "kfsp.rating_daily",
     "kfsp.ttai_history",
     "market.sync_universe",
+    "research_reports.backfill",
     "scanner.run",
     "signals.monitor",
     "wyckoff.ingest",
@@ -25,6 +26,7 @@ test("only the 6 allowlisted jobs are manual-safe", () => {
   assert.equal(isManualJobAllowed("kfsp.rating_daily"), true)
   assert.equal(isManualJobAllowed("kfsp.ttai_history"), true)
   assert.equal(isManualJobAllowed("market.sync_universe"), true)
+  assert.equal(isManualJobAllowed("research_reports.backfill"), true)
   assert.equal(isManualJobAllowed("scanner.run"), true)
   assert.equal(isManualJobAllowed("signals.monitor"), true)
   assert.equal(isManualJobAllowed("wyckoff.ingest"), true)
@@ -32,29 +34,34 @@ test("only the 6 allowlisted jobs are manual-safe", () => {
   assert.equal(isManualJobAllowed("ai_council.daily"), false)
   assert.equal(isManualJobAllowed("ai_council.debate_daily"), false)
   assert.equal(isManualJobAllowed("signals.daily"), false)
+  assert.equal(isManualJobAllowed("research_reports.daily"), false)
   assert.equal(isManualJobAllowed("arbitrary.job"), false)
 })
 
-test("getManualJobCapabilities returns metadata for the 6 manual-safe jobs", () => {
+test("getManualJobCapabilities returns metadata for the 7 manual-safe jobs", () => {
   const capabilities = getManualJobCapabilities()
-  assert.equal(capabilities.length, 6)
+  assert.equal(capabilities.length, 7)
   const keys = capabilities.map((c) => c.key).sort()
   assert.deepEqual(keys, [
     "kfsp.rating_daily",
     "kfsp.ttai_history",
     "market.sync_universe",
+    "research_reports.backfill",
     "scanner.run",
     "signals.monitor",
     "wyckoff.ingest",
   ])
   const rating = capabilities.find((c) => c.key === "kfsp.rating_daily")
   const ttai = capabilities.find((c) => c.key === "kfsp.ttai_history")
+  const reports = capabilities.find((c) => c.key === "research_reports.backfill")
   assert.equal(rating?.manualPolicy, "confirm")
   assert.equal(rating?.manualPurpose, "recovery")
   assert.deepEqual(rating?.automatedParentKeys, ["qeoindex.eod_pipeline"])
   assert.equal(ttai?.manualPolicy, "confirm")
   assert.equal(ttai?.manualPurpose, "recovery")
   assert.deepEqual(ttai?.automatedParentKeys, ["qeoindex.eod_pipeline"])
+  assert.equal(reports?.manualPolicy, "confirm")
+  assert.equal(reports?.manualPurpose, "recovery")
 })
 
 test("KFSP manual recovery is confirmation-gated and wired to the one-shot RPC", () => {

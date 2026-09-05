@@ -27,6 +27,9 @@ export interface ManualJobParams {
   offset?: number
   tickers?: string[]
   force?: boolean
+  fromDate?: string
+  toDate?: string
+  maxReports?: number
 }
 
 export interface DispatchManualAdminJobInput {
@@ -48,6 +51,9 @@ export interface AdminJobExecutionResult {
 }
 
 const TICKER_PATTERN = /^[A-Z0-9]{2,12}$/
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const RESEARCH_BACKFILL_MAX_DAYS = 90
+const RESEARCH_BACKFILL_MAX_REPORTS = 100
 
 function getManualAdminJobDefinition(key: string) {
   return getEffectiveAdminJobDefinition(key) ?? getAdminJobDefinition(key)
@@ -180,6 +186,94 @@ async function runKfspRecoveryDispatch(input: DispatchManualAdminJobInput): Prom
   }
 }
 
+function parseResearchBackfillDate(value: unknown, name: string): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined
+  const text = String(value).trim()
+  if (!ISO_DATE_PATTERN.test(text)) throw new Error(`${name} phải có định dạng YYYY-MM-DD.`)
+  const date = new Date(`${text}T00:00:00.000Z`)
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text) {
+    throw new Error(`${name} không phải ngày hợp lệ.`)
+  }
+  return text
+}
+
+function normalizeResearchBackfillParams(params?: ManualJobParams) {
+  const fromDate = parseResearchBackfillDate(params?.fromDate, "fromDate")
+  const toDate = parseResearchBackfillDate(params?.toDate, "toDate")
+  if (Boolean(fromDate) !== Boolean(toDate)) {
+    throw new Error("Research Reports backfill cần cả fromDate và toDate khi dùng khoảng ngày.")
+  }
+  if (fromDate && toDate) {
+    const from = new Date(`${fromDate}T00:00:00.000Z`).getTime()
+    const to = new Date(`${toDate}T00:00:00.000Z`).getTime()
+    if (from > to) throw new Error("toDate phải bằng hoặc sau fromDate.")
+    const days = Math.floor((to - from) / 86_400_000) + 1
+    if (days > RESEARCH_BACKFILL_MAX_DAYS) {
+      throw new Error(`Research Reports backfill tối đa ${RESEARCH_BACKFILL_MAX_DAYS} ngày.`)
+    }
+  }
+
+  const rawMaxReports = params?.maxReports ?? 20
+  const maxReports = Number(rawMaxReports)
+  if (!Number.isInteger(maxReports) || maxReports < 1 || maxReports > RESEARCH_BACKFILL_MAX_REPORTS) {
+    throw new Error(`maxReports phải là số nguyên từ 1 đến ${RESEARCH_BACKFILL_MAX_REPORTS}.`)
+  }
+  return { fromDate, toDate, maxReports }
+}
+
+async function runResearchReportsBackfillDispatch(input: DispatchManualAdminJobInput): Promise<Record<string, unknown>> {
+  const params = normalizeResearchBackfillParams(input.params)
+  const { start } = await import("workflow/api")
+  const { researchReportsBackfillWorkflow } = await import("../../workflows/research-reports-backfill-workflow.ts")
+  const startedAt = new Date().toISOString()
+  const workflow = await start(researchReportsBackfillWorkflow, [{
+    startedAt,
+    actorUserId: input.actorUserId,
+    ...params,
+  }])
+
+  return {
+    ok: true,
+    queued: true,
+    workflowRunId: workflow.runId,
+    requestId: input.requestId,
+    startedAt,
+    fromDate: params.fromDate ?? null,
+    toDate: params.toDate ?? null,
+    maxReports: params.maxReports,
+  }
+}
+
+async function auditDispatchResult(input: DispatchManualAdminJobInput, reason: string, result: Record<string, unknown>) {
+  const sanitizedSummary = sanitizeAdminValue(result) as Record<string, unknown>
+  await writeAuditLog({
+    actorUserId: input.actorUserId,
+    action: "job.run",
+    targetType: "job",
+    targetKey: input.key,
+    reason,
+    requestId: input.requestId,
+    success: true,
+    afterValue: sanitizedSummary,
+  })
+  return sanitizedSummary
+}
+
+async function auditDispatchFailure(input: DispatchManualAdminJobInput, reason: string, error: unknown) {
+  const errorMessage = error instanceof Error ? error.message : String(error)
+  await writeAuditLog({
+    actorUserId: input.actorUserId,
+    action: "job.run",
+    targetType: "job",
+    targetKey: input.key,
+    reason,
+    requestId: input.requestId,
+    success: false,
+    errorMessage,
+  })
+  return errorMessage
+}
+
 export async function dispatchManualAdminJob(input: DispatchManualAdminJobInput): Promise<AdminJobExecutionResult> {
   const startTime = Date.now()
 
@@ -211,20 +305,7 @@ export async function dispatchManualAdminJob(input: DispatchManualAdminJobInput)
 
   if (input.key === "kfsp.rating_daily" || input.key === "kfsp.ttai_history") {
     try {
-      const result = await runKfspRecoveryDispatch(input)
-      const sanitizedSummary = sanitizeAdminValue(result) as Record<string, unknown>
-
-      await writeAuditLog({
-        actorUserId: input.actorUserId,
-        action: "job.run",
-        targetType: "job",
-        targetKey: input.key,
-        reason: validReason,
-        requestId: input.requestId,
-        success: true,
-        afterValue: sanitizedSummary,
-      })
-
+      const sanitizedSummary = await auditDispatchResult(input, validReason, await runKfspRecoveryDispatch(input))
       return {
         ok: true,
         jobKey: input.key,
@@ -233,24 +314,24 @@ export async function dispatchManualAdminJob(input: DispatchManualAdminJobInput)
         summary: sanitizedSummary,
       }
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      await writeAuditLog({
-        actorUserId: input.actorUserId,
-        action: "job.run",
-        targetType: "job",
-        targetKey: input.key,
-        reason: validReason,
-        requestId: input.requestId,
-        success: false,
-        errorMessage,
-      })
+      const errorMessage = await auditDispatchFailure(input, validReason, error)
+      return { ok: false, jobKey: input.key, runId: null, durationMs: Date.now() - startTime, error: errorMessage }
+    }
+  }
+
+  if (input.key === "research_reports.backfill") {
+    try {
+      const sanitizedSummary = await auditDispatchResult(input, validReason, await runResearchReportsBackfillDispatch(input))
       return {
-        ok: false,
+        ok: true,
         jobKey: input.key,
-        runId: null,
+        runId: String(sanitizedSummary.workflowRunId ?? input.requestId),
         durationMs: Date.now() - startTime,
-        error: errorMessage,
+        summary: sanitizedSummary,
       }
+    } catch (error: unknown) {
+      const errorMessage = await auditDispatchFailure(input, validReason, error)
+      return { ok: false, jobKey: input.key, runId: null, durationMs: Date.now() - startTime, error: errorMessage }
     }
   }
 

@@ -5,6 +5,7 @@ export const ALLOWLISTED_MANUAL_JOB_KEYS = [
   "wyckoff.ingest",
   "kfsp.rating_daily",
   "kfsp.ttai_history",
+  "research_reports.backfill",
 ] as const
 
 export type AllowlistedManualJobKey = (typeof ALLOWLISTED_MANUAL_JOB_KEYS)[number]

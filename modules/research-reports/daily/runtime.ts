@@ -13,18 +13,20 @@ import {
 
 export const DAILY_PAGE_SIZE = 15
 export const DAILY_MAX_PAGES = 8
+export const BACKFILL_MAX_PAGES = 20
 export const DAILY_MAX_REPORTS = 20
+export const BACKFILL_MAX_REPORTS = 100
+export const BACKFILL_MAX_DAYS = 90
 export const DAILY_RECENT_RESCAN_DAYS = 30
 export const RESEARCH_REPORT_MAX_AI_REQUESTS = 20
 export const RESEARCH_REPORT_MAX_AI_COST_USD = 1
+export const REPORT_PROCESSING_MAX_ATTEMPTS = 3
 
 interface DbError { message?: string }
 interface DbResult { data: unknown; error: DbError | null }
 interface DbQuery extends PromiseLike<DbResult> {
   select(columns: string): DbQuery
   eq(column: string, value: unknown): DbQuery
-  gte(column: string, value: unknown): DbQuery
-  lte(column: string, value: unknown): DbQuery
   in(column: string, values: readonly unknown[]): DbQuery
   order(column: string, options?: { ascending?: boolean }): DbQuery
   limit(value: number): DbQuery
@@ -73,9 +75,13 @@ export interface ProcessResearchReportRunStepResult {
   usage: ResearchReportAttemptUsage
 }
 
-function assertIsoDate(value: string, name: string) {
+function parseIsoDate(value: string, name: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`${name} must be YYYY-MM-DD`)
-  return value
+  const date = new Date(`${value}T00:00:00.000Z`)
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+    throw new Error(`${name} must be a valid calendar date`)
+  }
+  return date
 }
 
 function isoDateDaysBefore(isoTimestamp: string, days: number) {
@@ -83,6 +89,20 @@ function isoDateDaysBefore(isoTimestamp: string, days: number) {
   if (Number.isNaN(date.getTime())) throw new Error("Research Reports workflow start time is invalid")
   date.setUTCDate(date.getUTCDate() - days)
   return date.toISOString().slice(0, 10)
+}
+
+function validateBackfillRange(fromDate?: string, toDate?: string) {
+  if (Boolean(fromDate) !== Boolean(toDate)) {
+    throw new Error("Research Reports backfill requires both fromDate and toDate when a date range is provided")
+  }
+  if (!fromDate || !toDate) return
+  const from = parseIsoDate(fromDate, "fromDate")
+  const to = parseIsoDate(toDate, "toDate")
+  if (from.getTime() > to.getTime()) throw new Error("Research Reports toDate must be on or after fromDate")
+  const spanDays = Math.floor((to.getTime() - from.getTime()) / 86_400_000) + 1
+  if (spanDays > BACKFILL_MAX_DAYS) {
+    throw new Error(`Research Reports backfill range cannot exceed ${BACKFILL_MAX_DAYS} days`)
+  }
 }
 
 async function getResearchReportsDb(): Promise<ResearchReportsDb> {
@@ -103,55 +123,38 @@ function safeDbError(prefix: string, error: DbError | null) {
 
 function reportFingerprint(report: ResearchReportSourceRecord) {
   return JSON.stringify([
-    report.publishDate,
-    report.title,
-    report.sourceName,
-    report.originalTypeReport,
-    report.category,
-    report.sectorName,
-    report.recommendation,
-    report.targetPrice,
-    report.code,
-    report.link,
-    report.pdfUrl,
+    report.publishDate, report.title, report.sourceName, report.originalTypeReport, report.category,
+    report.sectorName, report.recommendation, report.targetPrice, report.code, report.link, report.pdfUrl,
   ])
 }
 
 function rowFingerprint(row: ExistingReportRow) {
   return JSON.stringify([
-    row.publish_date,
-    row.title,
-    row.source_name,
-    row.original_type_report,
-    row.category,
-    row.sector_name,
-    row.recommendation,
-    row.target_price,
-    row.code,
-    row.link,
-    row.pdf_url,
+    row.publish_date, row.title, row.source_name, row.original_type_report, row.category,
+    row.sector_name, row.recommendation, row.target_price, row.code, row.link, row.pdf_url,
   ])
 }
 
 function emptyUsage(): ResearchReportAttemptUsage {
   return {
-    attemptedModels: [],
-    aiRequestCount: 0,
-    inputTokens: 0,
-    cachedInputTokens: 0,
-    cacheWriteTokens: 0,
-    outputTokens: 0,
-    reasoningTokens: 0,
-    totalTokens: 0,
-    unknownUsageAttempts: 0,
-    estimatedCostUsd: 0,
-    pricingVersion: "",
+    attemptedModels: [], aiRequestCount: 0, inputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0,
+    outputTokens: 0, reasoningTokens: 0, totalTokens: 0, unknownUsageAttempts: 0,
+    estimatedCostUsd: 0, pricingVersion: "",
   }
 }
 
 function classifyOutcome(result: ProcessResearchReportResult, budget: ResearchReportAiBudgetSnapshot): ResearchReportRunItemEvidence["outcome"] {
   if (result.status === "failed" && budget.budgetExhausted) return "deferred_budget"
   return result.status
+}
+
+export function isRetryableResearchReportFailure(result: ProcessResearchReportResult) {
+  if (result.status !== "failed") return false
+  return /\b(408|429|5\d\d)\b|timeout|timed out|AbortError|transport|fetch failed|network|ECONNRESET|ENETUNREACH|EAI_AGAIN/i.test(result.detail)
+}
+
+async function retryDelay(attempt: number) {
+  await new Promise<void>((resolve) => setTimeout(resolve, Math.min(2_000, 350 * 2 ** Math.max(0, attempt - 1))))
 }
 
 export async function prepareResearchReportsRunStep(input: {
@@ -165,24 +168,26 @@ export async function prepareResearchReportsRunStep(input: {
   "use step"
   const db = await getResearchReportsDb()
   const mode = input.mode ?? "daily"
+  if (mode === "backfill") validateBackfillRange(input.fromDate, input.toDate)
+
+  const hardMaxReports = mode === "backfill" ? BACKFILL_MAX_REPORTS : DAILY_MAX_REPORTS
   const maxReports = input.maxReports ?? DAILY_MAX_REPORTS
-  if (!Number.isInteger(maxReports) || maxReports < 1 || maxReports > DAILY_MAX_REPORTS) {
-    throw new Error(`Research Reports maxReports must be between 1 and ${DAILY_MAX_REPORTS}`)
+  if (!Number.isInteger(maxReports) || maxReports < 1 || maxReports > hardMaxReports) {
+    throw new Error(`Research Reports maxReports must be between 1 and ${hardMaxReports}`)
   }
 
-  const recentPublishDateFloor = mode === "backfill" && input.fromDate
-    ? assertIsoDate(input.fromDate, "fromDate")
+  const recentPublishDateFloor = mode === "backfill"
+    ? input.fromDate ?? isoDateDaysBefore(input.startedAt, BACKFILL_MAX_DAYS)
     : isoDateDaysBefore(input.startedAt, DAILY_RECENT_RESCAN_DAYS)
-  const toDate = input.toDate ? assertIsoDate(input.toDate, "toDate") : null
-  if (toDate && toDate < recentPublishDateFloor) throw new Error("Research Reports toDate must be on or after fromDate")
+  const toDate = mode === "backfill" ? input.toDate : undefined
+  const maxPages = mode === "backfill" ? BACKFILL_MAX_PAGES : DAILY_MAX_PAGES
 
   await updateResearchReportsPhaseStep({ runId: input.runId, phase: "DISCOVER", status: "running" })
-
   const knownResult = await db.from("market_research_reports")
     .select("id,provider,external_report_id,publish_date,title,source_name,original_type_report,category,sector_name,recommendation,target_price,code,link,pdf_url,ingestion_status,analysis_status")
     .eq("provider", "topi")
     .order("publish_date", { ascending: false })
-    .limit(500)
+    .limit(1000)
   safeDbError("Research Reports known metadata lookup failed", knownResult.error)
   const existingRows = rowsFrom(knownResult.data)
   const knownExternalReportIds = new Set(existingRows.map((row) => row.external_report_id))
@@ -191,10 +196,11 @@ export async function prepareResearchReportsRunStep(input: {
   const discovery = await discoverTopiReports({
     knownExternalReportIds,
     recentPublishDateFloor,
+    fromDate: mode === "backfill" ? input.fromDate : undefined,
+    toDate: mode === "backfill" ? input.toDate : undefined,
     pageSize: DAILY_PAGE_SIZE,
-    maxPages: DAILY_MAX_PAGES,
+    maxPages,
   })
-
   const scopedReports = discovery.reports.filter((report) =>
     report.publishDate >= recentPublishDateFloor && (!toDate || report.publishDate <= toDate))
 
@@ -208,15 +214,13 @@ export async function prepareResearchReportsRunStep(input: {
       boundaryReason: discovery.boundaryReason,
       hitSafetyLimit: discovery.reachedSafetyLimit,
       recentPublishDateFloor,
-      toDate,
+      toDate: toDate ?? null,
+      maxPages,
     },
   })
 
   await updateResearchReportsPhaseStep({ runId: input.runId, phase: "UPSERT_METADATA", status: "running" })
-  await upsertResearchReports(
-    db as unknown as Parameters<typeof upsertResearchReports>[0],
-    scopedReports,
-  )
+  await upsertResearchReports(db as unknown as Parameters<typeof upsertResearchReports>[0], scopedReports)
 
   let newCount = 0
   let changedCount = 0
@@ -235,7 +239,7 @@ export async function prepareResearchReportsRunStep(input: {
       .select("id,provider,external_report_id,publish_date,title,source_name,original_type_report,category,sector_name,recommendation,target_price,code,link,pdf_url,ingestion_status,analysis_status")
       .eq("provider", "topi")
       .in("external_report_id", externalIds)
-      .limit(120)
+      .limit(BACKFILL_MAX_PAGES * DAILY_PAGE_SIZE)
     safeDbError("Research Reports persisted metadata lookup failed", persistedResult.error)
     persistedRows = rowsFrom(persistedResult.data)
   }
@@ -244,13 +248,7 @@ export async function prepareResearchReportsRunStep(input: {
   const allCandidates = scopedReports.flatMap<ResearchReportWorkflowCandidate>((report) => {
     const persisted = persistedByExternalId.get(report.externalReportId)
     if (!persisted) return []
-    return [{
-      id: persisted.id,
-      provider: "topi",
-      externalReportId: persisted.external_report_id,
-      publishDate: persisted.publish_date,
-      pdfUrl: persisted.pdf_url,
-    }]
+    return [{ id: persisted.id, provider: "topi", externalReportId: persisted.external_report_id, publishDate: persisted.publish_date, pdfUrl: persisted.pdf_url }]
   })
   const candidates = allCandidates.slice(0, maxReports)
   const deferredReportLimit = Math.max(0, allCandidates.length - candidates.length)
@@ -259,27 +257,13 @@ export async function prepareResearchReportsRunStep(input: {
     runId: input.runId,
     phase: "UPSERT_METADATA",
     status: "succeeded",
-    summary: {
-      upserted: scopedReports.length,
-      newCount,
-      changedCount,
-      unchangedCount,
-      candidates: candidates.length,
-      deferredReportLimit,
-    },
+    summary: { upserted: scopedReports.length, newCount, changedCount, unchangedCount, candidates: candidates.length, deferredReportLimit },
   })
 
   return {
-    candidates,
-    discovered: scopedReports.length,
-    newCount,
-    changedCount,
-    unchangedCount,
-    deferredReportLimit,
-    pagesFetched: discovery.pagesFetched,
-    boundaryReason: discovery.boundaryReason,
-    hitDiscoverySafetyLimit: discovery.reachedSafetyLimit,
-    recentPublishDateFloor,
+    candidates, discovered: scopedReports.length, newCount, changedCount, unchangedCount,
+    deferredReportLimit, pagesFetched: discovery.pagesFetched, boundaryReason: discovery.boundaryReason,
+    hitDiscoverySafetyLimit: discovery.reachedSafetyLimit, recentPublishDateFloor,
   }
 }
 
@@ -299,11 +283,18 @@ export async function processResearchReportRunStep(input: {
   })
   const usage = emptyUsage()
 
-  const result = await processResearchReport(
-    db as unknown as Parameters<typeof processResearchReport>[0],
-    { id: input.candidate.id, pdfUrl: input.candidate.pdfUrl },
-    { runId: input.runId, aiBudget: budget, requestUsage: usage },
-  )
+  let result: ProcessResearchReportResult | null = null
+  for (let attempt = 1; attempt <= REPORT_PROCESSING_MAX_ATTEMPTS; attempt += 1) {
+    result = await processResearchReport(
+      db as unknown as Parameters<typeof processResearchReport>[0],
+      { id: input.candidate.id, pdfUrl: input.candidate.pdfUrl },
+      { runId: input.runId, aiBudget: budget, requestUsage: usage },
+    )
+    if (!isRetryableResearchReportFailure(result) || budget.snapshot().budgetExhausted || attempt === REPORT_PROCESSING_MAX_ATTEMPTS) break
+    await retryDelay(attempt)
+  }
+  if (!result) throw new Error("Research report processing did not produce a result")
+
   const nextBudgetSnapshot = budget.snapshot()
   const outcome = classifyOutcome(result, nextBudgetSnapshot)
   const finishedAt = new Date().toISOString()
@@ -314,7 +305,7 @@ export async function processResearchReportRunStep(input: {
     candidate: input.candidate,
     contentHash: result.contentHash,
     outcome,
-    terminalStage: result.status === "ready" ? "PUBLISH" : result.aiCalled ? "AI_ANALYZE" : "FETCH_PARSE",
+    terminalStage: result.status === "ready" ? "PUBLISH" : usage.aiRequestCount > 0 || result.aiCalled ? "AI_ANALYZE" : "FETCH_PARSE",
     errorCode: outcome === "deferred_budget" ? nextBudgetSnapshot.budgetReason : result.status === "failed" ? "REPORT_PROCESSING_FAILED" : null,
     errorMessage: result.status === "failed" ? result.detail : null,
     usage,
@@ -335,17 +326,10 @@ export async function deferResearchReportRunStep(input: {
   "use step"
   const now = new Date().toISOString()
   await persistResearchReportRunItemStep({
-    runId: input.runId,
-    jobKey: input.jobKey,
-    candidate: input.candidate,
-    contentHash: null,
-    outcome: input.outcome,
-    terminalStage: "FINALIZE",
+    runId: input.runId, jobKey: input.jobKey, candidate: input.candidate, contentHash: null,
+    outcome: input.outcome, terminalStage: "FINALIZE",
     errorCode: input.outcome === "deferred_budget" ? input.budgetSnapshot.budgetReason : "REPORT_LIMIT",
-    errorMessage: null,
-    usage: emptyUsage(),
-    startedAt: now,
-    finishedAt: now,
+    errorMessage: null, usage: emptyUsage(), startedAt: now, finishedAt: now,
   })
 }
 
