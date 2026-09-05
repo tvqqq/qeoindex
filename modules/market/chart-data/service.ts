@@ -109,7 +109,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
 
   let normalized = normalizeCanonicalBars(tagged)
   const nowSeconds = Math.floor((deps.now ?? new Date()).getTime() / 1000)
-  const effectiveTo = Math.min(request.to, nowSeconds - 60)
+  const effectiveTo = Math.min(request.to, nowSeconds)
   const requestedRange = { from: request.from, to: effectiveTo }
   const coveredRanges = coverageRead.status === "fulfilled" ? coverageRead.value : []
   const uncoveredRanges = normalized.bars.length === 0
