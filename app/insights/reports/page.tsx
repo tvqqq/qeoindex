@@ -225,7 +225,7 @@ export default async function ResearchReportsCatalogPage({
               <p className="mt-1 text-xs text-slate-500">Thử đổi danh mục, từ khóa, nguồn hoặc khoảng ngày.</p>
             </div>
           ) : (
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {catalog.items.map((item) => {
                 const status = statusView(item)
                 const target = targetPriceLabel(item.targetPrice)
