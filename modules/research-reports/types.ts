@@ -20,10 +20,19 @@ export interface ResearchReportSourceRecord {
   sourcePayload: Record<string, unknown>
 }
 
+export type ResearchReportDiscoveryBoundaryReason =
+  | "known_id"
+  | "known_old_page"
+  | "short_page"
+  | "empty_page"
+  | "max_pages"
+
 export interface ResearchReportDiscoveryResult {
   reports: ResearchReportSourceRecord[]
   pagesFetched: number
   stoppedAtKnownBoundary: boolean
+  boundaryReason: ResearchReportDiscoveryBoundaryReason
+  reachedSafetyLimit: boolean
 }
 
 export interface ResearchReportUpsertResult {
