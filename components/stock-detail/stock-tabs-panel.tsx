@@ -576,7 +576,7 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
               className={cn(
                 "flex items-center gap-2 border-b-2 px-3 sm:px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap",
                 active
-                  ? "border-cyan-400 bg-cyan-400/[0.04] text-cyan-300"
+                  ? "border-slate-200 text-slate-100 font-bold bg-white/[0.04]"
                   : "border-transparent text-slate-400 hover:text-slate-200"
               )}
             >
@@ -589,77 +589,77 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
 
       {/* TAB PANELS BODY */}
       <div className="p-4 sm:p-5">
-        {/* ========================================================================= */}
+        {/* ========================================================= */}
         {/* TAB 1: TỔNG QUAN                                                         */}
-        {/* ========================================================================= */}
+        {/* ========================================================= */}
         {topTab === "overview" && (
           <section id="rating-panel-overview" role="tabpanel" aria-labelledby="rating-tab-overview" className="space-y-4">
             {/* Top 4 Summary Cards */}
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-xl border border-violet-300/20 bg-violet-400/[0.07] p-4">
-                <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-violet-200/70">
+              <div className="rounded-xl border border-white/[0.08] bg-[#09111a] p-4">
+                <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
                   <span>Qeo composite</span>
-                  <Sparkles className="size-4" />
+                  <Sparkles className="size-4 text-slate-400" />
                 </div>
-                <div className="mt-3 font-mono text-3xl font-black text-violet-200">
+                <div className="mt-3 font-mono text-3xl font-black text-slate-100">
                   {row.ratingScore}
-                  <span className="text-base text-violet-200/50">/100</span>
+                  <span className="text-base text-slate-500">/100</span>
                 </div>
-                <div className="mt-2 text-sm font-bold text-white">{ratingModel.state}</div>
+                <div className="mt-2 text-sm font-bold text-slate-200">{ratingModel.state}</div>
               </div>
 
-              <div className="rounded-xl border border-emerald-300/20 bg-emerald-400/[0.07] p-4">
-                <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-emerald-200/70">
+              <div className="rounded-xl border border-white/[0.08] bg-[#09111a] p-4">
+                <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
                   <span>CANSLIM / 4M</span>
-                  <Target className="size-4" />
+                  <Target className="size-4 text-slate-400" />
                 </div>
                 <div className="mt-3 flex items-end gap-3">
-                  <span className="font-mono text-2xl font-black text-emerald-300">{row.canslimScore}</span>
-                  <span className="pb-1 text-muted-2">/</span>
-                  <span className="font-mono text-2xl font-black text-amber-300">{row.score4m}</span>
+                  <span className="font-mono text-2xl font-black text-emerald-400">{row.canslimScore}</span>
+                  <span className="pb-1 text-slate-500">/</span>
+                  <span className="font-mono text-2xl font-black text-slate-200">{row.score4m}</span>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   {row.canslimScore == null ? (
-                    <span className="text-xs text-muted-2">CANSLIM —</span>
+                    <span className="text-xs text-slate-500">CANSLIM —</span>
                   ) : (
-                    <AnimatedProgressBar value={row.canslimScore} color="#6ee7b7" />
+                    <AnimatedProgressBar value={row.canslimScore} color="#10b981" />
                   )}
                   {row.score4m == null ? (
-                    <span className="text-xs text-muted-2">4M —</span>
+                    <span className="text-xs text-slate-500">4M —</span>
                   ) : (
-                    <AnimatedProgressBar value={row.score4m} color="#fcd34d" />
+                    <AnimatedProgressBar value={row.score4m} color="#94a3b8" />
                   )}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-cyan-300/20 bg-cyan-400/[0.07] p-4">
-                <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-cyan-200/70">
+              <div className="rounded-xl border border-white/[0.08] bg-[#09111a] p-4">
+                <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
                   <span>RS Momentum</span>
-                  <Zap className="size-4" />
+                  <Zap className="size-4 text-slate-400" />
                 </div>
-                <div className="mt-3 font-mono text-2xl font-black text-cyan-200">
+                <div className="mt-3 font-mono text-2xl font-black text-slate-100">
                   {row.rsShort ?? "—"}
-                  <span className="text-base text-cyan-200/45"> · {row.rsMedium ?? "—"}</span>
+                  <span className="text-base text-slate-500"> · {row.rsMedium ?? "—"}</span>
                 </div>
-                <div className="mt-2 flex gap-3 text-xs font-bold text-muted-2">
+                <div className="mt-2 flex gap-3 text-xs font-bold text-slate-400">
                   <span>
-                    7D <b className={(deltaRs7d ?? 0) >= 0 ? "text-up" : "text-down"}>{deltaRs7d == null ? "—" : `${deltaRs7d >= 0 ? "+" : ""}${deltaRs7d}`}</b>
+                    7D <b className={(deltaRs7d ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"}>{deltaRs7d == null ? "—" : `${deltaRs7d >= 0 ? "+" : ""}${deltaRs7d}`}</b>
                   </span>
                   <span>
-                    30D <b className={(deltaRs30d ?? 0) >= 0 ? "text-up" : "text-down"}>{deltaRs30d == null ? "—" : `${deltaRs30d >= 0 ? "+" : ""}${deltaRs30d}`}</b>
+                    30D <b className={(deltaRs30d ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"}>{deltaRs30d == null ? "—" : `${deltaRs30d >= 0 ? "+" : ""}${deltaRs30d}`}</b>
                   </span>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-amber-300/20 bg-amber-400/[0.06] p-4">
-                <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-amber-200/70">
+              <div className="rounded-xl border border-white/[0.08] bg-[#09111a] p-4">
+                <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
                   <span>Market state</span>
-                  <Radar className="size-4" />
+                  <Radar className="size-4 text-slate-400" />
                 </div>
-                <div className="mt-3 text-xl font-black text-white">{row.stockRrgState || "—"}</div>
-                <div className="mt-2 flex flex-wrap gap-3 text-xs font-bold text-muted-2">
-                  <span>RSI <b className="text-white">{rsi ?? "—"}</b></span>
-                  <span>Beta <b className="text-white">{row.beta ?? metricDisplay("beta")}</b></span>
+                <div className="mt-3 text-xl font-bold text-slate-100">{row.stockRrgState || "—"}</div>
+                <div className="mt-2 flex flex-wrap gap-3 text-xs font-bold text-slate-400">
+                  <span>RSI <b className="text-slate-200">{rsi ?? "—"}</b></span>
+                  <span>Beta <b className="text-slate-200">{row.beta ?? metricDisplay("beta")}</b></span>
                   <span>{smaAboveCount}/5 SMA phía trên</span>
                 </div>
               </div>
@@ -1363,11 +1363,11 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
                       className={cn(
                         "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
                         isActive
-                          ? "bg-cyan-500/20 text-cyan-200 border border-cyan-400/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
-                          : "text-slate-400 hover:text-white hover:bg-white/[0.04] border border-transparent",
+                          ? "bg-white/15 text-slate-100 border border-white/25 font-bold"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent",
                       )}
                     >
-                      <Icon className={cn("size-3.5", isActive ? "text-cyan-400" : "text-slate-500")} />
+                      <Icon className={cn("size-3.5", isActive ? "text-slate-100" : "text-slate-500")} />
                       <span>{st.label}</span>
                     </button>
                   )
@@ -1375,7 +1375,7 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
               </div>
               <div className="hidden sm:flex items-center gap-2 font-mono text-[11px] text-slate-400">
                 <span>Consensus Engine:</span>
-                <span className="font-bold text-cyan-300">v1.4</span>
+                <span className="font-bold text-slate-200">v1.4</span>
               </div>
             </div>
 
@@ -1384,27 +1384,34 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
               <div className="space-y-4">
                 {/* Action Banner Strip */}
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.04] p-3">
+                  <div className="rounded-xl border border-white/[0.08] bg-[#09111a] p-3">
                     <div className="text-[10px] font-mono uppercase text-slate-400">Khuyến nghị Hội đồng</div>
-                    <div className="mt-1 font-ticker text-base font-black text-cyan-300">
+                    <div className={cn(
+                      "mt-1 font-ticker text-base font-black",
+                      (aiStock?.signal === "BUY" || scan?.taBias === "Bullish")
+                        ? "text-emerald-400"
+                        : (aiStock?.signal === "SELL" || aiStock?.signal === "REDUCE" || scan?.taBias === "Bearish")
+                        ? "text-rose-400"
+                        : "text-slate-200"
+                    )}>
                       {aiStock?.signal || scan?.taBias || "BUY"}
                     </div>
                   </div>
-                  <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.04] p-3">
+                  <div className="rounded-xl border border-white/[0.08] bg-[#09111a] p-3">
                     <div className="text-[10px] font-mono uppercase text-slate-400">Đồng thuận Hội đồng</div>
-                    <div className="mt-1 font-mono text-base font-bold text-emerald-300">
+                    <div className="mt-1 font-mono text-base font-bold text-emerald-400">
                       {aiStock?.consensus || 80}%
                     </div>
                   </div>
-                  <div className="rounded-xl border border-purple-400/20 bg-purple-400/[0.04] p-3">
+                  <div className="rounded-xl border border-white/[0.08] bg-[#09111a] p-3">
                     <div className="text-[10px] font-mono uppercase text-slate-400">Độ tin cậy (Confidence)</div>
-                    <div className="mt-1 font-mono text-base font-bold text-purple-300">
+                    <div className="mt-1 font-mono text-base font-bold text-slate-200">
                       {aiStock?.confidence ? `${aiStock.confidence}%` : "Cao (80%)"}
                     </div>
                   </div>
-                  <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-3">
+                  <div className="rounded-xl border border-white/[0.08] bg-[#09111a] p-3">
                     <div className="text-[10px] font-mono uppercase text-slate-400">Tỷ lệ R:R Mục tiêu</div>
-                    <div className="mt-1 font-mono text-base font-bold text-amber-300">
+                    <div className="mt-1 font-mono text-base font-bold text-slate-200">
                       1 : 3.0
                     </div>
                   </div>
@@ -1454,8 +1461,8 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
                           {supportParsed.display}
                         </div>
                         <div className="space-y-1.5 text-xs text-slate-300 leading-relaxed">
-                          <p><b className="text-white">Cấu trúc:</b> Vùng nền tích lũy then chốt hội tụ đường MA20/MA50.</p>
-                          <p><b className="text-white">Dòng tiền:</b> Lực cầu hấp thụ chủ động của Smart Money khi thanh khoản cạn kiệt.</p>
+                          <p><b className="text-slate-200">Cấu trúc:</b> Vùng nền tích lũy then chốt hội tụ đường MA20/MA50.</p>
+                          <p><b className="text-slate-200">Dòng tiền:</b> Lực cầu hấp thụ chủ động của Smart Money khi thanh khoản cạn kiệt.</p>
                         </div>
                       </div>
                       <div className="rounded-xl border border-emerald-400/10 bg-emerald-400/[0.03] p-2.5 text-[11px] text-emerald-200/90 leading-normal">
@@ -1466,26 +1473,26 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
 
                   {/* Card 2: Kháng cự */}
                   {(actionCategory === "all" || actionCategory === "resistance") && (
-                    <div className="rounded-2xl border border-amber-400/20 bg-[#16120b] p-4 sm:p-5 space-y-3 flex flex-col justify-between">
+                    <div className="rounded-2xl border border-white/[0.08] bg-[#09111a] p-4 sm:p-5 space-y-3 flex flex-col justify-between">
                       <div className="space-y-2.5">
-                        <div className="flex items-center justify-between border-b border-amber-400/10 pb-2.5">
-                          <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-amber-300 font-mono">
-                            <Target className="size-4" />
+                        <div className="flex items-center justify-between border-b border-white/[0.06] pb-2.5">
+                          <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+                            <Target className="size-4 text-slate-400" />
                             Vùng Kháng cự
                           </span>
-                          <span className="rounded bg-amber-400/15 px-2 py-0.5 font-mono text-xs font-bold text-amber-300">
+                          <span className="rounded bg-white/10 px-2 py-0.5 font-mono text-xs font-bold text-slate-200">
                             Supply Target
                           </span>
                         </div>
-                        <div className="text-2xl font-mono font-black text-amber-400">
+                        <div className="text-2xl font-mono font-black text-slate-100">
                           {resistanceParsed.display}
                         </div>
                         <div className="space-y-1.5 text-xs text-slate-300 leading-relaxed">
-                          <p><b className="text-white">Cấu trúc:</b> Vùng đỉnh nhịp trước / Biên trên của Trading Range.</p>
-                          <p><b className="text-white">Dòng tiền:</b> Áp lực cung chốt lời tiềm tàng từ lượng hàng kẹp cũ.</p>
+                          <p><b className="text-slate-200">Cấu trúc:</b> Vùng đỉnh nhịp trước / Biên trên của Trading Range.</p>
+                          <p><b className="text-slate-200">Dòng tiền:</b> Áp lực cung chốt lời tiềm tàng từ lượng hàng kẹp cũ.</p>
                         </div>
                       </div>
-                      <div className="rounded-xl border border-amber-400/10 bg-amber-400/[0.03] p-2.5 text-[11px] text-amber-200/90 leading-normal">
+                      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-[11px] text-slate-300 leading-normal">
                         <b>Kế hoạch:</b> Chốt lời chủ động 30-50% khi chạm cản; chỉ gia tăng nếu có breakout dứt khoát kèm volume bùng nổ.
                       </div>
                     </div>
@@ -1508,8 +1515,8 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
                           {stopLossParsed.display}
                         </div>
                         <div className="space-y-1.5 text-xs text-slate-300 leading-relaxed">
-                          <p><b className="text-white">Kỷ luật vốn:</b> Giới hạn rủi ro tối đa 1.5% - 2% trên tổng NAV danh mục.</p>
-                          <p><b className="text-white">Nguyên tắc:</b> Tuyệt đối không bình quân giá xuống khi vi phạm.</p>
+                          <p><b className="text-slate-200">Kỷ luật vốn:</b> Giới hạn rủi ro tối đa 1.5% - 2% trên tổng NAV danh mục.</p>
+                          <p><b className="text-slate-200">Nguyên tắc:</b> Tuyệt đối không bình quân giá xuống khi vi phạm.</p>
                         </div>
                       </div>
                       <div className="rounded-xl border border-rose-400/15 bg-rose-400/[0.05] p-2.5 text-[11px] text-rose-200/90 leading-normal">

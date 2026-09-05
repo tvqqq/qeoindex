@@ -99,7 +99,7 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
   const [isChartMaximized, setIsChartMaximized] = useState(false)
 
   return (
-    <div className="min-h-screen w-full bg-[#06090d] text-white lg:h-screen lg:overflow-hidden flex flex-col">
+    <div className="min-h-screen w-full bg-[#06090d] text-slate-200 lg:h-screen lg:overflow-hidden flex flex-col">
       {/* Top Navigation Bar */}
       <TopNav />
 
@@ -151,7 +151,7 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
                 isTransitioning ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none hidden",
               )}
             >
-              <div className="rounded-2xl border border-cyan-400/30 bg-[#0b1017]/95 px-4 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.8),0_0_24px_rgba(34,211,238,0.2)] backdrop-blur-md">
+              <div className="rounded-2xl border border-white/20 bg-[#0b1017]/95 px-4 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-md">
                 <AiLoader label={`Hội đồng AI đang cập nhật dữ liệu ${activeTicker}...`} />
               </div>
             </div>

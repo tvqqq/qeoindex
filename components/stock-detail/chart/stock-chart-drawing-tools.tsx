@@ -108,7 +108,7 @@ export function StockChartDrawingTools({
             className={cn(
               "flex size-7 items-center justify-center rounded-lg transition-colors",
               isActive
-                ? "border border-cyan-400/40 bg-cyan-400/20 text-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.3)]"
+                ? "border border-white/25 bg-white/15 text-slate-100"
                 : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
             )}
           >
@@ -130,7 +130,7 @@ export function StockChartDrawingTools({
           className={cn(
             "flex size-7 items-center justify-center rounded-lg transition-colors",
             activeTool === "icon"
-              ? "border border-cyan-400/40 bg-cyan-400/20 text-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.3)]"
+              ? "border border-white/25 bg-white/15 text-slate-100"
               : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
           )}
         >
@@ -154,7 +154,7 @@ export function StockChartDrawingTools({
                 }}
                 className={cn(
                   "flex size-6 items-center justify-center rounded p-1 transition-colors",
-                  selectedIconType === ic ? "bg-cyan-400/30 text-cyan-200" : "text-slate-400 hover:text-white",
+                  selectedIconType === ic ? "bg-white/20 text-slate-100" : "text-slate-400 hover:text-white",
                 )}
               >
                 {ic === "flag" && <Flag className="size-3.5" />}
@@ -225,7 +225,7 @@ export function StockChartDrawingTools({
                     }}
                     className={cn(
                       "flex-1 rounded py-0.5 text-[11px] font-mono font-bold transition-colors",
-                      lineWidth === w ? "bg-cyan-400/20 text-cyan-300 border border-cyan-400/30" : "text-slate-400 hover:bg-white/[0.05]",
+                      lineWidth === w ? "bg-white/15 text-slate-100 border border-white/25" : "text-slate-400 hover:bg-white/[0.05]",
                     )}
                   >
                     {w}px
@@ -266,7 +266,7 @@ export function StockChartDrawingTools({
         className={cn(
           "flex size-7 items-center justify-center rounded-lg transition-colors",
           isLocked
-            ? "border border-amber-400/40 bg-amber-400/20 text-amber-300"
+            ? "border border-white/20 bg-white/10 text-slate-200"
             : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
         )}
       >
@@ -281,7 +281,7 @@ export function StockChartDrawingTools({
         className={cn(
           "flex size-7 items-center justify-center rounded-lg transition-colors",
           isHidden
-            ? "border border-purple-400/40 bg-purple-400/20 text-purple-300"
+            ? "border border-white/20 bg-white/10 text-slate-200"
             : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
         )}
       >
@@ -298,13 +298,13 @@ export function StockChartDrawingTools({
             className={cn(
               "flex size-7 items-center justify-center rounded-lg transition-colors relative",
               isObjectManagerOpen
-                ? "border border-cyan-400/40 bg-cyan-400/20 text-cyan-300 shadow-[0_0_8px_rgba(0,240,255,0.3)]"
+                ? "border border-white/25 bg-white/15 text-slate-100"
                 : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
             )}
           >
             <Layers className="size-3.5" />
             {drawingsCount > 0 && (
-              <span className="absolute -top-1 -right-1 size-3.5 rounded-full bg-cyan-400 text-[9px] font-bold text-black flex items-center justify-center font-mono">
+              <span className="absolute -top-1 -right-1 size-3.5 rounded-full bg-white/20 border border-white/30 text-[9px] font-bold text-slate-100 flex items-center justify-center font-mono">
                 {drawingsCount}
               </span>
             )}

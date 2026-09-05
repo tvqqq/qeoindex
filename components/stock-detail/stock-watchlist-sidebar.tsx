@@ -53,8 +53,8 @@ export function StockWatchlistSidebar({
         <div className="shrink-0 space-y-3 border-b border-white/[0.06] bg-[#0a0f16] p-3.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="flex size-7 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-300">
-                <Bookmark className="size-3.5 fill-cyan-400" />
+              <span className="flex size-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] text-slate-300">
+                <Bookmark className="size-3.5 fill-slate-300" />
               </span>
               <span className="text-xs font-black uppercase tracking-wider text-slate-200">
                 Watchlist
@@ -73,7 +73,7 @@ export function StockWatchlistSidebar({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Tìm mã / công ty..."
-              className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-2 pl-8 pr-7 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-cyan-400/40 focus:outline-none"
+              className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-2 pl-8 pr-7 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-white/30 focus:outline-none"
             />
             {query && (
               <button
@@ -101,7 +101,7 @@ export function StockWatchlistSidebar({
                 className={cn(
                   "rounded-lg px-2.5 py-1 text-[9px] font-bold transition-colors whitespace-nowrap",
                   filterMode === val
-                    ? "border border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
+                    ? "border border-white/25 bg-white/15 text-slate-100 font-bold"
                     : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
                 )}
               >
@@ -123,10 +123,10 @@ export function StockWatchlistSidebar({
               const isUp = item.changePct > 0
               const isDown = item.changePct < 0
               const badgeBg = isUp
-                ? "bg-emerald-400/[0.08] text-emerald-300 border-emerald-400/20"
+                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                 : isDown
-                ? "bg-rose-400/[0.08] text-rose-300 border-rose-400/20"
-                : "bg-amber-400/[0.08] text-amber-300 border-amber-400/20"
+                ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                : "bg-white/[0.05] text-slate-300 border-white/10"
 
               return (
                 <Link
@@ -137,7 +137,7 @@ export function StockWatchlistSidebar({
                   className={cn(
                     "grid grid-cols-[32px_1fr_auto] items-center gap-2 px-3 py-2.5 transition-colors text-left",
                     isActive
-                      ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.08]"
+                      ? "border-l-2 border-l-white bg-white/[0.06]"
                       : "border-l-2 border-l-transparent hover:bg-white/[0.03]"
                   )}
                 >
@@ -149,13 +149,13 @@ export function StockWatchlistSidebar({
                       <b
                         className={cn(
                           "font-ticker text-sm tracking-wide",
-                          isActive ? "text-cyan-300" : "text-white"
+                          isActive ? "text-white font-black" : "text-slate-200"
                         )}
                       >
                         {item.ticker}
                       </b>
                       {isActive && isTransitioning && (
-                        <span className="size-1.5 rounded-full bg-cyan-400 animate-ping" />
+                        <span className="size-1.5 rounded-full bg-white animate-ping" />
                       )}
                     </div>
                     <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-slate-500">
@@ -190,9 +190,9 @@ export function StockWatchlistSidebar({
           <Link
             href="/insights/ai-council"
             prefetch={false}
-            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-[#080d13] py-2 text-[11px] font-bold text-slate-300 transition-colors hover:border-cyan-400/30 hover:text-cyan-200"
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-[#080d13] py-2 text-[11px] font-bold text-slate-300 transition-colors hover:border-white/20 hover:text-white"
           >
-            <Sparkles className="size-3.5 text-cyan-400" />
+            <Sparkles className="size-3.5 text-slate-400" />
             <span>Xem Bảng xếp hạng AI</span>
           </Link>
         </div>
