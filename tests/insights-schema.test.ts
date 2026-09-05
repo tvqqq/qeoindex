@@ -277,3 +277,30 @@ test("stock detail workstation pins sidebars and allows center column scrolling 
   assert.match(watchlist, /overflow-y-auto/)
 })
 
+test("stock ai sidebar renders consensus donut chart, 5 pillars progress bars, and confidence spectrum", () => {
+  const aiSidebar = readFileSync("components/stock-detail/stock-ai-sidebar.tsx", "utf8")
+
+  // 1. Donut Ring with Recommendation in center
+  assert.match(aiSidebar, /viewBox="0 0 200 200"/)
+  assert.match(aiSidebar, /strokeDashoffset=\{strokeDashoffset\}/)
+  assert.match(aiSidebar, /filter="url\(#consensus-ring-glow\)"/)
+  assert.match(aiSidebar, /Khuyến nghị/)
+  assert.match(aiSidebar, /\{signalText\}/)
+  assert.match(aiSidebar, /\{consensus\}% Đồng thuận/)
+
+  // 2. 5 Pillars as progress bars
+  assert.match(aiSidebar, /5 Trụ cột đánh giá/)
+  for (const pillar of ["Cơ bản", "Kỹ thuật", "Dòng tiền", "Bối cảnh", "Quản trị"]) {
+    assert.match(aiSidebar, new RegExp(`label: "${pillar}"`))
+  }
+  assert.match(aiSidebar, /style=\{\{ width: `\$\{Math\.min\(100, Math\.max\(0, p\.score\)\)\}%` \}\}/)
+
+  // 3. Confidence Spectrum and Tiered Legend matching Image 1
+  assert.match(aiSidebar, /Độ tin cậy \(Confidence\)/)
+  assert.match(aiSidebar, /from-\[#f43f5e\] via-\[#3b82f6\] via-\[#eab308\] via-\[#f97316\] to-\[#10b981\]/)
+  assert.match(aiSidebar, /style=\{\{ left: `\$\{clampedConfidence\}%` \}\}/)
+  for (const tier of ["Very high", "High", "Medium", "Low", "Very low"]) {
+    assert.match(aiSidebar, new RegExp(`label: "${tier}"`))
+  }
+})
+
