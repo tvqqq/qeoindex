@@ -679,7 +679,9 @@ export type Database = {
         Row: {
           archive_format: string
           base_resolution: string
+          byte_count: number | null
           created_at: string
+          format_version: number
           id: string
           object_path: string
           provenance_batch_id: string | null
@@ -693,7 +695,9 @@ export type Database = {
         Insert: {
           archive_format: string
           base_resolution: string
+          byte_count?: number | null
           created_at?: string
+          format_version?: number
           id?: string
           object_path: string
           provenance_batch_id?: string | null
@@ -707,7 +711,9 @@ export type Database = {
         Update: {
           archive_format?: string
           base_resolution?: string
+          byte_count?: number | null
           created_at?: string
+          format_version?: number
           id?: string
           object_path?: string
           provenance_batch_id?: string | null
@@ -724,6 +730,68 @@ export type Database = {
             columns: ["provenance_batch_id"]
             isOneToOne: false
             referencedRelation: "chart_ohlcv_provenance_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chart_ohlcv_derived_hourly: {
+        Row: {
+          aggregation_version: string
+          bar_time: string
+          close: number
+          generated_at: string
+          high: number
+          low: number
+          open: number
+          resolution: string
+          source_manifest_id: string
+          source_range_end: string
+          source_range_start: string
+          source_raw_row_count: number
+          source_sha256: string
+          ticker: string
+          volume: number
+        }
+        Insert: {
+          aggregation_version?: string
+          bar_time: string
+          close: number
+          generated_at?: string
+          high: number
+          low: number
+          open: number
+          resolution?: string
+          source_manifest_id: string
+          source_range_end: string
+          source_range_start: string
+          source_raw_row_count: number
+          source_sha256: string
+          ticker: string
+          volume: number
+        }
+        Update: {
+          aggregation_version?: string
+          bar_time?: string
+          close?: number
+          generated_at?: string
+          high?: number
+          low?: number
+          open?: number
+          resolution?: string
+          source_manifest_id?: string
+          source_range_end?: string
+          source_range_start?: string
+          source_raw_row_count?: number
+          source_sha256?: string
+          ticker?: string
+          volume?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chart_ohlcv_derived_hourly_source_manifest_id_fkey"
+            columns: ["source_manifest_id"]
+            isOneToOne: false
+            referencedRelation: "chart_ohlcv_cold_manifests"
             referencedColumns: ["id"]
           },
         ]
@@ -3574,6 +3642,14 @@ export type Database = {
       qeo_prune_noncanonical_orderbook_snapshots: {
         Args: { p_run_id: string }
         Returns: number
+      }
+      qeo_prune_verified_chart_intraday_partition: {
+        Args: {
+          p_expected_row_count: number
+          p_expected_sha256: string
+          p_manifest_id: string
+        }
+        Returns: Json
       }
       qeo_publish_market_universe_run: {
         Args: { p_run_id: string }

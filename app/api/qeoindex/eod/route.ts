@@ -4,6 +4,7 @@ import { start } from "workflow/api"
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { runChartIntradayArchiveLifecycle } from "@/modules/market/chart-data/archive-lifecycle"
+import { runChartDerivedHourlyRecovery } from "@/modules/market/chart-data/derived-hourly-recovery"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { qeoindexEodPipeline } from "@/workflows/qeoindex-eod-pipeline"
 
@@ -65,9 +66,9 @@ async function trigger(request: NextRequest) {
   }
 
   const mode = request.nextUrl.searchParams.get("mode")?.trim() || ""
-  if (mode === "chart-archive") {
+  if (mode === "chart-archive" || mode === "chart-derived-recovery") {
     if (request.method !== "POST") {
-      return NextResponse.json({ ok: false, error: "Chart archive recovery requires POST." }, { status: 405, headers: { Allow: "POST" } })
+      return NextResponse.json({ ok: false, error: "Chart storage recovery requires POST." }, { status: 405, headers: { Allow: "POST" } })
     }
     const maxPartitions = archivePartitionLimit(request.nextUrl.searchParams.get("maxPartitions"))
     if (maxPartitions == null) {
@@ -78,11 +79,13 @@ async function trigger(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Canonical market data service unavailable." }, { status: 503 })
     }
     try {
-      const result = await runChartIntradayArchiveLifecycle(supabase, { referenceAt: new Date(), maxPartitions })
+      const result = mode === "chart-archive"
+        ? await runChartIntradayArchiveLifecycle(supabase, { referenceAt: new Date(), maxPartitions })
+        : await runChartDerivedHourlyRecovery(supabase, { referenceAt: new Date(), maxPartitions })
       return NextResponse.json({ ok: result.status !== "partial", mode, result }, { status: result.status === "partial" ? 207 : 200 })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      await notifyOpsError({ source: "qeo103-chart-archive", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
+      await notifyOpsError({ source: mode === "chart-archive" ? "qeo103-chart-archive" : "qeo103-chart-derived-recovery", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
       return NextResponse.json({ ok: false, mode, error: message }, { status: 500 })
     }
   }

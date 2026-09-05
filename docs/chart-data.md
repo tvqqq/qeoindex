@@ -11,90 +11,123 @@ QeoIndex has two canonical raw OHLCV persistence concerns:
 | Concern | Raw resolution | Active store | Purpose |
 | --- | --- | --- | --- |
 | EOD / Wyckoff | `1D` | `market_ohlcv_history` | Completed Daily evidence for EOD, Wyckoff and deterministic Weekly derivation. |
-| Interactive chart | `1m` | `chart_ohlcv_intraday` + private Storage bucket `chart-ohlcv` | Exact intraday chart history with hot/cold lifecycle. |
+| Interactive chart | `1m` | `chart_ohlcv_intraday` + private Storage bucket `chart-ohlcv` | Exact intraday chart history with verified hot/cold lifecycle. |
 
-`market_ohlcv_history` remains Daily-only. QEO-92 does not add `1m` rows to the Wyckoff/EOD table.
+`market_ohlcv_history` remains Daily-only. Intraday chart storage never widens the active Wyckoff/EOD persistence contract.
 
 ## Canonical 1m contract
 
-The chart-data module lives under `modules/market/chart-data/` and owns:
+The chart-data module under `modules/market/chart-data/` owns canonical validation, deterministic sort/deduplication, provider backfill, coverage/gap evidence, integrity reporting, storage lifecycle, timeframe derivation, and the sanitized browser API projection.
 
-- canonical OHLCV validation;
-- deterministic sort/deduplication;
-- hot/cold merge precedence;
-- provider backfill for missing `1m` ranges;
-- coverage and gap evidence;
-- integrity issues for invalid bars or source mismatches;
-- sanitized API projection.
-
-A canonical bar is epoch-seconds `time` plus finite positive OHLC prices and non-negative volume. Inconsistent high/low relationships are rejected rather than repaired silently.
+A canonical bar is epoch-seconds `time` plus finite positive OHLC prices and non-negative volume. Inconsistent high/low relationships are rejected rather than repaired silently. Raw `1m` remains the canonical intraday evidence; derived intraday timeframes are rebuildable views/caches only.
 
 ### Source precedence
 
-When multiple valid sources contain the same timestamp, the active precedence is:
+For canonical `1m` overlap, active precedence remains:
 
 ```text
 hot > cold > daily > provider
 ```
 
-For `1m`, hot rows therefore win over overlapping cold rows. If overlapping sources disagree, the selected bar still follows deterministic precedence but the response records a `SOURCE_MISMATCH` integrity issue; it must not silently rewrite disagreement as agreement.
+If overlapping canonical sources disagree, the selected bar follows deterministic precedence and the response records integrity evidence rather than silently treating disagreement as agreement.
 
-## Hot storage
+## Hot raw 1m retention
 
 `chart_ohlcv_intraday` is the server-side hot store for canonical `1m` bars.
 
-Related provenance is batch-scoped in `chart_ohlcv_provenance_batches`. Provider identity and fetch metadata are operational evidence; they are not exposed as browser credentials or provider URLs.
+- target retention is **31 complete Vietnam calendar days**;
+- pruning is partitioned by ticker + Vietnam trading date so a session is never split by a rolling UTC cutoff;
+- the lifecycle is bounded and failures are partition-isolated;
+- provider/provenance evidence remains batch-scoped in `chart_ohlcv_provenance_batches`.
 
-The schema was activated in production by exact migration version:
+The base QEO-92 schema was activated by migration `20260905065836_qeo92_chart_ohlcv_intraday`. QEO-103 extends the lifecycle through `20260905115319_qeo103_chart_storage_lifecycle`.
 
-`20260905065836_qeo92_chart_ohlcv_intraday`
-
-## Cold storage
+## Cold raw 1m archive
 
 Cold chart history is stored in the private Supabase Storage bucket `chart-ohlcv`.
 
 - archive objects use immutable checksum-addressed `.ndjson.gz` paths;
-- `chart_ohlcv_cold_manifests` records ticker, base resolution, covered range, row count and SHA-256;
-- reads verify the stored object against the manifest checksum before bars are accepted;
-- object paths and bucket details remain server-only implementation details.
+- `chart_ohlcv_cold_manifests` records ticker, base resolution, exact covered range, row count, SHA-256, format version and byte count;
+- an archive object is downloaded and verified against SHA-256 + row count before its manifest is accepted for pruning;
+- an already-existing matching object/manifest is verified and reused idempotently;
+- object paths and bucket details remain server-only.
 
-Cold storage is evidence, not an alternate public API. The browser consumes only the unified canonical service.
+Cold raw storage is durability/reconstruction evidence, not the normal one-year hourly rendering path.
+
+## Derived 1h cache
+
+`chart_ohlcv_derived_hourly` is a **rebuildable cache**, never canonical source-of-truth.
+
+Each cached `1h` bar records the verified raw source manifest/checksum/range/row-count plus aggregation version. The cache is produced by the same Vietnam-session-aware aggregation engine used by chart rendering.
+
+Lifecycle order for an expired raw partition is fail-closed:
+
+```text
+hot raw 1m snapshot
+  -> immutable cold write
+  -> cold readback + SHA256 + row-count verify
+  -> deterministic 1h cache persist
+  -> hot snapshot re-read / equality check
+  -> service-role manifest-verified atomic prune RPC
+```
+
+The prune RPC refuses deletion when the manifest, checksum, row count, or derived-cache evidence does not match. Any exception rolls back the delete transaction. Daily/Wyckoff history is never touched by this RPC.
+
+### Legacy cold-to-derived recovery
+
+QEO-103 can encounter verified cold manifests created by the earlier archive slice before the derived cache existed. Those manifests are recovered through bounded server-only mode `chart-derived-recovery`.
+
+Recovery order is also fail-closed:
+
+```text
+verified cold manifest
+  -> private object download
+  -> SHA256 + row-count + exact range verification
+  -> deterministic 1h aggregation
+  -> derived cache upsert
+  -> derived OHLCV readback equality verification
+```
+
+Recovery refreshes manifest byte-count evidence after the verified object read. It never reconstructs raw bars from a provider and never writes legacy raw minutes back into hot Postgres.
+
+Until every verified cold manifest intersecting an hourly request has derived evidence, the server reads that old segment directly from verified cold raw storage and aggregates it in memory. This temporary correctness fallback prevents a partial derived backfill from creating missing hourly history. Once manifest coverage is complete, the normal path automatically uses only the derived `1h` cache for old history.
+
+## Render horizons and read path
+
+| Public timeframe | Maximum history | Normal source path |
+| --- | ---: | --- |
+| `1m`, `15m`, `30m` | 31 days | canonical raw `1m` hot path |
+| `1h`, `2h`, `4h` | 366 days | derived `1h` for old history + recent hot raw `1m -> 1h`; then `1h -> 2h/4h` when needed |
+| `1D`, `3D`, `1W`, `1M`, `1Q`, `1Y` | full available | canonical raw `1D` + deterministic Daily-derived aggregation |
+
+The server clamps ranges to these horizons. For `1h/2h/4h`, history older than the hot boundary normally comes from `chart_ohlcv_derived_hourly`; only the recent hot segment loads canonical raw `1m`. The normal steady-state hourly path therefore does not download one year of cold raw objects and does not refill old raw minute bars into Postgres.
+
+At the hot/derived boundary, recent hot-derived `1h` wins deterministic timestamp dedupe. During legacy recovery, incomplete derived-manifest coverage selects verified cold raw fallback for the affected old segment rather than returning a partially populated cache. No synthetic candles are fabricated.
 
 ## Provider backfill
 
-DNSE is the current exact-range `1m` historical provider through `fetchMinuteOhlcvRange`.
+Provider data is normalized through the same canonical validation path before it can participate in a response or hot persistence. Provider failure must never generate synthetic candles or fake fallback values.
 
-Provider data is normalized through the same canonical validation path before it can participate in a response or hot persistence. Provider failures must not cause synthetic candles or fake fallback values.
+Provider backfill does not weaken archive integrity: data that QeoIndex has chosen to retain must pass the local verified cold lifecycle before hot deletion.
 
 ## Unified API
 
-Browser-facing reads use:
+Browser-facing reads use authenticated `GET /api/market/ohlcv`.
 
-`GET /api/market/ohlcv`
-
-The route requires an authenticated user session and returns a sanitized projection containing canonical bars plus coverage/gap/integrity evidence. It must not return:
-
-- Supabase bucket names or object paths;
-- provider request URLs;
-- credentials, signatures or headers;
-- internal provenance payloads that are not part of the stable browser contract.
-
-## Timeframe boundary
-
-QEO-92 establishes canonical raw `1m` and preserves canonical raw `1D`. It does **not** own the general timeframe aggregation engine.
-
-Until the dedicated timeframe engine consumes canonical `1m`, unsupported intraday selections such as `15m`, `30m`, `1h`, `2h` and `4h` must render an explicit unavailable state. The chart must never derive fake intraday bars from Daily data, inject micro-volatility, or use synthetic `Math.sin()` candles.
-
-Weekly Wyckoff behavior remains separate: `1W` is deterministically derived from canonical `1D` under the existing Wyckoff contract.
+The response exposes canonical/derived chart bars plus sanitized coverage, gap, integrity and session metadata. It must not expose Storage bucket/object paths, provider request URLs, credentials/signatures/headers, or private provenance payloads.
 
 ## Integrity and release gates
 
 Material changes to this subsystem must preserve:
 
-- no synthetic OHLCV fallbacks;
-- deterministic sorted/deduped merge behavior;
-- hot-over-cold overlap precedence with mismatch evidence;
-- private hot/cold persistence and authenticated browser access;
+- no synthetic OHLCV fallback;
+- raw `1m` as canonical intraday evidence;
+- deterministic session-aware aggregation;
+- immutable cold archive + checksum/readback verification before prune;
+- derived `1h` as rebuildable non-canonical cache;
+- verified cold fallback while derived-manifest coverage is incomplete;
+- service-role-only fail-closed prune authority;
+- authenticated browser boundary;
 - Daily-only `market_ohlcv_history` invariant;
-- migration drift reconciliation, clean replay and generated Supabase type parity for schema changes;
-- current tests, touched lint, TypeScript and production build gates.
+- migration drift reconciliation, clean replay, and generated Supabase type parity;
+- current tests, touched lint, TypeScript, and production build gates.
