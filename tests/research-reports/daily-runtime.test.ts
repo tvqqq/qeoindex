@@ -2,6 +2,13 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+import { createResearchReportAiBudget } from "../../modules/research-reports/analysis/budget.ts"
+import {
+  RESEARCH_REPORT_AI_MAX_ATTEMPTS_PER_REPORT,
+  RESEARCH_REPORT_AI_MAX_RETRIES_PER_REPORT,
+  createPerReportAiRetryBudget,
+} from "../../modules/research-reports/daily/runtime.ts"
+
 function source(path: string) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8")
 }
@@ -58,10 +65,45 @@ test("QEO-85 runtime uses bounded daily/backfill discovery and shared retry budg
   assert.match(runtime, /toDate:\s*mode === "backfill"/)
   assert.match(runtime, /slice\(0,\s*maxReports\)/)
   assert.match(runtime, /REPORT_PROCESSING_MAX_ATTEMPTS\s*=\s*3/)
+  assert.match(runtime, /RESEARCH_REPORT_AI_MAX_RETRIES_PER_REPORT\s*=\s*3/)
+  assert.match(runtime, /RESEARCH_REPORT_AI_MAX_ATTEMPTS_PER_REPORT\s*=\s*RESEARCH_REPORT_AI_MAX_RETRIES_PER_REPORT \+ 1/)
+  assert.match(runtime, /createPerReportAiRetryBudget/)
   assert.match(runtime, /isRetryableResearchReportFailure/)
   assert.match(runtime, /createResearchReportAiBudget/)
   assert.match(runtime, /initialSnapshot/)
   assert.match(topi, /DEFAULT_TRANSIENT_ATTEMPTS\s*=\s*3/)
   assert.match(topi, /from_date:\s*fromDate \?\? ""/)
   assert.match(topi, /to_date:\s*toDate \?\? ""/)
+})
+
+test("QEO-87 one report gets one initial AI attempt plus at most three retries without exhausting the shared run budget", () => {
+  assert.equal(RESEARCH_REPORT_AI_MAX_RETRIES_PER_REPORT, 3)
+  assert.equal(RESEARCH_REPORT_AI_MAX_ATTEMPTS_PER_REPORT, 4)
+
+  const runBudget = createResearchReportAiBudget({ maxRequestAttempts: 20, maxEstimatedCostUsd: 1 })
+  const reportBudget = createPerReportAiRetryBudget(runBudget)
+
+  for (let attempt = 0; attempt < RESEARCH_REPORT_AI_MAX_ATTEMPTS_PER_REPORT; attempt += 1) {
+    reportBudget.beforeRequest({ reservedCostUsd: 0 })
+  }
+
+  assert.throws(
+    () => reportBudget.beforeRequest({ reservedCostUsd: 0 }),
+    /retry limit exhausted after 3 retries/i,
+  )
+  const snapshot = runBudget.snapshot()
+  assert.equal(snapshot.requestAttempts, 4)
+  assert.equal(snapshot.budgetExhausted, false)
+  assert.equal(snapshot.budgetReason, null)
+})
+
+test("QEO-87 scheduler activation stays quarantined until production smoke, then promotes the exact 07:05 ICT contract", () => {
+  const hold = source("supabase/migrations/20260905095126_qeo87_hold_research_reports_scheduler.sql")
+  const enable = source("supabase/pending-migrations/20260905135600_qeo87_enable_research_reports_scheduler.sql")
+
+  assert.match(hold, /cron\.unschedule\('research-reports-daily-0705-ict'\)/)
+  assert.match(enable, /qeo_trigger_research_reports_daily\(\)/)
+  assert.match(enable, /cron\.schedule\(/)
+  assert.match(enable, /'research-reports-daily-0705-ict'/)
+  assert.match(enable, /'5 0 \* \* \*'/)
 })

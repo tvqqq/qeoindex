@@ -1,4 +1,8 @@
-import { createResearchReportAiBudget, type ResearchReportAiBudgetSnapshot } from "../analysis/budget.ts"
+import {
+  createResearchReportAiBudget,
+  type ResearchReportAiBudget,
+  type ResearchReportAiBudgetSnapshot,
+} from "../analysis/budget.ts"
 import { processResearchReport } from "../analysis/pipeline.ts"
 import { discoverTopiReports } from "../providers/topi.ts"
 import { upsertResearchReports } from "../repository.ts"
@@ -20,6 +24,8 @@ export const BACKFILL_MAX_DAYS = 90
 export const DAILY_RECENT_RESCAN_DAYS = 30
 export const RESEARCH_REPORT_MAX_AI_REQUESTS = 20
 export const RESEARCH_REPORT_MAX_AI_COST_USD = 1
+export const RESEARCH_REPORT_AI_MAX_RETRIES_PER_REPORT = 3
+export const RESEARCH_REPORT_AI_MAX_ATTEMPTS_PER_REPORT = RESEARCH_REPORT_AI_MAX_RETRIES_PER_REPORT + 1
 export const REPORT_PROCESSING_MAX_ATTEMPTS = 3
 
 interface DbError { message?: string }
@@ -140,6 +146,31 @@ function emptyUsage(): ResearchReportAttemptUsage {
     attemptedModels: [], aiRequestCount: 0, inputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0,
     outputTokens: 0, reasoningTokens: 0, totalTokens: 0, unknownUsageAttempts: 0,
     estimatedCostUsd: 0, pricingVersion: "",
+  }
+}
+
+export function createPerReportAiRetryBudget(runBudget: ResearchReportAiBudget): ResearchReportAiBudget {
+  let reportAttempts = 0
+
+  return {
+    beforeRequest(input) {
+      if (reportAttempts >= RESEARCH_REPORT_AI_MAX_ATTEMPTS_PER_REPORT) {
+        throw new Error(
+          `Research report AI retry limit exhausted after ${RESEARCH_REPORT_AI_MAX_RETRIES_PER_REPORT} retries`,
+        )
+      }
+      runBudget.beforeRequest(input)
+      reportAttempts += 1
+    },
+    recordResponseCost(estimatedCostUsd) {
+      runBudget.recordResponseCost(estimatedCostUsd)
+    },
+    recordUnknownUsage() {
+      runBudget.recordUnknownUsage()
+    },
+    snapshot() {
+      return runBudget.snapshot()
+    },
   }
 }
 
@@ -281,6 +312,7 @@ export async function processResearchReportRunStep(input: {
     maxEstimatedCostUsd: RESEARCH_REPORT_MAX_AI_COST_USD,
     initialSnapshot: input.budgetSnapshot,
   })
+  const reportBudget = createPerReportAiRetryBudget(budget)
   const usage = emptyUsage()
 
   let result: ProcessResearchReportResult | null = null
@@ -288,7 +320,7 @@ export async function processResearchReportRunStep(input: {
     result = await processResearchReport(
       db as unknown as Parameters<typeof processResearchReport>[0],
       { id: input.candidate.id, pdfUrl: input.candidate.pdfUrl },
-      { runId: input.runId, aiBudget: budget, requestUsage: usage },
+      { runId: input.runId, aiBudget: reportBudget, requestUsage: usage },
     )
     if (!isRetryableResearchReportFailure(result) || budget.snapshot().budgetExhausted || attempt === REPORT_PROCESSING_MAX_ATTEMPTS) break
     await retryDelay(attempt)
