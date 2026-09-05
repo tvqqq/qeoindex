@@ -122,6 +122,14 @@ test("QEO-92 removes synthetic micro-volatility and adds canonical chart-data bo
   }
 })
 
+test("QEO-92 chart OHLC API requires the research feature gate", () => {
+  const route = source("app/api/market/ohlcv/route.ts")
+
+  assert.match(route, /requireApiFeature/)
+  assert.match(route, /requireApiFeature\(["']research["']\)/)
+  assert.doesNotMatch(route, /requireApiUser/)
+})
+
 test("QEO-92 canonical merge is sorted, deduped, hot-preferred and mismatch-aware", async () => {
   const { normalizeCanonicalBars, detectSequenceGaps } = await import("../modules/market/chart-data/normalize.ts")
 
