@@ -63,7 +63,7 @@ export function StockChartIndicatorModal({ config, onChange, onClose }: Indicato
     })
   }
 
-  const enabledCount = Object.values(config).filter(Boolean).length
+  const enabledCount = indicators.filter((indicator) => Boolean(config[indicator.key])).length
 
   return (
     <div className="absolute left-0 top-8 z-50 w-[340px] max-w-[calc(100vw-24px)] overflow-hidden rounded-lg border border-white/[0.12] bg-[#0b0f15]/98 shadow-[0_18px_52px_rgba(0,0,0,0.82)] backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
