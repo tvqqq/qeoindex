@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { createSupabaseColdOhlcvStorage } from "./cold-store"
 import type { CanonicalOhlcvBar } from "./contract"
 import { upsertDerivedHourlyBars } from "./derived-hourly-store"
+import { CHART_HOT_RETENTION_DAYS, chartHotRetentionCutoff } from "./history-policy"
 import {
   listExpiredHotPartitions,
   pruneVerifiedHotIntradayPartition,
@@ -13,8 +14,7 @@ import {
 } from "./hot-store"
 import { aggregateChartTimeframe } from "./timeframes"
 
-const DAY_SECONDS = 86400
-export const CHART_HOT_RETENTION_DAYS = 31
+export { CHART_HOT_RETENTION_DAYS, chartHotRetentionCutoff }
 export const DEFAULT_ARCHIVE_PARTITIONS_PER_RUN = 48
 
 export interface ChartArchiveFailure {
@@ -36,16 +36,6 @@ export interface ChartIntradayArchiveMetrics {
   rowsPruned: number
   failures: ChartArchiveFailure[]
   oldestHotBar: string | null
-}
-
-function vietnamDateKey(epochSeconds: number) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(epochSeconds * 1000))
-}
-
-export function chartHotRetentionCutoff(referenceAt: Date) {
-  const rollingEpoch = Math.floor(referenceAt.getTime() / 1000) - CHART_HOT_RETENTION_DAYS * DAY_SECONDS
-  const rollingDate = vietnamDateKey(rollingEpoch)
-  return Math.floor(new Date(`${rollingDate}T00:00:00+07:00`).getTime() / 1000) + DAY_SECONDS
 }
 
 function sameBars(left: CanonicalOhlcvBar[], right: CanonicalOhlcvBar[]) {
