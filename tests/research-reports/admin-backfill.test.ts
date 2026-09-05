@@ -13,6 +13,13 @@ function jobBlock(catalog: string, key: string) {
   return catalog.slice(start, next >= 0 ? next : undefined)
 }
 
+function functionBlock(sourceText: string, functionName: string, nextFunctionName: string) {
+  const start = sourceText.indexOf(`async function ${functionName}`)
+  const end = sourceText.indexOf(`async function ${nextFunctionName}`, start + 1)
+  assert.ok(start >= 0 && end > start, `missing function boundary ${functionName}`)
+  return sourceText.slice(start, end)
+}
+
 test("QEO-85 effective Admin catalog separates scheduled daily ownership from confirmed backfill recovery", () => {
   const catalog = source("modules/admin/effective-job-catalog.ts")
   const daily = jobBlock(catalog, "research_reports.daily")
@@ -49,9 +56,9 @@ test("QEO-85 manual capability allowlists backfill only and exposes bounded date
   assert.match(jobs, /input\.key === "research_reports\.backfill"/)
   assert.match(jobs, /RESEARCH_BACKFILL_MAX_REPORTS = 100/)
   assert.match(jobs, /RESEARCH_BACKFILL_MAX_DAYS = 90/)
-  const backfillDispatch = jobs.slice(jobs.indexOf('if (input.key === "research_reports.backfill")'), jobs.indexOf('if (input.key === "research_reports.backfill")') + 1_500)
+  const backfillDispatch = functionBlock(jobs, "runResearchReportsBackfillDispatch", "auditDispatchResult")
   assert.doesNotMatch(backfillDispatch, /force/)
-  assert.match(jobs, /start\(researchReportsBackfillWorkflow/)
+  assert.match(backfillDispatch, /start\(researchReportsBackfillWorkflow/)
 
   assert.match(actions, /formData\.get\("fromDate"\)/)
   assert.match(actions, /formData\.get\("toDate"\)/)
