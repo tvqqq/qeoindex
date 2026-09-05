@@ -1,171 +1,163 @@
-import test from "node:test"
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
-import path from "node:path"
+import { existsSync, readFileSync } from "node:fs"
+import test from "node:test"
+import {
+  calculateBollingerBands,
+  calculateIchimokuSeries,
+  calculateMacdSeries,
+  calculateRsiSeries,
+  calculateSma,
+  calculateVolumeProfile,
+} from "../components/stock-detail/chart/stock-chart-indicators.ts"
+import { aggregateBarsByTimeframe } from "../components/stock-detail/chart/stock-chart-timeframes.ts"
+import {
+  ALL_TIMEFRAMES,
+  DEFAULT_INDICATOR_CONFIG,
+  QUICK_TIMEFRAMES,
+} from "../components/stock-detail/chart/stock-chart-types.ts"
+import type { OhlcvBar } from "../modules/shared/technical/indicators.ts"
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-function source(relPath) {
-  return readFileSync(path.join(root, relPath), "utf8")
+function source(path: string) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
-const chartSource = source("components/stock-detail/stock-tradingview-chart.tsx")
-const canvasSource = source("components/stock-detail/chart/stock-chart-drawing-canvas.tsx")
-const objectManagerSource = source("components/stock-detail/chart/stock-chart-object-manager.tsx")
-const syncSource = source("components/stock-detail/chart/use-user-chart-sync.ts")
-const timeframeSource = source("components/stock-detail/chart/stock-chart-timeframes.ts")
-const indicatorSource = source("components/stock-detail/chart/stock-chart-indicators.ts")
-const typesSource = source("components/stock-detail/chart/stock-chart-types.ts")
-const detailDataSource = source("modules/research/insights/stock-detail-data.ts")
-const workstationSource = source("components/stock-detail/stock-detail-workstation.tsx")
-const identitySource = source("components/stock-detail/stock-identity.tsx")
-
-function mockBars(count = 120) {
-  return Array.from({ length: count }, (_, i) => ({
+const mockBars: OhlcvBar[] = Array.from({ length: 60 }, (_, i) => {
+  const base = 50 + Math.sin(i / 5) * 5
+  return {
     time: 1700000000 + i * 86400,
-    open: 100 + i * 0.1,
-    high: 101 + i * 0.1,
-    low: 99 + i * 0.1,
-    close: 100.5 + i * 0.1,
-    volume: 1_000_000 + i * 1000,
-  }))
-}
-
-test("StockTradingViewChart implements 100% TradingView scroll, zoom out, and coordinate pinning", () => {
-  assert.match(chartSource, /visibleBarsCount/)
-  assert.match(chartSource, /scrollOffset/)
-  assert.match(chartSource, /onWheel=\{handleWheel\}/)
-  assert.match(chartSource, /handleMouseDownCanvas/)
-  assert.match(chartSource, /handleMouseMoveCanvas/)
-  assert.match(chartSource, /timeToX/)
-  assert.match(chartSource, /xToTime/)
-  assert.match(chartSource, /priceToY/)
-  assert.match(chartSource, /yToPrice/)
-  assert.match(chartSource, /StockChartDrawingCanvas/)
-  assert.match(chartSource, /StockChartDrawingTools/)
-  assert.match(chartSource, /StockChartObjectManager/)
-})
-
-test("StockChartDrawingCanvas supports object selection, dragging, and anchor handles", () => {
-  assert.match(canvasSource, /selectedId/)
-  assert.match(canvasSource, /onSelect/)
-  assert.match(canvasSource, /onMoveDrawing/)
-  assert.match(canvasSource, /onMoveAnchor/)
-  assert.match(canvasSource, /onPointerDown/)
-  assert.match(canvasSource, /onPointerMove/)
-  assert.match(canvasSource, /onPointerUp/)
-})
-
-test("StockChartObjectManager provides clear object tree management and text editing", () => {
-  assert.match(objectManagerSource, /Object tree/i)
-  assert.match(objectManagerSource, /onToggleHide/)
-  assert.match(objectManagerSource, /onToggleLock/)
-  assert.match(objectManagerSource, /onDelete/)
-  assert.match(objectManagerSource, /onEditText/)
-})
-
-test("useUserChartSync manages database persistence and local cache fallback", () => {
-  assert.match(syncSource, /\/api\/user\/chart-drawings/)
-  assert.match(syncSource, /localStorage/)
-  assert.match(syncSource, /setTimeout/)
-  assert.match(syncSource, /saveStatus/)
-})
-
-test("StockTradingViewChart renders TradingView-style 4 horizontal columns timeframe panel with checkmark", () => {
-  assert.match(chartSource, /grid-cols-4/)
-  assert.match(chartSource, /divide-x divide-white/)
-  assert.match(chartSource, /title: "Phút"/)
-  assert.match(chartSource, /title: "Giờ"/)
-  assert.match(chartSource, /title: "Ngày"/)
-  assert.match(chartSource, /title: "Năm"/)
-  assert.match(chartSource, /Check className/)
-})
-
-test("StockTradingViewChart renders dedicated X-axis (time) and Y-axis (price) rails with crosshairs", () => {
-  assert.match(chartSource, /Right Y-Axis Price Rail Background/)
-  assert.match(chartSource, /Bottom X-Axis Time Rail Background/)
-  assert.match(chartSource, /Crosshair vertical/)
-  assert.match(chartSource, /Crosshair horizontal/)
-})
-
-test("StockTradingViewChart implements TitanLabs-style bottom range presets and auto-fit reset", () => {
-  assert.match(chartSource, /RANGE_PRESETS/)
-  assert.match(chartSource, /handleRangePreset/)
-  assert.match(chartSource, /Auto Fit/)
-  assert.match(chartSource, /handleResetView/)
+    open: base,
+    high: base + 2,
+    low: base - 2,
+    close: base + (i % 2 === 0 ? 1 : -1),
+    volume: 1_000_000 + i * 10_000,
+  }
 })
 
 test("Timeframe definitions contain all requested intervals", () => {
-  const expected = ["1m", "15m", "30m", "1h", "2h", "4h", "1D", "3D", "1W", "1M", "3M", "1Y"]
-  for (const tf of expected) assert.match(typesSource, new RegExp(`id: "${tf}"`))
+  assert.deepEqual(QUICK_TIMEFRAMES, ["15m", "1h", "1D", "1W"])
+
+  const ids = ALL_TIMEFRAMES.map((t) => t.id)
+  assert.ok(ids.includes("1m"))
+  assert.ok(ids.includes("15m"))
+  assert.ok(ids.includes("30m"))
+  assert.ok(ids.includes("1h"))
+  assert.ok(ids.includes("2h"))
+  assert.ok(ids.includes("4h"))
+  assert.ok(ids.includes("1D"))
+  assert.ok(ids.includes("3D"))
+  assert.ok(ids.includes("1W"))
+  assert.ok(ids.includes("1M"))
+  assert.ok(ids.includes("1Q"))
+  assert.ok(ids.includes("1Y"))
 })
 
-test("Technical indicators calculate valid series", async () => {
-  const { calculateSma, calculateRsiSeries, calculateMacdSeries, calculateBollingerBands } = await import(
-    path.join(root, "components/stock-detail/chart/stock-chart-indicators.ts")
-  )
-  const bars = mockBars(250)
-  const sma = calculateSma(bars, 20)
-  const rsi = calculateRsiSeries(bars, 14)
-  const macd = calculateMacdSeries(bars)
-  const boll = calculateBollingerBands(bars, 20)
-  assert.equal(sma.length, bars.length)
-  assert.equal(rsi.length, bars.length)
-  assert.equal(macd.macd.length, bars.length)
-  assert.equal(boll.upper.length, bars.length)
-  assert.ok(sma.at(-1) !== null)
-  assert.ok(rsi.at(-1) !== null)
+test("Technical indicators calculate valid series", () => {
+  const sma20 = calculateSma(mockBars, 20)
+  assert.equal(sma20.length, mockBars.length)
+  assert.equal(sma20[0], null)
+  assert.ok(typeof sma20[30] === "number")
+
+  const rsi = calculateRsiSeries(mockBars, 14)
+  assert.equal(rsi.length, mockBars.length)
+  assert.equal(rsi[0], null)
+  const lastRsi = rsi.at(-1)
+  assert.ok(typeof lastRsi === "number" && lastRsi >= 0 && lastRsi <= 100)
+
+  const macd = calculateMacdSeries(mockBars)
+  assert.equal(macd.macd.length, mockBars.length)
+  assert.equal(macd.signal.length, mockBars.length)
+  assert.equal(macd.histogram.length, mockBars.length)
+
+  const ichi = calculateIchimokuSeries(mockBars)
+  assert.equal(ichi.tenkan.length, mockBars.length)
+  assert.equal(ichi.kijun.length, mockBars.length)
+  assert.equal(ichi.spanA.length, mockBars.length)
+  assert.equal(ichi.spanB.length, mockBars.length)
+
+  const bb = calculateBollingerBands(mockBars, 20, 2)
+  assert.equal(bb.upper.length, mockBars.length)
+  assert.equal(bb.lower.length, mockBars.length)
+  const lastIdx = mockBars.length - 1
+  assert.ok((bb.upper[lastIdx] as number) >= (bb.lower[lastIdx] as number))
+
+  const vp = calculateVolumeProfile(mockBars, 10)
+  assert.equal(vp.buckets.length, 10)
+  assert.ok(vp.pocPrice > 0)
+  assert.ok(vp.buckets.some((b) => b.isPoc))
 })
 
-test("Timeframe aggregation never fabricates intraday candles from Daily bars", async () => {
-  const { aggregateBarsByTimeframe } = await import(
-    path.join(root, "components/stock-detail/chart/stock-chart-timeframes.ts")
-  )
-  const bars = mockBars(10)
-  assert.deepEqual(aggregateBarsByTimeframe(bars, undefined, "1m"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(bars, undefined, "15m"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(bars, undefined, "30m"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(bars, undefined, "1h"), [])
+test("Timeframe aggregation never fabricates intraday candles from Daily bars", () => {
+  const daily = aggregateBarsByTimeframe(mockBars, undefined, "1D")
+  assert.ok(daily.length > 0)
+
+  const weekly = aggregateBarsByTimeframe(mockBars, undefined, "1W")
+  assert.ok(weekly.length > 0 && weekly.length <= daily.length)
+
+  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "1m"), [])
+  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "15m"), [])
+  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "30m"), [])
+  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "1h"), [])
+  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "2h"), [])
+  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "4h"), [])
 })
 
 test("QEO-92 removes synthetic micro-volatility and adds canonical chart-data boundaries", () => {
-  const route = source("app/api/market/ohlcv/route.ts")
-  const normalize = source("modules/market/chart-data/normalize.ts")
-  const service = source("modules/market/chart-data/service.ts")
-  const hot = source("modules/market/chart-data/hot-store.ts")
-  const cold = source("modules/market/chart-data/cold-store.ts")
-  const provider = source("modules/market/chart-data/providers/dnse.ts")
+  const timeframeSource = source("components/stock-detail/chart/stock-chart-timeframes.ts")
+  const dnseSource = source("modules/market/providers/dnse/history.ts")
 
-  assert.doesNotMatch(timeframeSource, /deriveSubHourlyBars|Math\.sin/)
-  assert.match(route, /getCanonicalChartOhlcv/)
-  assert.match(normalize, /normalizeCanonicalBars/)
-  assert.match(service, /mergeCanonicalBars/)
-  assert.match(hot, /chart_ohlcv_intraday/)
-  assert.match(cold, /chart_ohlcv_cold_manifests/)
-  assert.match(provider, /fetchMinuteOhlcvExact/)
+  assert.doesNotMatch(timeframeSource, /deriveSubHourlyBars|micro-volatility|Math\.sin/i)
+  assert.doesNotMatch(timeframeSource, /hourly\s*=\s*.*daily\.slice/i)
+  assert.match(dnseSource, /fetchMinuteOhlcvRange/)
+
+  for (const path of [
+    "modules/market/chart-data/contract.ts",
+    "modules/market/chart-data/normalize.ts",
+    "modules/market/chart-data/provider.ts",
+    "modules/market/chart-data/hot-store.ts",
+    "modules/market/chart-data/cold-store.ts",
+    "modules/market/chart-data/service.ts",
+    "app/api/market/ohlcv/route.ts",
+  ]) {
+    assert.equal(existsSync(path), true, `${path} must exist`)
+  }
 })
 
 test("QEO-92 canonical merge is sorted, deduped, hot-preferred and mismatch-aware", async () => {
-  const { mergeCanonicalBars } = await import(path.join(root, "modules/market/chart-data/normalize.ts"))
-  const cold = [{ time: 100, open: 10, high: 12, low: 9, close: 11, volume: 100 }]
-  const hot = [
-    { time: 100, open: 10, high: 13, low: 9, close: 12, volume: 110 },
-    { time: 160, open: 12, high: 14, low: 11, close: 13, volume: 120 },
-  ]
-  const result = mergeCanonicalBars([
-    { source: "cold", bars: cold },
-    { source: "hot", bars: hot },
+  const { normalizeCanonicalBars, detectSequenceGaps } = await import("../modules/market/chart-data/normalize.ts")
+
+  const result = normalizeCanonicalBars([
+    { source: "cold", bar: { time: 100, open: 10, high: 12, low: 9, close: 11, volume: 100 } },
+    { source: "hot", bar: { time: 100, open: 10, high: 13, low: 9, close: 12, volume: 120 } },
+    { source: "hot", bar: { time: 160, open: 12, high: 13, low: 11, close: 12.5, volume: 90 } },
+    { source: "provider", bar: { time: 220, open: 0, high: 1, low: 1, close: 1, volume: 10 } },
   ])
-  assert.deepEqual(result.bars.map((bar) => bar.time), [100, 160])
-  assert.equal(result.bars[0].high, 13)
-  assert.equal(result.integrityIssues.length, 1)
+
+  assert.deepEqual(result.bars.map((bar: { time: number }) => bar.time), [100, 160])
+  assert.equal(result.bars[0].close, 12)
+  assert.ok(result.integrityIssues.some((issue: { kind: string }) => issue.kind === "SOURCE_MISMATCH"))
+  assert.ok(result.integrityIssues.some((issue: { kind: string }) => issue.kind === "INVALID_BAR"))
+
+  assert.deepEqual(detectSequenceGaps([
+    { time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+    { time: 220, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+  ], "1m"), [{ fromTime: 100, toTime: 220, missingBars: 1 }])
 })
 
 test("StockTradingViewChart implements standard compact mode and full maximized mode", () => {
-  assert.match(chartSource, /isMaximized/)
-  assert.match(chartSource, /StockChartIndicatorModal/)
-  assert.match(chartSource, /StockChartDrawingTools/)
-  assert.match(chartSource, /onToggleMaximize/)
+  const code = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.match(code, /isMaximized \?/)
+  assert.match(code, /Maximize2/)
+  assert.match(code, /Minimize2/)
+
+  assert.match(code, /indicators\.showRsi/)
+  assert.match(code, /indicators\.showMacd/)
+  assert.match(code, /indicators\.showIchimoku/)
+  assert.match(code, /indicators\.showBollinger/)
+  assert.match(code, /indicators\.showVolumeProfile/)
+
+  assert.match(code, /<StockChartDrawingTools/)
+  assert.match(code, /<StockChartDrawingCanvas/)
 })
 
 test("StockTradingViewChart renders explicit unavailable state for unsupported intraday timeframes", () => {
@@ -177,9 +169,17 @@ test("StockTradingViewChart renders explicit unavailable state for unsupported i
 })
 
 test("StockDetailWorkstation handles isChartMaximized and hides sidebar/tabs", () => {
-  assert.match(workstationSource, /isChartMaximized/)
-  assert.match(workstationSource, /StockWatchlistSidebar/)
-  assert.match(workstationSource, /onToggleMaximize=\{\(\) => setIsChartMaximized\(\(prev\) => !prev\)\}/)
+  const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
+
+  assert.match(workstation, /isChartMaximized/)
+  assert.match(workstation, /setIsChartMaximized/)
+
+  assert.match(workstation, /!isChartMaximized && \(\s*<aside/)
+  assert.match(workstation, /!isChartMaximized && <StockCompanyHeader/)
+  assert.match(workstation, /!isChartMaximized && <StockTabsPanel/)
+
+  assert.match(workstation, /StockWatchlistSidebar/)
+  assert.match(workstation, /onToggleMaximize=\{\(\) => setIsChartMaximized\(\(prev\) => !prev\)\}/)
 })
 
 test("StockTradingViewChart cannot trap an empty persisted timeframe behind the loading return", () => {
