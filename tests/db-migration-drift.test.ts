@@ -4,7 +4,15 @@ import { existsSync, readFileSync, readdirSync } from "node:fs"
 import test from "node:test"
 import { parseMigrationFilename, reconcileMigrations } from "../scripts/db/migration-drift-lib.mjs"
 
-const reviewedLedgerPath = "docs/db/evidence/production-migration-ledger-2026-09-04.json"
+const ledgerDirectory = "docs/db/evidence"
+const reviewedLedgerPath = (() => {
+  const latest = readdirSync(ledgerDirectory)
+    .filter((name) => /^production-migration-ledger-\d{4}-\d{2}-\d{2}\.json$/.test(name))
+    .sort()
+    .at(-1)
+  assert.ok(latest, "expected at least one reviewed production migration ledger")
+  return `${ledgerDirectory}/${latest}`
+})()
 
 test("parseMigrationFilename extracts version and logical name", () => {
   assert.deepEqual(
