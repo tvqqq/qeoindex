@@ -1,0 +1,102 @@
+name: QEO-106 one-shot Hot aging TDD
+
+on:
+  push:
+    branches:
+      - qeo-106-daily-hot-cold-full-history
+
+permissions:
+  contents: write
+
+jobs:
+  tdd-hot-aging:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact branch
+        uses: actions/checkout@v4
+        with:
+          ref: qeo-106-daily-hot-cold-full-history
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Add failing Hot-aging regression
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          path = Path('tests/qeo-100-market-data.cases.ts')
+          text = path.read_text()
+          anchor = 'test("QEO-106 deep Daily history is resumable, bounded, provider-backed and archive-before-prune", () => {'
+          assert text.count(anchor) == 1
+          regression = '''test("QEO-106 Hot aging blocks unresolved Daily evidence before immutable Cold archive", () => {\n  const history = source("modules/market/history/daily-cold-history.ts")\n  assert.match(history, /isCanonicalDailyHotRowUsable/)\n  assert.match(history, /Unresolved Daily hot evidence prevents archive/)\n  assert.ok(history.indexOf("Unresolved Daily hot evidence prevents archive") < history.indexOf("archiveVerifiedPartition"))\n  assert.match(history, /provider_detail,source_url/)\n})\n\n'''
+          path.write_text(text.replace(anchor, regression + anchor))
+          PY
+
+      - name: Prove RED before implementation
+        shell: bash
+        run: |
+          set +e
+          node --test tests/stock-tradingview-chart-v2.test.ts > /tmp/qeo106-hot-aging-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/qeo106-hot-aging-red.log
+          if [[ "$status" -eq 0 ]]; then
+            echo "Expected Hot-aging regression to fail before implementation"
+            exit 1
+          fi
+          grep -q "QEO-106 Hot aging blocks unresolved Daily evidence" /tmp/qeo106-hot-aging-red.log
+
+      - name: Implement fail-closed Hot aging authority gate
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          path = Path('modules/market/history/daily-cold-history.ts')
+          text = path.read_text()
+          import_anchor = 'import type { CanonicalOhlcvBar } from "@/modules/market/chart-data/contract"\n'
+          assert text.count(import_anchor) == 1
+          text = text.replace(import_anchor, import_anchor + 'import { isCanonicalDailyHotRowUsable } from "@/modules/market/chart-data/daily-authority"\n')
+          type_old = '''  volume?: unknown\n  provider?: unknown\n}\n'''
+          type_new = '''  volume?: unknown\n  provider?: unknown\n  provider_detail?: unknown\n  source_url?: unknown\n}\n'''
+          assert text.count(type_old) == 1
+          text = text.replace(type_old, type_new)
+          select_old = '.select("bar_time,open,high,low,close,volume,provider")'
+          select_new = '.select("bar_time,open,high,low,close,volume,provider,provider_detail,source_url")'
+          assert text.count(select_old) == 1
+          text = text.replace(select_old, select_new)
+          block_old = '''  const rows = (data || []) as StoredDailyRow[]\n  const bars = validTradingBars(rows.map(toBar).filter((bar): bar is CanonicalOhlcvBar => Boolean(bar)))\n  if (!bars.length) return { rows: 0, manifests: [] as string[] }\n\n  const firstYear = vietnamDateKey(bars[0].time * 1000).slice(0, 4)\n  const partition = bars.filter((bar) => vietnamDateKey(bar.time * 1000).startsWith(firstYear))\n  const providers = [...new Set(rows.map((row) => String(row.provider || "")).filter(Boolean))]\n'''
+          block_new = '''  const rows = (data || []) as StoredDailyRow[]\n  const parsedRows = rows.map((row) => ({ row, bar: toBar(row) }))\n    .filter((item): item is { row: StoredDailyRow; bar: CanonicalOhlcvBar } => Boolean(item.bar))\n  if (!parsedRows.length) return { rows: 0, manifests: [] as string[] }\n\n  const firstYear = vietnamDateKey(parsedRows[0].bar.time * 1000).slice(0, 4)\n  const firstYearRows = parsedRows.filter(({ bar }) => vietnamDateKey(bar.time * 1000).startsWith(firstYear))\n  const unresolved = firstYearRows.filter(({ row }) => !isCanonicalDailyHotRowUsable(row))\n  if (unresolved.length) {\n    throw new Error(`Unresolved Daily hot evidence prevents archive for ${ticker} year=${firstYear} rows=${unresolved.length}`)\n  }\n\n  const partition = validTradingBars(firstYearRows.map(({ bar }) => bar))\n  if (!partition.length) return { rows: 0, manifests: [] as string[] }\n  const providers = [...new Set(firstYearRows.map(({ row }) => String(row.provider || "")).filter(Boolean))]\n'''
+          assert text.count(block_old) == 1
+          text = text.replace(block_old, block_new)
+          path.write_text(text)
+          PY
+
+      - name: Prove GREEN and type safety
+        run: |
+          node --test tests/stock-tradingview-chart-v2.test.ts
+          pnpm typecheck
+
+      - name: Commit implementation and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/qeo106-hot-aging-tdd.yml
+          git config user.name "qeoindex-db-drift-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add modules/market/history/daily-cold-history.ts tests/qeo-100-market-data.cases.ts .github/workflows/qeo106-hot-aging-tdd.yml
+          git commit -m "fix(QEO-106): gate Daily Hot aging on authority"
+          git push origin HEAD:qeo-106-daily-hot-cold-full-history
