@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -6,6 +7,7 @@ import {
   clampChartHistoryRange,
   maxChartHistorySeconds,
 } from "../modules/market/chart-data/history-policy.ts"
+import { missingProviderRanges } from "../modules/market/chart-data/provider-coverage.ts"
 import {
   MARKET_DATA_PROBE_PROVIDERS,
   ProviderProbeError,
@@ -17,6 +19,10 @@ import {
 } from "../modules/market/provider-benchmark/providers/ssi-iboard.ts"
 
 const DAY = 86400
+
+function source(path: string) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+}
 
 test("QEO-100 chart history policy maps exact product horizons", () => {
   for (const resolution of ["1m", "15m", "30m"] as const) {
@@ -46,6 +52,48 @@ test("QEO-100 history clamp never expands a request and clamps only short/mid lo
 
   const alreadyNarrow = clampChartHistoryRange({ resolution: "1m", from: to - 3 * DAY, to, now: to + DAY })
   assert.deepEqual(alreadyNarrow, { from: to - 3 * DAY, to, clamped: false })
+})
+
+test("QEO-100 incomplete stored coverage backfills the missing head instead of trusting lastStored", () => {
+  assert.deepEqual(
+    missingProviderRanges(
+      { from: 100, to: 1_000 },
+      [{ from: 700, to: 1_000 }],
+    ),
+    [{ from: 100, to: 700 }],
+  )
+
+  assert.deepEqual(
+    missingProviderRanges(
+      { from: 100, to: 1_000 },
+      [{ from: 100, to: 400 }, { from: 700, to: 1_000 }],
+    ),
+    [{ from: 400, to: 700 }],
+  )
+
+  assert.deepEqual(
+    missingProviderRanges(
+      { from: 100, to: 1_000 },
+      [{ from: 700, to: 1_000 }, { from: 100, to: 750 }],
+    ),
+    [],
+  )
+})
+
+test("QEO-100 1m loadOlder progressively hydrates the bounded horizon independent of gestures", () => {
+  const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
+  const hook = source("components/stock-detail/chart/use-chart-history.ts")
+
+  assert.match(wrapper, /timeframe !== "1m" \|\| loading \|\| loadingOlder \|\| !hasMore/)
+  assert.match(wrapper, /void loadOlder\(\)/)
+  assert.match(wrapper, /if \(timeframe === "1m"\) return/)
+  assert.match(wrapper, /timeframe !== "1m" && event\.deltaY > 0/)
+
+  assert.match(hook, /historyCursorRef/)
+  assert.match(hook, /historyCursorRef\.current = range\.from/)
+  assert.match(hook, /olderChartHistoryRange\(timeframe, cursor, horizonTo\)/)
+  assert.match(hook, /setHasMore\(range\.from > chartHistoryFloor\(timeframe, horizonTo\) \+ 1\)/)
+  assert.doesNotMatch(hook, /setHasMore\(result\.bars\.length > 0/)
 })
 
 test("QEO-100 provider benchmark contract includes SSI iBoard first and bounded canonical resolutions", () => {

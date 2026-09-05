@@ -51,11 +51,24 @@ function HistoryBoundChart({
     if (!loading && !loadingOlder && hasMore) void loadOlder()
   }, [hasMore, loadOlder, loading, loadingOlder])
 
+  // QEO-100 P0: raw 1m has a bounded 31-day product horizon. Hydrate it
+  // progressively after the fast initial window so completeness does not
+  // depend on mouse/trackpad gesture direction. Stop automatic progression on
+  // a transport failure; a reload can retry instead of creating a retry loop.
+  useEffect(() => {
+    if (timeframe !== "1m" || loading || loadingOlder || !hasMore || error) return
+    void loadOlder()
+  }, [error, hasMore, loadOlder, loading, loadingOlder, timeframe])
+
+  // Preserve lazy gesture loading for non-1m timeframes. QEO-100 only changes
+  // the raw 1m completeness contract; QEO-103 owns cache/retention optimization.
   const handleMouseDownCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (timeframe === "1m") return
     if (event.button === 0) dragStartXRef.current = event.clientX
   }
 
   const handleMouseMoveCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (timeframe === "1m") return
     const start = dragStartXRef.current
     if (start == null || (event.buttons & 1) === 0) return
     if (event.clientX - start >= 80) {
@@ -80,7 +93,7 @@ function HistoryBoundChart({
       onMouseUpCapture={() => { dragStartXRef.current = null }}
       onMouseLeave={() => { dragStartXRef.current = null }}
       onWheelCapture={(event) => {
-        if (event.deltaY > 0) requestOlder()
+        if (timeframe !== "1m" && event.deltaY > 0) requestOlder()
       }}
     >
       <CanonicalMinuteBarsContext.Provider value={canonicalMinuteOverride}>

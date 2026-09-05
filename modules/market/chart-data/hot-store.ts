@@ -2,6 +2,7 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { CanonicalOhlcvBar } from "./contract"
+import type { ProviderCoverageRange } from "./provider-coverage"
 
 const UPSERT_CHUNK_SIZE = 500
 
@@ -21,6 +22,20 @@ function storedRowToBar(row: Record<string, unknown>): CanonicalOhlcvBar | null 
   return { time: Math.floor(timestamp / 1000), open, high, low, close, volume }
 }
 
+function provenanceCoverageRange(row: Record<string, unknown>): ProviderCoverageRange | null {
+  const detail = row.detail && typeof row.detail === "object" && !Array.isArray(row.detail)
+    ? row.detail as Record<string, unknown>
+    : {}
+  const requestedFrom = finite(detail.requestedFrom)
+  const requestedTo = finite(detail.requestedTo)
+  const actualFromMs = row.range_start ? new Date(String(row.range_start)).getTime() : NaN
+  const actualToMs = row.range_end ? new Date(String(row.range_end)).getTime() : NaN
+  const from = requestedFrom ?? (Number.isFinite(actualFromMs) ? Math.floor(actualFromMs / 1000) : null)
+  const to = requestedTo ?? (Number.isFinite(actualToMs) ? Math.floor(actualToMs / 1000) : null)
+  if (from == null || to == null || to < from) return null
+  return { from: Math.floor(from), to: Math.floor(to) }
+}
+
 export async function readHotIntradayRange(
   supabase: SupabaseClient,
   ticker: string,
@@ -38,6 +53,32 @@ export async function readHotIntradayRange(
 
   if (error) throw new Error(`Chart hot-store read failed: ${error.message}`)
   return (data || []).map((row) => storedRowToBar(row as Record<string, unknown>)).filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
+}
+
+/**
+ * Provenance stores the exact request bounds in detail.requestedFrom/To.
+ * Reading those bounds lets the service distinguish "we fetched this range"
+ * from "we merely have a recent suffix of this range".
+ */
+export async function readProviderRequestCoverage(
+  supabase: SupabaseClient,
+  ticker: string,
+  from: number,
+  to: number,
+): Promise<ProviderCoverageRange[]> {
+  const { data, error } = await supabase
+    .from("chart_ohlcv_provenance_batches")
+    .select("range_start,range_end,detail")
+    .eq("ticker", ticker)
+    .eq("base_resolution", "1m")
+    .lte("range_start", new Date(to * 1000).toISOString())
+    .gte("range_end", new Date(from * 1000).toISOString())
+    .order("range_start", { ascending: true })
+
+  if (error) throw new Error(`Chart provenance coverage read failed: ${error.message}`)
+  return (data || [])
+    .map((row) => provenanceCoverageRange(row as Record<string, unknown>))
+    .filter((range): range is ProviderCoverageRange => Boolean(range))
 }
 
 export async function upsertHotIntradayBars(
