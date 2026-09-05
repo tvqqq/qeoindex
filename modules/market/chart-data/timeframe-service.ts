@@ -11,7 +11,11 @@ import type {
   ChartOhlcvResult,
 } from "./contract"
 import { ChartDataRequestError, isChartResolution } from "./contract"
-import { readDerivedHourlyRange } from "./derived-hourly-store"
+import { createSupabaseColdOhlcvStorage } from "./cold-store"
+import {
+  derivedHourlyColdCoverageComplete,
+  readDerivedHourlyRange,
+} from "./derived-hourly-store"
 import { chartHotRetentionCutoff, clampChartHistoryRange } from "./history-policy"
 import { getCanonicalChartOhlcv, type ChartDataServiceDeps } from "./service"
 import {
@@ -23,10 +27,12 @@ import {
 
 type CanonicalLoader = (request: CanonicalChartOhlcvRequest) => Promise<CanonicalChartOhlcvResult>
 type DerivedHourlyLoader = (input: { ticker: string; from: number; to: number }) => Promise<CanonicalOhlcvBar[]>
+type DerivedCoverageLoader = (input: { ticker: string; from: number; to: number }) => Promise<boolean>
 
 export interface ChartTimeframeServiceDeps extends ChartDataServiceDeps {
   canonicalLoader?: CanonicalLoader
   derivedHourlyLoader?: DerivedHourlyLoader
+  derivedCoverageLoader?: DerivedCoverageLoader
 }
 
 const HOURLY_RESOLUTIONS = new Set(["1h", "2h", "4h"])
@@ -77,15 +83,26 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
   const hotCutoff = chartHotRetentionCutoff(referenceAt)
   const sourceRange = sourceRangeForResolution(request.resolution, request.from, request.to)
   const loadDerived: DerivedHourlyLoader = deps.derivedHourlyLoader ?? ((input) => readDerivedHourlyRange(deps.supabase, input.ticker, input.from, input.to))
+  const derivedCoverage: DerivedCoverageLoader = deps.derivedCoverageLoader ?? ((input) => derivedHourlyColdCoverageComplete(deps.supabase, input))
 
   const oldFrom = sourceRange.from
   const oldTo = Math.min(request.to, hotCutoff - 1)
   const oldRequested = oldFrom <= oldTo
   const oldErrors: ChartDataError[] = []
   let oldHourly: CanonicalOhlcvBar[] = []
+  let oldProvider: string | null = null
   if (oldRequested) {
     try {
-      oldHourly = await loadDerived({ ticker: request.ticker, from: oldFrom, to: oldTo })
+      const coverageComplete = await derivedCoverage({ ticker: request.ticker, from: oldFrom, to: oldTo })
+      if (coverageComplete) {
+        oldHourly = await loadDerived({ ticker: request.ticker, from: oldFrom, to: oldTo })
+        if (oldHourly.length) oldProvider = "DERIVED_1H_CACHE"
+      } else {
+        const coldStorage = deps.coldStorage ?? createSupabaseColdOhlcvStorage(deps.supabase)
+        const cold = await coldStorage.readIntersectingRange({ ticker: request.ticker, from: oldFrom, to: oldTo })
+        oldHourly = aggregateChartTimeframe(cold.bars, "1h")
+        if (oldHourly.length) oldProvider = "VERIFIED_COLD_1M_RECOVERY"
+      }
       if (!oldHourly.length) oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
     } catch {
       oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
@@ -128,7 +145,7 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
     coverage: { complete, state: complete ? "COMPLETE" : "PARTIAL" },
     metadata: {
       priceBasis: "RAW",
-      provider: sourceMetadata?.provider ?? (oldHourly.length ? "DERIVED_1H_CACHE" : null),
+      provider: sourceMetadata?.provider ?? oldProvider,
       lastUpdatedAt: sourceMetadata?.lastUpdatedAt ?? referenceAt.toISOString(),
       sessionState,
       currentBarTime: sessionState === "LIVE" ? bars.at(-1)?.time ?? null : null,
