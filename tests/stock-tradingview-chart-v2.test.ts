@@ -279,8 +279,10 @@ test("StockTradingViewChart implements standard compact mode and full maximized 
   assert.match(code, /Maximize2/)
   assert.match(code, /Minimize2/)
 
-  assert.match(code, /indicators\.showRsi/)
-  assert.match(code, /indicators\.showMacd/)
+  assert.match(code, /const hasRsi = isMaximized/)
+  assert.match(code, /const hasMacd = isMaximized/)
+  assert.doesNotMatch(code, /indicators\.showRsi/)
+  assert.doesNotMatch(code, /indicators\.showMacd/)
   assert.match(code, /indicators\.showIchimoku/)
   assert.match(code, /indicators\.showBollinger/)
   assert.match(code, /indicators\.showVolumeProfile/)

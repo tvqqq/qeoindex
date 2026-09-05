@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Check, Activity, BarChart2, TrendingUp, Layers, Compass, Sparkles, X } from "lucide-react"
+import { Check, BarChart2, TrendingUp, Layers, Compass, Sparkles, X } from "lucide-react"
 import { cn } from "@/modules/shared/ui/cn"
 import type { IndicatorConfig } from "./stock-chart-types"
 
@@ -25,20 +25,6 @@ export function StockChartIndicatorModal({ config, onChange, onClose }: Indicato
       code: "MA (20, 50, 200)",
       desc: "Xu hướng giá trung bình các mốc then chốt",
       icon: <TrendingUp className="size-3.5 text-emerald-400" />,
-    },
-    {
-      key: "showRsi",
-      title: "Chỉ số sức mạnh tương đối",
-      code: "RSI (14)",
-      desc: "Đo lường vùng quá mua / quá bán (30 - 70)",
-      icon: <Activity className="size-3.5 text-purple-400" />,
-    },
-    {
-      key: "showMacd",
-      title: "Hội tụ / Phân kỳ trung bình động",
-      code: "MACD (12, 26, 9)",
-      desc: "Histogram động lượng và đường tín hiệu MACD",
-      icon: <BarChart2 className="size-3.5 text-cyan-400" />,
     },
     {
       key: "showIchimoku",
@@ -77,7 +63,7 @@ export function StockChartIndicatorModal({ config, onChange, onClose }: Indicato
     })
   }
 
-  const enabledCount = Object.values(config).filter(Boolean).length
+  const enabledCount = indicators.filter((indicator) => Boolean(config[indicator.key])).length
 
   return (
     <div className="absolute left-0 top-8 z-50 w-[340px] max-w-[calc(100vw-24px)] overflow-hidden rounded-lg border border-white/[0.12] bg-[#0b0f15]/98 shadow-[0_18px_52px_rgba(0,0,0,0.82)] backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
