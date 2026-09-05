@@ -47,6 +47,10 @@ function localEpoch(year: number, month: number, day: number, hour = 0, minute =
   return Math.floor(Date.UTC(year, month - 1, day, hour, minute, 0) / 1000) - VN_OFFSET_SECONDS
 }
 
+function canonicalSourceStart(time: number) {
+  return Math.max(1, time)
+}
+
 function dateKey(parts: Pick<LocalParts, "year" | "month" | "day">) {
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`
 }
@@ -173,15 +177,15 @@ export function sourceRangeForResolution(
   to: number,
 ): { from: number; to: number } {
   if (resolution === "3D") return { from: THREE_DAY_ANCHOR_SECONDS, to }
-  if (resolution === "1W") return { from: mondayStart(from), to }
+  if (resolution === "1W") return { from: canonicalSourceStart(mondayStart(from)), to }
 
   const parts = localParts(from)
-  if (resolution === "1M") return { from: localEpoch(parts.year, parts.month, 1), to }
+  if (resolution === "1M") return { from: canonicalSourceStart(localEpoch(parts.year, parts.month, 1)), to }
   if (resolution === "1Q") {
     const quarterStartMonth = Math.floor((parts.month - 1) / 3) * 3 + 1
-    return { from: localEpoch(parts.year, quarterStartMonth, 1), to }
+    return { from: canonicalSourceStart(localEpoch(parts.year, quarterStartMonth, 1)), to }
   }
-  if (resolution === "1Y") return { from: localEpoch(parts.year, 1, 1), to }
+  if (resolution === "1Y") return { from: canonicalSourceStart(localEpoch(parts.year, 1, 1)), to }
 
   if (INTRADAY_BUCKET_MINUTES[resolution] && resolution !== "1m") {
     const bucket = intradayBucket(from, resolution)
