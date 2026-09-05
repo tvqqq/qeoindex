@@ -77,6 +77,27 @@ function validTradingBars(bars: CanonicalOhlcvBar[]) {
     .sort((a, b) => a.time - b.time)
 }
 
+function providerBackfillBars(provider: string, bars: CanonicalOhlcvBar[]) {
+  const valid = validTradingBars(bars)
+  // Generic Yahoo/Fallback zero-volume rows were the QEO-106 phantom-session
+  // failure mode. Without independent final-close evidence they cannot become
+  // immutable Cold history. VCI/DNSE/VNDirect/TitanLabs retain their real bars.
+  return provider === "Fallback" ? valid.filter((bar) => bar.volume > 0) : valid
+}
+
+function providerExhaustedWithoutData(message: string) {
+  const providers = ["VCI", "DNSE", "Yahoo", "VNDirect", "TitanLabs"]
+  return providers.every((provider) => message.includes(`${provider}: ${provider} returned no usable completed Daily bars`))
+}
+
+function earliestLocalEpoch(...values: Array<number | null>) {
+  return values.filter((value): value is number => value != null).sort((a, b) => a - b)[0] ?? null
+}
+
+function isoOrNull(epoch: number | null) {
+  return epoch == null ? null : new Date(epoch * 1000).toISOString()
+}
+
 function partitionByVietnamYear(bars: CanonicalOhlcvBar[]) {
   const groups = new Map<string, CanonicalOhlcvBar[]>()
   for (const bar of bars) {
@@ -185,10 +206,8 @@ async function backfillTicker(supabase: SupabaseClient, ticker: string, maxChunk
 
   const terminal = await loadTerminalStatus(supabase, ticker)
   if (terminal) {
-    const hot = await earliestHotEpoch(supabase, ticker)
-    const cold = await earliestColdEpoch(supabase, ticker)
-    const earliest = [hot, cold].filter((value): value is number => value != null).sort((a, b) => a - b)[0] ?? null
-    return { ticker, archivedHotRows, deepArchivedRows, manifests, status: terminal, earliestLocal: earliest == null ? null : new Date(earliest * 1000).toISOString() }
+    const earliest = earliestLocalEpoch(await earliestHotEpoch(supabase, ticker), await earliestColdEpoch(supabase, ticker))
+    return { ticker, archivedHotRows, deepArchivedRows, manifests, status: terminal, earliestLocal: isoOrNull(earliest) }
   }
 
   const hotArchive = await archiveExpiredDailyHotHistory(supabase, ticker, now)
@@ -200,7 +219,7 @@ async function backfillTicker(supabase: SupabaseClient, ticker: string, maxChunk
   for (let chunk = 0; chunk < maxChunksPerTicker; chunk += 1) {
     const hot = await earliestHotEpoch(supabase, ticker)
     const cold = await earliestColdEpoch(supabase, ticker)
-    const earliestLocal = [hot, cold].filter((value): value is number => value != null).sort((a, b) => a - b)[0] ?? null
+    const earliestLocal = earliestLocalEpoch(hot, cold)
     if (earliestLocal == null) throw new Error(`No canonical Daily anchor exists for ${ticker}`)
 
     const windowToMs = earliestLocal * 1000 - DAY_MS
@@ -211,7 +230,7 @@ async function backfillTicker(supabase: SupabaseClient, ticker: string, maxChunk
     try {
       const history = await fetchDailyMarketHistoryWindow(ticker, DAILY_DEEP_CHUNK_DAYS, cursorNow)
       lastProvider = history.provider
-      const older = validTradingBars(history.bars)
+      const older = providerBackfillBars(history.provider, history.bars)
         .filter((bar) => bar.time < earliestLocal)
       if (!older.length) {
         status = "PROVIDER_BOUNDARY"
@@ -266,6 +285,24 @@ async function backfillTicker(supabase: SupabaseClient, ticker: string, maxChunk
       const message = error instanceof Error ? error.message : String(error)
       const refreshedHot = await earliestHotEpoch(supabase, ticker)
       const refreshedCold = await earliestColdEpoch(supabase, ticker)
+      const refreshedEarliest = earliestLocalEpoch(refreshedHot, refreshedCold)
+
+      if (providerExhaustedWithoutData(message)) {
+        status = "PROVIDER_BOUNDARY"
+        await saveState(supabase, {
+          ticker,
+          earliestHot: refreshedHot,
+          earliestCold: refreshedCold,
+          status,
+          boundaryTime: refreshedEarliest,
+          provider: null,
+          windowFrom,
+          windowTo,
+          detail: { reason: "all-approved-providers-returned-no-data", error: message.slice(0, 1000) },
+        })
+        break
+      }
+
       status = "RETRYABLE_ERROR"
       await saveState(supabase, {
         ticker,
@@ -283,9 +320,7 @@ async function backfillTicker(supabase: SupabaseClient, ticker: string, maxChunk
         deepArchivedRows,
         manifests,
         status,
-        earliestLocal: [refreshedHot, refreshedCold].filter((value): value is number => value != null).sort((a, b) => a - b)[0] == null
-          ? null
-          : new Date(([refreshedHot, refreshedCold].filter((value): value is number => value != null).sort((a, b) => a - b)[0]) * 1000).toISOString(),
+        earliestLocal: isoOrNull(refreshedEarliest),
         error: message,
       }
     }
@@ -293,8 +328,8 @@ async function backfillTicker(supabase: SupabaseClient, ticker: string, maxChunk
 
   const finalHot = await earliestHotEpoch(supabase, ticker)
   const finalCold = await earliestColdEpoch(supabase, ticker)
-  const earliest = [finalHot, finalCold].filter((value): value is number => value != null).sort((a, b) => a - b)[0] ?? null
-  return { ticker, archivedHotRows, deepArchivedRows, manifests, status, earliestLocal: earliest == null ? null : new Date(earliest * 1000).toISOString() }
+  const earliest = earliestLocalEpoch(finalHot, finalCold)
+  return { ticker, archivedHotRows, deepArchivedRows, manifests, status, earliestLocal: isoOrNull(earliest) }
 }
 
 export async function backfillDailyColdHistory(
