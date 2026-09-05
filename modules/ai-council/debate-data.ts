@@ -215,10 +215,10 @@ function relatedReports(snapshot: ReportEvidenceSnapshotRow | undefined, ticker:
     const title = text(report.title)
     if (!reportId || !title) continue
 
-    const tickerEvidence = Array.isArray(report.tickerEvidence) ? report.tickerEvidence : []
-    const matchedTicker = tickerEvidence
-      .map(record)
-      .find((evidence) => text(evidence.ticker).toUpperCase() === ticker.toUpperCase())
+    const tickerMention = record(report.tickerMention)
+    const matchedTicker = text(tickerMention.ticker).toUpperCase() === ticker.toUpperCase()
+      ? tickerMention
+      : null
 
     normalized.push({
       reportId,
