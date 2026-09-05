@@ -1,4 +1,6 @@
 const VIETNAM_TIME_ZONE = "Asia/Ho_Chi_Minh"
+const VN_SECURITIES_CALENDAR_FIRST_DATE = "2018-01-01"
+const VN_SECURITIES_CALENDAR_LAST_DATE = "2026-12-31"
 
 // Official HNX/VNX cash-market closure dates for the historical Hot Daily range.
 // Weekends are rejected separately. Cold history older than this authoritative
@@ -29,6 +31,12 @@ export function vietnamDateKey(value: Date | string | number = new Date()) {
 
 function weekdayForDateKey(dateKey: string) {
   return new Date(`${dateKey}T12:00:00+07:00`).getUTCDay()
+}
+
+export function hasVietnamSecuritiesTradingCalendarCoverage(dateKey: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateKey)
+    && dateKey >= VN_SECURITIES_CALENDAR_FIRST_DATE
+    && dateKey <= VN_SECURITIES_CALENDAR_LAST_DATE
 }
 
 export function isVietnamSecuritiesTradingDateKey(dateKey: string) {
