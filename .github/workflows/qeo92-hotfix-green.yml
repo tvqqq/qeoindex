@@ -1,0 +1,68 @@
+name: QEO-92 Hotfix GREEN
+
+on:
+  push:
+    branches:
+      - tvq9612/qeo-92-hotfix-1m-chart-stuck
+    paths:
+      - .github/workflows/qeo92-hotfix-green.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-green:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tvq9612/qeo-92-hotfix-1m-chart-stuck
+          fetch-depth: 0
+      - name: Patch StockTradingViewChart
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('components/stock-detail/stock-tradingview-chart.tsx')
+          s = p.read_text()
+
+          old = 'import { useUserChartSync } from "./chart/use-user-chart-sync"\n'
+          new = old + 'import { useCanonicalMinuteBars } from "./chart/use-canonical-minute-bars"\n'
+          if 'useCanonicalMinuteBars' not in s:
+              if old not in s: raise SystemExit('import anchor missing')
+              s = s.replace(old, new, 1)
+
+          anchor = '  })\n\n  // Dropdown states\n'
+          replacement = '  })\n\n  const minuteBars = useCanonicalMinuteBars({ ticker, enabled: timeframe === "1m" })\n\n  // Dropdown states\n'
+          if 'const minuteBars = useCanonicalMinuteBars' not in s:
+              if anchor not in s: raise SystemExit('hook anchor missing')
+              s = s.replace(anchor, replacement, 1)
+
+          old = '  // Aggregated bars based on selected timeframe\n  const displayBars = useMemo(() => {\n    return aggregateBarsByTimeframe(bars, hourlyBars, timeframe)\n  }, [bars, hourlyBars, timeframe])\n'
+          new = '  // Canonical raw 1m is loaded from QEO-92. Derived timeframes remain owned by QEO-93.\n  const displayBars = useMemo(() => {\n    if (timeframe === "1m") return minuteBars.bars\n    return aggregateBarsByTimeframe(bars, hourlyBars, timeframe)\n  }, [bars, hourlyBars, minuteBars.bars, timeframe])\n'
+          if old not in s: raise SystemExit('displayBars block missing')
+          s = s.replace(old, new, 1)
+
+          old = '  if (!displayBars.length || !chartMetrics || visibleBars.length === 0) {\n    return (\n      <div className="flex h-[310px] items-center justify-center rounded-2xl border border-white/[0.08] bg-[#080d13] p-6 text-sm text-slate-500 font-ticker">\n        Đang nạp dữ liệu nến TradingView {ticker}...\n      </div>\n    )\n  }\n\n'
+          if old not in s: raise SystemExit('early loading return missing')
+          s = s.replace(old, '', 1)
+
+          old = '            const vH = (bar.volume / chartMetrics.maxVol) * volHeight\n'
+          new = '            const vH = (bar.volume / (chartMetrics?.maxVol ?? 1)) * volHeight\n'
+          if old not in s: raise SystemExit('volume metric anchor missing')
+          s = s.replace(old, new, 1)
+
+          old = '        {displayBars.length === 0 && (\n          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6">\n            <div className="rounded-xl border border-white/[0.08] bg-[#0c131c]/95 px-5 py-4 text-center shadow-xl">\n              <div className="text-sm font-semibold text-slate-200">\n                Dữ liệu timeframe này chưa sẵn sàng\n              </div>\n              <div className="mt-1 text-xs text-slate-500">\n                {timeframe} chưa có canonical candles. QEO-93 sẽ aggregate từ raw 1m.\n              </div>\n            </div>\n          </div>\n        )}\n'
+          new = '        {displayBars.length === 0 && (\n          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6">\n            <div className="rounded-xl border border-white/[0.08] bg-[#0c131c]/95 px-5 py-4 text-center shadow-xl">\n              <div className="text-sm font-semibold text-slate-200">\n                {timeframe === "1m"\n                  ? minuteBars.status === "loading"\n                    ? "Đang nạp dữ liệu 1m canonical"\n                    : "Không tải được dữ liệu 1m canonical"\n                  : "Dữ liệu timeframe này chưa sẵn sàng"}\n              </div>\n              <div className="mt-1 text-xs text-slate-500">\n                {timeframe === "1m"\n                  ? minuteBars.status === "loading"\n                    ? "Đang đọc dữ liệu thật từ canonical hot/cold storage..."\n                    : minuteBars.error || "Không có candle 1m trong khoảng dữ liệu yêu cầu."\n                  : `${timeframe} chưa có canonical candles. QEO-93 sẽ aggregate từ raw 1m.`}\n              </div>\n            </div>\n          </div>\n        )}\n'
+          if old not in s: raise SystemExit('unavailable overlay missing')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          PY
+      - name: Commit production fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/stock-detail/stock-tradingview-chart.tsx components/stock-detail/chart/use-canonical-minute-bars.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(qeo-92): restore canonical 1m chart loading"
+          git push origin HEAD:tvq9612/qeo-92-hotfix-1m-chart-stuck
