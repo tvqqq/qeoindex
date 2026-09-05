@@ -34,6 +34,23 @@ test("StockTradingViewChart implements 100% TradingView scroll, zoom out, and co
   assert.match(chartCode, /handleResetView/)
 })
 
+test("StockTradingViewChart keeps live-edge zoom history, floating tools, canonical candles and permanent lower panes", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+  const modalCode = source("components/stock-detail/chart/stock-chart-indicator-modal.tsx")
+  const shellCode = source("components/stock-detail/chart/stock-chart-terminal-shell.module.css")
+
+  assert.match(chartCode, /isZoomingOutAtLiveEdge = diff > 0 && scrollOffset === 0/)
+  assert.match(chartCode, /Main Candlesticks — canonical Japanese candles/)
+  assert.doesNotMatch(chartCode, /Maximized: Chart Style Dropdown/)
+  assert.match(chartCode, /const hasRsi = isMaximized/)
+  assert.match(chartCode, /const hasMacd = isMaximized/)
+  assert.match(chartCode, /TradingView-style in-plot OHLCV readout/)
+  assert.doesNotMatch(modalCode, /key: "showRsi"/)
+  assert.doesNotMatch(modalCode, /key: "showMacd"/)
+  assert.match(shellCode, /border-radius: 18px !important/)
+  assert.match(shellCode, /bottom: auto !important/)
+})
+
 test("StockTradingViewChart keeps TradingView-style future space and scalable price rail", () => {
   const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
 
