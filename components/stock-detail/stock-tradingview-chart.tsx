@@ -34,6 +34,7 @@ import {
   type DrawingTool,
 } from "./chart/stock-chart-types"
 import { useUserChartSync } from "./chart/use-user-chart-sync"
+import { useCanonicalMinuteBars } from "./chart/use-canonical-minute-bars"
 
 interface StockTradingViewChartProps {
   ticker: string
@@ -75,6 +76,8 @@ export function StockTradingViewChart({
     defaultIndicators: DEFAULT_INDICATOR_CONFIG,
   })
 
+  const minuteBars = useCanonicalMinuteBars({ ticker, enabled: timeframe === "1m" })
+
   // Dropdown states
   const [showTfDropdown, setShowTfDropdown] = useState(false)
   const [showStyleDropdown, setShowStyleDropdown] = useState(false)
@@ -105,10 +108,11 @@ export function StockTradingViewChart({
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [hoverY, setHoverY] = useState<number | null>(null)
 
-  // Aggregated bars based on selected timeframe
+  // Canonical raw 1m is loaded from QEO-92. Derived timeframes remain owned by QEO-93.
   const displayBars = useMemo(() => {
+    if (timeframe === "1m") return minuteBars.bars
     return aggregateBarsByTimeframe(bars, hourlyBars, timeframe)
-  }, [bars, hourlyBars, timeframe])
+  }, [bars, hourlyBars, minuteBars.bars, timeframe])
 
   // Compute visible slice of bars based on scrollOffset & visibleBarsCount
   const totalBars = displayBars.length
@@ -404,14 +408,6 @@ export function StockTradingViewChart({
   }
 
   const activeBar = hoverIndex !== null && visibleBars[hoverIndex] ? visibleBars[hoverIndex] : visibleBars.at(-1)
-
-  if (!displayBars.length || !chartMetrics || visibleBars.length === 0) {
-    return (
-      <div className="flex h-[310px] items-center justify-center rounded-2xl border border-white/[0.08] bg-[#080d13] p-6 text-sm text-slate-500 font-ticker">
-        Đang nạp dữ liệu nến TradingView {ticker}...
-      </div>
-    )
-  }
 
   const activeIndicatorsCount = Object.values(indicators).filter(Boolean).length
   const editingDrawing = drawings.find((d) => d.id === editingTextDrawingId)
@@ -827,10 +823,18 @@ export function StockTradingViewChart({
           <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6">
             <div className="rounded-xl border border-white/[0.08] bg-[#0c131c]/95 px-5 py-4 text-center shadow-xl">
               <div className="text-sm font-semibold text-slate-200">
-                Dữ liệu timeframe này chưa sẵn sàng
+                {timeframe === "1m"
+                  ? minuteBars.status === "loading"
+                    ? "Đang nạp dữ liệu 1m canonical"
+                    : "Không tải được dữ liệu 1m canonical"
+                  : "Dữ liệu timeframe này chưa sẵn sàng"}
               </div>
               <div className="mt-1 text-xs text-slate-500">
-                {timeframe} chưa có canonical candles. QEO-93 sẽ aggregate từ raw 1m.
+                {timeframe === "1m"
+                  ? minuteBars.status === "loading"
+                    ? "Đang đọc dữ liệu thật từ canonical hot/cold storage..."
+                    : minuteBars.error || "Không có candle 1m trong khoảng dữ liệu yêu cầu."
+                  : `${timeframe} chưa có canonical candles. QEO-93 sẽ aggregate từ raw 1m.`}
               </div>
             </div>
           </div>
@@ -1059,7 +1063,7 @@ export function StockTradingViewChart({
           {/* 4. Volume Bars (Standard Volume Pane) */}
           {visibleBars.map((bar, i) => {
             const x = getX(i)
-            const vH = (bar.volume / chartMetrics.maxVol) * volHeight
+            const vH = (bar.volume / (chartMetrics?.maxVol ?? 1)) * volHeight
             const isBull = bar.close >= bar.open
             const barW = Math.max(2, plotWidth / visibleBars.length - 1.5)
             return (
