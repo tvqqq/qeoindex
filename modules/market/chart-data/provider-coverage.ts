@@ -58,3 +58,18 @@ export function missingProviderRanges(
   if (cursor < normalizedRequest.to) missing.push({ from: cursor, to: normalizedRequest.to })
   return missing.filter((range) => range.to > range.from)
 }
+
+/**
+ * Filters detected storage gaps through successful provider-request coverage.
+ * A sparse 1m interval already covered by a successful provider request is a
+ * known no-trade/sparse interval, not evidence that another blocking refill is
+ * required. Uncovered portions remain eligible for bounded provider repair.
+ */
+export function uncoveredProviderRanges(
+  ranges: ProviderCoverageRange[],
+  coveredRanges: ProviderCoverageRange[],
+): ProviderCoverageRange[] {
+  return mergeProviderRanges(
+    ranges.flatMap((range) => missingProviderRanges(range, coveredRanges)),
+  )
+}
