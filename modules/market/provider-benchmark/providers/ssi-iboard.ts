@@ -1,5 +1,3 @@
-import "server-only"
-
 import type { CanonicalOhlcvBar } from "@/modules/market/chart-data/contract"
 import {
   ProviderProbeError,
