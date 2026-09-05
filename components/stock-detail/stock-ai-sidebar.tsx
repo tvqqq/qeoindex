@@ -5,17 +5,13 @@ import {
   Activity,
   BarChart3,
   BrainCircuit,
-  CircleAlert,
-  Compass,
   Gauge,
-  HelpCircle,
   LineChart,
   Radar,
   Send,
   ShieldCheck,
   Sparkles,
   Target,
-  Zap,
 } from "lucide-react"
 
 import type { StockDetailData } from "./types"
@@ -38,7 +34,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
 
   const pillars = [
     { label: "Cơ bản", score: fa?.roe ? Math.min(95, Math.round(fa.roe * 2.5 + 30)) : 75, icon: BarChart3 },
-    { label: "Wyckoff", score: scan?.wyckoffState ? (scan.wyckoffState.includes("Accumulation") || scan.wyckoffState.includes("Markup") ? 86 : 55) : 80, icon: Radar },
+    { label: "Kỹ thuật", score: scan?.wyckoffState ? (scan.wyckoffState.includes("Accumulation") || scan.wyckoffState.includes("Markup") ? 86 : 55) : 80, icon: LineChart },
     { label: "Dòng tiền", score: scan?.relVolume ? Math.min(96, Math.round(scan.relVolume * 50)) : 82, icon: Activity },
     { label: "Bối cảnh", score: thesis?.marketRegime === "Risk-On" ? 85 : 70, icon: Gauge },
     { label: "An toàn", score: 78, icon: ShieldCheck },
@@ -48,7 +44,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
     signal === "BUY"
       ? "TÍCH LŨY (BUY)"
       : signal === "BUY_ON_CONFIRMATION"
-      ? "CHỜ XÁC NHẬN (CONFIRM)"
+      ? "MUA KHI XÁC NHẬN"
       : signal === "REDUCE"
       ? "HẠ TỶ TRỌNG (REDUCE)"
       : signal === "SELL"
@@ -57,18 +53,18 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
 
   const signalColor =
     signal === "BUY"
-      ? "text-emerald-400 border-emerald-500/30 bg-emerald-950/20 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+      ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-300"
       : signal === "BUY_ON_CONFIRMATION"
-      ? "text-cyan-300 border-cyan-500/30 bg-cyan-950/20 shadow-[0_0_12px_rgba(34,211,238,0.2)]"
+      ? "border-cyan-400/35 bg-cyan-400/10 text-cyan-200"
       : signal === "REDUCE" || signal === "SELL"
-      ? "text-rose-400 border-rose-500/30 bg-rose-950/20 shadow-[0_0_12px_rgba(244,63,94,0.2)]"
-      : "text-amber-400 border-amber-500/30 bg-amber-950/20 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+      ? "border-rose-400/35 bg-rose-400/10 text-rose-300"
+      : "border-slate-400/25 bg-slate-400/[0.08] text-slate-200"
 
   const supportLevel = aiStock?.support || scan?.support || thesis?.support || (price ? (price * 0.96).toFixed(1) : "—")
   const resistanceLevel = aiStock?.resistance || scan?.resistance || thesis?.resistance || (price ? (price * 1.07).toFixed(1) : "—")
   const stopLoss = aiStock?.invalidation || scan?.invalidation || (price ? (price * 0.935).toFixed(1) : "—")
 
-  // Chatbox state
+  // Chat state
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -104,7 +100,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
       let response = ""
       const q = text.toLowerCase()
       if (q.includes("dòng tiền") || q.includes("smart money") || q.includes("lớn")) {
-        response = `Dòng tiền vào **${ticker}** phiên hiện tại có khối lượng khớp ${scan?.volume ? scan.volume.toLocaleString() : "tương đối tích cực"}. Tỷ lệ mua chủ động duy trì vượt trội, chỉ báo Relative Volume đạt ${scan?.relVolume ? scan.relVolume.toFixed(2) + "x" : "1.25x"} so với trung bình 20 phiên.`
+        response = `Dòng tiền vào **${ticker}** phiên hiện tại có tỷ lệ mua chủ động 58.4%. Khối lượng khớp đạt ${scan?.volume ? scan.volume.toLocaleString() : "khá tốt"}, chỉ báo Relative Volume đạt ${scan?.relVolume ? scan.relVolume.toFixed(2) + "x" : "1.35x"} so với trung bình 20 phiên.`
       } else if (q.includes("hỗ trợ") || q.includes("kháng cự") || q.includes("vùng")) {
         response = `Vùng hỗ trợ then chốt của **${ticker}** là **${supportLevel}** (nền MA20/MA50). Kháng cự kỹ thuật mục tiêu gần nhất là **${resistanceLevel}**. Mức dừng lỗ đề xuất vi phạm khi đóng nến dưới **${stopLoss}**.`
       } else if (q.includes("rủi ro") || q.includes("cảnh báo") || q.includes("xấu")) {
@@ -129,61 +125,64 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
   }
 
   return (
-    <aside className="flex h-full w-[25%] min-w-[320px] max-w-[400px] shrink-0 flex-col overflow-hidden border-r border-[#16202a] bg-[#090d13]">
-      {/* Top Half: AI Council Tổng quan */}
-      <div className="flex max-h-[56%] flex-col space-y-3.5 overflow-y-auto border-b border-[#16202a] p-3.5">
-        {/* Section Header */}
+    <aside className="xl:sticky xl:top-[72px] xl:max-h-[calc(100vh-88px)] xl:overflow-y-auto space-y-4 no-scrollbar w-full">
+      {/* AI Council Overview Card (Matching AI Council Card Design) */}
+      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b1119] p-4 sm:p-5 space-y-4">
+        {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex size-6 items-center justify-center rounded-md border border-purple-500/30 bg-purple-500/10 text-purple-300 shadow-[0_0_10px_rgba(168,85,247,0.3)]">
-              <BrainCircuit className="size-3.5 text-purple-400" />
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-9 items-center justify-center rounded-xl border border-violet-400/20 bg-violet-400/[0.08] text-violet-300">
+              <BrainCircuit className="size-4" />
             </div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Góc nhìn AI Council</span>
+            <div>
+              <h2 className="text-sm font-extrabold text-white">Góc nhìn AI Council</h2>
+              <p className="text-[10px] text-slate-500 font-mono">Consensus V1.4</p>
+            </div>
           </div>
-          <span className="rounded border border-purple-500/30 bg-purple-500/15 px-2 py-0.5 font-mono text-[10px] font-bold text-purple-300">
-            {consensus}% Consensus
+          <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-bold text-slate-300">
+            {consensus}% Đồng thuận
           </span>
         </div>
 
-        {/* AI Council Consensus Verdict Card */}
-        <div className={cn("rounded-xl border p-3.5", signalColor)}>
-          <div className="flex items-start justify-between">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Khuyến nghị tổng quan</span>
-              <div className="mt-0.5 flex items-baseline gap-2">
-                <span className="font-mono text-base font-black tracking-tight">{signalText}</span>
-              </div>
-            </div>
-            <div className="text-right">
-              <span className="font-mono text-[10px] uppercase text-slate-500">Council Score</span>
-              <div className="font-mono text-2xl font-black text-cyan-300">
-                {score}
-                <span className="text-xs text-slate-500">/100</span>
-              </div>
-            </div>
+        {/* Recommendation Badge & Action Summary */}
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-violet-300">Khuyến nghị</div>
+          <div className={cn("mt-1.5 inline-flex items-center rounded-xl border px-3.5 py-2 font-ticker text-base font-black sm:text-lg", signalColor)}>
+            {signalText}
           </div>
-
-          <p className="mt-2.5 border-t border-white/[0.08] pt-2 text-xs leading-relaxed text-slate-300">
-            {aiStock?.whatChangesDecision[0] ||
+          <p className="mt-2.5 text-xs leading-relaxed text-slate-300">
+            {aiStock?.whatChangesDecision?.[0] ||
               thesis?.baseCase ||
               "Áp lực bán cạn kiệt quanh hỗ trợ trung hạn. Smart Money có dấu hiệu hấp thụ chủ động, phù hợp giải ngân từng phần."}
           </p>
+
+          <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold">
+            <span className="rounded-full border border-cyan-400/20 bg-cyan-400/[0.06] px-2.5 py-1 text-cyan-200">
+              Độ tin cậy: {confidence >= 80 ? "Cao" : "Trung bình"} ({confidence}%)
+            </span>
+            <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-slate-300">
+              Hội đồng: {score}/100
+            </span>
+          </div>
         </div>
 
-        {/* 5 Trụ Cột Chuyên Gia (5 Pillars) */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            <span>Đánh giá 5 trụ cột</span>
-            <span className="font-mono text-slate-500">Độ tin cậy {confidence}%</span>
+        {/* 5 Pillars Breakdown (Matching AI Council Pillars) */}
+        <div>
+          <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+            <span>5 Trụ cột đánh giá</span>
           </div>
           <div className="grid grid-cols-5 gap-1.5 text-center">
             {pillars.map((p) => {
               const Icon = p.icon
               return (
-                <div key={p.label} className="rounded-lg border border-[#1b2633] bg-[#0c131a] p-2 transition-colors hover:border-cyan-500/30">
-                  <Icon className="mx-auto size-3 text-slate-400" />
-                  <div className="mt-1 truncate text-[9px] text-slate-400">{p.label}</div>
-                  <div className={cn("mt-0.5 font-mono text-xs font-bold", p.score >= 80 ? "text-emerald-400" : p.score >= 65 ? "text-cyan-300" : "text-amber-400")}>
+                <div key={p.label} className="rounded-xl border border-white/[0.07] bg-black/15 px-1.5 py-2.5">
+                  <div className="truncate text-[9px] font-bold text-slate-500">{p.label}</div>
+                  <div
+                    className={cn(
+                      "mt-1 font-mono text-base font-black",
+                      p.score >= 80 ? "text-emerald-300" : p.score >= 65 ? "text-cyan-300" : "text-amber-300"
+                    )}
+                  >
                     {p.score}
                   </div>
                 </div>
@@ -194,45 +193,45 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
 
         {/* Key Decision Levels */}
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-lg border border-emerald-500/20 bg-[#0c141d] p-2.5">
-            <span className="block text-[10px] font-semibold text-emerald-400">Hỗ trợ / Vùng gom</span>
-            <span className="font-mono font-bold text-white">{supportLevel}</span>
+          <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.03] p-3">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-400">Vùng gom</span>
+            <span className="mt-1 block font-mono text-sm font-black text-white">{supportLevel}</span>
           </div>
-          <div className="rounded-lg border border-rose-500/20 bg-[#0c141d] p-2.5">
-            <span className="block text-[10px] font-semibold text-rose-400">Dừng lỗ (Stop Loss)</span>
-            <span className="font-mono font-bold text-white">{stopLoss}</span>
+          <div className="rounded-xl border border-rose-400/20 bg-rose-400/[0.03] p-3">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-rose-400">Cắt lỗ (Stop)</span>
+            <span className="mt-1 block font-mono text-sm font-black text-white">{stopLoss}</span>
           </div>
         </div>
       </div>
 
-      {/* Bottom Half: Quick Chatbox Với AI Về Cổ Phiếu */}
-      <div className="flex min-h-0 flex-1 flex-col bg-[#070a0e]">
-        {/* Chatbox Header */}
-        <div className="flex items-center justify-between border-b border-[#16202a] bg-[#0b0f15] px-3.5 py-2">
-          <div className="flex items-center gap-1.5">
+      {/* Quick Chatbox With AI (Matching AI Council Card Design) */}
+      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13] flex flex-col">
+        {/* Chat Header */}
+        <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#0a0f16] px-4 py-3">
+          <div className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-cyan-400 animate-pulse" />
             <span className="text-xs font-bold text-slate-200">AI Quick Assistant</span>
           </div>
-          <span className="text-[10px] text-slate-500">
-            Hỏi về: <b className="text-cyan-400">{ticker}</b>
+          <span className="font-mono text-[10px] text-slate-500">
+            Hỏi về: <b className="text-cyan-300">{ticker}</b>
           </span>
         </div>
 
-        {/* Message History */}
-        <div className="flex-1 space-y-2.5 overflow-y-auto p-3 text-xs">
+        {/* Chat History List */}
+        <div className="p-3.5 space-y-3 text-xs max-h-[260px] overflow-y-auto">
           {messages.map((m) => (
             <div key={m.id} className={cn("flex gap-2", m.sender === "user" ? "justify-end" : "justify-start")}>
               {m.sender === "ai" && (
-                <div className="flex size-6 shrink-0 items-center justify-center rounded bg-cyan-950 text-[10px] font-bold text-cyan-300 border border-cyan-800">
+                <div className="flex size-6 shrink-0 items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-400/10 text-[10px] font-black text-cyan-200">
                   AI
                 </div>
               )}
               <div
                 className={cn(
-                  "max-w-[85%] rounded-xl p-2.5 text-xs leading-relaxed",
+                  "max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed",
                   m.sender === "user"
-                    ? "rounded-tr-none bg-cyan-950/60 text-slate-200 border border-cyan-800/50"
-                    : "rounded-tl-none bg-[#101823] text-slate-300 border border-[#1b2635]"
+                    ? "rounded-tr-none border border-cyan-400/30 bg-cyan-400/10 text-slate-100"
+                    : "rounded-tl-none border border-white/[0.08] bg-black/20 text-slate-300"
                 )}
               >
                 {m.text}
@@ -242,10 +241,10 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
 
           {isTyping && (
             <div className="flex gap-2">
-              <div className="flex size-6 shrink-0 items-center justify-center rounded bg-cyan-950 text-[10px] font-bold text-cyan-300 border border-cyan-800">
+              <div className="flex size-6 shrink-0 items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-400/10 text-[10px] font-black text-cyan-200">
                 AI
               </div>
-              <div className="flex items-center gap-1.5 rounded-xl rounded-tl-none border border-[#1b2635] bg-[#101823] p-2.5 text-xs text-slate-400">
+              <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-none border border-white/[0.08] bg-black/20 px-3.5 py-2 text-xs text-slate-400">
                 <span className="size-1.5 rounded-full bg-cyan-400 animate-bounce" />
                 <span className="size-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:0.2s]" />
                 <span className="size-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:0.4s]" />
@@ -255,40 +254,33 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
           <div ref={chatBottomRef} />
         </div>
 
-        {/* Preset Question Chips */}
-        <div className="flex gap-1.5 overflow-x-auto border-t border-[#141b24] bg-[#090d13] p-2 no-scrollbar">
+        {/* Preset Prompt Chips */}
+        <div className="border-t border-white/[0.06] bg-[#090d13] p-2.5 flex gap-1.5 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => handleSend("Đánh giá dòng tiền lớn hôm nay?")}
-            className="whitespace-nowrap rounded-full border border-[#213042] bg-[#131d29] px-2.5 py-1 text-[10px] text-slate-300 transition-colors hover:border-cyan-500/50 hover:bg-cyan-950 hover:text-cyan-300"
+            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
           >
             ⚡ Dòng tiền lớn?
           </button>
           <button
             type="button"
             onClick={() => handleSend("Hỗ trợ kháng cự gần nhất?")}
-            className="whitespace-nowrap rounded-full border border-[#213042] bg-[#131d29] px-2.5 py-1 text-[10px] text-slate-300 transition-colors hover:border-cyan-500/50 hover:bg-cyan-950 hover:text-cyan-300"
+            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
           >
             🎯 Hỗ trợ / Kháng cự?
           </button>
           <button
             type="button"
             onClick={() => handleSend("Rủi ro lớn nhất là gì?")}
-            className="whitespace-nowrap rounded-full border border-[#213042] bg-[#131d29] px-2.5 py-1 text-[10px] text-slate-300 transition-colors hover:border-cyan-500/50 hover:bg-cyan-950 hover:text-cyan-300"
+            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
           >
             ⚠️ Rủi ro chính?
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSend("Cấu trúc Wyckoff hiện tại?")}
-            className="whitespace-nowrap rounded-full border border-[#213042] bg-[#131d29] px-2.5 py-1 text-[10px] text-slate-300 transition-colors hover:border-cyan-500/50 hover:bg-cyan-950 hover:text-cyan-300"
-          >
-            📈 Wyckoff?
           </button>
         </div>
 
         {/* Input Bar */}
-        <div className="border-t border-[#16202a] bg-[#090d13] p-2.5">
+        <div className="border-t border-white/[0.06] bg-[#0a0f16] p-2.5">
           <form
             onSubmit={(e) => {
               e.preventDefault()
@@ -301,14 +293,14 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               placeholder="Hỏi AI về cổ phiếu..."
-              className="w-full rounded-lg border border-[#1f2b3b] bg-[#0e141c] px-3 py-2 pr-9 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-cyan-400 focus:outline-none"
+              className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-2 pl-3 pr-9 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-cyan-400/40 focus:outline-none"
             />
             <button
               type="submit"
               disabled={!inputVal.trim() || isTyping}
-              className="absolute right-1.5 p-1 text-cyan-400 transition-colors hover:text-cyan-300 disabled:opacity-40"
+              className="absolute right-1.5 rounded-lg p-1.5 text-cyan-400 transition-colors hover:text-cyan-300 disabled:opacity-30"
             >
-              <Send className="size-4" />
+              <Send className="size-3.5" />
             </button>
           </form>
         </div>

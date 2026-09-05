@@ -26,7 +26,6 @@ export function StockTradingViewChart({ ticker, bars }: StockTradingViewChartPro
   const [timeframe, setTimeframe] = useState<Timeframe>("1D")
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
-  // Filter bars according to timeframe
   const displayBars = useMemo(() => {
     if (!bars || bars.length === 0) return []
     if (timeframe === "1D") return bars.slice(-60)
@@ -35,11 +34,9 @@ export function StockTradingViewChart({ ticker, bars }: StockTradingViewChartPro
     return bars.slice(-200)
   }, [bars, timeframe])
 
-  // Moving averages
   const ma20 = useMemo(() => calculateSma(bars, 20).slice(-displayBars.length), [bars, displayBars.length])
   const ma50 = useMemo(() => calculateSma(bars, 50).slice(-displayBars.length), [bars, displayBars.length])
 
-  // Coordinate scales
   const chartMetrics = useMemo(() => {
     if (displayBars.length === 0) return null
 
@@ -66,25 +63,23 @@ export function StockTradingViewChart({ ticker, bars }: StockTradingViewChartPro
 
   const activeBar = hoverIndex !== null && displayBars[hoverIndex] ? displayBars[hoverIndex] : displayBars.at(-1)
 
-  // SVG Chart Dimensions
-  const width = 800
-  const height = 230
-  const padLeft = 10
-  const padRight = 50
-  const padTop = 15
-  const padBottom = 35
+  // Chart dimensions
+  const width = 860
+  const height = 290
+  const padLeft = 14
+  const padRight = 56
+  const padTop = 16
+  const priceHeight = 185
+  const volTop = 220
+  const volHeight = 45
   const plotWidth = width - padLeft - padRight
-  const pricePlotHeight = height - padTop - padBottom - 35
-  const volTop = height - padBottom - 30
-  const volHeight = 28
 
   const getX = (idx: number) => padLeft + (idx / Math.max(1, displayBars.length - 1)) * plotWidth
   const getY = (price: number) => {
     if (!chartMetrics) return 0
-    return padTop + ((chartMetrics.max - price) / chartMetrics.range) * pricePlotHeight
+    return padTop + ((chartMetrics.max - price) / chartMetrics.range) * priceHeight
   }
 
-  // Generate SVG path for MA
   const makeLinePath = (series: Array<number | null>) => {
     let path = ""
     series.forEach((val, i) => {
@@ -101,79 +96,67 @@ export function StockTradingViewChart({ ticker, bars }: StockTradingViewChartPro
 
   if (!displayBars.length || !chartMetrics) {
     return (
-      <div className="flex h-[230px] items-center justify-center border-b border-[#141d27] bg-[#070b10] text-xs text-slate-500">
+      <div className="flex h-[290px] items-center justify-center rounded-2xl border border-white/[0.08] bg-[#080d13] p-6 text-sm text-slate-500">
         Đang nạp dữ liệu nến TradingView {ticker}...
       </div>
     )
   }
 
   return (
-    <div className="relative flex h-[235px] flex-col border-b border-[#141d27] bg-[#070b10]">
-      {/* Top Controls & OHLCV Crosshair Display */}
-      <div className="flex h-7 shrink-0 items-center justify-between border-b border-[#141d27] bg-[#090d13] px-3 text-[11px]">
+    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13]">
+      {/* Top Header Controls & Live Crosshair Info */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0a0f16] px-4 py-2.5 text-xs">
         {/* Timeframe Buttons */}
-        <div className="flex items-center gap-1">
-          <span className="mr-1 font-mono text-slate-500">Khung:</span>
+        <div className="flex items-center gap-1.5">
+          <span className="mr-1 text-[11px] font-bold text-slate-500 font-mono">Khung:</span>
           {(["1D", "1W", "1M", "1Y"] as const).map((tf) => (
             <button
               key={tf}
               type="button"
               onClick={() => setTimeframe(tf)}
               className={cn(
-                "rounded px-2 py-0.5 font-mono text-[10px] font-bold transition-colors",
+                "rounded-lg px-2.5 py-1 font-mono text-[11px] font-bold transition-all",
                 timeframe === tf
-                  ? "border border-cyan-700/50 bg-cyan-950/80 text-cyan-300"
-                  : "text-slate-400 hover:text-white"
+                  ? "border border-cyan-400/30 bg-cyan-400/15 text-cyan-200 shadow-[0_0_10px_rgba(0,240,255,0.2)]"
+                  : "text-slate-400 hover:bg-white/[0.04] hover:text-white"
               )}
             >
               {tf}
             </button>
           ))}
-          <div className="mx-2 h-3 w-px bg-[#1e2a38]" />
-          <span className="flex items-center gap-1 font-mono text-[10px] text-emerald-400">
+          <div className="mx-2 h-3.5 w-px bg-white/[0.1]" />
+          <span className="flex items-center gap-1 font-mono text-[11px] text-emerald-300">
             <span className="size-1.5 rounded-full bg-emerald-400" />
             MA20: {ma20.at(-1)?.toFixed(1) || "—"}
           </span>
-          <span className="ml-2 flex items-center gap-1 font-mono text-[10px] text-amber-400">
+          <span className="ml-2 flex items-center gap-1 font-mono text-[11px] text-amber-300">
             <span className="size-1.5 rounded-full bg-amber-400" />
             MA50: {ma50.at(-1)?.toFixed(1) || "—"}
           </span>
         </div>
 
-        {/* Dynamic O-H-L-C-V Readout */}
+        {/* OHLCV readout */}
         {activeBar && (
-          <div className="flex items-center gap-2.5 font-mono text-[10px] text-slate-400">
+          <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] text-slate-400">
             <span>
               {new Date(activeBar.time * 1000).toLocaleDateString("vi-VN", {
                 day: "2-digit",
                 month: "2-digit",
+                year: "numeric",
               })}
             </span>
-            <span>
-              O: <b className="text-slate-200">{activeBar.open.toLocaleString()}</b>
-            </span>
-            <span>
-              H: <b className="text-emerald-400">{activeBar.high.toLocaleString()}</b>
-            </span>
-            <span>
-              L: <b className="text-rose-400">{activeBar.low.toLocaleString()}</b>
-            </span>
-            <span>
-              C:{" "}
-              <b className={activeBar.close >= activeBar.open ? "text-emerald-400" : "text-rose-400"}>
-                {activeBar.close.toLocaleString()}
-              </b>
-            </span>
-            <span>
-              V: <b className="text-slate-200">{(activeBar.volume / 1_000_000).toFixed(2)}M</b>
-            </span>
+            <span>O: <b className="text-slate-200">{activeBar.open.toLocaleString()}</b></span>
+            <span>H: <b className="text-emerald-300">{activeBar.high.toLocaleString()}</b></span>
+            <span>L: <b className="text-rose-300">{activeBar.low.toLocaleString()}</b></span>
+            <span>C: <b className={activeBar.close >= activeBar.open ? "text-emerald-300" : "text-rose-300"}>{activeBar.close.toLocaleString()}</b></span>
+            <span>V: <b className="text-slate-200">{(activeBar.volume / 1_000_000).toFixed(2)}M</b></span>
           </div>
         )}
       </div>
 
-      {/* SVG Canvas Chart */}
+      {/* SVG Canvas Rendering */}
       <div
-        className="relative flex-1 w-full cursor-crosshair"
+        className="relative w-full cursor-crosshair"
         onMouseLeave={() => setHoverIndex(null)}
         onMouseMove={(e) => {
           const rect = e.currentTarget.getBoundingClientRect()
@@ -184,27 +167,32 @@ export function StockTradingViewChart({ ticker, bars }: StockTradingViewChartPro
           setHoverIndex(idx)
         }}
       >
-        <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" preserveAspectRatio="none">
-          {/* Background Grid Lines */}
-          <line x1={padLeft} y1={padTop + pricePlotHeight * 0.25} x2={width - padRight} y2={padTop + pricePlotHeight * 0.25} stroke="#141c26" strokeDasharray="3 3" />
-          <line x1={padLeft} y1={padTop + pricePlotHeight * 0.5} x2={width - padRight} y2={padTop + pricePlotHeight * 0.5} stroke="#141c26" strokeDasharray="3 3" />
-          <line x1={padLeft} y1={padTop + pricePlotHeight * 0.75} x2={width - padRight} y2={padTop + pricePlotHeight * 0.75} stroke="#141c26" strokeDasharray="3 3" />
+        <svg viewBox={`0 0 ${width} ${height}`} className="h-[270px] w-full" preserveAspectRatio="none">
+          {/* Horizontal Grid lines */}
+          <line x1={padLeft} y1={padTop} x2={width - padRight} y2={padTop} stroke="#182330" strokeDasharray="3 3" opacity="0.6" />
+          <line x1={padLeft} y1={padTop + priceHeight * 0.33} x2={width - padRight} y2={padTop + priceHeight * 0.33} stroke="#182330" strokeDasharray="3 3" opacity="0.6" />
+          <line x1={padLeft} y1={padTop + priceHeight * 0.66} x2={width - padRight} y2={padTop + priceHeight * 0.66} stroke="#182330" strokeDasharray="3 3" opacity="0.6" />
+          <line x1={padLeft} y1={padTop + priceHeight} x2={width - padRight} y2={padTop + priceHeight} stroke="#182330" opacity="0.8" />
 
-          {/* Volume Histogram Bars */}
+          {/* Volume Baseline */}
+          <line x1={padLeft} y1={volTop + volHeight} x2={width - padRight} y2={volTop + volHeight} stroke="#182330" opacity="0.8" />
+
+          {/* Volume Bars */}
           {displayBars.map((bar, i) => {
             const x = getX(i)
-            const vHeight = (bar.volume / chartMetrics.maxVol) * volHeight
+            const vH = (bar.volume / chartMetrics.maxVol) * volHeight
             const isBull = bar.close >= bar.open
-            const barW = Math.max(2, plotWidth / displayBars.length - 2)
+            const barW = Math.max(2, plotWidth / displayBars.length - 1.5)
             return (
               <rect
-                key={bar.time}
+                key={`v-${bar.time}`}
                 x={x - barW / 2}
-                y={volTop + volHeight - vHeight}
+                y={volTop + volHeight - vH}
                 width={barW}
-                height={vHeight}
-                fill={isBull ? "#10b981" : "#ef4444"}
+                height={vH}
+                fill={isBull ? "#10b981" : "#f43f5e"}
                 opacity="0.35"
+                rx="0.5"
               />
             )
           })}
@@ -213,66 +201,67 @@ export function StockTradingViewChart({ ticker, bars }: StockTradingViewChartPro
           {displayBars.map((bar, i) => {
             const x = getX(i)
             const isBull = bar.close >= bar.open
-            const color = isBull ? "#10b981" : "#ef4444"
+            const color = isBull ? "#10b981" : "#f43f5e"
             const highY = getY(bar.high)
             const lowY = getY(bar.low)
             const openY = getY(bar.open)
             const closeY = getY(bar.close)
             const bodyTop = Math.min(openY, closeY)
             const bodyHeight = Math.max(1.5, Math.abs(closeY - openY))
-            const candleWidth = Math.max(2.5, plotWidth / displayBars.length - 2.5)
+            const candleW = Math.max(3, plotWidth / displayBars.length - 2)
 
             return (
               <g key={`c-${bar.time}`}>
-                {/* Wick */}
-                <line x1={x} y1={highY} x2={x} y2={lowY} stroke={color} strokeWidth="1" />
-                {/* Body */}
+                <line x1={x} y1={highY} x2={x} y2={lowY} stroke={color} strokeWidth="1.2" />
                 <rect
-                  x={x - candleWidth / 2}
+                  x={x - candleW / 2}
                   y={bodyTop}
-                  width={candleWidth}
+                  width={candleW}
                   height={bodyHeight}
                   fill={color}
-                  rx="0.5"
+                  rx="1"
                 />
               </g>
             )
           })}
 
-          {/* Moving Average Overlays */}
-          <path d={ma20Path} fill="none" stroke="#10b981" strokeWidth="1.5" opacity="0.85" />
-          <path d={ma50Path} fill="none" stroke="#f59e0b" strokeWidth="1.5" opacity="0.75" />
+          {/* Moving Averages */}
+          <path d={ma20Path} fill="none" stroke="#10b981" strokeWidth="1.6" opacity="0.85" />
+          <path d={ma50Path} fill="none" stroke="#f59e0b" strokeWidth="1.6" opacity="0.75" />
 
-          {/* Hover Crosshair Guide */}
+          {/* Crosshair indicator */}
           {hoverIndex !== null && (
             <g>
               <line
                 x1={getX(hoverIndex)}
                 y1={padTop}
                 x2={getX(hoverIndex)}
-                y2={height - padBottom}
+                y2={volTop + volHeight}
                 stroke="#00f0ff"
                 strokeWidth="1"
-                strokeDasharray="2 2"
+                strokeDasharray="3 3"
                 opacity="0.7"
               />
             </g>
           )}
 
           {/* Price Axis Labels on the right */}
-          <text x={width - padRight + 6} y={padTop + 6} fill="#62727d" fontSize="9" fontFamily="monospace">
+          <text x={width - padRight + 8} y={padTop + 4} fill="#8a9ba7" fontSize="10" fontFamily="monospace">
             {chartMetrics.max.toFixed(1)}
           </text>
-          <text x={width - padRight + 6} y={padTop + pricePlotHeight * 0.5 + 3} fill="#62727d" fontSize="9" fontFamily="monospace">
+          <text x={width - padRight + 8} y={padTop + priceHeight * 0.5 + 4} fill="#8a9ba7" fontSize="10" fontFamily="monospace">
             {(chartMetrics.min + chartMetrics.range * 0.5).toFixed(1)}
           </text>
-          <text x={width - padRight + 6} y={padTop + pricePlotHeight} fill="#62727d" fontSize="9" fontFamily="monospace">
+          <text x={width - padRight + 8} y={padTop + priceHeight + 4} fill="#8a9ba7" fontSize="10" fontFamily="monospace">
             {chartMetrics.min.toFixed(1)}
+          </text>
+          <text x={width - padRight + 8} y={volTop + volHeight} fill="#62727d" fontSize="9" fontFamily="monospace">
+            Vol
           </text>
         </svg>
 
-        <div className="pointer-events-none absolute bottom-1 right-2 text-[8px] font-mono text-slate-600">
-          Lightweight Canvas Engine
+        <div className="pointer-events-none absolute bottom-1.5 right-3 text-[9px] font-mono text-slate-500">
+          TradingView Lightweight Visual Engine
         </div>
       </div>
     </div>

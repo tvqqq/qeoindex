@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react"
 import Link from "next/link"
-import { Bookmark, Plus, Search, Star, TrendingUp, X } from "lucide-react"
+import { Bookmark, Plus, Search, Sparkles, TrendingDown, TrendingUp, X } from "lucide-react"
 
 import type { StockWatchlistItem } from "./types"
 import { cn } from "@/modules/shared/ui/cn"
@@ -12,148 +12,172 @@ interface StockWatchlistSidebarProps {
   items: StockWatchlistItem[]
 }
 
-type FilterMode = "all" | "top" | "up"
+type FilterMode = "all" | "top" | "up" | "down"
 
 export function StockWatchlistSidebar({ currentTicker, items }: StockWatchlistSidebarProps) {
   const [query, setQuery] = useState("")
   const [filterMode, setFilterMode] = useState<FilterMode>("all")
 
   const filteredItems = useMemo(() => {
-    return items.filter((item) => {
+    return items.filter((item, index) => {
       const q = query.trim().toUpperCase()
       if (q && !item.ticker.includes(q) && !item.companyName.toUpperCase().includes(q)) {
         return false
       }
+      if (filterMode === "top") return index < 20
       if (filterMode === "up") return item.changePct > 0
+      if (filterMode === "down") return item.changePct < 0
       return true
     })
   }, [items, query, filterMode])
 
   return (
-    <aside className="flex h-full w-[15%] min-w-[210px] max-w-[270px] shrink-0 flex-col overflow-hidden bg-[#070b0f] border-l border-[#16202a]">
-      {/* Top Header & Search */}
-      <div className="shrink-0 space-y-2 border-b border-[#16202a] bg-[#090d13] p-2.5">
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-300">
-            <Bookmark className="size-3.5 fill-cyan-400 text-cyan-400" />
-            Watchlist
-          </span>
-          <span className="font-mono text-[10px] text-slate-500">{items.length} mã</span>
+    <aside className="xl:sticky xl:top-[72px] xl:h-[calc(100vh-88px)] w-full">
+      <div className="flex h-full min-h-[560px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13]">
+        {/* Top Header & Search */}
+        <div className="shrink-0 space-y-3 border-b border-white/[0.06] bg-[#0a0f16] p-3.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="flex size-7 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-300">
+                <Bookmark className="size-3.5 fill-cyan-400" />
+              </span>
+              <span className="text-xs font-black uppercase tracking-wider text-slate-200">
+                Watchlist
+              </span>
+            </div>
+            <span className="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 font-mono text-[10px] text-slate-400">
+              {items.length} mã
+            </span>
+          </div>
+
+          {/* Search Box */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Tìm mã / công ty..."
+              className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-2 pl-8 pr-7 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-cyan-400/40 focus:outline-none"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+              >
+                <X className="size-3" />
+              </button>
+            )}
+          </div>
+
+          {/* Filter Pills */}
+          <div className="flex gap-1 overflow-x-auto no-scrollbar text-[10px]">
+            {([
+              ["all", "Tất cả"],
+              ["top", "Top 20"],
+              ["up", "Tăng"],
+              ["down", "Giảm"],
+            ] as const).map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setFilterMode(val)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 font-bold transition-colors whitespace-nowrap",
+                  filterMode === val
+                    ? "border border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
+                    : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Search Box */}
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 size-3 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Tìm mã CP..."
-            className="w-full rounded-md border border-[#1c2734] bg-[#0e141c] py-1.5 pl-7 pr-6 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-cyan-400 focus:outline-none"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-            >
-              <X className="size-3" />
-            </button>
+        {/* Stock Tickers List */}
+        <div className="min-h-0 flex-1 divide-y divide-white/[0.04] overflow-y-auto">
+          {filteredItems.length === 0 ? (
+            <div className="p-6 text-center text-xs text-slate-500">
+              Không tìm thấy mã phù hợp
+            </div>
+          ) : (
+            filteredItems.map((item, idx) => {
+              const isActive = item.ticker === currentTicker.toUpperCase()
+              const isUp = item.changePct > 0
+              const isDown = item.changePct < 0
+              const colorCls = isUp ? "text-emerald-400" : isDown ? "text-rose-400" : "text-amber-400"
+              const badgeBg = isUp
+                ? "bg-emerald-400/[0.08] text-emerald-300 border-emerald-400/20"
+                : isDown
+                ? "bg-rose-400/[0.08] text-rose-300 border-rose-400/20"
+                : "bg-amber-400/[0.08] text-amber-300 border-amber-400/20"
+
+              return (
+                <Link
+                  key={item.ticker}
+                  href={`/insights/${item.ticker.toLowerCase()}`}
+                  prefetch={false}
+                  className={cn(
+                    "grid grid-cols-[32px_1fr_auto] items-center gap-2 px-3 py-2.5 transition-colors text-left",
+                    isActive
+                      ? "border-l-2 border-l-cyan-400 bg-cyan-400/[0.08]"
+                      : "border-l-2 border-l-transparent hover:bg-white/[0.03]"
+                  )}
+                >
+                  <span className="font-mono text-[10px] text-slate-600">
+                    #{idx + 1}
+                  </span>
+                  <div className="min-w-0 pr-1">
+                    <div className="flex items-center gap-1.5">
+                      <b
+                        className={cn(
+                          "font-ticker text-sm tracking-wide",
+                          isActive ? "text-cyan-300" : "text-white"
+                        )}
+                      >
+                        {item.ticker}
+                      </b>
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-slate-500">
+                      <span className="font-mono text-slate-400 font-semibold">
+                        {item.price ? item.price.toLocaleString("vi-VN") : "—"}
+                      </span>
+                      <span>·</span>
+                      <span className="truncate max-w-[100px]" title={item.companyName}>
+                        {item.companyName}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-bold",
+                        badgeBg
+                      )}
+                    >
+                      {isUp ? "+" : ""}
+                      {item.changePct.toFixed(2)}%
+                    </span>
+                  </div>
+                </Link>
+              )
+            })
           )}
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex gap-1 overflow-x-auto no-scrollbar text-[10px]">
-          <button
-            type="button"
-            onClick={() => setFilterMode("all")}
-            className={cn(
-              "rounded px-2 py-0.5 font-bold transition-colors",
-              filterMode === "all"
-                ? "border border-cyan-800/40 bg-cyan-950 text-cyan-300"
-                : "text-slate-400 hover:text-white"
-            )}
+        {/* Footer / Manage Watchlist Link */}
+        <div className="border-t border-white/[0.06] bg-[#0a0f16] p-2.5 text-center">
+          <Link
+            href="/insights/ai-council"
+            prefetch={false}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-[#080d13] py-2 text-[11px] font-bold text-slate-300 transition-colors hover:border-cyan-400/30 hover:text-cyan-200"
           >
-            Tất cả
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterMode("top")}
-            className={cn(
-              "rounded px-2 py-0.5 font-bold transition-colors",
-              filterMode === "top"
-                ? "border border-cyan-800/40 bg-cyan-950 text-cyan-300"
-                : "text-slate-400 hover:text-white"
-            )}
-          >
-            Top 50
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterMode("up")}
-            className={cn(
-              "rounded px-2 py-0.5 font-bold transition-colors",
-              filterMode === "up"
-                ? "border border-cyan-800/40 bg-cyan-950 text-cyan-300"
-                : "text-slate-400 hover:text-white"
-            )}
-          >
-            Tăng
-          </button>
+            <Sparkles className="size-3.5 text-cyan-400" />
+            <span>Xem Bảng xếp hạng AI</span>
+          </Link>
         </div>
-      </div>
-
-      {/* Stock Tickers List */}
-      <div className="flex-1 divide-y divide-[#131b24] overflow-y-auto">
-        {filteredItems.map((item) => {
-          const isActive = item.ticker === currentTicker.toUpperCase()
-          const isUp = item.changePct > 0
-          const isDown = item.changePct < 0
-          const colorCls = isUp ? "text-emerald-400" : isDown ? "text-rose-400" : "text-amber-400"
-
-          return (
-            <Link
-              key={item.ticker}
-              href={`/research/${item.ticker.toLowerCase()}`}
-              prefetch={false}
-              className={cn(
-                "block p-2.5 transition-colors hover:bg-white/[0.04]",
-                isActive
-                  ? "border-l-2 border-cyan-400 bg-[#0f1722]"
-                  : "border-l-2 border-transparent"
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <span className={cn("font-mono text-xs font-black", isActive ? "text-cyan-300" : "text-white")}>
-                  {item.ticker}
-                </span>
-                <span className={cn("font-mono text-xs font-bold", colorCls)}>
-                  {item.price ? item.price.toLocaleString("vi-VN") : "—"}
-                </span>
-              </div>
-              <div className="mt-0.5 flex items-center justify-between font-mono text-[10px]">
-                <span className="max-w-[85px] truncate text-slate-400 font-sans" title={item.companyName}>
-                  {item.companyName}
-                </span>
-                <span className={cn("font-semibold", colorCls)}>
-                  {item.changePct > 0 ? `+${item.changePct.toFixed(2)}%` : `${item.changePct.toFixed(2)}%`}
-                </span>
-              </div>
-            </Link>
-          )
-        })}
-      </div>
-
-      {/* Footer / Add Watchlist Button */}
-      <div className="border-t border-[#16202a] bg-[#090d13] p-2 text-center">
-        <Link
-          href="/portfolio"
-          prefetch={false}
-          className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-[#243447] py-1.5 text-[11px] font-semibold text-slate-400 transition-colors hover:border-cyan-500/40 hover:text-cyan-300"
-        >
-          <Plus className="size-3" />
-          <span>Quản lý Watchlist</span>
-        </Link>
       </div>
     </aside>
   )
