@@ -1,6 +1,11 @@
 import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
+import {
+  hasVietnamSecuritiesTradingCalendarCoverage,
+  isVietnamSecuritiesTradingDateKey,
+  vietnamDateKey,
+} from "@/modules/market/calendar"
 import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import {
   createSupabaseColdOhlcvStorage,
@@ -12,6 +17,7 @@ import type {
   CanonicalChartOhlcvResult,
   CanonicalOhlcvBar,
   ChartDataError,
+  ChartDataGap,
   SourceTaggedBar,
 } from "./contract"
 import { ChartDataRequestError, ChartDataUnavailableError } from "./contract"
@@ -69,6 +75,59 @@ function laterTime(current: number | null, bars: CanonicalOhlcvBar[]) {
   return latest == null ? current : Math.max(current ?? latest, latest)
 }
 
+function addVietnamCalendarDay(dateKey: string) {
+  const date = new Date(`${dateKey}T12:00:00+07:00`)
+  date.setUTCDate(date.getUTCDate() + 1)
+  return vietnamDateKey(date)
+}
+
+function canonicalDailyTime(dateKey: string) {
+  return Math.floor(new Date(`${dateKey}T09:00:00+07:00`).getTime() / 1000)
+}
+
+function detectDailySessionGaps(bars: CanonicalOhlcvBar[]): ChartDataGap[] {
+  const gaps: ChartDataGap[] = []
+  for (let index = 1; index < bars.length; index += 1) {
+    const previousKey = vietnamDateKey(bars[index - 1].time * 1000)
+    const currentKey = vietnamDateKey(bars[index].time * 1000)
+    let cursor = addVietnamCalendarDay(previousKey)
+    let firstMissing: string | null = null
+    let lastMissing: string | null = null
+    let missingBars = 0
+    let guard = 0
+
+    while (cursor < currentKey && guard < 3700) {
+      // QEO-106 has an authoritative holiday calendar for the current hot/warm
+      // history. Older Cold history stays provider-evidence-driven until a
+      // reviewed historical calendar is added, so we must not invent gaps there.
+      if (hasVietnamSecuritiesTradingCalendarCoverage(cursor) && isVietnamSecuritiesTradingDateKey(cursor)) {
+        firstMissing ??= cursor
+        lastMissing = cursor
+        missingBars += 1
+      }
+      cursor = addVietnamCalendarDay(cursor)
+      guard += 1
+    }
+
+    if (firstMissing && lastMissing && missingBars > 0) {
+      gaps.push({
+        fromTime: canonicalDailyTime(firstMissing),
+        toTime: canonicalDailyTime(lastMissing),
+        missingBars,
+      })
+    }
+  }
+  return gaps
+}
+
+function validDailyTradingBar(bar: CanonicalOhlcvBar) {
+  const dateKey = vietnamDateKey(bar.time * 1000)
+  // Weekend filtering is valid for all years. Explicit holiday rejection is
+  // authoritative only for the calendar coverage window; outside it Cold
+  // history relies on provider evidence and the deep-backfill zero-volume gate.
+  return isVietnamSecuritiesTradingDateKey(dateKey)
+}
+
 async function loadDailyRows(supabase: SupabaseClient, request: CanonicalChartOhlcvRequest) {
   const rows: Array<Record<string, unknown>> = []
   for (let offset = 0; ; offset += DAILY_READ_PAGE_SIZE) {
@@ -99,7 +158,9 @@ async function loadDaily(deps: ChartDataServiceDeps, request: CanonicalChartOhlc
   const tagged: SourceTaggedBar[] = []
   const errors: ChartDataError[] = []
   if (coldRead.status === "fulfilled") {
-    tagged.push(...coldRead.value.bars.map((bar) => ({ source: "cold" as const, bar })))
+    tagged.push(...coldRead.value.bars
+      .filter(validDailyTradingBar)
+      .map((bar) => ({ source: "cold" as const, bar })))
   } else {
     errors.push({ code: "STORAGE_UNAVAILABLE" })
   }
@@ -107,6 +168,7 @@ async function loadDaily(deps: ChartDataServiceDeps, request: CanonicalChartOhlc
     tagged.push(...hotRead.value
       .map((row) => rowToBar(row))
       .filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
+      .filter(validDailyTradingBar)
       .map((bar) => ({ source: "daily" as const, bar })))
   } else {
     errors.push({ code: "STORAGE_UNAVAILABLE" })
@@ -116,13 +178,17 @@ async function loadDaily(deps: ChartDataServiceDeps, request: CanonicalChartOhlc
   if (!normalized.bars.length && errors.length) {
     throw new ChartDataUnavailableError("Canonical Daily hot/cold storage unavailable")
   }
+  const gaps = detectDailySessionGaps(normalized.bars)
   if (normalized.integrityIssues.length) errors.push({ code: "INTEGRITY_WARNING" })
   const uniqueErrors = [...new Map(errors.map((item) => [item.code, item])).values()]
-  const complete = normalized.bars.length > 0 && normalized.integrityIssues.length === 0 && uniqueErrors.length === 0
+  const complete = normalized.bars.length > 0
+    && gaps.length === 0
+    && normalized.integrityIssues.length === 0
+    && uniqueErrors.length === 0
   return {
     ...request,
     bars: normalized.bars,
-    gaps: [],
+    gaps,
     integrityIssues: normalized.integrityIssues,
     coverage: {
       complete,
