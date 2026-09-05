@@ -96,7 +96,7 @@ test("QEO-103 archive is cache-before-prune and prune authority is manifest veri
 })
 
 test("QEO-106 Daily cold schema reuses verified manifests and keeps prune fail-closed", () => {
-  const migration = source("supabase/migrations/20260905153500_qeo106_daily_hot_cold_history.sql")
+  const migration = source("supabase/pending-migrations/20260905153500_qeo106_daily_hot_cold_history.sql")
   assert.match(migration, /base_resolution in \('1m', '1D'\)/i)
   assert.match(migration, /add column if not exists provenance jsonb/i)
   assert.match(migration, /create table if not exists public\.chart_daily_history_state/i)
@@ -126,6 +126,7 @@ test("QEO-106 canonical Daily merges Hot PostgreSQL + verified Cold Storage and 
   assert.match(service, /Promise\.allSettled\(\[/)
   assert.match(service, /loadDailyRows/)
   assert.match(service, /dailyColdStorage\.readIntersectingRange/)
+  assert.match(service, /detectDailySessionGaps/)
   assert.match(service, /source: "cold"/)
   assert.match(service, /source: "daily"/)
   assert.match(normalize, /daily: 3/)
@@ -142,6 +143,8 @@ test("QEO-106 deep Daily history is resumable, bounded, provider-backed and arch
   assert.match(history, /maxChunksPerTicker/)
   assert.match(history, /archiveVerifiedPartition/)
   assert.match(history, /qeo_prune_verified_chart_daily_partition/)
+  assert.match(history, /providerExhaustedWithoutData/)
+  assert.match(history, /provider === "Fallback" \? valid\.filter\(\(bar\) => bar\.volume > 0\)/)
   assert.ok(history.indexOf("archiveVerifiedPartition") < history.lastIndexOf("qeo_prune_verified_chart_daily_partition"))
   assert.doesNotMatch(history, /synthetic|fillForward|fabricate/i)
   assert.match(route, /isMachineRequestAuthorized/)
