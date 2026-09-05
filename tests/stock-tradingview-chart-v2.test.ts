@@ -317,3 +317,5 @@ test("StockTradingViewChart consumes canonical raw 1m from the chart-data API", 
   assert.match(hook, /\/api\/market\/ohlcv/)
   assert.match(hook, /resolution:\s*"1m"/)
 })
+
+import "./qeo-100-market-data.cases.ts"
