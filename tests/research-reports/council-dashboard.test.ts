@@ -32,6 +32,14 @@ test("QEO-86 debate provenance recognizes prompt identity v2 and frozen report c
   assert.match(data, /relatedReports:/)
 })
 
+test("QEO-86 historical related reports hydrate ticker stance from frozen tickerMention", () => {
+  const data = source("modules/ai-council/debate-data.ts")
+
+  assert.match(data, /report\.tickerMention/)
+  assert.match(data, /tickerMention.*stance/s)
+  assert.doesNotMatch(data, /report\.tickerEvidence/)
+})
+
 test("QEO-86 Debate Card renders compact related-report links and source-opinion labeling", () => {
   const page = source("app/insights/ai-council/debates/page.tsx")
 
