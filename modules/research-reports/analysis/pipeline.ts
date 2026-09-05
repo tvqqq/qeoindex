@@ -10,7 +10,12 @@ import type { ProcessResearchReportResult } from "../types.ts"
 import { chunkResearchReportPages, REPORT_CHUNK_VERSION } from "../pdf/chunk.ts"
 import { parseResearchReportPdf } from "../pdf/parse.ts"
 import { fetchResearchReportPdf } from "../pdf/secure-fetch.ts"
-import { analyzeResearchReportPages, getResearchReportAiModelRoute } from "./openai.ts"
+import type { ResearchReportAiBudget } from "./budget.ts"
+import {
+  analyzeResearchReportPages,
+  getResearchReportAiModelRoute,
+  type ResearchReportAiRequestAuditEvent,
+} from "./openai.ts"
 import { REPORT_ANALYSIS_VERSION, REPORT_PROMPT_VERSION } from "./prompt.ts"
 
 type AnalysisLookupClient = Parameters<typeof findSuccessfulResearchReportAnalysis>[0]
@@ -26,6 +31,20 @@ export interface ResearchReportProcessingClient {
   }>
 }
 
+export interface ResearchReportRequestUsageAccumulator {
+  attemptedModels: string[]
+  aiRequestCount: number
+  inputTokens: number
+  cachedInputTokens: number
+  cacheWriteTokens: number
+  outputTokens: number
+  reasoningTokens: number
+  totalTokens: number
+  unknownUsageAttempts: number
+  estimatedCostUsd: number
+  pricingVersion: string
+}
+
 export interface ResearchReportProcessingDependencies {
   fetchPdf?: typeof fetchResearchReportPdf
   parsePdf?: typeof parseResearchReportPdf
@@ -33,6 +52,9 @@ export interface ResearchReportProcessingDependencies {
   runId?: string
   acquireLease?: typeof acquireResearchReportAnalysisLease
   releaseLease?: typeof releaseResearchReportAnalysisLease
+  aiBudget?: ResearchReportAiBudget
+  requestUsage?: ResearchReportRequestUsageAccumulator
+  onRequestAudit?: (event: ResearchReportAiRequestAuditEvent) => Promise<void> | void
 }
 
 interface ResearchReportProcessingInput {
@@ -66,6 +88,26 @@ function publishClient(client: ResearchReportProcessingClient) {
 
 function leaseClient(client: ResearchReportProcessingClient) {
   return client as unknown as ReportLeaseClient
+}
+
+function addRequestUsage(
+  target: ResearchReportRequestUsageAccumulator | undefined,
+  event: ResearchReportAiRequestAuditEvent,
+) {
+  if (!target) return
+  target.aiRequestCount += 1
+  if (!target.attemptedModels.includes(event.model)) target.attemptedModels.push(event.model)
+  if (event.outcome === "unknown_usage") target.unknownUsageAttempts += 1
+  target.inputTokens += event.inputTokens
+  target.cachedInputTokens += event.cachedInputTokens
+  target.cacheWriteTokens += event.cacheWriteTokens
+  target.outputTokens += event.outputTokens
+  target.reasoningTokens += event.reasoningTokens
+  target.totalTokens += event.totalTokens
+  if (event.estimatedCostUsd !== null) {
+    target.estimatedCostUsd = Number((target.estimatedCostUsd + event.estimatedCostUsd).toFixed(12))
+  }
+  if (event.pricingVersion) target.pricingVersion = event.pricingVersion
 }
 
 export async function processResearchReport(
@@ -204,7 +246,13 @@ export async function processResearchReport(
     })
 
     aiCalled = true
-    const analyzed = await analyzePages(parsed.pages)
+    const analyzed = await analyzePages(parsed.pages, {
+      budget: deps.aiBudget,
+      onRequestAudit: async (event) => {
+        addRequestUsage(deps.requestUsage, event)
+        await deps.onRequestAudit?.(event)
+      },
+    })
     if (analyzed.route.modelRouteKey !== identity.modelRouteKey) {
       throw new Error("Research report AI route changed during processing")
     }
