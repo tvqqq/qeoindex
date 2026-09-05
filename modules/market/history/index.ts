@@ -1,5 +1,6 @@
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { fetchDailyOhlcv as fetchDnseDailyOhlcv, fetchHourlyOhlcv as fetchDnseHourlyOhlcv } from "@/modules/market/providers/dnse/history"
+import { fetchVciDailyOhlcv } from "@/modules/market/providers/vci/daily"
 import { fetchVnDirectDailyOhlcv } from "@/modules/market/providers/vndirect/history"
 import { fetchYahooDailyOhlcv, fetchYahooHourlyOhlcv } from "@/modules/market/providers/yahoo/history"
 import { readThroughUiCache } from "@/modules/shared/cache/ui-data-cache"
@@ -28,12 +29,16 @@ function markDnseUnavailable(error: unknown) {
   return message
 }
 
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
 function isHistoricalBarsResult(value: unknown): value is HistoricalBarsResult {
   if (!value || typeof value !== "object") return false
   const result = value as Partial<HistoricalBarsResult>
   return Array.isArray(result.bars)
     && result.bars.length > 0
-    && (result.provider === "DNSE" || result.provider === "Fallback" || result.provider === "VNDirect")
+    && (result.provider === "VCI" || result.provider === "DNSE" || result.provider === "Fallback" || result.provider === "VNDirect")
     && typeof result.detail === "string"
     && typeof result.sourceUrl === "string"
     && typeof result.fetchedAt === "string"
@@ -70,6 +75,14 @@ export async function fetchDailyMarketHistoryWindow(
   now = new Date(),
 ): Promise<HistoricalBarsResult> {
   const errors: string[] = []
+
+  try {
+    const bars = await fetchVciDailyOhlcv(symbol, now, lookbackDays)
+    return historicalResult({ bars, provider: "VCI", detail: `VCI native ONE_DAY · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
+  } catch (error) {
+    errors.push(`VCI: ${errorMessage(error)}`)
+  }
+
   if (shouldTryDnse()) {
     try {
       const bars = await fetchDnseDailyOhlcv(symbol, now, lookbackDays)
@@ -85,17 +98,17 @@ export async function fetchDailyMarketHistoryWindow(
     const bars = await fetchYahooDailyOhlcv(symbol, now, lookbackDays)
     return historicalResult({ bars, provider: "Fallback", detail: `Yahoo Finance .VN fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
   } catch (error) {
-    errors.push(`Yahoo: ${error instanceof Error ? error.message : String(error)}`)
+    errors.push(`Yahoo: ${errorMessage(error)}`)
   }
 
   try {
     const bars = await fetchVnDirectDailyOhlcv(symbol, now, lookbackDays)
-    return historicalResult({ bars, provider: "VNDirect", detail: `VNDirect Finfo fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
+    return historicalResult({ bars, provider: "VNDirect", detail: `VNDirect Finfo last-resort fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
   } catch (error) {
-    errors.push(`VNDirect: ${error instanceof Error ? error.message : String(error)}`)
+    errors.push(`VNDirect: ${errorMessage(error)}`)
   }
 
-  throw new Error(errors.join(" | ").slice(0, 720))
+  throw new Error(errors.join(" | ").slice(0, 900))
 }
 
 export async function fetchHourlyMarketHistoryWindow(
@@ -119,50 +132,35 @@ export async function fetchHourlyMarketHistoryWindow(
     const bars = await fetchYahooHourlyOhlcv(symbol, now, lookbackDays)
     return historicalResult({ bars, provider: "Fallback", detail: `Yahoo Finance .VN fallback · 60m · ${lookbackDays}d window`, symbol, timeframe: "1H", lookbackDays, now })
   } catch (error) {
-    errors.push(`Yahoo: ${error instanceof Error ? error.message : String(error)}`)
+    errors.push(`Yahoo: ${errorMessage(error)}`)
   }
 
   throw new Error(errors.join(" | ").slice(0, 520))
 }
 
 export async function fetchDailyMarketHistory(symbol: string, now = new Date()): Promise<HistoricalBarsResult> {
-  const errors: string[] = []
-  if (shouldTryDnse()) {
-    try {
-      const bars = await fetchDnseDailyOhlcv(symbol, now)
-      return historicalResult({ bars, provider: "DNSE", detail: "DNSE OpenAPI · 1D", symbol, timeframe: "1D", lookbackDays: 520, now })
-    } catch (error) {
-      errors.push(`DNSE: ${markDnseUnavailable(error)}`)
-    }
-  } else {
-    errors.push("DNSE: temporarily bypassed after network failure")
-  }
-
-  try {
-    const bars = await fetchYahooDailyOhlcv(symbol, now)
-    return historicalResult({ bars, provider: "Fallback", detail: "Yahoo Finance .VN fallback · 1D", symbol, timeframe: "1D", lookbackDays: 620, now })
-  } catch (error) {
-    errors.push(`Yahoo: ${error instanceof Error ? error.message : String(error)}`)
-  }
-
-  try {
-    const bars = await fetchVnDirectDailyOhlcv(symbol, now, 620)
-    return historicalResult({ bars, provider: "VNDirect", detail: "VNDirect Finfo fallback · 1D", symbol, timeframe: "1D", lookbackDays: 620, now })
-  } catch (error) {
-    errors.push(`VNDirect: ${error instanceof Error ? error.message : String(error)}`)
-  }
-
-  throw new Error(errors.join(" | ").slice(0, 720))
+  const lookbackDays = 620
+  const result = await fetchDailyMarketHistoryWindow(symbol, lookbackDays, now)
+  const detail = result.provider === "VCI"
+    ? "VCI native ONE_DAY"
+    : result.provider === "DNSE"
+      ? "DNSE OpenAPI · 1D"
+      : result.provider === "VNDirect"
+        ? "VNDirect Finfo last-resort fallback · 1D"
+        : "Yahoo Finance .VN fallback · 1D"
+  return { ...result, detail }
 }
 
 /** Selected-ticker chart path and initial persistent-cache backfill. */
 export async function fetchLongDailyMarketHistory(symbol: string, now = new Date()): Promise<HistoricalBarsResult> {
   const result = await fetchDailyMarketHistoryWindow(symbol, DAILY_BACKFILL_DAYS, now)
-  const detail = result.provider === "DNSE"
-    ? "DNSE OpenAPI · 1D · 8-year Wyckoff window"
-    : result.provider === "VNDirect"
-      ? "VNDirect Finfo fallback · 1D · 8-year Wyckoff window"
-      : "Yahoo Finance .VN fallback · 1D · 8-year Wyckoff window"
+  const detail = result.provider === "VCI"
+    ? "VCI native ONE_DAY · 8-year Wyckoff window"
+    : result.provider === "DNSE"
+      ? "DNSE OpenAPI · 1D · 8-year Wyckoff window"
+      : result.provider === "VNDirect"
+        ? "VNDirect Finfo last-resort fallback · 1D · 8-year Wyckoff window"
+        : "Yahoo Finance .VN fallback · 1D · 8-year Wyckoff window"
   return { ...result, detail }
 }
 
