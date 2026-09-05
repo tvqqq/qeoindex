@@ -208,6 +208,15 @@ test("QEO-93 sparse 1m gaps already covered by a successful provider request are
   assert.match(serviceSource, /uncoveredProviderRanges\(storageGapRanges,\s*coveredRanges\)/)
 })
 
+test("QEO-93 canonical Daily reader paginates beyond the Supabase 1000-row response cap", () => {
+  const serviceSource = readFileSync(new URL("../modules/market/chart-data/service.ts", import.meta.url), "utf8")
+  const loadDailySource = serviceSource.match(/async function loadDaily[\s\S]*?\n}\n\nasync function loadIntraday/)?.[0] ?? ""
+
+  assert.match(loadDailySource, /DAILY_READ_PAGE_SIZE/)
+  assert.match(loadDailySource, /for\s*\(\s*let offset\s*=\s*0[\s\S]*?offset\s*\+=\s*DAILY_READ_PAGE_SIZE/)
+  assert.match(loadDailySource, /\.range\(offset,\s*offset\s*\+\s*DAILY_READ_PAGE_SIZE\s*-\s*1\)/)
+})
+
 test("QEO-96 live minute replay keeps current candle ephemeral and rejects future bars", () => {
   const nowSeconds = Math.floor(new Date("2026-09-07T02:15:42Z").getTime() / 1000)
   const current = activeMinuteStart(nowSeconds)
