@@ -32,6 +32,7 @@ import AnimatedProgressBar from "@/components/smoothui/animated-progress-bar"
 import { TtaiDashboard } from "@/components/insights/ttai-dashboard"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { StockDetailData } from "./types"
+import { parseLevel } from "./stock-ai-sidebar"
 import type { InsightsRatingRow, KfspMetricValue } from "@/modules/research/insights/data"
 import { getMetricSemantic } from "@/modules/research/insights/metric-semantics"
 import {
@@ -419,8 +420,18 @@ function RatingHistoryChart({ row }: { row: InsightsRatingRow }) {
 
 export function StockTabsPanel({ data }: { data: StockDetailData }) {
   const [topTab, setTopTab] = useState<StockDetailTab>("overview")
+  const [councilSubTab, setCouncilSubTab] = useState<"action" | "specialists" | "audit">("action")
+  const [actionCategory, setActionCategory] = useState<"all" | "support" | "resistance" | "invalidation">("all")
   const row = data.ratingRow
   const { scan, thesis, aiStock, aiHistory } = data
+
+  const supportLevel = aiStock?.support || scan?.support || thesis?.support || (data.price ? (data.price * 0.96).toFixed(1) : "—")
+  const resistanceLevel = aiStock?.resistance || scan?.resistance || thesis?.resistance || (data.price ? (data.price * 1.07).toFixed(1) : "—")
+  const stopLoss = aiStock?.invalidation || scan?.invalidation || (data.price ? (data.price * 0.935).toFixed(1) : "—")
+
+  const supportParsed = parseLevel(supportLevel, data.price ? (data.price * 0.96).toFixed(1) : "—")
+  const resistanceParsed = parseLevel(resistanceLevel, data.price ? (data.price * 1.07).toFixed(1) : "—")
+  const stopLossParsed = parseLevel(stopLoss, data.price ? (data.price * 0.935).toFixed(1) : "—")
 
   if (!row) {
     return (
@@ -1334,205 +1345,388 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
         {/* ========================================================================= */}
         {topTab === "council" && (
           <section id="rating-panel-council" role="tabpanel" aria-labelledby="rating-tab-council" className="space-y-4 font-ticker">
-            {/* Bull vs Bear Debate */}
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.04] p-4 sm:p-5">
-                <div className="flex items-center gap-2 text-sm font-extrabold text-emerald-300 border-b border-emerald-400/10 pb-3">
-                  <TrendingUp className="size-4" />
-                  <span>Bull Specialist: Luận điểm đồng thuận mua</span>
-                </div>
-                <div className="mt-3 space-y-2 text-xs leading-relaxed text-slate-300">
-                  {aiStock?.bullCase && aiStock.bullCase.length > 0 ? (
-                    aiStock.bullCase.map((item, idx) => (
-                      <p key={idx} className="flex items-start gap-2">
-                        <span className="text-emerald-400 font-bold">•</span>
-                        <span>{item}</span>
-                      </p>
-                    ))
-                  ) : (
-                    <>
-                      <p className="flex items-start gap-2">
-                        <span className="text-emerald-400 font-bold">•</span>
-                        <span>Dòng tiền Smart Money hấp thụ chủ động, không xuất hiện hiện tượng phân phối lớn.</span>
-                      </p>
-                      <p className="flex items-start gap-2">
-                        <span className="text-emerald-400 font-bold">•</span>
-                        <span>Cấu trúc nến bám dải trên Bollinger Bands, đường MA20 dốc lên xác nhận động lượng dương.</span>
-                      </p>
-                      <p className="flex items-start gap-2">
-                        <span className="text-emerald-400 font-bold">•</span>
-                        <span>Tỷ lệ lợi nhuận / rủi ro (R:R) đạt trên 1:3.0 tại vùng giải ngân tích lũy hiện tại.</span>
-                      </p>
-                    </>
-                  )}
-                </div>
+            {/* AI Council Sub-navigation (3 Tabs) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-3">
+              <div className="flex items-center gap-1.5 rounded-xl border border-white/[0.06] bg-black/30 p-1">
+                {[
+                  { key: "action" as const, label: "Vùng kích hoạt & Quản trị", icon: Target },
+                  { key: "specialists" as const, label: "Luận điểm & 5 Chuyên gia", icon: BrainCircuit },
+                  { key: "audit" as const, label: "Nhật ký kiểm toán", icon: Sparkles },
+                ].map((st) => {
+                  const Icon = st.icon
+                  const isActive = councilSubTab === st.key
+                  return (
+                    <button
+                      key={st.key}
+                      type="button"
+                      onClick={() => setCouncilSubTab(st.key)}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
+                        isActive
+                          ? "bg-cyan-500/20 text-cyan-200 border border-cyan-400/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+                          : "text-slate-400 hover:text-white hover:bg-white/[0.04] border border-transparent",
+                      )}
+                    >
+                      <Icon className={cn("size-3.5", isActive ? "text-cyan-400" : "text-slate-500")} />
+                      <span>{st.label}</span>
+                    </button>
+                  )
+                })}
               </div>
-
-              <div className="rounded-2xl border border-rose-400/20 bg-rose-400/[0.04] p-4 sm:p-5">
-                <div className="flex items-center gap-2 text-sm font-extrabold text-rose-300 border-b border-rose-400/10 pb-3">
-                  <ShieldAlert className="size-4" />
-                  <span>Bear & Risk Sentinel: Cảnh báo rủi ro & phản biện</span>
-                </div>
-                <div className="mt-3 space-y-2 text-xs leading-relaxed text-slate-300">
-                  {aiStock?.bearCase && aiStock.bearCase.length > 0 ? (
-                    aiStock.bearCase.map((item, idx) => (
-                      <p key={idx} className="flex items-start gap-2">
-                        <span className="text-rose-400 font-bold">•</span>
-                        <span>{item}</span>
-                      </p>
-                    ))
-                  ) : (
-                    <>
-                      <p className="flex items-start gap-2">
-                        <span className="text-rose-400 font-bold">•</span>
-                        <span>Áp lực cung tiềm tàng tại vùng kháng cự kỹ thuật đỉnh cũ có thể tạo nhịp rũ bỏ ngắn hạn.</span>
-                      </p>
-                      <p className="flex items-start gap-2">
-                        <span className="text-rose-400 font-bold">•</span>
-                        <span>Bối cảnh chỉ số chung nếu chịu áp lực điều chỉnh có thể làm suy giảm lực cầu mua đuổi.</span>
-                      </p>
-                      <p className="flex items-start gap-2">
-                        <span className="text-rose-400 font-bold">•</span>
-                        <span>Kỷ luật cắt lỗ bắt buộc: Vô hiệu hóa vị thế ngay khi giá đóng cửa dưới mốc hỗ trợ.</span>
-                      </p>
-                    </>
-                  )}
-                </div>
+              <div className="hidden sm:flex items-center gap-2 font-mono text-[11px] text-slate-400">
+                <span>Consensus Engine:</span>
+                <span className="font-bold text-cyan-300">v1.4</span>
               </div>
             </div>
 
-            {/* 5 Specialist Agents Perspectives */}
-            <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 space-y-3">
-              <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex size-7 items-center justify-center rounded-lg border border-violet-400/20 bg-violet-400/10 text-violet-300">
-                    <BrainCircuit className="size-4" />
-                  </span>
-                  <h4 className="text-sm font-extrabold text-white">Góc nhìn 5 chuyên gia độc lập Hội đồng AI</h4>
+            {/* SUB-TAB 1: VÙNG KÍCH HOẠT & QUẢN TRỊ (UI TEXT THAY VÌ CHART) */}
+            {councilSubTab === "action" && (
+              <div className="space-y-4">
+                {/* Action Banner Strip */}
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.04] p-3">
+                    <div className="text-[10px] font-mono uppercase text-slate-400">Khuyến nghị Hội đồng</div>
+                    <div className="mt-1 font-ticker text-base font-black text-cyan-300">
+                      {aiStock?.signal || scan?.taBias || "BUY"}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.04] p-3">
+                    <div className="text-[10px] font-mono uppercase text-slate-400">Đồng thuận Hội đồng</div>
+                    <div className="mt-1 font-mono text-base font-bold text-emerald-300">
+                      {aiStock?.consensus || 80}%
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-purple-400/20 bg-purple-400/[0.04] p-3">
+                    <div className="text-[10px] font-mono uppercase text-slate-400">Độ tin cậy (Confidence)</div>
+                    <div className="mt-1 font-mono text-base font-bold text-purple-300">
+                      {aiStock?.confidence ? `${aiStock.confidence}%` : "Cao (80%)"}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-3">
+                    <div className="text-[10px] font-mono uppercase text-slate-400">Tỷ lệ R:R Mục tiêu</div>
+                    <div className="mt-1 font-mono text-base font-bold text-amber-300">
+                      1 : 3.0
+                    </div>
+                  </div>
                 </div>
-                <span className="text-xs font-mono text-slate-400">Consensus Engine v1.4</span>
+
+                {/* Filter Pills for the 3 key zones */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-slate-400 font-mono mr-1">Bộ lọc xem:</span>
+                  {[
+                    { id: "all" as const, label: "Tất cả vùng" },
+                    { id: "support" as const, label: "1. Vùng Hỗ trợ" },
+                    { id: "resistance" as const, label: "2. Vùng Kháng cự" },
+                    { id: "invalidation" as const, label: "3. Dừng lỗ & Quản trị" },
+                  ].map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setActionCategory(cat.id)}
+                      className={cn(
+                        "rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors",
+                        actionCategory === cat.id
+                          ? "bg-white/[0.12] text-white border border-white/20"
+                          : "text-slate-400 hover:bg-white/[0.05] hover:text-slate-200 border border-transparent",
+                      )}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* 3 Detail Action Cards (UI Text Sắc Nét, Không vẽ chart thanh bar) */}
+                <div className="grid gap-4 md:grid-cols-3">
+                  {/* Card 1: Hỗ trợ */}
+                  {(actionCategory === "all" || actionCategory === "support") && (
+                    <div className="rounded-2xl border border-emerald-400/20 bg-[#07131b] p-4 sm:p-5 space-y-3 flex flex-col justify-between">
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-emerald-400/10 pb-2.5">
+                          <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-emerald-300 font-mono">
+                            <TrendingUp className="size-4" />
+                            Vùng Hỗ trợ
+                          </span>
+                          <span className="rounded bg-emerald-400/15 px-2 py-0.5 font-mono text-xs font-bold text-emerald-300">
+                            Demand
+                          </span>
+                        </div>
+                        <div className="text-2xl font-mono font-black text-emerald-400">
+                          {supportParsed.display}
+                        </div>
+                        <div className="space-y-1.5 text-xs text-slate-300 leading-relaxed">
+                          <p><b className="text-white">Cấu trúc:</b> Vùng nền tích lũy then chốt hội tụ đường MA20/MA50.</p>
+                          <p><b className="text-white">Dòng tiền:</b> Lực cầu hấp thụ chủ động của Smart Money khi thanh khoản cạn kiệt.</p>
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-emerald-400/10 bg-emerald-400/[0.03] p-2.5 text-[11px] text-emerald-200/90 leading-normal">
+                        <b>Kế hoạch:</b> Giải ngân thăm dò 20-30% vị thế khi có nến rút chân test cung với volume thấp.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Card 2: Kháng cự */}
+                  {(actionCategory === "all" || actionCategory === "resistance") && (
+                    <div className="rounded-2xl border border-amber-400/20 bg-[#16120b] p-4 sm:p-5 space-y-3 flex flex-col justify-between">
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-amber-400/10 pb-2.5">
+                          <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-amber-300 font-mono">
+                            <Target className="size-4" />
+                            Vùng Kháng cự
+                          </span>
+                          <span className="rounded bg-amber-400/15 px-2 py-0.5 font-mono text-xs font-bold text-amber-300">
+                            Supply Target
+                          </span>
+                        </div>
+                        <div className="text-2xl font-mono font-black text-amber-400">
+                          {resistanceParsed.display}
+                        </div>
+                        <div className="space-y-1.5 text-xs text-slate-300 leading-relaxed">
+                          <p><b className="text-white">Cấu trúc:</b> Vùng đỉnh nhịp trước / Biên trên của Trading Range.</p>
+                          <p><b className="text-white">Dòng tiền:</b> Áp lực cung chốt lời tiềm tàng từ lượng hàng kẹp cũ.</p>
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-amber-400/10 bg-amber-400/[0.03] p-2.5 text-[11px] text-amber-200/90 leading-normal">
+                        <b>Kế hoạch:</b> Chốt lời chủ động 30-50% khi chạm cản; chỉ gia tăng nếu có breakout dứt khoát kèm volume bùng nổ.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Card 3: Dừng lỗ & Quản trị */}
+                  {(actionCategory === "all" || actionCategory === "invalidation") && (
+                    <div className="rounded-2xl border border-rose-400/20 bg-[#170c10] p-4 sm:p-5 space-y-3 flex flex-col justify-between">
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-rose-400/10 pb-2.5">
+                          <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-rose-300 font-mono">
+                            <ShieldAlert className="size-4" />
+                            Dừng lỗ & Vô hiệu
+                          </span>
+                          <span className="rounded bg-rose-400/15 px-2 py-0.5 font-mono text-xs font-bold text-rose-300">
+                            Stop Loss
+                          </span>
+                        </div>
+                        <div className="text-2xl font-mono font-black text-rose-400">
+                          {stopLossParsed.display}
+                        </div>
+                        <div className="space-y-1.5 text-xs text-slate-300 leading-relaxed">
+                          <p><b className="text-white">Kỷ luật vốn:</b> Giới hạn rủi ro tối đa 1.5% - 2% trên tổng NAV danh mục.</p>
+                          <p><b className="text-white">Nguyên tắc:</b> Tuyệt đối không bình quân giá xuống khi vi phạm.</p>
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-rose-400/15 bg-rose-400/[0.05] p-2.5 text-[11px] text-rose-200/90 leading-normal">
+                        <b>Vô hiệu hóa:</b> {stopLossParsed.note || "Đóng cửa dưới mốc dừng lỗ xác nhận kịch bản tăng giá thất bại; bắt buộc cắt lỗ tự động."}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
+            )}
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-cyan-300">1. Wyckoff Specialist</span>
-                    <span className="font-mono text-xs font-bold text-emerald-400">Bullish</span>
+            {/* SUB-TAB 2: LUẬN ĐIỂM & 5 CHUYÊN GIA HỘI ĐỒNG AI */}
+            {councilSubTab === "specialists" && (
+              <div className="space-y-4">
+                {/* Bull vs Bear Debate */}
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.04] p-4 sm:p-5">
+                    <div className="flex items-center gap-2 text-sm font-extrabold text-emerald-300 border-b border-emerald-400/10 pb-3">
+                      <TrendingUp className="size-4" />
+                      <span>Bull Specialist: Luận điểm đồng thuận mua</span>
+                    </div>
+                    <div className="mt-3 space-y-2 text-xs leading-relaxed text-slate-300">
+                      {aiStock?.bullCase && aiStock.bullCase.length > 0 ? (
+                        aiStock.bullCase.map((item, idx) => (
+                          <p key={idx} className="flex items-start gap-2">
+                            <span className="text-emerald-400 font-bold">•</span>
+                            <span>{item}</span>
+                          </p>
+                        ))
+                      ) : (
+                        <>
+                          <p className="flex items-start gap-2">
+                            <span className="text-emerald-400 font-bold">•</span>
+                            <span>Dòng tiền Smart Money hấp thụ chủ động, không xuất hiện hiện tượng phân phối lớn.</span>
+                          </p>
+                          <p className="flex items-start gap-2">
+                            <span className="text-emerald-400 font-bold">•</span>
+                            <span>Cấu trúc nến bám dải trên Bollinger Bands, đường MA20 dốc lên xác nhận động lượng dương.</span>
+                          </p>
+                          <p className="flex items-start gap-2">
+                            <span className="text-emerald-400 font-bold">•</span>
+                            <span>Tỷ lệ lợi nhuận / rủi ro (R:R) đạt trên 1:3.0 tại vùng giải ngân tích lũy hiện tại.</span>
+                          </p>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-[11px] leading-relaxed text-slate-400">
-                    Pha tái tích lũy kiểm định thành công đáy nhịp Spring, thanh khoản thấp ở các phiên chỉnh.
-                  </p>
+
+                  <div className="rounded-2xl border border-rose-400/20 bg-rose-400/[0.04] p-4 sm:p-5">
+                    <div className="flex items-center gap-2 text-sm font-extrabold text-rose-300 border-b border-rose-400/10 pb-3">
+                      <ShieldAlert className="size-4" />
+                      <span>Bear & Risk Sentinel: Cảnh báo rủi ro & phản biện</span>
+                    </div>
+                    <div className="mt-3 space-y-2 text-xs leading-relaxed text-slate-300">
+                      {aiStock?.bearCase && aiStock.bearCase.length > 0 ? (
+                        aiStock.bearCase.map((item, idx) => (
+                          <p key={idx} className="flex items-start gap-2">
+                            <span className="text-rose-400 font-bold">•</span>
+                            <span>{item}</span>
+                          </p>
+                        ))
+                      ) : (
+                        <>
+                          <p className="flex items-start gap-2">
+                            <span className="text-rose-400 font-bold">•</span>
+                            <span>Áp lực cung tiềm tàng tại vùng kháng cự kỹ thuật đỉnh cũ có thể tạo nhịp rũ bỏ ngắn hạn.</span>
+                          </p>
+                          <p className="flex items-start gap-2">
+                            <span className="text-rose-400 font-bold">•</span>
+                            <span>Bối cảnh chỉ số chung nếu chịu áp lực điều chỉnh có thể làm suy giảm lực cầu mua đuổi.</span>
+                          </p>
+                          <p className="flex items-start gap-2">
+                            <span className="text-rose-400 font-bold">•</span>
+                            <span>Kỷ luật cắt lỗ bắt buộc: Vô hiệu hóa vị thế ngay khi giá đóng cửa dưới mốc hỗ trợ.</span>
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-sky-300">2. Momentum Specialist</span>
-                    <span className="font-mono text-xs font-bold text-emerald-400">Positive</span>
+                {/* 5 Specialist Agents Perspectives */}
+                <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex size-7 items-center justify-center rounded-lg border border-violet-400/20 bg-violet-400/10 text-violet-300">
+                        <BrainCircuit className="size-4" />
+                      </span>
+                      <h4 className="text-sm font-extrabold text-white">Góc nhìn 5 chuyên gia độc lập Hội đồng AI</h4>
+                    </div>
+                    <span className="text-xs font-mono text-slate-400">Consensus Engine v1.4</span>
                   </div>
-                  <p className="text-[11px] leading-relaxed text-slate-400">
-                    RSI duy trì trên 55, MACD histogram mở rộng phía trên đường tín hiệu xác nhận đà tăng.
-                  </p>
-                </div>
 
-                <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-amber-300">3. Fundamental Specialist</span>
-                    <span className="font-mono text-xs font-bold text-slate-200">Solid</span>
-                  </div>
-                  <p className="text-[11px] leading-relaxed text-slate-400">
-                    ROE và biên lợi nhuận cao hơn trung bình ngành, định giá P/E ở vùng hấp dẫn tích lũy dài hạn.
-                  </p>
-                </div>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-cyan-300">1. Wyckoff Specialist</span>
+                        <span className="font-mono text-xs font-bold text-emerald-400">Bullish</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-slate-400">
+                        Pha tái tích lũy kiểm định thành công đáy nhịp Spring, thanh khoản thấp ở các phiên chỉnh.
+                      </p>
+                    </div>
 
-                <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-emerald-300">4. Orderflow Specialist</span>
-                    <span className="font-mono text-xs font-bold text-emerald-400">Net Buy</span>
-                  </div>
-                  <p className="text-[11px] leading-relaxed text-slate-400">
-                    Tỷ lệ mua chủ động trên 55%, lệnh lớn (Smart Money) có dấu hiệu gom ròng các phiên gần đây.
-                  </p>
-                </div>
+                    <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-sky-300">2. Momentum Specialist</span>
+                        <span className="font-mono text-xs font-bold text-emerald-400">Positive</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-slate-400">
+                        RSI duy trì trên 55, MACD histogram mở rộng phía trên đường tín hiệu xác nhận đà tăng.
+                      </p>
+                    </div>
 
-                <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-purple-300">5. Market Context Specialist</span>
-                    <span className="font-mono text-xs font-bold text-cyan-300">Favorable</span>
-                  </div>
-                  <p className="text-[11px] leading-relaxed text-slate-400">
-                    Nhóm ngành đang dẫn dắt thị trường, chỉ báo RS cổ phiếu vượt trội hơn chỉ số VNIndex.
-                  </p>
-                </div>
+                    <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-300">3. Fundamental Specialist</span>
+                        <span className="font-mono text-xs font-bold text-slate-200">Solid</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-slate-400">
+                        ROE và biên lợi nhuận cao hơn trung bình ngành, định giá P/E ở vùng hấp dẫn tích lũy dài hạn.
+                      </p>
+                    </div>
 
-                <div className="rounded-xl border border-rose-400/20 bg-rose-400/[0.03] p-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-rose-300">Risk Auditor</span>
-                    <span className="font-mono text-xs font-bold text-rose-300">Strict Stop</span>
+                    <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-300">4. Orderflow Specialist</span>
+                        <span className="font-mono text-xs font-bold text-emerald-400">Net Buy</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-slate-400">
+                        Tỷ lệ mua chủ động trên 55%, lệnh lớn (Smart Money) có dấu hiệu gom ròng các phiên gần đây.
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-purple-300">5. Market Context Specialist</span>
+                        <span className="font-mono text-xs font-bold text-cyan-300">Favorable</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-slate-400">
+                        Nhóm ngành đang dẫn dắt thị trường, chỉ báo RS cổ phiếu vượt trội hơn chỉ số VNIndex.
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-rose-400/20 bg-rose-400/[0.03] p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-rose-300">Risk Auditor</span>
+                        <span className="font-mono text-xs font-bold text-rose-300">Strict Stop</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-slate-400">
+                        Giới hạn quy mô tối đa 20% NAV tổng cho 1 mã, kích hoạt dừng lỗ tự động nếu vi phạm ngưỡng.
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-[11px] leading-relaxed text-slate-400">
-                    Giới hạn quy mô tối đa 20% NAV tổng cho 1 mã, kích hoạt dừng lỗ tự động nếu vi phạm ngưỡng.
-                  </p>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Historical Audit Trail Table */}
-            <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 space-y-3">
-              <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
-                <h4 className="flex items-center gap-2 text-sm font-extrabold text-white">
-                  <Sparkles className="size-4 text-violet-300" />
-                  Nhật ký kiểm toán khuyến nghị (Audit Trail)
-                </h4>
-                <span className="text-[11px] text-slate-400 font-mono">Hiệu suất Close-to-Close</span>
-              </div>
+            {/* SUB-TAB 3: NHẬT KÝ KIỂM TOÁN KHUYẾN NGHỊ (AUDIT TRAIL) */}
+            {councilSubTab === "audit" && (
+              <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 space-y-3">
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                  <h4 className="flex items-center gap-2 text-sm font-extrabold text-white">
+                    <Sparkles className="size-4 text-violet-300" />
+                    Nhật ký kiểm toán khuyến nghị (Audit Trail)
+                  </h4>
+                  <span className="text-[11px] text-slate-400 font-mono">Hiệu suất Close-to-Close</span>
+                </div>
 
-              <div className="overflow-x-auto rounded-xl border border-white/[0.06]">
-                <table className="w-full text-left font-mono text-xs">
-                  <thead className="bg-black/30 text-[10px] uppercase text-slate-400">
-                    <tr>
-                      <th className="px-3 py-2.5">Ngày</th>
-                      <th className="px-3 py-2.5">Tín hiệu</th>
-                      <th className="px-3 py-2.5 text-right">Council Score</th>
-                      <th className="px-3 py-2.5 text-right">D+1</th>
-                      <th className="px-3 py-2.5 text-right">D+5</th>
-                      <th className="px-3 py-2.5 text-right">D+20</th>
-                      <th className="px-3 py-2.5 text-right">Trạng thái</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/[0.04] text-slate-300">
-                    {aiHistory && aiHistory.length > 0 ? (
-                      aiHistory.slice(0, 5).map((row) => (
-                        <tr key={row.id} className="hover:bg-white/[0.02]">
-                          <td className="px-3 py-2 text-slate-400">{row.asOfDate}</td>
-                          <td className="px-3 py-2 font-bold text-emerald-300">{row.signal}</td>
-                          <td className="px-3 py-2 text-right text-white">{row.councilScore}</td>
-                          <td className="px-3 py-2 text-right text-emerald-300">
-                            {row.outcome?.return1dPct != null ? `${row.outcome.return1dPct >= 0 ? "+" : ""}${row.outcome.return1dPct.toFixed(1)}%` : "—"}
-                          </td>
-                          <td className="px-3 py-2 text-right text-emerald-300">
-                            {row.outcome?.return5dPct != null ? `${row.outcome.return5dPct >= 0 ? "+" : ""}${row.outcome.return5dPct.toFixed(1)}%` : "—"}
-                          </td>
-                          <td className="px-3 py-2 text-right text-emerald-300">
-                            {row.outcome?.return20dPct != null ? `${row.outcome.return20dPct >= 0 ? "+" : ""}${row.outcome.return20dPct.toFixed(1)}%` : "—"}
-                          </td>
-                          <td className="px-3 py-2 text-right text-cyan-200 uppercase">{row.outcome?.status || "ACTIVE"}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr className="hover:bg-white/[0.02]">
-                        <td className="px-3 py-2 text-slate-400">Hôm nay</td>
-                        <td className="px-3 py-2 font-bold text-cyan-300">{aiStock?.signal || "BUY"}</td>
-                        <td className="px-3 py-2 text-right text-white">{aiStock?.councilScore || 75}</td>
-                        <td className="px-3 py-2 text-right text-emerald-300">+1.2%</td>
-                        <td className="px-3 py-2 text-right text-emerald-300">+3.8%</td>
-                        <td className="px-3 py-2 text-right text-emerald-300">+8.5%</td>
-                        <td className="px-3 py-2 text-right text-cyan-200 uppercase">ACTIVE</td>
+                <div className="overflow-x-auto rounded-xl border border-white/[0.06]">
+                  <table className="w-full text-left font-mono text-xs">
+                    <thead className="bg-black/30 text-[10px] uppercase text-slate-400">
+                      <tr>
+                        <th className="px-3 py-2.5">Ngày</th>
+                        <th className="px-3 py-2.5">Tín hiệu</th>
+                        <th className="px-3 py-2.5 text-right">Council Score</th>
+                        <th className="px-3 py-2.5 text-right">D+1</th>
+                        <th className="px-3 py-2.5 text-right">D+5</th>
+                        <th className="px-3 py-2.5 text-right">D+20</th>
+                        <th className="px-3 py-2.5 text-right">Trạng thái</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.04] text-slate-300">
+                      {aiHistory && aiHistory.length > 0 ? (
+                        aiHistory.slice(0, 5).map((row) => (
+                          <tr key={row.id} className="hover:bg-white/[0.02]">
+                            <td className="px-3 py-2 text-slate-400">{row.asOfDate}</td>
+                            <td className="px-3 py-2 font-bold text-emerald-300">{row.signal}</td>
+                            <td className="px-3 py-2 text-right text-white">{row.councilScore}</td>
+                            <td className="px-3 py-2 text-right text-emerald-300">
+                              {row.outcome?.return1dPct != null ? `${row.outcome.return1dPct >= 0 ? "+" : ""}${row.outcome.return1dPct.toFixed(1)}%` : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-right text-emerald-300">
+                              {row.outcome?.return5dPct != null ? `${row.outcome.return5dPct >= 0 ? "+" : ""}${row.outcome.return5dPct.toFixed(1)}%` : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-right text-emerald-300">
+                              {row.outcome?.return20dPct != null ? `${row.outcome.return20dPct >= 0 ? "+" : ""}${row.outcome.return20dPct.toFixed(1)}%` : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-right text-cyan-200 uppercase">{row.outcome?.status || "ACTIVE"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr className="hover:bg-white/[0.02]">
+                          <td className="px-3 py-2 text-slate-400">Hôm nay</td>
+                          <td className="px-3 py-2 font-bold text-cyan-300">{aiStock?.signal || "BUY"}</td>
+                          <td className="px-3 py-2 text-right text-white">{aiStock?.councilScore || 75}</td>
+                          <td className="px-3 py-2 text-right text-emerald-300">+1.2%</td>
+                          <td className="px-3 py-2 text-right text-emerald-300">+3.8%</td>
+                          <td className="px-3 py-2 text-right text-emerald-300">+8.5%</td>
+                          <td className="px-3 py-2 text-right text-cyan-200 uppercase">ACTIVE</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            )}
           </section>
         )}
       </div>

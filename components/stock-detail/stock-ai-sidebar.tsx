@@ -10,7 +10,6 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
-  Target,
 } from "lucide-react"
 
 import type { StockDetailData } from "./types"
@@ -93,7 +92,7 @@ function formatSignalLines(text: string): string[] {
   return [words.slice(0, mid).join(" "), words.slice(mid).join(" ")]
 }
 
-function parseLevel(raw: string | undefined | null, fallback: string) {
+export function parseLevel(raw: string | undefined | null, fallback: string) {
   if (!raw) return { display: fallback, note: null }
   const trimmed = raw.trim()
   if (/^[\d\s.,·\-+/]+$/.test(trimmed)) {
@@ -221,15 +220,9 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
   const activeTier =
     CONFIDENCE_TIERS.find((t) => confidence >= t.min && confidence <= t.max) ||
     CONFIDENCE_TIERS[1]
-  const clampedConfidence = Math.min(94, Math.max(6, confidence))
-
   const supportLevel = aiStock?.support || scan?.support || thesis?.support || (price ? (price * 0.96).toFixed(1) : "—")
   const resistanceLevel = aiStock?.resistance || scan?.resistance || thesis?.resistance || (price ? (price * 1.07).toFixed(1) : "—")
   const stopLoss = aiStock?.invalidation || scan?.invalidation || (price ? (price * 0.935).toFixed(1) : "—")
-
-  const supportParsed = parseLevel(supportLevel, price ? (price * 0.96).toFixed(1) : "—")
-  const resistanceParsed = parseLevel(resistanceLevel, price ? (price * 1.07).toFixed(1) : "—")
-  const stopLossParsed = parseLevel(stopLoss, price ? (price * 0.935).toFixed(1) : "—")
   const signalLines = formatSignalLines(signalText)
 
   // Chat state
@@ -370,16 +363,16 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
             </div>
           </div>
 
-          {/* Consensus label and conviction description */}
+          {/* Consensus label and conviction description with confidence merged */}
           <div className="flex flex-col items-center gap-2 px-1 text-center">
             <span
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[11px] font-bold shadow-[0_0_12px_rgba(0,0,0,0.4)]",
-                consensusStyle.badgeColor
+                "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1 font-mono text-[11px] font-bold shadow-[0_0_12px_rgba(0,0,0,0.4)]",
+                consensusStyle.badgeColor,
               )}
             >
               <span className={cn("size-1.5 rounded-full", consensusStyle.dotColor)} />
-              {consensus}% Đồng thuận
+              {consensus}% đồng thuận với độ tin cậy {activeTier.label} ({confidence}%)
             </span>
             <p className="text-center text-[11.5px] leading-relaxed text-slate-300">
               {aiStock?.whatChangesDecision?.[0] ||
@@ -391,15 +384,14 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
         </div>
 
         {/* ========================================================= */}
-        {/* 2. 5 TRỤ CỘT: 5 PROGRESS BAR CHARTS                       */}
+        {/* 2. 5 TRỤ CỘT ĐÁNH GIÁ TỪ AI COUNCIL                       */}
         {/* ========================================================= */}
         <div className="space-y-2 pt-1">
           <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
             <span className="flex items-center gap-1.5">
               <Gauge className="size-3.5 text-cyan-400" />
-              5 Trụ cột đánh giá
+              5 Trụ cột đánh giá từ AI Council
             </span>
-            <span className="font-mono text-slate-500">Hội đồng: {score}/100</span>
           </div>
           <div className="space-y-2.5 rounded-xl border border-white/[0.05] bg-black/20 p-3">
             {pillars.map((p) => (
@@ -418,97 +410,6 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-
-        {/* ========================================================= */}
-        {/* 3. ĐỘ TIN CẬY (CONFIDENCE SPECTRUM)                       */}
-        {/* ========================================================= */}
-        <div className="border-t border-white/[0.08] pt-3.5 space-y-2">
-          <div className="text-center text-xs font-bold text-slate-200">
-            Độ tin cậy (Confidence)
-          </div>
-
-          {/* Spectrum Track with Floating Label and Indicator Thumb */}
-          <div className="relative pt-5 pb-1 px-1">
-            {/* Floating text above thumb */}
-            <div
-              className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-[10px] font-mono font-bold text-slate-200 transition-all duration-300"
-              style={{ left: `${clampedConfidence}%` }}
-            >
-              {activeTier.label} {confidence}%
-            </div>
-
-            {/* Spectrum Track Bar */}
-            <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-[#f43f5e] via-[#3b82f6] via-[#eab308] via-[#f97316] to-[#10b981]">
-              {/* Indicator Circle / Thumb */}
-              <div
-                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-300"
-                style={{ left: `${clampedConfidence}%` }}
-              >
-                <div
-                  className={cn(
-                    "size-4 rounded-full border-[3px] bg-[#0b1119] shadow-[0_0_10px_rgba(0,0,0,0.8)]",
-                    activeTier.ringBorder
-                  )}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ========================================================= */}
-        {/* 4. VÙNG KÍCH HOẠT & QUẢN TRỊ                               */}
-        {/* ========================================================= */}
-        <div className="space-y-2 border-t border-white/[0.06] pt-3.5">
-          <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
-            <span className="flex items-center gap-1.5">
-              <Target className="size-3.5 text-cyan-400" />
-              Vùng kích hoạt & Quản trị
-            </span>
-          </div>
-
-          <div className="space-y-2.5 rounded-xl border border-white/[0.05] bg-black/20 p-3">
-            {/* Hỗ trợ */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="font-medium text-slate-400">Hỗ trợ</span>
-                <span className="font-mono text-xs font-bold text-emerald-400">{supportParsed.display}</span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
-                <div className="h-full w-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 opacity-90" />
-              </div>
-            </div>
-
-            {/* Kháng cự */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="font-medium text-slate-400">Kháng cự</span>
-                <span className="font-mono text-xs font-bold text-amber-400">{resistanceParsed.display}</span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
-                <div className="h-full w-full rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 opacity-90" />
-              </div>
-            </div>
-
-            {/* Dừng lỗ */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="font-medium text-slate-400">Dừng lỗ</span>
-                <span className="font-mono text-xs font-bold text-rose-400">{stopLossParsed.display}</span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
-                <div className="h-full w-full rounded-full bg-gradient-to-r from-rose-500 to-pink-500 opacity-90" />
-              </div>
-            </div>
-
-            {/* Invalidation note if descriptive */}
-            {stopLossParsed.note && (
-              <div className="border-t border-white/[0.05] pt-2 text-[10.5px] leading-relaxed text-slate-400">
-                <span className="font-semibold text-rose-300">Vô hiệu: </span>
-                {stopLossParsed.note}
-              </div>
-            )}
           </div>
         </div>
       </div>
