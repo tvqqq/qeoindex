@@ -71,18 +71,17 @@ hot raw 1m
 
 The existing checksum-verified cold storage abstraction remains valid. Pruning is a new lifecycle responsibility tracked by QEO-103.
 
+Verified raw `<1D` history may remain indefinitely in private cold Object Storage as the legacy/backup archive. This is intentionally separate from the online chart render horizon: data can remain archived even when the chart is not allowed to request it.
+
 ### Mid-term 1-year requirement
 
 A `1h/2h/4h` chart needs at most one year. The implementation must avoid keeping one year of raw `1m` indexed in Postgres.
 
-Two acceptable storage strategies are benchmarked:
+The first implementation uses the existing **cold raw-minute strategy**: raw `1m` older than the 31-day hot window is stored as immutable verified Object Storage partitions and the QEO-93 timeframe engine aggregates those bars on demand for `1h/2h/4h` up to one year.
 
-1. **cold raw-minute strategy** — keep raw `1m` partitions for days 32-366 in Object Storage and aggregate on demand;
-2. **derived 1h archive/cache strategy** — before raw-minute expiry, deterministically aggregate verified canonical `1m` into session-aware `1h` partitions. Keep those for up to one year and use them as a rebuildable cache for `1h/2h/4h`.
+A deterministic rebuildable `1h` cache may be added later under QEO-97 only if measured latency/storage evidence justifies it. Such a cache would remain derived and non-canonical.
 
-The second strategy is preferred if it materially reduces latency/storage. A derived `1h` archive is never canonical source-of-truth and must carry source range/checksum/provenance sufficient to audit how it was produced.
-
-Intraday data older than one year is outside the current chart product contract. It must not remain in hot Postgres. It may be deleted after archive/cache policy requirements are satisfied unless a separate approved research/backtest requirement explicitly retains it.
+Intraday data older than one year is outside the current **render** contract and must not remain in hot Postgres. When retained for backup/reproducibility, it stays cold and is not hydrated into the browser through normal chart requests.
 
 ## Provider/cache read order
 
@@ -93,13 +92,13 @@ Conceptual read path:
   |
   +-- >=1D ----------> local canonical Daily full history
   |
-  +-- 1h/2h/4h -----> hot/cold/derived mid-term cache (<=1y)
+  +-- 1h/2h/4h -----> hot + cold raw 1m (<=1y) -> QEO-93 aggregation
   |                       |
-  |                       +-- miss -> selected upstream from/to fetch
+  |                       +-- missing canonical range -> selected upstream from/to refill
   |
-  +-- <1h -----------> hot raw minute / short cold boundary (<=31d)
+  +-- <1h -----------> hot/cold raw 1m (<=31d) -> QEO-93 aggregation where derived
                           |
-                          +-- miss -> selected upstream from/to fetch
+                          +-- missing canonical range -> selected upstream from/to refill
 ```
 
 Provider REST is a refill source behind the canonical service boundary, not a frontend dependency.
@@ -112,7 +111,7 @@ Provider REST is a refill source behind the canonical service boundary, not a fr
 - One failed ticker/partition does not abort the whole lifecycle run.
 - Hot/cold overlap uses deterministic dedupe.
 - Archive movement must not change candle timestamps/values or time+price drawing anchors.
-- Derived `1h` cache creation uses the same session-aware aggregation implementation as QEO-93, not a separate approximation.
+- QEO-93 remains the single session-aware aggregation implementation; storage lifecycle does not introduce a second OHLC aggregation algorithm.
 - Provider disagreement is preserved as provenance/integrity evidence; storage lifecycle never silently rewrites historical bars.
 
 ## UI behavior
@@ -123,7 +122,7 @@ The chart must communicate the product horizon through available data rather tha
 - `1h/2h/4h`: pan-left stops at one year;
 - `>=1D`: pan-left may continue through all available Daily history.
 
-The visible range, crosshair and drawings must remain stable when data crosses hot/cold/cache boundaries.
+The visible range, crosshair and drawings must remain stable when data crosses hot/cold boundaries.
 
 ## Acceptance additions
 
@@ -134,5 +133,6 @@ The visible range, crosshair and drawings must remain stable when data crosses h
 - Long-term Daily/higher chart can render full available history.
 - Hot Postgres raw minute retention is bounded to approximately 31 days after archive lifecycle is enabled.
 - Legacy `<1D` rows are archived and verified before prune.
-- Intraday older than one year is absent from hot Postgres.
+- Intraday older than one year is absent from hot Postgres and may remain only in verified cold legacy archive.
+- Normal chart requests cannot hydrate archived intraday beyond the one-year mid-term horizon.
 - Five visible VIC candles still match canonical API output exactly after crossing the implemented storage tier boundary.
