@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { CanonicalOhlcvBar } from "./contract"
 
 const UPSERT_CHUNK_SIZE = 500
+const MANIFEST_ID_CHUNK_SIZE = 100
 export const DERIVED_HOURLY_AGGREGATION_VERSION = "vn-session-v1"
 
 function finite(value: unknown) {
@@ -39,6 +40,53 @@ export async function readDerivedHourlyRange(
     .order("bar_time", { ascending: true })
   if (error) throw new Error(`Chart derived-hourly read failed: ${error.message}`)
   return (data || []).map((row) => storedRowToBar(row as Record<string, unknown>)).filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
+}
+
+export async function readDerivedHourlyByManifest(
+  supabase: SupabaseClient,
+  manifestId: string,
+): Promise<CanonicalOhlcvBar[]> {
+  const { data, error } = await supabase
+    .from("chart_ohlcv_derived_hourly")
+    .select("bar_time,open,high,low,close,volume")
+    .eq("source_manifest_id", manifestId)
+    .eq("resolution", "1h")
+    .order("bar_time", { ascending: true })
+  if (error) throw new Error(`Chart derived-hourly manifest read failed: ${error.message}`)
+  return (data || []).map((row) => storedRowToBar(row as Record<string, unknown>)).filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
+}
+
+export async function derivedHourlyColdCoverageComplete(
+  supabase: SupabaseClient,
+  input: { ticker: string; from: number; to: number },
+): Promise<boolean> {
+  if (input.to < input.from) return true
+  const { data: manifests, error: manifestError } = await supabase
+    .from("chart_ohlcv_cold_manifests")
+    .select("id")
+    .eq("ticker", input.ticker)
+    .eq("base_resolution", "1m")
+    .not("verified_at", "is", null)
+    .lte("range_start", new Date(input.to * 1000).toISOString())
+    .gte("range_end", new Date(input.from * 1000).toISOString())
+  if (manifestError) throw new Error(`Chart derived-hourly coverage manifest read failed: ${manifestError.message}`)
+
+  const manifestIds = (manifests || []).map((row) => String(row.id || "")).filter(Boolean)
+  if (!manifestIds.length) return false
+
+  const covered = new Set<string>()
+  for (let offset = 0; offset < manifestIds.length; offset += MANIFEST_ID_CHUNK_SIZE) {
+    const ids = manifestIds.slice(offset, offset + MANIFEST_ID_CHUNK_SIZE)
+    const { data, error } = await supabase
+      .from("chart_ohlcv_derived_hourly")
+      .select("source_manifest_id")
+      .eq("ticker", input.ticker)
+      .eq("resolution", "1h")
+      .in("source_manifest_id", ids)
+    if (error) throw new Error(`Chart derived-hourly coverage read failed: ${error.message}`)
+    for (const row of data || []) covered.add(String(row.source_manifest_id || ""))
+  }
+  return manifestIds.every((id) => covered.has(id))
 }
 
 export async function upsertDerivedHourlyBars(
