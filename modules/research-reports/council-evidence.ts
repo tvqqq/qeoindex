@@ -422,7 +422,7 @@ export async function getRelevantMarketReportEvidence(
 ): Promise<CouncilReportEvidenceItem[]> {
   const limit = Math.max(0, Math.min(COUNCIL_REPORT_MARKET_LIMIT, params.marketLimit ?? COUNCIL_REPORT_MARKET_LIMIT))
   if (!limit) return []
-  const categories = params.categories?.length ? params.categories : ["macro", "strategy"]
+  const categories: CouncilReportCategory[] = params.categories?.length ? params.categories : ["macro", "strategy"]
   const reports = await loadReports(client, {
     asOf: params.asOf,
     runAt: params.runAt,
