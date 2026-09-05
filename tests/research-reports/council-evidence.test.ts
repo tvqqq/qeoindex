@@ -188,6 +188,37 @@ test("Council ticker report selector is bounded to newest 3 reports within 90 da
   assert.ok(result.every((row) => row.roles.includes("ticker")))
 })
 
+test("Council ticker selector finds sparse relevant evidence before applying the global row safety cap", async () => {
+  const unrelatedReports = Array.from({ length: 160 }, (_, index) => report(
+    `r-unrelated-${String(index).padStart(3, "0")}`,
+    "2026-09-04",
+  ))
+  const unrelatedAnalyses = unrelatedReports.map((row, index) => analysis(
+    `a-unrelated-${String(index).padStart(3, "0")}`,
+    String(row.id),
+    "2026-09-04T03:00:00Z",
+  ))
+  const fixture: Fixture = {
+    reports: [...unrelatedReports, report("r-msn", "2026-08-20")],
+    analyses: [
+      ...unrelatedAnalyses,
+      analysis("a-msn", "r-msn", "2026-08-20T03:00:00Z"),
+    ],
+    mentions: [
+      ...unrelatedAnalyses.map((row, index) => mention(String(unrelatedReports[index].id), String(row.id), "VIC")),
+      mention("r-msn", "a-msn", "MSN", { created_at: "2026-08-20T04:00:00Z" }),
+    ],
+  }
+
+  const result = await getRelevantReportEvidence(client(fixture) as never, {
+    ticker: "MSN",
+    asOf: AS_OF,
+    runAt: RUN_AT,
+  })
+
+  assert.deepEqual(result.map((row) => row.reportId), ["r-msn"])
+})
+
 test("Council report row safety cap is deterministic and keeps the newest eligible report", async () => {
   const oldReports = Array.from({ length: 160 }, (_, index) => report(`r-${String(index).padStart(3, "0")}`, "2026-09-01"))
   const oldAnalyses = oldReports.map((row, index) => analysis(`a-${String(index).padStart(3, "0")}`, String(row.id), "2026-09-01T03:00:00Z"))
