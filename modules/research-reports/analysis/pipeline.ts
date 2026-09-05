@@ -341,7 +341,6 @@ export async function processResearchReport(
     await markResearchReportStatus(statusClient(client), report.id, fetchFailedBeforeIdentity && lastKnownGood
       ? {
           contentHash: lastKnownGood.contentHash,
-          parsedPageCount: lastKnownGood.parsedPageCount,
           ingestionStatus: "parsed",
           ingestionError: detail,
           analysisStatus: "ready",

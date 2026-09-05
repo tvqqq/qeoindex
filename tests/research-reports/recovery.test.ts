@@ -32,11 +32,12 @@ function statusOnlyClient() {
   return { client, patches }
 }
 
-test("QEO-87 recovery lookup selects the latest published analysis for only the requested report", async () => {
+test("QEO-87 recovery lookup selects only persisted identity columns from the latest published analysis", async () => {
   const calls: Array<[string, unknown]> = []
   const builder = {
     select(columns: string) {
-      assert.equal(columns, "id,report_id,content_hash,parsed_page_count")
+      assert.equal(columns, "id,report_id,content_hash")
+      assert.doesNotMatch(columns, /parsed_page_count/)
       return this
     },
     eq(column: string, value: unknown) {
@@ -58,7 +59,6 @@ test("QEO-87 recovery lookup selects the latest published analysis for only the 
           id: "analysis-last-good",
           report_id: REPORT_ID,
           content_hash: LAST_GOOD_HASH,
-          parsed_page_count: 22,
         },
         error: null,
       }
@@ -77,11 +77,10 @@ test("QEO-87 recovery lookup selects the latest published analysis for only the 
     id: "analysis-last-good",
     reportId: REPORT_ID,
     contentHash: LAST_GOOD_HASH,
-    parsedPageCount: 22,
   })
 })
 
-test("QEO-87 pre-hash fetch timeout restores canonical last-known-good state without hiding the failed attempt", async () => {
+test("QEO-87 pre-hash fetch timeout restores canonical last-known-good identity without hiding the failed attempt", async () => {
   const { client, patches } = statusOnlyClient()
   let aiCalls = 0
 
@@ -104,7 +103,6 @@ test("QEO-87 pre-hash fetch timeout restores canonical last-known-good state wit
         id: "analysis-last-good",
         reportId: REPORT_ID,
         contentHash: LAST_GOOD_HASH,
-        parsedPageCount: 22,
       }
     },
   })
@@ -118,7 +116,7 @@ test("QEO-87 pre-hash fetch timeout restores canonical last-known-good state wit
   const restored = patches.at(-1)
   assert.ok(restored)
   assert.equal(restored.content_hash, LAST_GOOD_HASH)
-  assert.equal(restored.parsed_page_count, 22)
+  assert.equal("parsed_page_count" in restored, false)
   assert.equal(restored.ingestion_status, "parsed")
   assert.match(String(restored.ingestion_error), /timeout/)
   assert.equal(restored.analysis_status, "ready")

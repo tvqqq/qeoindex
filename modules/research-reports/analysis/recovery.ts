@@ -4,7 +4,6 @@ interface RecoveryLookupRow {
   id: string
   report_id: string
   content_hash: string
-  parsed_page_count: number
 }
 
 interface RecoveryLookupBuilder {
@@ -26,7 +25,6 @@ export interface LastKnownGoodResearchReportAnalysis {
   id: string
   reportId: string
   contentHash: string
-  parsedPageCount: number
 }
 
 function safeLookupError(error: { message?: string } | null) {
@@ -40,7 +38,7 @@ export async function findLastKnownGoodResearchReportAnalysis(
 ): Promise<LastKnownGoodResearchReportAnalysis | null> {
   const result = await client
     .from(ANALYSIS_TABLE)
-    .select("id,report_id,content_hash,parsed_page_count")
+    .select("id,report_id,content_hash")
     .eq("report_id", reportId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -53,6 +51,5 @@ export async function findLastKnownGoodResearchReportAnalysis(
     id: result.data.id,
     reportId: result.data.report_id,
     contentHash: result.data.content_hash,
-    parsedPageCount: result.data.parsed_page_count,
   }
 }
