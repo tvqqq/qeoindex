@@ -25,17 +25,25 @@ test("StockAiSidebar positions consensus badge with merged confidence and convic
   assert.match(code, /Tăng conviction khi/)
 })
 
-test("StockAiSidebar updates 5 pillars title and restores confidence spectrum track", () => {
+test("StockAiSidebar updates 5 pillars title, applies confidence neon glow ring, and removes standalone slider", () => {
   const code = source("components/stock-detail/stock-ai-sidebar.tsx")
 
   // 5 Pillars title updated
   assert.match(code, /5 Trụ cột đánh giá từ AI Council/)
   // Legacy "Hội đồng: {score}/100" header is removed
   assert.doesNotMatch(code, /Hội đồng:\s*\{score\}\/100/)
-  // Standalone confidence spectrum slider track bar is restored under consensus badge
-  assert.match(code, /bg-gradient-to-r from-\[#f43f5e\] via-\[#3b82f6\] via-\[#eab308\] via-\[#f97316\] to-\[#10b981\]/)
-  assert.match(code, /0% Thấp/)
-  assert.match(code, /100% Rất cao/)
+
+  // Standalone confidence spectrum slider track bar is removed
+  assert.doesNotMatch(code, /0% Thấp/)
+  assert.doesNotMatch(code, /100% Rất cao/)
+  assert.doesNotMatch(code, /bg-gradient-to-r from-\[#f43f5e\] via-\[#3b82f6\] via-\[#eab308\] via-\[#f97316\] to-\[#10b981\]/)
+
+  // Circular ring arc uses activeTier confidence gradient and neon glow filter
+  assert.match(code, /stroke=\{`url\(#\$\{activeTier\.gradientId\}\)`\}/)
+  assert.match(code, /filter="url\(#consensus-ring-glow\)"/)
+
+  // Arc length is still driven by consensus
+  assert.match(code, /strokeDashoffset=\{strokeDashoffset\}/)
 })
 
 test("Vùng kích hoạt & Quản trị is removed from sidebar and moved to Tab 6 in StockTabsPanel", () => {
