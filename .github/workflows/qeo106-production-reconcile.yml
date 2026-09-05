@@ -1,0 +1,213 @@
+name: QEO-106 one-shot Production Reconcile
+
+on:
+  push:
+    branches:
+      - qeo-106-daily-hot-cold-full-history
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile-production:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact branch
+        uses: actions/checkout@v4
+        with:
+          ref: qeo-106-daily-hot-cold-full-history
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Promote QEO-106 production migrations and ledger
+        shell: bash
+        run: |
+          mv supabase/pending-migrations/20260905153500_qeo106_daily_hot_cold_history.sql \
+             supabase/migrations/20260905153500_qeo106_daily_hot_cold_history.sql
+
+          cat > supabase/migrations/20260905235254_qeo106_daily_prune_error_evidence_fix.sql <<'SQL'
+          begin;
+
+          create or replace function public.qeo_prune_verified_chart_daily_partition(
+            p_manifest_id uuid,
+            p_expected_sha256 text,
+            p_expected_row_count integer
+          )
+          returns jsonb
+          language plpgsql
+          security definer
+          set search_path to 'public', 'pg_temp'
+          as $function$
+          declare
+            v_manifest public.chart_ohlcv_cold_manifests%rowtype;
+            v_hot_rows bigint := 0;
+            v_deleted bigint := 0;
+          begin
+            if p_expected_row_count is null or p_expected_row_count <= 0 then
+              raise exception 'QEO-106 Daily prune requires a positive expected row count';
+            end if;
+
+            select * into v_manifest
+            from public.chart_ohlcv_cold_manifests
+            where id = p_manifest_id
+            for update;
+
+            if not found then
+              raise exception 'QEO-106 Daily prune manifest not found: %', p_manifest_id;
+            end if;
+
+            if v_manifest.base_resolution <> '1D'
+               or v_manifest.verified_at is null
+               or v_manifest.sha256 <> p_expected_sha256
+               or v_manifest.row_count <> p_expected_row_count then
+              raise exception 'QEO-106 Daily prune manifest verification mismatch: %', p_manifest_id;
+            end if;
+
+            select count(*) into v_hot_rows
+            from public.market_ohlcv_history h
+            where h.ticker = v_manifest.ticker
+              and h.timeframe = '1D'
+              and h.bar_time >= v_manifest.range_start
+              and h.bar_time <= v_manifest.range_end;
+
+            if v_hot_rows <> p_expected_row_count then
+              raise exception 'QEO-106 Daily hot row-count mismatch before prune: manifest %, expected %, found %', p_manifest_id, p_expected_row_count, v_hot_rows;
+            end if;
+
+            delete from public.market_ohlcv_history h
+            where h.ticker = v_manifest.ticker
+              and h.timeframe = '1D'
+              and h.bar_time >= v_manifest.range_start
+              and h.bar_time <= v_manifest.range_end;
+            get diagnostics v_deleted = row_count;
+
+            if v_deleted <> p_expected_row_count then
+              raise exception 'QEO-106 Daily atomic prune mismatch: manifest %, expected %, deleted %', p_manifest_id, p_expected_row_count, v_deleted;
+            end if;
+
+            return jsonb_build_object(
+              'status','pruned',
+              'manifestId',p_manifest_id,
+              'ticker',v_manifest.ticker,
+              'rangeStart',v_manifest.range_start,
+              'rangeEnd',v_manifest.range_end,
+              'deletedRows',v_deleted,
+              'sha256',v_manifest.sha256
+            );
+          end;
+          $function$;
+
+          revoke all on function public.qeo_prune_verified_chart_daily_partition(uuid, text, integer) from public, anon, authenticated;
+          grant execute on function public.qeo_prune_verified_chart_daily_partition(uuid, text, integer) to service_role;
+
+          comment on function public.qeo_prune_verified_chart_daily_partition(uuid, text, integer) is 'QEO-106 fail-closed Daily hot prune requiring an exact verified 1D cold manifest and exact PostgreSQL row count.';
+
+          commit;
+          SQL
+
+          python <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          manifest_path = Path('supabase/migration-equivalence.json')
+          manifest = json.loads(manifest_path.read_text())
+          entries = manifest['migrations']
+          q106 = next(e for e in entries if e['logicalName'] == 'qeo106_daily_hot_cold_history')
+          q106.update({
+              'repositoryVersion': '20260905153500',
+              'productionVersion': '20260905235144',
+              'state': 'MAPPED',
+              'evidence': 'qeo106-exact-head-green-production-schema-rls-and-function-smoke',
+              'rationale': 'QEO-106 Hot PostgreSQL + verified Cold Storage schema was promoted only after exact-head Verify, DB Drift zero-to-latest replay/generated-types, and EOD v4 were all green. Production applied the reviewed logical migration as 20260905235144; repository replay keeps the approved 20260905153500 ordering.'
+          })
+          correction_name = 'qeo106_daily_prune_error_evidence_fix'
+          correction = {
+              'logicalName': correction_name,
+              'repositoryVersion': '20260905235254',
+              'productionVersion': '20260905235254',
+              'state': 'EXACT',
+              'evidence': 'qeo106-production-function-definition-and-grants-smoke',
+              'rationale': 'Corrects only prune mismatch error evidence to report v_deleted; prune authority and fail-closed row-count semantics are unchanged. Production function definition and service-role-only grants were verified after apply.'
+          }
+          existing = next((e for e in entries if e['logicalName'] == correction_name), None)
+          if existing:
+              existing.update(correction)
+          else:
+              insert_at = entries.index(q106) + 1
+              entries.insert(insert_at, correction)
+          manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + '\n')
+
+          ledger_path = Path('docs/db/evidence/production-migration-ledger-2026-09-05.json')
+          ledger = json.loads(ledger_path.read_text())
+          ledger['capturedAt'] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+          additions = [
+              {'version': '20260905235144', 'name': 'qeo106_daily_hot_cold_history'},
+              {'version': '20260905235254', 'name': correction_name},
+          ]
+          current = {(str(row['version']), row['name']) for row in ledger['migrations']}
+          for row in additions:
+              if (row['version'], row['name']) not in current:
+                  ledger['migrations'].append(row)
+          ledger['migrations'].sort(key=lambda row: str(row['version']))
+          ledger_path.write_text(json.dumps(ledger, indent=2, ensure_ascii=False) + '\n')
+          PY
+
+      - name: Start clean local Supabase
+        run: supabase start
+
+      - name: Verify zero-to-latest replay
+        run: pnpm db:replay:verify
+
+      - name: Generate canonical Database types
+        run: pnpm db:types:generate
+
+      - name: Verify generated Database types
+        run: pnpm db:types:verify
+
+      - name: Verify migration drift contracts
+        run: node --test tests/db-migration-drift.test.ts tests/qeo-100-market-data.cases.ts
+
+      - name: TypeScript
+        run: pnpm typecheck
+
+      - name: Commit reconciled production state and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/qeo106-production-reconcile.yml
+          git config user.name "qeoindex-db-drift-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add \
+            supabase/migrations/20260905153500_qeo106_daily_hot_cold_history.sql \
+            supabase/migrations/20260905235254_qeo106_daily_prune_error_evidence_fix.sql \
+            supabase/pending-migrations/20260905153500_qeo106_daily_hot_cold_history.sql \
+            supabase/migration-equivalence.json \
+            docs/db/evidence/production-migration-ledger-2026-09-05.json \
+            modules/shared/supabase/database.types.ts \
+            .github/workflows/qeo106-production-reconcile.yml
+          git commit -m "chore(QEO-106): reconcile production Hot Cold migrations"
+          git push origin HEAD:qeo-106-daily-hot-cold-full-history
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
