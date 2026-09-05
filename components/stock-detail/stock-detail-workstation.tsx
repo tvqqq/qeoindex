@@ -129,11 +129,11 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
               isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
             )}
           >
-            {/* SmoothUI Floating Loading Indicator */}
+            {/* SmoothUI Floating Loading Indicator (absolute positioned to avoid top gap) */}
             <div
               className={cn(
-                "pointer-events-none sticky top-2.5 z-40 flex justify-center transition-all duration-300",
-                isTransitioning ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none",
+                "pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-50 transition-all duration-300",
+                isTransitioning ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none hidden",
               )}
             >
               <div className="rounded-2xl border border-cyan-400/30 bg-[#0b1017]/95 px-4 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.8),0_0_24px_rgba(34,211,238,0.2)] backdrop-blur-md">

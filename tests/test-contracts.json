@@ -761,6 +761,16 @@
       ]
     },
     {
+      "path": "tests/stock-identity-header.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve the stock identity company name and sector icon contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
       "path": "tests/supabase-auth-schema.test.ts",
       "owner": "db",
       "invariant": "Preserve the current supabase auth schema contract.",

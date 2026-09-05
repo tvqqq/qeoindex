@@ -13,6 +13,93 @@ import {
 } from "@/modules/shared/cache/request-cache"
 import { getInsightsRatingForTicker, type InsightsRatingRow } from "@/modules/research/insights/data"
 
+export const VN_TOP_COMPANY_NAMES: Record<string, string> = {
+  VIC: "Tập đoàn Vingroup",
+  VHM: "Công ty Cổ phần Vinhomes",
+  VRE: "Công ty Cổ phần Vincom Retail",
+  HPG: "Tập đoàn Hòa Phát",
+  VNM: "Công ty Cổ phần Sữa Việt Nam (Vinamilk)",
+  FPT: "Công ty Cổ phần FPT",
+  MSN: "Tập đoàn Masan",
+  MWG: "Công ty Cổ phần Đầu tư Thế Giới Di Động",
+  VCB: "Ngân hàng TMCP Ngoại thương Việt Nam (Vietcombank)",
+  BID: "Ngân hàng TMCP Đầu tư và Phát triển Việt Nam (BIDV)",
+  CTG: "Ngân hàng TMCP Công Thương Việt Nam (VietinBank)",
+  TCB: "Ngân hàng TMCP Kỹ Thương Việt Nam (Techcombank)",
+  MBB: "Ngân hàng TMCP Quân Đội (MBBank)",
+  VPB: "Ngân hàng TMCP Việt Nam Thịnh Vượng (VPBank)",
+  ACB: "Ngân hàng TMCP Á Châu (ACB)",
+  HDB: "Ngân hàng TMCP Phát triển TP.HCM (HDBank)",
+  STB: "Ngân hàng TMCP Sài Gòn Thương Tín (Sacombank)",
+  SHB: "Ngân hàng TMCP Sài Gòn - Hà Nội (SHB)",
+  VIB: "Ngân hàng TMCP Quốc tế Việt Nam (VIB)",
+  TPB: "Ngân hàng TMCP Tiên Phong (TPBank)",
+  SSB: "Ngân hàng TMCP Đông Nam Á (SeABank)",
+  MSB: "Ngân hàng TMCP Hàng Hải Việt Nam (MSB)",
+  LPB: "Ngân hàng TMCP Lộc Phát Việt Nam (LPBank)",
+  GAS: "Tổng Công ty Khí Việt Nam (PV GAS)",
+  PLX: "Tập đoàn Xăng Dầu Việt Nam (Petrolimex)",
+  POW: "Tổng Công ty Điện lực Dầu khí Việt Nam (PV Power)",
+  BSR: "Công ty Cổ phần Lọc hóa dầu Bình Sơn",
+  PVD: "Tổng Công ty Cổ phần Khoan và Dịch vụ Khoan Dầu khí",
+  PVS: "Tổng Công ty Cổ phần Dịch vụ Kỹ thuật Dầu khí Việt Nam",
+  SAB: "Tổng Công ty Cổ phần Bia - Rượu - Nước giải khát Sài Gòn (Sabeco)",
+  VJC: "Công ty Cổ phần Hàng không Vietjet",
+  HVN: "Tổng Công ty Hàng không Việt Nam (Vietnam Airlines)",
+  GVR: "Tập đoàn Công nghiệp Cao su Việt Nam",
+  BVH: "Tập đoàn Bảo Việt",
+  SSI: "Công ty Cổ phần Chứng khoán SSI",
+  VND: "Công ty Cổ phần Chứng khoán VNDIRECT",
+  VCI: "Công ty Cổ phần Chứng khoán Vietcap",
+  HCM: "Công ty Cổ phần Chứng khoán TP.HCM (HSC)",
+  DGC: "Công ty Cổ phần Tập đoàn Hóa chất Đức Giang",
+  DCM: "Công ty Cổ phần Phân bón Dầu khí Cà Mau",
+  DPM: "Tổng Công ty Phân bón và Hóa chất Dầu khí (Phú Mỹ)",
+  KDH: "Công ty Cổ phần Đầu tư và Kinh doanh Nhà Khang Điền",
+  NLG: "Công ty Cổ phần Đầu tư Nam Long",
+  DIG: "Tổng Công ty Cổ phần Đầu tư Phát triển Xây dựng (DIC Corp)",
+  DXG: "Công ty Cổ phần Tập đoàn Đất Xanh",
+  PDR: "Công ty Cổ phần Phát triển Bất động sản Phát Đạt",
+  KBC: "Tổng Công ty Phát triển Đô thị Kinh Bắc",
+  VSC: "Công ty Cổ phần Tập đoàn Container Việt Nam",
+  GMD: "Công ty Cổ phần Gemadept",
+  HAH: "Công ty Cổ phần Vận tải và Xếp dỡ Hải An",
+  REE: "Công ty Cổ phần Cơ Điện Lạnh (REE)",
+  PNJ: "Công ty Cổ phần Vàng bạc Đá quý Phú Nhuận",
+  FRT: "Công ty Cổ phần Bán lẻ Kỹ thuật số FPT (FPT Retail)",
+  DGW: "Công ty Cổ phần Thế Giới Số (Digiworld)",
+  BCM: "Tổng Công ty Đầu tư và Phát triển Công nghiệp (Becamex IDC)",
+  NVL: "Công ty Cổ phần Tập đoàn Đầu tư Địa ốc No Va (Novaland)",
+  GEX: "Công ty Cổ phần Tập đoàn GELEX",
+  HSG: "Công ty Cổ phần Tập đoàn Hoa Sen",
+  NKG: "Công ty Cổ phần Thép Nam Kim",
+  VGC: "Tổng Công ty Viglacera",
+  PC1: "Công ty Cổ phần Tập đoàn PC1",
+  CTR: "Tổng Công ty Cổ phần Công trình Viettel (Viettel Construction)",
+  VTP: "Tổng Công ty Cổ phần Bưu chính Viettel (Viettel Post)",
+}
+
+export function resolveCleanCompanyName(
+  ticker: string,
+  candidates: (string | null | undefined)[],
+  sector?: string | null,
+): string {
+  const normTicker = ticker.trim().toUpperCase()
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    const trimmed = candidate.trim()
+    if (trimmed.toUpperCase() === normTicker) continue
+    if (trimmed.toUpperCase().startsWith(`${normTicker} ·`)) continue
+    if (trimmed.toUpperCase().startsWith(`${normTicker} -`)) continue
+    if (sector && trimmed.toLowerCase() === sector.trim().toLowerCase()) continue
+    if (trimmed.length > 2) return trimmed
+  }
+  if (VN_TOP_COMPANY_NAMES[normTicker]) {
+    return VN_TOP_COMPANY_NAMES[normTicker]
+  }
+  return `Công ty Cổ phần ${normTicker}`
+}
+
 export async function fetchStockDetailData(
   ticker: string,
   supabase?: SupabaseClient,
@@ -79,12 +166,13 @@ export async function fetchStockDetailData(
     scanRows.length > 0 ? scanRows.slice(0, 30) : FA_SCREEN_ROWS.slice(0, 30)
   ).map((row) => {
     const sym = row.ticker
+    const uItem = scannerData.universe.find((u) => u.ticker === sym)
     const faRow = FA_SCREEN_ROWS.find((f) => f.ticker === sym)
     const p = "price" in row && typeof row.price === "number" ? row.price : 28000
     const cp = "changePct" in row && typeof row.changePct === "number" ? row.changePct : 0
     return {
       ticker: sym,
-      companyName: faRow?.sector || sym,
+      companyName: resolveCleanCompanyName(sym, [uItem?.companyName], faRow?.sector),
       price: p,
       change: (p * cp) / 100,
       changePct: cp,
@@ -95,7 +183,7 @@ export async function fetchStockDetailData(
   if (!watchlist.some((w) => w.ticker === decoded)) {
     watchlist.unshift({
       ticker: decoded,
-      companyName: fa?.sector || decoded,
+      companyName: resolveCleanCompanyName(decoded, [universeItem?.companyName], fa?.sector),
       price,
       change,
       changePct,
@@ -112,12 +200,16 @@ export async function fetchStockDetailData(
     }
   }
 
+  const resolvedCompanyName = resolveCleanCompanyName(
+    decoded,
+    [ratingRow?.companyName, universeItem?.companyName, thesis?.company],
+    fa?.sector || universeItem?.sector,
+  )
+
   if (!ratingRow) {
     ratingRow = buildFallbackRatingRow({
       ticker: decoded,
-      companyName:
-        thesis?.company ||
-        (universeItem?.sector ? `${decoded} · ${universeItem.sector}` : `Công ty Cổ phần ${decoded}`),
+      companyName: resolvedCompanyName,
       exchange: universeItem?.rank ? "HOSE" : "HNX",
       sector: fa?.sector || universeItem?.sector || "Thị trường Việt Nam",
       rank: universeItem?.rank || fa?.rank,
@@ -135,9 +227,7 @@ export async function fetchStockDetailData(
 
   return {
     ticker: decoded,
-    companyName:
-      thesis?.company ||
-      (universeItem?.sector ? `${decoded} · ${universeItem.sector}` : `Công ty Cổ phần ${decoded}`),
+    companyName: resolvedCompanyName,
     exchange: universeItem?.rank ? "HOSE" : "HNX",
     sector: fa?.sector || universeItem?.sector || "Thị trường Việt Nam",
     rank: universeItem?.rank || fa?.rank,
