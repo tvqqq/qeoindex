@@ -3,6 +3,9 @@
   "regions": [
     "sin1"
   ],
+  "env": {
+    "RESEARCH_REPORT_PDF_ALLOWED_HOSTS": "cdn02.wigroup.vn"
+  },
   "ignoreCommand": "node scripts/vercel-ignore-build.mjs",
   "git": {
     "deploymentEnabled": {
