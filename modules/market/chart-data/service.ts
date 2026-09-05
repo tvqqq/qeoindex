@@ -24,6 +24,7 @@ import { mergeProviderRanges, missingProviderRanges, uncoveredProviderRanges } f
 const DAY_SECONDS = 86400
 const MAX_INTRADAY_SPAN_SECONDS = 31 * DAY_SECONDS
 const MAX_DAILY_SPAN_SECONDS = 100 * 366 * DAY_SECONDS
+const DAILY_READ_PAGE_SIZE = 500
 const LIVE_TAIL_SECONDS = 5 * 60
 
 export interface ChartDataServiceDeps {
@@ -64,18 +65,25 @@ function laterTime(current: number | null, bars: CanonicalOhlcvBar[]) {
 }
 
 async function loadDaily(supabase: SupabaseClient, request: CanonicalChartOhlcvRequest, now = new Date()): Promise<CanonicalChartOhlcvResult> {
-  const { data, error } = await supabase
-    .from("market_ohlcv_history")
-    .select("bar_time,open,high,low,close,volume")
-    .eq("ticker", request.ticker)
-    .eq("timeframe", "1D")
-    .gte("bar_time", new Date(request.from * 1000).toISOString())
-    .lte("bar_time", new Date(request.to * 1000).toISOString())
-    .order("bar_time", { ascending: true })
-  if (error) throw new ChartDataUnavailableError("Canonical Daily storage unavailable")
+  const rows: Array<Record<string, unknown>> = []
+  for (let offset = 0; ; offset += DAILY_READ_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("market_ohlcv_history")
+      .select("bar_time,open,high,low,close,volume")
+      .eq("ticker", request.ticker)
+      .eq("timeframe", "1D")
+      .gte("bar_time", new Date(request.from * 1000).toISOString())
+      .lte("bar_time", new Date(request.to * 1000).toISOString())
+      .order("bar_time", { ascending: true })
+      .range(offset, offset + DAILY_READ_PAGE_SIZE - 1)
+    if (error) throw new ChartDataUnavailableError("Canonical Daily storage unavailable")
+    const page = (data || []) as Array<Record<string, unknown>>
+    rows.push(...page)
+    if (page.length < DAILY_READ_PAGE_SIZE) break
+  }
 
-  const tagged: SourceTaggedBar[] = (data || [])
-    .map((row) => rowToBar(row as Record<string, unknown>))
+  const tagged: SourceTaggedBar[] = rows
+    .map((row) => rowToBar(row))
     .filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
     .map((bar) => ({ source: "daily" as const, bar }))
   const normalized = normalizeCanonicalBars(tagged)
