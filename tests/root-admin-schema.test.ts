@@ -5,7 +5,7 @@ import test from "node:test"
 const sql = readFileSync(new URL("../supabase/migrations/20260824120000_root_admin_control_plane.sql", import.meta.url), "utf8")
 const phasesSql = readFileSync(new URL("../supabase/migrations/20260825160000_system_job_phases.sql", import.meta.url), "utf8")
 const ohlcvMigrationUrl = new URL("../supabase/migrations/20260825163000_market_ohlcv_history.sql", import.meta.url)
-const chartOhlcvMigrationUrl = new URL("../supabase/migrations/20260905143000_qeo92_chart_ohlcv_intraday.sql", import.meta.url)
+const chartOhlcvMigrationUrl = new URL("../supabase/migrations/20260905065836_qeo92_chart_ohlcv_intraday.sql", import.meta.url)
 
 test("control-plane tables are private service-role data", () => {
   for (const table of ["system_settings", "system_job_runs", "system_audit_log"]) {
