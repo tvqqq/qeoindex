@@ -7,15 +7,33 @@ import type { CanonicalOhlcvBar } from "./contract"
 
 const BUCKET = "chart-ohlcv"
 const ARCHIVE_FORMAT_VERSION = 1
+const VERIFIED_MANIFEST_READ_LIMIT = 1_000
 
 type ManifestRow = {
   id?: unknown
+  ticker?: unknown
   object_path?: unknown
   range_start?: unknown
   range_end?: unknown
   row_count?: unknown
   sha256?: unknown
   archive_format?: unknown
+  verified_at?: unknown
+  format_version?: unknown
+  byte_count?: unknown
+}
+
+export interface VerifiedColdManifest {
+  id: string
+  ticker: string
+  objectPath: string
+  rangeStart: number
+  rangeEnd: number
+  rowCount: number
+  sha256: string
+  archiveFormat: "ndjson.gz"
+  formatVersion: number
+  byteCount: number | null
 }
 
 export interface ColdReadResult {
@@ -76,24 +94,84 @@ async function verifyStoredObject(supabase: SupabaseClient, input: { objectPath:
   return bytes
 }
 
+function finiteEpoch(value: unknown) {
+  const timestamp = value ? new Date(String(value)).getTime() : NaN
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : null
+}
+
+function manifestFromRow(raw: ManifestRow): VerifiedColdManifest | null {
+  const id = String(raw.id || "")
+  const ticker = String(raw.ticker || "").trim().toUpperCase()
+  const objectPath = String(raw.object_path || "")
+  const rangeStart = finiteEpoch(raw.range_start)
+  const rangeEnd = finiteEpoch(raw.range_end)
+  const rowCount = Number(raw.row_count)
+  const sha256 = String(raw.sha256 || "")
+  const formatVersion = Number(raw.format_version ?? ARCHIVE_FORMAT_VERSION)
+  const byteCountValue = raw.byte_count == null ? null : Number(raw.byte_count)
+  if (!id || !ticker || !objectPath || rangeStart == null || rangeEnd == null || rangeEnd < rangeStart) return null
+  if (!Number.isInteger(rowCount) || rowCount <= 0 || !/^[a-f0-9]{64}$/.test(sha256)) return null
+  if (raw.archive_format !== "ndjson.gz" || !raw.verified_at || formatVersion !== ARCHIVE_FORMAT_VERSION) return null
+  if (byteCountValue != null && (!Number.isFinite(byteCountValue) || byteCountValue <= 0)) return null
+  return {
+    id,
+    ticker,
+    objectPath,
+    rangeStart,
+    rangeEnd,
+    rowCount,
+    sha256,
+    archiveFormat: "ndjson.gz",
+    formatVersion,
+    byteCount: byteCountValue,
+  }
+}
+
+export async function listVerifiedColdManifests(
+  supabase: SupabaseClient,
+  input: { ticker?: string; from?: number; to?: number; limit?: number; offset?: number } = {},
+): Promise<VerifiedColdManifest[]> {
+  const limit = Math.max(1, Math.min(VERIFIED_MANIFEST_READ_LIMIT, Math.floor(input.limit ?? VERIFIED_MANIFEST_READ_LIMIT)))
+  const offset = Math.max(0, Math.floor(input.offset ?? 0))
+  let query = supabase.from("chart_ohlcv_cold_manifests")
+    .select("id,ticker,object_path,range_start,range_end,row_count,sha256,archive_format,verified_at,format_version,byte_count")
+    .eq("base_resolution", "1m")
+    .not("verified_at", "is", null)
+    .order("range_start", { ascending: true })
+    .range(offset, offset + limit - 1)
+  if (input.ticker) query = query.eq("ticker", input.ticker)
+  if (input.from != null) query = query.gte("range_end", new Date(input.from * 1000).toISOString())
+  if (input.to != null) query = query.lte("range_start", new Date(input.to * 1000).toISOString())
+  const { data, error } = await query
+  if (error) throw new Error(`Chart verified cold manifest read failed: ${error.message}`)
+  return ((data || []) as ManifestRow[]).map(manifestFromRow).filter((manifest): manifest is VerifiedColdManifest => Boolean(manifest))
+}
+
+export async function readVerifiedColdManifest(
+  supabase: SupabaseClient,
+  manifest: VerifiedColdManifest,
+): Promise<{ bars: CanonicalOhlcvBar[]; byteCount: number }> {
+  const bytes = await verifyStoredObject(supabase, {
+    objectPath: manifest.objectPath,
+    checksum: manifest.sha256,
+    rowCount: manifest.rowCount,
+  })
+  const bars = deserializeBars(bytes).sort((a, b) => a.time - b.time)
+  if (!bars.length || bars[0].time !== manifest.rangeStart || bars.at(-1)!.time !== manifest.rangeEnd) {
+    throw new Error(`Chart verified cold manifest range mismatch: ${manifest.id}`)
+  }
+  return { bars, byteCount: bytes.byteLength }
+}
+
 export function createSupabaseColdOhlcvStorage(supabase: SupabaseClient): ColdOhlcvStorage {
   return {
     async readIntersectingRange({ ticker, from, to }) {
-      const { data, error } = await supabase.from("chart_ohlcv_cold_manifests")
-        .select("object_path,range_start,range_end,row_count,sha256,archive_format")
-        .eq("ticker", ticker).eq("base_resolution", "1m")
-        .lte("range_start", new Date(to * 1000).toISOString()).gte("range_end", new Date(from * 1000).toISOString())
-        .order("range_start", { ascending: true })
-      if (error) throw new Error(`Chart cold manifest read failed: ${error.message}`)
+      const manifests = await listVerifiedColdManifests(supabase, { ticker, from, to })
       const bars: CanonicalOhlcvBar[] = []
       let manifestsRead = 0
-      for (const raw of (data || []) as ManifestRow[]) {
-        const objectPath = String(raw.object_path || "")
-        const expectedHash = String(raw.sha256 || "")
-        const expectedRows = Number(raw.row_count)
-        if (!objectPath || raw.archive_format !== "ndjson.gz") continue
-        const bytes = await verifyStoredObject(supabase, { objectPath, checksum: expectedHash, rowCount: expectedRows })
-        bars.push(...deserializeBars(bytes).filter((bar) => bar.time >= from && bar.time <= to))
+      for (const manifest of manifests) {
+        const verified = await readVerifiedColdManifest(supabase, manifest)
+        bars.push(...verified.bars.filter((bar) => bar.time >= from && bar.time <= to))
         manifestsRead += 1
       }
       return { bars, manifestsRead }
