@@ -86,12 +86,13 @@ QEO-86 consumes the canonical Research Reports tables created by QEO-80/81/85:
 Important existing semantics:
 
 - report metadata is provider-owned;
-- analysis rows are versioned by `report_id + content_hash + analysis_version + prompt_version + model_route_key`;
+- successful analysis rows are versioned by `report_id + content_hash + analysis_version + prompt_version + model_route_key`;
 - ticker mentions are tied to a concrete `analysis_id`;
 - recommendations and target prices are explicitly source-opinion evidence;
-- a report may later be reprocessed under a new content hash/analysis identity.
+- a report may later be reprocessed under a new content hash/analysis identity;
+- old successful analysis evidence remains canonical even when later ingestion/reprocessing fails.
 
-QEO-86 must therefore freeze a concrete eligible **analysis row**, not rely on the mutable current `market_research_reports.content_hash` for historical replay.
+QEO-86 must therefore freeze a concrete eligible **analysis row**, not rely on the mutable current `market_research_reports.content_hash` or current report processing status for historical replay.
 
 ## 5. Research Reports selector API
 
@@ -135,9 +136,9 @@ Required filters:
 1. `market_research_reports.publish_date <= asOf`;
 2. `market_research_reports.created_at <= runAt`;
 3. concrete `market_research_report_analyses.processed_at <= runAt`;
-4. the analysis row is a valid completed/published analysis candidate for that report identity;
+4. the concrete analysis row is a successful canonical analysis record for that report identity;
 5. ticker-specific evidence has an explicit `market_research_report_ticker_mentions.ticker = requested ticker` tied to the selected `analysis_id`;
-6. mention creation time must be `<= runAt` when the source schema exposes it;
+6. `market_research_report_ticker_mentions.created_at <= runAt`;
 7. future reports, future analysis revisions, and future mentions are excluded.
 
 Historical replay uses the exact selected `analysis_id/content_hash/version` from the frozen snapshot. Later current report state must not alter a historical Council run.
@@ -180,7 +181,7 @@ Apply `marketLimit` after ordering.
 
 ### 7.3 Dedupe
 
-When the same report/analysis qualifies for both buckets, include it once. Prefer preserving the ticker-specific role metadata while also retaining market/category metadata in the snapshot payload.
+When the same report/analysis qualifies for both buckets, include it once. Preserve ticker-specific role metadata while retaining market/category metadata in the snapshot payload.
 
 ## 8. Curated prompt payload
 
@@ -205,7 +206,7 @@ Initial Research Reports prompt budget: approximately **10,000 characters total*
 
 ## 9. Immutable snapshot schema
 
-Add a dedicated table, proposed name:
+Add a dedicated table:
 
 ```text
 ai_council_report_evidence_snapshots
@@ -237,19 +238,33 @@ Security/immutability:
 - index `(ticker, as_of_date desc, captured_at desc)`;
 - snapshot payload is immutable audit evidence.
 
-### 9.1 `ready`
+### 9.1 Freeze/reuse contract
 
-At least one eligible report is frozen.
+The freeze function must first load by `run_id`.
 
-### 9.2 `empty`
+- If a snapshot already exists, return it unchanged with `reused=true` and **do not re-run the selector**.
+- If none exists, select point-in-time evidence, canonicalize it, compute `context_hash`, then persist exactly one immutable row.
+- Same-run retry/replay must therefore use the original frozen evidence even if newer reports or analyses appeared after the first attempt.
+
+A Council prompt may consume Research Report evidence **only after the corresponding immutable snapshot has been successfully persisted or reused**.
+
+If selection succeeds but snapshot persistence fails, the Council debate may continue, but the unpersisted report evidence must be omitted from the prompt. This prevents an unauditable prompt from influencing advisory output.
+
+### 9.2 `ready`
+
+At least one eligible report is frozen and successfully persisted.
+
+### 9.3 `empty`
 
 Selector ran successfully but no eligible report existed. Persist an empty snapshot with `report_ids=[]` and `analysis_ids=[]`.
 
 This is required to distinguish a valid historical absence from a selector outage.
 
-### 9.3 `unavailable`
+### 9.4 `unavailable`
 
-Selector/database hydration failed. Persist bounded failure state/evidence where possible and allow Council LLM execution to continue without report evidence.
+Selector/database hydration failed. If the snapshot store is still writable, persist a versioned bounded `unavailable` payload with empty report/analysis lists and a deterministic context hash. Council continues without report evidence.
+
+If snapshot persistence itself fails, do not claim persisted provenance and do not include Research Report evidence in the prompt.
 
 ## 10. Frozen snapshot payload
 
@@ -301,9 +316,17 @@ deterministic evidence hash
 + prompt version
 ```
 
-A changed Research Reports snapshot therefore changes LLM prompt/cache identity while leaving deterministic Council authority untouched.
+Because this changes the identity contract, bump the identity version explicitly from the existing `prompt-identity-v1` to a new version, proposed:
 
-Version the prompt identity contract if needed rather than silently changing an existing version's semantics.
+```text
+prompt-identity-v2-report-evidence
+```
+
+Do not silently change `prompt-identity-v1` semantics.
+
+For `ready` and `empty` snapshots, include the frozen Research Reports `context_hash` in the new identity. `empty` therefore remains a reproducible explicit evidence state. For an unpersisted/unavailable snapshot, omit the report hash from prompt identity and omit report evidence from the prompt.
+
+A changed persisted Research Reports snapshot changes LLM prompt/cache identity while leaving deterministic Council authority untouched.
 
 ## 12. Runtime integration
 
@@ -316,9 +339,7 @@ Raw LLM evidence freeze
           ↓
 Notion research freeze — existing policy
           ↓
-Research Reports selector — ALL tickers
-          ↓
-Immutable report evidence snapshot
+Research Reports snapshot load-or-freeze — ALL tickers
           ↓
 Market synthesis context
           ↓
@@ -335,10 +356,12 @@ FrozenCouncilReportEvidence
 
 It must not call TOPI, download PDFs, parse PDFs, or invoke Research Reports ingestion.
 
-Failure semantics:
+Failure/retry semantics:
 
-- selector succeeds with no reports → `empty`, debate continues unchanged;
-- selector/database error → `unavailable`, debate continues without report evidence;
+- existing snapshot for `run_id` → reuse unchanged; never reselect;
+- selector succeeds with no reports → persist `empty`, debate continues unchanged;
+- selector/database query fails but snapshot can be persisted → persist `unavailable`, debate continues without report evidence;
+- snapshot persistence fails → omit report evidence and continue debate with existing deterministic/raw/Notion/market layers;
 - deterministic Council output is never failed or modified because Research Reports are unavailable.
 
 ## 13. Prompt semantics and anti-bias contract
@@ -396,7 +419,7 @@ Reuse the existing AI Council Debate Card and Evidence Provenance surface.
 
 ### 15.1 Evidence Provenance
 
-Add a Research Reports provenance card showing, when present:
+Add a Research Reports provenance card showing, when persisted:
 
 - snapshot status;
 - selected report count;
@@ -431,9 +454,10 @@ new content_hash / analysis_id
 then:
 
 - historical Council snapshot retains the old `analysis_id/content_hash` and old curated payload;
-- new Council run may select the newer eligible analysis;
-- the two snapshots have different `context_hash` values;
-- the two LLM prompt identities differ;
+- same-run retry reuses the old snapshot and does not select the new analysis;
+- a new Council run may select the newer eligible analysis;
+- the snapshots have different `context_hash` values;
+- the LLM prompt identities differ;
 - historical debate evidence is never hindsight-rewritten.
 
 ## 17. Testing / acceptance gates
@@ -447,29 +471,34 @@ Implementation follows TDD and must cover at least:
 5. future `publish_date` excluded;
 6. report not yet created at `runAt` excluded;
 7. analysis processed after `runAt` excluded;
-8. historical selection freezes the exact eligible analysis row;
-9. later reprocessing does not mutate old snapshot;
-10. successful no-match freezes `status=empty` and debate continues;
-11. selector/storage failure freezes/records `unavailable` where possible and debate continues;
-12. Research Reports `context_hash` participates in LLM prompt identity;
-13. deterministic `ai_council_runs.evidence_hash` remains unchanged;
-14. contradictory bullish broker report vs deterministic bearish/REDUCE preserves contradiction semantics and deterministic authority;
-15. `modules/ai-council` has no TOPI/PDF runtime dependency;
-16. prompt contains no full PDF/raw chunk dump;
-17. related-report links resolve to `/research/reports/[id]`;
-18. historical UI reads frozen snapshot rather than recomputing current selector;
-19. snapshot table RLS/immutability is enforced;
-20. generated Supabase types remain current;
-21. full Verify passes;
-22. DB Drift Reconciliation passes because schema changes are required.
+8. mention created after `runAt` excluded;
+9. historical selection freezes the exact eligible analysis row;
+10. later reprocessing does not mutate old snapshot;
+11. same `run_id` retry reuses the existing snapshot without reselection;
+12. successful no-match freezes `status=empty` and debate continues;
+13. selector failure freezes `unavailable` when persistence works and debate continues;
+14. snapshot persistence failure causes report evidence to be omitted from the prompt;
+15. Research Reports `context_hash` participates in the new LLM prompt identity;
+16. prompt identity version is bumped; v1 semantics are not silently changed;
+17. deterministic `ai_council_runs.evidence_hash` remains unchanged;
+18. contradictory bullish broker report vs deterministic bearish/REDUCE preserves contradiction semantics and deterministic authority;
+19. `modules/ai-council` has no TOPI/PDF runtime dependency;
+20. prompt contains no full PDF/raw chunk dump;
+21. related-report links resolve to `/research/reports/[id]`;
+22. historical UI reads frozen snapshot rather than recomputing current selector;
+23. snapshot table RLS/immutability is enforced;
+24. generated Supabase types remain current;
+25. full Verify passes;
+26. DB Drift Reconciliation passes because schema changes are required.
 
 ## 18. Failure and degradation policy
 
 Research Reports are advisory context, therefore failure must fail open for AI Council execution while remaining auditable.
 
-- `ready`: include frozen evidence;
-- `empty`: include explicit empty evidence state;
-- `unavailable`: omit report evidence from prompt, preserve deterministic and other LLM evidence layers, record limitation/provenance;
+- `ready`: include successfully persisted/reused frozen evidence;
+- `empty`: include explicit persisted empty evidence state;
+- `unavailable`: omit report evidence from prompt, preserve deterministic and other LLM evidence layers, record persisted limitation/provenance when possible;
+- snapshot persistence failure: omit report evidence entirely rather than use unauditable evidence;
 - never hide or rewrite older Council evidence because current report processing fails;
 - never fetch provider/PDF data synchronously as a fallback inside AI Council.
 
@@ -478,9 +507,9 @@ Research Reports are advisory context, therefore failure must fail open for AI C
 Expected components:
 
 - Research Reports deterministic selector module;
-- AI Council report-evidence freeze/snapshot adapter;
+- AI Council report-evidence load-or-freeze snapshot adapter;
 - schema migration + generated types;
-- prompt identity extension/versioning;
+- prompt identity v2 extension;
 - first-class semantic packet integration;
 - debate data/dashboard provenance loading;
 - compact `Báo cáo liên quan` UI;
@@ -495,6 +524,8 @@ QEO-86 is complete only when:
 - every AI Council ticker can consume eligible Research Reports;
 - selection is deterministic, bounded and point-in-time safe;
 - exact report/analysis provenance is immutable per Council run;
+- same-run retries reuse frozen evidence;
+- no unpersisted Research Report evidence can enter a Council prompt;
 - report evidence affects only advisory LLM reasoning;
 - deterministic authority remains unchanged;
 - contradictions are surfaced rather than broker opinion being promoted;
