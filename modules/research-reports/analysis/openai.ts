@@ -59,9 +59,27 @@ export interface ReportAiCallAudit {
   pricingVersion: typeof RESEARCH_REPORT_PRICING_VERSION
 }
 
+export interface ResearchReportAiRequestAuditEvent {
+  model: string
+  requestAttempt: number
+  outcome: "response" | "unknown_usage"
+  repair: boolean
+  httpStatus: number | null
+  providerStatus: string | null
+  inputTokens: number
+  cachedInputTokens: number
+  cacheWriteTokens: number
+  outputTokens: number
+  reasoningTokens: number
+  totalTokens: number
+  estimatedCostUsd: number | null
+  pricingVersion: typeof RESEARCH_REPORT_PRICING_VERSION | null
+}
+
 export interface ReportAiDependencies {
   fetchImpl?: typeof fetch
   budget?: ResearchReportAiBudget
+  onRequestAudit?: (event: ResearchReportAiRequestAuditEvent) => Promise<void> | void
 }
 
 interface ProviderCallResult {
@@ -200,6 +218,7 @@ async function callOpenAiOnce(
   repair: boolean,
   usage: UsageAccumulator,
   budget?: ResearchReportAiBudget,
+  onRequestAudit?: ReportAiDependencies["onRequestAudit"],
 ): Promise<ProviderCallResult> {
   const body = {
     model,
@@ -231,6 +250,27 @@ async function callOpenAiOnce(
   // Consume the attempt before network dispatch. A timeout or lost response is
   // still a provider request attempt and therefore cannot bypass the run cap.
   budget?.beforeRequest({ reservedCostUsd })
+  const requestAttempt = budget?.snapshot().requestAttempts ?? 0
+
+  const emitUnknownUsage = async (httpStatus: number | null) => {
+    budget?.recordUnknownUsage()
+    await onRequestAudit?.({
+      model,
+      requestAttempt,
+      outcome: "unknown_usage",
+      repair,
+      httpStatus,
+      providerStatus: null,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      totalTokens: 0,
+      estimatedCostUsd: null,
+      pricingVersion: null,
+    })
+  }
 
   let response: Response
   try {
@@ -245,7 +285,7 @@ async function callOpenAiOnce(
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     })
   } catch (error) {
-    budget?.recordUnknownUsage()
+    await emitUnknownUsage(null)
     const name = error instanceof Error ? error.name : "transport_error"
     throw new ReportAiProviderError(`OpenAI Responses request failed: ${name}`, true)
   }
@@ -255,7 +295,7 @@ async function callOpenAiOnce(
   try {
     envelope = rawText ? JSON.parse(rawText) : {}
   } catch {
-    budget?.recordUnknownUsage()
+    await emitUnknownUsage(response.status)
     throw new ReportAiProviderError(
       `OpenAI Responses API ${response.status} returned an invalid response envelope`,
       response.status === 429 || response.status >= 500,
@@ -273,8 +313,24 @@ async function callOpenAiOnce(
     })
     addUsage(usage, inspection, cost.estimatedCostUsd)
     budget?.recordResponseCost(cost.estimatedCostUsd)
+    await onRequestAudit?.({
+      model,
+      requestAttempt,
+      outcome: "response",
+      repair,
+      httpStatus: response.status,
+      providerStatus: inspection.status ?? null,
+      inputTokens: inspection.inputTokens,
+      cachedInputTokens: inspection.cachedInputTokens,
+      cacheWriteTokens: inspection.cacheWriteTokens,
+      outputTokens: inspection.outputTokens,
+      reasoningTokens: inspection.reasoningTokens,
+      totalTokens: inspection.totalTokens,
+      estimatedCostUsd: cost.estimatedCostUsd,
+      pricingVersion: cost.pricingVersion,
+    })
   } else {
-    budget?.recordUnknownUsage()
+    await emitUnknownUsage(response.status)
   }
 
   if (!response.ok) {
@@ -316,6 +372,7 @@ async function callWithIncompleteRetry(
   repair: boolean,
   usage: UsageAccumulator,
   budget?: ResearchReportAiBudget,
+  onRequestAudit?: ReportAiDependencies["onRequestAudit"],
 ) {
   let maxOutputTokens = INITIAL_MAX_OUTPUT_TOKENS
 
@@ -331,6 +388,7 @@ async function callWithIncompleteRetry(
         repair,
         usage,
         budget,
+        onRequestAudit,
       )
     } catch (error) {
       if (!(error instanceof ReportAiIncompleteError)) throw error
@@ -356,6 +414,7 @@ async function analyzeWithModel(
   fetchImpl: typeof fetch,
   usage: UsageAccumulator,
   budget?: ResearchReportAiBudget,
+  onRequestAudit?: ReportAiDependencies["onRequestAudit"],
 ): Promise<{ analysis: StructuredResearchReportAnalysis; call: ProviderCallResult }> {
   const first = await callWithIncompleteRetry(
     model,
@@ -366,6 +425,7 @@ async function analyzeWithModel(
     false,
     usage,
     budget,
+    onRequestAudit,
   )
 
   try {
@@ -383,6 +443,7 @@ async function analyzeWithModel(
     true,
     usage,
     budget,
+    onRequestAudit,
   )
   return { analysis: parseValidatedAnalysis(repaired.outputText, pages), call: repaired }
 }
@@ -420,7 +481,16 @@ export async function analyzeResearchReportPages(
   for (const model of models) {
     attemptedModels.push(model)
     try {
-      finalResult = await analyzeWithModel(model, route, pages, apiKey, fetchImpl, usage, deps.budget)
+      finalResult = await analyzeWithModel(
+        model,
+        route,
+        pages,
+        apiKey,
+        fetchImpl,
+        usage,
+        deps.budget,
+        deps.onRequestAudit,
+      )
       finalModel = model
       break
     } catch (error) {
