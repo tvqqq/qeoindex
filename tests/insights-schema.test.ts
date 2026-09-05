@@ -284,30 +284,24 @@ test("stock detail workstation pins sidebars and allows center column scrolling 
   assert.match(watchlist, /overflow-y-auto/)
 })
 
-test("stock ai sidebar renders consensus donut chart, 5 pillars progress bars, and confidence spectrum", () => {
+test("stock ai sidebar renders consensus donut chart, consensus with confidence badge, and 5 pillars progress bars", () => {
   const aiSidebar = readFileSync("components/stock-detail/stock-ai-sidebar.tsx", "utf8")
 
   // 1. Donut Ring with Recommendation in center
   assert.match(aiSidebar, /viewBox="0 0 200 200"/)
   assert.match(aiSidebar, /strokeDashoffset=\{strokeDashoffset\}/)
   assert.match(aiSidebar, /filter="url\(#consensus-ring-glow\)"/)
-  assert.match(aiSidebar, /Khuyến nghị/)
-  assert.match(aiSidebar, /\{signalText\}/)
-  assert.match(aiSidebar, /\{consensus\}% Đồng thuận/)
+  assert.match(aiSidebar, /\{signalLines\.map/)
 
-  // 2. 5 Pillars as progress bars
-  assert.match(aiSidebar, /5 Trụ cột đánh giá/)
+  // 2. Consensus badge with confidence tier and percentage
+  assert.match(aiSidebar, /\{consensus\}% đồng thuận với độ tin cậy/)
+  assert.match(aiSidebar, /activeTier\.label/)
+
+  // 3. 5 Pillars as progress bars with updated title
+  assert.match(aiSidebar, /5 Trụ cột đánh giá từ AI Council/)
   for (const pillar of ["Cơ bản", "Kỹ thuật", "Dòng tiền", "Bối cảnh", "Quản trị"]) {
     assert.match(aiSidebar, new RegExp(`label: "${pillar}"`))
   }
   assert.match(aiSidebar, /style=\{\{ width: `\$\{Math\.min\(100, Math\.max\(0, p\.score\)\)\}%` \}\}/)
-
-  // 3. Confidence Spectrum and Tiered Legend matching Image 1
-  assert.match(aiSidebar, /Độ tin cậy \(Confidence\)/)
-  assert.match(aiSidebar, /from-\[#f43f5e\] via-\[#3b82f6\] via-\[#eab308\] via-\[#f97316\] to-\[#10b981\]/)
-  assert.match(aiSidebar, /style=\{\{ left: `\$\{clampedConfidence\}%` \}\}/)
-  for (const tier of ["Very high", "High", "Medium", "Low", "Very low"]) {
-    assert.match(aiSidebar, new RegExp(`label: "${tier}"`))
-  }
 })
 
