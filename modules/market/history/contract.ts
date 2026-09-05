@@ -1,6 +1,6 @@
 import type { OhlcvBar } from "../../shared/technical/indicators.ts"
 
-export type HistoricalProvider = "DNSE" | "Fallback" | "VNDirect" | "VCI"
+export type HistoricalProvider = "DNSE" | "Fallback" | "VNDirect" | "VCI" | "TitanLabs"
 export type RawHistoryTimeframe = "1D" | "1H"
 
 export interface HistoricalBarsResult {
@@ -77,6 +77,13 @@ export function buildHistoricalSourceUrl(
     url.searchParams.set("q", `code:${ticker}~date:gte:${fromDate}~date:lte:${toDate}`)
     url.searchParams.set("size", String(Math.min(5000, safeLookbackDays + 2)))
     url.searchParams.set("page", "1")
+    return url.toString()
+  }
+
+  if (provider === "TitanLabs") {
+    if (timeframe !== "1D") throw new Error(`TitanLabs history provider does not support ${timeframe}`)
+    const url = new URL("https://www.titanlabs.vn/api/charts/series")
+    url.searchParams.set("symbol", ticker)
     return url.toString()
   }
 
