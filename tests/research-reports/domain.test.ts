@@ -7,6 +7,7 @@ import {
   normalizeResearchReportCatalogQuery,
   normalizeTopiReportCategory,
   parseTopiReport,
+  RESEARCH_REPORT_CATALOG_PAGE_SIZE,
   upsertResearchReports,
   type ResearchReportSourceRecord,
 } from "../../modules/research-reports/index.ts"
@@ -215,6 +216,12 @@ test("QEO-83 catalog query normalization is URL-stable and bounded", () => {
   assert.equal(invalid.fromDate, null)
   assert.equal(invalid.toDate, null)
   assert.equal(invalid.page, 1)
+})
+
+test("QEO-83 catalog pagination fills responsive 2-column and 3-column card rows", () => {
+  assert.equal(RESEARCH_REPORT_CATALOG_PAGE_SIZE, 24)
+  assert.equal(RESEARCH_REPORT_CATALOG_PAGE_SIZE % 2, 0)
+  assert.equal(RESEARCH_REPORT_CATALOG_PAGE_SIZE % 3, 0)
 })
 
 test("QEO-83 catalog is canonical metadata-only server UI with explicit lifecycle states", () => {
