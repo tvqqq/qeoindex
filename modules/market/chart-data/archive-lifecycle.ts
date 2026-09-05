@@ -58,17 +58,13 @@ export function chartHotRetentionCutoff(referenceAt: Date) {
 
 function sameBars(left: CanonicalOhlcvBar[], right: CanonicalOhlcvBar[]) {
   if (left.length !== right.length) return false
-  for (let index = 0; index < left.length; index += 1) {
-    const a = left[index]
-    const b = right[index]
-    if (
-      a.time !== b.time
-      || a.open !== b.open
-      || a.high !== b.high
-      || a.low !== b.low
-      || a.close !== b.close
-      || a.volume !== b.volume
-    ) return false
+  const leftByTime = new Map(left.map((bar) => [bar.time, bar]))
+  if (leftByTime.size !== left.length) return false
+  for (const b of right) {
+    const a = leftByTime.get(b.time)
+    if (!a || a.open !== b.open || a.high !== b.high || a.low !== b.low || a.close !== b.close || a.volume !== b.volume) {
+      return false
+    }
   }
   return true
 }
