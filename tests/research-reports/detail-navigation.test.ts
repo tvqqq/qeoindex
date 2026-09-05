@@ -6,6 +6,7 @@ import test from "node:test"
 // suite. Keep QEO-85 focused contracts in the same nested execution chain.
 import "./pricing.test.ts"
 import "./ai-budget.test.ts"
+import "./qeo85-schema.test.ts"
 
 import {
   nextCitationNavigationState,
