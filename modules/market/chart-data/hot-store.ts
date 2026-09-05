@@ -189,6 +189,7 @@ export async function upsertHotIntradayBars(
     fetchedAt?: string
     detail?: Record<string, unknown>
     provenanceBatchId?: string | null
+    recordProvenance?: boolean
   },
 ) {
   if (!input.bars.length) return { batchId: null as string | null, rowCount: 0 }
@@ -196,15 +197,17 @@ export async function upsertHotIntradayBars(
   const fetchedAt = input.fetchedAt ?? new Date().toISOString()
   const provenance = input.provenanceBatchId
     ? { batchId: input.provenanceBatchId, rowCount: sorted.length }
-    : await recordChartProviderAttempt(supabase, {
-        ticker: input.ticker,
-        provider: input.provider,
-        requestedFrom: finite(input.detail?.requestedFrom) ?? sorted[0].time,
-        requestedTo: finite(input.detail?.requestedTo) ?? sorted.at(-1)!.time,
-        bars: sorted,
-        fetchedAt,
-        detail: input.detail,
-      })
+    : input.recordProvenance === false
+      ? { batchId: null, rowCount: sorted.length }
+      : await recordChartProviderAttempt(supabase, {
+          ticker: input.ticker,
+          provider: input.provider,
+          requestedFrom: finite(input.detail?.requestedFrom) ?? sorted[0].time,
+          requestedTo: finite(input.detail?.requestedTo) ?? sorted.at(-1)!.time,
+          bars: sorted,
+          fetchedAt,
+          detail: input.detail,
+        })
   const rows = sorted.map((bar) => ({
     ticker: input.ticker, base_resolution: "1m", bar_time: new Date(bar.time * 1000).toISOString(),
     open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume,
