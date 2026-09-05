@@ -7,6 +7,7 @@ import test from "node:test"
 import "./pricing.test.ts"
 import "./ai-budget.test.ts"
 import "./qeo85-schema.test.ts"
+import "./lease.test.ts"
 
 import {
   nextCitationNavigationState,
