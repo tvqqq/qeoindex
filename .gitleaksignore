@@ -56,3 +56,5 @@ db7c00024f2e178121db6b1e53195abbb1422379:lib/insights-metric-semantics.ts:generi
 db7c00024f2e178121db6b1e53195abbb1422379:lib/insights-metric-semantics.ts:generic-api-key:859
 00143d18cedc8338f1b13694a24bccda730efe90:dnse_ws_client.py:generic-api-key:17
 00143d18cedc8338f1b13694a24bccda730efe90:dnse_ws_client.py:generic-api-key:18
+# QEO-86 reviewed false positive: a metric-key fixture in a transient test-only commit, not a credential.
+2b7d4825590989da3e6be8cd7c54dc985e2d2ae8:tests/ai-council-llm-reliability.test.ts:generic-api-key:158
