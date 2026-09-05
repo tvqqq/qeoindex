@@ -761,6 +761,16 @@
       ]
     },
     {
+      "path": "tests/stock-chart-interaction.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve TradingView chart scroll, zoom out, object selection, and object tree management contracts.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
       "path": "tests/stock-identity-header.test.ts",
       "owner": "ui",
       "invariant": "Preserve the stock identity company name and sector icon contract.",
@@ -844,6 +854,16 @@
       "suites": [
         "fast",
         "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/user-chart-drawings-api.test.ts",
+      "owner": "db",
+      "invariant": "Preserve user chart settings and drawings API authentication and persistence contracts.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "db"
       ]
     },
     {
