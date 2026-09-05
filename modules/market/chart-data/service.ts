@@ -1,6 +1,7 @@
 import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "@/modules/market/calendar"
 import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { createSupabaseColdOhlcvStorage, type ColdOhlcvStorage } from "./cold-store"
 import type {
@@ -8,6 +9,7 @@ import type {
   CanonicalChartOhlcvResult,
   CanonicalOhlcvBar,
   ChartDataError,
+  ChartDataGap,
   SourceTaggedBar,
 } from "./contract"
 import { ChartDataRequestError, ChartDataUnavailableError } from "./contract"
@@ -25,6 +27,7 @@ const DAY_SECONDS = 86400
 const MAX_INTRADAY_SPAN_SECONDS = 31 * DAY_SECONDS
 const MAX_DAILY_SPAN_SECONDS = 100 * 366 * DAY_SECONDS
 const LIVE_TAIL_SECONDS = 5 * 60
+const DAILY_STORAGE_PAGE_SIZE = 1000
 
 export interface ChartDataServiceDeps {
   supabase: SupabaseClient
@@ -63,30 +66,86 @@ function laterTime(current: number | null, bars: CanonicalOhlcvBar[]) {
   return latest == null ? current : Math.max(current ?? latest, latest)
 }
 
-async function loadDaily(supabase: SupabaseClient, request: CanonicalChartOhlcvRequest, now = new Date()): Promise<CanonicalChartOhlcvResult> {
-  const { data, error } = await supabase
-    .from("market_ohlcv_history")
-    .select("bar_time,open,high,low,close,volume")
-    .eq("ticker", request.ticker)
-    .eq("timeframe", "1D")
-    .gte("bar_time", new Date(request.from * 1000).toISOString())
-    .lte("bar_time", new Date(request.to * 1000).toISOString())
-    .order("bar_time", { ascending: true })
-  if (error) throw new ChartDataUnavailableError("Canonical Daily storage unavailable")
+function addVietnamCalendarDay(dateKey: string) {
+  const date = new Date(`${dateKey}T12:00:00+07:00`)
+  date.setUTCDate(date.getUTCDate() + 1)
+  return vietnamDateKey(date)
+}
 
-  const tagged: SourceTaggedBar[] = (data || [])
-    .map((row) => rowToBar(row as Record<string, unknown>))
+function canonicalDailyTime(dateKey: string) {
+  return Math.floor(new Date(`${dateKey}T09:00:00+07:00`).getTime() / 1000)
+}
+
+function detectDailySessionGaps(bars: CanonicalOhlcvBar[]): ChartDataGap[] {
+  const gaps: ChartDataGap[] = []
+  for (let index = 1; index < bars.length; index += 1) {
+    const previousKey = vietnamDateKey(bars[index - 1].time * 1000)
+    const currentKey = vietnamDateKey(bars[index].time * 1000)
+    let cursor = addVietnamCalendarDay(previousKey)
+    let firstMissing: string | null = null
+    let lastMissing: string | null = null
+    let missingBars = 0
+    let guard = 0
+
+    while (cursor < currentKey && guard < 3700) {
+      if (isVietnamSecuritiesTradingDateKey(cursor)) {
+        firstMissing ??= cursor
+        lastMissing = cursor
+        missingBars += 1
+      }
+      cursor = addVietnamCalendarDay(cursor)
+      guard += 1
+    }
+
+    if (firstMissing && lastMissing && missingBars > 0) {
+      gaps.push({
+        fromTime: canonicalDailyTime(firstMissing),
+        toTime: canonicalDailyTime(lastMissing),
+        missingBars,
+      })
+    }
+  }
+  return gaps
+}
+
+async function loadDailyRows(supabase: SupabaseClient, request: CanonicalChartOhlcvRequest) {
+  const rows: Array<Record<string, unknown>> = []
+  for (let offset = 0; ; offset += DAILY_STORAGE_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("market_ohlcv_history")
+      .select("bar_time,open,high,low,close,volume")
+      .eq("ticker", request.ticker)
+      .eq("timeframe", "1D")
+      .gte("bar_time", new Date(request.from * 1000).toISOString())
+      .lte("bar_time", new Date(request.to * 1000).toISOString())
+      .order("bar_time", { ascending: true })
+      .range(offset, offset + DAILY_STORAGE_PAGE_SIZE - 1)
+    if (error) throw new ChartDataUnavailableError("Canonical Daily storage unavailable")
+    const page = (data || []) as Array<Record<string, unknown>>
+    rows.push(...page)
+    if (page.length < DAILY_STORAGE_PAGE_SIZE) break
+  }
+  return rows
+}
+
+async function loadDaily(supabase: SupabaseClient, request: CanonicalChartOhlcvRequest, now = new Date()): Promise<CanonicalChartOhlcvResult> {
+  const rows = await loadDailyRows(supabase, request)
+  const tagged: SourceTaggedBar[] = rows
+    .map((row) => rowToBar(row))
     .filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
+    .filter((bar) => isVietnamSecuritiesTradingDateKey(vietnamDateKey(bar.time * 1000)))
     .map((bar) => ({ source: "daily" as const, bar }))
   const normalized = normalizeCanonicalBars(tagged)
+  const gaps = detectDailySessionGaps(normalized.bars)
+  const complete = normalized.bars.length > 0 && gaps.length === 0 && normalized.integrityIssues.length === 0
   return {
     ...request,
     bars: normalized.bars,
-    gaps: [],
+    gaps,
     integrityIssues: normalized.integrityIssues,
     coverage: {
-      complete: normalized.bars.length > 0 && normalized.integrityIssues.length === 0,
-      state: normalized.bars.length > 0 && normalized.integrityIssues.length === 0 ? "COMPLETE" : "PARTIAL",
+      complete,
+      state: complete ? "COMPLETE" : "PARTIAL",
     },
     errors: normalized.integrityIssues.length ? [{ code: "INTEGRITY_WARNING" }] : [],
     metadata: {
