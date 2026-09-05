@@ -96,12 +96,14 @@ export function StockTradingViewChart({
   // Viewport zoom and scroll state (TradingView style)
   const [visibleBarsCount, setVisibleBarsCount] = useState<number>(75)
   const [scrollOffset, setScrollOffset] = useState<number>(0) // 0 = rightmost recent bars; >0 = scrolled left into history
+  const containerRef = useRef<HTMLDivElement>(null)
   const isPanningRef = useRef(false)
   const panStartXRef = useRef(0)
   const panStartOffsetRef = useRef(0)
 
-  // Hover crosshair state
+  // Hover crosshair state (X bar index and Y position in SVG space)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const [hoverY, setHoverY] = useState<number | null>(null)
 
   // Aggregated bars based on selected timeframe
   const displayBars = useMemo(() => {
@@ -129,9 +131,18 @@ export function StockTradingViewChart({
     return isMaximized && indicators.showRsi ? calculateRsiSeries(displayBars, 14) : []
   }, [displayBars, isMaximized, indicators.showRsi])
 
-  const macdSeriesAll = useMemo(() => {
+  const macdSeriesAllRaw = useMemo(() => {
     return isMaximized && indicators.showMacd ? calculateMacdSeries(displayBars) : null
   }, [displayBars, isMaximized, indicators.showMacd])
+
+  const macdSeriesAll = useMemo(() => {
+    if (!macdSeriesAllRaw) return null
+    return {
+      macd: macdSeriesAllRaw.macd.slice(startIdx, endIdx),
+      signal: macdSeriesAllRaw.signal.slice(startIdx, endIdx),
+      histogram: macdSeriesAllRaw.histogram.slice(startIdx, endIdx),
+    }
+  }, [macdSeriesAllRaw, startIdx, endIdx])
 
   const ichimokuAll = useMemo(() => {
     return isMaximized && indicators.showIchimoku ? calculateIchimokuSeries(displayBars) : null
@@ -146,15 +157,7 @@ export function StockTradingViewChart({
   const ma50 = useMemo(() => ma50All.slice(startIdx, endIdx), [ma50All, startIdx, endIdx])
   const ma200 = useMemo(() => ma200All.slice(startIdx, endIdx), [ma200All, startIdx, endIdx])
   const rsiSeries = useMemo(() => rsiSeriesAll.slice(startIdx, endIdx), [rsiSeriesAll, startIdx, endIdx])
-
-  const macdSeries = useMemo(() => {
-    if (!macdSeriesAll) return null
-    return {
-      macd: macdSeriesAll.macd.slice(startIdx, endIdx),
-      signal: macdSeriesAll.signal.slice(startIdx, endIdx),
-      histogram: macdSeriesAll.histogram.slice(startIdx, endIdx),
-    }
-  }, [macdSeriesAll, startIdx, endIdx])
+  const macdSeries = macdSeriesAll
 
   const ichimoku = useMemo(() => {
     if (!ichimokuAll) return null
@@ -179,12 +182,13 @@ export function StockTradingViewChart({
     return isMaximized && indicators.showVolumeProfile ? calculateVolumeProfile(visibleBars, 24) : null
   }, [visibleBars, isMaximized, indicators.showVolumeProfile])
 
-  // Layout Geometry
+  // Layout Geometry (TitanLabs & TradingView Standard Structure)
   const width = 1000
-  const height = isMaximized ? 640 : 310
-  const padLeft = 20
-  const padRight = 65
-  const padTop = 20
+  const height = isMaximized ? 640 : 340
+  const padLeft = 8
+  const padRight = 68 // Dedicated Y-axis price rail on the right
+  const padTop = 16
+  const padBottom = 26 // Dedicated X-axis time rail at the bottom
   const plotWidth = width - padLeft - padRight
 
   const hasRsi = isMaximized && indicators.showRsi
@@ -192,11 +196,12 @@ export function StockTradingViewChart({
   const subpaneCount = (hasRsi ? 1 : 0) + (hasMacd ? 1 : 0)
   const subpaneHeight = 65
 
-  const volHeight = isMaximized ? 60 : 45
-  const mainPriceHeight = height - padTop - volHeight - 25 - subpaneCount * subpaneHeight
+  const volHeight = isMaximized ? 55 : 40
+  const plotHeight = height - padTop - padBottom - subpaneCount * subpaneHeight
+  const mainPriceHeight = plotHeight - volHeight - 12
   const volTop = padTop + mainPriceHeight + 10
-  const rsiTop = volTop + volHeight + 10
-  const macdTop = hasRsi ? rsiTop + subpaneHeight + 10 : volTop + volHeight + 10
+  const rsiTop = volTop + volHeight + 8
+  const macdTop = hasRsi ? rsiTop + subpaneHeight + 8 : volTop + volHeight + 8
 
   // Chart metrics based on VISIBLE bars for auto-scaling
   const chartMetrics = useMemo(() => {
@@ -231,6 +236,40 @@ export function StockTradingViewChart({
       maxVol: Math.max(maxVol, 1),
     }
   }, [visibleBars, bollinger])
+
+  // Price Grid Levels for Y-Axis (5 clean horizontal levels)
+  const priceLevels = useMemo(() => {
+    if (!chartMetrics) return []
+    const levels: number[] = []
+    const count = 5
+    for (let i = 0; i <= count; i++) {
+      const p = chartMetrics.min + (chartMetrics.range * i) / count
+      levels.push(p)
+    }
+    return levels
+  }, [chartMetrics])
+
+  // Time Ticks for X-Axis (evenly distributed according to visible slice)
+  const timeTicks = useMemo(() => {
+    if (visibleBars.length === 0) return []
+    const count = 6
+    const step = Math.max(1, Math.floor((visibleBars.length - 1) / count))
+    const ticks: { index: number; bar: OhlcvBar; label: string }[] = []
+    for (let i = 0; i < visibleBars.length; i += step) {
+      const b = visibleBars[i]
+      const d = new Date(b.time * 1000)
+      let label = ""
+      if (timeframe.includes("m") || timeframe.includes("h")) {
+        label = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+      } else if (timeframe === "1D" || timeframe === "3D" || timeframe === "1W") {
+        label = `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}`
+      } else {
+        label = `${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`
+      }
+      ticks.push({ index: i, bar: b, label })
+    }
+    return ticks
+  }, [visibleBars, timeframe])
 
   // Coordinate Mapping
   const getX = useCallback(
@@ -294,13 +333,29 @@ export function StockTradingViewChart({
   const ma50Path = useMemo(() => makeLinePath(ma50), [ma50, makeLinePath])
   const ma200Path = useMemo(() => makeLinePath(ma200), [ma200, makeLinePath])
 
-  // Mouse wheel Zooming (exact TradingView mechanics)
+  // Mouse wheel Zooming (cursor-centered TradingView / TitanLabs mechanics)
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault()
+    const container = containerRef.current
+    let cursorRatio = 0.5
+    if (container) {
+      const rect = container.getBoundingClientRect()
+      const mouseX = e.clientX - rect.left - (padLeft * rect.width) / width
+      const plotPx = (plotWidth * rect.width) / width
+      cursorRatio = Math.max(0, Math.min(1, mouseX / Math.max(1, plotPx)))
+    }
+
     const zoomDir = e.deltaY > 0 ? 1 : -1 // wheel down = zoom out; wheel up = zoom in
-    const step = Math.max(3, Math.round(visibleBarsCount * 0.1))
+    const step = Math.max(3, Math.round(visibleBarsCount * 0.12))
     const nextCount = Math.min(Math.max(15, visibleBarsCount + zoomDir * step), displayBars.length)
+    const diff = nextCount - visibleBarsCount
+
+    // Keep bar under cursor stable: proportionally adjust scrollOffset
+    const offsetDelta = Math.round(diff * (1 - cursorRatio))
+    const nextOffset = Math.max(0, Math.min(maxScrollOffset, scrollOffset + offsetDelta))
+
     setVisibleBarsCount(nextCount)
+    setScrollOffset(nextOffset)
   }
 
   // Mouse Panning & Scrolling
@@ -313,21 +368,29 @@ export function StockTradingViewChart({
   }
 
   const handleMouseMoveCanvas = (e: React.MouseEvent<HTMLDivElement>) => {
+    const container = containerRef.current
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+
     if (isPanningRef.current) {
       const dx = e.clientX - panStartXRef.current
-      const deltaBars = Math.round((dx / plotWidth) * visibleBarsCount)
+      const barPx = Math.max(1, (plotWidth * rect.width) / width / Math.max(1, visibleBarsCount))
+      const deltaBars = Math.round(dx / barPx)
       const nextOffset = Math.max(0, Math.min(maxScrollOffset, panStartOffsetRef.current + deltaBars))
       setScrollOffset(nextOffset)
       return
     }
 
     if (activeTool === "cursor") {
-      const rect = e.currentTarget.getBoundingClientRect()
       const relX = e.clientX - rect.left - (padLeft * rect.width) / width
       const effectiveWidth = (plotWidth * rect.width) / width
-      const ratio = Math.max(0, Math.min(1, relX / effectiveWidth))
+      const ratio = Math.max(0, Math.min(1, relX / Math.max(1, effectiveWidth)))
       const idx = Math.round(ratio * (visibleBars.length - 1))
       setHoverIndex(idx)
+
+      const relY = e.clientY - rect.top
+      const svgY = (relY / Math.max(1, rect.height)) * height
+      setHoverY(svgY)
     }
   }
 
@@ -662,9 +725,10 @@ export function StockTradingViewChart({
       {/* CHART MAIN CANVAS & DRAWING SUITE (SCROLL & ZOOMABLE)                     */}
       {/* ========================================================================= */}
       <div
+        ref={containerRef}
         className={cn(
           "relative w-full flex-1 select-none overflow-hidden",
-          isMaximized ? "min-h-[560px]" : "min-h-[260px]",
+          isMaximized ? "min-h-[560px]" : "min-h-[280px]",
           activeTool === "cursor" ? "cursor-grab active:cursor-grabbing" : "cursor-crosshair",
         )}
         onWheel={handleWheel}
@@ -674,6 +738,7 @@ export function StockTradingViewChart({
         onMouseLeave={() => {
           isPanningRef.current = false
           setHoverIndex(null)
+          setHoverY(null)
         }}
       >
         {/* Floating Drawing Toolbar on the Left (Only in Maximized Mode) */}
@@ -749,14 +814,137 @@ export function StockTradingViewChart({
 
         {/* Primary SVG Chart */}
         <svg viewBox={`0 0 ${width} ${height}`} className="size-full" preserveAspectRatio="none">
-          {/* Horizontal Grid lines */}
-          <line x1={padLeft} y1={padTop} x2={width - padRight} y2={padTop} stroke="#182330" strokeDasharray="3 3" opacity="0.6" />
-          <line x1={padLeft} y1={padTop + mainPriceHeight * 0.33} x2={width - padRight} y2={padTop + mainPriceHeight * 0.33} stroke="#182330" strokeDasharray="3 3" opacity="0.6" />
-          <line x1={padLeft} y1={padTop + mainPriceHeight * 0.66} x2={width - padRight} y2={padTop + mainPriceHeight * 0.66} stroke="#182330" strokeDasharray="3 3" opacity="0.6" />
-          <line x1={padLeft} y1={padTop + mainPriceHeight} x2={width - padRight} y2={padTop + mainPriceHeight} stroke="#182330" opacity="0.8" />
+          {/* Right Y-Axis Price Rail Background */}
+          <rect
+            x={width - padRight}
+            y={0}
+            width={padRight}
+            height={height - padBottom}
+            fill="#090d14"
+          />
+          <line
+            x1={width - padRight}
+            y1={0}
+            x2={width - padRight}
+            y2={height - padBottom}
+            stroke="#1c2836"
+            strokeWidth="1"
+          />
 
-          {/* Volume Baseline */}
-          <line x1={padLeft} y1={volTop + volHeight} x2={width - padRight} y2={volTop + volHeight} stroke="#182330" opacity="0.8" />
+          {/* Bottom X-Axis Time Rail Background */}
+          <rect
+            x={0}
+            y={height - padBottom}
+            width={width}
+            height={padBottom}
+            fill="#090d14"
+          />
+          <line
+            x1={0}
+            y1={height - padBottom}
+            x2={width}
+            y2={height - padBottom}
+            stroke="#1c2836"
+            strokeWidth="1"
+          />
+
+          {/* Corner Junction */}
+          <rect
+            x={width - padRight}
+            y={height - padBottom}
+            width={padRight}
+            height={padBottom}
+            fill="#06090f"
+          />
+
+          {/* Y-Axis Price Grid Lines & Labels */}
+          {priceLevels.map((p, idx) => {
+            const y = getY(p)
+            if (y < padTop || y > padTop + mainPriceHeight) return null
+            return (
+              <g key={`pl-${idx}`}>
+                <line
+                  x1={padLeft}
+                  y1={y}
+                  x2={width - padRight}
+                  y2={y}
+                  stroke="#182330"
+                  strokeDasharray="3 3"
+                  opacity="0.65"
+                />
+                <line
+                  x1={width - padRight}
+                  y1={y}
+                  x2={width - padRight + 4}
+                  y2={y}
+                  stroke="#334155"
+                />
+                <text
+                  x={width - padRight + 7}
+                  y={y + 3.5}
+                  fill="#788b9c"
+                  fontSize="10"
+                  fontFamily="monospace"
+                >
+                  {p.toFixed(1)}
+                </text>
+              </g>
+            )
+          })}
+
+          {/* X-Axis Time Grid Lines, Ticks & Labels */}
+          {timeTicks.map((t) => {
+            const x = getX(t.index)
+            return (
+              <g key={`tt-${t.index}`}>
+                <line
+                  x1={x}
+                  y1={padTop}
+                  x2={x}
+                  y2={height - padBottom}
+                  stroke="#141f2d"
+                  strokeDasharray="3 3"
+                  opacity="0.5"
+                />
+                <line
+                  x1={x}
+                  y1={height - padBottom}
+                  x2={x}
+                  y2={height - padBottom + 4}
+                  stroke="#334155"
+                />
+                <text
+                  x={x}
+                  y={height - padBottom + 16}
+                  textAnchor="middle"
+                  fill="#64748b"
+                  fontSize="10"
+                  fontFamily="monospace"
+                >
+                  {t.label}
+                </text>
+              </g>
+            )
+          })}
+
+          {/* Volume Baseline & Label */}
+          <line
+            x1={padLeft}
+            y1={volTop + volHeight}
+            x2={width - padRight}
+            y2={volTop + volHeight}
+            stroke="#1c2836"
+            opacity="0.9"
+          />
+          <text
+            x={width - padRight + 7}
+            y={volTop + volHeight}
+            fill="#62727d"
+            fontSize="9"
+            fontFamily="monospace"
+          >
+            Vol
+          </text>
 
           {/* 1. Volume Profile Bars (POC) on Price Chart (if enabled) */}
           {volumeProfile && (
@@ -922,7 +1110,7 @@ export function StockTradingViewChart({
             </>
           )}
 
-          {/* Current Price Dashed Line */}
+          {/* Current Price Dashed Line & Badge on Y-Axis */}
           {activeBar && (
             <g>
               <line
@@ -933,19 +1121,19 @@ export function StockTradingViewChart({
                 stroke={activeBar.close >= activeBar.open ? "#10b981" : "#f43f5e"}
                 strokeDasharray="4 2"
                 strokeWidth="1"
-                opacity="0.8"
+                opacity="0.9"
               />
               <rect
-                x={width - padRight + 2}
-                y={getY(activeBar.close) - 8}
-                width={56}
-                height={16}
+                x={width - padRight + 1}
+                y={getY(activeBar.close) - 8.5}
+                width={padRight - 2}
+                height={17}
                 fill={activeBar.close >= activeBar.open ? "#10b981" : "#f43f5e"}
-                rx="3"
+                rx="2"
               />
               <text
                 x={width - padRight + 6}
-                y={getY(activeBar.close) + 4}
+                y={getY(activeBar.close) + 3.5}
                 fill="#ffffff"
                 fontSize="10"
                 fontWeight="bold"
@@ -956,19 +1144,94 @@ export function StockTradingViewChart({
             </g>
           )}
 
-          {/* Crosshair indicator */}
-          {hoverIndex !== null && (
+          {/* Crosshair indicator with X-axis and Y-axis tracking */}
+          {hoverIndex !== null && visibleBars[hoverIndex] && (
             <g>
+              {/* Vertical crosshair line */}
               <line
                 x1={getX(hoverIndex)}
                 y1={padTop}
                 x2={getX(hoverIndex)}
-                y2={height - 10}
+                y2={height - padBottom}
                 stroke="#00f0ff"
                 strokeWidth="1"
                 strokeDasharray="3 3"
-                opacity="0.7"
+                opacity="0.75"
               />
+
+              {/* Horizontal crosshair line & Y-axis Price Badge */}
+              {hoverY !== null && hoverY >= padTop && hoverY <= height - padBottom && (
+                <>
+                  <line
+                    x1={padLeft}
+                    y1={hoverY}
+                    x2={width - padRight}
+                    y2={hoverY}
+                    stroke="#00f0ff"
+                    strokeWidth="1"
+                    strokeDasharray="3 3"
+                    opacity="0.75"
+                  />
+                  <rect
+                    x={width - padRight + 1}
+                    y={hoverY - 8.5}
+                    width={padRight - 2}
+                    height={17}
+                    fill="#182330"
+                    stroke="#00f0ff"
+                    strokeWidth="1"
+                    rx="2"
+                  />
+                  <text
+                    x={width - padRight + 6}
+                    y={hoverY + 3.5}
+                    fill="#00f0ff"
+                    fontSize="10"
+                    fontWeight="bold"
+                    fontFamily="monospace"
+                  >
+                    {yToPrice(hoverY).toFixed(1)}
+                  </text>
+                </>
+              )}
+
+              {/* X-axis Date/Time Badge */}
+              {(() => {
+                const hBar = visibleBars[hoverIndex]
+                const d = new Date(hBar.time * 1000)
+                const dateStr =
+                  timeframe.includes("m") || timeframe.includes("h")
+                    ? `${d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} ${d.getDate()}/${d.getMonth() + 1}`
+                    : `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`
+                const hX = getX(hoverIndex)
+                const pillW = 85
+                const pillX = Math.max(padLeft, Math.min(width - padRight - pillW, hX - pillW / 2))
+                return (
+                  <g>
+                    <rect
+                      x={pillX}
+                      y={height - padBottom + 3}
+                      width={pillW}
+                      height={18}
+                      fill="#182330"
+                      stroke="#00f0ff"
+                      strokeWidth="1"
+                      rx="2"
+                    />
+                    <text
+                      x={pillX + pillW / 2}
+                      y={height - padBottom + 15}
+                      textAnchor="middle"
+                      fill="#00f0ff"
+                      fontSize="9"
+                      fontWeight="bold"
+                      fontFamily="monospace"
+                    >
+                      {dateStr}
+                    </text>
+                  </g>
+                )
+              })()}
             </g>
           )}
 
@@ -1036,22 +1299,18 @@ export function StockTradingViewChart({
             </g>
           )}
 
-          {/* Price Axis Labels on the right (Click to Reset View) */}
-          <g className="cursor-pointer" onDoubleClick={handleResetView}>
+          {/* Price Axis Double-click Reset Trigger */}
+          <rect
+            x={width - padRight}
+            y={0}
+            width={padRight}
+            height={height}
+            fill="transparent"
+            className="cursor-pointer"
+            onDoubleClick={handleResetView}
+          >
             <title>Nhấn đúp để đặt lại tỷ lệ giá (Reset Auto Scale)</title>
-            <text x={width - padRight + 8} y={padTop + 6} fill="#8a9ba7" fontSize="10" fontFamily="monospace">
-              {chartMetrics.max.toFixed(1)}
-            </text>
-            <text x={width - padRight + 8} y={padTop + mainPriceHeight * 0.5 + 4} fill="#8a9ba7" fontSize="10" fontFamily="monospace">
-              {(chartMetrics.min + chartMetrics.range * 0.5).toFixed(1)}
-            </text>
-            <text x={width - padRight + 8} y={padTop + mainPriceHeight + 4} fill="#8a9ba7" fontSize="10" fontFamily="monospace">
-              {chartMetrics.min.toFixed(1)}
-            </text>
-            <text x={width - padRight + 8} y={volTop + volHeight} fill="#62727d" fontSize="9" fontFamily="monospace">
-              Vol
-            </text>
-          </g>
+          </rect>
 
           {/* Area gradient definition */}
           <defs>
@@ -1086,14 +1345,52 @@ export function StockTradingViewChart({
             xToTime={xToTime}
           />
         )}
+      </div>
 
-        {/* Engine branding & View navigation watermark */}
-        <div className="pointer-events-none absolute bottom-1.5 right-3 flex items-center gap-2 text-[9px] font-mono text-slate-500">
-          <span>{visibleBars.length} nến ({clampedScrollOffset > 0 ? `Lịch sử -${clampedScrollOffset}` : "Thời gian thực"})</span>
-          <span>·</span>
-          <span>Lăn chuột: Zoom · Kéo chuột: Scroll</span>
-          <span>·</span>
-          <span>TradingView Visual Engine v2</span>
+      {/* TitanLabs / TradingView Range Bar & Navigation Toolbar */}
+      <div className="flex flex-wrap items-center justify-between border-t border-white/[0.08] bg-[#070b10] px-3 py-1.5 text-[11px] font-mono select-none">
+        {/* Time Range Presets */}
+        <div className="flex items-center gap-1">
+          {[
+            { label: "1T", bars: 22, title: "1 tháng gần nhất" },
+            { label: "3T", bars: 66, title: "3 tháng gần nhất" },
+            { label: "6T", bars: 130, title: "6 tháng gần nhất" },
+            { label: "1N", bars: 250, title: "1 năm gần nhất" },
+            { label: "Tất cả", bars: displayBars.length, title: "Toàn bộ lịch sử" },
+          ].map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              title={preset.title}
+              onClick={() => {
+                setScrollOffset(0)
+                setVisibleBarsCount(Math.min(displayBars.length, Math.max(15, preset.bars)))
+              }}
+              className={cn(
+                "rounded px-2 py-0.5 font-bold transition-colors",
+                scrollOffset === 0 && Math.abs(visibleBarsCount - preset.bars) <= 5
+                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                  : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
+              )}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Right Controls: Auto-scale and status */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            title="Tự căn khung nhìn vừa dữ liệu (Auto Fit)"
+            onClick={handleResetView}
+            className="rounded px-2 py-0.5 font-bold text-slate-400 hover:bg-white/[0.06] hover:text-cyan-300 transition-colors"
+          >
+            Tự động
+          </button>
+          <span className="hidden sm:inline text-[10px] text-slate-500">
+            {visibleBars.length} nến · Lăn chuột để zoom · Kéo rê để cuộn
+          </span>
         </div>
       </div>
     </div>
