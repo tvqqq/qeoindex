@@ -111,3 +111,38 @@ test("QEO-85 discovery stops cleanly on a short page without claiming safety exh
   assert.equal(result.reachedSafetyLimit, false)
   assert.equal(result.boundaryReason, "short_page")
 })
+
+test("QEO-87 TOPI adapter accepts the live Data.Reports envelope and PDF gaps do not truncate pagination", async () => {
+  const calls: number[] = []
+  const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { page: number }
+    calls.push(body.page)
+    const rows = body.page === 1
+      ? [report(940, "05/09/2026"), { ...report(939, "05/09/2026"), url: "" }]
+      : [report(938, "04/09/2026")]
+    return new Response(JSON.stringify({
+      message: "OK",
+      code: 200,
+      data: { Data: { Reports: rows, TotalData: 3 }, Code: 0, Message: "success" },
+      success: 1,
+      errors: [],
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })
+  }) as typeof fetch
+
+  const result = await discoverTopiReports({
+    knownExternalReportIds: new Set<string>(),
+    recentPublishDateFloor: "2026-08-01",
+    pageSize: 2,
+    maxPages: 3,
+    fetchImpl,
+  })
+
+  assert.deepEqual(result.reports.map((item) => item.externalReportId), ["940", "938"])
+  assert.deepEqual(calls, [1, 2])
+  assert.equal(result.pagesFetched, 2)
+  assert.equal(result.boundaryReason, "short_page")
+  assert.equal(result.reachedSafetyLimit, false)
+})

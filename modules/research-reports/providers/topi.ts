@@ -121,12 +121,24 @@ function findReportRows(value: unknown, depth = 0): unknown[] | null {
   const record = asRecord(value)
   if (!record) return null
 
-  for (const key of ["list", "items", "results", "records", "data", "result"]) {
-    if (!(key in record)) continue
-    const rows = findReportRows(record[key], depth + 1)
+  const entries = Object.entries(record)
+  for (const key of ["list", "items", "results", "records", "reports", "data", "result"]) {
+    const entry = entries.find(([candidate]) => candidate.toLowerCase() === key)
+    if (!entry) continue
+    const rows = findReportRows(entry[1], depth + 1)
     if (rows) return rows
   }
   return null
+}
+
+interface TopiReportsPageResult {
+  reports: ResearchReportSourceRecord[]
+  sourceRowCount: number
+}
+
+function isTopiReportWithoutPdf(value: unknown) {
+  const record = asRecord(value)
+  return record ? readString(record.url) === null : false
 }
 
 export interface FetchTopiReportsPageOptions {
@@ -159,7 +171,7 @@ async function fetchTopiReportsPageOnce({
   toDate,
   fetchImpl,
   timeoutMs,
-}: Required<Pick<FetchTopiReportsPageOptions, "page" | "limit" | "fetchImpl" | "timeoutMs">> & Pick<FetchTopiReportsPageOptions, "fromDate" | "toDate">): Promise<ResearchReportSourceRecord[]> {
+}: Required<Pick<FetchTopiReportsPageOptions, "page" | "limit" | "fetchImpl" | "timeoutMs">> & Pick<FetchTopiReportsPageOptions, "fromDate" | "toDate">): Promise<TopiReportsPageResult> {
   const response = await fetchImpl(TOPI_ANALYSIS_REPORT_URL, {
     method: "POST",
     headers: {
@@ -184,10 +196,13 @@ async function fetchTopiReportsPageOnce({
   const payload = await response.json() as unknown
   const rows = findReportRows(payload)
   if (!rows) throw new Error("TOPI AnalysisReport response does not contain a report list")
-  return rows.map(parseTopiReport)
+  const reports = rows
+    .filter((row) => !isTopiReportWithoutPdf(row))
+    .map(parseTopiReport)
+  return { reports, sourceRowCount: rows.length }
 }
 
-export async function fetchTopiReportsPage({
+async function fetchTopiReportsPageResult({
   page,
   limit = DEFAULT_PAGE_SIZE,
   fromDate,
@@ -195,7 +210,7 @@ export async function fetchTopiReportsPage({
   fetchImpl = fetch,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   transientAttempts = DEFAULT_TRANSIENT_ATTEMPTS,
-}: FetchTopiReportsPageOptions): Promise<ResearchReportSourceRecord[]> {
+}: FetchTopiReportsPageOptions): Promise<TopiReportsPageResult> {
   if (!Number.isInteger(page) || page < 1) throw new Error("TOPI page must be a positive integer")
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("TOPI limit must be between 1 and 100")
   if (!Number.isInteger(transientAttempts) || transientAttempts < 1 || transientAttempts > 5) {
@@ -215,6 +230,10 @@ export async function fetchTopiReportsPage({
     }
   }
   throw lastError
+}
+
+export async function fetchTopiReportsPage(options: FetchTopiReportsPageOptions): Promise<ResearchReportSourceRecord[]> {
+  return (await fetchTopiReportsPageResult(options)).reports
 }
 
 export interface DiscoverTopiReportsOptions {
@@ -266,11 +285,12 @@ export async function discoverTopiReports({
   let lastPageWasFull = false
 
   for (let page = 1; page <= maxPages; page += 1) {
-    const pageReports = await fetchTopiReportsPage({ page, limit: pageSize, fromDate, toDate, fetchImpl, timeoutMs })
+    const pageResult = await fetchTopiReportsPageResult({ page, limit: pageSize, fromDate, toDate, fetchImpl, timeoutMs })
+    const pageReports = pageResult.reports
     pagesFetched += 1
-    lastPageWasFull = pageReports.length >= pageSize
+    lastPageWasFull = pageResult.sourceRowCount >= pageSize
 
-    if (pageReports.length === 0) {
+    if (pageResult.sourceRowCount === 0) {
       return discoveryResult(reports, pagesFetched, false, "empty_page")
     }
 
@@ -283,13 +303,13 @@ export async function discoverTopiReports({
         seen.add(report.externalReportId)
         reports.push(report)
       }
-      if (pageReports.length < pageSize) {
+      if (pageResult.sourceRowCount < pageSize) {
         return discoveryResult(reports, pagesFetched, false, "short_page")
       }
       continue
     }
 
-    const knownOldBoundary = pageReports.length >= pageSize && pageReports.every((report) =>
+    const knownOldBoundary = pageResult.sourceRowCount >= pageSize && pageReports.length > 0 && pageReports.every((report) =>
       knownExternalReportIds.has(report.externalReportId) && report.publishDate < recentPublishDateFloor)
 
     if (knownOldBoundary) {
@@ -302,7 +322,7 @@ export async function discoverTopiReports({
       reports.push(report)
     }
 
-    if (pageReports.length < pageSize) {
+    if (pageResult.sourceRowCount < pageSize) {
       return discoveryResult(reports, pagesFetched, false, "short_page")
     }
   }
