@@ -31,7 +31,7 @@ function pageFetch(pages: Record<number, unknown[]>) {
 
 test("QEO-85 discovery does not stop at the first known id when a reordered unseen report follows", async () => {
   const result = await discoverTopiReports({
-    knownExternalReportIds: new Set(["900"]),
+    knownExternalReportIds: new Set(["900", "899", "898", "897"]),
     recentPublishDateFloor: "2026-08-01",
     pageSize: 3,
     maxPages: 3,
@@ -41,7 +41,7 @@ test("QEO-85 discovery does not stop at the first known id when a reordered unse
     }),
   })
 
-  assert.deepEqual(result.reports.map((item) => item.externalReportId), ["901", "900", "902", "899", "898", "897"])
+  assert.deepEqual(result.reports.map((item) => item.externalReportId), ["901", "900", "902"])
   assert.equal(result.pagesFetched, 2)
   assert.equal(result.stoppedAtKnownBoundary, true)
   assert.equal(result.boundaryReason, "known_old_page")
