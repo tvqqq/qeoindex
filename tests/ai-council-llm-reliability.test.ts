@@ -25,6 +25,7 @@ import "./research-reports/council-snapshot.test.ts"
 import "./research-reports/council-prompt-integration.test.ts"
 import "./research-reports/council-dashboard.test.ts"
 import "./research-reports/council-boundary.test.ts"
+import "./research-reports/prompt-cache-key-limit.test.ts"
 
 import {
   extractOpenAiOutputText,
