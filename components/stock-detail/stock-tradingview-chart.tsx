@@ -823,6 +823,19 @@ export function StockTradingViewChart({
           />
         )}
 
+        {displayBars.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6">
+            <div className="rounded-xl border border-white/[0.08] bg-[#0c131c]/95 px-5 py-4 text-center shadow-xl">
+              <div className="text-sm font-semibold text-slate-200">
+                Dữ liệu timeframe này chưa sẵn sàng
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                {timeframe} chưa có canonical candles. QEO-93 sẽ aggregate từ raw 1m.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Primary SVG Chart */}
         <svg viewBox={`0 0 ${width} ${height}`} className="size-full" preserveAspectRatio="none">
           {/* Right Y-Axis Price Rail Background */}
