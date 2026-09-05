@@ -80,15 +80,14 @@ test("QEO-100 incomplete stored coverage backfills the missing head instead of t
   )
 })
 
-test("QEO-100 loadOlder is driven by the chart history edge, not wrapper gesture heuristics", () => {
+test("QEO-100 1m loadOlder progressively hydrates the bounded horizon without gesture heuristics", () => {
   const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
-  const chart = source("components/stock-detail/stock-tradingview-chart.tsx")
 
-  assert.match(wrapper, /onRequestOlderHistory=\{requestOlder\}/)
+  assert.match(wrapper, /timeframe !== "1m" \|\| loading \|\| loadingOlder \|\| !hasMore/)
+  assert.match(wrapper, /void loadOlder\(\)/)
   assert.doesNotMatch(wrapper, /onMouseMoveCapture/)
   assert.doesNotMatch(wrapper, /onWheelCapture/)
-  assert.match(chart, /onRequestOlderHistory/)
-  assert.match(chart, /shouldRequestOlderHistory/)
+  assert.doesNotMatch(wrapper, /dragStartXRef/)
 })
 
 test("QEO-100 provider benchmark contract includes SSI iBoard first and bounded canonical resolutions", () => {
