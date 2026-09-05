@@ -5,6 +5,8 @@ import type { CanonicalOhlcvBar } from "./contract"
 import type { ProviderCoverageRange } from "./provider-coverage"
 
 const UPSERT_CHUNK_SIZE = 500
+const ARCHIVE_DISCOVERY_ROWS_PER_PARTITION = 300
+const ARCHIVE_DISCOVERY_MAX_ROWS = 10_000
 
 function finite(value: unknown) {
   const number = Number(value)
@@ -36,6 +38,28 @@ function provenanceCoverageRange(row: Record<string, unknown>): ProviderCoverage
   return { from: Math.floor(from), to: Math.floor(to) }
 }
 
+function vietnamDateKey(epochSeconds: number) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(epochSeconds * 1000))
+}
+
+export interface HotArchivePartition {
+  ticker: string
+  tradingDate: string
+  from: number
+  toExclusive: number
+}
+
+function partitionFor(ticker: string, epochSeconds: number): HotArchivePartition {
+  const tradingDate = vietnamDateKey(epochSeconds)
+  const from = Math.floor(new Date(`${tradingDate}T00:00:00+07:00`).getTime() / 1000)
+  return { ticker, tradingDate, from, toExclusive: from + 86400 }
+}
+
 export async function readHotIntradayRange(
   supabase: SupabaseClient,
   ticker: string,
@@ -53,6 +77,66 @@ export async function readHotIntradayRange(
 
   if (error) throw new Error(`Chart hot-store read failed: ${error.message}`)
   return (data || []).map((row) => storedRowToBar(row as Record<string, unknown>)).filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
+}
+
+export async function listExpiredHotPartitions(
+  supabase: SupabaseClient,
+  input: { cutoff: number; maxPartitions?: number },
+): Promise<HotArchivePartition[]> {
+  const maxPartitions = Math.max(1, Math.min(48, Math.floor(input.maxPartitions ?? 12)))
+  const discoveryLimit = Math.min(ARCHIVE_DISCOVERY_MAX_ROWS, Math.max(1_000, maxPartitions * ARCHIVE_DISCOVERY_ROWS_PER_PARTITION))
+  const { data, error } = await supabase
+    .from("chart_ohlcv_intraday")
+    .select("ticker,bar_time")
+    .eq("base_resolution", "1m")
+    .lt("bar_time", new Date(input.cutoff * 1000).toISOString())
+    .order("bar_time", { ascending: true })
+    .limit(discoveryLimit)
+
+  if (error) throw new Error(`Chart hot archive discovery failed: ${error.message}`)
+
+  const unique = new Map<string, HotArchivePartition>()
+  for (const raw of (data || []) as Array<Record<string, unknown>>) {
+    const ticker = String(raw.ticker || "").trim().toUpperCase()
+    const timestamp = raw.bar_time ? new Date(String(raw.bar_time)).getTime() : NaN
+    if (!ticker || !Number.isFinite(timestamp)) continue
+    const partition = partitionFor(ticker, Math.floor(timestamp / 1000))
+    const key = `${ticker}:${partition.tradingDate}`
+    if (!unique.has(key)) unique.set(key, partition)
+    if (unique.size >= maxPartitions) break
+  }
+  return [...unique.values()]
+}
+
+export async function deleteHotIntradayPartition(
+  supabase: SupabaseClient,
+  input: HotArchivePartition & { cutoff: number },
+): Promise<CanonicalOhlcvBar[]> {
+  const { data, error } = await supabase
+    .from("chart_ohlcv_intraday")
+    .delete()
+    .eq("ticker", input.ticker)
+    .eq("base_resolution", "1m")
+    .gte("bar_time", new Date(input.from * 1000).toISOString())
+    .lt("bar_time", new Date(input.toExclusive * 1000).toISOString())
+    .lt("bar_time", new Date(input.cutoff * 1000).toISOString())
+    .select("bar_time,open,high,low,close,volume")
+
+  if (error) throw new Error(`Chart hot archive prune failed: ${error.message}`)
+  return (data || []).map((row) => storedRowToBar(row as Record<string, unknown>)).filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
+}
+
+export async function readOldestHotIntradayTime(supabase: SupabaseClient): Promise<number | null> {
+  const { data, error } = await supabase
+    .from("chart_ohlcv_intraday")
+    .select("bar_time")
+    .eq("base_resolution", "1m")
+    .order("bar_time", { ascending: true })
+    .limit(1)
+  if (error) throw new Error(`Chart oldest hot bar read failed: ${error.message}`)
+  const value = (data || [])[0]?.bar_time
+  const timestamp = value ? new Date(String(value)).getTime() : NaN
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : null
 }
 
 /**

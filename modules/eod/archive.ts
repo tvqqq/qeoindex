@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { runChartIntradayArchiveLifecycle, type ChartIntradayArchiveMetrics } from "@/modules/market/chart-data/archive-lifecycle"
 
 export interface EodArchiveCheckpoint {
   status: "archived" | "partial" | "blocked" | "skipped" | "error"
@@ -24,13 +25,16 @@ export type EodRetentionCleanupCheckpoint = EodArchiveCheckpoint & {
   safeCleanup?: SafeRetentionCleanupResult
   jobTelemetryCleanup?: RetentionCleanupResult
   buildArtifactCleanup?: RetentionCleanupResult
+  chartIntradayArchive?: ChartIntradayArchiveMetrics
+  chartIntradayArchiveError?: string
   rawHistoryRetention?: { status: "blocked"; detail: string }
 }
 
 /**
  * Safe telemetry/staging retention is operational and Supabase-only.
  * QEO-57 removes Drive; QEO-62 removes Notion from this dependency boundary.
- * Raw Daily history remains retained until an independently verified cold restore design exists.
+ * Raw Daily history remains retained. QEO-103 separately archives only chart
+ * raw 1m history after immutable object checksum/readback verification.
  */
 export async function runEodRetentionCleanup(
   supabase: SupabaseClient,
@@ -63,10 +67,35 @@ export async function runEodRetentionCleanup(
     safeCleanup, jobTelemetryCleanup, buildArtifactCleanup: buildArtifactCleanup || undefined, rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
   }
 
+  let chartIntradayArchive: ChartIntradayArchiveMetrics
+  try {
+    chartIntradayArchive = await runChartIntradayArchiveLifecycle(supabase, { referenceAt: new Date(referenceAt) })
+  } catch (cause) {
+    const chartIntradayArchiveError = cause instanceof Error ? cause.message : String(cause)
+    return {
+      status: "partial",
+      detail: `Core safe retention completed, but chart intraday archive discovery/lifecycle failed before a safe prune could complete: ${chartIntradayArchiveError}. ${rawHistoryDetail}`,
+      safeCleanup,
+      jobTelemetryCleanup,
+      buildArtifactCleanup,
+      chartIntradayArchiveError,
+      rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
+    }
+  }
+
+  const chartDetail = chartIntradayArchive.status === "partial"
+    ? `Chart intraday archive partially completed with ${chartIntradayArchive.failures.length} isolated partition failure(s); failed partitions remained/reverted hot.`
+    : chartIntradayArchive.status === "skipped"
+      ? "Chart intraday archive found no hot 1m partitions older than the 31-day retention cutoff."
+      : `Chart intraday archive verified ${chartIntradayArchive.partitionsArchived} partition(s), archived ${chartIntradayArchive.rowsArchived} row(s), and pruned ${chartIntradayArchive.rowsPruned} verified hot row(s).`
+
   return {
-    status: "archived",
-    detail: `Safe telemetry/staging retention, bounded job telemetry retention, and terminal Wyckoff build-artifact retention completed. ${rawHistoryDetail}`,
-    safeCleanup, jobTelemetryCleanup, buildArtifactCleanup,
+    status: chartIntradayArchive.status === "partial" ? "partial" : "archived",
+    detail: `Safe telemetry/staging retention, bounded job telemetry retention, and terminal Wyckoff build-artifact retention completed. ${chartDetail} ${rawHistoryDetail}`,
+    safeCleanup,
+    jobTelemetryCleanup,
+    buildArtifactCleanup,
+    chartIntradayArchive,
     rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
   }
 }

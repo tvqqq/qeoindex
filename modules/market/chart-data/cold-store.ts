@@ -25,6 +25,8 @@ export interface ColdArchiveResult {
   objectPath: string
   sha256: string
   rowCount: number
+  byteCount: number
+  reused: boolean
 }
 
 export interface ColdOhlcvStorage {
@@ -84,6 +86,18 @@ async function blobBytes(blob: Blob) {
   return new Uint8Array(await blob.arrayBuffer())
 }
 
+async function verifyStoredObject(
+  supabase: SupabaseClient,
+  input: { objectPath: string; checksum: string; rowCount: number },
+) {
+  const { data: verificationObject, error: verificationError } = await supabase.storage.from(BUCKET).download(input.objectPath)
+  if (verificationError || !verificationObject) throw new Error(`Chart cold verification read failed: ${verificationError?.message ?? "missing object"}`)
+  const verificationBytes = await blobBytes(verificationObject)
+  if (hash(verificationBytes) !== input.checksum) throw new Error("Chart cold verification checksum mismatch")
+  if (deserializeBars(verificationBytes).length !== input.rowCount) throw new Error("Chart cold verification row-count mismatch")
+  return verificationBytes
+}
+
 export function createSupabaseColdOhlcvStorage(supabase: SupabaseClient): ColdOhlcvStorage {
   return {
     async readIntersectingRange({ ticker, from, to }) {
@@ -106,12 +120,8 @@ export function createSupabaseColdOhlcvStorage(supabase: SupabaseClient): ColdOh
         const expectedHash = String(raw.sha256 || "")
         const expectedRows = Number(raw.row_count)
         if (!objectPath || raw.archive_format !== "ndjson.gz") continue
-        const { data: object, error: downloadError } = await supabase.storage.from(BUCKET).download(objectPath)
-        if (downloadError || !object) throw new Error(`Chart cold object read failed: ${downloadError?.message ?? "missing object"}`)
-        const bytes = await blobBytes(object)
-        if (hash(bytes) !== expectedHash) throw new Error("Chart cold object checksum mismatch")
+        const bytes = await verifyStoredObject(supabase, { objectPath, checksum: expectedHash, rowCount: expectedRows })
         const decoded = deserializeBars(bytes)
-        if (decoded.length !== expectedRows) throw new Error("Chart cold object row-count mismatch")
         bars.push(...decoded.filter((bar) => bar.time >= from && bar.time <= to))
         manifestsRead += 1
       }
@@ -124,33 +134,57 @@ export function createSupabaseColdOhlcvStorage(supabase: SupabaseClient): ColdOh
       const bytes = serializeBars(sorted)
       const checksum = hash(bytes)
       const objectPath = archivePath(ticker, sorted, checksum)
+      const rangeStart = new Date(sorted[0].time * 1000).toISOString()
+      const rangeEnd = new Date(sorted.at(-1)!.time * 1000).toISOString()
+
+      const { data: existingManifest, error: existingManifestError } = await supabase
+        .from("chart_ohlcv_cold_manifests")
+        .select("object_path,row_count,sha256")
+        .eq("ticker", ticker)
+        .eq("base_resolution", "1m")
+        .eq("range_start", rangeStart)
+        .eq("range_end", rangeEnd)
+        .eq("sha256", checksum)
+        .limit(1)
+      if (existingManifestError) throw new Error(`Chart cold manifest lookup failed: ${existingManifestError.message}`)
+
+      const existing = (existingManifest || [])[0] as ManifestRow | undefined
+      if (existing?.object_path) {
+        await verifyStoredObject(supabase, { objectPath: String(existing.object_path), checksum, rowCount: sorted.length })
+        return { objectPath: String(existing.object_path), sha256: checksum, rowCount: sorted.length, byteCount: bytes.byteLength, reused: true }
+      }
+
+      let reused = false
       const { error: uploadError } = await supabase.storage.from(BUCKET).upload(objectPath, bytes, {
         upsert: false,
         contentType: "application/gzip",
         cacheControl: "31536000",
       })
-      if (uploadError) throw new Error(`Chart cold object upload failed: ${uploadError.message}`)
+      if (uploadError) {
+        try {
+          await verifyStoredObject(supabase, { objectPath, checksum, rowCount: sorted.length })
+          reused = true
+        } catch {
+          throw new Error(`Chart cold object upload failed: ${uploadError.message}`)
+        }
+      } else {
+        await verifyStoredObject(supabase, { objectPath, checksum, rowCount: sorted.length })
+      }
 
-      const { data: verificationObject, error: verificationError } = await supabase.storage.from(BUCKET).download(objectPath)
-      if (verificationError || !verificationObject) throw new Error(`Chart cold verification read failed: ${verificationError?.message ?? "missing object"}`)
-      const verificationBytes = await blobBytes(verificationObject)
-      if (hash(verificationBytes) !== checksum) throw new Error("Chart cold verification checksum mismatch")
-      if (deserializeBars(verificationBytes).length !== sorted.length) throw new Error("Chart cold verification row-count mismatch")
-
-      const { error: manifestError } = await supabase.from("chart_ohlcv_cold_manifests").insert({
+      const { error: manifestError } = await supabase.from("chart_ohlcv_cold_manifests").upsert({
         ticker,
         base_resolution: "1m",
-        range_start: new Date(sorted[0].time * 1000).toISOString(),
-        range_end: new Date(sorted.at(-1)!.time * 1000).toISOString(),
+        range_start: rangeStart,
+        range_end: rangeEnd,
         object_path: objectPath,
         archive_format: "ndjson.gz",
         row_count: sorted.length,
         sha256: checksum,
         provenance_batch_id: provenanceBatchId,
         verified_at: new Date().toISOString(),
-      })
-      if (manifestError) throw new Error(`Chart cold manifest insert failed: ${manifestError.message}`)
-      return { objectPath, sha256: checksum, rowCount: sorted.length }
+      }, { onConflict: "ticker,base_resolution,range_start,range_end,sha256" })
+      if (manifestError) throw new Error(`Chart cold manifest upsert failed: ${manifestError.message}`)
+      return { objectPath, sha256: checksum, rowCount: sorted.length, byteCount: bytes.byteLength, reused }
     },
   }
 }
