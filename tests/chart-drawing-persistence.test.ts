@@ -1,8 +1,11 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 import {
   deserializeUserChartSettings,
+  persistedV2ToRuntimeDrawing,
   projectAnchor,
+  runtimeDrawingToPersistedV2,
   screenPointToAnchor,
   type CoordinateAdapter,
   type PersistedDrawingV2,
@@ -135,6 +138,38 @@ test("CoordinateAdapter projections projectAnchor and screenPointToAnchor", () =
   const incompleteAdapter: CoordinateAdapter = {}
   assert.equal(projectAnchor(anchor, incompleteAdapter), null)
   assert.equal(screenPointToAnchor({ x: 100, y: 150 }, incompleteAdapter), null)
+})
+
+test("Runtime roundtrip preserves persisted source timeframe and visibility metadata", () => {
+  const persistedDrawing: PersistedDrawingV2 = {
+    schemaVersion: 2,
+    id: "scoped-drawing",
+    tool: "trendline",
+    anchors: [
+      { time: 1700000000, price: 50 },
+      { time: 1700100000, price: 55 },
+    ],
+    sourceTimeframe: "1h",
+    visibility: "source-timeframe",
+    style: { color: "#00f0ff", lineWidth: 2 },
+  }
+
+  const runtime = persistedV2ToRuntimeDrawing(persistedDrawing)
+  const restored = runtimeDrawingToPersistedV2(runtime, "1D")
+
+  assert.ok(restored)
+  assert.equal(restored.sourceTimeframe, "1h")
+  assert.equal(restored.visibility, "source-timeframe")
+})
+
+test("useUserChartSync carries unresolved legacy drawings into every V2 save payload", () => {
+  const code = readFileSync(
+    new URL("../components/stock-detail/chart/use-user-chart-sync.ts", import.meta.url),
+    "utf8",
+  )
+
+  assert.match(code, /unresolvedLegacyDrawingsRef/)
+  assert.match(code, /unresolvedLegacyDrawings:\s*unresolvedLegacyDrawingsRef\.current/)
 })
 
 test("Rapid save queue simulation ensures latest revision wins without overlapping requests", async () => {
