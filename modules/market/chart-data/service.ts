@@ -10,13 +10,14 @@ import type {
   SourceTaggedBar,
 } from "./contract"
 import { ChartDataRequestError, ChartDataUnavailableError } from "./contract"
-import { readHotIntradayRange, upsertHotIntradayBars } from "./hot-store"
+import { readHotIntradayRange, readProviderRequestCoverage, upsertHotIntradayBars } from "./hot-store"
 import { detectTradingSessionGaps, normalizeCanonicalBars } from "./normalize"
 import {
   createPrimaryChartOhlcvProvider,
   normalizeChartProviderResult,
   type ChartOhlcvProvider,
 } from "./provider"
+import { mergeProviderRanges, missingProviderRanges } from "./provider-coverage"
 
 const DAY_SECONDS = 86400
 const MAX_INTRADAY_SPAN_SECONDS = 31 * DAY_SECONDS
@@ -88,9 +89,10 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   const provider = deps.provider ?? createPrimaryChartOhlcvProvider()
   const errors: ChartDataError[] = []
 
-  const [hotRead, coldRead] = await Promise.allSettled([
+  const [hotRead, coldRead, coverageRead] = await Promise.allSettled([
     readHotIntradayRange(deps.supabase, request.ticker, request.from, request.to),
     coldStorage.readIntersectingRange({ ticker: request.ticker, from: request.from, to: request.to }),
+    readProviderRequestCoverage(deps.supabase, request.ticker, request.from, request.to),
   ])
 
   const tagged: SourceTaggedBar[] = []
@@ -107,15 +109,24 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
 
   let normalized = normalizeCanonicalBars(tagged)
   const nowSeconds = Math.floor((deps.now ?? new Date()).getTime() / 1000)
-  const effectiveTo = Math.min(request.to, nowSeconds)
-  const lastStored = normalized.bars.at(-1)?.time ?? null
-  const providerFrom = lastStored == null ? request.from : Math.max(request.from, lastStored)
-  const needsProvider = effectiveTo > providerFrom
+  const effectiveTo = Math.min(request.to, nowSeconds - 60)
+  const requestedRange = { from: request.from, to: effectiveTo }
+  const coveredRanges = coverageRead.status === "fulfilled" ? coverageRead.value : []
+  const uncoveredRanges = normalized.bars.length === 0
+    ? [requestedRange]
+    : missingProviderRanges(requestedRange, coveredRanges)
+  const storageGapRanges = detectTradingSessionGaps(normalized.bars).map((gap) => ({
+    from: gap.fromTime,
+    to: gap.toTime,
+  }))
+  const providerRanges = effectiveTo > request.from
+    ? mergeProviderRanges([...uncoveredRanges, ...storageGapRanges])
+    : []
 
-  if (needsProvider) {
+  for (const range of providerRanges) {
     try {
       const providerResult = normalizeChartProviderResult(
-        await provider.fetch({ ...request, from: providerFrom, to: effectiveTo }),
+        await provider.fetch({ ...request, from: range.from, to: range.to }),
         "CUSTOM",
       )
       const providerBars = providerResult.bars
@@ -127,7 +138,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
             ticker: request.ticker,
             bars: providerBars,
             provider: providerResult.provider,
-            detail: { resolution: "1m", requestedFrom: providerFrom, requestedTo: effectiveTo },
+            detail: { resolution: "1m", requestedFrom: range.from, requestedTo: range.to },
           })
         } catch {
           errors.push({ code: "STORAGE_UNAVAILABLE" })
