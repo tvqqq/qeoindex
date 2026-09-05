@@ -183,125 +183,149 @@ export function PdfViewer({
     setZoom(clampPdfZoom(value))
   }
 
+  const renderToolbar = (placement: "top" | "bottom") => (
+    <div
+      data-pdf-toolbar={placement}
+      className={`flex flex-wrap items-center gap-2 px-3 py-2 ${placement === "top" ? "border-b" : "border-t"} border-white/10`}
+    >
+      <button
+        type="button"
+        aria-label="Trang trước"
+        onClick={() => movePage(currentPage - 1)}
+        disabled={status !== "ready" || currentPage <= 1}
+        className="rounded-md border border-white/10 px-2.5 py-1.5 text-sm text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Trước
+      </button>
+      <label className="flex items-center gap-2 text-sm text-zinc-400">
+        <span>Trang</span>
+        <input
+          type="number"
+          aria-label="Số trang"
+          min={1}
+          max={Math.max(1, pageCount)}
+          value={currentPage}
+          disabled={status !== "ready"}
+          onChange={(event) => movePage(Number(event.currentTarget.value))}
+          className="h-8 w-16 rounded-md border border-white/10 bg-black/30 px-2 text-center text-zinc-100 outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+        />
+        <span>/ {pageCount || "—"}</span>
+      </label>
+      <button
+        type="button"
+        aria-label="Trang sau"
+        onClick={() => movePage(currentPage + 1)}
+        disabled={status !== "ready" || currentPage >= pageCount}
+        className="rounded-md border border-white/10 px-2.5 py-1.5 text-sm text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Sau
+      </button>
+
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          aria-label="Zoom out"
+          onClick={() => moveZoom(zoom - 0.25)}
+          disabled={status !== "ready" || zoom <= 0.5}
+          className="rounded-md border border-white/10 px-2.5 py-1.5 text-sm text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          −
+        </button>
+        <span className="min-w-12 text-center text-xs text-zinc-400">{Math.round(zoom * 100)}%</span>
+        <button
+          type="button"
+          aria-label="Zoom in"
+          onClick={() => moveZoom(zoom + 0.25)}
+          disabled={status !== "ready" || zoom >= 2.5}
+          className="rounded-md border border-white/10 px-2.5 py-1.5 text-sm text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          aria-label="Reset zoom"
+          onClick={() => moveZoom(1)}
+          disabled={status !== "ready" || zoom === 1}
+          className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-zinc-300 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          100%
+        </button>
+        {placement === "top" && originalSourceLink ? (
+          <a
+            href={originalSourceLink}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-zinc-200 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          >
+            Nguồn ↗
+          </a>
+        ) : null}
+      </div>
+    </div>
+  )
+
   return (
     <section
       aria-label={`Trình đọc PDF ${title}`}
       className="flex min-h-[520px] flex-col overflow-hidden rounded-xl border border-white/10 bg-zinc-950/70"
     >
-      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2">
-        <button
-          type="button"
-          aria-label="Trang trước"
-          onClick={() => movePage(currentPage - 1)}
-          disabled={status !== "ready" || currentPage <= 1}
-          className="rounded-md border border-white/10 px-2.5 py-1.5 text-sm text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+      {renderToolbar("top")}
+
+      <div className="relative flex min-h-[460px] flex-1">
+        <div
+          tabIndex={-1}
+          className="flex min-h-[460px] flex-1 items-start justify-center overflow-auto bg-black/20 p-4 focus:outline-none"
         >
-          Trước
-        </button>
-        <label className="flex items-center gap-2 text-sm text-zinc-400">
-          <span>Trang</span>
-          <input
-            type="number"
-            aria-label="Số trang"
-            min={1}
-            max={Math.max(1, pageCount)}
-            value={currentPage}
-            disabled={status !== "ready"}
-            onChange={(event) => movePage(Number(event.currentTarget.value))}
-            className="h-8 w-16 rounded-md border border-white/10 bg-black/30 px-2 text-center text-zinc-100 outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          {status === "loading" ? (
+            <p className="mt-12 text-sm text-zinc-400" role="status">Đang tải PDF…</p>
+          ) : null}
+          {status === "error" ? (
+            <div className="mt-12 max-w-md text-center">
+              <p className="text-sm font-medium text-amber-200">Không thể tải PDF.</p>
+              <p className="mt-2 text-xs text-zinc-400">Bạn vẫn có thể đọc phần phân tích hoặc mở file PDF gốc.</p>
+              {originalPdfUrl ? (
+                <a
+                  href={originalPdfUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="mt-4 inline-flex rounded-lg border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/[0.12]"
+                >
+                  Mở PDF gốc ↗
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+          <canvas
+            ref={canvasRef}
+            aria-label={`Trang PDF ${currentPage}`}
+            className={status === "ready" ? "max-w-none bg-white shadow-xl" : "hidden"}
           />
-          <span>/ {pageCount || "—"}</span>
-        </label>
-        <button
-          type="button"
-          aria-label="Trang sau"
-          onClick={() => movePage(currentPage + 1)}
-          disabled={status !== "ready" || currentPage >= pageCount}
-          className="rounded-md border border-white/10 px-2.5 py-1.5 text-sm text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Sau
-        </button>
-
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            aria-label="Zoom out"
-            onClick={() => moveZoom(zoom - 0.25)}
-            disabled={status !== "ready" || zoom <= 0.5}
-            className="rounded-md border border-white/10 px-2.5 py-1.5 text-sm text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            −
-          </button>
-          <span className="min-w-12 text-center text-xs text-zinc-400">{Math.round(zoom * 100)}%</span>
-          <button
-            type="button"
-            aria-label="Zoom in"
-            onClick={() => moveZoom(zoom + 0.25)}
-            disabled={status !== "ready" || zoom >= 2.5}
-            className="rounded-md border border-white/10 px-2.5 py-1.5 text-sm text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            +
-          </button>
-          <button
-            type="button"
-            aria-label="Reset zoom"
-            onClick={() => moveZoom(1)}
-            disabled={status !== "ready" || zoom === 1}
-            className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-zinc-300 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            100%
-          </button>
-          {originalPdfUrl ? (
-            <a
-              href={originalPdfUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="rounded-md border border-cyan-400/20 bg-cyan-400/[0.06] px-2.5 py-1.5 text-xs font-medium text-cyan-100 hover:bg-cyan-400/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
-            >
-              PDF gốc ↗
-            </a>
-          ) : null}
-          {originalSourceLink ? (
-            <a
-              href={originalSourceLink}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-zinc-200 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-            >
-              Nguồn ↗
-            </a>
-          ) : null}
         </div>
-      </div>
 
-      <div
-        tabIndex={-1}
-        className="relative flex min-h-[460px] flex-1 items-start justify-center overflow-auto bg-black/20 p-4 focus:outline-none"
-      >
-        {status === "loading" ? (
-          <p className="mt-12 text-sm text-zinc-400" role="status">Đang tải PDF…</p>
+        {status === "ready" ? (
+          <>
+            <button
+              type="button"
+              data-pdf-floating-nav="previous"
+              aria-label="Trang trước"
+              onClick={() => movePage(currentPage - 1)}
+              disabled={currentPage <= 1}
+              className="absolute left-3 top-1/2 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/55 text-2xl leading-none text-white opacity-35 shadow-lg backdrop-blur-sm transition-opacity hover:opacity-90 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 disabled:pointer-events-none disabled:opacity-0"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              data-pdf-floating-nav="next"
+              aria-label="Trang sau"
+              onClick={() => movePage(currentPage + 1)}
+              disabled={currentPage >= pageCount}
+              className="absolute right-3 top-1/2 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/55 text-2xl leading-none text-white opacity-35 shadow-lg backdrop-blur-sm transition-opacity hover:opacity-90 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 disabled:pointer-events-none disabled:opacity-0"
+            >
+              ›
+            </button>
+          </>
         ) : null}
-        {status === "error" ? (
-          <div className="mt-12 max-w-md text-center">
-            <p className="text-sm font-medium text-amber-200">Không thể tải PDF.</p>
-            <p className="mt-2 text-xs text-zinc-400">Bạn vẫn có thể đọc phần phân tích hoặc mở file PDF gốc.</p>
-            {originalPdfUrl ? (
-              <a
-                href={originalPdfUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="mt-4 inline-flex rounded-lg border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/[0.12]"
-              >
-                Mở PDF gốc ↗
-              </a>
-            ) : null}
-          </div>
-        ) : null}
-        <canvas
-          ref={canvasRef}
-          aria-label={`Trang PDF ${currentPage}`}
-          className={status === "ready" ? "max-w-none bg-white shadow-xl" : "hidden"}
-        />
       </div>
 
       {errorMessage && status === "ready" ? (
@@ -309,6 +333,8 @@ export function PdfViewer({
           {errorMessage}
         </p>
       ) : null}
+
+      {renderToolbar("bottom")}
     </section>
   )
 }
