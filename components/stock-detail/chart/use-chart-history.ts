@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
+import { chartHistoryFloor } from "@/modules/market/chart-data/history-policy"
 import type { ChartTimeframe } from "./stock-chart-types"
 import {
-  historyWindowSeconds,
+  initialChartHistoryRange,
   mergeChartBars,
+  olderChartHistoryRange,
   requestChartRange,
   type ChartHistoryResponse,
 } from "./chart-history"
@@ -36,6 +38,7 @@ export function useChartHistory({ ticker, timeframe, seedDailyBars = [] }: UseCh
   const barsRef = useRef(bars)
   const generationRef = useRef(0)
   const olderRequestRef = useRef(false)
+  const horizonToRef = useRef<number | null>(null)
 
   useEffect(() => {
     barsRef.current = bars
@@ -55,18 +58,21 @@ export function useChartHistory({ ticker, timeframe, seedDailyBars = [] }: UseCh
     setHasMore(true)
 
     const to = Math.floor(Date.now() / 1000)
-    const from = Math.max(1, to - historyWindowSeconds(timeframe))
+    horizonToRef.current = to
+    const range = initialChartHistoryRange(timeframe, to)
 
-    void requestChartRange({ ticker, timeframe, from, to }, controller.signal)
+    void requestChartRange({ ticker, timeframe, ...range }, controller.signal)
       .then((result) => {
         if (generationRef.current !== generation) return
+        let mergedBars: OhlcvBar[] = []
         setBars((current) => {
-          const merged = mergeChartBars(current, result.bars)
-          barsRef.current = merged
-          return merged
+          mergedBars = mergeChartBars(current, result.bars)
+          barsRef.current = mergedBars
+          return mergedBars
         })
         setCoverage(result.coverage)
-        setHasMore(result.bars.length > 0)
+        const earliest = (result.bars[0]?.time ?? mergedBars[0]?.time) || range.from
+        setHasMore(result.bars.length > 0 && earliest > chartHistoryFloor(timeframe, to) + 1)
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || generationRef.current !== generation) return
@@ -82,7 +88,13 @@ export function useChartHistory({ ticker, timeframe, seedDailyBars = [] }: UseCh
   const loadOlder = useCallback(async () => {
     if (olderRequestRef.current || !hasMore) return
     const earliest = barsRef.current[0]?.time
-    if (!earliest || earliest <= 1) {
+    const horizonTo = horizonToRef.current
+    if (!earliest || !horizonTo) {
+      setHasMore(false)
+      return
+    }
+    const range = olderChartHistoryRange(timeframe, earliest, horizonTo)
+    if (!range) {
       setHasMore(false)
       return
     }
@@ -90,19 +102,19 @@ export function useChartHistory({ ticker, timeframe, seedDailyBars = [] }: UseCh
     olderRequestRef.current = true
     setLoadingOlder(true)
     const generation = generationRef.current
-    const to = earliest - 1
-    const from = Math.max(1, to - historyWindowSeconds(timeframe))
 
     try {
-      const result = await requestChartRange({ ticker, timeframe, from, to })
+      const result = await requestChartRange({ ticker, timeframe, ...range })
       if (generationRef.current !== generation) return
+      let mergedBars: OhlcvBar[] = []
       setBars((current) => {
-        const merged = mergeChartBars(current, result.bars)
-        barsRef.current = merged
-        return merged
+        mergedBars = mergeChartBars(current, result.bars)
+        barsRef.current = mergedBars
+        return mergedBars
       })
       setCoverage((current) => mergeCoverage(current, result.coverage))
-      if (result.bars.length === 0) setHasMore(false)
+      const nextEarliest = mergedBars[0]?.time ?? earliest
+      setHasMore(result.bars.length > 0 && nextEarliest > chartHistoryFloor(timeframe, horizonTo) + 1)
     } catch (cause) {
       if (generationRef.current === generation) {
         setError(cause instanceof Error ? cause.message : String(cause))
