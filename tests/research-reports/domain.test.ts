@@ -171,3 +171,18 @@ test("QEO-80 migration creates report evidence tables, idempotency constraints, 
   assert.match(sql, /grant\s+all\s+privileges\s+on\s+table[\s\S]*market_research_reports[\s\S]*to\s+service_role/i)
   assert.match(sql, /revoke\s+all[^;]*market_research_reports[^;]*from\s+anon/i)
 })
+
+test("QEO-81 pending report schema preserves OCR terminals and route-aware analysis identity", () => {
+  const sql = qeo80Migration()
+
+  assert.match(sql, /ingestion_status[\s\S]*?'needs_ocr'/i)
+  assert.match(sql, /analysis_status[\s\S]*?'needs_ocr'/i)
+  assert.match(sql, /model_route_key\s+text\s+not\s+null/i)
+  assert.match(sql, /reasoning_effort\s+text\s+not\s+null/i)
+  assert.match(sql, /chunk_version\s+text\s+not\s+null/i)
+  assert.match(sql, /unique\s*\(report_id,\s*content_hash,\s*analysis_version,\s*prompt_version,\s*model_route_key\)/i)
+  assert.match(sql, /unique\s*\(report_id,\s*content_hash,\s*chunk_version,\s*page_number,\s*chunk_index\)/i)
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.qeo_publish_research_report_analysis\s*\(/i)
+  assert.match(sql, /revoke\s+all\s+on\s+function\s+public\.qeo_publish_research_report_analysis[\s\S]*?from\s+public,\s*anon,\s*authenticated/i)
+  assert.match(sql, /grant\s+execute\s+on\s+function\s+public\.qeo_publish_research_report_analysis[\s\S]*?to\s+service_role/i)
+})

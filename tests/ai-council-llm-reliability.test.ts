@@ -2,6 +2,18 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
+// QEO-81 nested research-report contracts are executed through this existing
+// top-level AI suite because test-contracts.json intentionally classifies only
+// tests/*.test.ts files and rejects nested manifest paths.
+import "./research-reports/pdf-processing.test.ts"
+import "./research-reports/analysis.test.ts"
+import "./research-reports/pipeline.test.ts"
+
+import {
+  extractOpenAiOutputText,
+  inspectOpenAiResponseEnvelope as inspectSharedOpenAiResponseEnvelope,
+  nextMaxOutputTokensAfterIncomplete as nextSharedMaxOutputTokensAfterIncomplete,
+} from "../modules/ai/openai-response.ts"
 import {
   inspectOpenAiResponseEnvelope,
   nextMaxOutputTokensAfterIncomplete,
@@ -80,6 +92,37 @@ test("incomplete Responses API envelope preserves reason and usage for bounded r
   assert.equal(inspected.reasoningTokens, 520)
   assert.equal(inspected.totalTokens, 1884)
   assert.equal(inspected.shouldRetryWithMoreOutput, true)
+})
+
+test("shared OpenAI helper preserves the Council envelope contract", () => {
+  const raw = {
+    id: "resp_shared",
+    status: "incomplete",
+    model: "gpt-5.6-luna",
+    incomplete_details: { reason: "max_output_tokens" },
+    usage: {
+      input_tokens: 321,
+      input_tokens_details: { cached_tokens: 123 },
+      output_tokens: 456,
+      output_tokens_details: { reasoning_tokens: 222 },
+      total_tokens: 777,
+    },
+  }
+
+  assert.deepEqual(inspectSharedOpenAiResponseEnvelope(raw), inspectOpenAiResponseEnvelope(raw))
+  assert.equal(nextSharedMaxOutputTokensAfterIncomplete(800), nextMaxOutputTokensAfterIncomplete(800))
+})
+
+test("shared OpenAI helper extracts root and nested output text while rejecting refusals", () => {
+  assert.equal(extractOpenAiOutputText({ output_text: " root text " }), "root text")
+  assert.equal(extractOpenAiOutputText({
+    output: [{ content: [{ type: "output_text", text: " nested text " }] }],
+  }), "nested text")
+
+  assert.throws(() => extractOpenAiOutputText({
+    output: [{ content: [{ type: "refusal", refusal: "policy refusal" }] }],
+  }), /OpenAI refusal: policy refusal/)
+  assert.throws(() => extractOpenAiOutputText({ output: [] }), /no structured output text/i)
 })
 
 test("max-output retry is bounded and materially increases the budget", () => {
