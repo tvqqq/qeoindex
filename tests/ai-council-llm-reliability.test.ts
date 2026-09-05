@@ -8,6 +8,11 @@ import { readFileSync } from "node:fs"
 import "./research-reports/pdf-processing.test.ts"
 import "./research-reports/analysis.test.ts"
 import "./research-reports/pipeline.test.ts"
+import "./research-reports/qa-retrieval.test.ts"
+import "./research-reports/qa-schema.test.ts"
+import "./research-reports/qa-openai.test.ts"
+import "./research-reports/qa-service.test.ts"
+import "./research-reports/qa-api.test.ts"
 
 import {
   extractOpenAiOutputText,
