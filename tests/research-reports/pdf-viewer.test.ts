@@ -36,7 +36,7 @@ test("PDF viewer prefers the approved original PDF URL and falls back to the aut
   assert.match(code, /pdfjsLib\.getDocument\(\{ url \}\)/)
   assert.match(code, /\/api\/research-reports\/\$\{encodeURIComponent\(reportId\)\}\/pdf/)
   assert.match(code, /originalPdfUrl/)
-  assert.match(code, />PDF gốc ↗</)
+  assert.match(code, />\s*PDF gốc ↗\s*</)
 })
 
 test("PDF viewer renders exactly the active page canvas and cancels stale render work", () => {
