@@ -104,6 +104,13 @@ export async function getChartOhlcv(
     && gaps.length === 0
     && integrityIssues.length === 0
     && errors.length === 0
+  const sourceMetadata = [...results].reverse().find((result) => result.metadata)?.metadata
+  const metadata = sourceMetadata
+    ? {
+        ...sourceMetadata,
+        currentBarTime: sourceMetadata.sessionState === "LIVE" ? bars.at(-1)?.time ?? null : null,
+      }
+    : undefined
 
   return {
     ...request,
@@ -112,5 +119,6 @@ export async function getChartOhlcv(
     integrityIssues,
     errors,
     coverage: { complete, state: complete ? "COMPLETE" : "PARTIAL" },
+    metadata,
   }
 }
