@@ -181,3 +181,19 @@ test("StockDetailWorkstation handles isChartMaximized and hides sidebar/tabs", (
   assert.match(workstation, /StockWatchlistSidebar/)
   assert.match(workstation, /onToggleMaximize=\{\(\) => setIsChartMaximized\(\(prev\) => !prev\)\}/)
 })
+
+
+test("StockTradingViewChart cannot trap an empty persisted timeframe behind the loading return", () => {
+  const code = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.doesNotMatch(code, /if \(!displayBars\.length \|\| !chartMetrics \|\| visibleBars\.length === 0\)/)
+  assert.match(code, /Dữ liệu timeframe này chưa sẵn sàng/)
+})
+
+test("StockTradingViewChart consumes canonical raw 1m from the chart-data API", () => {
+  const code = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.match(code, /useCanonicalMinuteBars/)
+  assert.match(code, /timeframe === "1m"/)
+  assert.match(code, /\/api\/market\/ohlcv/)
+})
