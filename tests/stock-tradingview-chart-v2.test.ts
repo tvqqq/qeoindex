@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
+import { projectFutureTimes } from "../components/stock-detail/chart/future-timeline.ts"
 import {
   calculateBollingerBands,
   calculateIchimokuSeries,
@@ -328,3 +329,13 @@ test("StockTradingViewChart consumes canonical raw 1m from the chart-data API", 
 })
 
 import "./qeo-100-market-data.cases.ts"
+
+
+test("Future chart timeline uses canonical Vietnam securities holidays", () => {
+  const fridayClose = Math.floor(Date.parse("2026-08-28T14:45:00+07:00") / 1000)
+  const [nextIntraday] = projectFutureTimes(fridayClose, "15m", 1)
+  const [nextDaily] = projectFutureTimes(fridayClose, "1D", 1)
+
+  assert.equal(new Date(nextIntraday * 1000).toISOString(), "2026-09-03T02:00:00.000Z")
+  assert.equal(new Date(nextDaily * 1000).toISOString(), "2026-09-03T07:45:00.000Z")
+})

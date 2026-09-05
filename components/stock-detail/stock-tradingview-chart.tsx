@@ -29,6 +29,7 @@ import {
   calculateVolumeSma,
   ICHIMOKU_DISPLACEMENT,
 } from "./chart/stock-chart-indicators"
+import { formatFutureTimelineLabel, projectFutureTimes } from "./chart/future-timeline"
 import { aggregateBarsByTimeframe } from "./chart/stock-chart-timeframes"
 import {
   ALL_TIMEFRAMES,
@@ -53,134 +54,9 @@ interface StockTradingViewChartProps {
 
 const DEFAULT_RIGHT_OFFSET_BARS = 8
 const MIN_MAX_RIGHT_OFFSET_BARS = 32
-const VN_OFFSET_SECONDS = 7 * 60 * 60
 const EXPANDED_SUBPANE_HEIGHT = 92
 const COLLAPSED_SUBPANE_HEIGHT = 24
 const SUBPANE_GAP = 8
-
-const INTRADAY_MINUTES: Partial<Record<ChartTimeframe, number>> = {
-  "1m": 1,
-  "15m": 15,
-  "30m": 30,
-  "1h": 60,
-  "2h": 120,
-  "4h": 240,
-}
-
-function localParts(time: number) {
-  const date = new Date((time + VN_OFFSET_SECONDS) * 1000)
-  return {
-    year: date.getUTCFullYear(),
-    month: date.getUTCMonth() + 1,
-    day: date.getUTCDate(),
-    weekday: date.getUTCDay(),
-    hour: date.getUTCHours(),
-    minute: date.getUTCMinutes(),
-  }
-}
-
-function localEpoch(year: number, month: number, day: number, hour = 0, minute = 0) {
-  return Math.floor(Date.UTC(year, month - 1, day, hour, minute, 0) / 1000) - VN_OFFSET_SECONDS
-}
-
-function nextBusinessDay(time: number, businessDays = 1, hour?: number, minute?: number) {
-  const parts = localParts(time)
-  const cursor = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0))
-  let remaining = Math.max(1, businessDays)
-  while (remaining > 0) {
-    cursor.setUTCDate(cursor.getUTCDate() + 1)
-    const weekday = cursor.getUTCDay()
-    if (weekday !== 0 && weekday !== 6) remaining -= 1
-  }
-  return localEpoch(
-    cursor.getUTCFullYear(),
-    cursor.getUTCMonth() + 1,
-    cursor.getUTCDate(),
-    hour ?? parts.hour,
-    minute ?? parts.minute,
-  )
-}
-
-function firstBusinessDayOfMonth(year: number, month: number, hour: number, minute: number) {
-  const cursor = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0))
-  while (cursor.getUTCDay() === 0 || cursor.getUTCDay() === 6) {
-    cursor.setUTCDate(cursor.getUTCDate() + 1)
-  }
-  return localEpoch(
-    cursor.getUTCFullYear(),
-    cursor.getUTCMonth() + 1,
-    cursor.getUTCDate(),
-    hour,
-    minute,
-  )
-}
-
-function projectNextFutureTime(time: number, timeframe: ChartTimeframe) {
-  const intradayMinutes = INTRADAY_MINUTES[timeframe]
-  const parts = localParts(time)
-
-  if (intradayMinutes) {
-    const currentMinutes = parts.hour * 60 + parts.minute
-    const nextMinutes = currentMinutes + intradayMinutes
-    const morningEnd = 11 * 60 + 30
-    const afternoonStart = 13 * 60
-    const marketClose = 15 * 60
-
-    if (currentMinutes < morningEnd) {
-      if (nextMinutes < morningEnd) {
-        return localEpoch(parts.year, parts.month, parts.day, Math.floor(nextMinutes / 60), nextMinutes % 60)
-      }
-      return localEpoch(parts.year, parts.month, parts.day, 13, 0)
-    }
-
-    if (currentMinutes >= afternoonStart && currentMinutes < marketClose) {
-      if (nextMinutes < marketClose) {
-        return localEpoch(parts.year, parts.month, parts.day, Math.floor(nextMinutes / 60), nextMinutes % 60)
-      }
-      return nextBusinessDay(time, 1, 9, 0)
-    }
-
-    return nextBusinessDay(time, 1, 9, 0)
-  }
-
-  if (timeframe === "1D") return nextBusinessDay(time, 1)
-  if (timeframe === "3D") return nextBusinessDay(time, 3)
-  if (timeframe === "1W") return time + 7 * 86400
-
-  if (timeframe === "1M" || timeframe === "1Q") {
-    const monthsToAdd = timeframe === "1M" ? 1 : 3
-    const nextMonthDate = new Date(Date.UTC(parts.year, parts.month - 1 + monthsToAdd, 1, 0, 0, 0))
-    return firstBusinessDayOfMonth(
-      nextMonthDate.getUTCFullYear(),
-      nextMonthDate.getUTCMonth() + 1,
-      parts.hour,
-      parts.minute,
-    )
-  }
-
-  return firstBusinessDayOfMonth(parts.year + 1, 1, parts.hour, parts.minute)
-}
-
-function projectFutureTimes(lastTime: number, timeframe: ChartTimeframe, count: number) {
-  const result: number[] = []
-  let cursor = lastTime
-  for (let i = 0; i < count; i += 1) {
-    cursor = projectNextFutureTime(cursor, timeframe)
-    result.push(cursor)
-  }
-  return result
-}
-
-function formatTimelineLabel(time: number, timeframe: ChartTimeframe) {
-  const d = new Date(time * 1000)
-  if (timeframe.includes("m") || timeframe.includes("h")) {
-    return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
-  }
-  if (timeframe === "1D" || timeframe === "3D" || timeframe === "1W") {
-    return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}`
-  }
-  return `${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`
-}
 
 function formatCompactVolume(volume: number | null | undefined) {
   if (typeof volume !== "number" || !Number.isFinite(volume)) return "—"
@@ -471,14 +347,14 @@ export function StockTradingViewChart({
         ? visibleBars[slotIndex]?.time
         : futureTimes[slotIndex - visibleBars.length]
       if (!time) continue
-      ticks.push({ index: slotIndex, time, label: formatTimelineLabel(time, timeframe) })
+      ticks.push({ index: slotIndex, time, label: formatFutureTimelineLabel(time, timeframe) })
     }
 
     const finalTime = rightOffsetBars > 0
       ? futureTimes[rightOffsetBars - 1]
       : visibleBars.at(-1)?.time
     if (finalTime && ticks.at(-1)?.index !== lastSlotIndex) {
-      ticks.push({ index: lastSlotIndex, time: finalTime, label: formatTimelineLabel(finalTime, timeframe) })
+      ticks.push({ index: lastSlotIndex, time: finalTime, label: formatFutureTimelineLabel(finalTime, timeframe) })
     }
 
     return ticks
