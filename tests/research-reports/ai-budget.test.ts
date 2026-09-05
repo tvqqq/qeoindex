@@ -133,6 +133,43 @@ test("QEO-85 accumulates confirmed provider cost without counting reservations a
   assert.equal(budget.snapshot().requestAttempts, 2)
 })
 
+test("QEO-85 restores cumulative budget state across durable report steps", () => {
+  const firstStepBudget = createResearchReportAiBudget({
+    maxRequestAttempts: 20,
+    maxEstimatedCostUsd: 1,
+  })
+  firstStepBudget.beforeRequest({ reservedCostUsd: 0.2 })
+  firstStepBudget.recordResponseCost(0.35)
+  firstStepBudget.recordUnknownUsage()
+
+  const restored = createResearchReportAiBudget({ initialSnapshot: firstStepBudget.snapshot() })
+  assert.deepEqual(restored.snapshot(), firstStepBudget.snapshot())
+
+  restored.recordResponseCost(0.64)
+  assert.throws(
+    () => restored.beforeRequest({ reservedCostUsd: 0.02 }),
+    (error: unknown) => error instanceof ResearchReportBudgetExceededError
+      && error.reason === "estimated_cost_limit",
+  )
+  assert.equal(restored.snapshot().requestAttempts, 1)
+  assert.equal(restored.snapshot().unknownUsageAttempts, 1)
+  assert.equal(restored.snapshot().estimatedCostUsd, 0.99)
+})
+
+test("QEO-85 rejects snapshot rehydration when configured limits do not match durable evidence", () => {
+  const original = createResearchReportAiBudget({ maxRequestAttempts: 20, maxEstimatedCostUsd: 1 })
+  original.beforeRequest({ reservedCostUsd: 0.1 })
+
+  assert.throws(
+    () => createResearchReportAiBudget({
+      maxRequestAttempts: 10,
+      maxEstimatedCostUsd: 1,
+      initialSnapshot: original.snapshot(),
+    }),
+    /budget snapshot limits do not match/i,
+  )
+})
+
 test("QEO-85 blocks fallback before provider dispatch when request-attempt budget is exhausted", async () => {
   await withOpenAiKey(async () => {
     const budget = createResearchReportAiBudget({ maxRequestAttempts: 1, maxEstimatedCostUsd: 1 })
