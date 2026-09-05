@@ -4,6 +4,7 @@ import test from "node:test"
 
 import {
   chartHistoryClass,
+  chartHotRetentionCutoff,
   clampChartHistoryRange,
   maxChartHistorySeconds,
 } from "../modules/market/chart-data/history-policy.ts"
@@ -43,52 +44,57 @@ test("QEO-100 history clamp never expands a request and clamps only short/mid lo
   const to = 2_000_000_000
   const short = clampChartHistoryRange({ resolution: "15m", from: to - 60 * DAY, to, now: to + DAY })
   assert.deepEqual(short, { from: to - 31 * DAY, to, clamped: true })
-
   const mid = clampChartHistoryRange({ resolution: "4h", from: to - 500 * DAY, to, now: to + DAY })
   assert.deepEqual(mid, { from: to - 366 * DAY, to, clamped: true })
-
   const long = clampChartHistoryRange({ resolution: "1D", from: 1_000_000_000, to, now: to + DAY })
   assert.deepEqual(long, { from: 1_000_000_000, to, clamped: false })
-
   const alreadyNarrow = clampChartHistoryRange({ resolution: "1m", from: to - 3 * DAY, to, now: to + DAY })
   assert.deepEqual(alreadyNarrow, { from: to - 3 * DAY, to, clamped: false })
 })
 
+test("QEO-103 hot retention cutoff keeps complete Vietnam calendar dates", () => {
+  const referenceAt = new Date("2026-09-05T12:34:00+07:00")
+  assert.equal(new Date(chartHotRetentionCutoff(referenceAt) * 1000).toISOString(), "2026-08-06T17:00:00.000Z")
+})
+
+test("QEO-103 hourly read path uses derived cache for old history and raw 1m only for recent history", () => {
+  const service = source("modules/market/chart-data/timeframe-service.ts")
+  assert.match(service, /readDerivedHourlyRange/)
+  assert.match(service, /chartHotRetentionCutoff/)
+  assert.match(service, /const oldTo = Math\.min\(request\.to, hotCutoff - 1\)/)
+  assert.match(service, /const recentFrom = Math\.max\(sourceRange\.from, hotCutoff\)/)
+  assert.match(service, /aggregateChartTimeframe\(mergeBars\(recentResults\), "1h"\)/)
+  assert.match(service, /request\.resolution === "1h" \? mergedHourly : aggregateChartTimeframe\(mergedHourly, request\.resolution\)/)
+  assert.doesNotMatch(service, /readIntersectingRange/)
+})
+
+test("QEO-103 archive is cache-before-prune and prune authority is manifest verified", () => {
+  const lifecycle = source("modules/market/chart-data/archive-lifecycle.ts")
+  const hotStore = source("modules/market/chart-data/hot-store.ts")
+  const migration = source("supabase/migrations/20260905115319_qeo103_chart_storage_lifecycle.sql")
+  assert.match(lifecycle, /upsertDerivedHourlyBars/)
+  assert.match(lifecycle, /pruneVerifiedHotIntradayPartition/)
+  assert.ok(lifecycle.indexOf("upsertDerivedHourlyBars") < lifecycle.lastIndexOf("pruneVerifiedHotIntradayPartition"))
+  assert.match(hotStore, /qeo_prune_verified_chart_intraday_partition/)
+  assert.match(migration, /chart_ohlcv_derived_hourly/)
+  assert.match(migration, /derived hourly cache missing for manifest/)
+  assert.match(migration, /hot row-count mismatch before prune/)
+  assert.doesNotMatch(migration, /CASCADE/i)
+})
+
 test("QEO-100 incomplete stored coverage backfills the missing head instead of trusting lastStored", () => {
-  assert.deepEqual(
-    missingProviderRanges(
-      { from: 100, to: 1_000 },
-      [{ from: 700, to: 1_000 }],
-    ),
-    [{ from: 100, to: 700 }],
-  )
-
-  assert.deepEqual(
-    missingProviderRanges(
-      { from: 100, to: 1_000 },
-      [{ from: 100, to: 400 }, { from: 700, to: 1_000 }],
-    ),
-    [{ from: 400, to: 700 }],
-  )
-
-  assert.deepEqual(
-    missingProviderRanges(
-      { from: 100, to: 1_000 },
-      [{ from: 700, to: 1_000 }, { from: 100, to: 750 }],
-    ),
-    [],
-  )
+  assert.deepEqual(missingProviderRanges({ from: 100, to: 1_000 }, [{ from: 700, to: 1_000 }]), [{ from: 100, to: 700 }])
+  assert.deepEqual(missingProviderRanges({ from: 100, to: 1_000 }, [{ from: 100, to: 400 }, { from: 700, to: 1_000 }]), [{ from: 400, to: 700 }])
+  assert.deepEqual(missingProviderRanges({ from: 100, to: 1_000 }, [{ from: 700, to: 1_000 }, { from: 100, to: 750 }]), [])
 })
 
 test("QEO-100 1m loadOlder progressively hydrates the bounded horizon independent of gestures", () => {
   const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
   const hook = source("components/stock-detail/chart/use-chart-history.ts")
-
   assert.match(wrapper, /timeframe !== "1m" \|\| loading \|\| loadingOlder \|\| !hasMore/)
   assert.match(wrapper, /void loadOlder\(\)/)
   assert.match(wrapper, /if \(timeframe === "1m"\) return/)
   assert.match(wrapper, /timeframe !== "1m" && event\.deltaY > 0/)
-
   assert.match(hook, /historyCursorRef/)
   assert.match(hook, /historyCursorRef\.current = range\.from/)
   assert.match(hook, /olderChartHistoryRange\(timeframe, cursor, horizonTo\)/)
@@ -98,28 +104,15 @@ test("QEO-100 1m loadOlder progressively hydrates the bounded horizon independen
 
 test("QEO-100 provider benchmark contract includes SSI iBoard first and bounded canonical resolutions", () => {
   assert.deepEqual(MARKET_DATA_PROBE_PROVIDERS, ["SSI_IBOARD", "DNSE", "VCI", "KBS"])
-  assert.deepEqual(
-    normalizeProbeRequest({ ticker: " vic ", resolution: "1m", from: 1_788_480_000, to: 1_788_566_400 }),
-    { ticker: "VIC", resolution: "1m", from: 1_788_480_000, to: 1_788_566_400 },
-  )
+  assert.deepEqual(normalizeProbeRequest({ ticker: " vic ", resolution: "1m", from: 1_788_480_000, to: 1_788_566_400 }), { ticker: "VIC", resolution: "1m", from: 1_788_480_000, to: 1_788_566_400 })
   assert.throws(() => normalizeProbeRequest({ ticker: "VIC", resolution: "15m" as never, from: 1, to: 2 }))
 })
 
 test("QEO-100 SSI iBoard parser normalizes UDF envelope and clips requested range", () => {
   const result = parseSsiIboardPayload({
-    code: "SUCCESS",
-    status: "ok",
-    data: {
-      s: "ok",
-      t: [90, 100, 160, 220],
-      o: [9, 10, 11, 12],
-      h: [10, 12, 13, 13],
-      l: [8, 9, 10, 11],
-      c: [9.5, 11, 12, 12.5],
-      v: [90, 100, 200, 300],
-    },
+    code: "SUCCESS", status: "ok",
+    data: { s: "ok", t: [90, 100, 160, 220], o: [9, 10, 11, 12], h: [10, 12, 13, 13], l: [8, 9, 10, 11], c: [9.5, 11, 12, 12.5], v: [90, 100, 200, 300] },
   }, { ticker: "VIC", resolution: "1m", from: 100, to: 200 })
-
   assert.deepEqual(result.map((bar) => bar.time), [100, 160])
   assert.equal(result[0].open, 10)
   assert.equal(result[1].volume, 200)
@@ -129,11 +122,7 @@ test("QEO-100 SSI iBoard parser normalizes UDF envelope and clips requested rang
 
 test("QEO-100 SSI iBoard parser rejects misaligned arrays as MALFORMED_RESPONSE", () => {
   assert.throws(
-    () => parseSsiIboardPayload({
-      code: "SUCCESS",
-      status: "ok",
-      data: { s: "ok", t: [100, 160], o: [1], h: [2, 2], l: [1, 1], c: [2, 2], v: [10, 20] },
-    }, { ticker: "VIC", resolution: "1m", from: 100, to: 200 }),
+    () => parseSsiIboardPayload({ code: "SUCCESS", status: "ok", data: { s: "ok", t: [100, 160], o: [1], h: [2, 2], l: [1, 1], c: [2, 2], v: [10, 20] } }, { ticker: "VIC", resolution: "1m", from: 100, to: 200 }),
     (error: unknown) => error instanceof ProviderProbeError && error.errorClass === "MALFORMED_RESPONSE",
   )
 })
