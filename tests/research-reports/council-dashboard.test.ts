@@ -36,7 +36,7 @@ test("QEO-86 historical related reports hydrate ticker stance from frozen ticker
   const data = source("modules/ai-council/debate-data.ts")
 
   assert.match(data, /report\.tickerMention/)
-  assert.match(data, /tickerMention.*stance/s)
+  assert.match(data, /tickerMention[\s\S]*stance/)
   assert.doesNotMatch(data, /report\.tickerEvidence/)
 })
 
