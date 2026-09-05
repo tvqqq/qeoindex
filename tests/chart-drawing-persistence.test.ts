@@ -172,6 +172,16 @@ test("useUserChartSync carries unresolved legacy drawings into every V2 save pay
   assert.match(code, /unresolvedLegacyDrawings:\s*unresolvedLegacyDrawingsRef\.current/)
 })
 
+test("new runtime drawings retain their creation timeframe across later timeframe saves", () => {
+  const code = readFileSync(
+    new URL("../components/stock-detail/chart/use-user-chart-sync.ts", import.meta.url),
+    "utf8",
+  )
+
+  assert.match(code, /sourceTimeframe:\s*runtimeDrawing\.sourceTimeframe\s*\?\?\s*timeframe/)
+  assert.match(code, /visibility:\s*runtimeDrawing\.visibility\s*\?\?\s*"global"/)
+})
+
 test("Rapid save queue simulation ensures latest revision wins without overlapping requests", async () => {
   // Simulates the coalesced queue behavior in useUserChartSync
   let inFlight = false
