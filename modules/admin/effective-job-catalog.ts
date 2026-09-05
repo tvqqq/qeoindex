@@ -36,6 +36,38 @@ const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
   maxDurationMinutes: 90,
 }
 
+const RESEARCH_REPORTS_DAILY_JOB: AdminJobDefinition = {
+  key: "research_reports.daily",
+  provider: "supabase_pg_cron",
+  label: "Research Reports Daily",
+  description: "07:05 ICT daily TOPI discovery, PDF parsing, bounded AI analysis, atomic publish, and durable report-level telemetry.",
+  group: "provider",
+  scheduleUtc: "5 0 * * *",
+  scheduleIct: "07:05 hàng ngày",
+  scheduleKind: "workflow",
+  schedulerName: "research-reports-daily-0705-ict",
+  scheduleDays: "daily",
+  evidenceSource: "system_job_runs",
+  manualPolicy: "disabled",
+  freshnessMinutes: 26 * 60,
+  maxDurationMinutes: 90,
+}
+
+const RESEARCH_REPORTS_BACKFILL_JOB: AdminJobDefinition = {
+  key: "research_reports.backfill",
+  provider: "manual",
+  label: "Research Reports Backfill",
+  description: "Root Admin recovery/backfill for a bounded report date range. Uses the same hash identity, pre-AI lease, 20-request/$1 budget, and durable telemetry as the daily workflow.",
+  group: "provider",
+  scheduleKind: "manual",
+  evidenceSource: "system_job_runs",
+  manualPolicy: "confirm",
+  manualPurpose: "recovery",
+  automatedParentKeys: [],
+  freshnessMinutes: 7 * 24 * 60,
+  maxDurationMinutes: 90,
+}
+
 const LEGACY_EOD_JOB_KEYS = new Set([
   "qeoindex.eod_pipeline",
   "ai_council.daily",
@@ -162,9 +194,13 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
  * Market EOD action is retained only as disabled historical/maintenance
  * evidence because final market-close collection must preserve EOD frozen
  * lineage. Historical scheduler aliases remain readable via job-schedule.ts.
+ * QEO-85 adds a separate 07:05 daily Research Reports scheduler plus a manual
+ * confirmed backfill lane; neither overlaps EOD market-session ownership.
  */
 export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
   withSchedulePolicy(QEOINDEX_EOD_PIPELINE_JOB),
+  withSchedulePolicy(RESEARCH_REPORTS_DAILY_JOB),
+  withSchedulePolicy(RESEARCH_REPORTS_BACKFILL_JOB),
   ...ADMIN_JOB_CATALOG
     .filter((job) => !LEGACY_EOD_JOB_KEYS.has(job.key))
     .map(applyOperationalOverrides),
