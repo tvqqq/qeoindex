@@ -3,7 +3,8 @@ import "server-only"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { StockDetailData, StockWatchlistItem } from "@/components/stock-detail/types"
 import type { AiCouncilHistoryEntry } from "@/modules/ai-council/data"
-import { getAiCouncilRuntimeData } from "@/modules/ai-council/runtime"
+import { getAiCouncilRuntimeData, type AiCouncilRuntimeData } from "@/modules/ai-council/runtime"
+import { getChartOhlcv } from "@/modules/market/chart-data/timeframe-service"
 import { FA_SCREEN_ROWS } from "@/modules/research/fa-screen-data"
 import { buildMultiTimeframeStudies } from "@/modules/research/multi-timeframe"
 import {
@@ -12,6 +13,7 @@ import {
   getCachedResearchData,
   getCachedScannerData,
 } from "@/modules/shared/cache/request-cache"
+import { readThroughUiCache } from "@/modules/shared/cache/ui-data-cache"
 import { getInsightsRatingForTicker, type InsightsRatingRow } from "@/modules/research/insights/data"
 
 export const VN_TOP_COMPANY_NAMES: Record<string, string> = {
@@ -126,6 +128,38 @@ function normalizeOutcomeStatus(value: string): NonNullable<AiCouncilHistoryEntr
   return value === "partial" || value === "matured" || value === "unavailable" ? value : "pending"
 }
 
+function isAiCouncilRuntimeData(value: unknown): value is AiCouncilRuntimeData {
+  if (!value || typeof value !== "object") return false
+  const runtime = value as { data?: { generatedAt?: unknown; stocks?: unknown } }
+  return typeof runtime.data?.generatedAt === "string" && Array.isArray(runtime.data?.stocks)
+}
+
+async function getStockDetailCouncilRuntime(supabase: SupabaseClient) {
+  return readThroughUiCache({
+    namespace: "stock-detail-ai-council-v1",
+    key: "current",
+    tag: "qeoindex-stock-detail-ai-council-v1",
+    name: "QeoIndex stock-detail AI Council runtime",
+    ttlSeconds: 5 * 60,
+    validate: isAiCouncilRuntimeData,
+    load: () => getAiCouncilRuntimeData(supabase, { includeHistory: false, includePromptEvidence: false }),
+  })
+}
+
+async function getCanonicalDailySeed(supabase: SupabaseClient, ticker: string) {
+  const to = Math.floor(Date.now() / 1000)
+  const from = to - 620 * 24 * 60 * 60
+  const result = await getChartOhlcv(
+    { supabase },
+    { ticker, resolution: "1D", from, to },
+  )
+  return {
+    bars: result.bars,
+    provider: result.metadata?.provider ?? "CANONICAL_DAILY",
+    detail: "Supabase market_ohlcv_history · canonical 1D seed",
+  }
+}
+
 async function getTickerAiCouncilHistory(
   supabase: SupabaseClient,
   ticker: string,
@@ -211,7 +245,7 @@ export async function fetchStockDetailData(
   }
 
   const councilRuntimePromise = supabase
-    ? getAiCouncilRuntimeData(supabase, { includeHistory: false, includePromptEvidence: false }).catch(() => null)
+    ? getStockDetailCouncilRuntime(supabase).catch(() => null)
     : Promise.resolve(null)
   const aiHistoryPromise = supabase
     ? getTickerAiCouncilHistory(supabase, decoded).catch(() => [] as AiCouncilHistoryEntry[])
@@ -219,13 +253,20 @@ export async function fetchStockDetailData(
   const ratingRowPromise = supabase
     ? getInsightsRatingForTicker(supabase, decoded).catch(() => null)
     : Promise.resolve(null)
+  const dailyHistoryPromise = supabase
+    ? getCanonicalDailySeed(supabase, decoded).catch(() => ({ bars: [], provider: "CANONICAL_DAILY", detail: "Canonical Daily storage unavailable" }))
+    : getCachedDailyHistory(decoded)
+  // Stock-detail navigation must not block on external intraday providers. The chart
+  // owns 1H/4H loading through the canonical /api/market/ohlcv path after render.
+  const hourlyHistoryPromise = supabase
+    ? Promise.resolve({ bars: [], provider: "CANONICAL_CHART_API", detail: "1H/4H loaded lazily by /api/market/ohlcv" })
+    : getCachedHourlyHistory(decoded)
 
-  // All independent stock-detail reads start together. AI Council history is scoped to this ticker.
   const [researchData, scannerData, dailyHistory, hourlyHistory, councilRuntime, aiHistory, loadedRatingRow] = await Promise.all([
     getCachedResearchData(),
     getCachedScannerData(),
-    getCachedDailyHistory(decoded),
-    getCachedHourlyHistory(decoded),
+    dailyHistoryPromise,
+    hourlyHistoryPromise,
     councilRuntimePromise,
     aiHistoryPromise,
     ratingRowPromise,
@@ -262,7 +303,6 @@ export async function fetchStockDetailData(
   const roe = fa?.roe ?? null
   const eps = pe && price ? Math.round(price / pe) : null
 
-  // Build watchlist from top scanner and FA stocks
   const scanRows = Object.values(scannerData.latestScans)
   const watchlist: StockWatchlistItem[] = (
     scanRows.length > 0 ? scanRows.slice(0, 30) : FA_SCREEN_ROWS.slice(0, 30)
@@ -281,7 +321,6 @@ export async function fetchStockDetailData(
     }
   })
 
-  // Ensure current ticker is in watchlist
   if (!watchlist.some((w) => w.ticker === decoded)) {
     watchlist.unshift({
       ticker: decoded,
