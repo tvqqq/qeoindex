@@ -10,6 +10,7 @@ import {
   mergeChartBars,
   olderChartHistoryRange,
   requestChartRange,
+  requestFreshChartRange,
   type ChartHistoryResponse,
 } from "./chart-history"
 
@@ -81,11 +82,16 @@ export function useChartHistory({ ticker, timeframe, seedDailyBars = [] }: UseCh
     setLiveProvider(null)
     setLastUpdatedAt(null)
 
-    const to = Math.floor(Date.now() / 1000)
+    const now = new Date()
+    const to = Math.floor(now.getTime() / 1000)
     horizonToRef.current = to
     const range = initialChartHistoryRange(timeframe, to)
+    const session = getMarketSessionStatus(now)
+    const initialRequest = LIVE_TIMEFRAMES.has(timeframe) && session.isLiveSession
+      ? requestFreshChartRange({ ticker, timeframe, ...range }, controller.signal)
+      : requestChartRange({ ticker, timeframe, ...range }, controller.signal)
 
-    void requestChartRange({ ticker, timeframe, ...range }, controller.signal)
+    void initialRequest
       .then((result) => {
         if (generationRef.current !== generation) return
         let mergedBars: OhlcvBar[] = []
@@ -134,7 +140,7 @@ export function useChartHistory({ ticker, timeframe, seedDailyBars = [] }: UseCh
 
       liveRequestRef.current = true
       try {
-        const result = await requestChartRange({ ticker, timeframe, from, to })
+        const result = await requestFreshChartRange({ ticker, timeframe, from, to })
         if (generationRef.current !== generation) return
         setBars((current) => {
           const mergedBars = mergeChartBars(current, result.bars)
