@@ -116,6 +116,9 @@ create table if not exists public.market_research_report_chunks (
   page_number integer not null check (page_number > 0),
   chunk_index integer not null check (chunk_index >= 0),
   content text not null,
+  search_vector tsvector generated always as (
+    to_tsvector('simple'::regconfig, coalesce(content, ''))
+  ) stored,
   chunk_hash text not null check (chunk_hash ~ '^[0-9a-f]{64}$'),
   created_at timestamptz not null default now(),
   unique (report_id, content_hash, chunk_version, page_number, chunk_index)
@@ -125,6 +128,8 @@ create index if not exists market_research_report_chunks_report_page_idx
   on public.market_research_report_chunks(report_id, page_number, chunk_index);
 create index if not exists market_research_report_chunks_hash_idx
   on public.market_research_report_chunks(content_hash, chunk_hash);
+create index if not exists market_research_report_chunks_search_idx
+  on public.market_research_report_chunks using gin(search_vector);
 
 alter table public.market_research_reports enable row level security;
 alter table public.market_research_report_analyses enable row level security;
@@ -394,6 +399,58 @@ $$;
 revoke all on function public.qeo_publish_research_report_analysis(uuid, text, jsonb, jsonb, jsonb)
 from public, anon, authenticated;
 grant execute on function public.qeo_publish_research_report_analysis(uuid, text, jsonb, jsonb, jsonb)
+to service_role;
+
+create or replace function public.qeo_search_research_report_chunks(
+  p_report_id uuid,
+  p_content_hash text,
+  p_chunk_version text,
+  p_query text,
+  p_limit integer default 8
+) returns table (
+  id uuid,
+  report_id uuid,
+  content_hash text,
+  chunk_version text,
+  page_number integer,
+  chunk_index integer,
+  content text,
+  rank real
+)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  with query_input as (
+    select websearch_to_tsquery(
+      'simple'::regconfig,
+      left(trim(coalesce(p_query, '')), 4000)
+    ) as q
+  )
+  select
+    c.id,
+    c.report_id,
+    c.content_hash,
+    c.chunk_version,
+    c.page_number,
+    c.chunk_index,
+    c.content,
+    ts_rank_cd(c.search_vector, query_input.q)::real as rank
+  from public.market_research_report_chunks c
+  cross join query_input
+  where c.report_id = p_report_id
+    and c.content_hash = p_content_hash
+    and c.chunk_version = p_chunk_version
+    and trim(coalesce(p_query, '')) <> ''
+    and c.search_vector @@ query_input.q
+  order by rank desc, c.page_number asc, c.chunk_index asc, c.id asc
+  limit least(greatest(coalesce(p_limit, 8), 1), 8);
+$$;
+
+revoke all on function public.qeo_search_research_report_chunks(uuid, text, text, text, integer)
+from public, anon, authenticated;
+grant execute on function public.qeo_search_research_report_chunks(uuid, text, text, text, integer)
 to service_role;
 
 commit;

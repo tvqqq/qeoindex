@@ -10,6 +10,15 @@ export type {
   ResearchReportProcessingClient,
   ResearchReportProcessingDependencies,
 } from "./analysis/pipeline.ts"
+export { answerResearchReportQuestion, ResearchReportQaError } from "./qa/service.ts"
+export type {
+  ResearchReportQaCitation,
+  ResearchReportQaResult,
+} from "./qa/service.ts"
+export type {
+  ResearchReportQaAudit,
+  ResearchReportQaTurn,
+} from "./qa/types.ts"
 export { toResearchReportUpsertRow, upsertResearchReports } from "./repository.ts"
 export type {
   ProcessResearchReportResult,
