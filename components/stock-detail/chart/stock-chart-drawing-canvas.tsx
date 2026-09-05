@@ -45,6 +45,10 @@ function createDrawingId(): string {
   return `draw-${drawingSequence}`
 }
 
+function roundCoordinate(value: number): number {
+  return Math.round(value * 10) / 10
+}
+
 export function StockChartDrawingCanvas({
   width,
   height,
@@ -102,24 +106,45 @@ export function StockChartDrawingCanvas({
 
   if (isHidden) return null
 
+  const createRuntimePoint = (
+    x: number,
+    y: number,
+    fallback?: DrawingPoint,
+  ): DrawingPoint => {
+    const px = roundCoordinate(x)
+    const py = roundCoordinate(y)
+    const next: DrawingPoint = { x: px, y: py }
+
+    const convertedTime = xToTime?.(px)
+    if (typeof convertedTime === "number" && Number.isFinite(convertedTime)) {
+      next.time = convertedTime
+    } else if (fallback?.time !== undefined && Number.isFinite(fallback.time)) {
+      next.time = fallback.time
+    }
+
+    const convertedPrice = yToPrice?.(py)
+    if (typeof convertedPrice === "number" && Number.isFinite(convertedPrice)) {
+      next.price = convertedPrice
+    } else if (fallback?.price !== undefined && Number.isFinite(fallback.price)) {
+      next.price = fallback.price
+    }
+
+    return next
+  }
+
   // Coordinate transforms
   const getSvgCoordinates = (e: React.MouseEvent): DrawingPoint => {
     const svg = svgRef.current
     if (!svg) return { x: 0, y: 0 }
     const rect = svg.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return { x: 0, y: 0 }
     const x = ((e.clientX - rect.left) / rect.width) * width
     const y = ((e.clientY - rect.top) / rect.height) * height
-    const px = Math.round(x * 10) / 10
-    const py = Math.round(y * 10) / 10
-    return {
-      x: px,
-      y: py,
-      price: yToPrice ? yToPrice(py) : undefined,
-      time: xToTime ? xToTime(px) : undefined,
-    }
+    return createRuntimePoint(x, y)
   }
 
-  // Convert point time/price to current screen coordinates if available
+  // Convert point time/price to current screen coordinates if available.
+  // Canonical market coordinates always win over stale runtime x/y values.
   const resolvePoint = (pt: DrawingPoint): { x: number; y: number } => {
     let x = pt.x
     let y = pt.y
@@ -132,6 +157,29 @@ export function StockChartDrawingCanvas({
       if (Number.isFinite(computedY)) y = computedY
     }
     return { x, y }
+  }
+
+  const resolveRayEnd = (
+    start: { x: number; y: number },
+    directionPoint: { x: number; y: number },
+  ): { x: number; y: number } => {
+    const dx = directionPoint.x - start.x
+    const dy = directionPoint.y - start.y
+    if (Math.abs(dx) < 0.0001 && Math.abs(dy) < 0.0001) return directionPoint
+
+    const candidates: number[] = []
+    if (dx > 0) candidates.push((width - start.x) / dx)
+    if (dx < 0) candidates.push((0 - start.x) / dx)
+    if (dy > 0) candidates.push((height - start.y) / dy)
+    if (dy < 0) candidates.push((0 - start.y) / dy)
+
+    const t = Math.min(...candidates.filter((value) => Number.isFinite(value) && value >= 1))
+    if (!Number.isFinite(t)) return directionPoint
+
+    return {
+      x: start.x + dx * t,
+      y: start.y + dy * t,
+    }
   }
 
   // Mouse Down handler
@@ -155,10 +203,9 @@ export function StockChartDrawingCanvas({
       onAddDrawing({
         id: createDrawingId(),
         tool: "horizontal",
-        points: [
-          { x: 0, y: point.y, price: point.price, time: point.time },
-          { x: width, y: point.y, price: point.price, time: point.time },
-        ],
+        // A horizontal line only needs one canonical market anchor. Its timestamp
+        // identifies creation context; rendering spans the viewport at the anchor price.
+        points: [point],
         color: activeColor,
         lineWidth,
       })
@@ -213,30 +260,19 @@ export function StockChartDrawingCanvas({
         // Dragging one endpoint
         const newPoints = dragState.originalPoints.map((p, idx) => {
           if (idx === dragState.handleIndex) {
-            const newX = coords.x
-            const newY = coords.y
-            return {
-              x: newX,
-              y: newY,
-              price: yToPrice ? yToPrice(newY) : undefined,
-              time: xToTime ? xToTime(newX) : undefined,
-            }
+            return createRuntimePoint(coords.x, coords.y, p)
           }
           return p
         })
         onUpdateDrawing(dragState.drawingId, { points: newPoints })
       } else {
-        // Dragging entire shape
+        // Dragging entire shape. Horizontal lines retain their timestamp because
+        // only the price dimension is meaningful for viewport-wide rendering.
         const newPoints = dragState.originalPoints.map((p) => {
           const resolved = resolvePoint(p)
-          const newX = resolved.x + dx
+          const newX = targetDraw.tool === "horizontal" ? resolved.x : resolved.x + dx
           const newY = resolved.y + dy
-          return {
-            x: newX,
-            y: newY,
-            price: yToPrice ? yToPrice(newY) : undefined,
-            time: xToTime ? xToTime(newX) : undefined,
-          }
+          return createRuntimePoint(newX, newY, p)
         })
         onUpdateDrawing(dragState.drawingId, { points: newPoints })
       }
@@ -345,6 +381,13 @@ export function StockChartDrawingCanvas({
 
           const p1 = resolvePoint(rawP1)
           const p2 = resolvePoint(rawP2)
+          const lineEnd =
+            draw.tool === "horizontal"
+              ? { x: width, y: p1.y }
+              : draw.tool === "ray"
+              ? resolveRayEnd(p1, p2)
+              : p2
+          const lineStart = draw.tool === "horizontal" ? { x: 0, y: p1.y } : p1
           const isSelected = selectedId === draw.id
 
           const handleClickDrawing = (e: React.MouseEvent) => {
@@ -394,25 +437,25 @@ export function StockChartDrawingCanvas({
                   : "",
               )}
             >
-              {/* Trendline / Horizontal */}
-              {(draw.tool === "trendline" || draw.tool === "horizontal") && (
+              {/* Trendline / Horizontal / Ray */}
+              {(draw.tool === "trendline" || draw.tool === "horizontal" || draw.tool === "ray") && (
                 <>
                   {/* Invisible fat hit area for easy clicking */}
                   <line
-                    x1={p1.x}
-                    y1={p1.y}
-                    x2={draw.tool === "horizontal" ? width : p2.x}
-                    y2={draw.tool === "horizontal" ? p1.y : p2.y}
+                    x1={lineStart.x}
+                    y1={lineStart.y}
+                    x2={lineEnd.x}
+                    y2={lineEnd.y}
                     stroke="transparent"
                     strokeWidth={Math.max(12, draw.lineWidth + 8)}
                   />
                   {/* Selection glow if selected */}
                   {isSelected && (
                     <line
-                      x1={p1.x}
-                      y1={p1.y}
-                      x2={draw.tool === "horizontal" ? width : p2.x}
-                      y2={draw.tool === "horizontal" ? p1.y : p2.y}
+                      x1={lineStart.x}
+                      y1={lineStart.y}
+                      x2={lineEnd.x}
+                      y2={lineEnd.y}
                       stroke="#00f0ff"
                       strokeWidth={draw.lineWidth + 4}
                       strokeOpacity="0.4"
@@ -420,10 +463,10 @@ export function StockChartDrawingCanvas({
                     />
                   )}
                   <line
-                    x1={p1.x}
-                    y1={p1.y}
-                    x2={draw.tool === "horizontal" ? width : p2.x}
-                    y2={draw.tool === "horizontal" ? p1.y : p2.y}
+                    x1={lineStart.x}
+                    y1={lineStart.y}
+                    x2={lineEnd.x}
+                    y2={lineEnd.y}
                     stroke={draw.color}
                     strokeWidth={draw.lineWidth}
                     strokeLinecap="round"
@@ -607,6 +650,20 @@ export function StockChartDrawingCanvas({
                 strokeDasharray="4 4"
               />
             )}
+            {activeTool === "ray" && (() => {
+              const rayEnd = resolveRayEnd(currentStart, currentEnd)
+              return (
+                <line
+                  x1={currentStart.x}
+                  y1={currentStart.y}
+                  x2={rayEnd.x}
+                  y2={rayEnd.y}
+                  stroke={activeColor}
+                  strokeWidth={lineWidth}
+                  strokeDasharray="4 4"
+                />
+              )
+            })()}
             {activeTool === "arrow" && (
               <line
                 x1={currentStart.x}
