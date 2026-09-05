@@ -17,6 +17,23 @@ export function calculateSma(bars: OhlcvBar[], period: number): Array<number | n
 }
 
 /**
+ * Calculate simple moving average for volume. Kept separate from price SMA so
+ * callers never accidentally mix close-price and volume semantics.
+ */
+export function calculateVolumeSma(bars: OhlcvBar[], period = 20): Array<number | null> {
+  const result: Array<number | null> = Array(bars.length).fill(null)
+  if (bars.length < period || !Number.isInteger(period) || period <= 0) return result
+
+  let sum = 0
+  for (let i = 0; i < bars.length; i += 1) {
+    sum += bars[i].volume
+    if (i >= period) sum -= bars[i - period].volume
+    if (i >= period - 1) result[i] = sum / period
+  }
+  return result
+}
+
+/**
  * Calculate Exponential Moving Average (EMA) series
  */
 export function calculateEma(values: (number | null)[], period: number): Array<number | null> {
@@ -121,15 +138,16 @@ export const ICHIMOKU_DISPLACEMENT = 26
 
 /**
  * Calculate Ichimoku Kinko Hyo (9, 26, 52).
- * Senkou spans are displaced 26 bars forward and Chikou is displaced 26 bars
- * backward in the returned arrays so index alignment matches rendered time.
+ * Senkou spans are displaced 26 bars forward and therefore intentionally
+ * extend 26 logical slots beyond the last real candle. Tenkan/Kijun/Chikou
+ * remain aligned to the real OHLCV input length.
  */
 export function calculateIchimokuSeries(bars: OhlcvBar[]) {
   const n = bars.length
   const tenkan: Array<number | null> = Array(n).fill(null)
   const kijun: Array<number | null> = Array(n).fill(null)
-  const spanA: Array<number | null> = Array(n).fill(null)
-  const spanB: Array<number | null> = Array(n).fill(null)
+  const spanA: Array<number | null> = Array(n + ICHIMOKU_DISPLACEMENT).fill(null)
+  const spanB: Array<number | null> = Array(n + ICHIMOKU_DISPLACEMENT).fill(null)
   const chikou: Array<number | null> = Array(n).fill(null)
 
   const hlAvg = (startIdx: number, count: number) => {
@@ -152,7 +170,6 @@ export function calculateIchimokuSeries(bars: OhlcvBar[]) {
 
   for (let i = 25; i < n; i += 1) {
     const target = i + ICHIMOKU_DISPLACEMENT
-    if (target >= n) break
     if (tenkan[i] != null && kijun[i] != null) {
       spanA[target] = ((tenkan[i] as number) + (kijun[i] as number)) / 2
     }
@@ -160,7 +177,6 @@ export function calculateIchimokuSeries(bars: OhlcvBar[]) {
 
   for (let i = 51; i < n; i += 1) {
     const target = i + ICHIMOKU_DISPLACEMENT
-    if (target >= n) break
     spanB[target] = hlAvg(i - 51, 52)
   }
 

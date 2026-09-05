@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
+import { projectFutureTimes } from "../components/stock-detail/chart/future-timeline.ts"
 import {
   calculateBollingerBands,
   calculateIchimokuSeries,
@@ -8,6 +9,8 @@ import {
   calculateRsiSeries,
   calculateSma,
   calculateVolumeProfile,
+  calculateVolumeSma,
+  ICHIMOKU_DISPLACEMENT,
 } from "../components/stock-detail/chart/stock-chart-indicators.ts"
 import { aggregateBarsByTimeframe } from "../components/stock-detail/chart/stock-chart-timeframes.ts"
 import {
@@ -76,6 +79,11 @@ test("Technical indicators calculate valid series", () => {
   assert.equal(sma20[0], null)
   assert.ok(typeof sma20[30] === "number")
 
+  const volumeMa20 = calculateVolumeSma(mockBars, 20)
+  assert.equal(volumeMa20.length, mockBars.length)
+  assert.equal(volumeMa20[0], null)
+  assert.ok(typeof volumeMa20.at(-1) === "number")
+
   const rsi = calculateRsiSeries(mockBars, 14)
   assert.equal(rsi.length, mockBars.length)
   assert.equal(rsi[0], null)
@@ -90,8 +98,10 @@ test("Technical indicators calculate valid series", () => {
   const ichi = calculateIchimokuSeries(mockBars)
   assert.equal(ichi.tenkan.length, mockBars.length)
   assert.equal(ichi.kijun.length, mockBars.length)
-  assert.equal(ichi.spanA.length, mockBars.length)
-  assert.equal(ichi.spanB.length, mockBars.length)
+  assert.equal(ichi.spanA.length, mockBars.length + ICHIMOKU_DISPLACEMENT)
+  assert.equal(ichi.spanB.length, mockBars.length + ICHIMOKU_DISPLACEMENT)
+  assert.ok(typeof ichi.spanA.at(-1) === "number")
+  assert.ok(typeof ichi.spanB.at(-1) === "number")
 
   const bb = calculateBollingerBands(mockBars, 20, 2)
   assert.equal(bb.upper.length, mockBars.length)
@@ -319,3 +329,13 @@ test("StockTradingViewChart consumes canonical raw 1m from the chart-data API", 
 })
 
 import "./qeo-100-market-data.cases.ts"
+
+
+test("Future chart timeline uses canonical Vietnam securities holidays", () => {
+  const fridayClose = Math.floor(Date.parse("2026-08-28T14:45:00+07:00") / 1000)
+  const [nextIntraday] = projectFutureTimes(fridayClose, "15m", 1)
+  const [nextDaily] = projectFutureTimes(fridayClose, "1D", 1)
+
+  assert.equal(new Date(nextIntraday * 1000).toISOString(), "2026-09-03T02:00:00.000Z")
+  assert.equal(new Date(nextDaily * 1000).toISOString(), "2026-09-03T07:45:00.000Z")
+})
