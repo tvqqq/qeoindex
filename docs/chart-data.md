@@ -73,6 +73,25 @@ hot raw 1m snapshot
 
 The prune RPC refuses deletion when the manifest, checksum, row count, or derived-cache evidence does not match. Any exception rolls back the delete transaction. Daily/Wyckoff history is never touched by this RPC.
 
+### Legacy cold-to-derived recovery
+
+QEO-103 can encounter verified cold manifests created by the earlier archive slice before the derived cache existed. Those manifests are recovered through bounded server-only mode `chart-derived-recovery`.
+
+Recovery order is also fail-closed:
+
+```text
+verified cold manifest
+  -> private object download
+  -> SHA256 + row-count + exact range verification
+  -> deterministic 1h aggregation
+  -> derived cache upsert
+  -> derived OHLCV readback equality verification
+```
+
+Recovery refreshes manifest byte-count evidence after the verified object read. It never reconstructs raw bars from a provider and never writes legacy raw minutes back into hot Postgres.
+
+Until every verified cold manifest intersecting an hourly request has derived evidence, the server reads that old segment directly from verified cold raw storage and aggregates it in memory. This temporary correctness fallback prevents a partial derived backfill from creating missing hourly history. Once manifest coverage is complete, the normal path automatically uses only the derived `1h` cache for old history.
+
 ## Render horizons and read path
 
 | Public timeframe | Maximum history | Normal source path |
@@ -81,9 +100,9 @@ The prune RPC refuses deletion when the manifest, checksum, row count, or derive
 | `1h`, `2h`, `4h` | 366 days | derived `1h` for old history + recent hot raw `1m -> 1h`; then `1h -> 2h/4h` when needed |
 | `1D`, `3D`, `1W`, `1M`, `1Q`, `1Y` | full available | canonical raw `1D` + deterministic Daily-derived aggregation |
 
-The server clamps ranges to these horizons. For `1h/2h/4h`, history older than the hot boundary is read from `chart_ohlcv_derived_hourly`; only the recent hot segment loads canonical raw `1m`. The normal hourly path therefore does not download one year of cold raw objects and does not refill old raw minute bars into Postgres.
+The server clamps ranges to these horizons. For `1h/2h/4h`, history older than the hot boundary normally comes from `chart_ohlcv_derived_hourly`; only the recent hot segment loads canonical raw `1m`. The normal steady-state hourly path therefore does not download one year of cold raw objects and does not refill old raw minute bars into Postgres.
 
-At the hot/derived boundary, recent hot-derived `1h` wins deterministic timestamp dedupe. Missing derived history is reported as partial/storage-unavailable coverage; no synthetic candles are fabricated.
+At the hot/derived boundary, recent hot-derived `1h` wins deterministic timestamp dedupe. During legacy recovery, incomplete derived-manifest coverage selects verified cold raw fallback for the affected old segment rather than returning a partially populated cache. No synthetic candles are fabricated.
 
 ## Provider backfill
 
@@ -106,6 +125,7 @@ Material changes to this subsystem must preserve:
 - deterministic session-aware aggregation;
 - immutable cold archive + checksum/readback verification before prune;
 - derived `1h` as rebuildable non-canonical cache;
+- verified cold fallback while derived-manifest coverage is incomplete;
 - service-role-only fail-closed prune authority;
 - authenticated browser boundary;
 - Daily-only `market_ohlcv_history` invariant;
