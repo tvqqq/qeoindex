@@ -55,7 +55,7 @@ test("report header renders persisted metadata lifecycle and safe source navigat
   assert.match(shell, /report\.analysisStatus/)
   assert.match(shell, /originalSourceLink/)
   assert.match(shell, /originalPdfUrl/)
-  assert.match(shell, />Mở PDF gốc ↗</)
+  assert.match(shell, />\s*Mở PDF gốc ↗\s*</)
   assert.match(shell, /target=["']_blank["']/)
   assert.match(shell, /rel=["']noreferrer noopener["']/)
 })
