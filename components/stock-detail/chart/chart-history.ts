@@ -7,6 +7,9 @@ import {
 import type { ChartTimeframe } from "./stock-chart-types"
 
 const DAY_SECONDS = 86400
+const CLOSED_RANGE_CACHE_TTL_MS = 10 * 60 * 1000
+const CLOSED_RANGE_CACHE_TO_TOLERANCE_SECONDS = 10 * 60
+const CLOSED_RANGE_CACHE_MAX_ENTRIES = 24
 
 const INITIAL_HISTORY_WINDOW_SECONDS: Record<ChartTimeframe, number> = {
   "1m": 5 * DAY_SECONDS,
@@ -55,8 +58,18 @@ export interface ChartRangeInput {
 }
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+type RequestChartRangeOptions = { bypassCache?: boolean }
+type ClosedRangeCacheEntry = {
+  input: ChartRangeInput
+  result: ChartHistoryResponse
+  expiresAt: number
+  lastUsedAt: number
+}
 
 const inFlight = new Map<string, Promise<ChartHistoryResponse>>()
+const closedRangeCache = new Map<string, ClosedRangeCacheEntry>()
+let cacheHits = 0
+let cacheMisses = 0
 
 export function historyWindowSeconds(timeframe: ChartTimeframe) {
   return INITIAL_HISTORY_WINDOW_SECONDS[timeframe]
@@ -90,20 +103,90 @@ function requestKey(input: ChartRangeInput) {
   return `${input.ticker.toUpperCase()}:${input.timeframe}:${input.from}:${input.to}`
 }
 
+function cachePrefix(input: ChartRangeInput) {
+  return `${input.ticker.toUpperCase()}:${input.timeframe}:`
+}
+
+function pruneClosedRangeCache(now: number) {
+  for (const [key, entry] of closedRangeCache) {
+    if (entry.expiresAt <= now) closedRangeCache.delete(key)
+  }
+  if (closedRangeCache.size <= CLOSED_RANGE_CACHE_MAX_ENTRIES) return
+  const oldest = [...closedRangeCache.entries()]
+    .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)
+    .slice(0, closedRangeCache.size - CLOSED_RANGE_CACHE_MAX_ENTRIES)
+  for (const [key] of oldest) closedRangeCache.delete(key)
+}
+
+function cachedRange(input: ChartRangeInput): ChartHistoryResponse | null {
+  const now = Date.now()
+  pruneClosedRangeCache(now)
+  const prefix = cachePrefix(input)
+  let best: ClosedRangeCacheEntry | null = null
+  for (const [key, entry] of closedRangeCache) {
+    if (!key.startsWith(prefix)) continue
+    if (entry.input.from > input.from) continue
+    if (entry.input.to + CLOSED_RANGE_CACHE_TO_TOLERANCE_SECONDS < input.to) continue
+    if (!best || entry.input.from < best.input.from || entry.input.to > best.input.to) best = entry
+  }
+  if (!best) return null
+
+  best.lastUsedAt = now
+  cacheHits += 1
+  return {
+    ...best.result,
+    from: input.from,
+    to: input.to,
+    bars: best.result.bars.filter((bar) => bar.time >= input.from && bar.time <= input.to),
+  }
+}
+
+function rememberClosedRange(input: ChartRangeInput, result: ChartHistoryResponse) {
+  if (result.metadata?.sessionState !== "CLOSED") return
+  const now = Date.now()
+  closedRangeCache.set(requestKey(input), {
+    input: { ...input, ticker: input.ticker.toUpperCase() },
+    result,
+    expiresAt: now + CLOSED_RANGE_CACHE_TTL_MS,
+    lastUsedAt: now,
+  })
+  pruneClosedRangeCache(now)
+}
+
+export function chartHistoryCacheStats() {
+  pruneClosedRangeCache(Date.now())
+  return { entries: closedRangeCache.size, hits: cacheHits, misses: cacheMisses }
+}
+
+export function clearChartHistoryCache() {
+  closedRangeCache.clear()
+  cacheHits = 0
+  cacheMisses = 0
+}
+
 export function requestChartRange(
   input: ChartRangeInput,
   signal?: AbortSignal,
   fetchImpl: FetchLike = fetch,
+  options: RequestChartRangeOptions = {},
 ): Promise<ChartHistoryResponse> {
-  const key = requestKey(input)
+  const normalized = { ...input, ticker: input.ticker.toUpperCase() }
+  const key = requestKey(normalized)
+
+  if (!options.bypassCache) {
+    const cached = cachedRange(normalized)
+    if (cached) return Promise.resolve(cached)
+    cacheMisses += 1
+  }
+
   const existing = inFlight.get(key)
   if (existing) return existing
 
   const params = new URLSearchParams({
-    ticker: input.ticker.toUpperCase(),
-    resolution: input.timeframe,
-    from: String(input.from),
-    to: String(input.to),
+    ticker: normalized.ticker,
+    resolution: normalized.timeframe,
+    from: String(normalized.from),
+    to: String(normalized.to),
   })
 
   const promise = (async () => {
@@ -116,14 +199,24 @@ export function requestChartRange(
     if (!response.ok || body.ok !== true || !Array.isArray(body.bars)) {
       throw new Error(body.error || `Chart history request failed (${response.status})`)
     }
-    return {
+    const result = {
       ...(body as ChartHistoryResponse),
       bars: mergeChartBars([], body.bars),
     }
+    rememberClosedRange(normalized, result)
+    return result
   })().finally(() => {
     inFlight.delete(key)
   })
 
   inFlight.set(key, promise)
   return promise
+}
+
+export function requestFreshChartRange(
+  input: ChartRangeInput,
+  signal?: AbortSignal,
+  fetchImpl: FetchLike = fetch,
+) {
+  return requestChartRange(input, signal, fetchImpl, { bypassCache: true })
 }

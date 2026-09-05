@@ -18,6 +18,20 @@ function parseEpoch(value: string | null) {
   return Number(value)
 }
 
+function measuredJson(payload: Record<string, unknown>, startedAt: number, barCount: number) {
+  const body = JSON.stringify(payload)
+  const durationMs = Math.max(0, performance.now() - startedAt)
+  return new NextResponse(body, {
+    headers: {
+      ...NO_STORE,
+      "Content-Type": "application/json; charset=utf-8",
+      "Server-Timing": `chart-data;dur=${durationMs.toFixed(1)}`,
+      "X-Chart-Bar-Count": String(barCount),
+      "X-Chart-Payload-Bytes": String(Buffer.byteLength(body, "utf8")),
+    },
+  })
+}
+
 export async function GET(request: Request) {
   const auth = await requireApiUser()
   if (!auth.ok) return auth.response
@@ -32,10 +46,11 @@ export async function GET(request: Request) {
   const resolution = String(url.searchParams.get("resolution") || "") as ChartResolution
   const from = parseEpoch(url.searchParams.get("from"))
   const to = parseEpoch(url.searchParams.get("to"))
+  const startedAt = performance.now()
 
   try {
     const result = await getChartOhlcv({ supabase }, { ticker, resolution, from, to })
-    return NextResponse.json({
+    return measuredJson({
       ok: true,
       ticker: result.ticker,
       resolution: result.resolution,
@@ -48,7 +63,7 @@ export async function GET(request: Request) {
       errors: result.errors,
       metadata: result.metadata ?? null,
       generatedAt: new Date().toISOString(),
-    }, { headers: NO_STORE })
+    }, startedAt, result.bars.length)
   } catch (error) {
     if (error instanceof ChartDataRequestError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 400, headers: NO_STORE })
