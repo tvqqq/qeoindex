@@ -105,3 +105,39 @@ test("StockTradingViewChart renders TradingView-style single-row timeframe panel
   assert.match(chartCode, /fixed inset-0 z-40/)
 })
 
+test("StockTradingViewChart renders dedicated X-axis (time) and Y-axis (price) rails with crosshairs", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  // Dedicated geometry with right rail (padRight: 68) and bottom rail (padBottom: 26)
+  assert.match(chartCode, /padRight = 68/)
+  assert.match(chartCode, /padBottom = 26/)
+
+  // Y-axis Price Levels and Grid Lines
+  assert.match(chartCode, /priceLevels/)
+  assert.match(chartCode, /p\.toFixed\(1\)/)
+
+  // X-axis Time Ticks and Grid Lines
+  assert.match(chartCode, /timeTicks/)
+  assert.match(chartCode, /height - padBottom \+ 16/)
+
+  // Crosshair hover tracking on both axes
+  assert.match(chartCode, /hoverY/)
+  assert.match(chartCode, /yToPrice\(hoverY\)\.toFixed\(1\)/)
+})
+
+test("StockTradingViewChart implements TitanLabs-style bottom range presets and auto-fit reset", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  // Presets: 1T, 3T, 6T, 1N, Tất cả, and Tự động
+  assert.match(chartCode, /label: "1T"/)
+  assert.match(chartCode, /label: "3T"/)
+  assert.match(chartCode, /label: "6T"/)
+  assert.match(chartCode, /label: "1N"/)
+  assert.match(chartCode, /label: "Tất cả"/)
+  assert.match(chartCode, /Tự động/)
+
+  // Cursor-anchored wheel zoom calculations
+  assert.match(chartCode, /cursorRatio = Math\.max\(0, Math\.min\(1, mouseX \/ Math\.max\(1, plotPx\)\)\)/)
+  assert.match(chartCode, /offsetDelta = Math\.round\(diff \* \(1 - cursorRatio\)\)/)
+})
+

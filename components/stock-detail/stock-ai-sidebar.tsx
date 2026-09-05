@@ -215,6 +215,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
 
   const consensusStyle = getConsensusStyle(consensus)
   const clampedConsensus = Math.min(100, Math.max(0, consensus))
+  const clampedConfidence = Math.min(100, Math.max(0, confidence))
   const strokeDashoffset = CIRCUMFERENCE - (clampedConsensus / 100) * CIRCUMFERENCE
 
   const activeTier =
@@ -374,6 +375,30 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
               <span className={cn("size-1.5 rounded-full", consensusStyle.dotColor)} />
               {consensus}% đồng thuận với độ tin cậy {activeTier.label} ({confidence}%)
             </span>
+
+            {/* Confidence Spectrum Track Bar Chart */}
+            <div className="w-full max-w-[280px] pt-1 pb-1">
+              <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-[#f43f5e] via-[#3b82f6] via-[#eab308] via-[#f97316] to-[#10b981]">
+                {/* Indicator Circle / Thumb */}
+                <div
+                  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-300"
+                  style={{ left: `${clampedConfidence}%` }}
+                >
+                  <div
+                    className={cn(
+                      "size-3.5 rounded-full border-2 bg-[#0b1119] shadow-[0_0_8px_rgba(0,0,0,0.8)]",
+                      activeTier.ringBorder,
+                    )}
+                  />
+                </div>
+              </div>
+              <div className="mt-1 flex justify-between text-[9px] font-mono text-slate-500">
+                <span>0% Thấp</span>
+                <span>50%</span>
+                <span>100% Rất cao</span>
+              </div>
+            </div>
+
             <p className="text-center text-[11.5px] leading-relaxed text-slate-300">
               {aiStock?.whatChangesDecision?.[0] ||
                 (scan?.confirmation ? `Tăng conviction khi: ${scan.confirmation}` : null) ||
