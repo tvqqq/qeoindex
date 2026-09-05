@@ -22,14 +22,14 @@ test("QEO-86 debate dashboard hydrates historical Research Reports from immutabl
 
 test("QEO-86 debate provenance recognizes prompt identity v2 and frozen report context", () => {
   const data = source("modules/ai-council/debate-data.ts")
-  const llm = source("modules/ai-council/llm.ts")
 
   assert.match(data, /llm-debate-v4-research-report-evidence/)
   assert.match(data, /prompt-identity-v2-report-evidence/)
   assert.match(data, /reportEvidence:\s*\{\s*contextHash:/s)
-  assert.match(llm, /reportContextVersion:/)
-  assert.match(llm, /reportContextHash:/)
-  assert.match(llm, /relatedReports\?:/)
+  assert.match(data, /AiCouncilDebateDashboardRow/)
+  assert.match(data, /reportContextVersion:/)
+  assert.match(data, /reportContextHash:/)
+  assert.match(data, /relatedReports:/)
 })
 
 test("QEO-86 Debate Card renders compact related-report links and source-opinion labeling", () => {
