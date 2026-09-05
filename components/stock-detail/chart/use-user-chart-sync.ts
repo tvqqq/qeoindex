@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   DEFAULT_INDICATOR_CONFIG,
   type ChartStyle,
@@ -11,6 +11,7 @@ import {
 import {
   backupLegacyLocalSettings,
   deserializeUserChartSettings,
+  isDrawingVisibleOnTimeframe,
   persistedV2ToRuntimeDrawing,
   runtimeDrawingToPersistedV2,
   type LegacyDrawing,
@@ -87,13 +88,20 @@ export function useUserChartSync({
     const local = readLocalChartSettings(ticker).settings
     return local?.indicators ? { ...defaultIndicators, ...local.indicators } : defaultIndicators
   })
-  const [drawings, setDrawings] = useState<DrawingObject[]>(() => {
+  const [allDrawings, setAllDrawings] = useState<DrawingObject[]>(() => {
     const local = readLocalChartSettings(ticker).settings
     if (local?.drawings && Array.isArray(local.drawings)) {
       return local.drawings.map((d) => persistedV2ToRuntimeDrawing(d))
     }
     return []
   })
+  const drawings = useMemo(
+    () =>
+      allDrawings.filter((drawing) =>
+        isDrawingVisibleOnTimeframe(drawing as RuntimeDrawingObject, timeframe),
+      ),
+    [allDrawings, timeframe],
+  )
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved")
 
   const isLoadedRef = useRef(false)
@@ -160,6 +168,7 @@ export function useUserChartSync({
     currentTickerRef.current = ticker
     unresolvedLegacyDrawingsRef.current = []
     isLoadedRef.current = false
+    setAllDrawings([])
     let isCancelled = false
 
     async function syncSettings() {
@@ -178,7 +187,7 @@ export function useUserChartSync({
         if (local.chartStyle) setChartStyle(local.chartStyle)
         if (local.indicators) setIndicators({ ...defaultIndicators, ...local.indicators })
         if (Array.isArray(local.drawings)) {
-          setDrawings(local.drawings.map((d) => persistedV2ToRuntimeDrawing(d)))
+          setAllDrawings(local.drawings.map((d) => persistedV2ToRuntimeDrawing(d)))
         }
       }
 
@@ -202,7 +211,7 @@ export function useUserChartSync({
           setIndicators({ ...DEFAULT_INDICATOR_CONFIG, ...remote.indicators })
         }
         if (Array.isArray(remote.drawings)) {
-          setDrawings(remote.drawings.map((d) => persistedV2ToRuntimeDrawing(d)))
+          setAllDrawings(remote.drawings.map((d) => persistedV2ToRuntimeDrawing(d)))
         }
       } catch (err) {
         console.warn("[useUserChartSync] Failed to fetch remote settings, using local:", err)
@@ -291,33 +300,33 @@ export function useUserChartSync({
   const updateTimeframe = useCallback(
     (tf: ChartTimeframe) => {
       setTimeframe(tf)
-      scheduleSave(tf, chartStyle, indicators, drawings)
+      scheduleSave(tf, chartStyle, indicators, allDrawings)
     },
-    [chartStyle, indicators, drawings, scheduleSave],
+    [chartStyle, indicators, allDrawings, scheduleSave],
   )
 
   const updateChartStyle = useCallback(
     (st: ChartStyle) => {
       setChartStyle(st)
-      scheduleSave(timeframe, st, indicators, drawings)
+      scheduleSave(timeframe, st, indicators, allDrawings)
     },
-    [timeframe, indicators, drawings, scheduleSave],
+    [timeframe, indicators, allDrawings, scheduleSave],
   )
 
   const updateIndicators = useCallback(
     (newInd: IndicatorConfig | ((prev: IndicatorConfig) => IndicatorConfig)) => {
       setIndicators((prev) => {
         const next = typeof newInd === "function" ? newInd(prev) : newInd
-        scheduleSave(timeframe, chartStyle, next, drawings)
+        scheduleSave(timeframe, chartStyle, next, allDrawings)
         return next
       })
     },
-    [timeframe, chartStyle, drawings, scheduleSave],
+    [timeframe, chartStyle, allDrawings, scheduleSave],
   )
 
   const updateDrawings = useCallback(
     (newDrawings: DrawingObject[] | ((prev: DrawingObject[]) => DrawingObject[])) => {
-      setDrawings((prev) => {
+      setAllDrawings((prev) => {
         const next = typeof newDrawings === "function" ? newDrawings(prev) : newDrawings
         scheduleSave(timeframe, chartStyle, indicators, next)
         return next
