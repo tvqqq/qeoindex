@@ -26,14 +26,6 @@ const SECURITY_HEADERS = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Keep Node-only PDF.js package layout intact so its fake worker can resolve
-  // `./pdf.worker.mjs` at runtime instead of from a bundled `.next/server/chunks` path.
-  serverExternalPackages: ["pdfjs-dist"],
-  // PDF.js loads this sibling dynamically in Node. Vercel file tracing cannot infer
-  // that dynamic import, so include the exact worker artifact in server functions.
-  outputFileTracingIncludes: {
-    "/*": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
-  },
   // Keep production builds type-safe. Do not hide TypeScript failures on Vercel.
   env: {
     NEXT_PUBLIC_GIT_COMMIT_SHA: commitHash || "",

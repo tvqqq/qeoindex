@@ -1,6 +1,12 @@
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs"
+import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs"
 
 import type { ParsedReportPage, ParsedResearchReportPdf } from "../types.ts"
+
+const pdfJsGlobal = globalThis as typeof globalThis & {
+  pdfjsWorker?: typeof pdfjsWorker
+}
+pdfJsGlobal.pdfjsWorker ??= pdfjsWorker
 
 const MIN_USABLE_TEXT_CHARS = 80
 
