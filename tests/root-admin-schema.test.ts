@@ -5,6 +5,7 @@ import test from "node:test"
 const sql = readFileSync(new URL("../supabase/migrations/20260824120000_root_admin_control_plane.sql", import.meta.url), "utf8")
 const phasesSql = readFileSync(new URL("../supabase/migrations/20260825160000_system_job_phases.sql", import.meta.url), "utf8")
 const ohlcvMigrationUrl = new URL("../supabase/migrations/20260825163000_market_ohlcv_history.sql", import.meta.url)
+const chartOhlcvMigrationUrl = new URL("../supabase/migrations/20260905143000_qeo92_chart_ohlcv_intraday.sql", import.meta.url)
 
 test("control-plane tables are private service-role data", () => {
   for (const table of ["system_settings", "system_job_runs", "system_audit_log"]) {
@@ -41,6 +42,23 @@ test("raw OHLCV history is private, idempotent and exposes service-role coverage
   assert.match(ohlcvSql, /grant all privileges on table public\.market_ohlcv_history to service_role/)
   assert.match(ohlcvSql, /grant execute on function public\.qeo_market_ohlcv_coverage\(text\[\]\) to service_role/)
   assert.doesNotMatch(ohlcvSql, /grant execute[\s\S]*qeo_market_ohlcv_coverage[\s\S]*to authenticated/)
+})
+
+test("QEO-92 keeps chart 1m storage isolated from Daily-only Wyckoff history", () => {
+  assert.equal(existsSync(chartOhlcvMigrationUrl), true, "QEO-92 chart OHLCV migration must exist")
+  if (!existsSync(chartOhlcvMigrationUrl)) return
+  const chartSql = readFileSync(chartOhlcvMigrationUrl, "utf8")
+
+  assert.match(chartSql, /create table if not exists public\.chart_ohlcv_provenance_batches/i)
+  assert.match(chartSql, /create table if not exists public\.chart_ohlcv_intraday/i)
+  assert.match(chartSql, /primary key \(ticker, base_resolution, bar_time\)/i)
+  assert.match(chartSql, /base_resolution text not null check \(base_resolution = '1m'\)/i)
+  assert.match(chartSql, /create table if not exists public\.chart_ohlcv_cold_manifests/i)
+  assert.match(chartSql, /enable row level security/i)
+  assert.match(chartSql, /grant all privileges on table public\.chart_ohlcv_intraday to service_role/i)
+  assert.match(chartSql, /insert into storage\.buckets/i)
+  assert.match(chartSql, /'chart-ohlcv'/i)
+  assert.doesNotMatch(chartSql, /alter table public\.market_ohlcv_history[\s\S]*1m/i)
 })
 
 test("setting mutation RPCs are atomic and service-role only", () => {
