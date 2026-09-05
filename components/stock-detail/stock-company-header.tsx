@@ -1,8 +1,9 @@
 "use client"
 
 import React, { useState } from "react"
-import { Bookmark, Check, ExternalLink, Share2, Sparkles, TrendingDown, TrendingUp } from "lucide-react"
+import { Bookmark, Check, Share2, TrendingDown, TrendingUp } from "lucide-react"
 
+import { StockIdentity } from "@/components/stock-identity"
 import type { StockDetailData } from "./types"
 import { cn } from "@/modules/shared/ui/cn"
 
@@ -31,8 +32,8 @@ export function StockCompanyHeader({ data }: { data: StockDetailData }) {
 
   const isUp = change > 0
   const isDown = change < 0
-  const isCeiling = price >= ceilingPrice && ceilingPrice > 0
-  const isFloor = price <= floorPrice && floorPrice > 0
+  const isCeiling = ceilingPrice > 0 && price >= ceilingPrice
+  const isFloor = floorPrice > 0 && price <= floorPrice
 
   const priceColor = isCeiling
     ? "text-purple-300"
@@ -59,38 +60,24 @@ export function StockCompanyHeader({ data }: { data: StockDetailData }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,.08),transparent_32%),radial-gradient(circle_at_top_left,rgba(139,92,246,.08),transparent_28%),linear-gradient(145deg,#0b1119,#070b10)] p-4 sm:p-5">
+    <div className="overflow-hidden rounded-2xl border border-white/[0.09] bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,.10),transparent_32%),radial-gradient(circle_at_top_left,rgba(139,92,246,.10),transparent_28%),linear-gradient(145deg,#0b1119,#070b10)] p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        {/* Ticker Symbol with Neon Glow Avatar */}
-        <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
-          <div className="relative flex size-12 sm:size-14 shrink-0 items-center justify-center rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/20 via-sky-500/15 to-violet-500/20 shadow-[0_0_24px_-4px_rgba(0,240,255,0.4),inset_0_1px_0_rgba(255,255,255,0.22)]">
-            <span className="font-mono text-lg font-black text-cyan-200 drop-shadow-[0_0_8px_rgba(0,240,255,0.6)]">
-              {ticker}
-            </span>
-          </div>
-
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="neon-ticker-glow font-ticker text-3xl font-extrabold italic tracking-[-0.03em] text-cyan-300 sm:text-4xl">
-                {ticker}
-              </h1>
-              <span className="rounded-full border border-white/[0.1] bg-white/[0.04] px-2.5 py-0.5 font-mono text-[10px] font-bold text-slate-300">
-                {exchange || "HOSE"}
-              </span>
-              <span className="rounded-full border border-white/[0.08] bg-black/20 px-2.5 py-0.5 text-[10px] font-semibold text-slate-400">
-                {sector || "Thị trường Việt Nam"}
-              </span>
-            </div>
-            <p className="mt-1 truncate text-xs sm:text-sm font-medium text-slate-300 max-w-[420px]" title={companyName}>
-              {companyName}
-            </p>
-          </div>
+        {/* Ticker Identity with Logo & Typographic Glow (AI Council Standard) */}
+        <div className="min-w-0 flex-1">
+          <StockIdentity
+            ticker={ticker}
+            companyName={companyName}
+            exchange={exchange}
+            detail={sector}
+            logoSize={42}
+            className="min-w-0"
+          />
         </div>
 
         {/* Realtime Price & Changes */}
         <div className="flex items-center gap-4 sm:gap-6">
           <div className="text-right">
-            <div className={cn("font-mono text-3xl font-black sm:text-4xl tracking-tight", priceColor)}>
+            <div className={cn("font-mono text-2xl sm:text-3xl font-black tracking-tight", priceColor)}>
               {price ? price.toLocaleString("vi-VN") : "—"}
             </div>
             <div className="mt-1 flex items-center justify-end gap-2">

@@ -72,7 +72,7 @@ export function StockWatchlistSidebar({ currentTicker, items }: StockWatchlistSi
           </div>
 
           {/* Filter Pills */}
-          <div className="flex gap-1 overflow-x-auto no-scrollbar text-[10px]">
+          <div className="flex gap-1 overflow-x-auto no-scrollbar">
             {([
               ["all", "Tất cả"],
               ["top", "Top 20"],
@@ -84,7 +84,7 @@ export function StockWatchlistSidebar({ currentTicker, items }: StockWatchlistSi
                 type="button"
                 onClick={() => setFilterMode(val)}
                 className={cn(
-                  "rounded-lg px-2.5 py-1 font-bold transition-colors whitespace-nowrap",
+                  "rounded-lg px-2.5 py-1 text-[9px] font-bold transition-colors whitespace-nowrap",
                   filterMode === val
                     ? "border border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
                     : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
