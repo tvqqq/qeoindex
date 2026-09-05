@@ -68,13 +68,73 @@ interface ResearchContextAuditRow {
   captured_at: string
 }
 
+type ReportSnapshotStatus = "ready" | "empty" | "unavailable"
+
+interface ReportEvidenceSnapshotRow {
+  run_id: string
+  context_version: string
+  context_hash: string
+  status: ReportSnapshotStatus
+  context_payload: unknown
+  report_ids: unknown
+  analysis_ids: unknown
+  captured_at: string
+}
+
+type SnapshotReadClient = {
+  from(table: string): {
+    select(columns: string): {
+      in(column: string, values: string[]): Promise<{
+        data: unknown[] | null
+        error: { message?: string } | null
+      }>
+    }
+  }
+}
+
+export interface AiCouncilRelatedReport {
+  reportId: string
+  title: string
+  sourceName: string
+  publishDate: string
+  category: string
+  tickerStance: string | null
+}
+
+export interface AiCouncilDebateDashboardProvenance {
+  packetVersion: string
+  semanticGuideVersion: string
+  deterministicEvidenceHash: string
+  rawContextVersion: string | null
+  rawContextHash: string | null
+  rawCapturedAt: string | null
+  researchContextVersion: string | null
+  researchContextHash: string | null
+  researchStatus: string | null
+  researchMode: string | null
+  researchSourceCount: number
+  researchCapturedAt: string | null
+  reportContextVersion: string | null
+  reportContextHash: string | null
+  reportStatus: ReportSnapshotStatus | null
+  reportCount: number
+  reportCapturedAt: string | null
+  promptIdentityHash: string
+  cacheIdentityMode: "prompt-identity-v2-report-evidence" | "prompt-identity-v1" | "legacy-evidence-hash"
+}
+
+export interface AiCouncilDebateDashboardRow extends Omit<AiCouncilLlmDebateRecord, "evidenceProvenance"> {
+  evidenceProvenance?: AiCouncilDebateDashboardProvenance
+  relatedReports: AiCouncilRelatedReport[]
+}
+
 export interface AiCouncilDebateDashboardData {
   generatedAt: string
   latestDate: string | null
   enabledByConfiguration: boolean
   model: string
   modelRoute: CouncilLlmModelRoute
-  rows: AiCouncilLlmDebateRecord[]
+  rows: AiCouncilDebateDashboardRow[]
   completed: number
   partial: number
   failed: number
@@ -86,8 +146,24 @@ export interface AiCouncilDebateDashboardData {
   message: string
 }
 
+function snapshotDb(client: SupabaseClient) {
+  return client as unknown as SnapshotReadClient
+}
+
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
+}
+
+function text(value: unknown) {
+  return typeof value === "string" ? value.trim() : ""
+}
+
+function validHash(value: unknown) {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value) ? value : null
 }
 
 function debateReasons(value: unknown): DebateSelectionReason[] {
@@ -123,14 +199,55 @@ function nullableNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function reportSnapshotStatus(value: unknown): ReportSnapshotStatus | null {
+  return value === "ready" || value === "empty" || value === "unavailable" ? value : null
+}
+
+function relatedReports(snapshot: ReportEvidenceSnapshotRow | undefined, ticker: string): AiCouncilRelatedReport[] {
+  if (!snapshot || snapshot.status !== "ready") return []
+  const reports = record(snapshot.context_payload).reports
+  if (!Array.isArray(reports)) return []
+
+  const normalized: AiCouncilRelatedReport[] = []
+  for (const value of reports.slice(0, 5)) {
+    const report = record(value)
+    const reportId = text(report.reportId)
+    const title = text(report.title)
+    if (!reportId || !title) continue
+
+    const tickerEvidence = Array.isArray(report.tickerEvidence) ? report.tickerEvidence : []
+    const matchedTicker = tickerEvidence
+      .map(record)
+      .find((evidence) => text(evidence.ticker).toUpperCase() === ticker.toUpperCase())
+
+    normalized.push({
+      reportId,
+      title,
+      sourceName: text(report.sourceName) || "Research provider",
+      publishDate: text(report.publishDate),
+      category: text(report.category) || "research",
+      tickerStance: matchedTicker ? text(matchedTicker.stance) || null : null,
+    })
+  }
+  return normalized
+}
+
 function normalize(
   row: DebateRow,
   rawEvidence: RawEvidenceAuditRow | undefined,
   researchContext: ResearchContextAuditRow | undefined,
-): AiCouncilLlmDebateRecord {
+  reportSnapshot: ReportEvidenceSnapshotRow | undefined,
+): AiCouncilDebateDashboardRow {
   const status = row.status === "completed" || row.status === "partial" || row.status === "failed" ? row.status : "pending"
-  const firstClassContext = row.prompt_version === "llm-debate-v3-first-class-context"
+  const reportEvidenceContext = row.prompt_version === "llm-debate-v4-research-report-evidence"
+  const firstClassContext = reportEvidenceContext || row.prompt_version === "llm-debate-v3-first-class-context"
   const semanticPacket = firstClassContext || row.prompt_version === "llm-debate-v2-semantic-grounding"
+  const reportStatus = reportSnapshotStatus(reportSnapshot?.status)
+  const reportContextHash = validHash(reportSnapshot?.context_hash)
+  const reportParticipatesInPrompt = reportEvidenceContext
+    && (reportStatus === "ready" || reportStatus === "empty")
+    && Boolean(reportContextHash)
+
   const promptIdentityHash = firstClassContext
     ? resolveAiCouncilPromptIdentityHash({
         evidenceHash: row.evidence_hash,
@@ -141,9 +258,14 @@ function normalize(
             promptIdentityHash: researchContext.prompt_identity_hash,
           },
         } : {}),
+        ...(reportParticipatesInPrompt && reportContextHash ? {
+          reportEvidence: { contextHash: reportContextHash },
+        } : {}),
       }, row.prompt_version)
     : row.evidence_hash
   const sourcePageIds = Array.isArray(researchContext?.source_page_ids) ? researchContext.source_page_ids : []
+  const frozenReports = relatedReports(reportSnapshot, row.ticker)
+  const reportIds = stringArray(reportSnapshot?.report_ids)
 
   return {
     id: row.run_id,
@@ -164,9 +286,19 @@ function normalize(
       researchMode: researchContext?.mode || null,
       researchSourceCount: sourcePageIds.length,
       researchCapturedAt: researchContext?.captured_at || null,
+      reportContextVersion: reportSnapshot?.context_version || null,
+      reportContextHash,
+      reportStatus,
+      reportCount: reportStatus === "ready" ? reportIds.length : 0,
+      reportCapturedAt: reportSnapshot?.captured_at || null,
       promptIdentityHash,
-      cacheIdentityMode: firstClassContext ? "prompt-identity-v1" : "legacy-evidence-hash",
+      cacheIdentityMode: reportEvidenceContext
+        ? "prompt-identity-v2-report-evidence"
+        : firstClassContext
+          ? "prompt-identity-v1"
+          : "legacy-evidence-hash",
     },
+    relatedReports: frozenReports,
     selectionReasons: debateReasons(row.selection_reasons),
     status,
     model: row.model,
@@ -234,9 +366,10 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
   const runIds = debateRows.map((row) => row.run_id)
   const rawEvidenceByRun = new Map<string, RawEvidenceAuditRow>()
   const researchContextByRun = new Map<string, ResearchContextAuditRow>()
+  const reportSnapshotByRun = new Map<string, ReportEvidenceSnapshotRow>()
 
   if (runIds.length) {
-    const [rawEvidenceResult, researchContextResult] = await Promise.all([
+    const [rawEvidenceResult, researchContextResult, reportSnapshotResult] = await Promise.all([
       supabase
         .from("ai_council_llm_evidence")
         .select("run_id,context_version,context_hash,captured_at")
@@ -244,6 +377,10 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
       supabase
         .from("ai_council_llm_research_contexts")
         .select("run_id,context_version,context_hash,raw_context_hash,prompt_identity_hash,mode,status,source_page_ids,captured_at")
+        .in("run_id", runIds),
+      snapshotDb(supabase)
+        .from("ai_council_report_evidence_snapshots")
+        .select("run_id,context_version,context_hash,status,context_payload,report_ids,analysis_ids,captured_at")
         .in("run_id", runIds),
     ])
 
@@ -253,9 +390,19 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
     if (!researchContextResult.error) {
       for (const row of (researchContextResult.data || []) as ResearchContextAuditRow[]) researchContextByRun.set(row.run_id, row)
     }
+    if (!reportSnapshotResult.error) {
+      for (const row of (reportSnapshotResult.data || []) as ReportEvidenceSnapshotRow[]) {
+        reportSnapshotByRun.set(row.run_id, row)
+      }
+    }
   }
 
-  const rows = debateRows.map((row) => normalize(row, rawEvidenceByRun.get(row.run_id), researchContextByRun.get(row.run_id)))
+  const rows = debateRows.map((row) => normalize(
+    row,
+    rawEvidenceByRun.get(row.run_id),
+    researchContextByRun.get(row.run_id),
+    reportSnapshotByRun.get(row.run_id),
+  ))
   const latestDate = rows[0]?.asOfDate || null
   const latestRows = latestDate ? rows.filter((row) => row.asOfDate === latestDate) : []
   const costRows = latestRows.filter((row) => row.estimatedCostUsd != null)
@@ -278,7 +425,7 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
       ? Number(costRows.reduce((sum, row) => sum + (row.estimatedCostUsd || 0), 0).toFixed(6))
       : null,
     message: rows.length
-      ? "P4.3 uses first-class raw/research evidence, semantic grounding, prompt-identity cache telemetry and severe-conflict Sol escalation. Debates remain immutable per deterministic run and advisory-only."
+      ? "P4.4 uses frozen raw/research/report evidence, semantic grounding, prompt-identity cache telemetry and severe-conflict Sol escalation. Historical Research Reports are read from immutable Council snapshots only; debates remain advisory-only."
       : enabledByConfiguration
         ? "Runtime đã nhận OPENAI_API_KEY. Chưa có P4 debate vì cron chỉ chạy khi deterministic Council có event đáng tranh luận."
         : "P4 code đã sẵn sàng nhưng OPENAI_API_KEY chưa được cấu hình hoặc AI_COUNCIL_LLM_ENABLED đang tắt.",
