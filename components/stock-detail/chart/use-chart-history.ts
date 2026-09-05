@@ -72,7 +72,11 @@ export function useChartHistory({ ticker, timeframe, seedDailyBars = [] }: UseCh
         })
         setCoverage(result.coverage)
         const earliest = (result.bars[0]?.time ?? mergedBars[0]?.time) || range.from
-        setHasMore(result.bars.length > 0 && earliest > chartHistoryFloor(timeframe, to) + 1)
+        setHasMore(
+          range.from > 1
+          && result.bars.length > 0
+          && earliest > chartHistoryFloor(timeframe, to) + 1,
+        )
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || generationRef.current !== generation) return
