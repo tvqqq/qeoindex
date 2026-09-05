@@ -25,6 +25,7 @@ function storedRowToBar(row: Record<string, unknown>): CanonicalOhlcvBar | null 
 }
 
 function provenanceCoverageRange(row: Record<string, unknown>): ProviderCoverageRange | null {
+  if ((finite(row.row_count) ?? 0) <= 0) return null
   const detail = row.detail && typeof row.detail === "object" && !Array.isArray(row.detail) ? row.detail as Record<string, unknown> : {}
   const requestedFrom = finite(detail.requestedFrom)
   const requestedTo = finite(detail.requestedTo)
@@ -45,6 +46,20 @@ export interface HotArchivePartition {
   tradingDate: string
   from: number
   toExclusive: number
+}
+
+export interface ChartProviderAttemptInput {
+  ticker: string
+  provider: string
+  requestedFrom: number
+  requestedTo: number
+  bars?: CanonicalOhlcvBar[]
+  fetchedAt?: string
+  detail?: Record<string, unknown>
+}
+
+export interface Qeo107TerminalAttemptRange extends ProviderCoverageRange {
+  outcome: "success" | "provider_gap"
 }
 
 function partitionFor(ticker: string, epochSeconds: number): HotArchivePartition {
@@ -107,7 +122,7 @@ export async function readOldestHotIntradayTime(supabase: SupabaseClient): Promi
 }
 
 export async function readProviderRequestCoverage(supabase: SupabaseClient, ticker: string, from: number, to: number): Promise<ProviderCoverageRange[]> {
-  const { data, error } = await supabase.from("chart_ohlcv_provenance_batches").select("range_start,range_end,detail")
+  const { data, error } = await supabase.from("chart_ohlcv_provenance_batches").select("row_count,range_start,range_end,detail")
     .eq("ticker", ticker).eq("base_resolution", "1m")
     .lte("range_start", new Date(to * 1000).toISOString()).gte("range_end", new Date(from * 1000).toISOString())
     .order("range_start", { ascending: true })
@@ -115,27 +130,89 @@ export async function readProviderRequestCoverage(supabase: SupabaseClient, tick
   return (data || []).map((row) => provenanceCoverageRange(row as Record<string, unknown>)).filter((range): range is ProviderCoverageRange => Boolean(range))
 }
 
+export async function readQeo107TerminalAttemptRanges(
+  supabase: SupabaseClient,
+  ticker: string,
+  from: number,
+  to: number,
+): Promise<Qeo107TerminalAttemptRange[]> {
+  const { data, error } = await supabase.from("chart_ohlcv_provenance_batches").select("row_count,range_start,range_end,detail")
+    .eq("ticker", ticker).eq("base_resolution", "1m")
+    .lte("range_start", new Date(to * 1000).toISOString()).gte("range_end", new Date(from * 1000).toISOString())
+    .order("fetched_at", { ascending: true })
+  if (error) throw new Error(`QEO-107 bootstrap attempt read failed: ${error.message}`)
+
+  const ranges: Qeo107TerminalAttemptRange[] = []
+  for (const row of (data || []) as Array<Record<string, unknown>>) {
+    const detail = row.detail && typeof row.detail === "object" && !Array.isArray(row.detail) ? row.detail as Record<string, unknown> : {}
+    if (detail.workflow !== "QEO-107") continue
+    const outcome = detail.outcome === "provider_gap" ? "provider_gap" : (finite(row.row_count) ?? 0) > 0 ? "success" : null
+    if (!outcome) continue
+    const range = provenanceCoverageRange({ ...row, row_count: outcome === "provider_gap" ? 1 : row.row_count })
+    if (range) ranges.push({ ...range, outcome })
+  }
+  return ranges
+}
+
+export async function recordChartProviderAttempt(supabase: SupabaseClient, input: ChartProviderAttemptInput) {
+  if (!Number.isInteger(input.requestedFrom) || !Number.isInteger(input.requestedTo) || input.requestedFrom <= 0 || input.requestedTo <= input.requestedFrom) {
+    throw new Error("Chart provenance attempt requires a valid requested range")
+  }
+  const bars = [...(input.bars ?? [])].sort((a, b) => a.time - b.time)
+  const fetchedAt = input.fetchedAt ?? new Date().toISOString()
+  const rangeStart = bars[0]?.time ?? input.requestedFrom
+  const rangeEnd = bars.at(-1)?.time ?? input.requestedTo
+  const { data: batch, error } = await supabase.from("chart_ohlcv_provenance_batches").insert({
+    provider: input.provider,
+    ticker: input.ticker,
+    base_resolution: "1m",
+    range_start: new Date(rangeStart * 1000).toISOString(),
+    range_end: new Date(rangeEnd * 1000).toISOString(),
+    row_count: bars.length,
+    fetched_at: fetchedAt,
+    detail: {
+      ...(input.detail ?? {}),
+      requestedFrom: input.requestedFrom,
+      requestedTo: input.requestedTo,
+    },
+  }).select("id").single()
+  if (error || !batch?.id) throw new Error(`Chart provenance insert failed: ${error?.message ?? "missing batch id"}`)
+  return { batchId: String(batch.id), rowCount: bars.length }
+}
+
 export async function upsertHotIntradayBars(
   supabase: SupabaseClient,
-  input: { ticker: string; bars: CanonicalOhlcvBar[]; provider: string; fetchedAt?: string; detail?: Record<string, unknown> },
+  input: {
+    ticker: string
+    bars: CanonicalOhlcvBar[]
+    provider: string
+    fetchedAt?: string
+    detail?: Record<string, unknown>
+    provenanceBatchId?: string | null
+  },
 ) {
   if (!input.bars.length) return { batchId: null as string | null, rowCount: 0 }
   const sorted = [...input.bars].sort((a, b) => a.time - b.time)
   const fetchedAt = input.fetchedAt ?? new Date().toISOString()
-  const { data: batch, error: batchError } = await supabase.from("chart_ohlcv_provenance_batches").insert({
-    provider: input.provider, ticker: input.ticker, base_resolution: "1m",
-    range_start: new Date(sorted[0].time * 1000).toISOString(), range_end: new Date(sorted.at(-1)!.time * 1000).toISOString(),
-    row_count: sorted.length, fetched_at: fetchedAt, detail: input.detail ?? {},
-  }).select("id").single()
-  if (batchError || !batch?.id) throw new Error(`Chart provenance insert failed: ${batchError?.message ?? "missing batch id"}`)
+  const provenance = input.provenanceBatchId
+    ? { batchId: input.provenanceBatchId, rowCount: sorted.length }
+    : await recordChartProviderAttempt(supabase, {
+        ticker: input.ticker,
+        provider: input.provider,
+        requestedFrom: finite(input.detail?.requestedFrom) ?? sorted[0].time,
+        requestedTo: finite(input.detail?.requestedTo) ?? sorted.at(-1)!.time,
+        bars: sorted,
+        fetchedAt,
+        detail: input.detail,
+      })
   const rows = sorted.map((bar) => ({
     ticker: input.ticker, base_resolution: "1m", bar_time: new Date(bar.time * 1000).toISOString(),
     open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume,
-    provenance_batch_id: batch.id, fetched_at: fetchedAt,
+    provenance_batch_id: provenance.batchId, fetched_at: fetchedAt,
   }))
   for (let offset = 0; offset < rows.length; offset += UPSERT_CHUNK_SIZE) {
     const { error } = await supabase.from("chart_ohlcv_intraday").upsert(rows.slice(offset, offset + UPSERT_CHUNK_SIZE), { onConflict: "ticker,base_resolution,bar_time" })
     if (error) throw new Error(`Chart hot-store upsert failed: ${error.message}`)
   }
-  return { batchId: String(batch.id), rowCount: rows.length }
+  return { batchId: provenance.batchId, rowCount: rows.length }
 }
