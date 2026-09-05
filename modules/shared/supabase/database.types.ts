@@ -467,6 +467,53 @@ export type Database = {
           },
         ]
       }
+      ai_council_report_evidence_snapshots: {
+        Row: {
+          analysis_ids: Json
+          as_of_date: string
+          captured_at: string
+          context_hash: string
+          context_payload: Json
+          context_version: string
+          report_ids: Json
+          run_id: string
+          status: string
+          ticker: string
+        }
+        Insert: {
+          analysis_ids?: Json
+          as_of_date: string
+          captured_at?: string
+          context_hash: string
+          context_payload: Json
+          context_version: string
+          report_ids?: Json
+          run_id: string
+          status: string
+          ticker: string
+        }
+        Update: {
+          analysis_ids?: Json
+          as_of_date?: string
+          captured_at?: string
+          context_hash?: string
+          context_payload?: Json
+          context_version?: string
+          report_ids?: Json
+          run_id?: string
+          status?: string
+          ticker?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_council_report_evidence_snapshots_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: true
+            referencedRelation: "ai_council_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_council_runs: {
         Row: {
           as_of_date: string
@@ -1930,6 +1977,463 @@ export type Database = {
         }
         Relationships: []
       }
+      market_research_report_analyses: {
+        Row: {
+          analysis_version: string
+          cache_write_tokens: number
+          cached_input_tokens: number
+          catalysts: Json
+          chunk_version: string
+          confidence: Json
+          content_hash: string
+          created_at: string
+          estimated_cost_usd: number | null
+          executive_summary: string
+          id: string
+          input_tokens: number
+          key_points: Json
+          latency_ms: number
+          market_view: string | null
+          model_actual: string | null
+          model_requested: string
+          model_route_key: string
+          output_tokens: number
+          pricing_version: string | null
+          processed_at: string
+          prompt_version: string
+          reasoning_effort: string
+          reasoning_tokens: number
+          report_id: string
+          response_id: string | null
+          risks: Json
+          sector_outlook: string | null
+          total_tokens: number
+        }
+        Insert: {
+          analysis_version: string
+          cache_write_tokens?: number
+          cached_input_tokens?: number
+          catalysts?: Json
+          chunk_version: string
+          confidence?: Json
+          content_hash: string
+          created_at?: string
+          estimated_cost_usd?: number | null
+          executive_summary: string
+          id?: string
+          input_tokens?: number
+          key_points?: Json
+          latency_ms?: number
+          market_view?: string | null
+          model_actual?: string | null
+          model_requested: string
+          model_route_key: string
+          output_tokens?: number
+          pricing_version?: string | null
+          processed_at?: string
+          prompt_version: string
+          reasoning_effort: string
+          reasoning_tokens?: number
+          report_id: string
+          response_id?: string | null
+          risks?: Json
+          sector_outlook?: string | null
+          total_tokens?: number
+        }
+        Update: {
+          analysis_version?: string
+          cache_write_tokens?: number
+          cached_input_tokens?: number
+          catalysts?: Json
+          chunk_version?: string
+          confidence?: Json
+          content_hash?: string
+          created_at?: string
+          estimated_cost_usd?: number | null
+          executive_summary?: string
+          id?: string
+          input_tokens?: number
+          key_points?: Json
+          latency_ms?: number
+          market_view?: string | null
+          model_actual?: string | null
+          model_requested?: string
+          model_route_key?: string
+          output_tokens?: number
+          pricing_version?: string | null
+          processed_at?: string
+          prompt_version?: string
+          reasoning_effort?: string
+          reasoning_tokens?: number
+          report_id?: string
+          response_id?: string | null
+          risks?: Json
+          sector_outlook?: string | null
+          total_tokens?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_research_report_analyses_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "market_research_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_research_report_analysis_leases: {
+        Row: {
+          analysis_version: string
+          content_hash: string
+          created_at: string
+          expires_at: string
+          id: string
+          lease_token: string
+          model_route_key: string
+          owner_run_id: string
+          prompt_version: string
+          report_id: string
+          terminal_outcome: string | null
+          updated_at: string
+        }
+        Insert: {
+          analysis_version: string
+          content_hash: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          lease_token?: string
+          model_route_key: string
+          owner_run_id: string
+          prompt_version: string
+          report_id: string
+          terminal_outcome?: string | null
+          updated_at?: string
+        }
+        Update: {
+          analysis_version?: string
+          content_hash?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          lease_token?: string
+          model_route_key?: string
+          owner_run_id?: string
+          prompt_version?: string
+          report_id?: string
+          terminal_outcome?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_research_report_analysis_leases_owner_run_id_fkey"
+            columns: ["owner_run_id"]
+            isOneToOne: false
+            referencedRelation: "system_job_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_research_report_analysis_leases_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "market_research_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_research_report_chunks: {
+        Row: {
+          chunk_hash: string
+          chunk_index: number
+          chunk_version: string
+          content: string
+          content_hash: string
+          created_at: string
+          id: string
+          page_number: number
+          report_id: string
+          search_vector: unknown
+        }
+        Insert: {
+          chunk_hash: string
+          chunk_index: number
+          chunk_version: string
+          content: string
+          content_hash: string
+          created_at?: string
+          id?: string
+          page_number: number
+          report_id: string
+          search_vector?: unknown
+        }
+        Update: {
+          chunk_hash?: string
+          chunk_index?: number
+          chunk_version?: string
+          content?: string
+          content_hash?: string
+          created_at?: string
+          id?: string
+          page_number?: number
+          report_id?: string
+          search_vector?: unknown
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_research_report_chunks_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "market_research_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_research_report_run_items: {
+        Row: {
+          ai_request_count: number
+          attempted_models: Json
+          cache_write_tokens: number
+          cached_input_tokens: number
+          content_hash: string | null
+          created_at: string
+          duration_ms: number | null
+          error_code: string | null
+          error_message: string | null
+          estimated_cost_usd: number | null
+          external_report_id: string
+          finished_at: string | null
+          id: string
+          input_tokens: number
+          job_key: string
+          outcome: string | null
+          output_tokens: number
+          pricing_version: string | null
+          provider: string
+          publish_date: string
+          reasoning_tokens: number
+          report_id: string
+          run_id: string
+          started_at: string
+          terminal_stage: string | null
+          total_tokens: number
+          unknown_usage_attempts: number
+          updated_at: string
+        }
+        Insert: {
+          ai_request_count?: number
+          attempted_models?: Json
+          cache_write_tokens?: number
+          cached_input_tokens?: number
+          content_hash?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          error_message?: string | null
+          estimated_cost_usd?: number | null
+          external_report_id: string
+          finished_at?: string | null
+          id?: string
+          input_tokens?: number
+          job_key: string
+          outcome?: string | null
+          output_tokens?: number
+          pricing_version?: string | null
+          provider: string
+          publish_date: string
+          reasoning_tokens?: number
+          report_id: string
+          run_id: string
+          started_at?: string
+          terminal_stage?: string | null
+          total_tokens?: number
+          unknown_usage_attempts?: number
+          updated_at?: string
+        }
+        Update: {
+          ai_request_count?: number
+          attempted_models?: Json
+          cache_write_tokens?: number
+          cached_input_tokens?: number
+          content_hash?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          error_message?: string | null
+          estimated_cost_usd?: number | null
+          external_report_id?: string
+          finished_at?: string | null
+          id?: string
+          input_tokens?: number
+          job_key?: string
+          outcome?: string | null
+          output_tokens?: number
+          pricing_version?: string | null
+          provider?: string
+          publish_date?: string
+          reasoning_tokens?: number
+          report_id?: string
+          run_id?: string
+          started_at?: string
+          terminal_stage?: string | null
+          total_tokens?: number
+          unknown_usage_attempts?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_research_report_run_items_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "market_research_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_research_report_run_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "system_job_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_research_report_ticker_mentions: {
+        Row: {
+          analysis_id: string
+          created_at: string
+          evidence: Json
+          id: string
+          rationale: string | null
+          recommendation_text: string | null
+          report_id: string
+          stance: string
+          target_currency: string | null
+          target_price: number | null
+          target_source: string | null
+          ticker: string
+        }
+        Insert: {
+          analysis_id: string
+          created_at?: string
+          evidence?: Json
+          id?: string
+          rationale?: string | null
+          recommendation_text?: string | null
+          report_id: string
+          stance: string
+          target_currency?: string | null
+          target_price?: number | null
+          target_source?: string | null
+          ticker: string
+        }
+        Update: {
+          analysis_id?: string
+          created_at?: string
+          evidence?: Json
+          id?: string
+          rationale?: string | null
+          recommendation_text?: string | null
+          report_id?: string
+          stance?: string
+          target_currency?: string | null
+          target_price?: number | null
+          target_source?: string | null
+          ticker?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_research_report_ticker_mentions_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "market_research_report_analyses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_research_report_ticker_mentions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "market_research_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_research_reports: {
+        Row: {
+          analysis_error: string | null
+          analysis_status: string
+          category: string
+          code: string | null
+          content_hash: string | null
+          created_at: string
+          external_report_id: string
+          id: string
+          ingestion_error: string | null
+          ingestion_status: string
+          link: string | null
+          original_type_report: string | null
+          parsed_page_count: number
+          pdf_url: string
+          provider: string
+          publish_date: string
+          recommendation: string | null
+          sector_name: string | null
+          source_name: string
+          source_payload: Json
+          target_price: number | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          analysis_error?: string | null
+          analysis_status?: string
+          category: string
+          code?: string | null
+          content_hash?: string | null
+          created_at?: string
+          external_report_id: string
+          id?: string
+          ingestion_error?: string | null
+          ingestion_status?: string
+          link?: string | null
+          original_type_report?: string | null
+          parsed_page_count?: number
+          pdf_url: string
+          provider: string
+          publish_date: string
+          recommendation?: string | null
+          sector_name?: string | null
+          source_name: string
+          source_payload: Json
+          target_price?: number | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          analysis_error?: string | null
+          analysis_status?: string
+          category?: string
+          code?: string | null
+          content_hash?: string | null
+          created_at?: string
+          external_report_id?: string
+          id?: string
+          ingestion_error?: string | null
+          ingestion_status?: string
+          link?: string | null
+          original_type_report?: string | null
+          parsed_page_count?: number
+          pdf_url?: string
+          provider?: string
+          publish_date?: string
+          recommendation?: string | null
+          sector_name?: string | null
+          source_name?: string
+          source_payload?: Json
+          target_price?: number | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       market_universe_memberships: {
         Row: {
           average_volume_50d: number
@@ -2949,6 +3453,23 @@ export type Database = {
         Args: { p_sync_run_id: string }
         Returns: Json
       }
+      qeo_acquire_research_report_analysis_lease: {
+        Args: {
+          p_analysis_version: string
+          p_content_hash: string
+          p_model_route_key: string
+          p_prompt_version: string
+          p_report_id: string
+          p_run_id: string
+          p_ttl_seconds?: number
+        }
+        Returns: {
+          analysis_id: string
+          expires_at: string
+          lease_token: string
+          outcome: string
+        }[]
+      }
       qeo_admin_cron_snapshot: { Args: never; Returns: Json }
       qeo_admin_reset_system_setting: {
         Args: {
@@ -3058,6 +3579,20 @@ export type Database = {
         Args: { p_run_id: string }
         Returns: Json
       }
+      qeo_publish_research_report_analysis: {
+        Args: {
+          p_analysis: Json
+          p_chunks: Json
+          p_content_hash: string
+          p_mentions: Json
+          p_report_id: string
+        }
+        Returns: string
+      }
+      qeo_release_research_report_analysis_lease: {
+        Args: { p_lease_token: string; p_terminal_outcome: string }
+        Returns: boolean
+      }
       qeo_run_job_telemetry_cleanup: {
         Args: { p_reference_at?: string }
         Returns: Json
@@ -3069,6 +3604,25 @@ export type Database = {
       qeo_run_wyckoff_build_artifact_cleanup: {
         Args: { p_reference_at?: string }
         Returns: Json
+      }
+      qeo_search_research_report_chunks: {
+        Args: {
+          p_chunk_version: string
+          p_content_hash: string
+          p_limit?: number
+          p_query: string
+          p_report_id: string
+        }
+        Returns: {
+          chunk_index: number
+          chunk_version: string
+          content: string
+          content_hash: string
+          id: string
+          page_number: number
+          rank: number
+          report_id: string
+        }[]
       }
       qeo_select_market_universe_candidates: {
         Args: {
@@ -3101,6 +3655,7 @@ export type Database = {
       }
       qeo_trigger_market_snapshot_bootstrap: { Args: never; Returns: number }
       qeo_trigger_market_universe_monthly: { Args: never; Returns: number }
+      qeo_trigger_research_reports_daily: { Args: never; Returns: number }
       qeo_verify_eod_scheduler_secret: {
         Args: { p_secret: string }
         Returns: boolean

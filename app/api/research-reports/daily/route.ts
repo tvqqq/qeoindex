@@ -3,13 +3,35 @@ import { start } from "workflow/api"
 
 import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { researchReportsDailyWorkflow } from "@/workflows/research-reports-daily-workflow"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+function bearerToken(request: Request) {
+  const authorization = request.headers.get("authorization") ?? ""
+  if (!authorization.startsWith("Bearer ")) return ""
+  return authorization.slice("Bearer ".length).trim()
+}
+
+async function isResearchReportsSchedulerAuthorized(request: Request) {
+  if (isMachineRequestAuthorized(request, [process.env.CRON_SECRET], { allowUnconfiguredInDevelopment: true })) {
+    return true
+  }
+
+  const token = bearerToken(request)
+  if (!token) return false
+
+  const supabase = getSupabaseServerClient()
+  if (!supabase) return false
+
+  const { data, error } = await supabase.rpc("qeo_verify_eod_scheduler_secret", { p_secret: token })
+  return !error && data === true
+}
+
 export async function POST(request: NextRequest) {
-  if (!isMachineRequestAuthorized(request, [process.env.CRON_SECRET], { allowUnconfiguredInDevelopment: true })) {
+  if (!(await isResearchReportsSchedulerAuthorized(request))) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
   }
 
