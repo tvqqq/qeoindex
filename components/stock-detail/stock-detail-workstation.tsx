@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react"
 
 import { StockAiSidebar } from "./stock-ai-sidebar"
 import { StockCompanyHeader } from "./stock-company-header"
-import { StockTradingViewChart } from "./stock-tradingview-chart"
+import { StockTradingViewChartData } from "./stock-tradingview-chart-data"
 import { StockTabsPanel } from "./stock-tabs-panel"
 import { StockWatchlistSidebar } from "./stock-watchlist-sidebar"
 import type { StockDetailData } from "./types"
@@ -160,10 +160,9 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
             {!isChartMaximized && <StockCompanyHeader data={currentData} />}
 
             {/* TradingView Lightweight Candlestick Chart */}
-            <StockTradingViewChart
+            <StockTradingViewChartData
               ticker={currentData.ticker}
-              bars={currentData.bars}
-              hourlyBars={currentData.hourlyBars}
+              seedDailyBars={currentData.bars}
               isMaximized={isChartMaximized}
               onToggleMaximize={() => setIsChartMaximized((prev) => !prev)}
               currentPrice={currentData.price}

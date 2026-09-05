@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 
 type MinuteBarsStatus = "idle" | "loading" | "ready" | "error"
@@ -10,6 +10,13 @@ type MinuteBarsState = {
   status: MinuteBarsStatus
   error: string | null
 }
+
+type CanonicalMinuteBarsOverride = {
+  ticker: string
+  bars: OhlcvBar[]
+}
+
+export const CanonicalMinuteBarsContext = createContext<CanonicalMinuteBarsOverride | null>(null)
 
 const INITIAL_STATE: MinuteBarsState = { bars: [], status: "idle", error: null }
 const LOOKBACK_SECONDS = 7 * 24 * 60 * 60
@@ -22,14 +29,16 @@ function isOhlcvBar(value: unknown): value is OhlcvBar {
 
 export function useCanonicalMinuteBars({ ticker, enabled }: { ticker: string; enabled: boolean }): MinuteBarsState {
   const [state, setState] = useState<MinuteBarsState>(INITIAL_STATE)
+  const override = useContext(CanonicalMinuteBarsContext)
+  const normalizedTicker = ticker.trim().toUpperCase()
+  const overrideBars = override?.ticker === normalizedTicker ? override.bars : null
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || overrideBars !== null) return
 
     const controller = new AbortController()
     const to = Math.floor(Date.now() / 1000)
     const from = to - LOOKBACK_SECONDS
-    const normalizedTicker = ticker.trim().toUpperCase()
 
     setState({ bars: [], status: "loading", error: null })
 
@@ -63,7 +72,11 @@ export function useCanonicalMinuteBars({ ticker, enabled }: { ticker: string; en
     })()
 
     return () => controller.abort()
-  }, [enabled, ticker])
+  }, [enabled, normalizedTicker, overrideBars])
 
-  return enabled ? state : INITIAL_STATE
+  if (!enabled) return INITIAL_STATE
+  if (overrideBars !== null) {
+    return { bars: overrideBars, status: "ready", error: null }
+  }
+  return state
 }

@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
 import { requireApiUser } from "@/modules/auth/server"
-import { ChartDataRequestError, ChartDataUnavailableError, type CanonicalChartResolution } from "@/modules/market/chart-data/contract"
-import { getCanonicalChartOhlcv } from "@/modules/market/chart-data/service"
+import {
+  ChartDataRequestError,
+  ChartDataUnavailableError,
+  type ChartResolution,
+} from "@/modules/market/chart-data/contract"
+import { getChartOhlcv } from "@/modules/market/chart-data/timeframe-service"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
 export const runtime = "nodejs"
@@ -25,12 +29,12 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const ticker = String(url.searchParams.get("ticker") || "").trim().toUpperCase()
-  const resolution = String(url.searchParams.get("resolution") || "") as CanonicalChartResolution
+  const resolution = String(url.searchParams.get("resolution") || "") as ChartResolution
   const from = parseEpoch(url.searchParams.get("from"))
   const to = parseEpoch(url.searchParams.get("to"))
 
   try {
-    const result = await getCanonicalChartOhlcv({ supabase }, { ticker, resolution, from, to })
+    const result = await getChartOhlcv({ supabase }, { ticker, resolution, from, to })
     return NextResponse.json({
       ok: true,
       ticker: result.ticker,
