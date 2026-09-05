@@ -495,55 +495,68 @@ export function StockTradingViewChart({
                     className="fixed inset-0 z-40"
                     onClick={() => setShowTfDropdown(false)}
                   />
-                  <div className="absolute left-0 top-8 z-50 w-56 max-h-[420px] overflow-y-auto rounded-xl border border-white/[0.12] bg-[#0c131c] py-1.5 shadow-2xl divide-y divide-white/[0.06]">
-                    {["Phút", "Giờ", "Ngày / Tuần", "Tháng / Quý / Năm"].map((grp) => {
-                      const items = ALL_TIMEFRAMES.filter((t) => t.group === grp)
-                      return (
-                        <div key={grp} className="py-1 first:pt-0.5 last:pb-0.5">
-                          <span className="block px-3 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">
-                            {grp}
-                          </span>
-                          <div className="flex flex-col space-y-0.5">
-                            {items.map((it) => {
-                              const isActive = timeframe === it.id
-                              return (
-                                <button
-                                  key={it.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setTimeframe(it.id)
-                                    setShowTfDropdown(false)
-                                  }}
-                                  className={cn(
-                                    "w-full flex items-center justify-between px-3 py-1.5 text-left transition-colors group",
-                                    isActive
-                                      ? "bg-cyan-500/15 text-cyan-300 font-semibold"
-                                      : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
-                                  )}
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <span
-                                      className={cn(
-                                        "font-mono text-[11px] font-bold w-8 text-left shrink-0",
-                                        isActive
-                                          ? "text-cyan-300"
-                                          : "text-slate-400 group-hover:text-slate-200",
-                                      )}
-                                    >
-                                      {it.id}
-                                    </span>
-                                    <span className="text-[12px]">{it.label}</span>
-                                  </div>
-                                  {isActive && (
-                                    <Check className="size-3.5 text-cyan-400 shrink-0" />
-                                  )}
-                                </button>
-                              )
-                            })}
+                  <div className="absolute left-0 top-8 z-50 w-[540px] max-w-[calc(100vw-24px)] rounded-xl border border-white/[0.12] bg-[#0c131c] p-2.5 shadow-2xl">
+                    <div className="grid grid-cols-4 divide-x divide-white/[0.08]">
+                      {[
+                        { title: "Phút", group: "Phút" },
+                        { title: "Giờ", group: "Giờ" },
+                        { title: "Ngày", group: "Ngày / Tuần" },
+                        { title: "Năm", group: "Tháng / Quý / Năm" },
+                      ].map((grp, colIdx) => {
+                        const items = ALL_TIMEFRAMES.filter((t) => t.group === grp.group)
+                        return (
+                          <div
+                            key={grp.title}
+                            className={cn(
+                              "flex flex-col",
+                              colIdx === 0 ? "pr-2" : colIdx === 3 ? "pl-2" : "px-2",
+                            )}
+                          >
+                            <span className="block px-2 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">
+                              {grp.title}
+                            </span>
+                            <div className="flex flex-col space-y-0.5 mt-0.5">
+                              {items.map((it) => {
+                                const isActive = timeframe === it.id
+                                return (
+                                  <button
+                                    key={it.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setTimeframe(it.id)
+                                      setShowTfDropdown(false)
+                                    }}
+                                    className={cn(
+                                      "w-full flex items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors group",
+                                      isActive
+                                        ? "bg-cyan-500/15 text-cyan-300 font-semibold"
+                                        : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
+                                    )}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span
+                                        className={cn(
+                                          "font-mono text-[11px] font-bold w-8 text-left shrink-0",
+                                          isActive
+                                            ? "text-cyan-300"
+                                            : "text-slate-400 group-hover:text-slate-200",
+                                        )}
+                                      >
+                                        {it.id}
+                                      </span>
+                                      <span className="text-[11.5px] truncate">{it.label}</span>
+                                    </div>
+                                    {isActive && (
+                                      <Check className="size-3.5 text-cyan-400 shrink-0 ml-1" />
+                                    )}
+                                  </button>
+                                )
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
                 </>
               )}
