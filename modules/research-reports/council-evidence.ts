@@ -299,9 +299,44 @@ function normalizeItem(
   }
 }
 
+async function loadTickerCandidateReportIds(
+  client: SupabaseClient,
+  ticker: string,
+  runAt: string,
+) {
+  let query = db(client)
+    .from(MENTION_TABLE)
+    .select("report_id,created_at") as unknown as {
+      eq(column: string, value: unknown): typeof query
+      lte(column: string, value: string): typeof query
+      order(column: string, options?: { ascending?: boolean }): typeof query
+      limit(value: number): PromiseLike<QueryResult>
+    }
+  query = query.eq("ticker", ticker.toUpperCase())
+  query = query.lte("created_at", runAt)
+  query = query.order("created_at", { ascending: false })
+  query = query.order("report_id", { ascending: true })
+  const rows = ensureRows(await query.limit(MAX_QUERY_ROWS), "Council Research Report ticker candidate lookup failed")
+  const reportIds: string[] = []
+  const seen = new Set<string>()
+  for (const row of rows) {
+    const reportId = nullableText(row.report_id)
+    if (!reportId || seen.has(reportId)) continue
+    seen.add(reportId)
+    reportIds.push(reportId)
+  }
+  return reportIds
+}
+
 async function loadReports(
   client: SupabaseClient,
-  params: { asOf: string; runAt: string; lookbackDays: number; categories?: CouncilReportCategory[] },
+  params: {
+    asOf: string
+    runAt: string
+    lookbackDays: number
+    categories?: CouncilReportCategory[]
+    reportIds?: string[]
+  },
 ) {
   let query = db(client)
     .from(REPORT_TABLE)
@@ -312,6 +347,7 @@ async function loadReports(
       order(column: string, options?: { ascending?: boolean }): typeof query
       limit(value: number): PromiseLike<QueryResult>
     }
+  if (params.reportIds?.length) query = query.in("id", params.reportIds)
   query = query.lte("publish_date", params.asOf)
   query = query.gte("publish_date", dateFloor(params.asOf, params.lookbackDays))
   query = query.lte("created_at", params.runAt)
@@ -396,10 +432,13 @@ export async function getRelevantReportEvidence(
   const limit = Math.max(0, Math.min(COUNCIL_REPORT_TICKER_LIMIT, params.tickerLimit ?? COUNCIL_REPORT_TICKER_LIMIT))
   if (!normalizedTicker || !limit) return []
 
+  const candidateReportIds = await loadTickerCandidateReportIds(client, normalizedTicker, params.runAt)
+  if (!candidateReportIds.length) return []
   const reports = await loadReports(client, {
     asOf: params.asOf,
     runAt: params.runAt,
     lookbackDays: params.tickerLookbackDays ?? COUNCIL_REPORT_TICKER_LOOKBACK_DAYS,
+    reportIds: candidateReportIds,
   })
   const analyses = await loadAnalyses(client, reports.map((row) => row.id), params.runAt)
   const latestByReport = newestEligibleAnalysisByReport(analyses, params.runAt)
