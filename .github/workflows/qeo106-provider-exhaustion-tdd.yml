@@ -1,0 +1,128 @@
+name: QEO-106 one-shot Provider Exhaustion TDD
+
+on:
+  push:
+    branches:
+      - qeo-106-daily-hot-cold-full-history
+
+permissions:
+  contents: write
+
+jobs:
+  tdd-provider-exhaustion:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact branch
+        uses: actions/checkout@v4
+        with:
+          ref: qeo-106-daily-hot-cold-full-history
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Add failing provider-exhaustion regression
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          path = Path('tests/qeo-100-market-data.cases.ts')
+          text = path.read_text()
+          anchor = 'test("QEO-106 deep Daily history is resumable, bounded, provider-backed and archive-before-prune", () => {'
+          assert text.count(anchor) == 1
+          regression = '''test("QEO-106 deep backfill exhausts lower-priority providers when a provider has no trusted bars", () => {\n  const historyIndex = source("modules/market/history/index.ts")\n  const coldHistory = source("modules/market/history/daily-cold-history.ts")\n  assert.match(historyIndex, /DailyHistoryBarPolicy/)\n  assert.match(historyIndex, /applyDailyHistoryBarPolicy/)\n  assert.match(historyIndex, /no trusted completed Daily bars/)\n  assert.ok(historyIndex.indexOf('errors.push(`Yahoo:') < historyIndex.indexOf('fetchVnDirectDailyOhlcv'))\n  assert.ok(historyIndex.indexOf('fetchVnDirectDailyOhlcv') < historyIndex.indexOf('fetchTitanLabsDailyOhlcv'))\n  assert.match(coldHistory, /fetchDailyMarketHistoryWindow\(ticker, DAILY_DEEP_CHUNK_DAYS, cursorNow, deepHistoryBarPolicy\)/)\n  assert.match(coldHistory, /provider === "VCI" \|\| provider === "DNSE"/)\n  assert.match(coldHistory, /bar\.volume > 0/)\n})\n\n'''
+          path.write_text(text.replace(anchor, regression + anchor))
+          PY
+
+      - name: Prove RED before implementation
+        shell: bash
+        run: |
+          set +e
+          node --test tests/stock-tradingview-chart-v2.test.ts > /tmp/qeo106-provider-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/qeo106-provider-red.log
+          if [[ "$status" -eq 0 ]]; then
+            echo "Expected provider-exhaustion regression to fail before implementation"
+            exit 1
+          fi
+          grep -q "QEO-106 deep backfill exhausts lower-priority providers" /tmp/qeo106-provider-red.log
+
+      - name: Implement trusted-bar provider waterfall
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          path = Path('modules/market/history/index.ts')
+          text = path.read_text()
+          type_anchor = 'export type { HistoricalBarsResult, HistoricalProvider, RawHistoryTimeframe } from "@/modules/market/history/contract"\n\n'
+          assert text.count(type_anchor) == 1
+          type_block = '''export type DailyHistoryBarPolicy = (provider: HistoricalProvider, bar: OhlcvBar) => boolean\n\nfunction applyDailyHistoryBarPolicy(\n  provider: HistoricalProvider,\n  bars: OhlcvBar[],\n  policy?: DailyHistoryBarPolicy,\n) {\n  if (!policy) return bars\n  const trusted = bars.filter((bar) => policy(provider, bar))\n  if (!trusted.length) throw new Error(`${provider} returned no trusted completed Daily bars`)\n  return trusted\n}\n\n'''
+          text = text.replace(type_anchor, type_anchor + type_block)
+          signature_old = '''export async function fetchDailyMarketHistoryWindow(\n  symbol: string,\n  lookbackDays: number,\n  now = new Date(),\n): Promise<HistoricalBarsResult> {\n'''
+          signature_new = '''export async function fetchDailyMarketHistoryWindow(\n  symbol: string,\n  lookbackDays: number,\n  now = new Date(),\n  barPolicy?: DailyHistoryBarPolicy,\n): Promise<HistoricalBarsResult> {\n'''
+          assert text.count(signature_old) == 1
+          text = text.replace(signature_old, signature_new)
+          replacements = [
+            ('const bars = strictDailyBars("VCI", await fetchVciDailyOhlcv(symbol, now, lookbackDays))', 'const bars = applyDailyHistoryBarPolicy("VCI", strictDailyBars("VCI", await fetchVciDailyOhlcv(symbol, now, lookbackDays)), barPolicy)'),
+            ('const bars = strictDailyBars("DNSE", await fetchDnseDailyOhlcv(symbol, now, lookbackDays))', 'const bars = applyDailyHistoryBarPolicy("DNSE", strictDailyBars("DNSE", await fetchDnseDailyOhlcv(symbol, now, lookbackDays)), barPolicy)'),
+            ('const bars = strictDailyBars("Yahoo", await fetchYahooDailyOhlcv(symbol, now, lookbackDays))', 'const bars = applyDailyHistoryBarPolicy("Fallback", strictDailyBars("Yahoo", await fetchYahooDailyOhlcv(symbol, now, lookbackDays)), barPolicy)'),
+            ('const bars = strictDailyBars("VNDirect", await fetchVnDirectDailyOhlcv(symbol, now, lookbackDays))', 'const bars = applyDailyHistoryBarPolicy("VNDirect", strictDailyBars("VNDirect", await fetchVnDirectDailyOhlcv(symbol, now, lookbackDays)), barPolicy)'),
+            ('const bars = strictDailyBars("TitanLabs", await fetchTitanLabsDailyOhlcv(symbol, now, lookbackDays))', 'const bars = applyDailyHistoryBarPolicy("TitanLabs", strictDailyBars("TitanLabs", await fetchTitanLabsDailyOhlcv(symbol, now, lookbackDays)), barPolicy)'),
+          ]
+          for old, new in replacements:
+            assert text.count(old) == 1, old
+            text = text.replace(old, new)
+          path.write_text(text)
+          PY
+
+          python <<'PY'
+          from pathlib import Path
+          path = Path('modules/market/history/daily-cold-history.ts')
+          text = path.read_text()
+          import_old = 'import { fetchDailyMarketHistoryWindow } from "@/modules/market/history/index"\n'
+          import_new = 'import { fetchDailyMarketHistoryWindow, type DailyHistoryBarPolicy } from "@/modules/market/history/index"\n'
+          assert text.count(import_old) == 1
+          text = text.replace(import_old, import_new)
+          policy_anchor = '''function providerBackfillBars(provider: string, bars: CanonicalOhlcvBar[]) {\n  const valid = validTradingBars(bars)\n  // Generic Yahoo/Fallback zero-volume rows were the QEO-106 phantom-session\n  // failure mode. Without independent final-close evidence they cannot become\n  // immutable Cold history. VCI/DNSE/VNDirect/TitanLabs retain their real bars.\n  return provider === "Fallback" ? valid.filter((bar) => bar.volume > 0) : valid\n}\n\n'''
+          assert text.count(policy_anchor) == 1
+          policy_new = '''const deepHistoryBarPolicy: DailyHistoryBarPolicy = (provider, bar) => {\n  if (provider === "VCI" || provider === "DNSE") return true\n  return bar.volume > 0\n}\n\nfunction providerBackfillBars(provider: string, bars: CanonicalOhlcvBar[]) {\n  const valid = validTradingBars(bars)\n  return valid.filter((bar) => deepHistoryBarPolicy(provider as Parameters<DailyHistoryBarPolicy>[0], bar))\n}\n\n'''
+          text = text.replace(policy_anchor, policy_new)
+          fetch_old = 'const history = await fetchDailyMarketHistoryWindow(ticker, DAILY_DEEP_CHUNK_DAYS, cursorNow)'
+          fetch_new = 'const history = await fetchDailyMarketHistoryWindow(ticker, DAILY_DEEP_CHUNK_DAYS, cursorNow, deepHistoryBarPolicy)'
+          assert text.count(fetch_old) == 1
+          text = text.replace(fetch_old, fetch_new)
+          exhaustion_old = '''function providerExhaustedWithoutData(message: string) {\n  const providers = ["VCI", "DNSE", "Yahoo", "VNDirect", "TitanLabs"]\n  return providers.every((provider) => message.includes(`${provider}: ${provider} returned no usable completed Daily bars`))\n}\n'''
+          exhaustion_new = '''function providerExhaustedWithoutData(message: string) {\n  const providers = ["VCI", "DNSE", "Yahoo", "VNDirect", "TitanLabs"]\n  return providers.every((provider) => {\n    const prefix = `${provider}: `\n    if (!message.includes(prefix)) return false\n    return message.includes(`${provider} returned no usable completed Daily bars`)\n      || message.includes(`${provider === "Yahoo" ? "Fallback" : provider} returned no trusted completed Daily bars`)\n  })\n}\n'''
+          assert text.count(exhaustion_old) == 1
+          text = text.replace(exhaustion_old, exhaustion_new)
+          path.write_text(text)
+          PY
+
+      - name: Prove GREEN and type safety
+        run: |
+          node --test tests/stock-tradingview-chart-v2.test.ts
+          pnpm typecheck
+
+      - name: Commit implementation and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/qeo106-provider-exhaustion-tdd.yml
+          git config user.name "qeoindex-db-drift-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add modules/market/history/index.ts modules/market/history/daily-cold-history.ts tests/qeo-100-market-data.cases.ts .github/workflows/qeo106-provider-exhaustion-tdd.yml
+          git commit -m "fix(QEO-106): exhaust providers for trusted deep history"
+          git push origin HEAD:qeo-106-daily-hot-cold-full-history
