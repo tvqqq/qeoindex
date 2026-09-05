@@ -72,7 +72,7 @@ Browser-facing reads use:
 
 `GET /api/market/ohlcv`
 
-The route requires the authenticated `research` feature and returns a sanitized projection containing canonical bars plus coverage/gap/integrity evidence. It must not return:
+The route requires an authenticated user session and returns a sanitized projection containing canonical bars plus coverage/gap/integrity evidence. It must not return:
 
 - Supabase bucket names or object paths;
 - provider request URLs;
