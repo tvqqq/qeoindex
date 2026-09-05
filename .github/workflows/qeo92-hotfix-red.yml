@@ -1,0 +1,65 @@
+name: QEO-92 Hotfix RED
+
+on:
+  push:
+    branches:
+      - tvq9612/qeo-92-hotfix-1m-chart-stuck
+    paths:
+      - .github/workflows/qeo92-hotfix-red.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-red-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tvq9612/qeo-92-hotfix-1m-chart-stuck
+          fetch-depth: 0
+      - name: Add regression assertions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/stock-tradingview-chart-v2.test.ts')
+          s = p.read_text()
+          anchor = '''test("StockTradingViewChart renders explicit unavailable state for unsupported intraday timeframes", () => {
+  const code = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.match(code, /displayBars\\.length\\s*===\\s*0/)
+  assert.match(code, /Dữ liệu timeframe này chưa sẵn sàng/)
+  assert.match(code, /QEO-93/)
+})
+'''
+          addition = anchor + '''
+
+test("StockTradingViewChart cannot trap an empty persisted timeframe behind the loading return", () => {
+  const code = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.doesNotMatch(code, /if \\(!displayBars\\.length \\|\\| !chartMetrics \\|\\| visibleBars\\.length === 0\\)/)
+  assert.match(code, /Dữ liệu timeframe này chưa sẵn sàng/)
+})
+
+test("StockTradingViewChart consumes canonical raw 1m from the chart-data API", () => {
+  const code = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.match(code, /useCanonicalMinuteBars/)
+  assert.match(code, /timeframe === "1m"/)
+  assert.match(code, /\\/api\\/market\\/ohlcv/)
+})
+'''
+          if 'cannot trap an empty persisted timeframe' not in s:
+              if anchor not in s:
+                  raise SystemExit('expected unavailable-state test anchor not found')
+              s = s.replace(anchor, addition)
+              p.write_text(s)
+          PY
+      - name: Commit RED test
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/stock-tradingview-chart-v2.test.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "test(qeo-92): reproduce persisted 1m chart trap"
+          git push origin HEAD:tvq9612/qeo-92-hotfix-1m-chart-stuck
