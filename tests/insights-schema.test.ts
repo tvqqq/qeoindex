@@ -222,3 +222,36 @@ test("KFSP snapshot publish is atomic, authenticated read-only, and scheduled fo
   assert.match(pipelineMigration, /vault\.decrypted_secrets where name = 'kfsp_sync_secret'/i)
   assert.match(pipelineMigration, /timeout_milliseconds := 55000/i)
 })
+
+test("stock detail workstation integrates insights rating tabs and removes methodology footer", () => {
+  const workstation = readFileSync("components/stock-detail/stock-detail-workstation.tsx", "utf8")
+  const tabsPanel = readFileSync("components/stock-detail/stock-tabs-panel.tsx", "utf8")
+  const stockDetailData = readFileSync("modules/research/insights/stock-detail-data.ts", "utf8")
+
+  // 1. Methodology footer is removed
+  assert.doesNotMatch(workstation, /Methodology: Workstation chi tiết cổ phiếu kết hợp dữ liệu kỹ thuật/)
+
+  // 2. 4 Tabs integrated matching Insights modal
+  assert.match(tabsPanel, /type StockDetailTab = "overview" \| "info" \| "ta" \| "ttai"/)
+  for (const tab of ["Tổng quan", "Thông tin doanh nghiệp", "Phân tích TA", "TTAI"]) {
+    assert.match(tabsPanel, new RegExp(`label: "${tab}"`))
+  }
+  for (const panel of ["overview", "info", "ta", "ttai"]) {
+    assert.match(tabsPanel, new RegExp(`rating-panel-${panel}|TtaiDashboard`))
+  }
+
+  // 3. Wyckoff link action
+  assert.match(tabsPanel, /href=\{`\/insights\/wyckoff\?ticker=\$\{row\.ticker\}&timeframe=1D`\}/)
+  assert.match(tabsPanel, /<span>Phân tích Wyckoff<\/span>/)
+
+  // 4. Rating components present
+  assert.match(tabsPanel, /RatingRadar/)
+  assert.match(tabsPanel, /AccumulationHeatmap/)
+  assert.match(tabsPanel, /RatingHistoryChart/)
+  assert.match(tabsPanel, /TtaiDashboard/)
+
+  // 5. Stock detail data fetches rating row and has fallback
+  assert.match(stockDetailData, /getInsightsRatingForTicker\(supabase, decoded\)/)
+  assert.match(stockDetailData, /buildFallbackRatingRow/)
+})
+

@@ -156,11 +156,6 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
             isTransitioning={isTransitioning}
           />
         </div>
-
-        {/* Footer Methodology */}
-        <footer className="mt-4 rounded-2xl border border-white/[0.06] bg-[#080d13] px-4 py-2.5 text-[9px] leading-5 text-slate-500">
-          <b className="text-slate-400">Methodology:</b> Workstation chi tiết cổ phiếu kết hợp dữ liệu kỹ thuật thời gian thực, mô hình định giá cơ bản và consensus độc lập từ AI Council. Dữ liệu phân tích mang tính chất tham khảo, nhà đầu tư tự chịu trách nhiệm với quyết định giao dịch.
-        </footer>
       </main>
     </div>
   )
