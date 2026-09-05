@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 
 import type { ResearchReportDetailViewModel } from "@/modules/research-reports"
 
@@ -42,6 +43,7 @@ function analysisStatusLabel(status: ResearchReportDetailViewModel["analysisStat
 }
 
 export function ReportDetailShell({ report }: { report: ResearchReportDetailViewModel }) {
+  const router = useRouter()
   const [navigation, setNavigation] = useState<CitationNavigationState>({
     activeTab: "pdf",
     requestedPage: null,
@@ -56,6 +58,14 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
     setNavigation((current) => ({ ...current, activeTab }))
   }
 
+  const goBack = () => {
+    if (window.history.length > 1) {
+      router.back()
+      return
+    }
+    router.push("/insights/reports")
+  }
+
   useEffect(() => {
     if (navigation.activeTab !== "pdf" || navigation.requestedPage === null) return
     viewerRegionRef.current?.focus({ preventScroll: false })
@@ -64,6 +74,40 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
   return (
     <main className="mx-auto max-w-[1800px] space-y-5 p-4 lg:p-6">
       <header className="rounded-xl border border-white/10 bg-white/[0.03] p-5 lg:p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={goBack}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-zinc-300 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+          >
+            <span aria-hidden="true">←</span>
+            Quay lại
+          </button>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {report.originalPdfUrl ? (
+              <a
+                href={report.originalPdfUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="rounded-lg border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+              >
+                Mở PDF gốc ↗
+              </a>
+            ) : null}
+            {report.originalSourceLink ? (
+              <a
+                href={report.originalSourceLink}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+              >
+                Mở nguồn gốc ↗
+              </a>
+            ) : null}
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 max-w-5xl">
             <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
@@ -89,17 +133,6 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
               ) : null}
             </div>
           </div>
-
-          {report.originalSourceLink ? (
-            <a
-              href={report.originalSourceLink}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="shrink-0 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-            >
-              Mở nguồn gốc
-            </a>
-          ) : null}
         </div>
       </header>
 
@@ -150,6 +183,7 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
             title={report.title}
             requestedPage={navigation.requestedPage}
             originalSourceLink={report.originalSourceLink}
+            originalPdfUrl={report.originalPdfUrl}
             onPageResolved={(page) => {
               setNavigation((current) => current.requestedPage === page
                 ? { ...current, requestedPage: null }
