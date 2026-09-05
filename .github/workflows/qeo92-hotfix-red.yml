@@ -24,36 +24,9 @@ jobs:
           from pathlib import Path
           p = Path('tests/stock-tradingview-chart-v2.test.ts')
           s = p.read_text()
-          anchor = '''test("StockTradingViewChart renders explicit unavailable state for unsupported intraday timeframes", () => {
-  const code = source("components/stock-detail/stock-tradingview-chart.tsx")
-
-  assert.match(code, /displayBars\\.length\\s*===\\s*0/)
-  assert.match(code, /Dữ liệu timeframe này chưa sẵn sàng/)
-  assert.match(code, /QEO-93/)
-})
-'''
-          addition = anchor + '''
-
-test("StockTradingViewChart cannot trap an empty persisted timeframe behind the loading return", () => {
-  const code = source("components/stock-detail/stock-tradingview-chart.tsx")
-
-  assert.doesNotMatch(code, /if \\(!displayBars\\.length \\|\\| !chartMetrics \\|\\| visibleBars\\.length === 0\\)/)
-  assert.match(code, /Dữ liệu timeframe này chưa sẵn sàng/)
-})
-
-test("StockTradingViewChart consumes canonical raw 1m from the chart-data API", () => {
-  const code = source("components/stock-detail/stock-tradingview-chart.tsx")
-
-  assert.match(code, /useCanonicalMinuteBars/)
-  assert.match(code, /timeframe === "1m"/)
-  assert.match(code, /\\/api\\/market\\/ohlcv/)
-})
-'''
+          addition = '\n\ntest("StockTradingViewChart cannot trap an empty persisted timeframe behind the loading return", () => {\n  const code = source("components/stock-detail/stock-tradingview-chart.tsx")\n\n  assert.doesNotMatch(code, /if \\(!displayBars\\.length \\|\\| !chartMetrics \\|\\| visibleBars\\.length === 0\\)/)\n  assert.match(code, /Dữ liệu timeframe này chưa sẵn sàng/)\n})\n\ntest("StockTradingViewChart consumes canonical raw 1m from the chart-data API", () => {\n  const code = source("components/stock-detail/stock-tradingview-chart.tsx")\n\n  assert.match(code, /useCanonicalMinuteBars/)\n  assert.match(code, /timeframe === "1m"/)\n  assert.match(code, /\\/api\\/market\\/ohlcv/)\n})\n'
           if 'cannot trap an empty persisted timeframe' not in s:
-              if anchor not in s:
-                  raise SystemExit('expected unavailable-state test anchor not found')
-              s = s.replace(anchor, addition)
-              p.write_text(s)
+              p.write_text(s + addition)
           PY
       - name: Commit RED test
         run: |
