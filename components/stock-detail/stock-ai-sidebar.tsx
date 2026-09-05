@@ -31,6 +31,98 @@ function scoreTone(score: number | null) {
   return "text-white"
 }
 
+const RADIUS = 72
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS
+
+function getConsensusStyle(rate: number) {
+  if (rate >= 80) {
+    return {
+      gradientId: "consensus-grad-high",
+      fromColor: "#00f0ff",
+      toColor: "#22c98a",
+      glowColor: "rgba(0, 240, 255, 0.45)",
+      badgeColor: "border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
+      dotColor: "bg-cyan-400",
+    }
+  }
+  if (rate >= 65) {
+    return {
+      gradientId: "consensus-grad-med-high",
+      fromColor: "#38bdf8",
+      toColor: "#06b6d4",
+      glowColor: "rgba(56, 189, 248, 0.35)",
+      badgeColor: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+      dotColor: "bg-sky-400",
+    }
+  }
+  if (rate >= 50) {
+    return {
+      gradientId: "consensus-grad-neutral",
+      fromColor: "#f59e0b",
+      toColor: "#eab308",
+      glowColor: "rgba(245, 158, 11, 0.3)",
+      badgeColor: "border-amber-400/30 bg-amber-400/10 text-amber-300",
+      dotColor: "bg-amber-400",
+    }
+  }
+  return {
+    gradientId: "consensus-grad-low",
+    fromColor: "#f43f5e",
+    toColor: "#e11d48",
+    glowColor: "rgba(244, 63, 94, 0.3)",
+    badgeColor: "border-rose-400/30 bg-rose-400/10 text-rose-300",
+    dotColor: "bg-rose-400",
+  }
+}
+
+const CONFIDENCE_TIERS = [
+  {
+    label: "Very high",
+    range: "90% ↑",
+    dotColor: "bg-[#10b981]",
+    textColor: "text-emerald-300",
+    ringBorder: "border-[#10b981]",
+    min: 90,
+    max: 100,
+  },
+  {
+    label: "High",
+    range: "70%-89%",
+    dotColor: "bg-[#f97316]",
+    textColor: "text-orange-300",
+    ringBorder: "border-[#f97316]",
+    min: 70,
+    max: 89,
+  },
+  {
+    label: "Medium",
+    range: "50%-69%",
+    dotColor: "bg-[#eab308]",
+    textColor: "text-amber-300",
+    ringBorder: "border-[#eab308]",
+    min: 50,
+    max: 69,
+  },
+  {
+    label: "Low",
+    range: "30%-49%",
+    dotColor: "bg-[#3b82f6]",
+    textColor: "text-blue-300",
+    ringBorder: "border-[#3b82f6]",
+    min: 30,
+    max: 49,
+  },
+  {
+    label: "Very low",
+    range: "30% ↓",
+    dotColor: "bg-[#f43f5e]",
+    textColor: "text-rose-300",
+    ringBorder: "border-[#f43f5e]",
+    min: 0,
+    max: 29,
+  },
+] as const
+
 export function StockAiSidebar({ data }: { data: StockDetailData }) {
   const { ticker, price, changePct, aiStock, scan, thesis, fa } = data
 
@@ -40,11 +132,35 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
   const confidence = aiStock?.confidence ?? 80
 
   const pillars = [
-    { label: "Cơ bản", score: fa?.roe ? Math.min(95, Math.round(fa.roe * 2.5 + 30)) : 75 },
-    { label: "Kỹ thuật", score: scan?.wyckoffState ? (scan.wyckoffState.includes("Accumulation") || scan.wyckoffState.includes("Markup") ? 86 : 55) : 80 },
-    { label: "Dòng tiền", score: scan?.relVolume ? Math.min(96, Math.round(scan.relVolume * 50)) : 82 },
-    { label: "Bối cảnh", score: thesis?.marketRegime === "Risk-On" ? 85 : 70 },
-    { label: "An toàn", score: 78 },
+    {
+      label: "Cơ bản",
+      score: fa?.roe ? Math.min(95, Math.round(fa.roe * 2.5 + 30)) : 75,
+      gradient: "from-blue-500 to-cyan-400",
+    },
+    {
+      label: "Kỹ thuật",
+      score: scan?.wyckoffState
+        ? scan.wyckoffState.includes("Accumulation") || scan.wyckoffState.includes("Markup")
+          ? 86
+          : 55
+        : 80,
+      gradient: "from-cyan-500 to-emerald-400",
+    },
+    {
+      label: "Dòng tiền",
+      score: scan?.relVolume ? Math.min(96, Math.round(scan.relVolume * 50)) : 82,
+      gradient: "from-emerald-500 to-teal-400",
+    },
+    {
+      label: "Bối cảnh",
+      score: thesis?.marketRegime === "Risk-On" ? 85 : 70,
+      gradient: "from-violet-500 to-purple-400",
+    },
+    {
+      label: "Quản trị",
+      score: 78,
+      gradient: "from-amber-500 to-yellow-400",
+    },
   ]
 
   const signalText =
@@ -53,19 +169,28 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
       : signal === "BUY_ON_CONFIRMATION"
       ? "MUA KHI XÁC NHẬN"
       : signal === "REDUCE"
-      ? "HẠ TỶ TRỌNG (REDUCE)"
+      ? "HẠ TỶ TRỌNG"
       : signal === "SELL"
       ? "BÁN (SELL)"
       : "THEO DÕI (WAIT)"
 
-  const signalColor =
+  const signalTone =
     signal === "BUY"
-      ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-300"
+      ? "text-emerald-300 drop-shadow-[0_0_12px_rgba(34,201,138,0.5)]"
       : signal === "BUY_ON_CONFIRMATION"
-      ? "border-cyan-400/35 bg-cyan-400/10 text-cyan-200"
+      ? "text-cyan-200 drop-shadow-[0_0_12px_rgba(34,211,238,0.5)]"
       : signal === "REDUCE" || signal === "SELL"
-      ? "border-rose-400/35 bg-rose-400/10 text-rose-300"
-      : "border-slate-400/25 bg-slate-400/[0.08] text-slate-200"
+      ? "text-rose-300 drop-shadow-[0_0_12px_rgba(244,63,94,0.5)]"
+      : "text-slate-200"
+
+  const consensusStyle = getConsensusStyle(consensus)
+  const clampedConsensus = Math.min(100, Math.max(0, consensus))
+  const strokeDashoffset = CIRCUMFERENCE - (clampedConsensus / 100) * CIRCUMFERENCE
+
+  const activeTier =
+    CONFIDENCE_TIERS.find((t) => confidence >= t.min && confidence <= t.max) ||
+    CONFIDENCE_TIERS[1]
+  const clampedConfidence = Math.min(94, Math.max(6, confidence))
 
   const supportLevel = aiStock?.support || scan?.support || thesis?.support || (price ? (price * 0.96).toFixed(1) : "—")
   const resistanceLevel = aiStock?.resistance || scan?.resistance || thesis?.resistance || (price ? (price * 1.07).toFixed(1) : "—")
@@ -133,7 +258,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
 
   return (
     <div className="space-y-3.5 w-full pb-8">
-      {/* AI Council Overview Card (Matching AI Council Card Design) */}
+      {/* AI Council Overview Card */}
       <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b1119] p-4 sm:p-5 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -146,53 +271,171 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
               <p className="text-[10px] text-slate-500 font-mono">Consensus V1.4</p>
             </div>
           </div>
-          <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-bold text-slate-300">
+          <span className={cn("rounded-full border px-2.5 py-1 text-[10px] font-bold", consensusStyle.badgeColor)}>
             {consensus}% Đồng thuận
           </span>
         </div>
 
-        {/* Recommendation Badge & Action Summary */}
-        <div>
-          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-300">Khuyến nghị</div>
-          <div className={cn("mt-1.5 inline-flex items-center rounded-xl border px-3.5 py-2 font-ticker text-lg sm:text-xl font-black", signalColor)}>
-            {signalText}
+        {/* ========================================================= */}
+        {/* 1. DONUT CONSENSUS RING WITH RECOMMENDATION IN CENTER     */}
+        {/* ========================================================= */}
+        <div className="space-y-3 pt-1">
+          <div className="relative mx-auto flex size-44 sm:size-48 items-center justify-center">
+            <svg viewBox="0 0 200 200" className="size-full -rotate-90">
+              <defs>
+                <linearGradient id={consensusStyle.gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor={consensusStyle.fromColor} />
+                  <stop offset="100%" stopColor={consensusStyle.toColor} />
+                </linearGradient>
+                <filter id="consensus-ring-glow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+              {/* Base track */}
+              <circle
+                cx="100"
+                cy="100"
+                r={RADIUS}
+                fill="none"
+                stroke="rgba(255, 255, 255, 0.07)"
+                strokeWidth="14"
+              />
+              {/* Progress Arc */}
+              <circle
+                cx="100"
+                cy="100"
+                r={RADIUS}
+                fill="none"
+                stroke={`url(#${consensusStyle.gradientId})`}
+                strokeWidth="14"
+                strokeLinecap="round"
+                strokeDasharray={CIRCUMFERENCE}
+                strokeDashoffset={strokeDashoffset}
+                filter="url(#consensus-ring-glow)"
+                className="transition-all duration-700 ease-out"
+              />
+            </svg>
+
+            {/* In the center of the ring: Recommendation & consensus */}
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center px-4">
+              <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 mb-0.5">
+                Khuyến nghị
+              </span>
+              <div
+                className={cn(
+                  "font-ticker text-sm sm:text-base font-black tracking-tight uppercase leading-snug px-1",
+                  signalTone
+                )}
+              >
+                {signalText}
+              </div>
+              <div className="mt-1 flex items-center gap-1 font-mono text-[10.5px] text-slate-300">
+                <span className={cn("size-1.5 rounded-full", consensusStyle.dotColor)} />
+                <span>{consensus}% Đồng thuận</span>
+              </div>
+            </div>
           </div>
-          <p className="mt-2.5 text-[12px] leading-relaxed text-slate-300">
+
+          {/* Context thesis quote under donut */}
+          <p className="text-center text-[11.5px] leading-relaxed text-slate-300 px-1">
             {aiStock?.whatChangesDecision?.[0] ||
               thesis?.baseCase ||
               "Áp lực bán cạn kiệt quanh hỗ trợ trung hạn. Smart Money có dấu hiệu hấp thụ chủ động, phù hợp giải ngân từng phần."}
           </p>
-
-          <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold">
-            <span className="rounded-full border border-cyan-400/20 bg-cyan-400/[0.06] px-2.5 py-1 text-cyan-200">
-              Độ tin cậy: {confidence >= 80 ? "Cao" : "Trung bình"} ({confidence}%)
-            </span>
-            <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-slate-300">
-              Hội đồng: {score}/100
-            </span>
-          </div>
         </div>
 
-        {/* 5 Pillars Breakdown (Matching AI Council Pillars) */}
-        <div>
-          <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-            <Gauge className="size-3.5" />
-            5 Trụ cột
+        {/* ========================================================= */}
+        {/* 2. 5 TRỤ CỘT: 5 PROGRESS BAR CHARTS                       */}
+        {/* ========================================================= */}
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <Gauge className="size-3.5 text-cyan-400" />
+              5 Trụ cột đánh giá
+            </span>
+            <span className="font-mono text-slate-500">Hội đồng: {score}/100</span>
           </div>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="space-y-2.5 rounded-xl border border-white/[0.05] bg-black/20 p-3">
             {pillars.map((p) => (
-              <div
-                key={p.label}
-                className="rounded-xl border border-white/[0.07] bg-black/15 px-1 py-2 text-center"
-              >
-                <div className="text-[9px] font-bold text-slate-500 truncate" title={p.label}>
-                  {p.label}
-                </div>
-                <div className={cn("mt-1 font-mono text-base font-black", scoreTone(p.score))}>
-                  {p.score}
+              <div key={p.label} className="space-y-1">
+                <div className="text-[11px] font-medium text-slate-400">{p.label}</div>
+                <div className="flex items-center gap-2.5">
+                  <span className="w-11 font-mono text-xs font-bold text-white shrink-0">
+                    {p.score} %
+                  </span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
+                    <div
+                      className={cn("h-full rounded-full bg-gradient-to-r transition-all duration-500", p.gradient)}
+                      style={{ width: `${Math.min(100, Math.max(0, p.score))}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* ========================================================= */}
+        {/* 3. ĐỘ TIN CẬY (CONFIDENCE SPECTRUM & TIERED LEGEND)       */}
+        {/* ========================================================= */}
+        <div className="border-t border-white/[0.08] pt-3.5 space-y-3">
+          <div className="text-center text-xs font-bold text-slate-200">
+            Độ tin cậy (Confidence)
+          </div>
+
+          {/* Spectrum Track with Floating Label and Indicator Thumb */}
+          <div className="relative pt-5 pb-2 px-1">
+            {/* Floating text above thumb */}
+            <div
+              className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-[10px] font-mono font-bold text-slate-200 transition-all duration-300"
+              style={{ left: `${clampedConfidence}%` }}
+            >
+              {activeTier.label} {confidence}%
+            </div>
+
+            {/* Spectrum Track Bar */}
+            <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-[#f43f5e] via-[#3b82f6] via-[#eab308] via-[#f97316] to-[#10b981]">
+              {/* Indicator Circle / Thumb */}
+              <div
+                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-300"
+                style={{ left: `${clampedConfidence}%` }}
+              >
+                <div
+                  className={cn(
+                    "size-4 rounded-full border-[3px] bg-[#0b1119] shadow-[0_0_10px_rgba(0,0,0,0.8)]",
+                    activeTier.ringBorder
+                  )}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Tiered Legend List */}
+          <div className="space-y-1.5 pt-1 text-[11px]">
+            {CONFIDENCE_TIERS.map((tier) => {
+              const isCurrent = tier.label === activeTier.label
+              return (
+                <div
+                  key={tier.label}
+                  className={cn(
+                    "flex items-center justify-between transition-colors px-1 py-0.5 rounded-lg",
+                    isCurrent ? "bg-white/[0.04] font-bold text-white" : "text-slate-400"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={cn("size-2 rounded-full shrink-0", tier.dotColor, isCurrent && "ring-2 ring-white/30")} />
+                    <span>{tier.label}</span>
+                  </div>
+                  <span className={cn("font-mono text-[10px]", isCurrent ? tier.textColor : "text-slate-500")}>
+                    {tier.range}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </div>
 
