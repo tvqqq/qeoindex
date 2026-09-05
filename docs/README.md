@@ -1,6 +1,6 @@
 # QeoIndex documentation
 
-Last reviewed: 2026-09-04.
+Last reviewed: 2026-09-05.
 
 This file is the navigation and lifecycle contract for repository documentation. It prevents historical plans, rollout notes, and temporary handoffs from becoming competing architecture sources.
 
@@ -25,6 +25,8 @@ Linear is the source of truth for current issue status, sequencing, blockers, an
 - EOD architecture: `supabase-first-eod-v4-dag`.
 - Wyckoff operational timeframes: exactly `1D` + `1W` completed bars.
 - Persistent raw Wyckoff OHLCV: `1D` only; `1W` is deterministically derived.
+- Interactive chart raw OHLCV: canonical `1m` lives in the isolated `chart_ohlcv_intraday` hot store plus private `chart-ohlcv` cold storage; it does not widen the Wyckoff/EOD table contract.
+- Unsupported derived intraday chart timeframes must render unavailable rather than fabricate candles until the timeframe engine owns their aggregation.
 - Notion/other external knowledge systems may be downstream analytical or research layers, but they are not the active operational EOD state store.
 - Production release path: merge once to `main` → one Vercel Git Integration deployment → smoke the live system.
 
@@ -35,6 +37,7 @@ See `HANDOVER.md` for the full contract and safety gates.
 | Document | Role |
 | --- | --- |
 | [`HANDOVER.md`](./HANDOVER.md) | Canonical production architecture, EOD, storage, DB safety, validation and acceptance. |
+| [`chart-data.md`](./chart-data.md) | Canonical interactive-chart raw `1m`, hot/cold storage, merge integrity and API boundaries. |
 | [`market-board.md`](./market-board.md) | Market-board bootstrap, realtime path, filters, lifecycle and performance. |
 | [`security.md`](./security.md) | Security requirements and audit boundaries. |
 | [`auth.md`](./auth.md) | Supabase Auth, sessions, feature gates and RLS ownership. |
@@ -84,7 +87,7 @@ If historical material conflicts with an Active document, the Active document wi
 
 ## Docs-only release checklist
 
-- No active doc contradicts the canonical universe, EOD v4, Supabase-first, or Wyckoff 1D/1W contracts.
+- No active doc contradicts the canonical universe, EOD v4, Supabase-first, Wyckoff 1D/1W, or isolated interactive-chart `1m` contracts.
 - No links remain to deleted repo-wide handoff files.
 - `pnpm verify:pr` passes.
 - `pnpm build` passes when the change is intended for release.

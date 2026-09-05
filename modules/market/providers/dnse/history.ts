@@ -14,12 +14,16 @@ const DEFAULT_LOOKBACK_DAYS = 520
 const DEFAULT_INTRADAY_LOOKBACK_DAYS = 180
 const DAILY_REQUEST_WINDOW_DAYS = 366
 const HOURLY_REQUEST_WINDOW_DAYS = 30
+const MINUTE_REQUEST_WINDOW_DAYS = 7
 const DAILY_MIN_RETRY_WINDOW_DAYS = 7
 const HOURLY_MIN_RETRY_WINDOW_DAYS = 7
+const MINUTE_MIN_RETRY_WINDOW_DAYS = 1
 const DAILY_ADAPTIVE_BUDGET_MS = 30_000
 const HOURLY_ADAPTIVE_BUDGET_MS = 20_000
+const MINUTE_ADAPTIVE_BUDGET_MS = 20_000
 const REQUEST_TIMEOUT_MS = 8_000
 const SECONDS_PER_DAY = 86400
+const MAX_MINUTE_RANGE_SECONDS = 31 * SECONDS_PER_DAY
 
 export interface ProviderHealth {
   configured: boolean
@@ -136,6 +140,11 @@ function removeIncompleteCurrentHourlyBar(bars: OhlcvBar[], now = new Date()) {
   })
 }
 
+function removeIncompleteCurrentMinuteBar(bars: OhlcvBar[], now = new Date()) {
+  const nowSeconds = Math.floor(now.getTime() / 1000)
+  return bars.filter((bar) => bar.time + 60 <= nowSeconds)
+}
+
 const buildRequestWindows = buildDnseRequestWindows
 
 function dedupeBars(bars: OhlcvBar[]) {
@@ -228,6 +237,33 @@ async function requestOhlcWindows(
   const merged = dedupeBars(bars)
   if (!merged.length) throw new Error(`DNSE OHLC ${symbol} ${resolution} returned no usable bars across ${windows.length} window(s)`)
   return merged
+}
+
+export async function fetchMinuteOhlcvRange(
+  symbolInput: string,
+  from: number,
+  to: number,
+  now = new Date(),
+): Promise<OhlcvBar[]> {
+  const symbol = symbolInput.trim().toUpperCase()
+  if (!/^[A-Z0-9]{2,12}$/.test(symbol)) throw new Error(`Invalid DNSE OHLC symbol: ${symbolInput}`)
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from <= 0 || to <= from) throw new Error("Invalid DNSE 1m OHLC range")
+  if (to - from > MAX_MINUTE_RANGE_SECONDS) throw new Error("DNSE 1m OHLC range exceeds 31 days")
+
+  const deadlineMs = Date.now() + MINUTE_ADAPTIVE_BUDGET_MS
+  const errors: string[] = []
+  for (const resolution of ["1", "1m"]) {
+    try {
+      const bars = await requestOhlcWindows(symbol, resolution, from, to, MINUTE_REQUEST_WINDOW_DAYS, MINUTE_MIN_RETRY_WINDOW_DAYS, deadlineMs)
+      const completed = removeIncompleteCurrentMinuteBar(bars, now)
+      if (!completed.length) throw new Error(`DNSE OHLC ${symbol} ${resolution} returned no completed 1m bars`)
+      return completed
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error))
+      if (Date.now() >= deadlineMs) break
+    }
+  }
+  throw new Error(errors.join(" | ").slice(0, 720))
 }
 
 export async function fetchDailyOhlcv(symbol: string, now = new Date(), lookbackDays = DEFAULT_LOOKBACK_DAYS): Promise<OhlcvBar[]> {

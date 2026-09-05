@@ -628,6 +628,142 @@ export type Database = {
           },
         ]
       }
+      chart_ohlcv_cold_manifests: {
+        Row: {
+          archive_format: string
+          base_resolution: string
+          created_at: string
+          id: string
+          object_path: string
+          provenance_batch_id: string | null
+          range_end: string
+          range_start: string
+          row_count: number
+          sha256: string
+          ticker: string
+          verified_at: string
+        }
+        Insert: {
+          archive_format: string
+          base_resolution: string
+          created_at?: string
+          id?: string
+          object_path: string
+          provenance_batch_id?: string | null
+          range_end: string
+          range_start: string
+          row_count: number
+          sha256: string
+          ticker: string
+          verified_at?: string
+        }
+        Update: {
+          archive_format?: string
+          base_resolution?: string
+          created_at?: string
+          id?: string
+          object_path?: string
+          provenance_batch_id?: string | null
+          range_end?: string
+          range_start?: string
+          row_count?: number
+          sha256?: string
+          ticker?: string
+          verified_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chart_ohlcv_cold_manifests_provenance_batch_id_fkey"
+            columns: ["provenance_batch_id"]
+            isOneToOne: false
+            referencedRelation: "chart_ohlcv_provenance_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chart_ohlcv_intraday: {
+        Row: {
+          bar_time: string
+          base_resolution: string
+          close: number
+          fetched_at: string
+          high: number
+          low: number
+          open: number
+          provenance_batch_id: string | null
+          ticker: string
+          volume: number
+        }
+        Insert: {
+          bar_time: string
+          base_resolution: string
+          close: number
+          fetched_at?: string
+          high: number
+          low: number
+          open: number
+          provenance_batch_id?: string | null
+          ticker: string
+          volume: number
+        }
+        Update: {
+          bar_time?: string
+          base_resolution?: string
+          close?: number
+          fetched_at?: string
+          high?: number
+          low?: number
+          open?: number
+          provenance_batch_id?: string | null
+          ticker?: string
+          volume?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chart_ohlcv_intraday_provenance_batch_id_fkey"
+            columns: ["provenance_batch_id"]
+            isOneToOne: false
+            referencedRelation: "chart_ohlcv_provenance_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chart_ohlcv_provenance_batches: {
+        Row: {
+          base_resolution: string
+          detail: Json
+          fetched_at: string
+          id: string
+          provider: string
+          range_end: string
+          range_start: string
+          row_count: number
+          ticker: string
+        }
+        Insert: {
+          base_resolution: string
+          detail?: Json
+          fetched_at?: string
+          id?: string
+          provider: string
+          range_end: string
+          range_start: string
+          row_count: number
+          ticker: string
+        }
+        Update: {
+          base_resolution?: string
+          detail?: Json
+          fetched_at?: string
+          id?: string
+          provider?: string
+          range_end?: string
+          range_start?: string
+          row_count?: number
+          ticker?: string
+        }
+        Relationships: []
+      }
       insights_stock_ratings: {
         Row: {
           as_of_date: string
