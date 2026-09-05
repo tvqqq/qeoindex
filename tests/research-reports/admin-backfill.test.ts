@@ -12,8 +12,8 @@ function jobBlock(catalog: string, key: string) {
   return catalog.slice(start, start + 1_200)
 }
 
-test("QEO-85 Admin catalog separates scheduled daily ownership from confirmed backfill recovery", () => {
-  const catalog = source("modules/admin/catalog.ts")
+test("QEO-85 effective Admin catalog separates scheduled daily ownership from confirmed backfill recovery", () => {
+  const catalog = source("modules/admin/effective-job-catalog.ts")
   const daily = jobBlock(catalog, "research_reports.daily")
   const backfill = jobBlock(catalog, "research_reports.backfill")
 
