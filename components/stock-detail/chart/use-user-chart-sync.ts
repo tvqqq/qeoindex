@@ -15,6 +15,7 @@ import {
   runtimeDrawingToPersistedV2,
   type LegacyDrawing,
   type PersistedDrawingV2,
+  type RuntimeDrawingObject,
   type UserChartSettingsPayloadV2,
 } from "./drawings"
 
@@ -315,9 +316,15 @@ export function useUserChartSync({
 
   const addDrawing = useCallback(
     (d: DrawingObject) => {
-      updateDrawings((prev) => [...prev, d])
+      const runtimeDrawing = d as RuntimeDrawingObject
+      const drawingWithPersistenceMetadata: RuntimeDrawingObject = {
+        ...runtimeDrawing,
+        sourceTimeframe: runtimeDrawing.sourceTimeframe ?? timeframe,
+        visibility: runtimeDrawing.visibility ?? "global",
+      }
+      updateDrawings((prev) => [...prev, drawingWithPersistenceMetadata])
     },
-    [updateDrawings],
+    [timeframe, updateDrawings],
   )
 
   const modifyDrawing = useCallback(
