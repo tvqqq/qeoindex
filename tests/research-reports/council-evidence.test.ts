@@ -24,6 +24,7 @@ class FixtureQuery implements PromiseLike<{ data: Row[]; error: null }> {
   filters: Array<(row: Row) => boolean> = []
   rowLimit: number | null = null
   rows: Row[]
+  sorts: Array<{ column: string; ascending: boolean }> = []
 
   constructor(rows: Row[]) {
     this.rows = rows
@@ -47,7 +48,10 @@ class FixtureQuery implements PromiseLike<{ data: Row[]; error: null }> {
     this.filters.push((row) => allowed.has(row[column]))
     return this
   }
-  order(_column: string, _options?: { ascending?: boolean }) { return this }
+  order(column: string, options?: { ascending?: boolean }) {
+    this.sorts.push({ column, ascending: options?.ascending !== false })
+    return this
+  }
   limit(value: number) {
     this.rowLimit = value
     return this
@@ -58,6 +62,17 @@ class FixtureQuery implements PromiseLike<{ data: Row[]; error: null }> {
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2> {
     let data = this.rows.filter((row) => this.filters.every((filter) => filter(row)))
+    if (this.sorts.length) {
+      data = [...data].sort((left, right) => {
+        for (const sort of this.sorts) {
+          const leftValue = String(left[sort.column] ?? "")
+          const rightValue = String(right[sort.column] ?? "")
+          const comparison = leftValue.localeCompare(rightValue)
+          if (comparison) return sort.ascending ? comparison : -comparison
+        }
+        return 0
+      })
+    }
     if (this.rowLimit != null) data = data.slice(0, this.rowLimit)
     return Promise.resolve({ data, error: null }).then(onfulfilled, onrejected)
   }
@@ -171,6 +186,49 @@ test("Council ticker report selector is bounded to newest 3 reports within 90 da
 
   assert.deepEqual(result.map((row) => row.reportId), ["r1", "r2", "r3"])
   assert.ok(result.every((row) => row.roles.includes("ticker")))
+})
+
+test("Council report row safety cap is deterministic and keeps the newest eligible report", async () => {
+  const oldReports = Array.from({ length: 160 }, (_, index) => report(`r-${String(index).padStart(3, "0")}`, "2026-09-01"))
+  const oldAnalyses = oldReports.map((row, index) => analysis(`a-${String(index).padStart(3, "0")}`, String(row.id), "2026-09-01T03:00:00Z"))
+  const oldMentions = oldAnalyses.map((row, index) => mention(String(oldReports[index].id), String(row.id)))
+  const fixture: Fixture = {
+    reports: [...oldReports, report("r-new", "2026-09-04")],
+    analyses: [...oldAnalyses, analysis("a-new", "r-new", "2026-09-04T03:00:00Z")],
+    mentions: [...oldMentions, mention("r-new", "a-new")],
+  }
+
+  const result = await getRelevantReportEvidence(client(fixture) as never, {
+    ticker: "MSN",
+    asOf: AS_OF,
+    runAt: RUN_AT,
+  })
+
+  assert.equal(result[0]?.reportId, "r-new")
+})
+
+test("Council analysis row safety cap is deterministic and keeps the newest point-in-time analysis", async () => {
+  const oldAnalyses = Array.from({ length: 160 }, (_, index) => analysis(
+    `a-${String(index).padStart(3, "0")}`,
+    "r1",
+    "2026-09-01T03:00:00Z",
+  ))
+  const fixture: Fixture = {
+    reports: [report("r1", "2026-09-01")],
+    analyses: [...oldAnalyses, analysis("a-new", "r1", "2026-09-04T03:00:00Z")],
+    mentions: [
+      ...oldAnalyses.map((row) => mention("r1", String(row.id))),
+      mention("r1", "a-new"),
+    ],
+  }
+
+  const result = await getRelevantReportEvidence(client(fixture) as never, {
+    ticker: "MSN",
+    asOf: AS_OF,
+    runAt: RUN_AT,
+  })
+
+  assert.equal(result[0]?.analysisId, "a-new")
 })
 
 test("Council selector freezes newest analysis that actually existed at runAt and excludes future rows", async () => {
