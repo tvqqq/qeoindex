@@ -4,6 +4,7 @@ import test from "node:test"
 
 import {
   discoverTopiReports,
+  normalizeResearchReportCatalogQuery,
   normalizeTopiReportCategory,
   parseTopiReport,
   upsertResearchReports,
@@ -185,4 +186,60 @@ test("QEO-81 pending report schema preserves OCR terminals and route-aware analy
   assert.match(sql, /create\s+or\s+replace\s+function\s+public\.qeo_publish_research_report_analysis\s*\(/i)
   assert.match(sql, /revoke\s+all\s+on\s+function\s+public\.qeo_publish_research_report_analysis[\s\S]*?from\s+public,\s*anon,\s*authenticated/i)
   assert.match(sql, /grant\s+execute\s+on\s+function\s+public\.qeo_publish_research_report_analysis[\s\S]*?to\s+service_role/i)
+})
+
+test("QEO-83 catalog query normalization is URL-stable and bounded", () => {
+  assert.deepEqual(normalizeResearchReportCatalogQuery({
+    category: "SECTOR",
+    q: "  dầu, khí_% (test)  ",
+    source: "  PHS  ",
+    from: "2026-09-05",
+    to: "2026-08-01",
+    page: "9999",
+  }), {
+    category: "sector",
+    search: "dầu khí test",
+    source: "PHS",
+    fromDate: "2026-08-01",
+    toDate: "2026-09-05",
+    page: 500,
+  })
+
+  const invalid = normalizeResearchReportCatalogQuery({
+    category: "other",
+    from: "2026-02-31",
+    to: "not-a-date",
+    page: "0",
+  })
+  assert.equal(invalid.category, null)
+  assert.equal(invalid.fromDate, null)
+  assert.equal(invalid.toDate, null)
+  assert.equal(invalid.page, 1)
+})
+
+test("QEO-83 catalog is canonical metadata-only server UI with explicit lifecycle states", () => {
+  const service = readFileSync("modules/research-reports/catalog.ts", "utf8")
+  const page = readFileSync("app/insights/reports/page.tsx", "utf8")
+  const loading = readFileSync("app/insights/reports/loading.tsx", "utf8")
+  const nav = readFileSync("components/top-nav.tsx", "utf8")
+
+  assert.match(service, /order\("publish_date", \{ ascending: false \}\)[\s\S]*order\("id", \{ ascending: false \}\)/)
+  assert.match(service, /range\(offset, offset \+ RESEARCH_REPORT_CATALOG_PAGE_SIZE - 1\)/)
+  assert.doesNotMatch(service, /market_research_report_chunks|market_research_report_ticker_mentions/)
+  assert.match(page, /canonical: "\/insights\/reports"/)
+  assert.match(page, /getResearchReportCatalog/)
+  assert.match(page, /name="q"/)
+  assert.match(page, /name="source"/)
+  assert.match(page, /name="from"/)
+  assert.match(page, /name="to"/)
+  assert.match(page, /Vĩ mô tiền tệ/)
+  assert.match(page, /Chiến lược/)
+  assert.match(page, /Ngành/)
+  assert.match(page, /Đang xử lý/)
+  assert.match(page, /Chưa phân tích/)
+  assert.match(page, /Đọc PDF lỗi/)
+  assert.match(page, /href=\{`\/research\/reports\/\$\{item\.id\}`\}/)
+  assert.match(nav, /href: "\/insights\/reports"/)
+  assert.match(loading, /TopNav/)
+  assert.match(loading, /aria-busy="true"/)
 })
