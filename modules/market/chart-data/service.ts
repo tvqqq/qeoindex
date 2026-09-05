@@ -109,8 +109,8 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   const nowSeconds = Math.floor((deps.now ?? new Date()).getTime() / 1000)
   const effectiveTo = Math.min(request.to, nowSeconds)
   const lastStored = normalized.bars.at(-1)?.time ?? null
-  const providerFrom = lastStored == null ? request.from : Math.max(request.from, lastStored + 60)
-  const needsProvider = effectiveTo >= providerFrom
+  const providerFrom = lastStored == null ? request.from : Math.max(request.from, lastStored)
+  const needsProvider = effectiveTo > providerFrom
 
   if (needsProvider) {
     try {
