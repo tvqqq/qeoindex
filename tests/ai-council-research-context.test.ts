@@ -135,3 +135,16 @@ test("configuredCouncilResearchTickers accepts explicit runtime lists without mu
   assert.match(code, /isCouncilResearchTickerEnabled\(ticker: string, raw\?: string \| string\[\]\)/)
 })
 
+test("QEO-86 pre-market freezes auditable Research Reports for every Council ticker without inheriting the Notion pilot gate", () => {
+  const wrapper = source("modules/ai-council/pre-market-evidence.ts")
+
+  assert.match(wrapper, /AI_COUNCIL_REPORT_EVIDENCE_VERSION/)
+  assert.match(wrapper, /freezeCouncilReportEvidence/)
+  assert.match(wrapper, /const reportSelectionRunAt = new Date\(\)\.toISOString\(\)/)
+  assert.match(wrapper, /const reportStocks = raw\.stocks/)
+  assert.match(wrapper, /for \(const stock of reportStocks\)/)
+  assert.match(wrapper, /canUseInPrompt/)
+  assert.match(wrapper, /reportEvidence: \{/)
+  assert.match(wrapper, /Curated Research Report evidence for advisory LLM reasoning only/)
+  assert.doesNotMatch(wrapper, /const reportStocks = raw\.stocks\.filter\(\(stock\) => isCouncilResearchTickerEnabled/)
+})

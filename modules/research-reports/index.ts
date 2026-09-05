@@ -27,6 +27,11 @@ export type {
   ResearchReportDetailTickerMention,
   ResearchReportDetailViewModel,
 } from "./detail/types.ts"
+export { selectCouncilReportEvidence } from "./council-evidence.ts"
+export type {
+  CouncilReportEvidenceItem,
+  CouncilReportEvidenceSelection,
+} from "./council-evidence.ts"
 export { toResearchReportUpsertRow, upsertResearchReports } from "./repository.ts"
 export type {
   ProcessResearchReportResult,

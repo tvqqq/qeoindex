@@ -262,7 +262,7 @@ test("P2 AI Council V2 applies semantic grounding, Packet V2 and structured evid
   const route = source("app/api/ai-council/debate-daily/route.ts")
   const operations = source("modules/ai-council/operations.ts")
 
-  assert.match(llm, /AI_COUNCIL_LLM_PROMPT_VERSION = "llm-debate-v3-first-class-context"/)
+  assert.match(llm, /AI_COUNCIL_LLM_PROMPT_VERSION = "llm-debate-v4-research-report-evidence"/)
   assert.match(llm, /evidenceRefs/)
   assert.match(llm, /validateCouncilEvidenceRefs/)
   assert.match(llm, /buildAiCouncilEvidencePacketV2/)
