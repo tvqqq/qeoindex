@@ -51,7 +51,7 @@
   top: 0 !important;
   left: 0 !important;
   bottom: 0;
-  gap: 2px !important;
+  gap: 3px !important;
   overflow-y: auto;
   border-top: 0 !important;
   border-bottom: 0 !important;
@@ -59,15 +59,23 @@
   border-radius: 0 !important;
   border-color: rgba(255, 255, 255, 0.085) !important;
   background: rgba(13, 17, 24, 0.97) !important;
-  padding: 5px 4px !important;
+  padding: 6px 5px !important;
   box-shadow: none !important;
   backdrop-filter: blur(8px);
 }
 
-.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] button {
-  width: 28px;
-  height: 28px;
-  border-radius: 4px !important;
+/* Keep the main rail controls a touch larger and softly rounded like the earlier UI. */
+.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > button,
+.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > div > button {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px !important;
+}
+
+.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > button > svg,
+.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > div > button > svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* Bottom range/status rail: dense and visually distinct from the plotting surface. */
@@ -90,13 +98,42 @@
   border-radius: 3px;
 }
 
+/*
+ * Maximized mode lives inside a viewport-height workstation with overflow hidden.
+ * Do not let the old fixed minimums on the chart/canvas push the X-axis and
+ * bottom range rail below the viewport. The canvas owns the remaining height.
+ */
+.maximized {
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 .maximized > div:first-child {
+  height: 100%;
+  min-height: 0 !important;
   border-radius: 8px;
+}
+
+.maximized > div:first-child > div:first-child,
+.maximized > div:first-child > div:last-child {
+  flex: 0 0 auto;
+}
+
+.maximized > div:first-child > div:nth-child(2) {
+  min-height: 0 !important;
+  flex: 1 1 0%;
 }
 
 .maximized > div:first-child > div:first-child {
   position: relative;
   z-index: 35;
+}
+
+/* RSI/MACD pane titles previously started underneath the opaque left drawing rail. */
+.maximized > div:first-child > div:nth-child(2) > svg text[fill="#c084fc"],
+.maximized > div:first-child > div:nth-child(2) > svg text[fill="#38bdf8"] {
+  transform: translateX(34px);
 }
 
 @media (max-width: 1279px) {
