@@ -233,11 +233,11 @@ test("QEO-81 report AI route defaults to Luna medium with Terra fallback and has
     assert.match(route.modelRouteKey, /medium/)
 
     process.env.RESEARCH_REPORT_AI_MODEL = "gpt-5.6-sol"
-    process.env.RESEARCH_REPORT_AI_FALLBACK_MODEL = "gpt-5-mini"
+    process.env.RESEARCH_REPORT_AI_FALLBACK_MODEL = "gpt-mini"
     process.env.RESEARCH_REPORT_AI_REASONING_EFFORT = "high"
     const overridden = getResearchReportAiModelRoute()
     assert.equal(overridden.model, "gpt-5.6-sol")
-    assert.equal(overridden.fallbackModel, "gpt-5-mini")
+    assert.equal(overridden.fallbackModel, "gpt-mini")
     assert.equal(overridden.reasoningEffort, "high")
     assert.notEqual(overridden.modelRouteKey, route.modelRouteKey)
   } finally {
@@ -286,11 +286,12 @@ test("QEO-81 report AI uses strict Responses Structured Outputs and returns prov
     assert.equal(result.audit.responseId, "resp_report_1")
     assert.equal(result.audit.inputTokens, 120)
     assert.equal(result.audit.cachedInputTokens, 20)
+    assert.equal(result.audit.cacheWriteTokens, 0)
     assert.equal(result.audit.outputTokens, 48)
     assert.equal(result.audit.reasoningTokens, 12)
     assert.equal(result.audit.totalTokens, 168)
-    assert.equal(result.audit.estimatedCostUsd, null)
-    assert.equal(result.audit.pricingVersion, null)
+    assert.equal(result.audit.estimatedCostUsd, 0.000078)
+    assert.equal(result.audit.pricingVersion, "openai-gpt-5.6-standard-2026-09-05")
   })
 })
 
