@@ -57,15 +57,28 @@ test("QEO-103 hot retention cutoff keeps complete Vietnam calendar dates", () =>
   assert.equal(new Date(chartHotRetentionCutoff(referenceAt) * 1000).toISOString(), "2026-08-05T17:00:00.000Z")
 })
 
-test("QEO-103 hourly read path uses derived cache for old history and raw 1m only for recent history", () => {
+test("QEO-103 hourly read path uses derived cache only after cold-manifest coverage is complete", () => {
   const service = source("modules/market/chart-data/timeframe-service.ts")
   assert.match(service, /readDerivedHourlyRange/)
+  assert.match(service, /derivedHourlyColdCoverageComplete/)
+  assert.match(service, /readIntersectingRange/)
+  assert.match(service, /VERIFIED_COLD_1M_RECOVERY/)
   assert.match(service, /chartHotRetentionCutoff/)
   assert.match(service, /const oldTo = Math\.min\(request\.to, hotCutoff - 1\)/)
   assert.match(service, /const recentFrom = Math\.max\(sourceRange\.from, hotCutoff\)/)
   assert.match(service, /aggregateChartTimeframe\(mergeBars\(recentResults\), "1h"\)/)
   assert.match(service, /request\.resolution === "1h" \? mergedHourly : aggregateChartTimeframe\(mergedHourly, request\.resolution\)/)
-  assert.doesNotMatch(service, /readIntersectingRange/)
+})
+
+test("QEO-103 legacy derived recovery re-verifies cold raw before cache persistence", () => {
+  const recovery = source("modules/market/chart-data/derived-hourly-recovery.ts")
+  assert.match(recovery, /listVerifiedColdManifests/)
+  assert.match(recovery, /readVerifiedColdManifest/)
+  assert.match(recovery, /aggregateChartTimeframe\(verified\.bars, "1h"\)/)
+  assert.match(recovery, /upsertDerivedHourlyBars/)
+  assert.match(recovery, /readDerivedHourlyByManifest/)
+  assert.ok(recovery.indexOf("readVerifiedColdManifest") < recovery.lastIndexOf("upsertDerivedHourlyBars"))
+  assert.ok(recovery.lastIndexOf("upsertDerivedHourlyBars") < recovery.lastIndexOf("readDerivedHourlyByManifest"))
 })
 
 test("QEO-103 archive is cache-before-prune and prune authority is manifest verified", () => {
