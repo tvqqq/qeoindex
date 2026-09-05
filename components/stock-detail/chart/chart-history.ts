@@ -3,7 +3,7 @@ import {
   chartHistoryClass,
   chartHistoryFloor,
   maxChartHistorySeconds,
-} from "@/modules/market/chart-data/history-policy"
+} from "../../../modules/market/chart-data/history-policy.ts"
 import type { ChartTimeframe } from "./stock-chart-types"
 
 const DAY_SECONDS = 86400
