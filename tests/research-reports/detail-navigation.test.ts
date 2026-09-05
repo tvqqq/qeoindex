@@ -2,6 +2,11 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+// Nested research-report tests are executed through the existing top-level AI
+// suite. Keep QEO-85 focused contracts in the same nested execution chain.
+import "./pricing.test.ts"
+import "./ai-budget.test.ts"
+
 import {
   nextCitationNavigationState,
   type CitationNavigationState,
