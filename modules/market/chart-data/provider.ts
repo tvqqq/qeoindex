@@ -1,10 +1,10 @@
 import "server-only"
 
 import { fetchMinuteOhlcvRange } from "@/modules/market/providers/dnse/history"
-import type { CanonicalOhlcvBar, ChartOhlcvRequest } from "./contract"
+import type { CanonicalChartOhlcvRequest, CanonicalOhlcvBar } from "./contract"
 
 export interface ChartOhlcvProvider {
-  fetch(input: ChartOhlcvRequest): Promise<CanonicalOhlcvBar[]>
+  fetch(input: CanonicalChartOhlcvRequest): Promise<CanonicalOhlcvBar[]>
 }
 
 export function createPrimaryChartOhlcvProvider(): ChartOhlcvProvider {

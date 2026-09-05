@@ -27,6 +27,7 @@ interface UseUserChartSyncOptions {
 }
 
 export type SaveStatus = "saved" | "saving" | "offline"
+export const CHART_TIMEFRAME_EVENT = "qeo:chart-timeframe"
 
 function getLocalKey(ticker: string) {
   return `qeo_chart_settings_${ticker.toUpperCase()}`
@@ -47,6 +48,10 @@ function readLocalChartSettings(ticker: string): {
   } catch {
     return { settings: null, raw: null }
   }
+}
+
+export function readStoredChartTimeframe(ticker: string): ChartTimeframe | null {
+  return readLocalChartSettings(ticker).settings?.timeframe ?? null
 }
 
 function mergeUnresolvedLegacyDrawings(
@@ -102,6 +107,13 @@ export function useUserChartSync({
   } | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    window.dispatchEvent(new CustomEvent(CHART_TIMEFRAME_EVENT, {
+      detail: { ticker: ticker.toUpperCase(), timeframe },
+    }))
+  }, [ticker, timeframe])
+
   // Remote coalesced queue execution worker
   const drainSaveQueue = useCallback(() => {
     async function execute() {
@@ -153,7 +165,7 @@ export function useUserChartSync({
     async function syncSettings() {
       // Check local storage if ticker changed
       const { settings: local, raw } = readLocalChartSettings(ticker)
-      if (raw && !raw.includes('"drawingsSchemaVersion":2')) {
+      if (raw && !raw.includes('\"drawingsSchemaVersion\":2')) {
         backupLegacyLocalSettings(ticker, raw)
       }
 
@@ -249,7 +261,7 @@ export function useUserChartSync({
       // Immediate local save with legacy backup safeguard
       try {
         const rawExisting = localStorage.getItem(getLocalKey(currentTicker))
-        if (rawExisting && !rawExisting.includes('"drawingsSchemaVersion":2')) {
+        if (rawExisting && !rawExisting.includes('\"drawingsSchemaVersion\":2')) {
           backupLegacyLocalSettings(currentTicker, rawExisting)
         }
         localStorage.setItem(getLocalKey(currentTicker), JSON.stringify(payload))

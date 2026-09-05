@@ -3,10 +3,10 @@ import "server-only"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createSupabaseColdOhlcvStorage, type ColdOhlcvStorage } from "./cold-store"
 import type {
+  CanonicalChartOhlcvRequest,
+  CanonicalChartOhlcvResult,
   CanonicalOhlcvBar,
   ChartDataError,
-  ChartOhlcvRequest,
-  ChartOhlcvResult,
   SourceTaggedBar,
 } from "./contract"
 import { ChartDataRequestError, ChartDataUnavailableError } from "./contract"
@@ -25,10 +25,10 @@ export interface ChartDataServiceDeps {
   now?: Date
 }
 
-function normalizedRequest(input: ChartOhlcvRequest): ChartOhlcvRequest {
+function normalizedRequest(input: CanonicalChartOhlcvRequest): CanonicalChartOhlcvRequest {
   const ticker = String(input.ticker || "").trim().toUpperCase()
   if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new ChartDataRequestError("Invalid ticker")
-  if (input.resolution !== "1m" && input.resolution !== "1D") throw new ChartDataRequestError("Unsupported resolution")
+  if (input.resolution !== "1m" && input.resolution !== "1D") throw new ChartDataRequestError("Unsupported canonical resolution")
   if (!Number.isInteger(input.from) || !Number.isInteger(input.to) || input.from <= 0 || input.to <= input.from) {
     throw new ChartDataRequestError("Invalid chart range")
   }
@@ -50,7 +50,7 @@ function rowToBar(row: Record<string, unknown>): CanonicalOhlcvBar | null {
   return Number.isFinite(timestamp) ? bar : null
 }
 
-async function loadDaily(supabase: SupabaseClient, request: ChartOhlcvRequest): Promise<ChartOhlcvResult> {
+async function loadDaily(supabase: SupabaseClient, request: CanonicalChartOhlcvRequest): Promise<CanonicalChartOhlcvResult> {
   const { data, error } = await supabase
     .from("market_ohlcv_history")
     .select("bar_time,open,high,low,close,volume")
@@ -79,7 +79,7 @@ async function loadDaily(supabase: SupabaseClient, request: ChartOhlcvRequest): 
   }
 }
 
-async function loadIntraday(deps: ChartDataServiceDeps, request: ChartOhlcvRequest): Promise<ChartOhlcvResult> {
+async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartOhlcvRequest): Promise<CanonicalChartOhlcvResult> {
   const coldStorage = deps.coldStorage ?? createSupabaseColdOhlcvStorage(deps.supabase)
   const provider = deps.provider ?? createPrimaryChartOhlcvProvider()
   const errors: ChartDataError[] = []
@@ -151,8 +151,8 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: ChartOhlcvReque
 
 export async function getCanonicalChartOhlcv(
   deps: ChartDataServiceDeps,
-  input: ChartOhlcvRequest,
-): Promise<ChartOhlcvResult> {
+  input: CanonicalChartOhlcvRequest,
+): Promise<CanonicalChartOhlcvResult> {
   const request = normalizedRequest(input)
   return request.resolution === "1D" ? loadDaily(deps.supabase, request) : loadIntraday(deps, request)
 }
