@@ -1,4 +1,5 @@
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
+import { vietnamDateKey } from "@/modules/market/calendar"
 import { fetchDailyOhlcv as fetchDnseDailyOhlcv, fetchHourlyOhlcv as fetchDnseHourlyOhlcv } from "@/modules/market/providers/dnse/history"
 import { fetchVciDailyOhlcv } from "@/modules/market/providers/vci/daily"
 import { fetchVnDirectDailyOhlcv } from "@/modules/market/providers/vndirect/history"
@@ -33,6 +34,21 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+function canonicalDailySessionTime(timeSeconds: number) {
+  const dateKey = vietnamDateKey(timeSeconds * 1000)
+  const [year, month, day] = dateKey.split("-").map(Number)
+  return Math.floor(Date.UTC(year, month - 1, day, 2, 0, 0) / 1000)
+}
+
+function normalizeDailyBars(bars: OhlcvBar[]) {
+  const bySession = new Map<number, OhlcvBar>()
+  for (const bar of bars) {
+    const time = canonicalDailySessionTime(bar.time)
+    bySession.set(time, { ...bar, time })
+  }
+  return [...bySession.values()].sort((a, b) => a.time - b.time)
+}
+
 function isHistoricalBarsResult(value: unknown): value is HistoricalBarsResult {
   if (!value || typeof value !== "object") return false
   const result = value as Partial<HistoricalBarsResult>
@@ -54,7 +70,7 @@ function historicalResult(input: {
   now: Date
 }): HistoricalBarsResult {
   return {
-    bars: input.bars,
+    bars: input.timeframe === "1D" ? normalizeDailyBars(input.bars) : input.bars,
     provider: input.provider,
     detail: input.detail,
     sourceUrl: buildHistoricalSourceUrl(
