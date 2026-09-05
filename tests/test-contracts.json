@@ -138,6 +138,36 @@
       ]
     },
     {
+      "path": "tests/chart-drawing-migration.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve chart drawing migration and legacy safety backup contracts.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/chart-drawing-persistence.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve chart drawing persistence, viewport independence, and write queue contracts.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/chart-drawing-schema.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve chart drawing V2 schema validation and defensive limits contracts.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
       "path": "tests/cron-job-evidence.test.ts",
       "owner": "admin",
       "invariant": "Preserve the current cron job evidence contract.",

@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server"
 import { requireApiUser } from "@/modules/auth/server"
+import {
+  MAX_DRAWINGS_PER_TICKER,
+  deserializeUserChartSettings,
+  migrateDrawings,
+  validateDrawingsCollectionV2,
+} from "@/components/stock-detail/chart/drawings"
+import type { ChartTimeframe } from "@/components/stock-detail/chart/stock-chart-types"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -12,7 +19,9 @@ interface ChartDrawingPayload {
   timeframe?: string
   chartStyle?: string
   indicators?: Record<string, boolean>
+  drawingsSchemaVersion?: number
   drawings?: unknown[]
+  unresolvedLegacyDrawings?: unknown[]
 }
 
 function isPlainObject(val: unknown): val is Record<string, unknown> {
@@ -45,16 +54,29 @@ export async function GET(request: Request) {
     const charts = isPlainObject(settings.charts) ? (settings.charts as Record<string, unknown>) : {}
     const tickerData = isPlainObject(charts[ticker]) ? charts[ticker] : null
 
+    if (!tickerData) {
+      return NextResponse.json(
+        {
+          ok: true,
+          data: {
+            ticker,
+            timeframe: "1D",
+            chartStyle: "candles",
+            indicators: {},
+            drawingsSchemaVersion: 2,
+            drawings: [],
+          },
+        },
+        { headers: NO_STORE_HEADERS },
+      )
+    }
+
+    const { settings: normalizedSettings } = deserializeUserChartSettings(tickerData)
+
     return NextResponse.json(
       {
         ok: true,
-        data: tickerData || {
-          ticker,
-          timeframe: "1D",
-          chartStyle: "candles",
-          indicators: {},
-          drawings: [],
-        },
+        data: normalizedSettings,
       },
       { headers: NO_STORE_HEADERS },
     )
@@ -85,6 +107,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Chart drawings payload is too large." }, { status: 400, headers: NO_STORE_HEADERS })
   }
 
+  const rawDrawings = Array.isArray(body.drawings) ? body.drawings : []
+  if (rawDrawings.length > MAX_DRAWINGS_PER_TICKER) {
+    return NextResponse.json(
+      { ok: false, error: `Maximum of ${MAX_DRAWINGS_PER_TICKER} drawings exceeded.` },
+      { status: 400, headers: NO_STORE_HEADERS },
+    )
+  }
+
+  let finalDrawings: unknown[] = []
+  let finalUnresolved: unknown[] = Array.isArray(body.unresolvedLegacyDrawings) ? body.unresolvedLegacyDrawings : []
+
+  if (body.drawingsSchemaVersion === 2) {
+    const validation = validateDrawingsCollectionV2(rawDrawings)
+    if (!validation.valid) {
+      return NextResponse.json(
+        { ok: false, error: `Drawing validation failed: ${validation.errors.join("; ")}` },
+        { status: 400, headers: NO_STORE_HEADERS },
+      )
+    }
+    finalDrawings = rawDrawings
+  } else {
+    const migration = migrateDrawings(rawDrawings, {
+      defaultTimeframe: (body.timeframe as ChartTimeframe) || "1D",
+    })
+    finalDrawings = migration.migrated
+    finalUnresolved = [...finalUnresolved, ...migration.unresolved]
+  }
+
   try {
     const userId = auth.context.user.id
     const { data: existingPref, error: fetchErr } = await auth.context.supabase
@@ -107,7 +157,9 @@ export async function POST(request: Request) {
         timeframe: body.timeframe || "1D",
         chartStyle: body.chartStyle || "candles",
         indicators: body.indicators || {},
-        drawings: Array.isArray(body.drawings) ? body.drawings : [],
+        drawingsSchemaVersion: 2,
+        drawings: finalDrawings,
+        ...(finalUnresolved.length > 0 ? { unresolvedLegacyDrawings: finalUnresolved } : {}),
         updatedAt: new Date().toISOString(),
       },
     }

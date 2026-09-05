@@ -29,3 +29,22 @@ test("User chart drawings API route enforces authentication and validates payloa
   assert.match(code, /export async function GET/)
   assert.match(code, /export async function POST/)
 })
+
+test("User chart drawings API route enforces V2 schema validation and defensive limits", () => {
+  const code = source("app/api/user/chart-drawings/route.ts")
+
+  // Enforces max drawings count guard
+  assert.match(code, /MAX_DRAWINGS_PER_TICKER/)
+
+  // Validates schema version 2 payload via drawing domain validator
+  assert.match(code, /drawingsSchemaVersion === 2/)
+  assert.match(code, /validateDrawingsCollectionV2/)
+
+  // Fallback migration for legacy payloads without silent data loss
+  assert.match(code, /migrateDrawings/)
+  assert.match(code, /unresolvedLegacyDrawings/)
+
+  // Normalizes GET payloads through deserialization
+  assert.match(code, /deserializeUserChartSettings/)
+  assert.match(code, /drawingsSchemaVersion: 2/)
+})

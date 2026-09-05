@@ -7,8 +7,15 @@ import {
   type ChartTimeframe,
   type DrawingObject,
   type IndicatorConfig,
-  type UserChartSettingsPayload,
 } from "./stock-chart-types"
+import {
+  backupLegacyLocalSettings,
+  deserializeUserChartSettings,
+  persistedV2ToRuntimeDrawing,
+  runtimeDrawingToPersistedV2,
+  type PersistedDrawingV2,
+  type UserChartSettingsPayloadV2,
+} from "./drawings"
 
 interface UseUserChartSyncOptions {
   ticker: string
@@ -23,13 +30,20 @@ function getLocalKey(ticker: string) {
   return `qeo_chart_settings_${ticker.toUpperCase()}`
 }
 
-function readLocalChartSettings(ticker: string): Partial<UserChartSettingsPayload> | null {
-  if (typeof window === "undefined") return null
+function readLocalChartSettings(ticker: string): {
+  settings: UserChartSettingsPayloadV2 | null
+  raw: string | null
+} {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return { settings: null, raw: null }
+  }
   try {
     const raw = localStorage.getItem(getLocalKey(ticker))
-    return raw ? (JSON.parse(raw) as Partial<UserChartSettingsPayload>) : null
+    if (!raw) return { settings: null, raw: null }
+    const { settings } = deserializeUserChartSettings(raw)
+    return { settings, raw }
   } catch {
-    return null
+    return { settings: null, raw: null }
   }
 }
 
@@ -40,24 +54,74 @@ export function useUserChartSync({
   defaultIndicators = DEFAULT_INDICATOR_CONFIG,
 }: UseUserChartSyncOptions) {
   const [timeframe, setTimeframe] = useState<ChartTimeframe>(() => {
-    return readLocalChartSettings(ticker)?.timeframe || defaultTimeframe
+    return readLocalChartSettings(ticker).settings?.timeframe || defaultTimeframe
   })
   const [chartStyle, setChartStyle] = useState<ChartStyle>(() => {
-    return readLocalChartSettings(ticker)?.chartStyle || defaultChartStyle
+    return readLocalChartSettings(ticker).settings?.chartStyle || defaultChartStyle
   })
   const [indicators, setIndicators] = useState<IndicatorConfig>(() => {
-    const local = readLocalChartSettings(ticker)
+    const local = readLocalChartSettings(ticker).settings
     return local?.indicators ? { ...defaultIndicators, ...local.indicators } : defaultIndicators
   })
   const [drawings, setDrawings] = useState<DrawingObject[]>(() => {
-    const local = readLocalChartSettings(ticker)
-    return Array.isArray(local?.drawings) ? local.drawings : []
+    const local = readLocalChartSettings(ticker).settings
+    if (local?.drawings && Array.isArray(local.drawings)) {
+      return local.drawings.map((d) => persistedV2ToRuntimeDrawing(d))
+    }
+    return []
   })
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved")
 
   const isLoadedRef = useRef(false)
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const currentTickerRef = useRef(ticker)
+  const localRevisionRef = useRef(0)
+  const inFlightRevisionRef = useRef<number | null>(null)
+  const pendingSaveRef = useRef<{
+    revision: number
+    payload: UserChartSettingsPayloadV2
+  } | null>(null)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Remote coalesced queue execution worker
+  const drainSaveQueue = useCallback(() => {
+    async function execute() {
+      if (inFlightRevisionRef.current !== null) {
+        return
+      }
+
+      if (!pendingSaveRef.current) {
+        setSaveStatus("saved")
+        return
+      }
+
+      const { revision, payload } = pendingSaveRef.current
+      pendingSaveRef.current = null
+      inFlightRevisionRef.current = revision
+      setSaveStatus("saving")
+
+      try {
+        const res = await fetch("/api/user/chart-drawings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) {
+          setSaveStatus("offline")
+        }
+      } catch {
+        setSaveStatus("offline")
+      } finally {
+        inFlightRevisionRef.current = null
+        if (pendingSaveRef.current !== null) {
+          void execute()
+        } else {
+          setSaveStatus((prev) => (prev === "offline" ? "offline" : "saved"))
+        }
+      }
+    }
+
+    void execute()
+  }, [])
 
   // 1. Load data on mount or ticker change
   useEffect(() => {
@@ -67,12 +131,18 @@ export function useUserChartSync({
 
     async function syncSettings() {
       // Check local storage if ticker changed
-      const local = readLocalChartSettings(ticker)
+      const { settings: local, raw } = readLocalChartSettings(ticker)
+      if (raw && !raw.includes('"drawingsSchemaVersion":2')) {
+        backupLegacyLocalSettings(ticker, raw)
+      }
+
       if (local && !isCancelled) {
         if (local.timeframe) setTimeframe(local.timeframe)
         if (local.chartStyle) setChartStyle(local.chartStyle)
         if (local.indicators) setIndicators({ ...defaultIndicators, ...local.indicators })
-        if (Array.isArray(local.drawings)) setDrawings(local.drawings)
+        if (Array.isArray(local.drawings)) {
+          setDrawings(local.drawings.map((d) => persistedV2ToRuntimeDrawing(d)))
+        }
       }
 
       // Fetch remote settings from Supabase API
@@ -84,14 +154,14 @@ export function useUserChartSync({
         const body = await res.json()
         if (isCancelled || !body.ok || !body.data) return
 
-        const remote = body.data as Partial<UserChartSettingsPayload>
+        const { settings: remote } = deserializeUserChartSettings(body.data)
         if (remote.timeframe) setTimeframe(remote.timeframe)
         if (remote.chartStyle) setChartStyle(remote.chartStyle)
         if (remote.indicators && Object.keys(remote.indicators).length > 0) {
           setIndicators({ ...DEFAULT_INDICATOR_CONFIG, ...remote.indicators })
         }
         if (Array.isArray(remote.drawings)) {
-          setDrawings(remote.drawings)
+          setDrawings(remote.drawings.map((d) => persistedV2ToRuntimeDrawing(d)))
         }
       } catch (err) {
         console.warn("[useUserChartSync] Failed to fetch remote settings, using local:", err)
@@ -109,55 +179,68 @@ export function useUserChartSync({
     }
   }, [ticker, defaultTimeframe, defaultChartStyle, defaultIndicators])
 
-  // 2. Debounced save to API and immediate save to localStorage
+  // 2. Debounced coalesced remote save and immediate localStorage write
   const scheduleSave = useCallback(
     (
       newTimeframe: ChartTimeframe,
       newStyle: ChartStyle,
       newIndicators: IndicatorConfig,
-      newDrawings: DrawingObject[],
+      newDrawings: (DrawingObject | PersistedDrawingV2)[],
     ) => {
       const currentTicker = currentTickerRef.current
-      const payload: UserChartSettingsPayload = {
+      localRevisionRef.current += 1
+      const currentRevision = localRevisionRef.current
+
+      // Convert runtime drawings to canonical PersistedDrawingV2
+      const persistedDrawings: PersistedDrawingV2[] = []
+      for (const d of newDrawings) {
+        if ("schemaVersion" in d && d.schemaVersion === 2) {
+          persistedDrawings.push(d)
+        } else {
+          const converted = runtimeDrawingToPersistedV2(d as DrawingObject, newTimeframe)
+          if (converted) {
+            persistedDrawings.push(converted)
+          }
+        }
+      }
+
+      const payload: UserChartSettingsPayloadV2 = {
         ticker: currentTicker,
         timeframe: newTimeframe,
         chartStyle: newStyle,
         indicators: newIndicators,
-        drawings: newDrawings,
+        drawingsSchemaVersion: 2,
+        drawings: persistedDrawings,
         updatedAt: new Date().toISOString(),
       }
 
-      // Immediate local save
+      // Immediate local save with legacy backup safeguard
       try {
+        const rawExisting = localStorage.getItem(getLocalKey(currentTicker))
+        if (rawExisting && !rawExisting.includes('"drawingsSchemaVersion":2')) {
+          backupLegacyLocalSettings(currentTicker, rawExisting)
+        }
         localStorage.setItem(getLocalKey(currentTicker), JSON.stringify(payload))
       } catch {
-        // quota exceeded fallback
+        // Quota exceeded fallback
       }
 
-      // Debounced remote save
+      // Enqueue latest revision
+      pendingSaveRef.current = {
+        revision: currentRevision,
+        payload,
+      }
       setSaveStatus("saving")
+
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
       }
 
-      saveTimeoutRef.current = setTimeout(async () => {
-        try {
-          const res = await fetch("/api/user/chart-drawings", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          })
-          if (res.ok) {
-            setSaveStatus("saved")
-          } else {
-            setSaveStatus("offline")
-          }
-        } catch {
-          setSaveStatus("offline")
-        }
+      saveTimeoutRef.current = setTimeout(() => {
+        drainSaveQueue()
       }, 750)
     },
-    [],
+    [drainSaveQueue],
   )
 
   // Wrapper setters that trigger sync
