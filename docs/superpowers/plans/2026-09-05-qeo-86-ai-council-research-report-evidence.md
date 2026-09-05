@@ -4,7 +4,7 @@
 
 **Goal:** Feed bounded, point-in-time Research Report evidence into every AI Council ticker's advisory LLM debate, freeze exact immutable provenance per Council run, and expose related-report links without changing deterministic Council authority.
 
-**Architecture:** The Research Reports module owns deterministic point-in-time selection from canonical report/analysis/mention rows. AI Council load-or-freezes one immutable snapshot per `ai_council_runs.id`, attaches only successfully persisted/reused `ready` or `empty` evidence to the first-class LLM packet, and incorporates the snapshot hash into a versioned LLM prompt identity while leaving `ai_council_runs.evidence_hash` unchanged. Debate audit/UI reads the frozen snapshot rather than recomputing current report state.
+**Architecture:** The Research Reports module owns deterministic selection from canonical report/analysis/mention rows. AI Council load-or-freezes one immutable snapshot per `ai_council_runs.id`, attaches only successfully persisted/reused `ready` or `empty` evidence to the first-class LLM packet, and incorporates the snapshot hash into a versioned LLM prompt identity while leaving `ai_council_runs.evidence_hash` unchanged. Historical debate audit/UI reads the frozen snapshot instead of recomputing current report state.
 
 **Tech Stack:** Next.js 16.3, React 19, TypeScript 5.7, Supabase/PostgreSQL, OpenAI Responses-based AI Council router, Node test runner, pnpm 10.28.
 
@@ -27,11 +27,12 @@
 - Contradictory broker narrative must be surfaced as contradiction; it cannot upgrade/downgrade deterministic signal, score, or risk veto.
 - `ai_council_runs.evidence_hash` remains unchanged.
 - Prompt identity contract version becomes `prompt-identity-v2-report-evidence`; do not silently change v1 semantics.
-- Because the actual LLM instructions/packet change, bump `AI_COUNCIL_LLM_PROMPT_VERSION` from `llm-debate-v3-first-class-context` to `llm-debate-v4-research-report-evidence`.
+- Because the LLM packet/instructions change, bump `AI_COUNCIL_LLM_PROMPT_VERSION` from `llm-debate-v3-first-class-context` to `llm-debate-v4-research-report-evidence`.
 - AI Council runtime must not import/call TOPI, PDF fetch, PDF parse, or Research Reports ingestion.
 - Do not put raw/full PDF text or `market_research_report_chunks.content` into Council prompt or snapshot.
-- QEO-80/85 Research Reports schema remains quarantined until QEO-87 rollout. Keep QEO-86's rollout-coupled snapshot migration under `supabase/pending-migrations/`; QEO-87 owns production promotion/backfill/rollout.
-- Full Verify and DB Drift Reconciliation must pass on the final PR head.
+- QEO-80/85 Research Reports schema remains **quarantined** until QEO-87 rollout. QEO-86's snapshot SQL therefore stays under `supabase/pending-migrations/` and is not promoted into active `supabase/migrations/` here.
+- `supabase db reset` and generated DB types reflect only active migrations. **Do not hand-edit or regenerate `modules/shared/supabase/database.types.ts` to include the pending QEO-86 table.** QEO-87 owns promotion and resulting generated-type change.
+- Full Verify and DB Drift Reconciliation must pass on the final PR head; DB Drift must confirm the active migration ledger/types remain unchanged while the pending SQL contract is source-tested.
 
 ---
 
@@ -43,19 +44,18 @@
 - `modules/ai-council/report-evidence.ts` — immutable snapshot load/freeze adapter, canonical hashing, persistence fail-open contract, and stock attachment shape.
 - `tests/research-reports/council-evidence.test.ts` — selector ordering, lookback, point-in-time, reprocessing, dedupe, and prompt-budget tests.
 - `tests/ai-council-report-evidence.test.ts` — snapshot reuse/immutability/failure/prompt-boundary tests.
-- `tests/ai-council-report-evidence-ui.test.ts` — dashboard frozen-provenance and related-link contract.
-- `supabase/pending-migrations/20260905073000_qeo86_ai_council_report_evidence.sql` — rollout-coupled immutable snapshot table/RLS/trigger.
+- `tests/ai-council-report-evidence-ui.test.ts` — frozen provenance and related-link UI contract.
+- `supabase/pending-migrations/20260905073000_qeo86_ai_council_report_evidence.sql` — rollout-coupled immutable snapshot table/RLS/trigger; QEO-87 will promote it.
 
 ### Existing files to modify
 
 - `modules/ai-council/pre-market-evidence.ts` — freeze report snapshots for all Council tickers after run identity resolution; attach only persisted/reused ready/empty evidence.
 - `modules/ai-council/prompt-identity.ts` — add `reportEvidenceHash` and bump identity version to `prompt-identity-v2-report-evidence`.
-- `modules/ai-council/prompt-evidence.ts` — first-class `reportEvidence` packet layer and provenance wording.
+- `modules/ai-council/prompt-evidence.ts` — add first-class `reportEvidence` packet layer and provenance wording.
 - `modules/ai-council/llm.ts` — bump prompt version, add anti-bias/source-opinion instructions, expose report provenance/related-report fields on debate records.
 - `modules/ai-council/debate-data.ts` — load immutable report snapshots by `run_id` and normalize provenance/related reports from frozen payload.
 - `app/insights/ai-council/debates/page.tsx` — add Research Reports provenance card and compact `Báo cáo liên quan` links.
-- `modules/shared/supabase/database.types.ts` — regenerate from replayed schema; never hand-edit.
-- `modules/research-reports/README.md` — document Council selector boundary/limits/authority semantics.
+- `modules/research-reports/README.md` — document selector boundary/limits/authority semantics.
 - `modules/ai-council/README.md` — document report snapshot and deterministic-authority boundary.
 - `tests/ai-council-prompt-evidence.test.ts` — packet inclusion/anti-bias/prompt-version assertions.
 - `tests/ai-council-persistence.test.ts` — prompt identity v2 and deterministic evidence-hash invariants.
@@ -122,13 +122,7 @@ export interface CouncilReportEvidenceSelection {
 
 export async function getRelevantReportEvidence(
   client: SupabaseClient,
-  params: {
-    ticker: string
-    asOf: string
-    runAt: string
-    tickerLimit?: number
-    tickerLookbackDays?: number
-  },
+  params: { ticker: string; asOf: string; runAt: string; tickerLimit?: number; tickerLookbackDays?: number },
 ): Promise<CouncilReportEvidenceItem[]>
 
 export async function getRelevantMarketReportEvidence(
@@ -149,26 +143,19 @@ export async function selectCouncilReportEvidence(
 ): Promise<CouncilReportEvidenceSelection>
 ```
 
-Selection must query canonical report/analysis/mention tables only. A persisted analysis row is the successful canonical analysis identity; do not filter on mutable current report `analysis_status` or current report `content_hash`. For each report choose the newest **eligible** analysis at/before `runAt`, then apply deterministic tie-breakers.
+The selector queries only `market_research_reports`, `market_research_report_analyses`, and `market_research_report_ticker_mentions`. A persisted analysis row is the successful versioned analysis identity; do not filter on mutable current report `analysis_status` or current report `content_hash`. For each report select the newest eligible analysis at/before `runAt`, then apply deterministic tie-breaks.
 
-- [ ] **Step 1: Write failing selector tests for bounds and ordering**
+- [ ] **Step 1: Write the failing bound/order tests**
 
-Use an in-memory Supabase query-builder fixture, following `tests/research-reports/detail-service.test.ts`, with rows that include:
+Use an in-memory Supabase query-builder fixture like `tests/research-reports/detail-service.test.ts`. Seed four explicit ticker mentions within 90 days and assert only the newest three are selected.
 
 ```ts
-const REPORTS = [
-  { id: "r1", publish_date: "2026-09-01", created_at: "2026-09-01T01:00:00Z", category: "sector" },
-  { id: "r2", publish_date: "2026-08-30", created_at: "2026-08-30T01:00:00Z", category: "sector" },
-  { id: "r3", publish_date: "2026-08-20", created_at: "2026-08-20T01:00:00Z", category: "sector" },
-  { id: "r4", publish_date: "2026-08-10", created_at: "2026-08-10T01:00:00Z", category: "sector" },
-]
+assert.deepEqual(result.map((row) => row.reportId), ["r1", "r2", "r3"])
 ```
 
-Assert ticker selection returns `r1,r2,r3` and not `r4` when all have explicit `MSN` mentions.
+- [ ] **Step 2: Write failing point-in-time/reprocessing tests**
 
-- [ ] **Step 2: Add RED tests for point-in-time cutoffs and reprocessing**
-
-Fixture one report with two analyses:
+For one report seed two analyses:
 
 ```ts
 const analyses = [
@@ -177,50 +164,37 @@ const analyses = [
 ]
 ```
 
-With `runAt="2026-09-05T07:00:00Z"`, assert `a-old` is selected and future report/analysis/mention rows are excluded.
+With `runAt="2026-09-05T07:00:00Z"`, assert `a-old` is selected. Also exclude report `created_at > runAt`, mention `created_at > runAt`, and `publish_date > asOf`.
 
-- [ ] **Step 3: Add RED tests for macro/strategy limits, dedupe and deterministic ties**
+- [ ] **Step 3: Write failing market/dedupe/tie tests**
 
-Assert:
+Assert max two market reports, macro before strategy, dedupe by `reportId|analysisId`, and lexical `reportId` then `analysisId` tie-break when timestamps match.
 
-```ts
-assert.equal(market.length, 2)
-assert.deepEqual(market.map((row) => row.category), ["macro", "strategy"])
-assert.equal(new Set(selection.reports.map((row) => `${row.reportId}|${row.analysisId}`)).size, selection.reports.length)
-```
+- [ ] **Step 4: Write failing prompt-safety/budget tests**
 
-Tie identical publish/processed timestamps with `report_id`, then `analysis_id`, ascending lexical order.
+Assert no query touches `market_research_report_chunks`; no emitted item contains raw `content`; final canonical serialization is <= `COUNCIL_REPORT_MAX_PROMPT_CHARS`; truncation preserves IDs/version/source/date/category/stance/source-opinion before trimming rationale/evidence/catalyst/risk/summary prose.
 
-- [ ] **Step 4: Add RED prompt-safety tests**
-
-Assert selection never queries `market_research_report_chunks`, never emits a `content` field containing raw chunk/PDF text, preserves citation page/snippet data from structured mention/analysis JSON only, and clamps final curated serialization to `COUNCIL_REPORT_MAX_PROMPT_CHARS` with deterministic truncation.
-
-- [ ] **Step 5: Run the focused test and verify RED**
-
-Run:
+- [ ] **Step 5: Run focused test and verify RED**
 
 ```bash
 node --test tests/research-reports/council-evidence.test.ts
 ```
 
-Expected: FAIL because `modules/research-reports/council-evidence.ts` does not exist.
+Expected: FAIL because the selector module does not exist.
 
-- [ ] **Step 6: Implement minimal selector/query/canonical truncation code**
+- [ ] **Step 6: Implement the minimal selector**
 
-Use helper functions with explicit responsibilities:
+Use focused pure helpers:
 
 ```ts
-function withinLookback(date: string, asOf: string, days: number): boolean
 function newestEligibleAnalysisByReport(rows: AnalysisRow[], runAt: string): Map<string, AnalysisRow>
 function normalizeCouncilReportItem(...): CouncilReportEvidenceItem
-function clampCouncilReportSelection(items: CouncilReportEvidenceItem[]): CouncilReportEvidenceSelection
+function clampCouncilReportSelection(...): CouncilReportEvidenceSelection
 ```
 
-Truncation order: preserve IDs/version/source/date/category/stance/source-opinion fields first; trim optional rationale/evidence prose, then catalysts/risks, then summary tail. Never drop provenance fields to retain prose.
+Apply the exact default limits and ordering from the spec. Do not introduce embeddings or provider fetches.
 
-- [ ] **Step 7: Re-run focused tests**
-
-Run:
+- [ ] **Step 7: Re-run focused test**
 
 ```bash
 node --test tests/research-reports/council-evidence.test.ts
@@ -237,7 +211,7 @@ git commit -m "feat(reports): add Council evidence selector"
 
 ---
 
-### Task 2: Add immutable Council report-evidence snapshot storage and load-or-freeze adapter
+### Task 2: Add quarantined immutable snapshot SQL and load-or-freeze adapter
 
 **Files:**
 - Create: `supabase/pending-migrations/20260905073000_qeo86_ai_council_report_evidence.sql`
@@ -249,7 +223,6 @@ git commit -m "feat(reports): add Council evidence selector"
 
 ```ts
 export const AI_COUNCIL_REPORT_EVIDENCE_VERSION = "ai-council-report-evidence-v1"
-
 export type CouncilReportEvidenceSnapshotStatus = "ready" | "empty" | "unavailable"
 
 export interface CouncilReportEvidenceSnapshotPayload {
@@ -275,7 +248,7 @@ export async function freezeCouncilReportEvidence(
 ): Promise<FrozenCouncilReportEvidence>
 ```
 
-SQL contract:
+Pending SQL contract:
 
 ```sql
 create table if not exists public.ai_council_report_evidence_snapshots (
@@ -292,15 +265,17 @@ create table if not exists public.ai_council_report_evidence_snapshots (
 );
 ```
 
-Add authenticated read policy, service-role privileges, anon denial, `(ticker, as_of_date desc, captured_at desc)` index, and a `BEFORE UPDATE` trigger that raises because rows are immutable.
+Add authenticated read policy, service-role write/read, anon denial, `(ticker, as_of_date desc, captured_at desc)` index, and a `BEFORE UPDATE` trigger that rejects mutation.
 
-- [ ] **Step 1: Write RED DB/source contract assertions**
+Because this table is pending/quarantined, `report-evidence.ts` should keep the DB boundary typed with the generic `SupabaseClient` used by other pending Research Report adapters. Do not edit generated `Database` types in this task.
 
-Assert migration contains the exact table/status/RLS/immutability contract and that `report-evidence.ts` exports `AI_COUNCIL_REPORT_EVIDENCE_VERSION` and `freezeCouncilReportEvidence`.
+- [ ] **Step 1: Write failing pending-SQL source assertions**
 
-- [ ] **Step 2: Write RED behavior test for same-run reuse**
+Assert exact table/status/hash/RLS/index/no-update trigger contract by reading the pending SQL file.
 
-Seed an existing snapshot row for `run-1`. Assert:
+- [ ] **Step 2: Write failing same-run reuse test**
+
+Seed an existing row and assert:
 
 ```ts
 const frozen = await freezeCouncilReportEvidence(client, params)
@@ -309,39 +284,33 @@ assert.equal(selectorCallCount, 0)
 assert.equal(frozen.contextHash, EXISTING_HASH)
 ```
 
-- [ ] **Step 3: Write RED behavior tests for `ready`, `empty`, selector failure, and persistence failure**
+- [ ] **Step 3: Write failing `ready`, `empty`, unavailable and insert-failure tests**
 
-Required expectations:
+Required behavior:
 
 ```ts
 assert.equal(ready.persisted, true)
 assert.equal(ready.snapshot?.status, "ready")
 assert.equal(empty.snapshot?.status, "empty")
 assert.deepEqual(empty.snapshot?.reports, [])
-assert.equal(unavailable.snapshot?.status, "unavailable")
 assert.equal(unavailable.persisted, true)
+assert.equal(unavailable.snapshot?.status, "unavailable")
 assert.equal(storeFailure.persisted, false)
 assert.equal(storeFailure.snapshot, null)
 assert.equal(storeFailure.contextHash, null)
 ```
 
-If selector throws but the table can insert, persist a bounded `unavailable` snapshot with no report evidence and a limitation string. If insertion itself fails, return unpersisted/null evidence and do not throw into deterministic Council execution.
-
-- [ ] **Step 4: Run focused tests and verify RED**
-
-Run:
+- [ ] **Step 4: Run focused test and verify RED**
 
 ```bash
 node --test tests/ai-council-report-evidence.test.ts
 ```
 
-Expected: FAIL on missing migration/module.
+Expected: FAIL on missing SQL/module.
 
 - [ ] **Step 5: Implement canonical hash + load-first freeze**
 
-Reuse the existing canonical JSON SHA-256 pattern from `modules/ai-council/research-context.ts`, but keep report snapshot semantics in the new focused module. Hash the complete versioned bounded payload, including `status` and `selectionRunAt`.
-
-Pseudo-flow:
+Reuse the canonical JSON SHA-256 style from `modules/ai-council/research-context.ts`. Hash the complete versioned bounded payload including status and `selectionRunAt`.
 
 ```ts
 const existing = await loadPersistedSnapshot(runId)
@@ -349,18 +318,15 @@ if (existing) return persistedFrozen(existing, true)
 
 try {
   const selected = await selectCouncilReportEvidence(...)
-  const payload = selected.reports.length ? readyPayload(selected) : emptyPayload(selected)
-  return await persistPayload(payload)
+  return await persistPayload(selected.reports.length ? readyPayload(selected) : emptyPayload(selected))
 } catch (error) {
   return await tryPersistUnavailable(error)
 }
 ```
 
-The adapter must not expose unpersisted selected reports after insert failure.
+If insert itself fails, return `persisted:false`, `snapshot:null`, `contextHash:null`. Never return selected but unpersisted report evidence.
 
-- [ ] **Step 6: Re-run focused tests**
-
-Run:
+- [ ] **Step 6: Re-run focused test**
 
 ```bash
 node --test tests/ai-council-report-evidence.test.ts
@@ -377,7 +343,7 @@ git commit -m "feat(council): freeze report evidence snapshots"
 
 ---
 
-### Task 3: Freeze report evidence for every Council ticker at the pre-debate boundary
+### Task 3: Freeze report evidence for every Council ticker before debate
 
 **Files:**
 - Modify: `modules/ai-council/pre-market-evidence.ts`
@@ -386,7 +352,7 @@ git commit -m "feat(council): freeze report evidence snapshots"
 
 **Interfaces:**
 
-Extend `AiCouncilPreMarketEvidenceResult` with:
+Extend `AiCouncilPreMarketEvidenceResult`:
 
 ```ts
 reportEvidenceVersion: typeof AI_COUNCIL_REPORT_EVIDENCE_VERSION
@@ -398,7 +364,7 @@ reportEvidencePersisted: number
 reportEvidenceMissingRunIdentities: number
 ```
 
-Attached stock shape only for successfully persisted/reused `ready` or `empty` snapshots:
+Attach only persisted/reused `ready` or `empty` snapshots:
 
 ```ts
 reportEvidence: {
@@ -410,51 +376,33 @@ reportEvidence: {
 }
 ```
 
-- [ ] **Step 1: Write RED all-ticker wrapper tests**
+- [ ] **Step 1: Write failing all-ticker wrapper assertions**
 
-Keep the existing Notion assertion:
+Keep Notion pilot assertions intact, but require the Research Report path to iterate all `raw.stocks` with resolved run identities and not use `isCouncilResearchTickerEnabled`.
 
-```ts
-assert.match(researchContextSource, /DEFAULT_PILOT_TICKERS = "MSN"/)
-```
+- [ ] **Step 2: Write failing attachment/degradation tests**
 
-But assert Research Report path has **no** `isCouncilResearchTickerEnabled` gate and iterates all `raw.stocks` that have a run identity.
-
-- [ ] **Step 2: Write RED attachment/failure boundary tests**
-
-Assert:
-
-- `ready` and `empty` persisted snapshots attach `stock.reportEvidence`;
-- persisted `unavailable` does not attach prompt evidence;
-- unpersisted store failure does not attach prompt evidence;
-- a missing report snapshot never removes existing `llmEvidence` or Notion `researchContext`;
-- same `run_id` retry returns reused snapshot.
+Assert ready/empty attaches; unavailable/unpersisted does not; existing `llmEvidence` and Notion `researchContext` remain unchanged; same-run retry reuses snapshot.
 
 - [ ] **Step 3: Run focused tests and verify RED**
-
-Run:
 
 ```bash
 node --test tests/ai-council-report-evidence.test.ts tests/ai-council-research-context.test.ts
 ```
 
-Expected: FAIL because the wrapper has only raw + Notion enrichment.
+Expected: FAIL because the wrapper currently enriches only raw + Notion context.
 
-- [ ] **Step 4: Refactor run-identity loading once, without changing deterministic identity**
+- [ ] **Step 4: Resolve run identities once for all stocks**
 
-`loadRunIdentities()` should resolve identities for **all** `raw.stocks`, not only Notion-enabled stocks. Preserve `runKey(ticker,evidenceHash)` so the existing deterministic run remains authoritative.
-
-Capture one wall-clock cutoff for this enrichment invocation:
+Keep `runKey(ticker,evidenceHash)` so deterministic run identity remains unchanged. Capture one cutoff:
 
 ```ts
 const reportSelectionRunAt = new Date().toISOString()
 ```
 
-Pass the same value to every report selector in this invocation.
+Use that same timestamp for every report selector in this enrichment invocation.
 
-- [ ] **Step 5: Freeze all-ticker report evidence after raw/Notion hydration**
-
-For each stock with a resolved run identity:
+- [ ] **Step 5: Freeze all-ticker snapshots and attach only auditable evidence**
 
 ```ts
 const frozen = await freezeCouncilReportEvidence(supabase, {
@@ -465,11 +413,9 @@ const frozen = await freezeCouncilReportEvidence(supabase, {
 })
 ```
 
-Attach only when `frozen.persisted && frozen.contextHash && frozen.snapshot` and status is `ready` or `empty`.
+Attach only when `frozen.persisted && frozen.contextHash && frozen.snapshot` and status is ready/empty.
 
 - [ ] **Step 6: Re-run focused tests**
-
-Run:
 
 ```bash
 node --test tests/ai-council-report-evidence.test.ts tests/ai-council-research-context.test.ts
@@ -486,7 +432,7 @@ git commit -m "feat(council): hydrate report evidence before debate"
 
 ---
 
-### Task 4: Version prompt identity and first-class semantic packet for report evidence
+### Task 4: Version prompt identity and first-class semantic packet
 
 **Files:**
 - Modify: `modules/ai-council/prompt-identity.ts`
@@ -509,23 +455,13 @@ export interface AiCouncilPromptIdentityInput {
   promptVersion: string
   marketSynthesisHash?: string | null
 }
-```
 
-Bump:
-
-```ts
 export const AI_COUNCIL_LLM_PROMPT_VERSION = "llm-debate-v4-research-report-evidence"
 ```
 
-Extend `AiCouncilEvidencePacketV2` and builder stock input:
+Extend `AiCouncilEvidencePacketV2` and builder input with `reportEvidence?: unknown`.
 
-```ts
-reportEvidence?: unknown
-```
-
-- [ ] **Step 1: Write RED prompt-identity tests**
-
-Assert two otherwise identical inputs produce different hashes when only `reportEvidenceHash` differs:
+- [ ] **Step 1: Write failing identity tests**
 
 ```ts
 assert.notEqual(
@@ -534,29 +470,25 @@ assert.notEqual(
 )
 ```
 
-Assert `AI_COUNCIL_PROMPT_IDENTITY_VERSION` is v2 and current deterministic `stock.evidenceHash` is still passed untouched.
+Also assert deterministic `stock.evidenceHash` remains untouched and v1 is not reused as the new identity version.
 
-- [ ] **Step 2: Write RED packet/prompt semantics assertions**
+- [ ] **Step 2: Write failing packet/prompt semantic assertions**
 
-Require source to contain all of these concepts:
+Require source to contain these concepts:
 
 ```text
 RESEARCH_REPORT_EVIDENCE
 SOURCE OPINION
 The deterministic QeoIndex policy remains the final decision authority
-conflict / contradiction with deterministic price/volume/Wyckoff evidence
+contradiction with deterministic price/volume/Wyckoff evidence
 must not upgrade or downgrade the deterministic signal
 ```
 
-Assert `buildAiCouncilEvidencePacketV2()` includes `reportEvidence` only when attached, and does not read report chunks/PDF text.
+- [ ] **Step 3: Write failing empty/unavailable identity tests**
 
-- [ ] **Step 3: Write RED empty/unavailable identity tests**
-
-`empty` persisted evidence has a real context hash and must influence v2 identity. `unavailable`/unpersisted evidence must be omitted by the pre-market attachment path, so `resolveAiCouncilPromptIdentityHash()` sees `reportEvidenceHash=null`.
+Persisted `empty` has a real hash and participates in v2 identity. Unavailable/unpersisted is not attached, so `reportEvidenceHash` resolves to null.
 
 - [ ] **Step 4: Run focused tests and verify RED**
-
-Run:
 
 ```bash
 node --test tests/ai-council-prompt-evidence.test.ts tests/ai-council-persistence.test.ts tests/ai-council-report-evidence.test.ts
@@ -566,27 +498,17 @@ Expected: FAIL on identity version/hash input/prompt version/report packet layer
 
 - [ ] **Step 5: Implement v2 identity resolution**
 
-Add safe hash extraction from:
+Read the optional hash from `stock.reportEvidence?.contextHash` and include it in the canonical identity input. Keep cache key format `qeo-council-<hash>` unchanged.
 
-```ts
-stock.reportEvidence?.contextHash
-```
-
-and include it in computed identity. Update `buildAiCouncilPromptCacheKey()` to keep the same `qeo-council-<hash>` format; the hash input changes, the cache-key API does not.
-
-- [ ] **Step 6: Add first-class report layer and anti-bias instructions**
-
-Packet builder attaches the already-bounded frozen snapshot data:
+- [ ] **Step 6: Add report packet layer and anti-bias instructions**
 
 ```ts
 ...(stock.reportEvidence ? { reportEvidence: stock.reportEvidence } : {})
 ```
 
-The LLM system/common instructions must explicitly state that broker recommendations/targets are source opinions and contradictions must be surfaced without overriding deterministic authority. Do not create a new LLM call or scoring path.
+Add source-opinion/contradiction/final-authority wording for Bull, Bear, Risk and Chair. Do not create a new LLM request or scoring path.
 
 - [ ] **Step 7: Re-run focused tests**
-
-Run:
 
 ```bash
 node --test tests/ai-council-prompt-evidence.test.ts tests/ai-council-persistence.test.ts tests/ai-council-report-evidence.test.ts
@@ -603,7 +525,7 @@ git commit -m "feat(council): add report evidence to LLM identity"
 
 ---
 
-### Task 5: Load frozen provenance and render `Báo cáo liên quan` in Debate Lab
+### Task 5: Load frozen provenance and render `Báo cáo liên quan`
 
 **Files:**
 - Modify: `modules/ai-council/debate-data.ts`
@@ -639,13 +561,13 @@ relatedReports: Array<{
 }>
 ```
 
-- [ ] **Step 1: Write RED dashboard-data tests**
+- [ ] **Step 1: Write failing dashboard-data test**
 
-Assert `getAiCouncilDebateDashboardData()` queries `ai_council_report_evidence_snapshots` by the debate `run_id` set, reads `context_payload`, and does **not** call `selectCouncilReportEvidence()` or current Research Report tables.
+Assert dashboard data queries `ai_council_report_evidence_snapshots` by debate run IDs and does not call selectors/current Research Report tables.
 
-- [ ] **Step 2: Write RED UI contract tests**
+- [ ] **Step 2: Write failing UI contract**
 
-Require the Debate page to contain:
+Require:
 
 ```text
 Research Reports
@@ -654,21 +576,17 @@ Source opinion
 /research/reports/
 ```
 
-and to render the count/hash from `row.evidenceProvenance`, not from a live selector.
-
-- [ ] **Step 3: Run focused tests and verify RED**
-
-Run:
+- [ ] **Step 3: Run focused test and verify RED**
 
 ```bash
 node --test tests/ai-council-report-evidence-ui.test.ts
 ```
 
-Expected: FAIL because dashboard data/UI do not load/render the new snapshot.
+Expected: FAIL because snapshot provenance is not loaded/rendered.
 
-- [ ] **Step 4: Extend dashboard snapshot query/normalization**
+- [ ] **Step 4: Load and normalize immutable snapshots**
 
-Add a third query beside raw and Notion audit rows:
+Add a query beside raw/Notion audit queries:
 
 ```ts
 supabase
@@ -677,25 +595,19 @@ supabase
   .in("run_id", runIds)
 ```
 
-Normalize related reports solely from frozen `context_payload.reports`. If malformed, return an empty list rather than falling back to current report DB state.
+Normalize related reports solely from frozen `context_payload.reports`; malformed payload yields an empty UI list, never a live recomputation.
 
-- [ ] **Step 5: Extend Debate Card provenance**
+- [ ] **Step 5: Extend Debate Card provenance and related links**
 
-Add a Research Reports provenance tile with status/count/short hash/captured time. Keep the existing deterministic/raw/Notion/cache identity tiles and authority wording.
-
-- [ ] **Step 6: Add compact related reports section**
-
-For each frozen row render title/source/date/category/stance, optional `Source opinion` badge, and:
+Render status/count/hash/captured time and compact related rows. Links must use:
 
 ```tsx
 <Link href={`/research/reports/${report.reportId}`}>...</Link>
 ```
 
-Do not render full executive summary or PDF text.
+Do not duplicate full executive summary or PDF content.
 
-- [ ] **Step 7: Re-run focused tests**
-
-Run:
+- [ ] **Step 6: Re-run focused UI test**
 
 ```bash
 node --test tests/ai-council-report-evidence-ui.test.ts
@@ -703,7 +615,7 @@ node --test tests/ai-council-report-evidence-ui.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add modules/ai-council/debate-data.ts modules/ai-council/llm.ts app/insights/ai-council/debates/page.tsx tests/ai-council-report-evidence-ui.test.ts tests/test-contracts.json
@@ -712,7 +624,7 @@ git commit -m "feat(council): show related research reports"
 
 ---
 
-### Task 6: Lock cross-module authority boundaries, docs, and generated schema types
+### Task 6: Lock cross-module authority boundaries and quarantine semantics
 
 **Files:**
 - Modify: `modules/research-reports/README.md`
@@ -720,50 +632,45 @@ git commit -m "feat(council): show related research reports"
 - Modify: `tests/ai-council-report-evidence.test.ts`
 - Modify: `tests/ai-council-persistence.test.ts`
 - Modify: `tests/ai-council-research-context.test.ts`
-- Regenerate: `modules/shared/supabase/database.types.ts`
+- Verify unchanged: `modules/shared/supabase/database.types.ts`
 
 **Interfaces:**
-- Documentation states Research Reports selector is canonical DB-only and all-ticker.
-- Documentation states Notion Research Context remains separately MSN-pilot-gated.
-- Documentation states deterministic Council authority is unchanged.
-- Generated Database types include `ai_council_report_evidence_snapshots` exactly as replayed from pending schema policy used by repository verification.
+- Research Reports README states canonical DB-only all-ticker selector, exact limits, point-in-time identity and no provider/PDF runtime dependency.
+- AI Council README states snapshot statuses/reuse/prompt identity v2/deterministic authority separation.
+- Generated Database types remain unchanged until QEO-87 promotes pending Research Reports/QEO-86 schema.
 
-- [ ] **Step 1: Add RED architectural boundary assertions**
+- [ ] **Step 1: Add failing architecture-boundary assertions**
 
-Read `modules/ai-council` source files and assert there is no runtime import/path reference to:
+Scan AI Council runtime source and assert no import/reference to:
 
 ```text
 modules/research-reports/providers/topi
-modules/research-reports/analysis/pdf
 pdfjs-dist
 market_research_report_chunks
 ```
 
-Allow import of the stable selector through `modules/ai-council/report-evidence.ts` only; AI Council must not import provider/ingestion internals.
+Allow only the stable selector through `modules/ai-council/report-evidence.ts`.
 
-- [ ] **Step 2: Add RED deterministic authority assertions**
+- [ ] **Step 2: Add failing deterministic-authority assertions**
 
-Assert QEO-86 code does not write/update `ai_council_runs.evidence_hash`, `signal`, `council_score`, or `risk_status`, and the Debate UI continues labeling deterministic result as final authority.
+Assert QEO-86 code does not update `ai_council_runs.evidence_hash`, `signal`, `council_score`, or `risk_status`, and UI still identifies deterministic result as final authority.
 
-- [ ] **Step 3: Update module docs with exact limits/failure semantics**
+- [ ] **Step 3: Document exact selector/failure/quarantine semantics**
 
-Research Reports README must record `3/90d`, `2/30d`, max 5, ~10k chars, exact analysis identity, source-opinion semantics, and no PDF/runtime fetch. AI Council README must record snapshot statuses, same-run reuse, v2 prompt identity, and deterministic authority separation.
+Document `3/90d`, `2/30d`, max 5, ~10k chars, exact analysis identity, source-opinion semantics, same-run snapshot reuse, and persistence-failure omission.
 
-- [ ] **Step 4: Regenerate Supabase types through the repository DB verification flow**
+- [ ] **Step 4: Verify active generated types remain current and unchanged**
 
-Run the local replay/type generation flow used by DB Drift:
+Run against active migrations:
 
 ```bash
 pnpm db:replay:verify
-pnpm db:types:generate
 pnpm db:types:verify
 ```
 
-Expected: generated `modules/shared/supabase/database.types.ts` contains `ai_council_report_evidence_snapshots`; type verification passes.
+Expected: PASS with no QEO-86 pending table required in committed generated types. Do **not** run `pnpm db:types:generate` for the pending table and do not hand-edit `database.types.ts`.
 
 - [ ] **Step 5: Run focused architecture tests**
-
-Run:
 
 ```bash
 node --test tests/ai-council-report-evidence.test.ts tests/ai-council-persistence.test.ts tests/ai-council-research-context.test.ts
@@ -774,7 +681,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add modules/research-reports/README.md modules/ai-council/README.md modules/shared/supabase/database.types.ts tests/ai-council-report-evidence.test.ts tests/ai-council-persistence.test.ts tests/ai-council-research-context.test.ts
+git add modules/research-reports/README.md modules/ai-council/README.md tests/ai-council-report-evidence.test.ts tests/ai-council-persistence.test.ts tests/ai-council-research-context.test.ts
 git commit -m "docs(council): lock report evidence authority boundary"
 ```
 
@@ -783,16 +690,14 @@ git commit -m "docs(council): lock report evidence authority boundary"
 ### Task 7: Full regression, draft PR, Verify + DB Drift acceptance
 
 **Files:**
-- Modify only files required by failures discovered in this gate.
-- PR body references QEO-86 spec/plan and explicitly says production rollout remains QEO-87.
+- Modify only files required by genuine failures discovered in this gate.
+- PR body references QEO-86 spec/plan and explicitly says production promotion/backfill remains QEO-87.
 
 **Interfaces:**
 - Final PR head is the sole acceptance SHA.
 - No merge until Verify and DB Drift are green on that exact SHA.
 
-- [ ] **Step 1: Run all focused QEO-86 suites locally/CI-equivalent**
-
-Run:
+- [ ] **Step 1: Run all focused QEO-86 suites**
 
 ```bash
 node --test \
@@ -806,9 +711,7 @@ node --test \
 
 Expected: PASS.
 
-- [ ] **Step 2: Run current contract suite, lint, and typecheck**
-
-Run:
+- [ ] **Step 2: Run current contracts, lint and TypeScript**
 
 ```bash
 pnpm test:current
@@ -820,17 +723,13 @@ Expected: PASS.
 
 - [ ] **Step 3: Run production build**
 
-Run:
-
 ```bash
 pnpm build
 ```
 
 Expected: PASS with `/insights/ai-council/debates` compiled successfully.
 
-- [ ] **Step 4: Run full DB reconciliation gates**
-
-Run:
+- [ ] **Step 4: Run DB reconciliation gates**
 
 ```bash
 pnpm db:drift:verify
@@ -839,42 +738,34 @@ pnpm db:types:verify
 pnpm test:db-drift
 ```
 
-Expected: PASS.
+Expected: PASS. Active migration replay/types remain unchanged; pending QEO-86 SQL source contract remains quarantined for QEO-87 promotion.
 
-- [ ] **Step 5: Create/update a draft PR**
+- [ ] **Step 5: Create/update draft PR**
 
-PR title:
+Title:
 
 ```text
 QEO-86: feed curated Research Reports into AI Council
 ```
 
-PR body must summarize:
+Body summarizes all-ticker selector, immutable per-run snapshot, prompt identity v2 + prompt v4, contradiction/source-opinion semantics, related links, unchanged deterministic `evidence_hash`, and QEO-87 production rollout ownership.
 
-- all-ticker deterministic selector;
-- immutable per-run snapshot;
-- prompt identity v2 + prompt version v4;
-- source-opinion contradiction semantics;
-- related report links;
-- deterministic `evidence_hash` unchanged;
-- production rollout/backfill deferred to QEO-87.
+- [ ] **Step 6: Verify CI on exact final head**
 
-- [ ] **Step 6: Verify CI on the exact final head**
+Require successful repository **Verify** and **DB Drift Reconciliation** workflow runs on the PR's final SHA. Any later commit invalidates earlier green evidence.
 
-Require successful repository **Verify** and **DB Drift Reconciliation** workflow runs for the PR's final SHA. If another commit is pushed, discard prior green evidence and verify the new SHA.
-
-- [ ] **Step 7: Review diff for the five critical failure modes**
+- [ ] **Step 7: Review the five critical failure modes**
 
 Explicitly inspect:
 
 1. future analysis/mention leaking through `runAt` cutoff;
 2. same-run retry reselecting newer reports;
 3. unpersisted evidence entering the prompt;
-4. Research Report hash mutating deterministic `ai_council_runs.evidence_hash` or deterministic decision fields;
-5. historical UI recomputing current reports instead of using the frozen snapshot.
+4. report hash mutating deterministic Council identity/decision fields;
+5. historical UI recomputing current reports instead of using frozen snapshot.
 
 Expected: none present.
 
-- [ ] **Step 8: Mark PR ready for review only after all gates are green**
+- [ ] **Step 8: Mark PR ready only after all gates are green**
 
-Do not merge or mark Linear QEO-86 Done until final-head Verify + DB Drift evidence is present. Do not claim production deployment/runtime rollout; that belongs to QEO-87.
+Do not merge or mark Linear QEO-86 Done until final-head Verify + DB Drift evidence exists. Do not claim production deployment/runtime rollout; QEO-87 owns that acceptance.
