@@ -309,12 +309,19 @@ async function loadReports(
       lte(column: string, value: string): typeof query
       gte(column: string, value: string): typeof query
       in(column: string, values: unknown[]): typeof query
+      order(column: string, options?: { ascending?: boolean }): typeof query
       limit(value: number): PromiseLike<QueryResult>
     }
   query = query.lte("publish_date", params.asOf)
   query = query.gte("publish_date", dateFloor(params.asOf, params.lookbackDays))
   query = query.lte("created_at", params.runAt)
-  if (params.categories?.length) query = query.in("category", params.categories)
+  if (params.categories?.length) {
+    query = query.in("category", params.categories)
+    query = query.order("category", { ascending: true })
+  }
+  query = query.order("publish_date", { ascending: false })
+  query = query.order("created_at", { ascending: false })
+  query = query.order("id", { ascending: true })
   const rows = ensureRows(await query.limit(MAX_QUERY_ROWS), "Council Research Report metadata lookup failed")
   return rows.map(reportRow).filter((row): row is ReportRow => Boolean(row))
 }
@@ -326,10 +333,13 @@ async function loadAnalyses(client: SupabaseClient, reportIds: string[], runAt: 
     .select("id,report_id,content_hash,analysis_version,prompt_version,model_route_key,processed_at,executive_summary,market_view,sector_outlook,catalysts,risks") as unknown as {
       in(column: string, values: unknown[]): typeof query
       lte(column: string, value: string): typeof query
+      order(column: string, options?: { ascending?: boolean }): typeof query
       limit(value: number): PromiseLike<QueryResult>
     }
   query = query.in("report_id", reportIds)
   query = query.lte("processed_at", runAt)
+  query = query.order("processed_at", { ascending: false })
+  query = query.order("id", { ascending: true })
   const rows = ensureRows(await query.limit(MAX_QUERY_ROWS), "Council Research Report analysis lookup failed")
   return rows.map(analysisRow).filter((row): row is AnalysisRow => Boolean(row))
 }
