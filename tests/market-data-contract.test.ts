@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { mergeChartBars } from "../components/stock-detail/chart/chart-history.ts"
 import {
   normalizeToKiloPrice,
   normalizeVolume,
@@ -10,6 +11,7 @@ import {
   normalizeForeignFlow,
   toCanonicalOrderbookSnapshot,
 } from "../modules/market/data-contract.ts"
+import { activeMinuteStart, partitionLiveMinuteBars } from "../modules/market/chart-data/live-session.ts"
 
 test("price normalizer enforces consistent kilo format (21.85) across all price shapes", () => {
   // Raw Dong prices (>= 500)
@@ -178,4 +180,34 @@ test("toCanonicalOrderbookSnapshot produces 100% polymorphic schema whether load
   assert.equal(typeof snap2.referencePrice, "number")
   assert.equal(typeof snap1.latestPrice, "number")
   assert.equal(typeof snap2.latestPrice, "number")
+})
+
+test("QEO-96 live minute replay keeps current candle ephemeral and rejects future bars", () => {
+  const nowSeconds = Math.floor(new Date("2026-09-07T02:15:42Z").getTime() / 1000)
+  const current = activeMinuteStart(nowSeconds)
+  const bars = [
+    { time: current - 60, open: 10, high: 11, low: 9, close: 10.5, volume: 100 },
+    { time: current, open: 10.5, high: 12, low: 10, close: 11.5, volume: 150 },
+    { time: current + 60, open: 11.5, high: 13, low: 11, close: 12, volume: 200 },
+  ]
+
+  const live = partitionLiveMinuteBars(bars, current, true)
+  assert.deepEqual(live.responseBars.map((bar) => bar.time), [current - 60, current])
+  assert.deepEqual(live.completedBars.map((bar) => bar.time), [current - 60])
+  assert.equal(live.currentBar?.time, current)
+
+  const closed = partitionLiveMinuteBars(bars, current, false)
+  assert.equal(closed.responseBars.length, 3)
+  assert.equal(closed.completedBars.length, 3)
+  assert.equal(closed.currentBar, null)
+})
+
+test("QEO-96 live candle merge replaces the matching timestamp instead of duplicating it", () => {
+  const time = Math.floor(new Date("2026-09-07T02:15:00Z").getTime() / 1000)
+  const existing = [{ time, open: 10, high: 11, low: 9, close: 10, volume: 100 }]
+  const incoming = [{ time, open: 10, high: 12, low: 9, close: 11.5, volume: 180 }]
+
+  const merged = mergeChartBars(existing, incoming)
+  assert.equal(merged.length, 1)
+  assert.deepEqual(merged[0], incoming[0])
 })

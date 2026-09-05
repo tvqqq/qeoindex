@@ -46,6 +46,7 @@ export async function GET(request: Request) {
       integrityIssues: result.integrityIssues,
       coverage: result.coverage,
       errors: result.errors,
+      metadata: result.metadata ?? null,
       generatedAt: new Date().toISOString(),
     }, { headers: NO_STORE })
   } catch (error) {

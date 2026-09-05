@@ -1,6 +1,7 @@
 import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { createSupabaseColdOhlcvStorage, type ColdOhlcvStorage } from "./cold-store"
 import type {
   CanonicalChartOhlcvRequest,
@@ -11,6 +12,7 @@ import type {
 } from "./contract"
 import { ChartDataRequestError, ChartDataUnavailableError } from "./contract"
 import { readHotIntradayRange, readProviderRequestCoverage, upsertHotIntradayBars } from "./hot-store"
+import { activeMinuteStart, partitionLiveMinuteBars } from "./live-session"
 import { detectTradingSessionGaps, normalizeCanonicalBars } from "./normalize"
 import {
   createPrimaryChartOhlcvProvider,
@@ -22,6 +24,7 @@ import { mergeProviderRanges, missingProviderRanges } from "./provider-coverage"
 const DAY_SECONDS = 86400
 const MAX_INTRADAY_SPAN_SECONDS = 31 * DAY_SECONDS
 const MAX_DAILY_SPAN_SECONDS = 100 * 366 * DAY_SECONDS
+const LIVE_TAIL_SECONDS = 5 * 60
 
 export interface ChartDataServiceDeps {
   supabase: SupabaseClient
@@ -55,7 +58,12 @@ function rowToBar(row: Record<string, unknown>): CanonicalOhlcvBar | null {
   return Number.isFinite(timestamp) ? bar : null
 }
 
-async function loadDaily(supabase: SupabaseClient, request: CanonicalChartOhlcvRequest): Promise<CanonicalChartOhlcvResult> {
+function laterTime(current: number | null, bars: CanonicalOhlcvBar[]) {
+  const latest = bars.at(-1)?.time
+  return latest == null ? current : Math.max(current ?? latest, latest)
+}
+
+async function loadDaily(supabase: SupabaseClient, request: CanonicalChartOhlcvRequest, now = new Date()): Promise<CanonicalChartOhlcvResult> {
   const { data, error } = await supabase
     .from("market_ohlcv_history")
     .select("bar_time,open,high,low,close,volume")
@@ -81,6 +89,14 @@ async function loadDaily(supabase: SupabaseClient, request: CanonicalChartOhlcvR
       state: normalized.bars.length > 0 && normalized.integrityIssues.length === 0 ? "COMPLETE" : "PARTIAL",
     },
     errors: normalized.integrityIssues.length ? [{ code: "INTEGRITY_WARNING" }] : [],
+    metadata: {
+      priceBasis: "RAW",
+      provider: "CANONICAL_DAILY",
+      lastUpdatedAt: now.toISOString(),
+      sessionState: "CLOSED",
+      currentBarTime: null,
+      persistedThrough: normalized.bars.at(-1)?.time ?? null,
+    },
   }
 }
 
@@ -88,6 +104,10 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   const coldStorage = deps.coldStorage ?? createSupabaseColdOhlcvStorage(deps.supabase)
   const provider = deps.provider ?? createPrimaryChartOhlcvProvider()
   const errors: ChartDataError[] = []
+  const now = deps.now ?? new Date()
+  const nowSeconds = Math.floor(now.getTime() / 1000)
+  const currentMinuteStart = activeMinuteStart(nowSeconds)
+  const session = getMarketSessionStatus(now)
 
   const [hotRead, coldRead, coverageRead] = await Promise.allSettled([
     readHotIntradayRange(deps.supabase, request.ticker, request.from, request.to),
@@ -96,19 +116,24 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   ])
 
   const tagged: SourceTaggedBar[] = []
+  let durablePersistedThrough: number | null = null
   if (hotRead.status === "fulfilled") {
-    tagged.push(...hotRead.value.map((bar) => ({ source: "hot" as const, bar })))
+    const durableHotBars = session.isLiveSession
+      ? hotRead.value.filter((bar) => bar.time < currentMinuteStart)
+      : hotRead.value
+    tagged.push(...durableHotBars.map((bar) => ({ source: "hot" as const, bar })))
+    durablePersistedThrough = laterTime(durablePersistedThrough, durableHotBars)
   } else {
     errors.push({ code: "STORAGE_UNAVAILABLE" })
   }
   if (coldRead.status === "fulfilled") {
     tagged.push(...coldRead.value.bars.map((bar) => ({ source: "cold" as const, bar })))
+    durablePersistedThrough = laterTime(durablePersistedThrough, coldRead.value.bars)
   } else {
     errors.push({ code: "STORAGE_UNAVAILABLE" })
   }
 
   let normalized = normalizeCanonicalBars(tagged)
-  const nowSeconds = Math.floor((deps.now ?? new Date()).getTime() / 1000)
   const effectiveTo = Math.min(request.to, nowSeconds)
   const requestedRange = { from: request.from, to: effectiveTo }
   const coveredRanges = coverageRead.status === "fulfilled" ? coverageRead.value : []
@@ -119,27 +144,57 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
     from: gap.fromTime,
     to: gap.toTime,
   }))
+  const liveTailRange = session.isLiveSession && effectiveTo > request.from
+    ? {
+        from: Math.max(request.from, currentMinuteStart - LIVE_TAIL_SECONDS),
+        to: effectiveTo,
+      }
+    : null
   const providerRanges = effectiveTo > request.from
-    ? mergeProviderRanges([...uncoveredRanges, ...storageGapRanges])
+    ? mergeProviderRanges([
+        ...uncoveredRanges,
+        ...storageGapRanges,
+        ...(liveTailRange && liveTailRange.from < liveTailRange.to ? [liveTailRange] : []),
+      ])
     : []
 
+  let latestProvider: string | null = null
   for (const range of providerRanges) {
     try {
       const providerResult = normalizeChartProviderResult(
-        await provider.fetch({ ...request, from: range.from, to: range.to }),
+        await provider.fetch({
+          ...request,
+          from: range.from,
+          to: range.to,
+          includeCurrent: session.isLiveSession,
+        }),
         "CUSTOM",
       )
-      const providerBars = providerResult.bars
+      const partition = partitionLiveMinuteBars(providerResult.bars, currentMinuteStart, session.isLiveSession)
+      const providerBars = partition.responseBars
+      if (!providerBars.length) throw new Error("Provider returned no usable 1m bars")
+      latestProvider = providerResult.provider
       tagged.push(...providerBars.map((bar) => ({ source: "provider" as const, bar })))
       normalized = normalizeCanonicalBars(tagged)
-      if (providerBars.length) {
+
+      if (partition.completedBars.length) {
         try {
+          const completedRequestedTo = session.isLiveSession
+            ? Math.min(range.to, currentMinuteStart - 1)
+            : range.to
           await upsertHotIntradayBars(deps.supabase, {
             ticker: request.ticker,
-            bars: providerBars,
+            bars: partition.completedBars,
             provider: providerResult.provider,
-            detail: { resolution: "1m", requestedFrom: range.from, requestedTo: range.to },
+            fetchedAt: now.toISOString(),
+            detail: {
+              resolution: "1m",
+              requestedFrom: range.from,
+              requestedTo: completedRequestedTo,
+              liveTail: session.isLiveSession,
+            },
           })
+          durablePersistedThrough = laterTime(durablePersistedThrough, partition.completedBars)
         } catch {
           errors.push({ code: "STORAGE_UNAVAILABLE" })
         }
@@ -157,6 +212,9 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   if (normalized.integrityIssues.length) errors.push({ code: "INTEGRITY_WARNING" })
   const uniqueErrors = [...new Map(errors.map((item) => [item.code, item])).values()]
   const complete = normalized.bars.length > 0 && gaps.length === 0 && normalized.integrityIssues.length === 0 && uniqueErrors.length === 0
+  const currentBar = session.isLiveSession
+    ? normalized.bars.find((bar) => bar.time === currentMinuteStart) ?? null
+    : null
 
   return {
     ...request,
@@ -165,6 +223,14 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
     integrityIssues: normalized.integrityIssues,
     coverage: { complete, state: complete ? "COMPLETE" : "PARTIAL" },
     errors: uniqueErrors,
+    metadata: {
+      priceBasis: "RAW",
+      provider: latestProvider,
+      lastUpdatedAt: now.toISOString(),
+      sessionState: session.isLiveSession ? "LIVE" : "CLOSED",
+      currentBarTime: currentBar?.time ?? null,
+      persistedThrough: durablePersistedThrough,
+    },
   }
 }
 
@@ -173,5 +239,6 @@ export async function getCanonicalChartOhlcv(
   input: CanonicalChartOhlcvRequest,
 ): Promise<CanonicalChartOhlcvResult> {
   const request = normalizedRequest(input)
-  return request.resolution === "1D" ? loadDaily(deps.supabase, request) : loadIntraday(deps, request)
+  const now = deps.now ?? new Date()
+  return request.resolution === "1D" ? loadDaily(deps.supabase, request, now) : loadIntraday(deps, request)
 }

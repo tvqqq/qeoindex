@@ -20,6 +20,10 @@ type VciVector = {
   v?: unknown
 }
 
+export interface VciMinuteReadOptions {
+  includeCurrent?: boolean
+}
+
 function finite(value: unknown) {
   const number = Number(value)
   return Number.isFinite(number) ? number : null
@@ -44,7 +48,7 @@ function countBackForRange(from: number, to: number) {
 
 export function parseVciMinutePayload(
   payload: unknown,
-  input: { ticker: string; from: number; to: number; nowSeconds: number },
+  input: { ticker: string; from: number; to: number; nowSeconds: number; includeCurrent?: boolean },
 ): CanonicalOhlcvBar[] {
   const vectors = Array.isArray(payload)
     ? payload
@@ -66,7 +70,9 @@ export function parseVciMinutePayload(
   const volumes = Array.isArray(vector.v) ? vector.v : []
   if (!times.length || [opens, highs, lows, closes, volumes].some((array) => array.length !== times.length)) return []
 
+  const currentMinuteStart = Math.floor(input.nowSeconds / 60) * 60
   const completedTo = Math.min(input.to, input.nowSeconds - 60)
+  const allowedTo = input.includeCurrent ? Math.min(input.to, currentMinuteStart) : completedTo
   const byTime = new Map<number, CanonicalOhlcvBar>()
   for (let index = 0; index < times.length; index += 1) {
     const time = finite(times[index])
@@ -85,7 +91,7 @@ export function parseVciMinutePayload(
       close: rawClose / 1000,
       volume,
     }
-    if (bar.time < input.from || bar.time > completedTo || !validBar(bar)) continue
+    if (bar.time < input.from || bar.time > allowedTo || !validBar(bar)) continue
     byTime.set(bar.time, bar)
   }
   return [...byTime.values()].sort((a, b) => a.time - b.time)
@@ -96,6 +102,7 @@ export async function fetchVciMinuteOhlcvRange(
   from: number,
   to: number,
   now = new Date(),
+  options: VciMinuteReadOptions = {},
 ): Promise<CanonicalOhlcvBar[]> {
   const ticker = tickerInput.trim().toUpperCase()
   if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new Error("Invalid VCI OHLC ticker")
@@ -129,7 +136,12 @@ export async function fetchVciMinuteOhlcvRange(
     from,
     to,
     nowSeconds: Math.floor(now.getTime() / 1000),
+    includeCurrent: options.includeCurrent === true,
   })
-  if (!bars.length) throw new Error("VCI OHLC returned no completed 1m bars in requested range")
+  if (!bars.length) {
+    throw new Error(options.includeCurrent
+      ? "VCI OHLC returned no usable 1m bars in requested range"
+      : "VCI OHLC returned no completed 1m bars in requested range")
+  }
   return bars
 }

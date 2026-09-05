@@ -54,6 +54,15 @@ export interface ChartDataError {
   code: "PROVIDER_UNAVAILABLE" | "STORAGE_UNAVAILABLE" | "INTEGRITY_WARNING"
 }
 
+export interface ChartDataMetadata {
+  priceBasis: "RAW"
+  provider: string | null
+  lastUpdatedAt: string
+  sessionState: "LIVE" | "CLOSED"
+  currentBarTime: number | null
+  persistedThrough: number | null
+}
+
 export interface ChartOhlcvRequest {
   ticker: string
   resolution: ChartResolution
@@ -66,6 +75,8 @@ export interface CanonicalChartOhlcvRequest {
   resolution: CanonicalChartResolution
   from: number
   to: number
+  /** Internal-only live-tail hint. Public callers never set this directly. */
+  includeCurrent?: boolean
 }
 
 interface ChartOhlcvPayload {
@@ -74,6 +85,7 @@ interface ChartOhlcvPayload {
   integrityIssues: ChartDataIntegrityIssue[]
   coverage: ChartDataCoverage
   errors: ChartDataError[]
+  metadata?: ChartDataMetadata
 }
 
 export interface ChartOhlcvResult extends ChartOhlcvRequest, ChartOhlcvPayload {}

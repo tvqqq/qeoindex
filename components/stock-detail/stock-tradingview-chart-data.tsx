@@ -27,6 +27,8 @@ interface TimeframeEventDetail {
   timeframe: ChartTimeframe
 }
 
+const LIVE_TIMEFRAMES = new Set<ChartTimeframe>(["1m", "15m", "30m", "1h", "2h", "4h"])
+
 function HistoryBoundChart({
   ticker,
   timeframe,
@@ -44,6 +46,10 @@ function HistoryBoundChart({
     coverage,
     hasMore,
     loadOlder,
+    liveState,
+    liveError,
+    liveProvider,
+    lastUpdatedAt,
   } = useChartHistory({ ticker, timeframe, seedDailyBars })
 
   const dragStartXRef = useRef<number | null>(null)
@@ -82,12 +88,17 @@ function HistoryBoundChart({
     ticker: ticker.trim().toUpperCase(),
     bars: resolvedBars,
   }
+  const showLiveState = LIVE_TIMEFRAMES.has(timeframe) && !loading
+  const liveTimestamp = lastUpdatedAt
+    ? new Date(lastUpdatedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : null
 
   return (
     <div
       className={cn("relative min-w-0", styles.terminalSurface, isMaximized && styles.maximized)}
       data-chart-terminal="true"
       data-chart-maximized={isMaximized ? "true" : "false"}
+      data-chart-live-state={liveState}
       onMouseDownCapture={handleMouseDownCapture}
       onMouseMoveCapture={handleMouseMoveCapture}
       onMouseUpCapture={() => { dragStartXRef.current = null }}
@@ -114,7 +125,25 @@ function HistoryBoundChart({
         </div>
       )}
 
-      {!loading && coverage?.state === "PARTIAL" && (
+      {showLiveState && liveState === "live" && (
+        <div
+          className="pointer-events-none absolute right-3 top-12 z-30 rounded border border-emerald-300/20 bg-[#0b1712]/95 px-2 py-1 font-mono text-[10px] font-medium text-emerald-200/80"
+          title={`Raw price basis${liveProvider ? ` · ${liveProvider}` : ""}${liveTimestamp ? ` · ${liveTimestamp}` : ""}`}
+        >
+          LIVE{liveProvider ? ` · ${liveProvider}` : ""}
+        </div>
+      )}
+
+      {showLiveState && liveState === "stale" && (
+        <div
+          className="pointer-events-none absolute right-3 top-12 z-30 max-w-[70%] rounded border border-amber-300/20 bg-[#17130b]/95 px-2 py-1 font-mono text-[10px] font-medium text-amber-200/80"
+          title={liveError ?? "Realtime provider unavailable"}
+        >
+          REALTIME STALE{liveProvider ? ` · last ${liveProvider}` : ""}{liveTimestamp ? ` · ${liveTimestamp}` : ""}
+        </div>
+      )}
+
+      {!loading && coverage?.state === "PARTIAL" && liveState !== "stale" && (
         <div className="pointer-events-none absolute left-12 top-12 z-30 rounded border border-amber-300/20 bg-[#17130b]/95 px-2 py-1 font-mono text-[10px] font-medium text-amber-200/80">
           Dữ liệu chưa đầy đủ
         </div>
