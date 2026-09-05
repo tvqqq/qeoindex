@@ -18,6 +18,7 @@ import {
   parseSsiIboardPayload,
   ssiIboardResolutionToken,
 } from "../modules/market/provider-benchmark/providers/ssi-iboard.ts"
+import { isCanonicalDailyHotRowUsable } from "../modules/market/chart-data/daily-authority.ts"
 
 const DAY = 86400
 
@@ -117,6 +118,20 @@ test("QEO-106 cold-store supports Daily partitions without changing the legacy 1
   assert.match(cold, /base_resolution: baseResolution/)
   assert.match(cold, /createResolutionColdOhlcvStorage\(supabase, "1m"\)/)
   assert.match(cold, /createResolutionColdOhlcvStorage\(supabase, "1D"\)/)
+})
+
+test("QEO-106 hot Daily read rejects unresolved zero-volume fallback but preserves authority evidence", () => {
+  const flat = { volume: 0, provider: "Fallback", source_url: "https://query1.finance.yahoo.com/v8/finance/chart/VCB.VN", provider_detail: "Yahoo Finance .VN fallback" }
+  assert.equal(isCanonicalDailyHotRowUsable(flat), false)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, provider: "VCI" }), true)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, provider: "DNSE" }), true)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, source_url: "internal://stock_orderbook_snapshots", provider_detail: "Verified final market-close repair · no trade" }), true)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, provider: "VNDirect" }), false)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, volume: 123 }), true)
+
+  const service = source("modules/market/chart-data/service.ts")
+  assert.match(service, /provider,provider_detail,source_url/)
+  assert.match(service, /filter\(isCanonicalDailyHotRowUsable\)/)
 })
 
 test("QEO-106 canonical Daily merges Hot PostgreSQL + verified Cold Storage and Hot wins overlap", () => {

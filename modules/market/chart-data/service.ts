@@ -21,6 +21,7 @@ import type {
   SourceTaggedBar,
 } from "./contract"
 import { ChartDataRequestError, ChartDataUnavailableError } from "./contract"
+import { isCanonicalDailyHotRowUsable } from "./daily-authority"
 import { readHotIntradayRange, readProviderRequestCoverage, upsertHotIntradayBars } from "./hot-store"
 import { activeMinuteStart, partitionLiveMinuteBars } from "./live-session"
 import { detectTradingSessionGaps, normalizeCanonicalBars } from "./normalize"
@@ -133,7 +134,7 @@ async function loadDailyRows(supabase: SupabaseClient, request: CanonicalChartOh
   for (let offset = 0; ; offset += DAILY_READ_PAGE_SIZE) {
     const { data, error } = await supabase
       .from("market_ohlcv_history")
-      .select("bar_time,open,high,low,close,volume")
+      .select("bar_time,open,high,low,close,volume,provider,provider_detail,source_url")
       .eq("ticker", request.ticker)
       .eq("timeframe", "1D")
       .gte("bar_time", new Date(request.from * 1000).toISOString())
@@ -165,7 +166,9 @@ async function loadDaily(deps: ChartDataServiceDeps, request: CanonicalChartOhlc
     errors.push({ code: "STORAGE_UNAVAILABLE" })
   }
   if (hotRead.status === "fulfilled") {
-    tagged.push(...hotRead.value
+    const usableHotRows = hotRead.value.filter(isCanonicalDailyHotRowUsable)
+    if (usableHotRows.length !== hotRead.value.length) errors.push({ code: "INTEGRITY_WARNING" })
+    tagged.push(...usableHotRows
       .map((row) => rowToBar(row))
       .filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
       .filter(validDailyTradingBar)
