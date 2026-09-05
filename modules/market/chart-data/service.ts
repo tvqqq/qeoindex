@@ -2,7 +2,11 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
-import { createSupabaseColdOhlcvStorage, type ColdOhlcvStorage } from "./cold-store"
+import {
+  createSupabaseColdOhlcvStorage,
+  createSupabaseDailyColdOhlcvStorage,
+  type ColdOhlcvStorage,
+} from "./cold-store"
 import type {
   CanonicalChartOhlcvRequest,
   CanonicalChartOhlcvResult,
@@ -30,6 +34,7 @@ const LIVE_TAIL_SECONDS = 5 * 60
 export interface ChartDataServiceDeps {
   supabase: SupabaseClient
   coldStorage?: ColdOhlcvStorage
+  dailyColdStorage?: ColdOhlcvStorage
   provider?: ChartOhlcvProvider
   now?: Date
 }
@@ -64,7 +69,7 @@ function laterTime(current: number | null, bars: CanonicalOhlcvBar[]) {
   return latest == null ? current : Math.max(current ?? latest, latest)
 }
 
-async function loadDaily(supabase: SupabaseClient, request: CanonicalChartOhlcvRequest, now = new Date()): Promise<CanonicalChartOhlcvResult> {
+async function loadDailyRows(supabase: SupabaseClient, request: CanonicalChartOhlcvRequest) {
   const rows: Array<Record<string, unknown>> = []
   for (let offset = 0; ; offset += DAILY_READ_PAGE_SIZE) {
     const { data, error } = await supabase
@@ -76,30 +81,57 @@ async function loadDaily(supabase: SupabaseClient, request: CanonicalChartOhlcvR
       .lte("bar_time", new Date(request.to * 1000).toISOString())
       .order("bar_time", { ascending: true })
       .range(offset, offset + DAILY_READ_PAGE_SIZE - 1)
-    if (error) throw new ChartDataUnavailableError("Canonical Daily storage unavailable")
+    if (error) throw new ChartDataUnavailableError("Canonical Daily hot storage unavailable")
     const page = (data || []) as Array<Record<string, unknown>>
     rows.push(...page)
     if (page.length < DAILY_READ_PAGE_SIZE) break
   }
+  return rows
+}
 
-  const tagged: SourceTaggedBar[] = rows
-    .map((row) => rowToBar(row))
-    .filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
-    .map((bar) => ({ source: "daily" as const, bar }))
+async function loadDaily(deps: ChartDataServiceDeps, request: CanonicalChartOhlcvRequest, now = new Date()): Promise<CanonicalChartOhlcvResult> {
+  const dailyColdStorage = deps.dailyColdStorage ?? createSupabaseDailyColdOhlcvStorage(deps.supabase)
+  const [hotRead, coldRead] = await Promise.allSettled([
+    loadDailyRows(deps.supabase, request),
+    dailyColdStorage.readIntersectingRange({ ticker: request.ticker, from: request.from, to: request.to }),
+  ])
+
+  const tagged: SourceTaggedBar[] = []
+  const errors: ChartDataError[] = []
+  if (coldRead.status === "fulfilled") {
+    tagged.push(...coldRead.value.bars.map((bar) => ({ source: "cold" as const, bar })))
+  } else {
+    errors.push({ code: "STORAGE_UNAVAILABLE" })
+  }
+  if (hotRead.status === "fulfilled") {
+    tagged.push(...hotRead.value
+      .map((row) => rowToBar(row))
+      .filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
+      .map((bar) => ({ source: "daily" as const, bar })))
+  } else {
+    errors.push({ code: "STORAGE_UNAVAILABLE" })
+  }
+
   const normalized = normalizeCanonicalBars(tagged)
+  if (!normalized.bars.length && errors.length) {
+    throw new ChartDataUnavailableError("Canonical Daily hot/cold storage unavailable")
+  }
+  if (normalized.integrityIssues.length) errors.push({ code: "INTEGRITY_WARNING" })
+  const uniqueErrors = [...new Map(errors.map((item) => [item.code, item])).values()]
+  const complete = normalized.bars.length > 0 && normalized.integrityIssues.length === 0 && uniqueErrors.length === 0
   return {
     ...request,
     bars: normalized.bars,
     gaps: [],
     integrityIssues: normalized.integrityIssues,
     coverage: {
-      complete: normalized.bars.length > 0 && normalized.integrityIssues.length === 0,
-      state: normalized.bars.length > 0 && normalized.integrityIssues.length === 0 ? "COMPLETE" : "PARTIAL",
+      complete,
+      state: complete ? "COMPLETE" : "PARTIAL",
     },
-    errors: normalized.integrityIssues.length ? [{ code: "INTEGRITY_WARNING" }] : [],
+    errors: uniqueErrors,
     metadata: {
       priceBasis: "RAW",
-      provider: "CANONICAL_DAILY",
+      provider: "CANONICAL_DAILY_HOT_COLD",
       lastUpdatedAt: now.toISOString(),
       sessionState: "CLOSED",
       currentBarTime: null,
@@ -249,5 +281,5 @@ export async function getCanonicalChartOhlcv(
 ): Promise<CanonicalChartOhlcvResult> {
   const request = normalizedRequest(input)
   const now = deps.now ?? new Date()
-  return request.resolution === "1D" ? loadDaily(deps.supabase, request, now) : loadIntraday(deps, request)
+  return request.resolution === "1D" ? loadDaily(deps, request, now) : loadIntraday(deps, request)
 }
