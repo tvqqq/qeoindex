@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react"
 import Link from "next/link"
-import { Bookmark, Plus, Search, Sparkles, TrendingDown, TrendingUp, X } from "lucide-react"
+import { Bookmark, Search, Sparkles, X } from "lucide-react"
 
 import type { StockWatchlistItem } from "./types"
 import { cn } from "@/modules/shared/ui/cn"
@@ -10,11 +10,18 @@ import { cn } from "@/modules/shared/ui/cn"
 interface StockWatchlistSidebarProps {
   currentTicker: string
   items: StockWatchlistItem[]
+  onSelectTicker?: (ticker: string) => void
+  isTransitioning?: boolean
 }
 
 type FilterMode = "all" | "top" | "up" | "down"
 
-export function StockWatchlistSidebar({ currentTicker, items }: StockWatchlistSidebarProps) {
+export function StockWatchlistSidebar({
+  currentTicker,
+  items,
+  onSelectTicker,
+  isTransitioning = false,
+}: StockWatchlistSidebarProps) {
   const [query, setQuery] = useState("")
   const [filterMode, setFilterMode] = useState<FilterMode>("all")
 
@@ -30,6 +37,14 @@ export function StockWatchlistSidebar({ currentTicker, items }: StockWatchlistSi
       return true
     })
   }, [items, query, filterMode])
+
+  function handleItemClick(e: React.MouseEvent<HTMLAnchorElement>, ticker: string) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+    if (onSelectTicker) {
+      e.preventDefault()
+      onSelectTicker(ticker)
+    }
+  }
 
   return (
     <aside className="xl:sticky xl:top-[72px] xl:h-[calc(100vh-88px)] w-full">
@@ -107,7 +122,6 @@ export function StockWatchlistSidebar({ currentTicker, items }: StockWatchlistSi
               const isActive = item.ticker === currentTicker.toUpperCase()
               const isUp = item.changePct > 0
               const isDown = item.changePct < 0
-              const colorCls = isUp ? "text-emerald-400" : isDown ? "text-rose-400" : "text-amber-400"
               const badgeBg = isUp
                 ? "bg-emerald-400/[0.08] text-emerald-300 border-emerald-400/20"
                 : isDown
@@ -119,6 +133,7 @@ export function StockWatchlistSidebar({ currentTicker, items }: StockWatchlistSi
                   key={item.ticker}
                   href={`/insights/${item.ticker.toLowerCase()}`}
                   prefetch={false}
+                  onClick={(e) => handleItemClick(e, item.ticker)}
                   className={cn(
                     "grid grid-cols-[32px_1fr_auto] items-center gap-2 px-3 py-2.5 transition-colors text-left",
                     isActive
@@ -139,6 +154,9 @@ export function StockWatchlistSidebar({ currentTicker, items }: StockWatchlistSi
                       >
                         {item.ticker}
                       </b>
+                      {isActive && isTransitioning && (
+                        <span className="size-1.5 rounded-full bg-cyan-400 animate-ping" />
+                      )}
                     </div>
                     <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-slate-500">
                       <span className="font-mono text-slate-400 font-semibold">
