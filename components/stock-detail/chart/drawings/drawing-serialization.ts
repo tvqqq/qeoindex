@@ -105,7 +105,9 @@ export function deserializeUserChartSettings(
         showIchimoku: Boolean(obj.indicators.showIchimoku),
         showBollinger: Boolean(obj.indicators.showBollinger),
         showVolumeProfile: Boolean(obj.indicators.showVolumeProfile),
-        showQeoBase129: Boolean(obj.indicators.showQeoBase129),
+        ...(Object.prototype.hasOwnProperty.call(obj.indicators, "showQeoBase129")
+          ? { showQeoBase129: Boolean(obj.indicators.showQeoBase129) }
+          : {}),
       }
     : {
         showMa: false,
