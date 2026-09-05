@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-05T13:27:45Z",
+  "capturedAt": "2026-09-05T15:53:38Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
   "migrations": [
     {"version":"20260818","name":"orderbook_snapshots"},
@@ -95,6 +95,9 @@
     {"version":"20260905103720","name":"qeo101_daily_authority_precedence"},
     {"version":"20260905110306","name":"qeo101_daily_session_timestamp_canonicalization"},
     {"version":"20260905115319","name":"qeo103_chart_storage_lifecycle"},
-    {"version":"20260905131125","name":"qeo102_titanlabs_history_fallback_precedence"}
+    {"version":"20260905131125","name":"qeo102_titanlabs_history_fallback_precedence"},
+    {"version":"20260905143909","name":"qeo106_daily_integrity"},
+    {"version":"20260905144135","name":"qeo107_chart_intraday_coverage_report"},
+    {"version":"20260905144521","name":"qeo106_daily_authority_evidence"}
   ]
 }
