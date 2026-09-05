@@ -7,7 +7,6 @@ import {
   BrainCircuit,
   Gauge,
   LineChart,
-  Radar,
   Send,
   ShieldCheck,
   Sparkles,
@@ -24,6 +23,14 @@ interface Message {
   timestamp: string
 }
 
+function scoreTone(score: number | null) {
+  if (score == null) return "text-slate-500"
+  if (score >= 65) return "text-emerald-300"
+  if (score <= 40) return "text-rose-300"
+  if (score < 55) return "text-amber-300"
+  return "text-white"
+}
+
 export function StockAiSidebar({ data }: { data: StockDetailData }) {
   const { ticker, price, changePct, aiStock, scan, thesis, fa } = data
 
@@ -33,11 +40,11 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
   const confidence = aiStock?.confidence ?? 80
 
   const pillars = [
-    { label: "Cơ bản", score: fa?.roe ? Math.min(95, Math.round(fa.roe * 2.5 + 30)) : 75, icon: BarChart3 },
-    { label: "Kỹ thuật", score: scan?.wyckoffState ? (scan.wyckoffState.includes("Accumulation") || scan.wyckoffState.includes("Markup") ? 86 : 55) : 80, icon: LineChart },
-    { label: "Dòng tiền", score: scan?.relVolume ? Math.min(96, Math.round(scan.relVolume * 50)) : 82, icon: Activity },
-    { label: "Bối cảnh", score: thesis?.marketRegime === "Risk-On" ? 85 : 70, icon: Gauge },
-    { label: "An toàn", score: 78, icon: ShieldCheck },
+    { label: "Cơ bản", score: fa?.roe ? Math.min(95, Math.round(fa.roe * 2.5 + 30)) : 75 },
+    { label: "Kỹ thuật", score: scan?.wyckoffState ? (scan.wyckoffState.includes("Accumulation") || scan.wyckoffState.includes("Markup") ? 86 : 55) : 80 },
+    { label: "Dòng tiền", score: scan?.relVolume ? Math.min(96, Math.round(scan.relVolume * 50)) : 82 },
+    { label: "Bối cảnh", score: thesis?.marketRegime === "Risk-On" ? 85 : 70 },
+    { label: "An toàn", score: 78 },
   ]
 
   const signalText =
@@ -125,7 +132,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
   }
 
   return (
-    <aside className="xl:sticky xl:top-[72px] xl:max-h-[calc(100vh-88px)] xl:overflow-y-auto space-y-4 no-scrollbar w-full">
+    <aside className="xl:sticky xl:top-[72px] xl:max-h-[calc(100vh-88px)] xl:overflow-y-auto space-y-3.5 no-scrollbar w-full">
       {/* AI Council Overview Card (Matching AI Council Card Design) */}
       <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b1119] p-4 sm:p-5 space-y-4">
         {/* Header */}
@@ -146,11 +153,11 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
 
         {/* Recommendation Badge & Action Summary */}
         <div>
-          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-violet-300">Khuyến nghị</div>
-          <div className={cn("mt-1.5 inline-flex items-center rounded-xl border px-3.5 py-2 font-ticker text-base font-black sm:text-lg", signalColor)}>
+          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-300">Khuyến nghị</div>
+          <div className={cn("mt-1.5 inline-flex items-center rounded-xl border px-3.5 py-2 font-ticker text-lg sm:text-xl font-black", signalColor)}>
             {signalText}
           </div>
-          <p className="mt-2.5 text-xs leading-relaxed text-slate-300">
+          <p className="mt-2.5 text-[12px] leading-relaxed text-slate-300">
             {aiStock?.whatChangesDecision?.[0] ||
               thesis?.baseCase ||
               "Áp lực bán cạn kiệt quanh hỗ trợ trung hạn. Smart Money có dấu hiệu hấp thụ chủ động, phù hợp giải ngân từng phần."}
@@ -168,67 +175,73 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
 
         {/* 5 Pillars Breakdown (Matching AI Council Pillars) */}
         <div>
-          <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-            <span>5 Trụ cột đánh giá</span>
+          <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+            <Gauge className="size-3.5" />
+            5 Trụ cột
           </div>
-          <div className="grid grid-cols-5 gap-1.5 text-center">
-            {pillars.map((p) => {
-              const Icon = p.icon
-              return (
-                <div key={p.label} className="rounded-xl border border-white/[0.07] bg-black/15 px-1.5 py-2.5">
-                  <div className="truncate text-[9px] font-bold text-slate-500">{p.label}</div>
-                  <div
-                    className={cn(
-                      "mt-1 font-mono text-base font-black",
-                      p.score >= 80 ? "text-emerald-300" : p.score >= 65 ? "text-cyan-300" : "text-amber-300"
-                    )}
-                  >
-                    {p.score}
-                  </div>
+          <div className="grid grid-cols-5 gap-1.5">
+            {pillars.map((p) => (
+              <div
+                key={p.label}
+                className="rounded-xl border border-white/[0.07] bg-black/15 px-1 py-2 text-center"
+              >
+                <div className="text-[9px] font-bold text-slate-500 truncate" title={p.label}>
+                  {p.label}
                 </div>
-              )
-            })}
+                <div className={cn("mt-1 font-mono text-base font-black", scoreTone(p.score))}>
+                  {p.score}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Key Decision Levels */}
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.03] p-3">
-            <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-400">Vùng gom</span>
-            <span className="mt-1 block font-mono text-sm font-black text-white">{supportLevel}</span>
+        {/* Decision Levels (Hỗ trợ / Kháng cự / Cắt lỗ) */}
+        <div className="border-t border-white/[0.06] pt-3.5">
+          <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+            <Target className="size-3.5 text-cyan-300" />
+            Vùng kích hoạt & Quản trị
           </div>
-          <div className="rounded-xl border border-rose-400/20 bg-rose-400/[0.03] p-3">
-            <span className="block text-[10px] font-bold uppercase tracking-wider text-rose-400">Cắt lỗ (Stop)</span>
-            <span className="mt-1 block font-mono text-sm font-black text-white">{stopLoss}</span>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl border border-white/[0.07] bg-black/15 p-2.5">
+              <span className="block text-[9px] font-black uppercase tracking-wider text-slate-500">Hỗ trợ</span>
+              <span className="mt-1 block font-mono text-xs font-bold text-emerald-300">{supportLevel}</span>
+            </div>
+            <div className="rounded-xl border border-white/[0.07] bg-black/15 p-2.5">
+              <span className="block text-[9px] font-black uppercase tracking-wider text-slate-500">Kháng cự</span>
+              <span className="mt-1 block font-mono text-xs font-bold text-amber-300">{resistanceLevel}</span>
+            </div>
+            <div className="rounded-xl border border-white/[0.07] bg-black/15 p-2.5">
+              <span className="block text-[9px] font-black uppercase tracking-wider text-slate-500">Dừng lỗ</span>
+              <span className="mt-1 block font-mono text-xs font-bold text-rose-300">{stopLoss}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Quick Chatbox With AI (Matching AI Council Card Design) */}
-      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13] flex flex-col">
+      {/* Quick Chatbox với AI (Comfortable padding and rounded card) */}
+      <div className="flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13]">
         {/* Chat Header */}
-        <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#0a0f16] px-4 py-3">
+        <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#0a0f16] px-3.5 py-2.5">
           <div className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-cyan-400 animate-pulse" />
-            <span className="text-xs font-bold text-slate-200">AI Quick Assistant</span>
+            <Sparkles className="size-3.5 text-cyan-400" />
+            <span className="text-xs font-bold text-slate-200">Quick AI Assistant</span>
           </div>
-          <span className="font-mono text-[10px] text-slate-500">
-            Hỏi về: <b className="text-cyan-300">{ticker}</b>
+          <span className="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 font-mono text-[9px] text-slate-400">
+            Hỏi đáp: {ticker}
           </span>
         </div>
 
-        {/* Chat History List */}
-        <div className="p-3.5 space-y-3 text-xs max-h-[260px] overflow-y-auto">
+        {/* Message Stream */}
+        <div className="h-44 space-y-2.5 overflow-y-auto p-3 text-[11px] leading-relaxed no-scrollbar">
           {messages.map((m) => (
-            <div key={m.id} className={cn("flex gap-2", m.sender === "user" ? "justify-end" : "justify-start")}>
-              {m.sender === "ai" && (
-                <div className="flex size-6 shrink-0 items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-400/10 text-[10px] font-black text-cyan-200">
-                  AI
-                </div>
-              )}
+            <div
+              key={m.id}
+              className={cn("flex flex-col", m.sender === "user" ? "items-end" : "items-start")}
+            >
               <div
                 className={cn(
-                  "max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed",
+                  "max-w-[85%] rounded-2xl p-2.5 text-[11px] leading-relaxed",
                   m.sender === "user"
                     ? "rounded-tr-none border border-cyan-400/30 bg-cyan-400/10 text-slate-100"
                     : "rounded-tl-none border border-white/[0.08] bg-black/20 text-slate-300"
@@ -241,10 +254,10 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
 
           {isTyping && (
             <div className="flex gap-2">
-              <div className="flex size-6 shrink-0 items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-400/10 text-[10px] font-black text-cyan-200">
+              <div className="flex size-5 shrink-0 items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-400/10 text-[9px] font-black text-cyan-200">
                 AI
               </div>
-              <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-none border border-white/[0.08] bg-black/20 px-3.5 py-2 text-xs text-slate-400">
+              <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-none border border-white/[0.08] bg-black/20 px-3 py-1.5 text-xs text-slate-400">
                 <span className="size-1.5 rounded-full bg-cyan-400 animate-bounce" />
                 <span className="size-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:0.2s]" />
                 <span className="size-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:0.4s]" />
@@ -255,32 +268,32 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
         </div>
 
         {/* Preset Prompt Chips */}
-        <div className="border-t border-white/[0.06] bg-[#090d13] p-2.5 flex gap-1.5 overflow-x-auto no-scrollbar">
+        <div className="border-t border-white/[0.06] bg-[#090d13] p-2 flex gap-1.5 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => handleSend("Đánh giá dòng tiền lớn hôm nay?")}
-            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
+            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
           >
-            ⚡ Dòng tiền lớn?
+            ⚡ Dòng tiền?
           </button>
           <button
             type="button"
             onClick={() => handleSend("Hỗ trợ kháng cự gần nhất?")}
-            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
+            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
           >
             🎯 Hỗ trợ / Kháng cự?
           </button>
           <button
             type="button"
             onClick={() => handleSend("Rủi ro lớn nhất là gì?")}
-            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
+            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
           >
-            ⚠️ Rủi ro chính?
+            ⚠️ Rủi ro?
           </button>
         </div>
 
         {/* Input Bar */}
-        <div className="border-t border-white/[0.06] bg-[#0a0f16] p-2.5">
+        <div className="border-t border-white/[0.06] bg-[#0a0f16] p-2">
           <form
             onSubmit={(e) => {
               e.preventDefault()
@@ -293,12 +306,12 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               placeholder="Hỏi AI về cổ phiếu..."
-              className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-2 pl-3 pr-9 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-cyan-400/40 focus:outline-none"
+              className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-1.5 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-cyan-400/40 focus:outline-none"
             />
             <button
               type="submit"
               disabled={!inputVal.trim() || isTyping}
-              className="absolute right-1.5 rounded-lg p-1.5 text-cyan-400 transition-colors hover:text-cyan-300 disabled:opacity-30"
+              className="absolute right-1.5 rounded-lg p-1 text-cyan-400 transition-colors hover:text-cyan-300 disabled:opacity-30"
             >
               <Send className="size-3.5" />
             </button>

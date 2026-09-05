@@ -107,15 +107,15 @@ export function StockTradingViewChart({ ticker, bars }: StockTradingViewChartPro
       {/* Top Header Controls & Live Crosshair Info */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0a0f16] px-4 py-2.5 text-xs">
         {/* Timeframe Buttons */}
-        <div className="flex items-center gap-1.5">
-          <span className="mr-1 text-[11px] font-bold text-slate-500 font-mono">Khung:</span>
+        <div className="flex items-center gap-1">
+          <span className="mr-1 text-[10px] font-bold text-slate-500 font-mono">Khung:</span>
           {(["1D", "1W", "1M", "1Y"] as const).map((tf) => (
             <button
               key={tf}
               type="button"
               onClick={() => setTimeframe(tf)}
               className={cn(
-                "rounded-lg px-2.5 py-1 font-mono text-[11px] font-bold transition-all",
+                "rounded-lg px-2 py-0.5 font-mono text-[10px] font-bold transition-all",
                 timeframe === tf
                   ? "border border-cyan-400/30 bg-cyan-400/15 text-cyan-200 shadow-[0_0_10px_rgba(0,240,255,0.2)]"
                   : "text-slate-400 hover:bg-white/[0.04] hover:text-white"
@@ -124,12 +124,12 @@ export function StockTradingViewChart({ ticker, bars }: StockTradingViewChartPro
               {tf}
             </button>
           ))}
-          <div className="mx-2 h-3.5 w-px bg-white/[0.1]" />
-          <span className="flex items-center gap-1 font-mono text-[11px] text-emerald-300">
+          <div className="mx-1.5 h-3 w-px bg-white/[0.1]" />
+          <span className="flex items-center gap-1 font-mono text-[10px] text-emerald-300">
             <span className="size-1.5 rounded-full bg-emerald-400" />
             MA20: {ma20.at(-1)?.toFixed(1) || "—"}
           </span>
-          <span className="ml-2 flex items-center gap-1 font-mono text-[11px] text-amber-300">
+          <span className="ml-1.5 flex items-center gap-1 font-mono text-[10px] text-amber-300">
             <span className="size-1.5 rounded-full bg-amber-400" />
             MA50: {ma50.at(-1)?.toFixed(1) || "—"}
           </span>
@@ -137,7 +137,7 @@ export function StockTradingViewChart({ ticker, bars }: StockTradingViewChartPro
 
         {/* OHLCV readout */}
         {activeBar && (
-          <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] text-slate-400">
+          <div className="flex flex-wrap items-center gap-2.5 font-mono text-[10px] text-slate-400">
             <span>
               {new Date(activeBar.time * 1000).toLocaleDateString("vi-VN", {
                 day: "2-digit",
