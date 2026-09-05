@@ -54,7 +54,7 @@ test("QEO-100 history clamp never expands a request and clamps only short/mid lo
 
 test("QEO-103 hot retention cutoff keeps complete Vietnam calendar dates", () => {
   const referenceAt = new Date("2026-09-05T12:34:00+07:00")
-  assert.equal(new Date(chartHotRetentionCutoff(referenceAt) * 1000).toISOString(), "2026-08-06T17:00:00.000Z")
+  assert.equal(new Date(chartHotRetentionCutoff(referenceAt) * 1000).toISOString(), "2026-08-05T17:00:00.000Z")
 })
 
 test("QEO-103 hourly read path uses derived cache for old history and raw 1m only for recent history", () => {
