@@ -5,13 +5,13 @@ import {
   type MarketDataProbeProvider,
   type MarketDataProbeResolution,
   type ProviderFetchRequest,
-} from "../contract"
+} from "../contract.ts"
 import {
   classifyProviderError,
   coverageForBars,
   sanitizedProviderMessage,
   summarizeReturnedRange,
-} from "./http"
+} from "./http.ts"
 
 const SSI_IBOARD_HISTORY_URL = "https://iboard-api.ssi.com.vn/statistics/charts/history"
 const DEFAULT_TIMEOUT_MS = 15_000
