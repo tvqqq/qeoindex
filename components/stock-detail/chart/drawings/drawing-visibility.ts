@@ -18,5 +18,6 @@ export function isDrawingVisibleOnTimeframe(
   timeframe: ChartTimeframe,
 ): boolean {
   if (drawing.visibility !== "source-timeframe") return true
+  if (!drawing.sourceTimeframe) return true
   return drawing.sourceTimeframe === timeframe
 }
