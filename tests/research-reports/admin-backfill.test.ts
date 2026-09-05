@@ -44,8 +44,9 @@ test("QEO-85 manual capability allowlists backfill only and exposes bounded date
   assert.match(jobs, /toDate\?: string/)
   assert.match(jobs, /maxReports\?: number/)
   assert.match(jobs, /input\.key === "research_reports\.backfill"/)
-  assert.match(jobs, /maxReports[^\n]*20|20[^\n]*maxReports/)
-  assert.doesNotMatch(jobs.slice(jobs.indexOf('input.key === "research_reports.backfill"'), jobs.indexOf('input.key === "research_reports.backfill"') + 2_000), /force/)
+  assert.match(jobs, /100/)
+  assert.match(jobs, /90/)
+  assert.doesNotMatch(jobs.slice(jobs.indexOf('input.key === "research_reports.backfill"'), jobs.indexOf('input.key === "research_reports.backfill"') + 2_500), /force/)
 
   assert.match(actions, /formData\.get\("fromDate"\)/)
   assert.match(actions, /formData\.get\("toDate"\)/)
@@ -54,6 +55,7 @@ test("QEO-85 manual capability allowlists backfill only and exposes bounded date
   assert.match(modal, /name="fromDate"/)
   assert.match(modal, /name="toDate"/)
   assert.match(modal, /name="maxReports"/)
+  assert.match(modal, /max=\{100\}/)
 })
 
 test("QEO-85 scheduler reconciliation owns the exact Supabase research cron", () => {
