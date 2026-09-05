@@ -13,6 +13,7 @@ import {
   deserializeUserChartSettings,
   persistedV2ToRuntimeDrawing,
   runtimeDrawingToPersistedV2,
+  type LegacyDrawing,
   type PersistedDrawingV2,
   type UserChartSettingsPayloadV2,
 } from "./drawings"
@@ -47,6 +48,23 @@ function readLocalChartSettings(ticker: string): {
   }
 }
 
+function mergeUnresolvedLegacyDrawings(
+  current: LegacyDrawing[],
+  incoming: LegacyDrawing[] | undefined,
+): LegacyDrawing[] {
+  if (!incoming || incoming.length === 0) return current
+
+  const merged = [...current]
+  const seen = new Set(current.map((drawing) => JSON.stringify(drawing)))
+  for (const drawing of incoming) {
+    const key = JSON.stringify(drawing)
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push(drawing)
+  }
+  return merged
+}
+
 export function useUserChartSync({
   ticker,
   defaultTimeframe = "1D",
@@ -74,6 +92,7 @@ export function useUserChartSync({
 
   const isLoadedRef = useRef(false)
   const currentTickerRef = useRef(ticker)
+  const unresolvedLegacyDrawingsRef = useRef<LegacyDrawing[]>([])
   const localRevisionRef = useRef(0)
   const inFlightRevisionRef = useRef<number | null>(null)
   const pendingSaveRef = useRef<{
@@ -126,6 +145,7 @@ export function useUserChartSync({
   // 1. Load data on mount or ticker change
   useEffect(() => {
     currentTickerRef.current = ticker
+    unresolvedLegacyDrawingsRef.current = []
     isLoadedRef.current = false
     let isCancelled = false
 
@@ -137,6 +157,10 @@ export function useUserChartSync({
       }
 
       if (local && !isCancelled) {
+        unresolvedLegacyDrawingsRef.current = mergeUnresolvedLegacyDrawings(
+          unresolvedLegacyDrawingsRef.current,
+          local.unresolvedLegacyDrawings,
+        )
         if (local.timeframe) setTimeframe(local.timeframe)
         if (local.chartStyle) setChartStyle(local.chartStyle)
         if (local.indicators) setIndicators({ ...defaultIndicators, ...local.indicators })
@@ -155,6 +179,10 @@ export function useUserChartSync({
         if (isCancelled || !body.ok || !body.data) return
 
         const { settings: remote } = deserializeUserChartSettings(body.data)
+        unresolvedLegacyDrawingsRef.current = mergeUnresolvedLegacyDrawings(
+          unresolvedLegacyDrawingsRef.current,
+          remote.unresolvedLegacyDrawings,
+        )
         if (remote.timeframe) setTimeframe(remote.timeframe)
         if (remote.chartStyle) setChartStyle(remote.chartStyle)
         if (remote.indicators && Object.keys(remote.indicators).length > 0) {
@@ -211,6 +239,9 @@ export function useUserChartSync({
         indicators: newIndicators,
         drawingsSchemaVersion: 2,
         drawings: persistedDrawings,
+        ...(unresolvedLegacyDrawingsRef.current.length > 0
+          ? { unresolvedLegacyDrawings: unresolvedLegacyDrawingsRef.current }
+          : {}),
         updatedAt: new Date().toISOString(),
       }
 
