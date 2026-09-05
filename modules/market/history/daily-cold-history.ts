@@ -228,9 +228,16 @@ async function backfillTicker(supabase: SupabaseClient, ticker: string, maxChunk
     return { ticker, archivedHotRows, deepArchivedRows, manifests, status: terminal, earliestLocal: isoOrNull(earliest) }
   }
 
-  const hotArchive = await archiveExpiredDailyHotHistory(supabase, ticker, now)
-  archivedHotRows += hotArchive.rows
-  manifests.push(...hotArchive.manifests)
+  let hotArchiveSkippedForAuthority = false
+  try {
+    const hotArchive = await archiveExpiredDailyHotHistory(supabase, ticker, now)
+    archivedHotRows += hotArchive.rows
+    manifests.push(...hotArchive.manifests)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!message.startsWith("Unresolved Daily hot evidence prevents archive")) throw error
+    hotArchiveSkippedForAuthority = true
+  }
 
   let status: DailyLeftEdgeStatus = "IN_PROGRESS"
   let lastProvider: string | null = null
@@ -297,7 +304,7 @@ async function backfillTicker(supabase: SupabaseClient, ticker: string, maxChunk
         provider: history.provider,
         windowFrom,
         windowTo,
-        detail: { manifestIds: partitionResults.map((item) => item.manifestId), sourceUrl: history.sourceUrl, providerDetail: history.detail },
+        detail: { manifestIds: partitionResults.map((item) => item.manifestId), sourceUrl: history.sourceUrl, providerDetail: history.detail, hotArchiveSkippedForAuthority },
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

@@ -173,6 +173,16 @@ test("QEO-106 deep backfill exhausts lower-priority providers when a provider ha
   assert.match(coldHistory, /bar\.volume > 0/)
 })
 
+test("QEO-106 unresolved Hot aging stays fail-closed without blocking deeper Cold history", () => {
+  const history = source("modules/market/history/daily-cold-history.ts")
+  assert.match(history, /Unresolved Daily hot evidence prevents archive/)
+  assert.match(history, /hotArchiveSkippedForAuthority/)
+  assert.match(history, /message\.startsWith\("Unresolved Daily hot evidence prevents archive"\)/)
+  const skip = history.indexOf("hotArchiveSkippedForAuthority")
+  const deepLoop = history.indexOf("for (let chunk = 0; chunk < maxChunksPerTicker")
+  assert.ok(skip >= 0 && deepLoop > skip)
+})
+
 test("QEO-106 deep Daily history is resumable, bounded, provider-backed and archive-before-prune", () => {
   const history = source("modules/market/history/daily-cold-history.ts")
   const route = source("app/api/admin/market/daily-history/backfill/route.ts")
