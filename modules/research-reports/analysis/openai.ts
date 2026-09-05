@@ -31,6 +31,7 @@ const DEFAULT_FALLBACK_MODEL = "gpt-5.6-terra"
 const DEFAULT_REASONING_EFFORT: ReportReasoningEffort = "medium"
 const INITIAL_MAX_OUTPUT_TOKENS = 2200
 const REQUEST_TIMEOUT_MS = 30_000
+const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64
 const REPAIR_INSTRUCTION = "The previous structured result failed schema or citation-grounding validation. Re-read the exact same immutable document pages and return a corrected result. Do not add evidence, facts, targets, currencies, or page numbers that are not explicitly present in those pages."
 
 export type ReportReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh"
@@ -160,7 +161,8 @@ function promptCacheKey(pages: readonly ParsedReportPage[]) {
   const digest = createHash("sha256")
     .update(JSON.stringify({ promptVersion: REPORT_PROMPT_VERSION, pages }))
     .digest("hex")
-  return `research-report:${REPORT_PROMPT_VERSION}:${digest.slice(0, 32)}`
+  const prefix = `research-report:${REPORT_PROMPT_VERSION}:`
+  return `${prefix}${digest.slice(0, Math.max(0, OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH - prefix.length))}`
 }
 
 function safeProviderMessage(value: unknown) {
