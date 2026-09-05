@@ -2,6 +2,7 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { StockDetailData, StockWatchlistItem } from "@/components/stock-detail/types"
+import type { AiCouncilHistoryEntry } from "@/modules/ai-council/data"
 import { getAiCouncilRuntimeData } from "@/modules/ai-council/runtime"
 import { FA_SCREEN_ROWS } from "@/modules/research/fa-screen-data"
 import { buildMultiTimeframeStudies } from "@/modules/research/multi-timeframe"
@@ -79,6 +80,106 @@ export const VN_TOP_COMPANY_NAMES: Record<string, string> = {
   VTP: "Tổng Công ty Cổ phần Bưu chính Viettel (Viettel Post)",
 }
 
+type StockCouncilRunRow = {
+  id: string
+  ticker: string
+  as_of_date: string
+  signal: string
+  council_score: number
+  confidence: number
+  consensus: number
+  risk_status: string
+  price: number | null
+  policy_version: string
+  evidence_hash: string
+  created_at: string
+}
+
+type StockCouncilOutcomeRow = {
+  run_id: string
+  outcome_status: string
+  sessions_observed: number
+  evaluated_through_date: string | null
+  return_1d_pct: number | null
+  return_5d_pct: number | null
+  return_20d_pct: number | null
+  mfe_20d_pct: number | null
+  mae_20d_pct: number | null
+  direction_correct_5d: boolean | null
+}
+
+function nullableNumber(value: unknown) {
+  if (value == null || value === "") return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function isCouncilSignal(value: string): value is AiCouncilHistoryEntry["signal"] {
+  return value === "BUY" || value === "BUY_ON_CONFIRMATION" || value === "WAIT" || value === "REDUCE" || value === "SELL"
+}
+
+function isCouncilRiskStatus(value: string): value is AiCouncilHistoryEntry["riskStatus"] {
+  return value === "approve" || value === "caution" || value === "veto"
+}
+
+function normalizeOutcomeStatus(value: string): NonNullable<AiCouncilHistoryEntry["outcome"]>["status"] {
+  return value === "partial" || value === "matured" || value === "unavailable" ? value : "pending"
+}
+
+async function getTickerAiCouncilHistory(
+  supabase: SupabaseClient,
+  ticker: string,
+): Promise<AiCouncilHistoryEntry[]> {
+  const runsResult = await supabase
+    .from("ai_council_runs")
+    .select("id,ticker,as_of_date,signal,council_score,confidence,consensus,risk_status,price,policy_version,evidence_hash,created_at")
+    .eq("ticker", ticker)
+    .order("as_of_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(8)
+
+  if (runsResult.error || !runsResult.data?.length) return []
+
+  const runs = runsResult.data as StockCouncilRunRow[]
+  const runIds = runs.map((run) => run.id)
+  const outcomeResult = await supabase
+    .from("ai_council_outcomes")
+    .select("run_id,outcome_status,sessions_observed,evaluated_through_date,return_1d_pct,return_5d_pct,return_20d_pct,mfe_20d_pct,mae_20d_pct,direction_correct_5d")
+    .in("run_id", runIds)
+  const outcomes = outcomeResult.error ? [] : (outcomeResult.data || []) as StockCouncilOutcomeRow[]
+  const outcomeByRun = new Map(outcomes.map((row) => [row.run_id, row]))
+
+  return runs.flatMap((run) => {
+    if (!isCouncilSignal(run.signal) || !isCouncilRiskStatus(run.risk_status)) return []
+    const outcome = outcomeByRun.get(run.id)
+    return [{
+      id: run.id,
+      ticker: run.ticker,
+      asOfDate: run.as_of_date,
+      signal: run.signal,
+      councilScore: Number(run.council_score),
+      confidence: Number(run.confidence),
+      consensus: Number(run.consensus),
+      riskStatus: run.risk_status,
+      price: nullableNumber(run.price),
+      policyVersion: run.policy_version,
+      evidenceHash: run.evidence_hash,
+      createdAt: run.created_at,
+      outcome: outcome ? {
+        status: normalizeOutcomeStatus(outcome.outcome_status),
+        sessionsObserved: Number(outcome.sessions_observed || 0),
+        evaluatedThroughDate: outcome.evaluated_through_date,
+        return1dPct: nullableNumber(outcome.return_1d_pct),
+        return5dPct: nullableNumber(outcome.return_5d_pct),
+        return20dPct: nullableNumber(outcome.return_20d_pct),
+        mfe20dPct: nullableNumber(outcome.mfe_20d_pct),
+        mae20dPct: nullableNumber(outcome.mae_20d_pct),
+        directionCorrect5d: outcome.direction_correct_5d,
+      } : null,
+    }]
+  })
+}
+
 export function resolveCleanCompanyName(
   ticker: string,
   candidates: (string | null | undefined)[],
@@ -109,26 +210,27 @@ export async function fetchStockDetailData(
     decoded = "HPG"
   }
 
-  // Load research, scanner, and OHLCV history in parallel
-  const [researchData, scannerData, dailyHistory, hourlyHistory] = await Promise.all([
+  const councilRuntimePromise = supabase
+    ? getAiCouncilRuntimeData(supabase, { includeHistory: false, includePromptEvidence: false }).catch(() => null)
+    : Promise.resolve(null)
+  const aiHistoryPromise = supabase
+    ? getTickerAiCouncilHistory(supabase, decoded).catch(() => [] as AiCouncilHistoryEntry[])
+    : Promise.resolve([] as AiCouncilHistoryEntry[])
+  const ratingRowPromise = supabase
+    ? getInsightsRatingForTicker(supabase, decoded).catch(() => null)
+    : Promise.resolve(null)
+
+  // All independent stock-detail reads start together. AI Council history is scoped to this ticker.
+  const [researchData, scannerData, dailyHistory, hourlyHistory, councilRuntime, aiHistory, loadedRatingRow] = await Promise.all([
     getCachedResearchData(),
     getCachedScannerData(),
     getCachedDailyHistory(decoded),
     getCachedHourlyHistory(decoded),
+    councilRuntimePromise,
+    aiHistoryPromise,
+    ratingRowPromise,
   ])
-
-  // Attempt to load AI Council data
-  let aiStock = undefined
-  let aiHistory = undefined
-  if (supabase) {
-    try {
-      const councilRuntime = await getAiCouncilRuntimeData(supabase)
-      aiStock = councilRuntime.data.stocks.find((s) => s.ticker === decoded)
-      aiHistory = councilRuntime.data.history.filter((h) => h.ticker === decoded)
-    } catch {
-      // Graceful fallback if AI council runtime fails
-    }
-  }
+  const aiStock = councilRuntime?.data.stocks.find((s) => s.ticker === decoded)
 
   const scan = scannerData.latestScans[decoded]
   const thesis = researchData.theses.find((t) => t.ticker === decoded)
@@ -190,16 +292,7 @@ export async function fetchStockDetailData(
     })
   }
 
-  // Load Insights Rating Row from Supabase
-  let ratingRow: InsightsRatingRow | null = null
-  if (supabase) {
-    try {
-      ratingRow = await getInsightsRatingForTicker(supabase, decoded)
-    } catch {
-      // Graceful fallback if query fails
-    }
-  }
-
+  let ratingRow: InsightsRatingRow | null = loadedRatingRow
   const resolvedCompanyName = resolveCleanCompanyName(
     decoded,
     [ratingRow?.companyName, universeItem?.companyName, thesis?.company],
