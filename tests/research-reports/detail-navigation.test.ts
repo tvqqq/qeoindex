@@ -10,6 +10,7 @@ import "./qeo85-schema.test.ts"
 import "./lease.test.ts"
 import "./topi.test.ts"
 import "./daily-orchestrator.test.ts"
+import "./daily-runtime.test.ts"
 
 import {
   nextCitationNavigationState,
