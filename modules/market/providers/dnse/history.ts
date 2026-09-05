@@ -31,6 +31,10 @@ export interface ProviderHealth {
   message: string
 }
 
+export interface DnseMinuteReadOptions {
+  includeCurrent?: boolean
+}
+
 function credentials() {
   const apiKey = process.env.DNSE_API_KEY ?? ""
   const apiSecret = process.env.DNSE_API_SECRET ?? ""
@@ -145,6 +149,11 @@ function removeIncompleteCurrentMinuteBar(bars: OhlcvBar[], now = new Date()) {
   return bars.filter((bar) => bar.time + 60 <= nowSeconds)
 }
 
+function clipFutureMinuteBars(bars: OhlcvBar[], now = new Date()) {
+  const currentMinuteStart = Math.floor(now.getTime() / 60_000) * 60
+  return bars.filter((bar) => bar.time <= currentMinuteStart)
+}
+
 const buildRequestWindows = buildDnseRequestWindows
 
 function dedupeBars(bars: OhlcvBar[]) {
@@ -244,6 +253,7 @@ export async function fetchMinuteOhlcvRange(
   from: number,
   to: number,
   now = new Date(),
+  options: DnseMinuteReadOptions = {},
 ): Promise<OhlcvBar[]> {
   const symbol = symbolInput.trim().toUpperCase()
   if (!/^[A-Z0-9]{2,12}$/.test(symbol)) throw new Error(`Invalid DNSE OHLC symbol: ${symbolInput}`)
@@ -255,9 +265,11 @@ export async function fetchMinuteOhlcvRange(
   for (const resolution of ["1", "1m"]) {
     try {
       const bars = await requestOhlcWindows(symbol, resolution, from, to, MINUTE_REQUEST_WINDOW_DAYS, MINUTE_MIN_RETRY_WINDOW_DAYS, deadlineMs)
-      const completed = removeIncompleteCurrentMinuteBar(bars, now)
-      if (!completed.length) throw new Error(`DNSE OHLC ${symbol} ${resolution} returned no completed 1m bars`)
-      return completed
+      const usable = options.includeCurrent ? clipFutureMinuteBars(bars, now) : removeIncompleteCurrentMinuteBar(bars, now)
+      if (!usable.length) {
+        throw new Error(`DNSE OHLC ${symbol} ${resolution} returned no ${options.includeCurrent ? "usable" : "completed"} 1m bars`)
+      }
+      return usable
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error))
       if (Date.now() >= deadlineMs) break
