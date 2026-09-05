@@ -99,7 +99,7 @@ export function StockChartDrawingTools({
   return (
     <aside
       aria-label="Thanh công cụ vẽ TradingView"
-      className="absolute left-2.5 top-12 z-30 flex flex-col items-center gap-1 rounded-xl border border-white/[0.08] bg-[#0a0f16]/95 p-1 shadow-[0_8px_32px_rgba(0,0,0,0.7)] backdrop-blur-md"
+      className="absolute left-3 top-14 z-30 flex max-h-[calc(100%-72px)] flex-col items-center gap-1 overflow-y-auto rounded-[22px] border border-white/[0.1] bg-[#0a0f16]/94 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.72)] backdrop-blur-md"
     >
       {/* Drawing Tool Buttons */}
       {toolButtons.map((item) => {

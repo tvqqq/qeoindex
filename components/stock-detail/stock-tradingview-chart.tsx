@@ -79,8 +79,6 @@ export function StockTradingViewChart({
   const {
     timeframe,
     setTimeframe,
-    chartStyle,
-    setChartStyle,
     indicators,
     setIndicators,
     drawings,
@@ -100,7 +98,6 @@ export function StockTradingViewChart({
 
   // Dropdown states
   const [showTfDropdown, setShowTfDropdown] = useState(false)
-  const [showStyleDropdown, setShowStyleDropdown] = useState(false)
   const [showIndicatorModal, setShowIndicatorModal] = useState(false)
 
   // Drawing tools state
@@ -169,12 +166,12 @@ export function StockTradingViewChart({
   const volumeMa20All = useMemo(() => calculateVolumeSma(displayBars, 20), [displayBars])
 
   const rsiSeriesAll = useMemo(() => {
-    return isMaximized && indicators.showRsi ? calculateRsiSeries(displayBars, 14) : []
-  }, [displayBars, isMaximized, indicators.showRsi])
+    return isMaximized ? calculateRsiSeries(displayBars, 14) : []
+  }, [displayBars, isMaximized])
 
   const macdSeriesAllRaw = useMemo(() => {
-    return isMaximized && indicators.showMacd ? calculateMacdSeries(displayBars) : null
-  }, [displayBars, isMaximized, indicators.showMacd])
+    return isMaximized ? calculateMacdSeries(displayBars) : null
+  }, [displayBars, isMaximized])
 
   const macdSeriesAll = useMemo(() => {
     if (!macdSeriesAllRaw) return null
@@ -246,8 +243,8 @@ export function StockTradingViewChart({
   const padBottom = 26 // Dedicated X-axis time rail at the bottom
   const plotWidth = width - padLeft - padRight
 
-  const hasRsi = isMaximized && indicators.showRsi
-  const hasMacd = isMaximized && indicators.showMacd
+  const hasRsi = isMaximized
+  const hasMacd = isMaximized
   const rsiPaneHeight = hasRsi ? (isRsiCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0
   const macdPaneHeight = hasMacd ? (isMacdCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0
 
@@ -497,9 +494,12 @@ export function StockTradingViewChart({
     const nextCount = Math.min(Math.max(15, visibleBarsCount + zoomDir * step), displayBars.length)
     const diff = nextCount - visibleBarsCount
 
-    // Keep bar under cursor stable: proportionally adjust scrollOffset
+    // At the latest edge, zoom-out reveals older candles on the left without
+    // moving endIdx away from the newest candle. After the user pans into
+    // history, preserve the existing cursor-centered behavior.
     const offsetDelta = Math.round(diff * (1 - cursorRatio))
-    const nextOffset = Math.max(0, Math.min(maxScrollOffset, scrollOffset + offsetDelta))
+    const isAtLatestEdge = scrollOffset === 0
+    const nextOffset = isAtLatestEdge && diff > 0 ? 0 : Math.max(0, Math.min(maxScrollOffset, scrollOffset + offsetDelta))
 
     setVisibleBarsCount(nextCount)
     setScrollOffset(nextOffset)
@@ -565,7 +565,13 @@ export function StockTradingViewChart({
   const latestVolume = visibleBars.at(-1)?.volume
   const latestVolumeMa20 = volumeMa20.at(-1)
 
-  const activeIndicatorsCount = Object.values(indicators).filter(Boolean).length
+  const activeIndicatorsCount = [
+    indicators.showMa,
+    indicators.showIchimoku,
+    indicators.showQeoBase129,
+    indicators.showBollinger,
+    indicators.showVolumeProfile,
+  ].filter(Boolean).length
   const editingDrawing = drawings.find((d) => d.id === editingTextDrawingId)
 
   return (
@@ -715,64 +721,11 @@ export function StockTradingViewChart({
             </div>
           </div>
 
-          {/* Maximized: Chart Style Dropdown */}
+          {/* Japanese candles are the single canonical chart presentation. */}
           {isMaximized && (
-            <div className="relative flex items-center ml-1">
+            <div className="flex items-center ml-1">
               <div className="mx-1 h-3.5 w-px bg-white/[0.1]" />
-              <button
-                type="button"
-                onClick={() => setShowStyleDropdown((prev) => !prev)}
-                className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] text-slate-300 hover:bg-white/[0.05] transition-colors"
-              >
-                <span>
-                  {chartStyle === "candles"
-                    ? "Nến Nhật"
-                    : chartStyle === "line"
-                    ? "Đường Line"
-                    : chartStyle === "area"
-                    ? "Vùng Area"
-                    : "Nến Rỗng"}
-                </span>
-                <ChevronDown className="size-3 text-slate-400" />
-              </button>
-
-              {showStyleDropdown && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowStyleDropdown(false)}
-                  />
-                  <div className="absolute left-0 top-8 z-50 w-36 rounded-xl border border-white/[0.12] bg-[#0c131c] p-1.5 shadow-2xl">
-                    {(["candles", "line", "area", "hollow"] as const).map((st) => (
-                      <button
-                        key={st}
-                        type="button"
-                        onClick={() => {
-                          setChartStyle(st)
-                          setShowStyleDropdown(false)
-                        }}
-                        className={cn(
-                          "w-full flex items-center justify-between rounded px-2.5 py-1.5 text-left text-[11px] transition-colors",
-                          chartStyle === st
-                            ? "bg-white/15 text-slate-100 font-bold"
-                            : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]",
-                        )}
-                      >
-                        <span>
-                          {st === "candles"
-                            ? "Nến Nhật"
-                            : st === "line"
-                            ? "Đường Line"
-                            : st === "area"
-                            ? "Vùng Area"
-                            : "Nến Rỗng"}
-                        </span>
-                        {chartStyle === st && <Check className="size-3.5 text-slate-200 shrink-0" />}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
+              <span className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-slate-300">Nến Nhật</span>
             </div>
           )}
 
@@ -811,29 +764,6 @@ export function StockTradingViewChart({
 
         {/* Right Section: OHLCV Readout, Zoom/Pan Reset & Maximize/Minimize */}
         <div className="flex items-center gap-3">
-          {/* OHLCV live readout */}
-          {activeBar && (
-            <div className="hidden sm:flex flex-wrap items-center gap-2 font-mono text-[9px] text-slate-400">
-              <span className="text-slate-500">
-                {new Date(activeBar.time * 1000).toLocaleDateString("vi-VN", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                })}
-              </span>
-              <span>O: <b className="text-slate-200">{activeBar.open.toLocaleString()}</b></span>
-              <span>H: <b className="text-emerald-300">{activeBar.high.toLocaleString()}</b></span>
-              <span>L: <b className="text-rose-300">{activeBar.low.toLocaleString()}</b></span>
-              <span>
-                C:{" "}
-                <b className={activeBar.close >= activeBar.open ? "text-emerald-300" : "text-rose-300"}>
-                  {activeBar.close.toLocaleString()}
-                </b>
-              </span>
-              <span>V: <b className="text-slate-200">{(activeBar.volume / 1_000_000).toFixed(2)}M</b></span>
-            </div>
-          )}
-
           {/* Action Buttons: Reset View, Screenshot, Maximize/Minimize */}
           <div className="flex items-center gap-1">
             {isMaximized && (
@@ -925,6 +855,27 @@ export function StockTradingViewChart({
             drawingsCount={drawings.length}
             saveStatus={saveStatus}
           />
+        )}
+
+        {/* In-plot OHLCV readout under the timeframe bar. */}
+        {isMaximized && activeBar && (
+          <div
+            data-chart-ohlcv-overlay
+            className="pointer-events-none absolute left-14 top-3 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-white/[0.06] bg-[#080d13]/72 px-2.5 py-1 font-mono text-[10px] text-slate-400 backdrop-blur-sm"
+          >
+            <span className="text-slate-500">
+              {new Date(activeBar.time * 1000).toLocaleDateString("vi-VN", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+              })}
+            </span>
+            <span>O: <b className="text-slate-200">{activeBar.open.toLocaleString()}</b></span>
+            <span>H: <b className="text-emerald-300">{activeBar.high.toLocaleString()}</b></span>
+            <span>L: <b className="text-rose-300">{activeBar.low.toLocaleString()}</b></span>
+            <span>C: <b className={activeBar.close >= activeBar.open ? "text-emerald-300" : "text-rose-300"}>{activeBar.close.toLocaleString()}</b></span>
+            <span>V: <b className="text-slate-200">{formatCompactVolume(activeBar.volume)}</b></span>
+          </div>
         )}
 
         {/* Object Management Panel (Object Tree / Layers) */}
@@ -1307,54 +1258,35 @@ export function StockTradingViewChart({
             opacity="0.95"
           />
 
-          {/* 5. Main Candlesticks / Line Chart */}
-          {chartStyle === "candles" || chartStyle === "hollow" ? (
-            visibleBars.map((bar, i) => {
-              const x = getX(i)
-              const isBull = bar.close >= bar.open
-              const color = isBull ? "#10b981" : "#f43f5e"
-              const highY = getY(bar.high)
-              const lowY = getY(bar.low)
-              const openY = getY(bar.open)
-              const closeY = getY(bar.close)
-              const bodyTop = Math.min(openY, closeY)
-              const bodyHeight = Math.max(1.5, Math.abs(closeY - openY))
-              const candleW = Math.max(2, plotWidth / visibleSlotCount - 2)
+          {/* 5. Main Candlesticks — Japanese candles are the only presentation. */}
+          {visibleBars.map((bar, i) => {
+            const x = getX(i)
+            const isBull = bar.close >= bar.open
+            const color = isBull ? "#10b981" : "#f43f5e"
+            const highY = getY(bar.high)
+            const lowY = getY(bar.low)
+            const openY = getY(bar.open)
+            const closeY = getY(bar.close)
+            const bodyTop = Math.min(openY, closeY)
+            const bodyHeight = Math.max(1.5, Math.abs(closeY - openY))
+            const candleW = Math.max(2, plotWidth / visibleSlotCount - 2)
 
-              return (
-                <g key={`c-${bar.time}-${i}`}>
-                  <line x1={x} y1={highY} x2={x} y2={lowY} stroke={color} strokeWidth="1.2" />
-                  <rect
-                    x={x - candleW / 2}
-                    y={bodyTop}
-                    width={candleW}
-                    height={bodyHeight}
-                    fill={chartStyle === "hollow" && isBull ? "none" : color}
-                    stroke={color}
-                    strokeWidth={chartStyle === "hollow" ? 1.2 : 0}
-                    rx="1"
-                  />
-                </g>
-              )
-            })
-          ) : (
-            // Line or Area Chart
-            <g>
-              <path
-                d={makeLinePath(visibleBars.map((b) => b.close))}
-                fill="none"
-                stroke="#cbd5e1"
-                strokeWidth="2"
-              />
-              {chartStyle === "area" && (
-                <path
-                  d={`${makeLinePath(visibleBars.map((b) => b.close))} L ${getX(Math.max(0, visibleBars.length - 1))} ${padTop + mainPriceHeight} L ${padLeft} ${padTop + mainPriceHeight} Z`}
-                  fill="url(#area-gradient)"
-                  opacity="0.3"
+            return (
+              <g key={`c-${bar.time}-${i}`}>
+                <line x1={x} y1={highY} x2={x} y2={lowY} stroke={color} strokeWidth="1.2" />
+                <rect
+                  x={x - candleW / 2}
+                  y={bodyTop}
+                  width={candleW}
+                  height={bodyHeight}
+                  fill={color}
+                  stroke={color}
+                  strokeWidth="0"
+                  rx="1"
                 />
-              )}
-            </g>
-          )}
+              </g>
+            )
+          })}
 
           {/* Moving Averages — requested visual hierarchy */}
           {(isMaximized ? indicators.showMa : false) && (

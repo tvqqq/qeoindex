@@ -191,3 +191,39 @@ test("StockTradingViewChart implements TitanLabs-style bottom range presets and 
   assert.match(chartCode, /cursorRatio = Math\.max\(0, Math\.min\(1, mouseX \/ Math\.max\(1, plotPx\)\)\)/)
   assert.match(chartCode, /offsetDelta = Math\.round\(diff \* \(1 - cursorRatio\)\)/)
 })
+
+test("latest-edge zoom out preserves the newest candle instead of shifting the viewport into history", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.match(chartCode, /const isAtLatestEdge = scrollOffset === 0/)
+  assert.match(chartCode, /isAtLatestEdge && diff > 0 \? 0 :/)
+})
+
+test("maximized drawing tools remain a floating rounded capsule instead of a fixed full-height rail", () => {
+  const toolsCode = source("components/stock-detail/chart/stock-chart-drawing-tools.tsx")
+  const shellCode = source("components/stock-detail/chart/stock-chart-terminal-shell.module.css")
+
+  assert.match(toolsCode, /rounded-\[22px\]/)
+  assert.match(toolsCode, /left-3 top-14/)
+  assert.doesNotMatch(shellCode, /bottom:\s*0;/)
+  assert.doesNotMatch(shellCode, /border-radius:\s*0\s*!important/)
+})
+
+test("chart is Japanese-candles only and renders OHLCV inside the plot", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.doesNotMatch(chartCode, /showStyleDropdown/)
+  assert.doesNotMatch(chartCode, /Đường Line/)
+  assert.match(chartCode, /data-chart-ohlcv-overlay/)
+  assert.match(chartCode, /Nến Nhật/)
+})
+
+test("RSI and MACD are permanent lower panes and are not indicator-checkbox options", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+  const modalCode = source("components/stock-detail/chart/stock-chart-indicator-modal.tsx")
+
+  assert.match(chartCode, /const hasRsi = isMaximized/)
+  assert.match(chartCode, /const hasMacd = isMaximized/)
+  assert.doesNotMatch(modalCode, /key: "showRsi"/)
+  assert.doesNotMatch(modalCode, /key: "showMacd"/)
+})

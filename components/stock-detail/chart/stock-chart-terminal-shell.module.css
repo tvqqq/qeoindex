@@ -46,30 +46,21 @@
     #080b10;
 }
 
-/* Turn the drawing toolbox into a compact TradingView-style rail instead of a floating card. */
+/* Keep the drawing toolbox as a detached TradingView-style floating capsule. */
 .terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] {
-  top: 0 !important;
-  left: 0 !important;
-  bottom: 0;
   gap: 3px !important;
-  overflow-y: auto;
-  border-top: 0 !important;
-  border-bottom: 0 !important;
-  border-left: 0 !important;
-  border-radius: 0 !important;
-  border-color: rgba(255, 255, 255, 0.085) !important;
-  background: rgba(13, 17, 24, 0.97) !important;
-  padding: 6px 5px !important;
-  box-shadow: none !important;
-  backdrop-filter: blur(8px);
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(10, 15, 22, 0.94) !important;
+  padding: 6px !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.72) !important;
+  backdrop-filter: blur(10px);
 }
 
-/* Keep the main rail controls a touch larger and softly rounded like the earlier UI. */
 .terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > button,
 .terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > div > button {
   width: 32px;
   height: 32px;
-  border-radius: 9px !important;
+  border-radius: 10px !important;
 }
 
 .terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > button > svg,
