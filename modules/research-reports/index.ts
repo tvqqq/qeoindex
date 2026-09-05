@@ -19,6 +19,14 @@ export type {
   ResearchReportQaAudit,
   ResearchReportQaTurn,
 } from "./qa/types.ts"
+export { getResearchReportDetail } from "./detail/service.ts"
+export type {
+  ResearchReportDetailAnalysis,
+  ResearchReportDetailCitation,
+  ResearchReportDetailResolution,
+  ResearchReportDetailTickerMention,
+  ResearchReportDetailViewModel,
+} from "./detail/types.ts"
 export { toResearchReportUpsertRow, upsertResearchReports } from "./repository.ts"
 export type {
   ProcessResearchReportResult,
