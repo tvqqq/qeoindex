@@ -132,7 +132,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
   }
 
   return (
-    <aside className="xl:sticky xl:top-[72px] xl:max-h-[calc(100vh-88px)] xl:overflow-y-auto space-y-3.5 no-scrollbar w-full">
+    <div className="space-y-3.5 w-full pb-8">
       {/* AI Council Overview Card (Matching AI Council Card Design) */}
       <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b1119] p-4 sm:p-5 space-y-4">
         {/* Header */}
@@ -318,6 +318,6 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
           </form>
         </div>
       </div>
-    </aside>
+    </div>
   )
 }
