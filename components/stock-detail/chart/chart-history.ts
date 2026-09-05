@@ -142,7 +142,14 @@ function cachedRange(input: ChartRangeInput): ChartHistoryResponse | null {
 }
 
 function rememberClosedRange(input: ChartRangeInput, result: ChartHistoryResponse) {
-  if (result.metadata?.sessionState !== "CLOSED") return
+  if (
+    result.metadata?.sessionState !== "CLOSED"
+    || !result.coverage.complete
+    || result.gaps.length > 0
+    || result.integrityIssues.length > 0
+    || result.errors.length > 0
+  ) return
+
   const now = Date.now()
   closedRangeCache.set(requestKey(input), {
     input: { ...input, ticker: input.ticker.toUpperCase() },
