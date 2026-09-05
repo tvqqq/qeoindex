@@ -96,6 +96,8 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
     return () => window.removeEventListener("popstate", handlePopState)
   }, [activeTicker, handleSelectTicker])
 
+  const [isChartMaximized, setIsChartMaximized] = useState(false)
+
   return (
     <div className="min-h-screen w-full bg-[#06090d] text-white lg:h-screen lg:overflow-hidden flex flex-col">
       {/* Top Navigation Bar */}
@@ -103,29 +105,42 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
 
       {/* Main Full-Width Workstation Container */}
       <main className="w-full flex-1 px-2.5 py-2.5 sm:px-4 lg:px-5 2xl:px-6 lg:overflow-hidden min-h-0">
-        {/* 3 Columns Master Layout */}
-        <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[300px_minmax(0,1fr)_260px] xl:grid-cols-[330px_minmax(0,1fr)_270px] 2xl:grid-cols-[360px_minmax(0,1fr)_300px] h-full lg:overflow-hidden items-stretch">
+        {/* 3 Columns Master Layout (or 2 columns when Chart is Maximized) */}
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-3.5 h-full lg:overflow-hidden items-stretch",
+            isChartMaximized
+              ? "lg:grid-cols-[minmax(0,1fr)_260px] xl:grid-cols-[minmax(0,1fr)_270px] 2xl:grid-cols-[minmax(0,1fr)_300px]"
+              : "lg:grid-cols-[300px_minmax(0,1fr)_260px] xl:grid-cols-[330px_minmax(0,1fr)_270px] 2xl:grid-cols-[360px_minmax(0,1fr)_300px]",
+          )}
+        >
           {/* ========================================================= */}
           {/* COLUMN 1: BÊN TRÁI (~25% WIDTH) - CỐ ĐỊNH                 */}
           {/* AI Council tổng quan & Quick chatbox với AI               */}
+          {/* Ẩn khi phóng to chart                                      */}
           {/* ========================================================= */}
-          <aside
-            className={cn(
-              "w-full transition-opacity duration-200 ease-out lg:h-full lg:overflow-y-auto no-scrollbar",
-              isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
-            )}
-          >
-            <StockAiSidebar data={currentData} />
-          </aside>
+          {!isChartMaximized && (
+            <aside
+              className={cn(
+                "w-full transition-opacity duration-200 ease-out lg:h-full lg:overflow-y-auto no-scrollbar",
+                isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
+              )}
+            >
+              <StockAiSidebar data={currentData} />
+            </aside>
+          )}
 
           {/* ========================================================= */}
-          {/* COLUMN 2: GIỮA (~60% WIDTH) - SCROLL ĐƯỢC                 */}
-          {/* Thông tin công ty, Chart & Tabs (Scroll duy nhất ở desktop) */}
+          {/* COLUMN 2: GIỮA - SCROLL ĐƯỢC KHI BÌNH THƯỜNG / H-FULL KHI MAXIMIZED */}
+          {/* Thông tin công ty, Chart & Tabs                           */}
           {/* ========================================================= */}
           <section
             ref={centerColumnRef}
             className={cn(
-              "relative min-w-0 space-y-3.5 transition-opacity duration-200 ease-out lg:h-full lg:overflow-y-auto pr-1 pb-10",
+              "relative min-w-0 transition-opacity duration-200 ease-out",
+              isChartMaximized
+                ? "flex flex-col overflow-hidden pb-0 pr-0 lg:h-full"
+                : "space-y-3.5 lg:h-full lg:overflow-y-auto pr-1 pb-10",
               isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
             )}
           >
@@ -141,19 +156,28 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
               </div>
             </div>
 
-            {/* Thông tin công ty & Giá realtime */}
-            <StockCompanyHeader data={currentData} />
+            {/* Thông tin công ty & Giá realtime (Chỉ hiện khi ở chế độ xem chuẩn) */}
+            {!isChartMaximized && <StockCompanyHeader data={currentData} />}
 
             {/* TradingView Lightweight Candlestick Chart */}
-            <StockTradingViewChart ticker={currentData.ticker} bars={currentData.bars} />
+            <StockTradingViewChart
+              ticker={currentData.ticker}
+              bars={currentData.bars}
+              hourlyBars={currentData.hourlyBars}
+              isMaximized={isChartMaximized}
+              onToggleMaximize={() => setIsChartMaximized((prev) => !prev)}
+              currentPrice={currentData.price}
+              changePct={currentData.changePct}
+            />
 
-            {/* 4 Tabs Panel: Tổng quan, DN, TA, AI Council */}
-            <StockTabsPanel data={currentData} />
+            {/* 6 Tabs Panel: Tổng quan, DN, TA, AI Council (Chỉ hiện khi ở chế độ xem chuẩn) */}
+            {!isChartMaximized && <StockTabsPanel data={currentData} />}
           </section>
 
           {/* ========================================================= */}
           {/* COLUMN 3: BÊN PHẢI (~15% WIDTH) - CỐ ĐỊNH                 */}
           {/* Watchlist cổ phiếu (Cố định, search & filter nội bộ)     */}
+          {/* Luôn hiển thị và có thể chuyển đổi cp trực tiếp           */}
           {/* ========================================================= */}
           <aside className="w-full lg:h-full lg:overflow-hidden">
             <StockWatchlistSidebar
