@@ -265,6 +265,14 @@
       "state": "EXACT",
       "evidence": "qeo87-production-ledger-cron-absence",
       "rationale": "Temporary rollout gate: Research Reports schema is live while the 07:05 scheduler remains intentionally disabled until production smoke and telemetry acceptance pass."
+    },
+    {
+      "logicalName": "qeo87_enable_research_reports_scheduler",
+      "repositoryVersion": "20260905135600",
+      "productionVersion": null,
+      "state": "QUARANTINED",
+      "evidence": "qeo87-user-approved-retry-policy-pending-production-smoke",
+      "rationale": "Final 07:05 ICT activation is intentionally quarantined until the capped three-retry runtime is Verify-green, production READY, and a bounded manual smoke proves per-report AI failure isolation before cron ownership is enabled."
     }
   ]
 }
