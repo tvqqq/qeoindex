@@ -5,7 +5,7 @@ import {
   selectCouncilReportEvidence,
   type CouncilReportEvidenceItem,
   type CouncilReportEvidenceSelection,
-} from "../research-reports/council-evidence.ts"
+} from "../research-reports/index.ts"
 
 export const AI_COUNCIL_REPORT_EVIDENCE_VERSION = "ai-council-report-evidence-v1"
 
