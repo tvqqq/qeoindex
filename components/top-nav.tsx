@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { BrainCircuit, Briefcase, CandlestickChart, ChevronDown, Compass, GitCommit, LayoutDashboard, Sparkles, Terminal } from "lucide-react"
+import { BrainCircuit, Briefcase, CandlestickChart, ChevronDown, Compass, FileText, GitCommit, LayoutDashboard, Sparkles, Terminal } from "lucide-react"
 
 import { BRAND } from "@/modules/shared/brand"
 
@@ -28,6 +28,15 @@ const INSIGHTS_ITEMS = [
     activeRow: "border-cyan-500/30 bg-gradient-to-r from-cyan-500/15 via-cyan-500/5 to-transparent",
     activeText: "text-cyan-300",
     description: "Chart 1H–1M, phase và kịch bản tiếp theo",
+  },
+  {
+    label: "Báo cáo Research",
+    href: "/insights/reports",
+    icon: FileText,
+    iconBg: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]",
+    activeRow: "border-emerald-500/30 bg-gradient-to-r from-emerald-500/15 via-emerald-500/5 to-transparent",
+    activeText: "text-emerald-300",
+    description: "Báo cáo vĩ mô, chiến lược, ngành và trạng thái AI",
   },
   {
     label: "AI Council",

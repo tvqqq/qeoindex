@@ -27,6 +27,19 @@ export type {
   ResearchReportDetailTickerMention,
   ResearchReportDetailViewModel,
 } from "./detail/types.ts"
+export {
+  getResearchReportCatalog,
+  normalizeResearchReportCatalogQuery,
+  RESEARCH_REPORT_CATALOG_CATEGORIES,
+  RESEARCH_REPORT_CATALOG_PAGE_SIZE,
+} from "./catalog.ts"
+export type {
+  ResearchReportCatalogCategory,
+  ResearchReportCatalogClient,
+  ResearchReportCatalogItem,
+  ResearchReportCatalogQuery,
+  ResearchReportCatalogResult,
+} from "./catalog.ts"
 export { selectCouncilReportEvidence } from "./council-evidence.ts"
 export type {
   CouncilReportEvidenceItem,
