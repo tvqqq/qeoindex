@@ -17,6 +17,10 @@ import {
   type ResearchReportAiRequestAuditEvent,
 } from "./openai.ts"
 import { REPORT_ANALYSIS_VERSION, REPORT_PROMPT_VERSION } from "./prompt.ts"
+import {
+  findLastKnownGoodResearchReportAnalysis,
+  type ResearchReportRecoveryLookupClient,
+} from "./recovery.ts"
 
 type AnalysisLookupClient = Parameters<typeof findSuccessfulResearchReportAnalysis>[0]
 type ReportStatusClient = Parameters<typeof markResearchReportStatus>[0]
@@ -52,6 +56,7 @@ export interface ResearchReportProcessingDependencies {
   runId?: string
   acquireLease?: typeof acquireResearchReportAnalysisLease
   releaseLease?: typeof releaseResearchReportAnalysisLease
+  findLastKnownGood?: typeof findLastKnownGoodResearchReportAnalysis
   aiBudget?: ResearchReportAiBudget
   requestUsage?: ResearchReportRequestUsageAccumulator
   onRequestAudit?: (event: ResearchReportAiRequestAuditEvent) => Promise<void> | void
@@ -90,6 +95,10 @@ function leaseClient(client: ResearchReportProcessingClient) {
   return client as unknown as ReportLeaseClient
 }
 
+function recoveryClient(client: ResearchReportProcessingClient) {
+  return client as unknown as ResearchReportRecoveryLookupClient
+}
+
 function addRequestUsage(
   target: ResearchReportRequestUsageAccumulator | undefined,
   event: ResearchReportAiRequestAuditEvent,
@@ -120,6 +129,7 @@ export async function processResearchReport(
   const analyzePages = deps.analyzePages ?? analyzeResearchReportPages
   const acquireLease = deps.acquireLease ?? acquireResearchReportAnalysisLease
   const releaseLease = deps.releaseLease ?? releaseResearchReportAnalysisLease
+  const findLastKnownGood = deps.findLastKnownGood ?? findLastKnownGoodResearchReportAnalysis
 
   let contentHash: string | null = null
   let aiCalled = false
@@ -319,24 +329,42 @@ export async function processResearchReport(
       ownedLeaseToken = null
     }
 
-    await markResearchReportStatus(statusClient(client), report.id, fetchFailedBeforeIdentity
+    let lastKnownGood = null
+    if (fetchFailedBeforeIdentity) {
+      try {
+        lastKnownGood = await findLastKnownGood(recoveryClient(client), report.id)
+      } catch {
+        // Recovery is best-effort. The run-item must still preserve the original fetch failure.
+      }
+    }
+
+    await markResearchReportStatus(statusClient(client), report.id, fetchFailedBeforeIdentity && lastKnownGood
       ? {
-          ingestionStatus: "failed",
+          contentHash: lastKnownGood.contentHash,
+          parsedPageCount: lastKnownGood.parsedPageCount,
+          ingestionStatus: "parsed",
           ingestionError: detail,
+          analysisStatus: "ready",
+          analysisError: null,
         }
-      : ingestionFailed
+      : fetchFailedBeforeIdentity
         ? {
-            contentHash,
             ingestionStatus: "failed",
             ingestionError: detail,
-            analysisStatus: "failed",
-            analysisError: detail,
           }
-        : {
-            contentHash,
-            analysisStatus: "failed",
-            analysisError: detail,
-          })
+        : ingestionFailed
+          ? {
+              contentHash,
+              ingestionStatus: "failed",
+              ingestionError: detail,
+              analysisStatus: "failed",
+              analysisError: detail,
+            }
+          : {
+              contentHash,
+              analysisStatus: "failed",
+              analysisError: detail,
+            })
 
     return {
       reportId: report.id,
