@@ -231,26 +231,33 @@ test("stock detail workstation integrates insights rating tabs and removes metho
   // 1. Methodology footer is removed
   assert.doesNotMatch(workstation, /Methodology: Workstation chi tiết cổ phiếu kết hợp dữ liệu kỹ thuật/)
 
-  // 2. 4 Tabs integrated matching Insights modal
-  assert.match(tabsPanel, /type StockDetailTab = "overview" \| "info" \| "ta" \| "ttai"/)
-  for (const tab of ["Tổng quan", "Thông tin doanh nghiệp", "Phân tích TA", "TTAI"]) {
+  // 2. 6 Tabs integrated (Overview, Info, TA, TTAI, Wyckoff, AI Council)
+  assert.match(tabsPanel, /type StockDetailTab = "overview" \| "info" \| "ta" \| "ttai" \| "wyckoff" \| "council"/)
+  for (const tab of ["Tổng quan", "Thông tin doanh nghiệp", "Phân tích TA", "TTAI", "Phân tích Wyckoff", "AI Council chi tiết"]) {
     assert.match(tabsPanel, new RegExp(`label: "${tab}"`))
   }
-  for (const panel of ["overview", "info", "ta", "ttai"]) {
+  for (const panel of ["overview", "info", "ta", "ttai", "wyckoff", "council"]) {
     assert.match(tabsPanel, new RegExp(`rating-panel-${panel}|TtaiDashboard`))
   }
 
-  // 3. Wyckoff link action
-  assert.match(tabsPanel, /href=\{`\/insights\/wyckoff\?ticker=\$\{row\.ticker\}&timeframe=1D`\}/)
-  assert.match(tabsPanel, /<span>Phân tích Wyckoff<\/span>/)
+  // 3. Compact tabs without liquid glass
+  assert.match(tabsPanel, /border-white\/\[0\.08\] bg-\[#080d13\]/)
+  assert.match(tabsPanel, /border-b border-white\/\[0\.06\] bg-\[#0a0f16\]/)
+  assert.doesNotMatch(tabsPanel, /shadow-\[0_40px_120px_-20px_rgba\(0,0,0,\.98\)/)
 
-  // 4. Rating components present
+  // 4. Wyckoff and Council content integrated
+  assert.match(tabsPanel, /href=\{`\/insights\/wyckoff\?ticker=\$\{row\.ticker\}&timeframe=1D`\}/)
+  assert.match(tabsPanel, /Bull Specialist: Luận điểm đồng thuận mua/)
+  assert.match(tabsPanel, /Bear & Risk Sentinel: Cảnh báo rủi ro & phản biện/)
+  assert.match(tabsPanel, /Góc nhìn 5 chuyên gia độc lập Hội đồng AI/)
+
+  // 5. Rating components present
   assert.match(tabsPanel, /RatingRadar/)
   assert.match(tabsPanel, /AccumulationHeatmap/)
   assert.match(tabsPanel, /RatingHistoryChart/)
   assert.match(tabsPanel, /TtaiDashboard/)
 
-  // 5. Stock detail data fetches rating row and has fallback
+  // 6. Stock detail data fetches rating row and has fallback
   assert.match(stockDetailData, /getInsightsRatingForTicker\(supabase, decoded\)/)
   assert.match(stockDetailData, /buildFallbackRatingRow/)
 })
