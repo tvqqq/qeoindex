@@ -25,7 +25,7 @@ test("QEO-86 debate provenance recognizes prompt identity v2 and frozen report c
 
   assert.match(data, /llm-debate-v4-research-report-evidence/)
   assert.match(data, /prompt-identity-v2-report-evidence/)
-  assert.match(data, /reportEvidence:\s*\{\s*contextHash:/s)
+  assert.match(data, /reportEvidence:\s*\{\s*contextHash:/)
   assert.match(data, /AiCouncilDebateDashboardRow/)
   assert.match(data, /reportContextVersion:/)
   assert.match(data, /reportContextHash:/)
