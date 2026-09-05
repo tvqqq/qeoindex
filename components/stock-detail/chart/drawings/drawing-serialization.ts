@@ -15,6 +15,7 @@ import {
 import type {
   CoordinateAdapter,
   DrawingToolType,
+  DrawingVisibility,
   MarketAnchor,
   PersistedDrawingV2,
 } from "./drawing-types.ts"
@@ -28,6 +29,11 @@ export interface UserChartSettingsPayloadV2 {
   drawings: PersistedDrawingV2[]
   unresolvedLegacyDrawings?: LegacyDrawing[]
   updatedAt?: string
+}
+
+export type RuntimeDrawingObject = DrawingObject & {
+  sourceTimeframe?: ChartTimeframe
+  visibility?: DrawingVisibility
 }
 
 export function getLegacyBackupKey(ticker: string): string {
@@ -153,11 +159,12 @@ export function deserializeUserChartSettings(
 
 /**
  * Converts a canonical PersistedDrawingV2 to a runtime DrawingObject for rendering in canvas.
+ * Persistence metadata rides along on the runtime object so normal edits/saves do not rewrite scope.
  */
 export function persistedV2ToRuntimeDrawing(
   persisted: PersistedDrawingV2,
   adapter?: CoordinateAdapter,
-): DrawingObject {
+): RuntimeDrawingObject {
   const points = persisted.anchors.map((anchor) => {
     let x = 0
     let y = 0
@@ -192,6 +199,8 @@ export function persistedV2ToRuntimeDrawing(
     iconType: persisted.iconType,
     locked: persisted.locked,
     hidden: persisted.hidden,
+    sourceTimeframe: persisted.sourceTimeframe,
+    visibility: persisted.visibility,
   }
 }
 
@@ -255,13 +264,21 @@ export function runtimeDrawingToPersistedV2(
     return null
   }
 
+  const runtimeWithMetadata = runtime as RuntimeDrawingObject
+  const persistedSourceTimeframe =
+    runtimeWithMetadata.sourceTimeframe && VALID_CHART_TIMEFRAMES.has(runtimeWithMetadata.sourceTimeframe)
+      ? runtimeWithMetadata.sourceTimeframe
+      : sourceTimeframe
+  const persistedVisibility: DrawingVisibility =
+    runtimeWithMetadata.visibility === "source-timeframe" ? "source-timeframe" : "global"
+
   return {
     schemaVersion: 2,
     id: runtime.id,
     tool: runtime.tool as DrawingToolType,
     anchors,
-    sourceTimeframe,
-    visibility: "global",
+    sourceTimeframe: persistedSourceTimeframe,
+    visibility: persistedVisibility,
     style: {
       color: runtime.color || "#00f0ff",
       lineWidth: runtime.lineWidth || 2,
