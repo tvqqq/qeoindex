@@ -121,9 +121,9 @@ function persistedRow(status: "ready" | "empty" | "unavailable" = "ready"): Snap
   }
 }
 
-test("QEO-86 pending SQL creates immutable authenticated-read Council report snapshots", () => {
+test("QEO-87 active SQL preserves immutable authenticated-read Council report snapshots", () => {
   const sql = readFileSync(
-    new URL("../../supabase/pending-migrations/20260905073000_qeo86_ai_council_report_evidence.sql", import.meta.url),
+    new URL("../../supabase/migrations/20260905073000_qeo86_ai_council_report_evidence.sql", import.meta.url),
     "utf8",
   )
 

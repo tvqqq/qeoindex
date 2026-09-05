@@ -10,11 +10,11 @@ function researchMigration() {
       .map((name) => `${directory}/${name}`),
   )
   assert.equal(matches.length, 1, "expected exactly one QEO-80/QEO-85 research migration")
-  assert.match(matches[0], /^supabase\/pending-migrations\//, "research schema must remain quarantined until rollout")
+  assert.match(matches[0], /^supabase\/migrations\//, "QEO-87 rollout must promote the research schema into active migrations")
   return readFileSync(matches[0], "utf8")
 }
 
-test("QEO-85 quarantined schema adds cache-write usage, analysis leases, and run-item evidence", () => {
+test("QEO-87 promoted schema preserves cache-write usage, analysis leases, and run-item evidence", () => {
   const sql = researchMigration()
 
   assert.match(sql, /cache_write_tokens\s+bigint\s+not\s+null\s+default\s+0/i)
@@ -28,7 +28,7 @@ test("QEO-85 quarantined schema adds cache-write usage, analysis leases, and run
   assert.match(sql, /market_research_report_analysis_leases[\s\S]*?service_role/i)
 })
 
-test("QEO-85 rollout-coupled scheduler is exact 07:05 ICT daily and Vault-authenticated", () => {
+test("QEO-87 promoted scheduler source remains exact 07:05 ICT daily and Vault-authenticated", () => {
   const sql = researchMigration()
 
   assert.match(sql, /qeo_trigger_research_reports_daily/i)

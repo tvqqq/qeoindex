@@ -98,7 +98,7 @@ test("source catalog retains historical pg_cron definitions while effective cata
   assert.equal(eodDef.scheduleIct, "15:15 T2-T6")
   assert.equal(eodDef.scheduleKind, "workflow")
 
-  const researchMigration = readTextFile("supabase/pending-migrations/20260904193000_qeo80_research_reports.sql")
+  const researchMigration = readTextFile("supabase/migrations/20260904193000_qeo80_research_reports.sql")
   assert.match(researchMigration, /'research-reports-daily-0705-ict'/)
   assert.match(researchMigration, /'5 0 \* \* \*'/)
   const research = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "research_reports.daily")
