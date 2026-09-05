@@ -33,6 +33,14 @@ jobs:
                   raise SystemExit(f'missing replacement target: {label}')
               s = s.replace(old, new, 1)
 
+          def replace_between(start_marker: str, end_marker: str, replacement: str, label: str):
+              global s
+              start = s.find(start_marker)
+              end = s.find(end_marker, start + len(start_marker)) if start >= 0 else -1
+              if start < 0 or end < 0:
+                  raise SystemExit(f'missing block markers: {label}')
+              s = s[:start] + replacement + s[end:]
+
           replace_once('    chartStyle,\n    setChartStyle,\n', '', 'chart style persistence destructure')
           replace_once('  const [showStyleDropdown, setShowStyleDropdown] = useState(false)\n', '', 'chart style dropdown state')
 
@@ -40,20 +48,23 @@ jobs:
 
           replace_once('  const hasRsi = isMaximized && indicators.showRsi\n  const hasMacd = isMaximized && indicators.showMacd\n', '  const hasRsi = isMaximized\n  const hasMacd = isMaximized\n', 'permanent RSI/MACD panes')
 
-          replace_once('''    // Keep bar under cursor stable: proportionally adjust scrollOffset\n    const offsetDelta = Math.round(diff * (1 - cursorRatio))\n    const nextOffset = Math.max(0, Math.min(maxScrollOffset, scrollOffset + offsetDelta))''', '''    // At the latest edge, zoom-out must reveal older candles on the left without\n    // moving endIdx away from the newest candle. Once the user has panned into\n    // history, keep the existing cursor-centered behavior.\n    const offsetDelta = Math.round(diff * (1 - cursorRatio))\n    const isAtLatestEdge = scrollOffset === 0\n    const nextOffset = isAtLatestEdge && diff > 0 ? 0 : Math.max(0, Math.min(maxScrollOffset, scrollOffset + offsetDelta))''', 'latest-edge zoom')
+          replace_once('''    // Keep bar under cursor stable: proportionally adjust scrollOffset\n    const offsetDelta = Math.round(diff * (1 - cursorRatio))\n    const nextOffset = Math.max(0, Math.min(maxScrollOffset, scrollOffset + offsetDelta))''', '''    // At the latest edge, zoom-out reveals older candles on the left without\n    // moving endIdx away from the newest candle. After the user pans into\n    // history, preserve the existing cursor-centered behavior.\n    const offsetDelta = Math.round(diff * (1 - cursorRatio))\n    const isAtLatestEdge = scrollOffset === 0\n    const nextOffset = isAtLatestEdge && diff > 0 ? 0 : Math.max(0, Math.min(maxScrollOffset, scrollOffset + offsetDelta))''', 'latest-edge zoom')
 
           replace_once('  const activeIndicatorsCount = Object.values(indicators).filter(Boolean).length\n', '''  const activeIndicatorsCount = [\n    indicators.showMa,\n    indicators.showIchimoku,\n    indicators.showQeoBase129,\n    indicators.showBollinger,\n    indicators.showVolumeProfile,\n  ].filter(Boolean).length\n''', 'indicator counter')
 
-          style_pattern = re.compile(r'''\n          /\* Maximized: Chart Style Dropdown \*/\n          \{isMaximized && \(.*?\n          /\* Maximized: Indicators Popover Button \*/''', re.S)
-          style_replacement = '''\n          {/* Japanese candles are the single canonical chart presentation. */}\n          {isMaximized && (\n            <div className="flex items-center ml-1">\n              <div className="mx-1 h-3.5 w-px bg-white/[0.1]" />\n              <span className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-slate-300">Nến Nhật</span>\n            </div>\n          )}\n\n          {/* Maximized: Indicators Popover Button */}'''
-          s, count = style_pattern.subn(style_replacement, s, count=1)
-          if count != 1:
-              raise SystemExit('failed to replace chart-style dropdown block')
+          replace_between(
+              '          {/* Maximized: Chart Style Dropdown */}',
+              '          {/* Maximized: Indicators Popover Button */}',
+              '''          {/* Japanese candles are the single canonical chart presentation. */}\n          {isMaximized && (\n            <div className="flex items-center ml-1">\n              <div className="mx-1 h-3.5 w-px bg-white/[0.1]" />\n              <span className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-slate-300">Nến Nhật</span>\n            </div>\n          )}\n\n''',
+              'chart-style dropdown',
+          )
 
-          ohlcv_pattern = re.compile(r'''\n          /\* OHLCV live readout \*/\n          \{activeBar && \(.*?\n          /\* Action Buttons: Reset View, Screenshot, Maximize/Minimize \*/''', re.S)
-          s, count = ohlcv_pattern.subn('\n          {/* Action Buttons: Reset View, Screenshot, Maximize/Minimize */}', s, count=1)
-          if count != 1:
-              raise SystemExit('failed to remove top-right OHLCV readout')
+          replace_between(
+              '          {/* OHLCV live readout */}',
+              '          {/* Action Buttons: Reset View, Screenshot, Maximize/Minimize */}',
+              '',
+              'top-right OHLCV',
+          )
 
           overlay = '''        {/* In-plot OHLCV readout under the timeframe bar. */}\n        {isMaximized && activeBar && (\n          <div\n            data-chart-ohlcv-overlay\n            className="pointer-events-none absolute left-14 top-3 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-white/[0.06] bg-[#080d13]/72 px-2.5 py-1 font-mono text-[10px] text-slate-400 backdrop-blur-sm"\n          >\n            <span className="text-slate-500">\n              {new Date(activeBar.time * 1000).toLocaleDateString("vi-VN", {\n                day: "2-digit",\n                month: "2-digit",\n                year: "numeric",\n              })}\n            </span>\n            <span>O: <b className="text-slate-200">{activeBar.open.toLocaleString()}</b></span>\n            <span>H: <b className="text-emerald-300">{activeBar.high.toLocaleString()}</b></span>\n            <span>L: <b className="text-rose-300">{activeBar.low.toLocaleString()}</b></span>\n            <span>C: <b className={activeBar.close >= activeBar.open ? "text-emerald-300" : "text-rose-300"}>{activeBar.close.toLocaleString()}</b></span>\n            <span>V: <b className="text-slate-200">{formatCompactVolume(activeBar.volume)}</b></span>\n          </div>\n        )}\n\n'''
           marker = '        {/* Object Management Panel (Object Tree / Layers) */}'
@@ -61,15 +72,15 @@ jobs:
               raise SystemExit('missing object manager marker')
           s = s.replace(marker, overlay + marker, 1)
 
-          candles_pattern = re.compile(r'''          /\* 5\. Main Candlesticks / Line Chart \*/\n          \{chartStyle === "candles" \|\| chartStyle === "hollow" \? \(.*?\n          \)\}\n\n          /\* Moving Averages''', re.S)
-          candles_replacement = '''          {/* 5. Main Candlesticks — Japanese candles are the only presentation. */}\n          {visibleBars.map((bar, i) => {\n            const x = getX(i)\n            const isBull = bar.close >= bar.open\n            const color = isBull ? "#10b981" : "#f43f5e"\n            const highY = getY(bar.high)\n            const lowY = getY(bar.low)\n            const openY = getY(bar.open)\n            const closeY = getY(bar.close)\n            const bodyTop = Math.min(openY, closeY)\n            const bodyHeight = Math.max(1.5, Math.abs(closeY - openY))\n            const candleW = Math.max(2, plotWidth / visibleSlotCount - 2)\n\n            return (\n              <g key={`c-${bar.time}-${i}`}>\n                <line x1={x} y1={highY} x2={x} y2={lowY} stroke={color} strokeWidth="1.2" />\n                <rect\n                  x={x - candleW / 2}\n                  y={bodyTop}\n                  width={candleW}\n                  height={bodyHeight}\n                  fill={color}\n                  stroke={color}\n                  strokeWidth="0"\n                  rx="1"\n                />\n              </g>\n            )\n          })}\n\n          {/* Moving Averages'''
-          s, count = candles_pattern.subn(candles_replacement, s, count=1)
-          if count != 1:
-              raise SystemExit('failed to replace chart render block')
+          replace_between(
+              '          {/* 5. Main Candlesticks / Line Chart */}',
+              '          {/* Moving Averages — requested visual hierarchy */}',
+              '''          {/* 5. Main Candlesticks — Japanese candles are the only presentation. */}\n          {visibleBars.map((bar, i) => {\n            const x = getX(i)\n            const isBull = bar.close >= bar.open\n            const color = isBull ? "#10b981" : "#f43f5e"\n            const highY = getY(bar.high)\n            const lowY = getY(bar.low)\n            const openY = getY(bar.open)\n            const closeY = getY(bar.close)\n            const bodyTop = Math.min(openY, closeY)\n            const bodyHeight = Math.max(1.5, Math.abs(closeY - openY))\n            const candleW = Math.max(2, plotWidth / visibleSlotCount - 2)\n\n            return (\n              <g key={`c-${bar.time}-${i}`}>\n                <line x1={x} y1={highY} x2={x} y2={lowY} stroke={color} strokeWidth="1.2" />\n                <rect\n                  x={x - candleW / 2}\n                  y={bodyTop}\n                  width={candleW}\n                  height={bodyHeight}\n                  fill={color}\n                  stroke={color}\n                  strokeWidth="0"\n                  rx="1"\n                />\n              </g>\n            )\n          })}\n\n''',
+              'main chart render',
+          )
 
           if 'showStyleDropdown' in s or 'Đường Line' in s:
               raise SystemExit('legacy chart-style UI remains')
-
           chart_path.write_text(s)
 
           tools_path = Path('components/stock-detail/chart/stock-chart-drawing-tools.tsx')
@@ -82,19 +93,19 @@ jobs:
 
           shell_path = Path('components/stock-detail/chart/stock-chart-terminal-shell.module.css')
           shell = shell_path.read_text()
-          rail_pattern = re.compile(r'''/\* Turn the drawing toolbox into a compact TradingView-style rail instead of a floating card\. \*/.*?/\* Bottom range/status rail:''', re.S)
-          floating_css = '''/* Keep the drawing toolbox as a detached TradingView-style floating capsule. */\n.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] {\n  gap: 3px !important;\n  border-color: rgba(255, 255, 255, 0.1) !important;\n  background: rgba(10, 15, 22, 0.94) !important;\n  padding: 6px !important;\n  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.72) !important;\n  backdrop-filter: blur(10px);\n}\n\n.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > button,\n.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > div > button {\n  width: 32px;\n  height: 32px;\n  border-radius: 10px !important;\n}\n\n.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > button > svg,\n.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > div > button > svg {\n  width: 18px;\n  height: 18px;\n}\n\n/* Bottom range/status rail:'''
-          shell, count = rail_pattern.subn(floating_css, shell, count=1)
-          if count != 1:
-              raise SystemExit('failed to replace fixed drawing rail CSS')
-          shell_path.write_text(shell)
+          start = shell.find('/* Turn the drawing toolbox into a compact TradingView-style rail instead of a floating card. */')
+          end = shell.find('/* Bottom range/status rail:', start)
+          if start < 0 or end < 0:
+              raise SystemExit('missing fixed drawing rail CSS markers')
+          floating_css = '''/* Keep the drawing toolbox as a detached TradingView-style floating capsule. */\n.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] {\n  gap: 3px !important;\n  border-color: rgba(255, 255, 255, 0.1) !important;\n  background: rgba(10, 15, 22, 0.94) !important;\n  padding: 6px !important;\n  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.72) !important;\n  backdrop-filter: blur(10px);\n}\n\n.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > button,\n.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > div > button {\n  width: 32px;\n  height: 32px;\n  border-radius: 10px !important;\n}\n\n.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > button > svg,\n.terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > div > button > svg {\n  width: 18px;\n  height: 18px;\n}\n\n'''
+          shell_path.write_text(shell[:start] + floating_css + shell[end:])
 
           modal_path = Path('components/stock-detail/chart/stock-chart-indicator-modal.tsx')
           modal = modal_path.read_text()
           modal = modal.replace('Check, Activity, BarChart2, TrendingUp, Layers, Compass, Sparkles, X', 'Check, BarChart2, TrendingUp, Layers, Compass, Sparkles, X')
-          modal = re.sub(r'''\n    \{\n      key: "showRsi",.*?\n    \},\n    \{\n      key: "showMacd",.*?\n    \},''', '', modal, count=1, flags=re.S)
-          if 'key: "showRsi"' in modal or 'key: "showMacd"' in modal:
-              raise SystemExit('RSI/MACD checkbox entries still present')
+          modal, count = re.subn(r'''\n    \{\n      key: "showRsi",.*?\n    \},\n    \{\n      key: "showMacd",.*?\n    \},''', '', modal, count=1, flags=re.S)
+          if count != 1 or 'key: "showRsi"' in modal or 'key: "showMacd"' in modal:
+              raise SystemExit('failed to remove RSI/MACD checkbox entries')
           modal_path.write_text(modal)
           PY
       - name: Commit implementation and remove temporary workflow
