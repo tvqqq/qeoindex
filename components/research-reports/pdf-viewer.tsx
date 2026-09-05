@@ -104,10 +104,7 @@ export function PdfViewer({
 
     void openDocument()
       .then((document) => {
-        if (disposed || generation !== documentGenerationRef.current) {
-          void document.destroy()
-          return
-        }
+        if (disposed || generation !== documentGenerationRef.current) return
         setPdfDocument(document)
         setPageCount(document.numPages)
         setStatus("ready")
