@@ -1,7 +1,9 @@
 import {
+  acquireResearchReportAnalysisLease,
   findSuccessfulResearchReportAnalysis,
   markResearchReportStatus,
   publishResearchReportAnalysis,
+  releaseResearchReportAnalysisLease,
   type ResearchReportAnalysisIdentity,
 } from "../repository.ts"
 import type { ProcessResearchReportResult } from "../types.ts"
@@ -14,6 +16,7 @@ import { REPORT_ANALYSIS_VERSION, REPORT_PROMPT_VERSION } from "./prompt.ts"
 type AnalysisLookupClient = Parameters<typeof findSuccessfulResearchReportAnalysis>[0]
 type ReportStatusClient = Parameters<typeof markResearchReportStatus>[0]
 type ReportPublishClient = Parameters<typeof publishResearchReportAnalysis>[0]
+type ReportLeaseClient = Parameters<typeof acquireResearchReportAnalysisLease>[0]
 
 export interface ResearchReportProcessingClient {
   from(table: string): unknown
@@ -27,6 +30,9 @@ export interface ResearchReportProcessingDependencies {
   fetchPdf?: typeof fetchResearchReportPdf
   parsePdf?: typeof parseResearchReportPdf
   analyzePages?: typeof analyzeResearchReportPages
+  runId?: string
+  acquireLease?: typeof acquireResearchReportAnalysisLease
+  releaseLease?: typeof releaseResearchReportAnalysisLease
 }
 
 interface ResearchReportProcessingInput {
@@ -58,6 +64,10 @@ function publishClient(client: ResearchReportProcessingClient) {
   return client as unknown as ReportPublishClient
 }
 
+function leaseClient(client: ResearchReportProcessingClient) {
+  return client as unknown as ReportLeaseClient
+}
+
 export async function processResearchReport(
   client: ResearchReportProcessingClient,
   report: ResearchReportProcessingInput,
@@ -66,10 +76,13 @@ export async function processResearchReport(
   const fetchPdf = deps.fetchPdf ?? fetchResearchReportPdf
   const parsePdf = deps.parsePdf ?? parseResearchReportPdf
   const analyzePages = deps.analyzePages ?? analyzeResearchReportPages
+  const acquireLease = deps.acquireLease ?? acquireResearchReportAnalysisLease
+  const releaseLease = deps.releaseLease ?? releaseResearchReportAnalysisLease
 
   let contentHash: string | null = null
   let aiCalled = false
   let stage: ProcessingStage = "fetch"
+  let ownedLeaseToken: string | null = null
 
   try {
     await markResearchReportStatus(statusClient(client), report.id, {
@@ -155,6 +168,35 @@ export async function processResearchReport(
       }
     }
 
+    if (deps.runId) {
+      const lease = await acquireLease(leaseClient(client), {
+        ...identity,
+        runId: deps.runId,
+        ttlSeconds: 900,
+      })
+      if (lease.outcome === "existing_success") {
+        return {
+          reportId: report.id,
+          status: "skipped_existing",
+          contentHash,
+          analysisId: lease.analysisId,
+          aiCalled: false,
+          detail: "Identical successful analysis completed before lease acquisition",
+        }
+      }
+      if (lease.outcome === "busy") {
+        return {
+          reportId: report.id,
+          status: "skipped_concurrent",
+          contentHash,
+          analysisId: null,
+          aiCalled: false,
+          detail: "Identical analysis is already owned by another active workflow",
+        }
+      }
+      ownedLeaseToken = lease.leaseToken
+    }
+
     stage = "analysis"
     await markResearchReportStatus(statusClient(client), report.id, {
       analysisStatus: "processing",
@@ -178,6 +220,7 @@ export async function processResearchReport(
       responseId: analyzed.audit.responseId,
       inputTokens: analyzed.audit.inputTokens,
       cachedInputTokens: analyzed.audit.cachedInputTokens,
+      cacheWriteTokens: analyzed.audit.cacheWriteTokens,
       outputTokens: analyzed.audit.outputTokens,
       reasoningTokens: analyzed.audit.reasoningTokens,
       totalTokens: analyzed.audit.totalTokens,
@@ -187,6 +230,14 @@ export async function processResearchReport(
       analysis: analyzed.analysis,
       chunks,
     })
+
+    if (ownedLeaseToken) {
+      await releaseLease(leaseClient(client), {
+        leaseToken: ownedLeaseToken,
+        terminalOutcome: "ready",
+      })
+      ownedLeaseToken = null
+    }
 
     return {
       reportId: report.id,
@@ -199,6 +250,18 @@ export async function processResearchReport(
   } catch (error) {
     const detail = safeFailureDetail(error)
     const ingestionFailed = stage === "fetch" || stage === "parse"
+
+    if (ownedLeaseToken) {
+      try {
+        await releaseLease(leaseClient(client), {
+          leaseToken: ownedLeaseToken,
+          terminalOutcome: "failed",
+        })
+      } catch {
+        // Lease expiry/takeover provides recovery; preserve the original report failure.
+      }
+      ownedLeaseToken = null
+    }
 
     await markResearchReportStatus(statusClient(client), report.id, ingestionFailed
       ? {
