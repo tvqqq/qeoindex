@@ -95,6 +95,19 @@ body::after {
   font-family: var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
 }
 
+.neon-ticker-glow {
+  text-shadow: 0 0 12px rgba(34, 211, 238, 0.65), 0 0 24px rgba(34, 211, 238, 0.25);
+}
+
+.neon-ticker-glow-green {
+  text-shadow: 0 0 12px rgba(34, 201, 138, 0.65), 0 0 24px rgba(34, 201, 138, 0.25);
+}
+
+.neon-border-glow {
+  box-shadow: 0 0 16px -2px rgba(34, 211, 238, 0.25);
+}
+
+
 @keyframes title-gradient-flow {
   0% {
     background-position: 0% 50%;
