@@ -9,7 +9,7 @@ import {
 import type { CanonicalOhlcvBar } from "@/modules/market/chart-data/contract"
 import { isCanonicalDailyHotRowUsable } from "@/modules/market/chart-data/daily-authority"
 import { DAILY_BACKFILL_DAYS } from "@/modules/market/history/contract"
-import { fetchDailyMarketHistoryWindow } from "@/modules/market/history/index"
+import { fetchDailyMarketHistoryWindow, type DailyHistoryBarPolicy } from "@/modules/market/history/index"
 
 const DAY_MS = 86_400_000
 const DAILY_DEEP_CHUNK_DAYS = 4 * 366
@@ -80,17 +80,24 @@ function validTradingBars(bars: CanonicalOhlcvBar[]) {
     .sort((a, b) => a.time - b.time)
 }
 
+const deepHistoryBarPolicy: DailyHistoryBarPolicy = (provider, bar) => {
+  if (provider === "VCI" || provider === "DNSE") return true
+  return bar.volume > 0
+}
+
 function providerBackfillBars(provider: string, bars: CanonicalOhlcvBar[]) {
   const valid = validTradingBars(bars)
-  // Generic Yahoo/Fallback zero-volume rows were the QEO-106 phantom-session
-  // failure mode. Without independent final-close evidence they cannot become
-  // immutable Cold history. VCI/DNSE/VNDirect/TitanLabs retain their real bars.
-  return provider === "Fallback" ? valid.filter((bar) => bar.volume > 0) : valid
+  return valid.filter((bar) => deepHistoryBarPolicy(provider as Parameters<DailyHistoryBarPolicy>[0], bar))
 }
 
 function providerExhaustedWithoutData(message: string) {
   const providers = ["VCI", "DNSE", "Yahoo", "VNDirect", "TitanLabs"]
-  return providers.every((provider) => message.includes(`${provider}: ${provider} returned no usable completed Daily bars`))
+  return providers.every((provider) => {
+    const prefix = `${provider}: `
+    if (!message.includes(prefix)) return false
+    return message.includes(`${provider} returned no usable completed Daily bars`)
+      || message.includes(`${provider === "Yahoo" ? "Fallback" : provider} returned no trusted completed Daily bars`)
+  })
 }
 
 function earliestLocalEpoch(...values: Array<number | null>) {
@@ -239,7 +246,7 @@ async function backfillTicker(supabase: SupabaseClient, ticker: string, maxChunk
     const windowTo = Math.floor(windowToMs / 1000)
 
     try {
-      const history = await fetchDailyMarketHistoryWindow(ticker, DAILY_DEEP_CHUNK_DAYS, cursorNow)
+      const history = await fetchDailyMarketHistoryWindow(ticker, DAILY_DEEP_CHUNK_DAYS, cursorNow, deepHistoryBarPolicy)
       lastProvider = history.provider
       const older = providerBackfillBars(history.provider, history.bars)
         .filter((bar) => bar.time < earliestLocal)

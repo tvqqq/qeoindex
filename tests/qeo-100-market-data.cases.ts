@@ -156,6 +156,23 @@ test("QEO-106 Hot aging blocks unresolved Daily evidence before immutable Cold a
   assert.match(history, /provider_detail,source_url/)
 })
 
+test("QEO-106 deep backfill exhausts lower-priority providers when a provider has no trusted bars", () => {
+  const historyIndex = source("modules/market/history/index.ts")
+  const coldHistory = source("modules/market/history/daily-cold-history.ts")
+  assert.match(historyIndex, /DailyHistoryBarPolicy/)
+  assert.match(historyIndex, /applyDailyHistoryBarPolicy/)
+  assert.match(historyIndex, /no trusted completed Daily bars/)
+  const dailyStart = historyIndex.indexOf("export async function fetchDailyMarketHistoryWindow")
+  const dailyEnd = historyIndex.indexOf("export async function fetchHourlyMarketHistoryWindow", dailyStart)
+  const waterfall = historyIndex.slice(dailyStart, dailyEnd)
+  assert.ok(dailyStart >= 0 && dailyEnd > dailyStart)
+  assert.ok(waterfall.indexOf('errors.push(`Yahoo:') < waterfall.indexOf('fetchVnDirectDailyOhlcv'))
+  assert.ok(waterfall.indexOf('fetchVnDirectDailyOhlcv') < waterfall.indexOf('fetchTitanLabsDailyOhlcv'))
+  assert.match(coldHistory, /fetchDailyMarketHistoryWindow\(ticker, DAILY_DEEP_CHUNK_DAYS, cursorNow, deepHistoryBarPolicy\)/)
+  assert.match(coldHistory, /provider === "VCI" \|\| provider === "DNSE"/)
+  assert.match(coldHistory, /bar\.volume > 0/)
+})
+
 test("QEO-106 deep Daily history is resumable, bounded, provider-backed and archive-before-prune", () => {
   const history = source("modules/market/history/daily-cold-history.ts")
   const route = source("app/api/admin/market/daily-history/backfill/route.ts")
@@ -167,7 +184,8 @@ test("QEO-106 deep Daily history is resumable, bounded, provider-backed and arch
   assert.match(history, /archiveVerifiedPartition/)
   assert.match(history, /qeo_prune_verified_chart_daily_partition/)
   assert.match(history, /providerExhaustedWithoutData/)
-  assert.match(history, /provider === "Fallback" \? valid\.filter\(\(bar\) => bar\.volume > 0\)/)
+  assert.match(history, /deepHistoryBarPolicy/)
+  assert.match(history, /bar\.volume > 0/)
   assert.ok(history.indexOf("archiveVerifiedPartition") < history.lastIndexOf("qeo_prune_verified_chart_daily_partition"))
   assert.doesNotMatch(history, /synthetic|fillForward|fabricate/i)
   assert.match(route, /isMachineRequestAuthorized/)
