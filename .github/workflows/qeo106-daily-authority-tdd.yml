@@ -1,0 +1,135 @@
+name: QEO-106 one-shot Daily authority TDD
+
+on:
+  push:
+    branches:
+      - qeo-106-daily-hot-cold-full-history
+
+permissions:
+  contents: write
+
+jobs:
+  tdd-daily-authority:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact branch
+        uses: actions/checkout@v4
+        with:
+          ref: qeo-106-daily-hot-cold-full-history
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Add failing authority regression
+        shell: bash
+        run: |
+          cat > modules/market/chart-data/daily-authority.ts <<'EOF'
+          export interface CanonicalDailyHotAuthorityRow {
+            volume?: unknown
+            provider?: unknown
+            source_url?: unknown
+            provider_detail?: unknown
+          }
+
+          export function isCanonicalDailyHotRowUsable(_row: CanonicalDailyHotAuthorityRow) {
+            return true
+          }
+          EOF
+          python <<'PY'
+          from pathlib import Path
+          path = Path('tests/qeo-100-market-data.cases.ts')
+          text = path.read_text()
+          import_anchor = 'import {\n  parseSsiIboardPayload,\n  ssiIboardResolutionToken,\n} from "../modules/market/provider-benchmark/providers/ssi-iboard.ts"\n'
+          assert text.count(import_anchor) == 1
+          text = text.replace(import_anchor, import_anchor + 'import { isCanonicalDailyHotRowUsable } from "../modules/market/chart-data/daily-authority.ts"\n')
+          test_anchor = 'test("QEO-106 canonical Daily merges Hot PostgreSQL + verified Cold Storage and Hot wins overlap", () => {'
+          assert text.count(test_anchor) == 1
+          regression = '''test("QEO-106 hot Daily read rejects unresolved zero-volume fallback but preserves authority evidence", () => {\n  const flat = { volume: 0, provider: "Fallback", source_url: "https://query1.finance.yahoo.com/v8/finance/chart/VCB.VN", provider_detail: "Yahoo Finance .VN fallback" }\n  assert.equal(isCanonicalDailyHotRowUsable(flat), false)\n  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, provider: "VCI" }), true)\n  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, provider: "DNSE" }), true)\n  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, source_url: "internal://stock_orderbook_snapshots", provider_detail: "Verified final market-close repair · no trade" }), true)\n  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, provider: "VNDirect" }), false)\n  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, volume: 123 }), true)\n\n  const service = source("modules/market/chart-data/service.ts")\n  assert.match(service, /provider,provider_detail,source_url/)\n  assert.match(service, /filter\(isCanonicalDailyHotRowUsable\)/)\n})\n\n'''
+          text = text.replace(test_anchor, regression + test_anchor)
+          path.write_text(text)
+          PY
+
+      - name: Prove RED before implementation
+        shell: bash
+        run: |
+          set +e
+          node --test tests/stock-tradingview-chart-v2.test.ts > /tmp/qeo106-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/qeo106-red.log
+          if [[ "$status" -eq 0 ]]; then
+            echo "Expected QEO-106 authority regression to fail before implementation"
+            exit 1
+          fi
+          grep -q "QEO-106 hot Daily read rejects unresolved zero-volume fallback" /tmp/qeo106-red.log
+
+      - name: Implement canonical Hot Daily authority filter
+        shell: bash
+        run: |
+          cat > modules/market/chart-data/daily-authority.ts <<'EOF'
+          export interface CanonicalDailyHotAuthorityRow {
+            volume?: unknown
+            provider?: unknown
+            source_url?: unknown
+            provider_detail?: unknown
+          }
+
+          export function isCanonicalDailyHotRowUsable(row: CanonicalDailyHotAuthorityRow) {
+            const volume = Number(row.volume)
+            if (!Number.isFinite(volume) || volume < 0) return false
+            if (volume !== 0) return true
+
+            const provider = String(row.provider || "")
+            if (provider === "VCI" || provider === "DNSE") return true
+
+            return provider === "Fallback"
+              && String(row.source_url || "") === "internal://stock_orderbook_snapshots"
+              && String(row.provider_detail || "").startsWith("Verified final market-close repair")
+          }
+          EOF
+          python <<'PY'
+          from pathlib import Path
+          path = Path('modules/market/chart-data/service.ts')
+          text = path.read_text()
+          import_anchor = 'import { ChartDataRequestError, ChartDataUnavailableError } from "./contract"\n'
+          assert text.count(import_anchor) == 1
+          text = text.replace(import_anchor, import_anchor + 'import { isCanonicalDailyHotRowUsable } from "./daily-authority"\n')
+          select_old = '.select("bar_time,open,high,low,close,volume")'
+          select_new = '.select("bar_time,open,high,low,close,volume,provider,provider_detail,source_url")'
+          assert text.count(select_old) == 1
+          text = text.replace(select_old, select_new)
+          hot_old = '''  if (hotRead.status === "fulfilled") {\n    tagged.push(...hotRead.value\n      .map((row) => rowToBar(row))\n      .filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))\n      .filter(validDailyTradingBar)\n      .map((bar) => ({ source: "daily" as const, bar })))\n  } else {\n'''
+          hot_new = '''  if (hotRead.status === "fulfilled") {\n    const usableHotRows = hotRead.value.filter(isCanonicalDailyHotRowUsable)\n    if (usableHotRows.length !== hotRead.value.length) errors.push({ code: "INTEGRITY_WARNING" })\n    tagged.push(...usableHotRows\n      .map((row) => rowToBar(row))\n      .filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))\n      .filter(validDailyTradingBar)\n      .map((bar) => ({ source: "daily" as const, bar })))\n  } else {\n'''
+          assert text.count(hot_old) == 1
+          text = text.replace(hot_old, hot_new)
+          path.write_text(text)
+          PY
+
+      - name: Prove GREEN and type safety
+        run: |
+          node --test tests/stock-tradingview-chart-v2.test.ts
+          pnpm typecheck
+
+      - name: Commit implementation and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/qeo106-daily-authority-tdd.yml
+          git config user.name "qeoindex-db-drift-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add modules/market/chart-data/daily-authority.ts modules/market/chart-data/service.ts tests/qeo-100-market-data.cases.ts .github/workflows/qeo106-daily-authority-tdd.yml
+          git commit -m "fix(QEO-106): reject unresolved zero-volume Daily fallback"
+          git push origin HEAD:qeo-106-daily-hot-cold-full-history
