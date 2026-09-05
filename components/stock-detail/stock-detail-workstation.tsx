@@ -140,7 +140,7 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
               "relative min-w-0 transition-opacity duration-200 ease-out",
               isChartMaximized
                 ? "flex flex-col overflow-hidden pb-0 pr-0 lg:h-full"
-                : "space-y-2.5 lg:h-full lg:overflow-y-auto pr-0.5 pb-8",
+                : "space-y-2.5 lg:h-full lg:overflow-y-auto pr-1 pb-10",
               isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
             )}
           >
