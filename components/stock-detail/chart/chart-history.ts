@@ -212,3 +212,11 @@ export function requestChartRange(
   inFlight.set(key, promise)
   return promise
 }
+
+export function requestFreshChartRange(
+  input: ChartRangeInput,
+  signal?: AbortSignal,
+  fetchImpl: FetchLike = fetch,
+) {
+  return requestChartRange(input, signal, fetchImpl, { bypassCache: true })
+}
