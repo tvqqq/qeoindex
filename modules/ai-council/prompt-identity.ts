@@ -58,14 +58,15 @@ export function resolveAiCouncilPromptIdentityHash(
     deterministicEvidenceHash: stock.evidenceHash,
     rawContextHash: hashString(stock.llmEvidence?.contextHash),
     researchContextHash: hashString(stock.researchContext?.contextHash),
-    reportEvidenceHash,
     promptVersion,
+    ...(reportEvidenceHash ? { reportEvidenceHash } : {}),
     ...(marketSynthesisHash ? { marketSynthesisHash } : {}),
   })
   const persistedResearchIdentity = hashString(stock.researchContext?.promptIdentityHash)
 
   // A frozen Notion identity predates the first-class Research Reports layer. Reuse it
-  // only when it covers the exact current prompt inputs; any report hash forces the
-  // v2 identity to be recomputed without mutating the deterministic evidence hash.
+  // only when it covers the exact current prompt inputs; any persisted ready/empty
+  // report snapshot hash forces the v2 identity to be recomputed. Unavailable or
+  // unpersisted report evidence is absent and therefore cannot perturb prompt identity.
   return persistedResearchIdentity === computedIdentity ? persistedResearchIdentity : computedIdentity
 }
