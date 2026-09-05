@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 import {
   deserializeUserChartSettings,
+  isDrawingVisibleOnTimeframe,
   persistedV2ToRuntimeDrawing,
   projectAnchor,
   runtimeDrawingToPersistedV2,
@@ -11,6 +12,10 @@ import {
   type PersistedDrawingV2,
   type UserChartSettingsPayloadV2,
 } from "../components/stock-detail/chart/drawings/index.ts"
+
+function source(path: string) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+}
 
 test("Serialization roundtrip preserves canonical V2 values without loss", () => {
   const originalPayload: UserChartSettingsPayloadV2 = {
@@ -162,24 +167,60 @@ test("Runtime roundtrip preserves persisted source timeframe and visibility meta
   assert.equal(restored.visibility, "source-timeframe")
 })
 
+test("source-timeframe visibility is runtime-only and legacy-safe", () => {
+  assert.equal(isDrawingVisibleOnTimeframe({ visibility: "global", sourceTimeframe: "1D" }, "1h"), true)
+  assert.equal(isDrawingVisibleOnTimeframe({ visibility: "source-timeframe", sourceTimeframe: "1D" }, "1D"), true)
+  assert.equal(isDrawingVisibleOnTimeframe({ visibility: "source-timeframe", sourceTimeframe: "1D" }, "1h"), false)
+
+  // Malformed legacy scope remains visible instead of silently hiding user content.
+  assert.equal(isDrawingVisibleOnTimeframe({ visibility: "source-timeframe" }, "1h"), true)
+})
+
 test("useUserChartSync carries unresolved legacy drawings into every V2 save payload", () => {
-  const code = readFileSync(
-    new URL("../components/stock-detail/chart/use-user-chart-sync.ts", import.meta.url),
-    "utf8",
-  )
+  const code = source("components/stock-detail/chart/use-user-chart-sync.ts")
 
   assert.match(code, /unresolvedLegacyDrawingsRef/)
   assert.match(code, /unresolvedLegacyDrawings:\s*unresolvedLegacyDrawingsRef\.current/)
 })
 
 test("new runtime drawings retain their creation timeframe across later timeframe saves", () => {
-  const code = readFileSync(
-    new URL("../components/stock-detail/chart/use-user-chart-sync.ts", import.meta.url),
-    "utf8",
-  )
+  const code = source("components/stock-detail/chart/use-user-chart-sync.ts")
 
   assert.match(code, /sourceTimeframe:\s*runtimeDrawing\.sourceTimeframe\s*\?\?\s*timeframe/)
   assert.match(code, /visibility:\s*runtimeDrawing\.visibility\s*\?\?\s*"global"/)
+})
+
+test("useUserChartSync keeps full persistence set while exposing current-timeframe drawings", () => {
+  const code = source("components/stock-detail/chart/use-user-chart-sync.ts")
+
+  assert.match(code, /const \[allDrawings, setAllDrawings\]/)
+  assert.match(code, /allDrawings\.filter/)
+  assert.match(code, /isDrawingVisibleOnTimeframe/)
+  assert.match(code, /scheduleSave\(tf, chartStyle, indicators, allDrawings\)/)
+  assert.match(code, /scheduleSave\(timeframe, st, indicators, allDrawings\)/)
+})
+
+test("Phase B chart path projects market coordinates and supports ray rendering", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+  const canvasCode = source("components/stock-detail/chart/stock-chart-drawing-canvas.tsx")
+  const toolsCode = source("components/stock-detail/chart/stock-chart-drawing-tools.tsx")
+
+  assert.match(chartCode, /priceToY=\{priceToY\}/)
+  assert.match(chartCode, /yToPrice=\{yToPrice\}/)
+  assert.match(chartCode, /timeToX=\{timeToX\}/)
+  assert.match(chartCode, /xToTime=\{xToTime\}/)
+  assert.match(canvasCode, /Canonical market coordinates always win over stale runtime x\/y values/)
+  assert.match(canvasCode, /draw\.tool === "ray"/)
+  assert.match(canvasCode, /resolveRayEnd/)
+  assert.match(toolsCode, /id: "ray"/)
+})
+
+test("horizontal drawings use one canonical anchor and render across viewport", () => {
+  const canvasCode = source("components/stock-detail/chart/stock-chart-drawing-canvas.tsx")
+
+  assert.match(canvasCode, /tool: "horizontal",[\s\S]*?points: \[point\]/)
+  assert.match(canvasCode, /lineStart = draw\.tool === "horizontal" \? \{ x: 0, y: p1\.y \} : p1/)
+  assert.match(canvasCode, /draw\.tool === "horizontal"[\s\S]*?\{ x: width, y: p1\.y \}/)
 })
 
 test("Rapid save queue simulation ensures latest revision wins without overlapping requests", async () => {
