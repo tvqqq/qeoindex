@@ -136,6 +136,34 @@ export async function processResearchReport(
     const downloaded = await fetchPdf(report.pdfUrl)
     contentHash = downloaded.contentHash
 
+    const route = getResearchReportAiModelRoute()
+    const identity: ResearchReportAnalysisIdentity = {
+      reportId: report.id,
+      contentHash,
+      analysisVersion: REPORT_ANALYSIS_VERSION,
+      promptVersion: REPORT_PROMPT_VERSION,
+      modelRouteKey: route.modelRouteKey,
+    }
+
+    const existing = await findSuccessfulResearchReportAnalysis(lookupClient(client), identity)
+    if (existing) {
+      await markResearchReportStatus(statusClient(client), report.id, {
+        contentHash,
+        ingestionStatus: "parsed",
+        ingestionError: null,
+        analysisStatus: "ready",
+        analysisError: null,
+      })
+      return {
+        reportId: report.id,
+        status: "skipped_existing",
+        contentHash,
+        analysisId: existing.id,
+        aiCalled: false,
+        detail: "Identical successful analysis already exists",
+      }
+    }
+
     stage = "parse"
     const parsed = await parsePdf(downloaded.bytes)
 
@@ -187,27 +215,6 @@ export async function processResearchReport(
     const chunks = chunkResearchReportPages(parsed.pages)
     if (parsed.pages.length === 0 || chunks.length === 0) {
       throw new Error("Parsed research report produced no page-local text chunks")
-    }
-
-    const route = getResearchReportAiModelRoute()
-    const identity: ResearchReportAnalysisIdentity = {
-      reportId: report.id,
-      contentHash,
-      analysisVersion: REPORT_ANALYSIS_VERSION,
-      promptVersion: REPORT_PROMPT_VERSION,
-      modelRouteKey: route.modelRouteKey,
-    }
-
-    const existing = await findSuccessfulResearchReportAnalysis(lookupClient(client), identity)
-    if (existing) {
-      return {
-        reportId: report.id,
-        status: "skipped_existing",
-        contentHash,
-        analysisId: existing.id,
-        aiCalled: false,
-        detail: "Identical successful analysis already exists",
-      }
     }
 
     if (deps.runId) {
@@ -297,6 +304,7 @@ export async function processResearchReport(
     }
   } catch (error) {
     const detail = safeFailureDetail(error)
+    const fetchFailedBeforeIdentity = stage === "fetch" && contentHash === null
     const ingestionFailed = stage === "fetch" || stage === "parse"
 
     if (ownedLeaseToken) {
@@ -311,19 +319,24 @@ export async function processResearchReport(
       ownedLeaseToken = null
     }
 
-    await markResearchReportStatus(statusClient(client), report.id, ingestionFailed
+    await markResearchReportStatus(statusClient(client), report.id, fetchFailedBeforeIdentity
       ? {
-          contentHash,
           ingestionStatus: "failed",
           ingestionError: detail,
-          analysisStatus: "failed",
-          analysisError: detail,
         }
-      : {
-          contentHash,
-          analysisStatus: "failed",
-          analysisError: detail,
-        })
+      : ingestionFailed
+        ? {
+            contentHash,
+            ingestionStatus: "failed",
+            ingestionError: detail,
+            analysisStatus: "failed",
+            analysisError: detail,
+          }
+        : {
+            contentHash,
+            analysisStatus: "failed",
+            analysisError: detail,
+          })
 
     return {
       reportId: report.id,
