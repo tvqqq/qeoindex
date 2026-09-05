@@ -23,6 +23,15 @@ const INITIAL_HISTORY_WINDOW_SECONDS: Record<ChartTimeframe, number> = {
   "1Y": 0,
 }
 
+export interface ChartHistoryMetadata {
+  priceBasis: "RAW"
+  provider: string | null
+  lastUpdatedAt: string
+  sessionState: "LIVE" | "CLOSED"
+  currentBarTime: number | null
+  persistedThrough: number | null
+}
+
 export interface ChartHistoryResponse {
   ok: true
   ticker: string
@@ -34,6 +43,7 @@ export interface ChartHistoryResponse {
   integrityIssues: unknown[]
   coverage: { complete: boolean; state: "COMPLETE" | "PARTIAL" }
   errors: Array<{ code: string }>
+  metadata?: ChartHistoryMetadata | null
   generatedAt?: string
 }
 
