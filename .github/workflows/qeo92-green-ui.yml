@@ -1,0 +1,62 @@
+name: QEO-92 Green UI Patch
+
+on:
+  push:
+    branches:
+      - tvq9612/qeo-92-chart-data-real-1m-1d-canonical-ohlcv-with-hotcold-storage
+    paths:
+      - .github/workflows/qeo92-green-ui.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tvq9612/qeo-92-chart-data-real-1m-1d-canonical-ohlcv-with-hotcold-storage
+          fetch-depth: 0
+      - name: Add explicit unavailable chart state
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("components/stock-detail/stock-tradingview-chart.tsx")
+          source = path.read_text()
+          marker = "Dữ liệu timeframe này chưa sẵn sàng"
+          if marker in source:
+              raise SystemExit(0)
+
+          needle = '''        {/* Primary SVG Chart */}
+        <svg viewBox={`0 0 ${width} ${height}`} className="size-full" preserveAspectRatio="none">'''
+          replacement = '''        {displayBars.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6">
+            <div className="rounded-xl border border-white/[0.08] bg-[#0c131c]/95 px-5 py-4 text-center shadow-xl">
+              <div className="text-sm font-semibold text-slate-200">
+                Dữ liệu timeframe này chưa sẵn sàng
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                {timeframe} chưa có canonical candles. QEO-93 sẽ aggregate từ raw 1m.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Primary SVG Chart */}
+        <svg viewBox={`0 0 ${width} ${height}`} className="size-full" preserveAspectRatio="none">'''
+          if needle not in source:
+              raise SystemExit("QEO-92 patch anchor not found")
+          path.write_text(source.replace(needle, replacement, 1))
+          PY
+      - name: Commit GREEN implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/stock-detail/stock-tradingview-chart.tsx
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "fix(chart): show unavailable intraday state"
+          git push origin HEAD:tvq9612/qeo-92-chart-data-real-1m-1d-canonical-ohlcv-with-hotcold-storage
