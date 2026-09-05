@@ -42,6 +42,7 @@ export interface ResearchReportDetailViewModel {
   category: "macro" | "strategy" | "sector" | "other"
   sectorName: string | null
   originalSourceLink: string | null
+  originalPdfUrl: string | null
   parsedPageCount: number
   ingestionStatus: string
   analysisStatus: ResearchReportDetailStatus

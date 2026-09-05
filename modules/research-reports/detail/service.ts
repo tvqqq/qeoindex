@@ -1,6 +1,8 @@
+import { safeResearchReportPdfBrowserUrl } from "./pdf-route.ts"
 import {
   findLatestResearchReportAnalysisRow,
   findResearchReportDetailRow,
+  findResearchReportPdfSource,
   findResearchReportTickerMentionRows,
 } from "./repository.ts"
 import type {
@@ -146,6 +148,7 @@ function baseReportViewModel(row: Record<string, unknown>): ResearchReportDetail
     category: category(row.category),
     sectorName: nullableString(row.sector_name),
     originalSourceLink: safeHttpsLink(row.link),
+    originalPdfUrl: null,
     parsedPageCount: parsedPageCount(row.parsed_page_count),
     ingestionStatus: nonEmptyString(row.ingestion_status) ?? "discovered",
     analysisStatus: detailStatus(row.analysis_status),
@@ -189,7 +192,15 @@ export async function getResearchReportDetail(
   const reportRow = await findResearchReportDetailRow(client, reportId)
   if (!reportRow) return { status: "not_found" }
 
-  const report = baseReportViewModel(reportRow)
+  let originalPdfUrl: string | null = null
+  try {
+    const pdfSource = await findResearchReportPdfSource(client, reportId)
+    originalPdfUrl = safeResearchReportPdfBrowserUrl(pdfSource?.pdfUrl)
+  } catch {
+    originalPdfUrl = null
+  }
+
+  const report = { ...baseReportViewModel(reportRow), originalPdfUrl }
   if (report.analysisStatus !== "ready") return { status: "found", report }
 
   const contentHash = nonEmptyString(reportRow.content_hash)

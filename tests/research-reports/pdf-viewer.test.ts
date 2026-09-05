@@ -21,14 +21,22 @@ test("PDF page and zoom bounds are deterministic", () => {
   assert.equal(clampPdfZoom(1.25), 1.25)
 })
 
-test("PDF viewer uses bundled pdfjs worker and authenticated report-id endpoint only", () => {
+test("PDF viewer loads pdfjs only in the client runtime and keeps the bundled worker", () => {
   const code = source("components/research-reports/pdf-viewer.tsx")
-  assert.match(code, /pdfjs-dist/)
+  assert.match(code, /import\(["']pdfjs-dist["']\)/)
   assert.match(code, /GlobalWorkerOptions\.workerSrc/)
   assert.match(code, /new URL\(\s*["']pdfjs-dist\/build\/pdf\.worker\.min\.mjs["']/)
-  assert.match(code, /getDocument/)
-  assert.match(code, /\/api\/research-reports\/\$\{encodeURIComponent\(reportId\)\}\/pdf/)
+  assert.doesNotMatch(code, /import\s+\*\s+as\s+pdfjsLib\s+from\s+["']pdfjs-dist["']/)
   assert.doesNotMatch(code, /cdnjs|unpkg|jsdelivr/i)
+})
+
+test("PDF viewer prefers the approved original PDF URL and falls back to the authenticated report route", () => {
+  const code = source("components/research-reports/pdf-viewer.tsx")
+  assert.match(code, /const candidateUrls = originalPdfUrl \? \[originalPdfUrl, proxyUrl\] : \[proxyUrl\]/)
+  assert.match(code, /pdfjsLib\.getDocument\(\{ url \}\)/)
+  assert.match(code, /\/api\/research-reports\/\$\{encodeURIComponent\(reportId\)\}\/pdf/)
+  assert.match(code, /originalPdfUrl/)
+  assert.match(code, />\s*PDF gốc ↗\s*</)
 })
 
 test("PDF viewer renders exactly the active page canvas and cancels stale render work", () => {
@@ -49,11 +57,12 @@ test("PDF viewer exposes keyboard-operable navigation zoom and page controls", (
   assert.match(code, /type=["']number["']/)
 })
 
-test("pending citation page is applied after PDF metadata resolves and original source is optional", () => {
+test("pending citation page is applied after PDF metadata resolves and source links remain optional", () => {
   const code = source("components/research-reports/pdf-viewer.tsx")
   assert.match(code, /requestedPage/)
   assert.match(code, /clampPdfPage\(requestedPage,\s*pageCount\)/)
   assert.match(code, /onPageResolved\?\./)
   assert.match(code, /originalSourceLink/)
+  assert.match(code, /originalPdfUrl/)
   assert.match(code, /target=["']_blank["']/)
 })

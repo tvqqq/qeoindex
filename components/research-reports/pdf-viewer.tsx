@@ -1,22 +1,32 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import * as pdfjsLib from "pdfjs-dist"
 
 import { clampPdfPage, clampPdfZoom } from "./pdf-viewer-state"
 
 export { clampPdfPage, clampPdfZoom } from "./pdf-viewer-state"
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url,
-).toString()
-
-type PdfLoadingTask = ReturnType<typeof pdfjsLib.getDocument>
+type PdfJsModule = typeof import("pdfjs-dist")
+type PdfLoadingTask = ReturnType<PdfJsModule["getDocument"]>
 type PdfDocument = Awaited<PdfLoadingTask["promise"]>
 type PdfPage = Awaited<ReturnType<PdfDocument["getPage"]>>
 type PdfRenderTask = ReturnType<PdfPage["render"]>
 type ViewerStatus = "loading" | "ready" | "error"
+
+let pdfJsPromise: Promise<PdfJsModule> | null = null
+
+function loadPdfJs(): Promise<PdfJsModule> {
+  if (!pdfJsPromise) {
+    pdfJsPromise = import("pdfjs-dist").then((pdfjsLib) => {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/build/pdf.worker.min.mjs",
+        import.meta.url,
+      ).toString()
+      return pdfjsLib
+    })
+  }
+  return pdfJsPromise
+}
 
 function isRenderingCancelled(error: unknown): boolean {
   return error instanceof Error && error.name === "RenderingCancelledException"
@@ -26,12 +36,14 @@ export function PdfViewer({
   reportId,
   title,
   originalSourceLink,
+  originalPdfUrl,
   requestedPage,
   onPageResolved,
 }: {
   reportId: string
   title: string
   originalSourceLink: string | null
+  originalPdfUrl: string | null
   requestedPage: number | null
   onPageResolved?: (page: number) => void
 }) {
@@ -49,6 +61,7 @@ export function PdfViewer({
   useEffect(() => {
     const generation = ++documentGenerationRef.current
     let disposed = false
+    let loadingTask: PdfLoadingTask | null = null
 
     renderTaskRef.current?.cancel()
     renderTaskRef.current = null
@@ -59,11 +72,37 @@ export function PdfViewer({
     setStatus("loading")
     setErrorMessage(null)
 
-    const loadingTask = pdfjsLib.getDocument({
-      url: `/api/research-reports/${encodeURIComponent(reportId)}/pdf`,
-    })
+    const proxyUrl = `/api/research-reports/${encodeURIComponent(reportId)}/pdf`
+    const candidateUrls = originalPdfUrl ? [originalPdfUrl, proxyUrl] : [proxyUrl]
 
-    void loadingTask.promise
+    const openDocument = async () => {
+      const pdfjsLib = await loadPdfJs()
+      let lastError: unknown = null
+
+      for (const url of candidateUrls) {
+        if (disposed || generation !== documentGenerationRef.current) {
+          throw new Error("PDF viewer load cancelled")
+        }
+
+        const task = pdfjsLib.getDocument({ url })
+        loadingTask = task
+        try {
+          return await task.promise
+        } catch (error) {
+          lastError = error
+          try {
+            await task.destroy()
+          } catch {
+            // The next source is independent; cleanup failure must not block fallback.
+          }
+          if (loadingTask === task) loadingTask = null
+        }
+      }
+
+      throw lastError instanceof Error ? lastError : new Error("Unable to load research report PDF")
+    }
+
+    void openDocument()
       .then((document) => {
         if (disposed || generation !== documentGenerationRef.current) return
         setPdfDocument(document)
@@ -81,9 +120,9 @@ export function PdfViewer({
       documentGenerationRef.current += 1
       renderTaskRef.current?.cancel()
       renderTaskRef.current = null
-      void loadingTask.destroy()
+      if (loadingTask) void loadingTask.destroy()
     }
-  }, [reportId])
+  }, [originalPdfUrl, reportId])
 
   useEffect(() => {
     if (!pdfDocument || status !== "ready" || pageCount < 1) return
@@ -183,7 +222,7 @@ export function PdfViewer({
           Sau
         </button>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <button
             type="button"
             aria-label="Zoom out"
@@ -212,14 +251,24 @@ export function PdfViewer({
           >
             100%
           </button>
+          {originalPdfUrl ? (
+            <a
+              href={originalPdfUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="rounded-md border border-cyan-400/20 bg-cyan-400/[0.06] px-2.5 py-1.5 text-xs font-medium text-cyan-100 hover:bg-cyan-400/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+            >
+              PDF gốc ↗
+            </a>
+          ) : null}
           {originalSourceLink ? (
             <a
               href={originalSourceLink}
               target="_blank"
-              rel="noreferrer"
+              rel="noreferrer noopener"
               className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-zinc-200 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
             >
-              Mở nguồn gốc
+              Nguồn ↗
             </a>
           ) : null}
         </div>
@@ -235,7 +284,17 @@ export function PdfViewer({
         {status === "error" ? (
           <div className="mt-12 max-w-md text-center">
             <p className="text-sm font-medium text-amber-200">Không thể tải PDF.</p>
-            <p className="mt-2 text-xs text-zinc-400">Bạn vẫn có thể đọc phần phân tích và mở nguồn gốc nếu có.</p>
+            <p className="mt-2 text-xs text-zinc-400">Bạn vẫn có thể đọc phần phân tích hoặc mở file PDF gốc.</p>
+            {originalPdfUrl ? (
+              <a
+                href={originalPdfUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="mt-4 inline-flex rounded-lg border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/[0.12]"
+              >
+                Mở PDF gốc ↗
+              </a>
+            ) : null}
           </div>
         ) : null}
         <canvas

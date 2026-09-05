@@ -45,7 +45,7 @@ test("detail shell provides desktop split and exactly three accessible mobile ta
   assert.match(shell, /lg:hidden/)
 })
 
-test("report header renders persisted metadata lifecycle and safe original-source navigation", () => {
+test("report header renders persisted metadata lifecycle and safe source navigation", () => {
   const shell = source("components/research-reports/report-detail-shell.tsx")
 
   assert.match(shell, /report\.title/)
@@ -54,8 +54,20 @@ test("report header renders persisted metadata lifecycle and safe original-sourc
   assert.match(shell, /report\.category/)
   assert.match(shell, /report\.analysisStatus/)
   assert.match(shell, /originalSourceLink/)
+  assert.match(shell, /originalPdfUrl/)
+  assert.match(shell, />\s*Mở PDF gốc ↗\s*</)
   assert.match(shell, /target=["']_blank["']/)
   assert.match(shell, /rel=["']noreferrer noopener["']/)
+})
+
+test("detail shell provides a previous-page action with catalog fallback", () => {
+  const shell = source("components/research-reports/report-detail-shell.tsx")
+
+  assert.match(shell, /useRouter\(\)/)
+  assert.match(shell, /window\.history\.length\s*>\s*1/)
+  assert.match(shell, /router\.back\(\)/)
+  assert.match(shell, /router\.push\(["']\/insights\/reports["']\)/)
+  assert.match(shell, />\s*Quay lại\s*</)
 })
 
 test("detail shell forwards current persisted state to viewer analysis and chat without cross-fetching", () => {
@@ -65,6 +77,7 @@ test("detail shell forwards current persisted state to viewer analysis and chat 
   assert.match(shell, /title=\{report\.title\}/)
   assert.match(shell, /requestedPage=\{navigation\.requestedPage\}/)
   assert.match(shell, /originalSourceLink=\{report\.originalSourceLink\}/)
+  assert.match(shell, /originalPdfUrl=\{report\.originalPdfUrl\}/)
   assert.match(shell, /analysisStatus=\{report\.analysisStatus\}/)
   assert.match(shell, /analysis=\{report\.analysis\}/)
   assert.match(shell, /onNavigateCitation=\{navigateToCitation\}/)

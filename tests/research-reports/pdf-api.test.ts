@@ -5,6 +5,7 @@ import test from "node:test"
 import {
   publicPdfFailure,
   safeInlineFilename,
+  safeResearchReportPdfBrowserUrl,
   validatePdfReportId,
 } from "../../modules/research-reports/detail/pdf-route.ts"
 
@@ -26,19 +27,20 @@ test("PDF route authenticates before privileged service-role access", () => {
   assert.ok(serverClient > authGate)
 })
 
-test("PDF route resolves stored report source then reuses the QEO-81 secure fetch boundary", () => {
+test("PDF route resolves stored report source and redirects only to the approved browser URL", () => {
   const code = routeSource()
   assert.match(code, /findResearchReportPdfSource/)
-  assert.match(code, /fetchResearchReportPdf/)
+  assert.match(code, /safeResearchReportPdfBrowserUrl\(source\.pdfUrl\)/)
+  assert.match(code, /status:\s*307/)
+  assert.match(code, /Location:\s*target/)
+  assert.doesNotMatch(code, /fetchResearchReportPdf/)
   assert.doesNotMatch(code, /searchParams\.get\(["']url["']\)|body\.url|payload\.url|request\.json\(\)/)
 })
 
-test("successful PDF response is private no-store and nosniff", () => {
+test("PDF redirect response stays private no-store and nosniff", () => {
   const code = routeSource()
-  assert.match(code, /["']Content-Type["']\s*:\s*["']application\/pdf["']/i)
   assert.match(code, /["']Cache-Control["']\s*:\s*["']private, no-store["']/i)
   assert.match(code, /["']X-Content-Type-Options["']\s*:\s*["']nosniff["']/i)
-  assert.match(code, /["']Content-Disposition["']\s*:\s*safeInlineFilename\(/i)
 })
 
 test("PDF report id validation fails closed before lookup", () => {
@@ -47,6 +49,23 @@ test("PDF report id validation fails closed before lookup", () => {
     validatePdfReportId("11111111-1111-4111-8111-111111111111"),
     { ok: true, id: "11111111-1111-4111-8111-111111111111" },
   )
+})
+
+test("browser PDF URL is exposed only for configured HTTPS hosts without credentials", () => {
+  const previous = process.env.RESEARCH_REPORT_PDF_ALLOWED_HOSTS
+  process.env.RESEARCH_REPORT_PDF_ALLOWED_HOSTS = "cdn02.wigroup.vn,cdn.example.com"
+  try {
+    assert.equal(
+      safeResearchReportPdfBrowserUrl("https://cdn02.wigroup.vn/report.pdf"),
+      "https://cdn02.wigroup.vn/report.pdf",
+    )
+    assert.equal(safeResearchReportPdfBrowserUrl("https://evil.example/report.pdf"), null)
+    assert.equal(safeResearchReportPdfBrowserUrl("http://cdn02.wigroup.vn/report.pdf"), null)
+    assert.equal(safeResearchReportPdfBrowserUrl("https://user:pass@cdn02.wigroup.vn/report.pdf"), null)
+  } finally {
+    if (previous === undefined) delete process.env.RESEARCH_REPORT_PDF_ALLOWED_HOSTS
+    else process.env.RESEARCH_REPORT_PDF_ALLOWED_HOSTS = previous
+  }
 })
 
 test("Content-Disposition filename removes header injection and path separators", () => {
