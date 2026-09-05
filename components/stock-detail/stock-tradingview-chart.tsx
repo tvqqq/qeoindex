@@ -46,6 +46,9 @@ interface StockTradingViewChartProps {
   changePct?: number
 }
 
+const DEFAULT_RIGHT_OFFSET_BARS = 8
+const MAX_RIGHT_OFFSET_BARS = 32
+
 export function StockTradingViewChart({
   ticker,
   bars,
@@ -98,11 +101,13 @@ export function StockTradingViewChart({
 
   // Viewport zoom and scroll state (TradingView style)
   const [visibleBarsCount, setVisibleBarsCount] = useState<number>(75)
-  const [scrollOffset, setScrollOffset] = useState<number>(0) // 0 = rightmost recent bars; >0 = scrolled left into history
+  const [scrollOffset, setScrollOffset] = useState<number>(0) // >0 = scrolled left into history
+  const [rightOffsetBars, setRightOffsetBars] = useState<number>(DEFAULT_RIGHT_OFFSET_BARS)
+  const [manualPriceDomain, setManualPriceDomain] = useState<{ min: number; max: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isPanningRef = useRef(false)
   const panStartXRef = useRef(0)
-  const panStartOffsetRef = useRef(0)
+  const panStartOffsetRef = useRef(0) // signed viewport position: history > 0, future space < 0
 
   // Hover crosshair state (X bar index and Y position in SVG space)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
@@ -207,8 +212,8 @@ export function StockTradingViewChart({
   const rsiTop = volTop + volHeight + 8
   const macdTop = hasRsi ? rsiTop + subpaneHeight + 8 : volTop + volHeight + 8
 
-  // Chart metrics based on VISIBLE bars for auto-scaling
-  const chartMetrics = useMemo(() => {
+  // Auto metrics remain the source for reset bounds and volume scaling.
+  const autoChartMetrics = useMemo(() => {
     if (visibleBars.length === 0) return null
 
     let minPrice = Infinity
@@ -240,6 +245,20 @@ export function StockTradingViewChart({
       maxVol: Math.max(maxVol, 1),
     }
   }, [visibleBars, bollinger])
+
+  // Manual Y-axis scaling overrides only the price domain; volume remains auto-scaled.
+  const chartMetrics = useMemo(() => {
+    if (!autoChartMetrics) return null
+    if (!manualPriceDomain) return autoChartMetrics
+
+    const range = Math.max(0.0001, manualPriceDomain.max - manualPriceDomain.min)
+    return {
+      ...autoChartMetrics,
+      min: manualPriceDomain.min,
+      max: manualPriceDomain.max,
+      range,
+    }
+  }, [autoChartMetrics, manualPriceDomain])
 
   // Price Grid Levels for Y-Axis (5 clean horizontal levels)
   const priceLevels = useMemo(() => {
@@ -275,10 +294,13 @@ export function StockTradingViewChart({
     return ticks
   }, [visibleBars, timeframe])
 
+  const xSlotSpan = Math.max(1, visibleBars.length - 1 + rightOffsetBars)
+  const visibleSlotCount = Math.max(1, visibleBars.length + rightOffsetBars)
+
   // Coordinate Mapping
   const getX = useCallback(
-    (idx: number) => padLeft + (idx / Math.max(1, visibleBars.length - 1)) * plotWidth,
-    [padLeft, visibleBars.length, plotWidth],
+    (idx: number) => padLeft + (idx / xSlotSpan) * plotWidth,
+    [padLeft, plotWidth, xSlotSpan],
   )
   const getY = useCallback(
     (price: number) => {
@@ -315,7 +337,8 @@ export function StockTradingViewChart({
   const xToTime = (x: number) => {
     if (visibleBars.length === 0) return 0
     const ratio = Math.max(0, Math.min(1, (x - padLeft) / plotWidth))
-    const idx = Math.round(ratio * (visibleBars.length - 1))
+    const slotIndex = Math.round(ratio * xSlotSpan)
+    const idx = Math.max(0, Math.min(visibleBars.length - 1, slotIndex))
     return visibleBars[idx]?.time || visibleBars.at(-1)?.time || 0
   }
 
@@ -337,14 +360,37 @@ export function StockTradingViewChart({
   const ma50Path = useMemo(() => makeLinePath(ma50), [ma50, makeLinePath])
   const ma200Path = useMemo(() => makeLinePath(ma200), [ma200, makeLinePath])
 
-  // Mouse wheel Zooming (cursor-centered TradingView / TitanLabs mechanics)
+  // Mouse wheel Zooming (cursor-centered X zoom + TradingView-style Y-axis scaling)
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault()
     const container = containerRef.current
     let cursorRatio = 0.5
+
     if (container) {
       const rect = container.getBoundingClientRect()
-      const mouseX = e.clientX - rect.left - (padLeft * rect.width) / width
+      const pointerX = e.clientX - rect.left
+      const pointerY = e.clientY - rect.top
+      const yAxisStartPx = ((width - padRight) / width) * rect.width
+      const mainPriceBottomPx = ((padTop + mainPriceHeight) / height) * rect.height
+      const isOverPriceAxis = pointerX >= yAxisStartPx && pointerY >= 0 && pointerY <= mainPriceBottomPx
+
+      if (isOverPriceAxis && chartMetrics && autoChartMetrics) {
+        const svgY = (pointerY / Math.max(1, rect.height)) * height
+        const anchorRatio = Math.max(0, Math.min(1, (svgY - padTop) / Math.max(1, mainPriceHeight)))
+        const currentRange = chartMetrics.range
+        const zoomFactor = e.deltaY > 0 ? 1.12 : 0.89
+        const nextRange = Math.max(
+          autoChartMetrics.range * 0.25,
+          Math.min(autoChartMetrics.range * 6, currentRange * zoomFactor),
+        )
+        const anchorPrice = chartMetrics.max - anchorRatio * currentRange
+        const nextMax = anchorPrice + anchorRatio * nextRange
+
+        setManualPriceDomain({ min: nextMax - nextRange, max: nextMax })
+        return
+      }
+
+      const mouseX = pointerX - (padLeft * rect.width) / width
       const plotPx = (plotWidth * rect.width) / width
       cursorRatio = Math.max(0, Math.min(1, mouseX / Math.max(1, plotPx)))
     }
@@ -362,12 +408,12 @@ export function StockTradingViewChart({
     setScrollOffset(nextOffset)
   }
 
-  // Mouse Panning & Scrolling
+  // Mouse Panning & Scrolling. Signed position allows recent candles to move left into future space.
   const handleMouseDownCanvas = (e: React.MouseEvent<HTMLDivElement>) => {
     if (activeTool === "cursor") {
       isPanningRef.current = true
       panStartXRef.current = e.clientX
-      panStartOffsetRef.current = scrollOffset
+      panStartOffsetRef.current = scrollOffset - rightOffsetBars
     }
   }
 
@@ -378,10 +424,15 @@ export function StockTradingViewChart({
 
     if (isPanningRef.current) {
       const dx = e.clientX - panStartXRef.current
-      const barPx = Math.max(1, (plotWidth * rect.width) / width / Math.max(1, visibleBarsCount))
+      const barPx = Math.max(1, (plotWidth * rect.width) / width / Math.max(1, visibleSlotCount))
       const deltaBars = Math.round(dx / barPx)
-      const nextOffset = Math.max(0, Math.min(maxScrollOffset, panStartOffsetRef.current + deltaBars))
-      setScrollOffset(nextOffset)
+      const nextPosition = Math.max(
+        -MAX_RIGHT_OFFSET_BARS,
+        Math.min(maxScrollOffset, panStartOffsetRef.current + deltaBars),
+      )
+
+      setScrollOffset(Math.max(0, nextPosition))
+      setRightOffsetBars(Math.max(0, -nextPosition))
       return
     }
 
@@ -389,7 +440,8 @@ export function StockTradingViewChart({
       const relX = e.clientX - rect.left - (padLeft * rect.width) / width
       const effectiveWidth = (plotWidth * rect.width) / width
       const ratio = Math.max(0, Math.min(1, relX / Math.max(1, effectiveWidth)))
-      const idx = Math.round(ratio * (visibleBars.length - 1))
+      const slotIndex = Math.round(ratio * xSlotSpan)
+      const idx = Math.max(0, Math.min(visibleBars.length - 1, slotIndex))
       setHoverIndex(idx)
 
       const relY = e.clientY - rect.top
@@ -402,9 +454,15 @@ export function StockTradingViewChart({
     isPanningRef.current = false
   }
 
+  const handleResetPriceScale = () => {
+    setManualPriceDomain(null)
+  }
+
   const handleResetView = () => {
     setScrollOffset(0)
+    setRightOffsetBars(DEFAULT_RIGHT_OFFSET_BARS)
     setVisibleBarsCount(75)
+    setManualPriceDomain(null)
   }
 
   const activeBar = hoverIndex !== null && visibleBars[hoverIndex] ? visibleBars[hoverIndex] : visibleBars.at(-1)
@@ -430,14 +488,14 @@ export function StockTradingViewChart({
             <div className="flex items-center gap-2 mr-1">
               <span className="font-ticker text-base font-extrabold text-cyan-300 tracking-tight">{ticker}</span>
               {currentPrice ? (
-                <span className="font-mono text-xs font-bold text-white">
+                <span className="font-mono text-[11px] font-bold text-white">
                   {currentPrice.toLocaleString("vi-VN")}
                 </span>
               ) : null}
               {changePct !== undefined ? (
                 <span
                   className={cn(
-                    "rounded px-1.5 py-0.5 font-mono text-[10px] font-bold",
+                    "rounded px-1.5 py-0.5 font-mono text-[9px] font-bold",
                     changePct >= 0 ? "bg-emerald-400/20 text-emerald-300" : "bg-rose-400/20 text-rose-300",
                   )}
                 >
@@ -657,7 +715,7 @@ export function StockTradingViewChart({
         <div className="flex items-center gap-3">
           {/* OHLCV live readout */}
           {activeBar && (
-            <div className="hidden sm:flex flex-wrap items-center gap-2 font-mono text-[10px] text-slate-400">
+            <div className="hidden sm:flex flex-wrap items-center gap-2 font-mono text-[9px] text-slate-400">
               <span className="text-slate-500">
                 {new Date(activeBar.time * 1000).toLocaleDateString("vi-VN", {
                   day: "2-digit",
@@ -911,7 +969,7 @@ export function StockTradingViewChart({
                   x={width - padRight + 7}
                   y={y + 3.5}
                   fill="#788b9c"
-                  fontSize="10"
+                  fontSize="9"
                   fontFamily="monospace"
                 >
                   {p.toFixed(1)}
@@ -946,7 +1004,7 @@ export function StockTradingViewChart({
                   y={height - padBottom + 16}
                   textAnchor="middle"
                   fill="#64748b"
-                  fontSize="10"
+                  fontSize="9"
                   fontFamily="monospace"
                 >
                   {t.label}
@@ -968,7 +1026,7 @@ export function StockTradingViewChart({
             x={width - padRight + 7}
             y={volTop + volHeight}
             fill="#62727d"
-            fontSize="9"
+            fontSize="8"
             fontFamily="monospace"
           >
             Vol
@@ -1065,7 +1123,7 @@ export function StockTradingViewChart({
             const x = getX(i)
             const vH = (bar.volume / (chartMetrics?.maxVol ?? 1)) * volHeight
             const isBull = bar.close >= bar.open
-            const barW = Math.max(2, plotWidth / visibleBars.length - 1.5)
+            const barW = Math.max(2, plotWidth / visibleSlotCount - 1.5)
             return (
               <rect
                 key={`v-${bar.time}-${i}`}
@@ -1092,7 +1150,7 @@ export function StockTradingViewChart({
               const closeY = getY(bar.close)
               const bodyTop = Math.min(openY, closeY)
               const bodyHeight = Math.max(1.5, Math.abs(closeY - openY))
-              const candleW = Math.max(2, plotWidth / visibleBars.length - 2)
+              const candleW = Math.max(2, plotWidth / visibleSlotCount - 2)
 
               return (
                 <g key={`c-${bar.time}-${i}`}>
@@ -1121,7 +1179,7 @@ export function StockTradingViewChart({
               />
               {chartStyle === "area" && (
                 <path
-                  d={`${makeLinePath(visibleBars.map((b) => b.close))} L ${width - padRight} ${padTop + mainPriceHeight} L ${padLeft} ${padTop + mainPriceHeight} Z`}
+                  d={`${makeLinePath(visibleBars.map((b) => b.close))} L ${getX(Math.max(0, visibleBars.length - 1))} ${padTop + mainPriceHeight} L ${padLeft} ${padTop + mainPriceHeight} Z`}
                   fill="url(#area-gradient)"
                   opacity="0.3"
                 />
@@ -1153,17 +1211,17 @@ export function StockTradingViewChart({
               />
               <rect
                 x={width - padRight + 1}
-                y={getY(activeBar.close) - 8.5}
+                y={getY(activeBar.close) - 8}
                 width={padRight - 2}
-                height={17}
+                height={16}
                 fill={activeBar.close >= activeBar.open ? "#10b981" : "#f43f5e"}
                 rx="2"
               />
               <text
                 x={width - padRight + 6}
-                y={getY(activeBar.close) + 3.5}
+                y={getY(activeBar.close) + 3}
                 fill="#ffffff"
-                fontSize="10"
+                fontSize="9"
                 fontWeight="bold"
                 fontFamily="monospace"
               >
@@ -1202,9 +1260,9 @@ export function StockTradingViewChart({
                   />
                   <rect
                     x={width - padRight + 1}
-                    y={hoverY - 8.5}
+                    y={hoverY - 8}
                     width={padRight - 2}
-                    height={17}
+                    height={16}
                     fill="#111827"
                     stroke="rgba(255,255,255,0.2)"
                     strokeWidth="1"
@@ -1212,9 +1270,9 @@ export function StockTradingViewChart({
                   />
                   <text
                     x={width - padRight + 6}
-                    y={hoverY + 3.5}
+                    y={hoverY + 3}
                     fill="#e2e8f0"
-                    fontSize="10"
+                    fontSize="9"
                     fontWeight="bold"
                     fontFamily="monospace"
                   >
@@ -1232,7 +1290,7 @@ export function StockTradingViewChart({
                     ? `${d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} ${d.getDate()}/${d.getMonth() + 1}`
                     : `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`
                 const hX = getX(hoverIndex)
-                const pillW = 85
+                const pillW = 80
                 const pillX = Math.max(padLeft, Math.min(width - padRight - pillW, hX - pillW / 2))
                 return (
                   <g>
@@ -1240,7 +1298,7 @@ export function StockTradingViewChart({
                       x={pillX}
                       y={height - padBottom + 3}
                       width={pillW}
-                      height={18}
+                      height={17}
                       fill="#111827"
                       stroke="rgba(255,255,255,0.2)"
                       strokeWidth="1"
@@ -1248,10 +1306,10 @@ export function StockTradingViewChart({
                     />
                     <text
                       x={pillX + pillW / 2}
-                      y={height - padBottom + 15}
+                      y={height - padBottom + 14}
                       textAnchor="middle"
                       fill="#e2e8f0"
-                      fontSize="9"
+                      fontSize="8.5"
                       fontWeight="bold"
                       fontFamily="monospace"
                     >
@@ -1284,7 +1342,7 @@ export function StockTradingViewChart({
                 return <path d={rsiPath} fill="none" stroke="#a855f7" strokeWidth="1.8" />
               })()}
 
-              <text x={padLeft + 8} y={rsiTop + 12} fill="#c084fc" fontSize="10" fontFamily="monospace" fontWeight="bold">
+              <text x={padLeft + 8} y={rsiTop + 12} fill="#c084fc" fontSize="9" fontFamily="monospace" fontWeight="bold">
                 RSI (14): {rsiSeries.at(-1)?.toFixed(1) || "—"}
               </text>
               <text x={width - padRight + 8} y={rsiTop + subpaneHeight * 0.3 + 3} fill="#94a3b8" fontSize="8" fontFamily="monospace">
@@ -1321,23 +1379,23 @@ export function StockTradingViewChart({
                 )
               })}
 
-              <text x={padLeft + 8} y={macdTop + 12} fill="#38bdf8" fontSize="10" fontFamily="monospace" fontWeight="bold">
+              <text x={padLeft + 8} y={macdTop + 12} fill="#38bdf8" fontSize="9" fontFamily="monospace" fontWeight="bold">
                 MACD (12, 26, 9)
               </text>
             </g>
           )}
 
-          {/* Price Axis Double-click Reset Trigger */}
+          {/* Price Axis Wheel Zoom / Double-click Auto-scale Trigger */}
           <rect
             x={width - padRight}
             y={0}
             width={padRight}
-            height={height}
+            height={padTop + mainPriceHeight}
             fill="transparent"
-            className="cursor-pointer"
-            onDoubleClick={handleResetView}
+            className="cursor-ns-resize"
+            onDoubleClick={handleResetPriceScale}
           >
-            <title>Nhấn đúp để đặt lại tỷ lệ giá (Reset Auto Scale)</title>
+            <title>Lăn chuột để thu/phóng trục giá · Nhấn đúp để Auto Scale</title>
           </rect>
 
           {/* Area gradient definition */}
@@ -1392,6 +1450,8 @@ export function StockTradingViewChart({
               title={preset.title}
               onClick={() => {
                 setScrollOffset(0)
+                setRightOffsetBars(DEFAULT_RIGHT_OFFSET_BARS)
+                setManualPriceDomain(null)
                 setVisibleBarsCount(Math.min(displayBars.length, Math.max(15, preset.bars)))
               }}
               className={cn(
@@ -1416,8 +1476,8 @@ export function StockTradingViewChart({
           >
             Tự động
           </button>
-          <span className="hidden sm:inline text-[10px] text-slate-500">
-            {visibleBars.length} nến · Lăn chuột để zoom · Kéo rê để cuộn
+          <span className="hidden sm:inline text-[9px] text-slate-500">
+            {visibleBars.length} nến · Lăn chart để zoom X · Lăn trục giá để scale Y · Kéo rê để cuộn
           </span>
         </div>
       </div>
