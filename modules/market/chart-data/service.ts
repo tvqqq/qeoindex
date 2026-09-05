@@ -57,6 +57,11 @@ function rowToBar(row: Record<string, unknown>): CanonicalOhlcvBar | null {
   return Number.isFinite(timestamp) ? bar : null
 }
 
+function laterTime(current: number | null, bars: CanonicalOhlcvBar[]) {
+  const latest = bars.at(-1)?.time
+  return latest == null ? current : Math.max(current ?? latest, latest)
+}
+
 async function loadDaily(supabase: SupabaseClient, request: CanonicalChartOhlcvRequest, now = new Date()): Promise<CanonicalChartOhlcvResult> {
   const { data, error } = await supabase
     .from("market_ohlcv_history")
@@ -110,16 +115,19 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   ])
 
   const tagged: SourceTaggedBar[] = []
+  let durablePersistedThrough: number | null = null
   if (hotRead.status === "fulfilled") {
     const durableHotBars = session.isLiveSession
       ? hotRead.value.filter((bar) => bar.time < currentMinuteStart)
       : hotRead.value
     tagged.push(...durableHotBars.map((bar) => ({ source: "hot" as const, bar })))
+    durablePersistedThrough = laterTime(durablePersistedThrough, durableHotBars)
   } else {
     errors.push({ code: "STORAGE_UNAVAILABLE" })
   }
   if (coldRead.status === "fulfilled") {
     tagged.push(...coldRead.value.bars.map((bar) => ({ source: "cold" as const, bar })))
+    durablePersistedThrough = laterTime(durablePersistedThrough, coldRead.value.bars)
   } else {
     errors.push({ code: "STORAGE_UNAVAILABLE" })
   }
@@ -186,6 +194,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
               liveTail: session.isLiveSession,
             },
           })
+          durablePersistedThrough = laterTime(durablePersistedThrough, completedBars)
         } catch {
           errors.push({ code: "STORAGE_UNAVAILABLE" })
         }
@@ -206,9 +215,6 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   const currentBar = session.isLiveSession
     ? normalized.bars.find((bar) => bar.time === currentMinuteStart) ?? null
     : null
-  const persistedBars = session.isLiveSession
-    ? normalized.bars.filter((bar) => bar.time < currentMinuteStart)
-    : normalized.bars
 
   return {
     ...request,
@@ -223,7 +229,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
       lastUpdatedAt: now.toISOString(),
       sessionState: session.isLiveSession ? "LIVE" : "CLOSED",
       currentBarTime: currentBar?.time ?? null,
-      persistedThrough: persistedBars.at(-1)?.time ?? null,
+      persistedThrough: durablePersistedThrough,
     },
   }
 }
