@@ -37,13 +37,19 @@ test("StockTradingViewChart implements 100% TradingView scroll, zoom out, and co
 test("StockTradingViewChart keeps TradingView-style future space and scalable price rail", () => {
   const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
 
-  // Latest candle can sit left of the price rail and pan farther into bounded future space.
+  // Latest candle can sit left of the price rail and pan to at least half the visible candle count.
   assert.match(chartCode, /DEFAULT_RIGHT_OFFSET_BARS = 8/)
-  assert.match(chartCode, /MAX_RIGHT_OFFSET_BARS = 32/)
-  assert.match(chartCode, /rightOffsetBars/)
+  assert.match(chartCode, /MIN_MAX_RIGHT_OFFSET_BARS = 32/)
+  assert.match(chartCode, /Math\.ceil\(visibleBars\.length \* 0\.5\)/)
+  assert.match(chartCode, /maxRightOffsetBars/)
   assert.match(chartCode, /scrollOffset - rightOffsetBars/)
   assert.match(chartCode, /setRightOffsetBars\(Math\.max\(0, -nextPosition\)\)/)
-  assert.match(chartCode, /visibleBars\.length - 1 \+ rightOffsetBars/)
+  assert.match(chartCode, /visibleBars\.length \+ rightOffsetBars/)
+
+  // Future blank space owns real projected timestamps so canonical drawings can be created there.
+  assert.match(chartCode, /projectFutureTimes/)
+  assert.match(chartCode, /futureTimes\[slotIndex - visibleBars\.length\]/)
+  assert.match(chartCode, /futureTimes\.findIndex/)
 
   // Wheel on the Y rail changes only the manual price domain and supports auto-scale reset.
   assert.match(chartCode, /manualPriceDomain/)
@@ -51,6 +57,22 @@ test("StockTradingViewChart keeps TradingView-style future space and scalable pr
   assert.match(chartCode, /setManualPriceDomain\(\{ min: nextMax - nextRange, max: nextMax \}\)/)
   assert.match(chartCode, /onDoubleClick=\{handleResetPriceScale\}/)
   assert.match(chartCode, /cursor-ns-resize/)
+})
+
+test("StockTradingViewChart exposes future Ichimoku, volume MA20 and collapsible lower panes", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+  const indicatorCode = source("components/stock-detail/chart/stock-chart-indicators.ts")
+
+  assert.match(indicatorCode, /ICHIMOKU_DISPLACEMENT = 26/)
+  assert.match(indicatorCode, /Array\(n \+ ICHIMOKU_DISPLACEMENT\)/)
+  assert.match(indicatorCode, /calculateVolumeSma/)
+  assert.match(chartCode, /calculateVolumeSma/)
+  assert.match(chartCode, /volumeMa20Path/)
+  assert.match(chartCode, /isRsiCollapsed/)
+  assert.match(chartCode, /isMacdCollapsed/)
+  assert.match(chartCode, /EXPANDED_SUBPANE_HEIGHT = 92/)
+  assert.match(chartCode, /vectorEffect="non-scaling-stroke"/)
+  assert.match(chartCode, /<CalendarDays/)
 })
 
 test("StockChartDrawingCanvas supports object selection, dragging, and anchor handles", () => {
@@ -154,13 +176,16 @@ test("StockTradingViewChart renders dedicated X-axis (time) and Y-axis (price) r
 test("StockTradingViewChart implements TitanLabs-style bottom range presets and auto-fit reset", () => {
   const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
 
-  // Presets: 1T, 3T, 6T, 1N, Tất cả, and Tự động
-  assert.match(chartCode, /label: "1T"/)
-  assert.match(chartCode, /label: "3T"/)
-  assert.match(chartCode, /label: "6T"/)
+  // Presets and TradingView-style status controls
+  assert.match(chartCode, /label: "5N"/)
+  assert.match(chartCode, /label: "3N"/)
   assert.match(chartCode, /label: "1N"/)
+  assert.match(chartCode, /label: "6T"/)
+  assert.match(chartCode, /label: "3T"/)
+  assert.match(chartCode, /label: "1T"/)
   assert.match(chartCode, /label: "Tất cả"/)
-  assert.match(chartCode, /Tự động/)
+  assert.match(chartCode, /UTC\+7/)
+  assert.match(chartCode, /tự động/)
 
   // Cursor-anchored wheel zoom calculations
   assert.match(chartCode, /cursorRatio = Math\.max\(0, Math\.min\(1, mouseX \/ Math\.max\(1, plotPx\)\)\)/)

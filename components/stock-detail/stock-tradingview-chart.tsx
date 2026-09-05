@@ -2,6 +2,7 @@
 
 import React, { useCallback, useMemo, useRef, useState } from "react"
 import {
+  CalendarDays,
   Camera,
   Check,
   ChevronDown,
@@ -25,12 +26,16 @@ import {
   calculateRsiSeries,
   calculateSma,
   calculateVolumeProfile,
+  calculateVolumeSma,
+  ICHIMOKU_DISPLACEMENT,
 } from "./chart/stock-chart-indicators"
+import { formatFutureTimelineLabel, projectFutureTimes } from "./chart/future-timeline"
 import { aggregateBarsByTimeframe } from "./chart/stock-chart-timeframes"
 import {
   ALL_TIMEFRAMES,
   DEFAULT_INDICATOR_CONFIG,
   QUICK_TIMEFRAMES,
+  type ChartTimeframe,
   type DrawingIconType,
   type DrawingTool,
 } from "./chart/stock-chart-types"
@@ -48,7 +53,18 @@ interface StockTradingViewChartProps {
 }
 
 const DEFAULT_RIGHT_OFFSET_BARS = 8
-const MAX_RIGHT_OFFSET_BARS = 32
+const MIN_MAX_RIGHT_OFFSET_BARS = 32
+const EXPANDED_SUBPANE_HEIGHT = 92
+const COLLAPSED_SUBPANE_HEIGHT = 24
+const SUBPANE_GAP = 8
+
+function formatCompactVolume(volume: number | null | undefined) {
+  if (typeof volume !== "number" || !Number.isFinite(volume)) return "—"
+  if (Math.abs(volume) >= 1_000_000_000) return `${(volume / 1_000_000_000).toFixed(2)}B`
+  if (Math.abs(volume) >= 1_000_000) return `${(volume / 1_000_000).toFixed(2)}M`
+  if (Math.abs(volume) >= 1_000) return `${(volume / 1_000).toFixed(1)}K`
+  return Math.round(volume).toLocaleString("vi-VN")
+}
 
 export function StockTradingViewChart({
   ticker,
@@ -105,6 +121,8 @@ export function StockTradingViewChart({
   const [scrollOffset, setScrollOffset] = useState<number>(0) // >0 = scrolled left into history
   const [rightOffsetBars, setRightOffsetBars] = useState<number>(DEFAULT_RIGHT_OFFSET_BARS)
   const [manualPriceDomain, setManualPriceDomain] = useState<{ min: number; max: number } | null>(null)
+  const [isRsiCollapsed, setIsRsiCollapsed] = useState(false)
+  const [isMacdCollapsed, setIsMacdCollapsed] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const isPanningRef = useRef(false)
   const panStartXRef = useRef(0)
@@ -132,10 +150,23 @@ export function StockTradingViewChart({
     return displayBars.slice(startIdx, endIdx)
   }, [displayBars, startIdx, endIdx])
 
+  const maxRightOffsetBars = Math.max(
+    MIN_MAX_RIGHT_OFFSET_BARS,
+    ICHIMOKU_DISPLACEMENT,
+    Math.ceil(visibleBars.length * 0.5),
+  )
+
+  const futureTimes = useMemo(() => {
+    const lastTime = visibleBars.at(-1)?.time
+    if (!lastTime) return []
+    return projectFutureTimes(lastTime, timeframe, maxRightOffsetBars)
+  }, [visibleBars, timeframe, maxRightOffsetBars])
+
   // Technical Indicators calculations on full displayBars, then mapped
   const ma20All = useMemo(() => calculateSma(displayBars, 20), [displayBars])
   const ma50All = useMemo(() => calculateSma(displayBars, 50), [displayBars])
   const ma200All = useMemo(() => calculateSma(displayBars, 200), [displayBars])
+  const volumeMa20All = useMemo(() => calculateVolumeSma(displayBars, 20), [displayBars])
 
   const rsiSeriesAll = useMemo(() => {
     return isMaximized && indicators.showRsi ? calculateRsiSeries(displayBars, 14) : []
@@ -170,18 +201,23 @@ export function StockTradingViewChart({
   const ma20 = useMemo(() => ma20All.slice(startIdx, endIdx), [ma20All, startIdx, endIdx])
   const ma50 = useMemo(() => ma50All.slice(startIdx, endIdx), [ma50All, startIdx, endIdx])
   const ma200 = useMemo(() => ma200All.slice(startIdx, endIdx), [ma200All, startIdx, endIdx])
+  const volumeMa20 = useMemo(() => volumeMa20All.slice(startIdx, endIdx), [volumeMa20All, startIdx, endIdx])
   const rsiSeries = useMemo(() => rsiSeriesAll.slice(startIdx, endIdx), [rsiSeriesAll, startIdx, endIdx])
   const macdSeries = macdSeriesAll
 
   const ichimoku = useMemo(() => {
     if (!ichimokuAll) return null
+    const visibleFutureCount = endIdx === displayBars.length
+      ? Math.min(ICHIMOKU_DISPLACEMENT, rightOffsetBars)
+      : 0
+    const spanEndIdx = endIdx + visibleFutureCount
     return {
       tenkan: ichimokuAll.tenkan.slice(startIdx, endIdx),
       kijun: ichimokuAll.kijun.slice(startIdx, endIdx),
-      spanA: ichimokuAll.spanA.slice(startIdx, endIdx),
-      spanB: ichimokuAll.spanB.slice(startIdx, endIdx),
+      spanA: ichimokuAll.spanA.slice(startIdx, spanEndIdx),
+      spanB: ichimokuAll.spanB.slice(startIdx, spanEndIdx),
     }
-  }, [ichimokuAll, startIdx, endIdx])
+  }, [ichimokuAll, startIdx, endIdx, displayBars.length, rightOffsetBars])
 
   const bollinger = useMemo(() => {
     if (!bollingerAll) return null
@@ -212,15 +248,19 @@ export function StockTradingViewChart({
 
   const hasRsi = isMaximized && indicators.showRsi
   const hasMacd = isMaximized && indicators.showMacd
-  const subpaneCount = (hasRsi ? 1 : 0) + (hasMacd ? 1 : 0)
-  const subpaneHeight = 65
+  const rsiPaneHeight = hasRsi ? (isRsiCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0
+  const macdPaneHeight = hasMacd ? (isMacdCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0
 
   const volHeight = isMaximized ? 55 : 40
-  const plotHeight = height - padTop - padBottom - subpaneCount * subpaneHeight
-  const mainPriceHeight = plotHeight - volHeight - 12
+  const indicatorPaneTotal =
+    (hasRsi ? rsiPaneHeight + SUBPANE_GAP : 0) +
+    (hasMacd ? macdPaneHeight + SUBPANE_GAP : 0)
+  const mainPriceHeight = height - padTop - padBottom - volHeight - 10 - indicatorPaneTotal
   const volTop = padTop + mainPriceHeight + 10
-  const rsiTop = volTop + volHeight + 8
-  const macdTop = hasRsi ? rsiTop + subpaneHeight + 8 : volTop + volHeight + 8
+  const rsiTop = volTop + volHeight + SUBPANE_GAP
+  const macdTop = hasRsi
+    ? rsiTop + rsiPaneHeight + SUBPANE_GAP
+    : volTop + volHeight + SUBPANE_GAP
 
   // Auto metrics remain the source for reset bounds and volume scaling.
   const autoChartMetrics = useMemo(() => {
@@ -245,6 +285,14 @@ export function StockTradingViewChart({
       })
     }
 
+    if (ichimoku) {
+      for (const value of [...ichimoku.spanA, ...ichimoku.spanB]) {
+        if (value == null) continue
+        if (value > maxPrice) maxPrice = value
+        if (value < minPrice) minPrice = value
+      }
+    }
+
     const padding = (maxPrice - minPrice) * 0.08 || 1
     const priceRange = maxPrice - minPrice + padding * 2
 
@@ -254,7 +302,7 @@ export function StockTradingViewChart({
       range: priceRange,
       maxVol: Math.max(maxVol, 1),
     }
-  }, [visibleBars, bollinger])
+  }, [visibleBars, bollinger, ichimoku])
 
   // Manual Y-axis scaling overrides only the price domain; volume remains auto-scaled.
   const chartMetrics = useMemo(() => {
@@ -282,30 +330,35 @@ export function StockTradingViewChart({
     return levels
   }, [chartMetrics])
 
-  // Time Ticks for X-Axis (evenly distributed according to visible slice)
+  const visibleTimelineSlots = Math.max(1, visibleBars.length + rightOffsetBars)
+  const xSlotSpan = Math.max(1, visibleTimelineSlots - 1)
+  const visibleSlotCount = visibleTimelineSlots
+
+  // Time Ticks for X-Axis span real candles and the currently opened future area.
   const timeTicks = useMemo(() => {
     if (visibleBars.length === 0) return []
     const count = 6
-    const step = Math.max(1, Math.floor((visibleBars.length - 1) / count))
-    const ticks: { index: number; bar: OhlcvBar; label: string }[] = []
-    for (let i = 0; i < visibleBars.length; i += step) {
-      const b = visibleBars[i]
-      const d = new Date(b.time * 1000)
-      let label = ""
-      if (timeframe.includes("m") || timeframe.includes("h")) {
-        label = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
-      } else if (timeframe === "1D" || timeframe === "3D" || timeframe === "1W") {
-        label = `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}`
-      } else {
-        label = `${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`
-      }
-      ticks.push({ index: i, bar: b, label })
-    }
-    return ticks
-  }, [visibleBars, timeframe])
+    const lastSlotIndex = Math.max(0, visibleTimelineSlots - 1)
+    const step = Math.max(1, Math.round(lastSlotIndex / count))
+    const ticks: { index: number; time: number; label: string }[] = []
 
-  const xSlotSpan = Math.max(1, visibleBars.length - 1 + rightOffsetBars)
-  const visibleSlotCount = Math.max(1, visibleBars.length + rightOffsetBars)
+    for (let slotIndex = 0; slotIndex <= lastSlotIndex; slotIndex += step) {
+      const time = slotIndex < visibleBars.length
+        ? visibleBars[slotIndex]?.time
+        : futureTimes[slotIndex - visibleBars.length]
+      if (!time) continue
+      ticks.push({ index: slotIndex, time, label: formatFutureTimelineLabel(time, timeframe) })
+    }
+
+    const finalTime = rightOffsetBars > 0
+      ? futureTimes[rightOffsetBars - 1]
+      : visibleBars.at(-1)?.time
+    if (finalTime && ticks.at(-1)?.index !== lastSlotIndex) {
+      ticks.push({ index: lastSlotIndex, time: finalTime, label: formatFutureTimelineLabel(finalTime, timeframe) })
+    }
+
+    return ticks
+  }, [visibleBars, visibleTimelineSlots, rightOffsetBars, futureTimes, timeframe])
 
   // Coordinate Mapping
   const getX = useCallback(
@@ -329,27 +382,41 @@ export function StockTradingViewChart({
   const timeToX = (time: number) => {
     if (visibleBars.length === 0) return 0
     if (time < visibleBars[0].time) return -60 // offscreen left
-    if (time > visibleBars.at(-1)!.time) return width + 60 // offscreen right
 
-    // Exact or closest interpolation
-    for (let i = 0; i < visibleBars.length; i++) {
-      if (visibleBars[i].time >= time) {
-        if (i === 0 || visibleBars[i].time === time) return getX(i)
-        const t0 = visibleBars[i - 1].time
-        const t1 = visibleBars[i].time
-        const frac = (time - t0) / Math.max(1, t1 - t0)
-        return getX(i - 1) + frac * (getX(i) - getX(i - 1))
+    const lastRealTime = visibleBars.at(-1)!.time
+    if (time <= lastRealTime) {
+      for (let i = 0; i < visibleBars.length; i++) {
+        if (visibleBars[i].time >= time) {
+          if (i === 0 || visibleBars[i].time === time) return getX(i)
+          const t0 = visibleBars[i - 1].time
+          const t1 = visibleBars[i].time
+          const frac = (time - t0) / Math.max(1, t1 - t0)
+          return getX(i - 1) + frac * (getX(i) - getX(i - 1))
+        }
       }
+      return getX(visibleBars.length - 1)
     }
-    return getX(visibleBars.length - 1)
+
+    const futureIdx = futureTimes.findIndex((futureTime) => futureTime >= time)
+    if (futureIdx < 0) return width + 60
+
+    const targetIndex = visibleBars.length + futureIdx
+    const previousTime = futureIdx === 0 ? lastRealTime : futureTimes[futureIdx - 1]
+    const previousIndex = targetIndex - 1
+    const targetTime = futureTimes[futureIdx]
+    if (targetTime === time || targetTime <= previousTime) return getX(targetIndex)
+    const frac = (time - previousTime) / Math.max(1, targetTime - previousTime)
+    return getX(previousIndex) + frac * (getX(targetIndex) - getX(previousIndex))
   }
 
   const xToTime = (x: number) => {
     if (visibleBars.length === 0) return 0
     const ratio = Math.max(0, Math.min(1, (x - padLeft) / plotWidth))
     const slotIndex = Math.round(ratio * xSlotSpan)
-    const idx = Math.max(0, Math.min(visibleBars.length - 1, slotIndex))
-    return visibleBars[idx]?.time || visibleBars.at(-1)?.time || 0
+    if (slotIndex < visibleBars.length) {
+      return visibleBars[Math.max(0, slotIndex)]?.time || visibleBars[0]?.time || 0
+    }
+    return futureTimes[slotIndex - visibleBars.length] || futureTimes.at(-1) || visibleBars.at(-1)?.time || 0
   }
 
   const makeLinePath = useCallback(
@@ -366,9 +433,24 @@ export function StockTradingViewChart({
     [getX, getY],
   )
 
+  const makeVolumePath = useCallback(
+    (series: Array<number | null>) => {
+      let path = ""
+      series.forEach((value, i) => {
+        if (value == null) return
+        const x = getX(i)
+        const y = volTop + volHeight - (value / Math.max(1, chartMetrics?.maxVol ?? 1)) * volHeight
+        path += path === "" ? `M ${x} ${y}` : ` L ${x} ${y}`
+      })
+      return path
+    },
+    [getX, volTop, volHeight, chartMetrics?.maxVol],
+  )
+
   const ma20Path = useMemo(() => makeLinePath(ma20), [ma20, makeLinePath])
   const ma50Path = useMemo(() => makeLinePath(ma50), [ma50, makeLinePath])
   const ma200Path = useMemo(() => makeLinePath(ma200), [ma200, makeLinePath])
+  const volumeMa20Path = useMemo(() => makeVolumePath(volumeMa20), [volumeMa20, makeVolumePath])
   const ichimokuSpanAPath = useMemo(() => makeLinePath(ichimoku?.spanA ?? []), [ichimoku, makeLinePath])
   const ichimokuSpanBPath = useMemo(() => makeLinePath(ichimoku?.spanB ?? []), [ichimoku, makeLinePath])
   const bollingerUpperPath = useMemo(() => makeLinePath(bollinger?.upper ?? []), [bollinger, makeLinePath])
@@ -442,7 +524,7 @@ export function StockTradingViewChart({
       const barPx = Math.max(1, (plotWidth * rect.width) / width / Math.max(1, visibleSlotCount))
       const deltaBars = Math.round(dx / barPx)
       const nextPosition = Math.max(
-        -MAX_RIGHT_OFFSET_BARS,
+        -maxRightOffsetBars,
         Math.min(maxScrollOffset, panStartOffsetRef.current + deltaBars),
       )
 
@@ -456,8 +538,7 @@ export function StockTradingViewChart({
       const effectiveWidth = (plotWidth * rect.width) / width
       const ratio = Math.max(0, Math.min(1, relX / Math.max(1, effectiveWidth)))
       const slotIndex = Math.round(ratio * xSlotSpan)
-      const idx = Math.max(0, Math.min(visibleBars.length - 1, slotIndex))
-      setHoverIndex(idx)
+      setHoverIndex(slotIndex < visibleBars.length ? Math.max(0, slotIndex) : null)
 
       const relY = e.clientY - rect.top
       const svgY = (relY / Math.max(1, rect.height)) * height
@@ -481,6 +562,8 @@ export function StockTradingViewChart({
   }
 
   const activeBar = hoverIndex !== null && visibleBars[hoverIndex] ? visibleBars[hoverIndex] : visibleBars.at(-1)
+  const latestVolume = visibleBars.at(-1)?.volume
+  const latestVolumeMa20 = volumeMa20.at(-1)
 
   const activeIndicatorsCount = Object.values(indicators).filter(Boolean).length
   const editingDrawing = drawings.find((d) => d.id === editingTextDrawingId)
@@ -982,9 +1065,9 @@ export function StockTradingViewChart({
                 />
                 <text
                   x={width - padRight + 7}
-                  y={y + 3.5}
-                  fill="#788b9c"
-                  fontSize="9"
+                  y={y + 4}
+                  fill="#91a2b3"
+                  fontSize="10.5"
                   fontFamily="monospace"
                 >
                   {p.toFixed(1)}
@@ -997,7 +1080,7 @@ export function StockTradingViewChart({
           {timeTicks.map((t) => {
             const x = getX(t.index)
             return (
-              <g key={`tt-${t.index}`}>
+              <g key={`tt-${t.index}-${t.time}`}>
                 <line
                   x1={x}
                   y1={padTop}
@@ -1018,8 +1101,8 @@ export function StockTradingViewChart({
                   x={x}
                   y={height - padBottom + 16}
                   textAnchor="middle"
-                  fill="#64748b"
-                  fontSize="9"
+                  fill="#7d8da0"
+                  fontSize="9.5"
                   fontFamily="monospace"
                 >
                   {t.label}
@@ -1028,7 +1111,7 @@ export function StockTradingViewChart({
             )
           })}
 
-          {/* Volume Baseline & Label */}
+          {/* Volume Baseline & labels */}
           <line
             x1={padLeft}
             y1={volTop + volHeight}
@@ -1038,13 +1121,33 @@ export function StockTradingViewChart({
             opacity="0.9"
           />
           <text
-            x={width - padRight + 7}
-            y={volTop + volHeight}
-            fill="#62727d"
-            fontSize="8"
+            x={padLeft + 8}
+            y={volTop + 11}
+            fill="#94a3b8"
+            fontSize="9.5"
             fontFamily="monospace"
           >
-            Vol
+            Vol <tspan fill="#d7e0ea" fontWeight="bold">{formatCompactVolume(latestVolume)}</tspan>
+            {"  "}MA20 <tspan fill="#f59e0b" fontWeight="bold">{formatCompactVolume(latestVolumeMa20)}</tspan>
+          </text>
+          <text
+            x={width - padRight + 7}
+            y={volTop + 12}
+            fill="#c7d2df"
+            fontSize="10"
+            fontFamily="monospace"
+            fontWeight="bold"
+          >
+            {formatCompactVolume(latestVolume)}
+          </text>
+          <text
+            x={width - padRight + 7}
+            y={volTop + 25}
+            fill="#f59e0b"
+            fontSize="8.5"
+            fontFamily="monospace"
+          >
+            MA {formatCompactVolume(latestVolumeMa20)}
           </text>
 
           {/* 1. Volume Profile Bars + explicit POC price badge */}
@@ -1101,7 +1204,7 @@ export function StockTradingViewChart({
                       fill="#fff1f2"
                       fontFamily="monospace"
                       fontWeight="bold"
-                      fontSize="7.2"
+                      fontSize="8.4"
                     >
                       POC {volumeProfile.pocPrice.toFixed(1)}
                     </text>
@@ -1111,10 +1214,10 @@ export function StockTradingViewChart({
             </g>
           )}
 
-          {/* 2. Ichimoku Cloud — muted TradingView-like bull/bear colors + Span A/B outlines */}
+          {/* 2. Ichimoku Cloud — future-aware muted TradingView-like bull/bear colors */}
           {ichimoku && (
             <g>
-              {visibleBars.map((_, i) => {
+              {Array.from({ length: ichimoku.spanA.length }, (_, i) => i).map((i) => {
                 if (i === 0) return null
                 const spanA1 = ichimoku.spanA[i - 1]
                 const spanB1 = ichimoku.spanB[i - 1]
@@ -1156,9 +1259,9 @@ export function StockTradingViewChart({
             </g>
           )}
 
-          {/* 3. Bollinger Bands — upper/lower white dashed lines only */}
+          {/* 3. Bollinger Bands — muted white dashed upper/lower lines */}
           {bollinger && (
-            <g opacity="0.78">
+            <g opacity="0.48">
               <path
                 d={bollingerUpperPath}
                 fill="none"
@@ -1195,6 +1298,14 @@ export function StockTradingViewChart({
               />
             )
           })}
+          <path
+            d={volumeMa20Path}
+            fill="none"
+            stroke="#f59e0b"
+            strokeWidth="1"
+            vectorEffect="non-scaling-stroke"
+            opacity="0.95"
+          />
 
           {/* 5. Main Candlesticks / Line Chart */}
           {chartStyle === "candles" || chartStyle === "hollow" ? (
@@ -1294,17 +1405,17 @@ export function StockTradingViewChart({
               />
               <rect
                 x={width - padRight + 1}
-                y={getY(activeBar.close) - 8}
+                y={getY(activeBar.close) - 9}
                 width={padRight - 2}
-                height={16}
+                height={18}
                 fill={activeBar.close >= activeBar.open ? "#10b981" : "#f43f5e"}
                 rx="2"
               />
               <text
                 x={width - padRight + 6}
-                y={getY(activeBar.close) + 3}
+                y={getY(activeBar.close) + 4}
                 fill="#ffffff"
-                fontSize="9"
+                fontSize="10.5"
                 fontWeight="bold"
                 fontFamily="monospace"
               >
@@ -1343,9 +1454,9 @@ export function StockTradingViewChart({
                   />
                   <rect
                     x={width - padRight + 1}
-                    y={hoverY - 8}
+                    y={hoverY - 9}
                     width={padRight - 2}
-                    height={16}
+                    height={18}
                     fill="#111827"
                     stroke="rgba(255,255,255,0.2)"
                     strokeWidth="1"
@@ -1353,9 +1464,9 @@ export function StockTradingViewChart({
                   />
                   <text
                     x={width - padRight + 6}
-                    y={hoverY + 3}
+                    y={hoverY + 4}
                     fill="#e2e8f0"
-                    fontSize="9"
+                    fontSize="10.5"
                     fontWeight="bold"
                     fontFamily="monospace"
                   >
@@ -1404,11 +1515,19 @@ export function StockTradingViewChart({
             </g>
           )}
 
-          {/* 6. RSI Subpane — TradingView-like 30–70 band and current value badge */}
+          {/* 6. RSI Subpane — expanded/collapsible TradingView-like pane */}
           {hasRsi && (
             <g>
-              {(() => {
-                const yForRsi = (value: number) => rsiTop + ((100 - value) / 100) * subpaneHeight
+              <line x1={padLeft} y1={rsiTop} x2={width - padRight} y2={rsiTop} stroke="#334155" opacity="0.7" />
+              <text x={padLeft + 8} y={rsiTop + 14} fill="#cbd5e1" fontSize="9.5" fontFamily="monospace">
+                RSI 14
+              </text>
+              <text x={padLeft + 50} y={rsiTop + 14} fill="#8b5cf6" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                {rsiSeries.at(-1)?.toFixed(2) ?? "—"}
+              </text>
+
+              {!isRsiCollapsed && (() => {
+                const yForRsi = (value: number) => rsiTop + ((100 - value) / 100) * rsiPaneHeight
                 const rsi70Y = yForRsi(70)
                 const rsi30Y = yForRsi(30)
                 const latestRsi = rsiSeries.at(-1)
@@ -1430,10 +1549,8 @@ export function StockTradingViewChart({
                       fill="#7c3aed"
                       fillOpacity="0.08"
                     />
-                    <line x1={padLeft} y1={rsiTop} x2={width - padRight} y2={rsiTop} stroke="#334155" opacity="0.7" />
                     <line x1={padLeft} y1={rsi70Y} x2={width - padRight} y2={rsi70Y} stroke="#a78bfa" strokeDasharray="5 5" opacity="0.55" />
                     <line x1={padLeft} y1={rsi30Y} x2={width - padRight} y2={rsi30Y} stroke="#a78bfa" strokeDasharray="5 5" opacity="0.55" />
-                    <line x1={padLeft} y1={rsiTop + subpaneHeight} x2={width - padRight} y2={rsiTop + subpaneHeight} stroke="#334155" opacity="0.7" />
 
                     {[80, 60, 40, 20].map((tick) => (
                       <text
@@ -1441,37 +1558,36 @@ export function StockTradingViewChart({
                         x={width - padRight + 8}
                         y={yForRsi(tick) + 3}
                         fill="#94a3b8"
-                        fontSize="8"
+                        fontSize="8.5"
                         fontFamily="monospace"
                       >
                         {tick}
                       </text>
                     ))}
 
-                    <path d={rsiPath} fill="none" stroke="#8b5cf6" strokeWidth="1" />
-
-                    <text x={padLeft + 8} y={rsiTop + 12} fill="#cbd5e1" fontSize="9" fontFamily="monospace">
-                      RSI 14
-                    </text>
-                    <text x={padLeft + 48} y={rsiTop + 12} fill="#8b5cf6" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                      {latestRsi?.toFixed(2) ?? "—"}
-                    </text>
+                    <path
+                      d={rsiPath}
+                      fill="none"
+                      stroke="#8b5cf6"
+                      strokeWidth="0.75"
+                      vectorEffect="non-scaling-stroke"
+                    />
 
                     {typeof latestRsi === "number" && (
                       <g>
                         <rect
                           x={width - padRight + 1}
-                          y={Math.max(rsiTop + 1, Math.min(rsiTop + subpaneHeight - 15, yForRsi(latestRsi) - 7))}
+                          y={Math.max(rsiTop + 1, Math.min(rsiTop + rsiPaneHeight - 16, yForRsi(latestRsi) - 7.5))}
                           width={padRight - 2}
-                          height={14}
+                          height={15}
                           fill="#7c3aed"
                           rx="2"
                         />
                         <text
                           x={width - padRight + 7}
-                          y={Math.max(rsiTop + 1, Math.min(rsiTop + subpaneHeight - 15, yForRsi(latestRsi) - 7)) + 9.5}
+                          y={Math.max(rsiTop + 1, Math.min(rsiTop + rsiPaneHeight - 16, yForRsi(latestRsi) - 7.5)) + 10.5}
                           fill="#f5f3ff"
-                          fontSize="8"
+                          fontSize="9.5"
                           fontFamily="monospace"
                           fontWeight="bold"
                         >
@@ -1482,21 +1598,27 @@ export function StockTradingViewChart({
                   </>
                 )
               })()}
+              <line x1={padLeft} y1={rsiTop + rsiPaneHeight} x2={width - padRight} y2={rsiTop + rsiPaneHeight} stroke="#334155" opacity="0.7" />
             </g>
           )}
 
-          {/* 7. MACD Subpane — independent symmetric scale, line/signal and momentum histogram */}
+          {/* 7. MACD Subpane — expanded/collapsible independent symmetric scale */}
           {hasMacd && macdSeries && (
             <g>
-              {(() => {
+              <line x1={padLeft} y1={macdTop} x2={width - padRight} y2={macdTop} stroke="#334155" opacity="0.65" />
+              <text x={padLeft + 8} y={macdTop + 14} fill="#cbd5e1" fontSize="9" fontFamily="monospace">
+                MACD 12 26 close 9
+              </text>
+
+              {!isMacdCollapsed && (() => {
                 const numericValues = [
                   ...macdSeries.macd,
                   ...macdSeries.signal,
                   ...macdSeries.histogram,
                 ].filter((value): value is number => typeof value === "number" && Number.isFinite(value))
                 const maxAbs = Math.max(0.0001, ...numericValues.map((value) => Math.abs(value)))
-                const zeroY = macdTop + subpaneHeight / 2
-                const yForMacd = (value: number) => zeroY - (value / maxAbs) * (subpaneHeight * 0.42)
+                const zeroY = macdTop + macdPaneHeight / 2
+                const yForMacd = (value: number) => zeroY - (value / maxAbs) * (macdPaneHeight * 0.42)
                 const makeMacdPath = (series: Array<number | null>) => {
                   let path = ""
                   series.forEach((value, i) => {
@@ -1519,9 +1641,7 @@ export function StockTradingViewChart({
 
                 return (
                   <>
-                    <line x1={padLeft} y1={macdTop} x2={width - padRight} y2={macdTop} stroke="#334155" opacity="0.65" />
                     <line x1={padLeft} y1={zeroY} x2={width - padRight} y2={zeroY} stroke="#64748b" strokeWidth="1" opacity="0.7" />
-                    <line x1={padLeft} y1={macdTop + subpaneHeight} x2={width - padRight} y2={macdTop + subpaneHeight} stroke="#334155" opacity="0.65" />
 
                     {macdSeries.histogram.map((val, i) => {
                       if (val == null) return null
@@ -1548,46 +1668,43 @@ export function StockTradingViewChart({
                       )
                     })}
 
-                    <path d={makeMacdPath(macdSeries.macd)} fill="none" stroke="#2196f3" strokeWidth="1" />
-                    <path d={makeMacdPath(macdSeries.signal)} fill="none" stroke="#f97316" strokeWidth="1" />
+                    <path d={makeMacdPath(macdSeries.macd)} fill="none" stroke="#2196f3" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                    <path d={makeMacdPath(macdSeries.signal)} fill="none" stroke="#f97316" strokeWidth="1" vectorEffect="non-scaling-stroke" />
 
-                    <text x={padLeft + 8} y={macdTop + 12} fill="#cbd5e1" fontSize="8.5" fontFamily="monospace">
-                      MACD 12 26 close 9
-                    </text>
                     {typeof latestHist === "number" && (
-                      <text x={padLeft + 116} y={macdTop + 12} fill={latestHist >= 0 ? "#22b8a7" : "#ff5252"} fontSize="8.5" fontFamily="monospace">
+                      <text x={padLeft + 122} y={macdTop + 14} fill={latestHist >= 0 ? "#22b8a7" : "#ff5252"} fontSize="9" fontFamily="monospace">
                         {latestHist.toFixed(2)}
                       </text>
                     )}
                     {typeof latestMacd === "number" && (
-                      <text x={padLeft + 148} y={macdTop + 12} fill="#2196f3" fontSize="8.5" fontFamily="monospace">
+                      <text x={padLeft + 154} y={macdTop + 14} fill="#2196f3" fontSize="9" fontFamily="monospace">
                         {latestMacd.toFixed(2)}
                       </text>
                     )}
                     {typeof latestSignal === "number" && (
-                      <text x={padLeft + 180} y={macdTop + 12} fill="#f97316" fontSize="8.5" fontFamily="monospace">
+                      <text x={padLeft + 186} y={macdTop + 14} fill="#f97316" fontSize="9" fontFamily="monospace">
                         {latestSignal.toFixed(2)}
                       </text>
                     )}
 
                     {badges.map((badge) => {
                       const rawY = yForMacd(badge.value)
-                      const badgeY = Math.max(macdTop + 1, Math.min(macdTop + subpaneHeight - 15, rawY - 7))
+                      const badgeY = Math.max(macdTop + 1, Math.min(macdTop + macdPaneHeight - 16, rawY - 7.5))
                       return (
                         <g key={`macd-badge-${badge.key}`}>
                           <rect
                             x={width - padRight + 1}
                             y={badgeY}
                             width={padRight - 2}
-                            height={14}
+                            height={15}
                             fill={badge.color}
                             rx="1.5"
                           />
                           <text
                             x={width - padRight + 7}
-                            y={badgeY + 9.5}
+                            y={badgeY + 10.5}
                             fill="#ffffff"
-                            fontSize="8"
+                            fontSize="9.5"
                             fontFamily="monospace"
                             fontWeight="bold"
                           >
@@ -1599,6 +1716,7 @@ export function StockTradingViewChart({
                   </>
                 )
               })()}
+              <line x1={padLeft} y1={macdTop + macdPaneHeight} x2={width - padRight} y2={macdTop + macdPaneHeight} stroke="#334155" opacity="0.65" />
             </g>
           )}
 
@@ -1651,17 +1769,54 @@ export function StockTradingViewChart({
             xToTime={xToTime}
           />
         )}
+
+        {hasRsi && (
+          <button
+            type="button"
+            title={isRsiCollapsed ? "Mở pane RSI" : "Thu gọn pane RSI"}
+            onClick={(event) => {
+              event.stopPropagation()
+              setIsRsiCollapsed((value) => !value)
+            }}
+            className="absolute z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow hover:bg-white/10 hover:text-white"
+            style={{
+              top: `${((rsiTop + 3) / height) * 100}%`,
+              right: `${(padRight / width) * 100 + 0.6}%`,
+            }}
+          >
+            {isRsiCollapsed ? "+" : "−"}
+          </button>
+        )}
+
+        {hasMacd && (
+          <button
+            type="button"
+            title={isMacdCollapsed ? "Mở pane MACD" : "Thu gọn pane MACD"}
+            onClick={(event) => {
+              event.stopPropagation()
+              setIsMacdCollapsed((value) => !value)
+            }}
+            className="absolute z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow hover:bg-white/10 hover:text-white"
+            style={{
+              top: `${((macdTop + 3) / height) * 100}%`,
+              right: `${(padRight / width) * 100 + 0.6}%`,
+            }}
+          >
+            {isMacdCollapsed ? "+" : "−"}
+          </button>
+        )}
       </div>
 
-      {/* TitanLabs / TradingView Range Bar & Navigation Toolbar */}
-      <div className="flex flex-wrap items-center justify-between border-t border-white/[0.08] bg-[#070b10] px-3 py-1.5 text-[11px] font-mono select-none">
-        {/* Time Range Presets */}
-        <div className="flex items-center gap-1">
+      {/* TradingView-style bottom range/navigation bar */}
+      <div className="flex shrink-0 flex-wrap items-center justify-between border-t border-white/[0.08] bg-[#070b10] px-2 py-1 text-[10px] font-mono select-none">
+        <div className="flex items-center gap-0.5">
           {[
-            { label: "1T", bars: 22, title: "1 tháng gần nhất" },
-            { label: "3T", bars: 66, title: "3 tháng gần nhất" },
-            { label: "6T", bars: 130, title: "6 tháng gần nhất" },
+            { label: "5N", bars: 1250, title: "5 năm gần nhất" },
+            { label: "3N", bars: 750, title: "3 năm gần nhất" },
             { label: "1N", bars: 250, title: "1 năm gần nhất" },
+            { label: "6T", bars: 130, title: "6 tháng gần nhất" },
+            { label: "3T", bars: 66, title: "3 tháng gần nhất" },
+            { label: "1T", bars: 22, title: "1 tháng gần nhất" },
             { label: "Tất cả", bars: displayBars.length, title: "Toàn bộ lịch sử" },
           ].map((preset) => (
             <button
@@ -1675,29 +1830,35 @@ export function StockTradingViewChart({
                 setVisibleBarsCount(Math.min(displayBars.length, Math.max(15, preset.bars)))
               }}
               className={cn(
-                "rounded px-2 py-0.5 font-bold transition-colors",
-                scrollOffset === 0 && Math.abs(visibleBarsCount - preset.bars) <= 5
-                  ? "bg-white/15 text-slate-100 border border-white/25"
-                  : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
+                "rounded-sm px-2 py-0.5 font-semibold transition-colors",
+                scrollOffset === 0 && Math.abs(visibleBarsCount - Math.min(displayBars.length, preset.bars)) <= 5
+                  ? "bg-white/[0.08] text-slate-100"
+                  : "text-slate-400 hover:bg-white/[0.05] hover:text-slate-100",
               )}
             >
               {preset.label}
             </button>
           ))}
+          <span className="mx-1 h-4 w-px bg-white/[0.08]" />
+          <span className="flex size-6 items-center justify-center rounded-sm text-slate-500" title="Điều hướng trục thời gian">
+            <CalendarDays className="size-3.5" />
+          </span>
         </div>
 
-        {/* Right Controls: Auto-scale and status */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 text-slate-500">
+          <span className="hidden md:inline px-1.5">UTC+7</span>
+          <span className="rounded-sm px-1.5 py-0.5">%</span>
+          <span className="rounded-sm px-1.5 py-0.5">log</span>
           <button
             type="button"
             title="Tự căn khung nhìn vừa dữ liệu (Auto Fit)"
             onClick={handleResetView}
-            className="rounded px-2 py-0.5 font-bold text-slate-400 hover:bg-white/[0.06] hover:text-slate-200 transition-colors"
+            className="rounded-sm px-1.5 py-0.5 font-semibold text-cyan-400 hover:bg-white/[0.05] hover:text-cyan-300 transition-colors"
           >
-            Tự động
+            tự động
           </button>
-          <span className="hidden sm:inline text-[9px] text-slate-500">
-            {visibleBars.length} nến · Lăn chart để zoom X · Lăn trục giá để scale Y · Kéo rê để cuộn
+          <span className="hidden lg:inline pl-2 text-[9px] text-slate-600">
+            {visibleBars.length} nến · vùng trống +{rightOffsetBars}/{maxRightOffsetBars}
           </span>
         </div>
       </div>
