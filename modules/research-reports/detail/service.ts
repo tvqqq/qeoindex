@@ -1,3 +1,4 @@
+import { safeResearchReportPdfBrowserUrl } from "./pdf-route.ts"
 import {
   findLatestResearchReportAnalysisRow,
   findResearchReportDetailRow,
@@ -146,6 +147,7 @@ function baseReportViewModel(row: Record<string, unknown>): ResearchReportDetail
     category: category(row.category),
     sectorName: nullableString(row.sector_name),
     originalSourceLink: safeHttpsLink(row.link),
+    originalPdfUrl: safeResearchReportPdfBrowserUrl(row.pdf_url),
     parsedPageCount: parsedPageCount(row.parsed_page_count),
     ingestionStatus: nonEmptyString(row.ingestion_status) ?? "discovered",
     analysisStatus: detailStatus(row.analysis_status),
