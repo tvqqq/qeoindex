@@ -74,13 +74,13 @@ Follow the existing EOD scheduler pattern:
 - scheduler dispatch is not treated as execution success;
 - `system_job_runs` and `system_job_phases` remain the execution truth.
 
-Suggested scheduler name:
+Scheduler name:
 
 ```text
 research-reports-daily-0705-ict
 ```
 
-Suggested job key:
+Job key:
 
 ```text
 research_reports.daily
@@ -113,7 +113,7 @@ The backfill path must call the same orchestration core, processing core, lease 
 
 ## 5. Workflow phases
 
-Persist these phases in `system_job_phases`:
+Persist these phase keys in `system_job_phases`:
 
 1. `DISCOVER`
 2. `UPSERT_METADATA`
@@ -122,11 +122,24 @@ Persist these phases in `system_job_phases`:
 5. `PUBLISH`
 6. `FINALIZE`
 
-The implementation may process each report through fetch/parse/analyze/publish sequentially while updating phase summaries cumulatively. Phase names are the public operational contract even if the internal helper boundaries are more granular.
+### 5.1 Phase evidence semantics
 
-### 5.1 MVP execution model
+The workflow processes reports **sequentially** in QEO-85. Therefore `FETCH_PARSE`, `AI_ANALYZE`, and `PUBLISH` are aggregate operational evidence buckets, not barriers that require holding all parsed PDF text in workflow state before moving to the next phase.
 
-Process reports **sequentially** in the durable workflow for QEO-85.
+Implementation rules:
+
+- create/update one durable phase row per phase key;
+- `DISCOVER` and `UPSERT_METADATA` are naturally sequential;
+- during the report loop, update aggregate counters for `FETCH_PARSE`, `AI_ANALYZE`, and `PUBLISH` as each report reaches those stages;
+- these report-processing phase timestamps may overlap because the loop advances one report end-to-end;
+- terminal phase summaries must reconcile exactly with the run-item ledger;
+- `FINALIZE` computes and persists the parent terminal status and final aggregate summary.
+
+Do **not** serialize every parsed PDF page for up to 20 reports into durable workflow state merely to force artificial phase barriers.
+
+### 5.2 MVP execution model
+
+Process reports sequentially.
 
 Reasons:
 
@@ -162,7 +175,7 @@ Discovery may stop when one of these conditions is met:
 - a full page is entirely composed of already-known reports older than the recent-rescan window;
 - provider explicitly returns no rows.
 
-The implementation should keep enough recent overlap to discover changed/reordered reports instead of only collecting never-seen IDs.
+The implementation must keep bounded recent overlap so changed/reordered reports are discovered instead of only collecting never-seen IDs.
 
 ### 6.3 Daily limits
 
@@ -263,6 +276,7 @@ Suggested fields:
 - `error_message`
 - `attempted_models` JSON array
 - `ai_request_count`
+- `usage_unknown_request_count`
 - `input_tokens`
 - `cached_input_tokens`
 - `cache_write_tokens`
@@ -271,6 +285,7 @@ Suggested fields:
 - `total_tokens`
 - `estimated_cost_usd`
 - `pricing_version`
+- `cost_estimate_complete`
 - `started_at`
 - `finished_at`
 - `duration_ms`
@@ -335,6 +350,8 @@ For requests with **more than 272K input tokens**, apply the current GPT-5.6 lon
 
 The calculator must be pure and testable.
 
+Pricing was verified on 2026-09-05 against the official OpenAI GPT-5.6 Luna/Terra model documentation and Responses usage schema. Runtime code must use the pinned version above; a future price change requires a new explicit pricing version and tests.
+
 ### 10.3 Actual cost formula
 
 Derive billable uncached input without double-counting detailed categories:
@@ -367,7 +384,7 @@ Existing fields remain intact.
 
 Repair, incomplete retry, and fallback requests are separate billable requests.
 
-The report-attempt ledger must aggregate all actual usage across all attempted requests/models, including failed requests that returned a valid usage envelope.
+The report-attempt ledger must aggregate all actual usage across all attempted requests/models, including failed responses that return a valid usage envelope.
 
 ## 11. AI request and USD budget enforcement
 
@@ -376,28 +393,34 @@ The report-attempt ledger must aggregate all actual usage across all attempted r
 Defaults for both daily and backfill:
 
 - maximum report candidates processed: **20**;
-- maximum actual OpenAI Responses requests: **20**;
+- maximum OpenAI Responses request attempts: **20**;
 - maximum estimated AI cost: **$1.00 USD**.
 
-The request counter counts every provider request, including:
+The request-attempt counter includes every provider dispatch attempt, including:
 
 - initial model call;
 - incomplete retry;
 - validation repair;
-- fallback model call.
+- fallback model call;
+- transport attempt that times out or loses the response after dispatch.
 
 It does not count reports.
 
-### 11.2 Pre-request guard
+### 11.2 Pre-request guard and attempt reservation
 
 Check budget **before every OpenAI request**, including repair/retry/fallback.
 
-A provider request may begin only when both conditions hold:
+Immediately before dispatch:
 
-- another AI request is allowed by the 20-request limit;
-- a conservative worst-case reservation for the next request fits in the remaining USD budget.
+1. verify another request attempt fits inside the 20-request limit;
+2. compute the conservative USD reservation for the selected model/request;
+3. verify the reservation fits inside the remaining $1 budget;
+4. consume/increment the request-attempt slot **before** the network dispatch;
+5. dispatch the request.
 
-### 11.3 Conservative reservation
+A transport failure therefore cannot be retried indefinitely without consuming the request-attempt budget.
+
+### 11.3 Conservative cost reservation
 
 The preflight reservation must not require an external tokenizer call.
 
@@ -412,16 +435,26 @@ For reservation:
 
 This intentionally over-reserves rather than allowing runaway spend.
 
+Because report processing is sequential, only one provider reservation is active at a time; no distributed reservation ledger is required for QEO-85.
+
 ### 11.4 Actual accounting
 
 After each response with usage data:
 
 - calculate actual estimated USD using the pinned pricing table;
-- persist/accumulate usage immediately in the run-item evidence;
-- increment the actual AI request counter;
-- reduce the remaining run budget.
+- persist/accumulate usage immediately in the run-item evidence through a request-level usage hook;
+- release the conservative reservation and replace it with actual estimated cost;
+- update aggregate run counters.
 
-If a provider call cannot return usage because transport failed before a response, record the request attempt but cost remains unknown/zero for estimated accounting; telemetry must distinguish this from a confirmed zero-token response.
+The current QEO-81 final-call audit alone is insufficient for this requirement because usage must survive a later validation/fallback/publish failure. QEO-85 must add a request-boundary usage callback/controller so each response's usage is recorded before subsequent processing can fail.
+
+If a dispatched provider request cannot return usage because transport failed or the response is lost:
+
+- the request attempt remains consumed;
+- record `usage_unknown_request_count += 1`;
+- do not fabricate token/cost values;
+- set `cost_estimate_complete=false` for the item/run;
+- continue to enforce future requests using conservative preflight reservation.
 
 ### 11.5 Exhaustion semantics
 
@@ -452,9 +485,9 @@ A bad PDF affects that report only; continue with remaining reports.
 
 ### 12.3 OpenAI
 
-Keep QEO-81 bounded incomplete/repair/fallback behavior, but route every provider request through the QEO-85 budget guard and usage recorder.
+Keep QEO-81 bounded incomplete/repair/fallback behavior, but route every provider request through the QEO-85 budget controller and request-level usage recorder.
 
-Provider transport/429/5xx retries must remain bounded and must not bypass the 20-request/$1 limits.
+Provider transport/429/5xx retries must remain bounded and every dispatch attempt consumes the 20-request limit.
 
 ### 12.4 Non-retryable
 
@@ -520,7 +553,8 @@ A provider outage must not delete or hide previously ready reports.
 - unsupported count;
 - failed count;
 - deferred count;
-- actual AI request count;
+- OpenAI request-attempt count;
+- unknown-usage request count;
 - attempted/actual model set;
 - input tokens;
 - cached input tokens;
@@ -530,6 +564,7 @@ A provider outage must not delete or hide previously ready reports.
 - total tokens;
 - estimated cost USD;
 - pricing version;
+- `cost_estimate_complete`;
 - cost budget USD;
 - remaining estimated budget USD;
 - budget exhausted flag/reason;
@@ -561,7 +596,8 @@ Latest-run telemetry must display:
 - duration;
 - discovered/new/changed/processed/ready/failed/deferred counts;
 - model(s);
-- AI request count;
+- OpenAI request-attempt count;
+- unknown-usage request count when non-zero;
 - input tokens;
 - cached input tokens;
 - cache-write tokens;
@@ -569,12 +605,13 @@ Latest-run telemetry must display:
 - reasoning tokens;
 - total tokens;
 - estimated USD;
+- whether the estimate is complete;
 - pricing version;
 - $1 budget used/remaining;
 - budget exhausted/reason;
 - cost overrun when present.
 
-The UI must clearly label cost as estimated from API usage.
+The UI must clearly label cost as **estimated from API-reported usage**, not an invoice amount.
 
 ## 17. Backfill contract
 
@@ -605,7 +642,7 @@ A backfill request with `maxReports=100` does **not** authorize 100 model calls.
 
 Each invocation still uses:
 
-- max 20 actual OpenAI requests;
+- max 20 OpenAI request attempts;
 - max $1 estimated AI spend;
 - the same content-hash identity and analysis lease.
 
@@ -654,16 +691,18 @@ Required automated coverage:
 10. reasoning tokens are exposed but not double-billed;
 11. >272K input applies long-context multipliers;
 12. repair/incomplete/fallback requests aggregate token/cost usage;
-13. actual OpenAI request count includes retries/repair/fallback;
-14. 20-request guard blocks request 21;
+13. request-attempt count includes transport failures/retries/repair/fallback;
+14. request 21 is blocked;
 15. $1 reservation guard blocks a request that cannot safely fit;
-16. one failed PDF produces `partial` while other reports reach `ready`;
-17. total TOPI outage produces `failed` and preserves old ready data;
-18. `needs_ocr`/`unsupported` are non-error terminal outcomes and not retried in-run;
-19. backfill date/range/maxReports validation;
-20. backfill requires confirmation/reason and writes Admin audit evidence;
-21. Admin catalog/scheduler reconciliation recognizes the daily job;
-22. Admin detail renders phase/model/token/cost/budget evidence without sensitive payloads.
+16. response usage is persisted before a later validation/fallback/publish failure;
+17. unknown-usage transport failure is reported without fabricated cost;
+18. one failed PDF produces `partial` while other reports reach `ready`;
+19. total TOPI outage produces `failed` and preserves old ready data;
+20. `needs_ocr`/`unsupported` are non-error terminal outcomes and not retried in-run;
+21. backfill date/range/maxReports validation;
+22. backfill requires confirmation/reason and writes Admin audit evidence;
+23. Admin catalog/scheduler reconciliation recognizes the daily job;
+24. Admin detail renders phase/model/token/cost/budget evidence without sensitive payloads.
 
 ## 21. Required smoke fixture
 
@@ -679,7 +718,8 @@ Expected first-run behavior:
 - existing report is `skipped_existing` with zero AI spend;
 - failed report records report-level error;
 - parent run is `partial`;
-- aggregate model/token/cost telemetry equals the successful/failed provider calls actually made.
+- aggregate model/token/cost telemetry equals the successful/failed provider calls for which API usage was available;
+- any lost-response request is explicitly represented as unknown usage rather than silently counted as zero cost.
 
 Run the same fixture again.
 
@@ -712,9 +752,9 @@ QEO-87 remains responsible for the broader research-report E2E quality gate and 
 | Same data twice does not duplicate/re-spend | content-hash identity + pre-AI lease + tests |
 | One PDF fails, others finish | report isolation + parent `partial` |
 | Provider outage telemetry, old data preserved | parent `failed` only for core outage; no destructive rollback |
-| Correct run/phases success/partial/failure | explicit terminal-state rules |
+| Correct run/phases success/partial/failure | explicit terminal-state rules + aggregate phase evidence |
 | Admin model/token/cost | run-item usage ledger + pricing calculator + generalized phase UI |
-| Safety max pages/reports/AI calls | 8 pages / 20 candidates / 20 actual AI requests |
+| Safety max pages/reports/AI calls | 8 pages / 20 candidates / 20 request attempts |
 | Cost safety | conservative pre-request reservation + $1/run ceiling |
 | Manual/backfill tested/idempotent | separate confirmed job using same core/lease/budget |
 | Smoke 2 new + 1 existing + 1 failed | mandatory deterministic fixture + rerun assertion |
