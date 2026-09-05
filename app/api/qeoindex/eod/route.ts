@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { start } from "workflow/api"
 
-import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { notifyOpsError } from "@/modules/admin/ops-alerts"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { runChartIntradayArchiveLifecycle } from "@/modules/market/chart-data/archive-lifecycle"
+import { qeo107BootstrapTarget, readChartIntradayCoverageReport } from "@/modules/market/chart-data/bootstrap"
 import { runChartDerivedHourlyRecovery } from "@/modules/market/chart-data/derived-hourly-recovery"
+import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
+import { chartIntradayBootstrapWorkflow } from "@/workflows/chart-intraday-bootstrap"
 import { qeoindexEodPipeline } from "@/workflows/qeoindex-eod-pipeline"
 
 export const runtime = "nodejs"
@@ -60,12 +63,73 @@ async function isQeoIndexSchedulerAuthorized(request: Request) {
   return !error && data === true
 }
 
+async function chartCoverage(request: NextRequest) {
+  const supabase = getSupabaseServerClient()
+  if (!supabase) return NextResponse.json({ ok: false, error: "Canonical market data service unavailable." }, { status: 503 })
+  try {
+    const referenceAt = new Date()
+    const universe = await getCanonicalUniverse()
+    const rows = await readChartIntradayCoverageReport(supabase, {
+      tickers: universe.stocks.map((stock) => stock.ticker),
+      referenceAt,
+    })
+    const target = qeo107BootstrapTarget(referenceAt)
+    return NextResponse.json({
+      ok: rows.length === universe.selectedCount,
+      mode: "chart-coverage",
+      universe: {
+        runId: universe.runId,
+        sourceAsOfDate: universe.sourceAsOfDate,
+        selectedCount: universe.selectedCount,
+      },
+      target: {
+        targetDays: 366,
+        targetFrom: new Date(target.targetFrom * 1000).toISOString(),
+        targetTo: new Date(target.targetTo * 1000).toISOString(),
+        hotCutoff: new Date(target.hotCutoff * 1000).toISOString(),
+        chunkCount: target.chunks.length,
+      },
+      summary: {
+        tickerCount: rows.length,
+        hotCoveredTickers: rows.filter((row) => row.hotRowCount > 0).length,
+        coldCoveredTickers: rows.filter((row) => row.coldManifestCount > 0).length,
+        derivedHourlyCoveredTickers: rows.filter((row) => row.derivedHourlyRowCount > 0).length,
+        providerGapTickers: rows.filter((row) => row.providerGapCount > 0).length,
+        retryableFailureTickers: rows.filter((row) => row.retryableFailureCount > 0).length,
+        failedAttemptTickers: rows.filter((row) => row.failedAttemptCount > 0).length,
+      },
+      rows,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await notifyOpsError({ source: "qeo107-chart-coverage", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
+    return NextResponse.json({ ok: false, mode: "chart-coverage", error: message }, { status: 500 })
+  }
+}
+
 async function trigger(request: NextRequest) {
   if (!(await isQeoIndexSchedulerAuthorized(request))) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
   }
 
   const mode = request.nextUrl.searchParams.get("mode")?.trim() || ""
+  if (mode === "chart-coverage") return chartCoverage(request)
+
+  if (mode === "chart-bootstrap") {
+    if (request.method !== "POST") {
+      return NextResponse.json({ ok: false, error: "Chart bootstrap requires POST." }, { status: 405, headers: { Allow: "POST" } })
+    }
+    try {
+      const startedAt = new Date().toISOString()
+      const run = await start(chartIntradayBootstrapWorkflow, [startedAt])
+      return NextResponse.json({ ok: true, mode, workflowRunId: run.runId, startedAt }, { status: 202 })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      await notifyOpsError({ source: "qeo107-chart-bootstrap", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
+      return NextResponse.json({ ok: false, mode, error: message }, { status: 500 })
+    }
+  }
+
   if (mode === "chart-archive" || mode === "chart-derived-recovery") {
     if (request.method !== "POST") {
       return NextResponse.json({ ok: false, error: "Chart storage recovery requires POST." }, { status: 405, headers: { Allow: "POST" } })
