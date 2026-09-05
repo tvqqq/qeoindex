@@ -29,6 +29,7 @@ const DEFAULT_FALLBACK_MODEL = "gpt-5.6-terra"
 const DEFAULT_REASONING_EFFORT: ResearchReportQaReasoningEffort = "medium"
 const INITIAL_MAX_OUTPUT_TOKENS = 1_600
 const REQUEST_TIMEOUT_MS = 30_000
+const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64
 const REPAIR_INSTRUCTION = "The previous structured result failed schema or citation-grounding validation. Re-read the exact same immutable REPORT_EVIDENCE and return a corrected result. Do not add facts, figures, targets, recommendations, evidence IDs, excerpts, or outside knowledge that are not supported by that evidence."
 
 export type ResearchReportQaReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh"
@@ -139,7 +140,8 @@ function promptCacheKey(input: ResearchReportQaOpenAiInput) {
       })),
     }))
     .digest("hex")
-  return `research-report-qa:${RESEARCH_REPORT_QA_PROMPT_VERSION}:${digest.slice(0, 32)}`
+  const prefix = `research-report-qa:${RESEARCH_REPORT_QA_PROMPT_VERSION}:`
+  return `${prefix}${digest.slice(0, Math.max(0, OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH - prefix.length))}`
 }
 
 function safeProviderMessage(value: unknown) {
