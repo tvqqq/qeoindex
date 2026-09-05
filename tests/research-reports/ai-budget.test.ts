@@ -183,9 +183,9 @@ test("QEO-85 successful analysis exposes cache-write tokens and versioned estima
     })
 
     assert.equal(result.audit.cacheWriteTokens, 10)
-    assert.equal(result.audit.estimatedCostUsd, 0.000064)
+    assert.equal(result.audit.estimatedCostUsd, 0.0000649)
     assert.equal(result.audit.pricingVersion, "openai-gpt-5.6-standard-2026-09-05")
-    assert.equal(budget.snapshot().estimatedCostUsd, 0.000064)
+    assert.equal(budget.snapshot().estimatedCostUsd, 0.0000649)
     assert.equal(budget.snapshot().requestAttempts, 1)
   })
 })
