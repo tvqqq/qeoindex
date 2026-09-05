@@ -12,11 +12,15 @@ import type {
 import { ChartDataRequestError, ChartDataUnavailableError } from "./contract"
 import { readHotIntradayRange, upsertHotIntradayBars } from "./hot-store"
 import { detectTradingSessionGaps, normalizeCanonicalBars } from "./normalize"
-import { createPrimaryChartOhlcvProvider, type ChartOhlcvProvider } from "./provider"
+import {
+  createPrimaryChartOhlcvProvider,
+  normalizeChartProviderResult,
+  type ChartOhlcvProvider,
+} from "./provider"
 
 const DAY_SECONDS = 86400
 const MAX_INTRADAY_SPAN_SECONDS = 31 * DAY_SECONDS
-const MAX_DAILY_SPAN_SECONDS = 10 * 366 * DAY_SECONDS
+const MAX_DAILY_SPAN_SECONDS = 100 * 366 * DAY_SECONDS
 
 export interface ChartDataServiceDeps {
   supabase: SupabaseClient
@@ -106,11 +110,15 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   const effectiveTo = Math.min(request.to, nowSeconds)
   const lastStored = normalized.bars.at(-1)?.time ?? null
   const providerFrom = lastStored == null ? request.from : Math.max(request.from, lastStored + 60)
-  const needsProvider = effectiveTo > providerFrom
+  const needsProvider = effectiveTo >= providerFrom
 
   if (needsProvider) {
     try {
-      const providerBars = await provider.fetch({ ...request, from: providerFrom, to: effectiveTo })
+      const providerResult = normalizeChartProviderResult(
+        await provider.fetch({ ...request, from: providerFrom, to: effectiveTo }),
+        "CUSTOM",
+      )
+      const providerBars = providerResult.bars
       tagged.push(...providerBars.map((bar) => ({ source: "provider" as const, bar })))
       normalized = normalizeCanonicalBars(tagged)
       if (providerBars.length) {
@@ -118,8 +126,8 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
           await upsertHotIntradayBars(deps.supabase, {
             ticker: request.ticker,
             bars: providerBars,
-            provider: "DNSE",
-            detail: { resolution: "1m" },
+            provider: providerResult.provider,
+            detail: { resolution: "1m", requestedFrom: providerFrom, requestedTo: effectiveTo },
           })
         } catch {
           errors.push({ code: "STORAGE_UNAVAILABLE" })
