@@ -99,19 +99,19 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
   const [isChartMaximized, setIsChartMaximized] = useState(false)
 
   return (
-    <div className="min-h-screen w-full bg-[#06090d] text-slate-200 lg:h-screen lg:overflow-hidden flex flex-col">
+    <div className="min-h-screen w-full bg-[#05070a] text-slate-200 lg:h-screen lg:overflow-hidden flex flex-col">
       {/* Top Navigation Bar */}
       <TopNav />
 
       {/* Main Full-Width Workstation Container */}
-      <main className="w-full flex-1 px-2.5 py-2.5 sm:px-4 lg:px-5 2xl:px-6 lg:overflow-hidden min-h-0">
+      <main className="w-full flex-1 px-2 py-2 sm:px-3 lg:px-4 2xl:px-5 lg:overflow-hidden min-h-0">
         {/* 3 Columns Master Layout (or 2 columns when Chart is Maximized) */}
         <div
           className={cn(
-            "grid grid-cols-1 gap-3.5 h-full lg:overflow-hidden items-stretch",
+            "grid grid-cols-1 gap-2.5 h-full lg:overflow-hidden items-stretch",
             isChartMaximized
-              ? "lg:grid-cols-[minmax(0,1fr)_260px] xl:grid-cols-[minmax(0,1fr)_270px] 2xl:grid-cols-[minmax(0,1fr)_300px]"
-              : "lg:grid-cols-[300px_minmax(0,1fr)_260px] xl:grid-cols-[330px_minmax(0,1fr)_270px] 2xl:grid-cols-[360px_minmax(0,1fr)_300px]",
+              ? "lg:grid-cols-[minmax(0,1fr)_250px] xl:grid-cols-[minmax(0,1fr)_260px] 2xl:grid-cols-[minmax(0,1fr)_280px]"
+              : "lg:grid-cols-[288px_minmax(0,1fr)_250px] xl:grid-cols-[318px_minmax(0,1fr)_260px] 2xl:grid-cols-[340px_minmax(0,1fr)_280px]",
           )}
         >
           {/* ========================================================= */}
@@ -140,7 +140,7 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
               "relative min-w-0 transition-opacity duration-200 ease-out",
               isChartMaximized
                 ? "flex flex-col overflow-hidden pb-0 pr-0 lg:h-full"
-                : "space-y-3.5 lg:h-full lg:overflow-y-auto pr-1 pb-10",
+                : "space-y-2.5 lg:h-full lg:overflow-y-auto pr-1 pb-10",
               isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
             )}
           >
@@ -151,7 +151,7 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
                 isTransitioning ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none hidden",
               )}
             >
-              <div className="rounded-2xl border border-white/20 bg-[#0b1017]/95 px-4 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-md">
+              <div className="rounded-xl border border-white/15 bg-[#0b1017]/95 px-4 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-md">
                 <AiLoader label={`Hội đồng AI đang cập nhật dữ liệu ${activeTicker}...`} />
               </div>
             </div>
