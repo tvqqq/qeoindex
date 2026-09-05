@@ -12,6 +12,7 @@ import {
   toCanonicalOrderbookSnapshot,
 } from "../modules/market/data-contract.ts"
 import { activeMinuteStart, partitionLiveMinuteBars } from "../modules/market/chart-data/live-session.ts"
+import { sourceRangeForResolution } from "../modules/market/chart-data/timeframes.ts"
 
 test("price normalizer enforces consistent kilo format (21.85) across all price shapes", () => {
   // Raw Dong prices (>= 500)
@@ -180,6 +181,14 @@ test("toCanonicalOrderbookSnapshot produces 100% polymorphic schema whether load
   assert.equal(typeof snap2.referencePrice, "number")
   assert.equal(typeof snap1.latestPrice, "number")
   assert.equal(typeof snap2.latestPrice, "number")
+})
+
+test("QEO-93 full-history calendar source ranges stay inside canonical positive epoch", () => {
+  const to = Math.floor(new Date("2026-09-05T14:20:00Z").getTime() / 1000)
+  for (const resolution of ["1W", "1M", "1Q", "1Y"] as const) {
+    const source = sourceRangeForResolution(resolution, 1, to)
+    assert.ok(source.from > 0, `${resolution} source range must remain positive, got ${source.from}`)
+  }
 })
 
 test("QEO-96 live minute replay keeps current candle ephemeral and rejects future bars", () => {
