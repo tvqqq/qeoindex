@@ -751,6 +751,16 @@
       ]
     },
     {
+      "path": "tests/stock-ai-sidebar-ui.test.ts",
+      "owner": "ui",
+      "invariant": "Preserve the stock detail ai council sidebar layout and presentation contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
       "path": "tests/supabase-auth-schema.test.ts",
       "owner": "db",
       "invariant": "Preserve the current supabase auth schema contract.",
