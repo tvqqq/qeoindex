@@ -66,6 +66,7 @@ create table if not exists public.market_research_report_analyses (
   response_id text,
   input_tokens bigint not null default 0 check (input_tokens >= 0),
   cached_input_tokens bigint not null default 0 check (cached_input_tokens >= 0),
+  cache_write_tokens bigint not null default 0 check (cache_write_tokens >= 0),
   output_tokens bigint not null default 0 check (output_tokens >= 0),
   reasoning_tokens bigint not null default 0 check (reasoning_tokens >= 0),
   total_tokens bigint not null default 0 check (total_tokens >= 0),
@@ -81,6 +82,66 @@ create index if not exists market_research_report_analyses_report_idx
   on public.market_research_report_analyses(report_id, processed_at desc);
 create index if not exists market_research_report_analyses_content_hash_idx
   on public.market_research_report_analyses(content_hash);
+
+create table if not exists public.market_research_report_analysis_leases (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references public.market_research_reports(id) on delete cascade,
+  content_hash text not null check (content_hash ~ '^[0-9a-f]{64}$'),
+  analysis_version text not null,
+  prompt_version text not null,
+  model_route_key text not null,
+  owner_run_id uuid not null references public.system_job_runs(id) on delete cascade,
+  lease_token uuid not null default gen_random_uuid(),
+  expires_at timestamptz not null,
+  terminal_outcome text check (terminal_outcome is null or terminal_outcome in ('ready', 'failed')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (report_id, content_hash, analysis_version, prompt_version, model_route_key),
+  unique (lease_token)
+);
+
+create index if not exists market_research_report_analysis_leases_expires_idx
+  on public.market_research_report_analysis_leases(expires_at);
+
+create table if not exists public.market_research_report_run_items (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references public.system_job_runs(id) on delete cascade,
+  job_key text not null check (job_key ~ '^[a-z0-9_]+([.][a-z0-9_]+)*$'),
+  report_id uuid not null references public.market_research_reports(id) on delete cascade,
+  provider text not null,
+  external_report_id text not null,
+  publish_date date not null,
+  content_hash text check (content_hash is null or content_hash ~ '^[0-9a-f]{64}$'),
+  outcome text check (outcome is null or outcome in (
+    'ready', 'skipped_existing', 'skipped_concurrent', 'needs_ocr', 'unsupported',
+    'failed', 'deferred_budget', 'deferred_report_limit'
+  )),
+  terminal_stage text,
+  error_code text,
+  error_message text,
+  attempted_models jsonb not null default '[]'::jsonb check (jsonb_typeof(attempted_models) = 'array'),
+  ai_request_count integer not null default 0 check (ai_request_count >= 0),
+  input_tokens bigint not null default 0 check (input_tokens >= 0),
+  cached_input_tokens bigint not null default 0 check (cached_input_tokens >= 0),
+  cache_write_tokens bigint not null default 0 check (cache_write_tokens >= 0),
+  output_tokens bigint not null default 0 check (output_tokens >= 0),
+  reasoning_tokens bigint not null default 0 check (reasoning_tokens >= 0),
+  total_tokens bigint not null default 0 check (total_tokens >= 0),
+  unknown_usage_attempts integer not null default 0 check (unknown_usage_attempts >= 0),
+  estimated_cost_usd numeric(18,8),
+  pricing_version text,
+  started_at timestamptz not null default now(),
+  finished_at timestamptz,
+  duration_ms bigint check (duration_ms is null or duration_ms >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (run_id, report_id)
+);
+
+create index if not exists market_research_report_run_items_run_idx
+  on public.market_research_report_run_items(run_id, started_at asc);
+create index if not exists market_research_report_run_items_report_idx
+  on public.market_research_report_run_items(report_id, started_at desc);
 
 create table if not exists public.market_research_report_ticker_mentions (
   id uuid primary key default gen_random_uuid(),
@@ -133,6 +194,8 @@ create index if not exists market_research_report_chunks_search_idx
 
 alter table public.market_research_reports enable row level security;
 alter table public.market_research_report_analyses enable row level security;
+alter table public.market_research_report_analysis_leases enable row level security;
+alter table public.market_research_report_run_items enable row level security;
 alter table public.market_research_report_ticker_mentions enable row level security;
 alter table public.market_research_report_chunks enable row level security;
 
@@ -164,6 +227,16 @@ grant all privileges on table
   public.market_research_report_chunks
 to service_role;
 
+revoke all privileges on table
+  public.market_research_report_analysis_leases,
+  public.market_research_report_run_items
+from public, anon, authenticated;
+
+grant all privileges on table
+  public.market_research_report_analysis_leases,
+  public.market_research_report_run_items
+to service_role;
+
 drop policy if exists market_research_reports_authenticated_read on public.market_research_reports;
 create policy market_research_reports_authenticated_read
   on public.market_research_reports for select to authenticated using (true);
@@ -179,6 +252,154 @@ create policy market_research_report_mentions_authenticated_read
 drop policy if exists market_research_report_chunks_authenticated_read on public.market_research_report_chunks;
 create policy market_research_report_chunks_authenticated_read
   on public.market_research_report_chunks for select to authenticated using (true);
+
+create or replace function public.qeo_acquire_research_report_analysis_lease(
+  p_report_id uuid,
+  p_content_hash text,
+  p_analysis_version text,
+  p_prompt_version text,
+  p_model_route_key text,
+  p_run_id uuid,
+  p_ttl_seconds integer default 900
+) returns table (
+  outcome text,
+  lease_token uuid,
+  expires_at timestamptz,
+  analysis_id uuid
+)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_analysis_id uuid;
+  v_lease_token uuid := gen_random_uuid();
+  v_expires_at timestamptz;
+  v_busy_expires_at timestamptz;
+  v_ttl_seconds integer := least(greatest(coalesce(p_ttl_seconds, 900), 60), 3600);
+begin
+  if p_content_hash is null or p_content_hash !~ '^[0-9a-f]{64}$' then
+    raise exception 'invalid research report content hash';
+  end if;
+  if nullif(btrim(coalesce(p_analysis_version, '')), '') is null
+     or nullif(btrim(coalesce(p_prompt_version, '')), '') is null
+     or nullif(btrim(coalesce(p_model_route_key, '')), '') is null
+     or p_run_id is null then
+    raise exception 'invalid research report analysis lease identity';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(
+    concat_ws(':', p_report_id::text, p_content_hash, p_analysis_version, p_prompt_version, p_model_route_key),
+    0
+  ));
+
+  select a.id
+    into v_analysis_id
+    from public.market_research_report_analyses a
+   where a.report_id = p_report_id
+     and a.content_hash = p_content_hash
+     and a.analysis_version = p_analysis_version
+     and a.prompt_version = p_prompt_version
+     and a.model_route_key = p_model_route_key
+   limit 1;
+
+  if found then
+    return query select 'existing_success'::text, null::uuid, null::timestamptz, v_analysis_id;
+    return;
+  end if;
+
+  v_expires_at := now() + make_interval(secs => v_ttl_seconds);
+
+  insert into public.market_research_report_analysis_leases (
+    report_id,
+    content_hash,
+    analysis_version,
+    prompt_version,
+    model_route_key,
+    owner_run_id,
+    lease_token,
+    expires_at,
+    terminal_outcome,
+    updated_at
+  ) values (
+    p_report_id,
+    p_content_hash,
+    p_analysis_version,
+    p_prompt_version,
+    p_model_route_key,
+    p_run_id,
+    v_lease_token,
+    v_expires_at,
+    null,
+    now()
+  )
+  on conflict (report_id, content_hash, analysis_version, prompt_version, model_route_key)
+  do update set
+    owner_run_id = excluded.owner_run_id,
+    lease_token = excluded.lease_token,
+    expires_at = excluded.expires_at,
+    terminal_outcome = null,
+    updated_at = now()
+  where public.market_research_report_analysis_leases.expires_at <= now()
+     or public.market_research_report_analysis_leases.owner_run_id = p_run_id
+  returning public.market_research_report_analysis_leases.lease_token,
+            public.market_research_report_analysis_leases.expires_at
+    into v_lease_token, v_expires_at;
+
+  if found then
+    return query select 'acquired'::text, v_lease_token, v_expires_at, null::uuid;
+    return;
+  end if;
+
+  select l.expires_at
+    into v_busy_expires_at
+    from public.market_research_report_analysis_leases l
+   where l.report_id = p_report_id
+     and l.content_hash = p_content_hash
+     and l.analysis_version = p_analysis_version
+     and l.prompt_version = p_prompt_version
+     and l.model_route_key = p_model_route_key;
+
+  return query select 'busy'::text, null::uuid, v_busy_expires_at, null::uuid;
+end;
+$$;
+
+revoke all on function public.qeo_acquire_research_report_analysis_lease(uuid, text, text, text, text, uuid, integer)
+from public, anon, authenticated;
+grant execute on function public.qeo_acquire_research_report_analysis_lease(uuid, text, text, text, text, uuid, integer)
+to service_role;
+
+create or replace function public.qeo_release_research_report_analysis_lease(
+  p_lease_token uuid,
+  p_terminal_outcome text
+) returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_updated boolean := false;
+begin
+  if p_lease_token is null
+     or p_terminal_outcome not in ('ready', 'failed') then
+    raise exception 'invalid research report analysis lease release';
+  end if;
+
+  update public.market_research_report_analysis_leases
+     set terminal_outcome = p_terminal_outcome,
+         expires_at = now(),
+         updated_at = now()
+   where lease_token = p_lease_token;
+
+  v_updated := found;
+  return v_updated;
+end;
+$$;
+
+revoke all on function public.qeo_release_research_report_analysis_lease(uuid, text)
+from public, anon, authenticated;
+grant execute on function public.qeo_release_research_report_analysis_lease(uuid, text)
+to service_role;
 
 create or replace function public.qeo_publish_research_report_analysis(
   p_report_id uuid,
@@ -271,6 +492,7 @@ begin
     response_id,
     input_tokens,
     cached_input_tokens,
+    cache_write_tokens,
     output_tokens,
     reasoning_tokens,
     total_tokens,
@@ -298,6 +520,7 @@ begin
     p_analysis ->> 'response_id',
     coalesce((p_analysis ->> 'input_tokens')::bigint, 0),
     coalesce((p_analysis ->> 'cached_input_tokens')::bigint, 0),
+    coalesce((p_analysis ->> 'cache_write_tokens')::bigint, 0),
     coalesce((p_analysis ->> 'output_tokens')::bigint, 0),
     coalesce((p_analysis ->> 'reasoning_tokens')::bigint, 0),
     coalesce((p_analysis ->> 'total_tokens')::bigint, 0),
@@ -322,6 +545,7 @@ begin
     response_id = excluded.response_id,
     input_tokens = excluded.input_tokens,
     cached_input_tokens = excluded.cached_input_tokens,
+    cache_write_tokens = excluded.cache_write_tokens,
     output_tokens = excluded.output_tokens,
     reasoning_tokens = excluded.reasoning_tokens,
     total_tokens = excluded.total_tokens,
@@ -452,5 +676,78 @@ revoke all on function public.qeo_search_research_report_chunks(uuid, text, text
 from public, anon, authenticated;
 grant execute on function public.qeo_search_research_report_chunks(uuid, text, text, text, integer)
 to service_role;
+
+create or replace function public.qeo_trigger_research_reports_daily()
+returns bigint
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_app_url text;
+  v_cron_secret text;
+  v_request_id bigint;
+begin
+  select s.decrypted_secret
+    into v_app_url
+    from vault.decrypted_secrets s
+   where s.name = 'qeoindex_app_url'
+   limit 1;
+
+  if nullif(btrim(v_app_url), '') is null then
+    raise exception 'qeoindex_app_url is not configured in Supabase Vault';
+  end if;
+
+  select s.decrypted_secret
+    into v_cron_secret
+    from vault.decrypted_secrets s
+   where s.name = 'qeoindex_cron_secret'
+   limit 1;
+
+  if nullif(btrim(v_cron_secret), '') is null then
+    raise exception 'qeoindex_cron_secret is not configured in Supabase Vault';
+  end if;
+
+  select net.http_post(
+    url := rtrim(v_app_url, '/') || '/api/research-reports/daily',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || v_cron_secret
+    ),
+    body := jsonb_build_object(
+      'source', 'supabase_pg_cron',
+      'job', 'research_reports.daily'
+    ),
+    timeout_milliseconds := 55000
+  )
+    into v_request_id;
+
+  return v_request_id;
+end;
+$$;
+
+revoke all on function public.qeo_trigger_research_reports_daily()
+from public, anon, authenticated;
+grant execute on function public.qeo_trigger_research_reports_daily()
+to service_role;
+
+do $$
+begin
+  if exists (
+    select 1
+      from cron.job
+     where jobname = 'research-reports-daily-0705-ict'
+  ) then
+    perform cron.unschedule('research-reports-daily-0705-ict');
+  end if;
+end $$;
+
+select cron.schedule(
+  'research-reports-daily-0705-ict',
+  '5 0 * * *',
+  $cron$
+  select public.qeo_trigger_research_reports_daily();
+  $cron$
+);
 
 commit;
