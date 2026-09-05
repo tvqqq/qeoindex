@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto"
 
-export const AI_COUNCIL_PROMPT_IDENTITY_VERSION = "prompt-identity-v1"
+export const AI_COUNCIL_PROMPT_IDENTITY_VERSION = "prompt-identity-v2-report-evidence"
 
 export interface AiCouncilPromptIdentityInput {
   deterministicEvidenceHash: string
   rawContextHash: string | null
   researchContextHash: string | null
+  reportEvidenceHash?: string | null
   promptVersion: string
   marketSynthesisHash?: string | null
 }
@@ -47,21 +48,24 @@ export function resolveAiCouncilPromptIdentityHash(
       promptIdentityHash?: unknown
       marketSynthesis?: { evidenceHash?: unknown }
     }
+    reportEvidence?: { contextHash?: unknown }
   },
   promptVersion: string,
 ) {
   const marketSynthesisHash = hashString(stock.researchContext?.marketSynthesis?.evidenceHash)
+  const reportEvidenceHash = hashString(stock.reportEvidence?.contextHash)
   const computedIdentity = buildAiCouncilPromptIdentityHash({
     deterministicEvidenceHash: stock.evidenceHash,
     rawContextHash: hashString(stock.llmEvidence?.contextHash),
     researchContextHash: hashString(stock.researchContext?.contextHash),
+    reportEvidenceHash,
     promptVersion,
     ...(marketSynthesisHash ? { marketSynthesisHash } : {}),
   })
   const persistedResearchIdentity = hashString(stock.researchContext?.promptIdentityHash)
 
-  // Reuse the frozen audit identity only when it covers the exact same prompt inputs.
-  // A same-session Market Synthesis context changes the prompt/cache identity without
-  // mutating the immutable research-context audit row.
+  // A frozen Notion identity predates the first-class Research Reports layer. Reuse it
+  // only when it covers the exact current prompt inputs; any report hash forces the
+  // v2 identity to be recomputed without mutating the deterministic evidence hash.
   return persistedResearchIdentity === computedIdentity ? persistedResearchIdentity : computedIdentity
 }
