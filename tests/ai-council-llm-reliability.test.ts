@@ -13,6 +13,13 @@ import "./research-reports/qa-schema.test.ts"
 import "./research-reports/qa-openai.test.ts"
 import "./research-reports/qa-service.test.ts"
 import "./research-reports/qa-api.test.ts"
+import "./research-reports/detail-service.test.ts"
+import "./research-reports/pdf-api.test.ts"
+import "./research-reports/detail-navigation.test.ts"
+import "./research-reports/pdf-viewer.test.ts"
+import "./research-reports/detail-analysis-ui.test.ts"
+import "./research-reports/detail-chat-ui.test.ts"
+import "./research-reports/detail-page.test.ts"
 
 import {
   extractOpenAiOutputText,
