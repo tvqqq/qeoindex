@@ -1,6 +1,6 @@
 # QeoIndex engineering handover
 
-Last updated: 2026-09-04.
+Last updated: 2026-09-05.
 
 This document is the canonical fast-start for the active production architecture. Historical architecture is preserved in Git history and explicitly historical design/plan documents; when historical material conflicts with this file, this file wins.
 
@@ -44,6 +44,25 @@ The DNSE Daily bootstrap keeps the 366-day fast request window for normal ticker
 
 See `docs/wyckoff-chart-unified-data.md` for the domain-specific storage/read contract.
 
+## Interactive chart-data contract — raw 1m hot/cold
+
+Interactive stock charts have a separate canonical raw `1m` subsystem. It does not widen or replace the Daily-only Wyckoff/EOD contract above.
+
+- Hot `1m` rows: `chart_ohlcv_intraday`.
+- Batch provenance: `chart_ohlcv_provenance_batches`.
+- Cold manifests: `chart_ohlcv_cold_manifests`.
+- Cold objects: private Supabase Storage bucket `chart-ohlcv`, checksum-addressed `.ndjson.gz`.
+- Browser boundary: authenticated `GET /api/market/ohlcv` through the `research` feature gate.
+- Current exact production migration: `20260905065836_qeo92_chart_ohlcv_intraday`.
+
+The canonical chart-data service validates OHLCV, sorts/deduplicates deterministically, and merges overlapping sources with `hot > cold > daily > provider` precedence. Overlap disagreement is retained as integrity evidence rather than silently hidden. Cold objects must pass SHA-256 verification before their bars participate in a read.
+
+DNSE exact-range `1m` history is the current provider backfill path. Provider failure must never generate synthetic candles or fake OHLCV fallbacks.
+
+Derived intraday timeframes are a separate timeframe-engine concern. Until that engine consumes canonical raw `1m`, unsupported `15m`, `30m`, `1h`, `2h`, `4h`, and similar chart selections must render an explicit unavailable state rather than derive fake candles from Daily bars.
+
+See `docs/chart-data.md` for the detailed interactive-chart persistence/read contract.
+
 ## EOD v4 DAG contract
 
 Current-session dependency flow:
@@ -85,11 +104,13 @@ See `docs/automation/CRON_WORKFLOW_TOP_STOCKS_200.md` for the canonical EOD runb
 
 Supabase is the operational hot store. Notion is a compact analytical/audit sink only.
 
-Raw Daily retention is intentionally fail-closed while Weekly analysis is derived from Daily and no independently verified cold-history hydration/restore path is part of the active architecture.
+For EOD/Wyckoff, raw Daily retention is intentionally fail-closed while Weekly analysis is derived from Daily and no independently verified cold-history hydration/restore path is part of that architecture.
 
-The active retention implementation only calls approved Supabase cleanup RPCs for transient/terminal evidence such as telemetry, staging, expired raw evidence and build artifacts. It must not delete `market_ohlcv_history` Daily bars merely by age.
+Interactive chart history is a separate exception with an explicit verified hot/cold path: raw `1m` may move between `chart_ohlcv_intraday` and private `chart-ohlcv` objects only through manifest/checksum-aware chart-data code. This does not authorize age-pruning `market_ohlcv_history`.
 
-Legacy archive-ledger concepts such as `eod_archive_checkpoints`, `market_ohlcv_archive_ranges`, Drive manifests/SHA coverage and per-ticker Notion archive status are not active retention authority. Under QEO-65 they may be physically dropped only after zero-consumer repository + production dependency proof and a no-`CASCADE` migration.
+The active EOD retention implementation only calls approved Supabase cleanup RPCs for transient/terminal evidence such as telemetry, staging, expired raw evidence and build artifacts. It must not delete `market_ohlcv_history` Daily bars merely by age.
+
+Legacy EOD archive-ledger concepts such as `eod_archive_checkpoints`, `market_ohlcv_archive_ranges`, Drive manifests/SHA coverage and per-ticker Notion archive status are not active retention authority. They are unrelated to the current interactive-chart cold manifest contract. Under QEO-65 legacy objects may be physically dropped only after zero-consumer repository + production dependency proof and a no-`CASCADE` migration.
 
 ## Database migration safety
 
@@ -107,6 +128,7 @@ Important existing migration contracts include:
 - `20260901190000_wyckoff_daily_weekly_storage_cutover.sql`: active raw `1D`, active Wyckoff `1D/1W`, bootstrap state and storage constraints.
 - `20260901193000_clean_rebuild_top_stocks_200.sql`: approved one-shot rebuild of rebuildable operational state; its production ledger timestamp is reconciled through `supabase/migration-equivalence.json`.
 - `20260902011529_clean_rebuild_market_snapshot_trigger.sql`: service-role-only bootstrap of fresh canonical market snapshots after destructive rebuild.
+- `20260905065836_qeo92_chart_ohlcv_intraday.sql`: isolated interactive-chart `1m` hot/provenance/cold-manifest schema and private cold Storage bucket; it must not relax the Daily-only `market_ohlcv_history` invariant.
 
 Do not replay SQL merely to make timestamps look identical. `pnpm db:drift:verify` is the reviewed reconciliation gate.
 
@@ -139,7 +161,7 @@ A current-session manual smoke is accepted only when evidence shows:
 - market synthesis / LLM / retention / analytical summary report their real states;
 - `COMPLETE` closes the parent run without hidden skipped critical phases and records `supabase-first-eod-v4-dag`.
 
-For fast troubleshooting, inspect `system_job_runs`, `system_job_phases`, latest `market_universe_runs`, `stock_orderbook_snapshots`, `wyckoff_scan_runs`, `market_ohlcv_history`, and `market_ohlcv_bootstrap_state` before interpreting UI state.
+For fast troubleshooting, inspect `system_job_runs`, `system_job_phases`, latest `market_universe_runs`, `stock_orderbook_snapshots`, `wyckoff_scan_runs`, `market_ohlcv_history`, and `market_ohlcv_bootstrap_state` before interpreting EOD UI state. For interactive chart-data issues, separately inspect `chart_ohlcv_intraday`, `chart_ohlcv_provenance_batches`, `chart_ohlcv_cold_manifests`, and the canonical chart-data API/service path.
 
 ## Required release gates
 
