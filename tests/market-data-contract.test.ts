@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { mergeChartBars } from "../components/stock-detail/chart/chart-history.ts"
@@ -12,6 +13,7 @@ import {
   toCanonicalOrderbookSnapshot,
 } from "../modules/market/data-contract.ts"
 import { activeMinuteStart, partitionLiveMinuteBars } from "../modules/market/chart-data/live-session.ts"
+import { uncoveredProviderRanges } from "../modules/market/chart-data/provider-coverage.ts"
 import { sourceRangeForResolution } from "../modules/market/chart-data/timeframes.ts"
 
 test("price normalizer enforces consistent kilo format (21.85) across all price shapes", () => {
@@ -189,6 +191,21 @@ test("QEO-93 full-history calendar source ranges stay inside canonical positive 
     const source = sourceRangeForResolution(resolution, 1, to)
     assert.ok(source.from > 0, `${resolution} source range must remain positive, got ${source.from}`)
   }
+})
+
+test("QEO-93 sparse 1m gaps already covered by a successful provider request are not refetched", () => {
+  const detectedGaps = [{ from: 1786001340, to: 1786002300 }]
+  const successfulCoverage = [{ from: 1785949200, to: 1786456192 }]
+  assert.deepEqual(uncoveredProviderRanges(detectedGaps, successfulCoverage), [])
+
+  const partiallyCovered = uncoveredProviderRanges(
+    [{ from: 100, to: 200 }],
+    [{ from: 100, to: 150 }],
+  )
+  assert.deepEqual(partiallyCovered, [{ from: 150, to: 200 }])
+
+  const serviceSource = readFileSync(new URL("../modules/market/chart-data/service.ts", import.meta.url), "utf8")
+  assert.match(serviceSource, /uncoveredProviderRanges\(storageGapRanges,\s*coveredRanges\)/)
 })
 
 test("QEO-96 live minute replay keeps current candle ephemeral and rejects future bars", () => {
