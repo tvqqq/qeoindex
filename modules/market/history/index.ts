@@ -1,6 +1,7 @@
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { vietnamDateKey } from "@/modules/market/calendar"
 import { fetchDailyOhlcv as fetchDnseDailyOhlcv, fetchHourlyOhlcv as fetchDnseHourlyOhlcv } from "@/modules/market/providers/dnse/history"
+import { fetchTitanLabsDailyOhlcv } from "@/modules/market/providers/titanlabs/daily"
 import { fetchVciDailyOhlcv } from "@/modules/market/providers/vci/daily"
 import { fetchVnDirectDailyOhlcv } from "@/modules/market/providers/vndirect/history"
 import { fetchYahooDailyOhlcv, fetchYahooHourlyOhlcv } from "@/modules/market/providers/yahoo/history"
@@ -40,6 +41,32 @@ function canonicalDailySessionTime(timeSeconds: number) {
   return Math.floor(Date.UTC(year, month - 1, day, 2, 0, 0) / 1000)
 }
 
+function validDailyBar(bar: OhlcvBar) {
+  return Number.isInteger(bar.time)
+    && bar.time > 0
+    && Number.isFinite(bar.open)
+    && Number.isFinite(bar.high)
+    && Number.isFinite(bar.low)
+    && Number.isFinite(bar.close)
+    && Number.isFinite(bar.volume)
+    && bar.open > 0
+    && bar.high > 0
+    && bar.low > 0
+    && bar.close > 0
+    && bar.volume >= 0
+    && bar.high >= Math.max(bar.open, bar.close, bar.low)
+    && bar.low <= Math.min(bar.open, bar.close, bar.high)
+}
+
+function strictDailyBars(provider: string, bars: OhlcvBar[]) {
+  const invalid = bars.find((bar) => !validDailyBar(bar))
+  if (invalid) {
+    throw new Error(`${provider} returned invalid Daily OHLCV at ${new Date(invalid.time * 1000).toISOString()}`)
+  }
+  if (!bars.length) throw new Error(`${provider} returned no usable completed Daily bars`)
+  return bars
+}
+
 function normalizeDailyBars(bars: OhlcvBar[]) {
   const bySession = new Map<number, OhlcvBar>()
   for (const bar of bars) {
@@ -54,7 +81,7 @@ function isHistoricalBarsResult(value: unknown): value is HistoricalBarsResult {
   const result = value as Partial<HistoricalBarsResult>
   return Array.isArray(result.bars)
     && result.bars.length > 0
-    && (result.provider === "VCI" || result.provider === "DNSE" || result.provider === "Fallback" || result.provider === "VNDirect")
+    && (result.provider === "VCI" || result.provider === "DNSE" || result.provider === "Fallback" || result.provider === "VNDirect" || result.provider === "TitanLabs")
     && typeof result.detail === "string"
     && typeof result.sourceUrl === "string"
     && typeof result.fetchedAt === "string"
@@ -93,7 +120,7 @@ export async function fetchDailyMarketHistoryWindow(
   const errors: string[] = []
 
   try {
-    const bars = await fetchVciDailyOhlcv(symbol, now, lookbackDays)
+    const bars = strictDailyBars("VCI", await fetchVciDailyOhlcv(symbol, now, lookbackDays))
     return historicalResult({ bars, provider: "VCI", detail: `VCI native ONE_DAY · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
   } catch (error) {
     errors.push(`VCI: ${errorMessage(error)}`)
@@ -101,7 +128,7 @@ export async function fetchDailyMarketHistoryWindow(
 
   if (shouldTryDnse()) {
     try {
-      const bars = await fetchDnseDailyOhlcv(symbol, now, lookbackDays)
+      const bars = strictDailyBars("DNSE", await fetchDnseDailyOhlcv(symbol, now, lookbackDays))
       return historicalResult({ bars, provider: "DNSE", detail: `DNSE OpenAPI · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
     } catch (error) {
       errors.push(`DNSE: ${markDnseUnavailable(error)}`)
@@ -111,20 +138,27 @@ export async function fetchDailyMarketHistoryWindow(
   }
 
   try {
-    const bars = await fetchYahooDailyOhlcv(symbol, now, lookbackDays)
+    const bars = strictDailyBars("Yahoo", await fetchYahooDailyOhlcv(symbol, now, lookbackDays))
     return historicalResult({ bars, provider: "Fallback", detail: `Yahoo Finance .VN fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
   } catch (error) {
     errors.push(`Yahoo: ${errorMessage(error)}`)
   }
 
   try {
-    const bars = await fetchVnDirectDailyOhlcv(symbol, now, lookbackDays)
-    return historicalResult({ bars, provider: "VNDirect", detail: `VNDirect Finfo last-resort fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
+    const bars = strictDailyBars("VNDirect", await fetchVnDirectDailyOhlcv(symbol, now, lookbackDays))
+    return historicalResult({ bars, provider: "VNDirect", detail: `VNDirect Finfo fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
   } catch (error) {
     errors.push(`VNDirect: ${errorMessage(error)}`)
   }
 
-  throw new Error(errors.join(" | ").slice(0, 900))
+  try {
+    const bars = strictDailyBars("TitanLabs", await fetchTitanLabsDailyOhlcv(symbol, now, lookbackDays))
+    return historicalResult({ bars, provider: "TitanLabs", detail: `TitanLabs last-resort historical fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
+  } catch (error) {
+    errors.push(`TitanLabs: ${errorMessage(error)}`)
+  }
+
+  throw new Error(errors.join(" | ").slice(0, 1100))
 }
 
 export async function fetchHourlyMarketHistoryWindow(
@@ -162,8 +196,10 @@ export async function fetchDailyMarketHistory(symbol: string, now = new Date()):
     : result.provider === "DNSE"
       ? "DNSE OpenAPI · 1D"
       : result.provider === "VNDirect"
-        ? "VNDirect Finfo last-resort fallback · 1D"
-        : "Yahoo Finance .VN fallback · 1D"
+        ? "VNDirect Finfo fallback · 1D"
+        : result.provider === "TitanLabs"
+          ? "TitanLabs last-resort historical fallback · 1D"
+          : "Yahoo Finance .VN fallback · 1D"
   return { ...result, detail }
 }
 
@@ -175,8 +211,10 @@ export async function fetchLongDailyMarketHistory(symbol: string, now = new Date
     : result.provider === "DNSE"
       ? "DNSE OpenAPI · 1D · 8-year Wyckoff window"
       : result.provider === "VNDirect"
-        ? "VNDirect Finfo last-resort fallback · 1D · 8-year Wyckoff window"
-        : "Yahoo Finance .VN fallback · 1D · 8-year Wyckoff window"
+        ? "VNDirect Finfo fallback · 1D · 8-year Wyckoff window"
+        : result.provider === "TitanLabs"
+          ? "TitanLabs last-resort historical fallback · 1D · 8-year Wyckoff window"
+          : "Yahoo Finance .VN fallback · 1D · 8-year Wyckoff window"
   return { ...result, detail }
 }
 
