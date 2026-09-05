@@ -40,6 +40,7 @@ export interface UniverseRow {
   providerStatus: string
   lastScan: string
   sector: string
+  companyName?: string
 }
 
 export interface DailyScanRow {
@@ -161,6 +162,7 @@ async function loadUniverse() {
     providerStatus: stock.detailComplete ? "Ready" : "Pending",
     lastScan: "",
     sector: stock.sector || "",
+    companyName: stock.companyName || "",
   }))
   if (!universe.length) throw new Error("Canonical scanner universe returned no active stocks")
   return { universeDate: snapshot.sourceAsOfDate, universe }
