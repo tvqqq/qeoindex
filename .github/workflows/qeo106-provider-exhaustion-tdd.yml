@@ -41,9 +41,13 @@ jobs:
           from pathlib import Path
           path = Path('tests/qeo-100-market-data.cases.ts')
           text = path.read_text()
+          legacy_assert = '  assert.match(history, /provider === "Fallback" \\? valid\\.filter\\(\\(bar\\) => bar\\.volume > 0\\)/)\n'
+          replacement_assert = '  assert.match(history, /deepHistoryBarPolicy/)\n  assert.match(history, /bar\\.volume > 0/)\n'
+          assert text.count(legacy_assert) == 1
+          text = text.replace(legacy_assert, replacement_assert)
           anchor = 'test("QEO-106 deep Daily history is resumable, bounded, provider-backed and archive-before-prune", () => {'
           assert text.count(anchor) == 1
-          regression = '''test("QEO-106 deep backfill exhausts lower-priority providers when a provider has no trusted bars", () => {\n  const historyIndex = source("modules/market/history/index.ts")\n  const coldHistory = source("modules/market/history/daily-cold-history.ts")\n  assert.match(historyIndex, /DailyHistoryBarPolicy/)\n  assert.match(historyIndex, /applyDailyHistoryBarPolicy/)\n  assert.match(historyIndex, /no trusted completed Daily bars/)\n  assert.ok(historyIndex.indexOf('errors.push(`Yahoo:') < historyIndex.indexOf('fetchVnDirectDailyOhlcv'))\n  assert.ok(historyIndex.indexOf('fetchVnDirectDailyOhlcv') < historyIndex.indexOf('fetchTitanLabsDailyOhlcv'))\n  assert.match(coldHistory, /fetchDailyMarketHistoryWindow\(ticker, DAILY_DEEP_CHUNK_DAYS, cursorNow, deepHistoryBarPolicy\)/)\n  assert.match(coldHistory, /provider === "VCI" \|\| provider === "DNSE"/)\n  assert.match(coldHistory, /bar\.volume > 0/)\n})\n\n'''
+          regression = '''test("QEO-106 deep backfill exhausts lower-priority providers when a provider has no trusted bars", () => {\n  const historyIndex = source("modules/market/history/index.ts")\n  const coldHistory = source("modules/market/history/daily-cold-history.ts")\n  assert.match(historyIndex, /DailyHistoryBarPolicy/)\n  assert.match(historyIndex, /applyDailyHistoryBarPolicy/)\n  assert.match(historyIndex, /no trusted completed Daily bars/)\n  const dailyStart = historyIndex.indexOf("export async function fetchDailyMarketHistoryWindow")\n  const dailyEnd = historyIndex.indexOf("export async function fetchHourlyMarketHistoryWindow", dailyStart)\n  const waterfall = historyIndex.slice(dailyStart, dailyEnd)\n  assert.ok(dailyStart >= 0 && dailyEnd > dailyStart)\n  assert.ok(waterfall.indexOf('errors.push(`Yahoo:') < waterfall.indexOf('fetchVnDirectDailyOhlcv'))\n  assert.ok(waterfall.indexOf('fetchVnDirectDailyOhlcv') < waterfall.indexOf('fetchTitanLabsDailyOhlcv'))\n  assert.match(coldHistory, /fetchDailyMarketHistoryWindow\\(ticker, DAILY_DEEP_CHUNK_DAYS, cursorNow, deepHistoryBarPolicy\\)/)\n  assert.match(coldHistory, /provider === "VCI" \\|\\| provider === "DNSE"/)\n  assert.match(coldHistory, /bar\\.volume > 0/)\n})\n\n'''
           path.write_text(text.replace(anchor, regression + anchor))
           PY
 
