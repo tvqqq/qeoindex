@@ -310,13 +310,12 @@ async function loadTickerCandidateReportIds(
       eq(column: string, value: unknown): typeof query
       lte(column: string, value: string): typeof query
       order(column: string, options?: { ascending?: boolean }): typeof query
-      limit(value: number): PromiseLike<QueryResult>
-    }
+    } & PromiseLike<QueryResult>
   query = query.eq("ticker", ticker.toUpperCase())
   query = query.lte("created_at", runAt)
   query = query.order("created_at", { ascending: false })
   query = query.order("report_id", { ascending: true })
-  const rows = ensureRows(await query.limit(MAX_QUERY_ROWS), "Council Research Report ticker candidate lookup failed")
+  const rows = ensureRows(await query, "Council Research Report ticker candidate lookup failed")
   const reportIds: string[] = []
   const seen = new Set<string>()
   for (const row of rows) {
