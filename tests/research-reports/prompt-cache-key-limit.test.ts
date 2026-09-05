@@ -3,7 +3,9 @@ import test from "node:test"
 
 import { buildAiCouncilPromptCacheKey } from "../../modules/ai-council/prompt-identity.ts"
 import { analyzeResearchReportPages } from "../../modules/research-reports/analysis/openai.ts"
+import { REPORT_PROMPT_VERSION } from "../../modules/research-reports/analysis/prompt.ts"
 import { answerResearchReportQaWithOpenAi } from "../../modules/research-reports/qa/openai.ts"
+import { RESEARCH_REPORT_QA_PROMPT_VERSION } from "../../modules/research-reports/qa/prompt.ts"
 import type { ResearchReportQaEvidence } from "../../modules/research-reports/qa/types.ts"
 
 const MAX_PROMPT_CACHE_KEY_LENGTH = 64
@@ -43,7 +45,7 @@ test("QEO-87 report analysis prompt cache key stays within OpenAI 64-char contra
       { pageNumber: 1, text: "Material report evidence ".repeat(8) },
     ], { fetchImpl }))
     const key = String(body.prompt_cache_key)
-    assert.match(key, /^research-report:report-analysis-prompt-v1:/)
+    assert.ok(key.startsWith(`research-report:${REPORT_PROMPT_VERSION}:`))
     assert.ok(key.length <= MAX_PROMPT_CACHE_KEY_LENGTH)
   })
 })
@@ -67,7 +69,7 @@ test("QEO-87 report Q&A prompt cache key stays within OpenAI 64-char contract", 
       evidence,
     }, { fetchImpl }))
     const key = String(body.prompt_cache_key)
-    assert.match(key, /^research-report-qa:report-qa-prompt-v1:/)
+    assert.ok(key.startsWith(`research-report-qa:${RESEARCH_REPORT_QA_PROMPT_VERSION}:`))
     assert.ok(key.length <= MAX_PROMPT_CACHE_KEY_LENGTH)
   })
 })
