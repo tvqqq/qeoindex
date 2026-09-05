@@ -34,6 +34,25 @@ test("StockTradingViewChart implements 100% TradingView scroll, zoom out, and co
   assert.match(chartCode, /handleResetView/)
 })
 
+test("StockTradingViewChart keeps TradingView-style future space and scalable price rail", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  // Latest candle can sit left of the price rail and pan farther into bounded future space.
+  assert.match(chartCode, /DEFAULT_RIGHT_OFFSET_BARS = 8/)
+  assert.match(chartCode, /MAX_RIGHT_OFFSET_BARS = 32/)
+  assert.match(chartCode, /rightOffsetBars/)
+  assert.match(chartCode, /scrollOffset - rightOffsetBars/)
+  assert.match(chartCode, /setRightOffsetBars\(Math\.max\(0, -nextPosition\)\)/)
+  assert.match(chartCode, /visibleBars\.length - 1 \+ rightOffsetBars/)
+
+  // Wheel on the Y rail changes only the manual price domain and supports auto-scale reset.
+  assert.match(chartCode, /manualPriceDomain/)
+  assert.match(chartCode, /isOverPriceAxis/)
+  assert.match(chartCode, /setManualPriceDomain\(\{ min: nextMax - nextRange, max: nextMax \}\)/)
+  assert.match(chartCode, /onDoubleClick=\{handleResetPriceScale\}/)
+  assert.match(chartCode, /cursor-ns-resize/)
+})
+
 test("StockChartDrawingCanvas supports object selection, dragging, and anchor handles", () => {
   const canvasCode = source("components/stock-detail/chart/stock-chart-drawing-canvas.tsx")
 
@@ -74,6 +93,11 @@ test("StockChartObjectManager provides clear object tree management and text edi
   assert.match(toolsCode, /onToggleObjectManager/)
   assert.match(toolsCode, /drawingsCount/)
   assert.match(toolsCode, /saveStatus/)
+
+  // Ray and arrow must remain visually distinct tools.
+  assert.match(toolsCode, /function RayToolIcon/)
+  assert.match(toolsCode, /id: "ray"[^\n]+RayToolIcon/)
+  assert.match(toolsCode, /id: "arrow"[^\n]+ArrowUpRight/)
 })
 
 test("useUserChartSync manages database persistence and local cache fallback", () => {
@@ -142,4 +166,3 @@ test("StockTradingViewChart implements TitanLabs-style bottom range presets and 
   assert.match(chartCode, /cursorRatio = Math\.max\(0, Math\.min\(1, mouseX \/ Math\.max\(1, plotPx\)\)\)/)
   assert.match(chartCode, /offsetDelta = Math\.round\(diff \* \(1 - cursorRatio\)\)/)
 })
-

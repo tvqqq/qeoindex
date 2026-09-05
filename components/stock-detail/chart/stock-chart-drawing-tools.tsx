@@ -45,6 +45,14 @@ interface DrawingToolsProps {
   saveStatus?: "saved" | "saving" | "offline"
 }
 
+function RayToolIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <circle cx="5" cy="17" r="1.7" fill="currentColor" />
+      <path d="M6.5 15.5 19 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
 
 const PALETTE_COLORS = [
   { hex: "#00f0ff", label: "Cyan" },
@@ -80,7 +88,7 @@ export function StockChartDrawingTools({
   const toolButtons: { id: DrawingTool; label: string; icon: React.ReactNode }[] = [
     { id: "cursor", label: "Con trỏ (Crosshair)", icon: <Crosshair className="size-4" /> },
     { id: "trendline", label: "Đường xu hướng (Trendline)", icon: <TrendingUp className="size-4" /> },
-    { id: "ray", label: "Tia xu hướng (Ray)", icon: <ArrowUpRight className="size-4" /> },
+    { id: "ray", label: "Tia xu hướng (Ray)", icon: <RayToolIcon className="size-4" /> },
     { id: "arrow", label: "Mũi tên (Arrow)", icon: <ArrowUpRight className="size-4" /> },
     { id: "horizontal", label: "Đường ngang (Hỗ trợ/Kháng cự)", icon: <Minus className="size-4" /> },
     { id: "rectangle", label: "Hình chữ nhật (Vùng giá / Wyckoff TR)", icon: <Square className="size-4" /> },
