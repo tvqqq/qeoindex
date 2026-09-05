@@ -19,7 +19,7 @@ import {
   normalizeChartProviderResult,
   type ChartOhlcvProvider,
 } from "./provider"
-import { mergeProviderRanges, missingProviderRanges } from "./provider-coverage"
+import { mergeProviderRanges, missingProviderRanges, uncoveredProviderRanges } from "./provider-coverage"
 
 const DAY_SECONDS = 86400
 const MAX_INTRADAY_SPAN_SECONDS = 31 * DAY_SECONDS
@@ -144,6 +144,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
     from: gap.fromTime,
     to: gap.toTime,
   }))
+  const uncoveredStorageGapRanges = uncoveredProviderRanges(storageGapRanges, coveredRanges)
   const liveTailRange = session.isLiveSession && effectiveTo > request.from
     ? {
         from: Math.max(request.from, currentMinuteStart - LIVE_TAIL_SECONDS),
@@ -153,7 +154,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   const providerRanges = effectiveTo > request.from
     ? mergeProviderRanges([
         ...uncoveredRanges,
-        ...storageGapRanges,
+        ...uncoveredStorageGapRanges,
         ...(liveTailRange && liveTailRange.from < liveTailRange.to ? [liveTailRange] : []),
       ])
     : []
