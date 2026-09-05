@@ -5,7 +5,7 @@ const MAX_ERROR_CHARS = 500
 const MAX_SEARCH_CHARS = 100
 const MAX_SOURCE_CHARS = 80
 
-export const RESEARCH_REPORT_CATALOG_PAGE_SIZE = 20
+export const RESEARCH_REPORT_CATALOG_PAGE_SIZE = 24
 export const RESEARCH_REPORT_CATALOG_CATEGORIES = ["macro", "strategy", "sector"] as const
 
 export type ResearchReportCatalogCategory = (typeof RESEARCH_REPORT_CATALOG_CATEGORIES)[number]
