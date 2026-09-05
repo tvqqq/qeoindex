@@ -52,7 +52,7 @@ Interactive stock charts have a separate canonical raw `1m` subsystem. It does n
 - Batch provenance: `chart_ohlcv_provenance_batches`.
 - Cold manifests: `chart_ohlcv_cold_manifests`.
 - Cold objects: private Supabase Storage bucket `chart-ohlcv`, checksum-addressed `.ndjson.gz`.
-- Browser boundary: authenticated `GET /api/market/ohlcv` through the `research` feature gate.
+- Browser boundary: authenticated `GET /api/market/ohlcv`.
 - Current exact production migration: `20260905065836_qeo92_chart_ohlcv_intraday`.
 
 The canonical chart-data service validates OHLCV, sorts/deduplicates deterministically, and merges overlapping sources with `hot > cold > daily > provider` precedence. Overlap disagreement is retained as integrity evidence rather than silently hidden. Cold objects must pass SHA-256 verification before their bars participate in a read.
