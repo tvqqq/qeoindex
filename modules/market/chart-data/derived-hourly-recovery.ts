@@ -48,14 +48,14 @@ function sameBars(left: CanonicalOhlcvBar[], right: CanonicalOhlcvBar[]) {
   return true
 }
 
-async function manifestHasDerivedRows(supabase: SupabaseClient, manifestId: string) {
+async function derivedManifestIds(supabase: SupabaseClient, manifestIds: string[]) {
+  if (!manifestIds.length) return new Set<string>()
   const { data, error } = await supabase
     .from("chart_ohlcv_derived_hourly")
     .select("source_manifest_id")
-    .eq("source_manifest_id", manifestId)
-    .limit(1)
+    .in("source_manifest_id", manifestIds)
   if (error) throw new Error(`Chart derived recovery coverage read failed: ${error.message}`)
-  return Boolean((data || []).length)
+  return new Set((data || []).map((row) => String(row.source_manifest_id || "")).filter(Boolean))
 }
 
 async function listRecoveryCandidates(supabase: SupabaseClient, limit: number): Promise<VerifiedColdManifest[]> {
@@ -66,8 +66,9 @@ async function listRecoveryCandidates(supabase: SupabaseClient, limit: number): 
       offset,
     })
     if (!page.length) break
+    const covered = await derivedManifestIds(supabase, page.map((manifest) => manifest.id))
     for (const manifest of page) {
-      if (!(await manifestHasDerivedRows(supabase, manifest.id))) candidates.push(manifest)
+      if (!covered.has(manifest.id)) candidates.push(manifest)
       if (candidates.length >= limit) break
     }
     if (page.length < MANIFEST_SCAN_PAGE_SIZE) break
