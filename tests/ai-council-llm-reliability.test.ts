@@ -22,6 +22,7 @@ import "./research-reports/detail-chat-ui.test.ts"
 import "./research-reports/detail-page.test.ts"
 import "./research-reports/council-evidence.test.ts"
 import "./research-reports/council-snapshot.test.ts"
+import "./research-reports/council-prompt-integration.test.ts"
 
 import {
   extractOpenAiOutputText,
