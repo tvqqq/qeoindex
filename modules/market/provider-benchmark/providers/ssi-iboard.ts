@@ -134,7 +134,11 @@ export function createSsiIboardProbeProvider(deps: {
         }
 
         const payload = await response.json()
-        const bars = parseSsiIboardPayload(payload, input)
+        const parsed = parseSsiIboardPayload(payload, input)
+        const completedCutoff = Math.floor(nowMs() / 1000) - 60
+        const bars = input.resolution === "1m"
+          ? parsed.filter((bar) => bar.time <= completedCutoff)
+          : parsed
         const latencyMs = Math.max(0, nowMs() - started)
         const range = summarizeReturnedRange(bars)
         return {
