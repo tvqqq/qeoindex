@@ -8,6 +8,7 @@ import "./pricing.test.ts"
 import "./ai-budget.test.ts"
 import "./qeo85-schema.test.ts"
 import "./lease.test.ts"
+import "./topi.test.ts"
 
 import {
   nextCitationNavigationState,
