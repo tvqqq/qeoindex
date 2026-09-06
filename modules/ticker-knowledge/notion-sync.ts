@@ -1,6 +1,11 @@
 import type { Thesis } from "@/modules/research/types"
 
-import type { TickerKnowledgeIndex } from "./domain.ts"
+import {
+  normalizeTicker,
+  queryTickerKnowledgeSafely,
+  type TickerKnowledgeIndex,
+  type TickerKnowledgeUnavailableReason,
+} from "./domain.ts"
 import { projectCurrentThesisKnowledge } from "./projections.ts"
 
 export const MAX_CURRENT_THESIS_REBUILD = 200
@@ -20,6 +25,18 @@ export interface CurrentThesisRebuildResult {
   failed: number
   truncated: boolean
   rows: CurrentThesisRebuildRow[]
+}
+
+export type CurrentThesisProjectionState = "current" | "stale" | "missing" | "unavailable"
+
+export interface CurrentThesisProjectionStatus {
+  ticker: string
+  pointId: string
+  canonicalSourceVersion: string
+  indexedSourceVersion: string | null
+  indexedAt: string | null
+  status: CurrentThesisProjectionState
+  reason: TickerKnowledgeUnavailableReason | null
 }
 
 export interface RebuildCurrentThesisKnowledgeInput {
@@ -55,6 +72,68 @@ function currentCanonicalTheses(rows: readonly Thesis[], tickers?: readonly stri
   }
 
   return [...byTicker.values()].sort((left, right) => left.ticker.localeCompare(right.ticker))
+}
+
+export async function inspectCurrentThesisProjection(
+  index: TickerKnowledgeIndex,
+  thesis: Thesis,
+): Promise<CurrentThesisProjectionStatus> {
+  const projected = projectCurrentThesisKnowledge(thesis)
+  const ticker = normalizeTicker(thesis.ticker)
+  const retrieval = await queryTickerKnowledgeSafely(index, {
+    ticker,
+    text: `current stock thesis ${ticker}`,
+    knowledgeTypes: ["CURRENT_THESIS"],
+    sourceTypes: ["NOTION_THESIS"],
+    authorities: ["CANONICAL_THESIS"],
+    sourceId: projected.provenance.sourceId,
+    limit: 4,
+  })
+
+  if (retrieval.status === "unavailable") {
+    return {
+      ticker,
+      pointId: projected.id,
+      canonicalSourceVersion: projected.provenance.sourceVersion,
+      indexedSourceVersion: null,
+      indexedAt: null,
+      status: "unavailable",
+      reason: retrieval.reason,
+    }
+  }
+
+  const indexed = retrieval.results
+    .map((result) => result.item)
+    .find((item) => (
+      item.id === projected.id
+      && item.ticker === ticker
+      && item.knowledgeType === "CURRENT_THESIS"
+      && item.sourceType === "NOTION_THESIS"
+      && item.authority === "CANONICAL_THESIS"
+      && item.provenance.sourceId === projected.provenance.sourceId
+    ))
+
+  if (!indexed) {
+    return {
+      ticker,
+      pointId: projected.id,
+      canonicalSourceVersion: projected.provenance.sourceVersion,
+      indexedSourceVersion: null,
+      indexedAt: null,
+      status: "missing",
+      reason: null,
+    }
+  }
+
+  return {
+    ticker,
+    pointId: projected.id,
+    canonicalSourceVersion: projected.provenance.sourceVersion,
+    indexedSourceVersion: indexed.provenance.sourceVersion,
+    indexedAt: indexed.indexedAt ?? null,
+    status: indexed.provenance.sourceVersion === projected.provenance.sourceVersion ? "current" : "stale",
+    reason: null,
+  }
 }
 
 export async function rebuildCurrentThesisKnowledge(
