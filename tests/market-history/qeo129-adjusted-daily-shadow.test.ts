@@ -191,3 +191,27 @@ test("QEO-129 rejects ticker mismatch and invalid adjusted numeric output", () =
     /raw Daily/i,
   )
 })
+
+test("QEO-129 refuses adjusted or unknown source basis before applying any factor", () => {
+  const baseRaw = {
+    ticker: "VHM",
+    sessionDate: "2025-10-15",
+    barTime: "2025-10-15T02:00:00.000Z",
+    open: 120,
+    high: 131.5,
+    low: 114.6,
+    close: 125,
+    volume: 1_000,
+  }
+
+  for (const sourcePriceBasis of ["ADJUSTED", "UNKNOWN", undefined] as const) {
+    assert.throws(
+      () => applyDailyAdjustment({
+        raw: { ...baseRaw, sourcePriceBasis } as any,
+        run,
+        transitions,
+      }),
+      /raw price basis/i,
+    )
+  }
+})
