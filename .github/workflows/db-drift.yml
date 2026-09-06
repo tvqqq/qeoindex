@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   drift:
@@ -57,6 +57,19 @@ jobs:
           path: artifacts/qeo23/database.types.ts
           if-no-files-found: ignore
           retention-days: 3
+      - name: One-shot sync generated Database types
+        if: failure() && github.head_ref == 'feat/qeo-108-storage-hardening'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          test -f artifacts/qeo23/database.types.ts
+          cp artifacts/qeo23/database.types.ts modules/shared/supabase/database.types.ts
+          git diff --quiet -- modules/shared/supabase/database.types.ts && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add modules/shared/supabase/database.types.ts
+          git commit -m "chore(db): refresh generated Supabase types"
+          git push origin "HEAD:${HEAD_REF}"
       - name: Run current DB contracts
         run: pnpm test:db
       - name: Compile TypeScript
