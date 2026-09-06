@@ -50,6 +50,8 @@ jobs:
           fi
       - name: Verify QEO-124 schema contract
         run: node --test tests/corporate-actions/qeo124-factor-schema.test.ts
+      - name: Verify generated RPC contract
+        run: grep -q "qeo_persist_adjustment_factor_candidate" modules/shared/supabase/database.types.ts
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
