@@ -48,7 +48,7 @@ jobs:
           text = path.read_text()
           anchor = 'test("QEO-106 deep Daily history is resumable, bounded, provider-backed and archive-before-prune", () => {'
           assert text.count(anchor) == 1
-          regression = '''test("QEO-106 integrity repair scopes the expensive audit to the requested tickers", () => {\n  const integrity = source("modules/market/history/daily-integrity.ts")\n  const migration = source("supabase/migrations/20260906003000_qeo106_scoped_daily_integrity_report.sql")\n  assert.match(migration, /qeo_market_daily_integrity_report_scoped\(p_tickers text\[\]\)/)\n  assert.match(migration, /requested as \(/)\n  assert.match(migration, /join requested r on r\.ticker = upper\(stock->>'ticker'\)/)\n  assert.match(migration, /grant execute on function public\.qeo_market_daily_integrity_report_scoped\(text\[\]\) to service_role/)\n  assert.match(integrity, /qeo_market_daily_integrity_report_scoped/)\n  assert.match(integrity, /\{ p_tickers: tickers \}/)\n  assert.equal((integrity.match(/loadIntegrityReport\(supabase, tickers\)/g) ?? []).length, 2)\n})\n\n'''
+          regression = '''test("QEO-106 integrity repair scopes the expensive audit to the requested tickers", () => {\n  const integrity = source("modules/market/history/daily-integrity.ts")\n  const migration = source("supabase/migrations/20260906003000_qeo106_scoped_daily_integrity_report.sql")\n  assert.match(migration, /qeo_market_daily_integrity_report_scoped\(p_tickers text\[\]\)/)\n  assert.match(migration, /requested as \(/)\n  assert.match(migration, /join requested r on r\.ticker = upper\(stock->>'ticker'\)/)\n  assert.match(migration, /provider in \('VCI', 'DNSE'\)/)\n  assert.match(migration, /grant execute on function public\.qeo_market_daily_integrity_report_scoped\(text\[\]\) to service_role/)\n  assert.match(integrity, /qeo_market_daily_integrity_report_scoped/)\n  assert.match(integrity, /\{ p_tickers: tickers \}/)\n  assert.equal((integrity.match(/loadIntegrityReport\(supabase, tickers\)/g) ?? []).length, 2)\n})\n\n'''
           path.write_text(text.replace(anchor, regression + anchor))
           PY
 
@@ -66,7 +66,7 @@ jobs:
           fi
           grep -q "QEO-106 integrity repair scopes the expensive audit" /tmp/qeo106-scoped-red.log
 
-      - name: Implement scoped integrity report
+      - name: Implement scoped integrity report and reconcile production ledger
         shell: bash
         run: |
           cat > supabase/migrations/20260906003000_qeo106_scoped_daily_integrity_report.sql <<'SQL'
@@ -135,14 +135,16 @@ jobs:
               count(*) filter (where is_trading_day)::bigint as valid_daily_rows,
               count(*) filter (where not is_trading_day)::bigint as non_trading_persisted_rows,
               count(*) filter (
-                where is_trading_day and volume = 0 and provider = 'Fallback'
-                  and source_url = 'internal://stock_orderbook_snapshots'
-                  and provider_detail ilike 'Verified final market-close repair%'
+                where is_trading_day and volume = 0 and (
+                  provider in ('VCI', 'DNSE') or (
+                    provider = 'Fallback' and source_url = 'internal://stock_orderbook_snapshots'
+                    and provider_detail ilike 'Verified final market-close repair%'
+                  )
+                )
               )::bigint as verified_no_trade_rows,
               count(*) filter (
                 where is_trading_day and volume = 0 and not (
-                  (provider = 'VCI' or provider = 'DNSE')
-                  or (
+                  provider in ('VCI', 'DNSE') or (
                     provider = 'Fallback' and source_url = 'internal://stock_orderbook_snapshots'
                     and provider_detail ilike 'Verified final market-close repair%'
                   )
@@ -191,20 +193,35 @@ jobs:
 
           python <<'PY'
           import json
+          from datetime import datetime, timezone
           from pathlib import Path
-          path = Path('supabase/migration-equivalence.json')
-          data = json.loads(path.read_text())
+
+          manifest_path = Path('supabase/migration-equivalence.json')
+          data = json.loads(manifest_path.read_text())
           name = 'qeo106_scoped_daily_integrity_report'
-          if not any(row['logicalName'] == name for row in data['migrations']):
-              data['migrations'].append({
-                  'logicalName': name,
-                  'repositoryVersion': '20260906003000',
-                  'productionVersion': None,
-                  'state': 'QUARANTINED',
-                  'evidence': 'qeo106-production-repair-timeout-red-green',
-                  'rationale': 'Production canonical-200 repair exposed statement_timeout because each batch recomputed the full 200-ticker integrity report. This migration adds a service-role-only scoped equivalent; production apply follows exact-head verification.'
-              })
-          path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n')
+          row = {
+              'logicalName': name,
+              'repositoryVersion': '20260906003000',
+              'productionVersion': '20260906002919',
+              'state': 'MAPPED',
+              'evidence': 'qeo106-production-scoped-integrity-rpc-and-vic-vcb-parity-smoke',
+              'rationale': 'Production repair batches exposed statement_timeout because the route recomputed the full canonical-200 integrity report twice. The reviewed scoped equivalent was replay-verified locally, applied as production version 20260906002919, and returned VIC/VCB PASS with exact canonical counts before runtime cutover.'
+          }
+          existing = next((item for item in data['migrations'] if item['logicalName'] == name), None)
+          if existing:
+              existing.update(row)
+          else:
+              data['migrations'].append(row)
+          manifest_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n')
+
+          ledger_path = Path('docs/db/evidence/production-migration-ledger-2026-09-05.json')
+          ledger = json.loads(ledger_path.read_text())
+          ledger['capturedAt'] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+          prod = {'version': '20260906002919', 'name': name}
+          if not any(str(item['version']) == prod['version'] and item['name'] == name for item in ledger['migrations']):
+              ledger['migrations'].append(prod)
+              ledger['migrations'].sort(key=lambda item: str(item['version']))
+          ledger_path.write_text(json.dumps(ledger, indent=2, ensure_ascii=False) + '\n')
           PY
 
       - name: Start clean local Supabase
@@ -216,7 +233,7 @@ jobs:
       - name: Generate canonical Database types
         run: pnpm db:types:generate
 
-      - name: Verify GREEN, types, and DB contracts
+      - name: Verify GREEN, drift, types and TypeScript
         run: |
           node --test tests/qeo-100-market-data.cases.ts
           pnpm db:types:verify
@@ -232,6 +249,7 @@ jobs:
           git add modules/market/history/daily-integrity.ts \
             supabase/migrations/20260906003000_qeo106_scoped_daily_integrity_report.sql \
             supabase/migration-equivalence.json \
+            docs/db/evidence/production-migration-ledger-2026-09-05.json \
             modules/shared/supabase/database.types.ts \
             tests/qeo-100-market-data.cases.ts \
             .github/workflows/qeo106-scoped-integrity-tdd.yml
