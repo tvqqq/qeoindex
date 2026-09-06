@@ -127,16 +127,12 @@ function toTransition(row: FactorTransitionRow): ShadowFactorTransition {
 }
 
 function storedDailyPriceBasis(row: RawDailyRow): DailySourcePriceBasis {
-  const provider = String(row.provider ?? "").trim().toUpperCase()
   const detail = String(row.provider_detail ?? "").trim().toLowerCase()
 
   if (detail.includes("source basis: adjusted") || detail.includes("adjusted ohlc")) {
     return "ADJUSTED"
   }
   if (detail.includes("source basis: raw")) {
-    return "RAW"
-  }
-  if (provider === "DNSE" || provider === "VCI") {
     return "RAW"
   }
   return "UNKNOWN"
