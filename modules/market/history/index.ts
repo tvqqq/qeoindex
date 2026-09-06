@@ -153,7 +153,7 @@ export async function fetchDailyMarketHistoryWindow(
 
   try {
     const bars = applyDailyHistoryBarPolicy("Fallback", strictDailyBars("Yahoo", await fetchYahooDailyOhlcv(symbol, now, lookbackDays)), barPolicy)
-    return historicalResult({ bars, provider: "Fallback", detail: `Yahoo Finance .VN fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
+    return historicalResult({ bars, provider: "Fallback", detail: `Yahoo Finance .VN adjusted OHLC fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
   } catch (error) {
     errors.push(`Yahoo: ${errorMessage(error)}`)
   }
@@ -213,7 +213,7 @@ export async function fetchDailyMarketHistory(symbol: string, now = new Date()):
         ? "VNDirect Finfo fallback · 1D"
         : result.provider === "TitanLabs"
           ? "TitanLabs last-resort historical fallback · 1D"
-          : "Yahoo Finance .VN fallback · 1D"
+          : "Yahoo Finance .VN adjusted OHLC fallback · 1D"
   return { ...result, detail }
 }
 
@@ -228,7 +228,7 @@ export async function fetchLongDailyMarketHistory(symbol: string, now = new Date
         ? "VNDirect Finfo fallback · 1D · 8-year Wyckoff window"
         : result.provider === "TitanLabs"
           ? "TitanLabs last-resort historical fallback · 1D · 8-year Wyckoff window"
-          : "Yahoo Finance .VN fallback · 1D · 8-year Wyckoff window"
+          : "Yahoo Finance .VN adjusted OHLC fallback · 1D · 8-year Wyckoff window"
   return { ...result, detail }
 }
 
