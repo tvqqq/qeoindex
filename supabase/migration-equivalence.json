@@ -353,6 +353,14 @@
       "state": "MAPPED",
       "evidence": "qeo123-production-ledger-rpc-grants-vhm-idempotency-amendment-atomicity-smoke",
       "rationale": "QEO-123 persistence RPC was promoted under a production timestamp different from repository replay. Rollback-only production smoke proved VHM multi-component persistence, exact replay idempotency, newer-amendment precedence, stale-evidence retention without canonical rollback, and atomic failure with zero residual fixture rows."
+    },
+    {
+      "logicalName": "qeo124_adjustment_factor_runs",
+      "repositoryVersion": "20260906165000",
+      "productionVersion": "20260906155227",
+      "state": "MAPPED",
+      "evidence": "qeo124-production-ledger-schema-rls-rpc-and-rollback-smoke",
+      "rationale": "QEO-124 versioned adjustment-factor storage and service-role persistence RPC were promoted only after synced-main preprod zero-to-latest replay, deterministic contracts, TypeScript and VSDC discovery passed. Production readback verified both private RLS-enabled tables, service-role-only SELECT/EXECUTE boundaries and SECURITY DEFINER persistence; rollback-only smoke proved exact replay idempotency, blocked-run isolation, active-run immutability and zero residual fixture rows. Production timestamp differs from repository replay ordering."
     }
   ]
 }

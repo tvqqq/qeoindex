@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-06T13:22:50Z",
+  "capturedAt": "2026-09-06T15:54:09.503Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
   "migrations": [
     {
@@ -429,7 +429,11 @@
     {
       "version": "20260906132050",
       "name": "qeo116_report_qa_hydration"
+    },
+    {
+      "version": "20260906155227",
+      "name": "qeo124_adjustment_factor_runs"
     }
   ],
-  "reviewScope": "QEO-119 and QEO-123 reviewed production migration reconciliation; both promotion sets are included in the canonical ledger."
+  "reviewScope": "QEO-119, QEO-123 and QEO-124 reviewed production migration reconciliation; all promoted migration sets are included in the canonical ledger."
 }
