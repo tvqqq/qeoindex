@@ -6,6 +6,7 @@ import { fetchDailyMarketHistoryWindow } from "@/modules/market/history/index"
 
 const MAX_REPAIR_TICKERS = 10
 const DAY_MS = 86_400_000
+const YAHOO_CHART_SOURCE = "query1.finance.yahoo.com/v8/finance/chart/"
 
 type IntegrityReportRow = {
   ticker?: unknown
@@ -21,6 +22,10 @@ type StoredZeroVolumeRow = {
   provider?: unknown
   source_url?: unknown
   provider_detail?: unknown
+}
+
+type StoredLegacyYahooRow = StoredZeroVolumeRow & {
+  volume?: unknown
 }
 
 export interface DailyIntegrityRepairTickerResult {
@@ -68,6 +73,13 @@ function isVerifiedNoTradeRow(row: StoredZeroVolumeRow) {
     && String(row.provider_detail || "").startsWith("Verified final market-close repair")
 }
 
+function storedSessionDate(row: StoredZeroVolumeRow) {
+  const timestamp = row.bar_time ? new Date(String(row.bar_time)).getTime() : NaN
+  if (!Number.isFinite(timestamp)) return null
+  const dateKey = vietnamDateKey(timestamp)
+  return isVietnamSecuritiesTradingDateKey(dateKey) ? dateKey : null
+}
+
 async function loadIntegrityReport(supabase: SupabaseClient, tickers: string[]) {
   const { data, error } = await supabase.rpc("qeo_market_daily_integrity_report_scoped", { p_tickers: tickers })
   if (error) throw new Error(`Load scoped Daily integrity report failed: ${error.message}`)
@@ -93,10 +105,8 @@ async function loadUnclassifiedZeroDates(supabase: SupabaseClient, tickers: stri
     for (const row of page) {
       if (isVerifiedNoTradeRow(row)) continue
       const ticker = String(row.ticker || "").trim().toUpperCase()
-      const timestamp = row.bar_time ? new Date(String(row.bar_time)).getTime() : NaN
-      if (!ticker || !Number.isFinite(timestamp)) continue
-      const dateKey = vietnamDateKey(timestamp)
-      if (!isVietnamSecuritiesTradingDateKey(dateKey)) continue
+      const dateKey = storedSessionDate(row)
+      if (!ticker || !dateKey) continue
       const current = dates.get(ticker) ?? []
       current.push(dateKey)
       dates.set(ticker, current)
@@ -107,15 +117,54 @@ async function loadUnclassifiedZeroDates(supabase: SupabaseClient, tickers: stri
   return dates
 }
 
+async function loadLegacyYahooBasisRows(supabase: SupabaseClient, tickers: string[]) {
+  const rowsByTicker = new Map<string, StoredLegacyYahooRow[]>()
+  let offset = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from("market_ohlcv_history")
+      .select("ticker,bar_time,provider,source_url,provider_detail,volume")
+      .eq("timeframe", "1D")
+      .eq("provider", "Fallback")
+      .in("ticker", tickers)
+      .order("ticker", { ascending: true })
+      .order("bar_time", { ascending: true })
+      .range(offset, offset + pageSize - 1)
+    if (error) throw new Error(`Load legacy Yahoo Daily rows failed: ${error.message}`)
+    const page = (data || []) as StoredLegacyYahooRow[]
+    for (const row of page) {
+      const ticker = String(row.ticker || "").trim().toUpperCase()
+      const sourceUrl = String(row.source_url || "")
+      const detail = String(row.provider_detail || "")
+      const dateKey = storedSessionDate(row)
+      if (!ticker || !dateKey || Number(row.volume) <= 0) continue
+      if (!sourceUrl.includes(YAHOO_CHART_SOURCE)) continue
+      if (/adjusted OHLC/i.test(detail)) continue
+      const current = rowsByTicker.get(ticker) ?? []
+      current.push(row)
+      rowsByTicker.set(ticker, current)
+    }
+    if (page.length < pageSize) break
+    offset += pageSize
+  }
+  return rowsByTicker
+}
+
 async function repairTicker(
   supabase: SupabaseClient,
   ticker: string,
   report: IntegrityReportRow | undefined,
   zeroDates: string[],
+  legacyYahooRows: StoredLegacyYahooRow[],
   now: Date,
 ): Promise<DailyIntegrityRepairTickerResult> {
   const missingDates = stringArray(report?.missing_session_dates)
-  const suspectDates = [...new Set([...missingDates, ...zeroDates])]
+  const legacyYahooDates = [...new Set(legacyYahooRows.flatMap((row) => {
+    const dateKey = storedSessionDate(row)
+    return dateKey ? [dateKey] : []
+  }))]
+  const suspectDates = [...new Set([...missingDates, ...zeroDates, ...legacyYahooDates])]
     .filter(isVietnamSecuritiesTradingDateKey)
     .sort()
 
@@ -180,9 +229,10 @@ export async function repairDailyIntegrityGaps(
   now = new Date(),
 ): Promise<DailyIntegrityRepairResult> {
   const tickers = normalizeTickers(inputTickers)
-  const [beforeRows, zeroDatesByTicker] = await Promise.all([
+  const [beforeRows, zeroDatesByTicker, legacyYahooRowsByTicker] = await Promise.all([
     loadIntegrityReport(supabase, tickers),
     loadUnclassifiedZeroDates(supabase, tickers),
+    loadLegacyYahooBasisRows(supabase, tickers),
   ])
   const beforeByTicker = new Map(beforeRows.map((row) => [String(row.ticker || "").toUpperCase(), row]))
 
@@ -193,6 +243,7 @@ export async function repairDailyIntegrityGaps(
       ticker,
       beforeByTicker.get(ticker),
       zeroDatesByTicker.get(ticker) ?? [],
+      legacyYahooRowsByTicker.get(ticker) ?? [],
       now,
     ))
   }

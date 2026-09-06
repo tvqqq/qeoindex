@@ -65,13 +65,22 @@ async function fetchYahooOhlcvResult(symbol: string, interval: "1d" | "60m" | "5
 
   const timestamps = result.timestamp || []
   const quote = result?.indicators?.quote?.[0] ?? {}
+  const adjustedClose = result?.indicators?.adjclose?.[0]?.adjclose ?? []
   const bars: OhlcvBar[] = []
   for (let i = 0; i < timestamps.length; i += 1) {
     const time = finite(timestamps[i])
-    const open = normalizeToKiloPrice(finite(quote.open?.[i]))
-    const high = normalizeToKiloPrice(finite(quote.high?.[i]))
-    const low = normalizeToKiloPrice(finite(quote.low?.[i]))
-    const close = normalizeToKiloPrice(finite(quote.close?.[i]))
+    const rawOpen = finite(quote.open?.[i])
+    const rawHigh = finite(quote.high?.[i])
+    const rawLow = finite(quote.low?.[i])
+    const rawClose = finite(quote.close?.[i])
+    const dailyAdjustedClose = interval === "1d" ? finite(adjustedClose?.[i]) : null
+    const adjustmentRatio = dailyAdjustedClose != null && dailyAdjustedClose > 0 && rawClose != null && rawClose > 0
+      ? dailyAdjustedClose / rawClose
+      : 1
+    const open = normalizeToKiloPrice(rawOpen == null ? null : rawOpen * adjustmentRatio)
+    const high = normalizeToKiloPrice(rawHigh == null ? null : rawHigh * adjustmentRatio)
+    const low = normalizeToKiloPrice(rawLow == null ? null : rawLow * adjustmentRatio)
+    const close = normalizeToKiloPrice(rawClose == null ? null : rawClose * adjustmentRatio)
     const volume = normalizeVolume(finite(quote.volume?.[i]))
     if ([time, open, high, low, close].some((value) => value == null || value <= 0) || volume < 0) continue
     bars.push({
