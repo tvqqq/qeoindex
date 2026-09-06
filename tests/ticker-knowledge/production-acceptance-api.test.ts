@@ -111,3 +111,41 @@ test("QEO-119 backfill failures expose only bounded source identity plus stable 
   })
   assert.doesNotMatch(JSON.stringify(result), /do-not-expose-upstream-detail/)
 })
+
+test("QEO-119 Council sync preserves distinct deterministic and debate-error source versions", async () => {
+  const { syncCouncilHistoryKnowledge } = await import("../../modules/ticker-knowledge/sync.ts")
+  const batches: string[][] = []
+  const result = await syncCouncilHistoryKnowledge({
+    ensureReady: async () => undefined,
+    upsert: async (items) => {
+      batches.push(items.map((item) => item.provenance.sourceVersion))
+    },
+    deleteSourceVersion: async () => undefined,
+    query: async () => [],
+  }, {
+    id: "run-partial",
+    ticker: "PNJ",
+    asOfDate: "2026-09-03",
+    signal: "BUY_ON_CONFIRMATION",
+    councilScore: 62,
+    confidence: 62,
+    consensus: 60,
+    riskStatus: "caution",
+    price: 39.8,
+    policyVersion: "council-policy-v2",
+    evidenceHash: "9".repeat(64),
+    createdAt: "2026-09-03T08:55:29.661Z",
+    outcome: null,
+    debate: {
+      status: "partial",
+      promptVersion: "llm-debate-v3-first-class-context",
+      error: "Validation failed after repair",
+      completedAt: "2026-09-03T08:57:16.928Z",
+    },
+  })
+
+  assert.equal(result.upserted, 2)
+  assert.equal(batches.length, 2)
+  assert.ok(batches.every((batch) => new Set(batch).size === 1))
+  assert.notEqual(batches[0][0], batches[1][0])
+})
