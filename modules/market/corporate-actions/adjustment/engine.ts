@@ -59,9 +59,25 @@ function validIsoDate(value: string | null | undefined): value is string {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
 }
 
+function stableSourceIdentity(action: FactorInputAction) {
+  return [
+    action.source,
+    action.lineageRootSourceEventId,
+    action.sourceComponentKey,
+    action.actionType,
+  ].join("\u0000")
+}
+
+function compareFactorActions(left: FactorInputAction, right: FactorInputAction) {
+  const stableOrder = stableSourceIdentity(left).localeCompare(stableSourceIdentity(right))
+  return stableOrder !== 0 ? stableOrder : left.id.localeCompare(right.id)
+}
+
+// QEO-123 database UUIDs are generated independently in each database. They
+// remain persisted audit/FK references but are deliberately excluded from the
+// portable factor identity. Source lineage + normalized terms are canonical.
 function canonicalAction(action: FactorInputAction) {
   return {
-    id: action.id,
     ticker: action.ticker,
     actionType: action.actionType,
     exDate: action.exDate,
@@ -77,6 +93,11 @@ function canonicalAction(action: FactorInputAction) {
     lineageRootSourceEventId: action.lineageRootSourceEventId,
     sourceComponentKey: action.sourceComponentKey,
   }
+}
+
+function lineageFormulaInputs(step: StepAdjustment) {
+  const { corporateActionIds: _auditIds, ...stableInputs } = step.formulaInputs
+  return stableInputs
 }
 
 function runIdentity(input: {
@@ -143,7 +164,7 @@ function findReferenceSession(sessions: string[], effectiveSession: string) {
 }
 
 export function buildFactorRunCandidate(input: BuildFactorRunCandidateInput): FactorRunCandidate {
-  const orderedActions = [...input.actions].sort((left, right) => left.id.localeCompare(right.id))
+  const orderedActions = [...input.actions].sort(compareFactorActions)
   const missingExDate = orderedActions.find((action) => !validIsoDate(action.exDate))
   if (missingExDate) {
     return blockedCandidate(input, "MISSING_CANONICAL_EX_DATE", {
@@ -226,7 +247,7 @@ export function buildFactorRunCandidate(input: BuildFactorRunCandidateInput): Fa
       referenceSession,
       referenceRawClose: rawReference.close,
       actions: eventActions.map(canonicalAction),
-      formulaInputs: step.formulaInputs,
+      formulaInputs: lineageFormulaInputs(step),
     })
 
     baseTransitions.push({
