@@ -14,6 +14,7 @@ import {
   normalizeOhlcvTickers,
   type OhlcvCoverage,
 } from "../modules/market/history/ohlcv-store.ts"
+import { chartHotSessionRetentionCutoff } from "../modules/market/chart-data/history-policy.ts"
 import {
   buildVerifiedFinalDailyBar,
   buildVerifiedNoTradeDailyBar,
@@ -123,6 +124,32 @@ test("refresh planner backfills insufficient coverage then switches to bounded d
     timeframe: "1H",
     lookbackDays: HOURLY_DELTA_DAYS,
   })
+})
+
+test("QEO-108 physical 1m HOT retention keeps exactly five Vietnam trading sessions", () => {
+  const sunday = new Date("2026-09-06T08:00:00+07:00")
+  assert.equal(
+    new Date(chartHotSessionRetentionCutoff(sunday) * 1000).toISOString(),
+    "2026-08-25T17:00:00.000Z",
+  )
+
+  const liveThursday = new Date("2026-09-10T10:00:00+07:00")
+  assert.equal(
+    new Date(chartHotSessionRetentionCutoff(liveThursday) * 1000).toISOString(),
+    "2026-09-03T17:00:00.000Z",
+  )
+})
+
+test("QEO-108 Daily chart path is bounded PostgreSQL-only and legacy deep-cold route is disabled", () => {
+  const service = readFileSync("modules/market/chart-data/service.ts", "utf8")
+  const route = readFileSync("app/api/admin/market/daily-history/backfill/route.ts", "utf8")
+  const dailyLoad = service.match(/async function loadDaily[\s\S]*?\n}\n\nasync function loadIntraday/)?.[0] ?? ""
+
+  assert.match(dailyLoad, /loadDailyRows\(deps\.supabase, request\)/)
+  assert.match(dailyLoad, /CANONICAL_DAILY_POSTGRES/)
+  assert.doesNotMatch(dailyLoad, /dailyColdStorage|createSupabaseDailyColdOhlcvStorage|readIntersectingRange/)
+  assert.doesNotMatch(route, /backfillDailyColdHistory/)
+  assert.match(route, /DAILY_DEEP_COLD_RETIRED/)
 })
 
 test("ticker normalization preserves deterministic universe order and rejects invalid symbols", () => {

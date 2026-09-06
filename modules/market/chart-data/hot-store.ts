@@ -40,11 +40,32 @@ function vietnamDateKey(epochSeconds: number) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(epochSeconds * 1000))
 }
 
+function missingPartitionRpc(error: { code?: string | null; message?: string | null }) {
+  return error.code === "PGRST202" || /qeo_ensure_chart_intraday_session_partition/i.test(error.message ?? "") && /not find|not found/i.test(error.message ?? "")
+}
+
+async function ensureHotIntradaySessionPartitions(supabase: SupabaseClient, bars: CanonicalOhlcvBar[]) {
+  const tradingDates = [...new Set(bars.map((bar) => vietnamDateKey(bar.time)))]
+  for (const tradingDate of tradingDates) {
+    const { error } = await supabase.rpc("qeo_ensure_chart_intraday_session_partition", { p_trading_date: tradingDate })
+    // Rollout compatibility: before the quarantined QEO-108 cutover is promoted,
+    // the legacy non-partitioned table can continue accepting writes. Once the
+    // RPC exists, any provisioning error is fail-closed.
+    if (error && !missingPartitionRpc(error)) throw new Error(`Chart session partition provisioning failed: ${error.message}`)
+  }
+}
+
 export interface HotArchivePartition {
   ticker: string
   tradingDate: string
   from: number
   toExclusive: number
+}
+
+export interface HotSessionPartitionDropResult {
+  status: "absent" | "blocked" | "dropped"
+  tradingDate: string
+  remainingRows: number
 }
 
 function partitionFor(ticker: string, epochSeconds: number): HotArchivePartition {
@@ -98,6 +119,23 @@ export async function pruneVerifiedHotIntradayPartition(
   return deletedRows
 }
 
+export async function dropEmptyHotIntradaySessionPartition(
+  supabase: SupabaseClient,
+  tradingDate: string,
+): Promise<HotSessionPartitionDropResult | null> {
+  const { data, error } = await supabase.rpc("qeo_drop_empty_chart_intraday_session_partition", { p_trading_date: tradingDate })
+  if (error?.code === "PGRST202") return null
+  if (error) throw new Error(`Chart session partition reclaim failed: ${error.message}`)
+  const raw = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {}
+  const status = raw.status
+  if (status !== "absent" && status !== "blocked" && status !== "dropped") throw new Error(`Chart session partition reclaim returned invalid status=${String(status)}`)
+  return {
+    status,
+    tradingDate,
+    remainingRows: finite(raw.remainingRows) ?? 0,
+  }
+}
+
 export async function readOldestHotIntradayTime(supabase: SupabaseClient): Promise<number | null> {
   const { data, error } = await supabase.from("chart_ohlcv_intraday").select("bar_time").eq("base_resolution", "1m").order("bar_time", { ascending: true }).limit(1)
   if (error) throw new Error(`Chart oldest hot bar read failed: ${error.message}`)
@@ -121,6 +159,7 @@ export async function upsertHotIntradayBars(
 ) {
   if (!input.bars.length) return { batchId: null as string | null, rowCount: 0 }
   const sorted = [...input.bars].sort((a, b) => a.time - b.time)
+  await ensureHotIntradaySessionPartitions(supabase, sorted)
   const fetchedAt = input.fetchedAt ?? new Date().toISOString()
   const { data: batch, error: batchError } = await supabase.from("chart_ohlcv_provenance_batches").insert({
     provider: input.provider, ticker: input.ticker, base_resolution: "1m",

@@ -246,3 +246,35 @@ test("QEO-96 live candle merge replaces the matching timestamp instead of duplic
   assert.equal(merged.length, 1)
   assert.deepEqual(merged[0], incoming[0])
 })
+
+test("QEO-108 native intraday cutover is session-partitioned, verified, rollback-safe, and quarantined", () => {
+  const migration = readFileSync(new URL("../supabase/pending-migrations/20260906024500_qeo108_chart_intraday_session_partitions.sql", import.meta.url), "utf8")
+  assert.match(migration, /partition by range\s*\(bar_time\)/i)
+  assert.match(migration, /qeo_ensure_chart_intraday_session_partition/i)
+  assert.match(migration, /chart_ohlcv_intraday_qeo108_legacy/i)
+  assert.match(migration, /row-count mismatch/i)
+  assert.match(migration, /checksum mismatch/i)
+  assert.match(migration, /qeo_drop_empty_chart_intraday_session_partition/i)
+  assert.doesNotMatch(migration, /drop table[^;]*chart_ohlcv_intraday_qeo108_legacy/i)
+  assert.doesNotMatch(migration, /cascade/i)
+})
+
+test("QEO-108 hot writes provision a native session partition before upsert", () => {
+  const hotStore = readFileSync(new URL("../modules/market/chart-data/hot-store.ts", import.meta.url), "utf8")
+  const ensure = hotStore.indexOf("qeo_ensure_chart_intraday_session_partition")
+  const upsert = hotStore.indexOf('.from("chart_ohlcv_intraday").upsert')
+  assert.ok(ensure >= 0 && upsert > ensure)
+})
+
+test("QEO-108 capacity preflight keeps a 100 MiB hard headroom before the 500 MB quota", () => {
+  const capacity = readFileSync(new URL("../modules/market/chart-data/storage-capacity.ts", import.meta.url), "utf8")
+  const migration = readFileSync(new URL("../supabase/pending-migrations/20260906024500_qeo108_chart_intraday_session_partitions.sql", import.meta.url), "utf8")
+  assert.match(capacity, /QEO_CHART_DB_CAPACITY_WARN_BYTES\s*=\s*350\s*\*\s*1024\s*\*\s*1024/)
+  assert.match(capacity, /QEO_CHART_DB_CAPACITY_HARD_BYTES\s*=\s*400\s*\*\s*1024\s*\*\s*1024/)
+  assert.match(capacity, /qeo_chart_storage_capacity/)
+  assert.match(migration, /pg_database_size\s*\(current_database\(\)\)/i)
+  assert.match(migration, /pg_relation_size\s*\('public\.chart_ohlcv_intraday'/i)
+  assert.match(migration, /pg_indexes_size\s*\('public\.chart_ohlcv_intraday'/i)
+  assert.match(migration, /revoke all on function public\.qeo_chart_storage_capacity\(\) from public/i)
+  assert.match(migration, /grant execute on function public\.qeo_chart_storage_capacity\(\) to service_role/i)
+})

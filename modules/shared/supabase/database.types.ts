@@ -3702,6 +3702,7 @@ export type Database = {
           ticker: string
         }[]
       }
+      qeo_chart_storage_capacity: { Args: never; Returns: Json }
       qeo_current_market_universe: {
         Args: { p_universe_key?: string }
         Returns: Json
