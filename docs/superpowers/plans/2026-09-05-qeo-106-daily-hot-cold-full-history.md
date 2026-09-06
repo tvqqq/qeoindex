@@ -105,3 +105,10 @@
 - [ ] **Step 1: Port QEO-106 integrity files from PR #329 onto latest-main-based branch, preserving QEO-93 pagination.**
 - [ ] **Step 2: Run `pnpm verify:pr`; if DB schema changed, run full DB drift/replay/type gates.**
 - [ ] **Step 3: Open replacement PR, mark old PR #329 superseded, and update Linear with exact remaining production rollout steps.**
+
+## Production reconciliation — 2026-09-06
+
+- Production logical migration `qeo106_daily_hot_cold_history` is recorded as repository version `20260905153500` mapped to production version `20260905235144`.
+- Corrective migration `20260905235254_qeo106_daily_prune_error_evidence_fix` is repository/production exact and changes only mismatch error evidence (`v_deleted`), not prune authority.
+- The one-shot reconciliation replayed the active migration set from zero, regenerated/verified `database.types.ts`, ran migration-drift contracts, and passed TypeScript before committing the reconciled source state.
+- Remaining release gates are fresh exact-head CI, merge/deploy, bounded VIC/VCB production Hot/Cold smoke, then authenticated web acceptance.
