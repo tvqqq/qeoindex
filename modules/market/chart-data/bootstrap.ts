@@ -54,11 +54,21 @@ export interface Qeo107BootstrapChunkResult {
   error: string | null
 }
 
+export interface Qeo107HotSessionCoverageRow {
+  ticker: string
+  hotSessionCount: number
+  firstHotSession: string | null
+  lastHotSession: string | null
+}
+
 export interface Qeo107CoverageRow {
   ticker: string
   hotRowCount: number
   hotFirstBarTime: string | null
   hotLastBarTime: string | null
+  hotSessionCount: number
+  firstHotSession: string | null
+  lastHotSession: string | null
   coldManifestCount: number
   coldRowCount: number
   coldFirstBarTime: string | null
@@ -136,11 +146,50 @@ function skippedResult(ticker: string, chunk: Qeo107BootstrapChunk): Qeo107Boots
   }
 }
 
-async function alreadyTerminal(supabase: SupabaseClient, ticker: string, chunk: Qeo107BootstrapChunk) {
+function finiteNumber(value: unknown) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : 0
+}
+
+function nullableString(value: unknown) {
+  return value == null || value === "" ? null : String(value)
+}
+
+export async function readChartIntradaySessionCoverage(
+  supabase: SupabaseClient,
+  input: { tickers: string[]; referenceAt?: Date },
+): Promise<Qeo107HotSessionCoverageRow[]> {
+  const tickers = [...new Set(input.tickers.map(validTicker))]
+  if (!tickers.length) return []
+  const referenceAt = input.referenceAt ?? new Date()
+  const { data, error } = await supabase.rpc("qeo_chart_intraday_session_coverage", {
+    p_tickers: tickers,
+    p_hot_cutoff: new Date(chartHotSessionRetentionCutoff(referenceAt) * 1000).toISOString(),
+  })
+  if (error) throw new Error(`QEO-107 HOT session coverage failed: ${error.message}`)
+  return ((data || []) as Array<Record<string, unknown>>).map((row) => ({
+    ticker: String(row.ticker || "").trim().toUpperCase(),
+    hotSessionCount: finiteNumber(row.hot_session_count),
+    firstHotSession: nullableString(row.first_hot_session),
+    lastHotSession: nullableString(row.last_hot_session),
+  }))
+}
+
+async function alreadyTerminal(
+  supabase: SupabaseClient,
+  ticker: string,
+  chunk: Qeo107BootstrapChunk,
+  referenceAt: Date,
+) {
+  const sessionCoverage = await readChartIntradaySessionCoverage(supabase, { tickers: [ticker], referenceAt })
+  const hotSessionCount = sessionCoverage[0]?.hotSessionCount ?? 0
+  if (hotSessionCount >= QEO107_HOT_RETENTION_SESSIONS) return true
+
   const attempted = await readQeo107TerminalAttemptRanges(supabase, ticker, chunk.from, chunk.to)
+  const providerGaps = attempted.filter(({ outcome }) => outcome === "provider_gap")
   return missingProviderRanges(
     { from: chunk.from, to: chunk.to },
-    attempted.map(({ from, to }) => ({ from, to })),
+    providerGaps.map(({ from, to }) => ({ from, to })),
   ).length === 0
 }
 
@@ -181,7 +230,7 @@ export async function bootstrapChartIntradayChunk(
   const ticker = validTicker(input.ticker)
   const referenceAt = input.referenceAt ?? new Date()
   const hotCutoff = chartHotSessionRetentionCutoff(referenceAt)
-  if (await alreadyTerminal(supabase, ticker, input.chunk)) return skippedResult(ticker, input.chunk)
+  if (await alreadyTerminal(supabase, ticker, input.chunk, referenceAt)) return skippedResult(ticker, input.chunk)
 
   const provider = input.provider ?? createPrimaryChartOhlcvProvider()
   let providerResult
@@ -322,15 +371,6 @@ export async function bootstrapChartIntradayChunk(
   }
 }
 
-function finiteNumber(value: unknown) {
-  const number = Number(value)
-  return Number.isFinite(number) ? number : 0
-}
-
-function nullableString(value: unknown) {
-  return value == null || value === "" ? null : String(value)
-}
-
 export async function readChartIntradayCoverageReport(
   supabase: SupabaseClient,
   input: { tickers: string[]; referenceAt?: Date },
@@ -338,27 +378,39 @@ export async function readChartIntradayCoverageReport(
   const tickers = [...new Set(input.tickers.map(validTicker))]
   if (!tickers.length) return []
   const referenceAt = input.referenceAt ?? new Date()
-  const { data, error } = await supabase.rpc("qeo_chart_intraday_coverage", {
-    p_tickers: tickers,
-    p_hot_cutoff: new Date(chartHotSessionRetentionCutoff(referenceAt) * 1000).toISOString(),
+  const hotCutoff = new Date(chartHotSessionRetentionCutoff(referenceAt) * 1000).toISOString()
+  const [coverageResult, sessionRows] = await Promise.all([
+    supabase.rpc("qeo_chart_intraday_coverage", {
+      p_tickers: tickers,
+      p_hot_cutoff: hotCutoff,
+    }),
+    readChartIntradaySessionCoverage(supabase, { tickers, referenceAt }),
+  ])
+  if (coverageResult.error) throw new Error(`QEO-107 intraday coverage report failed: ${coverageResult.error.message}`)
+  const sessionsByTicker = new Map(sessionRows.map((row) => [row.ticker, row]))
+  return ((coverageResult.data || []) as Array<Record<string, unknown>>).map((row) => {
+    const ticker = String(row.ticker || "").trim().toUpperCase()
+    const session = sessionsByTicker.get(ticker)
+    return {
+      ticker,
+      hotRowCount: finiteNumber(row.hot_row_count),
+      hotFirstBarTime: nullableString(row.hot_first_bar_time),
+      hotLastBarTime: nullableString(row.hot_last_bar_time),
+      hotSessionCount: session?.hotSessionCount ?? 0,
+      firstHotSession: session?.firstHotSession ?? null,
+      lastHotSession: session?.lastHotSession ?? null,
+      coldManifestCount: finiteNumber(row.cold_manifest_count),
+      coldRowCount: finiteNumber(row.cold_row_count),
+      coldFirstBarTime: nullableString(row.cold_first_bar_time),
+      coldLastBarTime: nullableString(row.cold_last_bar_time),
+      derivedHourlyRowCount: finiteNumber(row.derived_hourly_row_count),
+      derivedFirstBarTime: nullableString(row.derived_first_bar_time),
+      derivedLastBarTime: nullableString(row.derived_last_bar_time),
+      successfulRequestCount: finiteNumber(row.successful_request_count),
+      providerGapCount: finiteNumber(row.provider_gap_count),
+      retryableFailureCount: finiteNumber(row.retryable_failure_count),
+      failedAttemptCount: finiteNumber(row.failed_attempt_count),
+      lastAttemptAt: nullableString(row.last_attempt_at),
+    }
   })
-  if (error) throw new Error(`QEO-107 intraday coverage report failed: ${error.message}`)
-  return ((data || []) as Array<Record<string, unknown>>).map((row) => ({
-    ticker: String(row.ticker || "").trim().toUpperCase(),
-    hotRowCount: finiteNumber(row.hot_row_count),
-    hotFirstBarTime: nullableString(row.hot_first_bar_time),
-    hotLastBarTime: nullableString(row.hot_last_bar_time),
-    coldManifestCount: finiteNumber(row.cold_manifest_count),
-    coldRowCount: finiteNumber(row.cold_row_count),
-    coldFirstBarTime: nullableString(row.cold_first_bar_time),
-    coldLastBarTime: nullableString(row.cold_last_bar_time),
-    derivedHourlyRowCount: finiteNumber(row.derived_hourly_row_count),
-    derivedFirstBarTime: nullableString(row.derived_first_bar_time),
-    derivedLastBarTime: nullableString(row.derived_last_bar_time),
-    successfulRequestCount: finiteNumber(row.successful_request_count),
-    providerGapCount: finiteNumber(row.provider_gap_count),
-    retryableFailureCount: finiteNumber(row.retryable_failure_count),
-    failedAttemptCount: finiteNumber(row.failed_attempt_count),
-    lastAttemptAt: nullableString(row.last_attempt_at),
-  }))
 }
