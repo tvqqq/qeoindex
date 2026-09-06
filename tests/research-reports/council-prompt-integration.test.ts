@@ -98,3 +98,22 @@ test("QEO-117 keeps semantic ticker knowledge advisory while existing LLM rules 
   assert.match(llm, /deterministic.*final.*authority/i)
   assert.match(llm, /must not.*(?:upgrade|downgrade).*deterministic/i)
 })
+
+test("QEO-117 Council ticker knowledge wiring is off-by-default, ticker-wide, frozen before prompt attach and uses shared context builder", () => {
+  const wrapper = source("modules/ai-council/pre-market-evidence.ts")
+  const runtime = source("modules/ai-council/ticker-knowledge-runtime.ts")
+
+  assert.match(runtime, /AI_COUNCIL_TICKER_KNOWLEDGE_ENABLED/)
+  assert.match(runtime, /=== "true"/)
+  assert.match(runtime, /createServerTickerKnowledgeIndex/)
+  assert.match(runtime, /buildTickerContext/)
+  assert.match(runtime, /consumer: "AI_COUNCIL"/)
+  assert.match(runtime, /CURRENT_THESIS/)
+  assert.match(runtime, /freezeCouncilTickerKnowledge/)
+  assert.match(wrapper, /const tickerKnowledgeStocks = raw\.stocks/)
+  assert.match(wrapper, /for \(const stock of tickerKnowledgeStocks\)/)
+  assert.match(wrapper, /canUseInPrompt/)
+  assert.match(wrapper, /tickerKnowledge: \{/)
+  assert.match(wrapper, /frozen unified ticker knowledge/i)
+  assert.doesNotMatch(wrapper, /tickerKnowledgeStocks = raw\.stocks\.filter\(\(stock\) => isCouncilResearchTickerEnabled/)
+})
