@@ -3759,6 +3759,23 @@ export type Database = {
           verified_no_trade_rows: number
         }[]
       }
+      qeo_market_daily_integrity_report_scoped: {
+        Args: { p_tickers: string[] }
+        Returns: {
+          exchange: string
+          expected_sessions: number
+          first_session: string
+          last_session: string
+          missing_expected_sessions: number
+          missing_session_dates: string[]
+          non_trading_persisted_rows: number
+          status: string
+          ticker: string
+          unclassified_zero_volume_rows: number
+          valid_daily_rows: number
+          verified_no_trade_rows: number
+        }[]
+      }
       qeo_market_ohlcv_coverage: {
         Args: { p_tickers: string[] }
         Returns: {

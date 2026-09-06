@@ -68,9 +68,9 @@ function isVerifiedNoTradeRow(row: StoredZeroVolumeRow) {
     && String(row.provider_detail || "").startsWith("Verified final market-close repair")
 }
 
-async function loadIntegrityReport(supabase: SupabaseClient) {
-  const { data, error } = await supabase.rpc("qeo_market_daily_integrity_report")
-  if (error) throw new Error(`Load Daily integrity report failed: ${error.message}`)
+async function loadIntegrityReport(supabase: SupabaseClient, tickers: string[]) {
+  const { data, error } = await supabase.rpc("qeo_market_daily_integrity_report_scoped", { p_tickers: tickers })
+  if (error) throw new Error(`Load scoped Daily integrity report failed: ${error.message}`)
   return (data || []) as IntegrityReportRow[]
 }
 
@@ -181,7 +181,7 @@ export async function repairDailyIntegrityGaps(
 ): Promise<DailyIntegrityRepairResult> {
   const tickers = normalizeTickers(inputTickers)
   const [beforeRows, zeroDatesByTicker] = await Promise.all([
-    loadIntegrityReport(supabase),
+    loadIntegrityReport(supabase, tickers),
     loadUnclassifiedZeroDates(supabase, tickers),
   ])
   const beforeByTicker = new Map(beforeRows.map((row) => [String(row.ticker || "").toUpperCase(), row]))
@@ -197,7 +197,7 @@ export async function repairDailyIntegrityGaps(
     ))
   }
 
-  const afterRows = await loadIntegrityReport(supabase)
+  const afterRows = await loadIntegrityReport(supabase, tickers)
   const afterByTicker = new Map(afterRows.map((row) => [String(row.ticker || "").toUpperCase(), row]))
   for (const result of tickerResults) {
     const after = afterByTicker.get(result.ticker)
