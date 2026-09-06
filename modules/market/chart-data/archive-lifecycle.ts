@@ -4,7 +4,12 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { createSupabaseColdOhlcvStorage } from "./cold-store"
 import type { CanonicalOhlcvBar } from "./contract"
 import { upsertDerivedHourlyBars } from "./derived-hourly-store"
-import { CHART_HOT_RETENTION_DAYS, chartHotRetentionCutoff } from "./history-policy"
+import {
+  CHART_HOT_RETENTION_DAYS,
+  CHART_HOT_RETENTION_SESSIONS,
+  chartHotRetentionCutoff,
+  chartHotSessionRetentionCutoff,
+} from "./history-policy"
 import {
   listExpiredHotPartitions,
   pruneVerifiedHotIntradayPartition,
@@ -14,7 +19,12 @@ import {
 } from "./hot-store"
 import { aggregateChartTimeframe } from "./timeframes"
 
-export { CHART_HOT_RETENTION_DAYS, chartHotRetentionCutoff }
+export {
+  CHART_HOT_RETENTION_DAYS,
+  CHART_HOT_RETENTION_SESSIONS,
+  chartHotRetentionCutoff,
+  chartHotSessionRetentionCutoff,
+}
 export const DEFAULT_ARCHIVE_PARTITIONS_PER_RUN = 48
 
 export interface ChartArchiveFailure {
@@ -66,7 +76,7 @@ export async function runChartIntradayArchiveLifecycle(
   input: { referenceAt?: Date; maxPartitions?: number } = {},
 ): Promise<ChartIntradayArchiveMetrics> {
   const referenceAt = input.referenceAt ?? new Date()
-  const cutoff = chartHotRetentionCutoff(referenceAt)
+  const cutoff = chartHotSessionRetentionCutoff(referenceAt)
   const maxPartitions = Math.max(1, Math.min(48, Math.floor(input.maxPartitions ?? DEFAULT_ARCHIVE_PARTITIONS_PER_RUN)))
   const partitions = await listExpiredHotPartitions(supabase, { cutoff, maxPartitions })
   const cold = createSupabaseColdOhlcvStorage(supabase)
