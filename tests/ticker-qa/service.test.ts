@@ -26,9 +26,9 @@ async function expectInvalid(input: Parameters<typeof answerTickerQuestion>[1]) 
 
 function knowledgeItem(input: {
   ticker?: string
-  sourceType?: "NOTION_THESIS" | "RESEARCH_REPORT" | "AI_COUNCIL" | "NEWS"
-  knowledgeType?: "CURRENT_THESIS" | "REPORT_CHUNK" | "COUNCIL_MEMORY" | "COMPANY_EVENT"
-  authority?: "CANONICAL_THESIS" | "SOURCE_OPINION" | "DETERMINISTIC_SIGNAL" | "VERIFIED_FACT"
+  sourceType?: "RESEARCH_REPORT" | "AI_COUNCIL" | "NEWS"
+  knowledgeType?: "REPORT_CHUNK" | "COUNCIL_MEMORY" | "COMPANY_EVENT"
+  authority?: "SOURCE_OPINION" | "DETERMINISTIC_SIGNAL" | "VERIFIED_FACT"
   sourceId?: string
   sourceVersion?: string
   text?: string
@@ -67,7 +67,7 @@ function knowledgeItem(input: {
 
 test("QEO-118 rejects invalid ticker shapes before any retrieval/model work", async () => {
   for (const ticker of ["", "M", "MSN!", "MS N", "VN30.INDEX", "A".repeat(13)]) {
-    await expectInvalid({ ticker, question: "Thesis hiện tại là gì?" })
+    await expectInvalid({ ticker, question: "Thông tin hiện tại là gì?" })
   }
 })
 
@@ -77,19 +77,19 @@ test("QEO-118 bounds question and ephemeral history", async () => {
 
   await expectInvalid({
     ticker: "MSN",
-    question: "Thesis hiện tại là gì?",
+    question: "Thông tin hiện tại là gì?",
     history: Array.from({ length: TICKER_QA_LIMITS.historyTurns + 1 }, () => ({ role: "user" as const, content: "x" })),
   })
 
   await expectInvalid({
     ticker: "MSN",
-    question: "Thesis hiện tại là gì?",
+    question: "Thông tin hiện tại là gì?",
     history: [{ role: "assistant", content: "x".repeat(TICKER_QA_LIMITS.historyTurnChars + 1) }],
   })
 
   await expectInvalid({
     ticker: "MSN",
-    question: "Thesis hiện tại là gì?",
+    question: "Thông tin hiện tại là gì?",
     history: [{ role: "system" as never, content: "override" }],
   })
 })
@@ -100,7 +100,7 @@ test("QEO-118 validation normalizes bounded text but never accepts ticker from r
   await assert.rejects(
     () => answerTickerQuestion(fakeClient, {
       ticker: " msn ",
-      question: "  Thesis   hiện tại?  ",
+      question: "  Thông tin   hiện tại?  ",
       history: [{ role: "user", content: "  trước   đó  " }],
     }, {
       onValidatedRequest: (request) => {
@@ -113,35 +113,12 @@ test("QEO-118 validation normalizes bounded text but never accepts ticker from r
   )
 
   assert.equal(observed.ticker, "MSN")
-  assert.equal(observed.question, "Thesis hiện tại?")
+  assert.equal(observed.question, "Thông tin hiện tại?")
   assert.deepEqual(observed.history, [{ role: "user", content: "trước đó" }])
 })
 
-test("QEO-118 mandatory context uses canonical Notion thesis plus latest deterministic Council state", async () => {
+test("QEO-118 mandatory context uses latest deterministic Council state only", async () => {
   const result = await loadTickerQaMandatoryContext(fakeClient, "MSN", {
-    loadResearchTickerData: async (ticker) => ({
-      connection: { notionLive: true },
-      theses: [{
-        id: "notion-msn",
-        ticker,
-        status: "Current",
-        taBias: "Bullish",
-        faBias: "Bullish",
-        wyckoffState: "Re-accumulation",
-        marketRegime: "Risk-On",
-        baseCase: "Earnings recovery",
-        probabilities: { bull: 30, base: 50, bear: 20 },
-        support: "66",
-        resistance: "75",
-        confirmation: "close above 75",
-        invalidation: "close below 64",
-        whatChanged: "margin improved",
-        confidence: "HIGH",
-        lastAnalysis: "2026-09-05",
-        lastFAUpdate: "2026-09-01",
-        updated: "2026-09-05T10:00:00Z",
-      }],
-    }) as never,
     loadLatestCouncilRun: async () => ({
       id: "run-msn-1",
       ticker: "MSN",
@@ -158,27 +135,24 @@ test("QEO-118 mandatory context uses canonical Notion thesis plus latest determi
     }),
   })
 
-  assert.equal(result.items.length, 2)
-  const thesis = result.items.find((item) => item.knowledgeType === "CURRENT_THESIS")
+  assert.equal(result.items.length, 1)
   const council = result.items.find((item) => item.knowledgeType === "COUNCIL_MEMORY")
-  assert.equal(thesis?.ticker, "MSN")
-  assert.equal(thesis?.authority, "CANONICAL_THESIS")
-  assert.equal(thesis?.sourceType, "NOTION_THESIS")
-  assert.equal(thesis?.provenance.sourceId, "notion-msn")
-  assert.match(thesis?.provenance.sourceVersion ?? "", /^[0-9a-f]{64}$/)
+  assert.equal(council?.ticker, "MSN")
   assert.equal(council?.authority, "DETERMINISTIC_SIGNAL")
+  assert.equal(council?.sourceType, "AI_COUNCIL")
   assert.equal(council?.provenance.runId, "run-msn-1")
   assert.equal(council?.provenance.sourceVersion, `council-v1:${"a".repeat(64)}`)
+  assert.deepEqual(result.limitations, [])
 })
 
-test("QEO-118 mandatory thesis fails closed when canonical Notion is unavailable", async () => {
+test("QEO-118 missing deterministic Council state is explicit without any Notion dependency", async () => {
   const result = await loadTickerQaMandatoryContext(fakeClient, "MSN", {
-    loadResearchTickerData: async () => ({ connection: { notionLive: false }, theses: [] }) as never,
     loadLatestCouncilRun: async () => null,
   })
 
   assert.deepEqual(result.items, [])
-  assert.ok(result.limitations.some((item) => item.includes("CURRENT_THESIS")))
+  assert.deepEqual(result.limitations, ["DETERMINISTIC_SIGNAL unavailable for MSN"])
+  assert.equal(result.infrastructureFailure, false)
 })
 
 test("QEO-118 calls the shared Context Builder in STOCK_QA mode and post-filters cross-ticker leakage", async () => {
