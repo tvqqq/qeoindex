@@ -37,19 +37,19 @@ jobs:
         run: pnpm db:replay:verify
       - name: Generate committed Database types
         run: pnpm db:types:generate
-      - name: Verify QEO-124 schema contract
-        run: node --test tests/corporate-actions/qeo124-factor-schema.test.ts
       - name: Commit generated types if changed
         run: |
           if git diff --quiet -- modules/shared/supabase/database.types.ts; then
             echo "Generated types already current"
-            exit 0
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add modules/shared/supabase/database.types.ts
+            git commit -m "chore(QEO-124): regenerate Supabase types"
+            git push origin HEAD:feat/qeo-124-adjustment-engine
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add modules/shared/supabase/database.types.ts
-          git commit -m "chore(QEO-124): regenerate Supabase types"
-          git push origin HEAD:feat/qeo-124-adjustment-engine
+      - name: Verify QEO-124 schema contract
+        run: node --test tests/corporate-actions/qeo124-factor-schema.test.ts
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
