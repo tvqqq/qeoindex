@@ -85,7 +85,7 @@ export const QEO122_LIVE_CASES: Qeo122LiveCase[] = [
     kind: "notice",
     sourceEventId: "144349",
     url: "https://vsdc.vn/vi/ad1/144349",
-    expected: { ticker: "VHM", exchange: "HOSE", recordDate: "2021-09-16", components: [cash(1500), stock("100:30")] },
+    expected: { ticker: "VHM", exchange: "HOSE", recordDate: "2021-09-16", components: [cash(1500), stock("1000:300")] },
   },
   {
     id: "vhm-2022-cash",
