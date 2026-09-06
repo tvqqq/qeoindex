@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { evaluateResearchReportQaRetrieval } from "../../modules/research-reports/qa/evaluation.ts"
 import {
   answerResearchReportQuestion,
   type ResearchReportQaRetrievalComparison,
@@ -208,4 +209,113 @@ test("QEO-116 hybrid mode falls back to bounded lexical evidence when Qdrant is 
     overlapRatio: 0,
     hybridStatus: "unavailable",
   })
+})
+
+test("QEO-116 offline evaluation proves semantic paraphrase recall improves without regressing Vietnamese lexical anchors", () => {
+  const evaluation = evaluateResearchReportQaRetrieval([
+    {
+      id: "lexical-number-anchor",
+      kind: "lexical_anchor",
+      expectedChunkIds: ["chunk-a"],
+      lexicalChunkIds: ["chunk-a", "noise-a"],
+      hybridChunkIds: ["chunk-a", "noise-b"],
+      qdrantCandidateCount: 2,
+      canonicalHybridCount: 2,
+      lexicalMs: 5,
+      hybridRetrievalMs: 9,
+      hybridHydrationMs: 3,
+      citationValidity: "pass",
+      answerQuality: "pass",
+    },
+    {
+      id: "semantic-paraphrase-improvement",
+      kind: "semantic_paraphrase",
+      expectedChunkIds: ["chunk-b"],
+      lexicalChunkIds: ["noise-c"],
+      hybridChunkIds: ["chunk-b", "noise-d"],
+      qdrantCandidateCount: 2,
+      canonicalHybridCount: 2,
+      lexicalMs: 4,
+      hybridRetrievalMs: 8,
+      hybridHydrationMs: 2,
+      citationValidity: "pass",
+      answerQuality: "pass",
+    },
+    {
+      id: "semantic-paraphrase-non-regression",
+      kind: "semantic_paraphrase",
+      expectedChunkIds: ["chunk-c"],
+      lexicalChunkIds: ["chunk-c"],
+      hybridChunkIds: ["chunk-c"],
+      qdrantCandidateCount: 1,
+      canonicalHybridCount: 1,
+      lexicalMs: 6,
+      hybridRetrievalMs: 10,
+      hybridHydrationMs: 2,
+      citationValidity: "pass",
+      answerQuality: "pass",
+    },
+  ])
+
+  assert.equal(evaluation.totalCases, 3)
+  assert.equal(evaluation.overall.lexical.hitRate, 2 / 3)
+  assert.equal(evaluation.overall.hybrid.hitRate, 1)
+  assert.equal(evaluation.overall.lexical.recall, 2 / 3)
+  assert.equal(evaluation.overall.hybrid.recall, 1)
+  assert.deepEqual(evaluation.byKind.lexical_anchor, {
+    cases: 1,
+    lexicalRecall: 1,
+    hybridRecall: 1,
+    nonRegressive: true,
+  })
+  assert.deepEqual(evaluation.byKind.semantic_paraphrase, {
+    cases: 2,
+    lexicalRecall: 0.5,
+    hybridRecall: 1,
+    nonRegressive: true,
+  })
+  assert.equal(evaluation.canonicalResolutionRate, 1)
+  assert.equal(evaluation.citationValidity.scored, 3)
+  assert.equal(evaluation.citationValidity.passRate, 1)
+  assert.equal(evaluation.answerQuality.scored, 3)
+  assert.equal(evaluation.answerQuality.passRate, 1)
+  assert.deepEqual(evaluation.latencyMs, {
+    lexicalAverage: 5,
+    hybridRetrievalAverage: 9,
+    hybridHydrationAverage: 7 / 3,
+    hybridTotalAverage: 34 / 3,
+  })
+})
+
+test("QEO-116 offline evaluation rejects unlabeled or duplicate benchmark cases instead of fabricating recall", () => {
+  assert.throws(() => evaluateResearchReportQaRetrieval([{
+    id: "missing-ground-truth",
+    kind: "semantic_paraphrase",
+    expectedChunkIds: [],
+    lexicalChunkIds: [],
+    hybridChunkIds: [],
+    qdrantCandidateCount: 0,
+    canonicalHybridCount: 0,
+    lexicalMs: 0,
+    hybridRetrievalMs: 0,
+    hybridHydrationMs: 0,
+    citationValidity: "not_scored",
+    answerQuality: "not_scored",
+  }]), /expectedChunkIds/i)
+
+  const duplicate = {
+    id: "duplicate-case",
+    kind: "lexical_anchor" as const,
+    expectedChunkIds: ["chunk-a"],
+    lexicalChunkIds: ["chunk-a"],
+    hybridChunkIds: ["chunk-a"],
+    qdrantCandidateCount: 1,
+    canonicalHybridCount: 1,
+    lexicalMs: 1,
+    hybridRetrievalMs: 1,
+    hybridHydrationMs: 1,
+    citationValidity: "not_scored" as const,
+    answerQuality: "not_scored" as const,
+  }
+  assert.throws(() => evaluateResearchReportQaRetrieval([duplicate, duplicate]), /duplicate/i)
 })
