@@ -1,0 +1,25 @@
+name: QEO-106 Yahoo adjusted basis
+
+on:
+  push:
+    branches:
+      - fix/qeo-106-vcb-adjusted-basis
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/qeo-106-vcb-adjusted-basis
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --prefer-offline
+      - run: node --test tests/qeo-106-yahoo-adjusted-basis.test.ts
