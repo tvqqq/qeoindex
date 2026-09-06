@@ -91,7 +91,8 @@ async function chartCoverage(request: NextRequest) {
       },
       summary: {
         tickerCount: rows.length,
-        hotCoveredTickers: rows.filter((row) => row.hotRowCount > 0).length,
+        hotCoveredTickers: rows.filter((row) => row.hotSessionCount >= QEO107_HOT_RETENTION_SESSIONS).length,
+        partialHotTickers: rows.filter((row) => row.hotSessionCount > 0 && row.hotSessionCount < QEO107_HOT_RETENTION_SESSIONS).length,
         coldCoveredTickers: rows.filter((row) => row.coldManifestCount > 0).length,
         derivedHourlyCoveredTickers: rows.filter((row) => row.derivedHourlyRowCount > 0).length,
         providerGapTickers: rows.filter((row) => row.providerGapCount > 0).length,
