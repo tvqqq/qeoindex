@@ -4,7 +4,7 @@
 
 **Goal:** Compute deterministic, versioned, auditable Daily price/volume adjustment factors from canonical corporate actions and raw Daily evidence.
 
-**Architecture:** Keep the factor engine pure and provider-agnostic. Load normalized events + raw reference Daily bars, compute same-date event sets into step factors, fold them backward into cumulative factors, persist derived factor lineage, and expose explicit `pending/active/ambiguous` status. No chart consumer reads factors directly until QEO-125 cutover.
+**Architecture:** Keep the factor engine pure and provider-agnostic. Load normalized events + raw reference Daily bars, compute every same-date corporate-action set as one theoretical ex-price transition, fold step factors backward into cumulative factors, persist derived factor lineage, and expose explicit `pending/active/ambiguous` status. Tickers with no effective action still receive deterministic identity factors so shadow adjusted Daily can be complete. No chart consumer reads factors directly until QEO-125 cutover.
 
 **Tech Stack:** TypeScript, PostgreSQL/Supabase, existing market calendar/history modules, node tests.
 
@@ -17,6 +17,8 @@
 - Future events do not become active before canonical `ex_date`.
 - Cash dividend does not mechanically scale volume.
 - Ambiguous/missing terms fail closed.
+- Same-date cash/stock/rights components are solved as one complete event set against the same prior raw reference price; never apply order-dependent sequential mutations.
+- A ticker/session with no effective corporate action has explicit identity factors `priceFactor=1`, `volumeFactor=1`, `stepFactor=1` under the current lineage/version.
 - Factors are recomputable and every active factor references exact event lineage + engine version.
 
 ---
@@ -104,7 +106,9 @@ export function computeStepAdjustment(input: AdjustmentEventSet): StepAdjustment
 ```
 
 - [ ] **Step 1: Register `tests/qeo-124-adjustment-engine.test.ts` in `tests/test-contracts.json`** with owner `market-data` and deterministic factor/lineage invariant.
-- [ ] **Step 2: RED cash-dividend fixture**
+- [ ] **Step 2: RED identity fixture** — empty effective event set returns exactly `priceFactor=1`, `volumeFactor=1`; later cumulative-series tests prove no-action tickers receive full session coverage rather than missing factors.
+- [ ] **Step 3: GREEN identity formula**
+- [ ] **Step 4: RED cash-dividend fixture**
 
 Assert:
 
@@ -115,14 +119,14 @@ volumeFactor === 1
 
 Reject `cashPerShare >= previousRawClose` as ambiguous rather than creating a non-positive factor.
 
-- [ ] **Step 3: GREEN cash formula**
-- [ ] **Step 4: RED stock dividend/split fixture** — ratio `1:1` gives price factor `0.5`; volume factor is the explicit reciprocal normalization required by the selected adjusted-volume basis, never inferred from the price field at render time.
-- [ ] **Step 5: GREEN stock/split formula**
-- [ ] **Step 6: RED rights issue fixture** using explicit ratio + subscription price + previous raw close.
-- [ ] **Step 7: GREEN rights formula**
-- [ ] **Step 8: RED multi-action same-date determinism** — shuffled cash/stock/right components must produce the same output.
-- [ ] **Step 9: GREEN deterministic event-set calculation**
-- [ ] **Step 10: Commit**
+- [ ] **Step 5: GREEN cash formula**
+- [ ] **Step 6: RED stock dividend/split fixture** — ratio `1:1` gives price factor `0.5`; volume factor is the explicit reciprocal normalization required by the selected adjusted-volume basis, never inferred from the price field at render time.
+- [ ] **Step 7: GREEN stock/split formula**
+- [ ] **Step 8: RED rights issue fixture** using explicit ratio + subscription price + previous raw close.
+- [ ] **Step 9: GREEN rights formula**
+- [ ] **Step 10: RED multi-action same-date event-set fixture** — shuffled cash/stock/right components must produce the same single theoretical ex-price and the same price/volume step factors. The implementation must solve from the complete entitlement set against the original `previousRawClose`; it must not feed one component's adjusted price into the next component.
+- [ ] **Step 11: GREEN deterministic event-set calculation**
+- [ ] **Step 12: Commit**
 
 ### Task 3: Build cumulative backward factor series
 
@@ -154,11 +158,12 @@ export function buildAdjustmentFactorSeries(input: {
 }): FactorRow[]
 ```
 
-- [ ] **Step 1: RED future event activation test** — an event with `exDate > asOfDate` may yield pending metadata but must not alter active historical cumulative factors.
-- [ ] **Step 2: RED backward-fold test** — two historical event sets compound from newest to oldest deterministically.
-- [ ] **Step 3: Implement engine**
-- [ ] **Step 4: Verify event amendment changes lineage from the earliest affected action backward and leaves later unaffected sessions unchanged**
-- [ ] **Step 5: Commit**
+- [ ] **Step 1: RED zero-action series** — every requested canonical session receives an active identity row under deterministic empty-event lineage; no missing factor gaps are allowed solely because a ticker had no corporate action.
+- [ ] **Step 2: RED future event activation test** — an event with `exDate > asOfDate` may yield pending metadata but must not alter active historical cumulative factors.
+- [ ] **Step 3: RED backward-fold test** — two historical event sets compound from newest to oldest deterministically.
+- [ ] **Step 4: Implement engine**
+- [ ] **Step 5: Verify event amendment changes lineage from the earliest affected action backward and leaves later unaffected sessions unchanged**
+- [ ] **Step 6: Commit**
 
 ### Task 4: Add lineage hashing and persistence/readback
 
