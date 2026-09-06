@@ -27,6 +27,21 @@ export type ResearchReportQaErrorCode =
   | "provider_failed"
   | "invalid_model_output"
 
+export type ResearchReportQaRetrievalMode = "lexical" | "shadow" | "hybrid"
+export type ResearchReportQaRetrievalSelection = "lexical" | "hybrid"
+export type ResearchReportQaHybridStatus = "ready" | "unavailable"
+
+export interface ResearchReportQaRetrievalComparison {
+  mode: Exclude<ResearchReportQaRetrievalMode, "lexical">
+  selected: ResearchReportQaRetrievalSelection
+  fallbackUsed: boolean
+  lexicalCount: number
+  hybridCount: number
+  overlapCount: number
+  overlapRatio: number
+  hybridStatus: ResearchReportQaHybridStatus
+}
+
 export class ResearchReportQaError extends Error {
   readonly code: ResearchReportQaErrorCode
   readonly httpStatus: number
@@ -70,6 +85,19 @@ type RetrieveEvidence = (
   lexicalQuery: string,
 ) => Promise<ResearchReportQaEvidence[]>
 
+type RetrieveHybridEvidence = (
+  client: ResearchReportQaRetrievalClient,
+  identity: ResearchReportQaEvidenceIdentity,
+  lexicalQuery: string,
+) => Promise<{
+  status: ResearchReportQaHybridStatus
+  evidence: readonly ResearchReportQaEvidence[]
+  pointIds?: readonly string[]
+  reason?: unknown
+  retrievalMs?: number
+  hydrationMs?: number
+}>
+
 type AnswerWithAi = (input: {
   question: string
   history: readonly ResearchReportQaTurn[]
@@ -83,6 +111,9 @@ type AnswerWithAi = (input: {
 export interface ResearchReportQaServiceDependencies {
   resolveIdentity?: ResolveIdentity
   retrieveEvidence?: RetrieveEvidence
+  retrieveHybridEvidence?: RetrieveHybridEvidence
+  retrievalMode?: ResearchReportQaRetrievalMode
+  recordRetrievalComparison?: (metric: ResearchReportQaRetrievalComparison) => void | Promise<void>
   answerWithAi?: AnswerWithAi
 }
 
@@ -184,6 +215,43 @@ function projectAnswer(
   }
 }
 
+function retrievalComparison(input: {
+  mode: Exclude<ResearchReportQaRetrievalMode, "lexical">
+  selected: ResearchReportQaRetrievalSelection
+  fallbackUsed: boolean
+  lexical: readonly ResearchReportQaEvidence[]
+  hybrid: readonly ResearchReportQaEvidence[]
+  hybridStatus: ResearchReportQaHybridStatus
+}): ResearchReportQaRetrievalComparison {
+  const lexicalIds = new Set(input.lexical.map((row) => row.chunkId))
+  const hybridIds = new Set(input.hybrid.map((row) => row.chunkId))
+  let overlapCount = 0
+  for (const id of hybridIds) if (lexicalIds.has(id)) overlapCount += 1
+  const denominator = Math.min(lexicalIds.size, hybridIds.size)
+  return {
+    mode: input.mode,
+    selected: input.selected,
+    fallbackUsed: input.fallbackUsed,
+    lexicalCount: input.lexical.length,
+    hybridCount: input.hybrid.length,
+    overlapCount,
+    overlapRatio: denominator > 0 ? overlapCount / denominator : 0,
+    hybridStatus: input.hybridStatus,
+  }
+}
+
+async function recordComparisonSafely(
+  recorder: ResearchReportQaServiceDependencies["recordRetrievalComparison"],
+  metric: ResearchReportQaRetrievalComparison,
+) {
+  if (!recorder) return
+  try {
+    await recorder(metric)
+  } catch {
+    // Observability must never become a user-visible Q&A dependency.
+  }
+}
+
 export async function answerResearchReportQuestion(
   client: ResearchReportQaRetrievalClient,
   input: ResearchReportQaRequest,
@@ -192,6 +260,8 @@ export async function answerResearchReportQuestion(
   const request = validateRequest(input)
   const resolveIdentity = deps.resolveIdentity ?? resolveResearchReportQaEvidenceIdentity
   const retrieveEvidence = deps.retrieveEvidence ?? retrieveResearchReportQaEvidence
+  const retrieveHybridEvidence = deps.retrieveHybridEvidence
+  const retrievalMode = deps.retrievalMode ?? "lexical"
   const answerWithAi = deps.answerWithAi ?? answerResearchReportQaWithOpenAi
 
   let resolution: ResearchReportQaEvidenceIdentityResolution
@@ -213,17 +283,103 @@ export async function answerResearchReportQuestion(
   }
 
   const lexicalQuery = buildResearchReportQaLexicalQuery(request.question, request.history)
-  let evidence: ResearchReportQaEvidence[]
-  try {
-    evidence = boundResearchReportQaEvidence(
-      await retrieveEvidence(client, resolution.identity, lexicalQuery),
-    )
-  } catch (error) {
-    throw new ResearchReportQaError(
-      "retrieval_failed",
-      502,
-      sanitizeErrorMessage(error),
-    )
+  let evidence: ResearchReportQaEvidence[] = []
+
+  if (retrievalMode === "lexical" || !retrieveHybridEvidence) {
+    try {
+      evidence = boundResearchReportQaEvidence(
+        await retrieveEvidence(client, resolution.identity, lexicalQuery),
+      )
+    } catch (error) {
+      throw new ResearchReportQaError(
+        "retrieval_failed",
+        502,
+        sanitizeErrorMessage(error),
+      )
+    }
+  } else if (retrievalMode === "shadow") {
+    let lexical: ResearchReportQaEvidence[]
+    try {
+      lexical = boundResearchReportQaEvidence(
+        await retrieveEvidence(client, resolution.identity, lexicalQuery),
+      )
+    } catch (error) {
+      throw new ResearchReportQaError(
+        "retrieval_failed",
+        502,
+        sanitizeErrorMessage(error),
+      )
+    }
+
+    let hybrid: ResearchReportQaEvidence[] = []
+    let hybridStatus: ResearchReportQaHybridStatus = "unavailable"
+    try {
+      const result = await retrieveHybridEvidence(client, resolution.identity, lexicalQuery)
+      hybridStatus = result.status
+      hybrid = result.status === "ready" ? boundResearchReportQaEvidence(result.evidence) : []
+    } catch {
+      hybridStatus = "unavailable"
+    }
+
+    evidence = lexical
+    await recordComparisonSafely(deps.recordRetrievalComparison, retrievalComparison({
+      mode: "shadow",
+      selected: "lexical",
+      fallbackUsed: false,
+      lexical,
+      hybrid,
+      hybridStatus,
+    }))
+  } else {
+    let hybrid: ResearchReportQaEvidence[] = []
+    let hybridStatus: ResearchReportQaHybridStatus = "unavailable"
+    try {
+      const result = await retrieveHybridEvidence(client, resolution.identity, lexicalQuery)
+      hybridStatus = result.status
+      hybrid = result.status === "ready" ? boundResearchReportQaEvidence(result.evidence) : []
+    } catch {
+      hybridStatus = "unavailable"
+    }
+
+    let lexical: ResearchReportQaEvidence[] = []
+    let lexicalError: unknown = null
+    try {
+      lexical = boundResearchReportQaEvidence(
+        await retrieveEvidence(client, resolution.identity, lexicalQuery),
+      )
+    } catch (error) {
+      lexicalError = error
+    }
+
+    const useHybrid = hybridStatus === "ready" && hybrid.length > 0
+    if (useHybrid) {
+      evidence = hybrid
+      await recordComparisonSafely(deps.recordRetrievalComparison, retrievalComparison({
+        mode: "hybrid",
+        selected: "hybrid",
+        fallbackUsed: false,
+        lexical,
+        hybrid,
+        hybridStatus,
+      }))
+    } else {
+      if (lexicalError) {
+        throw new ResearchReportQaError(
+          "retrieval_failed",
+          502,
+          sanitizeErrorMessage(lexicalError),
+        )
+      }
+      evidence = lexical
+      await recordComparisonSafely(deps.recordRetrievalComparison, retrievalComparison({
+        mode: "hybrid",
+        selected: "lexical",
+        fallbackUsed: true,
+        lexical,
+        hybrid,
+        hybridStatus,
+      }))
+    }
   }
 
   if (evidence.length === 0) return notFoundResult(request.reportId, null)
