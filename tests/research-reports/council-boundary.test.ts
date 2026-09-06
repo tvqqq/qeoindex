@@ -339,8 +339,13 @@ test("QEO-115 consumer policy preserves contradictory authorities and exposes st
   const context = await buildTickerContext({ index, ticker: "MSN", query: "What should I do?", consumer: "AI_COUNCIL", now: "2026-09-06" })
   assert.equal(context.consumer, "AI_COUNCIL")
   assert.equal(context.items.length, 2)
-  assert.equal(context.items[0].authority, "DETERMINISTIC_SIGNAL")
-  assert.equal(context.items[1].authority, "SOURCE_OPINION")
+  assert.deepEqual(
+    new Set(context.items.map((item) => item.authority)),
+    new Set(["DETERMINISTIC_SIGNAL", "SOURCE_OPINION"]),
+  )
+  assert.match(context.text, /Council says WAIT/)
+  assert.match(context.text, /Broker says BUY/)
+  assert.doesNotMatch(context.text, /consensus|average/i)
   assert.ok(context.telemetry.totalMs >= 0)
   assert.ok(context.telemetry.retrievalMs >= 0)
   assert.ok(context.telemetry.rerankMs >= 0)
