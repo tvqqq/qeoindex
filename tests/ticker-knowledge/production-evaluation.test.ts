@@ -38,6 +38,8 @@ test("QEO-119 production benchmark requires perfect canonical provenance/citatio
     tickerIsolation: { tested: 3, passed: 3 },
     exactVersion: { tested: 2, passed: 2 },
     contradictionAuthority: { tested: 1, passed: 1 },
+    temporalValidity: { tested: 2, passed: 2 },
+    historicalAnalog: { tested: 2, passed: 2 },
   })
 
   assert.equal(evaluation.passed, true)
@@ -48,6 +50,8 @@ test("QEO-119 production benchmark requires perfect canonical provenance/citatio
   assert.equal(evaluation.gates.tickerIsolation100Pct, true)
   assert.equal(evaluation.gates.exactVersion100Pct, true)
   assert.equal(evaluation.gates.contradictionAuthority100Pct, true)
+  assert.equal(evaluation.gates.temporalValidity100Pct, true)
+  assert.equal(evaluation.gates.historicalAnalog100Pct, true)
 })
 
 test("QEO-119 production benchmark fails closed on partial Qdrant hydration or ticker leakage", () => {
@@ -85,6 +89,8 @@ test("QEO-119 production benchmark fails closed on partial Qdrant hydration or t
     tickerIsolation: { tested: 2, passed: 1 },
     exactVersion: { tested: 1, passed: 1 },
     contradictionAuthority: { tested: 1, passed: 1 },
+    temporalValidity: { tested: 1, passed: 0 },
+    historicalAnalog: { tested: 1, passed: 0 },
   })
 
   assert.equal(evaluation.passed, false)
@@ -92,4 +98,6 @@ test("QEO-119 production benchmark fails closed on partial Qdrant hydration or t
   assert.equal(evaluation.gates.canonicalCitation100Pct, false)
   assert.equal(evaluation.gates.semanticNonRegression, false)
   assert.equal(evaluation.gates.tickerIsolation100Pct, false)
+  assert.equal(evaluation.gates.temporalValidity100Pct, false)
+  assert.equal(evaluation.gates.historicalAnalog100Pct, false)
 })
