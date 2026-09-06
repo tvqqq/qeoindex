@@ -13,6 +13,8 @@ export interface TickerKnowledgeProductionAcceptanceInput {
   tickerIsolation: ProductionAcceptanceProbeSummary
   exactVersion: ProductionAcceptanceProbeSummary
   contradictionAuthority: ProductionAcceptanceProbeSummary
+  temporalValidity: ProductionAcceptanceProbeSummary
+  historicalAnalog: ProductionAcceptanceProbeSummary
 }
 
 function perfectProbe(summary: ProductionAcceptanceProbeSummary, label: string) {
@@ -48,6 +50,8 @@ export function evaluateTickerKnowledgeProductionAcceptance(
     tickerIsolation100Pct: perfectProbe(input.tickerIsolation, "ticker isolation"),
     exactVersion100Pct: perfectProbe(input.exactVersion, "exact version"),
     contradictionAuthority100Pct: perfectProbe(input.contradictionAuthority, "contradiction authority"),
+    temporalValidity100Pct: perfectProbe(input.temporalValidity, "temporal validity"),
+    historicalAnalog100Pct: perfectProbe(input.historicalAnalog, "historical analog"),
   }
 
   return {
@@ -58,6 +62,8 @@ export function evaluateTickerKnowledgeProductionAcceptance(
       tickerIsolation: input.tickerIsolation,
       exactVersion: input.exactVersion,
       contradictionAuthority: input.contradictionAuthority,
+      temporalValidity: input.temporalValidity,
+      historicalAnalog: input.historicalAnalog,
     },
   }
 }
