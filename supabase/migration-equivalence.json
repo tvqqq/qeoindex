@@ -152,7 +152,7 @@
       "productionVersion": "20260902061549",
       "state": "MAPPED",
       "evidence": "production-ledger-and-service-role-rpc-smoke",
-      "rationale": "QEO-21 service-role retention RPC was applied to production before runtime merge; Supabase production timestamp differs from repository filename"
+      "rationale": "QEO-21 service-role retention RPC was applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
     },
     {
       "logicalName": "qeo20_compatibility_columns_cleanup",
@@ -176,7 +176,7 @@
       "productionVersion": "20260902101642",
       "state": "MAPPED",
       "evidence": "production-ledger-and-service-role-rpc",
-      "rationale": "QEO-29 bounded job telemetry cleanup was applied to production before runtime merge; Supabase production timestamp differs from repository filename"
+      "rationale": "QEO-29 bounded job telemetry cleanup was applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
     },
     {
       "logicalName": "qeo39_wyckoff_n_plus_one",
@@ -184,7 +184,7 @@
       "productionVersion": "20260902120822",
       "state": "MAPPED",
       "evidence": "production-ledger-batched-rpc-and-artifact-cleanup-smoke",
-      "rationale": "QEO-39 batched indexed OHLCV RPC and run-scoped build artifact store were applied to production before runtime merge; Supabase production timestamp differs from repository filename"
+      "rationale": "QEO-39 batched indexed OHLCV RPC and run-scoped build artifact store were applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
     },
     {
       "logicalName": "qeo39_grouped_ohlcv_rpc",
@@ -264,7 +264,7 @@
       "productionVersion": "20260905095126",
       "state": "EXACT",
       "evidence": "qeo87-production-ledger-cron-absence",
-      "rationale": "Temporary rollout gate: Research Reports schema is live while the 07:05 scheduler remains intentionally disabled until production smoke and telemetry acceptance pass."
+      "rationale": "Temporary rollout gate: Research Reports schema is live while the 07:05 scheduler remains intentionally disabled until the capped three-retry runtime is Verify-green, production READY, and a bounded manual smoke proves per-report AI failure isolation before cron ownership is enabled."
     },
     {
       "logicalName": "qeo107_chart_intraday_coverage_report",
@@ -307,12 +307,20 @@
       "rationale": "Production repair batches exposed statement_timeout because the route recomputed the full canonical-200 integrity report twice. The reviewed scoped equivalent was replay-verified locally, applied as production version 20260906002919, and returned VIC/VCB PASS with exact canonical counts before runtime cutover."
     },
     {
-      "logicalName": "qeo117_ai_council_ticker_knowledge",
-      "repositoryVersion": "20260906094500",
+      "logicalName": "qeo108_chart_capacity_and_index_cleanup",
+      "repositoryVersion": "20260906030037",
+      "productionVersion": "20260906030037",
+      "state": "EXACT",
+      "evidence": "qeo108-production-capacity-rpc-grants-index-plan-and-ledger-smoke",
+      "rationale": "Production applied only the low-risk QEO-108 capacity observability RPC plus the benchmark-proven redundant DESC lookup-index removal. Service-role-only grants, sole PK index ownership, and warm DESC PK Index Scan Backward were verified after apply. The native partition cutover remains separately quarantined."
+    },
+    {
+      "logicalName": "qeo108_chart_intraday_session_partitions",
+      "repositoryVersion": "20260906024500",
       "productionVersion": null,
       "state": "QUARANTINED",
-      "evidence": "qeo117-green-freeze-contract-pending-qdrant-production-cutover",
-      "rationale": "Immutable ticker-knowledge Council snapshot schema is intentionally quarantined until Qdrant credentials, exact-head DB replay/types, runtime wiring, and bounded production smoke are approved."
+      "evidence": "qeo108-production-readonly-schema-index-capacity-audit-pending-nonproduction-rehearsal",
+      "rationale": "Native session/date partition cutover remains quarantined until a non-production rehearsal proves exact row/range/checksum parity, service-role RPC rebinds, deterministic empty-partition reclamation, rollback-shadow behavior, and latency/correctness acceptance. Production DDL has not been applied."
     }
   ]
 }
