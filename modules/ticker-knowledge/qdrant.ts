@@ -392,7 +392,6 @@ export function createQdrantTickerKnowledgeIndex(options: QdrantTickerKnowledgeI
   async function query(input: TickerKnowledgeQuery) {
     const text = normalizeText(input.text)
     if (!text) return []
-    await ensureReady()
     const limit = normalizedLimit(input.limit)
     const filter = queryFilter(input)
     const [dense] = await embed([text])
