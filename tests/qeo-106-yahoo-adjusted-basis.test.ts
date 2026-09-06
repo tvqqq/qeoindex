@@ -46,12 +46,14 @@ test("QEO-106 Yahoo Daily applies adjusted-close ratio to OHLC while preserving 
   }
 })
 
-test("QEO-106 repair worker reconciles persisted legacy Yahoo Daily rows on the adjusted basis", () => {
+test("QEO-106 repair worker treats legacy raw Yahoo Daily rows as suspect and refetches through provider priority", () => {
   const integrity = readFileSync(new URL("../modules/market/history/daily-integrity.ts", import.meta.url), "utf8")
-  assert.match(integrity, /fetchYahooDailyOhlcv/)
   assert.match(integrity, /loadLegacyYahooBasisRows/)
   assert.match(integrity, /legacyYahooRowsByTicker/)
-  assert.match(integrity, /Yahoo Finance \.VN adjusted OHLC fallback · QEO-106 basis reconcile/)
-  assert.match(integrity, /provider:\s*"Fallback"/)
   assert.match(integrity, /legacyYahooDates/)
+  assert.match(integrity, /query1\.finance\.yahoo\.com\/v8\/finance\/chart\//)
+  assert.match(integrity, /\.eq\("provider", "Fallback"\)/)
+  assert.match(integrity, /provider_detail/)
+  assert.match(integrity, /fetchDailyMarketHistoryWindow/)
+  assert.match(integrity, /\.\.\.legacyYahooDates/)
 })
