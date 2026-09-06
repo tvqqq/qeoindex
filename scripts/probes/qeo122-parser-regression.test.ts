@@ -31,7 +31,34 @@ test("QEO-122 parses Vietnamese thousands-separated stock ratios without shrinki
   ])
 })
 
-test("QEO-122 prefers the explicit stock-dividend purpose over downstream cash wording on the same rendered line", () => {
+test("QEO-122 ignores related-news action wording outside the main VSDC notice body", () => {
+  const notice = parseVsdcCorporateActionHtml(`
+    <article>
+      <div>Cập nhật ngày 21/07/2026 - 16:29:39</div>
+      <div>Mã chứng khoán: VHM</div>
+      <div>Mã ISIN: VN000000VHM0</div>
+      <div>Nơi giao dịch: HOSE</div>
+      <div>Ngày đăng ký cuối cùng: 07/08/2026</div>
+      <div>Lý do mục đích:</div>
+      <div>Chi trả cổ tức năm 2025 bằng cổ phiếu</div>
+      <div>Tỷ lệ thực hiện: 1:1 (Người sở hữu 01 cổ phiếu được nhận 01 cổ phiếu mới)</div>
+    </article>
+    <section>Tin cùng tổ chức</section>
+    <li>VHM: Chi trả cổ tức bằng tiền mặt cho các cổ đông công ty từ lợi nhuận sau thuế lũy kế năm 2025</li>
+  `, "https://vsdc.vn/vi/ad/198392")
+
+  assert.deepEqual(notice.components, [
+    {
+      actionType: "stock_dividend",
+      cashPerShare: null,
+      stockRatio: "1:1",
+      rightsRatio: null,
+      subscriptionPrice: null,
+    },
+  ])
+})
+
+test("QEO-122 does not let non-action cash wording override an explicit stock-dividend purpose", () => {
   const notice = parseVsdcCorporateActionHtml(`
     <article>
       <div>Mã chứng khoán: VHM</div>
