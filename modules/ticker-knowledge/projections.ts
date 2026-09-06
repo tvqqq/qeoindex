@@ -12,6 +12,7 @@ import {
   normalizeTicker,
   type TickerKnowledgeItem,
 } from "./domain.ts"
+import { RESEARCH_REPORT_QA_PARTITION } from "./partitions.ts"
 
 export const RESEARCH_REPORT_KNOWLEDGE_PROJECTION_VERSION = "research-report-knowledge-v1" as const
 export const COUNCIL_HISTORY_KNOWLEDGE_PROJECTION_VERSION = "council-history-knowledge-v1" as const
@@ -156,6 +157,26 @@ export function projectResearchReportKnowledge(input: ResearchReportKnowledgePro
   if (!cleanText(input.analysis.id) || !cleanText(input.analysis.chunkVersion)) throw new Error("Research report projection requires exact analysis and chunk versions")
 
   const items: TickerKnowledgeItem[] = []
+
+  for (const chunk of input.chunks) {
+    const content = cleanText(chunk.content)
+    if (!content) continue
+    items.push(createTickerKnowledgeItem({
+      ticker: RESEARCH_REPORT_QA_PARTITION,
+      knowledgeType: "REPORT_CHUNK",
+      authority: "SOURCE_OPINION",
+      sourceType: "RESEARCH_REPORT",
+      logicalKey: `report-qa-chunk:${input.report.contentHash}:${input.analysis.chunkVersion}:${chunk.id}:${chunk.chunkHash}`,
+      text: content,
+      provenance: reportProvenance(input, {
+        page: chunk.pageNumber,
+        chunkId: chunk.id,
+        chunkIndex: chunk.chunkIndex,
+      }),
+      projectionVersion: RESEARCH_REPORT_KNOWLEDGE_PROJECTION_VERSION,
+    }))
+  }
+
   const seenTickers = new Set<string>()
   for (const mention of input.mentions) {
     const ticker = normalizeTicker(mention.ticker)
