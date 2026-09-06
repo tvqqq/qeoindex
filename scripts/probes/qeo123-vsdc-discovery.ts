@@ -1,13 +1,18 @@
 import { createHash } from "node:crypto"
 
-const TARGETS = [
-  { id: "vhm-security-detail", url: "https://vsdc.vn/vi/s-detail/6951" },
-  { id: "suggestion-search-js", url: "https://vsdc.vn/js/suggestion-search.js?v=20260906" },
-  { id: "site-js", url: "https://vsdc.vn/js/site.js" },
-  { id: "script-js", url: "https://vsdc.vn/assets/libs/js/script.js" },
-] as const
-
+const VSDC_ORIGIN = "https://vsdc.vn"
+const VHM_DETAIL_URL = `${VSDC_ORIGIN}/vi/s-detail/6951`
 const USER_AGENT = "qeoindex-qeo123-source-validation/1.0 (+bounded-read-only-probe)"
+const REQUEST_DELAY_MS = 300
+
+type FetchResult = {
+  status: number
+  contentType: string | null
+  bytes: number
+  sha256: string
+  body: string
+  setCookies: string[]
+}
 
 function decodeHtmlOnce(value: string) {
   return value
@@ -31,56 +36,36 @@ function eventHrefs(html: string) {
     .slice(0, 200)
 }
 
-function relevantHrefs(html: string) {
-  return allHrefs(html)
-    .filter((href) => /(?:\/(?:vi\/)?(?:ad1?|s-detail)|page|paging|pagination|search)/i.test(href))
-    .slice(0, 300)
+function extractVpToken(html: string) {
+  const metaTag = html.match(/<meta\b[^>]*\bname=["']__VPToken["'][^>]*>/i)?.[0]
+  return metaTag?.match(/\bcontent=["']([^"']+)["']/i)?.[1] ?? null
 }
 
-function contextSnippets(body: string) {
-  const flattened = decodeHtmlOnce(body).replace(/\s+/g, " ")
-  const needles = [
-    "__VPToken",
-    "RequestVerificationToken",
-    "X-CSRF",
-    "setRequestHeader",
-    "ajaxSetup",
-    "beforeSend",
-    "headers:",
-    "changePage_TCDK",
-    "tabDetailTCPH_THQ",
-    "suggestion-search/isustocks",
-    "/isuisser-thq/search",
-  ]
-  const snippets: Record<string, string | null> = {}
-  const normalized = flattened.toLocaleLowerCase("en-US")
-  for (const needle of needles) {
-    const index = normalized.indexOf(needle.toLocaleLowerCase("en-US"))
-    snippets[needle] = index < 0 ? null : flattened.slice(Math.max(0, index - 500), Math.min(flattened.length, index + 1800))
-  }
-  return snippets
+function getSetCookies(response: Response) {
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] }
+  if (typeof headers.getSetCookie === "function") return headers.getSetCookie()
+  const fallback = response.headers.get("set-cookie")
+  return fallback ? [fallback] : []
 }
 
-function endpointCandidates(body: string) {
-  const candidates = [
-    ...uniqueMatches(body, /(?:url|action)\s*:\s*["']([^"']+)["']/gi),
-    ...uniqueMatches(body, /\$\.(?:get|post)\s*\(\s*["']([^"']+)["']/gi),
-    ...uniqueMatches(body, /fetch\s*\(\s*["']([^"']+)["']/gi),
-  ]
-  return [...new Set(candidates)]
-    .filter((value) => value.startsWith("/") || value.startsWith("http"))
-    .slice(0, 200)
+function cookieHeader(setCookies: string[]) {
+  return setCookies
+    .map((value) => value.split(";", 1)[0]?.trim())
+    .filter(Boolean)
+    .join("; ")
 }
 
-function cookieNames(response: Response) {
-  const headersWithCookies = response.headers as Headers & { getSetCookie?: () => string[] }
-  const values = typeof headersWithCookies.getSetCookie === "function"
-    ? headersWithCookies.getSetCookie()
-    : [response.headers.get("set-cookie") ?? ""].filter(Boolean)
-  return [...new Set(values.map((value) => value.split(";", 1)[0]?.split("=", 1)[0]?.trim()).filter(Boolean))]
+function cookieNames(setCookies: string[]) {
+  return [...new Set(setCookies
+    .map((value) => value.split(";", 1)[0]?.split("=", 1)[0]?.trim())
+    .filter((value): value is string => Boolean(value)))]
 }
 
-async function requestText(url: string, init: RequestInit = {}) {
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function requestText(url: string, init: RequestInit = {}): Promise<FetchResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 20_000)
   try {
@@ -88,7 +73,7 @@ async function requestText(url: string, init: RequestInit = {}) {
       ...init,
       redirect: "error",
       headers: {
-        accept: "text/html,application/xhtml+xml,application/json,application/javascript,text/javascript,*/*;q=0.8",
+        accept: "text/html,application/xhtml+xml,application/json,*/*;q=0.8",
         "user-agent": USER_AGENT,
         ...(init.headers ?? {}),
       },
@@ -100,50 +85,179 @@ async function requestText(url: string, init: RequestInit = {}) {
       contentType: response.headers.get("content-type"),
       bytes: Buffer.byteLength(body),
       sha256: createHash("sha256").update(body).digest("hex"),
-      setCookieNames: cookieNames(response),
       body,
+      setCookies: getSetCookies(response),
     }
   } finally {
     clearTimeout(timeout)
   }
 }
 
-async function inspectGet(id: string, url: string) {
-  try {
-    const fetched = await requestText(url)
-    return {
-      id,
-      url,
+function exactVhmSuggestion(parsed: unknown) {
+  if (!parsed || typeof parsed !== "object") return null
+  const data = (parsed as { data?: unknown }).data
+  if (!Array.isArray(data)) return null
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue
+    const record = row as Record<string, unknown>
+    const name = typeof record.name === "string" ? record.name.trim().toUpperCase() : ""
+    const content = typeof record.content === "string" ? record.content.trim() : ""
+    if (name === "VHM" || /^VHM\b/i.test(content)) {
+      const safe: Record<string, string | number | boolean | null> = {}
+      for (const [key, value] of Object.entries(record)) {
+        if (typeof value === "string") safe[key] = value.slice(0, 300)
+        else if (typeof value === "number" || typeof value === "boolean" || value === null) safe[key] = value
+      }
+      return safe
+    }
+  }
+  return null
+}
+
+function hrefSecurityId(value: unknown) {
+  if (typeof value !== "string") return null
+  return value.match(/\/(?:vi\/)?s-detail\/(\d+)(?:[/?#]|$)/i)?.[1] ?? null
+}
+
+function securityIdFromSuggestion(row: Record<string, unknown> | null) {
+  if (!row) return null
+  for (const [key, value] of Object.entries(row)) {
+    if (/^(?:id|securityId|issuerOrgId|value)$/i.test(key) && /^\d+$/.test(String(value ?? ""))) {
+      return String(value)
+    }
+    const fromHref = hrefSecurityId(value)
+    if (fromHref) return fromHref
+  }
+  return null
+}
+
+function exactVhmGlobalSearch(parsed: unknown) {
+  if (!parsed || typeof parsed !== "object") return null
+  const data = (parsed as { data?: unknown }).data
+  if (!Array.isArray(data)) return null
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue
+    const record = row as Record<string, unknown>
+    const content = typeof record.content === "string" ? record.content.trim() : ""
+    const href = typeof record.href === "string" ? record.href.trim() : ""
+    if (/\bVHM\b/i.test(content) && hrefSecurityId(href)) {
+      return {
+        content: content.slice(0, 300),
+        href: href.slice(0, 300),
+        securityId: hrefSecurityId(href),
+      }
+    }
+  }
+  return null
+}
+
+async function main() {
+  const bootstrap = await requestText(VHM_DETAIL_URL)
+  const vpToken = extractVpToken(bootstrap.body)
+  const cookies = cookieHeader(bootstrap.setCookies)
+  const bootstrapEventLinks = eventHrefs(bootstrap.body)
+
+  if (bootstrap.status !== 200 || !vpToken || !cookies || bootstrapEventLinks.length === 0) {
+    throw new Error("VSDC discovery bootstrap failed closed")
+  }
+
+  const sessionHeaders = {
+    "__VPToken": vpToken,
+    cookie: cookies,
+    referer: VHM_DETAIL_URL,
+    "x-requested-with": "XMLHttpRequest",
+  }
+
+  await delay(REQUEST_DELAY_MS)
+  const suggestion = await requestText(`${VSDC_ORIGIN}/suggestion-search/isustocks`, {
+    method: "POST",
+    headers: {
+      ...sessionHeaders,
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    },
+    body: new URLSearchParams({ keyword: "VHM", issuerOrgId: "" }).toString(),
+  })
+  let suggestionJson: unknown = null
+  try { suggestionJson = JSON.parse(suggestion.body) } catch { suggestionJson = null }
+  const exactSuggestion = exactVhmSuggestion(suggestionJson)
+
+  await delay(REQUEST_DELAY_MS)
+  const globalSearch = await requestText(`${VSDC_ORIGIN}/search-suggest`, {
+    method: "POST",
+    headers: {
+      ...sessionHeaders,
+      "content-type": "application/json;charset=utf-8",
+    },
+    body: JSON.stringify({ text: "VHM", type: "1" }),
+  })
+  let globalSearchJson: unknown = null
+  try { globalSearchJson = JSON.parse(globalSearch.body) } catch { globalSearchJson = null }
+  const exactGlobal = exactVhmGlobalSearch(globalSearchJson)
+
+  const resolvedSecurityId = securityIdFromSuggestion(exactSuggestion) ?? exactGlobal?.securityId ?? null
+  if (suggestion.status !== 200 || !exactSuggestion) {
+    throw new Error(`VSDC ticker suggestion failed closed: status=${suggestion.status}`)
+  }
+  if (globalSearch.status !== 200 || !exactGlobal || resolvedSecurityId !== "6951") {
+    throw new Error(`VSDC ticker-to-security discovery failed closed: status=${globalSearch.status} id=${resolvedSecurityId ?? "missing"}`)
+  }
+
+  const rightsPages = []
+  for (const page of [1, 2]) {
+    await delay(REQUEST_DELAY_MS)
+    const fetched = await requestText(`${VSDC_ORIGIN}/isuisser-thq/search`, {
+      method: "POST",
+      headers: {
+        ...sessionHeaders,
+        "content-type": "application/json;charset=utf-8",
+      },
+      body: JSON.stringify({ SearchKey: resolvedSecurityId, CurrentPage: page, RecordOnPage: 10 }),
+    })
+    const links = eventHrefs(fetched.body)
+    if (fetched.status !== 200 || links.length === 0) {
+      throw new Error(`VSDC rights pagination failed closed: page=${page} status=${fetched.status}`)
+    }
+    rightsPages.push({
+      page,
       status: fetched.status,
       contentType: fetched.contentType,
       bytes: fetched.bytes,
       sha256: fetched.sha256,
-      setCookieNames: fetched.setCookieNames,
-      vpTokenPresent: /<meta\b[^>]*name=["']__VPToken["'][^>]*content=["'][^"']+["']/i.test(fetched.body),
-      eventLinks: eventHrefs(fetched.body),
-      relevantHrefs: relevantHrefs(fetched.body),
-      endpointCandidates: endpointCandidates(fetched.body),
-      snippets: contextSnippets(fetched.body),
-    }
-  } catch (error) {
-    return { id, url, error: error instanceof Error ? error.message : String(error) }
+      eventLinks: links,
+    })
   }
-}
 
-async function main() {
-  const results = []
-  for (const target of TARGETS) {
-    results.push(await inspectGet(target.id, target.url))
-    await new Promise((resolve) => setTimeout(resolve, 200))
+  const pageOneIds = new Set(rightsPages[0].eventLinks)
+  const pageTwoHasNewEvent = rightsPages[1].eventLinks.some((href) => !pageOneIds.has(href))
+  if (!pageTwoHasNewEvent) {
+    throw new Error("VSDC rights pagination did not advance to distinct events")
   }
 
   console.log(JSON.stringify({
     generatedAt: new Date().toISOString(),
-    targets: results,
+    gate: "PASS",
+    bootstrap: {
+      url: VHM_DETAIL_URL,
+      status: bootstrap.status,
+      contentType: bootstrap.contentType,
+      bytes: bootstrap.bytes,
+      sha256: bootstrap.sha256,
+      setCookieNames: cookieNames(bootstrap.setCookies),
+      vpTokenPresent: Boolean(vpToken),
+      eventLinkCount: bootstrapEventLinks.length,
+    },
+    tickerDiscovery: {
+      suggestionStatus: suggestion.status,
+      exactSuggestion,
+      globalSearchStatus: globalSearch.status,
+      exactGlobal,
+      resolvedSecurityId,
+    },
+    rightsPages,
   }, null, 2))
 }
 
 main().catch((error) => {
-  console.error(error)
+  console.error(error instanceof Error ? error.message : String(error))
   process.exitCode = 1
 })
