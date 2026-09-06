@@ -4151,6 +4151,19 @@ export type Database = {
           ticker: string
         }[]
       }
+      qeo_persist_adjustment_factor_candidate: {
+        Args: {
+          p_as_of_date: string
+          p_blocked_reason: string
+          p_engine_version: string
+          p_event_lineage_hash: string
+          p_factor_version: string
+          p_status: string
+          p_ticker: string
+          p_transitions: Json
+        }
+        Returns: string
+      }
       qeo_prune_noncanonical_orderbook_snapshots: {
         Args: { p_run_id: string }
         Returns: number
