@@ -31,6 +31,40 @@ test("QEO-122 parses Vietnamese thousands-separated stock ratios without shrinki
   ])
 })
 
+test("QEO-122 parses live VSDC metadata when a label and value render on adjacent lines", () => {
+  const notice = parseVsdcCorporateActionHtml(`
+    <article>
+      <div>Cập nhật ngày 02/10/2018 - 16:05:48</div>
+      <div>Mã chứng khoán:</div>
+      <div>VHM</div>
+      <div>Mã ISIN:</div>
+      <div>VN000000VHM0</div>
+      <div>Sàn giao dịch:</div>
+      <div>HOSE</div>
+      <div>Ngày đăng ký cuối cùng:</div>
+      <div>09/10/2018</div>
+      <div>Lý do mục đích:</div>
+      <div>Trả cổ tức năm 2018 bằng cổ phiếu</div>
+      <div>Tỷ lệ thực hiện:</div>
+      <div>1.000:250 (Người sở hữu 1.000 cổ phiếu được nhận 250 cổ phiếu mới)</div>
+    </article>
+  `, "https://vsdc.vn/vi/ad/50366")
+
+  assert.equal(notice.ticker, "VHM")
+  assert.equal(notice.isin, "VN000000VHM0")
+  assert.equal(notice.exchange, "HOSE")
+  assert.equal(notice.recordDate, "2018-10-09")
+  assert.deepEqual(notice.components, [
+    {
+      actionType: "stock_dividend",
+      cashPerShare: null,
+      stockRatio: "1000:250",
+      rightsRatio: null,
+      subscriptionPrice: null,
+    },
+  ])
+})
+
 test("QEO-122 ignores related-news action wording outside the main VSDC notice body", () => {
   const notice = parseVsdcCorporateActionHtml(`
     <article>
