@@ -3702,6 +3702,15 @@ export type Database = {
           ticker: string
         }[]
       }
+      qeo_chart_intraday_session_coverage: {
+        Args: { p_hot_cutoff: string; p_tickers: string[] }
+        Returns: {
+          first_hot_session: string
+          hot_session_count: number
+          last_hot_session: string
+          ticker: string
+        }[]
+      }
       qeo_chart_storage_capacity: { Args: never; Returns: Json }
       qeo_current_market_universe: {
         Args: { p_universe_key?: string }
