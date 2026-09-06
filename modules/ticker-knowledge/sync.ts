@@ -14,6 +14,8 @@ import {
   type ResearchReportKnowledgeProjectionInput,
 } from "./projections.ts"
 
+const MAX_SYNC_UPSERT_BATCH = 64
+
 export interface TickerKnowledgeSyncResult {
   sourceId: string
   sourceVersion: string
@@ -39,7 +41,9 @@ async function syncProjection(
 ): Promise<TickerKnowledgeSyncResult> {
   const identity = projectionIdentity(items)
   await index.ensureReady()
-  await index.upsert(items)
+  for (let offset = 0; offset < items.length; offset += MAX_SYNC_UPSERT_BATCH) {
+    await index.upsert(items.slice(offset, offset + MAX_SYNC_UPSERT_BATCH))
+  }
   return {
     ...identity,
     itemIds: items.map((item) => item.id),
