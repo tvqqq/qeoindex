@@ -3,6 +3,20 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 const TICKER = /^[A-Z0-9]{2,12}$/
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
+export class CorporateActionRequestError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "CorporateActionRequestError"
+  }
+}
+
+export class CorporateActionUnavailableError extends Error {
+  constructor() {
+    super("Corporate action data unavailable")
+    this.name = "CorporateActionUnavailableError"
+  }
+}
+
 export type CorporateActionView = {
   id: string
   ticker: string
@@ -59,16 +73,16 @@ type CorporateActionRow = {
 
 function normalizeTicker(value: string) {
   const ticker = value.trim().toUpperCase()
-  if (!TICKER.test(ticker)) throw new Error("Invalid corporate-action ticker")
+  if (!TICKER.test(ticker)) throw new CorporateActionRequestError("Invalid corporate-action ticker")
   return ticker
 }
 
 function normalizeDate(value: string | null | undefined, label: string) {
   if (!value) return null
-  if (!ISO_DATE.test(value)) throw new Error(`Invalid corporate-action ${label}`)
+  if (!ISO_DATE.test(value)) throw new CorporateActionRequestError(`Invalid corporate-action ${label}`)
   const parsed = new Date(`${value}T00:00:00Z`)
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
-    throw new Error(`Invalid corporate-action ${label}`)
+    throw new CorporateActionRequestError(`Invalid corporate-action ${label}`)
   }
   return value
 }
@@ -129,7 +143,7 @@ export async function readCorporateActions(
   const ticker = normalizeTicker(options.ticker)
   const from = normalizeDate(options.from, "from date")
   const to = normalizeDate(options.to, "to date")
-  if (from && to && from > to) throw new Error("Invalid corporate-action date range")
+  if (from && to && from > to) throw new CorporateActionRequestError("Invalid corporate-action date range")
 
   let query = supabase
     .from("corporate_actions")
@@ -140,6 +154,6 @@ export async function readCorporateActions(
   if (to) query = query.lte("record_date", to)
 
   const { data, error } = await query.order("record_date", { ascending: false })
-  if (error) throw new Error("Unable to read corporate actions")
+  if (error) throw new CorporateActionUnavailableError()
   return (data ?? []).map((row) => mapRow(row as CorporateActionRow))
 }
