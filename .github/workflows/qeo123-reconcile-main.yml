@@ -43,30 +43,38 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
+          git fetch origin +refs/heads/main:refs/remotes/origin/main
           expected_main="a740d455478c4bf974051c447bf46920925f86e6"
-          actual_main="$(git rev-parse origin/main)"
+          actual_main="$(git rev-parse refs/remotes/origin/main)"
+          echo "origin/main=$actual_main"
           if [[ "$actual_main" != "$expected_main" ]]; then
             echo "main moved: expected $expected_main, got $actual_main" >&2
             exit 1
           fi
           set +e
-          git merge --no-commit --no-ff origin/main
+          git merge --no-commit --no-ff refs/remotes/origin/main
           merge_rc=$?
           set -e
           if [[ $merge_rc -ne 0 ]]; then
             mapfile -t conflicts < <(git diff --name-only --diff-filter=U | sort)
-            printf 'Conflicts: %s\n' "${conflicts[*]}"
+            printf 'Conflicts:\n'
+            printf ' - %s\n' "${conflicts[@]}"
             expected=(
               "docs/db/evidence/production-migration-ledger-2026-09-06.json"
               "modules/shared/supabase/database.types.ts"
               "supabase/migration-equivalence.json"
             )
             mapfile -t expected_sorted < <(printf '%s\n' "${expected[@]}" | sort)
-            if [[ "$(printf '%s\n' "${conflicts[@]}")" != "$(printf '%s\n' "${expected_sorted[@]}")" ]]; then
-              echo "Unexpected merge conflict set; refusing automatic resolution" >&2
+            if [[ ${#conflicts[@]} -ne ${#expected_sorted[@]} ]]; then
+              echo "Unexpected conflict count; refusing automatic resolution" >&2
               exit 1
             fi
+            for i in "${!expected_sorted[@]}"; do
+              if [[ "${conflicts[$i]}" != "${expected_sorted[$i]}" ]]; then
+                echo "Unexpected merge conflict set; refusing automatic resolution" >&2
+                exit 1
+              fi
+            done
           fi
 
       - name: Semantically reconcile shared migration evidence
