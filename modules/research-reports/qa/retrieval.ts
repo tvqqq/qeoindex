@@ -10,7 +10,9 @@ import {
 const REPORT_TABLE = "market_research_reports"
 const ANALYSIS_TABLE = "market_research_report_analyses"
 const SEARCH_RPC = "qeo_search_research_report_chunks"
+const HYDRATE_RPC = "qeo_hydrate_research_report_chunks"
 const HASH_RE = /^[0-9a-f]{64}$/
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function normalizeText(value: string) {
   return value.replace(/\s+/g, " ").trim()
@@ -179,6 +181,57 @@ export async function retrieveResearchReportQaEvidence(
     .map((row) => parseEvidenceRow(row, identity))
     .filter((row): row is ResearchReportQaEvidence => row !== null)
     .slice(0, RESEARCH_REPORT_QA_LIMITS.retrievalChunks)
+}
+
+export interface ResearchReportQaRankedChunkRef {
+  chunkId: string
+  rank: number
+}
+
+export async function hydrateResearchReportQaEvidence(
+  client: ResearchReportQaRetrievalClient,
+  identity: ResearchReportQaEvidenceIdentity,
+  candidates: readonly ResearchReportQaRankedChunkRef[],
+): Promise<ResearchReportQaEvidence[]> {
+  const ranked: ResearchReportQaRankedChunkRef[] = []
+  const seen = new Set<string>()
+  for (const candidate of candidates) {
+    const chunkId = typeof candidate.chunkId === "string" ? candidate.chunkId.trim() : ""
+    if (!UUID_RE.test(chunkId) || !Number.isFinite(candidate.rank) || seen.has(chunkId)) continue
+    seen.add(chunkId)
+    ranked.push({ chunkId, rank: candidate.rank })
+    if (ranked.length >= RESEARCH_REPORT_QA_LIMITS.retrievalChunks) break
+  }
+  if (ranked.length === 0) return []
+
+  const result = await client.rpc(HYDRATE_RPC, {
+    p_report_id: identity.reportId,
+    p_content_hash: identity.contentHash,
+    p_chunk_version: identity.chunkVersion,
+    p_chunk_ids: ranked.map((candidate) => candidate.chunkId),
+  })
+
+  if (result.error) {
+    throw new Error(`Research report Q&A hydration failed: ${safeErrorMessage(result.error.message)}`)
+  }
+  if (!Array.isArray(result.data)) return []
+
+  const rankByChunkId = new Map(ranked.map((candidate) => [candidate.chunkId, candidate.rank]))
+  const canonicalByChunkId = new Map<string, ResearchReportQaEvidence>()
+  for (const value of result.data) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue
+    const rawId = asNonEmptyString((value as Record<string, unknown>).id)
+    if (!rawId || !rankByChunkId.has(rawId)) continue
+    const parsed = parseEvidenceRow(
+      { ...(value as Record<string, unknown>), rank: rankByChunkId.get(rawId) },
+      identity,
+    )
+    if (parsed) canonicalByChunkId.set(parsed.chunkId, parsed)
+  }
+
+  return ranked
+    .map((candidate) => canonicalByChunkId.get(candidate.chunkId) ?? null)
+    .filter((row): row is ResearchReportQaEvidence => row !== null)
 }
 
 export function boundResearchReportQaEvidence(
