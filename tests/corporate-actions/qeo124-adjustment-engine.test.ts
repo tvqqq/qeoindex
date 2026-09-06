@@ -2,8 +2,9 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { AdjustmentFactorError, computeStepAdjustment } from "../../modules/market/corporate-actions/adjustment/formulas.ts"
+import type { CanonicalFactorAction } from "../../modules/market/corporate-actions/adjustment/types.ts"
 
-function action(overrides: Record<string, unknown>) {
+function action(overrides: Partial<CanonicalFactorAction>): CanonicalFactorAction {
   return {
     id: "00000000-0000-4000-8000-000000000001",
     ticker: "AAA",
@@ -24,7 +25,7 @@ function action(overrides: Record<string, unknown>) {
   }
 }
 
-function eventSet(events: ReturnType<typeof action>[], previousRawClose = 100) {
+function eventSet(events: CanonicalFactorAction[], previousRawClose = 100) {
   return {
     ticker: "AAA",
     exDate: "2026-01-10",
