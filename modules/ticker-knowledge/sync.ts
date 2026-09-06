@@ -1,8 +1,10 @@
 import {
   normalizeTicker,
+  TickerKnowledgeUnavailableError,
   type TickerKnowledgeIndex,
   type TickerKnowledgeItem,
   type TickerKnowledgeSourceType,
+  type TickerKnowledgeUnavailableReason,
 } from "./domain.ts"
 import {
   projectCouncilHistoryKnowledge,
@@ -12,6 +14,7 @@ import {
 } from "./projections.ts"
 
 const MAX_SYNC_UPSERT_BATCH = 64
+const MAX_BACKFILL_FAILURE_SOURCE_ID = 128
 
 export interface TickerKnowledgeSyncResult {
   sourceId: string
@@ -94,16 +97,25 @@ export interface TickerKnowledgeBackfillPage<T> {
   nextCursor: string | null
 }
 
+export type TickerKnowledgeBackfillFailureReason = TickerKnowledgeUnavailableReason | "sync_error"
+
+export interface TickerKnowledgeBackfillFailure {
+  sourceId: string
+  reason: TickerKnowledgeBackfillFailureReason
+}
+
 export interface RunTickerKnowledgeBackfillInput<T> {
   cursor?: string | null
   batchSize?: number
   loadPage: (cursor: string | null, limit: number) => Promise<TickerKnowledgeBackfillPage<T>>
   syncRow: (row: T) => Promise<unknown>
+  failureId?: (row: T) => string
 }
 
 export interface TickerKnowledgeBackfillProgress {
   processed: number
   failed: number
+  failures?: TickerKnowledgeBackfillFailure[]
   nextCursor: string | null
   completed: boolean
 }
@@ -114,21 +126,34 @@ function boundedBatchSize(value: number | undefined) {
   return Math.max(1, Math.min(200, Math.floor(value)))
 }
 
+function boundedFailureSourceId(value: string | undefined) {
+  const normalized = String(value ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_BACKFILL_FAILURE_SOURCE_ID)
+  return normalized || "unknown"
+}
+
+function backfillFailureReason(error: unknown): TickerKnowledgeBackfillFailureReason {
+  return error instanceof TickerKnowledgeUnavailableError ? error.reason : "sync_error"
+}
+
 export async function runTickerKnowledgeBackfill<T>(
   input: RunTickerKnowledgeBackfillInput<T>,
 ): Promise<TickerKnowledgeBackfillProgress> {
   const page = await input.loadPage(input.cursor ?? null, boundedBatchSize(input.batchSize))
-  let failed = 0
+  const failures: TickerKnowledgeBackfillFailure[] = []
   for (const row of page.rows) {
     try {
       await input.syncRow(row)
-    } catch {
-      failed += 1
+    } catch (error) {
+      failures.push({
+        sourceId: boundedFailureSourceId(input.failureId?.(row)),
+        reason: backfillFailureReason(error),
+      })
     }
   }
   return {
     processed: page.rows.length,
-    failed,
+    failed: failures.length,
+    ...(failures.length ? { failures } : {}),
     nextCursor: page.nextCursor,
     completed: page.nextCursor === null,
   }
