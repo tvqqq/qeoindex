@@ -134,6 +134,18 @@ test("QEO-124 same-date cash stock and rights are one order-independent event se
   closeTo(forward.stepVolumeFactor, 1.25)
 })
 
+test("QEO-124 component aggregation is byte-stable across permutations of same-type actions", () => {
+  const events = [
+    action({ id: "00000000-0000-4000-8000-000000000021", cashPerShare: 0.1, sourceComponentKey: "component:0" }),
+    action({ id: "00000000-0000-4000-8000-000000000022", cashPerShare: 0.2, sourceComponentKey: "component:1" }),
+    action({ id: "00000000-0000-4000-8000-000000000023", cashPerShare: 0.3, sourceComponentKey: "component:2" }),
+  ]
+
+  const ascending = computeStepAdjustment(eventSet(events))
+  const descending = computeStepAdjustment(eventSet([...events].reverse()))
+  assert.deepEqual(ascending, descending)
+})
+
 test("QEO-124 malformed or contradictory action inputs fail closed", () => {
   const invalidCases: Array<[string, () => unknown]> = [
     ["INVALID_REFERENCE_CLOSE", () => computeStepAdjustment(eventSet([], 0))],
