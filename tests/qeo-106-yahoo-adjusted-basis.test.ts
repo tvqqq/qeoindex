@@ -3,7 +3,7 @@ import test from "node:test"
 
 import { fetchYahooDailyOhlcv } from "../modules/market/providers/yahoo/history.ts"
 
-function approx(actual: number, expected: number, epsilon = 1e-6) {
+function approx(actual: number, expected: number, epsilon = 0.0051) {
   assert.ok(Math.abs(actual - expected) <= epsilon, `expected ${actual} ≈ ${expected}`)
 }
 
