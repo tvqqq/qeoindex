@@ -14,6 +14,11 @@ import {
   freezeCouncilResearchContext,
   isCouncilResearchTickerEnabled,
 } from "@/modules/ai-council/research-context"
+import {
+  AI_COUNCIL_TICKER_KNOWLEDGE_CONTEXT_VERSION,
+  type FrozenCouncilTickerKnowledge,
+} from "@/modules/ai-council/ticker-knowledge-context"
+import { createAiCouncilTickerKnowledgeRuntime } from "@/modules/ai-council/ticker-knowledge-runtime"
 
 type CouncilRunIdentityRow = {
   id: string
@@ -49,6 +54,14 @@ export interface AiCouncilPreMarketEvidenceResult {
   reportEvidenceReused: number
   reportEvidencePersisted: number
   reportEvidenceMissingRunIdentities: number
+  tickerKnowledgeContextVersion: typeof AI_COUNCIL_TICKER_KNOWLEDGE_CONTEXT_VERSION
+  tickerKnowledgeEnabled: boolean
+  tickerKnowledgeReady: number
+  tickerKnowledgeEmpty: number
+  tickerKnowledgeUnavailable: number
+  tickerKnowledgeReused: number
+  tickerKnowledgePersisted: number
+  tickerKnowledgeMissingRunIdentities: number
 }
 
 function runKey(ticker: string, evidenceHash: string) {
@@ -121,6 +134,24 @@ function attachReportEvidence(
   }
 }
 
+function attachTickerKnowledge(
+  stock: AiCouncilStockSnapshot,
+  frozen: FrozenCouncilTickerKnowledge,
+) {
+  if (!frozen.canUseInPrompt || !frozen.persisted || !frozen.contextHash) return stock
+  return {
+    ...stock,
+    tickerKnowledge: {
+      purpose: "Frozen unified ticker knowledge for advisory LLM reasoning only; deterministic Council remains final authority.",
+      contextVersion: AI_COUNCIL_TICKER_KNOWLEDGE_CONTEXT_VERSION,
+      contextHash: frozen.contextHash,
+      status: frozen.context.status,
+      pointIds: frozen.pointIds,
+      context: frozen.context,
+    },
+  }
+}
+
 export async function enrichCouncilStocksForDebate(
   supabase: SupabaseClient,
   params: {
@@ -133,6 +164,7 @@ export async function enrichCouncilStocksForDebate(
     ratingDate: params.ratingDate,
     stocks: params.stocks,
   })
+  const tickerKnowledgeRuntime = createAiCouncilTickerKnowledgeRuntime()
 
   if (!params.ratingDate || !raw.stocks.length) {
     return {
@@ -150,11 +182,20 @@ export async function enrichCouncilStocksForDebate(
       reportEvidenceReused: 0,
       reportEvidencePersisted: 0,
       reportEvidenceMissingRunIdentities: raw.stocks.length,
+      tickerKnowledgeContextVersion: AI_COUNCIL_TICKER_KNOWLEDGE_CONTEXT_VERSION,
+      tickerKnowledgeEnabled: tickerKnowledgeRuntime.enabled,
+      tickerKnowledgeReady: 0,
+      tickerKnowledgeEmpty: 0,
+      tickerKnowledgeUnavailable: 0,
+      tickerKnowledgeReused: 0,
+      tickerKnowledgePersisted: 0,
+      tickerKnowledgeMissingRunIdentities: raw.stocks.length,
     }
   }
 
   const reportSelectionRunAt = new Date().toISOString()
   const reportStocks = raw.stocks
+  const tickerKnowledgeStocks = raw.stocks
   const researchStocks = raw.stocks.filter((stock) => isCouncilResearchTickerEnabled(stock.ticker))
   const runIdentities = await loadRunIdentities(supabase, params.ratingDate, reportStocks)
   const researchRunIds = researchStocks
@@ -231,6 +272,36 @@ export async function enrichCouncilStocksForDebate(
     else if (frozen.persisted) reportEvidencePersisted += 1
   }
 
+  const tickerKnowledgeFrozenByRun = new Map<string, FrozenCouncilTickerKnowledge>()
+  let tickerKnowledgeReady = 0
+  let tickerKnowledgeEmpty = 0
+  let tickerKnowledgeUnavailable = 0
+  let tickerKnowledgeReused = 0
+  let tickerKnowledgePersisted = 0
+  let tickerKnowledgeMissingRunIdentities = 0
+
+  if (tickerKnowledgeRuntime.enabled) {
+    for (const stock of tickerKnowledgeStocks) {
+      const run = runIdentities.get(runKey(stock.ticker, stock.evidenceHash))
+      if (!run) {
+        tickerKnowledgeMissingRunIdentities += 1
+        continue
+      }
+      const frozen = await tickerKnowledgeRuntime.freeze(supabase, {
+        runId: run.id,
+        ticker: stock.ticker,
+        asOfDate: params.ratingDate,
+      })
+      if (!frozen) continue
+      tickerKnowledgeFrozenByRun.set(run.id, frozen)
+      if (frozen.context.status === "ready" && frozen.persisted) tickerKnowledgeReady += 1
+      else if (frozen.context.status === "empty" && frozen.persisted) tickerKnowledgeEmpty += 1
+      else tickerKnowledgeUnavailable += 1
+      if (frozen.reused) tickerKnowledgeReused += 1
+      else if (frozen.persisted) tickerKnowledgePersisted += 1
+    }
+  }
+
   const stocks = raw.stocks.map((stock) => {
     const run = runIdentities.get(runKey(stock.ticker, stock.evidenceHash))
     if (!run) return stock
@@ -238,7 +309,9 @@ export async function enrichCouncilStocksForDebate(
     const researchFrozen = researchFrozenByRun.get(run.id)
     const withResearch = researchFrozen ? attachResearchContext(stock, researchFrozen) : stock
     const reportFrozen = reportFrozenByRun.get(run.id)
-    return reportFrozen ? attachReportEvidence(withResearch, reportFrozen) : withResearch
+    const withReport = reportFrozen ? attachReportEvidence(withResearch, reportFrozen) : withResearch
+    const tickerKnowledgeFrozen = tickerKnowledgeFrozenByRun.get(run.id)
+    return tickerKnowledgeFrozen ? attachTickerKnowledge(withReport, tickerKnowledgeFrozen) : withReport
   })
 
   return {
@@ -257,6 +330,14 @@ export async function enrichCouncilStocksForDebate(
     reportEvidenceReused,
     reportEvidencePersisted,
     reportEvidenceMissingRunIdentities,
-    detail: `${raw.detail} Notion Research Context pilot froze ${researchReady} ready context(s); unavailable=${researchUnavailable}, reused=${researchReused}. Research Reports froze ready=${reportEvidenceReady}, empty=${reportEvidenceEmpty}, unavailable=${reportEvidenceUnavailable}, reused=${reportEvidenceReused}.`,
+    tickerKnowledgeContextVersion: AI_COUNCIL_TICKER_KNOWLEDGE_CONTEXT_VERSION,
+    tickerKnowledgeEnabled: tickerKnowledgeRuntime.enabled,
+    tickerKnowledgeReady,
+    tickerKnowledgeEmpty,
+    tickerKnowledgeUnavailable,
+    tickerKnowledgeReused,
+    tickerKnowledgePersisted,
+    tickerKnowledgeMissingRunIdentities,
+    detail: `${raw.detail} Notion Research Context pilot froze ${researchReady} ready context(s); unavailable=${researchUnavailable}, reused=${researchReused}. Research Reports froze ready=${reportEvidenceReady}, empty=${reportEvidenceEmpty}, unavailable=${reportEvidenceUnavailable}, reused=${reportEvidenceReused}. Unified ticker knowledge ${tickerKnowledgeRuntime.enabled ? `froze ready=${tickerKnowledgeReady}, empty=${tickerKnowledgeEmpty}, unavailable=${tickerKnowledgeUnavailable}, reused=${tickerKnowledgeReused}` : "is disabled"}.`,
   }
 }
