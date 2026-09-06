@@ -321,6 +321,22 @@
       "state": "QUARANTINED",
       "evidence": "qeo108-production-readonly-schema-index-capacity-audit-pending-nonproduction-rehearsal",
       "rationale": "Native session/date partition cutover remains quarantined until a non-production rehearsal proves exact row/range/checksum parity, service-role RPC rebinds, deterministic empty-partition reclamation, rollback-shadow behavior, and latency/correctness acceptance. Production DDL has not been applied."
+    },
+    {
+      "logicalName": "qeo117_ai_council_ticker_knowledge",
+      "repositoryVersion": "20260906094500",
+      "productionVersion": null,
+      "state": "QUARANTINED",
+      "evidence": "qeo117-green-freeze-contract-pending-qdrant-production-cutover",
+      "rationale": "Immutable ticker-knowledge Council snapshot schema is intentionally quarantined until Qdrant credentials, exact-head DB replay/types, runtime wiring, and bounded production smoke are approved."
+    },
+    {
+      "logicalName": "qeo116_report_qa_hydration",
+      "repositoryVersion": "20260906111500",
+      "productionVersion": null,
+      "state": "QUARANTINED",
+      "evidence": "qeo116-shadow-evaluation-pending-production-hydration-cutover",
+      "rationale": "Exact-version report Q&A hydration RPC remains quarantined until QEO-116 shadow evaluation, exact-head DB replay/types, canonical backfill, and production retrieval smoke are approved."
     }
   ]
 }
