@@ -56,6 +56,13 @@ jobs:
               bucket: 'deep-safety',
               suites: ['db'],
             },
+            {
+              path: 'tests/qeo-124-monetary-unit.test.ts',
+              owner: 'market',
+              invariant: 'QEO-124 converts canonical corporate-action monetary terms in VND onto the canonical Daily kilo-VND price scale before factor arithmetic.',
+              bucket: 'canonical',
+              suites: ['fast'],
+            },
           ]
           const byPath = new Map(doc.entries.map((entry) => [entry.path, entry]))
           for (const entry of desired) byPath.set(entry.path, entry)
