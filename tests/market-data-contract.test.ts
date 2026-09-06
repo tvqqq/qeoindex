@@ -278,3 +278,114 @@ test("QEO-108 capacity preflight keeps a 100 MiB hard headroom before the 500 MB
   assert.match(migration, /revoke all on function public\.qeo_chart_storage_capacity\(\) from public/i)
   assert.match(migration, /grant execute on function public\.qeo_chart_storage_capacity\(\) to service_role/i)
 })
+
+async function loadQeo122ProbeModule() {
+  const moduleUrl = new URL("../scripts/probes/qeo122-vsdc-corporate-actions.ts", import.meta.url).href
+  try {
+    return await import(moduleUrl) as {
+      parseVsdcCorporateActionHtml: (html: string, sourceUrl: string) => {
+        sourceUrl: string
+        sourceEventId: string
+        ticker: string
+        isin: string | null
+        exchange: "HOSE" | "HNX" | "UPCOM" | "UNKNOWN"
+        recordDate: string | null
+        components: Array<{
+          actionType: "cash_dividend" | "stock_dividend" | "rights_issue" | "other"
+          cashPerShare: number | null
+          stockRatio: string | null
+          rightsRatio: string | null
+          subscriptionPrice: number | null
+        }>
+        rawTextHash: string
+      }
+    }
+  } catch (error) {
+    assert.fail(`QEO-122 probe module missing: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+test("QEO-122 VSDC parser preserves a combined VHM cash plus stock notice as two action components", async () => {
+  const { parseVsdcCorporateActionHtml } = await loadQeo122ProbeModule()
+  const notice = parseVsdcCorporateActionHtml(`
+    <article>
+      <div>Mã chứng khoán: VHM</div>
+      <div>Mã ISIN: VN000000VHM0</div>
+      <div>Sàn giao dịch: HOSE</div>
+      <div>Ngày đăng ký cuối cùng: 16/09/2021</div>
+      <div>Lý do mục đích: Chi trả cổ tức năm 2020 bằng tiền và Chi trả cổ tức năm 2020 bằng cổ phiếu</div>
+      <h3>1. Chi trả cổ tức năm 2020 bằng tiền</h3>
+      <div>Tỷ lệ thực hiện: 15%/cổ phiếu (01 cổ phiếu được nhận 1.500 đồng)</div>
+      <h3>2. Chi trả cổ tức năm 2020 bằng cổ phiếu</h3>
+      <div>Tỷ lệ thực hiện: 30% (Người sở hữu 100 cổ phiếu được nhận 30 cổ phiếu mới)</div>
+    </article>
+  `, "https://www.vsd.vn/ad/144349")
+
+  assert.equal(notice.sourceEventId, "144349")
+  assert.equal(notice.ticker, "VHM")
+  assert.equal(notice.isin, "VN000000VHM0")
+  assert.equal(notice.exchange, "HOSE")
+  assert.equal(notice.recordDate, "2021-09-16")
+  assert.deepEqual(notice.components, [
+    { actionType: "cash_dividend", cashPerShare: 1500, stockRatio: null, rightsRatio: null, subscriptionPrice: null },
+    { actionType: "stock_dividend", cashPerShare: null, stockRatio: "100:30", rightsRatio: null, subscriptionPrice: null },
+  ])
+  assert.match(notice.rawTextHash, /^[a-f0-9]{64}$/)
+})
+
+test("QEO-122 VSDC parser normalizes VHM 2026 cash and stock dividend notices", async () => {
+  const { parseVsdcCorporateActionHtml } = await loadQeo122ProbeModule()
+  const cash = parseVsdcCorporateActionHtml(`
+    <article>
+      <div>Mã chứng khoán: VHM</div><div>Mã ISIN: VN000000VHM0</div><div>Nơi giao dịch: HOSE</div>
+      <div>Ngày đăng ký cuối cùng: 30/06/2026</div>
+      <div>Lý do mục đích: Chi trả cổ tức bằng tiền mặt cho các cổ đông công ty từ lợi nhuận sau thuế lũy kế năm 2025</div>
+      <div>Tỷ lệ thực hiện: 60%/cổ phiếu (01 cổ phiếu được nhận 6.000 đồng)</div>
+    </article>
+  `, "https://vsdc.vn/vi/ad/197086")
+  const stock = parseVsdcCorporateActionHtml(`
+    <article>
+      <div>Mã chứng khoán: VHM</div><div>Mã ISIN: VN000000VHM0</div><div>Nơi giao dịch: HOSE</div>
+      <div>Ngày đăng ký cuối cùng: 07/08/2026</div>
+      <div>Lý do mục đích: Chi trả cổ tức năm 2025 bằng cổ phiếu</div>
+      <div>Tỷ lệ thực hiện: 1:1 (Người sở hữu 01 cổ phiếu được nhận 01 cổ phiếu mới)</div>
+    </article>
+  `, "https://vsd.vn/vi/ad/198392")
+
+  assert.deepEqual(cash.components, [
+    { actionType: "cash_dividend", cashPerShare: 6000, stockRatio: null, rightsRatio: null, subscriptionPrice: null },
+  ])
+  assert.equal(cash.recordDate, "2026-06-30")
+  assert.deepEqual(stock.components, [
+    { actionType: "stock_dividend", cashPerShare: null, stockRatio: "1:1", rightsRatio: null, subscriptionPrice: null },
+  ])
+  assert.equal(stock.recordDate, "2026-08-07")
+})
+
+test("QEO-122 VSDC parser handles representative HNX, UPCOM and rights issue terms", async () => {
+  const { parseVsdcCorporateActionHtml } = await loadQeo122ProbeModule()
+  const hnx = parseVsdcCorporateActionHtml(`
+    <article><div>Mã chứng khoán: TDN</div><div>Mã ISIN: VN000000TDN1</div><div>Sàn giao dịch: HNX</div>
+      <div>Ngày đăng ký cuối cùng: 01/06/2022</div><div>Lý do mục đích: Chi trả cổ tức năm 2021 bằng tiền</div>
+      <div>Tỷ lệ thực hiện: 14%/cổ phiếu (01 cổ phiếu được nhận 1.400 đồng)</div></article>
+  `, "https://vsd.vn/vi/ad/150529")
+  const upcom = parseVsdcCorporateActionHtml(`
+    <article><div>Mã chứng khoán: THN</div><div>Mã ISIN: VN000000THN2</div><div>Sàn giao dịch: UpCOM</div>
+      <div>Ngày đăng ký cuối cùng: 15/07/2022</div><div>Lý do mục đích: Chi trả cổ tức năm 2021 bằng tiền</div>
+      <div>Tỷ lệ thực hiện: 8,66%/cổ phiếu (1 cổ phiếu được nhận 866 đồng)</div></article>
+  `, "https://www.vsd.vn/vi/ad1/151827")
+  const rights = parseVsdcCorporateActionHtml(`
+    <article><div>Mã chứng khoán: YTC</div><div>Mã ISIN: VN000000YTC0</div><div>Sàn giao dịch: UpCOM</div>
+      <div>Ngày đăng ký cuối cùng: 16/04/2024</div><div>Lý do mục đích: Thực hiện quyền mua cổ phiếu</div>
+      <div>Giá phát hành: 20.000 đồng/cổ phiếu</div>
+      <div>Tỷ lệ thực hiện: 100:210 (01 cổ phiếu được hưởng 01 quyền, 100 quyền được mua 210 cổ phiếu mới)</div></article>
+  `, "https://www.vsd.vn/vi/ad1/169561")
+
+  assert.equal(hnx.exchange, "HNX")
+  assert.equal(hnx.components[0].cashPerShare, 1400)
+  assert.equal(upcom.exchange, "UPCOM")
+  assert.equal(upcom.components[0].cashPerShare, 866)
+  assert.deepEqual(rights.components, [
+    { actionType: "rights_issue", cashPerShare: null, stockRatio: null, rightsRatio: "100:210", subscriptionPrice: 20000 },
+  ])
+})
