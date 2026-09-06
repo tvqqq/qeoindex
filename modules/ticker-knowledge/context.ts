@@ -92,7 +92,7 @@ function availableAsOf(item: TickerKnowledgeItem, asOf: string | undefined) {
   const cutoff = timestamp(asOf)
   if (cutoff === null) throw new Error("Ticker context asOf must be a valid timestamp")
   const rawEvidenceTime = item.provenance.asOf ?? item.provenance.publishedAt
-  if (!rawEvidenceTime) return true
+  if (!rawEvidenceTime) return false
   const evidenceTime = timestamp(rawEvidenceTime)
   return evidenceTime !== null && evidenceTime <= cutoff
 }
