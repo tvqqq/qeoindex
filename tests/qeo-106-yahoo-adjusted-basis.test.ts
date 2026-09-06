@@ -69,6 +69,7 @@ test("QEO-106 semantic basis repair can replace legacy Yahoo rows and counts onl
   const migrationDirs = [
     new URL("../supabase/migrations/", import.meta.url),
     new URL("../supabase/pending-migrations/", import.meta.url),
+    new URL("../supabase/proposed-migrations/", import.meta.url),
   ]
   const migrationSources = migrationDirs.flatMap((dir) => readdirSync(dir)
     .filter((name) => name.endsWith(".sql"))
@@ -78,7 +79,7 @@ test("QEO-106 semantic basis repair can replace legacy Yahoo rows and counts onl
   assert.match(semanticPrecedence, /old_semantic_valid/)
   assert.match(semanticPrecedence, /query1\.finance\.yahoo\.com\/v8\/finance\/chart\//)
   assert.match(semanticPrecedence, /adjusted OHLC/i)
-  assert.match(semanticPrecedence, /not old_semantic_valid and new_valid/)
+  assert.match(semanticPrecedence, /not old_semantic_valid and new_semantic_valid/)
 
   const integrity = readFileSync(new URL("../modules/market/history/daily-integrity.ts", import.meta.url), "utf8")
   assert.match(integrity, /verifyPersistedRepairDates/)
