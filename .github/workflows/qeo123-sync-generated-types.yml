@@ -1,0 +1,53 @@
+name: QEO-123 Generated Types Sync
+
+on:
+  push:
+    branches:
+      - feat/qeo-123-corporate-actions
+    paths:
+      - .github/workflows/qeo123-sync-generated-types.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/qeo-123-corporate-actions
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - run: pnpm install --frozen-lockfile
+      - name: Start local Supabase
+        run: supabase start
+      - name: Replay migrations from zero
+        run: pnpm db:replay:verify
+      - name: Generate canonical Database types
+        run: supabase gen types typescript --local --schema public > modules/shared/supabase/database.types.ts
+      - name: Verify generated Database types
+        run: pnpm db:types:verify
+      - name: Commit generated types to PR branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add modules/shared/supabase/database.types.ts
+          if git diff --cached --quiet; then
+            echo "Generated Database types already synchronized"
+            exit 0
+          fi
+          git commit -m "chore(QEO-123): sync generated Supabase types"
+          git push origin HEAD:feat/qeo-123-corporate-actions
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
