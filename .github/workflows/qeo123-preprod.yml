@@ -6,7 +6,7 @@ on:
       - ".github/workflows/qeo123-preprod.yml"
       - "modules/market/corporate-actions/**"
       - "scripts/probes/qeo123-vsdc-discovery.ts"
-      - "supabase/migrations/*_qeo123_corporate_actions.sql"
+      - "supabase/migrations/*_qeo123_corporate_action*.sql"
       - "tests/corporate-actions/**"
       - "tests/db-schema-contract.test.ts"
   workflow_dispatch:
