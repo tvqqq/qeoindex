@@ -53,9 +53,9 @@ test("QEO-100 history clamp never expands a request and clamps only short/mid lo
   assert.deepEqual(alreadyNarrow, { from: to - 3 * DAY, to, clamped: false })
 })
 
-test("QEO-103 hot retention cutoff keeps complete Vietnam calendar dates", () => {
+test("QEO-108 hot retention cutoff keeps exactly five Vietnam trading sessions", () => {
   const referenceAt = new Date("2026-09-05T12:34:00+07:00")
-  assert.equal(new Date(chartHotRetentionCutoff(referenceAt) * 1000).toISOString(), "2026-08-05T17:00:00.000Z")
+  assert.equal(new Date(chartHotRetentionCutoff(referenceAt) * 1000).toISOString(), "2026-08-25T17:00:00.000Z")
 })
 
 test("QEO-103 hourly read path uses derived cache only after cold-manifest coverage is complete", () => {
