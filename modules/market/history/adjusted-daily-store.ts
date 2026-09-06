@@ -49,6 +49,11 @@ type RawDailyRow = {
 type ReadbackRow = {
   session_date: string
   bar_time: string
+  open: number | string
+  high: number | string
+  low: number | string
+  close: number | string
+  volume: number | string
   raw_bar_time: string
   factor_run_id: string
   factor_version: string
@@ -93,6 +98,11 @@ function sameInstant(left: string, right: string) {
   return Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs === rightMs
 }
 
+function sameNumber(actual: number | string, expected: number) {
+  const numeric = Number(actual)
+  return Number.isFinite(numeric) && numeric === expected
+}
+
 function toRun(row: FactorRunRow): ShadowFactorRun {
   return {
     id: row.id,
@@ -130,6 +140,11 @@ function readbackMatches(
   expected: {
     sessionDate: string
     barTime: string
+    open: number
+    high: number
+    low: number
+    close: number
+    volume: number
     rawBarTime: string
     factorRunId: string
     factorVersion: string
@@ -139,6 +154,11 @@ function readbackMatches(
 ) {
   return row.session_date === expected.sessionDate
     && sameInstant(row.bar_time, expected.barTime)
+    && sameNumber(row.open, expected.open)
+    && sameNumber(row.high, expected.high)
+    && sameNumber(row.low, expected.low)
+    && sameNumber(row.close, expected.close)
+    && sameNumber(row.volume, expected.volume)
     && sameInstant(row.raw_bar_time, expected.rawBarTime)
     && row.factor_run_id === expected.factorRunId
     && row.factor_version === expected.factorVersion
@@ -293,6 +313,11 @@ export async function rebuildAdjustedDailyRange(input: {
       || !readbackMatches(candidates[0], {
         sessionDate: bar.sessionDate,
         barTime: bar.barTime,
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+        volume: bar.volume,
         rawBarTime: bar.rawBarTime,
         factorRunId: run.id,
         factorVersion: run.factorVersion,
