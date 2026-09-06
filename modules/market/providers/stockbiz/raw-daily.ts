@@ -202,7 +202,7 @@ export function parseStockBizRawDailyHtml(html: string, input: { ticker: string 
     }
   }
   if (matching.length !== 1) {
-    throw new Error(`StockBiz raw history table is ${matching.length === 0 ? "missing" : "ambiguous"}`)
+    throw new Error(`StockBiz raw history table/header columns are ${matching.length === 0 ? "missing" : "ambiguous"}`)
   }
   return matching[0]
 }
