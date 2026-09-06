@@ -152,7 +152,7 @@
       "productionVersion": "20260902061549",
       "state": "MAPPED",
       "evidence": "production-ledger-and-service-role-rpc-smoke",
-      "rationale": "QEO-21 service-role retention RPC was applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
+      "rationale": "QEO-21 bounded job telemetry cleanup was applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
     },
     {
       "logicalName": "qeo20_compatibility_columns_cleanup",
@@ -305,6 +305,14 @@
       "state": "MAPPED",
       "evidence": "qeo106-production-scoped-integrity-rpc-and-vic-vcb-parity-smoke",
       "rationale": "Production repair batches exposed statement_timeout because the route recomputed the full canonical-200 integrity report twice. The reviewed scoped equivalent was replay-verified locally, applied as production version 20260906002919, and returned VIC/VCB PASS with exact canonical counts before runtime cutover."
+    },
+    {
+      "logicalName": "qeo108_chart_storage_hardening",
+      "repositoryVersion": "20260906020000",
+      "productionVersion": null,
+      "state": "QUARANTINED",
+      "evidence": "qeo108-production-explain-index-proof-runtime-policy-pending-promotion",
+      "rationale": "QEO-108 removes the redundant intraday DESC lookup index and adds a service-role-only capacity guardrail. It stays pending until the five-session runtime cutover is Verify-green and production promotion/preflight is explicitly reviewed."
     }
   ]
 }
