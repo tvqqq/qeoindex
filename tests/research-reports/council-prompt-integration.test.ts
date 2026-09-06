@@ -117,3 +117,17 @@ test("QEO-117 Council ticker knowledge wiring is off-by-default, ticker-wide, fr
   assert.match(wrapper, /frozen unified ticker knowledge/i)
   assert.doesNotMatch(wrapper, /tickerKnowledgeStocks = raw\.stocks\.filter\(\(stock\) => isCouncilResearchTickerEnabled/)
 })
+
+test("QEO-117 debate operation exposes bounded ticker knowledge provenance telemetry", () => {
+  const operations = source("modules/ai-council/operations.ts")
+
+  assert.match(operations, /tickerKnowledge:\s*\{/)
+  assert.match(operations, /contextVersion:\s*evidenceFidelity\.tickerKnowledgeContextVersion/)
+  assert.match(operations, /enabled:\s*evidenceFidelity\.tickerKnowledgeEnabled/)
+  assert.match(operations, /ready:\s*evidenceFidelity\.tickerKnowledgeReady/)
+  assert.match(operations, /empty:\s*evidenceFidelity\.tickerKnowledgeEmpty/)
+  assert.match(operations, /unavailable:\s*evidenceFidelity\.tickerKnowledgeUnavailable/)
+  assert.match(operations, /reused:\s*evidenceFidelity\.tickerKnowledgeReused/)
+  assert.match(operations, /persisted:\s*evidenceFidelity\.tickerKnowledgePersisted/)
+  assert.match(operations, /missingRunIdentities:\s*evidenceFidelity\.tickerKnowledgeMissingRunIdentities/)
+})
