@@ -49,11 +49,9 @@ export type {
 } from "./cold-evidence.ts"
 export {
   COUNCIL_HISTORY_KNOWLEDGE_PROJECTION_VERSION,
-  NOTION_THESIS_KNOWLEDGE_PROJECTION_VERSION,
   RESEARCH_REPORT_KNOWLEDGE_PROJECTION_VERSION,
   TICKER_KNOWLEDGE_PROJECTION_FAMILY_VERSION,
   projectCouncilHistoryKnowledge,
-  projectCurrentThesisKnowledge,
   projectResearchReportKnowledge,
 } from "./projections.ts"
 export type {
@@ -63,7 +61,6 @@ export type {
 export {
   runTickerKnowledgeBackfill,
   syncCouncilHistoryKnowledge,
-  syncCurrentThesisKnowledge,
   syncResearchReportKnowledge,
 } from "./sync.ts"
 export type {
@@ -72,18 +69,6 @@ export type {
   TickerKnowledgeBackfillProgress,
   TickerKnowledgeSyncResult,
 } from "./sync.ts"
-export {
-  MAX_CURRENT_THESIS_REBUILD,
-  inspectCurrentThesisProjection,
-  rebuildCurrentThesisKnowledge,
-} from "./notion-sync.ts"
-export type {
-  CurrentThesisProjectionState,
-  CurrentThesisProjectionStatus,
-  CurrentThesisRebuildResult,
-  CurrentThesisRebuildRow,
-  RebuildCurrentThesisKnowledgeInput,
-} from "./notion-sync.ts"
 export { buildTickerContext } from "./context.ts"
 export type {
   BuildTickerContextInput,
