@@ -66,6 +66,14 @@ export interface CouncilHistoryKnowledgeProjectionInput {
   policyVersion: string
   evidenceHash: string
   createdAt: string
+  scenario?: {
+    bullCase: unknown
+    bearCase: unknown
+    probabilities: { bull: number; base: number; bear: number } | null
+    confirmation: string
+    invalidation: string
+    whatChangesDecision: readonly string[] | string
+  } | null
   outcome: {
     status: "pending" | "partial" | "matured" | "unavailable"
     sessionsObserved: number
@@ -76,6 +84,12 @@ export interface CouncilHistoryKnowledgeProjectionInput {
     mfe20dPct: number | null
     mae20dPct: number | null
     directionCorrect5d: boolean | null
+  } | null
+  debate?: {
+    status: string
+    promptVersion: string
+    error: string | null
+    completedAt: string | null
   } | null
 }
 
@@ -90,6 +104,25 @@ function list(label: string, values: readonly string[]) {
 
 function compactLines(values: readonly (string | null | undefined)[]) {
   return values.map(cleanText).filter(Boolean).join("\n")
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (!value || typeof value !== "object") return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, canonicalize(child)]),
+  )
+}
+
+function stableJson(value: unknown) {
+  if (value == null) return ""
+  try {
+    return JSON.stringify(canonicalize(value))
+  } catch {
+    return ""
+  }
 }
 
 function reportSourceVersion(input: ResearchReportKnowledgeProjectionInput) {
@@ -200,6 +233,22 @@ function numberText(value: number | null) {
   return value === null || !Number.isFinite(value) ? "n/a" : String(value)
 }
 
+function scenarioText(scenario: NonNullable<CouncilHistoryKnowledgeProjectionInput["scenario"]>) {
+  const probabilities = scenario.probabilities
+  const changes = Array.isArray(scenario.whatChangesDecision)
+    ? scenario.whatChangesDecision
+    : [scenario.whatChangesDecision]
+  return compactLines([
+    "Deterministic Council scenario set",
+    stableJson(scenario.bullCase) ? `Bull case: ${stableJson(scenario.bullCase)}` : "",
+    stableJson(scenario.bearCase) ? `Bear case: ${stableJson(scenario.bearCase)}` : "",
+    probabilities ? `Probabilities — Bull: ${probabilities.bull}; Base: ${probabilities.base}; Bear: ${probabilities.bear}` : "",
+    scenario.confirmation ? `Confirmation: ${scenario.confirmation}` : "",
+    scenario.invalidation ? `Invalidation: ${scenario.invalidation}` : "",
+    list("What changes decision", changes),
+  ])
+}
+
 export function projectCouncilHistoryKnowledge(input: CouncilHistoryKnowledgeProjectionInput): TickerKnowledgeItem[] {
   const ticker = normalizeTicker(input.ticker)
   const sourceVersion = `${input.policyVersion}:${input.evidenceHash}`
@@ -211,7 +260,7 @@ export function projectCouncilHistoryKnowledge(input: CouncilHistoryKnowledgePro
     publishedAt: input.createdAt,
     asOf: input.asOfDate,
   }
-  const memory = createTickerKnowledgeItem({
+  const items: TickerKnowledgeItem[] = [createTickerKnowledgeItem({
     ticker,
     knowledgeType: "COUNCIL_MEMORY",
     authority: "DETERMINISTIC_SIGNAL",
@@ -229,33 +278,77 @@ export function projectCouncilHistoryKnowledge(input: CouncilHistoryKnowledgePro
     ]),
     provenance: baseProvenance,
     projectionVersion: COUNCIL_HISTORY_KNOWLEDGE_PROJECTION_VERSION,
-  })
-
-  if (!input.outcome || input.outcome.status === "pending") return [memory]
-  const outcome = input.outcome
-  return [memory, createTickerKnowledgeItem({
-    ticker,
-    knowledgeType: "COUNCIL_OUTCOME",
-    authority: "VERIFIED_FACT",
-    sourceType: "AI_COUNCIL",
-    logicalKey: `outcome:${input.id}:${outcome.status}:${outcome.evaluatedThroughDate ?? "pending"}`,
-    text: compactLines([
-      `Observed outcome for AI Council run ${input.id}`,
-      `Status: ${outcome.status}; sessions observed: ${outcome.sessionsObserved}`,
-      `Evaluated through: ${outcome.evaluatedThroughDate ?? "n/a"}`,
-      `Return 1D: ${numberText(outcome.return1dPct)}%`,
-      `Return 5D: ${numberText(outcome.return5dPct)}%`,
-      `Return 20D: ${numberText(outcome.return20dPct)}%`,
-      `MFE 20D: ${numberText(outcome.mfe20dPct)}%`,
-      `MAE 20D: ${numberText(outcome.mae20dPct)}%`,
-      `Direction correct 5D: ${outcome.directionCorrect5d === null ? "n/a" : String(outcome.directionCorrect5d)}`,
-    ]),
-    provenance: {
-      ...baseProvenance,
-      asOf: outcome.evaluatedThroughDate ?? input.asOfDate,
-    },
-    projectionVersion: COUNCIL_HISTORY_KNOWLEDGE_PROJECTION_VERSION,
   })]
+
+  if (input.scenario) {
+    const text = scenarioText(input.scenario)
+    if (text) {
+      items.push(createTickerKnowledgeItem({
+        ticker,
+        knowledgeType: "COUNCIL_SCENARIO",
+        authority: "DETERMINISTIC_SIGNAL",
+        sourceType: "AI_COUNCIL",
+        logicalKey: `scenario:${input.id}:${sourceVersion}`,
+        text,
+        provenance: baseProvenance,
+        projectionVersion: COUNCIL_HISTORY_KNOWLEDGE_PROJECTION_VERSION,
+      }))
+    }
+  }
+
+  if (input.outcome && input.outcome.status !== "pending") {
+    const outcome = input.outcome
+    items.push(createTickerKnowledgeItem({
+      ticker,
+      knowledgeType: "COUNCIL_OUTCOME",
+      authority: "VERIFIED_FACT",
+      sourceType: "AI_COUNCIL",
+      logicalKey: `outcome:${input.id}:${outcome.status}:${outcome.evaluatedThroughDate ?? "pending"}`,
+      text: compactLines([
+        `Observed outcome for AI Council run ${input.id}`,
+        `Status: ${outcome.status}; sessions observed: ${outcome.sessionsObserved}`,
+        `Evaluated through: ${outcome.evaluatedThroughDate ?? "n/a"}`,
+        `Return 1D: ${numberText(outcome.return1dPct)}%`,
+        `Return 5D: ${numberText(outcome.return5dPct)}%`,
+        `Return 20D: ${numberText(outcome.return20dPct)}%`,
+        `MFE 20D: ${numberText(outcome.mfe20dPct)}%`,
+        `MAE 20D: ${numberText(outcome.mae20dPct)}%`,
+        `Direction correct 5D: ${outcome.directionCorrect5d === null ? "n/a" : String(outcome.directionCorrect5d)}`,
+      ]),
+      provenance: {
+        ...baseProvenance,
+        asOf: outcome.evaluatedThroughDate ?? input.asOfDate,
+      },
+      projectionVersion: COUNCIL_HISTORY_KNOWLEDGE_PROJECTION_VERSION,
+    }))
+  }
+
+  const debateError = cleanText(input.debate?.error)
+  if (input.debate && debateError) {
+    const debateSourceVersion = `${sourceVersion}:prompt=${cleanText(input.debate.promptVersion) || "unknown"}:status=${cleanText(input.debate.status) || "unknown"}`
+    items.push(createTickerKnowledgeItem({
+      ticker,
+      knowledgeType: "COUNCIL_ERROR",
+      authority: "VERIFIED_FACT",
+      sourceType: "AI_COUNCIL",
+      logicalKey: `debate-error:${input.id}:${debateSourceVersion}`,
+      text: compactLines([
+        `Advisory LLM debate operational error for Council run ${input.id}`,
+        `Status: ${input.debate.status || "unknown"}`,
+        `Prompt version: ${input.debate.promptVersion || "unknown"}`,
+        `Error: ${debateError.slice(0, 1000)}`,
+      ]),
+      provenance: {
+        ...baseProvenance,
+        sourceVersion: debateSourceVersion,
+        publishedAt: input.debate.completedAt ?? input.createdAt,
+        asOf: input.debate.completedAt ?? input.asOfDate,
+      },
+      projectionVersion: COUNCIL_HISTORY_KNOWLEDGE_PROJECTION_VERSION,
+    }))
+  }
+
+  return items
 }
 
 function thesisSourceVersion(thesis: Thesis) {
