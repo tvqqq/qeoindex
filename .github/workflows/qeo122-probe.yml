@@ -31,4 +31,4 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
       - name: Run QEO-122 parser regressions
-        run: pnpm exec tsx --test scripts/probes/qeo122-parser-regression.test.ts
+        run: node --test scripts/probes/qeo122-parser-regression.test.ts
