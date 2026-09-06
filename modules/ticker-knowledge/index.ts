@@ -60,5 +60,22 @@ export type {
   CouncilHistoryKnowledgeProjectionInput,
   ResearchReportKnowledgeProjectionInput,
 } from "./projections.ts"
+export {
+  runTickerKnowledgeBackfill,
+  syncCouncilHistoryKnowledge,
+  syncCurrentThesisKnowledge,
+  syncResearchReportKnowledge,
+} from "./sync.ts"
+export type {
+  RunTickerKnowledgeBackfillInput,
+  TickerKnowledgeBackfillPage,
+  TickerKnowledgeBackfillProgress,
+  TickerKnowledgeSyncResult,
+} from "./sync.ts"
 export { buildTickerContext } from "./context.ts"
-export type { BuildTickerContextInput, TickerContext } from "./context.ts"
+export type {
+  BuildTickerContextInput,
+  TickerContext,
+  TickerContextConsumer,
+  TickerContextTelemetry,
+} from "./context.ts"
