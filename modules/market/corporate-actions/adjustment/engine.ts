@@ -4,6 +4,7 @@ import type { CanonicalFactorAction, StepAdjustment } from "./types.ts"
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const LINEAGE_CONTRACT_VERSION = "qeo124-factor-lineage-v1"
+const AS_OF_POLICY_VERSION = "effective-ex-date-lte-as-of-v1"
 
 export type FactorInputAction = Omit<CanonicalFactorAction, "exDate"> & {
   exDate: string | null
@@ -81,7 +82,6 @@ function canonicalAction(action: FactorInputAction) {
 function runIdentity(input: {
   ticker: string
   engineVersion: string
-  asOfDate: string
   transitions: Array<{
     effectiveSession: string
     referenceSession: string
@@ -91,9 +91,9 @@ function runIdentity(input: {
 }) {
   return sha256Canonical({
     contractVersion: LINEAGE_CONTRACT_VERSION,
+    asOfPolicyVersion: AS_OF_POLICY_VERSION,
     ticker: input.ticker,
     engineVersion: input.engineVersion,
-    asOfDate: input.asOfDate,
     transitions: input.transitions.map((transition) => ({
       effectiveSession: transition.effectiveSession,
       referenceSession: transition.referenceSession,
@@ -110,9 +110,9 @@ function blockedCandidate(
 ): FactorRunCandidate {
   const eventLineageHash = sha256Canonical({
     contractVersion: LINEAGE_CONTRACT_VERSION,
+    asOfPolicyVersion: AS_OF_POLICY_VERSION,
     ticker: input.ticker,
     engineVersion: input.engineVersion,
-    asOfDate: input.asOfDate,
     status: "blocked",
     blockedReason,
     evidence: lineageEvidence,
@@ -254,7 +254,6 @@ export function buildFactorRunCandidate(input: BuildFactorRunCandidateInput): Fa
   const eventLineageHash = runIdentity({
     ticker: input.ticker,
     engineVersion: input.engineVersion,
-    asOfDate: input.asOfDate,
     transitions: baseTransitions,
   })
 
