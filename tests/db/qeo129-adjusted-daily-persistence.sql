@@ -72,6 +72,11 @@ do $$
 declare
   v_dates date[];
   v_count integer;
+  v_open numeric;
+  v_high numeric;
+  v_low numeric;
+  v_close numeric;
+  v_volume numeric;
 begin
   select array_agg(r.session_date order by r.session_date)
   into v_dates
@@ -85,6 +90,25 @@ begin
 
   if v_dates is distinct from array['2026-01-05'::date, '2026-01-06'::date] then
     raise exception 'QEO-129 exact readback did not preserve canonical session order: %', v_dates;
+  end if;
+
+  select r.open, r.high, r.low, r.close, r.volume
+  into v_open, v_high, v_low, v_close, v_volume
+  from public.qeo_adjusted_daily_readback(
+    'Q129',
+    '2026-01-05'::date,
+    '2026-01-05'::date,
+    '00000000-0000-4000-8000-000000000129'::uuid,
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  ) r;
+
+  if v_open is distinct from 50::numeric
+    or v_high is distinct from 55::numeric
+    or v_low is distinct from 48::numeric
+    or v_close is distinct from 52.5::numeric
+    or v_volume is distinct from 2000::numeric then
+    raise exception 'QEO-129 exact readback changed persisted OHLCV: open=%, high=%, low=%, close=%, volume=%',
+      v_open, v_high, v_low, v_close, v_volume;
   end if;
 
   select count(*)
