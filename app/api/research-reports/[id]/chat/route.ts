@@ -5,7 +5,10 @@ import {
   answerResearchReportQuestion,
   ResearchReportQaError,
 } from "@/modules/research-reports"
+import { retrieveResearchReportQaHybridEvidence } from "@/modules/research-reports/qa/hybrid-retrieval"
+import type { ResearchReportQaRetrievalMode } from "@/modules/research-reports/qa/service"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
+import { createServerTickerKnowledgeIndex } from "@/modules/ticker-knowledge/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -26,6 +29,12 @@ function publicQaErrorMessage(code: ResearchReportQaError["code"]) {
     case "invalid_model_output":
       return "Research report Q&A is temporarily unavailable"
   }
+}
+
+function resolveRetrievalMode(): ResearchReportQaRetrievalMode {
+  const raw = (process.env.RESEARCH_REPORT_QA_RETRIEVAL_MODE ?? "shadow").trim().toLowerCase()
+  if (raw === "lexical" || raw === "hybrid") return raw
+  return "shadow"
 }
 
 export async function POST(
@@ -60,6 +69,18 @@ export async function POST(
     )
   }
 
+  const retrievalMode = resolveRetrievalMode()
+  let retrieveHybridEvidence: Parameters<typeof answerResearchReportQuestion>[2]["retrieveHybridEvidence"]
+  if (retrievalMode !== "lexical") {
+    try {
+      const index = createServerTickerKnowledgeIndex()
+      retrieveHybridEvidence = (qaClient, identity, query) =>
+        retrieveResearchReportQaHybridEvidence(index, qaClient, identity, query)
+    } catch {
+      retrieveHybridEvidence = undefined
+    }
+  }
+
   try {
     const payload = body as Record<string, unknown>
     const result = await answerResearchReportQuestion(
@@ -68,6 +89,15 @@ export async function POST(
         reportId: id,
         question: typeof payload.question === "string" ? payload.question : "",
         history: payload.history as Parameters<typeof answerResearchReportQuestion>[1]["history"],
+      },
+      {
+        retrievalMode,
+        retrieveHybridEvidence,
+        recordRetrievalComparison: retrievalMode === "lexical"
+          ? undefined
+          : (metric) => {
+              console.info("[QEO-116_REPORT_QA_RETRIEVAL]", JSON.stringify({ reportId: id, ...metric }))
+            },
       },
     )
 
