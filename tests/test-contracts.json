@@ -687,6 +687,15 @@
       ]
     },
     {
+      "path": "tests/qeo-124-vhm-golden.test.ts",
+      "owner": "market",
+      "invariant": "QEO-124 VHM canonical event lineage reproduces the 13-17/10/2025 adjusted weekly H/L through the QEO-93 Daily-to-weekly aggregation contract without moving session identities.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/qeoindex-eod-phase-telemetry.test.ts",
       "owner": "eod",
       "invariant": "Preserve the current qeoindex eod phase telemetry contract.",
