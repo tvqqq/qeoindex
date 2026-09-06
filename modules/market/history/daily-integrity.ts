@@ -203,6 +203,39 @@ async function repairTicker(
     }]
   })
 
+  const repairedDates = new Set(rows.map((row) => vietnamDateKey(row.bar_time)))
+  const unresolvedSessions = suspectDates.filter((dateKey) => !repairedDates.has(dateKey))
+  for (const sessionDate of unresolvedSessions) {
+    try {
+      const fallback = await fetchDailyMarketHistoryWindow(
+        ticker,
+        lookbackDays(sessionDate, now),
+        now,
+        (_provider, bar) => vietnamDateKey(bar.time * 1000) === sessionDate,
+      )
+      const bar = fallback.bars.find((candidate) => vietnamDateKey(candidate.time * 1000) === sessionDate)
+      if (!bar) continue
+      if (bar.volume === 0 && fallback.provider !== "VCI" && fallback.provider !== "DNSE") continue
+      rows.push({
+        ticker,
+        timeframe: "1D",
+        bar_time: new Date(bar.time * 1000).toISOString(),
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+        volume: bar.volume,
+        provider: fallback.provider,
+        provider_detail: `QEO-106 per-session Daily integrity repair · ${fallback.detail}`,
+        source_url: fallback.sourceUrl,
+        fetched_at: fallback.fetchedAt || now.toISOString(),
+      })
+      repairedDates.add(sessionDate)
+    } catch {
+      // Keep the session explicit in unresolvedSessions when every approved provider misses it.
+    }
+  }
+
   if (rows.length) {
     const { error } = await supabase
       .from("market_ohlcv_history")
@@ -210,13 +243,12 @@ async function repairTicker(
     if (error) throw new Error(`Persist Daily integrity repair for ${ticker} failed: ${error.message}`)
   }
 
-  const repairedDates = new Set(rows.map((row) => vietnamDateKey(row.bar_time)))
-  const unresolvedSessions = suspectDates.filter((dateKey) => !repairedDates.has(dateKey))
+  const finalUnresolvedSessions = suspectDates.filter((dateKey) => !repairedDates.has(dateKey))
   return {
     ticker,
     suspectSessions: suspectDates.length,
     repairedSessions: repairedDates.size,
-    unresolvedSessions,
+    unresolvedSessions: finalUnresolvedSessions,
     provider: history.provider,
     statusBefore: report?.status ? String(report.status) : null,
     statusAfter: null,

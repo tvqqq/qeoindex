@@ -57,3 +57,10 @@ test("QEO-106 repair worker treats legacy raw Yahoo Daily rows as suspect and re
   assert.match(integrity, /fetchDailyMarketHistoryWindow/)
   assert.match(integrity, /\.\.\.legacyYahooDates/)
 })
+
+test("QEO-106 partial provider windows fall back per unresolved trading session", () => {
+  const integrity = readFileSync(new URL("../modules/market/history/daily-integrity.ts", import.meta.url), "utf8")
+  assert.match(integrity, /for \(const sessionDate of unresolvedSessions\)/)
+  assert.match(integrity, /fetchDailyMarketHistoryWindow\([\s\S]*?\(_provider, bar\) => vietnamDateKey\(bar\.time \* 1000\) === sessionDate/)
+  assert.match(integrity, /QEO-106 per-session Daily integrity repair/)
+})
