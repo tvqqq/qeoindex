@@ -6,6 +6,7 @@ on:
       - feat/qeo-129-adjusted-daily-shadow
     paths:
       - .github/workflows/qeo129-replay-types.yml
+      - supabase/migrations/20260906170000_qeo129_adjusted_daily_shadow.sql
 
 permissions:
   contents: write
