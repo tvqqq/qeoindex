@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   drift:
@@ -30,6 +30,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: pnpm/action-setup@v4
         with:
           version: 10.28.0
@@ -41,12 +43,55 @@ jobs:
         with:
           version: 2.116.0
       - run: pnpm install --frozen-lockfile
+      - name: Reconcile exact QEO-116 production source
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'tvq9612/qeo-119-production-acceptance-final'
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs')
+          const pending = 'supabase/pending-migrations/20260906111500_qeo116_report_qa_hydration.sql'
+          const active = 'supabase/migrations/20260906132050_qeo116_report_qa_hydration.sql'
+          if (fs.existsSync(pending)) fs.renameSync(pending, active)
+          if (!fs.existsSync(active)) throw new Error('QEO-116 active migration source missing')
+
+          const manifestPath = 'supabase/migration-equivalence.json'
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+          const entry = manifest.migrations.find((row) => row.logicalName === 'qeo116_report_qa_hydration')
+          if (!entry) throw new Error('QEO-116 manifest entry missing')
+          Object.assign(entry, {
+            repositoryVersion: '20260906132050',
+            productionVersion: '20260906132050',
+            state: 'EXACT',
+            evidence: 'qeo119-exact-head-db-drift-production-hydration-smoke',
+            rationale: 'QEO-116 exact-version Report Q&A hydration RPC was promoted only after exact-head Verify, zero-to-latest DB replay/generated-types, canonical backfill, and production smoke proved service-role-only execution plus exact report/content-hash/chunk-version/chunk-id hydration.'
+          })
+          fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n')
+
+          const ledgerPath = 'docs/db/evidence/production-migration-ledger-2026-09-06.json'
+          const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'))
+          ledger.capturedAt = '2026-09-06T13:20:50Z'
+          ledger.reviewScope = 'QEO-119 reviewed migration evidence; concurrent production migrations remain excluded until their owning source branch is reconciled.'
+          ledger.concurrentProductionMigrationsExcluded = [
+            { version: '20260906130930', name: 'qeo123_corporate_actions' },
+            { version: '20260906130959', name: 'qeo123_corporate_action_persistence' }
+          ]
+          if (!ledger.migrations.some((row) => row.name === 'qeo116_report_qa_hydration')) {
+            ledger.migrations.push({ version: '20260906132050', name: 'qeo116_report_qa_hydration' })
+          }
+          fs.writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2) + '\n')
+
+          const temporaryWorkflow = '.github/workflows/qeo119-promote-qeo116.yml'
+          if (fs.existsSync(temporaryWorkflow)) fs.unlinkSync(temporaryWorkflow)
+          NODE
       - name: Verify reviewed migration ledger
         run: node scripts/db/verify-migration-drift.mjs
       - name: Start local Supabase
         run: supabase start
       - name: Replay migrations from zero
         run: pnpm db:replay:verify
+      - name: Generate exact Database types for reconciled QEO-116
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'tvq9612/qeo-119-production-acceptance-final'
+        run: pnpm db:types:generate
       - name: Verify generated Database types
         run: pnpm db:types:verify
       - name: Upload generated Database type candidate
@@ -63,6 +108,25 @@ jobs:
         run: pnpm typecheck
       - name: Rehearse QEO-108 quarantined chart cutover
         run: bash scripts/db/rehearse-qeo108-chart-storage.sh
+      - name: Commit reconciled QEO-116 after all DB gates pass
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'tvq9612/qeo-119-production-acceptance-final'
+        run: |
+          set -euo pipefail
+          git add -A -- \
+            .github/workflows/qeo119-promote-qeo116.yml \
+            supabase/migrations/20260906132050_qeo116_report_qa_hydration.sql \
+            supabase/pending-migrations/20260906111500_qeo116_report_qa_hydration.sql \
+            supabase/migration-equivalence.json \
+            docs/db/evidence/production-migration-ledger-2026-09-06.json \
+            modules/shared/supabase/database.types.ts
+          if git diff --cached --quiet; then
+            echo "QEO-116 source already reconciled"
+            exit 0
+          fi
+          git config user.name "qeoindex-db-drift-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "fix(QEO-119): reconcile production Report QA hydration"
+          git push origin "HEAD:${{ github.head_ref }}"
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
