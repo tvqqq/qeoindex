@@ -76,32 +76,13 @@ jobs:
           doc.entries = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path))
           fs.writeFileSync(path, JSON.stringify(doc, null, 2) + '\n')
           NODE
-      - name: Align formula fixtures with canonical VND terms
-        run: |
-          node <<'NODE'
-          const fs = require('fs')
-          const path = 'tests/corporate-actions/qeo124-adjustment-engine.test.ts'
-          let text = fs.readFileSync(path, 'utf8')
-          const replacements = [
-            [/cashPerShare: 100\b/g, 'cashPerShare: 100_000'],
-            [/cashPerShare: 20\b/g, 'cashPerShare: 20_000'],
-            [/cashPerShare: 11\b/g, 'cashPerShare: 11_000'],
-            [/cashPerShare: 10\b/g, 'cashPerShare: 10_000'],
-            [/subscriptionPrice: 60\b/g, 'subscriptionPrice: 60_000'],
-            [/cashPerShare: 0\.1\b/g, 'cashPerShare: 100'],
-            [/cashPerShare: 0\.2\b/g, 'cashPerShare: 200'],
-            [/cashPerShare: 0\.3\b/g, 'cashPerShare: 300'],
-          ]
-          for (const [pattern, replacement] of replacements) text = text.replace(pattern, replacement)
-          fs.writeFileSync(path, text)
-          NODE
       - name: Verify QEO-124 focused contracts
         run: node --test tests/qeo-124-monetary-unit.test.ts tests/qeo-124-lineage-portability.test.ts tests/corporate-actions/qeo124-adjustment-engine.test.ts
-      - name: Commit manifest and fixture alignment
+      - name: Commit manifest
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tests/test-contracts.json tests/corporate-actions/qeo124-adjustment-engine.test.ts
+          git add tests/test-contracts.json
           if git diff --cached --quiet; then
             echo "QEO-124 contracts already synchronized"
             exit 0
