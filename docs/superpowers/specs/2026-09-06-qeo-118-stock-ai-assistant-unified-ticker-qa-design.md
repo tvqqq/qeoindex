@@ -36,7 +36,7 @@ QEO-118 upgrades that existing assistant into the single ticker-level Q&A experi
 
 `app/insights/[ticker]/page.tsx` authenticates the user, loads `fetchStockDetailData()`, and renders `StockDetailWorkstation`.
 
-`StockDetailWorkstation` already renders `StockAiSidebar`, whose lower section is the `Quick AI Assistant` UI. QEO-118 keeps that placement, visual footprint, preset prompt chips, message stream, and ticker label. The only product change is to make the assistant real and evidence-grounded.
+`StockDetailWorkstation` already renders `StockAiSidebar`, whose lower section is the `Quick AI Assistant` UI. QEO-118 keeps that placement, visual footprint, preset prompt chips, message stream, and ticker label. The product change is to make that existing assistant real and evidence-grounded.
 
 The client component must stop generating financial answers locally. Local page data may still be used for non-answer UI such as the overview card, but user questions are answered only by the authenticated server Q&A path.
 
@@ -46,19 +46,19 @@ The client component must stop generating financial answers locally. Local page 
 /insights/MSN
   └─ StockAiSidebar
        └─ POST /api/insights/MSN/chat
-            ├─ authenticated user gate
+            ├─ authenticated research feature gate
             ├─ request validation + bounded history
             └─ answerTickerQuestion()
                  ├─ load mandatory canonical state
-                 │    ├─ CURRENT_THESIS projection/canonical source
-                 │    └─ latest deterministic Council state where available
+                 │    ├─ CURRENT_THESIS from canonical ticker research read model
+                 │    └─ latest deterministic Council state from PostgreSQL
                  ├─ buildTickerContext(
                  │    consumer = STOCK_QA,
                  │    ticker = MSN,
                  │    query = user question
                  │  )
                  ├─ canonical multi-source resolver
-                 │    ├─ Notion thesis identity
+                 │    ├─ Notion thesis identity/version
                  │    ├─ PostgreSQL Research Report identity/chunk
                  │    └─ PostgreSQL Council run/outcome identity
                  ├─ bounded grounded evidence packet
@@ -76,7 +76,7 @@ Create one authenticated server endpoint:
 
 The route runs in Node.js, is `force-dynamic`, and returns `Cache-Control: no-store`.
 
-Use `requireApiFeature("research")`, matching the existing protected research/insights data surface rather than inventing a new feature permission.
+Use `requireApiFeature("research")`, matching the existing Research/Insights access family rather than inventing a new feature permission.
 
 ### Request
 
@@ -94,13 +94,13 @@ Ticker comes only from the route parameter. The client must not be allowed to ov
 
 ### Input limits
 
-Initial v1 limits:
+V1 limits are fixed:
 
 - question: max 2,000 characters;
 - history: max 6 turns;
 - each history turn: max 1,200 characters;
 - normalized ticker: `^[A-Z0-9]{2,12}$`;
-- STOCK_QA context: use the QEO-115 policy budget, currently max 18,000 characters / 12 retrieval results unless a stricter service-level cap is applied;
+- STOCK_QA context: max 18,000 characters and max 12 retrieval results, owned by QEO-115 policy;
 - model output: max 8 grounded claims;
 - citation excerpt: max 240 characters.
 
@@ -110,7 +110,7 @@ History is sent only to support conversational continuity. Retrieval is always a
 
 Add a dedicated `modules/ticker-qa/` module rather than placing service logic in the React component or API route.
 
-Suggested units:
+Units:
 
 - `types.ts` — request/result/citation/audit limits and public contracts.
 - `service.ts` — orchestration, validation, context build, canonical hydration, answer projection.
@@ -119,7 +119,7 @@ Suggested units:
 - `openai.ts` — answer-model call and usage audit, following the existing Research Report Q&A conventions.
 - `prompt.ts` — bounded system/evidence/history packet construction.
 
-The public service entry point is conceptually:
+The public service entry point is:
 
 ```ts
 answerTickerQuestion(client, {
@@ -131,14 +131,21 @@ answerTickerQuestion(client, {
 
 ## Mandatory Canonical Context
 
-Every live STOCK_QA request should attempt to load deterministic/current context before semantic retrieval:
+Every live STOCK_QA request attempts to load deterministic/current context before semantic retrieval.
 
-1. canonical CURRENT_THESIS for the requested ticker;
-2. latest deterministic AI Council state for the requested ticker when a canonical run exists.
+### CURRENT_THESIS
 
-These are passed to `buildTickerContext()` as `mandatory` items. They remain subject to the same structured character budget as retrieved items.
+Use `getCachedResearchTickerData(ticker)` as the canonical server read path for the current Stock Thesis. This path is independent of Qdrant and uses the existing bounded Notion-backed research read model with UI runtime caching. It therefore remains available as the mandatory source when Qdrant is unavailable.
 
-The service must not call Notion directly on every chat request if a verified current projection is available. Canonical source identity/version must remain resolvable, and stale/missing projection state must be explicit.
+The loader must require `connection.notionLive === true` and select the thesis whose normalized ticker equals the route ticker. If canonical Notion is unavailable or no thesis exists, no CURRENT_THESIS mandatory item is created; the limitation is recorded explicitly.
+
+The Qdrant CURRENT_THESIS projection remains useful for semantic retrieval, but it is not the only source of mandatory thesis context.
+
+### Latest deterministic Council state
+
+Load the latest canonical `ai_council_runs` row for the requested ticker from PostgreSQL with exact run ID, as-of date, signal, score/confidence/consensus/risk status, policy version, evidence hash, and created timestamp. This becomes the mandatory `DETERMINISTIC_SIGNAL` item.
+
+Mandatory items are passed to `buildTickerContext()` and remain subject to the same structured character budget as retrieved items.
 
 ## Retrieval
 
@@ -166,7 +173,7 @@ Before answer generation, each included knowledge item is classified and resolve
 
 #### `NOTION_THESIS`
 
-Resolve the deterministic thesis projection identity back to the canonical Stock Thesis source/version. Citation metadata may contain the Notion source/page identity and user-facing thesis label; no hidden/internal API data is exposed.
+Resolve the selected item against the canonical thesis returned by `getCachedResearchTickerData(ticker)`. The exact Notion page ID and source version/updated timestamp must match the item provenance. A mismatch is unresolved; the service must not silently substitute another thesis version.
 
 #### `RESEARCH_REPORT`
 
@@ -178,7 +185,7 @@ Resolve exact:
 - `chunk_version`;
 - `chunk_id` / page for chunk evidence.
 
-Hydration must use current exact canonical rows that match the selected provenance. Stale analysis/chunk versions must fail resolution rather than silently substitute the latest row.
+Hydration must use canonical PostgreSQL rows that match the selected provenance. Stale analysis/chunk versions fail resolution rather than silently substituting the latest row.
 
 #### `AI_COUNCIL`
 
@@ -186,9 +193,9 @@ Resolve exact canonical Council run/provenance for memory/scenario/outcome/error
 
 ### Unsupported sources
 
-Knowledge types/source types without a canonical resolver may participate only if they are mandatory canonical items already verified by the caller. Otherwise they are excluded from the model evidence packet until a resolver exists.
+Knowledge/source types without a v1 canonical resolver are excluded from the model evidence packet. They are not cited and cannot support claims.
 
-The assistant must never cite a `Qdrant point id` as if it were a canonical source.
+The assistant must never cite a Qdrant point ID as if it were a canonical source.
 
 ## Evidence Authority
 
@@ -214,12 +221,9 @@ The prompt explicitly says:
 
 Model output is strict structured JSON and is validated before projection.
 
-Conceptual shape:
-
 ```ts
 type TickerQaModelOutput = {
   status: "answered" | "not_found"
-  summary?: string
   claims: Array<{
     text: string
     authority: TickerKnowledgeAuthority
@@ -239,7 +243,7 @@ type TickerQaModelOutput = {
 Rules:
 
 - an `answered` response needs at least one claim backed by a valid resolved evidence ID;
-- citations referencing unknown evidence IDs are dropped and cannot support the claim;
+- citations referencing unknown evidence IDs are rejected and cannot support the claim;
 - if no grounded claim survives validation, return `not_found` rather than answering from outside knowledge;
 - `AI_INFERENCE` claims must cite the evidence they are inferred from and be labeled as inference in the UI/API result;
 - the final user-visible answer is assembled from validated claims, not free-form model prose outside the schema.
@@ -247,8 +251,6 @@ Rules:
 ## Citation Contract
 
 QEO-118 citations are multi-source, not report-page-only.
-
-Return a normalized citation object such as:
 
 ```ts
 {
@@ -265,11 +267,11 @@ Return a normalized citation object such as:
 }
 ```
 
-User-facing links:
+V1 user-facing citation behavior is fixed:
 
-- Research Report: `/research/reports/{reportId}` with page metadata available for future deep-link integration;
-- AI Council run/debate: link only when a stable existing route exists; otherwise render non-clickable provenance text rather than inventing a URL;
-- Notion thesis: expose only a safe canonical source link if the existing application already surfaces it to the authenticated user; otherwise show `Current Stock Thesis` as provenance without leaking internal integration details.
+- Research Report citations link to `/research/reports/{reportId}` and carry page metadata;
+- AI Council citations are non-clickable provenance chips with exact run ID/date because there is no stable per-run deep-link contract in QEO-118;
+- Notion thesis citations are non-clickable `Current Stock Thesis` provenance chips; QEO-118 does not expose raw Notion integration URLs.
 
 Citation excerpts are bounded and come from canonical hydrated evidence, not directly from Qdrant payload text.
 
@@ -285,17 +287,25 @@ Continue with the bounded mandatory canonical context. Return:
 
 - `status: "answered"` if grounded claims can be produced;
 - `retrievalStatus: "unavailable"`;
-- a safe limitation such as `Semantic ticker knowledge retrieval is temporarily unavailable; answer uses available canonical context.`
+- a safe limitation: `Semantic ticker knowledge retrieval is temporarily unavailable; answer uses available canonical context.`
 
-The UI should show a compact degraded/source-status indicator, not a blocking error.
+The UI shows a compact degraded/source-status indicator, not a blocking error.
 
 ### Qdrant unavailable, no safe canonical context
 
-Return a typed service-unavailable/not-found state. Do not fabricate an answer from page props or model prior knowledge.
+Return typed `service_unavailable`. The model is not called and no answer is fabricated from page props or model prior knowledge.
 
-### Canonical hydration failure
+### Canonical evidence absence
 
-Drop only the unresolved retrieved item. If all evidence becomes unresolved, return `not_found` or typed unavailable depending on whether the failure is evidence absence or infrastructure failure.
+If infrastructure is healthy but no resolvable evidence supports the question, return `not_found`.
+
+### Canonical infrastructure failure
+
+If a required canonical resolver fails because its backing service/database is unavailable and no other grounded evidence remains, return `service_unavailable`.
+
+### Partial canonical hydration failure
+
+Drop only unresolved retrieved items. Continue only when at least one grounded canonical evidence item remains.
 
 ## Conversation History
 
@@ -310,7 +320,7 @@ Never persist:
 - hidden chain-of-thought/reasoning;
 - user questions as Qdrant ticker knowledge.
 
-Optional aggregate operational metrics may be logged without message bodies.
+Aggregate operational metrics may be logged without message bodies.
 
 ## UI Changes in `stock-ai-sidebar.tsx`
 
@@ -329,13 +339,13 @@ Assistant messages gain:
 - rendered answer text;
 - compact source chips beneath the message;
 - authority/source-opinion badges where relevant;
-- optional contradiction note;
-- optional degraded retrieval badge;
+- contradiction note when the validated result contains one;
+- degraded retrieval badge when `retrievalStatus="unavailable"` but the answer is grounded;
 - retry-safe error state.
 
-Preset chips become real questions sent to the same API. Existing visual design remains intact unless citation density requires a small increase in chat viewport height.
+Preset chips become real questions sent to the same API. Existing visual design remains intact; chat message viewport may increase only enough to keep citations usable without changing the workstation layout.
 
-The welcome message should no longer claim omniscience such as `Tôi nắm toàn diện...`. Use a scoped statement that it answers from the available QeoIndex evidence for the current ticker.
+The welcome message must no longer claim omniscience such as `Tôi nắm toàn diện...`. It states that the assistant answers from available QeoIndex evidence for the current ticker.
 
 ## Model / Prompt Policy
 
@@ -351,7 +361,7 @@ The model receives only:
 
 It does not receive full database rows, full PDFs, all historical Council runs, or arbitrary hidden application state.
 
-The evidence packet must preserve provenance and authority labels in a machine-readable format.
+The evidence packet preserves provenance and authority labels in a machine-readable format.
 
 ## Telemetry
 
@@ -374,7 +384,7 @@ Do not log raw evidence text, raw question/history, raw prompt, or hidden reason
 
 QEO-118 depends on QEO-115 verification. Implementation may land on the QEO-109 integration branch while blocked, but production enablement must not bypass the QEO-115 Verify gate.
 
-Use a server-side feature flag such as `TICKER_QA_ENABLED` for the new grounded endpoint/client behavior during rollout. When disabled, the UI should show the assistant as unavailable rather than falling back to the existing fabricated keyword answers.
+The rollout flag is exactly `TICKER_QA_ENABLED`. When it is not `true`, `/api/insights/[ticker]/chat` returns typed `feature_disabled`, and the Quick AI Assistant renders an unavailable state.
 
 No fallback path may re-enable the current fake `setTimeout` financial responses after grounded Q&A is introduced.
 
@@ -392,22 +402,24 @@ Strict RED/GREEN TDD.
 6. unresolved canonical provenance cannot support a claim;
 7. report citations preserve exact report/content-hash/analysis/chunk version and page;
 8. Council citations preserve exact run identity;
-9. Qdrant unavailable + mandatory context produces typed degraded but grounded result;
-10. Qdrant unavailable + no canonical evidence does not fabricate an answer;
-11. `not_found` is returned when no grounded claim survives;
-12. model citation IDs outside the evidence packet are ignored/rejected;
-13. AI inference is labeled and still requires supporting citations;
-14. telemetry excludes raw prompt/history/evidence text.
+9. CURRENT_THESIS mandatory load uses the ticker-scoped canonical research getter and does not depend on Qdrant;
+10. Qdrant unavailable + mandatory context produces typed degraded but grounded result;
+11. Qdrant unavailable + no canonical evidence returns `service_unavailable` without model call;
+12. healthy infrastructure + no grounded evidence returns `not_found`;
+13. model citation IDs outside the evidence packet are rejected;
+14. AI inference is labeled and still requires supporting citations;
+15. telemetry excludes raw prompt/history/evidence text.
 
 ### API contracts
 
 1. authenticated access required;
-2. feature access required;
+2. `research` feature access required;
 3. ticker comes from route only;
 4. `Cache-Control: no-store`;
-5. input errors return bounded public messages;
-6. provider/Qdrant/internal details are sanitized;
-7. no browser-side OpenAI credentials or server secrets.
+5. `TICKER_QA_ENABLED` gates the new backend;
+6. input errors return bounded public messages;
+7. provider/Qdrant/internal details are sanitized;
+8. no browser-side OpenAI credentials or server secrets.
 
 ### UI contracts
 
@@ -417,7 +429,8 @@ Strict RED/GREEN TDD.
 4. messages render citations/source labels;
 5. degraded retrieval state is visible but non-blocking when an answer exists;
 6. chat history sent to the server is bounded;
-7. no new `/research/[ticker]` chat page/component is introduced.
+7. `feature_disabled`/service errors never fall back to fabricated local answers;
+8. no new `/research/[ticker]` chat page/component is introduced.
 
 ### Retrieval evaluation
 
