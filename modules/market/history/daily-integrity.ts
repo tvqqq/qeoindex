@@ -7,6 +7,10 @@ import { fetchDailyMarketHistoryWindow } from "@/modules/market/history/index"
 const MAX_REPAIR_TICKERS = 10
 const DAY_MS = 86_400_000
 const YAHOO_CHART_SOURCE = "query1.finance.yahoo.com/v8/finance/chart/"
+const REPAIR_PROVENANCE_PREFIXES = [
+  "QEO-106 targeted Daily integrity repair · ",
+  "QEO-106 per-session Daily integrity repair · ",
+] as const
 
 type IntegrityReportRow = {
   ticker?: unknown
@@ -80,6 +84,11 @@ function storedSessionDate(row: StoredZeroVolumeRow) {
   return isVietnamSecuritiesTradingDateKey(dateKey) ? dateKey : null
 }
 
+function isRepairProvenance(row: StoredZeroVolumeRow) {
+  const detail = String(row.provider_detail || "")
+  return REPAIR_PROVENANCE_PREFIXES.some((prefix) => detail.startsWith(prefix))
+}
+
 async function loadIntegrityReport(supabase: SupabaseClient, tickers: string[]) {
   const { data, error } = await supabase.rpc("qeo_market_daily_integrity_report_scoped", { p_tickers: tickers })
   if (error) throw new Error(`Load scoped Daily integrity report failed: ${error.message}`)
@@ -151,6 +160,39 @@ async function loadLegacyYahooBasisRows(supabase: SupabaseClient, tickers: strin
   return rowsByTicker
 }
 
+async function verifyPersistedRepairDates(
+  supabase: SupabaseClient,
+  ticker: string,
+  suspectDates: string[],
+) {
+  const expectedDates = new Set(suspectDates)
+  const persistedDates = new Set<string>()
+  let offset = 0
+  const pageSize = 1000
+
+  while (persistedDates.size < expectedDates.size) {
+    const { data, error } = await supabase
+      .from("market_ohlcv_history")
+      .select("bar_time,provider,provider_detail,source_url")
+      .eq("ticker", ticker)
+      .eq("timeframe", "1D")
+      .order("bar_time", { ascending: true })
+      .range(offset, offset + pageSize - 1)
+    if (error) throw new Error(`QEO-106 repair readback for ${ticker} failed: ${error.message}`)
+
+    const page = (data || []) as StoredZeroVolumeRow[]
+    for (const row of page) {
+      const dateKey = storedSessionDate(row)
+      if (!dateKey || !expectedDates.has(dateKey) || !isRepairProvenance(row)) continue
+      persistedDates.add(dateKey)
+    }
+    if (page.length < pageSize) break
+    offset += pageSize
+  }
+
+  return persistedDates
+}
+
 async function repairTicker(
   supabase: SupabaseClient,
   ticker: string,
@@ -203,8 +245,8 @@ async function repairTicker(
     }]
   })
 
-  const repairedDates = new Set(rows.map((row) => vietnamDateKey(row.bar_time)))
-  const unresolvedSessions = suspectDates.filter((dateKey) => !repairedDates.has(dateKey))
+  const candidateDates = new Set(rows.map((row) => vietnamDateKey(row.bar_time)))
+  const unresolvedSessions = suspectDates.filter((dateKey) => !candidateDates.has(dateKey))
   for (const sessionDate of unresolvedSessions) {
     try {
       const fallback = await fetchDailyMarketHistoryWindow(
@@ -230,9 +272,9 @@ async function repairTicker(
         source_url: fallback.sourceUrl,
         fetched_at: fallback.fetchedAt || now.toISOString(),
       })
-      repairedDates.add(sessionDate)
+      candidateDates.add(sessionDate)
     } catch {
-      // Keep the session explicit in unresolvedSessions when every approved provider misses it.
+      // Keep the session explicit when every approved provider misses it.
     }
   }
 
@@ -243,11 +285,12 @@ async function repairTicker(
     if (error) throw new Error(`Persist Daily integrity repair for ${ticker} failed: ${error.message}`)
   }
 
-  const finalUnresolvedSessions = suspectDates.filter((dateKey) => !repairedDates.has(dateKey))
+  const persistedDates = await verifyPersistedRepairDates(supabase, ticker, suspectDates)
+  const finalUnresolvedSessions = suspectDates.filter((dateKey) => !persistedDates.has(dateKey))
   return {
     ticker,
     suspectSessions: suspectDates.length,
-    repairedSessions: repairedDates.size,
+    repairedSessions: persistedDates.size,
     unresolvedSessions: finalUnresolvedSessions,
     provider: history.provider,
     statusBefore: report?.status ? String(report.status) : null,
