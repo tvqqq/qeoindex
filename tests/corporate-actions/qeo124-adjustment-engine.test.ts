@@ -71,14 +71,14 @@ test("QEO-124 identity event set preserves price and volume exactly", () => {
 
 test("QEO-124 cash dividend changes price basis but never historical volume", () => {
   const result = computeStepAdjustment(eventSet([
-    action({ cashPerShare: 10 }),
+    action({ cashPerShare: 10_000 }),
   ]))
   assert.equal(result.theoreticalExPrice, 90)
   assert.equal(result.stepPriceFactor, 0.9)
   assert.equal(result.stepVolumeFactor, 1)
 
   assert.throws(
-    () => computeStepAdjustment(eventSet([action({ cashPerShare: 100 })])),
+    () => computeStepAdjustment(eventSet([action({ cashPerShare: 100_000 })])),
     (error: unknown) => error instanceof AdjustmentFactorError && error.code === "NON_POSITIVE_THEORETICAL_VALUE",
   )
 })
@@ -129,7 +129,7 @@ test("QEO-124 rights issue affects TERP price but not historical volume in engin
       actionType: "rights_issue",
       rightsRatioNumerator: 4,
       rightsRatioDenominator: 1,
-      subscriptionPrice: 60,
+      subscriptionPrice: 60_000,
     }),
   ]))
   assert.equal(result.theoreticalExPrice, 92)
@@ -139,8 +139,8 @@ test("QEO-124 rights issue affects TERP price but not historical volume in engin
 
 test("QEO-124 same-date cash stock and rights are one order-independent event set", () => {
   const events = [
-    action({ id: "00000000-0000-4000-8000-000000000003", actionType: "rights_issue", rightsRatioNumerator: 4, rightsRatioDenominator: 1, subscriptionPrice: 60, sourceComponentKey: "component:2" }),
-    action({ id: "00000000-0000-4000-8000-000000000001", cashPerShare: 10, sourceComponentKey: "component:0" }),
+    action({ id: "00000000-0000-4000-8000-000000000003", actionType: "rights_issue", rightsRatioNumerator: 4, rightsRatioDenominator: 1, subscriptionPrice: 60_000, sourceComponentKey: "component:2" }),
+    action({ id: "00000000-0000-4000-8000-000000000001", cashPerShare: 10_000, sourceComponentKey: "component:0" }),
     action({ id: "00000000-0000-4000-8000-000000000002", actionType: "stock_dividend", stockRatioNumerator: 4, stockRatioDenominator: 1, sourceComponentKey: "component:1" }),
   ]
   const forward = computeStepAdjustment(eventSet(events))
@@ -159,9 +159,9 @@ test("QEO-124 same-date cash stock and rights are one order-independent event se
 
 test("QEO-124 component aggregation is byte-stable across permutations of same-type actions", () => {
   const events = [
-    action({ id: "00000000-0000-4000-8000-000000000021", cashPerShare: 0.1, sourceComponentKey: "component:0" }),
-    action({ id: "00000000-0000-4000-8000-000000000022", cashPerShare: 0.2, sourceComponentKey: "component:1" }),
-    action({ id: "00000000-0000-4000-8000-000000000023", cashPerShare: 0.3, sourceComponentKey: "component:2" }),
+    action({ id: "00000000-0000-4000-8000-000000000021", cashPerShare: 100, sourceComponentKey: "component:0" }),
+    action({ id: "00000000-0000-4000-8000-000000000022", cashPerShare: 200, sourceComponentKey: "component:1" }),
+    action({ id: "00000000-0000-4000-8000-000000000023", cashPerShare: 300, sourceComponentKey: "component:2" }),
   ]
 
   const ascending = computeStepAdjustment(eventSet(events))
@@ -176,7 +176,7 @@ test("QEO-124 malformed or contradictory action inputs fail closed", () => {
     ["EVENT_DATE_MISMATCH", () => computeStepAdjustment(eventSet([action({ exDate: "2026-01-11" })]))],
     ["INVALID_STOCK_RATIO", () => computeStepAdjustment(eventSet([action({ actionType: "stock_dividend", stockRatioNumerator: 0, stockRatioDenominator: 1 })]))],
     ["MISSING_SUBSCRIPTION_PRICE", () => computeStepAdjustment(eventSet([action({ actionType: "rights_issue", rightsRatioNumerator: 4, rightsRatioDenominator: 1 })]))],
-    ["CONTRADICTORY_TERMS", () => computeStepAdjustment(eventSet([action({ cashPerShare: 10, stockRatioNumerator: 1, stockRatioDenominator: 1 })]))],
+    ["CONTRADICTORY_TERMS", () => computeStepAdjustment(eventSet([action({ cashPerShare: 10_000, stockRatioNumerator: 1, stockRatioDenominator: 1 })]))],
   ]
 
   for (const [code, run] of invalidCases) {
@@ -198,7 +198,7 @@ test("QEO-124 no-action run is deterministic and has no transitions", () => {
 
 test("QEO-124 effective event uses immediately preceding canonical session as raw reference", () => {
   const candidate = runCandidate({
-    actions: [action({ cashPerShare: 10 })],
+    actions: [action({ cashPerShare: 10_000 })],
   })
 
   assert.equal(candidate.status, "candidate")
@@ -212,7 +212,7 @@ test("QEO-124 effective event uses immediately preceding canonical session as ra
 test("QEO-124 missing canonical raw reference blocks the whole factor run", () => {
   const candidate = runCandidate({
     rawDailyByDate: rawDaily([["2026-01-10", 90]]),
-    actions: [action({ cashPerShare: 10 })],
+    actions: [action({ cashPerShare: 10_000 })],
   })
 
   assert.equal(candidate.status, "blocked")
@@ -221,7 +221,7 @@ test("QEO-124 missing canonical raw reference blocks the whole factor run", () =
 })
 
 test("QEO-124 missing canonical ex-date blocks the whole factor run", () => {
-  const missingExDate = { ...action({ cashPerShare: 10 }), exDate: null } as unknown as CanonicalFactorAction
+  const missingExDate = { ...action({ cashPerShare: 10_000 }), exDate: null } as unknown as CanonicalFactorAction
   const candidate = runCandidate({ actions: [missingExDate] })
 
   assert.equal(candidate.status, "blocked")
@@ -232,17 +232,17 @@ test("QEO-124 missing canonical ex-date blocks the whole factor run", () => {
 test("QEO-124 future event does not change current factor lineage or transitions", () => {
   const base = runCandidate({
     asOfDate: "2026-01-10",
-    actions: [action({ cashPerShare: 10 })],
+    actions: [action({ cashPerShare: 10_000 })],
   })
   const future = action({
     id: "00000000-0000-4000-8000-000000000099",
     exDate: "2026-01-12",
-    cashPerShare: 20,
+    cashPerShare: 20_000,
     sourceComponentKey: "component:1",
   })
   const withFuture = runCandidate({
     asOfDate: "2026-01-10",
-    actions: [action({ cashPerShare: 10 }), future],
+    actions: [action({ cashPerShare: 10_000 }), future],
   })
 
   assert.deepEqual(withFuture.transitions, base.transitions)
@@ -253,8 +253,8 @@ test("QEO-124 future event does not change current factor lineage or transitions
 test("QEO-124 cumulative factors fold newest-to-oldest", () => {
   const candidate = runCandidate({
     actions: [
-      action({ id: "00000000-0000-4000-8000-000000000031", cashPerShare: 10, exDate: "2026-01-10", sourceComponentKey: "component:0" }),
-      action({ id: "00000000-0000-4000-8000-000000000032", cashPerShare: 10, exDate: "2026-01-12", sourceComponentKey: "component:0", lineageRootSourceEventId: "1002" }),
+      action({ id: "00000000-0000-4000-8000-000000000031", cashPerShare: 10_000, exDate: "2026-01-10", sourceComponentKey: "component:0" }),
+      action({ id: "00000000-0000-4000-8000-000000000032", cashPerShare: 10_000, exDate: "2026-01-12", sourceComponentKey: "component:0", lineageRootSourceEventId: "1002" }),
     ],
   })
 
@@ -273,9 +273,9 @@ test("QEO-124 cumulative factors fold newest-to-oldest", () => {
 })
 
 test("QEO-124 lineage changes when effective terms evidence raw reference or engine version changes", () => {
-  const baseAction = action({ cashPerShare: 10 })
+  const baseAction = action({ cashPerShare: 10_000 })
   const base = runCandidate({ actions: [baseAction] })
-  const changedTerm = runCandidate({ actions: [{ ...baseAction, cashPerShare: 11 }] })
+  const changedTerm = runCandidate({ actions: [{ ...baseAction, cashPerShare: 11_000 }] })
   const changedEvidence = runCandidate({ actions: [{ ...baseAction, rawEvidenceHash: "b".repeat(64) }] })
   const changedReference = runCandidate({
     actions: [baseAction],
