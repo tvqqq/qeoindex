@@ -247,8 +247,8 @@ test("QEO-96 live candle merge replaces the matching timestamp instead of duplic
   assert.deepEqual(merged[0], incoming[0])
 })
 
-test("QEO-108 native intraday cutover is session-partitioned, verified, and rollback-safe", () => {
-  const migration = readFileSync(new URL("../supabase/migrations/20260906024500_qeo108_chart_intraday_session_partitions.sql", import.meta.url), "utf8")
+test("QEO-108 native intraday cutover is session-partitioned, verified, rollback-safe, and quarantined", () => {
+  const migration = readFileSync(new URL("../supabase/pending-migrations/20260906024500_qeo108_chart_intraday_session_partitions.sql", import.meta.url), "utf8")
   assert.match(migration, /partition by range\s*\(bar_time\)/i)
   assert.match(migration, /qeo_ensure_chart_intraday_session_partition/i)
   assert.match(migration, /chart_ohlcv_intraday_qeo108_legacy/i)
@@ -268,7 +268,7 @@ test("QEO-108 hot writes provision a native session partition before upsert", ()
 
 test("QEO-108 capacity preflight keeps a 100 MiB hard headroom before the 500 MB quota", () => {
   const capacity = readFileSync(new URL("../modules/market/chart-data/storage-capacity.ts", import.meta.url), "utf8")
-  const migration = readFileSync(new URL("../supabase/migrations/20260906024500_qeo108_chart_intraday_session_partitions.sql", import.meta.url), "utf8")
+  const migration = readFileSync(new URL("../supabase/pending-migrations/20260906024500_qeo108_chart_intraday_session_partitions.sql", import.meta.url), "utf8")
   assert.match(capacity, /QEO_CHART_DB_CAPACITY_WARN_BYTES\s*=\s*350\s*\*\s*1024\s*\*\s*1024/)
   assert.match(capacity, /QEO_CHART_DB_CAPACITY_HARD_BYTES\s*=\s*400\s*\*\s*1024\s*\*\s*1024/)
   assert.match(capacity, /qeo_chart_storage_capacity/)
