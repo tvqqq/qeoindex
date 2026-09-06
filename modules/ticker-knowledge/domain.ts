@@ -65,6 +65,7 @@ export interface TickerKnowledgeProvenance {
   contentHash?: string | null
   reportId?: string | null
   analysisId?: string | null
+  chunkVersion?: string | null
   runId?: string | null
   page?: number | null
   chunkId?: string | null
@@ -106,6 +107,8 @@ export interface TickerKnowledgeQuery {
   runId?: string
   sourceId?: string
   sourceVersion?: string
+  contentHash?: string
+  chunkVersion?: string
   publishedFrom?: string
   publishedTo?: string
   asOf?: string
