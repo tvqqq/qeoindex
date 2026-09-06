@@ -43,7 +43,7 @@ test("QEO-107 provider gaps are resumable but zero-row attempts never become can
 
 test("QEO-107 only treats a ticker as HOT-complete after five distinct trading sessions", () => {
   const bootstrap = source("modules/market/chart-data/bootstrap.ts")
-  const migration = source("supabase/migrations/20260906043000_qeo107_hot_session_coverage_gate.sql")
+  const migration = source("docs/db/proposed/qeo107_hot_session_coverage_gate.sql")
   assert.match(bootstrap, /hotSessionCount/)
   assert.match(bootstrap, /hotSessionCount >= QEO107_HOT_RETENTION_SESSIONS/)
   assert.match(bootstrap, /outcome === "provider_gap"/)
