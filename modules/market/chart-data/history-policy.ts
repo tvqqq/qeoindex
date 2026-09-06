@@ -1,5 +1,5 @@
 import type { ChartResolution } from "./contract"
-import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "@/modules/market/calendar"
+import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "../calendar.ts"
 
 const DAY_SECONDS = 86400
 export const CHART_HOT_RETENTION_DAYS = 31
