@@ -504,6 +504,15 @@
       ]
     },
     {
+      "path": "tests/market-history/qeo129-adjusted-daily-store.test.ts",
+      "owner": "market",
+      "invariant": "Preserve QEO-129 exact factor-run adjusted Daily persistence, OHLCV readback, and shadow-only rollout contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/market-insight-edge-types.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market insight edge types contract.",
