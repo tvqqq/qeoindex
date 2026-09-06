@@ -7,6 +7,7 @@ on:
       - "modules/market/corporate-actions/**"
       - "scripts/probes/qeo123-vsdc-discovery.ts"
       - "supabase/migrations/*_qeo123_corporate_action*.sql"
+      - "supabase/migrations/*_qeo124_adjustment_factor*.sql"
       - "tests/corporate-actions/**"
       - "tests/db-schema-contract.test.ts"
   workflow_dispatch:
@@ -28,7 +29,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Run QEO-123 deterministic contracts
+      - name: Run corporate-action deterministic contracts
         run: node --test tests/corporate-actions/*.test.ts
       - name: Compile TypeScript
         run: pnpm typecheck
@@ -72,25 +73,25 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Start local Supabase
         run: supabase start
-      - name: Replay migrations from zero through QEO-123
+      - name: Replay migrations from zero through current branch
         run: pnpm db:replay:verify
-      - name: Verify QEO-123 atomic persistence
+      - name: Verify corporate-action atomic persistence
         run: |
           eval "$(supabase status -o env)"
-          for contract in tests/corporate-actions/persistence*.sql; do
+          for contract in tests/corporate-actions/persistence*.sql tests/corporate-actions/qeo124-factor-persistence.sql; do
             psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$contract"
           done
       - name: Lint replayed local database
         run: supabase db lint --local --level warning
-      - name: Generate QEO-123 Database type candidate
+      - name: Generate Database type candidate
         run: |
-          mkdir -p artifacts/qeo123
-          supabase gen types typescript --local --schema public > artifacts/qeo123/database.types.ts
+          mkdir -p artifacts/corporate-actions
+          supabase gen types typescript --local --schema public > artifacts/corporate-actions/database.types.ts
       - name: Upload Database type candidate
         uses: actions/upload-artifact@v4
         with:
-          name: qeo123-database-types
-          path: artifacts/qeo123/database.types.ts
+          name: corporate-actions-database-types
+          path: artifacts/corporate-actions/database.types.ts
           retention-days: 3
       - name: Stop local Supabase
         if: always()
