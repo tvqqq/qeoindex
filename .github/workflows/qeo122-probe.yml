@@ -1,0 +1,34 @@
+name: QEO-122 Probe
+
+on:
+  pull_request:
+    paths:
+      - "scripts/probes/qeo122-*.ts"
+      - ".github/workflows/qeo122-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parser-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Run QEO-122 parser regressions
+        run: pnpm exec tsx --test scripts/probes/qeo122-parser-regression.test.ts
