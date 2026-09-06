@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import test from "node:test"
 
+import "./corporate-actions/domain.test.ts"
 import "./research-reports/domain.test.ts"
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
@@ -73,6 +74,7 @@ test("QEO-29 keeps phase detail for 1 day and terminal run summaries for 7 days"
   assert.match(sql, /v_job_cutoff\s+timestamptz\s*:=\s*p_reference_at\s*-\s*interval\s+'7 days'/i)
   assert.match(sql, /delete\s+from\s+public\.system_job_phases[\s\S]*?status\s+in\s*\(\s*'succeeded'\s*,\s*'failed'\s*,\s*'skipped'\s*\)[\s\S]*?v_phase_cutoff/i)
   assert.match(sql, /delete\s+from\s+public\.system_job_runs[\s\S]*?status\s+in\s*\(\s*'succeeded'\s*,\s*'failed'\s*,\s*'skipped'\s*\)[\s\S]*?v_job_cutoff/i)
+  assert.match(active, /rpc\("qeo_run_job_telemetry_cleanup"/)
   assert.doesNotMatch(sql, /delete\s+from\s+public\.system_audit_log/i)
   assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
 })
@@ -138,6 +140,7 @@ test("QEO-123 stores immutable raw notice evidence and one canonical row per log
   assert.match(sql, /unique\s*\(source,\s*source_event_id,\s*raw_evidence_hash\)/i)
   assert.match(sql, /referenced_notice_number\s+text/i)
   assert.match(sql, /referenced_notice_date\s+date/i)
+  assert.match(sql, /referenced_source_event_id\s+text/i)
   assert.match(sql, /amendment_type\s+text/i)
 
   assert.match(sql, /create\s+table\s+public\.corporate_actions/i)
@@ -152,7 +155,7 @@ test("QEO-123 stores immutable raw notice evidence and one canonical row per log
   assert.match(sql, /normalization_version\s+text\s+not\s+null/i)
 
   assert.match(sql, /alter\s+table\s+public\.corporate_action_source_evidence\s+enable\s+row\s+level\s+security/i)
-  assert.match(sql, /revoke\s+all\s+privileges\s+on\s+table\s+public\.corporate_action_source_evidence\s+from\s+anon,\s*authenticated/i)
+  assert.match(sql, /revoke\s+all\s+privileges\s+on\s+table\s+public\.corporate_action_source_evidence\s+from\s+public,\s*anon,\s*authenticated/i)
   assert.match(sql, /grant\s+select,\s*insert\s+on\s+table\s+public\.corporate_action_source_evidence\s+to\s+service_role/i)
   assert.doesNotMatch(sql, /grant\s+(?:all|update|delete)[^;]*corporate_action_source_evidence[^;]*service_role/i)
 
@@ -161,4 +164,5 @@ test("QEO-123 stores immutable raw notice evidence and one canonical row per log
   assert.match(sql, /grant\s+select\s+on\s+table\s+public\.corporate_actions\s+to\s+authenticated/i)
   assert.match(sql, /grant\s+select,\s*insert,\s*update\s+on\s+table\s+public\.corporate_actions\s+to\s+service_role/i)
   assert.doesNotMatch(sql, /grant\s+delete[^;]*corporate_actions[^;]*service_role/i)
+  assert.doesNotMatch(sql, /(?:insert\s+into|update|delete\s+from)\s+public\.(?:market_ohlcv_history|chart_ohlcv_intraday)/i)
 })
