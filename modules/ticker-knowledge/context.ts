@@ -215,7 +215,7 @@ export async function buildTickerContext(input: BuildTickerContextInput): Promis
   const retrievalMs = durationSince(retrievalStarted)
 
   const rerankStarted = monotonicNow()
-  const nowMs = timestamp(input.now) ?? Date.now()
+  const nowMs = timestamp(input.now ?? input.asOf) ?? Date.now()
   const scopedResults = retrieval.status === "ready"
     ? retrieval.results.filter((result) => matchesRequestedScope(result.item, input, ticker))
     : []
