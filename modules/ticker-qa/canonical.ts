@@ -100,10 +100,31 @@ function boundedExcerpt(text: string) {
   return `${normalized.slice(0, Math.max(0, TICKER_QA_LIMITS.citationExcerptChars - 1)).trimEnd()}…`
 }
 
+function canonicalEvidenceId(item: TickerKnowledgeItem) {
+  const provenance = item.provenance
+  if (item.sourceType === "NOTION_THESIS") {
+    return `thesis:${provenance.sourceId}:${provenance.sourceVersion}`
+  }
+  if (item.sourceType === "RESEARCH_REPORT" && provenance.reportId) {
+    return [
+      "report",
+      provenance.reportId,
+      provenance.analysisId ?? "analysis-none",
+      provenance.chunkId ?? item.knowledgeType,
+      provenance.sourceVersion,
+    ].join(":")
+  }
+  if (item.sourceType === "AI_COUNCIL" && provenance.runId) {
+    return ["council", provenance.runId, item.knowledgeType, provenance.sourceVersion].join(":")
+  }
+  return [item.sourceType.toLowerCase(), provenance.sourceId, item.knowledgeType, provenance.sourceVersion].join(":")
+}
+
 function citationFor(item: TickerKnowledgeItem): TickerQaCitation | null {
+  const id = canonicalEvidenceId(item)
   if (item.sourceType === "NOTION_THESIS") {
     return {
-      id: `tk:${item.id}`,
+      id,
       sourceType: "NOTION_THESIS",
       authority: item.authority,
       label: "Current Stock Thesis",
@@ -115,7 +136,7 @@ function citationFor(item: TickerKnowledgeItem): TickerQaCitation | null {
 
   if (item.sourceType === "RESEARCH_REPORT" && item.provenance.reportId) {
     return {
-      id: `tk:${item.id}`,
+      id,
       sourceType: "RESEARCH_REPORT",
       authority: item.authority,
       label: item.provenance.page
@@ -131,7 +152,7 @@ function citationFor(item: TickerKnowledgeItem): TickerQaCitation | null {
 
   if (item.sourceType === "AI_COUNCIL" && item.provenance.runId) {
     return {
-      id: `tk:${item.id}`,
+      id,
       sourceType: "AI_COUNCIL",
       authority: item.authority,
       label: `AI Council · ${item.provenance.asOf ?? item.provenance.runId}`,
@@ -296,11 +317,12 @@ export async function resolveTickerQaEvidence(
         unresolvedCount += 1
         continue
       }
+      const citation = citationFor(canonical)
       evidence.push({
-        evidenceId: `tk:${canonical.id}`,
+        evidenceId: citation?.id ?? canonicalEvidenceId(canonical),
         item: canonical,
         text: canonical.text,
-        citation: citationFor(canonical),
+        citation,
       })
     } catch {
       infrastructureFailure = true
