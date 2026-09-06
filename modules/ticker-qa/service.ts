@@ -9,6 +9,7 @@ import {
   TickerKnowledgeUnavailableError,
   type TickerKnowledgeIndex,
   type TickerKnowledgeItem,
+  type TickerKnowledgeUnavailableReason,
 } from "../ticker-knowledge/domain.ts"
 import {
   resolveTickerQaEvidence,
@@ -19,6 +20,12 @@ import {
   loadTickerQaMandatoryContext,
   type TickerQaMandatoryContext,
 } from "./mandatory.ts"
+import {
+  answerTickerQaWithOpenAi,
+  TickerQaValidationError,
+  type TickerQaModelRoute,
+  type TickerQaProviderAudit,
+} from "./openai.ts"
 import type { TickerQaModelOutput } from "./schema.ts"
 import {
   TICKER_QA_LIMITS,
@@ -29,6 +36,9 @@ import {
   type TickerQaRetrievalStatus,
   type ValidatedTickerQaRequest,
 } from "./types.ts"
+
+const DEGRADED_RETRIEVAL_LIMITATION = "Semantic ticker knowledge retrieval is temporarily unavailable; answer uses available canonical context."
+const PARTIAL_CANONICAL_LIMITATION = "Some canonical ticker sources are unavailable or missing for this request."
 
 export type TickerQaErrorCode =
   | "invalid_request"
@@ -62,12 +72,50 @@ type ResolveEvidence = (
   items: readonly TickerKnowledgeItem[],
 ) => Promise<TickerQaCanonicalResolution>
 
+type AnswerWithAi = (input: {
+  ticker: string
+  question: string
+  history: ValidatedTickerQaRequest["history"]
+  evidence: readonly TickerQaResolvedEvidence[]
+}) => Promise<{
+  output: TickerQaModelOutput
+  audit: TickerQaProviderAudit
+  route: TickerQaModelRoute
+}>
+
+export interface TickerQaTelemetry {
+  ticker: string
+  retrievalStatus: TickerQaRetrievalStatus
+  retrievalReason: TickerKnowledgeUnavailableReason | null
+  infrastructureFailure: boolean
+  contextTotalMs: number
+  contextRetrievalMs: number
+  contextRerankMs: number
+  contextBuildMs: number
+  hydrationMs: number
+  selectedItemCount: number
+  resolvedEvidenceCount: number
+  unresolvedCount: number
+  truncated: boolean
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+  reasoningTokens: number
+  totalTokens: number
+  model: string
+  fallbackUsed: boolean
+  answerStatus: "answered" | "not_found" | "service_unavailable"
+  totalMs: number
+}
+
 export interface TickerQaServiceDependencies {
   onValidatedRequest?: (request: ValidatedTickerQaRequest) => void | Promise<void>
   index?: TickerKnowledgeIndex
   loadMandatory?: LoadMandatory
   buildContext?: BuildContext
   resolveEvidence?: ResolveEvidence
+  answerWithAi?: AnswerWithAi
+  recordTelemetry?: (metric: TickerQaTelemetry) => void | Promise<void>
   execute?: (
     client: SupabaseClient,
     request: ValidatedTickerQaRequest,
@@ -81,6 +129,10 @@ export interface PreparedTickerQaContext extends TickerQaCanonicalResolution {
 
 function normalizeText(value: string) {
   return value.replace(/\s+/g, " ").trim()
+}
+
+function elapsedMs(startedAt: number) {
+  return Math.max(0, Date.now() - startedAt)
 }
 
 export function validateTickerQaRequest(input: TickerQaRequest): ValidatedTickerQaRequest {
@@ -163,6 +215,7 @@ export async function prepareTickerQaContext(
 
   return {
     ...resolved,
+    infrastructureFailure: resolved.infrastructureFailure || Boolean(mandatory.infrastructureFailure),
     context: isolatedContext,
     limitations: mandatory.limitations,
   }
@@ -248,6 +301,101 @@ export function projectTickerQaModelOutput(
   }
 }
 
+function limitationFor(prepared: PreparedTickerQaContext) {
+  if (prepared.context.retrievalStatus === "unavailable") return DEGRADED_RETRIEVAL_LIMITATION
+  if (prepared.limitations.length || prepared.infrastructureFailure || prepared.unresolvedCount > 0) {
+    return PARTIAL_CANONICAL_LIMITATION
+  }
+  return null
+}
+
+function auditFor(
+  prepared: PreparedTickerQaContext,
+  provider: TickerQaProviderAudit | null,
+  totalMs: number,
+): TickerQaAudit {
+  return {
+    retrievalStatus: prepared.context.retrievalStatus,
+    contextTotalMs: prepared.context.telemetry.totalMs,
+    contextRetrievalMs: prepared.context.telemetry.retrievalMs,
+    contextRerankMs: prepared.context.telemetry.rerankMs,
+    contextBuildMs: prepared.context.telemetry.buildMs,
+    hydrationMs: prepared.hydrationMs,
+    selectedItemCount: prepared.context.items.length,
+    resolvedEvidenceCount: prepared.evidence.length,
+    truncated: prepared.context.truncated,
+    inputTokens: provider?.inputTokens ?? 0,
+    cachedInputTokens: provider?.cachedInputTokens ?? 0,
+    outputTokens: provider?.outputTokens ?? 0,
+    reasoningTokens: provider?.reasoningTokens ?? 0,
+    totalTokens: provider?.totalTokens ?? 0,
+    model: provider?.responseModel ?? "",
+    fallbackUsed: provider?.fallbackUsed ?? false,
+    totalMs,
+  }
+}
+
+function telemetryFor(
+  ticker: string,
+  prepared: PreparedTickerQaContext,
+  audit: TickerQaAudit,
+  answerStatus: TickerQaTelemetry["answerStatus"],
+): TickerQaTelemetry {
+  return {
+    ticker,
+    retrievalStatus: prepared.context.retrievalStatus,
+    retrievalReason: prepared.context.retrievalReason,
+    infrastructureFailure: prepared.infrastructureFailure,
+    contextTotalMs: audit.contextTotalMs,
+    contextRetrievalMs: audit.contextRetrievalMs,
+    contextRerankMs: audit.contextRerankMs,
+    contextBuildMs: audit.contextBuildMs,
+    hydrationMs: audit.hydrationMs,
+    selectedItemCount: audit.selectedItemCount,
+    resolvedEvidenceCount: audit.resolvedEvidenceCount,
+    unresolvedCount: prepared.unresolvedCount,
+    truncated: audit.truncated,
+    inputTokens: audit.inputTokens,
+    cachedInputTokens: audit.cachedInputTokens,
+    outputTokens: audit.outputTokens,
+    reasoningTokens: audit.reasoningTokens,
+    totalTokens: audit.totalTokens,
+    model: audit.model,
+    fallbackUsed: audit.fallbackUsed,
+    answerStatus,
+    totalMs: audit.totalMs,
+  }
+}
+
+async function safeRecordTelemetry(
+  recorder: TickerQaServiceDependencies["recordTelemetry"],
+  metric: TickerQaTelemetry,
+) {
+  try {
+    await recorder?.(metric)
+  } catch {
+    // Observability must never change the grounded answer/failure contract.
+  }
+}
+
+function notFoundResult(
+  ticker: string,
+  prepared: PreparedTickerQaContext,
+  audit: TickerQaAudit,
+): TickerQaResult {
+  return {
+    ticker,
+    status: "not_found",
+    answer: "",
+    claims: [],
+    citations: [],
+    contradictions: [],
+    retrievalStatus: prepared.context.retrievalStatus,
+    limitation: limitationFor(prepared),
+    audit,
+  }
+}
+
 export async function answerTickerQuestion(
   client: SupabaseClient,
   input: TickerQaRequest,
@@ -255,10 +403,57 @@ export async function answerTickerQuestion(
 ): Promise<TickerQaResult> {
   const request = validateTickerQaRequest(input)
   await deps.onValidatedRequest?.(request)
+  if (deps.execute) return deps.execute(client, request)
 
-  if (!deps.execute) {
-    throw new TickerQaError("service_unavailable", 503, "Ticker Q&A service is unavailable")
+  const startedAt = Date.now()
+  let prepared: PreparedTickerQaContext
+  try {
+    prepared = await prepareTickerQaContext(client, request, deps)
+  } catch {
+    throw new TickerQaError("service_unavailable", 503, "Ticker Q&A canonical context is unavailable")
   }
 
-  return deps.execute(client, request)
+  if (prepared.evidence.length === 0) {
+    const audit = auditFor(prepared, null, elapsedMs(startedAt))
+    if (prepared.context.retrievalStatus === "unavailable" || prepared.infrastructureFailure) {
+      await safeRecordTelemetry(deps.recordTelemetry, telemetryFor(request.ticker, prepared, audit, "service_unavailable"))
+      throw new TickerQaError("service_unavailable", 503, "Ticker Q&A evidence is temporarily unavailable")
+    }
+    const result = notFoundResult(request.ticker, prepared, audit)
+    await safeRecordTelemetry(deps.recordTelemetry, telemetryFor(request.ticker, prepared, audit, "not_found"))
+    return result
+  }
+
+  const answerWithAi = deps.answerWithAi ?? answerTickerQaWithOpenAi
+  let providerResult: Awaited<ReturnType<AnswerWithAi>>
+  try {
+    providerResult = await answerWithAi({
+      ticker: request.ticker,
+      question: request.question,
+      history: request.history,
+      evidence: prepared.evidence,
+    })
+  } catch (error) {
+    if (error instanceof TickerQaValidationError) {
+      throw new TickerQaError("invalid_model_output", 502, "Ticker Q&A model output failed grounding validation")
+    }
+    throw new TickerQaError("provider_failed", 502, "Ticker Q&A provider is temporarily unavailable")
+  }
+
+  const audit = auditFor(prepared, providerResult.audit, elapsedMs(startedAt))
+  const result = projectTickerQaModelOutput(
+    request.ticker,
+    providerResult.output,
+    prepared.evidence,
+    {
+      retrievalStatus: prepared.context.retrievalStatus,
+      limitation: limitationFor(prepared),
+      audit,
+    },
+  )
+  await safeRecordTelemetry(
+    deps.recordTelemetry,
+    telemetryFor(request.ticker, prepared, audit, result.status),
+  )
+  return result
 }
