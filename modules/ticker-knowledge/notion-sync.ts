@@ -84,7 +84,7 @@ export async function rebuildCurrentThesisKnowledge(
       pointId: item.id,
       sourceId: item.provenance.sourceId,
       sourceVersion: item.provenance.sourceVersion,
-      sourceUpdatedAt: item.provenance.asOf ?? item.provenance.publishedAt,
+      sourceUpdatedAt: item.provenance.asOf ?? item.provenance.publishedAt ?? null,
       status: "current" as const,
     })),
   }
