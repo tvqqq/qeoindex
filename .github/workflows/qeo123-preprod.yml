@@ -14,7 +14,25 @@ permissions:
   contents: read
 
 jobs:
-  rehearsal:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run QEO-123 deterministic contracts
+        run: node --test tests/corporate-actions/*.test.ts
+      - name: Compile TypeScript
+        run: pnpm typecheck
+
+  schema-rehearsal:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -36,8 +54,6 @@ jobs:
         run: pnpm db:replay:verify
       - name: Lint replayed local database
         run: supabase db lint --local --level warning
-      - name: Run QEO-123 deterministic contracts
-        run: node --test tests/corporate-actions/*.test.ts
       - name: Generate QEO-123 Database type candidate
         run: |
           mkdir -p artifacts/qeo123
@@ -48,8 +64,6 @@ jobs:
           name: qeo123-database-types
           path: artifacts/qeo123/database.types.ts
           retention-days: 3
-      - name: Compile TypeScript
-        run: pnpm typecheck
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
