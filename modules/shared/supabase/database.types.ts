@@ -4088,11 +4088,16 @@ export type Database = {
         Returns: {
           adjustment_engine_version: string
           bar_time: string
+          close: number
           event_lineage_hash: string
           factor_run_id: string
           factor_version: string
+          high: number
+          low: number
+          open: number
           raw_bar_time: string
           session_date: string
+          volume: number
         }[]
       }
       qeo_admin_cron_snapshot: { Args: never; Returns: Json }
