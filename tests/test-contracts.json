@@ -669,6 +669,15 @@
       ]
     },
     {
+      "path": "tests/qeo-124-monetary-unit.test.ts",
+      "owner": "market",
+      "invariant": "QEO-124 converts canonical corporate-action monetary terms in VND onto the canonical Daily kilo-VND price scale before factor arithmetic.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/qeoindex-eod-phase-telemetry.test.ts",
       "owner": "eod",
       "invariant": "Preserve the current qeoindex eod phase telemetry contract.",
