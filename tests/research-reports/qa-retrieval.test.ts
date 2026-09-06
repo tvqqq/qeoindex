@@ -13,6 +13,10 @@ import {
   resolveResearchReportQaEvidenceIdentity,
   retrieveResearchReportQaEvidence,
 } from "../../modules/research-reports/qa/retrieval.ts"
+import type {
+  TickerKnowledgeIndex,
+  TickerKnowledgeQuery,
+} from "../../modules/ticker-knowledge/domain.ts"
 
 const REPORT_ID = "11111111-1111-4111-8111-111111111111"
 const OTHER_REPORT_ID = "22222222-2222-4222-8222-222222222222"
@@ -297,12 +301,12 @@ test("QEO-116 REPORT_QA context forwards exact report provenance filters and rej
     },
     projectionVersion: "test-v1",
   })
-  const queries: Array<Record<string, unknown>> = []
-  const index = {
+  const queries: TickerKnowledgeQuery[] = []
+  const index: TickerKnowledgeIndex = {
     ensureReady: async () => undefined,
     upsert: async () => undefined,
     deleteSourceVersion: async () => undefined,
-    query: async (input: Record<string, unknown>) => {
+    query: async (input) => {
       queries.push(input)
       return [valid, leaked].map((item, index) => ({
         id: item.id,
