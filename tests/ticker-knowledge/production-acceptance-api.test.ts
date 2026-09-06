@@ -84,3 +84,30 @@ test("QEO-119 machine acceptance runner accepts only canonical machine or Vault 
   assert.match(route, /private, no-store/)
   assert.doesNotMatch(route, /rebuild_theses|NOTION_THESIS|CANONICAL_THESIS/)
 })
+
+test("QEO-119 backfill failures expose only bounded source identity plus stable reason", async () => {
+  const { TickerKnowledgeUnavailableError } = await import("../../modules/ticker-knowledge/domain.ts")
+  const { runTickerKnowledgeBackfill } = await import("../../modules/ticker-knowledge/sync.ts")
+  const result = await runTickerKnowledgeBackfill({
+    batchSize: 2,
+    loadPage: async () => ({
+      rows: [{ id: "run-good" }, { id: "run-bad" }],
+      nextCursor: "next-page",
+    }),
+    failureId: (row) => row.id,
+    syncRow: async (row) => {
+      if (row.id === "run-bad") {
+        throw new TickerKnowledgeUnavailableError("qdrant_timeout", "do-not-expose-upstream-detail")
+      }
+    },
+  })
+
+  assert.deepEqual(result, {
+    processed: 2,
+    failed: 1,
+    failures: [{ sourceId: "run-bad", reason: "qdrant_timeout" }],
+    nextCursor: "next-page",
+    completed: false,
+  })
+  assert.doesNotMatch(JSON.stringify(result), /do-not-expose-upstream-detail/)
+})
