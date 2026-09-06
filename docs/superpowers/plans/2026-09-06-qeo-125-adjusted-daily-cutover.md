@@ -1,198 +1,188 @@
-# QEO-125 Adjusted Daily Cutover Implementation Plan
+# QEO-125 Canonical Adjusted Daily Consumer Cutover Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Introduce a separate chart-facing adjusted Daily storage/read boundary, rebuild it deterministically from raw Daily + factors, and cut over consumers through a staged VHM→canonical-200 rollout without repurposing `market_ohlcv_history` in place.
+**Goal:** Atomically switch Chart, Wyckoff and AI Council Daily consumers from the existing raw/provider source to the verified adjusted-Daily source per ticker, then stage the canonical-200 rollout without repurposing `market_ohlcv_history`.
 
-**Architecture:** Preserve current raw/provider Daily evidence in `market_ohlcv_history`. Add a derived adjusted Daily table/read model keyed by ticker/session and lineage hash. Rebuild only affected ranges, validate VHM and representative tickers, then switch `/api/market/ohlcv` Daily/higher-timeframe source through an explicit feature/cutover gate.
+**Architecture:** QEO-129 owns shadow storage/rebuild. QEO-126 owns EOD maintenance and factor activation. QEO-125 adds one canonical Daily read boundary: active tickers read `market_ohlcv_adjusted_daily`; non-active tickers continue to read raw `market_ohlcv_history`. The boundary is shared by Chart, Wyckoff and AI Council so one ticker cannot use different price bases across consumers.
 
-**Tech Stack:** Supabase/PostgreSQL, TypeScript, existing `modules/market/history/*`, Next.js market OHLC API, QEO-93 aggregation engine.
+**Tech Stack:** Supabase/PostgreSQL, TypeScript, existing `modules/market/chart-data/*`, Wyckoff grouped Daily RPC, AI Council EOD market loader, QEO-93 aggregation engine.
 
 **Spec:** `docs/superpowers/specs/2026-09-06-corporate-actions-adjusted-chart-design.md`
 
 ## Global Constraints
 
-- Depends on QEO-123/QEO-124 and the QEO-126 activation contract.
-- `market_ohlcv_history` remains raw/provider evidence during rollout.
-- `1W/1M/1Q/1Y` must derive from adjusted `1D`; never apply a second adjustment after aggregation.
-- No mixed basis per rendered ticker/range.
-- Exact one canonical session identity per ticker/date; no shifted/duplicate bars.
-- Fail closed on missing factor/event lineage.
-- PR #340/QEO-106 legacy Yahoo repair work must be reconciled before cutover: retain persisted-readback/semantic-invalid lessons, but do not make Yahoo-adjusted rows the long-term factor authority.
+- Depends on QEO-129 shadow foundation and QEO-126 EOD maintenance/activation.
+- `market_ohlcv_history` remains raw/provider evidence and is never overwritten/deleted by this cutover.
+- Per ticker, the canonical read boundary is atomic: either RAW or ADJUSTED, never a merged mixed-basis Daily range.
+- `1W/1M/1Q/1Y` derive only from the selected canonical `1D`; never adjust after aggregation.
+- A ticker may become `active` only after complete adjusted-session/factor/event lineage verification.
+- PR #340/QEO-106 transitional Yahoo semantic-repair work must be reconciled before rollout: preserve readback/fail-closed protections but do not use Yahoo adjustment as factor authority.
 
 ---
 
-### Task 1: Add adjusted Daily storage + audit schema
+### Task 1: Add canonical Daily read-boundary migration
 
 **Files:**
-- Create: `supabase/migrations/<timestamp>_qeo125_adjusted_daily_ohlcv.sql`
-- Modify: `lib/supabase/database.types.ts`
+- Create: `supabase/migrations/20260906165500_qeo125_canonical_adjusted_daily_cutover.sql`
+- Modify: `supabase/migration-equivalence.json`
+- Modify: `docs/db/evidence/production-migration-ledger-2026-09-06.json`
+- Modify: `modules/shared/supabase/database.types.ts`
+- Test: `tests/db-schema-contract.test.ts`
 - Test: `tests/market-data-contract.test.ts`
 
 **Interfaces:**
-- Produces `market_ohlcv_adjusted_daily` and service-role rebuild/readback RPCs.
 
-Core shape:
+Create a read-only canonical view with the current Daily shape plus explicit basis:
 
 ```sql
-create table public.market_ohlcv_adjusted_daily (
-  ticker text not null,
-  session_date date not null,
-  bar_time timestamptz not null,
-  open numeric not null,
-  high numeric not null,
-  low numeric not null,
-  close numeric not null,
-  volume numeric not null,
-  raw_bar_time timestamptz not null,
-  factor_version text not null,
-  event_lineage_hash text not null,
-  adjustment_engine_version text not null,
-  rebuilt_at timestamptz not null default now(),
-  primary key (ticker, session_date)
-);
+create view public.market_ohlcv_canonical_daily
+with (security_invoker = true)
+as
+select
+  a.ticker,
+  '1D'::text as timeframe,
+  a.bar_time,
+  a.open, a.high, a.low, a.close, a.volume,
+  'QEO_ADJUSTED'::text as provider,
+  ('event_lineage=' || a.event_lineage_hash)::text as provider_detail,
+  null::text as source_url,
+  a.rebuilt_at as fetched_at,
+  'ADJUSTED'::text as price_basis
+from public.market_ohlcv_adjusted_daily a
+join public.market_adjusted_daily_rollout r
+  on r.ticker = a.ticker and r.status = 'active'
+union all
+select
+  h.ticker, h.timeframe, h.bar_time,
+  h.open, h.high, h.low, h.close, h.volume,
+  h.provider, h.provider_detail, h.source_url, h.fetched_at,
+  'RAW'::text as price_basis
+from public.market_ohlcv_history h
+where h.timeframe = '1D'
+  and not exists (
+    select 1 from public.market_adjusted_daily_rollout r
+    where r.ticker = h.ticker and r.status = 'active'
+  );
 ```
 
-- [ ] **Step 1: RED schema assertions** — unique session identity, OHLC validity checks, service-role mutation only, indexes for ticker/date reads.
-- [ ] **Step 2: Implement migration and readback RPC**
-- [ ] **Step 3: Regenerate Database types + DB Drift**
-- [ ] **Step 4: Commit**
+Exact SQL may add lineage columns needed for audit, but it must preserve one basis for every ticker.
 
-### Task 2: Implement raw→adjusted transformation
+- [ ] **Step 1: RED canonical-view contract**
+
+Assert active ticker excludes raw rows, inactive/shadow/blocked ticker excludes adjusted rows, and `price_basis` is explicit.
+
+- [ ] **Step 2: Rebind `qeo_market_ohlcv_recent_grouped(text[], integer)` to read the canonical view**
+
+Preserve its existing function signature/tuple order so Wyckoff callers do not receive a breaking payload shape. Source fields for adjusted rows identify `QEO_ADJUSTED` and lineage.
+
+- [ ] **Step 3: Keep mutation grants unchanged** — the view is a read boundary, not a write API.
+- [ ] **Step 4: Regenerate Database types and register exact migration equivalence**
+
+Repository version is `20260906165500`; map any differing production timestamp explicitly.
+
+- [ ] **Step 5: Run DB Drift/replay and commit**
+
+```bash
+git add supabase/migrations/20260906165500_qeo125_canonical_adjusted_daily_cutover.sql supabase/migration-equivalence.json docs/db/evidence/production-migration-ledger-2026-09-06.json modules/shared/supabase/database.types.ts tests/db-schema-contract.test.ts tests/market-data-contract.test.ts
+git commit -m "feat(QEO-125): add canonical adjusted Daily read boundary"
+```
+
+### Task 2: Cut Chart Daily source to the canonical view
 
 **Files:**
-- Create: `modules/market/history/adjusted-daily.ts`
-- Test: `tests/qeo-125-adjusted-daily.test.ts`
+- Modify: `modules/market/chart-data/service.ts`
+- Modify: `modules/market/chart-data/timeframe-service.ts` only for basis propagation if required
+- Modify: `tests/chart-timeframe-service.test.ts`
+- Modify: `app/api/market/ohlcv/route.ts` only if response metadata typing needs the new basis value
 
 **Interfaces:**
 
-```ts
-export type AdjustedDailyBar = {
-  ticker: string
-  sessionDate: string
-  barTime: string
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
-  rawBarTime: string
-  factorVersion: string
-  eventLineageHash: string
-  adjustmentEngineVersion: string
-}
+`loadDailyRows()` must read `market_ohlcv_canonical_daily` instead of `market_ohlcv_history` and select `price_basis`.
 
-export function applyDailyAdjustment(
-  raw: RawDailyBar,
-  factor: FactorRow,
-): AdjustedDailyBar
-```
-
-- [ ] **Step 1: RED OHLC factor application** — all OHLC multiply by `priceFactor`.
-- [ ] **Step 2: RED volume semantics** — volume uses factor row's explicit `volumeFactor`, not price factor.
-- [ ] **Step 3: RED invalid/missing-factor case** — no bar returned/throw typed unresolved error rather than raw fallback.
-- [ ] **Step 4: Implement minimal transformation**
-- [ ] **Step 5: GREEN tests and commit**
-
-### Task 3: Implement bounded rebuild + exact DB readback
-
-**Files:**
-- Create: `modules/market/history/adjusted-daily-store.ts`
-- Modify: `modules/market/history/adjusted-daily.ts`
-- Test: `tests/qeo-125-adjusted-daily.test.ts`
-
-**Interfaces:**
-
-```ts
-export async function rebuildAdjustedDailyRange(input: {
-  supabase: SupabaseClient
-  ticker: string
-  fromDate: string
-  toDate: string
-  expectedLineageHash: string
-}): Promise<{
-  rebuiltSessions: number
-  unresolvedSessions: string[]
-  firstSession: string | null
-  lastSession: string | null
-}>
-```
-
-- [ ] **Step 1: RED persistence false-positive regression** — mocked silent-preserve/write mismatch must remain unresolved.
-- [ ] **Step 2: Load raw Daily from existing `market_ohlcv_history`/history store and active factors**
-- [ ] **Step 3: Upsert adjusted rows in bounded batches**
-- [ ] **Step 4: Read back exact sessions + lineage; compute success from readback only**
+- [ ] **Step 1: RED active VHM case** — canonical loader returns only adjusted rows and `metadata.priceBasis === "ADJUSTED"`.
+- [ ] **Step 2: RED shadow/non-active case** — remains RAW; no adjusted rows leak into response.
+- [ ] **Step 3: RED higher-timeframe case** — `1W/1M/1Q/1Y` preserve the Daily source basis metadata and aggregate only selected Daily bars through QEO-93.
+- [ ] **Step 4: Implement minimal source/basis propagation and GREEN tests**
 - [ ] **Step 5: Commit**
 
-### Task 4: Add adjusted Daily read abstraction without cutover
+### Task 3: Cut Wyckoff to the same canonical Daily boundary
 
 **Files:**
-- Modify: `modules/market/history/contract.ts`
-- Create: `modules/market/history/adjusted-daily-read.ts`
-- Modify: `modules/market/history/index.ts`
-- Test: `tests/ohlcv-history-store.test.ts`
+- Modify: `modules/wyckoff/eod-cache-read.ts` only if provider/basis metadata handling needs adjustment
+- Modify: `modules/wyckoff/eod-chart-series.ts` only if provider/basis metadata handling needs adjustment
+- Modify: `tests/wyckoff-v2-runtime-data.test.ts`
+- Modify: `tests/wyckoff-v2-chart-series.test.ts`
+- Modify: `tests/db-schema-contract.test.ts`
 
 **Interfaces:**
 
-```ts
-export async function loadAdjustedDailyRange(
-  ticker: string,
-  fromMs: number,
-  toMs: number,
-): Promise<MarketHistoryBar[]>
-```
+Wyckoff continues calling `qeo_market_ohlcv_recent_grouped`; the migration changes its underlying source to `market_ohlcv_canonical_daily`.
 
-- [ ] **Step 1: RED read contract** — complete adjusted range returns bars ordered by canonical session; missing lineage is explicit, not raw fallback.
-- [ ] **Step 2: Implement provider-agnostic adjusted read path**
-- [ ] **Step 3: Keep existing raw read path unchanged and separately callable**
-- [ ] **Step 4: Commit**
+- [ ] **Step 1: RED RPC source contract** — grouped RPC must reference canonical view, not raw table directly.
+- [ ] **Step 2: Verify active adjusted ticker yields the same 1D/1W data lineage used by chart**
+- [ ] **Step 3: Verify non-active ticker retains current raw behavior**
+- [ ] **Step 4: Run Wyckoff runtime/chart-series tests and commit**
 
-### Task 5: Add explicit chart-data cutover gate
+### Task 4: Cut AI Council persistent EOD market source to the canonical boundary
 
 **Files:**
-- Modify: `app/api/market/ohlcv/route.ts`
-- Modify: chart-data server module used by the route if split from route implementation
-- Modify: `tests/qeo-93-chart-timeframes.test.ts` or existing chart API contract test
+- Modify: `modules/ai-council/eod-market.ts`
+- Modify: `modules/eod/backfill-ready-step.ts` if source-specific error wording/contract is raw-table-specific
+- Modify: `tests/eod-recovery-contract.test.ts`
 
 **Interfaces:**
-- Daily/higher-timeframe chart queries select adjusted Daily only for tickers marked cutover-ready.
 
-Recommended gate source: DB rollout state table/RPC rather than environment variable per ticker.
+`loadPersistentCouncilEodSnapshots()` reads `market_ohlcv_canonical_daily`, so current/reference prices use the same basis as chart/Wyckoff. This is essential on an ex-date: adjusted previous close prevents a corporate-action mechanical price gap from being interpreted as market return.
 
-- [ ] **Step 1: RED VHM cutover test** — VHM 1D reads adjusted store when rollout state is `active`.
-- [ ] **Step 2: RED non-migrated ticker test** — remains on existing raw path until explicitly activated; response metadata must expose basis so mixed ranges cannot be merged invisibly.
-- [ ] **Step 3: Implement atomic per-ticker basis selection**
-- [ ] **Step 4: Ensure derived `3D/1W/1M/1Q/1Y` receives only the selected Daily series via QEO-93 aggregation**
+- [ ] **Step 1: RED active ticker current/reference test** — both current and previous rows come from ADJUSTED canonical source.
+- [ ] **Step 2: RED non-active ticker test** — remains RAW.
+- [ ] **Step 3: Preserve exact-session/freshness/volume finality gates**
+- [ ] **Step 4: Implement and GREEN recovery/EOD tests**
 - [ ] **Step 5: Commit**
 
-### Task 6: VHM golden production migration
+### Task 5: Update active architecture docs/contracts
+
+**Files:**
+- Modify: `docs/chart-data.md`
+- Modify: `docs/wyckoff-chart-unified-data.md`
+- Modify: `docs/HANDOVER.md`
+- Modify: `docs/README.md` only if lifecycle/index links require it
+
+- [ ] **Step 1: Document `market_ohlcv_history` = raw evidence, `market_ohlcv_adjusted_daily` = derived shadow/active adjusted store, `market_ohlcv_canonical_daily` = consumer read boundary**
+- [ ] **Step 2: Document atomic per-ticker rollout and no mixed basis**
+- [ ] **Step 3: Document EOD ownership from QEO-126 and consumer set Chart/Wyckoff/AI Council**
+- [ ] **Step 4: Commit**
+
+### Task 6: VHM atomic production cutover
 
 **Files:**
 - Create: `docs/db/evidence/qeo125-vhm-adjusted-daily-cutover.md`
 
-- [ ] Rebuild VHM full retained adjusted Daily range.
-- [ ] Verify factor/session coverage = complete for target range.
-- [ ] Verify no duplicate/shifted sessions around 13–21/10/2025.
-- [ ] Aggregate 13–17/10/2025 weekly from adjusted Daily and require H≈63.31 / L≈55.18 within documented tolerance.
-- [ ] Compare raw and adjusted series explicitly; never overwrite raw evidence.
-- [ ] Activate VHM cutover only after checks pass.
-- [ ] Verify `/api/market/ohlcv` and production chart show adjusted VHM 1D/1W.
-- [ ] Commit evidence.
+- [ ] Preflight QEO-129 VHM shadow coverage + QEO-126 incremental maintenance/readback.
+- [ ] Verify VHM current shadow lineage matches active QEO-124 factor lineage and has exact sessions through latest completed trading day.
+- [ ] In one controlled DB update set VHM rollout `shadow -> active` with verified lineage/version.
+- [ ] Query canonical view: VHM returns only ADJUSTED; raw table remains unchanged and queryable for audit.
+- [ ] Verify `/api/market/ohlcv` VHM 1D and 1W. Week 13–17/10/2025 must be H≈63.31 / L≈55.18 within documented tolerance.
+- [ ] Verify Wyckoff grouped Daily/Weekly uses adjusted source for VHM.
+- [ ] Verify AI Council current/reference price pair uses adjusted source and no false corporate-action return jump.
+- [ ] Verify no duplicate/shifted VHM sessions around 13–21/10/2025.
+- [ ] Capture DB/API/UI evidence and commit.
 
 ### Task 7: Regression set + multi-exchange rollout
 
-- [ ] Rebuild HCM/VCB/VIC; verify persistence/readback and no session shift.
-- [ ] Pick HOSE/HNX/UPCOM sample with cash/stock/rights cases.
-- [ ] Require 0 unresolved effective events, 0 mixed-basis reads, 0 duplicate sessions before activation.
-- [ ] Measure DB growth/capacity after each stage.
-- [ ] Update rollout state only for passing tickers.
+- [ ] Activate HCM/VCB/VIC only after shadow coverage/readback passes.
+- [ ] Pick representative HOSE/HNX/UPCOM tickers covering cash, stock/split and rights actions.
+- [ ] For every activation require: 0 unresolved effective events, complete adjusted-session/factor lineage, 0 duplicate sessions, Chart/Wyckoff/Council basis parity.
+- [ ] Measure DB size/capacity after each stage.
+- [ ] Stop rollout immediately on any consumer mismatch or unresolved lineage.
 
 ### Task 8: Canonical-200 staged rollout
 
-- [ ] Process 10–20 tickers per batch.
-- [ ] Before each batch: capacity + event/factor coverage preflight.
-- [ ] After each batch: exact adjusted-session readback, unresolved count, price-basis marker, derived-timeframe smoke.
-- [ ] Stop on any ambiguous effective event or unresolved persistence.
-- [ ] Final canonical-200 report: migrated, blocked, unresolved, event coverage, factor coverage, DB size.
-- [ ] QEO-98 must consume this report as a release gate.
-- [ ] Only after canonical acceptance consider retiring transitional Yahoo-adjusted repair logic; never delete raw evidence as part of this issue.
+- [ ] Process 10–20 tickers per activation batch.
+- [ ] Before each batch: event/factor/shadow-session/capacity preflight.
+- [ ] After each batch: canonical-view basis check, Chart derived-timeframe smoke, Wyckoff grouped read, AI Council current/reference smoke.
+- [ ] Fail closed on ambiguous effective event or stale/missing shadow session.
+- [ ] Final report: active, shadow-blocked, ambiguous, unresolved, event coverage, factor coverage, adjusted-session coverage, DB size.
+- [ ] QEO-98 consumes this report as release gate.
+- [ ] Only after canonical acceptance consider retiring transitional QEO-106 Yahoo-adjustment repair logic; raw evidence remains retained.
