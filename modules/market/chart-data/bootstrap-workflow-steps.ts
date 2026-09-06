@@ -15,6 +15,7 @@ import {
 
 const CANONICAL_QEO107_UNIVERSE_SIZE = 200
 export const QEO107_BOOTSTRAP_BATCH_SIZE = 10
+export const QEO107_STAGED_MAX_TICKERS = 20
 export const QEO107_CAPACITY_WARN_BYTES = 350 * 1024 * 1024
 export const QEO107_CAPACITY_HARD_STOP_BYTES = 400 * 1024 * 1024
 const QEO107_CAPACITY_ROWS_PER_TICKER = 5 * 240
@@ -51,7 +52,9 @@ export interface Qeo107BootstrapContext {
   startedAt: string
   universeRunId: string
   universeSourceAsOfDate: string
+  canonicalSelectedCount: number
   selectedCount: number
+  scope: "canonical_200" | "staged"
   stocks: Qeo107BootstrapStock[]
   target: Qeo107BootstrapTarget
   initialCapacity: Qeo107CapacityGate
@@ -101,6 +104,17 @@ function nullableString(value: unknown) {
   return value == null || value === "" ? null : String(value)
 }
 
+function normalizeRequestedTickers(input: string[]) {
+  const tickers = [...new Set(input.map((ticker) => String(ticker || "").trim().toUpperCase()).filter(Boolean))]
+  if (tickers.length > QEO107_STAGED_MAX_TICKERS) {
+    throw new Error(`QEO-107 staged bootstrap accepts at most ${QEO107_STAGED_MAX_TICKERS} explicit tickers`)
+  }
+  for (const ticker of tickers) {
+    if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new Error(`Invalid QEO-107 staged ticker: ${ticker}`)
+  }
+  return tickers
+}
+
 export function projectedBatchBytes(tickerCount: number) {
   return Math.max(0, Math.floor(tickerCount)) * QEO107_CAPACITY_ROWS_PER_TICKER * QEO107_CAPACITY_BYTES_PER_ROW
 }
@@ -136,7 +150,10 @@ async function readChartStorageCapacity(): Promise<Qeo107StorageCapacity> {
   }
 }
 
-export async function startChartIntradayBootstrapStep(startedAtIso: string): Promise<Qeo107BootstrapContext> {
+export async function startChartIntradayBootstrapStep(
+  startedAtIso: string,
+  requestedTickersInput: string[] = [],
+): Promise<Qeo107BootstrapContext> {
   "use step"
 
   const startedAt = new Date(startedAtIso)
@@ -145,15 +162,29 @@ export async function startChartIntradayBootstrapStep(startedAtIso: string): Pro
   if (universe.selectedCount !== CANONICAL_QEO107_UNIVERSE_SIZE || universe.stocks.length !== CANONICAL_QEO107_UNIVERSE_SIZE) {
     throw new Error(`QEO-107 requires canonical ${CANONICAL_QEO107_UNIVERSE_SIZE} universe, found ${universe.selectedCount}`)
   }
+
+  const requestedTickers = normalizeRequestedTickers(requestedTickersInput)
+  const canonicalByTicker = new Map(universe.stocks.map((stock) => [stock.ticker.toUpperCase(), stock]))
+  const selectedStocks = requestedTickers.length
+    ? requestedTickers.map((ticker) => {
+        const stock = canonicalByTicker.get(ticker)
+        if (!stock) throw new Error(`QEO-107 staged ticker is outside canonical universe: ${ticker}`)
+        return stock
+      })
+    : universe.stocks
+  const stocks = selectedStocks.map((stock) => ({ ticker: stock.ticker, rank: stock.rank, exchange: stock.exchange }))
   const capacity = await readChartStorageCapacity()
+
   return {
     startedAt: startedAt.toISOString(),
     universeRunId: universe.runId,
     universeSourceAsOfDate: universe.sourceAsOfDate,
-    selectedCount: universe.selectedCount,
-    stocks: universe.stocks.map((stock) => ({ ticker: stock.ticker, rank: stock.rank, exchange: stock.exchange })),
+    canonicalSelectedCount: universe.selectedCount,
+    selectedCount: stocks.length,
+    scope: requestedTickers.length ? "staged" : "canonical_200",
+    stocks,
     target: qeo107BootstrapTarget(startedAt),
-    initialCapacity: capacityGate(capacity, Math.min(QEO107_BOOTSTRAP_BATCH_SIZE, universe.stocks.length)),
+    initialCapacity: capacityGate(capacity, Math.min(QEO107_BOOTSTRAP_BATCH_SIZE, stocks.length)),
   }
 }
 
