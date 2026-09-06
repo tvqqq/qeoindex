@@ -251,6 +251,46 @@ test("QEO-113 sync orchestration upserts deterministic report/Council projection
   assert.equal(upserts.length, 3)
 })
 
+test("QEO-113 source reprocessing preserves history until an explicit exact-version tombstone is requested", async () => {
+  const {
+    syncResearchReportKnowledge,
+    tombstoneTickerKnowledgeSourceVersion,
+  } = await import("../../modules/ticker-knowledge/sync.ts")
+  const deletes: Array<{ ticker: string; sourceType: string; sourceId: string; sourceVersion: string }> = []
+  const index = {
+    ensureReady: async () => undefined,
+    upsert: async () => undefined,
+    deleteSourceVersion: async (input: { ticker: string; sourceType: string; sourceId: string; sourceVersion: string }) => { deletes.push(input) },
+    query: async () => [],
+  }
+  const base = {
+    report: { id: "report-1", title: "MSN", sourceName: "Broker", publishDate: "2026-09-01", contentHash: "a".repeat(64) },
+    analysis: { id: "analysis-1", chunkVersion: "v1", executiveSummary: "first", keyPoints: [], marketView: null, sectorOutlook: null, catalysts: [], risks: [] },
+    mentions: [{ ticker: "MSN", stance: "positive" as const, recommendationText: "BUY", targetPrice: 100000, targetCurrency: "VND", rationale: "first", evidence: [] }],
+    chunks: [],
+  }
+  const first = await syncResearchReportKnowledge(index, base)
+  await syncResearchReportKnowledge(index, {
+    ...base,
+    report: { ...base.report, contentHash: "b".repeat(64) },
+    analysis: { ...base.analysis, id: "analysis-2", chunkVersion: "v2", executiveSummary: "reprocessed" },
+  })
+  assert.deepEqual(deletes, [])
+
+  await tombstoneTickerKnowledgeSourceVersion(index, {
+    ticker: "MSN",
+    sourceType: "RESEARCH_REPORT",
+    sourceId: first.sourceId,
+    sourceVersion: first.sourceVersion,
+  })
+  assert.deepEqual(deletes, [{
+    ticker: "MSN",
+    sourceType: "RESEARCH_REPORT",
+    sourceId: "report-1",
+    sourceVersion: first.sourceVersion,
+  }])
+})
+
 test("QEO-114 thesis sync is rebuildable and uses the stable CURRENT_THESIS slot", async () => {
   const { syncCurrentThesisKnowledge } = await import("../../modules/ticker-knowledge/sync.ts")
   const ids: string[] = []
