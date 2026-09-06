@@ -12,6 +12,7 @@ import { normalizeTicker, type TickerKnowledgeItem } from "../ticker-knowledge/d
 export interface TickerQaMandatoryContext {
   items: TickerKnowledgeItem[]
   limitations: string[]
+  infrastructureFailure?: boolean
 }
 
 export interface TickerQaLatestCouncilRun {
@@ -126,6 +127,7 @@ export async function loadTickerQaMandatoryContext(
   const loadCouncil = deps.loadLatestCouncilRun ?? loadLatestCouncilRunFromPostgres
   const items: TickerKnowledgeItem[] = []
   const limitations: string[] = []
+  let infrastructureFailure = false
 
   try {
     const research = await loadResearch(ticker)
@@ -137,9 +139,11 @@ export async function loadTickerQaMandatoryContext(
       if (thesis) items.push(projectCurrentThesisKnowledge(thesis))
       else limitations.push(`CURRENT_THESIS unavailable for ${ticker}`)
     } else {
+      infrastructureFailure = true
       limitations.push(`CURRENT_THESIS canonical Notion source unavailable for ${ticker}`)
     }
   } catch {
+    infrastructureFailure = true
     limitations.push(`CURRENT_THESIS canonical Notion source unavailable for ${ticker}`)
   }
 
@@ -153,8 +157,9 @@ export async function loadTickerQaMandatoryContext(
       limitations.push(`DETERMINISTIC_SIGNAL unavailable for ${ticker}`)
     }
   } catch {
+    infrastructureFailure = true
     limitations.push(`DETERMINISTIC_SIGNAL canonical PostgreSQL source unavailable for ${ticker}`)
   }
 
-  return { items, limitations }
+  return { items, limitations, infrastructureFailure }
 }
