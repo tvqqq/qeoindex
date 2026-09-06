@@ -53,7 +53,8 @@ function archivePartitionLimit(value: string | null) {
 }
 
 function stagedBootstrapTickers(value: string | null) {
-  if (value == null || value.trim() === "") return []
+  if (value == null) return []
+  if (value.trim() === "") return null
   const tickers = [...new Set(value.split(",").map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))]
   if (!tickers.length || tickers.length > QEO107_STAGED_MAX_TICKERS) return null
   if (tickers.some((ticker) => !/^[A-Z0-9]{2,12}$/.test(ticker))) return null
