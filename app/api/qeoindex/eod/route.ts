@@ -83,7 +83,7 @@ async function chartCoverage(request: NextRequest) {
         selectedCount: universe.selectedCount,
       },
       target: {
-        hotRetentionSessions: 5,
+        hotRetentionSessions: QEO107_HOT_RETENTION_SESSIONS,
         targetFrom: new Date(target.targetFrom * 1000).toISOString(),
         targetTo: new Date(target.targetTo * 1000).toISOString(),
         hotCutoff: new Date(target.hotCutoff * 1000).toISOString(),

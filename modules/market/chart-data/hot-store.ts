@@ -202,7 +202,7 @@ export async function readQeo107TerminalAttemptRanges(
 }
 
 export async function recordChartProviderAttempt(supabase: SupabaseClient, input: ChartProviderAttemptInput) {
-  if (!Number.isInteger(input.requestedFrom) || !Number.isInteger(input.requestedTo) || input.requestedFrom <= 0 || input.requestedTo <= input.requestedFrom) {
+  if (!Number.isInteger(input.requestedFrom) || !Number.isInteger(input.requestedTo) || input.requestedFrom <= 0 || input.requestedTo < input.requestedFrom) {
     throw new Error("Chart provenance attempt requires a valid requested range")
   }
   const bars = [...(input.bars ?? [])].sort((a, b) => a.time - b.time)

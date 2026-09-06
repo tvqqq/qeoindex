@@ -9,7 +9,7 @@ on:
       - "workflows/chart-intraday-bootstrap.ts"
       - "app/api/qeoindex/eod/route.ts"
       - "supabase/migrations/*qeo107*"
-      - "tests/qeo-107-chart-bootstrap.test.ts"
+      - "tests/qeo-107-chart-bootstrap.cases.ts"
       - ".github/workflows/qeo-107.yml"
   push:
     branches: [main]
@@ -20,7 +20,7 @@ on:
       - "workflows/chart-intraday-bootstrap.ts"
       - "app/api/qeoindex/eod/route.ts"
       - "supabase/migrations/*qeo107*"
-      - "tests/qeo-107-chart-bootstrap.test.ts"
+      - "tests/qeo-107-chart-bootstrap.cases.ts"
       - ".github/workflows/qeo-107.yml"
 
 jobs:
@@ -36,4 +36,4 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node --test tests/qeo-107-chart-bootstrap.test.ts
+      - run: node --test tests/qeo-107-chart-bootstrap.cases.ts
