@@ -39,6 +39,13 @@ export interface BuildTickerContextInput {
   knowledgeTypes?: TickerKnowledgeQuery["knowledgeTypes"]
   sourceTypes?: TickerKnowledgeQuery["sourceTypes"]
   authorities?: TickerKnowledgeQuery["authorities"]
+  reportId?: TickerKnowledgeQuery["reportId"]
+  analysisId?: TickerKnowledgeQuery["analysisId"]
+  runId?: TickerKnowledgeQuery["runId"]
+  sourceId?: TickerKnowledgeQuery["sourceId"]
+  sourceVersion?: TickerKnowledgeQuery["sourceVersion"]
+  contentHash?: TickerKnowledgeQuery["contentHash"]
+  chunkVersion?: TickerKnowledgeQuery["chunkVersion"]
   asOf?: string
   limit?: number
   maxChars?: number
@@ -88,6 +95,24 @@ function availableAsOf(item: TickerKnowledgeItem, asOf: string | undefined) {
   if (!rawEvidenceTime) return true
   const evidenceTime = timestamp(rawEvidenceTime)
   return evidenceTime !== null && evidenceTime <= cutoff
+}
+
+function matchesRequestedScope(item: TickerKnowledgeItem, input: BuildTickerContextInput, ticker: string) {
+  if (item.ticker !== ticker) return false
+  if (!availableAsOf(item, input.asOf)) return false
+  if (input.knowledgeTypes?.length && !input.knowledgeTypes.includes(item.knowledgeType)) return false
+  if (input.sourceTypes?.length && !input.sourceTypes.includes(item.sourceType)) return false
+  if (input.authorities?.length && !input.authorities.includes(item.authority)) return false
+
+  const provenance = item.provenance
+  if (input.reportId && provenance.reportId !== input.reportId) return false
+  if (input.analysisId && provenance.analysisId !== input.analysisId) return false
+  if (input.runId && provenance.runId !== input.runId) return false
+  if (input.sourceId && provenance.sourceId !== input.sourceId) return false
+  if (input.sourceVersion && provenance.sourceVersion !== input.sourceVersion) return false
+  if (input.contentHash && provenance.contentHash !== input.contentHash) return false
+  if (input.chunkVersion && provenance.chunkVersion !== input.chunkVersion) return false
+  return true
 }
 
 function recencyScore(item: TickerKnowledgeItem, nowMs: number) {
@@ -171,6 +196,13 @@ export async function buildTickerContext(input: BuildTickerContextInput): Promis
     knowledgeTypes: input.knowledgeTypes,
     sourceTypes: input.sourceTypes,
     authorities: input.authorities,
+    reportId: input.reportId,
+    analysisId: input.analysisId,
+    runId: input.runId,
+    sourceId: input.sourceId,
+    sourceVersion: input.sourceVersion,
+    contentHash: input.contentHash,
+    chunkVersion: input.chunkVersion,
     asOf: input.asOf,
     limit: input.limit ?? policy?.limit ?? DEFAULT_LIMIT,
   })
@@ -179,7 +211,7 @@ export async function buildTickerContext(input: BuildTickerContextInput): Promis
   const rerankStarted = monotonicNow()
   const nowMs = timestamp(input.now) ?? Date.now()
   const scopedResults = retrieval.status === "ready"
-    ? retrieval.results.filter((result) => result.item.ticker === ticker && availableAsOf(result.item, input.asOf))
+    ? retrieval.results.filter((result) => matchesRequestedScope(result.item, input, ticker))
     : []
   const retrieved = rankRetrieved(scopedResults, nowMs)
   const seen = new Set<string>()
