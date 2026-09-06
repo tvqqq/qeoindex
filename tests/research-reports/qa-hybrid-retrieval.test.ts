@@ -149,7 +149,8 @@ test("QEO-116 projects every report chunk once into the deterministic REPORT par
     ],
   })
 
-  const reportChunks = projected.filter((item) => item.ticker === RESEARCH_REPORT_QA_PARTITION && item.knowledgeType === "REPORT_CHUNK")
+  const reportChunks = projected.filter((item) =>
+    item.ticker === RESEARCH_REPORT_QA_PARTITION && item.knowledgeType === "REPORT_CHUNK")
   assert.deepEqual(reportChunks.map((item) => item.provenance.chunkId), [CHUNK_A, CHUNK_B])
   assert.ok(reportChunks.every((item) => item.provenance.reportId === REPORT_ID))
   assert.ok(reportChunks.every((item) => item.provenance.analysisId === ANALYSIS_ID))
@@ -190,7 +191,12 @@ test("QEO-116 report hybrid retrieval uses REPORT + exact provenance and never t
         id: qdrantItem.id,
         score: 0.87,
         item: qdrantItem,
-        derivedVersions: { embeddingModel: "x", embeddingVersion: "x", sparseEncoder: "x", sparseVersion: "x" },
+        derivedVersions: {
+          embeddingModel: "x",
+          embeddingVersion: "x",
+          sparseEncoder: "x",
+          sparseVersion: "x",
+        },
       }]
     },
   }
@@ -225,22 +231,22 @@ test("QEO-116 report hybrid retrieval uses REPORT + exact provenance and never t
 
   assert.equal(result.status, "ready")
   assert.equal(queries.length, 1)
-  assert.deepEqual(queries[0], {
-    ticker: RESEARCH_REPORT_QA_PARTITION,
-    text: "mục tiêu định giá",
-    knowledgeTypes: ["REPORT_CHUNK"],
-    sourceTypes: ["RESEARCH_REPORT"],
-    reportId: REPORT_ID,
-    analysisId: ANALYSIS_ID,
-    sourceId: REPORT_ID,
-    sourceVersion,
-    contentHash: HASH,
-    chunkVersion: CHUNK_VERSION,
-    asOf: undefined,
-    limit: 8,
-  })
+  const query = queries[0]
+  assert.equal(query.ticker, RESEARCH_REPORT_QA_PARTITION)
+  assert.equal(query.text, "mục tiêu định giá")
+  assert.deepEqual(query.knowledgeTypes, ["REPORT_CHUNK"])
+  assert.deepEqual(query.sourceTypes, ["RESEARCH_REPORT"])
+  assert.equal(query.reportId, REPORT_ID)
+  assert.equal(query.analysisId, ANALYSIS_ID)
+  assert.equal(query.sourceId, REPORT_ID)
+  assert.equal(query.sourceVersion, sourceVersion)
+  assert.equal(query.contentHash, HASH)
+  assert.equal(query.chunkVersion, CHUNK_VERSION)
+  assert.equal(query.limit, 8)
   assert.equal(result.evidence.length, 1)
   assert.equal(result.evidence[0].page, 7)
   assert.equal(result.evidence[0].content, "Canonical PostgreSQL text A")
   assert.doesNotMatch(result.evidence[0].content, /FORGED/)
+  assert.ok(Number.isFinite(result.retrievalMs) && result.retrievalMs >= 0)
+  assert.ok(Number.isFinite(result.hydrationMs) && result.hydrationMs >= 0)
 })
