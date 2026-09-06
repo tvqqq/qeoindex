@@ -92,17 +92,41 @@ Observed 2025-10-13..17 weekly extrema:
 
 TitanLabs independently corroborates the **adjusted** VHM series and does not provide raw pre-corporate-action input for QEO-124. This narrows the earlier QEO-102 statement that TitanLabs prices are “raw VND”: unit scale may be raw VND while corporate-action price basis is adjusted. VHM proves these are distinct semantics.
 
-## Independent raw-vs-adjusted evidence
+## StockBiz — bounded raw-basis technical spike
 
-StockBiz historical VHM displays raw OHLC and `Đóng cửa ĐC` side-by-side. For `2026-08-05` it reports:
+Public historical VHM displays raw OHLC and `Đóng cửa ĐC` side-by-side. A one-shot GitHub Actions probe then tested the deterministic `LookupQuote.aspx?Date=...` surface from a cloud runner.
 
-- raw open/high/low/close: `154.20 / 158.80 / 153.00 / 153.00`
-- adjusted close: `76.50`
-- volume: `10,681,100`
+- workflow: `QEO-132 StockBiz Raw Basis Probe`
+- run: `34066329329`
+- job: `101575618732`
+- three bounded pages queried: `26/06/2026`, `05/08/2026`, `17/10/2025`
+- all three returned HTTP `200`
+- each parsed page returned `30` historical rows
+- observed request latencies: about `2.6s`, `0.7s`, `0.4s`
 
-Source surface: `https://web.stockbiz.vn/Stocks/VHM/HistoricalQuotes.aspx`.
+Exact VHM raw/adjusted evidence:
 
-StockBiz is evidence that the raw/adjusted split exists and that the QEO-124 `153.0` raw anchor is externally observable. It is **not yet approved as a canonical bulk raw provider**; coverage, terms, rate limits and deterministic acquisition must be reviewed separately.
+| Session | Raw O | Raw H | Raw L | Raw C | Adjusted C | Volume |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2025-10-13 | 123.0 | 126.0 | 122.1 | 124.2 | 59.80 | 13,782,200 |
+| 2025-10-14 | 124.5 | 131.5 | 124.5 | 127.0 | 61.15 | 14,600,200 |
+| 2025-10-15 | 127.5 | 127.6 | 122.6 | 124.0 | 59.70 | 8,062,500 |
+| 2025-10-16 | 123.8 | 123.8 | 120.4 | 122.0 | 58.74 | 9,614,900 |
+| 2025-10-17 | 122.0 | 122.0 | 114.6 | 116.0 | 55.85 | 12,213,500 |
+| 2026-06-26 | 157.5 | 163.9 | 156.5 | **162.0** | 78.00 | 12,073,300 |
+| 2026-08-05 | 154.2 | 158.8 | 153.0 | **153.0** | 76.50 | 10,681,100 |
+
+The raw golden-week extrema are exactly:
+
+- high: **`131.5`**
+- low: **`114.6`**
+- sessions: `5`
+
+This independently reproduces the QEO-124 regression carrier and both externally required raw reference closes without inverse-adjusting an adjusted provider series.
+
+Technical classification: **GO AS A BOUNDED RAW-BASIS EVIDENCE SOURCE**.
+
+Production-source classification: **HOLD**. The public site exposes `Điều khoản sử dụng` and `Bản quyền`, but this investigation did not retrieve terms that authorize automated bulk ingestion. Rate-limit and long-range/canonical-200 suitability are also not established. Therefore StockBiz must not yet be promoted to a production bulk raw provider solely from this successful bounded probe.
 
 ## Code hardening produced by this investigation
 
