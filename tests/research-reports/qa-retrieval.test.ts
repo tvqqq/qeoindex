@@ -322,6 +322,8 @@ test("QEO-116 REPORT_QA context forwards exact report provenance filters and rej
     analysisId: ANALYSIS_ID,
     sourceId: REPORT_ID,
     sourceVersion,
+    contentHash: HASH,
+    chunkVersion: CHUNK_VERSION,
   })
 
   assert.equal(queries.length, 1)
@@ -329,6 +331,8 @@ test("QEO-116 REPORT_QA context forwards exact report provenance filters and rej
   assert.equal(queries[0].analysisId, ANALYSIS_ID)
   assert.equal(queries[0].sourceId, REPORT_ID)
   assert.equal(queries[0].sourceVersion, sourceVersion)
+  assert.equal(queries[0].contentHash, HASH)
+  assert.equal(queries[0].chunkVersion, CHUNK_VERSION)
   assert.deepEqual(context.items.map((item) => item.id), [valid.id])
   assert.doesNotMatch(context.text, /999,000/)
 })
