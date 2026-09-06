@@ -1643,6 +1643,48 @@ export type Database = {
         }
         Relationships: []
       }
+      market_adjustment_factor_runs: {
+        Row: {
+          as_of_date: string
+          blocked_reason: string | null
+          computed_at: string
+          created_at: string
+          engine_version: string
+          event_lineage_hash: string
+          factor_version: string
+          id: string
+          status: string
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          as_of_date: string
+          blocked_reason?: string | null
+          computed_at?: string
+          created_at?: string
+          engine_version: string
+          event_lineage_hash: string
+          factor_version: string
+          id?: string
+          status?: string
+          ticker: string
+          updated_at?: string
+        }
+        Update: {
+          as_of_date?: string
+          blocked_reason?: string | null
+          computed_at?: string
+          created_at?: string
+          engine_version?: string
+          event_lineage_hash?: string
+          factor_version?: string
+          id?: string
+          status?: string
+          ticker?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       market_ai_conclusions: {
         Row: {
           as_of: string
@@ -2348,6 +2390,62 @@ export type Database = {
           volume?: number
         }
         Relationships: []
+      }
+      market_price_adjustment_factors: {
+        Row: {
+          computed_at: string
+          corporate_action_ids: string[]
+          cumulative_price_factor: number
+          cumulative_volume_factor: number
+          effective_session: string
+          event_lineage_hash: string
+          formula_inputs: Json
+          reference_raw_close: number
+          reference_session: string
+          run_id: string
+          step_price_factor: number
+          step_volume_factor: number
+          ticker: string
+        }
+        Insert: {
+          computed_at?: string
+          corporate_action_ids: string[]
+          cumulative_price_factor: number
+          cumulative_volume_factor: number
+          effective_session: string
+          event_lineage_hash: string
+          formula_inputs: Json
+          reference_raw_close: number
+          reference_session: string
+          run_id: string
+          step_price_factor: number
+          step_volume_factor: number
+          ticker: string
+        }
+        Update: {
+          computed_at?: string
+          corporate_action_ids?: string[]
+          cumulative_price_factor?: number
+          cumulative_volume_factor?: number
+          effective_session?: string
+          event_lineage_hash?: string
+          formula_inputs?: Json
+          reference_raw_close?: number
+          reference_session?: string
+          run_id?: string
+          step_price_factor?: number
+          step_volume_factor?: number
+          ticker?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_price_adjustment_factors_run_fk"
+            columns: ["run_id", "ticker"]
+            isOneToOne: false
+            referencedRelation: "market_adjustment_factor_runs"
+            referencedColumns: ["id", "ticker"]
+          },
+        ]
       }
       market_research_report_analyses: {
         Row: {
@@ -4052,6 +4150,19 @@ export type Database = {
           rows: Json
           ticker: string
         }[]
+      }
+      qeo_persist_adjustment_factor_candidate: {
+        Args: {
+          p_as_of_date: string
+          p_blocked_reason: string
+          p_engine_version: string
+          p_event_lineage_hash: string
+          p_factor_version: string
+          p_status: string
+          p_ticker: string
+          p_transitions: Json
+        }
+        Returns: string
       }
       qeo_prune_noncanonical_orderbook_snapshots: {
         Args: { p_run_id: string }

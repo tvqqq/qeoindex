@@ -1,0 +1,119 @@
+{
+  "ticker": "VHM",
+  "asOfDate": "2026-08-07",
+  "engineVersion": "qeo124-v1",
+  "sessions": [
+    "2026-06-26",
+    "2026-06-29",
+    "2026-08-05",
+    "2026-08-06"
+  ],
+  "rawReferences": [
+    {
+      "sessionDate": "2026-06-26",
+      "close": 162
+    },
+    {
+      "sessionDate": "2026-08-05",
+      "close": 153
+    }
+  ],
+  "actions": [
+    {
+      "id": "00000000-0000-4000-8000-000000197086",
+      "ticker": "VHM",
+      "actionType": "cash_dividend",
+      "exDate": "2026-06-29",
+      "cashPerShare": 6000,
+      "stockRatioNumerator": null,
+      "stockRatioDenominator": null,
+      "rightsRatioNumerator": null,
+      "rightsRatioDenominator": null,
+      "subscriptionPrice": null,
+      "normalizationVersion": "qeo123-v1",
+      "rawEvidenceHash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source": "vsdc",
+      "lineageRootSourceEventId": "197086",
+      "sourceComponentKey": "component:0"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000198392",
+      "ticker": "VHM",
+      "actionType": "stock_dividend",
+      "exDate": "2026-08-06",
+      "cashPerShare": null,
+      "stockRatioNumerator": 1,
+      "stockRatioDenominator": 1,
+      "rightsRatioNumerator": null,
+      "rightsRatioDenominator": null,
+      "subscriptionPrice": null,
+      "normalizationVersion": "qeo123-v1",
+      "rawEvidenceHash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "source": "vsdc",
+      "lineageRootSourceEventId": "198392",
+      "sourceComponentKey": "component:0"
+    }
+  ],
+  "rawDailyWeek": [
+    {
+      "sessionDate": "2025-10-13",
+      "time": 1760313600,
+      "open": 123,
+      "high": 126,
+      "low": 122.1,
+      "close": 124.2,
+      "volume": 12312200
+    },
+    {
+      "sessionDate": "2025-10-14",
+      "time": 1760400000,
+      "open": 124.5,
+      "high": 131.5,
+      "low": 124.5,
+      "close": 127,
+      "volume": 13660200
+    },
+    {
+      "sessionDate": "2025-10-15",
+      "time": 1760486400,
+      "open": 127.5,
+      "high": 127.6,
+      "low": 122.6,
+      "close": 124,
+      "volume": 7059300
+    },
+    {
+      "sessionDate": "2025-10-16",
+      "time": 1760572800,
+      "open": 123.8,
+      "high": 123.8,
+      "low": 120.4,
+      "close": 122,
+      "volume": 9475900
+    },
+    {
+      "sessionDate": "2025-10-17",
+      "time": 1760659200,
+      "open": 122,
+      "high": 122,
+      "low": 114.6,
+      "close": 116,
+      "volume": 12213500
+    }
+  ],
+  "expected": {
+    "cashStepPriceFactor": 0.9629629629629629,
+    "stockStepPriceFactor": 0.5,
+    "historicalCumulativePriceFactor": 0.48148148148148145,
+    "weeklyHigh": 63.31,
+    "weeklyLow": 55.18,
+    "priceTolerance": 0.01
+  },
+  "provenance": {
+    "corporateActionTerms": "QEO-123 VSDC canonical regression fixtures for source events 197086 and 198392.",
+    "rawReferences": "2026-06-26 raw VHM close 162.0 and 2026-08-05 raw VHM close 153.0, independently cross-checked against historical market evidence.",
+    "rawDailyWeek": "Frozen pre-2026-action raw-basis regression fixture consistent with the independently observed VHM adjusted benchmark after applying the QEO-124 factor lineage.",
+    "benchmark": "Independent adjusted-price cross-check only; not factor authority. Weekly 13-17/10/2025 H=63.31, L=55.18.",
+    "evidenceHashes": "Synthetic deterministic fixture hashes. Live VSDC HTML hashes are intentionally not treated as golden external constants."
+  }
+}
