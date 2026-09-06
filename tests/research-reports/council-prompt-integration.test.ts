@@ -131,3 +131,41 @@ test("QEO-117 debate operation exposes bounded ticker knowledge provenance telem
   assert.match(operations, /persisted:\s*evidenceFidelity\.tickerKnowledgePersisted/)
   assert.match(operations, /missingRunIdentities:\s*evidenceFidelity\.tickerKnowledgeMissingRunIdentities/)
 })
+
+test("QEO-115 context builder rejects cross-ticker results even when the retrieval backend misbehaves", async () => {
+  const { buildTickerContext } = await import("../../modules/ticker-knowledge/context.ts")
+  const { createTickerKnowledgeItem } = await import("../../modules/ticker-knowledge/domain.ts")
+  const leaked = createTickerKnowledgeItem({
+    ticker: "VIC",
+    knowledgeType: "COUNCIL_MEMORY",
+    authority: "DETERMINISTIC_SIGNAL",
+    sourceType: "AI_COUNCIL",
+    logicalKey: "run-vic",
+    text: "VIC deterministic signal BUY",
+    provenance: { sourceId: "run-vic", sourceVersion: "v1", asOf: "2026-09-05T08:00:00.000Z" },
+    projectionVersion: "test-v1",
+  })
+  const index = {
+    ensureReady: async () => undefined,
+    upsert: async () => undefined,
+    deleteSourceVersion: async () => undefined,
+    query: async () => [{
+      id: leaked.id,
+      score: 0.99,
+      item: leaked,
+      derivedVersions: { embeddingModel: "x", embeddingVersion: "x", sparseEncoder: "x", sparseVersion: "x" },
+    }],
+  }
+
+  const context = await buildTickerContext({
+    index,
+    ticker: "MSN",
+    query: "current thesis",
+    consumer: "STOCK_QA",
+    now: "2026-09-06T08:00:00.000Z",
+  })
+
+  assert.equal(context.ticker, "MSN")
+  assert.deepEqual(context.items, [])
+  assert.doesNotMatch(context.text, /VIC/)
+})
