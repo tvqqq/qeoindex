@@ -4,8 +4,14 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { createSupabaseColdOhlcvStorage } from "./cold-store"
 import type { CanonicalOhlcvBar } from "./contract"
 import { upsertDerivedHourlyBars } from "./derived-hourly-store"
-import { CHART_HOT_RETENTION_DAYS, chartHotRetentionCutoff } from "./history-policy"
 import {
+  CHART_HOT_RETENTION_DAYS,
+  CHART_HOT_RETENTION_SESSIONS,
+  chartHotRetentionCutoff,
+  chartHotSessionRetentionCutoff,
+} from "./history-policy"
+import {
+  dropEmptyHotIntradaySessionPartition,
   listExpiredHotPartitions,
   pruneVerifiedHotIntradayPartition,
   readHotIntradayRange,
@@ -14,7 +20,12 @@ import {
 } from "./hot-store"
 import { aggregateChartTimeframe } from "./timeframes"
 
-export { CHART_HOT_RETENTION_DAYS, chartHotRetentionCutoff }
+export {
+  CHART_HOT_RETENTION_DAYS,
+  CHART_HOT_RETENTION_SESSIONS,
+  chartHotRetentionCutoff,
+  chartHotSessionRetentionCutoff,
+}
 export const DEFAULT_ARCHIVE_PARTITIONS_PER_RUN = 48
 
 export interface ChartArchiveFailure {
@@ -34,6 +45,7 @@ export interface ChartIntradayArchiveMetrics {
   bytesWritten: number
   hourlyRowsCached: number
   rowsPruned: number
+  sessionPartitionsDropped: number
   failures: ChartArchiveFailure[]
   oldestHotBar: string | null
 }
@@ -66,7 +78,7 @@ export async function runChartIntradayArchiveLifecycle(
   input: { referenceAt?: Date; maxPartitions?: number } = {},
 ): Promise<ChartIntradayArchiveMetrics> {
   const referenceAt = input.referenceAt ?? new Date()
-  const cutoff = chartHotRetentionCutoff(referenceAt)
+  const cutoff = chartHotSessionRetentionCutoff(referenceAt)
   const maxPartitions = Math.max(1, Math.min(48, Math.floor(input.maxPartitions ?? DEFAULT_ARCHIVE_PARTITIONS_PER_RUN)))
   const partitions = await listExpiredHotPartitions(supabase, { cutoff, maxPartitions })
   const cold = createSupabaseColdOhlcvStorage(supabase)
@@ -77,6 +89,7 @@ export async function runChartIntradayArchiveLifecycle(
   let bytesWritten = 0
   let hourlyRowsCached = 0
   let rowsPruned = 0
+  let sessionPartitionsDropped = 0
   const failures: ChartArchiveFailure[] = []
 
   for (const partition of partitions) {
@@ -103,6 +116,8 @@ export async function runChartIntradayArchiveLifecycle(
         sha256: archived.sha256,
         rowCount: archived.rowCount,
       })
+      const reclaim = await dropEmptyHotIntradaySessionPartition(supabase, partition.tradingDate)
+      if (reclaim?.status === "dropped") sessionPartitionsDropped += 1
       partitionsArchived += 1
       if (archived.reused) reusedArchives += 1
       rowsArchived += archived.rowCount
@@ -127,6 +142,7 @@ export async function runChartIntradayArchiveLifecycle(
     bytesWritten,
     hourlyRowsCached,
     rowsPruned,
+    sessionPartitionsDropped,
     failures,
     oldestHotBar: oldestHotEpoch == null ? null : new Date(oldestHotEpoch * 1000).toISOString(),
   }

@@ -4,8 +4,12 @@ import { start } from "workflow/api"
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { runChartIntradayArchiveLifecycle } from "@/modules/market/chart-data/archive-lifecycle"
+import { QEO107_HOT_RETENTION_SESSIONS, qeo107BootstrapTarget, readChartIntradayCoverageReport } from "@/modules/market/chart-data/bootstrap"
+import { QEO107_STAGED_MAX_TICKERS } from "@/modules/market/chart-data/bootstrap-workflow-steps"
 import { runChartDerivedHourlyRecovery } from "@/modules/market/chart-data/derived-hourly-recovery"
+import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
+import { chartIntradayBootstrapWorkflow } from "@/workflows/chart-intraday-bootstrap"
 import { qeoindexEodPipeline } from "@/workflows/qeoindex-eod-pipeline"
 
 export const runtime = "nodejs"
@@ -48,6 +52,15 @@ function archivePartitionLimit(value: string | null) {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 12 ? parsed : null
 }
 
+function stagedBootstrapTickers(value: string | null) {
+  if (value == null) return []
+  if (value.trim() === "") return null
+  const tickers = [...new Set(value.split(",").map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))]
+  if (!tickers.length || tickers.length > QEO107_STAGED_MAX_TICKERS) return null
+  if (tickers.some((ticker) => !/^[A-Z0-9]{2,12}$/.test(ticker))) return null
+  return tickers
+}
+
 async function isQeoIndexSchedulerAuthorized(request: Request) {
   if (isMachineRequestAuthorized(request, [process.env.CRON_SECRET], { allowUnconfiguredInDevelopment: true })) return true
 
@@ -60,12 +73,100 @@ async function isQeoIndexSchedulerAuthorized(request: Request) {
   return !error && data === true
 }
 
+async function chartCoverage(request: NextRequest) {
+  const supabase = getSupabaseServerClient()
+  if (!supabase) return NextResponse.json({ ok: false, error: "Canonical market data service unavailable." }, { status: 503 })
+  try {
+    const referenceAt = new Date()
+    const universe = await getCanonicalUniverse()
+    const rows = await readChartIntradayCoverageReport(supabase, {
+      tickers: universe.stocks.map((stock) => stock.ticker),
+      referenceAt,
+    })
+    const target = qeo107BootstrapTarget(referenceAt)
+    return NextResponse.json({
+      ok: rows.length === universe.selectedCount,
+      mode: "chart-coverage",
+      universe: {
+        runId: universe.runId,
+        sourceAsOfDate: universe.sourceAsOfDate,
+        selectedCount: universe.selectedCount,
+      },
+      target: {
+        hotRetentionSessions: QEO107_HOT_RETENTION_SESSIONS,
+        targetFrom: new Date(target.targetFrom * 1000).toISOString(),
+        targetTo: new Date(target.targetTo * 1000).toISOString(),
+        hotCutoff: new Date(target.hotCutoff * 1000).toISOString(),
+        chunkCount: target.chunks.length,
+      },
+      summary: {
+        tickerCount: rows.length,
+        hotCoveredTickers: rows.filter((row) => row.hotSessionCount >= QEO107_HOT_RETENTION_SESSIONS).length,
+        partialHotTickers: rows.filter((row) => row.hotSessionCount > 0 && row.hotSessionCount < QEO107_HOT_RETENTION_SESSIONS).length,
+        coldCoveredTickers: rows.filter((row) => row.coldManifestCount > 0).length,
+        derivedHourlyCoveredTickers: rows.filter((row) => row.derivedHourlyRowCount > 0).length,
+        providerGapTickers: rows.filter((row) => row.providerGapCount > 0).length,
+        retryableFailureTickers: rows.filter((row) => row.retryableFailureCount > 0).length,
+        failedAttemptTickers: rows.filter((row) => row.failedAttemptCount > 0).length,
+      },
+      rows,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await notifyOpsError({ source: "qeo107-chart-coverage", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
+    return NextResponse.json({ ok: false, mode: "chart-coverage", error: message }, { status: 500 })
+  }
+}
+
 async function trigger(request: NextRequest) {
   if (!(await isQeoIndexSchedulerAuthorized(request))) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
   }
 
   const mode = request.nextUrl.searchParams.get("mode")?.trim() || ""
+  if (mode === "chart-coverage") return chartCoverage(request)
+
+  if (mode === "chart-bootstrap") {
+    if (request.method !== "POST") {
+      return NextResponse.json({ ok: false, error: "Chart bootstrap requires POST." }, { status: 405, headers: { Allow: "POST" } })
+    }
+    const requestedTickers = stagedBootstrapTickers(request.nextUrl.searchParams.get("tickers"))
+    if (requestedTickers == null) {
+      return NextResponse.json({
+        ok: false,
+        error: `tickers must be a comma-separated canonical subset of at most ${QEO107_STAGED_MAX_TICKERS} symbols. Omit tickers for canonical-200 bootstrap.`,
+      }, { status: 400 })
+    }
+    try {
+      if (requestedTickers.length) {
+        const universe = await getCanonicalUniverse()
+        const canonicalTickers = new Set(universe.stocks.map((stock) => stock.ticker.toUpperCase()))
+        const outsideCanonical = requestedTickers.filter((ticker) => !canonicalTickers.has(ticker))
+        if (outsideCanonical.length) {
+          return NextResponse.json({
+            ok: false,
+            error: `QEO-107 staged tickers must belong to the canonical universe: ${outsideCanonical.join(", ")}`,
+          }, { status: 400 })
+        }
+      }
+
+      const startedAt = new Date().toISOString()
+      const run = await start(chartIntradayBootstrapWorkflow, [startedAt, requestedTickers])
+      return NextResponse.json({
+        ok: true,
+        mode,
+        scope: requestedTickers.length ? "staged" : "canonical_200",
+        tickers: requestedTickers,
+        workflowRunId: run.runId,
+        startedAt,
+      }, { status: 202 })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      await notifyOpsError({ source: "qeo107-chart-bootstrap", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
+      return NextResponse.json({ ok: false, mode, error: message }, { status: 500 })
+    }
+  }
+
   if (mode === "chart-archive" || mode === "chart-derived-recovery") {
     if (request.method !== "POST") {
       return NextResponse.json({ ok: false, error: "Chart storage recovery requires POST." }, { status: 405, headers: { Allow: "POST" } })

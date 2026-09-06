@@ -16,7 +16,7 @@ import {
   derivedHourlyColdCoverageComplete,
   readDerivedHourlyRange,
 } from "./derived-hourly-store"
-import { chartHotRetentionCutoff, clampChartHistoryRange } from "./history-policy"
+import { chartHotSessionRetentionCutoff, clampChartHistoryRange } from "./history-policy"
 import { getCanonicalChartOhlcv, type ChartDataServiceDeps } from "./service"
 import {
   aggregateChartTimeframe,
@@ -80,7 +80,7 @@ function filterThreeDayRange(bars: CanonicalOhlcvBar[], from: number, to: number
 
 async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartOhlcvRequest, loadCanonical: CanonicalLoader): Promise<ChartOhlcvResult> {
   const referenceAt = deps.now ?? new Date()
-  const hotCutoff = chartHotRetentionCutoff(referenceAt)
+  const hotCutoff = chartHotSessionRetentionCutoff(referenceAt)
   const sourceRange = sourceRangeForResolution(request.resolution, request.from, request.to)
   const loadDerived: DerivedHourlyLoader = deps.derivedHourlyLoader ?? ((input) => readDerivedHourlyRange(deps.supabase, input.ticker, input.from, input.to))
   const derivedCoverage: DerivedCoverageLoader = deps.derivedCoverageLoader ?? ((input) => derivedHourlyColdCoverageComplete(deps.supabase, input))
