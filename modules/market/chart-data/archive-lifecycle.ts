@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { createSupabaseColdOhlcvStorage } from "./cold-store"
 import type { CanonicalOhlcvBar } from "./contract"
 import { upsertDerivedHourlyBars } from "./derived-hourly-store"
-import { CHART_HOT_RETENTION_DAYS, chartHotRetentionCutoff } from "./history-policy"
+import { CHART_HOT_RETENTION_SESSIONS, chartHotRetentionCutoff } from "./history-policy"
 import {
   listExpiredHotPartitions,
   pruneVerifiedHotIntradayPartition,
@@ -14,7 +14,7 @@ import {
 } from "./hot-store"
 import { aggregateChartTimeframe } from "./timeframes"
 
-export { CHART_HOT_RETENTION_DAYS, chartHotRetentionCutoff }
+export { CHART_HOT_RETENTION_SESSIONS, chartHotRetentionCutoff }
 export const DEFAULT_ARCHIVE_PARTITIONS_PER_RUN = 48
 
 export interface ChartArchiveFailure {
