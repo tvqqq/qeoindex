@@ -45,6 +45,16 @@ jobs:
           mv supabase/pending-migrations/20260905153500_qeo106_daily_hot_cold_history.sql \
              supabase/migrations/20260905153500_qeo106_daily_hot_cold_history.sql
 
+          python <<'PY'
+          from pathlib import Path
+          test_path = Path('tests/qeo-100-market-data.cases.ts')
+          text = test_path.read_text()
+          old = 'supabase/pending-migrations/20260905153500_qeo106_daily_hot_cold_history.sql'
+          new = 'supabase/migrations/20260905153500_qeo106_daily_hot_cold_history.sql'
+          assert text.count(old) == 1
+          test_path.write_text(text.replace(old, new))
+          PY
+
           cat > supabase/migrations/20260905235254_qeo106_daily_prune_error_evidence_fix.sql <<'SQL'
           begin;
 
@@ -204,6 +214,7 @@ jobs:
             supabase/migration-equivalence.json \
             docs/db/evidence/production-migration-ledger-2026-09-05.json \
             modules/shared/supabase/database.types.ts \
+            tests/qeo-100-market-data.cases.ts \
             .github/workflows/qeo106-production-reconcile.yml
           git commit -m "chore(QEO-106): reconcile production Hot Cold migrations"
           git push origin HEAD:qeo-106-daily-hot-cold-full-history
