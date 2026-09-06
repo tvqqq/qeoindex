@@ -116,8 +116,9 @@ export function computeStepAdjustment(input: AdjustmentEventSet): StepAdjustment
     throw new AdjustmentFactorError("INVALID_REFERENCE_CLOSE", "previousRawClose must be positive and finite")
   }
 
+  const orderedEvents = [...input.events].sort((left, right) => left.id.localeCompare(right.id))
   const seenIds = new Set<string>()
-  for (const action of input.events) {
+  for (const action of orderedEvents) {
     validateAction(input, action)
     if (seenIds.has(action.id)) {
       throw new AdjustmentFactorError("DUPLICATE_ACTION_ID", `Duplicate corporate action id ${action.id}`)
@@ -125,8 +126,8 @@ export function computeStepAdjustment(input: AdjustmentEventSet): StepAdjustment
     seenIds.add(action.id)
   }
 
-  const splitActions = input.events.filter((action) => action.actionType === "stock_split")
-  const nonCashShareActions = input.events.filter((action) => (
+  const splitActions = orderedEvents.filter((action) => action.actionType === "stock_split")
+  const nonCashShareActions = orderedEvents.filter((action) => (
     action.actionType === "stock_dividend"
     || action.actionType === "bonus_issue"
     || action.actionType === "rights_issue"
@@ -144,7 +145,7 @@ export function computeStepAdjustment(input: AdjustmentEventSet): StepAdjustment
   let rightsSubscriptionValue = 0
   let splitMultiplier = 1
 
-  for (const action of input.events) {
+  for (const action of orderedEvents) {
     if (action.actionType === "cash_dividend") {
       totalCashPerShare += action.cashPerShare as number
       continue
@@ -180,7 +181,7 @@ export function computeStepAdjustment(input: AdjustmentEventSet): StepAdjustment
     throw new AdjustmentFactorError("NON_POSITIVE_THEORETICAL_VALUE", "Event set produces invalid adjustment factors")
   }
 
-  const corporateActionIds = [...seenIds].sort()
+  const corporateActionIds = [...seenIds]
   const formulaInputs: StepAdjustmentFormulaInputs = {
     previousRawClose: input.previousRawClose,
     totalCashPerShare,
