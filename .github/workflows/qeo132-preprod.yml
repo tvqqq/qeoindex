@@ -1,0 +1,34 @@
+name: QEO-132 Raw Daily Preprod
+
+on:
+  push:
+    branches:
+      - feat/qeo-132-raw-daily-basis
+  pull_request:
+    paths:
+      - 'modules/market/providers/stockbiz/**'
+      - 'modules/market/history/raw-daily-*'
+      - 'supabase/migrations/*qeo132*'
+      - 'tests/market-history/qeo132-*'
+      - 'tests/db/qeo132-*'
+      - '.github/workflows/qeo132-preprod.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run QEO-132 StockBiz raw Daily contract
+        run: node --test tests/market-history/qeo132-stockbiz-raw-daily.test.ts
