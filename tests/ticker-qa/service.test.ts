@@ -1,9 +1,19 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
+import { resolveTickerQaEvidence } from "../../modules/ticker-qa/canonical.ts"
 import { loadTickerQaMandatoryContext } from "../../modules/ticker-qa/mandatory.ts"
-import { answerTickerQuestion, TickerQaError } from "../../modules/ticker-qa/service.ts"
+import {
+  answerTickerQuestion,
+  prepareTickerQaContext,
+  TickerQaError,
+} from "../../modules/ticker-qa/service.ts"
 import { TICKER_QA_LIMITS } from "../../modules/ticker-qa/types.ts"
+import {
+  createTickerKnowledgeItem,
+  TICKER_KNOWLEDGE_PROJECTION_VERSION,
+  type TickerKnowledgeItem,
+} from "../../modules/ticker-knowledge/domain.ts"
 
 const fakeClient = {} as never
 
@@ -12,6 +22,47 @@ async function expectInvalid(input: Parameters<typeof answerTickerQuestion>[1]) 
     () => answerTickerQuestion(fakeClient, input, {}),
     (error: unknown) => error instanceof TickerQaError && error.code === "invalid_request" && error.httpStatus === 400,
   )
+}
+
+function knowledgeItem(input: {
+  ticker?: string
+  sourceType?: "NOTION_THESIS" | "RESEARCH_REPORT" | "AI_COUNCIL" | "NEWS"
+  knowledgeType?: "CURRENT_THESIS" | "REPORT_CHUNK" | "COUNCIL_MEMORY" | "COMPANY_EVENT"
+  authority?: "CANONICAL_THESIS" | "SOURCE_OPINION" | "DETERMINISTIC_SIGNAL" | "VERIFIED_FACT"
+  sourceId?: string
+  sourceVersion?: string
+  text?: string
+  logicalKey?: string
+  reportId?: string
+  analysisId?: string
+  contentHash?: string
+  chunkVersion?: string
+  chunkId?: string
+  page?: number
+  runId?: string
+} = {}): TickerKnowledgeItem {
+  return createTickerKnowledgeItem({
+    ticker: input.ticker ?? "MSN",
+    knowledgeType: input.knowledgeType ?? "REPORT_CHUNK",
+    authority: input.authority ?? "SOURCE_OPINION",
+    sourceType: input.sourceType ?? "RESEARCH_REPORT",
+    logicalKey: input.logicalKey ?? "qeo-118-test-item",
+    text: input.text ?? "qdrant text must not become canonical automatically",
+    provenance: {
+      sourceId: input.sourceId ?? "report-1",
+      sourceVersion: input.sourceVersion ?? "source-v1",
+      reportId: input.reportId ?? "report-1",
+      analysisId: input.analysisId ?? "analysis-1",
+      contentHash: input.contentHash ?? "b".repeat(64),
+      chunkVersion: input.chunkVersion ?? "chunk-v1",
+      chunkId: input.chunkId ?? "11111111-1111-4111-8111-111111111111",
+      page: input.page ?? 7,
+      runId: input.runId ?? null,
+      asOf: "2026-09-05",
+      publishedAt: "2026-09-05",
+    },
+    projectionVersion: TICKER_KNOWLEDGE_PROJECTION_VERSION,
+  })
 }
 
 test("QEO-118 rejects invalid ticker shapes before any retrieval/model work", async () => {
@@ -128,4 +179,97 @@ test("QEO-118 mandatory thesis fails closed when canonical Notion is unavailable
 
   assert.deepEqual(result.items, [])
   assert.ok(result.limitations.some((item) => item.includes("CURRENT_THESIS")))
+})
+
+test("QEO-118 calls the shared Context Builder in STOCK_QA mode and post-filters cross-ticker leakage", async () => {
+  const msn = knowledgeItem({ ticker: "MSN", logicalKey: "msn" })
+  const vcb = knowledgeItem({ ticker: "VCB", logicalKey: "vcb" })
+  let builderInput: Record<string, unknown> | null = null
+  let resolverItems: readonly TickerKnowledgeItem[] = []
+
+  const prepared = await prepareTickerQaContext(fakeClient, {
+    ticker: "MSN",
+    question: "Broker gần đây nói gì?",
+    history: [],
+  }, {
+    loadMandatory: async () => ({ items: [], limitations: [] }),
+    buildContext: async (input) => {
+      builderInput = input as unknown as Record<string, unknown>
+      return {
+        ticker: "MSN",
+        query: input.query,
+        consumer: "STOCK_QA",
+        retrievalStatus: "ready",
+        retrievalReason: null,
+        items: [msn, vcb],
+        retrievedPointIds: [msn.id, vcb.id],
+        text: "bounded",
+        truncated: false,
+        telemetry: { totalMs: 5, alwaysLoadMs: 1, retrievalMs: 2, rerankMs: 1, buildMs: 1 },
+      }
+    },
+    resolveEvidence: async (_client, _ticker, items) => {
+      resolverItems = items
+      return {
+        evidence: items.map((item) => ({
+          evidenceId: `tk:${item.id}`,
+          item,
+          text: `canonical:${item.ticker}`,
+          citation: null,
+        })),
+        unresolvedCount: 0,
+        infrastructureFailure: false,
+        hydrationMs: 1,
+      }
+    },
+  })
+
+  assert.equal(builderInput?.consumer, "STOCK_QA")
+  assert.equal(builderInput?.ticker, "MSN")
+  assert.equal(builderInput?.query, "Broker gần đây nói gì?")
+  assert.deepEqual(resolverItems.map((item) => item.ticker), ["MSN"])
+  assert.deepEqual(prepared.evidence.map((item) => item.item.ticker), ["MSN"])
+})
+
+test("QEO-118 canonical resolver replaces Qdrant text only when exact identity and provenance match", async () => {
+  const selected = knowledgeItem({ text: "untrusted qdrant text" })
+  const canonical = {
+    ...selected,
+    text: "canonical PostgreSQL chunk text",
+    provenance: { ...selected.provenance },
+  }
+
+  const resolved = await resolveTickerQaEvidence(fakeClient, "MSN", [selected], {
+    loadReportCanonicalCandidates: async () => [canonical],
+  })
+
+  assert.equal(resolved.infrastructureFailure, false)
+  assert.equal(resolved.unresolvedCount, 0)
+  assert.equal(resolved.evidence.length, 1)
+  assert.equal(resolved.evidence[0]?.text, "canonical PostgreSQL chunk text")
+  assert.equal(resolved.evidence[0]?.item.id, selected.id)
+})
+
+test("QEO-118 canonical resolver rejects stale versions and unsupported source types", async () => {
+  const selected = knowledgeItem({ text: "untrusted" })
+  const stale = {
+    ...selected,
+    text: "stale canonical text",
+    provenance: { ...selected.provenance, sourceVersion: "stale-version" },
+  }
+  const unsupported = knowledgeItem({
+    sourceType: "NEWS",
+    knowledgeType: "COMPANY_EVENT",
+    authority: "VERIFIED_FACT",
+    sourceId: "news-1",
+    sourceVersion: "news-v1",
+    logicalKey: "unsupported-news",
+  })
+
+  const resolved = await resolveTickerQaEvidence(fakeClient, "MSN", [selected, unsupported], {
+    loadReportCanonicalCandidates: async () => [stale],
+  })
+
+  assert.equal(resolved.evidence.length, 0)
+  assert.equal(resolved.unresolvedCount, 2)
 })
