@@ -98,7 +98,9 @@ test("QEO-123 runtime store persists one atomic notice and verifies exact canoni
 
   assert.equal(result.appliedCount, 1)
   assert.equal(result.staleCount, 0)
-  assert.deepEqual((rpcArgs as { p_evidence: Record<string, unknown> }).p_evidence, {
+  assert.notEqual(rpcArgs, null)
+  const persistedArgs = rpcArgs as unknown as Record<string, unknown>
+  assert.deepEqual(persistedArgs.p_evidence, {
     source: "vsdc",
     source_event_id: "197086",
     source_url: "https://vsdc.vn/vi/ad/197086",
