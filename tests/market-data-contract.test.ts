@@ -389,3 +389,54 @@ test("QEO-122 VSDC parser handles representative HNX, UPCOM and rights issue ter
     { actionType: "rights_issue", cashPerShare: null, stockRatio: null, rightsRatio: "100:210", subscriptionPrice: 20000 },
   ])
 })
+
+async function loadQeo122ExDateModule() {
+  const moduleUrl = new URL("../scripts/probes/qeo122-ex-date-derivation.ts", import.meta.url).href
+  try {
+    return await import(moduleUrl) as {
+      deriveProbeExDate: (input: {
+        recordDate: string
+        exchange: "HOSE" | "HNX" | "UPCOM"
+        regimeVersion: string
+      }) => { exDate: string; method: string; calendarVersion: string } | null
+    }
+  } catch (error) {
+    assert.fail(`QEO-122 ex-date derivation module missing: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+test("QEO-122 ex-date derivation reproduces independently verified VHM rights dates", async () => {
+  const { deriveProbeExDate } = await loadQeo122ExDateModule()
+  const cases = [
+    ["2021-09-16", "2021-09-15"],
+    ["2022-06-01", "2022-05-31"],
+    ["2026-06-30", "2026-06-29"],
+    ["2026-08-07", "2026-08-06"],
+  ] as const
+
+  for (const [recordDate, exDate] of cases) {
+    assert.deepEqual(deriveProbeExDate({
+      recordDate,
+      exchange: "HOSE",
+      regimeVersion: "verified-record-minus-one-trading-session-v1",
+    }), {
+      exDate,
+      method: "record_date_previous_verified_trading_session",
+      calendarVersion: "vn-securities-calendar-2018-2026-v1",
+    })
+  }
+})
+
+test("QEO-122 ex-date derivation fails closed outside a proven regime or calendar", async () => {
+  const { deriveProbeExDate } = await loadQeo122ExDateModule()
+  assert.equal(deriveProbeExDate({
+    recordDate: "2026-06-30",
+    exchange: "HOSE",
+    regimeVersion: "unknown",
+  }), null)
+  assert.equal(deriveProbeExDate({
+    recordDate: "2017-12-29",
+    exchange: "HOSE",
+    regimeVersion: "verified-record-minus-one-trading-session-v1",
+  }), null)
+})
