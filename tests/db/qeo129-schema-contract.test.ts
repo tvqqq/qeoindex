@@ -53,6 +53,16 @@ test("QEO-129 shadow storage is private, lineage-bound, and exact-readback verif
     sql,
     /create\s+or\s+replace\s+function\s+public\.qeo_adjusted_daily_readback\s*\(\s*p_ticker\s+text,\s*p_from\s+date,\s*p_to\s+date,\s*p_factor_run_id\s+uuid,\s*p_lineage_hash\s+text\s*\)/i,
   )
+  assert.match(
+    sql,
+    /returns\s+table\s*\([\s\S]*?session_date\s+date[\s\S]*?bar_time\s+timestamptz[\s\S]*?open\s+numeric[\s\S]*?high\s+numeric[\s\S]*?low\s+numeric[\s\S]*?close\s+numeric[\s\S]*?volume\s+numeric[\s\S]*?raw_bar_time\s+timestamptz[\s\S]*?factor_run_id\s+uuid[\s\S]*?factor_version\s+text[\s\S]*?event_lineage_hash\s+text[\s\S]*?adjustment_engine_version\s+text[\s\S]*?\)/i,
+    "QEO-129 exact readback RPC must expose persisted OHLCV as well as identity/lineage",
+  )
+  assert.match(
+    sql,
+    /select[\s\S]*?a\.session_date[\s\S]*?a\.bar_time[\s\S]*?a\.open[\s\S]*?a\.high[\s\S]*?a\.low[\s\S]*?a\.close[\s\S]*?a\.volume[\s\S]*?a\.raw_bar_time[\s\S]*?a\.factor_run_id[\s\S]*?a\.factor_version[\s\S]*?a\.event_lineage_hash[\s\S]*?a\.adjustment_engine_version/i,
+    "QEO-129 exact readback RPC must select persisted OHLCV, not lineage-only metadata",
+  )
   assert.match(sql, /security\s+definer/i)
   assert.match(sql, /set\s+search_path\s*=\s*public,\s*pg_temp/i)
   assert.match(
