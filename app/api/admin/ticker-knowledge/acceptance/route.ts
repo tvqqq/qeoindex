@@ -6,7 +6,6 @@ import {
   runServerCouncilKnowledgeBackfillPage,
   runServerResearchReportKnowledgeBackfillPage,
 } from "@/modules/ticker-knowledge/canonical-server"
-import { rebuildCurrentThesisKnowledgeFromCanonicalNotion } from "@/modules/ticker-knowledge/notion-server"
 import {
   normalizeTickerKnowledgeAcceptanceCommand,
 } from "@/modules/ticker-knowledge/production-acceptance"
@@ -50,25 +49,16 @@ export async function POST(request: Request) {
 
   try {
     const command = normalizeTickerKnowledgeAcceptanceCommand(await request.json())
-    if (command.action === "backfill_reports") {
-      const result = await runServerResearchReportKnowledgeBackfillPage({
-        cursor: command.cursor,
-        batchSize: command.batchSize,
-      })
-      return json({ ok: true, action: command.action, result })
-    }
-    if (command.action === "backfill_council") {
-      const result = await runServerCouncilKnowledgeBackfillPage({
-        cursor: command.cursor,
-        batchSize: command.batchSize,
-      })
-      return json({ ok: true, action: command.action, result })
-    }
+    const result = command.action === "backfill_reports"
+      ? await runServerResearchReportKnowledgeBackfillPage({
+          cursor: command.cursor,
+          batchSize: command.batchSize,
+        })
+      : await runServerCouncilKnowledgeBackfillPage({
+          cursor: command.cursor,
+          batchSize: command.batchSize,
+        })
 
-    const result = await rebuildCurrentThesisKnowledgeFromCanonicalNotion({
-      tickers: command.tickers.length ? command.tickers : undefined,
-      maxTheses: command.maxTheses,
-    })
     return json({ ok: true, action: command.action, result })
   } catch {
     return json({ ok: false, error: "Ticker knowledge production acceptance operation failed" }, 400)
