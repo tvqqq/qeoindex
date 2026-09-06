@@ -13,7 +13,7 @@ function item(input: {
   text: string
   authority?: "CANONICAL_THESIS" | "SOURCE_OPINION" | "DETERMINISTIC_SIGNAL"
   sourceType?: "NOTION_THESIS" | "RESEARCH_REPORT" | "AI_COUNCIL"
-  asOf?: string
+  asOf?: string | null
 }) {
   const sourceType = input.sourceType ?? "RESEARCH_REPORT"
   return createTickerKnowledgeItem({
@@ -26,7 +26,7 @@ function item(input: {
     provenance: {
       sourceId: `source-${input.key}`,
       sourceVersion: `version-${input.key}`,
-      asOf: input.asOf ?? "2026-09-05T00:00:00.000Z",
+      asOf: input.asOf === undefined ? "2026-09-05T00:00:00.000Z" : input.asOf,
     },
     projectionVersion: "test-v1",
   })
@@ -176,4 +176,39 @@ test("QEO-115 historical ranking uses asOf as the default recency clock", async 
 
   assert.equal(result.items[0].id, recentNearEqual.id)
   assert.equal(result.items[1].id, olderHighSemantic.id)
+})
+
+test("QEO-115 historical asOf excludes evidence without temporal provenance", async () => {
+  const dated = item({
+    key: "dated",
+    text: "Dated canonical evidence",
+    authority: "CANONICAL_THESIS",
+    sourceType: "NOTION_THESIS",
+    asOf: "2024-09-01T00:00:00.000Z",
+  })
+  const undatedMandatory = item({
+    key: "undated-mandatory",
+    text: "Undated mandatory evidence must not enter historical replay",
+    authority: "CANONICAL_THESIS",
+    sourceType: "NOTION_THESIS",
+    asOf: null,
+  })
+  const undatedRetrieved = item({
+    key: "undated-retrieved",
+    text: "Undated retrieved evidence must not enter historical replay",
+    asOf: null,
+  })
+
+  const result = await buildTickerContext({
+    index: index([searchResult(undatedRetrieved, 1)]),
+    ticker: "MSN",
+    query: "historical replay",
+    asOf: "2024-09-06T00:00:00.000Z",
+    mandatory: [undatedMandatory, dated],
+    maxChars: 4000,
+  })
+
+  assert.deepEqual(result.items.map((value) => value.id), [dated.id])
+  assert.deepEqual(result.retrievedPointIds, [])
+  assert.doesNotMatch(result.text, /Undated/)
 })
