@@ -81,9 +81,17 @@ function parseVnd(value: string | null) {
   return Number.isSafeInteger(parsed) ? parsed : null
 }
 
+function parseRatioOperand(value: string) {
+  const normalized = value.trim()
+  if (/^\d{1,3}(?:\.\d{3})+$/.test(normalized)) {
+    return Number(normalized.replace(/\./g, ""))
+  }
+  return Number(normalized.replace(",", "."))
+}
+
 function normalizeRatio(left: string, right: string) {
-  const a = Number(left.replace(",", "."))
-  const b = Number(right.replace(",", "."))
+  const a = parseRatioOperand(left)
+  const b = parseRatioOperand(right)
   if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b < 0) return null
   const printable = (value: number) => Number.isInteger(value) ? String(value) : String(value).replace(".", ",")
   return `${printable(a)}:${printable(b)}`
