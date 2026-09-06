@@ -80,6 +80,16 @@ function timestamp(value: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function availableAsOf(item: TickerKnowledgeItem, asOf: string | undefined) {
+  if (!asOf) return true
+  const cutoff = timestamp(asOf)
+  if (cutoff === null) throw new Error("Ticker context asOf must be a valid timestamp")
+  const rawEvidenceTime = item.provenance.asOf ?? item.provenance.publishedAt
+  if (!rawEvidenceTime) return true
+  const evidenceTime = timestamp(rawEvidenceTime)
+  return evidenceTime !== null && evidenceTime <= cutoff
+}
+
 function recencyScore(item: TickerKnowledgeItem, nowMs: number) {
   const asOf = timestamp(item.provenance.asOf ?? item.provenance.publishedAt)
   if (asOf === null) return 0.35
@@ -151,7 +161,7 @@ export async function buildTickerContext(input: BuildTickerContextInput): Promis
   const policy = input.consumer ? CONSUMER_POLICY[input.consumer] : null
 
   const alwaysLoadStarted = monotonicNow()
-  const mandatory = (input.mandatory ?? []).filter((item) => item.ticker === ticker)
+  const mandatory = (input.mandatory ?? []).filter((item) => item.ticker === ticker && availableAsOf(item, input.asOf))
   const alwaysLoadMs = durationSince(alwaysLoadStarted)
 
   const retrievalStarted = monotonicNow()
@@ -169,7 +179,7 @@ export async function buildTickerContext(input: BuildTickerContextInput): Promis
   const rerankStarted = monotonicNow()
   const nowMs = timestamp(input.now) ?? Date.now()
   const scopedResults = retrieval.status === "ready"
-    ? retrieval.results.filter((result) => result.item.ticker === ticker)
+    ? retrieval.results.filter((result) => result.item.ticker === ticker && availableAsOf(result.item, input.asOf))
     : []
   const retrieved = rankRetrieved(scopedResults, nowMs)
   const seen = new Set<string>()
