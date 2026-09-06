@@ -19,9 +19,9 @@ create table public.market_ohlcv_adjusted_daily (
   constraint market_ohlcv_adjusted_daily_factor_run_fk
     foreign key (factor_run_id, ticker)
     references public.market_adjustment_factor_runs (id, ticker),
-  constraint market_ohlcv_adjusted_daily_high_check
+  constraint market_ohlcv_adjusted_daily_high_ohlc_check
     check (high >= greatest(open, close, low)),
-  constraint market_ohlcv_adjusted_daily_low_check
+  constraint market_ohlcv_adjusted_daily_low_ohlc_check
     check (low <= least(open, close, high))
 );
 
