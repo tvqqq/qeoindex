@@ -168,7 +168,10 @@ export async function buildTickerContext(input: BuildTickerContextInput): Promis
 
   const rerankStarted = monotonicNow()
   const nowMs = timestamp(input.now) ?? Date.now()
-  const retrieved = retrieval.status === "ready" ? rankRetrieved(retrieval.results, nowMs) : []
+  const scopedResults = retrieval.status === "ready"
+    ? retrieval.results.filter((result) => result.item.ticker === ticker)
+    : []
+  const retrieved = rankRetrieved(scopedResults, nowMs)
   const seen = new Set<string>()
   const items: TickerKnowledgeItem[] = []
   for (const item of mandatory) {
