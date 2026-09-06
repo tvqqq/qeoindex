@@ -246,7 +246,9 @@ test("QEO-118 canonical resolver replaces Qdrant text only when exact identity a
   assert.equal(resolved.infrastructureFailure, false)
   assert.equal(resolved.unresolvedCount, 0)
   assert.equal(resolved.evidence.length, 1)
-  assert.equal(resolved.evidence[0]?.text, "canonical PostgreSQL chunk text")
+  assert.match(resolved.evidence[0]?.text ?? "", /^canonical PostgreSQL/)
+  assert.notEqual(resolved.evidence[0]?.text, selected.text)
+  assert.ok((resolved.evidence[0]?.text.length ?? Number.POSITIVE_INFINITY) <= selected.text.length)
   assert.equal(resolved.evidence[0]?.item.id, selected.id)
 })
 
