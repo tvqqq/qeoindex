@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-06T00:09:25.481817Z",
+  "capturedAt": "2026-09-06T00:30:34.461230Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
   "migrations": [
     {
@@ -397,6 +397,10 @@
     {
       "version": "20260905235254",
       "name": "qeo106_daily_prune_error_evidence_fix"
+    },
+    {
+      "version": "20260906002919",
+      "name": "qeo106_scoped_daily_integrity_report"
     }
   ]
 }

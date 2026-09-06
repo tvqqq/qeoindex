@@ -297,6 +297,14 @@
       "state": "QUARANTINED",
       "evidence": "qeo87-user-approved-retry-policy-pending-production-smoke",
       "rationale": "Final 07:05 ICT activation is intentionally quarantined until the capped three-retry runtime is Verify-green, production READY, and a bounded manual smoke proves per-report AI failure isolation before cron ownership is enabled."
+    },
+    {
+      "logicalName": "qeo106_scoped_daily_integrity_report",
+      "repositoryVersion": "20260906003000",
+      "productionVersion": "20260906002919",
+      "state": "MAPPED",
+      "evidence": "qeo106-production-scoped-integrity-rpc-and-vic-vcb-parity-smoke",
+      "rationale": "Production repair batches exposed statement_timeout because the route recomputed the full canonical-200 integrity report twice. The reviewed scoped equivalent was replay-verified locally, applied as production version 20260906002919, and returned VIC/VCB PASS with exact canonical counts before runtime cutover."
     }
   ]
 }

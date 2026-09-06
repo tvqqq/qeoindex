@@ -183,6 +183,19 @@ test("QEO-106 unresolved Hot aging stays fail-closed without blocking deeper Col
   assert.ok(skip >= 0 && deepLoop > skip)
 })
 
+test("QEO-106 integrity repair scopes the expensive audit to the requested tickers", () => {
+  const integrity = source("modules/market/history/daily-integrity.ts")
+  const migration = source("supabase/migrations/20260906003000_qeo106_scoped_daily_integrity_report.sql")
+  assert.match(migration, /qeo_market_daily_integrity_report_scoped\(p_tickers text\[\]\)/)
+  assert.match(migration, /requested as \(/)
+  assert.match(migration, /join requested r on r\.ticker = upper\(stock->>'ticker'\)/)
+  assert.match(migration, /provider in \('VCI', 'DNSE'\)/)
+  assert.match(migration, /grant execute on function public\.qeo_market_daily_integrity_report_scoped\(text\[\]\) to service_role/)
+  assert.match(integrity, /qeo_market_daily_integrity_report_scoped/)
+  assert.match(integrity, /\{ p_tickers: tickers \}/)
+  assert.equal((integrity.match(/loadIntegrityReport\(supabase, tickers\)/g) ?? []).length, 2)
+})
+
 test("QEO-106 deep Daily history is resumable, bounded, provider-backed and archive-before-prune", () => {
   const history = source("modules/market/history/daily-cold-history.ts")
   const route = source("app/api/admin/market/daily-history/backfill/route.ts")
