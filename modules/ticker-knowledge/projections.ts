@@ -1,6 +1,3 @@
-import { createHash } from "node:crypto"
-
-import type { Thesis } from "@/modules/research/types"
 import type {
   ResearchReportEvidenceRef,
   ResearchReportTickerStance,
@@ -16,7 +13,6 @@ import { RESEARCH_REPORT_QA_PARTITION } from "./partitions.ts"
 
 export const RESEARCH_REPORT_KNOWLEDGE_PROJECTION_VERSION = "research-report-knowledge-v1" as const
 export const COUNCIL_HISTORY_KNOWLEDGE_PROJECTION_VERSION = "council-history-knowledge-v1" as const
-export const NOTION_THESIS_KNOWLEDGE_PROJECTION_VERSION = "notion-current-thesis-v1" as const
 
 export interface ResearchReportKnowledgeProjectionInput {
   report: {
@@ -371,64 +367,6 @@ export function projectCouncilHistoryKnowledge(input: CouncilHistoryKnowledgePro
   }
 
   return items
-}
-
-function thesisSourceVersion(thesis: Thesis) {
-  const canonical = JSON.stringify({
-    ticker: normalizeTicker(thesis.ticker),
-    status: thesis.status,
-    taBias: thesis.taBias,
-    faBias: thesis.faBias,
-    wyckoffState: thesis.wyckoffState,
-    marketRegime: thesis.marketRegime,
-    baseCase: thesis.baseCase,
-    probabilities: thesis.probabilities,
-    support: thesis.support,
-    resistance: thesis.resistance,
-    confirmation: thesis.confirmation,
-    invalidation: thesis.invalidation,
-    whatChanged: thesis.whatChanged,
-    confidence: thesis.confidence,
-    lastAnalysis: thesis.lastAnalysis,
-    lastFAUpdate: thesis.lastFAUpdate,
-    updated: thesis.updated,
-  })
-  return createHash("sha256").update(canonical).digest("hex")
-}
-
-export function projectCurrentThesisKnowledge(thesis: Thesis): TickerKnowledgeItem {
-  const ticker = normalizeTicker(thesis.ticker)
-  const sourceVersion = thesisSourceVersion(thesis)
-  return createTickerKnowledgeItem({
-    ticker,
-    knowledgeType: "CURRENT_THESIS",
-    authority: "CANONICAL_THESIS",
-    sourceType: "NOTION_THESIS",
-    logicalKey: "current-thesis",
-    text: compactLines([
-      `Canonical Stock Thesis — ${ticker}${cleanText(thesis.company) ? ` (${cleanText(thesis.company)})` : ""}`,
-      `Status: ${thesis.status || "unknown"}`,
-      `TA bias: ${thesis.taBias || "unknown"}; FA bias: ${thesis.faBias || "unknown"}; market regime: ${thesis.marketRegime || "unknown"}`,
-      thesis.wyckoffState ? `Wyckoff state: ${thesis.wyckoffState}` : "",
-      thesis.baseCase ? `Base case: ${thesis.baseCase}` : "",
-      `Probabilities — Bull: ${numberText(thesis.probabilities.bull)}; Base: ${numberText(thesis.probabilities.base)}; Bear: ${numberText(thesis.probabilities.bear)}`,
-      thesis.support ? `Support: ${thesis.support}` : "",
-      thesis.resistance ? `Resistance: ${thesis.resistance}` : "",
-      thesis.confirmation ? `Confirmation: ${thesis.confirmation}` : "",
-      thesis.invalidation ? `Invalidation: ${thesis.invalidation}` : "",
-      thesis.whatChanged ? `What changed: ${thesis.whatChanged}` : "",
-      `Confidence: ${thesis.confidence || "unknown"}`,
-      thesis.lastAnalysis ? `Last analysis: ${thesis.lastAnalysis}` : "",
-    ]),
-    provenance: {
-      sourceId: thesis.id,
-      sourceVersion,
-      publishedAt: thesis.updated || thesis.lastAnalysis || null,
-      asOf: thesis.updated || thesis.lastAnalysis || null,
-      storagePath: thesis.notionUrl || null,
-    },
-    projectionVersion: NOTION_THESIS_KNOWLEDGE_PROJECTION_VERSION,
-  })
 }
 
 export const TICKER_KNOWLEDGE_PROJECTION_FAMILY_VERSION = TICKER_KNOWLEDGE_PROJECTION_VERSION

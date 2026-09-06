@@ -11,14 +11,16 @@ import {
 function item(input: {
   key: string
   text: string
-  authority?: "CANONICAL_THESIS" | "SOURCE_OPINION" | "DETERMINISTIC_SIGNAL"
-  sourceType?: "NOTION_THESIS" | "RESEARCH_REPORT" | "AI_COUNCIL"
+  authority?: "VERIFIED_FACT" | "SOURCE_OPINION" | "DETERMINISTIC_SIGNAL"
+  sourceType?: "RESEARCH_REPORT" | "AI_COUNCIL"
+  knowledgeType?: "REPORT_SUMMARY" | "COUNCIL_MEMORY" | "COUNCIL_OUTCOME"
   asOf?: string | null
 }) {
   const sourceType = input.sourceType ?? "RESEARCH_REPORT"
+  const knowledgeType = input.knowledgeType ?? (sourceType === "AI_COUNCIL" ? "COUNCIL_MEMORY" : "REPORT_SUMMARY")
   return createTickerKnowledgeItem({
     ticker: "MSN",
-    knowledgeType: sourceType === "NOTION_THESIS" ? "CURRENT_THESIS" : sourceType === "AI_COUNCIL" ? "COUNCIL_MEMORY" : "REPORT_SUMMARY",
+    knowledgeType,
     authority: input.authority ?? "SOURCE_OPINION",
     sourceType,
     logicalKey: input.key,
@@ -26,6 +28,7 @@ function item(input: {
     provenance: {
       sourceId: `source-${input.key}`,
       sourceVersion: `version-${input.key}`,
+      runId: sourceType === "AI_COUNCIL" ? `run-${input.key}` : null,
       asOf: input.asOf === undefined ? "2026-09-05T00:00:00.000Z" : input.asOf,
     },
     projectionVersion: "test-v1",
@@ -56,15 +59,15 @@ function index(results: readonly TickerKnowledgeSearchResult[]): TickerKnowledge
 }
 
 test("QEO-115 character budget bounds items and retrieved identities, not only rendered text", async () => {
-  const thesis = item({
-    key: "thesis",
-    text: `Canonical thesis ${"T".repeat(220)}`,
-    authority: "CANONICAL_THESIS",
-    sourceType: "NOTION_THESIS",
+  const councilA = item({
+    key: "council-a",
+    text: `Deterministic Council state A ${"T".repeat(220)}`,
+    authority: "DETERMINISTIC_SIGNAL",
+    sourceType: "AI_COUNCIL",
   })
-  const council = item({
-    key: "council",
-    text: `Council state ${"C".repeat(220)}`,
+  const councilB = item({
+    key: "council-b",
+    text: `Deterministic Council state B ${"C".repeat(220)}`,
     authority: "DETERMINISTIC_SIGNAL",
     sourceType: "AI_COUNCIL",
   })
@@ -76,7 +79,7 @@ test("QEO-115 character budget bounds items and retrieved identities, not only r
     ticker: "MSN",
     query: "valuation catalyst",
     consumer: "AI_COUNCIL",
-    mandatory: [thesis, council],
+    mandatory: [councilA, councilB],
     maxChars: 500,
     now: "2026-09-06T00:00:00.000Z",
   })
@@ -93,16 +96,16 @@ test("QEO-115 character budget bounds items and retrieved identities, not only r
 
 test("QEO-115 partial-fit structured item carries only the bounded rendered text", async () => {
   const huge = item({
-    key: "huge-thesis",
-    text: `Huge canonical thesis ${"H".repeat(5_000)}`,
-    authority: "CANONICAL_THESIS",
-    sourceType: "NOTION_THESIS",
+    key: "huge-council",
+    text: `Huge deterministic Council context ${"H".repeat(5_000)}`,
+    authority: "DETERMINISTIC_SIGNAL",
+    sourceType: "AI_COUNCIL",
   })
 
   const result = await buildTickerContext({
     index: index([]),
     ticker: "MSN",
-    query: "current thesis",
+    query: "current Council state",
     mandatory: [huge],
     maxChars: 500,
     now: "2026-09-06T00:00:00.000Z",
@@ -180,17 +183,17 @@ test("QEO-115 historical ranking uses asOf as the default recency clock", async 
 
 test("QEO-115 historical asOf excludes evidence without temporal provenance", async () => {
   const dated = item({
-    key: "dated",
-    text: "Dated canonical evidence",
-    authority: "CANONICAL_THESIS",
-    sourceType: "NOTION_THESIS",
+    key: "dated-council",
+    text: "Dated deterministic Council evidence",
+    authority: "DETERMINISTIC_SIGNAL",
+    sourceType: "AI_COUNCIL",
     asOf: "2024-09-01T00:00:00.000Z",
   })
   const undatedMandatory = item({
     key: "undated-mandatory",
     text: "Undated mandatory evidence must not enter historical replay",
-    authority: "CANONICAL_THESIS",
-    sourceType: "NOTION_THESIS",
+    authority: "DETERMINISTIC_SIGNAL",
+    sourceType: "AI_COUNCIL",
     asOf: null,
   })
   const undatedRetrieved = item({

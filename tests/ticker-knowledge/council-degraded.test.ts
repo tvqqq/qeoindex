@@ -33,21 +33,21 @@ class SnapshotClient {
   }
 }
 
-test("QEO-117 persists bounded mandatory canonical context when semantic retrieval is unavailable", async () => {
-  const thesis = createTickerKnowledgeItem({
+test("QEO-117 persists bounded mandatory deterministic Council context when semantic retrieval is unavailable", async () => {
+  const council = createTickerKnowledgeItem({
     ticker: "MSN",
-    knowledgeType: "CURRENT_THESIS",
-    authority: "CANONICAL_THESIS",
-    sourceType: "NOTION_THESIS",
-    logicalKey: "current-thesis",
-    text: "Canonical thesis remains usable even when Qdrant semantic retrieval times out.",
+    knowledgeType: "COUNCIL_MEMORY",
+    authority: "DETERMINISTIC_SIGNAL",
+    sourceType: "AI_COUNCIL",
+    logicalKey: "latest-council",
+    text: "Deterministic Council state remains usable even when Qdrant semantic retrieval times out.",
     provenance: {
-      sourceId: "notion-page-msn",
-      sourceVersion: "thesis-version-1",
+      sourceId: RUN_ID,
+      sourceVersion: `policy-v1:${"a".repeat(64)}`,
+      runId: RUN_ID,
       asOf: "2026-09-05T00:00:00.000Z",
-      storagePath: "https://notion.so/msn",
     },
-    projectionVersion: "notion-current-thesis-v1",
+    projectionVersion: "council-history-knowledge-v1",
   })
   const client = new SnapshotClient()
 
@@ -63,9 +63,9 @@ test("QEO-117 persists bounded mandatory canonical context when semantic retriev
       consumer: "AI_COUNCIL",
       retrievalStatus: "unavailable",
       retrievalReason: "qdrant_timeout",
-      items: [thesis],
+      items: [council],
       retrievedPointIds: [],
-      text: thesis.text,
+      text: council.text,
       truncated: false,
       telemetry: { totalMs: 5, alwaysLoadMs: 1, retrievalMs: 4, rerankMs: 0, buildMs: 0 },
     }),
@@ -76,7 +76,7 @@ test("QEO-117 persists bounded mandatory canonical context when semantic retriev
   assert.equal(frozen.context.status, "ready")
   assert.equal(frozen.context.retrievalStatus, "unavailable")
   assert.equal(frozen.context.retrievalReason, "qdrant_timeout")
-  assert.deepEqual(frozen.context.items.map((item) => item.id), [thesis.id])
+  assert.deepEqual(frozen.context.items.map((item) => item.id), [council.id])
   assert.deepEqual(frozen.pointIds, [])
   assert.ok(frozen.context.limitations.some((value) => /semantic retrieval unavailable/i.test(value)))
 })

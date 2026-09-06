@@ -5,8 +5,6 @@ export const TICKER_KNOWLEDGE_PROJECTION_VERSION = "ticker-knowledge-projection-
 export const TICKER_KNOWLEDGE_COLLECTION = "ticker_knowledge" as const
 
 export const TICKER_KNOWLEDGE_TYPES = [
-  "CURRENT_THESIS",
-  "THESIS_HISTORY",
   "REPORT_CHUNK",
   "REPORT_SUMMARY",
   "BROKER_VIEW",
@@ -22,7 +20,6 @@ export const TICKER_KNOWLEDGE_TYPES = [
 
 export const TICKER_KNOWLEDGE_AUTHORITIES = [
   "VERIFIED_FACT",
-  "CANONICAL_THESIS",
   "DETERMINISTIC_SIGNAL",
   "SOURCE_OPINION",
   "AI_INFERENCE",
@@ -32,7 +29,6 @@ export const TICKER_KNOWLEDGE_AUTHORITIES = [
 export const TICKER_KNOWLEDGE_SOURCE_TYPES = [
   "RESEARCH_REPORT",
   "AI_COUNCIL",
-  "NOTION_THESIS",
   "COMPANY_FILING",
   "MARKET_DATA",
   "NEWS",
@@ -236,6 +232,7 @@ export async function queryTickerKnowledgeSafely(
   input: TickerKnowledgeQuery,
 ): Promise<SafeTickerKnowledgeQueryResult> {
   try {
+    await index.ensureReady()
     return { status: "ready", results: await index.query(input) }
   } catch (error) {
     if (error instanceof TickerKnowledgeUnavailableError) {

@@ -136,52 +136,17 @@ test("QEO-113 Council projection separates deterministic decision memory from ob
   assert.equal(items.some((item) => item.knowledgeType === "LESSON" || item.knowledgeType === "COUNCIL_ERROR"), false)
 })
 
-test("QEO-114 current thesis projection keeps a stable point identity while provenance version changes", async () => {
-  const { projectCurrentThesisKnowledge } = await import("../../modules/ticker-knowledge/projections.ts")
-  const base = {
-    id: "notion-page-1",
-    notionUrl: "https://notion.so/1",
-    ticker: "MSN",
-    company: "Masan Group",
-    status: "Current",
-    taBias: "Bullish" as const,
-    faBias: "Bullish" as const,
-    wyckoffState: "Reaccumulation candidate",
-    marketRegime: "Neutral" as const,
-    baseCase: "Hold range before breakout",
-    probabilities: { bull: 35, base: 50, bear: 15 },
-    support: "78-80",
-    resistance: "86-88",
-    confirmation: "Acceptance above 88",
-    invalidation: "Acceptance below 78",
-    whatChanged: "Demand improved",
-    confidence: "MEDIUM" as const,
-    lastAnalysis: "2026-09-01",
-    lastFAUpdate: "2026-08-31",
-    updated: "2026-09-01T09:00:00.000Z",
-    driveFolder: "",
-  }
-  const first = projectCurrentThesisKnowledge(base)
-  const changed = projectCurrentThesisKnowledge({ ...base, baseCase: "Breakout confirmed", updated: "2026-09-02T09:00:00.000Z" })
-
-  assert.equal(first.id, changed.id)
-  assert.notEqual(first.provenance.sourceVersion, changed.provenance.sourceVersion)
-  assert.equal(first.knowledgeType, "CURRENT_THESIS")
-  assert.equal(first.authority, "CANONICAL_THESIS")
-  assert.equal(first.provenance.sourceId, "notion-page-1")
-})
-
-test("QEO-115 context builder always keeps mandatory current state and reports retrieval outage distinctly", async () => {
+test("QEO-115 context builder keeps mandatory deterministic Council state and reports retrieval outage distinctly", async () => {
   const { createTickerKnowledgeItem, TickerKnowledgeUnavailableError } = await import("../../modules/ticker-knowledge/domain.ts")
   const { buildTickerContext } = await import("../../modules/ticker-knowledge/context.ts")
-  const thesis = createTickerKnowledgeItem({
+  const council = createTickerKnowledgeItem({
     ticker: "MSN",
-    knowledgeType: "CURRENT_THESIS",
-    authority: "CANONICAL_THESIS",
-    sourceType: "NOTION_THESIS",
-    logicalKey: "current-thesis",
-    text: "Current thesis: hold range before breakout.",
-    provenance: { sourceId: "notion-page-1", sourceVersion: "hash-v1", asOf: "2026-09-01T09:00:00.000Z" },
+    knowledgeType: "COUNCIL_MEMORY",
+    authority: "DETERMINISTIC_SIGNAL",
+    sourceType: "AI_COUNCIL",
+    logicalKey: "latest-council",
+    text: "Latest deterministic Council signal: WAIT.",
+    provenance: { sourceId: "run-1", sourceVersion: "policy-v1:hash-v1", runId: "run-1", asOf: "2026-09-01T09:00:00.000Z" },
     projectionVersion: "test-v1",
   })
   const unavailable = {
@@ -194,8 +159,8 @@ test("QEO-115 context builder always keeps mandatory current state and reports r
   const context = await buildTickerContext({
     index: unavailable,
     ticker: "MSN",
-    query: "MSN catalyst and current thesis",
-    mandatory: [thesis],
+    query: "MSN catalysts and current Council state",
+    mandatory: [council],
     maxChars: 1200,
     now: "2026-09-06T08:00:00.000Z",
   })
@@ -203,8 +168,8 @@ test("QEO-115 context builder always keeps mandatory current state and reports r
   assert.equal(context.retrievalStatus, "unavailable")
   assert.equal(context.retrievalReason, "qdrant_unavailable")
   assert.equal(context.items.length, 1)
-  assert.equal(context.items[0].id, thesis.id)
-  assert.match(context.text, /Current thesis/)
+  assert.equal(context.items[0].id, council.id)
+  assert.match(context.text, /deterministic Council signal/)
 })
 
 test("QEO-113 sync orchestration upserts deterministic report/Council projections and exposes resumable backfill progress", async () => {
@@ -295,26 +260,6 @@ test("QEO-113 source reprocessing preserves history until an explicit exact-vers
     sourceId: "report-1",
     sourceVersion: first.sourceVersion,
   }])
-})
-
-test("QEO-114 thesis sync is rebuildable and uses the stable CURRENT_THESIS slot", async () => {
-  const { syncCurrentThesisKnowledge } = await import("../../modules/ticker-knowledge/sync.ts")
-  const writes: string[][] = []
-  const index = {
-    ensureReady: async () => undefined,
-    upsert: async (items: readonly { id: string }[]) => { writes.push(items.map((item) => item.id)) },
-    deleteSourceVersion: async () => undefined,
-    query: async () => [],
-  }
-  const thesis = {
-    id: "notion-page-1", notionUrl: "", ticker: "MSN", company: "Masan", status: "Current", taBias: "Neutral" as const, faBias: "Neutral" as const,
-    wyckoffState: "Range", marketRegime: "Neutral" as const, baseCase: "Wait", probabilities: { bull: 30, base: 50, bear: 20 }, support: "70", resistance: "80",
-    confirmation: "80", invalidation: "68", whatChanged: "none", confidence: "LOW" as const, lastAnalysis: "2026-09-01", lastFAUpdate: "2026-09-01", updated: "2026-09-01", driveFolder: "",
-  }
-  const first = await syncCurrentThesisKnowledge(index, thesis)
-  const rebuilt = await syncCurrentThesisKnowledge(index, thesis)
-  assert.equal(first.itemIds[0], rebuilt.itemIds[0])
-  assert.deepEqual(writes, [[first.itemIds[0]], [first.itemIds[0]]])
 })
 
 test("QEO-115 consumer policy preserves contradictory authorities and exposes stage telemetry", async () => {

@@ -140,7 +140,7 @@ test("QEO-118 ticker QA uses strict Responses API schema without storing provide
     assert.equal(format.name, "ticker_qa")
     assert.equal(format.strict, true)
     assert.deepEqual(format.schema, TICKER_QA_JSON_SCHEMA)
-    assert.match(String(body.prompt_cache_key), /^ticker-qa:ticker-qa-prompt-v1:/)
+    assert.match(String(body.prompt_cache_key), /^ticker-qa:ticker-qa-prompt-v2-notion-free:/)
     assert.doesNotMatch(JSON.stringify(body), /test-ticker-qa-key/)
     assert.equal(result.output.status, "answered")
     assert.equal(result.audit.inputTokens, 120)

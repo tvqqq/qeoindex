@@ -17,13 +17,13 @@ const SECRET_EVIDENCE = "RAW_EVIDENCE_MUST_NOT_BE_LOGGED"
 function mandatoryItem(): TickerKnowledgeItem {
   return createTickerKnowledgeItem({
     ticker: "MSN",
-    knowledgeType: "CURRENT_THESIS",
-    authority: "CANONICAL_THESIS",
-    sourceType: "NOTION_THESIS",
-    logicalKey: "current",
+    knowledgeType: "COUNCIL_MEMORY",
+    authority: "DETERMINISTIC_SIGNAL",
+    sourceType: "AI_COUNCIL",
+    logicalKey: "current-council",
     text: SECRET_EVIDENCE,
     provenance: {
-      sourceId: "notion-msn",
+      sourceId: "council-msn",
       sourceVersion: "f".repeat(64),
       asOf: "2026-09-05T10:00:00Z",
       publishedAt: "2026-09-05T10:00:00Z",
@@ -39,9 +39,9 @@ function resolved(item: TickerKnowledgeItem): TickerQaResolvedEvidence {
     text: item.text,
     citation: {
       id: `tk:${item.id}`,
-      sourceType: "NOTION_THESIS",
-      authority: "CANONICAL_THESIS",
-      label: "Current Stock Thesis",
+      sourceType: "AI_COUNCIL",
+      authority: "DETERMINISTIC_SIGNAL",
+      label: "Latest AI Council",
       excerpt: item.text,
       href: null,
       sourceVersion: item.provenance.sourceVersion,
@@ -71,7 +71,7 @@ function context(status: "ready" | "unavailable", items: readonly TickerKnowledg
 }
 
 const providerAudit = {
-  promptVersion: "ticker-qa-prompt-v1",
+  promptVersion: "ticker-qa-prompt-v2",
   requestedModel: "gpt-5.6-luna",
   responseModel: "gpt-5.6-luna",
   fallbackUsed: false,
@@ -90,7 +90,7 @@ test("QEO-118 Qdrant outage still allows grounded mandatory-only answer with exp
   let answerCalls = 0
   const result = await answerTickerQuestion(fakeClient, {
     ticker: "MSN",
-    question: "Thesis hiện tại?",
+    question: "Council hiện tại?",
   }, {
     loadMandatory: async () => ({ items: [item], limitations: [] }),
     buildContext: async () => context("unavailable", [item]),
@@ -106,8 +106,8 @@ test("QEO-118 Qdrant outage still allows grounded mandatory-only answer with exp
         output: {
           status: "answered",
           claims: [{
-            text: "Thesis hiện tại vẫn là kịch bản canonical đã lưu.",
-            authority: "CANONICAL_THESIS",
+            text: "Tín hiệu AI Council hiện tại vẫn là trạng thái deterministic đã lưu.",
+            authority: "DETERMINISTIC_SIGNAL",
             citations: [{ evidenceId: `tk:${item.id}`, excerpt: SECRET_EVIDENCE }],
           }],
           contradictions: [],
@@ -131,9 +131,9 @@ test("QEO-118 unavailable retrieval plus zero canonical evidence returns service
   let answerCalls = 0
   await assert.rejects(() => answerTickerQuestion(fakeClient, {
     ticker: "MSN",
-    question: "Thesis hiện tại?",
+    question: "Council hiện tại?",
   }, {
-    loadMandatory: async () => ({ items: [], limitations: ["CURRENT_THESIS unavailable"] }),
+    loadMandatory: async () => ({ items: [], limitations: ["LATEST_COUNCIL unavailable"] }),
     buildContext: async () => context("unavailable", []),
     resolveEvidence: async () => ({ evidence: [], unresolvedCount: 0, infrastructureFailure: false, hydrationMs: 1 }),
     answerWithAi: async () => {
@@ -196,7 +196,7 @@ test("QEO-118 telemetry is aggregate-only and excludes raw question history evid
         status: "answered",
         claims: [{
           text: "Grounded answer",
-          authority: "CANONICAL_THESIS",
+          authority: "DETERMINISTIC_SIGNAL",
           citations: [{ evidenceId: `tk:${item.id}`, excerpt: SECRET_EVIDENCE }],
         }],
         contradictions: [],

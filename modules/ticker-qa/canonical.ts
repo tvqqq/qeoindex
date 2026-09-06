@@ -6,7 +6,6 @@ import {
 } from "../ticker-knowledge/canonical.ts"
 import {
   projectCouncilHistoryKnowledge,
-  projectCurrentThesisKnowledge,
   projectResearchReportKnowledge,
 } from "../ticker-knowledge/projections.ts"
 import type { TickerKnowledgeItem } from "../ticker-knowledge/domain.ts"
@@ -42,7 +41,6 @@ type CanonicalCandidateLoader = (
 ) => Promise<readonly TickerKnowledgeItem[]>
 
 export interface TickerQaCanonicalDependencies {
-  loadNotionCanonicalCandidates?: CanonicalCandidateLoader
   loadReportCanonicalCandidates?: CanonicalCandidateLoader
   loadCouncilCanonicalCandidates?: CanonicalCandidateLoader
 }
@@ -115,9 +113,6 @@ function boundCanonicalItemToSelectedBudget(
 
 function canonicalEvidenceId(item: TickerKnowledgeItem) {
   const provenance = item.provenance
-  if (item.sourceType === "NOTION_THESIS") {
-    return `thesis:${provenance.sourceId}:${provenance.sourceVersion}`
-  }
   if (item.sourceType === "RESEARCH_REPORT" && provenance.reportId) {
     return [
       "report",
@@ -135,18 +130,6 @@ function canonicalEvidenceId(item: TickerKnowledgeItem) {
 
 function citationFor(item: TickerKnowledgeItem): TickerQaCitation | null {
   const id = canonicalEvidenceId(item)
-  if (item.sourceType === "NOTION_THESIS") {
-    return {
-      id,
-      sourceType: "NOTION_THESIS",
-      authority: item.authority,
-      label: "Current Stock Thesis",
-      excerpt: boundedExcerpt(item.text),
-      href: null,
-      sourceVersion: item.provenance.sourceVersion,
-    }
-  }
-
   if (item.sourceType === "RESEARCH_REPORT" && item.provenance.reportId) {
     return {
       id,
@@ -177,21 +160,6 @@ function citationFor(item: TickerKnowledgeItem): TickerQaCitation | null {
   }
 
   return null
-}
-
-async function loadNotionCanonicalCandidates(
-  _client: SupabaseClient,
-  ticker: string,
-  _selected: TickerKnowledgeItem,
-) {
-  const { getCachedResearchTickerData } = await import("../shared/cache/request-cache.ts")
-  const research = await getCachedResearchTickerData(ticker)
-  if (research.connection.notionLive !== true) return []
-  const thesis = research.theses.find((row) => (
-    normalizeTicker(row.ticker) === ticker
-    && row.status.trim().toLowerCase() === "current"
-  ))
-  return thesis ? [projectCurrentThesisKnowledge(thesis)] : []
 }
 
 async function loadReportCanonicalCandidates(
@@ -315,8 +283,7 @@ export async function resolveTickerQaEvidence(
     seen.add(selected.id)
 
     let loader: CanonicalCandidateLoader | null = null
-    if (selected.sourceType === "NOTION_THESIS") loader = deps.loadNotionCanonicalCandidates ?? loadNotionCanonicalCandidates
-    else if (selected.sourceType === "RESEARCH_REPORT") loader = deps.loadReportCanonicalCandidates ?? loadReportCanonicalCandidates
+    if (selected.sourceType === "RESEARCH_REPORT") loader = deps.loadReportCanonicalCandidates ?? loadReportCanonicalCandidates
     else if (selected.sourceType === "AI_COUNCIL") loader = deps.loadCouncilCanonicalCandidates ?? loadCouncilCanonicalCandidates
 
     if (!loader) {
