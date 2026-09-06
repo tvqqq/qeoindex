@@ -675,6 +675,45 @@ export type Database = {
           },
         ]
       }
+      chart_daily_history_state: {
+        Row: {
+          boundary_time: string | null
+          detail: Json
+          earliest_cold_bar: string | null
+          earliest_hot_bar: string | null
+          last_window_from: string | null
+          last_window_to: string | null
+          left_edge_status: string
+          provider: string | null
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          boundary_time?: string | null
+          detail?: Json
+          earliest_cold_bar?: string | null
+          earliest_hot_bar?: string | null
+          last_window_from?: string | null
+          last_window_to?: string | null
+          left_edge_status?: string
+          provider?: string | null
+          ticker: string
+          updated_at?: string
+        }
+        Update: {
+          boundary_time?: string | null
+          detail?: Json
+          earliest_cold_bar?: string | null
+          earliest_hot_bar?: string | null
+          last_window_from?: string | null
+          last_window_to?: string | null
+          left_edge_status?: string
+          provider?: string | null
+          ticker?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       chart_ohlcv_cold_manifests: {
         Row: {
           archive_format: string
@@ -684,6 +723,7 @@ export type Database = {
           format_version: number
           id: string
           object_path: string
+          provenance: Json
           provenance_batch_id: string | null
           range_end: string
           range_start: string
@@ -700,6 +740,7 @@ export type Database = {
           format_version?: number
           id?: string
           object_path: string
+          provenance?: Json
           provenance_batch_id?: string | null
           range_end: string
           range_start: string
@@ -716,6 +757,7 @@ export type Database = {
           format_version?: number
           id?: string
           object_path?: string
+          provenance?: Json
           provenance_batch_id?: string | null
           range_end?: string
           range_start?: string
@@ -3755,6 +3797,14 @@ export type Database = {
       qeo_prune_noncanonical_orderbook_snapshots: {
         Args: { p_run_id: string }
         Returns: number
+      }
+      qeo_prune_verified_chart_daily_partition: {
+        Args: {
+          p_expected_row_count: number
+          p_expected_sha256: string
+          p_manifest_id: string
+        }
+        Returns: Json
       }
       qeo_prune_verified_chart_intraday_partition: {
         Args: {

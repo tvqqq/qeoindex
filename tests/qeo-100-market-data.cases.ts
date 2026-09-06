@@ -97,7 +97,7 @@ test("QEO-103 archive is cache-before-prune and prune authority is manifest veri
 })
 
 test("QEO-106 Daily cold schema reuses verified manifests and keeps prune fail-closed", () => {
-  const migration = source("supabase/pending-migrations/20260905153500_qeo106_daily_hot_cold_history.sql")
+  const migration = source("supabase/migrations/20260905153500_qeo106_daily_hot_cold_history.sql")
   assert.match(migration, /base_resolution in \('1m', '1D'\)/i)
   assert.match(migration, /add column if not exists provenance jsonb/i)
   assert.match(migration, /create table if not exists public\.chart_daily_history_state/i)

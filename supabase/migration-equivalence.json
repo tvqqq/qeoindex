@@ -277,10 +277,18 @@
     {
       "logicalName": "qeo106_daily_hot_cold_history",
       "repositoryVersion": "20260905153500",
-      "productionVersion": null,
-      "state": "QUARANTINED",
-      "evidence": "qeo106-hot-cold-full-history-preproduction-gate",
-      "rationale": "Daily Hot PostgreSQL + verified Cold Storage schema remains quarantined until exact-head Verify is green; production migration and bounded VIC/VCB smoke follow only after that gate."
+      "productionVersion": "20260905235144",
+      "state": "MAPPED",
+      "evidence": "qeo106-exact-head-green-production-schema-rls-and-function-smoke",
+      "rationale": "QEO-106 Hot PostgreSQL + verified Cold Storage schema was promoted only after exact-head Verify, DB Drift zero-to-latest replay/generated-types, and EOD v4 were all green. Production applied the reviewed logical migration as 20260905235144; repository replay keeps the approved 20260905153500 ordering."
+    },
+    {
+      "logicalName": "qeo106_daily_prune_error_evidence_fix",
+      "repositoryVersion": "20260905235254",
+      "productionVersion": "20260905235254",
+      "state": "EXACT",
+      "evidence": "qeo106-production-function-definition-and-grants-smoke",
+      "rationale": "Corrects only prune mismatch error evidence to report v_deleted; prune authority and fail-closed row-count semantics are unchanged. Production function definition and service-role-only grants were verified after apply."
     },
     {
       "logicalName": "qeo87_enable_research_reports_scheduler",
