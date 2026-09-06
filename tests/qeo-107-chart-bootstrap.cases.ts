@@ -68,6 +68,8 @@ test("QEO-107 staged rollout is canonical-only, capped at twenty tickers, and ke
   assert.match(workflow, /startChartIntradayBootstrapStep\(startedAtIso, requestedTickers\)/)
 
   assert.match(route, /stagedBootstrapTickers\(request\.nextUrl\.searchParams\.get\("tickers"\)\)/)
+  assert.match(route, /if \(value == null\) return \[\]/)
+  assert.match(route, /if \(value\.trim\(\) === ""\) return null/)
   assert.match(route, /QEO107_STAGED_MAX_TICKERS/)
   assert.match(route, /outsideCanonical/)
   assert.match(route, /start\(chartIntradayBootstrapWorkflow, \[startedAt, requestedTickers\]\)/)
