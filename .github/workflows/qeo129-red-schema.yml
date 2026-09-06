@@ -22,4 +22,4 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Run QEO-129 schema contract
-        run: pnpm exec tsx --test tests/db/qeo129-schema-contract.test.ts
+        run: node --test tests/db/qeo129-schema-contract.test.ts
