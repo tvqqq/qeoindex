@@ -31,6 +31,22 @@ test("QEO-122 parses Vietnamese thousands-separated stock ratios without shrinki
   ])
 })
 
+test("QEO-122 decodes VSDC numeric HTML entities before parsing source update timestamps", () => {
+  const notice = parseVsdcCorporateActionHtml(`
+    <article>
+      <div>C&#x1EAD;p nh&#x1EAD;t ng&#xE0;y 19/06/2026 - 09:42:40</div>
+      <div>Mã chứng khoán: VHM</div>
+      <div>Mã ISIN: VN000000VHM0</div>
+      <div>Nơi giao dịch: HOSE</div>
+      <div>Ngày đăng ký cuối cùng: 30/06/2026</div>
+      <div>Lý do mục đích: Chi trả cổ tức bằng tiền mặt</div>
+      <div>Tỷ lệ thực hiện: 60%/cổ phiếu (01 cổ phiếu được nhận 6.000 đồng)</div>
+    </article>
+  `, "https://vsdc.vn/vi/ad1/197086")
+
+  assert.equal(notice.sourceUpdatedAt, "2026-06-19T09:42:40+07:00")
+})
+
 test("QEO-122 uses the numeric VSDC event id as stable identity across legacy/current host aliases", () => {
   const html = `
     <article>
