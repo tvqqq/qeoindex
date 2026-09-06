@@ -49,6 +49,39 @@ type CouncilSample = {
   asOfDate: string
 }
 
+const PRODUCTION_REPORT_BENCHMARK = {
+  reportId: "8ee7c9c5-0557-4cd1-82b0-5d7a27e1f165",
+  analysisId: "e5e9f9a5-5980-4904-8bae-4b50fe2202cb",
+  contentHash: "f6630cc7cb1801c511924431125740309004163a94e7e0caab5dad4887d66dd7",
+  chunkVersion: "report-chunk-v1",
+  cases: [
+    {
+      id: "bsr-fair-value-anchor",
+      kind: "lexical_anchor",
+      query: "giá trị hợp lý 31.150 đồng/cổ phiếu upside 17,1%",
+      expectedChunkIds: ["bf46a232-c3bc-4553-87f1-a00c8acadcc7"],
+    },
+    {
+      id: "bsr-historical-multiples-anchor",
+      kind: "lexical_anchor",
+      query: "P/B 1,79x P/E trailing 6,74x",
+      expectedChunkIds: ["1eb118a7-c0ce-4832-ae56-0b45a3b2dcea"],
+    },
+    {
+      id: "bsr-large-capex-valuation-paraphrase",
+      kind: "semantic_paraphrase",
+      query: "Vì sao định giá bằng dòng tiền chiết khấu kém phù hợp khi BSR bước vào chu kỳ đầu tư lớn?",
+      expectedChunkIds: ["71c40b81-4c1e-4e62-9bae-a96bf5e581f0"],
+    },
+    {
+      id: "bsr-operating-leverage-paraphrase",
+      kind: "semantic_paraphrase",
+      query: "Năng lực vận hành nào giúp BSR hưởng lợi mạnh hơn khi biên lợi nhuận lọc dầu cải thiện?",
+      expectedChunkIds: ["9c143e99-84d6-446a-9c7f-601b26dd665f"],
+    },
+  ],
+} as const
+
 function text(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
@@ -173,6 +206,54 @@ async function loadReportSample(client: SupabaseClient): Promise<ReportSample> {
   }
 
   throw new Error("No ready production report sample with canonical chunks")
+}
+
+async function loadProductionReportBenchmarkSample(client: SupabaseClient): Promise<ReportSample> {
+  const benchmark = PRODUCTION_REPORT_BENCHMARK
+  const reportResponse = await client
+    .from(REPORT_TABLE)
+    .select("id,content_hash,analysis_status")
+    .eq("id", benchmark.reportId)
+    .eq("content_hash", benchmark.contentHash)
+    .eq("analysis_status", "ready")
+    .maybeSingle()
+  if (reportResponse.error) throw new Error(`Production benchmark report lookup failed: ${reportResponse.error.message}`)
+  if (!reportResponse.data) throw new Error("Production benchmark report exact version is not ready")
+
+  const analysisResponse = await client
+    .from(ANALYSIS_TABLE)
+    .select("id,report_id,content_hash,chunk_version")
+    .eq("id", benchmark.analysisId)
+    .eq("report_id", benchmark.reportId)
+    .eq("content_hash", benchmark.contentHash)
+    .eq("chunk_version", benchmark.chunkVersion)
+    .maybeSingle()
+  if (analysisResponse.error) throw new Error(`Production benchmark analysis lookup failed: ${analysisResponse.error.message}`)
+  if (!analysisResponse.data) throw new Error("Production benchmark analysis exact version is unavailable")
+
+  const expectedChunkIds = [...new Set(benchmark.cases.flatMap((entry) => [...entry.expectedChunkIds]))]
+  const chunksResponse = await client
+    .from(CHUNK_TABLE)
+    .select("id")
+    .eq("report_id", benchmark.reportId)
+    .eq("content_hash", benchmark.contentHash)
+    .eq("chunk_version", benchmark.chunkVersion)
+    .in("id", expectedChunkIds)
+  if (chunksResponse.error) throw new Error(`Production benchmark chunk lookup failed: ${chunksResponse.error.message}`)
+  const foundChunkIds = new Set((Array.isArray(chunksResponse.data) ? chunksResponse.data : []).map((row) => text(row.id)))
+  if (foundChunkIds.size !== expectedChunkIds.length || expectedChunkIds.some((id) => !foundChunkIds.has(id))) {
+    throw new Error("Production benchmark manually labeled canonical chunks are incomplete")
+  }
+
+  return {
+    reportId: benchmark.reportId,
+    analysisId: benchmark.analysisId,
+    contentHash: benchmark.contentHash,
+    chunkVersion: benchmark.chunkVersion,
+    chunkId: expectedChunkIds[0],
+    chunkText: "",
+    title: "",
+  }
 }
 
 async function loadCouncilSample(client: SupabaseClient): Promise<CouncilSample> {
@@ -425,14 +506,14 @@ export async function runServerCouncilKnowledgeCanary() {
 function evaluationCase(
   id: string,
   kind: ResearchReportQaEvaluationCase["kind"],
-  expectedChunkId: string,
+  expectedChunkIds: readonly string[],
   probe: Awaited<ReturnType<typeof reportProbe>>,
 ): ResearchReportQaEvaluationCase {
   const hybridChunkIds = probe.hybrid.status === "ready" ? probe.hybrid.evidence.map((row) => row.chunkId) : []
   return {
     id,
     kind,
-    expectedChunkIds: [expectedChunkId],
+    expectedChunkIds: [...expectedChunkIds],
     lexicalChunkIds: probe.lexical.map((row) => row.chunkId),
     hybridChunkIds,
     qdrantCandidateCount: probe.hybrid.status === "ready" ? probe.hybrid.pointIds.length : 0,
@@ -447,15 +528,13 @@ function evaluationCase(
 
 export async function runServerTickerKnowledgeBenchmark() {
   const client = requireSupabase()
-  const sample = await loadReportSample(client)
-  const lexicalProbe = await reportProbe(client, sample, probeText(sample.chunkText))
-  const semanticProbe = await reportProbe(client, sample, probeText(sample.title || sample.chunkText, 6))
-  const lexicalExpected = lexicalProbe.lexical[0]?.chunkId ?? sample.chunkId
-  const semanticExpected = semanticProbe.lexical[0]?.chunkId ?? sample.chunkId
-  const reportCases = [
-    evaluationCase("production-lexical-anchor", "lexical_anchor", lexicalExpected, lexicalProbe),
-    evaluationCase("production-semantic-title", "semantic_paraphrase", semanticExpected, semanticProbe),
-  ]
+  const sample = await loadProductionReportBenchmarkSample(client)
+  const probes = await Promise.all(PRODUCTION_REPORT_BENCHMARK.cases.map((entry) => (
+    reportProbe(client, sample, entry.query)
+  )))
+  const reportCases = PRODUCTION_REPORT_BENCHMARK.cases.map((entry, index) => (
+    evaluationCase(entry.id, entry.kind, entry.expectedChunkIds, probes[index])
+  ))
 
   const councilSample = await loadCouncilSample(client)
   const asOf = endOfVietnamDate(councilSample.asOfDate)
@@ -475,12 +554,12 @@ export async function runServerTickerKnowledgeBenchmark() {
   const historical = councilContext.items.some((item) => (
     item.knowledgeType === "COUNCIL_MEMORY" || item.knowledgeType === "COUNCIL_OUTCOME"
   ))
-  const exactVersion = lexicalProbe.hybrid.status === "ready" && lexicalProbe.canonical
+  const exactVersion = probes.every((probe) => probe.hybrid.status === "ready" && probe.canonical)
 
   const evaluation = evaluateTickerKnowledgeProductionAcceptance({
     reportCases,
     tickerIsolation: { tested: 1, passed: isolated ? 1 : 0 },
-    exactVersion: { tested: 1, passed: exactVersion ? 1 : 0 },
+    exactVersion: { tested: reportCases.length, passed: exactVersion ? reportCases.length : 0 },
     contradictionAuthority: { tested: 1, passed: authorityOk ? 1 : 0 },
     temporalValidity: { tested: 1, passed: temporalOk ? 1 : 0 },
     historicalAnalog: { tested: 1, passed: historical ? 1 : 0 },
@@ -494,9 +573,15 @@ export async function runServerTickerKnowledgeBenchmark() {
     passed: evaluation.passed,
     gates: evaluation.gates,
     report: {
+      benchmarkReportId: PRODUCTION_REPORT_BENCHMARK.reportId,
+      benchmarkAnalysisId: PRODUCTION_REPORT_BENCHMARK.analysisId,
       totalCases: evaluation.report.totalCases,
       lexicalRecall: evaluation.report.overall.lexical.recall,
       hybridRecall: evaluation.report.overall.hybrid.recall,
+      lexicalAnchorRecall: evaluation.report.byKind.lexical_anchor.lexicalRecall,
+      hybridAnchorRecall: evaluation.report.byKind.lexical_anchor.hybridRecall,
+      lexicalSemanticRecall: evaluation.report.byKind.semantic_paraphrase.lexicalRecall,
+      hybridSemanticRecall: evaluation.report.byKind.semantic_paraphrase.hybridRecall,
       canonicalResolutionRate: evaluation.report.canonicalResolutionRate,
       citationPassRate: evaluation.report.citationValidity.passRate,
     },
