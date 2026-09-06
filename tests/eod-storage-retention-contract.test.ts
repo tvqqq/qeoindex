@@ -19,7 +19,8 @@ test("active EOD retention is Supabase-first and never deletes canonical raw Dai
   const sql = retentionMigration()
 
   assert.match(archive, /qeo_run_safe_retention_cleanup/)
-  assert.match(archive, /Raw Daily OHLCV retention is intentionally disabled/i)
+  assert.match(archive, /Canonical Daily OHLCV remains in market_ohlcv_history after its bounded ~8-year bootstrap/i)
+  assert.match(archive, /five Vietnam trading sessions/i)
   assert.doesNotMatch(archive, /\.from\("market_ohlcv_history"\)[\s\S]*?\.delete\(/i)
   assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
   assert.doesNotMatch(sql, /truncate\s+(table\s+)?public\.market_ohlcv_history/i)
