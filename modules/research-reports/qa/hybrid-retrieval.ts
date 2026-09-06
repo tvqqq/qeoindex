@@ -1,9 +1,9 @@
-import { buildTickerContext } from "@/modules/ticker-knowledge/context"
+import { buildTickerContext } from "../../ticker-knowledge/context.ts"
 import type {
   TickerKnowledgeIndex,
   TickerKnowledgeUnavailableReason,
-} from "@/modules/ticker-knowledge/domain"
-import { RESEARCH_REPORT_QA_PARTITION } from "@/modules/ticker-knowledge/partitions"
+} from "../../ticker-knowledge/domain.ts"
+import { RESEARCH_REPORT_QA_PARTITION } from "../../ticker-knowledge/partitions.ts"
 
 import { hydrateResearchReportQaEvidence } from "./retrieval.ts"
 import {
