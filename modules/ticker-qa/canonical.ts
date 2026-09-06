@@ -100,6 +100,20 @@ function boundedExcerpt(text: string) {
   return `${normalized.slice(0, Math.max(0, TICKER_QA_LIMITS.citationExcerptChars - 1)).trimEnd()}…`
 }
 
+function boundCanonicalItemToSelectedBudget(
+  selected: TickerKnowledgeItem,
+  canonical: TickerKnowledgeItem,
+): TickerKnowledgeItem {
+  const normalized = cleanText(canonical.text)
+  const budget = selected.text.length
+  if (normalized.length <= budget) return { ...canonical, text: normalized }
+  if (budget <= 1) return { ...canonical, text: normalized.slice(0, Math.max(0, budget)) }
+  return {
+    ...canonical,
+    text: `${normalized.slice(0, budget - 1).trimEnd()}…`,
+  }
+}
+
 function canonicalEvidenceId(item: TickerKnowledgeItem) {
   const provenance = item.provenance
   if (item.sourceType === "NOTION_THESIS") {
@@ -317,11 +331,12 @@ export async function resolveTickerQaEvidence(
         unresolvedCount += 1
         continue
       }
-      const citation = citationFor(canonical)
+      const boundedCanonical = boundCanonicalItemToSelectedBudget(selected, canonical)
+      const citation = citationFor(boundedCanonical)
       evidence.push({
-        evidenceId: citation?.id ?? canonicalEvidenceId(canonical),
-        item: canonical,
-        text: canonical.text,
+        evidenceId: citation?.id ?? canonicalEvidenceId(boundedCanonical),
+        item: boundedCanonical,
+        text: boundedCanonical.text,
         citation,
       })
     } catch {
