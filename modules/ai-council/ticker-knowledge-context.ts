@@ -7,6 +7,7 @@ export const AI_COUNCIL_TICKER_KNOWLEDGE_CONTEXT_VERSION = "ticker-knowledge-con
 
 const SNAPSHOT_TABLE = "ai_council_ticker_knowledge_snapshots"
 const SAFE_UNAVAILABLE_LIMITATION = "Ticker knowledge retrieval unavailable at Council freeze time."
+const SAFE_DEGRADED_LIMITATION = "Semantic retrieval unavailable; using bounded mandatory canonical context only."
 
 export type CouncilTickerKnowledgeStatus = "ready" | "empty" | "unavailable"
 
@@ -145,7 +146,10 @@ async function readPersistedSnapshot(client: CouncilTickerKnowledgeSnapshotClien
   }
 }
 
-function unavailableContext(input: FreezeCouncilTickerKnowledgeInput): CouncilTickerKnowledgeContext {
+function unavailableContext(
+  input: FreezeCouncilTickerKnowledgeInput,
+  reason = "ticker_knowledge_unavailable",
+): CouncilTickerKnowledgeContext {
   return {
     contextVersion: AI_COUNCIL_TICKER_KNOWLEDGE_CONTEXT_VERSION,
     ticker: normalizeTicker(input.ticker),
@@ -156,16 +160,33 @@ function unavailableContext(input: FreezeCouncilTickerKnowledgeInput): CouncilTi
     retrievedPointIds: [],
     truncated: false,
     retrievalStatus: "unavailable",
-    retrievalReason: "ticker_knowledge_unavailable",
+    retrievalReason: reason.slice(0, 120),
     limitations: [SAFE_UNAVAILABLE_LIMITATION],
   }
 }
 
 function freezeContext(input: FreezeCouncilTickerKnowledgeInput, built: TickerContext): CouncilTickerKnowledgeContext {
-  if (built.retrievalStatus === "unavailable") return unavailableContext(input)
   const ticker = normalizeTicker(input.ticker)
   const items = built.items.filter((item) => item.ticker === ticker)
   const pointIds = built.retrievedPointIds.filter((id) => items.some((item) => item.id === id))
+
+  if (built.retrievalStatus === "unavailable") {
+    if (!items.length) return unavailableContext(input, built.retrievalReason ?? undefined)
+    return {
+      contextVersion: AI_COUNCIL_TICKER_KNOWLEDGE_CONTEXT_VERSION,
+      ticker,
+      asOfDate: input.asOfDate,
+      status: "ready",
+      query: normalizeQuery(input.query),
+      items,
+      retrievedPointIds: pointIds,
+      truncated: built.truncated,
+      retrievalStatus: "unavailable",
+      retrievalReason: built.retrievalReason,
+      limitations: [SAFE_DEGRADED_LIMITATION],
+    }
+  }
+
   return {
     contextVersion: AI_COUNCIL_TICKER_KNOWLEDGE_CONTEXT_VERSION,
     ticker,
