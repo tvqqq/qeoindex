@@ -669,6 +669,15 @@
       ]
     },
     {
+      "path": "tests/qeo-124-lineage-portability.test.ts",
+      "owner": "market",
+      "invariant": "QEO-124 factor lineage is stable across databases when canonical source facts are identical but generated corporate-action UUIDs differ.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/qeo-124-monetary-unit.test.ts",
       "owner": "market",
       "invariant": "QEO-124 converts canonical corporate-action monetary terms in VND onto the canonical Daily kilo-VND price scale before factor arithmetic.",
