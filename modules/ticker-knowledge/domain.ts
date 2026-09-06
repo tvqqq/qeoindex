@@ -236,6 +236,7 @@ export async function queryTickerKnowledgeSafely(
   input: TickerKnowledgeQuery,
 ): Promise<SafeTickerKnowledgeQueryResult> {
   try {
+    await index.ensureReady()
     return { status: "ready", results: await index.query(input) }
   } catch (error) {
     if (error instanceof TickerKnowledgeUnavailableError) {

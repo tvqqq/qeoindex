@@ -190,7 +190,7 @@ export function createCanonicalPostgresBackfillSource(
       if (!runIds.length) return []
       const response = await supabase
         .from(COUNCIL_DEBATE_TABLE)
-        .select("id,run_id,status,prompt_version,error,completed_at,created_at")
+        .select("run_id,status,prompt_version,error,completed_at,created_at")
         .in("run_id", [...runIds])
         .order("run_id", { ascending: true })
       if (response.error) throw dbError("Canonical AI Council debates read failed", response.error)

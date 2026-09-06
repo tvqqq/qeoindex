@@ -95,6 +95,13 @@ function numberOrNull(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
+function payloadSchemaType(value: unknown) {
+  if (typeof value === "string") return value.trim().toLowerCase()
+  if (!isRecord(value)) return null
+  const dataType = stringOrNull(value.data_type) ?? stringOrNull(value.dataType) ?? stringOrNull(value.type)
+  return dataType?.toLowerCase() ?? null
+}
+
 function exactFilter(key: string, value: string) {
   return { key, match: { value } }
 }
@@ -228,6 +235,7 @@ export function createQdrantTickerKnowledgeIndex(options: QdrantTickerKnowledgeI
   }
   const fetchImpl = options.fetchImpl ?? fetch
   const timeoutMs = Math.max(500, Math.min(30_000, Math.floor(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)))
+  let readinessPromise: Promise<void> | null = null
 
   const derivedVersions: TickerKnowledgeDerivedVersions = {
     embeddingModel: embeddingProvider.model,
@@ -285,8 +293,34 @@ export function createQdrantTickerKnowledgeIndex(options: QdrantTickerKnowledgeI
     }
   }
 
-  async function ensureReady() {
-    const info = await request(`/collections/${encodeURIComponent(collectionName)}`, { method: "GET" }, true)
+  function inspectCollectionInfo(json: QdrantJson | null) {
+    const result = json && isRecord(json.result) ? json.result : null
+    const config = result && isRecord(result.config) ? result.config : null
+    const params = config && isRecord(config.params) ? config.params : null
+    const vectors = params && isRecord(params.vectors) ? params.vectors : null
+    const dense = vectors && isRecord(vectors[DENSE_VECTOR_NAME]) ? vectors[DENSE_VECTOR_NAME] : null
+    const sparseVectors = params && isRecord(params.sparse_vectors) ? params.sparse_vectors : null
+    const payloadSchema = result && isRecord(result.payload_schema) ? result.payload_schema : {}
+
+    if (!dense) {
+      throw new TickerKnowledgeUnavailableError("invalid_response", `Qdrant collection is missing ${DENSE_VECTOR_NAME} dense vector`)
+    }
+    if (Number(dense.size) !== vectorSize) {
+      throw new TickerKnowledgeUnavailableError("invalid_response", `Qdrant dense vector size mismatch: expected ${vectorSize}`)
+    }
+    const distance = stringOrNull(dense.distance)
+    if (distance && distance.toLowerCase() !== "cosine") {
+      throw new TickerKnowledgeUnavailableError("invalid_response", "Qdrant dense vector distance must be Cosine")
+    }
+    if (!sparseVectors || !(SPARSE_VECTOR_NAME in sparseVectors)) {
+      throw new TickerKnowledgeUnavailableError("invalid_response", `Qdrant collection is missing ${SPARSE_VECTOR_NAME} sparse vector`)
+    }
+
+    return payloadSchema
+  }
+
+  async function ensureReadyUncached() {
+    let info = await request(`/collections/${encodeURIComponent(collectionName)}`, { method: "GET" }, true)
     if (info.response.status === 404) {
       await request(`/collections/${encodeURIComponent(collectionName)}`, {
         method: "PUT",
@@ -304,24 +338,33 @@ export function createQdrantTickerKnowledgeIndex(options: QdrantTickerKnowledgeI
           },
         }),
       })
-    } else if (info.json) {
-      const result = isRecord(info.json.result) ? info.json.result : null
-      const config = result && isRecord(result.config) ? result.config : null
-      const params = config && isRecord(config.params) ? config.params : null
-      const vectors = params && isRecord(params.vectors) ? params.vectors : null
-      const dense = vectors && isRecord(vectors[DENSE_VECTOR_NAME]) ? vectors[DENSE_VECTOR_NAME] as Record<string, unknown> : null
-      if (dense && Number(dense.size) !== vectorSize) {
-        throw new TickerKnowledgeUnavailableError("invalid_response", `Qdrant dense vector size mismatch: expected ${vectorSize}`)
-      }
+      info = await request(`/collections/${encodeURIComponent(collectionName)}`, { method: "GET" })
     }
 
+    const payloadSchema = inspectCollectionInfo(info.json)
     for (const [fieldName, fieldSchema] of PAYLOAD_INDEXES) {
+      const existingType = payloadSchemaType(payloadSchema[fieldName])
+      if (existingType === fieldSchema) continue
+      if (existingType !== null) {
+        throw new TickerKnowledgeUnavailableError(
+          "invalid_response",
+          `Qdrant payload index ${fieldName} type mismatch: expected ${fieldSchema}`,
+        )
+      }
       const response = await request(`/collections/${encodeURIComponent(collectionName)}/index?wait=true`, {
         method: "PUT",
         body: JSON.stringify({ field_name: fieldName, field_schema: fieldSchema }),
       })
       if (!response.json) throw new TickerKnowledgeUnavailableError("invalid_response", `Qdrant payload index response missing for ${fieldName}`)
     }
+  }
+
+  function ensureReady() {
+    readinessPromise ??= ensureReadyUncached().catch((error) => {
+      readinessPromise = null
+      throw error
+    })
+    return readinessPromise
   }
 
   async function upsert(items: readonly TickerKnowledgeItem[]) {
