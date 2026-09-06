@@ -72,6 +72,18 @@ export type {
   TickerKnowledgeBackfillProgress,
   TickerKnowledgeSyncResult,
 } from "./sync.ts"
+export {
+  MAX_CURRENT_THESIS_REBUILD,
+  inspectCurrentThesisProjection,
+  rebuildCurrentThesisKnowledge,
+} from "./notion-sync.ts"
+export type {
+  CurrentThesisProjectionState,
+  CurrentThesisProjectionStatus,
+  CurrentThesisRebuildResult,
+  CurrentThesisRebuildRow,
+  RebuildCurrentThesisKnowledgeInput,
+} from "./notion-sync.ts"
 export { buildTickerContext } from "./context.ts"
 export type {
   BuildTickerContextInput,
