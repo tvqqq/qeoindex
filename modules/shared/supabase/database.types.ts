@@ -619,6 +619,50 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_council_ticker_knowledge_snapshots: {
+        Row: {
+          as_of_date: string
+          captured_at: string
+          context_hash: string
+          context_payload: Json
+          context_version: string
+          point_ids: Json
+          run_id: string
+          status: string
+          ticker: string
+        }
+        Insert: {
+          as_of_date: string
+          captured_at?: string
+          context_hash: string
+          context_payload: Json
+          context_version: string
+          point_ids?: Json
+          run_id: string
+          status: string
+          ticker: string
+        }
+        Update: {
+          as_of_date?: string
+          captured_at?: string
+          context_hash?: string
+          context_payload?: Json
+          context_version?: string
+          point_ids?: Json
+          run_id?: string
+          status?: string
+          ticker?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_council_ticker_knowledge_snapshots_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: true
+            referencedRelation: "ai_council_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_council_votes: {
         Row: {
           agent_key: string
@@ -3752,6 +3796,23 @@ export type Database = {
       qeo_get_kfsp_credentials: { Args: never; Returns: Json }
       qeo_get_kfsp_provider_token_cache: { Args: never; Returns: Json }
       qeo_get_market_close_sync_secret: { Args: never; Returns: string }
+      qeo_hydrate_research_report_chunks: {
+        Args: {
+          p_chunk_ids: string[]
+          p_chunk_version: string
+          p_content_hash: string
+          p_report_id: string
+        }
+        Returns: {
+          chunk_index: number
+          chunk_version: string
+          content: string
+          content_hash: string
+          id: string
+          page_number: number
+          report_id: string
+        }[]
+      }
       qeo_market_daily_integrity_report: {
         Args: never
         Returns: {

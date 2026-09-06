@@ -7,10 +7,17 @@ import {
 const DEFAULT_BACKFILL_BATCH_SIZE = 25
 const MAX_BACKFILL_BATCH_SIZE = 100
 const MAX_CURSOR_LENGTH = 256
+const RESET_CONFIRMATION = "RESET_DERIVED_TICKER_KNOWLEDGE" as const
 
 export type TickerKnowledgeAcceptanceCommand =
   | { action: "backfill_reports"; cursor: string | null; batchSize: number }
   | { action: "backfill_council"; cursor: string | null; batchSize: number }
+  | { action: "inventory" }
+  | { action: "benchmark" }
+  | { action: "canary_report" }
+  | { action: "canary_stock" }
+  | { action: "canary_council" }
+  | { action: "reset_collection"; confirm: typeof RESET_CONFIRMATION }
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -43,6 +50,19 @@ export function normalizeTickerKnowledgeAcceptanceCommand(value: unknown): Ticke
       cursor: normalizedCursor(input.cursor),
       batchSize: boundedInteger(input.batchSize, DEFAULT_BACKFILL_BATCH_SIZE, MAX_BACKFILL_BATCH_SIZE),
     }
+  }
+  if (
+    action === "inventory"
+    || action === "benchmark"
+    || action === "canary_report"
+    || action === "canary_stock"
+    || action === "canary_council"
+  ) return { action }
+  if (action === "reset_collection") {
+    if (input.confirm !== RESET_CONFIRMATION) {
+      throw new Error("Ticker knowledge collection reset requires explicit confirmation")
+    }
+    return { action, confirm: RESET_CONFIRMATION }
   }
   throw new Error(`Unsupported ticker knowledge acceptance action: ${action || "missing"}`)
 }

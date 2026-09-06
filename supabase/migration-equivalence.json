@@ -176,7 +176,7 @@
       "productionVersion": "20260902101642",
       "state": "MAPPED",
       "evidence": "production-ledger-and-service-role-rpc",
-      "rationale": "QEO-29 bounded job telemetry cleanup was applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
+      "rationale": "QEO-29 bounded job telemetry cleanup was applied to production before runtime merge; Supabase production timestamp differs from repository filename"
     },
     {
       "logicalName": "qeo39_wyckoff_n_plus_one",
@@ -184,7 +184,7 @@
       "productionVersion": "20260902120822",
       "state": "MAPPED",
       "evidence": "production-ledger-batched-rpc-and-artifact-cleanup-smoke",
-      "rationale": "QEO-39 batched indexed OHLCV RPC and run-scoped build artifact store were applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
+      "rationale": "QEO-39 batched indexed OHLCV RPC and run-scoped build artifact store were applied to production before runtime merge; Supabase production timestamp differs from repository filename"
     },
     {
       "logicalName": "qeo39_grouped_ohlcv_rpc",
@@ -324,19 +324,19 @@
     },
     {
       "logicalName": "qeo117_ai_council_ticker_knowledge",
-      "repositoryVersion": "20260906094500",
-      "productionVersion": null,
-      "state": "QUARANTINED",
-      "evidence": "qeo117-green-freeze-contract-pending-qdrant-production-cutover",
-      "rationale": "Immutable ticker-knowledge Council snapshot schema is intentionally quarantined until Qdrant credentials, exact-head DB replay/types, runtime wiring, and bounded production smoke are approved."
+      "repositoryVersion": "20260906123024",
+      "productionVersion": "20260906123024",
+      "state": "EXACT",
+      "evidence": "qeo119-production-ledger-and-snapshot-schema-smoke",
+      "rationale": "QEO-117 immutable Council ticker-knowledge snapshot schema is already applied in production as exact version 20260906123024; production table existence was reverified before QEO-119 final acceptance wiring."
     },
     {
       "logicalName": "qeo116_report_qa_hydration",
-      "repositoryVersion": "20260906111500",
-      "productionVersion": null,
-      "state": "QUARANTINED",
-      "evidence": "qeo116-shadow-evaluation-pending-production-hydration-cutover",
-      "rationale": "Exact-version report Q&A hydration RPC remains quarantined until QEO-116 shadow evaluation, exact-head DB replay/types, canonical backfill, and production retrieval smoke are approved."
+      "repositoryVersion": "20260906132050",
+      "productionVersion": "20260906132050",
+      "state": "EXACT",
+      "evidence": "qeo119-exact-head-db-drift-production-hydration-smoke",
+      "rationale": "QEO-116 exact-version Report Q&A hydration RPC was promoted only after exact-head Verify, zero-to-latest DB replay/generated-types, canonical backfill, and production smoke proved service-role-only execution plus exact report/content-hash/chunk-version/chunk-id hydration."
     }
   ]
 }
