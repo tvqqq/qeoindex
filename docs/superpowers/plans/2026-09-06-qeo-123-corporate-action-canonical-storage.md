@@ -6,7 +6,7 @@
 
 **Architecture:** Keep source-specific parsing isolated under `modules/market/corporate-actions/providers/`; normalize into a provider-agnostic contract and persist immutable raw notice evidence plus one-or-more normalized action components per source notice. UI and adjustment-engine consumers read only normalized contracts.
 
-**Tech Stack:** TypeScript, Supabase/PostgreSQL, Next.js server runtime, existing Database types/test conventions.
+**Tech Stack:** TypeScript, Supabase/PostgreSQL, Next.js server runtime, canonical Database types/test manifest.
 
 **Spec:** `docs/superpowers/specs/2026-09-06-corporate-actions-adjusted-chart-design.md`
 
@@ -27,8 +27,9 @@
 - Create: `supabase/migrations/20260906163000_qeo123_corporate_actions.sql`
 - Modify: `supabase/migration-equivalence.json`
 - Modify: `docs/db/evidence/production-migration-ledger-2026-09-06.json`
-- Modify: `lib/supabase/database.types.ts`
+- Modify: `modules/shared/supabase/database.types.ts`
 - Test: `tests/market-data-contract.test.ts`
+- Test: `tests/db-schema-contract.test.ts`
 
 **Interfaces:**
 - Produces tables `corporate_action_source_evidence` and `corporate_actions`.
@@ -37,10 +38,10 @@
 
 Assert the migration contains service-role-only mutation policy, immutable source-notice evidence, one-to-many normalized action components, explicit nullable `ex_date`, status/action checks, provenance hashes and normalization version.
 
-- [ ] **Step 2: Run targeted contract RED**
+- [ ] **Step 2: Run targeted schema contracts RED**
 
 ```bash
-pnpm exec tsx --test tests/market-data-contract.test.ts
+pnpm exec tsx --test tests/market-data-contract.test.ts tests/db-schema-contract.test.ts
 ```
 
 Expected: FAIL because the migration/schema does not exist.
@@ -96,13 +97,13 @@ create table public.corporate_actions (
 );
 ```
 
-`source_component_key` is deterministic within one notice, for example `cash_dividend:0`, `stock_dividend:0`, `rights_issue:0`. A notice amendment preserves the logical component identity and updates its evidence lineage rather than inventing a second action.
+`source_component_key` is deterministic within one notice, for example `cash_dividend:0`, `stock_dividend:0`, `rights_issue:0`. A notice amendment preserves logical component identity and changes evidence lineage rather than inventing a second action.
 
 Add checks for supported status/action values and indexes on `(ticker, ex_date)`, `(ticker, record_date)` and `(source, source_event_id)`.
 
 - [ ] **Step 4: Regenerate Database types and add migration-equivalence entry**
 
-Repository version is exactly `20260906163000`. If production applies under a different Supabase timestamp, map it explicitly in `supabase/migration-equivalence.json`; never rename an already-applied production migration to fake parity.
+Run `pnpm db:types:generate`. Repository version is exactly `20260906163000`. If production applies under a different Supabase timestamp, map it explicitly in `supabase/migration-equivalence.json`; never rename an already-applied production migration to fake parity.
 
 - [ ] **Step 5: Run DB Drift locally/CI**
 
@@ -111,16 +112,17 @@ Expected: reviewed ledger passes, migrations replay from zero, generated types a
 - [ ] **Step 6: Commit**
 
 ```bash
-git add supabase/migrations/20260906163000_qeo123_corporate_actions.sql supabase/migration-equivalence.json docs/db/evidence/production-migration-ledger-2026-09-06.json lib/supabase/database.types.ts tests/market-data-contract.test.ts
+git add supabase/migrations/20260906163000_qeo123_corporate_actions.sql supabase/migration-equivalence.json docs/db/evidence/production-migration-ledger-2026-09-06.json modules/shared/supabase/database.types.ts tests/market-data-contract.test.ts tests/db-schema-contract.test.ts
 git commit -m "feat(QEO-123): add canonical corporate action storage"
 ```
 
-### Task 2: Create provider-agnostic contracts
+### Task 2: Create provider-agnostic contracts + normalization
 
 **Files:**
 - Create: `modules/market/corporate-actions/contract.ts`
 - Create: `modules/market/corporate-actions/normalize.ts`
-- Test: `tests/qeo-123-corporate-actions.test.ts`
+- Create: `tests/qeo-123-corporate-actions.test.ts`
+- Modify: `tests/test-contracts.json`
 
 **Interfaces:**
 
@@ -156,13 +158,11 @@ export type NormalizedCorporateAction = {
 }
 ```
 
-- [ ] **Step 1: RED normalization fixtures**
-
-Include a combined VHM notice that yields exactly two normalized rows with the same `sourceEventId` and different deterministic `sourceComponentKey` values.
-
-- [ ] **Step 2: Implement fail-closed normalization** — incomplete rights terms or unproven ex-date become `ambiguous`.
-- [ ] **Step 3: GREEN targeted tests**
-- [ ] **Step 4: Commit**
+- [ ] **Step 1: Register `tests/qeo-123-corporate-actions.test.ts` in `tests/test-contracts.json`** with owner `market-data` and canonical event identity/provenance invariant.
+- [ ] **Step 2: RED normalization fixtures** — combined VHM notice yields exactly two normalized components sharing `sourceEventId` but using distinct stable `sourceComponentKey` values.
+- [ ] **Step 3: RED fail-closed cases** — incomplete rights terms or unproven ex-date normalize to `ambiguous`.
+- [ ] **Step 4: Implement normalization and GREEN tests**
+- [ ] **Step 5: Commit**
 
 ### Task 3: Promote the approved free-source adapter from spike to production module
 
@@ -173,7 +173,13 @@ Include a combined VHM notice that yields exactly two normalized rows with the s
 - Modify: `tests/qeo-123-corporate-actions.test.ts`
 
 **Interfaces:**
-- Produces `fetchCorporateActionsForTicker(ticker, options): Promise<NormalizedCorporateAction[]>`.
+
+```ts
+export async function fetchCorporateActionsForTicker(
+  ticker: string,
+  options: { asOf: string; signal?: AbortSignal },
+): Promise<NormalizedCorporateAction[]>
+```
 
 - [ ] **Step 1: Copy only behavior proven by QEO-122 fixtures; do not import the probe module**
 - [ ] **Step 2: Add combined-action, amendment and duplicate-notice regression fixtures**
@@ -181,7 +187,7 @@ Include a combined VHM notice that yields exactly two normalized rows with the s
 - [ ] **Step 4: Run targeted tests and TypeScript**
 - [ ] **Step 5: Commit**
 
-### Task 4: Add idempotent repository/persistence layer
+### Task 4: Add idempotent persistence + exact readback
 
 **Files:**
 - Create: `modules/market/corporate-actions/store.ts`
@@ -197,11 +203,11 @@ export async function upsertCorporateActionEvidence(
 ): Promise<{ actionId: string; change: "new" | "amended" | "unchanged" }>
 ```
 
-- [ ] **Step 1: RED idempotency test** — same component/evidence twice returns `unchanged`.
-- [ ] **Step 2: RED amendment test** — same `(source, sourceEventId, sourceComponentKey)` + changed hash returns `amended` while retaining source evidence lineage.
-- [ ] **Step 3: RED combined notice test** — cash and stock components coexist without uniqueness conflict.
-- [ ] **Step 4: Implement transactional/idempotent persistence via RPC or bounded table writes**
-- [ ] **Step 5: Verify exact readback matches normalized row before returning success**
+- [ ] **Step 1: RED idempotency** — same component/evidence twice returns `unchanged`.
+- [ ] **Step 2: RED amendment** — same `(source, sourceEventId, sourceComponentKey)` + changed hash returns `amended` while retaining source evidence history.
+- [ ] **Step 3: RED combined notice** — cash and stock components coexist without uniqueness conflict.
+- [ ] **Step 4: Implement transactional/idempotent persistence via a focused service-role RPC or bounded writes**
+- [ ] **Step 5: Read back exact normalized component before returning success**
 - [ ] **Step 6: Commit**
 
 ### Task 5: Add normalized read API
@@ -209,7 +215,8 @@ export async function upsertCorporateActionEvidence(
 **Files:**
 - Create: `app/api/market/corporate-actions/route.ts`
 - Create: `modules/market/corporate-actions/read-model.ts`
-- Test: `tests/qeo-123-corporate-actions-api.test.ts`
+- Create: `tests/qeo-123-corporate-actions-api.test.ts`
+- Modify: `tests/test-contracts.json`
 
 **Interfaces:**
 
@@ -232,18 +239,17 @@ export type CorporateActionView = {
 }
 ```
 
-- [ ] **Step 1: RED API contract for ticker + optional date range**
-- [ ] **Step 2: Implement authenticated read-only route**
-- [ ] **Step 3: Verify ambiguous event exposes `exDate=null` and is not silently canonicalized**
-- [ ] **Step 4: Verify two components from one source notice return as two event rows sharing source provenance**
-- [ ] **Step 5: Run API tests/build**
-- [ ] **Step 6: Commit**
+- [ ] **Step 1: Register API test in `tests/test-contracts.json`** with owner `market-data` and authenticated provider-agnostic read-model invariant.
+- [ ] **Step 2: RED API contract for ticker + optional `from`/`to` date range**
+- [ ] **Step 3: Implement authenticated read-only route**
+- [ ] **Step 4: Verify ambiguous event exposes `exDate=null`; two components from one source notice return as two event rows sharing source provenance**
+- [ ] **Step 5: Run API tests/build and commit**
 
 ### Task 6: Production verification and Linear handoff
 
-- [ ] Apply migration only after DB Drift/Verify green.
-- [ ] Record the exact production migration version in the reviewed ledger/equivalence mapping.
+- [ ] Apply migration only after Verify + DB Drift green.
+- [ ] Record exact production migration version in reviewed ledger/equivalence mapping.
 - [ ] Ingest VHM golden events and read them back with exact provenance, including combined cash+stock notice behavior.
 - [ ] Verify browser roles cannot mutate source/action tables.
 - [ ] Verify QEO-123 has no write to `market_ohlcv_history` or adjusted chart tables.
-- [ ] Update QEO-123 with migration, fixture, VHM and RLS evidence; only then mark Done and unblock QEO-124/QEO-126.
+- [ ] Update QEO-123 with migration, fixture, VHM and RLS evidence; only then mark Done and unblock QEO-124.
