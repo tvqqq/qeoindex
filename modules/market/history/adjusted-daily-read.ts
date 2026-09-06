@@ -45,10 +45,16 @@ type AdjustedRow = {
   adjustment_engine_version: string
 }
 
+function utcDateKey(valueMs: number) {
+  const date = new Date(valueMs)
+  if (!Number.isFinite(date.getTime())) throw new Error("Adjusted Daily read range date is invalid")
+  return date.toISOString().slice(0, 10)
+}
+
 function addCalendarDay(dateKey: string) {
-  const date = new Date(`${dateKey}T12:00:00+07:00`)
+  const date = new Date(`${dateKey}T00:00:00.000Z`)
   date.setUTCDate(date.getUTCDate() + 1)
-  return vietnamDateKey(date)
+  return date.toISOString().slice(0, 10)
 }
 
 function expectedTradingSessions(fromMs: number, toMs: number) {
@@ -56,8 +62,8 @@ function expectedTradingSessions(fromMs: number, toMs: number) {
     throw new Error("Adjusted Daily read range is invalid")
   }
 
-  const from = vietnamDateKey(fromMs)
-  const to = vietnamDateKey(toMs)
+  const from = utcDateKey(fromMs)
+  const to = utcDateKey(toMs)
   if (
     !hasVietnamSecuritiesTradingCalendarCoverage(from)
     || !hasVietnamSecuritiesTradingCalendarCoverage(to)
