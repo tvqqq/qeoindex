@@ -191,9 +191,16 @@ function numberedActionSections(text: string) {
   return starts.map((start, index) => lines.slice(start, starts[index + 1] ?? lines.length).join("\n"))
 }
 
+function sectionLines(section: string) {
+  return section
+    .split("\n")
+    .map((line) => line.toLocaleLowerCase("vi-VN"))
+}
+
 function parseComponent(section: string): ProbeCorporateActionComponent | null {
-  const normalized = section.toLocaleLowerCase("vi-VN")
-  if (/quyền mua cổ phiếu|thực hiện quyền mua/.test(normalized)) {
+  const lines = sectionLines(section)
+  const normalized = lines.join("\n")
+  if (normalized.includes("quyền mua cổ phiếu") || normalized.includes("thực hiện quyền mua")) {
     return {
       actionType: "rights_issue",
       cashPerShare: null,
@@ -202,7 +209,12 @@ function parseComponent(section: string): ProbeCorporateActionComponent | null {
       subscriptionPrice: subscriptionPrice(section),
     }
   }
-  if (/cổ tức[^\n]*(?:bằng tiền|tiền mặt)|chi trả[^\n]*bằng tiền/.test(normalized)) {
+
+  const isCashDividend = lines.some((line) => (
+    (line.includes("cổ tức") && (line.includes("bằng tiền") || line.includes("tiền mặt")))
+    || (line.includes("chi trả") && line.includes("bằng tiền"))
+  ))
+  if (isCashDividend) {
     return {
       actionType: "cash_dividend",
       cashPerShare: cashAmount(section),
@@ -211,7 +223,13 @@ function parseComponent(section: string): ProbeCorporateActionComponent | null {
       subscriptionPrice: null,
     }
   }
-  if (/cổ tức[^\n]*bằng cổ phiếu|chi trả[^\n]*bằng cổ phiếu|cổ phiếu thưởng/.test(normalized)) {
+
+  const isStockDividend = lines.some((line) => (
+    (line.includes("cổ tức") && line.includes("bằng cổ phiếu"))
+    || (line.includes("chi trả") && line.includes("bằng cổ phiếu"))
+    || line.includes("cổ phiếu thưởng")
+  ))
+  if (isStockDividend) {
     return {
       actionType: "stock_dividend",
       cashPerShare: null,
