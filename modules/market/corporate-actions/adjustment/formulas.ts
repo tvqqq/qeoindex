@@ -43,6 +43,20 @@ function canonicalVndToDailyPriceUnit(value: number) {
   return value / VND_PER_KILO_VND
 }
 
+function stableSourceIdentity(action: CanonicalFactorAction) {
+  return [
+    action.source,
+    action.lineageRootSourceEventId,
+    action.sourceComponentKey,
+    action.actionType,
+  ].join("\u0000")
+}
+
+function compareCanonicalActions(left: CanonicalFactorAction, right: CanonicalFactorAction) {
+  const stableOrder = stableSourceIdentity(left).localeCompare(stableSourceIdentity(right))
+  return stableOrder !== 0 ? stableOrder : left.id.localeCompare(right.id)
+}
+
 function hasStockTerms(action: CanonicalFactorAction) {
   return action.stockRatioNumerator !== null || action.stockRatioDenominator !== null
 }
@@ -122,7 +136,7 @@ export function computeStepAdjustment(input: AdjustmentEventSet): StepAdjustment
     throw new AdjustmentFactorError("INVALID_REFERENCE_CLOSE", "previousRawClose must be positive and finite")
   }
 
-  const orderedEvents = [...input.events].sort((left, right) => left.id.localeCompare(right.id))
+  const orderedEvents = [...input.events].sort(compareCanonicalActions)
   const seenIds = new Set<string>()
   for (const action of orderedEvents) {
     validateAction(input, action)
@@ -190,7 +204,9 @@ export function computeStepAdjustment(input: AdjustmentEventSet): StepAdjustment
     throw new AdjustmentFactorError("NON_POSITIVE_THEORETICAL_VALUE", "Event set produces invalid adjustment factors")
   }
 
-  const corporateActionIds = [...seenIds]
+  // UUIDs are persistence/audit references. Keep them deterministically sorted,
+  // but do not use their order as the arithmetic or lineage identity source.
+  const corporateActionIds = [...seenIds].sort()
   const formulaInputs: StepAdjustmentFormulaInputs = {
     previousRawClose: input.previousRawClose,
     totalCashPerShare,
