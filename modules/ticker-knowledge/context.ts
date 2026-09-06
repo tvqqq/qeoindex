@@ -1,0 +1,158 @@
+import {
+  normalizeTicker,
+  queryTickerKnowledgeSafely,
+  type TickerKnowledgeAuthority,
+  type TickerKnowledgeIndex,
+  type TickerKnowledgeItem,
+  type TickerKnowledgeQuery,
+  type TickerKnowledgeSearchResult,
+  type TickerKnowledgeUnavailableReason,
+} from "./domain.ts"
+
+const DEFAULT_MAX_CHARS = 18_000
+const DEFAULT_LIMIT = 12
+
+const AUTHORITY_WEIGHT: Record<TickerKnowledgeAuthority, number> = {
+  VERIFIED_FACT: 1,
+  CANONICAL_THESIS: 0.95,
+  DETERMINISTIC_SIGNAL: 0.95,
+  HISTORICAL_LESSON: 0.8,
+  SOURCE_OPINION: 0.65,
+  AI_INFERENCE: 0.5,
+}
+
+export interface BuildTickerContextInput {
+  index: TickerKnowledgeIndex
+  ticker: string
+  query: string
+  mandatory?: readonly TickerKnowledgeItem[]
+  knowledgeTypes?: TickerKnowledgeQuery["knowledgeTypes"]
+  sourceTypes?: TickerKnowledgeQuery["sourceTypes"]
+  authorities?: TickerKnowledgeQuery["authorities"]
+  asOf?: string
+  limit?: number
+  maxChars?: number
+  now?: string
+}
+
+export interface TickerContext {
+  ticker: string
+  query: string
+  retrievalStatus: "ready" | "unavailable"
+  retrievalReason: TickerKnowledgeUnavailableReason | null
+  items: TickerKnowledgeItem[]
+  retrievedPointIds: string[]
+  text: string
+  truncated: boolean
+}
+
+function timestamp(value: string | null | undefined) {
+  if (!value) return null
+  const parsed = new Date(value).getTime()
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function recencyScore(item: TickerKnowledgeItem, nowMs: number) {
+  const asOf = timestamp(item.provenance.asOf ?? item.provenance.publishedAt)
+  if (asOf === null) return 0.35
+  const ageDays = Math.max(0, (nowMs - asOf) / 86_400_000)
+  return Math.exp(-ageDays / 180)
+}
+
+function normalizeRelevance(results: readonly TickerKnowledgeSearchResult[]) {
+  if (!results.length) return new Map<string, number>()
+  const finite = results.map((result) => result.score).filter(Number.isFinite)
+  if (!finite.length) return new Map(results.map((result) => [result.id, 0.5]))
+  const min = Math.min(...finite)
+  const max = Math.max(...finite)
+  if (max === min) return new Map(results.map((result) => [result.id, 1]))
+  return new Map(results.map((result) => [result.id, (result.score - min) / (max - min)]))
+}
+
+function rankRetrieved(results: readonly TickerKnowledgeSearchResult[], nowMs: number) {
+  const relevance = normalizeRelevance(results)
+  return [...results].sort((left, right) => {
+    const leftScore = 0.55 * (relevance.get(left.id) ?? 0) + 0.25 * AUTHORITY_WEIGHT[left.item.authority] + 0.2 * recencyScore(left.item, nowMs)
+    const rightScore = 0.55 * (relevance.get(right.id) ?? 0) + 0.25 * AUTHORITY_WEIGHT[right.item.authority] + 0.2 * recencyScore(right.item, nowMs)
+    return rightScore - leftScore || right.score - left.score || left.id.localeCompare(right.id)
+  })
+}
+
+function itemHeader(item: TickerKnowledgeItem) {
+  const provenance = item.provenance
+  const source = [item.sourceType, provenance.sourceId, provenance.sourceVersion].filter(Boolean).join("/")
+  const location = [
+    provenance.reportId ? `report=${provenance.reportId}` : "",
+    provenance.analysisId ? `analysis=${provenance.analysisId}` : "",
+    provenance.runId ? `run=${provenance.runId}` : "",
+    provenance.page ? `page=${provenance.page}` : "",
+    provenance.chunkId ? `chunk=${provenance.chunkId}` : "",
+  ].filter(Boolean).join(" ")
+  return `[${item.knowledgeType} | ${item.authority} | ${source}${location ? ` | ${location}` : ""}]`
+}
+
+function buildBoundedText(items: readonly TickerKnowledgeItem[], maxChars: number) {
+  let text = ""
+  let truncated = false
+  for (const item of items) {
+    const block = `${itemHeader(item)}\n${item.text.trim()}\n\n`
+    const remaining = maxChars - text.length
+    if (remaining <= 0) {
+      truncated = true
+      break
+    }
+    if (block.length <= remaining) {
+      text += block
+      continue
+    }
+    const minimumUseful = itemHeader(item).length + 80
+    if (remaining >= minimumUseful) {
+      text += `${block.slice(0, Math.max(0, remaining - 1)).trimEnd()}…`
+    }
+    truncated = true
+    break
+  }
+  return { text: text.trim(), truncated }
+}
+
+export async function buildTickerContext(input: BuildTickerContextInput): Promise<TickerContext> {
+  const ticker = normalizeTicker(input.ticker)
+  const query = input.query.replace(/\s+/g, " ").trim()
+  if (!query) throw new Error("Ticker context query is required")
+  const mandatory = (input.mandatory ?? []).filter((item) => item.ticker === ticker)
+  const retrieval = await queryTickerKnowledgeSafely(input.index, {
+    ticker,
+    text: query,
+    knowledgeTypes: input.knowledgeTypes,
+    sourceTypes: input.sourceTypes,
+    authorities: input.authorities,
+    asOf: input.asOf,
+    limit: input.limit ?? DEFAULT_LIMIT,
+  })
+  const nowMs = timestamp(input.now) ?? Date.now()
+  const retrieved = retrieval.status === "ready" ? rankRetrieved(retrieval.results, nowMs) : []
+  const seen = new Set<string>()
+  const items: TickerKnowledgeItem[] = []
+  for (const item of mandatory) {
+    if (seen.has(item.id)) continue
+    seen.add(item.id)
+    items.push(item)
+  }
+  for (const result of retrieved) {
+    if (seen.has(result.item.id)) continue
+    seen.add(result.item.id)
+    items.push(result.item)
+  }
+  const maxChars = Math.max(500, Math.min(60_000, Math.floor(input.maxChars ?? DEFAULT_MAX_CHARS)))
+  const bounded = buildBoundedText(items, maxChars)
+  return {
+    ticker,
+    query,
+    retrievalStatus: retrieval.status,
+    retrievalReason: retrieval.status === "unavailable" ? retrieval.reason : null,
+    items,
+    retrievedPointIds: retrieved.map((result) => result.id),
+    text: bounded.text,
+    truncated: bounded.truncated,
+  }
+}
