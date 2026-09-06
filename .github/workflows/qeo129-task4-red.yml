@@ -1,0 +1,32 @@
+name: QEO-129 Shadow Read Boundary Contract
+
+on:
+  push:
+    branches:
+      - feat/qeo-129-adjusted-daily-shadow
+    paths:
+      - .github/workflows/qeo129-task4-red.yml
+      - tests/market-history/qeo129-adjusted-daily-read.test.ts
+      - modules/market/history/adjusted-daily-read.ts
+      - modules/market/history/index.ts
+      - modules/market/chart-data/service.ts
+      - modules/wyckoff/eod-cache-read.ts
+      - modules/wyckoff/eod-chart-series.ts
+      - modules/ai-council/eod-market.ts
+
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run QEO-129 shadow read boundary contract
+        run: node --test tests/market-history/qeo129-adjusted-daily-read.test.ts
