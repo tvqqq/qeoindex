@@ -3,10 +3,10 @@ import { createHash } from "node:crypto"
 const TARGETS = [
   { id: "vhm-security-detail", url: "https://vsdc.vn/vi/s-detail/6951" },
   { id: "suggestion-search-js", url: "https://vsdc.vn/js/suggestion-search.js?v=20260906" },
-  { id: "rights-calendar", url: "https://vsdc.vn/vi/lich-giao-dich" },
 ] as const
 
 const USER_AGENT = "qeoindex-qeo123-source-validation/1.0 (+bounded-read-only-probe)"
+const VSDC_ORIGIN = "https://vsdc.vn"
 
 function decodeHtmlOnce(value: string) {
   return value
@@ -32,7 +32,7 @@ function eventHrefs(html: string) {
 
 function relevantHrefs(html: string) {
   return allHrefs(html)
-    .filter((href) => /(?:\/(?:vi\/)?(?:ad1?|s-detail|lich-giao-dich)|page|paging|pagination|search)/i.test(href))
+    .filter((href) => /(?:\/(?:vi\/)?(?:ad1?|s-detail)|page|paging|pagination|search)/i.test(href))
     .slice(0, 300)
 }
 
@@ -60,14 +60,8 @@ function contextSnippets(body: string) {
     "autocomplete",
     "ajax",
     "url:",
-    "pagination",
     "paging",
-    "pageIndex",
-    "pageSize",
-    "Tin tức và sự kiện liên quan",
     "Ngày đăng ký cuối cùng",
-    "Mã/Tên Chứng khoán",
-    "__RequestVerificationToken",
     "__VPToken",
   ]
   const snippets: Record<string, string | null> = {}
@@ -89,38 +83,39 @@ function endpointCandidates(body: string) {
     .slice(0, 200)
 }
 
-async function fetchText(url: string) {
+async function requestText(url: string, init: RequestInit = {}) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 20_000)
   try {
     const response = await fetch(url, {
+      ...init,
       redirect: "error",
       headers: {
-        accept: "text/html,application/xhtml+xml,application/javascript,text/javascript,*/*;q=0.8",
+        accept: "text/html,application/xhtml+xml,application/json,application/javascript,text/javascript,*/*;q=0.8",
         "user-agent": USER_AGENT,
+        ...(init.headers ?? {}),
       },
       signal: controller.signal,
     })
-    const text = await response.text()
+    const body = await response.text()
     return {
       status: response.status,
       contentType: response.headers.get("content-type"),
-      bytes: Buffer.byteLength(text),
-      sha256: createHash("sha256").update(text).digest("hex"),
-      body: text,
+      bytes: Buffer.byteLength(body),
+      sha256: createHash("sha256").update(body).digest("hex"),
+      body,
     }
   } finally {
     clearTimeout(timeout)
   }
 }
 
-const results = []
-for (const target of TARGETS) {
+async function inspectGet(id: string, url: string) {
   try {
-    const fetched = await fetchText(target.url)
-    results.push({
-      id: target.id,
-      url: target.url,
+    const fetched = await requestText(url)
+    return {
+      id,
+      url,
       status: fetched.status,
       contentType: fetched.contentType,
       bytes: fetched.bytes,
@@ -131,17 +126,80 @@ for (const target of TARGETS) {
       scripts: scriptSources(fetched.body),
       endpointCandidates: endpointCandidates(fetched.body),
       snippets: contextSnippets(fetched.body),
-    })
+    }
   } catch (error) {
-    results.push({
-      id: target.id,
-      url: target.url,
-      error: error instanceof Error ? error.message : String(error),
-    })
+    return { id, url, error: error instanceof Error ? error.message : String(error) }
   }
 }
 
-console.log(JSON.stringify({
-  generatedAt: new Date().toISOString(),
-  targets: results,
-}, null, 2))
+async function inspectSuggestion() {
+  const url = `${VSDC_ORIGIN}/suggestion-search/isustocks`
+  try {
+    const fetched = await requestText(url, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded; charset=UTF-8" },
+      body: new URLSearchParams({ keyword: "VHM", issuerOrgId: "" }).toString(),
+    })
+    let parsed: unknown = null
+    try {
+      parsed = JSON.parse(fetched.body)
+    } catch {
+      parsed = null
+    }
+    return {
+      id: "vhm-ticker-suggestion",
+      url,
+      status: fetched.status,
+      contentType: fetched.contentType,
+      bytes: fetched.bytes,
+      sha256: fetched.sha256,
+      json: parsed,
+      preview: parsed ? null : fetched.body.slice(0, 2000),
+    }
+  } catch (error) {
+    return { id: "vhm-ticker-suggestion", url, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+async function inspectRightsPage(page: number) {
+  const url = `${VSDC_ORIGIN}/isuisser-thq/search`
+  try {
+    const fetched = await requestText(url, {
+      method: "POST",
+      headers: { "content-type": "application/json;charset=utf-8" },
+      body: JSON.stringify({ SearchKey: "6951", CurrentPage: page, RecordOnPage: 10 }),
+    })
+    return {
+      id: `vhm-rights-page-${page}`,
+      url,
+      status: fetched.status,
+      contentType: fetched.contentType,
+      bytes: fetched.bytes,
+      sha256: fetched.sha256,
+      eventLinks: eventHrefs(fetched.body),
+      preview: decodeHtmlOnce(fetched.body).replace(/\s+/g, " ").slice(0, 3000),
+    }
+  } catch (error) {
+    return { id: `vhm-rights-page-${page}`, url, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+async function main() {
+  const gets = await Promise.all(TARGETS.map((target) => inspectGet(target.id, target.url)))
+  const suggestion = await inspectSuggestion()
+  const rightsPages = []
+  for (const page of [1, 2]) {
+    rightsPages.push(await inspectRightsPage(page))
+    if (page === 1) await new Promise((resolve) => setTimeout(resolve, 300))
+  }
+
+  console.log(JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    targets: [...gets, suggestion, ...rightsPages],
+  }, null, 2))
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exitCode = 1
+})
