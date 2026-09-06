@@ -93,23 +93,30 @@ async function requestText(url: string, init: RequestInit = {}): Promise<FetchRe
   }
 }
 
-function exactVhmSuggestion(parsed: unknown) {
-  if (!parsed || typeof parsed !== "object") return null
+function sanitizeRecord(record: Record<string, unknown>) {
+  const safe: Record<string, string | number | boolean | null> = {}
+  for (const [key, value] of Object.entries(record)) {
+    if (typeof value === "string") safe[key] = value.slice(0, 300)
+    else if (typeof value === "number" || typeof value === "boolean" || value === null) safe[key] = value
+  }
+  return safe
+}
+
+function responseRows(parsed: unknown, limit = 5) {
+  if (!parsed || typeof parsed !== "object") return []
   const data = (parsed as { data?: unknown }).data
-  if (!Array.isArray(data)) return null
-  for (const row of data) {
-    if (!row || typeof row !== "object") continue
-    const record = row as Record<string, unknown>
+  if (!Array.isArray(data)) return []
+  return data
+    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
+    .slice(0, limit)
+    .map(sanitizeRecord)
+}
+
+function exactVhmSuggestion(parsed: unknown) {
+  for (const record of responseRows(parsed, 50)) {
     const name = typeof record.name === "string" ? record.name.trim().toUpperCase() : ""
     const content = typeof record.content === "string" ? record.content.trim() : ""
-    if (name === "VHM" || /^VHM\b/i.test(content)) {
-      const safe: Record<string, string | number | boolean | null> = {}
-      for (const [key, value] of Object.entries(record)) {
-        if (typeof value === "string") safe[key] = value.slice(0, 300)
-        else if (typeof value === "number" || typeof value === "boolean" || value === null) safe[key] = value
-      }
-      return safe
-    }
+    if (name === "VHM" || /^VHM\b/i.test(content)) return record
   }
   return null
 }
@@ -120,21 +127,12 @@ function hrefSecurityId(value: unknown) {
 }
 
 function exactVhmGlobalSearch(parsed: unknown) {
-  if (!parsed || typeof parsed !== "object") return null
-  const data = (parsed as { data?: unknown }).data
-  if (!Array.isArray(data)) return null
-  for (const row of data) {
-    if (!row || typeof row !== "object") continue
-    const record = row as Record<string, unknown>
+  for (const record of responseRows(parsed, 50)) {
     const content = typeof record.content === "string" ? record.content.trim() : ""
     const href = typeof record.href === "string" ? record.href.trim() : ""
     const securityId = hrefSecurityId(href)
     if (/\bVHM\b/i.test(content) && securityId) {
-      return {
-        content: content.slice(0, 300),
-        href: href.slice(0, 300),
-        securityId,
-      }
+      return { content: content.slice(0, 300), href: href.slice(0, 300), securityId }
     }
   }
   return null
@@ -160,10 +158,7 @@ async function main() {
   await delay(REQUEST_DELAY_MS)
   const suggestion = await requestText(`${VSDC_ORIGIN}/suggestion-search/isustocks`, {
     method: "POST",
-    headers: {
-      ...sessionHeaders,
-      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-    },
+    headers: { ...sessionHeaders, "content-type": "application/x-www-form-urlencoded; charset=UTF-8" },
     body: new URLSearchParams({ keyword: "VHM", issuerOrgId: "" }).toString(),
   })
   let suggestionJson: unknown = null
@@ -173,16 +168,24 @@ async function main() {
   await delay(REQUEST_DELAY_MS)
   const globalSearch = await requestText(`${VSDC_ORIGIN}/search-suggest`, {
     method: "POST",
-    headers: {
-      ...sessionHeaders,
-      "content-type": "application/json;charset=utf-8",
-    },
+    headers: { ...sessionHeaders, "content-type": "application/json;charset=utf-8" },
     body: JSON.stringify({ text: "VHM", type: "1" }),
   })
   let globalSearchJson: unknown = null
   try { globalSearchJson = JSON.parse(globalSearch.body) } catch { globalSearchJson = null }
   const exactGlobal = exactVhmGlobalSearch(globalSearchJson)
   const resolvedSecurityId = exactGlobal?.securityId ?? null
+
+  const diagnostic = {
+    suggestionStatus: suggestion.status,
+    exactSuggestion,
+    suggestionRows: responseRows(suggestionJson),
+    globalSearchStatus: globalSearch.status,
+    globalSearchRows: responseRows(globalSearchJson),
+    exactGlobal,
+    resolvedSecurityId,
+  }
+  console.log(JSON.stringify({ generatedAt: new Date().toISOString(), diagnostic }, null, 2))
 
   if (suggestion.status !== 200 || !exactSuggestion) {
     throw new Error(`VSDC ticker suggestion failed closed: status=${suggestion.status}`)
@@ -196,29 +199,18 @@ async function main() {
     await delay(REQUEST_DELAY_MS)
     const fetched = await requestText(`${VSDC_ORIGIN}/isuisser-thq/search`, {
       method: "POST",
-      headers: {
-        ...sessionHeaders,
-        "content-type": "application/json;charset=utf-8",
-      },
+      headers: { ...sessionHeaders, "content-type": "application/json;charset=utf-8" },
       body: JSON.stringify({ SearchKey: resolvedSecurityId, CurrentPage: page, RecordOnPage: 10 }),
     })
     const links = eventHrefs(fetched.body)
     if (fetched.status !== 200 || links.length === 0) {
       throw new Error(`VSDC rights pagination failed closed: page=${page} status=${fetched.status}`)
     }
-    rightsPages.push({
-      page,
-      status: fetched.status,
-      contentType: fetched.contentType,
-      bytes: fetched.bytes,
-      sha256: fetched.sha256,
-      eventLinks: links,
-    })
+    rightsPages.push({ page, status: fetched.status, contentType: fetched.contentType, bytes: fetched.bytes, sha256: fetched.sha256, eventLinks: links })
   }
 
   const pageOneIds = new Set(rightsPages[0].eventLinks)
-  const pageTwoHasNewEvent = rightsPages[1].eventLinks.some((href) => !pageOneIds.has(href))
-  if (!pageTwoHasNewEvent) {
+  if (!rightsPages[1].eventLinks.some((href) => !pageOneIds.has(href))) {
     throw new Error("VSDC rights pagination did not advance to distinct events")
   }
 
@@ -235,13 +227,7 @@ async function main() {
       vpTokenPresent: Boolean(vpToken),
       eventLinkCount: bootstrapEventLinks.length,
     },
-    tickerDiscovery: {
-      suggestionStatus: suggestion.status,
-      exactSuggestion,
-      globalSearchStatus: globalSearch.status,
-      exactGlobal,
-      resolvedSecurityId,
-    },
+    tickerDiscovery: diagnostic,
     rightsPages,
   }, null, 2))
 }
