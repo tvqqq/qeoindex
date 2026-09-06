@@ -278,3 +278,19 @@ test("QEO-108 capacity preflight keeps a 100 MiB hard headroom before the 500 MB
   assert.match(migration, /revoke all on function public\.qeo_chart_storage_capacity\(\) from public/i)
   assert.match(migration, /grant execute on function public\.qeo_chart_storage_capacity\(\) to service_role/i)
 })
+
+
+test("QEO-129 adjusted Daily shadow remains isolated from chart/Wyckoff/AI consumers", () => {
+  const consumerFiles = [
+    "../modules/market/chart-data/service.ts",
+    "../modules/wyckoff/eod-cache-read.ts",
+    "../modules/wyckoff/eod-chart-series.ts",
+    "../modules/ai-council/eod-market.ts",
+  ]
+
+  for (const relativePath of consumerFiles) {
+    const source = readFileSync(new URL(relativePath, import.meta.url), "utf8")
+    assert.doesNotMatch(source, /adjusted-daily-read/i)
+    assert.doesNotMatch(source, /market_ohlcv_adjusted_daily/i)
+  }
+})

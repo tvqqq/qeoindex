@@ -495,6 +495,15 @@
       ]
     },
     {
+      "path": "tests/market-history/qeo129-adjusted-daily-read.test.ts",
+      "owner": "market",
+      "invariant": "Preserve QEO-129 adjusted-only shadow Daily read completeness, exact lineage, fail-closed behavior, and consumer isolation.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/market-history/qeo129-adjusted-daily-shadow.test.ts",
       "owner": "market",
       "invariant": "QEO-129 adjusted Daily remains a pure raw plus exact-factor derivation with strict next-effective-session projection and no raw fallback.",

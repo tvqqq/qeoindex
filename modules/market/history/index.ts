@@ -1,3 +1,4 @@
+export { loadAdjustedDailyRange, type AdjustedDailyRangeRead } from "./adjusted-daily-read"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { vietnamDateKey } from "@/modules/market/calendar"
 import { fetchDailyOhlcv as fetchDnseDailyOhlcv, fetchHourlyOhlcv as fetchDnseHourlyOhlcv } from "@/modules/market/providers/dnse/history"
