@@ -59,21 +59,19 @@ jobs:
             mapfile -t conflicts < <(git diff --name-only --diff-filter=U | sort)
             printf 'Conflicts:\n'
             printf ' - %s\n' "${conflicts[@]}"
-            expected=(
-              "docs/db/evidence/production-migration-ledger-2026-09-06.json"
-              "modules/shared/supabase/database.types.ts"
-              "supabase/migration-equivalence.json"
-            )
-            mapfile -t expected_sorted < <(printf '%s\n' "${expected[@]}" | sort)
-            if [[ ${#conflicts[@]} -ne ${#expected_sorted[@]} ]]; then
-              echo "Unexpected conflict count; refusing automatic resolution" >&2
+            if [[ ${#conflicts[@]} -eq 0 ]]; then
+              echo "Merge failed without content conflicts; refusing automatic resolution" >&2
               exit 1
             fi
-            for i in "${!expected_sorted[@]}"; do
-              if [[ "${conflicts[$i]}" != "${expected_sorted[$i]}" ]]; then
-                echo "Unexpected merge conflict set; refusing automatic resolution" >&2
-                exit 1
-              fi
+            for path in "${conflicts[@]}"; do
+              case "$path" in
+                docs/db/evidence/production-migration-ledger-2026-09-06.json|modules/shared/supabase/database.types.ts|supabase/migration-equivalence.json)
+                  ;;
+                *)
+                  echo "Unexpected merge conflict: $path" >&2
+                  exit 1
+                  ;;
+              esac
             done
           fi
 
@@ -81,10 +79,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git checkout --theirs -- \
+          for path in \
             docs/db/evidence/production-migration-ledger-2026-09-06.json \
             supabase/migration-equivalence.json \
-            modules/shared/supabase/database.types.ts
+            modules/shared/supabase/database.types.ts; do
+            git show "refs/remotes/origin/main:$path" > "$path"
+          done
           node <<'NODE'
           const fs = require('fs');
           const cp = require('child_process');
