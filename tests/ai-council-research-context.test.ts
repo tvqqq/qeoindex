@@ -3,3 +3,4 @@
 import "./ai-council-research-context.base.ts"
 import "./ticker-knowledge/notion-sync.test.ts"
 import "./ticker-knowledge/context.test.ts"
+import "./ticker-knowledge/council-degraded.test.ts"
