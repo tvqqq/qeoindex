@@ -90,6 +90,11 @@ create or replace function public.qeo_adjusted_daily_readback(
 returns table (
   session_date date,
   bar_time timestamptz,
+  open numeric,
+  high numeric,
+  low numeric,
+  close numeric,
+  volume numeric,
   raw_bar_time timestamptz,
   factor_run_id uuid,
   factor_version text,
@@ -104,6 +109,11 @@ as $$
   select
     a.session_date,
     a.bar_time,
+    a.open,
+    a.high,
+    a.low,
+    a.close,
+    a.volume,
     a.raw_bar_time,
     a.factor_run_id,
     a.factor_version,
@@ -133,6 +143,6 @@ comment on table public.market_ohlcv_adjusted_daily is
 comment on table public.market_adjusted_daily_rollout is
   'QEO-129 per-ticker adjusted Daily verification state. QEO-129 writes shadow/blocked only; later rollout owners may activate.';
 comment on function public.qeo_adjusted_daily_readback(text, date, date, uuid, text) is
-  'QEO-129 service-role-only exact persisted session/lineage readback for adjusted Daily rebuild verification.';
+  'QEO-129 service-role-only exact persisted OHLCV/session/lineage readback for adjusted Daily rebuild verification.';
 
 commit;
