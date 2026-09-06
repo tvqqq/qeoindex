@@ -71,10 +71,12 @@ test("QEO-119 production acceptance API is Root Admin-only, same-origin guarded 
   assert.doesNotMatch(route, /QDRANT_API_KEY|OPENAI_API_KEY|prompt|evidence/i)
 })
 
-test("QEO-119 machine acceptance runner is CRON_SECRET-only, bounded and reuses canonical backfill functions", () => {
+test("QEO-119 machine acceptance runner accepts only canonical machine or Vault scheduler auth and stays bounded", () => {
   const route = source("app/api/ops/ticker-knowledge/acceptance/route.ts")
   assert.match(route, /isMachineRequestAuthorized/)
   assert.match(route, /process\.env\.CRON_SECRET/)
+  assert.match(route, /qeo_verify_eod_scheduler_secret/)
+  assert.match(route, /getSupabaseServerClient/)
   assert.doesNotMatch(route, /requireApiRoot|ROOT_ADMIN_USER_IDS/)
   assert.match(route, /normalizeTickerKnowledgeAcceptanceCommand/)
   assert.match(route, /runServerResearchReportKnowledgeBackfillPage/)
