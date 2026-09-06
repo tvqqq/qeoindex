@@ -255,7 +255,7 @@ test("QEO-108 native intraday cutover is session-partitioned, verified, rollback
   assert.match(migration, /row-count mismatch/i)
   assert.match(migration, /checksum mismatch/i)
   assert.match(migration, /qeo_drop_empty_chart_intraday_session_partition/i)
-  assert.doesNotMatch(migration, /drop table[^;]*chart_ohlcv_intraday_qeo108_legacy/is)
+  assert.doesNotMatch(migration, /drop table[^;]*chart_ohlcv_intraday_qeo108_legacy/i)
   assert.doesNotMatch(migration, /cascade/i)
 })
 
