@@ -65,6 +65,21 @@ test("QEO-122 parses live VSDC metadata when a label and value render on adjacen
   ])
 })
 
+test("QEO-122 decodes HTML entities exactly once", () => {
+  const notice = parseVsdcCorporateActionHtml(`
+    <article>
+      <div>Mã chứng khoán: VHM</div>
+      <div>Mã ISIN: &amp;lt;encoded&amp;gt;</div>
+      <div>Sàn giao dịch: HOSE</div>
+      <div>Ngày đăng ký cuối cùng: 09/10/2018</div>
+      <div>Lý do mục đích: Trả cổ tức năm 2018 bằng cổ phiếu</div>
+      <div>Tỷ lệ thực hiện: 1.000:250</div>
+    </article>
+  `, "https://vsdc.vn/vi/ad/50366")
+
+  assert.equal(notice.isin, "&lt;encoded&gt;")
+})
+
 test("QEO-122 ignores related-news action wording outside the main VSDC notice body", () => {
   const notice = parseVsdcCorporateActionHtml(`
     <article>
