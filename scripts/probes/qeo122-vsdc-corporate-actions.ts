@@ -129,6 +129,29 @@ function subscriptionPrice(text: string) {
   return parseVnd(match?.[1] ?? null)
 }
 
+function mainCorporateActionBody(text: string) {
+  const normalized = text.toLocaleLowerCase("vi-VN")
+  const purposeIndex = normalized.indexOf("lý do mục đích:")
+  if (purposeIndex < 0) return text
+
+  const body = text.slice(purposeIndex)
+  const normalizedBody = body.toLocaleLowerCase("vi-VN")
+  const footerMarkers = [
+    "tin cùng tổ chức",
+    "tin tức và sự kiện liên quan",
+    "tin liên quan",
+    "các tin khác",
+    "thống kê",
+  ]
+
+  let endIndex = body.length
+  for (const marker of footerMarkers) {
+    const markerIndex = normalizedBody.indexOf(marker)
+    if (markerIndex > 0 && markerIndex < endIndex) endIndex = markerIndex
+  }
+  return body.slice(0, endIndex).trim()
+}
+
 function numberedActionSections(text: string) {
   const lines = text.split("\n")
   const starts = lines
@@ -193,7 +216,8 @@ export function parseVsdcCorporateActionHtml(html: string, sourceUrl: string): P
   const ticker = firstLabelValue(text, ["Mã chứng khoán"])
   if (!ticker) throw new Error("VSDC probe: missing ticker")
 
-  const sections = numberedActionSections(text)
+  const actionBody = mainCorporateActionBody(text)
+  const sections = numberedActionSections(actionBody)
   const components = sections
     .map(parseComponent)
     .filter((component): component is ProbeCorporateActionComponent => Boolean(component))
