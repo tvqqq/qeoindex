@@ -92,11 +92,17 @@ function htmlToText(html: string) {
     .join("\n")
 }
 
-function firstLabelValue(text: string, labels: string[]) {
-  for (const label of labels) {
-    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    const match = text.match(new RegExp(`(?:^|\\n)${escaped}\\s*:\\s*([^\\n]+)`, "i"))
-    if (match?.[1]) return match[1].trim()
+function firstLabelValue(text: string, labels: readonly string[]) {
+  const normalizedLabels = new Set(labels.map((label) => label.toLocaleLowerCase("vi-VN")))
+  for (const line of text.split("\n")) {
+    const colonIndex = line.indexOf(":")
+    if (colonIndex < 0) continue
+
+    const key = line.slice(0, colonIndex).trim().toLocaleLowerCase("vi-VN")
+    if (!normalizedLabels.has(key)) continue
+
+    const value = line.slice(colonIndex + 1).trim()
+    if (value) return value
   }
   return null
 }
