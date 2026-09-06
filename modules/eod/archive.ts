@@ -86,7 +86,7 @@ export async function runEodRetentionCleanup(
   const chartDetail = chartIntradayArchive.status === "partial"
     ? `Chart intraday archive partially completed with ${chartIntradayArchive.failures.length} isolated partition failure(s); failed partitions remained/reverted hot.`
     : chartIntradayArchive.status === "skipped"
-      ? "Chart intraday archive found no hot 1m partitions older than the 31-day retention cutoff."
+      ? "Chart intraday archive found no hot 1m partitions older than the five-trading-session retention cutoff."
       : `Chart intraday archive verified ${chartIntradayArchive.partitionsArchived} partition(s), archived ${chartIntradayArchive.rowsArchived} row(s), and pruned ${chartIntradayArchive.rowsPruned} verified hot row(s).`
 
   return {
