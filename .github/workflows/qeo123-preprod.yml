@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/qeo123-preprod.yml"
       - "modules/market/corporate-actions/**"
+      - "scripts/probes/qeo123-vsdc-discovery.ts"
       - "supabase/migrations/*_qeo123_corporate_actions.sql"
       - "tests/corporate-actions/**"
       - "tests/db-schema-contract.test.ts"
@@ -31,6 +32,27 @@ jobs:
         run: node --test tests/corporate-actions/*.test.ts
       - name: Compile TypeScript
         run: pnpm typecheck
+
+  live-discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Probe bounded VSDC discovery surfaces
+        run: |
+          set -o pipefail
+          node scripts/probes/qeo123-vsdc-discovery.ts | tee qeo123-vsdc-discovery.json
+      - name: Upload discovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo123-vsdc-discovery
+          path: qeo123-vsdc-discovery.json
+          if-no-files-found: error
+          retention-days: 3
 
   schema-rehearsal:
     runs-on: ubuntu-latest
