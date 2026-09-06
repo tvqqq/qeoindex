@@ -35,6 +35,7 @@ const PAYLOAD_INDEXES = [
   ["content_hash", "keyword"],
   ["report_id", "keyword"],
   ["analysis_id", "keyword"],
+  ["chunk_version", "keyword"],
   ["run_id", "keyword"],
   ["published_at", "datetime"],
   ["as_of", "datetime"],
@@ -112,6 +113,8 @@ function queryFilter(input: TickerKnowledgeQuery) {
   if (input.runId) must.push(exactFilter("run_id", input.runId))
   if (input.sourceId) must.push(exactFilter("source_id", input.sourceId))
   if (input.sourceVersion) must.push(exactFilter("source_version", input.sourceVersion))
+  if (input.contentHash) must.push(exactFilter("content_hash", input.contentHash))
+  if (input.chunkVersion) must.push(exactFilter("chunk_version", input.chunkVersion))
   if (input.publishedFrom || input.publishedTo) {
     must.push({ key: "published_at", range: { ...(input.publishedFrom ? { gte: input.publishedFrom } : {}), ...(input.publishedTo ? { lte: input.publishedTo } : {}) } })
   }
@@ -138,6 +141,7 @@ function itemPayload(
     content_hash: provenance.contentHash ?? null,
     report_id: provenance.reportId ?? null,
     analysis_id: provenance.analysisId ?? null,
+    chunk_version: provenance.chunkVersion ?? null,
     run_id: provenance.runId ?? null,
     page: provenance.page ?? null,
     chunk_id: provenance.chunkId ?? null,
@@ -192,6 +196,7 @@ function parsePayload(id: string, score: number, raw: unknown): TickerKnowledgeS
         contentHash: stringOrNull(raw.content_hash),
         reportId: stringOrNull(raw.report_id),
         analysisId: stringOrNull(raw.analysis_id),
+        chunkVersion: stringOrNull(raw.chunk_version),
         runId: stringOrNull(raw.run_id),
         page: numberOrNull(raw.page),
         chunkId: stringOrNull(raw.chunk_id),
