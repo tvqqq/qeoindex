@@ -13,15 +13,20 @@ import {
 import {
   resolveTickerQaEvidence,
   type TickerQaCanonicalResolution,
+  type TickerQaResolvedEvidence,
 } from "./canonical.ts"
 import {
   loadTickerQaMandatoryContext,
   type TickerQaMandatoryContext,
 } from "./mandatory.ts"
+import type { TickerQaModelOutput } from "./schema.ts"
 import {
   TICKER_QA_LIMITS,
+  type TickerQaAudit,
+  type TickerQaCitation,
   type TickerQaRequest,
   type TickerQaResult,
+  type TickerQaRetrievalStatus,
   type ValidatedTickerQaRequest,
 } from "./types.ts"
 
@@ -160,6 +165,86 @@ export async function prepareTickerQaContext(
     ...resolved,
     context: isolatedContext,
     limitations: mandatory.limitations,
+  }
+}
+
+function projectedCitation(
+  source: TickerQaResolvedEvidence,
+  excerpt: string,
+): TickerQaCitation | null {
+  if (!source.citation) return null
+  return { ...source.citation, excerpt }
+}
+
+export function projectTickerQaModelOutput(
+  ticker: string,
+  output: TickerQaModelOutput,
+  evidence: readonly TickerQaResolvedEvidence[],
+  options: {
+    retrievalStatus: TickerQaRetrievalStatus
+    limitation: string | null
+    audit: TickerQaAudit | null
+  },
+): TickerQaResult {
+  if (output.status === "not_found") {
+    return {
+      ticker,
+      status: "not_found",
+      answer: "",
+      claims: [],
+      citations: [],
+      contradictions: [],
+      retrievalStatus: options.retrievalStatus,
+      limitation: options.limitation,
+      audit: options.audit,
+    }
+  }
+
+  const evidenceById = new Map(evidence.map((item) => [item.evidenceId, item]))
+  const citations: TickerQaCitation[] = []
+  const citationKeys = new Set<string>()
+  const claims = output.claims.flatMap((claim) => {
+    const citationIds: string[] = []
+    for (const modelCitation of claim.citations) {
+      const source = evidenceById.get(modelCitation.evidenceId)
+      if (!source) continue
+      const citation = projectedCitation(source, modelCitation.excerpt)
+      if (!citation) continue
+      const key = `${citation.id}\u0000${citation.excerpt}`
+      if (!citationKeys.has(key)) {
+        citationKeys.add(key)
+        citations.push(citation)
+      }
+      citationIds.push(citation.id)
+    }
+    if (!citationIds.length) return []
+    return [{ text: claim.text, authority: claim.authority, citationIds: [...new Set(citationIds)] }]
+  })
+
+  if (!claims.length) {
+    return {
+      ticker,
+      status: "not_found",
+      answer: "",
+      claims: [],
+      citations: [],
+      contradictions: [],
+      retrievalStatus: options.retrievalStatus,
+      limitation: options.limitation,
+      audit: options.audit,
+    }
+  }
+
+  return {
+    ticker,
+    status: "answered",
+    answer: claims.map((claim) => claim.text).join("\n\n"),
+    claims,
+    citations,
+    contradictions: output.contradictions.map((item) => ({ ...item })),
+    retrievalStatus: options.retrievalStatus,
+    limitation: options.limitation,
+    audit: options.audit,
   }
 }
 
