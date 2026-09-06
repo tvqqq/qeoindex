@@ -30,7 +30,7 @@ function fakeSupabase(options: {
     cumulative_volume_factor: 2,
   }]
   const provider = options.rawProvider ?? "DNSE"
-  const providerDetail = options.rawProviderDetail ?? "DNSE direct Daily OHLCV"
+  const providerDetail = options.rawProviderDetail ?? "DNSE direct Daily OHLCV | source basis: raw"
   const rawRows = [
     {
       ticker: "VHM",
@@ -237,6 +237,14 @@ test("QEO-129 refuses adjusted or unknown persisted Daily provenance before any 
     {
       rawProvider: "TitanLabs",
       rawProviderDetail: "legacy history",
+    },
+    {
+      rawProvider: "VCI",
+      rawProviderDetail: "VCI native ONE_DAY · 620d window",
+    },
+    {
+      rawProvider: "DNSE",
+      rawProviderDetail: "DNSE direct Daily OHLCV",
     },
   ]
 
