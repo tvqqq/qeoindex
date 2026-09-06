@@ -17,7 +17,7 @@ export interface ResearchReportChunkSelector {
   reportId: string
   contentHash: string
   chunkVersion: string
-  pages: readonly number[]
+  pages: readonly number[] | null
 }
 
 export interface CanonicalResearchReportBackfillSource {
@@ -44,13 +44,6 @@ function boundedPageSize(value: number | undefined, max: number) {
 
 function uniqueStrings(values: readonly unknown[]) {
   return [...new Set(values.map(text).filter(Boolean))]
-}
-
-function citedPages(input: ResearchReportKnowledgeProjectionInput) {
-  return [...new Set(
-    input.mentions.flatMap((mention) => mention.evidence.map((entry) => entry.page))
-      .filter((page) => Number.isInteger(page) && page > 0),
-  )].sort((left, right) => left - right)
 }
 
 export async function loadCanonicalResearchReportBackfillPage(input: {
@@ -85,15 +78,12 @@ export async function loadCanonicalResearchReportBackfillPage(input: {
 
   const selectors: ResearchReportChunkSelector[] = selectedMentions
     .filter((row) => row.mentions.length > 0)
-    .flatMap((row) => {
-      const pages = citedPages(row)
-      return pages.length ? [{
-        reportId: row.report.id,
-        contentHash: row.report.contentHash,
-        chunkVersion: row.analysis.chunkVersion,
-        pages,
-      }] : []
-    })
+    .map((row) => ({
+      reportId: row.report.id,
+      contentHash: row.report.contentHash,
+      chunkVersion: row.analysis.chunkVersion,
+      pages: null,
+    }))
     .sort((left, right) => left.reportId.localeCompare(right.reportId))
 
   const chunks = selectors.length ? await input.source.loadChunks(selectors) : []
