@@ -27,7 +27,7 @@
 - Create: `supabase/migrations/20260906164000_qeo124_market_price_adjustment_factors.sql`
 - Modify: `supabase/migration-equivalence.json`
 - Modify: `docs/db/evidence/production-migration-ledger-2026-09-06.json`
-- Modify: `lib/supabase/database.types.ts`
+- Modify: `modules/shared/supabase/database.types.ts`
 - Test: `tests/market-data-contract.test.ts`
 
 **Interfaces:**
@@ -72,7 +72,7 @@ Expected: reviewed ledger, replay-from-zero, generated types and DB contracts al
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20260906164000_qeo124_market_price_adjustment_factors.sql supabase/migration-equivalence.json docs/db/evidence/production-migration-ledger-2026-09-06.json lib/supabase/database.types.ts tests/market-data-contract.test.ts
+git add supabase/migrations/20260906164000_qeo124_market_price_adjustment_factors.sql supabase/migration-equivalence.json docs/db/evidence/production-migration-ledger-2026-09-06.json modules/shared/supabase/database.types.ts tests/market-data-contract.test.ts
 git commit -m "feat(QEO-124): add adjustment factor storage"
 ```
 
@@ -82,6 +82,7 @@ git commit -m "feat(QEO-124): add adjustment factor storage"
 - Create: `modules/market/corporate-actions/adjustment/formulas.ts`
 - Create: `modules/market/corporate-actions/adjustment/types.ts`
 - Test: `tests/qeo-124-adjustment-engine.test.ts`
+- Modify: `tests/test-contracts.json`
 
 **Interfaces:**
 
@@ -102,7 +103,8 @@ export type StepAdjustment = {
 export function computeStepAdjustment(input: AdjustmentEventSet): StepAdjustment
 ```
 
-- [ ] **Step 1: RED cash-dividend fixture**
+- [ ] **Step 1: Register `tests/qeo-124-adjustment-engine.test.ts` in `tests/test-contracts.json`** with owner `market-data` and deterministic factor/lineage invariant.
+- [ ] **Step 2: RED cash-dividend fixture**
 
 Assert:
 
@@ -113,14 +115,14 @@ volumeFactor === 1
 
 Reject `cashPerShare >= previousRawClose` as ambiguous rather than creating a non-positive factor.
 
-- [ ] **Step 2: GREEN cash formula**
-- [ ] **Step 3: RED stock dividend/split fixture** — ratio `1:1` gives price factor `0.5`; volume factor is the explicit reciprocal normalization required by the selected adjusted-volume basis, never inferred from the price field at render time.
-- [ ] **Step 4: GREEN stock/split formula**
-- [ ] **Step 5: RED rights issue fixture** using explicit ratio + subscription price + previous raw close.
-- [ ] **Step 6: GREEN rights formula**
-- [ ] **Step 7: RED multi-action same-date determinism** — shuffled cash/stock/right components must produce the same output.
-- [ ] **Step 8: GREEN deterministic event-set calculation**
-- [ ] **Step 9: Commit**
+- [ ] **Step 3: GREEN cash formula**
+- [ ] **Step 4: RED stock dividend/split fixture** — ratio `1:1` gives price factor `0.5`; volume factor is the explicit reciprocal normalization required by the selected adjusted-volume basis, never inferred from the price field at render time.
+- [ ] **Step 5: GREEN stock/split formula**
+- [ ] **Step 6: RED rights issue fixture** using explicit ratio + subscription price + previous raw close.
+- [ ] **Step 7: GREEN rights formula**
+- [ ] **Step 8: RED multi-action same-date determinism** — shuffled cash/stock/right components must produce the same output.
+- [ ] **Step 9: GREEN deterministic event-set calculation**
+- [ ] **Step 10: Commit**
 
 ### Task 3: Build cumulative backward factor series
 
@@ -202,4 +204,4 @@ export async function persistFactorSeries(
 - [ ] Generate factors for VHM only; do not switch chart consumers yet.
 - [ ] Read back factor lineage and compare golden calculations.
 - [ ] Re-run unchanged generation and prove idempotent/no-op.
-- [ ] Update Linear QEO-124 with factor evidence; only then unblock QEO-126/QEO-125.
+- [ ] Update Linear QEO-124 with factor evidence; only then unblock QEO-129.
