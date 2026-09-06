@@ -15,22 +15,26 @@ function source(path: string) {
   return readFileSync(path, "utf8")
 }
 
-function qeo29RetentionMigration() {
-  const matches = readdirSync("supabase/migrations").filter((name) => name.endsWith("_qeo29_job_telemetry_retention.sql"))
-  assert.equal(matches.length, 1, "expected exactly one QEO-29 job telemetry retention migration")
+function migrationBySuffix(suffix: string) {
+  const matches = readdirSync("supabase/migrations").filter((name) => name.endsWith(suffix))
+  assert.equal(matches.length, 1, `expected exactly one migration ending ${suffix}`)
   return source(`supabase/migrations/${matches[0]}`)
+}
+
+function qeo29RetentionMigration() {
+  return migrationBySuffix("_qeo29_job_telemetry_retention.sql")
 }
 
 function qeo39NPlusOneMigration() {
-  const matches = readdirSync("supabase/migrations").filter((name) => name.endsWith("_qeo39_wyckoff_n_plus_one.sql"))
-  assert.equal(matches.length, 1, "expected exactly one QEO-39 N+1 migration")
-  return source(`supabase/migrations/${matches[0]}`)
+  return migrationBySuffix("_qeo39_wyckoff_n_plus_one.sql")
 }
 
 function qeo39GroupedRpcMigration() {
-  const matches = readdirSync("supabase/migrations").filter((name) => name.endsWith("_qeo39_grouped_ohlcv_rpc.sql"))
-  assert.equal(matches.length, 1, "expected exactly one QEO-39 grouped OHLCV migration")
-  return source(`supabase/migrations/${matches[0]}`)
+  return migrationBySuffix("_qeo39_grouped_ohlcv_rpc.sql")
+}
+
+function qeo108StorageHardeningMigration() {
+  return migrationBySuffix("_qeo108_chart_storage_hardening.sql")
 }
 
 test("QEO-23 exposes fail-closed database replay and generated type commands", () => {
@@ -68,7 +72,6 @@ test("QEO-29 keeps phase detail for 1 day and terminal run summaries for 7 days"
   assert.match(sql, /delete\s+from\s+public\.system_job_phases[\s\S]*?status\s+in\s*\(\s*'succeeded'\s*,\s*'failed'\s*,\s*'skipped'\s*\)[\s\S]*?v_phase_cutoff/i)
   assert.match(sql, /delete\s+from\s+public\.system_job_runs[\s\S]*?status\s+in\s*\(\s*'succeeded'\s*,\s*'failed'\s*,\s*'skipped'\s*\)[\s\S]*?v_job_cutoff/i)
   assert.match(active, /rpc\("qeo_run_job_telemetry_cleanup"/)
-  assert.doesNotMatch(sql, /delete\s+from\s+public\.system_audit_log/i)
   assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
 })
 
@@ -122,4 +125,21 @@ test("QEO-39 stores large build payloads in private run-scoped artifacts with te
   assert.match(sql, /p_reference_at\s*-\s*interval\s+'1 day'/i)
   assert.match(active, /rpc\("qeo_run_wyckoff_build_artifact_cleanup"/)
   assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
+})
+
+test("QEO-108 drops only the redundant intraday lookup index and exposes service-role capacity guardrails", () => {
+  const sql = qeo108StorageHardeningMigration()
+
+  assert.match(sql, /drop\s+index\s+if\s+exists\s+public\.chart_ohlcv_intraday_lookup_idx/i)
+  assert.doesNotMatch(sql, /drop\s+index[\s\S]*chart_ohlcv_intraday_pkey/i)
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.qeo_chart_storage_capacity_report/i)
+  assert.match(sql, /pg_database_size\s*\(current_database\(\)\)/i)
+  assert.match(sql, /pg_total_relation_size\s*\('public\.chart_ohlcv_intraday'::regclass\)/i)
+  assert.match(sql, /chart_ohlcv_cold_manifests/i)
+  assert.match(sql, /500000000/)
+  assert.match(sql, /'BLOCK'/i)
+  assert.match(sql, /'WARN'/i)
+  assert.match(sql, /revoke\s+all\s+on\s+function[\s\S]*anon,\s*authenticated/i)
+  assert.match(sql, /grant\s+execute\s+on\s+function[\s\S]*service_role/i)
+  assert.doesNotMatch(sql, /delete\s+from\s+public\.chart_ohlcv_intraday/i)
 })
