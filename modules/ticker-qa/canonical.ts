@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { getCachedResearchTickerData } from "../shared/cache/request-cache.ts"
 import {
   assembleCouncilProjectionInputs,
   assembleResearchReportProjectionInputs,
@@ -185,6 +184,7 @@ async function loadNotionCanonicalCandidates(
   ticker: string,
   _selected: TickerKnowledgeItem,
 ) {
+  const { getCachedResearchTickerData } = await import("../shared/cache/request-cache.ts")
   const research = await getCachedResearchTickerData(ticker)
   if (research.connection.notionLive !== true) return []
   const thesis = research.theses.find((row) => (
