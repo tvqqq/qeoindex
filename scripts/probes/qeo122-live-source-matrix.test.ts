@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   QEO122_LIVE_CASES,
   evaluateProbePair,
+  validateQeo122SourceUrl,
 } from "./qeo122-live-source-matrix.ts"
 
 test("QEO-122 live matrix covers retained VHM history, HOSE/HNX/UPCOM, rights and an explicit amendment", () => {
@@ -39,4 +40,20 @@ test("QEO-122 pair evaluation separates semantic stability from harmless raw-bod
   })
 
   assert.equal(evaluateProbePair(first, { ...second, ok: false, status: 429 }).rateLimited, true)
+})
+
+test("QEO-122 rejects SSRF-capable source and redirect targets before fetch", () => {
+  assert.equal(validateQeo122SourceUrl("https://vsdc.vn/vi/ad/50366"), "https://vsdc.vn/vi/ad/50366")
+  assert.equal(validateQeo122SourceUrl("https://www.vsd.vn/robots.txt"), "https://www.vsd.vn/robots.txt")
+
+  for (const unsafe of [
+    "http://vsdc.vn/vi/ad/50366",
+    "https://vsdc.vn.evil.example/vi/ad/50366",
+    "https://evil.example/redirect",
+    "https://127.0.0.1/internal",
+    "https://vsdc.vn:444/vi/ad/50366",
+    "https://user:pass@vsdc.vn/vi/ad/50366",
+  ]) {
+    assert.throws(() => validateQeo122SourceUrl(unsafe), /QEO-122 probe: disallowed source URL/)
+  }
 })
