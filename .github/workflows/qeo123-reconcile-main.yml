@@ -1,0 +1,181 @@
+name: QEO-123 Reconcile Main
+
+on:
+  push:
+    branches:
+      - feat/qeo-123-corporate-actions
+    paths:
+      - .github/workflows/qeo123-reconcile-main.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qeo123-reconcile-main
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/qeo-123-corporate-actions
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Assert expected main and start merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          expected_main="a740d455478c4bf974051c447bf46920925f86e6"
+          actual_main="$(git rev-parse origin/main)"
+          if [[ "$actual_main" != "$expected_main" ]]; then
+            echo "main moved: expected $expected_main, got $actual_main" >&2
+            exit 1
+          fi
+          set +e
+          git merge --no-commit --no-ff origin/main
+          merge_rc=$?
+          set -e
+          if [[ $merge_rc -ne 0 ]]; then
+            mapfile -t conflicts < <(git diff --name-only --diff-filter=U | sort)
+            printf 'Conflicts: %s\n' "${conflicts[*]}"
+            expected=(
+              "docs/db/evidence/production-migration-ledger-2026-09-06.json"
+              "modules/shared/supabase/database.types.ts"
+              "supabase/migration-equivalence.json"
+            )
+            mapfile -t expected_sorted < <(printf '%s\n' "${expected[@]}" | sort)
+            if [[ "$(printf '%s\n' "${conflicts[@]}")" != "$(printf '%s\n' "${expected_sorted[@]}")" ]]; then
+              echo "Unexpected merge conflict set; refusing automatic resolution" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Semantically reconcile shared migration evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --theirs -- \
+            docs/db/evidence/production-migration-ledger-2026-09-06.json \
+            supabase/migration-equivalence.json \
+            modules/shared/supabase/database.types.ts
+          node <<'NODE'
+          const fs = require('fs');
+          const cp = require('child_process');
+
+          function ours(path) {
+            return JSON.parse(cp.execFileSync('git', ['show', `HEAD:${path}`], { encoding: 'utf8' }));
+          }
+          function current(path) {
+            return JSON.parse(fs.readFileSync(path, 'utf8'));
+          }
+          function write(path, value) {
+            fs.writeFileSync(path, JSON.stringify(value, null, 2) + '\n');
+          }
+
+          const mappingPath = 'supabase/migration-equivalence.json';
+          const mappingHead = ours(mappingPath);
+          const mappingMain = current(mappingPath);
+          const qeo123Mappings = mappingHead.migrations.filter((m) => m.logicalName?.startsWith('qeo123_'));
+          if (qeo123Mappings.length !== 2) throw new Error(`Expected 2 QEO-123 mappings, got ${qeo123Mappings.length}`);
+          const byLogicalName = new Map(mappingMain.migrations.map((m) => [m.logicalName, m]));
+          for (const m of qeo123Mappings) byLogicalName.set(m.logicalName, m);
+          mappingMain.migrations = [...byLogicalName.values()].sort((a, b) =>
+            String(a.repositoryVersion).localeCompare(String(b.repositoryVersion)) ||
+            String(a.logicalName).localeCompare(String(b.logicalName))
+          );
+          write(mappingPath, mappingMain);
+
+          const ledgerPath = 'docs/db/evidence/production-migration-ledger-2026-09-06.json';
+          const ledgerHead = ours(ledgerPath);
+          const ledgerMain = current(ledgerPath);
+          const qeo123Ledger = ledgerHead.migrations.filter((m) => m.name?.startsWith('qeo123_'));
+          if (qeo123Ledger.length !== 2) throw new Error(`Expected 2 QEO-123 ledger rows, got ${qeo123Ledger.length}`);
+          const byVersionName = new Map(ledgerMain.migrations.map((m) => [`${m.version}:${m.name}`, m]));
+          for (const m of qeo123Ledger) byVersionName.set(`${m.version}:${m.name}`, m);
+          ledgerMain.migrations = [...byVersionName.values()].sort((a, b) =>
+            String(a.version).localeCompare(String(b.version)) || String(a.name).localeCompare(String(b.name))
+          );
+          if (Array.isArray(ledgerMain.concurrentProductionMigrationsExcluded)) {
+            ledgerMain.concurrentProductionMigrationsExcluded = ledgerMain.concurrentProductionMigrationsExcluded
+              .filter((m) => !m.name?.startsWith('qeo123_'));
+            if (ledgerMain.concurrentProductionMigrationsExcluded.length === 0) {
+              delete ledgerMain.concurrentProductionMigrationsExcluded;
+            }
+          }
+          if (Array.isArray(ledgerMain.excludedConcurrentProductionMigrations)) {
+            ledgerMain.excludedConcurrentProductionMigrations = ledgerMain.excludedConcurrentProductionMigrations
+              .filter((m) => !m.name?.startsWith('qeo123_'));
+            if (ledgerMain.excludedConcurrentProductionMigrations.length === 0) {
+              delete ledgerMain.excludedConcurrentProductionMigrations;
+            }
+          }
+          ledgerMain.capturedAt = [ledgerMain.capturedAt, ledgerHead.capturedAt].filter(Boolean).sort().at(-1);
+          ledgerMain.reviewScope = 'QEO-119 and QEO-123 reviewed production migration reconciliation; both promotion sets are included in the canonical ledger.';
+          write(ledgerPath, ledgerMain);
+          NODE
+          git add \
+            docs/db/evidence/production-migration-ledger-2026-09-06.json \
+            supabase/migration-equivalence.json \
+            modules/shared/supabase/database.types.ts
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo "Unresolved conflicts remain" >&2
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start combined local Supabase
+        run: supabase start
+
+      - name: Replay combined migrations from zero
+        run: pnpm db:replay:verify
+
+      - name: Generate combined canonical Database types
+        run: supabase gen types typescript --local --schema public > modules/shared/supabase/database.types.ts
+
+      - name: Verify generated Database types
+        run: pnpm db:types:verify
+
+      - name: Commit semantic merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add \
+            docs/db/evidence/production-migration-ledger-2026-09-06.json \
+            supabase/migration-equivalence.json \
+            modules/shared/supabase/database.types.ts
+          git status --short
+          git commit -m "merge(QEO-123): reconcile QEO-119 main state"
+
+      - name: Remove one-shot resolver and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/qeo123-reconcile-main.yml
+          git add .github/workflows/qeo123-reconcile-main.yml
+          git commit -m "chore(QEO-123): remove one-shot main resolver"
+          git push origin HEAD:feat/qeo-123-corporate-actions
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
