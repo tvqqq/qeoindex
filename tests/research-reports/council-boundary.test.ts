@@ -203,3 +203,101 @@ test("QEO-115 context builder always keeps mandatory current state and reports r
   assert.equal(context.items[0].id, thesis.id)
   assert.match(context.text, /Current thesis/)
 })
+
+test("QEO-113 sync orchestration upserts deterministic report/Council projections and exposes resumable backfill progress", async () => {
+  const {
+    runTickerKnowledgeBackfill,
+    syncCouncilHistoryKnowledge,
+    syncResearchReportKnowledge,
+  } = await import("../../modules/ticker-knowledge/sync.ts")
+  const upserts: string[][] = []
+  const index = {
+    ensureReady: async () => undefined,
+    upsert: async (items: readonly { id: string }[]) => { upserts.push(items.map((item) => item.id)) },
+    deleteSourceVersion: async () => undefined,
+    query: async () => [],
+  }
+  const reportInput = {
+    report: { id: "report-1", title: "MSN", sourceName: "HSBC", publishDate: "2026-09-01", contentHash: "a".repeat(64) },
+    analysis: { id: "analysis-1", chunkVersion: "v1", executiveSummary: "summary", keyPoints: [], marketView: null, sectorOutlook: null, catalysts: [], risks: [] },
+    mentions: [{ ticker: "MSN", stance: "positive" as const, recommendationText: "BUY", targetPrice: 110000, targetCurrency: "VND", rationale: "recovery", evidence: [{ page: 1, snippet: "target" }] }],
+    chunks: [{ id: "chunk-1", pageNumber: 1, chunkIndex: 0, content: "target 110000", chunkHash: "b".repeat(64) }],
+  }
+  const first = await syncResearchReportKnowledge(index, reportInput)
+  const retry = await syncResearchReportKnowledge(index, reportInput)
+  assert.deepEqual(first.itemIds, retry.itemIds)
+  assert.equal(first.sourceId, "report-1")
+  assert.equal(first.upserted, 3)
+
+  const council = await syncCouncilHistoryKnowledge(index, {
+    id: "run-1", ticker: "MSN", asOfDate: "2026-09-01", signal: "HOLD", councilScore: 60, confidence: 0.6, consensus: 0.7,
+    riskStatus: "normal", price: 80, policyVersion: "p1", evidenceHash: "c".repeat(64), createdAt: "2026-09-01T08:00:00.000Z", outcome: null,
+  })
+  assert.equal(council.upserted, 1)
+
+  const seen: string[] = []
+  const backfill = await runTickerKnowledgeBackfill({
+    cursor: "page-1",
+    batchSize: 2,
+    loadPage: async (cursor, limit) => {
+      assert.equal(cursor, "page-1")
+      assert.equal(limit, 2)
+      return { rows: ["a", "b"], nextCursor: "page-2" }
+    },
+    syncRow: async (row) => { seen.push(row) },
+  })
+  assert.deepEqual(seen, ["a", "b"])
+  assert.deepEqual(backfill, { processed: 2, failed: 0, nextCursor: "page-2", completed: false })
+  assert.equal(upserts.length, 3)
+})
+
+test("QEO-114 thesis sync is rebuildable and uses the stable CURRENT_THESIS slot", async () => {
+  const { syncCurrentThesisKnowledge } = await import("../../modules/ticker-knowledge/sync.ts")
+  const ids: string[] = []
+  const index = {
+    ensureReady: async () => undefined,
+    upsert: async (items: readonly { id: string }[]) => { ids.push(...items.map((item) => item.id)) },
+    deleteSourceVersion: async () => undefined,
+    query: async () => [],
+  }
+  const base = {
+    id: "notion-page-1", notionUrl: "https://notion.so/1", ticker: "MSN", company: "Masan", status: "Current",
+    taBias: "Bullish" as const, faBias: "Neutral" as const, wyckoffState: "Range", marketRegime: "Neutral" as const,
+    baseCase: "Range", probabilities: { bull: 30, base: 50, bear: 20 }, support: "78", resistance: "86", confirmation: "86 hold",
+    invalidation: "below 78", whatChanged: "", confidence: "MEDIUM" as const, lastAnalysis: "2026-09-01", lastFAUpdate: "",
+    updated: "2026-09-01T09:00:00.000Z", driveFolder: "",
+  }
+  const first = await syncCurrentThesisKnowledge(index, base)
+  const second = await syncCurrentThesisKnowledge(index, { ...base, baseCase: "Breakout", updated: "2026-09-02T09:00:00.000Z" })
+  assert.equal(first.itemIds[0], second.itemIds[0])
+  assert.equal(ids[0], ids[1])
+  assert.notEqual(first.sourceVersion, second.sourceVersion)
+})
+
+test("QEO-115 consumer policy preserves contradictory authorities and exposes stage telemetry", async () => {
+  const { createTickerKnowledgeItem } = await import("../../modules/ticker-knowledge/domain.ts")
+  const { buildTickerContext } = await import("../../modules/ticker-knowledge/context.ts")
+  const deterministic = createTickerKnowledgeItem({
+    ticker: "MSN", knowledgeType: "COUNCIL_MEMORY", authority: "DETERMINISTIC_SIGNAL", sourceType: "AI_COUNCIL", logicalKey: "latest",
+    text: "Deterministic Council signal: REDUCE", provenance: { sourceId: "run-1", sourceVersion: "v1", asOf: "2026-09-05" }, projectionVersion: "v1",
+  })
+  const broker = createTickerKnowledgeItem({
+    ticker: "MSN", knowledgeType: "BROKER_VIEW", authority: "SOURCE_OPINION", sourceType: "RESEARCH_REPORT", logicalKey: "broker",
+    text: "Broker recommendation: BUY; target 110000", provenance: { sourceId: "report-1", sourceVersion: "v1", asOf: "2026-09-06" }, projectionVersion: "v1",
+  })
+  const index = {
+    ensureReady: async () => undefined,
+    upsert: async () => undefined,
+    deleteSourceVersion: async () => undefined,
+    query: async () => [{ id: broker.id, score: 0.9, item: broker, derivedVersions: { embeddingModel: "x", embeddingVersion: "x", sparseEncoder: "x", sparseVersion: "x" } }],
+  }
+  const context = await buildTickerContext({ index, ticker: "MSN", query: "should I buy?", consumer: "STOCK_QA", mandatory: [deterministic], now: "2026-09-06T08:00:00.000Z" })
+  assert.equal(context.items[0].authority, "DETERMINISTIC_SIGNAL")
+  assert.ok(context.items.some((item) => item.authority === "SOURCE_OPINION"))
+  assert.match(context.text, /REDUCE/)
+  assert.match(context.text, /BUY/)
+  assert.ok(context.telemetry.totalMs >= 0)
+  assert.ok(context.telemetry.retrievalMs >= 0)
+  assert.ok(context.telemetry.rerankMs >= 0)
+  assert.ok(context.telemetry.buildMs >= 0)
+})
