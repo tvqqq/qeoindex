@@ -76,14 +76,14 @@ jobs:
           const path = 'tests/corporate-actions/qeo124-adjustment-engine.test.ts'
           let text = fs.readFileSync(path, 'utf8')
           const replacements = [
-            [/cashPerShare: 0\.1\b/g, 'cashPerShare: 100'],
-            [/cashPerShare: 0\.2\b/g, 'cashPerShare: 200'],
-            [/cashPerShare: 0\.3\b/g, 'cashPerShare: 300'],
             [/cashPerShare: 100\b/g, 'cashPerShare: 100_000'],
             [/cashPerShare: 20\b/g, 'cashPerShare: 20_000'],
             [/cashPerShare: 11\b/g, 'cashPerShare: 11_000'],
             [/cashPerShare: 10\b/g, 'cashPerShare: 10_000'],
             [/subscriptionPrice: 60\b/g, 'subscriptionPrice: 60_000'],
+            [/cashPerShare: 0\.1\b/g, 'cashPerShare: 100'],
+            [/cashPerShare: 0\.2\b/g, 'cashPerShare: 200'],
+            [/cashPerShare: 0\.3\b/g, 'cashPerShare: 300'],
           ]
           for (const [pattern, replacement] of replacements) text = text.replace(pattern, replacement)
           fs.writeFileSync(path, text)
