@@ -23,7 +23,6 @@ const CONSUMER_POLICY: Record<TickerContextConsumer, { limit: number; maxChars: 
 
 const AUTHORITY_WEIGHT: Record<TickerKnowledgeAuthority, number> = {
   VERIFIED_FACT: 1,
-  CANONICAL_THESIS: 0.95,
   DETERMINISTIC_SIGNAL: 0.95,
   HISTORICAL_LESSON: 0.8,
   SOURCE_OPINION: 0.65,
