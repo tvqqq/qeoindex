@@ -1,4 +1,4 @@
-name: QEO-129 Schema RED Gate
+name: QEO-129 Schema Contract
 
 on:
   push:
@@ -6,9 +6,11 @@ on:
       - feat/qeo-129-adjusted-daily-shadow
     paths:
       - .github/workflows/qeo129-red-schema.yml
+      - tests/db/qeo129-schema-contract.test.ts
+      - supabase/migrations/20260906170000_qeo129_adjusted_daily_shadow.sql
 
 jobs:
-  red:
+  schema:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
