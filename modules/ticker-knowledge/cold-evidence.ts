@@ -1,5 +1,3 @@
-import "server-only"
-
 import { createHash } from "node:crypto"
 import { gzipSync, gunzipSync } from "node:zlib"
 import type { SupabaseClient } from "@supabase/supabase-js"
