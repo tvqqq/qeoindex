@@ -152,7 +152,7 @@
       "productionVersion": "20260902061549",
       "state": "MAPPED",
       "evidence": "production-ledger-and-service-role-rpc-smoke",
-      "rationale": "QEO-21 service-role retention RPC was applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
+      "rationale": "QEO-21 service-role retention RPC was applied to production before runtime merge; Supabase production timestamp differs from repository filename"
     },
     {
       "logicalName": "qeo20_compatibility_columns_cleanup",
@@ -176,7 +176,7 @@
       "productionVersion": "20260902101642",
       "state": "MAPPED",
       "evidence": "production-ledger-and-service-role-rpc",
-      "rationale": "QEO-29 bounded job telemetry cleanup was applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
+      "rationale": "QEO-29 bounded job telemetry cleanup was applied to production before runtime merge; Supabase production timestamp differs from repository filename"
     },
     {
       "logicalName": "qeo39_wyckoff_n_plus_one",
@@ -184,7 +184,7 @@
       "productionVersion": "20260902120822",
       "state": "MAPPED",
       "evidence": "production-ledger-batched-rpc-and-artifact-cleanup-smoke",
-      "rationale": "QEO-39 batched indexed OHLCV RPC and run-scoped build artifact store were applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
+      "rationale": "QEO-39 batched indexed OHLCV RPC and run-scoped build artifact store were applied to production before runtime merge; Supabase production timestamp differs from repository filename"
     },
     {
       "logicalName": "qeo39_grouped_ohlcv_rpc",
@@ -305,6 +305,14 @@
       "state": "MAPPED",
       "evidence": "qeo106-production-scoped-integrity-rpc-and-vic-vcb-parity-smoke",
       "rationale": "Production repair batches exposed statement_timeout because the route recomputed the full canonical-200 integrity report twice. The reviewed scoped equivalent was replay-verified locally, applied as production version 20260906002919, and returned VIC/VCB PASS with exact canonical counts before runtime cutover."
+    },
+    {
+      "logicalName": "qeo117_ai_council_ticker_knowledge",
+      "repositoryVersion": "20260906094500",
+      "productionVersion": null,
+      "state": "QUARANTINED",
+      "evidence": "qeo117-green-freeze-contract-pending-qdrant-production-cutover",
+      "rationale": "Immutable ticker-knowledge Council snapshot schema is intentionally quarantined until Qdrant credentials, exact-head DB replay/types, runtime wiring, and bounded production smoke are approved."
     }
   ]
 }
