@@ -154,11 +154,14 @@ function itemHeader(item: TickerKnowledgeItem) {
   return `[${item.knowledgeType} | ${item.authority} | ${source}${location ? ` | ${location}` : ""}]`
 }
 
-function buildBoundedText(items: readonly TickerKnowledgeItem[], maxChars: number) {
+function buildBoundedContext(items: readonly TickerKnowledgeItem[], maxChars: number) {
   let text = ""
   let truncated = false
+  const included: TickerKnowledgeItem[] = []
+
   for (const item of items) {
-    const block = `${itemHeader(item)}\n${item.text.trim()}\n\n`
+    const header = itemHeader(item)
+    const block = `${header}\n${item.text.trim()}\n\n`
     const remaining = maxChars - text.length
     if (remaining <= 0) {
       truncated = true
@@ -166,16 +169,19 @@ function buildBoundedText(items: readonly TickerKnowledgeItem[], maxChars: numbe
     }
     if (block.length <= remaining) {
       text += block
+      included.push(item)
       continue
     }
-    const minimumUseful = itemHeader(item).length + 80
+    const minimumUseful = header.length + 80
     if (remaining >= minimumUseful) {
       text += `${block.slice(0, Math.max(0, remaining - 1)).trimEnd()}…`
+      included.push(item)
     }
     truncated = true
     break
   }
-  return { text: text.trim(), truncated }
+
+  return { text: text.trim(), truncated, items: included }
 }
 
 export async function buildTickerContext(input: BuildTickerContextInput): Promise<TickerContext> {
@@ -215,22 +221,23 @@ export async function buildTickerContext(input: BuildTickerContextInput): Promis
     : []
   const retrieved = rankRetrieved(scopedResults, nowMs)
   const seen = new Set<string>()
-  const items: TickerKnowledgeItem[] = []
+  const candidates: TickerKnowledgeItem[] = []
   for (const item of mandatory) {
     if (seen.has(item.id)) continue
     seen.add(item.id)
-    items.push(item)
+    candidates.push(item)
   }
   for (const result of retrieved) {
     if (seen.has(result.item.id)) continue
     seen.add(result.item.id)
-    items.push(result.item)
+    candidates.push(result.item)
   }
   const rerankMs = durationSince(rerankStarted)
 
   const buildStarted = monotonicNow()
   const maxChars = Math.max(500, Math.min(60_000, Math.floor(input.maxChars ?? policy?.maxChars ?? DEFAULT_MAX_CHARS)))
-  const bounded = buildBoundedText(items, maxChars)
+  const bounded = buildBoundedContext(candidates, maxChars)
+  const includedIds = new Set(bounded.items.map((item) => item.id))
   const buildMs = durationSince(buildStarted)
 
   return {
@@ -239,8 +246,8 @@ export async function buildTickerContext(input: BuildTickerContextInput): Promis
     consumer: input.consumer ?? null,
     retrievalStatus: retrieval.status,
     retrievalReason: retrieval.status === "unavailable" ? retrieval.reason : null,
-    items,
-    retrievedPointIds: retrieved.map((result) => result.id),
+    items: bounded.items,
+    retrievedPointIds: retrieved.map((result) => result.id).filter((id) => includedIds.has(id)),
     text: bounded.text,
     truncated: bounded.truncated,
     telemetry: {
