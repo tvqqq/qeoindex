@@ -34,14 +34,14 @@ jobs:
           const manifest = JSON.parse(fs.readFileSync(path, 'utf8'))
           const entry = {
             path: 'tests/market-history/qeo129-adjusted-daily-store.test.ts',
-            owner: 'market-data',
+            owner: 'market',
             invariant: 'Preserve QEO-129 exact factor-run adjusted Daily persistence, OHLCV readback, and shadow-only rollout contract.',
             bucket: 'canonical',
-            suites: ['fast', 'market'],
+            suites: ['fast'],
           }
-          if (!manifest.entries.some((item) => item.path === entry.path)) {
-            manifest.entries.push(entry)
-          }
+          const index = manifest.entries.findIndex((item) => item.path === entry.path)
+          if (index >= 0) manifest.entries[index] = entry
+          else manifest.entries.push(entry)
           manifest.entries.sort((a, b) => a.path.localeCompare(b.path))
           fs.writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`)
           NODE
