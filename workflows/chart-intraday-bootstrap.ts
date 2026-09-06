@@ -10,10 +10,13 @@ import {
 const MAX_CONSECUTIVE_RETRYABLE_FAILURES = 5
 const MAX_CONSECUTIVE_PERMANENT_FAILURES = 3
 
-export async function chartIntradayBootstrapWorkflow(startedAtIso: string): Promise<Qeo107BootstrapWorkflowSummary> {
+export async function chartIntradayBootstrapWorkflow(
+  startedAtIso: string,
+  requestedTickers: string[] = [],
+): Promise<Qeo107BootstrapWorkflowSummary> {
   "use workflow"
 
-  const context = await startChartIntradayBootstrapStep(startedAtIso)
+  const context = await startChartIntradayBootstrapStep(startedAtIso, requestedTickers)
   const chunk = context.target.chunks[0]
   let attemptedChunks = 0
   let succeededChunks = 0
