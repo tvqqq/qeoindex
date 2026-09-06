@@ -115,13 +115,11 @@ export function assembleResearchReportProjectionInputs(input: {
       })
       .sort((left, right) => left.ticker.localeCompare(right.ticker))
 
-    const citedPages = new Set(mentions.flatMap((mention) => mention.evidence.map((entry) => entry.page)))
     const chunks = input.chunks
       .filter((row) => (
         text(row.report_id) === reportId
         && text(row.content_hash) === contentHash
         && text(row.chunk_version) === chunkVersion
-        && citedPages.has(integer(row.page_number, -1))
       ))
       .flatMap((row) => {
         const id = text(row.id)
