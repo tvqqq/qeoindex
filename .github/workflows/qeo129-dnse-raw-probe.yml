@@ -1,4 +1,4 @@
-name: QEO-129 VCI Raw Basis Probe
+name: QEO-129 TitanLabs Final Basis Probe
 
 on:
   push:
@@ -19,60 +19,57 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Probe VCI native ONE_DAY VHM anchors
+      - name: Probe TitanLabs VHM Daily anchors
         run: |
           node --input-type=module <<'NODE'
-          const endpoint = 'https://trading.vietcap.com.vn/api/chart/OHLCChart/gap-chart'
-          const now = new Date('2026-08-07T23:59:59.000Z')
-          const to = Math.floor(now.getTime() / 1000)
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              Accept: 'application/json, text/plain, */*',
-              'Accept-Encoding': 'identity',
-              'Content-Type': 'application/json',
-              Origin: 'https://trading.vietcap.com.vn',
-              Referer: 'https://trading.vietcap.com.vn/',
-              'User-Agent': 'Mozilla/5.0 QeoIndex/1.0',
-            },
-            body: JSON.stringify({ timeFrame: 'ONE_DAY', symbols: ['VHM'], to, countBack: 400 }),
-            signal: AbortSignal.timeout(8000),
+          const url = new URL('https://www.titanlabs.vn/api/charts/series')
+          url.searchParams.set('symbol', 'VHM')
+          const response = await fetch(url, {
+            headers: { Accept:'application/json', 'User-Agent':'Mozilla/5.0 QeoIndex/1.0' },
+            signal: AbortSignal.timeout(10000),
           })
+          const text = await response.text()
           if (!response.ok) {
-            console.log(JSON.stringify({ provider:'VCI', usable:false, httpStatus:response.status }))
+            console.log(JSON.stringify({ provider:'TitanLabs', usable:false, httpStatus:response.status }))
             process.exit(2)
           }
-          const payload = await response.json()
-          const vectors = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : []
-          const vector = vectors.find((item) => String(item?.symbol ?? '').trim().toUpperCase() === 'VHM') ?? vectors[0]
-          if (!vector || !Array.isArray(vector.t)) {
-            console.log(JSON.stringify({ provider:'VCI', usable:false, reason:'MISSING_VECTOR' }))
+          let payload
+          try { payload = JSON.parse(text) } catch {
+            console.log(JSON.stringify({ provider:'TitanLabs', usable:false, reason:'INVALID_JSON' }))
             process.exit(3)
           }
-          const fields = ['t','o','h','l','c','v']
-          if (fields.some((field) => !Array.isArray(vector[field]) || vector[field].length !== vector.t.length)) {
-            console.log(JSON.stringify({ provider:'VCI', usable:false, reason:'MISALIGNED_VECTORS' }))
+          if (String(payload?.s ?? '').toLowerCase() !== 'ok' || !Array.isArray(payload?.t)) {
+            console.log(JSON.stringify({ provider:'TitanLabs', usable:false, reason:'INVALID_ENVELOPE', status:payload?.s ?? null }))
             process.exit(4)
+          }
+          const fields = ['t','o','h','l','c','v']
+          if (fields.some((field) => !Array.isArray(payload[field]) || payload[field].length !== payload.t.length)) {
+            console.log(JSON.stringify({ provider:'TitanLabs', usable:false, reason:'MISALIGNED_VECTORS' }))
+            process.exit(5)
           }
           function vnDate(seconds) {
             const parts = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Ho_Chi_Minh', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(new Date(Number(seconds) * 1000))
             const get = (type) => parts.find((part) => part.type === type)?.value ?? ''
             return `${get('year')}-${get('month')}-${get('day')}`
           }
-          const bars = vector.t.map((time, index) => ({
-            date: vnDate(time),
-            open: Number(vector.o[index]) / 1000,
-            high: Number(vector.h[index]) / 1000,
-            low: Number(vector.l[index]) / 1000,
-            close: Number(vector.c[index]) / 1000,
-            volume: Number(vector.v[index]),
-          })).filter((bar) => Object.values(bar).every((value) => typeof value === 'string' || Number.isFinite(value)))
+          const bars = payload.t.map((time,index) => ({
+            date:vnDate(time),
+            open:Number(payload.o[index])/1000,
+            high:Number(payload.h[index])/1000,
+            low:Number(payload.l[index])/1000,
+            close:Number(payload.c[index])/1000,
+            volume:Number(payload.v[index]),
+          })).filter((bar) => Object.entries(bar).every(([key,value]) => key === 'date' ? typeof value === 'string' : Number.isFinite(value)))
           const wanted = new Set(['2025-10-13','2025-10-14','2025-10-15','2025-10-16','2025-10-17','2026-06-26','2026-08-05'])
-          const anchors = bars.filter((bar) => wanted.has(bar.date)).sort((a,b) => a.date.localeCompare(b.date))
-          const golden = anchors.filter((bar) => bar.date.startsWith('2025-10-'))
+          const anchors = bars.filter((bar)=>wanted.has(bar.date)).sort((a,b)=>a.date.localeCompare(b.date))
+          const golden = anchors.filter((bar)=>bar.date.startsWith('2025-10-'))
           console.log(JSON.stringify({
-            provider:'VCI', usable:true, timeFrame:'ONE_DAY', barCount:bars.length,
+            provider:'TitanLabs', usable:true,
+            declaredCount:Number(payload.count ?? bars.length),
+            barCount:bars.length,
+            firstDate:payload.firstDate ?? bars[0]?.date ?? null,
+            lastDate:payload.lastDate ?? bars.at(-1)?.date ?? null,
             anchors,
-            goldenWeek: golden.length ? { high:Math.max(...golden.map((bar)=>bar.high)), low:Math.min(...golden.map((bar)=>bar.low)), sessions:golden.length } : null,
+            goldenWeek:golden.length ? { high:Math.max(...golden.map((bar)=>bar.high)), low:Math.min(...golden.map((bar)=>bar.low)), sessions:golden.length } : null,
           }))
           NODE
