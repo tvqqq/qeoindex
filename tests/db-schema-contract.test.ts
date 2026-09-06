@@ -21,6 +21,12 @@ function migrationBySuffix(suffix: string) {
   return source(`supabase/migrations/${matches[0]}`)
 }
 
+function pendingMigrationBySuffix(suffix: string) {
+  const matches = readdirSync("supabase/pending-migrations").filter((name) => name.endsWith(suffix))
+  assert.equal(matches.length, 1, `expected exactly one pending migration ending ${suffix}`)
+  return source(`supabase/pending-migrations/${matches[0]}`)
+}
+
 function qeo29RetentionMigration() {
   return migrationBySuffix("_qeo29_job_telemetry_retention.sql")
 }
@@ -34,7 +40,7 @@ function qeo39GroupedRpcMigration() {
 }
 
 function qeo108StorageHardeningMigration() {
-  return migrationBySuffix("_qeo108_chart_storage_hardening.sql")
+  return pendingMigrationBySuffix("_qeo108_chart_storage_hardening.sql")
 }
 
 test("QEO-23 exposes fail-closed database replay and generated type commands", () => {
@@ -127,7 +133,7 @@ test("QEO-39 stores large build payloads in private run-scoped artifacts with te
   assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
 })
 
-test("QEO-108 drops only the redundant intraday lookup index and exposes service-role capacity guardrails", () => {
+test("QEO-108 quarantined migration drops only the redundant intraday lookup index and exposes service-role capacity guardrails", () => {
   const sql = qeo108StorageHardeningMigration()
 
   assert.match(sql, /drop\s+index\s+if\s+exists\s+public\.chart_ohlcv_intraday_lookup_idx/i)
