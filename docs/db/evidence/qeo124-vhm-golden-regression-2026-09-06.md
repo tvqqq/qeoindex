@@ -75,3 +75,20 @@ Finhay is used only as an independent regression cross-check. It is not used as 
 6. Require weekly `H=63.31` and `L=55.18` within the pinned tolerance and exactly after two-decimal rounding.
 
 Focused workflow evidence: QEO-124 Register Tests Once run `34042723800` completed GREEN, including monetary-unit, lineage-portability, formula, and VHM golden contracts.
+
+## Production promotion and rollback smoke
+
+The QEO-124 repository migration `20260906165000_qeo124_adjustment_factor_runs.sql` was promoted to Supabase production project `glwhhrmejlonhyorvtzm` as production migration `20260906155227_qeo124_adjustment_factor_runs` after the synced-main preproduction rehearsal completed successfully.
+
+Post-promotion readback verified:
+
+- `market_adjustment_factor_runs` and `market_price_adjustment_factors` exist with RLS enabled;
+- `anon` and `authenticated` have no SELECT access to either derived-state table;
+- `service_role` has the required SELECT access;
+- `qeo_persist_adjustment_factor_candidate(...)` is `SECURITY DEFINER`;
+- only `service_role` has execute privilege on the persistence RPC;
+- both factor tables contained zero rows before the smoke.
+
+A production rollback-only persistence smoke then proved candidate persistence, unchanged replay idempotency, blocked-run isolation, and active-run immutability. The transaction was rolled back and the final synthetic fixture count was exactly `0` factor runs and `0` factor rows for tickers `AAA`, `BBB`, and `CCC`.
+
+Repository reconciliation maps `20260906165000` to production `20260906155227` in `supabase/migration-equivalence.json`, and the reviewed production ledger includes the applied production row.
