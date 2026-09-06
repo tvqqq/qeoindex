@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-06T15:54:09.503Z",
+  "capturedAt": "2026-09-06T22:31:30.001Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
   "migrations": [
     {
@@ -433,7 +433,11 @@
     {
       "version": "20260906155227",
       "name": "qeo124_adjustment_factor_runs"
+    },
+    {
+      "version": "20260906223014",
+      "name": "qeo129_adjusted_daily_shadow"
     }
   ],
-  "reviewScope": "QEO-119, QEO-123 and QEO-124 reviewed production migration reconciliation; all promoted migration sets are included in the canonical ledger."
+  "reviewScope": "QEO-119, QEO-123, QEO-124 and QEO-129 reviewed production migration reconciliation; all promoted migration sets are included in the canonical ledger."
 }
