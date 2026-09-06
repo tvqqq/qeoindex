@@ -36,6 +36,14 @@ begin
   if to_regclass('public.chart_ohlcv_intraday_qeo108_legacy') is not null then
     raise exception 'QEO-108 rehearsal found a stale rollback shadow';
   end if;
+  if exists (
+    select 1 from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'chart_ohlcv_intraday'
+      and indexname = 'chart_ohlcv_intraday_lookup_idx'
+  ) then
+    raise exception 'QEO-108 rehearsal requires index-cleanup baseline; redundant lookup index still exists';
+  end if;
 end;
 $$;
 
@@ -111,13 +119,13 @@ begin
   ) then
     raise exception 'QEO-108 rehearsal: redundant DESC lookup index exists on canonical parent';
   end if;
-  if not exists (
+  if exists (
     select 1 from pg_indexes
     where schemaname = 'public'
       and tablename = 'chart_ohlcv_intraday_qeo108_legacy'
       and indexname = 'chart_ohlcv_intraday_lookup_idx'
   ) then
-    raise exception 'QEO-108 rehearsal: legacy rollback shadow lost its original lookup index';
+    raise exception 'QEO-108 rehearsal: rollback shadow reintroduced redundant DESC lookup index';
   end if;
 
   select public.qeo_chart_storage_capacity() into v_capacity;
