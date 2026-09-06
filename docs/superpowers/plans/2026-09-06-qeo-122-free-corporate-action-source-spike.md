@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prove whether a free authoritative Vietnam corporate-action source can supply enough stable event evidence to support QeoIndex canonical corporate actions without FiinGroup.
+**Goal:** Prove whether a free authoritative Vietnam corporate-action source can supply stable event evidence for QeoIndex without FiinGroup.
 
-**Architecture:** Treat this as a throwaway/source-validation spike only. Fetch VSDC/VSD public event pages server-side, normalize them into an in-memory probe shape, validate ex-date derivation against the canonical Vietnam trading calendar, and publish evidence + GO/NO-GO without changing production schema or chart data.
+**Architecture:** This is a source-validation spike only. Fetch VSDC/VSD public event pages from a script, normalize into an in-memory probe shape, validate historical ex-date derivation against the canonical Vietnam trading calendar, and publish GO/NO-GO evidence. No production module imports the probe.
 
-**Tech Stack:** Node.js/TypeScript, built-in `fetch`, existing Vietnam trading-calendar helpers, repository scripts/tests, Markdown evidence.
+**Tech Stack:** Node.js/TypeScript, built-in `fetch`, existing Vietnam trading-calendar helpers, canonical repository test manifest, Markdown evidence.
 
 **Spec:** `docs/superpowers/specs/2026-09-06-corporate-actions-adjusted-chart-design.md`
 
@@ -14,64 +14,67 @@
 
 - FiinGroup remains out of implementation scope unless this spike returns NO-GO.
 - No production database migration or canonical Daily rewrite.
-- Do not silently infer `ex_date`; every derived date must carry derivation method + calendar version.
+- Do not silently infer `ex_date`; every derived date carries derivation method + calendar version.
 - Validate VHM golden history plus representative HOSE/HNX/UPCOM cases.
-- Preserve exact source URL/event identity in evidence.
+- Preserve exact source URL/event identity and source-body hash in evidence.
+- One source notice may contain multiple action components; the spike must preserve that fact for QEO-123.
 
 ---
 
-### Task 1: Add a throwaway VSDC event probe
+### Task 1: Add a throwaway VSDC event probe with deterministic fixtures
 
 **Files:**
 - Create: `scripts/probes/qeo122-vsdc-corporate-actions.ts`
 - Create: `tests/qeo-122-vsdc-probe.test.ts`
+- Modify: `tests/test-contracts.json`
 
 **Interfaces:**
-- Consumes: public VSDC/VSD event-detail URLs and `isVietnamSecuritiesTradingDateKey()` from `modules/market/calendar`.
-- Produces: `probeVsdcCorporateAction(url): Promise<ProbeCorporateAction>` used only by the spike/test.
 
 ```ts
-type ProbeCorporateAction = {
-  sourceUrl: string
-  ticker: string
-  isin: string | null
-  exchange: "HOSE" | "HNX" | "UPCOM" | "UNKNOWN"
+type ProbeCorporateActionComponent = {
   actionType: "cash_dividend" | "stock_dividend" | "rights_issue" | "other"
-  recordDate: string | null
   cashPerShare: number | null
   stockRatio: string | null
   rightsRatio: string | null
   subscriptionPrice: number | null
+}
+
+type ProbeCorporateActionNotice = {
+  sourceUrl: string
+  sourceEventId: string
+  ticker: string
+  isin: string | null
+  exchange: "HOSE" | "HNX" | "UPCOM" | "UNKNOWN"
+  recordDate: string | null
+  components: ProbeCorporateActionComponent[]
   rawTextHash: string
 }
 ```
 
-- [ ] **Step 1: Write parser fixtures/tests first**
+- [ ] **Step 1: Register `tests/qeo-122-vsdc-probe.test.ts` in `tests/test-contracts.json`**
 
-Add deterministic HTML snippets for VHM cash dividend, VHM stock dividend, HNX cash dividend, UPCOM cash dividend and one rights issue. Assert normalized numeric values and dates exactly.
+Owner `market-data`; invariant: free-source probe preserves exact terms, multi-action notices and fail-closed ex-date evidence without becoming runtime authority.
 
-- [ ] **Step 2: Run the targeted test and verify RED**
+- [ ] **Step 2: Add RED fixture cases**
 
-Run:
+Include VHM cash dividend, VHM stock dividend, VHM 2021 combined cash+stock notice, one HNX cash notice, one UPCOM cash notice and one rights issue with subscription price.
+
+- [ ] **Step 3: Verify RED**
 
 ```bash
 pnpm exec tsx --test tests/qeo-122-vsdc-probe.test.ts
 ```
 
-Expected: FAIL because `scripts/probes/qeo122-vsdc-corporate-actions.ts` does not exist.
+Expected: FAIL because the probe module does not exist.
 
-- [ ] **Step 3: Implement the minimal parser/probe**
+- [ ] **Step 4: Implement minimal label-based parser**
 
-Implement explicit label-based extraction; do not use position-only scraping. Hash the fetched body with SHA-256 for evidence identity.
+Do not use position-only scraping. Hash fetched body with SHA-256. Return multiple `components` for a combined notice.
 
-- [ ] **Step 4: Run fixture tests GREEN**
-
-Run the same command. Expected: all QEO-122 fixture assertions pass.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Run fixture test GREEN and commit**
 
 ```bash
-git add scripts/probes/qeo122-vsdc-corporate-actions.ts tests/qeo-122-vsdc-probe.test.ts
+git add scripts/probes/qeo122-vsdc-corporate-actions.ts tests/qeo-122-vsdc-probe.test.ts tests/test-contracts.json
 git commit -m "test(QEO-122): probe free VSDC corporate actions"
 ```
 
@@ -82,100 +85,64 @@ git commit -m "test(QEO-122): probe free VSDC corporate actions"
 - Modify: `tests/qeo-122-vsdc-probe.test.ts`
 
 **Interfaces:**
-- Consumes: normalized `recordDate`, exchange trading calendar, settlement-regime table embedded in the probe.
-- Produces: `deriveProbeExDate(recordDate, exchange, regime): { exDate: string; method: string } | null`.
 
-- [ ] **Step 1: Add RED cases for 2021, 2022 and 2026 VHM events**
-
-Require explicit expected ex-dates from independently verified historical event evidence. Include a case that must return `null` when the settlement regime cannot be proven.
-
-- [ ] **Step 2: Implement a bounded historical settlement regime map**
-
-Use explicit date intervals, not a single modern `recordDate - 1 trading day` assumption. The function must walk the existing Vietnam trading calendar and return `null` outside proven regimes.
-
-- [ ] **Step 3: Run tests GREEN**
-
-```bash
-pnpm exec tsx --test tests/qeo-122-vsdc-probe.test.ts
+```ts
+export function deriveProbeExDate(input: {
+  recordDate: string
+  exchange: "HOSE" | "HNX" | "UPCOM"
+  regimeVersion: string
+}): { exDate: string; method: string; calendarVersion: string } | null
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 1: Add RED cases for verified VHM 2021, 2022 and 2026 events**
+- [ ] **Step 2: Add RED unknown-regime case** — must return `null`, never modern-rule guess.
+- [ ] **Step 3: Implement explicit historical settlement-regime intervals and walk the existing Vietnam trading calendar**
+- [ ] **Step 4: GREEN targeted test and commit**
 
-```bash
-git add scripts/probes/qeo122-ex-date-derivation.ts tests/qeo-122-vsdc-probe.test.ts
-git commit -m "test(QEO-122): validate historical ex-date derivation"
-```
-
-### Task 3: Run live-source matrix and record operational constraints
+### Task 3: Run live-source matrix and operational probe
 
 **Files:**
 - Create: `docs/db/evidence/qeo122-free-corporate-action-source-2026-09-06.md`
 
-**Interfaces:**
-- Consumes: live public source pages.
-- Produces: reproducible GO/NO-GO evidence; no runtime dependency.
+- [ ] **Step 1: Probe all approved VHM golden event URLs live** — record HTTP status, redirect chain, content-type, normalized notice/components, source body hash.
+- [ ] **Step 2: Probe at least one HOSE, one HNX and one UPCOM issuer** — include cash plus stock/right cases required by the source gate.
+- [ ] **Step 3: Fetch every source twice** — record stable identity/hash behavior, obvious bot/rate-limit response and latency/error class.
+- [ ] **Step 4: Test amendment identity** — use a known amended/duplicate notice if source history exposes one; otherwise the gate is FAIL rather than assumed PASS.
+- [ ] **Step 5: Commit live-source evidence**
 
-- [ ] **Step 1: Probe VHM golden events live**
-
-Run the probe for the approved VHM event URLs and record HTTP status, normalized fields, source body hash and parser result.
-
-- [ ] **Step 2: Probe cross-exchange matrix**
-
-At minimum: one HOSE issuer, one HNX issuer, one UPCOM issuer; include cash dividend plus at least one stock/right issue where available.
-
-- [ ] **Step 3: Measure operational stability**
-
-Run each URL twice. Record redirect behavior, response content-type, obvious bot/rate-limit response, and whether the same event yields stable normalized identity/hash when unchanged.
-
-- [ ] **Step 4: Write GO/NO-GO evidence**
-
-The evidence document must include this decision table:
-
-```text
-historical coverage      PASS/FAIL
-cash terms               PASS/FAIL
-stock/split terms        PASS/FAIL
-rights terms             PASS/FAIL
-ex-date determinism      PASS/FAIL
-amendment identity       PASS/FAIL
-HOSE/HNX/UPCOM coverage  PASS/FAIL
-operational accessibility PASS/FAIL
-```
-
-GO requires every required row to PASS. Otherwise QEO-122 is NO-GO and the next-source/paid-source decision is reopened explicitly.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add docs/db/evidence/qeo122-free-corporate-action-source-2026-09-06.md
-git commit -m "docs(QEO-122): record free source GO-NO-GO evidence"
-```
-
-### Task 4: Close the spike without leaking probe code into production
+### Task 4: Make explicit GO/NO-GO decision
 
 **Files:**
-- Modify: `scripts/probes/qeo122-vsdc-corporate-actions.ts`
 - Modify: `docs/db/evidence/qeo122-free-corporate-action-source-2026-09-06.md`
+- Modify: `scripts/probes/qeo122-vsdc-corporate-actions.ts`
 
-- [ ] **Step 1: Mark probe code explicitly non-production**
+Decision table must contain:
 
-Add a module comment stating the parser is a spike and must not be imported from `app/`, `modules/`, `workflows/`, or `supabase/` runtime code.
+```text
+historical retained-scope coverage PASS/FAIL
+cash terms                        PASS/FAIL
+stock/split terms                 PASS/FAIL
+rights terms                      PASS/FAIL
+multi-action notice identity      PASS/FAIL
+ex-date determinism               PASS/FAIL
+amendment identity                PASS/FAIL
+HOSE/HNX/UPCOM coverage           PASS/FAIL
+operational accessibility         PASS/FAIL
+```
 
-- [ ] **Step 2: Run repository verification**
+GO requires every required row PASS. Any required FAIL => QEO-122 NO-GO and source decision reopens before QEO-123.
+
+- [ ] **Step 1: Add module comment that probe is non-production and forbidden from runtime imports**
+- [ ] **Step 2: Run canonical verification**
 
 ```bash
-pnpm test:core
-pnpm lint
+pnpm exec tsx --test tests/qeo-122-vsdc-probe.test.ts
+pnpm test:current
 pnpm typecheck
 ```
 
-Expected: PASS.
-
-- [ ] **Step 3: Update Linear QEO-122**
-
-Attach the evidence commit/PR and set GO or NO-GO. Only a GO unblocks QEO-123.
-
-- [ ] **Step 4: Commit any final evidence wording**
+- [ ] **Step 3: Update Linear QEO-122 with evidence and GO/NO-GO**
+- [ ] **Step 4: Commit final decision**
 
 ```bash
 git add scripts/probes/qeo122-vsdc-corporate-actions.ts docs/db/evidence/qeo122-free-corporate-action-source-2026-09-06.md
