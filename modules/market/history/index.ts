@@ -238,22 +238,46 @@ export async function fetchHourlyMarketHistory(symbol: string, now = new Date())
     ...result,
     detail: result.provider === "DNSE"
       ? "DNSE OpenAPI · 1H completed bars"
-      : "Yahoo Finance .VN fallback · 1H completed bars",
+      : "Yahoo Finance .VN fallback · 60m completed bars",
   }
 }
 
-export async function getHistoricalMarketBars(
-  symbol: string,
-  timeframe: RawHistoryTimeframe,
-  now = new Date(),
-): Promise<HistoricalBarsResult> {
-  const key = `market-history:${symbol.trim().toUpperCase()}:${timeframe}`
-  const ttlMs = timeframe === "1D" ? 5 * 60_000 : 30_000
-  return readThroughUiCache(key, ttlMs, async () => {
-    const result = timeframe === "1D"
-      ? await fetchDailyMarketHistory(symbol, now)
-      : await fetchHourlyMarketHistory(symbol, now)
-    if (!isHistoricalBarsResult(result)) throw new Error(`Invalid ${timeframe} historical market payload`)
-    return result
+/** UI-only cross-request history caches. Scanner/signal paths keep using fresh functions above. */
+export async function fetchDailyMarketHistoryUi(symbol: string): Promise<HistoricalBarsResult> {
+  const normalized = symbol.trim().toUpperCase()
+  return readThroughUiCache({
+    namespace: "market-history-ui-v1",
+    key: `daily:${normalized}`,
+    tag: "qeoindex-market-history-ui-v1",
+    name: `QeoIndex ${normalized} Daily history`,
+    ttlSeconds: 15 * 60,
+    validate: isHistoricalBarsResult,
+    load: () => fetchDailyMarketHistory(normalized),
+  })
+}
+
+export async function fetchHourlyMarketHistoryUi(symbol: string): Promise<HistoricalBarsResult> {
+  const normalized = symbol.trim().toUpperCase()
+  return readThroughUiCache({
+    namespace: "market-history-ui-v1",
+    key: `hourly:${normalized}`,
+    tag: "qeoindex-market-history-ui-v1",
+    name: `QeoIndex ${normalized} Hourly history`,
+    ttlSeconds: 5 * 60,
+    validate: isHistoricalBarsResult,
+    load: () => fetchHourlyMarketHistory(normalized),
+  })
+}
+
+export async function fetchLongDailyMarketHistoryUi(symbol: string): Promise<HistoricalBarsResult> {
+  const normalized = symbol.trim().toUpperCase()
+  return readThroughUiCache({
+    namespace: "market-history-ui-v1",
+    key: `daily-long:${normalized}`,
+    tag: "qeoindex-market-history-ui-v1",
+    name: `QeoIndex ${normalized} long Daily Wyckoff history`,
+    ttlSeconds: 30 * 60,
+    validate: isHistoricalBarsResult,
+    load: () => fetchLongDailyMarketHistory(normalized),
   })
 }
