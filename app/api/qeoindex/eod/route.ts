@@ -5,6 +5,7 @@ import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { runChartIntradayArchiveLifecycle } from "@/modules/market/chart-data/archive-lifecycle"
 import { QEO107_HOT_RETENTION_SESSIONS, qeo107BootstrapTarget, readChartIntradayCoverageReport } from "@/modules/market/chart-data/bootstrap"
+import { QEO107_STAGED_MAX_TICKERS } from "@/modules/market/chart-data/bootstrap-workflow-steps"
 import { runChartDerivedHourlyRecovery } from "@/modules/market/chart-data/derived-hourly-recovery"
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
@@ -49,6 +50,14 @@ function archivePartitionLimit(value: string | null) {
   if (!/^\d+$/.test(value)) return null
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 12 ? parsed : null
+}
+
+function stagedBootstrapTickers(value: string | null) {
+  if (value == null || value.trim() === "") return []
+  const tickers = [...new Set(value.split(",").map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))]
+  if (!tickers.length || tickers.length > QEO107_STAGED_MAX_TICKERS) return null
+  if (tickers.some((ticker) => !/^[A-Z0-9]{2,12}$/.test(ticker))) return null
+  return tickers
 }
 
 async function isQeoIndexSchedulerAuthorized(request: Request) {
@@ -120,10 +129,36 @@ async function trigger(request: NextRequest) {
     if (request.method !== "POST") {
       return NextResponse.json({ ok: false, error: "Chart bootstrap requires POST." }, { status: 405, headers: { Allow: "POST" } })
     }
+    const requestedTickers = stagedBootstrapTickers(request.nextUrl.searchParams.get("tickers"))
+    if (requestedTickers == null) {
+      return NextResponse.json({
+        ok: false,
+        error: `tickers must be a comma-separated canonical subset of at most ${QEO107_STAGED_MAX_TICKERS} symbols. Omit tickers for canonical-200 bootstrap.`,
+      }, { status: 400 })
+    }
     try {
+      if (requestedTickers.length) {
+        const universe = await getCanonicalUniverse()
+        const canonicalTickers = new Set(universe.stocks.map((stock) => stock.ticker.toUpperCase()))
+        const outsideCanonical = requestedTickers.filter((ticker) => !canonicalTickers.has(ticker))
+        if (outsideCanonical.length) {
+          return NextResponse.json({
+            ok: false,
+            error: `QEO-107 staged tickers must belong to the canonical universe: ${outsideCanonical.join(", ")}`,
+          }, { status: 400 })
+        }
+      }
+
       const startedAt = new Date().toISOString()
-      const run = await start(chartIntradayBootstrapWorkflow, [startedAt])
-      return NextResponse.json({ ok: true, mode, workflowRunId: run.runId, startedAt }, { status: 202 })
+      const run = await start(chartIntradayBootstrapWorkflow, [startedAt, requestedTickers])
+      return NextResponse.json({
+        ok: true,
+        mode,
+        scope: requestedTickers.length ? "staged" : "canonical_200",
+        tickers: requestedTickers,
+        workflowRunId: run.runId,
+        startedAt,
+      }, { status: 202 })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       await notifyOpsError({ source: "qeo107-chart-bootstrap", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
