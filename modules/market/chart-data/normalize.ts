@@ -9,8 +9,8 @@ import type {
 
 const SOURCE_PRECEDENCE: Record<CanonicalBarSource, number> = {
   provider: 1,
-  daily: 2,
-  cold: 3,
+  cold: 2,
+  daily: 3,
   hot: 4,
 }
 

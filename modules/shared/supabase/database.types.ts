@@ -675,6 +675,45 @@ export type Database = {
           },
         ]
       }
+      chart_daily_history_state: {
+        Row: {
+          boundary_time: string | null
+          detail: Json
+          earliest_cold_bar: string | null
+          earliest_hot_bar: string | null
+          last_window_from: string | null
+          last_window_to: string | null
+          left_edge_status: string
+          provider: string | null
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          boundary_time?: string | null
+          detail?: Json
+          earliest_cold_bar?: string | null
+          earliest_hot_bar?: string | null
+          last_window_from?: string | null
+          last_window_to?: string | null
+          left_edge_status?: string
+          provider?: string | null
+          ticker: string
+          updated_at?: string
+        }
+        Update: {
+          boundary_time?: string | null
+          detail?: Json
+          earliest_cold_bar?: string | null
+          earliest_hot_bar?: string | null
+          last_window_from?: string | null
+          last_window_to?: string | null
+          left_edge_status?: string
+          provider?: string | null
+          ticker?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       chart_ohlcv_cold_manifests: {
         Row: {
           archive_format: string
@@ -684,6 +723,7 @@ export type Database = {
           format_version: number
           id: string
           object_path: string
+          provenance: Json
           provenance_batch_id: string | null
           range_end: string
           range_start: string
@@ -700,6 +740,7 @@ export type Database = {
           format_version?: number
           id?: string
           object_path: string
+          provenance?: Json
           provenance_batch_id?: string | null
           range_end: string
           range_start: string
@@ -716,6 +757,7 @@ export type Database = {
           format_version?: number
           id?: string
           object_path?: string
+          provenance?: Json
           provenance_batch_id?: string | null
           range_end?: string
           range_start?: string
@@ -2000,6 +2042,57 @@ export type Database = {
         }
         Relationships: []
       }
+      market_ohlcv_daily_quarantine: {
+        Row: {
+          bar_time: string
+          close: number
+          fetched_at: string
+          high: number
+          low: number
+          open: number
+          provider: string
+          provider_detail: string
+          quarantine_reason: string
+          quarantined_at: string
+          source_url: string
+          ticker: string
+          timeframe: string
+          volume: number
+        }
+        Insert: {
+          bar_time: string
+          close: number
+          fetched_at: string
+          high: number
+          low: number
+          open: number
+          provider: string
+          provider_detail: string
+          quarantine_reason: string
+          quarantined_at?: string
+          source_url: string
+          ticker: string
+          timeframe: string
+          volume: number
+        }
+        Update: {
+          bar_time?: string
+          close?: number
+          fetched_at?: string
+          high?: number
+          low?: number
+          open?: number
+          provider?: string
+          provider_detail?: string
+          quarantine_reason?: string
+          quarantined_at?: string
+          source_url?: string
+          ticker?: string
+          timeframe?: string
+          volume?: number
+        }
+        Relationships: []
+      }
       market_ohlcv_history: {
         Row: {
           bar_time: string
@@ -2498,6 +2591,30 @@ export type Database = {
           source_payload?: Json
           target_price?: number | null
           title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      market_trading_sessions: {
+        Row: {
+          is_trading_day: boolean
+          note: string | null
+          session_date: string
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          is_trading_day: boolean
+          note?: string | null
+          session_date: string
+          source: string
+          updated_at?: string
+        }
+        Update: {
+          is_trading_day?: boolean
+          note?: string | null
+          session_date?: string
+          source?: string
           updated_at?: string
         }
         Relationships: []
@@ -3564,6 +3681,28 @@ export type Database = {
         Args: { p_job_key: string; p_request_id: string; p_sync_run_id: string }
         Returns: Json
       }
+      qeo_chart_intraday_coverage: {
+        Args: { p_hot_cutoff: string; p_tickers: string[] }
+        Returns: {
+          cold_first_bar_time: string
+          cold_last_bar_time: string
+          cold_manifest_count: number
+          cold_row_count: number
+          derived_first_bar_time: string
+          derived_hourly_row_count: number
+          derived_last_bar_time: string
+          failed_attempt_count: number
+          hot_first_bar_time: string
+          hot_last_bar_time: string
+          hot_row_count: number
+          last_attempt_at: string
+          provider_gap_count: number
+          retryable_failure_count: number
+          successful_request_count: number
+          ticker: string
+        }[]
+      }
+      qeo_chart_storage_capacity: { Args: never; Returns: Json }
       qeo_current_market_universe: {
         Args: { p_universe_key?: string }
         Returns: Json
@@ -3604,6 +3743,40 @@ export type Database = {
       qeo_get_kfsp_credentials: { Args: never; Returns: Json }
       qeo_get_kfsp_provider_token_cache: { Args: never; Returns: Json }
       qeo_get_market_close_sync_secret: { Args: never; Returns: string }
+      qeo_market_daily_integrity_report: {
+        Args: never
+        Returns: {
+          exchange: string
+          expected_sessions: number
+          first_session: string
+          last_session: string
+          missing_expected_sessions: number
+          missing_session_dates: string[]
+          non_trading_persisted_rows: number
+          status: string
+          ticker: string
+          unclassified_zero_volume_rows: number
+          valid_daily_rows: number
+          verified_no_trade_rows: number
+        }[]
+      }
+      qeo_market_daily_integrity_report_scoped: {
+        Args: { p_tickers: string[] }
+        Returns: {
+          exchange: string
+          expected_sessions: number
+          first_session: string
+          last_session: string
+          missing_expected_sessions: number
+          missing_session_dates: string[]
+          non_trading_persisted_rows: number
+          status: string
+          ticker: string
+          unclassified_zero_volume_rows: number
+          valid_daily_rows: number
+          verified_no_trade_rows: number
+        }[]
+      }
       qeo_market_ohlcv_coverage: {
         Args: { p_tickers: string[] }
         Returns: {
@@ -3642,6 +3815,14 @@ export type Database = {
       qeo_prune_noncanonical_orderbook_snapshots: {
         Args: { p_run_id: string }
         Returns: number
+      }
+      qeo_prune_verified_chart_daily_partition: {
+        Args: {
+          p_expected_row_count: number
+          p_expected_sha256: string
+          p_manifest_id: string
+        }
+        Returns: Json
       }
       qeo_prune_verified_chart_intraday_partition: {
         Args: {

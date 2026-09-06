@@ -18,6 +18,7 @@ import {
   parseSsiIboardPayload,
   ssiIboardResolutionToken,
 } from "../modules/market/provider-benchmark/providers/ssi-iboard.ts"
+import { isCanonicalDailyHotRowUsable } from "../modules/market/chart-data/daily-authority.ts"
 
 const DAY = 86400
 
@@ -52,18 +53,18 @@ test("QEO-100 history clamp never expands a request and clamps only short/mid lo
   assert.deepEqual(alreadyNarrow, { from: to - 3 * DAY, to, clamped: false })
 })
 
-test("QEO-103 hot retention cutoff keeps complete Vietnam calendar dates", () => {
+test("QEO-103 product hot retention cutoff keeps complete Vietnam calendar dates", () => {
   const referenceAt = new Date("2026-09-05T12:34:00+07:00")
   assert.equal(new Date(chartHotRetentionCutoff(referenceAt) * 1000).toISOString(), "2026-08-05T17:00:00.000Z")
 })
 
-test("QEO-103 hourly read path uses derived cache only after cold-manifest coverage is complete", () => {
+test("QEO-108 hourly read path splits physical HOT/COLD at the five-session boundary", () => {
   const service = source("modules/market/chart-data/timeframe-service.ts")
   assert.match(service, /readDerivedHourlyRange/)
   assert.match(service, /derivedHourlyColdCoverageComplete/)
   assert.match(service, /readIntersectingRange/)
   assert.match(service, /VERIFIED_COLD_1M_RECOVERY/)
-  assert.match(service, /chartHotRetentionCutoff/)
+  assert.match(service, /chartHotSessionRetentionCutoff/)
   assert.match(service, /const oldTo = Math\.min\(request\.to, hotCutoff - 1\)/)
   assert.match(service, /const recentFrom = Math\.max\(sourceRange\.from, hotCutoff\)/)
   assert.match(service, /aggregateChartTimeframe\(mergeBars\(recentResults\), "1h"\)/)
@@ -93,6 +94,116 @@ test("QEO-103 archive is cache-before-prune and prune authority is manifest veri
   assert.match(migration, /derived hourly cache missing for manifest/)
   assert.match(migration, /hot row-count mismatch before prune/)
   assert.doesNotMatch(migration, /CASCADE/i)
+})
+
+test("QEO-106 Daily cold schema remains legacy-compatible until zero-consumer cleanup", () => {
+  const migration = source("supabase/migrations/20260905153500_qeo106_daily_hot_cold_history.sql")
+  assert.match(migration, /base_resolution in \('1m', '1D'\)/i)
+  assert.match(migration, /add column if not exists provenance jsonb/i)
+  assert.match(migration, /create table if not exists public\.chart_daily_history_state/i)
+  assert.match(migration, /qeo_prune_verified_chart_daily_partition/i)
+  assert.match(migration, /v_manifest\.base_resolution <> '1D'/i)
+  assert.match(migration, /market_ohlcv_history/i)
+  assert.match(migration, /timeframe = '1D'/i)
+  assert.match(migration, /hot row-count mismatch before prune/i)
+  assert.doesNotMatch(migration, /CASCADE/i)
+})
+
+test("QEO-106 cold-store keeps legacy Daily support until verified cleanup", () => {
+  const cold = source("modules/market/chart-data/cold-store.ts")
+  assert.match(cold, /createSupabaseDailyColdOhlcvStorage/)
+  assert.match(cold, /baseResolution: "1m" \| "1D"/)
+  assert.match(cold, /`\$\{baseResolution\}\/ticker=\$\{ticker\}/)
+  assert.match(cold, /\.eq\("base_resolution", baseResolution\)/)
+  assert.match(cold, /base_resolution: baseResolution/)
+  assert.match(cold, /createResolutionColdOhlcvStorage\(supabase, "1m"\)/)
+  assert.match(cold, /createResolutionColdOhlcvStorage\(supabase, "1D"\)/)
+})
+
+test("QEO-106 hot Daily read rejects unresolved zero-volume fallback but preserves authority evidence", () => {
+  const flat = { volume: 0, provider: "Fallback", source_url: "https://query1.finance.yahoo.com/v8/finance/chart/VCB.VN", provider_detail: "Yahoo Finance .VN fallback" }
+  assert.equal(isCanonicalDailyHotRowUsable(flat), false)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, provider: "VCI" }), true)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, provider: "DNSE" }), true)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, source_url: "internal://stock_orderbook_snapshots", provider_detail: "Verified final market-close repair · no trade" }), true)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, provider: "VNDirect" }), false)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, volume: 123 }), true)
+
+  const service = source("modules/market/chart-data/service.ts")
+  assert.match(service, /provider,provider_detail,source_url/)
+  assert.match(service, /filter\(isCanonicalDailyHotRowUsable\)/)
+})
+
+test("QEO-108 canonical Daily is bounded PostgreSQL-only with no active cold merge", () => {
+  const service = source("modules/market/chart-data/service.ts")
+  const normalize = source("modules/market/chart-data/normalize.ts")
+  assert.match(service, /loadDailyRows/)
+  assert.match(service, /detectDailySessionGaps/)
+  assert.match(service, /source: "daily"/)
+  assert.match(service, /CANONICAL_DAILY_POSTGRES/)
+  assert.doesNotMatch(service, /createSupabaseDailyColdOhlcvStorage/)
+  assert.doesNotMatch(service, /dailyColdStorage\.readIntersectingRange/)
+  assert.match(normalize, /daily: 3/)
+})
+
+test("QEO-106 legacy Hot aging remains fail-closed while cleanup is deferred", () => {
+  const history = source("modules/market/history/daily-cold-history.ts")
+  assert.match(history, /isCanonicalDailyHotRowUsable/)
+  assert.match(history, /Unresolved Daily hot evidence prevents archive/)
+  assert.ok(history.indexOf("Unresolved Daily hot evidence prevents archive") < history.indexOf("archiveVerifiedPartition"))
+  assert.match(history, /provider_detail,source_url/)
+})
+
+test("QEO-106 legacy deep backfill keeps provider evidence rules while inactive", () => {
+  const historyIndex = source("modules/market/history/index.ts")
+  const coldHistory = source("modules/market/history/daily-cold-history.ts")
+  assert.match(historyIndex, /DailyHistoryBarPolicy/)
+  assert.match(historyIndex, /applyDailyHistoryBarPolicy/)
+  assert.match(historyIndex, /no trusted completed Daily bars/)
+  const dailyStart = historyIndex.indexOf("export async function fetchDailyMarketHistoryWindow")
+  const dailyEnd = historyIndex.indexOf("export async function fetchHourlyMarketHistoryWindow", dailyStart)
+  const waterfall = historyIndex.slice(dailyStart, dailyEnd)
+  assert.ok(dailyStart >= 0 && dailyEnd > dailyStart)
+  assert.ok(waterfall.indexOf('errors.push(`Yahoo:') < waterfall.indexOf('fetchVnDirectDailyOhlcv'))
+  assert.ok(waterfall.indexOf('fetchVnDirectDailyOhlcv') < waterfall.indexOf('fetchTitanLabsDailyOhlcv'))
+  assert.match(coldHistory, /fetchDailyMarketHistoryWindow\(ticker, DAILY_DEEP_CHUNK_DAYS, cursorNow, deepHistoryBarPolicy\)/)
+  assert.match(coldHistory, /provider === "VCI" \|\| provider === "DNSE"/)
+  assert.match(coldHistory, /bar\.volume > 0/)
+})
+
+test("QEO-106 legacy unresolved Hot aging stays fail-closed until cleanup", () => {
+  const history = source("modules/market/history/daily-cold-history.ts")
+  assert.match(history, /Unresolved Daily hot evidence prevents archive/)
+  assert.match(history, /hotArchiveSkippedForAuthority/)
+  assert.match(history, /message\.startsWith\("Unresolved Daily hot evidence prevents archive"\)/)
+  const skip = history.indexOf("hotArchiveSkippedForAuthority")
+  const deepLoop = history.indexOf("for (let chunk = 0; chunk < maxChunksPerTicker")
+  assert.ok(skip >= 0 && deepLoop > skip)
+})
+
+test("QEO-106 integrity repair scopes the expensive audit to the requested tickers", () => {
+  const integrity = source("modules/market/history/daily-integrity.ts")
+  const migration = source("supabase/migrations/20260906003000_qeo106_scoped_daily_integrity_report.sql")
+  assert.match(migration, /qeo_market_daily_integrity_report_scoped\(p_tickers text\[\]\)/)
+  assert.match(migration, /requested as \(/)
+  assert.match(migration, /join requested r on r\.ticker = upper\(stock->>'ticker'\)/)
+  assert.match(migration, /provider in \('VCI', 'DNSE'\)/)
+  assert.match(migration, /grant execute on function public\.qeo_market_daily_integrity_report_scoped\(text\[\]\) to service_role/)
+  assert.match(integrity, /qeo_market_daily_integrity_report_scoped/)
+  assert.match(integrity, /\{ p_tickers: tickers \}/)
+  assert.equal((integrity.match(/loadIntegrityReport\(supabase, tickers\)/g) ?? []).length, 2)
+})
+
+test("QEO-108 Daily deep-cold backfill endpoint is retired but remains authenticated", () => {
+  const history = source("modules/market/history/daily-cold-history.ts")
+  const route = source("app/api/admin/market/daily-history/backfill/route.ts")
+  assert.match(history, /DAILY_BACKFILL_DAYS/)
+  assert.match(history, /archiveVerifiedPartition/)
+  assert.doesNotMatch(history, /synthetic|fillForward|fabricate/i)
+  assert.match(route, /isMachineRequestAuthorized/)
+  assert.match(route, /DAILY_DEEP_COLD_RETIRED/)
+  assert.match(route, /status: 410/)
+  assert.doesNotMatch(route, /backfillDailyColdHistory/)
 })
 
 test("QEO-100 incomplete stored coverage backfills the missing head instead of trusting lastStored", () => {
@@ -138,60 +249,4 @@ test("QEO-100 SSI iBoard parser rejects misaligned arrays as MALFORMED_RESPONSE"
     () => parseSsiIboardPayload({ code: "SUCCESS", status: "ok", data: { s: "ok", t: [100, 160], o: [1], h: [2, 2], l: [1, 1], c: [2, 2], v: [10, 20] } }, { ticker: "VIC", resolution: "1m", from: 100, to: 200 }),
     (error: unknown) => error instanceof ProviderProbeError && error.errorClass === "MALFORMED_RESPONSE",
   )
-})
-
-test("QEO-107 provider waterfall exposes retryable failures and terminal retention gaps", () => {
-  const provider = source("modules/market/chart-data/provider.ts")
-  assert.match(provider, /export class ChartOhlcvProviderWaterfallError/)
-  assert.match(provider, /terminalCoverageGap = failures\.length > 0 && failures\.every\(\(failure\) => failure\.code === "EMPTY_COVERAGE"\)/)
-  assert.match(provider, /retryable = failures\.some\(\(failure\) => isTransientFailure\(failure\.code\)\)/)
-  assert.match(provider, /throw new ChartOhlcvProviderWaterfallError\(failures\)/)
-})
-
-test("QEO-107 provenance gaps are resumable but never canonical provider coverage", () => {
-  const hotStore = source("modules/market/chart-data/hot-store.ts")
-  assert.match(hotStore, /if \(\(finite\(row\.row_count\) \?\? 0\) <= 0\) return null/)
-  assert.match(hotStore, /readQeo107TerminalAttemptRanges/)
-  assert.match(hotStore, /detail\.outcome === "provider_gap"/)
-  assert.match(hotStore, /recordProvenance\?: boolean/)
-  assert.match(hotStore, /input\.recordProvenance === false/)
-})
-
-test("QEO-107 bootstrap prioritizes hot 31d then archives real old 1m before deterministic hourly cache", () => {
-  const bootstrap = source("modules/market/chart-data/bootstrap.ts")
-  assert.match(bootstrap, /QEO107_INTRADAY_TARGET_DAYS = 366/)
-  assert.match(bootstrap, /QEO107_PROVIDER_CHUNK_DAYS = 31/)
-  assert.match(bootstrap, /class: index === 0 \? "HOT_FIRST" : "COLD_BACKFILL"/)
-  assert.match(bootstrap, /const hotBars = bars\.filter\(\(bar\) => bar\.time >= hotCutoff\)/)
-  assert.match(bootstrap, /const coldBars = bars\.filter\(\(bar\) => bar\.time < hotCutoff\)/)
-  assert.match(bootstrap, /recordProvenance: false/)
-  assert.match(bootstrap, /archiveVerifiedPartition\(\{ ticker, bars: partition\.bars \}\)/)
-  assert.match(bootstrap, /aggregateChartTimeframe\(partition\.bars, "1h"\)/)
-  assert.match(bootstrap, /upsertDerivedHourlyBars/)
-  assert.ok(bootstrap.lastIndexOf("archiveVerifiedPartition") < bootstrap.lastIndexOf("recordChartProviderAttempt"))
-})
-
-test("QEO-107 durable workflow covers canonical 200 chunk-first and stops safely on provider failure storms", () => {
-  const steps = source("modules/market/chart-data/bootstrap-workflow-steps.ts")
-  const workflow = source("workflows/chart-intraday-bootstrap.ts")
-  assert.match(steps, /CANONICAL_QEO107_UNIVERSE_SIZE = 200/)
-  assert.match(steps, /"use step"/)
-  assert.match(workflow, /"use workflow"/)
-  assert.ok(workflow.indexOf("for (const chunk of context.target.chunks)") < workflow.indexOf("for (const stock of context.stocks)"))
-  assert.match(workflow, /MAX_CONSECUTIVE_RETRYABLE_FAILURES = 5/)
-  assert.match(workflow, /MAX_CONSECUTIVE_PERMANENT_FAILURES = 3/)
-  assert.match(workflow, /rerun resumes from provenance/)
-})
-
-test("QEO-107 operations expose authenticated bootstrap and canonical-200 coverage report", () => {
-  const route = source("app/api/qeoindex/eod/route.ts")
-  const migration = source("supabase/migrations/20260905213000_qeo107_chart_intraday_coverage_report.sql")
-  assert.match(route, /mode === "chart-bootstrap"/)
-  assert.match(route, /start\(chartIntradayBootstrapWorkflow, \[startedAt\]\)/)
-  assert.match(route, /mode === "chart-coverage"/)
-  assert.match(route, /readChartIntradayCoverageReport/)
-  assert.match(migration, /qeo_chart_intraday_coverage/)
-  assert.match(migration, /provider_gap_count/)
-  assert.match(migration, /retryable_failure_count/)
-  assert.match(migration, /detail ->> 'workflow' = 'QEO-107'/)
 })

@@ -1,0 +1,39 @@
+name: QEO-107
+
+on:
+  pull_request:
+    paths:
+      - "modules/market/chart-data/bootstrap*.ts"
+      - "modules/market/chart-data/hot-store.ts"
+      - "modules/market/chart-data/provider.ts"
+      - "workflows/chart-intraday-bootstrap.ts"
+      - "app/api/qeoindex/eod/route.ts"
+      - "supabase/migrations/*qeo107*"
+      - "tests/qeo-107-chart-bootstrap.test.ts"
+      - ".github/workflows/qeo-107.yml"
+  push:
+    branches: [main]
+    paths:
+      - "modules/market/chart-data/bootstrap*.ts"
+      - "modules/market/chart-data/hot-store.ts"
+      - "modules/market/chart-data/provider.ts"
+      - "workflows/chart-intraday-bootstrap.ts"
+      - "app/api/qeoindex/eod/route.ts"
+      - "supabase/migrations/*qeo107*"
+      - "tests/qeo-107-chart-bootstrap.test.ts"
+      - ".github/workflows/qeo-107.yml"
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test tests/qeo-107-chart-bootstrap.test.ts

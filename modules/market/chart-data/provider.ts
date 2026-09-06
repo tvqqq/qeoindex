@@ -15,26 +15,7 @@ export interface ChartOhlcvProvider {
 }
 
 type RuntimeProvider = "VCI" | "DNSE" | "SSI_IBOARD"
-export type ChartProviderFailureCode = "AUTH" | "RATE_LIMIT" | "TIMEOUT" | "NETWORK" | "EMPTY_COVERAGE" | "INVALID_REQUEST" | "ERROR"
-
-export interface ChartProviderFailure {
-  provider: RuntimeProvider
-  code: ChartProviderFailureCode
-}
-
-export class ChartOhlcvProviderWaterfallError extends Error {
-  readonly failures: ChartProviderFailure[]
-  readonly retryable: boolean
-  readonly terminalCoverageGap: boolean
-
-  constructor(failures: ChartProviderFailure[]) {
-    super(`Chart OHLC provider waterfall exhausted (${failures.map((failure) => `${failure.provider}:${failure.code}`).join(",")})`)
-    this.name = "ChartOhlcvProviderWaterfallError"
-    this.failures = failures
-    this.retryable = failures.some((failure) => isTransientFailure(failure.code))
-    this.terminalCoverageGap = failures.length > 0 && failures.every((failure) => failure.code === "EMPTY_COVERAGE")
-  }
-}
+type ProviderFailureCode = "AUTH" | "RATE_LIMIT" | "TIMEOUT" | "NETWORK" | "EMPTY_COVERAGE" | "INVALID_REQUEST" | "ERROR"
 
 const TRANSIENT_ATTEMPTS = 2
 const RETRY_DELAY_MS = 250
@@ -47,9 +28,9 @@ function providerOrder(): RuntimeProvider[] {
   return configured.length ? [...new Set(configured)] : ["VCI", "DNSE", "SSI_IBOARD"]
 }
 
-function providerFailureCode(error: unknown): ChartProviderFailureCode {
+function providerFailureCode(error: unknown): ProviderFailureCode {
   if (error && typeof error === "object" && "errorClass" in error) {
-    return String((error as { errorClass?: unknown }).errorClass || "ERROR") as ChartProviderFailureCode
+    return String((error as { errorClass?: unknown }).errorClass || "ERROR") as ProviderFailureCode
   }
   const message = error instanceof Error ? error.message.toLowerCase() : String(error ?? "").toLowerCase()
   if (/401|403|unauthorized|forbidden|signature/.test(message)) return "AUTH"
@@ -61,7 +42,7 @@ function providerFailureCode(error: unknown): ChartProviderFailureCode {
   return "ERROR"
 }
 
-function isTransientFailure(code: ChartProviderFailureCode) {
+function isTransientFailure(code: ProviderFailureCode) {
   return code === "RATE_LIMIT" || code === "TIMEOUT" || code === "NETWORK"
 }
 
@@ -116,9 +97,9 @@ export function createPrimaryChartOhlcvProvider(): ChartOhlcvProvider {
         throw new Error(`Primary chart provider does not fetch ${input.resolution}; canonical Daily is persisted separately`)
       }
 
-      const failures: ChartProviderFailure[] = []
+      const failures: string[] = []
       for (const provider of providerOrder()) {
-        let lastFailure: ChartProviderFailureCode | null = null
+        let lastFailure: ProviderFailureCode | null = null
         for (let attempt = 1; attempt <= TRANSIENT_ATTEMPTS; attempt += 1) {
           try {
             const bars = await fetchFromProvider(provider, input, ssi)
@@ -137,7 +118,7 @@ export function createPrimaryChartOhlcvProvider(): ChartOhlcvProvider {
         }
 
         const code = lastFailure ?? "EMPTY_COVERAGE"
-        failures.push({ provider, code })
+        failures.push(`${provider}:${code}`)
         logProviderEvent(input, provider, "failure", { errorClass: code, retrying: false })
       }
       console.warn("[chart-ohlcv-provider]", {
@@ -150,7 +131,7 @@ export function createPrimaryChartOhlcvProvider(): ChartOhlcvProvider {
         includeCurrent: input.includeCurrent === true,
         failures,
       })
-      throw new ChartOhlcvProviderWaterfallError(failures)
+      throw new Error(`Chart OHLC provider waterfall exhausted (${failures.join(",")})`)
     },
   }
 }
