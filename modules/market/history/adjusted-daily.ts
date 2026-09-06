@@ -46,19 +46,21 @@ export type AdjustedDailyBar = {
   adjustmentEngineVersion: string
 }
 
+export type AdjustedDailyErrorCode =
+  | "INVALID_SESSION_DATE"
+  | "INVALID_FACTOR_TRANSITION"
+  | "INVALID_FACTOR_RUN"
+  | "INVALID_RAW_DAILY"
+  | "TICKER_MISMATCH"
+  | "INVALID_ADJUSTED_DAILY"
+
 export class AdjustedDailyError extends Error {
-  constructor(
-    readonly code:
-      | "INVALID_SESSION_DATE"
-      | "INVALID_FACTOR_TRANSITION"
-      | "INVALID_FACTOR_RUN"
-      | "INVALID_RAW_DAILY"
-      | "TICKER_MISMATCH"
-      | "INVALID_ADJUSTED_DAILY",
-    message: string,
-  ) {
+  readonly code: AdjustedDailyErrorCode
+
+  constructor(code: AdjustedDailyErrorCode, message: string) {
     super(message)
     this.name = "AdjustedDailyError"
+    this.code = code
   }
 }
 
