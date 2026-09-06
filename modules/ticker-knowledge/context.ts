@@ -161,7 +161,8 @@ function buildBoundedContext(items: readonly TickerKnowledgeItem[], maxChars: nu
 
   for (const item of items) {
     const header = itemHeader(item)
-    const block = `${header}\n${item.text.trim()}\n\n`
+    const content = item.text.trim()
+    const block = `${header}\n${content}\n\n`
     const remaining = maxChars - text.length
     if (remaining <= 0) {
       truncated = true
@@ -172,10 +173,15 @@ function buildBoundedContext(items: readonly TickerKnowledgeItem[], maxChars: nu
       included.push(item)
       continue
     }
-    const minimumUseful = header.length + 80
-    if (remaining >= minimumUseful) {
-      text += `${block.slice(0, Math.max(0, remaining - 1)).trimEnd()}…`
-      included.push(item)
+
+    const prefix = `${header}\n`
+    const contentBudget = remaining - prefix.length
+    if (contentBudget >= 80) {
+      const boundedText = content.length <= contentBudget
+        ? content
+        : `${content.slice(0, Math.max(0, contentBudget - 1)).trimEnd()}…`
+      text += `${prefix}${boundedText}`
+      included.push({ ...item, text: boundedText })
     }
     truncated = true
     break
