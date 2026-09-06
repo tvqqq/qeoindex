@@ -33,14 +33,16 @@ export type EodRetentionCleanupCheckpoint = EodArchiveCheckpoint & {
 /**
  * Safe telemetry/staging retention is operational and Supabase-only.
  * QEO-57 removes Drive; QEO-62 removes Notion from this dependency boundary.
- * Raw Daily history remains retained. QEO-103 separately archives only chart
- * raw 1m history after immutable object checksum/readback verification.
+ * Canonical Daily OHLCV stays in market_ohlcv_history after the bounded ~8-year
+ * bootstrap and is maintained incrementally; it is not part of this cleanup.
+ * QEO-108 archives raw 1m history only after immutable object checksum/readback
+ * verification and bounds PostgreSQL HOT storage to five Vietnam trading sessions.
  */
 export async function runEodRetentionCleanup(
   supabase: SupabaseClient,
   input: { tradingDate: string },
 ): Promise<EodRetentionCleanupCheckpoint> {
-  const rawHistoryDetail = "Raw Daily OHLCV retention is intentionally disabled until an independently verified cold-backup hydration/restore design exists; no operational Daily bars were deleted."
+  const rawHistoryDetail = "Canonical Daily OHLCV remains in market_ohlcv_history after its bounded ~8-year bootstrap and is maintained incrementally; this retention phase does not prune Daily history."
   const referenceAt = new Date(`${input.tradingDate}T23:59:59.999+07:00`).toISOString()
   const cleanup = await supabase.rpc("qeo_run_safe_retention_cleanup", { p_reference_at: referenceAt })
   if (cleanup.error) return { status: "error", detail: `Safe telemetry/staging retention failed: ${cleanup.error.message}. ${rawHistoryDetail}`, rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail } }
@@ -86,7 +88,7 @@ export async function runEodRetentionCleanup(
   const chartDetail = chartIntradayArchive.status === "partial"
     ? `Chart intraday archive partially completed with ${chartIntradayArchive.failures.length} isolated partition failure(s); failed partitions remained/reverted hot.`
     : chartIntradayArchive.status === "skipped"
-      ? "Chart intraday archive found no hot 1m partitions older than the 31-day retention cutoff."
+      ? "Chart intraday archive found no raw 1m partitions older than the five-session HOT retention boundary."
       : `Chart intraday archive verified ${chartIntradayArchive.partitionsArchived} partition(s), archived ${chartIntradayArchive.rowsArchived} row(s), and pruned ${chartIntradayArchive.rowsPruned} verified hot row(s).`
 
   return {
