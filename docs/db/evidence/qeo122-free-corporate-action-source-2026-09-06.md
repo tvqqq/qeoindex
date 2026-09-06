@@ -10,16 +10,20 @@ This decision is bounded to the evidence below. The legacy `www.vsd.vn` host is 
 
 QEO-122 is a source-validation spike only. The probe under `scripts/probes/qeo122-*` is intentionally non-production and must not be imported by runtime surfaces. This spike does not create the canonical `corporate_actions` schema, does not rewrite Daily OHLCV, and does not implement adjustment factors.
 
-Final tested PR head before this evidence commit: `efb80687476dbe990211b24789e3043d26e93569`.
+Final tested code head before this docs-only evidence update: `771c1b8cbedacc12366088d4984c08f20abb3fef`.
 
-Fresh verification evidence:
+Fresh verification evidence on that exact code head:
 
-- GitHub Actions `QEO-122 Probe` run **#17**, run id `34028958116`: success.
-- `probe-regressions`: success.
-- `live-source-matrix`: success.
-- Generic `Verify` run **#2362**, run id `34028958311`: success.
-- Live evidence artifact: `qeo122-live-source-matrix`, artifact id `9987971578`.
-- Live matrix generated at `2026-09-06T11:00:43.663Z`.
+- GitHub Actions `QEO-122 Probe` run **#27**, run id `34031368375`: **success**.
+- `probe-regressions` job `101481374301`: **success**.
+- `live-source-matrix` job `101481414199`: **success**.
+- Generic `Verify` run **#2389**, run id `34031368222`: **success** including tracked/PR/ref secret scans, repo hygiene, contracts, touched lint, TypeScript and production build.
+- GitHub CodeQL check `101481428596`: **success**, `No new alerts in code changed by this pull request`.
+- Live evidence artifact: `qeo122-live-source-matrix`, artifact id `9988719130`.
+- Artifact digest: `sha256:3c52eb4f1bd041cb8f99a711a88a9738e059c200986d33907f40abb05d240cd3`.
+- Live matrix generated at `2026-09-06T11:50:49.263Z`.
+
+The branch was also synchronized with current `main` before this final run; PR #345 was mergeable and the shared `.gitleaksignore` / `tests/market-data-contract.test.ts` drift was removed from the PR diff so QEO-122 remains isolated to dedicated probe/evidence files.
 
 ## Final gate table
 
@@ -27,13 +31,16 @@ Fresh verification evidence:
 | --- | --- | --- |
 | historical retained-scope coverage | **PASS** | Retained VHM listed-history events from 2018–2026 are represented and the six verified VHM record dates reproduce the retained ex-date sequence. |
 | cash terms | **PASS** | VHM 2019 `1,000 VND/share`, VHM 2021 `1,500`, VHM 2022 `2,000`, VHM 2026 `6,000`, plus HNX/UPCOM samples parse exactly. |
-| stock/split terms | **PASS** | VHM 2018 source ratio `1.000:250` is preserved semantically as `1000:250`; VHM 2021 `1000:300`; VHM 2026 `1:1`. |
+| stock terms | **PASS** | VHM 2018 source ratio `1.000:250` is preserved semantically as `1000:250`; VHM 2021 `1000:300`; VHM 2026 `1:1`. |
 | rights terms | **PASS** | YTC UPCOM event `169561`: ratio `100:210`, subscription price `20,000 VND`. |
 | multi-action notice identity | **PASS** | VHM event `144349` remains one source notice with two normalized components: cash `1,500` and stock `1000:300`. |
-| ex-date determinism | **PASS** | Explicit `record_date_previous_verified_trading_session` derivation against versioned Vietnam trading calendar; unknown regime/uncovered/invalid dates return `null`. |
+| parser live-DOM compatibility | **PASS** | Labels whose values render on adjacent lines are parsed without weakening exact-label matching. |
+| entity decoding safety | **PASS** | Numeric entities parse correctly and nested named entities are decoded exactly once; CodeQL reports no new PR alerts. |
+| ex-date determinism | **PASS** | Explicit `record_date_previous_verified_trading_session` derivation against the versioned Vietnam trading calendar; unknown regime/uncovered/invalid dates return `null`. |
 | amendment identity | **PASS** | SNC correction event `199110` explicitly references notice `1515/TB-CNVSDC` dated `2026-08-06`; original event `198978` is independently retrievable twice. |
 | HOSE/HNX/UPCOM coverage | **PASS** | HOSE: VHM; HNX: TDN `150529`; UPCOM: THN `151827` and YTC `169561`. |
 | operational accessibility | **PASS** | All required current-host cases fetched twice with HTTP 200, stable semantic fingerprints and no observed HTTP 429/rate-limit response. |
+| generic repo verification | **PASS** | Verify #2389 passed secrets, hygiene, contracts, lint, TypeScript and production build. |
 
 **All required rows PASS => QEO-122 GO.**
 
@@ -44,7 +51,8 @@ Fetch policy used by the final successful run:
 - attempts per source: `2`
 - inter-request delay: `300 ms`
 - timeout: `20,000 ms`
-- max redirects: `5`
+- redirects: disabled for the bounded source allowlist probe
+- network targets: compile-time literal allowlist
 - required source cases: `10`
 
 Final summary emitted by the probe:
@@ -124,27 +132,30 @@ SNC correction event `199110` parses an explicit correction relationship rather 
 - amendment type: `correction`
 - referenced notice: `1515/TB-CNVSDC`
 - referenced notice date: `2026-08-06`
+- source update timestamp: `2026-08-11T11:10:33+07:00`
 - original event probe: `198978`
 - original independently returned HTTP 200 twice and matched expected body evidence.
 
 QEO-123 should therefore model amendments as explicit provenance/lineage, not overwrite events solely by ticker/date similarity.
 
-## Parser stability findings and fixes made during the spike
+## Parser stability and security findings fixed during the spike
 
-The live gate found real parser bugs before GO:
+The gates found real defects before GO:
 
 1. Vietnamese thousands-separated ratio operand `1.000` was initially interpreted as decimal `1`; regression now preserves it as `1000`.
-2. VSDC encodes Vietnamese characters with numeric HTML entities in live HTML; the decoder now supports hexadecimal and decimal numeric entities so labels and `sourceUpdatedAt` remain parseable.
-3. Parsing the entire rendered page allowed related-news content to contaminate the main action classification. The parser now scopes action-component parsing to the main notice action body, before related-news/footer markers.
+2. VSDC encodes Vietnamese characters with numeric HTML entities; hexadecimal and decimal entities are parsed so labels and `sourceUpdatedAt` remain available.
+3. Parsing the entire rendered page allowed related-news content to contaminate main-action classification; action parsing is now scoped to the main notice body before related-news/footer markers.
 4. The VHM 2021 notice proves a single VSDC notice can contain multiple action components; parsing preserves both rather than collapsing them.
+5. A security hardening refactor initially assumed same-line `label: value` markup and broke 9/10 live notices. A RED regression captured VSDC's adjacent-line label/value rendering; exact-label parsing now accepts only the immediately adjacent value when the inline value is empty.
+6. CodeQL identified a possible double-unescape path in the HTML decoder. A RED regression proves `&amp;lt;...&amp;gt;` is decoded once, and named `&amp;` is now decoded last. Final CodeQL reports no new alerts in PR changes.
 
-Dedicated regressions cover these cases.
+Dedicated QEO-122 regressions cover these cases and passed in Probe #27.
 
 ## Raw HTML drift and semantic stability
 
-Every final live pair had a different raw HTML hash (`rawBodyDriftCount = 10`). Inspection shows the page contains dynamic request/page token material (for example `__VPToken`), so raw-byte equality is not a valid source-stability requirement.
+Every final live pair had a different raw HTML hash (`rawBodyDriftCount = 10`). The page includes dynamic request/page token material, so raw-byte equality is not a valid source-stability requirement.
 
-The GO gate therefore separates:
+The GO gate separates:
 
 - **raw body hash:** retained for evidence/audit, expected to drift;
 - **semantic fingerprint:** normalized source identity + parsed material terms, required to remain stable across the pair.
@@ -153,15 +164,16 @@ All required final pairs were semantically stable.
 
 ## Rate-limit / robots / operational constraints
 
-Observed in the final bounded probe:
+Observed in final Probe #27:
 
-- no HTTP 429 response;
-- required current-host pages returned HTTP 200 twice;
-- `https://vsdc.vn/robots.txt` resolves to the site's page-not-found surface rather than a usable robots policy;
+- no HTTP 429 response across the bounded 2x matrix;
+- all required current-host action pages returned HTTP 200 twice;
+- `https://vsdc.vn/robots.txt` returned HTTP 302 with location `/vi/robots.txt` while redirects were intentionally disabled for the probe;
 - legacy `https://www.vsd.vn/robots.txt` failed from the GitHub Actions environment;
-- legacy `vsd.vn` is therefore **not** selected as a production dependency.
+- therefore no claim is made that a machine-readable robots policy grants unlimited crawling, and public accessibility is not treated as a license;
+- legacy `vsd.vn` is **not** selected as a production dependency.
 
-This is not proof of unlimited request capacity. QEO-123 ingestion should remain conservative: bounded concurrency, backoff/retry for transient network/5xx/429 responses, caching/idempotency by numeric event id, and no high-frequency crawling requirement.
+This does not prove unlimited request capacity. QEO-123 ingestion should remain conservative: bounded concurrency, retry/backoff for transient network/5xx/429 responses, caching/idempotency by numeric event id, and no high-frequency crawling requirement.
 
 ## QEO-123 handoff requirements
 
@@ -179,4 +191,4 @@ The source gate is GO, but QEO-123 must preserve the proven constraints:
 
 ## Final recommendation
 
-**QEO-122 = GO.** VSDC current-host public corporate-action pages are sufficient to proceed to QEO-123 canonical `corporate_actions` schema/ingestion design for the tested retained scope. FiinGroup remains unnecessary for this gate and stays out of implementation scope unless later canonical-ingestion evidence exposes a material coverage/operational gap.
+**QEO-122 = GO.** VSDC current-host public corporate-action pages are sufficient to proceed to QEO-123 canonical `corporate_actions` schema/ingestion design for the tested retained scope. FiinGroup remains unnecessary for this gate and stays out of implementation scope unless later canonical-ingestion evidence exposes a material coverage or operational gap.
