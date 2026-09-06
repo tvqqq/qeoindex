@@ -76,7 +76,9 @@ jobs:
           git add tests/test-contracts.json
           if git diff --cached --quiet; then
             echo "Manifest already registered"
-            exit 0
+          else
+            git commit -m "test(QEO-124): register adjustment contracts"
+            git push origin HEAD:feat/qeo-124-adjustment-engine
           fi
-          git commit -m "test(QEO-124): register adjustment contracts"
-          git push origin HEAD:feat/qeo-124-adjustment-engine
+      - name: Prove monetary unit regression
+        run: node --test tests/qeo-124-monetary-unit.test.ts
