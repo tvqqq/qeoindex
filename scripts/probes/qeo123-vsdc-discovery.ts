@@ -3,10 +3,11 @@ import { createHash } from "node:crypto"
 const TARGETS = [
   { id: "vhm-security-detail", url: "https://vsdc.vn/vi/s-detail/6951" },
   { id: "suggestion-search-js", url: "https://vsdc.vn/js/suggestion-search.js?v=20260906" },
+  { id: "site-js", url: "https://vsdc.vn/js/site.js" },
+  { id: "script-js", url: "https://vsdc.vn/assets/libs/js/script.js" },
 ] as const
 
 const USER_AGENT = "qeoindex-qeo123-source-validation/1.0 (+bounded-read-only-probe)"
-const VSDC_ORIGIN = "https://vsdc.vn"
 
 function decodeHtmlOnce(value: string) {
   return value
@@ -16,8 +17,8 @@ function decodeHtmlOnce(value: string) {
     .replace(/&amp;/gi, "&")
 }
 
-function uniqueMatches(html: string, pattern: RegExp) {
-  return [...new Set([...html.matchAll(pattern)].map((match) => decodeHtmlOnce(match[1] ?? "").trim()).filter(Boolean))]
+function uniqueMatches(body: string, pattern: RegExp) {
+  return [...new Set([...body.matchAll(pattern)].map((match) => decodeHtmlOnce(match[1] ?? "").trim()).filter(Boolean))]
 }
 
 function allHrefs(html: string) {
@@ -36,38 +37,26 @@ function relevantHrefs(html: string) {
     .slice(0, 300)
 }
 
-function formMetadata(html: string) {
-  return [...html.matchAll(/<form\b([^>]*)>/gi)].slice(0, 20).map((match) => {
-    const attrs = match[1] ?? ""
-    const action = attrs.match(/\baction\s*=\s*["']([^"']*)["']/i)?.[1] ?? null
-    const method = attrs.match(/\bmethod\s*=\s*["']([^"']*)["']/i)?.[1] ?? null
-    const id = attrs.match(/\bid\s*=\s*["']([^"']*)["']/i)?.[1] ?? null
-    return { action: action ? decodeHtmlOnce(action) : null, method, id }
-  })
-}
-
-function scriptSources(html: string) {
-  return uniqueMatches(html, /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi).slice(0, 200)
-}
-
 function contextSnippets(body: string) {
   const flattened = decodeHtmlOnce(body).replace(/\s+/g, " ")
   const needles = [
+    "__VPToken",
+    "RequestVerificationToken",
+    "X-CSRF",
+    "setRequestHeader",
+    "ajaxSetup",
+    "beforeSend",
+    "headers:",
     "changePage_TCDK",
     "tabDetailTCPH_THQ",
-    "divlistArticlesTCPH_THQ",
-    "suggestion",
-    "autocomplete",
-    "ajax",
-    "url:",
-    "paging",
-    "Ngày đăng ký cuối cùng",
-    "__VPToken",
+    "suggestion-search/isustocks",
+    "/isuisser-thq/search",
   ]
   const snippets: Record<string, string | null> = {}
+  const normalized = flattened.toLocaleLowerCase("en-US")
   for (const needle of needles) {
-    const index = flattened.toLocaleLowerCase("vi-VN").indexOf(needle.toLocaleLowerCase("vi-VN"))
-    snippets[needle] = index < 0 ? null : flattened.slice(Math.max(0, index - 450), Math.min(flattened.length, index + 1200))
+    const index = normalized.indexOf(needle.toLocaleLowerCase("en-US"))
+    snippets[needle] = index < 0 ? null : flattened.slice(Math.max(0, index - 500), Math.min(flattened.length, index + 1800))
   }
   return snippets
 }
@@ -81,6 +70,14 @@ function endpointCandidates(body: string) {
   return [...new Set(candidates)]
     .filter((value) => value.startsWith("/") || value.startsWith("http"))
     .slice(0, 200)
+}
+
+function cookieNames(response: Response) {
+  const headersWithCookies = response.headers as Headers & { getSetCookie?: () => string[] }
+  const values = typeof headersWithCookies.getSetCookie === "function"
+    ? headersWithCookies.getSetCookie()
+    : [response.headers.get("set-cookie") ?? ""].filter(Boolean)
+  return [...new Set(values.map((value) => value.split(";", 1)[0]?.split("=", 1)[0]?.trim()).filter(Boolean))]
 }
 
 async function requestText(url: string, init: RequestInit = {}) {
@@ -103,6 +100,7 @@ async function requestText(url: string, init: RequestInit = {}) {
       contentType: response.headers.get("content-type"),
       bytes: Buffer.byteLength(body),
       sha256: createHash("sha256").update(body).digest("hex"),
+      setCookieNames: cookieNames(response),
       body,
     }
   } finally {
@@ -120,10 +118,10 @@ async function inspectGet(id: string, url: string) {
       contentType: fetched.contentType,
       bytes: fetched.bytes,
       sha256: fetched.sha256,
+      setCookieNames: fetched.setCookieNames,
+      vpTokenPresent: /<meta\b[^>]*name=["']__VPToken["'][^>]*content=["'][^"']+["']/i.test(fetched.body),
       eventLinks: eventHrefs(fetched.body),
       relevantHrefs: relevantHrefs(fetched.body),
-      forms: formMetadata(fetched.body),
-      scripts: scriptSources(fetched.body),
       endpointCandidates: endpointCandidates(fetched.body),
       snippets: contextSnippets(fetched.body),
     }
@@ -132,70 +130,16 @@ async function inspectGet(id: string, url: string) {
   }
 }
 
-async function inspectSuggestion() {
-  const url = `${VSDC_ORIGIN}/suggestion-search/isustocks`
-  try {
-    const fetched = await requestText(url, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded; charset=UTF-8" },
-      body: new URLSearchParams({ keyword: "VHM", issuerOrgId: "" }).toString(),
-    })
-    let parsed: unknown = null
-    try {
-      parsed = JSON.parse(fetched.body)
-    } catch {
-      parsed = null
-    }
-    return {
-      id: "vhm-ticker-suggestion",
-      url,
-      status: fetched.status,
-      contentType: fetched.contentType,
-      bytes: fetched.bytes,
-      sha256: fetched.sha256,
-      json: parsed,
-      preview: parsed ? null : fetched.body.slice(0, 2000),
-    }
-  } catch (error) {
-    return { id: "vhm-ticker-suggestion", url, error: error instanceof Error ? error.message : String(error) }
-  }
-}
-
-async function inspectRightsPage(page: number) {
-  const url = `${VSDC_ORIGIN}/isuisser-thq/search`
-  try {
-    const fetched = await requestText(url, {
-      method: "POST",
-      headers: { "content-type": "application/json;charset=utf-8" },
-      body: JSON.stringify({ SearchKey: "6951", CurrentPage: page, RecordOnPage: 10 }),
-    })
-    return {
-      id: `vhm-rights-page-${page}`,
-      url,
-      status: fetched.status,
-      contentType: fetched.contentType,
-      bytes: fetched.bytes,
-      sha256: fetched.sha256,
-      eventLinks: eventHrefs(fetched.body),
-      preview: decodeHtmlOnce(fetched.body).replace(/\s+/g, " ").slice(0, 3000),
-    }
-  } catch (error) {
-    return { id: `vhm-rights-page-${page}`, url, error: error instanceof Error ? error.message : String(error) }
-  }
-}
-
 async function main() {
-  const gets = await Promise.all(TARGETS.map((target) => inspectGet(target.id, target.url)))
-  const suggestion = await inspectSuggestion()
-  const rightsPages = []
-  for (const page of [1, 2]) {
-    rightsPages.push(await inspectRightsPage(page))
-    if (page === 1) await new Promise((resolve) => setTimeout(resolve, 300))
+  const results = []
+  for (const target of TARGETS) {
+    results.push(await inspectGet(target.id, target.url))
+    await new Promise((resolve) => setTimeout(resolve, 200))
   }
 
   console.log(JSON.stringify({
     generatedAt: new Date().toISOString(),
-    targets: [...gets, suggestion, ...rightsPages],
+    targets: results,
   }, null, 2))
 }
 
