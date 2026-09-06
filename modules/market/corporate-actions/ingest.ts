@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import {
   hasVietnamSecuritiesTradingCalendarCoverage,
   isVietnamSecuritiesTradingDateKey,
-} from "@/modules/market/calendar"
+} from "../calendar.ts"
 import type {
   CorporateActionExDateInput,
   NormalizedCorporateAction,
