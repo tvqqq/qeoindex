@@ -108,7 +108,7 @@ test("QEO-117 Council ticker knowledge wiring is off-by-default, ticker-wide, fr
   assert.match(runtime, /createServerTickerKnowledgeIndex/)
   assert.match(runtime, /buildTickerContext/)
   assert.match(runtime, /consumer: "AI_COUNCIL"/)
-  assert.match(runtime, /CURRENT_THESIS/)
+  assert.doesNotMatch(runtime, /CURRENT_THESIS|NOTION_THESIS|projectCurrentThesisKnowledge|getResearchOverviewData/)
   assert.match(runtime, /freezeCouncilTickerKnowledge/)
   assert.match(wrapper, /const tickerKnowledgeStocks = raw\.stocks/)
   assert.match(wrapper, /for \(const stock of tickerKnowledgeStocks\)/)
@@ -160,7 +160,7 @@ test("QEO-115 context builder rejects cross-ticker results even when the retriev
   const context = await buildTickerContext({
     index,
     ticker: "MSN",
-    query: "current thesis",
+    query: "current evidence",
     consumer: "STOCK_QA",
     now: "2026-09-06T08:00:00.000Z",
   })
@@ -208,56 +208,6 @@ test("QEO-115 point-in-time context rejects future retrieved and mandatory evide
   assert.deepEqual(context.items, [])
   assert.deepEqual(context.retrievedPointIds, [])
   assert.doesNotMatch(context.text, /Future outcome/)
-})
-
-test("QEO-114 canonical Notion rebuild is bounded, fail-safe and can recreate a lost CURRENT_THESIS projection", async () => {
-  const { rebuildCurrentThesisKnowledge } = await import("../../modules/ticker-knowledge/notion-sync.ts")
-  const stored = new Map<string, string>()
-  let deleteCalls = 0
-  const index = {
-    ensureReady: async () => undefined,
-    upsert: async (items: readonly { id: string; provenance: { sourceVersion: string } }[]) => {
-      for (const item of items) stored.set(item.id, item.provenance.sourceVersion)
-    },
-    deleteSourceVersion: async () => { deleteCalls += 1 },
-    query: async () => [],
-  }
-  const thesis = {
-    id: "notion-page-1", notionUrl: "https://notion.so/1", ticker: "MSN", company: "Masan", status: "Current",
-    taBias: "Bullish" as const, faBias: "Neutral" as const, wyckoffState: "Range", marketRegime: "Neutral" as const,
-    baseCase: "Range", probabilities: { bull: 30, base: 50, bear: 20 }, support: "78", resistance: "86", confirmation: "86 hold",
-    invalidation: "below 78", whatChanged: "", confidence: "MEDIUM" as const, lastAnalysis: "2026-09-01", lastFAUpdate: "",
-    updated: "2026-09-01T09:00:00.000Z", driveFolder: "",
-  }
-
-  const first = await rebuildCurrentThesisKnowledge({ index, loadCanonicalTheses: async () => [thesis], maxTheses: 200 })
-  assert.equal(first.synced, 1)
-  assert.equal(first.failed, 0)
-  assert.equal(first.rows[0].ticker, "MSN")
-  assert.equal(first.rows[0].status, "current")
-  const pointId = first.rows[0].pointId
-  const sourceVersion = first.rows[0].sourceVersion
-  assert.equal(stored.get(pointId), sourceVersion)
-
-  stored.clear()
-  const rebuilt = await rebuildCurrentThesisKnowledge({ index, loadCanonicalTheses: async () => [thesis], maxTheses: 200 })
-  assert.equal(rebuilt.rows[0].pointId, pointId)
-  assert.equal(stored.get(pointId), sourceVersion)
-
-  await assert.rejects(() => rebuildCurrentThesisKnowledge({
-    index,
-    loadCanonicalTheses: async () => { throw new Error("Notion unavailable") },
-    maxTheses: 200,
-  }), /Notion unavailable/)
-  assert.equal(deleteCalls, 0)
-})
-
-test("QEO-114 server rebuild reads fresh canonical Notion rather than cached overview state", () => {
-  const server = source("modules/ticker-knowledge/notion-server.ts")
-  assert.match(server, /getResearchDataFresh/)
-  assert.match(server, /createServerTickerKnowledgeIndex/)
-  assert.match(server, /rebuildCurrentThesisKnowledge/)
-  assert.doesNotMatch(server, /getResearchOverviewData/)
 })
 
 test("QEO-113 canonical report assembler selects only current content hash, exact analysis and exact chunk version", async () => {
