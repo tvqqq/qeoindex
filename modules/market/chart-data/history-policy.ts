@@ -1,5 +1,5 @@
-import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "../calendar"
-import type { ChartResolution } from "./contract"
+import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "../calendar.ts"
+import type { ChartResolution } from "./contract.ts"
 
 const DAY_SECONDS = 86400
 const SHORT_HISTORY_DAYS = 31
