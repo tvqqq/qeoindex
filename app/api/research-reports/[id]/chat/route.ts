@@ -6,7 +6,10 @@ import {
   ResearchReportQaError,
 } from "@/modules/research-reports"
 import { retrieveResearchReportQaHybridEvidence } from "@/modules/research-reports/qa/hybrid-retrieval"
-import type { ResearchReportQaRetrievalMode } from "@/modules/research-reports/qa/service"
+import type {
+  ResearchReportQaRetrievalMode,
+  ResearchReportQaServiceDependencies,
+} from "@/modules/research-reports/qa/service"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { createServerTickerKnowledgeIndex } from "@/modules/ticker-knowledge/server"
 
@@ -70,7 +73,7 @@ export async function POST(
   }
 
   const retrievalMode = resolveRetrievalMode()
-  let retrieveHybridEvidence: Parameters<typeof answerResearchReportQuestion>[2]["retrieveHybridEvidence"]
+  let retrieveHybridEvidence: ResearchReportQaServiceDependencies["retrieveHybridEvidence"]
   if (retrievalMode !== "lexical") {
     try {
       const index = createServerTickerKnowledgeIndex()
