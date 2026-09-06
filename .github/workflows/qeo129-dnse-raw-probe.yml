@@ -139,3 +139,5 @@ jobs:
             } : null,
           }))
 NODE
+
+# QEO-129 one-shot trigger: 2026-09-07
