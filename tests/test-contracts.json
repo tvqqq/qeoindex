@@ -624,6 +624,15 @@
       ]
     },
     {
+      "path": "tests/qeo-106-yahoo-adjusted-basis.test.ts",
+      "owner": "market",
+      "invariant": "Yahoo Daily fallback and persisted repairs must use one adjusted canonical price basis.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/qeoindex-eod-phase-telemetry.test.ts",
       "owner": "eod",
       "invariant": "Preserve the current qeoindex eod phase telemetry contract.",
