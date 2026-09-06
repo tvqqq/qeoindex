@@ -18,6 +18,7 @@ import {
   parseSsiIboardPayload,
   ssiIboardResolutionToken,
 } from "../modules/market/provider-benchmark/providers/ssi-iboard.ts"
+import { isCanonicalDailyHotRowUsable } from "../modules/market/chart-data/daily-authority.ts"
 
 const DAY = 86400
 
@@ -93,6 +94,113 @@ test("QEO-103 archive is cache-before-prune and prune authority is manifest veri
   assert.match(migration, /derived hourly cache missing for manifest/)
   assert.match(migration, /hot row-count mismatch before prune/)
   assert.doesNotMatch(migration, /CASCADE/i)
+})
+
+test("QEO-106 Daily cold schema reuses verified manifests and keeps prune fail-closed", () => {
+  const migration = source("supabase/migrations/20260905153500_qeo106_daily_hot_cold_history.sql")
+  assert.match(migration, /base_resolution in \('1m', '1D'\)/i)
+  assert.match(migration, /add column if not exists provenance jsonb/i)
+  assert.match(migration, /create table if not exists public\.chart_daily_history_state/i)
+  assert.match(migration, /qeo_prune_verified_chart_daily_partition/i)
+  assert.match(migration, /v_manifest\.base_resolution <> '1D'/i)
+  assert.match(migration, /market_ohlcv_history/i)
+  assert.match(migration, /timeframe = '1D'/i)
+  assert.match(migration, /hot row-count mismatch before prune/i)
+  assert.doesNotMatch(migration, /CASCADE/i)
+})
+
+test("QEO-106 cold-store supports Daily partitions without changing the legacy 1m factory", () => {
+  const cold = source("modules/market/chart-data/cold-store.ts")
+  assert.match(cold, /createSupabaseDailyColdOhlcvStorage/)
+  assert.match(cold, /baseResolution: "1m" \| "1D"/)
+  assert.match(cold, /`\$\{baseResolution\}\/ticker=\$\{ticker\}/)
+  assert.match(cold, /\.eq\("base_resolution", baseResolution\)/)
+  assert.match(cold, /base_resolution: baseResolution/)
+  assert.match(cold, /createResolutionColdOhlcvStorage\(supabase, "1m"\)/)
+  assert.match(cold, /createResolutionColdOhlcvStorage\(supabase, "1D"\)/)
+})
+
+test("QEO-106 hot Daily read rejects unresolved zero-volume fallback but preserves authority evidence", () => {
+  const flat = { volume: 0, provider: "Fallback", source_url: "https://query1.finance.yahoo.com/v8/finance/chart/VCB.VN", provider_detail: "Yahoo Finance .VN fallback" }
+  assert.equal(isCanonicalDailyHotRowUsable(flat), false)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, provider: "VCI" }), true)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, provider: "DNSE" }), true)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, source_url: "internal://stock_orderbook_snapshots", provider_detail: "Verified final market-close repair · no trade" }), true)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, provider: "VNDirect" }), false)
+  assert.equal(isCanonicalDailyHotRowUsable({ ...flat, volume: 123 }), true)
+
+  const service = source("modules/market/chart-data/service.ts")
+  assert.match(service, /provider,provider_detail,source_url/)
+  assert.match(service, /filter\(isCanonicalDailyHotRowUsable\)/)
+})
+
+test("QEO-106 canonical Daily merges Hot PostgreSQL + verified Cold Storage and Hot wins overlap", () => {
+  const service = source("modules/market/chart-data/service.ts")
+  const normalize = source("modules/market/chart-data/normalize.ts")
+  assert.match(service, /createSupabaseDailyColdOhlcvStorage/)
+  assert.match(service, /Promise\.allSettled\(\[/)
+  assert.match(service, /loadDailyRows/)
+  assert.match(service, /dailyColdStorage\.readIntersectingRange/)
+  assert.match(service, /detectDailySessionGaps/)
+  assert.match(service, /source: "cold"/)
+  assert.match(service, /source: "daily"/)
+  assert.match(normalize, /daily: 3/)
+  assert.match(normalize, /cold: 2/)
+})
+
+test("QEO-106 Hot aging blocks unresolved Daily evidence before immutable Cold archive", () => {
+  const history = source("modules/market/history/daily-cold-history.ts")
+  assert.match(history, /isCanonicalDailyHotRowUsable/)
+  assert.match(history, /Unresolved Daily hot evidence prevents archive/)
+  assert.ok(history.indexOf("Unresolved Daily hot evidence prevents archive") < history.indexOf("archiveVerifiedPartition"))
+  assert.match(history, /provider_detail,source_url/)
+})
+
+test("QEO-106 deep backfill exhausts lower-priority providers when a provider has no trusted bars", () => {
+  const historyIndex = source("modules/market/history/index.ts")
+  const coldHistory = source("modules/market/history/daily-cold-history.ts")
+  assert.match(historyIndex, /DailyHistoryBarPolicy/)
+  assert.match(historyIndex, /applyDailyHistoryBarPolicy/)
+  assert.match(historyIndex, /no trusted completed Daily bars/)
+  const dailyStart = historyIndex.indexOf("export async function fetchDailyMarketHistoryWindow")
+  const dailyEnd = historyIndex.indexOf("export async function fetchHourlyMarketHistoryWindow", dailyStart)
+  const waterfall = historyIndex.slice(dailyStart, dailyEnd)
+  assert.ok(dailyStart >= 0 && dailyEnd > dailyStart)
+  assert.ok(waterfall.indexOf('errors.push(`Yahoo:') < waterfall.indexOf('fetchVnDirectDailyOhlcv'))
+  assert.ok(waterfall.indexOf('fetchVnDirectDailyOhlcv') < waterfall.indexOf('fetchTitanLabsDailyOhlcv'))
+  assert.match(coldHistory, /fetchDailyMarketHistoryWindow\(ticker, DAILY_DEEP_CHUNK_DAYS, cursorNow, deepHistoryBarPolicy\)/)
+  assert.match(coldHistory, /provider === "VCI" \|\| provider === "DNSE"/)
+  assert.match(coldHistory, /bar\.volume > 0/)
+})
+
+test("QEO-106 unresolved Hot aging stays fail-closed without blocking deeper Cold history", () => {
+  const history = source("modules/market/history/daily-cold-history.ts")
+  assert.match(history, /Unresolved Daily hot evidence prevents archive/)
+  assert.match(history, /hotArchiveSkippedForAuthority/)
+  assert.match(history, /message\.startsWith\("Unresolved Daily hot evidence prevents archive"\)/)
+  const skip = history.indexOf("hotArchiveSkippedForAuthority")
+  const deepLoop = history.indexOf("for (let chunk = 0; chunk < maxChunksPerTicker")
+  assert.ok(skip >= 0 && deepLoop > skip)
+})
+
+test("QEO-106 deep Daily history is resumable, bounded, provider-backed and archive-before-prune", () => {
+  const history = source("modules/market/history/daily-cold-history.ts")
+  const route = source("app/api/admin/market/daily-history/backfill/route.ts")
+  assert.match(history, /DAILY_BACKFILL_DAYS/)
+  assert.match(history, /fetchDailyMarketHistoryWindow/)
+  assert.match(history, /createSupabaseDailyColdOhlcvStorage/)
+  assert.match(history, /chart_daily_history_state/)
+  assert.match(history, /maxChunksPerTicker/)
+  assert.match(history, /archiveVerifiedPartition/)
+  assert.match(history, /qeo_prune_verified_chart_daily_partition/)
+  assert.match(history, /providerExhaustedWithoutData/)
+  assert.match(history, /deepHistoryBarPolicy/)
+  assert.match(history, /bar\.volume > 0/)
+  assert.ok(history.indexOf("archiveVerifiedPartition") < history.lastIndexOf("qeo_prune_verified_chart_daily_partition"))
+  assert.doesNotMatch(history, /synthetic|fillForward|fabricate/i)
+  assert.match(route, /isMachineRequestAuthorized/)
+  assert.match(route, /backfillDailyColdHistory/)
+  assert.match(route, /10/)
 })
 
 test("QEO-100 incomplete stored coverage backfills the missing head instead of trusting lastStored", () => {

@@ -17,6 +17,19 @@ import {
 
 export type { HistoricalBarsResult, HistoricalProvider, RawHistoryTimeframe } from "@/modules/market/history/contract"
 
+export type DailyHistoryBarPolicy = (provider: HistoricalProvider, bar: OhlcvBar) => boolean
+
+function applyDailyHistoryBarPolicy(
+  provider: HistoricalProvider,
+  bars: OhlcvBar[],
+  policy?: DailyHistoryBarPolicy,
+) {
+  if (!policy) return bars
+  const trusted = bars.filter((bar) => policy(provider, bar))
+  if (!trusted.length) throw new Error(`${provider} returned no trusted completed Daily bars`)
+  return trusted
+}
+
 let dnseUnavailableUntil = 0
 
 function shouldTryDnse() {
@@ -116,11 +129,12 @@ export async function fetchDailyMarketHistoryWindow(
   symbol: string,
   lookbackDays: number,
   now = new Date(),
+  barPolicy?: DailyHistoryBarPolicy,
 ): Promise<HistoricalBarsResult> {
   const errors: string[] = []
 
   try {
-    const bars = strictDailyBars("VCI", await fetchVciDailyOhlcv(symbol, now, lookbackDays))
+    const bars = applyDailyHistoryBarPolicy("VCI", strictDailyBars("VCI", await fetchVciDailyOhlcv(symbol, now, lookbackDays)), barPolicy)
     return historicalResult({ bars, provider: "VCI", detail: `VCI native ONE_DAY · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
   } catch (error) {
     errors.push(`VCI: ${errorMessage(error)}`)
@@ -128,7 +142,7 @@ export async function fetchDailyMarketHistoryWindow(
 
   if (shouldTryDnse()) {
     try {
-      const bars = strictDailyBars("DNSE", await fetchDnseDailyOhlcv(symbol, now, lookbackDays))
+      const bars = applyDailyHistoryBarPolicy("DNSE", strictDailyBars("DNSE", await fetchDnseDailyOhlcv(symbol, now, lookbackDays)), barPolicy)
       return historicalResult({ bars, provider: "DNSE", detail: `DNSE OpenAPI · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
     } catch (error) {
       errors.push(`DNSE: ${markDnseUnavailable(error)}`)
@@ -138,21 +152,21 @@ export async function fetchDailyMarketHistoryWindow(
   }
 
   try {
-    const bars = strictDailyBars("Yahoo", await fetchYahooDailyOhlcv(symbol, now, lookbackDays))
+    const bars = applyDailyHistoryBarPolicy("Fallback", strictDailyBars("Yahoo", await fetchYahooDailyOhlcv(symbol, now, lookbackDays)), barPolicy)
     return historicalResult({ bars, provider: "Fallback", detail: `Yahoo Finance .VN fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
   } catch (error) {
     errors.push(`Yahoo: ${errorMessage(error)}`)
   }
 
   try {
-    const bars = strictDailyBars("VNDirect", await fetchVnDirectDailyOhlcv(symbol, now, lookbackDays))
+    const bars = applyDailyHistoryBarPolicy("VNDirect", strictDailyBars("VNDirect", await fetchVnDirectDailyOhlcv(symbol, now, lookbackDays)), barPolicy)
     return historicalResult({ bars, provider: "VNDirect", detail: `VNDirect Finfo fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
   } catch (error) {
     errors.push(`VNDirect: ${errorMessage(error)}`)
   }
 
   try {
-    const bars = strictDailyBars("TitanLabs", await fetchTitanLabsDailyOhlcv(symbol, now, lookbackDays))
+    const bars = applyDailyHistoryBarPolicy("TitanLabs", strictDailyBars("TitanLabs", await fetchTitanLabsDailyOhlcv(symbol, now, lookbackDays)), barPolicy)
     return historicalResult({ bars, provider: "TitanLabs", detail: `TitanLabs last-resort historical fallback · 1D · ${lookbackDays}d window`, symbol, timeframe: "1D", lookbackDays, now })
   } catch (error) {
     errors.push(`TitanLabs: ${errorMessage(error)}`)
