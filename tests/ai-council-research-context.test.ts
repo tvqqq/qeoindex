@@ -148,3 +148,152 @@ test("QEO-86 pre-market freezes auditable Research Reports for every Council tic
   assert.match(wrapper, /Curated Research Report evidence for advisory LLM reasoning only/)
   assert.doesNotMatch(wrapper, /const reportStocks = raw\.stocks\.filter\(\(stock\) => isCouncilResearchTickerEnabled/)
 })
+
+test("QEO-110 ticker knowledge identity is deterministic, ticker-scoped and retry-safe", async () => {
+  const {
+    TICKER_KNOWLEDGE_SCHEMA_VERSION,
+    createTickerKnowledgeIdentity,
+  } = await import("../modules/ticker-knowledge/domain.ts")
+
+  const input = {
+    ticker: "msn",
+    knowledgeType: "REPORT_CHUNK" as const,
+    sourceType: "RESEARCH_REPORT" as const,
+    sourceId: "report-1",
+    logicalKey: "report-1:hash-v1:chunk-7",
+  }
+  const first = createTickerKnowledgeIdentity(input)
+  const retry = createTickerKnowledgeIdentity({ ...input, ticker: "MSN" })
+  const otherTicker = createTickerKnowledgeIdentity({ ...input, ticker: "VIC" })
+
+  assert.equal(first.id, retry.id)
+  assert.equal(first.identityKey, retry.identityKey)
+  assert.equal(first.ticker, "MSN")
+  assert.equal(first.schemaVersion, TICKER_KNOWLEDGE_SCHEMA_VERSION)
+  assert.notEqual(first.id, otherTicker.id)
+  assert.match(first.id, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+})
+
+test("QEO-112 local sparse encoder preserves financial lexical anchors and numbers", async () => {
+  const { encodeTickerKnowledgeSparse } = await import("../modules/ticker-knowledge/sparse.ts")
+
+  const document = encodeTickerKnowledgeSparse("MSN target 110,000 EV/EBITDA 2027F")
+  const query = encodeTickerKnowledgeSparse("MSN 110000 EBITDA")
+  const documentIndices = new Set(document.indices)
+  const overlap = query.indices.filter((index) => documentIndices.has(index))
+
+  assert.equal(document.indices.length, document.values.length)
+  assert.deepEqual([...document.indices].sort((a, b) => a - b), document.indices)
+  assert.ok(overlap.length >= 3)
+})
+
+test("QEO-112 Qdrant hybrid query always filters ticker first and fuses dense+sparse evidence", async () => {
+  const { createQdrantTickerKnowledgeIndex } = await import("../modules/ticker-knowledge/qdrant.ts")
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = []
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>
+    calls.push({ url: String(input), body })
+    return new Response(JSON.stringify({ result: { points: [] }, status: "ok" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })
+  }
+
+  const index = createQdrantTickerKnowledgeIndex({
+    baseUrl: "https://example.qdrant.io",
+    apiKey: "secret-qdrant-key",
+    collectionName: "ticker_knowledge",
+    vectorSize: 3,
+    fetchImpl,
+    embeddingProvider: {
+      model: "test-embedding",
+      version: "test-embedding-v1",
+      dimensions: 3,
+      embed: async () => [[0.1, 0.2, 0.3]],
+    },
+  })
+
+  const result = await index.query({
+    ticker: "msn",
+    text: "HSBC target 110000 dựa trên giả định gì?",
+    knowledgeTypes: ["REPORT_CHUNK", "REPORT_SUMMARY"],
+    limit: 8,
+  })
+
+  assert.deepEqual(result, [])
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].url, /\/collections\/ticker_knowledge\/points\/query$/)
+  assert.deepEqual((calls[0].body.query as { fusion?: string }).fusion, "rrf")
+  assert.equal((calls[0].body.prefetch as unknown[]).length, 2)
+  const filter = calls[0].body.filter as { must: Array<Record<string, unknown>> }
+  assert.deepEqual(filter.must[0], { key: "ticker", match: { value: "MSN" } })
+})
+
+test("QEO-110 Qdrant outage degrades explicitly instead of impersonating empty knowledge", async () => {
+  const {
+    TickerKnowledgeUnavailableError,
+    queryTickerKnowledgeSafely,
+  } = await import("../modules/ticker-knowledge/domain.ts")
+
+  const result = await queryTickerKnowledgeSafely({
+    ensureReady: async () => undefined,
+    upsert: async () => undefined,
+    deleteSourceVersion: async () => undefined,
+    query: async () => {
+      throw new TickerKnowledgeUnavailableError("qdrant_unavailable", "Qdrant unavailable")
+    },
+  }, {
+    ticker: "MSN",
+    text: "current thesis",
+  })
+
+  assert.equal(result.status, "unavailable")
+  assert.deepEqual(result.results, [])
+  assert.equal(result.reason, "qdrant_unavailable")
+})
+
+test("QEO-111 cold evidence archive round-trips, reuses retries and fails closed on checksum mismatch", async () => {
+  const { createSupabaseColdEvidenceStore } = await import("../modules/ticker-knowledge/cold-evidence.ts")
+  const objects = new Map<string, Uint8Array>()
+  const fakeSupabase = {
+    storage: {
+      from: () => ({
+        upload: async (path: string, bytes: Uint8Array) => {
+          if (objects.has(path)) return { error: { message: "The resource already exists" } }
+          objects.set(path, new Uint8Array(bytes))
+          return { error: null }
+        },
+        download: async (path: string) => {
+          const bytes = objects.get(path)
+          return bytes
+            ? { data: new Blob([bytes]), error: null }
+            : { data: null, error: { message: "not found" } }
+        },
+      }),
+    },
+  }
+
+  const store = createSupabaseColdEvidenceStore(fakeSupabase as never, { bucket: "ticker-evidence" })
+  const input = {
+    domain: "AI_COUNCIL" as const,
+    ticker: "MSN",
+    sourceId: "run-123",
+    sourceVersion: "council-run-v1",
+    asOf: "2026-09-06T08:00:00.000Z",
+    payload: { scenario: "BASE", probability: 0.55, evidence: ["a", "b"] },
+  }
+
+  const first = await store.archiveJson(input)
+  const retry = await store.archiveJson(input)
+  assert.equal(first.pointer.objectPath, retry.pointer.objectPath)
+  assert.equal(first.reused, false)
+  assert.equal(retry.reused, true)
+  assert.deepEqual((await store.restoreJson(first.pointer)).payload, input.payload)
+
+  const stored = objects.get(first.pointer.objectPath)
+  assert.ok(stored)
+  const tampered = new Uint8Array(stored)
+  tampered[tampered.length - 1] ^= 1
+  objects.set(first.pointer.objectPath, tampered)
+  await assert.rejects(() => store.restoreJson(first.pointer), /checksum mismatch/i)
+})
