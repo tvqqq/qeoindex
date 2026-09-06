@@ -1,0 +1,53 @@
+name: QEO-129 Regenerate Database Types Once
+
+on:
+  push:
+    branches:
+      - feat/qeo-129-adjusted-daily-shadow
+    paths:
+      - .github/workflows/qeo129-regenerate-types-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - run: pnpm install --frozen-lockfile
+      - name: Start local Supabase
+        run: supabase start
+      - name: Replay migrations from zero
+        run: pnpm db:replay:verify
+      - name: Regenerate canonical Database types
+        run: supabase gen types typescript --local --schema public > modules/shared/supabase/database.types.ts
+      - name: Verify generated QEO-129 contract
+        run: |
+          node --test tests/db/qeo129-schema-contract.test.ts tests/market-history/qeo129-adjusted-daily-store.test.ts tests/market-history/qeo129-adjusted-daily-read.test.ts tests/market-history/qeo129-adjusted-daily-shadow.test.ts
+          pnpm test:manifest
+          pnpm typecheck
+      - name: Commit generated types and remove helper
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/qeo129-regenerate-types-once.yml
+          git add modules/shared/supabase/database.types.ts
+          git commit -m 'chore(QEO-129): regenerate database types'
+          git push origin HEAD:feat/qeo-129-adjusted-daily-shadow
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
