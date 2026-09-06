@@ -37,7 +37,7 @@ jobs:
       - name: Lint replayed local database
         run: supabase db lint --local --level warning
       - name: Run QEO-123 deterministic contracts
-        run: node --test tests/corporate-actions/domain.test.ts
+        run: node --test tests/corporate-actions/*.test.ts
       - name: Generate QEO-123 Database type candidate
         run: |
           mkdir -p artifacts/qeo123
