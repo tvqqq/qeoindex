@@ -11,7 +11,11 @@ import type {
   ResearchReportQaEvidenceIdentity,
   ResearchReportQaRetrievalClient,
 } from "../../modules/research-reports/qa/types.ts"
-import { createTickerKnowledgeItem } from "../../modules/ticker-knowledge/domain.ts"
+import {
+  createTickerKnowledgeItem,
+  type TickerKnowledgeIndex,
+  type TickerKnowledgeQuery,
+} from "../../modules/ticker-knowledge/domain.ts"
 import { projectResearchReportKnowledge } from "../../modules/ticker-knowledge/projections.ts"
 
 const REPORT_ID = "11111111-1111-4111-8111-111111111111"
@@ -180,12 +184,12 @@ test("QEO-116 report hybrid retrieval uses REPORT + exact provenance and never t
     },
     projectionVersion: "test-v1",
   })
-  const queries: Array<Record<string, unknown>> = []
-  const index = {
+  const queries: TickerKnowledgeQuery[] = []
+  const index: TickerKnowledgeIndex = {
     ensureReady: async () => undefined,
     upsert: async () => undefined,
     deleteSourceVersion: async () => undefined,
-    query: async (input: Record<string, unknown>) => {
+    query: async (input) => {
       queries.push(input)
       return [{
         id: qdrantItem.id,
