@@ -3,6 +3,7 @@ const TICKER = /^[A-Z0-9]{2,12}$/
 const LINEAGE_HASH = /^[a-f0-9]{64}$/
 
 export type ShadowFactorRunStatus = "candidate" | "active" | "blocked" | "superseded"
+export type DailySourcePriceBasis = "RAW" | "ADJUSTED" | "UNKNOWN"
 
 export type ShadowFactorRun = {
   id: string
@@ -28,6 +29,7 @@ export type RawDailyBar = {
   low: number
   close: number
   volume: number
+  sourcePriceBasis: DailySourcePriceBasis
 }
 
 export type AdjustedDailyBar = {
@@ -51,6 +53,7 @@ export type AdjustedDailyErrorCode =
   | "INVALID_FACTOR_TRANSITION"
   | "INVALID_FACTOR_RUN"
   | "INVALID_RAW_DAILY"
+  | "INVALID_RAW_PRICE_BASIS"
   | "TICKER_MISMATCH"
   | "INVALID_ADJUSTED_DAILY"
 
@@ -114,6 +117,13 @@ function validateRun(run: ShadowFactorRun) {
 }
 
 function validateRaw(raw: RawDailyBar) {
+  if (raw.sourcePriceBasis !== "RAW") {
+    throw new AdjustedDailyError(
+      "INVALID_RAW_PRICE_BASIS",
+      `QEO-129 raw price basis must be explicitly RAW; received ${raw.sourcePriceBasis ?? "MISSING"}`,
+    )
+  }
+
   const parsedBarTime = Date.parse(raw.barTime)
   if (
     !TICKER.test(raw.ticker)
