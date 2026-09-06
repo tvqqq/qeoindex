@@ -7,6 +7,7 @@ export const TICKER_QA_LIMITS = {
   evidenceChars: 18_000,
   retrievalItems: 12,
   citationExcerptChars: 240,
+  claimChars: 1_200,
   claims: 8,
 } as const
 
@@ -30,6 +31,12 @@ export interface TickerQaCitation {
   page?: number
   runId?: string
   sourceVersion?: string
+}
+
+export interface TickerQaClaim {
+  text: string
+  authority: TickerKnowledgeAuthority
+  citationIds: string[]
 }
 
 export interface TickerQaContradiction {
@@ -74,6 +81,7 @@ export interface TickerQaResult {
   ticker: string
   status: "answered" | "not_found"
   answer: string
+  claims: TickerQaClaim[]
   citations: TickerQaCitation[]
   contradictions: TickerQaContradiction[]
   retrievalStatus: TickerQaRetrievalStatus
