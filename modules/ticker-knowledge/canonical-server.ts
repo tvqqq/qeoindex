@@ -133,20 +133,21 @@ export function createCanonicalPostgresBackfillSource(
     async loadChunks(selectors: readonly ResearchReportChunkSelector[]) {
       const result: CanonicalRow[] = []
       for (const selector of selectors) {
-        if (!selector.pages.length) continue
-        if (selector.pages.length > MAX_CHUNK_SELECTOR_PAGES) {
+        if (selector.pages && selector.pages.length === 0) continue
+        if (selector.pages && selector.pages.length > MAX_CHUNK_SELECTOR_PAGES) {
           throw new Error(`Canonical report chunk selector exceeds ${MAX_CHUNK_SELECTOR_PAGES} cited pages`)
         }
         const selected = await loadBoundedRelatedRows(
           "Canonical research-report chunks read failed",
           async (from, to) => {
-            const response = await supabase
+            let query = supabase
               .from(CHUNK_TABLE)
               .select("id,report_id,content_hash,chunk_version,page_number,chunk_index,content,chunk_hash")
               .eq("report_id", selector.reportId)
               .eq("content_hash", selector.contentHash)
               .eq("chunk_version", selector.chunkVersion)
-              .in("page_number", [...selector.pages])
+            if (selector.pages) query = query.in("page_number", [...selector.pages])
+            const response = await query
               .order("page_number", { ascending: true })
               .order("chunk_index", { ascending: true })
               .order("id", { ascending: true })
