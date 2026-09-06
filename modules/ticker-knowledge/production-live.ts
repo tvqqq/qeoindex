@@ -3,12 +3,13 @@ import "server-only"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
-import {
-  retrieveResearchReportQaEvidence,
-  type ResearchReportQaEvidenceIdentity,
-} from "@/modules/research-reports/qa/retrieval"
+import { retrieveResearchReportQaEvidence } from "@/modules/research-reports/qa/retrieval"
 import { retrieveResearchReportQaHybridEvidence } from "@/modules/research-reports/qa/hybrid-retrieval"
 import type { ResearchReportQaEvaluationCase } from "@/modules/research-reports/qa/evaluation"
+import type {
+  ResearchReportQaEvidenceIdentity,
+  ResearchReportQaRetrievalClient,
+} from "@/modules/research-reports/qa/types"
 import {
   prepareTickerQaContext,
   validateTickerQaRequest,
@@ -61,6 +62,10 @@ function requireSupabase() {
   const client = getSupabaseServerClient()
   if (!client) throw new Error("Ticker knowledge production acceptance requires Supabase service-role configuration")
   return client
+}
+
+function asReportQaClient(client: SupabaseClient) {
+  return client as unknown as ResearchReportQaRetrievalClient
 }
 
 function endOfVietnamDate(date: string) {
@@ -302,12 +307,13 @@ async function reportProbe(client: SupabaseClient, sample: ReportSample, queryTe
     contentHash: sample.contentHash,
     chunkVersion: sample.chunkVersion,
   }
+  const retrievalClient = asReportQaClient(client)
   const startedAt = performance.now()
-  const lexical = await retrieveResearchReportQaEvidence(client, identity, queryText)
+  const lexical = await retrieveResearchReportQaEvidence(retrievalClient, identity, queryText)
   const lexicalMs = Math.max(0, performance.now() - startedAt)
   const hybrid = await retrieveResearchReportQaHybridEvidence(
     createServerTickerKnowledgeIndex(),
-    client,
+    retrievalClient,
     identity,
     queryText,
   )
