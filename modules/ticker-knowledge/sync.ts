@@ -1,8 +1,10 @@
 import type { Thesis } from "@/modules/research/types"
 
-import type {
-  TickerKnowledgeIndex,
-  TickerKnowledgeItem,
+import {
+  normalizeTicker,
+  type TickerKnowledgeIndex,
+  type TickerKnowledgeItem,
+  type TickerKnowledgeSourceType,
 } from "./domain.ts"
 import {
   projectCouncilHistoryKnowledge,
@@ -65,6 +67,33 @@ export async function syncCurrentThesisKnowledge(
 ) {
   const item = projectCurrentThesisKnowledge(thesis)
   return syncProjection(index, [item])
+}
+
+export interface TickerKnowledgeSourceVersionTombstone {
+  ticker: string
+  sourceType: TickerKnowledgeSourceType
+  sourceId: string
+  sourceVersion: string
+}
+
+function exactTombstoneValue(label: string, value: string) {
+  const normalized = value.trim()
+  if (!normalized) throw new Error(`Ticker knowledge tombstone requires exact ${label}`)
+  return normalized
+}
+
+export async function tombstoneTickerKnowledgeSourceVersion(
+  index: TickerKnowledgeIndex,
+  input: TickerKnowledgeSourceVersionTombstone,
+) {
+  const exact = {
+    ticker: normalizeTicker(input.ticker),
+    sourceType: input.sourceType,
+    sourceId: exactTombstoneValue("sourceId", input.sourceId),
+    sourceVersion: exactTombstoneValue("sourceVersion", input.sourceVersion),
+  }
+  await index.ensureReady()
+  await index.deleteSourceVersion(exact)
 }
 
 export interface TickerKnowledgeBackfillPage<T> {
