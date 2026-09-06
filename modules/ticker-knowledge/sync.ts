@@ -28,11 +28,22 @@ function projectionIdentity(items: readonly TickerKnowledgeItem[]) {
   const sourceId = items[0].provenance.sourceId
   const sourceVersion = items[0].provenance.sourceVersion
   for (const item of items) {
-    if (item.provenance.sourceId !== sourceId || item.provenance.sourceVersion !== sourceVersion) {
-      throw new Error("Ticker knowledge sync requires one exact source version per projection batch")
+    if (item.provenance.sourceId !== sourceId) {
+      throw new Error("Ticker knowledge sync requires one exact source identity per projection batch")
     }
   }
   return { sourceId, sourceVersion }
+}
+
+function projectionSourceVersionGroups(items: readonly TickerKnowledgeItem[]) {
+  const groups = new Map<string, TickerKnowledgeItem[]>()
+  for (const item of items) {
+    const sourceVersion = item.provenance.sourceVersion
+    const group = groups.get(sourceVersion)
+    if (group) group.push(item)
+    else groups.set(sourceVersion, [item])
+  }
+  return [...groups.values()]
 }
 
 async function syncProjection(
@@ -41,8 +52,10 @@ async function syncProjection(
 ): Promise<TickerKnowledgeSyncResult> {
   const identity = projectionIdentity(items)
   await index.ensureReady()
-  for (let offset = 0; offset < items.length; offset += MAX_SYNC_UPSERT_BATCH) {
-    await index.upsert(items.slice(offset, offset + MAX_SYNC_UPSERT_BATCH))
+  for (const group of projectionSourceVersionGroups(items)) {
+    for (let offset = 0; offset < group.length; offset += MAX_SYNC_UPSERT_BATCH) {
+      await index.upsert(group.slice(offset, offset + MAX_SYNC_UPSERT_BATCH))
+    }
   }
   return {
     ...identity,

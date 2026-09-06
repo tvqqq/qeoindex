@@ -111,3 +111,88 @@ test("QEO-119 backfill failures expose only bounded source identity plus stable 
   })
   assert.doesNotMatch(JSON.stringify(result), /do-not-expose-upstream-detail/)
 })
+
+test("QEO-119 Council sync preserves distinct deterministic and debate-error source versions", async () => {
+  const { syncCouncilHistoryKnowledge } = await import("../../modules/ticker-knowledge/sync.ts")
+  const batches: string[][] = []
+  const result = await syncCouncilHistoryKnowledge({
+    ensureReady: async () => undefined,
+    upsert: async (items) => {
+      batches.push(items.map((item) => item.provenance.sourceVersion))
+    },
+    deleteSourceVersion: async () => undefined,
+    query: async () => [],
+  }, {
+    id: "run-partial",
+    ticker: "PNJ",
+    asOfDate: "2026-09-03",
+    signal: "BUY_ON_CONFIRMATION",
+    councilScore: 62,
+    confidence: 62,
+    consensus: 60,
+    riskStatus: "caution",
+    price: 39.8,
+    policyVersion: "council-policy-v2",
+    evidenceHash: "9".repeat(64),
+    createdAt: "2026-09-03T08:55:29.661Z",
+    outcome: null,
+    debate: {
+      status: "partial",
+      promptVersion: "llm-debate-v3-first-class-context",
+      error: "Validation failed after repair",
+      completedAt: "2026-09-03T08:57:16.928Z",
+    },
+  })
+
+  assert.equal(result.upserted, 2)
+  assert.equal(batches.length, 2)
+  assert.ok(batches.every((batch) => new Set(batch).size === 1))
+  assert.notEqual(batches[0][0], batches[1][0])
+})
+
+test("QEO-119 final production actions are explicit and destructive reset is confirmation-gated", () => {
+  assert.deepEqual(normalizeTickerKnowledgeAcceptanceCommand({ action: "inventory" }), { action: "inventory" })
+  assert.deepEqual(normalizeTickerKnowledgeAcceptanceCommand({ action: "benchmark" }), { action: "benchmark" })
+  assert.deepEqual(normalizeTickerKnowledgeAcceptanceCommand({ action: "canary_report" }), { action: "canary_report" })
+  assert.deepEqual(normalizeTickerKnowledgeAcceptanceCommand({ action: "canary_stock" }), { action: "canary_stock" })
+  assert.deepEqual(normalizeTickerKnowledgeAcceptanceCommand({ action: "canary_council" }), { action: "canary_council" })
+  assert.throws(
+    () => normalizeTickerKnowledgeAcceptanceCommand({ action: "reset_collection", confirm: "wrong" }),
+    /explicit confirmation/i,
+  )
+  assert.deepEqual(
+    normalizeTickerKnowledgeAcceptanceCommand({ action: "reset_collection", confirm: "RESET_DERIVED_TICKER_KNOWLEDGE" }),
+    { action: "reset_collection", confirm: "RESET_DERIVED_TICKER_KNOWLEDGE" },
+  )
+})
+
+test("QEO-119 machine runner owns live inventory benchmark canaries and derived-only rebuild reset", () => {
+  const route = source("app/api/ops/ticker-knowledge/acceptance/route.ts")
+  assert.match(route, /runServerTickerKnowledgeInventory/)
+  assert.match(route, /runServerTickerKnowledgeBenchmark/)
+  assert.match(route, /runServerReportQaCanary/)
+  assert.match(route, /runServerStockQaCanary/)
+  assert.match(route, /runServerCouncilKnowledgeCanary/)
+  assert.match(route, /resetServerTickerKnowledgeDerivedCollection/)
+  assert.doesNotMatch(route, /QDRANT_API_KEY|OPENAI_API_KEY|content_payload|rawEvidence/)
+})
+
+test("QEO-119 live acceptance implementation keeps raw evidence private and reports bounded metrics", () => {
+  const live = source("modules/ticker-knowledge/production-live.ts")
+  assert.match(live, /evaluateTickerKnowledgeProductionAcceptance/)
+  assert.match(live, /retrieveResearchReportQaEvidence/)
+  assert.match(live, /retrieveResearchReportQaHybridEvidence/)
+  assert.match(live, /buildTickerContext/)
+  assert.match(live, /p50|percentile/i)
+  assert.match(live, /p95|percentile/i)
+  assert.doesNotMatch(live, /return\s+.*(?:content|snippet|question|prompt)/i)
+})
+
+test("QEO-117 production snapshot migration is promoted at the exact applied version", () => {
+  const sql = source("supabase/migrations/20260906123024_qeo117_ai_council_ticker_knowledge.sql")
+  assert.match(sql, /create table if not exists public\.ai_council_ticker_knowledge_snapshots/i)
+  assert.match(sql, /run_id uuid primary key references public\.ai_council_runs\(id\)/i)
+  assert.match(sql, /grant select on table public\.ai_council_ticker_knowledge_snapshots to authenticated/i)
+  assert.match(sql, /before update on public\.ai_council_ticker_knowledge_snapshots/i)
+  assert.throws(() => source("supabase/pending-migrations/20260906094500_qeo117_ai_council_ticker_knowledge.sql"))
+})
