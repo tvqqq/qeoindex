@@ -41,6 +41,18 @@ test("QEO-107 provider gaps are resumable but zero-row attempts never become can
   assert.match(hotStore, /dropEmptyHotIntradaySessionPartition/)
 })
 
+test("QEO-107 only treats a ticker as HOT-complete after five distinct trading sessions", () => {
+  const bootstrap = source("modules/market/chart-data/bootstrap.ts")
+  const migration = source("supabase/migrations/20260906043000_qeo107_hot_session_coverage_gate.sql")
+  assert.match(bootstrap, /hotSessionCount/)
+  assert.match(bootstrap, /hotSessionCount >= QEO107_HOT_RETENTION_SESSIONS/)
+  assert.match(bootstrap, /outcome === "provider_gap"/)
+  assert.doesNotMatch(bootstrap, /attempted\.map\(\(\{ from, to \}\)/)
+  assert.match(migration, /qeo_chart_intraday_session_coverage/)
+  assert.match(migration, /count\(distinct \(h\.bar_time at time zone 'Asia\/Ho_Chi_Minh'\)::date\)/i)
+  assert.match(migration, /grant execute on function public\.qeo_chart_intraday_session_coverage\(text\[\], timestamptz\) to service_role/)
+})
+
 test("QEO-107 operations expose authenticated bootstrap and five-session coverage", () => {
   const route = source("app/api/qeoindex/eod/route.ts")
   const migration = source("supabase/migrations/20260905213000_qeo107_chart_intraday_coverage_report.sql")
