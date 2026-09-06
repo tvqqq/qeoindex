@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 
 const TARGETS = [
   { id: "vhm-security-detail", url: "https://vsdc.vn/vi/s-detail/6951" },
+  { id: "suggestion-search-js", url: "https://vsdc.vn/js/suggestion-search.js?v=20260906" },
   { id: "rights-calendar", url: "https://vsdc.vn/vi/lich-giao-dich" },
 ] as const
 
@@ -19,10 +20,20 @@ function uniqueMatches(html: string, pattern: RegExp) {
   return [...new Set([...html.matchAll(pattern)].map((match) => decodeHtmlOnce(match[1] ?? "").trim()).filter(Boolean))]
 }
 
-function relevantHrefs(html: string) {
+function allHrefs(html: string) {
   return uniqueMatches(html, /\bhref\s*=\s*["']([^"']+)["']/gi)
-    .filter((href) => /(?:\/vi\/(?:ad1?|s-detail|lich-giao-dich)|page|paging|pagination|search)/i.test(href))
+}
+
+function eventHrefs(html: string) {
+  return allHrefs(html)
+    .filter((href) => /\/(?:vi\/)?ad1?\/\d+(?:[?#].*)?$/i.test(href))
     .slice(0, 200)
+}
+
+function relevantHrefs(html: string) {
+  return allHrefs(html)
+    .filter((href) => /(?:\/(?:vi\/)?(?:ad1?|s-detail|lich-giao-dich)|page|paging|pagination|search)/i.test(href))
+    .slice(0, 300)
 }
 
 function formMetadata(html: string) {
@@ -36,15 +47,19 @@ function formMetadata(html: string) {
 }
 
 function scriptSources(html: string) {
-  return uniqueMatches(html, /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)
-    .filter((src) => /(?:detail|security|calendar|lich|search|paging|page|main|site|app)/i.test(src))
-    .slice(0, 100)
+  return uniqueMatches(html, /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi).slice(0, 200)
 }
 
-function contextSnippets(html: string) {
-  const flattened = decodeHtmlOnce(html).replace(/\s+/g, " ")
+function contextSnippets(body: string) {
+  const flattened = decodeHtmlOnce(body).replace(/\s+/g, " ")
   const needles = [
-    "Xem thêm",
+    "changePage_TCDK",
+    "tabDetailTCPH_THQ",
+    "divlistArticlesTCPH_THQ",
+    "suggestion",
+    "autocomplete",
+    "ajax",
+    "url:",
     "pagination",
     "paging",
     "pageIndex",
@@ -58,9 +73,20 @@ function contextSnippets(html: string) {
   const snippets: Record<string, string | null> = {}
   for (const needle of needles) {
     const index = flattened.toLocaleLowerCase("vi-VN").indexOf(needle.toLocaleLowerCase("vi-VN"))
-    snippets[needle] = index < 0 ? null : flattened.slice(Math.max(0, index - 220), Math.min(flattened.length, index + 520))
+    snippets[needle] = index < 0 ? null : flattened.slice(Math.max(0, index - 450), Math.min(flattened.length, index + 1200))
   }
   return snippets
+}
+
+function endpointCandidates(body: string) {
+  const candidates = [
+    ...uniqueMatches(body, /(?:url|action)\s*:\s*["']([^"']+)["']/gi),
+    ...uniqueMatches(body, /\$\.(?:get|post)\s*\(\s*["']([^"']+)["']/gi),
+    ...uniqueMatches(body, /fetch\s*\(\s*["']([^"']+)["']/gi),
+  ]
+  return [...new Set(candidates)]
+    .filter((value) => value.startsWith("/") || value.startsWith("http"))
+    .slice(0, 200)
 }
 
 async function fetchText(url: string) {
@@ -70,7 +96,7 @@ async function fetchText(url: string) {
     const response = await fetch(url, {
       redirect: "error",
       headers: {
-        accept: "text/html,application/xhtml+xml",
+        accept: "text/html,application/xhtml+xml,application/javascript,text/javascript,*/*;q=0.8",
         "user-agent": USER_AGENT,
       },
       signal: controller.signal,
@@ -81,7 +107,7 @@ async function fetchText(url: string) {
       contentType: response.headers.get("content-type"),
       bytes: Buffer.byteLength(text),
       sha256: createHash("sha256").update(text).digest("hex"),
-      html: text,
+      body: text,
     }
   } finally {
     clearTimeout(timeout)
@@ -99,11 +125,12 @@ for (const target of TARGETS) {
       contentType: fetched.contentType,
       bytes: fetched.bytes,
       sha256: fetched.sha256,
-      eventLinks: relevantHrefs(fetched.html).filter((href) => /\/vi\/ad1?\//i.test(href)),
-      relevantHrefs: relevantHrefs(fetched.html),
-      forms: formMetadata(fetched.html),
-      scripts: scriptSources(fetched.html),
-      snippets: contextSnippets(fetched.html),
+      eventLinks: eventHrefs(fetched.body),
+      relevantHrefs: relevantHrefs(fetched.body),
+      forms: formMetadata(fetched.body),
+      scripts: scriptSources(fetched.body),
+      endpointCandidates: endpointCandidates(fetched.body),
+      snippets: contextSnippets(fetched.body),
     })
   } catch (error) {
     results.push({
