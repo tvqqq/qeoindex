@@ -1,0 +1,77 @@
+name: QEO-129 Register Read Boundary Once
+
+on:
+  push:
+    branches:
+      - feat/qeo-129-adjusted-daily-shadow
+    paths:
+      - .github/workflows/qeo129-register-read-boundary.yml
+
+permissions:
+  contents: write
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Register QEO-129 read boundary
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+
+          const historyPath = 'modules/market/history/index.ts'
+          let history = fs.readFileSync(historyPath, 'utf8')
+          const exportLine = 'export { loadAdjustedDailyRange, type AdjustedDailyRangeRead } from "./adjusted-daily-read"'
+          if (!history.includes(exportLine)) {
+            history = `${exportLine}\n${history}`
+            fs.writeFileSync(historyPath, history)
+          }
+
+          const contractPath = 'tests/market-data-contract.test.ts'
+          let contract = fs.readFileSync(contractPath, 'utf8')
+          const marker = 'QEO-129 adjusted Daily shadow remains isolated from chart/Wyckoff/AI consumers'
+          if (!contract.includes(marker)) {
+            contract += `\n\ntest("${marker}", () => {\n  const consumerFiles = [\n    "../modules/market/chart-data/service.ts",\n    "../modules/wyckoff/eod-cache-read.ts",\n    "../modules/wyckoff/eod-chart-series.ts",\n    "../modules/ai-council/eod-market.ts",\n  ]\n\n  for (const relativePath of consumerFiles) {\n    const source = readFileSync(new URL(relativePath, import.meta.url), "utf8")\n    assert.doesNotMatch(source, /adjusted-daily-read/i)\n    assert.doesNotMatch(source, /market_ohlcv_adjusted_daily/i)\n  }\n})\n`
+            fs.writeFileSync(contractPath, contract)
+          }
+
+          const manifestPath = 'tests/test-contracts.json'
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+          const entry = {
+            path: 'tests/market-history/qeo129-adjusted-daily-read.test.ts',
+            owner: 'market',
+            invariant: 'Preserve QEO-129 adjusted-only shadow Daily read completeness, exact lineage, fail-closed behavior, and consumer isolation.',
+            bucket: 'canonical',
+            suites: ['fast'],
+          }
+          const index = manifest.entries.findIndex((item) => item.path === entry.path)
+          if (index >= 0) manifest.entries[index] = entry
+          else manifest.entries.push(entry)
+          manifest.entries.sort((a, b) => a.path.localeCompare(b.path))
+          fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+          NODE
+      - name: Verify canonical QEO-129 read contracts
+        run: |
+          pnpm test:manifest
+          node --test tests/market-history/qeo129-adjusted-daily-read.test.ts tests/market-history/qeo129-adjusted-daily-store.test.ts tests/market-history/qeo129-adjusted-daily-shadow.test.ts tests/db/qeo129-schema-contract.test.ts tests/market-data-contract.test.ts
+          pnpm typecheck
+      - name: Commit canonicalization and remove TDD helpers
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm -f .github/workflows/qeo129-register-read-boundary.yml .github/workflows/qeo129-task4-red.yml
+          git add modules/market/history/index.ts tests/market-data-contract.test.ts tests/test-contracts.json
+          git commit -m 'test(QEO-129): register shadow read boundary'
+          git push origin HEAD:feat/qeo-129-adjusted-daily-shadow
