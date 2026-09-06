@@ -965,6 +965,173 @@ export type Database = {
         }
         Relationships: []
       }
+      corporate_action_source_evidence: {
+        Row: {
+          amendment_type: string | null
+          created_at: string
+          fetched_at: string
+          id: string
+          raw_evidence_hash: string
+          raw_payload: Json
+          referenced_notice_date: string | null
+          referenced_notice_number: string | null
+          referenced_source_event_id: string | null
+          source: string
+          source_event_id: string
+          source_published_at: string | null
+          source_updated_at: string | null
+          source_url: string
+          ticker: string | null
+        }
+        Insert: {
+          amendment_type?: string | null
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          raw_evidence_hash: string
+          raw_payload: Json
+          referenced_notice_date?: string | null
+          referenced_notice_number?: string | null
+          referenced_source_event_id?: string | null
+          source: string
+          source_event_id: string
+          source_published_at?: string | null
+          source_updated_at?: string | null
+          source_url: string
+          ticker?: string | null
+        }
+        Update: {
+          amendment_type?: string | null
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          raw_evidence_hash?: string
+          raw_payload?: Json
+          referenced_notice_date?: string | null
+          referenced_notice_number?: string | null
+          referenced_source_event_id?: string | null
+          source?: string
+          source_event_id?: string
+          source_published_at?: string | null
+          source_updated_at?: string | null
+          source_url?: string
+          ticker?: string | null
+        }
+        Relationships: []
+      }
+      corporate_actions: {
+        Row: {
+          action_type: string
+          cash_per_share: number | null
+          created_at: string
+          effective_date: string | null
+          ex_date: string | null
+          ex_date_basis: string
+          ex_date_derivation_method: string | null
+          exchange: string
+          id: string
+          isin: string | null
+          lineage_root_source_event_id: string
+          normalization_version: string
+          payment_date: string | null
+          raw_evidence_hash: string
+          record_date: string | null
+          rights_ratio_denominator: number | null
+          rights_ratio_numerator: number | null
+          source: string
+          source_component_key: string
+          source_event_id: string
+          source_evidence_id: string
+          source_published_at: string | null
+          source_updated_at: string | null
+          source_url: string
+          status: string
+          stock_ratio_denominator: number | null
+          stock_ratio_numerator: number | null
+          subscription_price: number | null
+          ticker: string
+          trading_calendar_version: string | null
+          updated_at: string
+          verified_at: string
+        }
+        Insert: {
+          action_type: string
+          cash_per_share?: number | null
+          created_at?: string
+          effective_date?: string | null
+          ex_date?: string | null
+          ex_date_basis?: string
+          ex_date_derivation_method?: string | null
+          exchange: string
+          id?: string
+          isin?: string | null
+          lineage_root_source_event_id: string
+          normalization_version: string
+          payment_date?: string | null
+          raw_evidence_hash: string
+          record_date?: string | null
+          rights_ratio_denominator?: number | null
+          rights_ratio_numerator?: number | null
+          source: string
+          source_component_key: string
+          source_event_id: string
+          source_evidence_id: string
+          source_published_at?: string | null
+          source_updated_at?: string | null
+          source_url: string
+          status?: string
+          stock_ratio_denominator?: number | null
+          stock_ratio_numerator?: number | null
+          subscription_price?: number | null
+          ticker: string
+          trading_calendar_version?: string | null
+          updated_at?: string
+          verified_at?: string
+        }
+        Update: {
+          action_type?: string
+          cash_per_share?: number | null
+          created_at?: string
+          effective_date?: string | null
+          ex_date?: string | null
+          ex_date_basis?: string
+          ex_date_derivation_method?: string | null
+          exchange?: string
+          id?: string
+          isin?: string | null
+          lineage_root_source_event_id?: string
+          normalization_version?: string
+          payment_date?: string | null
+          raw_evidence_hash?: string
+          record_date?: string | null
+          rights_ratio_denominator?: number | null
+          rights_ratio_numerator?: number | null
+          source?: string
+          source_component_key?: string
+          source_event_id?: string
+          source_evidence_id?: string
+          source_published_at?: string | null
+          source_updated_at?: string | null
+          source_url?: string
+          status?: string
+          stock_ratio_denominator?: number | null
+          stock_ratio_numerator?: number | null
+          subscription_price?: number | null
+          ticker?: string
+          trading_calendar_version?: string | null
+          updated_at?: string
+          verified_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "corporate_actions_source_evidence_id_fkey"
+            columns: ["source_evidence_id"]
+            isOneToOne: false
+            referencedRelation: "corporate_action_source_evidence"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       insights_stock_ratings: {
         Row: {
           as_of_date: string
@@ -3669,6 +3836,10 @@ export type Database = {
       mark_market_ai_completion_unknown: {
         Args: { p_claim_token: string; p_error_code?: string; p_id: string }
         Returns: boolean
+      }
+      persist_corporate_action_notice: {
+        Args: { p_actions: Json; p_evidence: Json }
+        Returns: Json
       }
       publish_kfsp_rating_snapshot: {
         Args: { p_minimum_rows?: number; p_sync_run_id: string }

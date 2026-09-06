@@ -88,13 +88,6 @@
       "evidence": "ledger-logical-name"
     },
     {
-      "logicalName": "kfsp_manual_recovery_lifecycle",
-      "repositoryVersion": "20260902060000",
-      "productionVersion": "20260901231054",
-      "state": "MAPPED",
-      "evidence": "ledger-logical-name"
-    },
-    {
       "logicalName": "clean_rebuild_market_snapshot_trigger",
       "repositoryVersion": "20260902011529",
       "productionVersion": "20260902011529",
@@ -109,34 +102,12 @@
       "evidence": "function-grants-and-advisor"
     },
     {
-      "logicalName": "ai_council_authenticated_readonly",
-      "repositoryVersion": "20260902084500",
-      "productionVersion": "20260902014425",
-      "state": "MAPPED",
-      "evidence": "ledger-logical-name"
-    },
-    {
-      "logicalName": "ai_council_debate_identity_cleanup",
-      "repositoryVersion": "20260902084000",
-      "productionVersion": "20260902014432",
-      "state": "MAPPED",
-      "evidence": "ledger-logical-name"
-    },
-    {
       "logicalName": "kfsp_rating_storage_refactor",
       "repositoryVersion": "20260902020424",
       "productionVersion": "20260902020424",
       "state": "EXACT",
       "evidence": "production-schema-contract",
       "rationale": "Production ledger and schema prove the destructive refactor is already applied; source must use the production version to prevent double-apply"
-    },
-    {
-      "logicalName": "kfsp_vault_token_cache",
-      "repositoryVersion": "20260902052909",
-      "productionVersion": "20260902052909",
-      "state": "EXACT",
-      "evidence": "production-ledger-vault-rpc-and-post-cutover-smoke",
-      "rationale": "QEO-19 compatibility migration is applied in production; source is promoted to the exact production version after Vault RPC and three-consumer smoke verification"
     },
     {
       "logicalName": "qeo22_watchlist_default_invariant",
@@ -147,12 +118,27 @@
       "rationale": "QEO-22 restores the DB-level at-most-one default watchlist invariant after deterministic duplicate repair"
     },
     {
-      "logicalName": "qeo21_safe_retention_cleanup",
-      "repositoryVersion": "20260902130000",
-      "productionVersion": "20260902061549",
+      "logicalName": "kfsp_vault_token_cache",
+      "repositoryVersion": "20260902052909",
+      "productionVersion": "20260902052909",
+      "state": "EXACT",
+      "evidence": "production-ledger-vault-rpc-and-post-cutover-smoke",
+      "rationale": "QEO-19 compatibility migration is applied in production; source is promoted to the exact production version after Vault RPC and three-consumer smoke verification"
+    },
+    {
+      "logicalName": "kfsp_manual_recovery_lifecycle",
+      "repositoryVersion": "20260902060000",
+      "productionVersion": "20260901231054",
       "state": "MAPPED",
-      "evidence": "production-ledger-and-service-role-rpc-smoke",
-      "rationale": "QEO-21 service-role retention RPC was applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
+      "evidence": "ledger-logical-name"
+    },
+    {
+      "logicalName": "drop_kfsp_provider_tokens",
+      "repositoryVersion": "20260902061819",
+      "productionVersion": "20260902061819",
+      "state": "EXACT",
+      "evidence": "production-ledger-zero-consumer-post-drop-rating-ttai-and-final-eod-v4-smoke",
+      "rationale": "QEO-19 physical legacy token table drop after Vault cutover and zero-consumer dependency checks; post-drop Rating/TTAI verification and the final 200/0 EOD v4 acceptance confirmed Market Insight, Wyckoff, Council, Market Synthesis, LLM, retention and Notion completion without the legacy table."
     },
     {
       "logicalName": "qeo20_compatibility_columns_cleanup",
@@ -163,12 +149,26 @@
       "rationale": "QEO-20 runtime cutover deployed READY before the fail-closed cleanup migration; production parity was zero, exact schema/RLS/grants were verified post-drop, and claim-start-complete plus expired-lease lifecycle passed in a rollback-only smoke"
     },
     {
-      "logicalName": "drop_kfsp_provider_tokens",
-      "repositoryVersion": "20260902061819",
-      "productionVersion": "20260902061819",
-      "state": "EXACT",
-      "evidence": "production-ledger-zero-consumer-post-drop-rating-ttai-and-final-eod-v4-smoke",
-      "rationale": "QEO-19 physical legacy token table drop after Vault cutover and zero-consumer dependency checks; post-drop Rating/TTAI verification and the final 200/0 EOD v4 acceptance confirmed Market Insight, Wyckoff, Council, Market Synthesis, LLM, retention and Notion completion without the legacy table."
+      "logicalName": "ai_council_debate_identity_cleanup",
+      "repositoryVersion": "20260902084000",
+      "productionVersion": "20260902014432",
+      "state": "MAPPED",
+      "evidence": "ledger-logical-name"
+    },
+    {
+      "logicalName": "ai_council_authenticated_readonly",
+      "repositoryVersion": "20260902084500",
+      "productionVersion": "20260902014425",
+      "state": "MAPPED",
+      "evidence": "ledger-logical-name"
+    },
+    {
+      "logicalName": "qeo21_safe_retention_cleanup",
+      "repositoryVersion": "20260902130000",
+      "productionVersion": "20260902061549",
+      "state": "MAPPED",
+      "evidence": "production-ledger-and-service-role-rpc-smoke",
+      "rationale": "QEO-21 service-role retention RPC was applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
     },
     {
       "logicalName": "qeo29_job_telemetry_retention",
@@ -227,20 +227,20 @@
       "rationale": "QEO-64 final production smoke proved EOD v4 200/0 health, Wyckoff 400/200 publish, Market Synthesis before LLM and COMPLETE; fresh QEO-19 preflight then proved the empty legacy table had zero inbound FK/view/matview/function/trigger consumers before the minimal no-CASCADE production DROP."
     },
     {
-      "logicalName": "qeo65_drop_legacy_archive_ledgers",
-      "repositoryVersion": "20260904114500",
-      "productionVersion": "20260904074828",
-      "state": "MAPPED",
-      "evidence": "production-ledger-2026-09-04-post-drop-zero-consumer-smoke",
-      "rationale": "QEO-65 source cutover deployed before the post-deploy cleanup activation. Production applied the same logical no-CASCADE DROP under version 20260904074828; live schema, dependency and scheduler verification proves both legacy tables and the obsolete preflight function are absent with zero remaining active consumers, while repository replay keeps its reviewed 20260904114500 source ordering."
-    },
-    {
       "logicalName": "authenticate_orderbook_sync",
       "repositoryVersion": "20260904111000",
       "productionVersion": "20260904112245",
       "state": "MAPPED",
       "evidence": "production-ledger-qeo77-auth-smoke",
       "rationale": "QEO-77 production applied the caller-auth cutover only after an explicit Vault-secret preflight. Repository replay intentionally omits that environment-specific assertion so zero-to-latest works on a fresh database; callers remain fail-closed at execution through the service-role-only qeo_get_market_close_sync_secret() RPC. The final scheduler/bootstrap schema is equivalent; production version is 20260904112245 while repository ordering remains 20260904111000."
+    },
+    {
+      "logicalName": "qeo65_drop_legacy_archive_ledgers",
+      "repositoryVersion": "20260904114500",
+      "productionVersion": "20260904074828",
+      "state": "MAPPED",
+      "evidence": "production-ledger-2026-09-04-post-drop-zero-consumer-smoke",
+      "rationale": "QEO-65 source cutover deployed before the post-deploy cleanup activation. Production applied the same logical no-CASCADE DROP under version 20260904074828; live schema, dependency and scheduler verification proves both legacy tables and the obsolete preflight function are absent with zero remaining active consumers, while repository replay keeps its reviewed 20260904114500 source ordering."
     },
     {
       "logicalName": "qeo80_research_reports",
@@ -267,12 +267,12 @@
       "rationale": "Temporary rollout gate: Research Reports schema is live while the 07:05 scheduler remains intentionally disabled until the capped three-retry runtime is Verify-green, production READY, and a bounded manual smoke proves per-report AI failure isolation before cron ownership is enabled."
     },
     {
-      "logicalName": "qeo107_chart_intraday_coverage_report",
-      "repositoryVersion": "20260905213000",
-      "productionVersion": "20260905144135",
-      "state": "MAPPED",
-      "evidence": "qeo107-production-ledger-and-schema-reconciliation",
-      "rationale": "QEO-107 coverage RPC was applied to production from its concurrent implementation branch before merge; this branch carries the same reviewed source under repository replay ordering."
+      "logicalName": "qeo87_enable_research_reports_scheduler",
+      "repositoryVersion": "20260905135600",
+      "productionVersion": null,
+      "state": "QUARANTINED",
+      "evidence": "qeo87-user-approved-retry-policy-pending-production-smoke",
+      "rationale": "Final 07:05 ICT activation is intentionally quarantined until the capped three-retry runtime is Verify-green, production READY, and a bounded manual smoke proves per-report AI failure isolation before cron ownership is enabled."
     },
     {
       "logicalName": "qeo106_daily_hot_cold_history",
@@ -283,20 +283,20 @@
       "rationale": "QEO-106 Hot PostgreSQL + verified Cold Storage schema was promoted only after exact-head Verify, DB Drift zero-to-latest replay/generated-types, and EOD v4 were all green. Production applied the reviewed logical migration as 20260905235144; repository replay keeps the approved 20260905153500 ordering."
     },
     {
+      "logicalName": "qeo107_chart_intraday_coverage_report",
+      "repositoryVersion": "20260905213000",
+      "productionVersion": "20260905144135",
+      "state": "MAPPED",
+      "evidence": "qeo107-production-ledger-and-schema-reconciliation",
+      "rationale": "QEO-107 coverage RPC was applied to production from its concurrent implementation branch before merge; this branch carries the same reviewed source under repository replay ordering."
+    },
+    {
       "logicalName": "qeo106_daily_prune_error_evidence_fix",
       "repositoryVersion": "20260905235254",
       "productionVersion": "20260905235254",
       "state": "EXACT",
       "evidence": "qeo106-production-function-definition-and-grants-smoke",
       "rationale": "Corrects only prune mismatch error evidence to report v_deleted; prune authority and fail-closed row-count semantics are unchanged. Production function definition and service-role-only grants were verified after apply."
-    },
-    {
-      "logicalName": "qeo87_enable_research_reports_scheduler",
-      "repositoryVersion": "20260905135600",
-      "productionVersion": null,
-      "state": "QUARANTINED",
-      "evidence": "qeo87-user-approved-retry-policy-pending-production-smoke",
-      "rationale": "Final 07:05 ICT activation is intentionally quarantined until the capped three-retry runtime is Verify-green, production READY, and a bounded manual smoke proves per-report AI failure isolation before cron ownership is enabled."
     },
     {
       "logicalName": "qeo106_scoped_daily_integrity_report",
@@ -307,20 +307,20 @@
       "rationale": "Production repair batches exposed statement_timeout because the route recomputed the full canonical-200 integrity report twice. The reviewed scoped equivalent was replay-verified locally, applied as production version 20260906002919, and returned VIC/VCB PASS with exact canonical counts before runtime cutover."
     },
     {
-      "logicalName": "qeo108_chart_capacity_and_index_cleanup",
-      "repositoryVersion": "20260906030037",
-      "productionVersion": "20260906030037",
-      "state": "EXACT",
-      "evidence": "qeo108-production-capacity-rpc-grants-index-plan-and-ledger-smoke",
-      "rationale": "Production applied only the low-risk QEO-108 capacity observability RPC plus the benchmark-proven redundant DESC lookup-index removal. Service-role-only grants, sole PK index ownership, and warm DESC PK Index Scan Backward were verified after apply. The native partition cutover remains separately quarantined."
-    },
-    {
       "logicalName": "qeo108_chart_intraday_session_partitions",
       "repositoryVersion": "20260906024500",
       "productionVersion": null,
       "state": "QUARANTINED",
       "evidence": "qeo108-production-readonly-schema-index-capacity-audit-pending-nonproduction-rehearsal",
       "rationale": "Native session/date partition cutover remains quarantined until a non-production rehearsal proves exact row/range/checksum parity, service-role RPC rebinds, deterministic empty-partition reclamation, rollback-shadow behavior, and latency/correctness acceptance. Production DDL has not been applied."
+    },
+    {
+      "logicalName": "qeo108_chart_capacity_and_index_cleanup",
+      "repositoryVersion": "20260906030037",
+      "productionVersion": "20260906030037",
+      "state": "EXACT",
+      "evidence": "qeo108-production-capacity-rpc-grants-index-plan-and-ledger-smoke",
+      "rationale": "Production applied only the low-risk QEO-108 capacity observability RPC plus the benchmark-proven redundant DESC lookup-index removal. Service-role-only grants, sole PK index ownership, and warm DESC PK Index Scan Backward were verified after apply. The native partition cutover remains separately quarantined."
     },
     {
       "logicalName": "qeo117_ai_council_ticker_knowledge",
@@ -337,6 +337,22 @@
       "state": "EXACT",
       "evidence": "qeo119-exact-head-db-drift-production-hydration-smoke",
       "rationale": "QEO-116 exact-version Report Q&A hydration RPC was promoted only after exact-head Verify, zero-to-latest DB replay/generated-types, canonical backfill, and production smoke proved service-role-only execution plus exact report/content-hash/chunk-version/chunk-id hydration."
+    },
+    {
+      "logicalName": "qeo123_corporate_actions",
+      "repositoryVersion": "20260906163000",
+      "productionVersion": "20260906130930",
+      "state": "MAPPED",
+      "evidence": "qeo123-production-ledger-schema-rls-rpc-and-rollback-smoke",
+      "rationale": "QEO-123 canonical corporate-action schema was promoted after GREEN preprod rehearsal. Production readback verified the applied ledger row, RLS/policy surface and table contract; repository replay keeps the reviewed source ordering."
+    },
+    {
+      "logicalName": "qeo123_corporate_action_persistence",
+      "repositoryVersion": "20260906164000",
+      "productionVersion": "20260906130959",
+      "state": "MAPPED",
+      "evidence": "qeo123-production-ledger-rpc-grants-vhm-idempotency-amendment-atomicity-smoke",
+      "rationale": "QEO-123 persistence RPC was promoted under a production timestamp different from repository replay. Rollback-only production smoke proved VHM multi-component persistence, exact replay idempotency, newer-amendment precedence, stale-evidence retention without canonical rollback, and atomic failure with zero residual fixture rows."
     }
   ]
 }

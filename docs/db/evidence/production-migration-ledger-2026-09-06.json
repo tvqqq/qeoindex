@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-06T13:20:50Z",
+  "capturedAt": "2026-09-06T13:22:50Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
   "migrations": [
     {
@@ -419,19 +419,17 @@
       "name": "qeo117_ai_council_ticker_knowledge"
     },
     {
-      "version": "20260906132050",
-      "name": "qeo116_report_qa_hydration"
-    }
-  ],
-  "reviewScope": "QEO-119 reviewed migration evidence; concurrent production migrations remain excluded until their owning source branch is reconciled.",
-  "concurrentProductionMigrationsExcluded": [
-    {
       "version": "20260906130930",
       "name": "qeo123_corporate_actions"
     },
     {
       "version": "20260906130959",
       "name": "qeo123_corporate_action_persistence"
+    },
+    {
+      "version": "20260906132050",
+      "name": "qeo116_report_qa_hydration"
     }
-  ]
+  ],
+  "reviewScope": "QEO-119 and QEO-123 reviewed production migration reconciliation; both promotion sets are included in the canonical ledger."
 }

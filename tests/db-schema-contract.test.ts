@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import test from "node:test"
 
+import "./corporate-actions/domain.test.ts"
 import "./research-reports/domain.test.ts"
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
@@ -30,6 +31,12 @@ function qeo39NPlusOneMigration() {
 function qeo39GroupedRpcMigration() {
   const matches = readdirSync("supabase/migrations").filter((name) => name.endsWith("_qeo39_grouped_ohlcv_rpc.sql"))
   assert.equal(matches.length, 1, "expected exactly one QEO-39 grouped OHLCV migration")
+  return source(`supabase/migrations/${matches[0]}`)
+}
+
+function qeo123CorporateActionMigration() {
+  const matches = readdirSync("supabase/migrations").filter((name) => name.endsWith("_qeo123_corporate_actions.sql"))
+  assert.equal(matches.length, 1, "expected exactly one QEO-123 corporate-actions migration")
   return source(`supabase/migrations/${matches[0]}`)
 }
 
@@ -122,4 +129,40 @@ test("QEO-39 stores large build payloads in private run-scoped artifacts with te
   assert.match(sql, /p_reference_at\s*-\s*interval\s+'1 day'/i)
   assert.match(active, /rpc\("qeo_run_wyckoff_build_artifact_cleanup"/)
   assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
+})
+
+test("QEO-123 stores immutable raw notice evidence and one canonical row per logical action component", () => {
+  const sql = qeo123CorporateActionMigration()
+
+  assert.match(sql, /create\s+table\s+public\.corporate_action_source_evidence/i)
+  assert.match(sql, /raw_payload\s+jsonb\s+not\s+null/i)
+  assert.match(sql, /raw_evidence_hash\s+text\s+not\s+null/i)
+  assert.match(sql, /unique\s*\(source,\s*source_event_id,\s*raw_evidence_hash\)/i)
+  assert.match(sql, /referenced_notice_number\s+text/i)
+  assert.match(sql, /referenced_notice_date\s+date/i)
+  assert.match(sql, /referenced_source_event_id\s+text/i)
+  assert.match(sql, /amendment_type\s+text/i)
+
+  assert.match(sql, /create\s+table\s+public\.corporate_actions/i)
+  assert.match(sql, /source_evidence_id\s+uuid\s+not\s+null[\s\S]*?references\s+public\.corporate_action_source_evidence\s*\(id\)/i)
+  assert.match(sql, /lineage_root_source_event_id\s+text\s+not\s+null/i)
+  assert.match(sql, /source_component_key\s+text\s+not\s+null/i)
+  assert.match(sql, /unique\s*\(source,\s*lineage_root_source_event_id,\s*source_component_key\)/i)
+  assert.match(sql, /ex_date\s+date/i)
+  assert.match(sql, /ex_date_basis\s+text\s+not\s+null/i)
+  assert.match(sql, /ex_date_derivation_method\s+text/i)
+  assert.match(sql, /trading_calendar_version\s+text/i)
+  assert.match(sql, /normalization_version\s+text\s+not\s+null/i)
+
+  assert.match(sql, /alter\s+table\s+public\.corporate_action_source_evidence\s+enable\s+row\s+level\s+security/i)
+  assert.match(sql, /revoke\s+all\s+privileges\s+on\s+table\s+public\.corporate_action_source_evidence\s+from\s+public,\s*anon,\s*authenticated/i)
+  assert.match(sql, /grant\s+select,\s*insert\s+on\s+table\s+public\.corporate_action_source_evidence\s+to\s+service_role/i)
+  assert.doesNotMatch(sql, /grant\s+(?:all|update|delete)[^;]*corporate_action_source_evidence[^;]*service_role/i)
+
+  assert.match(sql, /alter\s+table\s+public\.corporate_actions\s+enable\s+row\s+level\s+security/i)
+  assert.match(sql, /for\s+select\s+to\s+authenticated\s+using\s*\(true\)/i)
+  assert.match(sql, /grant\s+select\s+on\s+table\s+public\.corporate_actions\s+to\s+authenticated/i)
+  assert.match(sql, /grant\s+select,\s*insert,\s*update\s+on\s+table\s+public\.corporate_actions\s+to\s+service_role/i)
+  assert.doesNotMatch(sql, /grant\s+delete[^;]*corporate_actions[^;]*service_role/i)
+  assert.doesNotMatch(sql, /(?:insert\s+into|update|delete\s+from)\s+public\.(?:market_ohlcv_history|chart_ohlcv_intraday)/i)
 })
