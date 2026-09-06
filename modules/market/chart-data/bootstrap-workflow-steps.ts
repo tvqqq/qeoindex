@@ -3,6 +3,7 @@ import "server-only"
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import {
+  QEO107_HOT_RETENTION_SESSIONS,
   bootstrapChartIntradayChunk,
   qeo107BootstrapTarget,
   readChartIntradayCoverageReport,
@@ -75,6 +76,7 @@ export interface Qeo107BootstrapWorkflowSummary {
   coverage: {
     tickerCount: number
     hotCoveredTickers: number
+    partialHotTickers: number
     coldCoveredTickers: number
     derivedHourlyCoveredTickers: number
     providerGapTickers: number
@@ -217,7 +219,8 @@ export async function finishChartIntradayBootstrapStep(input: {
     },
     coverage: {
       tickerCount: rows.length,
-      hotCoveredTickers: rows.filter((row) => row.hotRowCount > 0).length,
+      hotCoveredTickers: rows.filter((row) => row.hotSessionCount >= QEO107_HOT_RETENTION_SESSIONS).length,
+      partialHotTickers: rows.filter((row) => row.hotSessionCount > 0 && row.hotSessionCount < QEO107_HOT_RETENTION_SESSIONS).length,
       coldCoveredTickers: rows.filter((row) => row.coldManifestCount > 0).length,
       derivedHourlyCoveredTickers: rows.filter((row) => row.derivedHourlyRowCount > 0).length,
       providerGapTickers: rows.filter((row) => row.providerGapCount > 0).length,
