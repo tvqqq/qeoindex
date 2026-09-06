@@ -15,7 +15,7 @@ import type { StockDetailData } from "./types"
 
 type ChatCitation = {
   id: string
-  sourceType: "NOTION_THESIS" | "RESEARCH_REPORT" | "AI_COUNCIL"
+  sourceType: "RESEARCH_REPORT" | "AI_COUNCIL"
   authority: string
   label: string
   excerpt: string
@@ -77,7 +77,6 @@ function chatErrorMessage(code: string | undefined, status: number) {
 function authorityLabel(authority: string) {
   switch (authority) {
     case "VERIFIED_FACT": return "Verified fact"
-    case "CANONICAL_THESIS": return "Current thesis"
     case "DETERMINISTIC_SIGNAL": return "AI Council"
     case "SOURCE_OPINION": return "Source opinion"
     case "HISTORICAL_LESSON": return "Historical lesson"
