@@ -1,0 +1,162 @@
+name: QEO-119 Production Inventory Idempotency
+
+on:
+  push:
+    branches:
+      - ops/qeo-119-inventory-idempotency-20260906
+    paths:
+      - ".github/workflows/qeo119-production-idempotency.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASE_URL: https://qeoindex.qeoqeo.com
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Assert machine auth secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CRON_SECRET:-}"
+
+      - name: Run production inventory and full idempotency rerun
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint="${BASE_URL}/api/ops/ticker-knowledge/acceptance"
+
+          api() {
+            local payload="$1"
+            curl --silent --show-error --fail-with-body \
+              --connect-timeout 15 \
+              --max-time 125 \
+              --retry 2 \
+              --retry-all-errors \
+              --header "Authorization: Bearer ${CRON_SECRET}" \
+              --header "Content-Type: application/json" \
+              --data "$payload" \
+              "$endpoint"
+          }
+
+          before="$(api '{"action":"inventory"}')"
+          printf '%s\n' "$before" > before.json
+          jq -e '.ok == true' before.json >/dev/null
+          jq -e '.result.qdrant.exactPointCount > 0' before.json >/dev/null
+          jq -e '.result.qdrant.reportPoints > 0' before.json >/dev/null
+          jq -e '.result.qdrant.councilPoints > 0' before.json >/dev/null
+          jq -e '.result.qdrant.sourcePointSumMatchesTotal == true' before.json >/dev/null
+
+          run_backfill() {
+            local action="$1"
+            local batch_size="$2"
+            local cursor=""
+            local pages=0
+            local processed=0
+            local failed=0
+
+            while true; do
+              local payload
+              if [[ -n "$cursor" ]]; then
+                payload="$(jq -nc --arg action "$action" --arg cursor "$cursor" --argjson batchSize "$batch_size" '{action:$action,cursor:$cursor,batchSize:$batchSize}')"
+              else
+                payload="$(jq -nc --arg action "$action" --argjson batchSize "$batch_size" '{action:$action,batchSize:$batchSize}')"
+              fi
+
+              local response
+              response="$(api "$payload")"
+              jq -e '.ok == true' <<<"$response" >/dev/null
+              local page_failed
+              local page_processed
+              page_failed="$(jq -r '.result.failed' <<<"$response")"
+              page_processed="$(jq -r '.result.processed' <<<"$response")"
+              [[ "$page_failed" == "0" ]]
+
+              pages=$((pages + 1))
+              processed=$((processed + page_processed))
+              failed=$((failed + page_failed))
+
+              if [[ "$(jq -r '.result.completed' <<<"$response")" == "true" ]]; then
+                break
+              fi
+
+              local next_cursor
+              next_cursor="$(jq -r '.result.nextCursor // empty' <<<"$response")"
+              [[ -n "$next_cursor" ]]
+              [[ "$next_cursor" != "$cursor" ]]
+              cursor="$next_cursor"
+              [[ "$pages" -lt 100 ]]
+            done
+
+            jq -nc \
+              --arg action "$action" \
+              --argjson pages "$pages" \
+              --argjson processed "$processed" \
+              --argjson failed "$failed" \
+              '{action:$action,pages:$pages,processed:$processed,failed:$failed,completed:true}'
+          }
+
+          reports="$(run_backfill backfill_reports 50)"
+          council="$(run_backfill backfill_council 50)"
+          after="$(api '{"action":"inventory"}')"
+          printf '%s\n' "$after" > after.json
+
+          jq -e '.ok == true' after.json >/dev/null
+          jq -e '.result.qdrant.sourcePointSumMatchesTotal == true' after.json >/dev/null
+
+          jq -n \
+            --slurpfile before before.json \
+            --slurpfile after after.json \
+            --argjson reports "$reports" \
+            --argjson council "$council" \
+            '{
+              before: $before[0].result,
+              rerun: {reports:$reports,council:$council},
+              after: $after[0].result,
+              idempotent: {
+                totalPointsStable: ($before[0].result.qdrant.exactPointCount == $after[0].result.qdrant.exactPointCount),
+                reportPointsStable: ($before[0].result.qdrant.reportPoints == $after[0].result.qdrant.reportPoints),
+                councilPointsStable: ($before[0].result.qdrant.councilPoints == $after[0].result.qdrant.councilPoints),
+                canonicalStable: ($before[0].result.canonical == $after[0].result.canonical)
+              }
+            }' > proof.json
+
+          jq -e '
+            .rerun.reports.failed == 0 and
+            .rerun.council.failed == 0 and
+            .rerun.reports.completed == true and
+            .rerun.council.completed == true and
+            .idempotent.totalPointsStable == true and
+            .idempotent.reportPointsStable == true and
+            .idempotent.councilPointsStable == true and
+            .idempotent.canonicalStable == true
+          ' proof.json >/dev/null
+
+          jq '{
+            before: {
+              collection: .before.collection,
+              qdrant: .before.qdrant,
+              canonical: .before.canonical
+            },
+            rerun: .rerun,
+            after: {
+              collection: .after.collection,
+              qdrant: .after.qdrant,
+              canonical: .after.canonical
+            },
+            idempotent: .idempotent
+          }' proof.json
+
+      - name: Upload bounded acceptance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo119-production-inventory-idempotency
+          path: |
+            before.json
+            after.json
+            proof.json
+          retention-days: 7
