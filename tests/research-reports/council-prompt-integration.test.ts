@@ -323,3 +323,94 @@ test("QEO-113 Council projection emits compact scenario and explicit operational
   assert.ok(items.some((item) => item.knowledgeType === "COUNCIL_ERROR" && item.authority === "VERIFIED_FACT"))
   assert.ok(!items.some((item) => item.knowledgeType === "LESSON"))
 })
+
+test("QEO-113 canonical backfill loaders are bounded, resumable, and advance past unprojectable report rows", async () => {
+  const {
+    MAX_COUNCIL_BACKFILL_PAGE,
+    MAX_RESEARCH_REPORT_BACKFILL_PAGE,
+    loadCanonicalCouncilBackfillPage,
+    loadCanonicalResearchReportBackfillPage,
+  } = await import("../../modules/ticker-knowledge/canonical-backfill.ts")
+  assert.equal(MAX_RESEARCH_REPORT_BACKFILL_PAGE, 25)
+  assert.equal(MAX_COUNCIL_BACKFILL_PAGE, 100)
+
+  const reportPage = await loadCanonicalResearchReportBackfillPage({
+    cursor: "r0",
+    batchSize: 999,
+    source: {
+      loadReports: async (cursor, limit) => {
+        assert.equal(cursor, "r0")
+        assert.equal(limit, 25)
+        return {
+          rows: [
+            { id: "r1", title: "Macro only", source_name: "Broker", publish_date: "2026-08-31", content_hash: "1".repeat(64), analysis_status: "ready" },
+            { id: "r2", title: "MSN update", source_name: "Broker", publish_date: "2026-09-01", content_hash: "2".repeat(64), analysis_status: "ready" },
+          ],
+          nextCursor: "r2",
+        }
+      },
+      loadAnalyses: async (reportIds) => {
+        assert.deepEqual(reportIds, ["r1", "r2"])
+        return [
+          { id: "a1", report_id: "r1", content_hash: "1".repeat(64), chunk_version: "v1", executive_summary: "macro", key_points: [], market_view: null, sector_outlook: null, catalysts: [], risks: [], processed_at: "2026-09-01T00:00:00Z", created_at: "2026-09-01T00:00:00Z" },
+          { id: "a2", report_id: "r2", content_hash: "2".repeat(64), chunk_version: "v2", executive_summary: "MSN", key_points: [], market_view: null, sector_outlook: null, catalysts: [], risks: [], processed_at: "2026-09-02T00:00:00Z", created_at: "2026-09-02T00:00:00Z" },
+        ]
+      },
+      loadMentions: async (analysisIds) => {
+        assert.deepEqual(analysisIds, ["a1", "a2"])
+        return [{ analysis_id: "a2", ticker: "MSN", stance: "positive", recommendation_text: "BUY", target_price: 110000, target_currency: "VND", rationale: "recovery", evidence: [{ page: 4, snippet: "target" }] }]
+      },
+      loadChunks: async (selectors) => {
+        assert.deepEqual(selectors, [{ reportId: "r2", contentHash: "2".repeat(64), chunkVersion: "v2", pages: [4] }])
+        return [{ id: "c2", report_id: "r2", content_hash: "2".repeat(64), chunk_version: "v2", page_number: 4, chunk_index: 0, content: "target 110000", chunk_hash: "3".repeat(64) }]
+      },
+    },
+  })
+  assert.equal(reportPage.nextCursor, "r2")
+  assert.deepEqual(reportPage.rows.map((row) => row.report.id), ["r2"])
+
+  const councilPage = await loadCanonicalCouncilBackfillPage({
+    cursor: "run-0",
+    batchSize: 999,
+    source: {
+      loadRuns: async (cursor, limit) => {
+        assert.equal(cursor, "run-0")
+        assert.equal(limit, 100)
+        return {
+          rows: [{ id: "run-1", ticker: "MSN", as_of_date: "2026-09-01", signal: "WAIT", council_score: 62, confidence: 70, consensus: 65, risk_status: "caution", price: 80, policy_version: "p1", evidence_hash: "4".repeat(64), created_at: "2026-09-01T08:00:00Z" }],
+          nextCursor: null,
+        }
+      },
+      loadOutcomes: async (runIds) => {
+        assert.deepEqual(runIds, ["run-1"])
+        return [{ run_id: "run-1", outcome_status: "partial", sessions_observed: 5, evaluated_through_date: "2026-09-08", return_5d_pct: 3 }]
+      },
+      loadDebates: async (runIds) => {
+        assert.deepEqual(runIds, ["run-1"])
+        return [{ run_id: "run-1", status: "partial", prompt_version: "prompt-v4", error: "chair validation failed", completed_at: "2026-09-01T09:00:00Z" }]
+      },
+    },
+  })
+  assert.equal(councilPage.nextCursor, null)
+  assert.equal(councilPage.rows.length, 1)
+  assert.equal(councilPage.rows[0].id, "run-1")
+  assert.equal(councilPage.rows[0].outcome?.status, "partial")
+  assert.equal(councilPage.rows[0].debate?.error, "chair validation failed")
+})
+
+test("QEO-113 server backfill reads canonical PostgreSQL sources and never uses Qdrant as source data", () => {
+  const server = source("modules/ticker-knowledge/canonical-server.ts")
+  assert.match(server, /getSupabaseServerClient/)
+  assert.match(server, /createServerTickerKnowledgeIndex/)
+  assert.match(server, /loadCanonicalResearchReportBackfillPage/)
+  assert.match(server, /loadCanonicalCouncilBackfillPage/)
+  assert.match(server, /runTickerKnowledgeBackfill/)
+  assert.match(server, /market_research_reports/)
+  assert.match(server, /market_research_report_analyses/)
+  assert.match(server, /market_research_report_ticker_mentions/)
+  assert.match(server, /market_research_report_chunks/)
+  assert.match(server, /ai_council_runs/)
+  assert.match(server, /ai_council_outcomes/)
+  assert.match(server, /ai_council_llm_debates/)
+  assert.doesNotMatch(server, /\.query\(/)
+})
