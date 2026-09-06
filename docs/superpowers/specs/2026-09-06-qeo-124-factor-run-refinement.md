@@ -94,7 +94,11 @@ Define:
 - `K_i` = subscription price for each rights component;
 - `M` = split/consolidation old-to-new total-share multiplier, default `1`.
 
-Then:
+### 4.1 Monetary-unit boundary
+
+QEO-123 stores canonical monetary corporate-action terms (`cash_per_share`, `rights_subscription_price`) in **VND/share**. The canonical Daily OHLC contract stores Vietnamese equity prices in **thousand VND** (`81` means `81,000 VND`). QEO-124 therefore converts monetary corporate-action terms from VND to thousand-VND exactly once at the formula boundary before TERP arithmetic. Raw QEO-123 facts remain in their source/canonical VND unit for provenance and audit.
+
+Then, with `D` and `K_i` expressed on the same thousand-VND scale as `P`:
 
 ```text
 rights_subscription_value = sum(R_i * K_i)
@@ -138,10 +142,12 @@ Run lineage hash is generated from stable canonical JSON containing:
 - engine version;
 - as-of date policy/version;
 - sorted effective event sets;
-- for every action: canonical database id, action type, ex-date, normalized terms, normalization version, source lineage identity and evidence hash;
+- for every action: stable source lineage identity (`source`, `lineage_root_source_event_id`, `source_component_key`), action type, ex-date, normalized terms, normalization version and evidence hash;
 - reference raw session/date/close inputs used by each transition.
 
-Same inputs must produce the same lineage hash and factor version. Any amended event term, source evidence lineage, reference raw close, or engine version must produce a new candidate run.
+QEO-123 `corporate_actions.id` is a database-generated UUID and can differ between local, pre-production and production databases for the same canonical VSDC event. It remains a persisted audit/FK reference in `corporate_action_ids`, but it is deliberately excluded from `event_lineage_hash` and `factor_version`. The same rule applies to `corporateActionIds` inside persisted formula-audit payloads: they are retained for traceability but excluded from the portable identity hash.
+
+Same canonical source facts and reference inputs must therefore produce the same lineage hash and factor version across databases even when generated UUIDs differ. Any amended event term, source evidence lineage, reference raw close, or engine version must produce a new candidate run.
 
 ## 7. Activation and future events
 
@@ -168,5 +174,7 @@ At minimum:
 - duplicate split component fails closed;
 - future event does not activate early;
 - amendment changes lineage;
+- monetary-unit regression proving VND event terms are converted to the thousand-VND Daily basis exactly once;
+- cross-database lineage portability when only generated corporate-action UUIDs differ;
 - exact persisted readback;
 - VHM golden weekly regression around H 63.31 / L 55.18 within documented tolerance.
