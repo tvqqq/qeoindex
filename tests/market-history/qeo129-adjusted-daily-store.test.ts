@@ -11,6 +11,7 @@ function fakeSupabase(options: {
   runStatus?: "candidate" | "active" | "blocked" | "superseded"
   runLineage?: string
   omitReadbackSession?: string
+  badReadbackCloseSession?: string
 } = {}) {
   const calls: Array<{ kind: string; value: unknown }> = []
   const runRow = {
@@ -114,6 +115,13 @@ function fakeSupabase(options: {
           .map((row) => ({
             session_date: row.session_date,
             bar_time: row.bar_time,
+            open: row.open,
+            high: row.high,
+            low: row.low,
+            close: row.session_date === options.badReadbackCloseSession
+              ? Number(row.close) + 1
+              : row.close,
+            volume: row.volume,
             raw_bar_time: row.raw_bar_time,
             factor_run_id: row.factor_run_id,
             factor_version: row.factor_version,
@@ -157,6 +165,27 @@ test("QEO-129 counts rebuilt sessions only from exact persisted DB readback", as
     activated_at: null,
     blocked_reason: "PERSISTED_READBACK_MISMATCH",
   })
+})
+
+test("QEO-129 blocks rollout when persisted OHLCV differs despite matching run and lineage", async () => {
+  const fake = fakeSupabase({ badReadbackCloseSession: "2026-08-05" })
+  const result = await rebuildAdjustedDailyRange({
+    supabase: fake.client as never,
+    ticker: "VHM",
+    fromDate: "2026-08-04",
+    toDate: "2026-08-05",
+    expectedFactorRunId: RUN_ID,
+    expectedLineageHash: LINEAGE,
+  })
+
+  assert.equal(result.rebuiltSessions, 1)
+  assert.deepEqual(result.unresolvedSessions, ["2026-08-05"])
+
+  const rolloutCall = fake.calls.find((call) => call.kind === "upsert:rollout")
+  assert.ok(rolloutCall)
+  const rollout = rolloutCall.value as Record<string, unknown>
+  assert.equal(rollout.status, "blocked")
+  assert.equal(rollout.blocked_reason, "PERSISTED_READBACK_MISMATCH")
 })
 
 test("QEO-129 persists shadow rollout only after complete exact readback", async () => {
