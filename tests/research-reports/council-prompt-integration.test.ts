@@ -18,16 +18,19 @@ const researchContextHash = "c".repeat(64)
 const marketSynthesisHash = "d".repeat(64)
 const reportHashOne = "e".repeat(64)
 const reportHashTwo = "f".repeat(64)
-const promptVersion = "llm-debate-v4-research-report-evidence"
+const tickerKnowledgeHashOne = "1".repeat(64)
+const tickerKnowledgeHashTwo = "2".repeat(64)
+const promptVersion = "llm-debate-v5-ticker-knowledge"
 
-test("QEO-86 bumps prompt identity contract and Research Report hash changes only the LLM identity", () => {
-  assert.equal(AI_COUNCIL_PROMPT_IDENTITY_VERSION, "prompt-identity-v2-report-evidence")
+test("QEO-117 prompt identity includes frozen ticker knowledge without mutating deterministic evidence identity", () => {
+  assert.equal(AI_COUNCIL_PROMPT_IDENTITY_VERSION, "prompt-identity-v3-ticker-knowledge")
 
   const first = buildAiCouncilPromptIdentityHash({
     deterministicEvidenceHash,
     rawContextHash,
     researchContextHash,
     reportEvidenceHash: reportHashOne,
+    tickerKnowledgeHash: tickerKnowledgeHashOne,
     marketSynthesisHash,
     promptVersion,
   })
@@ -35,7 +38,8 @@ test("QEO-86 bumps prompt identity contract and Research Report hash changes onl
     deterministicEvidenceHash,
     rawContextHash,
     researchContextHash,
-    reportEvidenceHash: reportHashTwo,
+    reportEvidenceHash: reportHashOne,
+    tickerKnowledgeHash: tickerKnowledgeHashTwo,
     marketSynthesisHash,
     promptVersion,
   })
@@ -44,7 +48,7 @@ test("QEO-86 bumps prompt identity contract and Research Report hash changes onl
   assert.equal(deterministicEvidenceHash, "a".repeat(64))
 })
 
-test("QEO-86 resolver includes frozen reportEvidence.contextHash in prompt/cache identity", () => {
+test("QEO-117 resolver includes only persisted frozen tickerKnowledge.contextHash in prompt/cache identity", () => {
   const resolved = resolveAiCouncilPromptIdentityHash({
     evidenceHash: deterministicEvidenceHash,
     llmEvidence: { contextHash: rawContextHash },
@@ -53,6 +57,7 @@ test("QEO-86 resolver includes frozen reportEvidence.contextHash in prompt/cache
       marketSynthesis: { evidenceHash: marketSynthesisHash },
     },
     reportEvidence: { contextHash: reportHashOne },
+    tickerKnowledge: { contextHash: tickerKnowledgeHashOne },
   }, promptVersion)
 
   const expected = buildAiCouncilPromptIdentityHash({
@@ -60,13 +65,14 @@ test("QEO-86 resolver includes frozen reportEvidence.contextHash in prompt/cache
     rawContextHash,
     researchContextHash,
     reportEvidenceHash: reportHashOne,
+    tickerKnowledgeHash: tickerKnowledgeHashOne,
     marketSynthesisHash,
     promptVersion,
   })
   assert.equal(resolved, expected)
 })
 
-test("QEO-86 first-class packet exposes Research Reports as a separate advisory evidence layer", () => {
+test("QEO-86 first-class packet continues to expose Research Reports as a separate advisory evidence layer", () => {
   const packet = source("modules/ai-council/prompt-evidence.ts")
   assert.match(packet, /reportEvidence\?: unknown/)
   assert.match(packet, /stock\.reportEvidence/)
@@ -74,11 +80,19 @@ test("QEO-86 first-class packet exposes Research Reports as a separate advisory 
   assert.match(packet, /Research Report/i)
 })
 
-test("QEO-86 LLM prompt version and instructions preserve deterministic authority against broker narrative", () => {
+test("QEO-117 first-class packet exposes frozen unified ticker knowledge separately from deterministic evidence", () => {
+  const packet = source("modules/ai-council/prompt-evidence.ts")
+  assert.match(packet, /tickerKnowledge\?: unknown/)
+  assert.match(packet, /stock\.tickerKnowledge/)
+  assert.match(packet, /tickerKnowledge: stock\.tickerKnowledge/)
+  assert.match(packet, /ticker knowledge/i)
+})
+
+test("QEO-117 LLM prompt version and instructions preserve deterministic authority against semantic retrieval narrative", () => {
   const llm = source("modules/ai-council/llm.ts")
-  assert.match(llm, /AI_COUNCIL_LLM_PROMPT_VERSION = "llm-debate-v4-research-report-evidence"/)
+  assert.match(llm, /AI_COUNCIL_LLM_PROMPT_VERSION = "llm-debate-v5-ticker-knowledge"/)
   assert.match(llm, /SOURCE OPINION/i)
-  assert.match(llm, /Research Report/i)
+  assert.match(llm, /ticker knowledge/i)
   assert.match(llm, /contradiction/i)
   assert.match(llm, /deterministic.*final.*authority/i)
   assert.match(llm, /must not.*(?:upgrade|downgrade).*deterministic/i)
