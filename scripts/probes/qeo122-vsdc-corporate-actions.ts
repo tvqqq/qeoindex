@@ -40,11 +40,11 @@ function decodeHtml(value: string) {
     .replace(/&nbsp;/gi, " ")
     .replace(/&#x([0-9a-f]+);/gi, (_match, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
     .replace(/&#(\d+);/g, (_match, decimal: string) => String.fromCodePoint(Number.parseInt(decimal, 10)))
-    .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, '"')
     .replace(/&apos;/gi, "'")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&")
 }
 
 function stripElementBlocks(value: string, tagName: "script" | "style") {
