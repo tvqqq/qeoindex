@@ -270,6 +270,7 @@ test("QEO-116 REPORT_QA context forwards exact report provenance filters and rej
       contentHash: HASH,
       reportId: REPORT_ID,
       analysisId: ANALYSIS_ID,
+      chunkVersion: CHUNK_VERSION,
       page: 7,
       chunkId: CHUNK_ID,
       chunkIndex: 1,
@@ -289,6 +290,7 @@ test("QEO-116 REPORT_QA context forwards exact report provenance filters and rej
       contentHash: OLD_HASH,
       reportId: OTHER_REPORT_ID,
       analysisId: ANALYSIS_ID,
+      chunkVersion: CHUNK_VERSION,
       page: 1,
       chunkId: "77777777-7777-4777-8777-777777777777",
       chunkIndex: 0,
@@ -335,4 +337,57 @@ test("QEO-116 REPORT_QA context forwards exact report provenance filters and rej
   assert.equal(queries[0].chunkVersion, CHUNK_VERSION)
   assert.deepEqual(context.items.map((item) => item.id), [valid.id])
   assert.doesNotMatch(context.text, /999,000/)
+})
+
+test("QEO-116 Qdrant request carries exact report provenance payload filters", async () => {
+  const { createQdrantTickerKnowledgeIndex } = await import("../../modules/ticker-knowledge/qdrant.ts")
+  const calls: Array<Record<string, unknown>> = []
+  const index = createQdrantTickerKnowledgeIndex({
+    baseUrl: "https://example.qdrant.io",
+    apiKey: "test-qdrant-key",
+    vectorSize: 3,
+    fetchImpl: async (_input, init) => {
+      calls.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>)
+      return new Response(JSON.stringify({ result: { points: [] }, status: "ok" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    },
+    embeddingProvider: {
+      model: "test-embedding",
+      version: "test-embedding-v1",
+      dimensions: 3,
+      embed: async () => [[0.1, 0.2, 0.3]],
+    },
+  })
+  const sourceVersion = `${HASH}:${ANALYSIS_ID}:${CHUNK_VERSION}`
+
+  await index.query({
+    ticker: "MSN",
+    text: "định giá mục tiêu",
+    knowledgeTypes: ["REPORT_CHUNK"],
+    sourceTypes: ["RESEARCH_REPORT"],
+    reportId: REPORT_ID,
+    analysisId: ANALYSIS_ID,
+    sourceId: REPORT_ID,
+    sourceVersion,
+    contentHash: HASH,
+    chunkVersion: CHUNK_VERSION,
+    limit: 8,
+  } as never)
+
+  assert.equal(calls.length, 1)
+  const filter = calls[0].filter as { must: Array<{ key: string; match?: { value?: string } }> }
+  const exact = Object.fromEntries(filter.must.map((entry) => [entry.key, entry.match?.value]))
+  assert.deepEqual(exact, {
+    ticker: "MSN",
+    knowledge_type: undefined,
+    source_type: undefined,
+    report_id: REPORT_ID,
+    analysis_id: ANALYSIS_ID,
+    source_id: REPORT_ID,
+    source_version: sourceVersion,
+    content_hash: HASH,
+    chunk_version: CHUNK_VERSION,
+  })
 })
