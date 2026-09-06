@@ -279,7 +279,7 @@ async function loadCouncilCanonicalCandidates(
 
   const debateResult = await client
     .from(COUNCIL_DEBATE_TABLE)
-    .select("id,run_id,status,prompt_version,error,completed_at,created_at")
+    .select("run_id,status,prompt_version,error,completed_at,created_at")
     .eq("run_id", runId)
     .order("completed_at", { ascending: false })
     .order("created_at", { ascending: false })
