@@ -1,4 +1,4 @@
-name: QEO-129 Shadow Persistence RED Gate
+name: QEO-129 Shadow Persistence Contract
 
 on:
   push:
@@ -7,9 +7,11 @@ on:
     paths:
       - .github/workflows/qeo129-task3-red.yml
       - tests/market-history/qeo129-adjusted-daily-store.test.ts
+      - modules/market/history/adjusted-daily-store.ts
+      - modules/market/history/adjusted-daily.ts
 
 jobs:
-  red:
+  contract:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,3 +26,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Run QEO-129 shadow persistence contract
         run: node --test tests/market-history/qeo129-adjusted-daily-store.test.ts
+      - name: Compile TypeScript
+        run: pnpm typecheck
