@@ -139,6 +139,7 @@ function reportProvenance(
     contentHash: input.report.contentHash,
     reportId: input.report.id,
     analysisId: input.analysis.id,
+    chunkVersion: input.analysis.chunkVersion,
     publishedAt: input.report.publishDate,
     asOf: input.report.publishDate,
     ...extra,
