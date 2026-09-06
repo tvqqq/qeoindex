@@ -134,15 +134,23 @@ test("QEO-106 hot Daily read rejects unresolved zero-volume fallback but preserv
   assert.match(service, /filter\(isCanonicalDailyHotRowUsable\)/)
 })
 
-test("QEO-108 canonical Daily runtime reads Postgres only and does not hydrate deep cold", () => {
+test("QEO-108 canonical Daily runtime reads Postgres only while intraday retains verified cold hydration", () => {
   const service = source("modules/market/chart-data/service.ts")
-  assert.match(service, /loadDailyRows/)
+  const dailyStart = service.indexOf("async function loadDaily(")
+  const intradayStart = service.indexOf("async function loadIntraday(", dailyStart)
+  assert.ok(dailyStart >= 0 && intradayStart > dailyStart)
+  const daily = service.slice(dailyStart, intradayStart)
+  const intraday = service.slice(intradayStart)
+
   assert.match(service, /market_ohlcv_history/)
   assert.doesNotMatch(service, /createSupabaseDailyColdOhlcvStorage/)
   assert.doesNotMatch(service, /dailyColdStorage/)
-  assert.doesNotMatch(service, /source: "cold"/)
-  assert.match(service, /source: "daily"/)
-  assert.match(service, /CANONICAL_DAILY_POSTGRES/)
+  assert.match(daily, /loadDailyRows/)
+  assert.match(daily, /source: "daily"/)
+  assert.match(daily, /CANONICAL_DAILY_POSTGRES/)
+  assert.doesNotMatch(daily, /source: "cold"/)
+  assert.match(intraday, /createSupabaseColdOhlcvStorage/)
+  assert.match(intraday, /source: "cold"/)
 })
 
 test("QEO-106 legacy Hot aging remains fail-closed before immutable Daily Cold archive", () => {
