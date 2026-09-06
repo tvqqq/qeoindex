@@ -23,6 +23,16 @@ export type ProbeCorporateActionNotice = {
   rawTextHash: string
 }
 
+export type ProbeCorporateActionAmendment = {
+  sourceUrl: string
+  sourceEventId: string
+  ticker: string
+  referencedNoticeNumber: string
+  referencedNoticeDate: string
+  amendmentType: "correction"
+  rawTextHash: string
+}
+
 function decodeHtml(value: string) {
   return value
     .replace(/&nbsp;|&#160;/gi, " ")
@@ -181,6 +191,29 @@ export function parseVsdcCorporateActionHtml(html: string, sourceUrl: string): P
     exchange: detectExchange(firstLabelValue(text, ["Sàn giao dịch", "Nơi giao dịch", "Thị trường giao dịch"])),
     recordDate: parseDate(firstLabelValue(text, ["Ngày đăng ký cuối cùng"])),
     components,
+    rawTextHash: createHash("sha256").update(html).digest("hex"),
+  }
+}
+
+export function parseVsdcAmendmentHtml(html: string, sourceUrl: string): ProbeCorporateActionAmendment {
+  const text = htmlToText(html)
+  const relation = text.match(/Thông báo số\s+([^\n]+?)\s+ngày\s+(\d{1,2}\/\d{1,2}\/\d{4})/i)
+  if (!relation) throw new Error("VSDC probe: missing referenced notice")
+
+  const tickerMatch = text.match(/mã chứng khoán\s*:?\s*([A-Z0-9]{2,12})\b/i)
+    ?? text.match(/(?:^|\n)([A-Z0-9]{2,12})\s*:\s*Đính chính/i)
+  if (!tickerMatch?.[1]) throw new Error("VSDC probe: missing amendment ticker")
+
+  const referencedNoticeDate = parseDate(relation[2])
+  if (!referencedNoticeDate) throw new Error("VSDC probe: invalid referenced notice date")
+
+  return {
+    sourceUrl,
+    sourceEventId: sourceEventId(sourceUrl),
+    ticker: tickerMatch[1].toUpperCase(),
+    referencedNoticeNumber: relation[1].trim(),
+    referencedNoticeDate,
+    amendmentType: "correction",
     rawTextHash: createHash("sha256").update(html).digest("hex"),
   }
 }
