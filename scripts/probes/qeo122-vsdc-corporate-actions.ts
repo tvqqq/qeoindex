@@ -15,6 +15,7 @@ export type ProbeCorporateActionComponent = {
 export type ProbeCorporateActionNotice = {
   sourceUrl: string
   sourceEventId: string
+  sourceUpdatedAt: string | null
   ticker: string
   isin: string | null
   exchange: "HOSE" | "HNX" | "UPCOM" | "UNKNOWN"
@@ -26,6 +27,7 @@ export type ProbeCorporateActionNotice = {
 export type ProbeCorporateActionAmendment = {
   sourceUrl: string
   sourceEventId: string
+  sourceUpdatedAt: string | null
   ticker: string
   referencedNoticeNumber: string
   referencedNoticeDate: string
@@ -71,6 +73,13 @@ function parseDate(value: string | null) {
   const match = value?.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/)
   if (!match) return null
   return `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`
+}
+
+function parseSourceUpdatedAt(text: string) {
+  const match = text.match(/Cập nhật ngày\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s*-\s*(\d{1,2}):(\d{2}):(\d{2})/i)
+  if (!match) return null
+  const [, day, month, year, hour, minute, second] = match
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T${hour.padStart(2, "0")}:${minute}:${second}+07:00`
 }
 
 function parseVnd(value: string | null) {
@@ -163,7 +172,7 @@ function detectExchange(value: string | null): ProbeCorporateActionNotice["excha
   const normalized = String(value ?? "").trim().toUpperCase()
   if (normalized.includes("HOSE") || normalized.includes("HSX")) return "HOSE"
   if (normalized.includes("HNX")) return "HNX"
-  if (normalized.includes("UPCOM") || normalized.includes("UPCOM")) return "UPCOM"
+  if (normalized.includes("UPCOM")) return "UPCOM"
   return "UNKNOWN"
 }
 
@@ -194,6 +203,7 @@ export function parseVsdcCorporateActionHtml(html: string, sourceUrl: string): P
   return {
     sourceUrl,
     sourceEventId: sourceEventId(sourceUrl),
+    sourceUpdatedAt: parseSourceUpdatedAt(text),
     ticker: ticker.trim().toUpperCase(),
     isin: firstLabelValue(text, ["Mã ISIN"]),
     exchange: detectExchange(firstLabelValue(text, ["Sàn giao dịch", "Nơi giao dịch", "Thị trường giao dịch"])),
@@ -218,6 +228,7 @@ export function parseVsdcAmendmentHtml(html: string, sourceUrl: string): ProbeCo
   return {
     sourceUrl,
     sourceEventId: sourceEventId(sourceUrl),
+    sourceUpdatedAt: parseSourceUpdatedAt(text),
     ticker: tickerMatch[1].toUpperCase(),
     referencedNoticeNumber: relation[1].trim(),
     referencedNoticeDate,
