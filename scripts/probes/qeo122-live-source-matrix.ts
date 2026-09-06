@@ -201,13 +201,42 @@ function expectedMatches(actual: unknown, expected: unknown) {
   return JSON.stringify(actual) === JSON.stringify(expected)
 }
 
+export function validateQeo122SourceUrl(value: string) {
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    throw new Error("QEO-122 probe: disallowed source URL")
+  }
+
+  const allowedHostname = parsed.hostname === "vsdc.vn" || parsed.hostname === "www.vsd.vn"
+  if (
+    parsed.protocol !== "https:"
+    || !allowedHostname
+    || parsed.port !== ""
+    || parsed.username !== ""
+    || parsed.password !== ""
+  ) {
+    throw new Error("QEO-122 probe: disallowed source URL")
+  }
+
+  return parsed.href
+}
+
 async function fetchFollowingRedirects(url: string) {
   const started = performance.now()
   const redirectChain: Array<{ url: string; status: number; location: string | null }> = []
-  let currentUrl = url
+  const validatedInitialUrl = validateQeo122SourceUrl(url)
+  const initialOrigin = new URL(validatedInitialUrl).origin
+  let currentUrl = validatedInitialUrl
 
   for (let hop = 0; hop <= 5; hop += 1) {
-    const response = await fetch(currentUrl, {
+    const validatedCurrentUrl = validateQeo122SourceUrl(currentUrl)
+    if (new URL(validatedCurrentUrl).origin !== initialOrigin) {
+      throw new Error("QEO-122 probe: disallowed source URL")
+    }
+
+    const response = await fetch(validatedCurrentUrl, {
       redirect: "manual",
       signal: AbortSignal.timeout(20_000),
       headers: {
@@ -217,17 +246,21 @@ async function fetchFollowingRedirects(url: string) {
       },
     })
     const location = response.headers.get("location")
-    redirectChain.push({ url: currentUrl, status: response.status, location })
+    redirectChain.push({ url: validatedCurrentUrl, status: response.status, location })
 
     if (response.status >= 300 && response.status < 400 && location) {
-      currentUrl = new URL(location, currentUrl).href
+      const nextUrl = validateQeo122SourceUrl(new URL(location, validatedCurrentUrl).href)
+      if (new URL(nextUrl).origin !== initialOrigin) {
+        throw new Error("QEO-122 probe: disallowed source URL")
+      }
+      currentUrl = nextUrl
       continue
     }
 
     const body = await response.text()
     return {
       status: response.status,
-      finalUrl: currentUrl,
+      finalUrl: validatedCurrentUrl,
       contentType: response.headers.get("content-type"),
       latencyMs: Math.round(performance.now() - started),
       body,
@@ -235,7 +268,7 @@ async function fetchFollowingRedirects(url: string) {
     }
   }
 
-  throw new Error(`too many redirects for ${url}`)
+  throw new Error(`too many redirects for ${validatedInitialUrl}`)
 }
 
 async function probeCase(item: Qeo122LiveCase): Promise<ProbeFetchSnapshot> {
@@ -412,7 +445,14 @@ export async function runQeo122LiveSourceMatrix() {
   const report = {
     generatedAt: new Date().toISOString(),
     source: "VSDC public corporate-action pages",
-    fetchPolicy: { attemptsPerSource: 2, interRequestDelayMs: 300, timeoutMs: 20_000, maxRedirects: 5 },
+    fetchPolicy: {
+      attemptsPerSource: 2,
+      interRequestDelayMs: 300,
+      timeoutMs: 20_000,
+      maxRedirects: 5,
+      allowedHosts: ["vsdc.vn", "www.vsd.vn"],
+      sameOriginRedirectsOnly: true,
+    },
     results,
     amendmentOriginal: { sourceEventId: QEO122_AMENDMENT_ORIGINAL.sourceEventId, url: QEO122_AMENDMENT_ORIGINAL.url, ...amendmentOriginal },
     robots,
