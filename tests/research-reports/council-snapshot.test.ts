@@ -271,3 +271,99 @@ test("snapshot hash is canonical and independent of Council run id or persistenc
 
   assert.equal(first.contextHash, second.contextHash)
 })
+
+test("QEO-117 frozen ticker knowledge reuses exact persisted point context on same-run retry", async () => {
+  const {
+    AI_COUNCIL_TICKER_KNOWLEDGE_CONTEXT_VERSION,
+    freezeCouncilTickerKnowledge,
+  } = await import("../../modules/ai-council/ticker-knowledge-context.ts")
+
+  class KnowledgeSnapshotClient {
+    row: Record<string, unknown> | null = null
+    writes = 0
+    from(table: string) {
+      assert.equal(table, "ai_council_ticker_knowledge_snapshots")
+      const self = this
+      return {
+        select(_columns: string) {
+          return {
+            eq(_column: string, _value: unknown) {
+              return {
+                async limit(_limit: number) {
+                  return { data: self.row ? [{ ...self.row }] : [], error: null }
+                },
+              }
+            },
+          }
+        },
+        async upsert(payload: Record<string, unknown>) {
+          self.writes += 1
+          if (!self.row) self.row = { ...payload, captured_at: RUN_AT }
+          return { data: null, error: null }
+        },
+      }
+    }
+  }
+
+  const client = new KnowledgeSnapshotClient()
+  let retrievalCalls = 0
+  const selectedItem = {
+    id: "aaaaaaaa-aaaa-5aaa-8aaa-aaaaaaaaaaaa",
+    identityKey: "ticker-knowledge-v1|MSN|BROKER_VIEW|RESEARCH_REPORT|report-1|broker",
+    ticker: "MSN",
+    knowledgeType: "BROKER_VIEW" as const,
+    authority: "SOURCE_OPINION" as const,
+    sourceType: "RESEARCH_REPORT" as const,
+    text: "Broker BUY target 110000; this remains a source opinion.",
+    provenance: {
+      sourceId: "report-1",
+      sourceVersion: `${HASH}:analysis-1:report-chunk-v1`,
+      contentHash: HASH,
+      reportId: "report-1",
+      analysisId: "analysis-1",
+      page: 7,
+      asOf: AS_OF_DATE,
+    },
+    schemaVersion: "ticker-knowledge-v1" as const,
+    projectionVersion: "research-report-knowledge-v1",
+  }
+  const buildContext = async () => {
+    retrievalCalls += 1
+    return {
+      ticker: "MSN",
+      query: "Council advisory context",
+      consumer: "AI_COUNCIL" as const,
+      retrievalStatus: "ready" as const,
+      retrievalReason: null,
+      items: [selectedItem],
+      retrievedPointIds: [selectedItem.id],
+      text: `[BROKER_VIEW | SOURCE_OPINION]\n${selectedItem.text}`,
+      truncated: false,
+      telemetry: { totalMs: 1, alwaysLoadMs: 0, retrievalMs: 1, rerankMs: 0, buildMs: 0 },
+    }
+  }
+
+  const first = await freezeCouncilTickerKnowledge(client as never, {
+    runId: RUN_ID,
+    ticker: "MSN",
+    asOfDate: AS_OF_DATE,
+    query: "Council advisory context",
+  }, { buildContext })
+  const retry = await freezeCouncilTickerKnowledge(client as never, {
+    runId: RUN_ID,
+    ticker: "MSN",
+    asOfDate: AS_OF_DATE,
+    query: "a changed query must not rerun retrieval",
+  }, { buildContext })
+
+  assert.equal(AI_COUNCIL_TICKER_KNOWLEDGE_CONTEXT_VERSION, "ticker-knowledge-context-v1")
+  assert.equal(retrievalCalls, 1)
+  assert.equal(client.writes, 1)
+  assert.equal(first.contextHash, retry.contextHash)
+  assert.equal(retry.reused, true)
+  assert.equal(retry.canUseInPrompt, true)
+  assert.deepEqual(retry.pointIds, [selectedItem.id])
+  assert.equal(retry.context.items[0].authority, "SOURCE_OPINION")
+  assert.equal(retry.context.items[0].provenance.analysisId, "analysis-1")
+  assert.match(retry.contextHash || "", /^[0-9a-f]{64}$/)
+})
