@@ -42,6 +42,20 @@ jobs:
               bucket: 'deep-safety',
               suites: ['db'],
             },
+            {
+              path: 'tests/corporate-actions/qeo124-lineage-policy.test.ts',
+              owner: 'market',
+              invariant: 'QEO-124 factor identity stays stable when only audit as-of date advances and no new effective evidence enters the lineage.',
+              bucket: 'canonical',
+              suites: ['fast'],
+            },
+            {
+              path: 'tests/corporate-actions/qeo124-factor-store.test.ts',
+              owner: 'db',
+              invariant: 'QEO-124 accepts persisted factor candidates only after exact run and transition readback and sanitizes persistence failures.',
+              bucket: 'deep-safety',
+              suites: ['db'],
+            },
           ]
           const byPath = new Map(doc.entries.map((entry) => [entry.path, entry]))
           for (const entry of desired) byPath.set(entry.path, entry)
