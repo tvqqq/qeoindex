@@ -47,6 +47,8 @@ jobs:
         run: supabase start
       - name: Replay migrations from zero
         run: pnpm db:replay:verify
+      - name: Rehearse QEO-108 quarantined chart cutover
+        run: bash scripts/db/rehearse-qeo108-chart-storage.sh
       - name: Verify generated Database types
         run: pnpm db:types:verify
       - name: Upload generated Database type candidate
