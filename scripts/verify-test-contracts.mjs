@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { join, resolve } from "node:path"
 
@@ -17,11 +17,18 @@ function topLevelTests(root) {
     .sort()
 }
 
+function declaredNestedTests(root, entries) {
+  return entries
+    .map((entry) => entry?.path)
+    .filter((path) => typeof path === "string" && /^tests\/(?:[^/]+\/)+[^/]+\.test\.ts$/.test(path))
+    .filter((path) => existsSync(join(root, path)))
+}
+
 function invalidEntry(entry, index) {
   const errors = []
   const label = entry?.path || `entry[${index}]`
   if (!entry || typeof entry !== "object") return [`${label}: entry must be an object`]
-  if (typeof entry.path !== "string" || !/^tests\/[^/]+\.test\.ts$/.test(entry.path)) errors.push(`${label}: invalid top-level test path`)
+  if (typeof entry.path !== "string" || !/^tests\/(?:[^/]+\/)*[^/]+\.test\.ts$/.test(entry.path)) errors.push(`${label}: invalid test path`)
   if (!OWNERS.has(entry.owner)) errors.push(`${label}: invalid owner ${String(entry.owner)}`)
   if (typeof entry.invariant !== "string" || entry.invariant.trim().length < 12) errors.push(`${label}: invariant must be explicit`)
   if (!BUCKETS.has(entry.bucket)) errors.push(`${label}: invalid bucket ${String(entry.bucket)}`)
@@ -47,7 +54,7 @@ export function validateTestContracts(rootUrl = new URL("../", import.meta.url))
   const root = repoPath(rootUrl)
   const manifest = JSON.parse(readFileSync(join(root, "tests", "test-contracts.json"), "utf8"))
   const entries = Array.isArray(manifest.entries) ? manifest.entries : []
-  const actual = topLevelTests(root)
+  const actual = [...new Set([...topLevelTests(root), ...declaredNestedTests(root, entries)])].sort()
   const counts = new Map()
   for (const entry of entries) counts.set(entry?.path, (counts.get(entry?.path) || 0) + 1)
   const manifestPaths = [...new Set(entries.map((entry) => entry?.path).filter((path) => typeof path === "string"))].sort()
@@ -76,7 +83,7 @@ function main() {
     process.exitCode = 1
     return
   }
-  console.log(`test-contract manifest valid: ${result.manifestCount}/${result.actualCount} top-level tests classified`)
+  console.log(`test-contract manifest valid: ${result.manifestCount}/${result.actualCount} classified tests`)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main()
