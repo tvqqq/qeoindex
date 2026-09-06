@@ -54,3 +54,28 @@ test("QEO-86 Debate Card renders compact related-report links and source-opinion
   assert.match(page, /report\.tickerStance/)
   assert.doesNotMatch(page, /report\.executiveSummary/)
 })
+
+test("QEO-117 debate dashboard hydrates frozen ticker knowledge provenance and prompt identity v3", () => {
+  const data = source("modules/ai-council/debate-data.ts")
+
+  assert.match(data, /ai_council_ticker_knowledge_snapshots/)
+  assert.match(data, /run_id,context_version,context_hash,status,context_payload,point_ids,captured_at/)
+  assert.match(data, /tickerKnowledgeContextVersion/)
+  assert.match(data, /tickerKnowledgeContextHash/)
+  assert.match(data, /tickerKnowledgeStatus/)
+  assert.match(data, /tickerKnowledgeRetrievalStatus/)
+  assert.match(data, /tickerKnowledgeCount/)
+  assert.match(data, /tickerKnowledgeCapturedAt/)
+  assert.match(data, /tickerKnowledge:\s*\{\s*contextHash:/)
+  assert.match(data, /prompt-identity-v3-ticker-knowledge/)
+})
+
+test("QEO-117 Debate Card displays ticker knowledge status version and bounded context count", () => {
+  const page = source("app/insights/ai-council/debates/page.tsx")
+
+  assert.match(page, /Ticker Knowledge/i)
+  assert.match(page, /tickerKnowledgeContextVersion/)
+  assert.match(page, /tickerKnowledgeStatus/)
+  assert.match(page, /tickerKnowledgeRetrievalStatus/)
+  assert.match(page, /tickerKnowledgeCount/)
+})
