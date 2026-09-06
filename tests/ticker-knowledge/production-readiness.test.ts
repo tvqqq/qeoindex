@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { queryTickerKnowledgeSafely } from "../../modules/ticker-knowledge/domain.ts"
 import { createQdrantTickerKnowledgeIndex } from "../../modules/ticker-knowledge/qdrant.ts"
 
 const denseConfig = {
@@ -25,7 +26,7 @@ function jsonResponse(body: unknown, status = 200) {
   })
 }
 
-test("QEO-119 first semantic query provisions a missing ticker_knowledge collection before querying", async () => {
+test("QEO-119 first safe semantic retrieval provisions a missing ticker_knowledge collection before querying", async () => {
   const calls: Array<{ method: string; url: string; body: Record<string, unknown> }> = []
   let collectionExists = false
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -66,9 +67,14 @@ test("QEO-119 first semantic query provisions a missing ticker_knowledge collect
     embeddingProvider: embeddingProvider(),
   })
 
-  const result = await index.query({ ticker: "MSN", text: "MSN target 110000 EBITDA", limit: 4 })
+  const result = await queryTickerKnowledgeSafely(index, {
+    ticker: "MSN",
+    text: "MSN target 110000 EBITDA",
+    limit: 4,
+  })
 
-  assert.deepEqual(result, [])
+  assert.equal(result.status, "ready")
+  assert.deepEqual(result.results, [])
   assert.equal(calls[0]?.method, "GET")
   assert.match(calls[0]?.url ?? "", /\/collections\/ticker_knowledge$/)
   assert.ok(calls.some((call) => call.method === "PUT" && call.url.endsWith("/collections/ticker_knowledge")))
