@@ -241,6 +241,29 @@ function sourceEventId(sourceUrl: string) {
   }
 }
 
+function parseReferencedNotice(text: string) {
+  const prefix = "thông báo số "
+  const dateMarker = " ngày "
+
+  for (const line of text.split("\n")) {
+    const normalized = line.toLocaleLowerCase("vi-VN")
+    const prefixIndex = normalized.indexOf(prefix)
+    if (prefixIndex < 0) continue
+
+    const numberStart = prefixIndex + prefix.length
+    const dateMarkerIndex = normalized.indexOf(dateMarker, numberStart)
+    if (dateMarkerIndex < 0) continue
+
+    const noticeNumber = line.slice(numberStart, dateMarkerIndex).trim()
+    const noticeDate = parseDate(line.slice(dateMarkerIndex + dateMarker.length))
+    if (noticeNumber && noticeDate) {
+      return { noticeNumber, noticeDate }
+    }
+  }
+
+  return null
+}
+
 export function parseVsdcCorporateActionHtml(html: string, sourceUrl: string): ProbeCorporateActionNotice {
   const text = htmlToText(html)
   const ticker = firstLabelValue(text, ["Mã chứng khoán"])
@@ -271,23 +294,20 @@ export function parseVsdcCorporateActionHtml(html: string, sourceUrl: string): P
 
 export function parseVsdcAmendmentHtml(html: string, sourceUrl: string): ProbeCorporateActionAmendment {
   const text = htmlToText(html)
-  const relation = text.match(/Thông báo số\s+([^\n]+?)\s+ngày\s+(\d{1,2}\/\d{1,2}\/\d{4})/i)
+  const relation = parseReferencedNotice(text)
   if (!relation) throw new Error("VSDC probe: missing referenced notice")
 
   const tickerMatch = text.match(/mã chứng khoán\s*:?\s*([A-Z0-9]{2,12})\b/i)
     ?? text.match(/(?:^|\n)([A-Z0-9]{2,12})\s*:\s*Đính chính/i)
   if (!tickerMatch?.[1]) throw new Error("VSDC probe: missing amendment ticker")
 
-  const referencedNoticeDate = parseDate(relation[2])
-  if (!referencedNoticeDate) throw new Error("VSDC probe: invalid referenced notice date")
-
   return {
     sourceUrl,
     sourceEventId: sourceEventId(sourceUrl),
     sourceUpdatedAt: parseSourceUpdatedAt(text),
     ticker: tickerMatch[1].toUpperCase(),
-    referencedNoticeNumber: relation[1].trim(),
-    referencedNoticeDate,
+    referencedNoticeNumber: relation.noticeNumber,
+    referencedNoticeDate: relation.noticeDate,
     amendmentType: "correction",
     rawTextHash: createHash("sha256").update(html).digest("hex"),
   }
