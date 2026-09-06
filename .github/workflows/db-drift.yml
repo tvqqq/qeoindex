@@ -63,7 +63,10 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: |
           test -f artifacts/qeo23/database.types.ts
-          cp artifacts/qeo23/database.types.ts modules/shared/supabase/database.types.ts
+          cp artifacts/qeo23/database.types.ts /tmp/qeo108-database.types.ts
+          git fetch origin "${HEAD_REF}"
+          git checkout "${HEAD_REF}"
+          cp /tmp/qeo108-database.types.ts modules/shared/supabase/database.types.ts
           git diff --quiet -- modules/shared/supabase/database.types.ts && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
