@@ -1,0 +1,61 @@
+name: QEO-124 Register Tests Once
+
+on:
+  push:
+    branches:
+      - feat/qeo-124-adjustment-engine
+    paths:
+      - ".github/workflows/qeo124-register-tests-once.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/qeo-124-adjustment-engine
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Register QEO-124 test contracts
+        run: |
+          node <<'NODE'
+          const fs = require('fs')
+          const path = 'tests/test-contracts.json'
+          const doc = JSON.parse(fs.readFileSync(path, 'utf8'))
+          const desired = [
+            {
+              path: 'tests/corporate-actions/qeo124-adjustment-engine.test.ts',
+              owner: 'market',
+              invariant: 'QEO-124 keeps corporate-action adjustment formulas deterministic, action-type-specific, order-independent, and fail-closed.',
+              bucket: 'canonical',
+              suites: ['fast'],
+            },
+            {
+              path: 'tests/corporate-actions/qeo124-factor-schema.test.ts',
+              owner: 'db',
+              invariant: 'QEO-124 preserves versioned factor-run storage, one combined transition per effective session, and private RLS-protected derived state.',
+              bucket: 'deep-safety',
+              suites: ['db'],
+            },
+          ]
+          const byPath = new Map(doc.entries.map((entry) => [entry.path, entry]))
+          for (const entry of desired) byPath.set(entry.path, entry)
+          doc.entries = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path))
+          fs.writeFileSync(path, JSON.stringify(doc, null, 2) + '\n')
+          NODE
+      - name: Commit manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/test-contracts.json
+          if git diff --cached --quiet; then
+            echo "Manifest already registered"
+            exit 0
+          fi
+          git commit -m "test(QEO-124): register adjustment contracts"
+          git push origin HEAD:feat/qeo-124-adjustment-engine
