@@ -47,3 +47,18 @@ export type {
   ColdEvidencePointer,
   ColdEvidenceStore,
 } from "./cold-evidence.ts"
+export {
+  COUNCIL_HISTORY_KNOWLEDGE_PROJECTION_VERSION,
+  NOTION_THESIS_KNOWLEDGE_PROJECTION_VERSION,
+  RESEARCH_REPORT_KNOWLEDGE_PROJECTION_VERSION,
+  TICKER_KNOWLEDGE_PROJECTION_FAMILY_VERSION,
+  projectCouncilHistoryKnowledge,
+  projectCurrentThesisKnowledge,
+  projectResearchReportKnowledge,
+} from "./projections.ts"
+export type {
+  CouncilHistoryKnowledgeProjectionInput,
+  ResearchReportKnowledgeProjectionInput,
+} from "./projections.ts"
+export { buildTickerContext } from "./context.ts"
+export type { BuildTickerContextInput, TickerContext } from "./context.ts"
