@@ -53,18 +53,18 @@ test("QEO-100 history clamp never expands a request and clamps only short/mid lo
   assert.deepEqual(alreadyNarrow, { from: to - 3 * DAY, to, clamped: false })
 })
 
-test("QEO-103 hot retention cutoff keeps complete Vietnam calendar dates", () => {
+test("QEO-103 product hot retention cutoff keeps complete Vietnam calendar dates", () => {
   const referenceAt = new Date("2026-09-05T12:34:00+07:00")
   assert.equal(new Date(chartHotRetentionCutoff(referenceAt) * 1000).toISOString(), "2026-08-05T17:00:00.000Z")
 })
 
-test("QEO-103 hourly read path uses derived cache only after cold-manifest coverage is complete", () => {
+test("QEO-108 hourly read path splits physical HOT/COLD at the five-session boundary", () => {
   const service = source("modules/market/chart-data/timeframe-service.ts")
   assert.match(service, /readDerivedHourlyRange/)
   assert.match(service, /derivedHourlyColdCoverageComplete/)
   assert.match(service, /readIntersectingRange/)
   assert.match(service, /VERIFIED_COLD_1M_RECOVERY/)
-  assert.match(service, /chartHotRetentionCutoff/)
+  assert.match(service, /chartHotSessionRetentionCutoff/)
   assert.match(service, /const oldTo = Math\.min\(request\.to, hotCutoff - 1\)/)
   assert.match(service, /const recentFrom = Math\.max\(sourceRange\.from, hotCutoff\)/)
   assert.match(service, /aggregateChartTimeframe\(mergeBars\(recentResults\), "1h"\)/)
@@ -96,7 +96,7 @@ test("QEO-103 archive is cache-before-prune and prune authority is manifest veri
   assert.doesNotMatch(migration, /CASCADE/i)
 })
 
-test("QEO-106 Daily cold schema reuses verified manifests and keeps prune fail-closed", () => {
+test("QEO-106 Daily cold schema remains legacy-compatible until zero-consumer cleanup", () => {
   const migration = source("supabase/migrations/20260905153500_qeo106_daily_hot_cold_history.sql")
   assert.match(migration, /base_resolution in \('1m', '1D'\)/i)
   assert.match(migration, /add column if not exists provenance jsonb/i)
@@ -109,7 +109,7 @@ test("QEO-106 Daily cold schema reuses verified manifests and keeps prune fail-c
   assert.doesNotMatch(migration, /CASCADE/i)
 })
 
-test("QEO-106 cold-store supports Daily partitions without changing the legacy 1m factory", () => {
+test("QEO-106 cold-store keeps legacy Daily support until verified cleanup", () => {
   const cold = source("modules/market/chart-data/cold-store.ts")
   assert.match(cold, /createSupabaseDailyColdOhlcvStorage/)
   assert.match(cold, /baseResolution: "1m" \| "1D"/)
@@ -134,21 +134,19 @@ test("QEO-106 hot Daily read rejects unresolved zero-volume fallback but preserv
   assert.match(service, /filter\(isCanonicalDailyHotRowUsable\)/)
 })
 
-test("QEO-106 canonical Daily merges Hot PostgreSQL + verified Cold Storage and Hot wins overlap", () => {
+test("QEO-108 canonical Daily is bounded PostgreSQL-only with no active cold merge", () => {
   const service = source("modules/market/chart-data/service.ts")
   const normalize = source("modules/market/chart-data/normalize.ts")
-  assert.match(service, /createSupabaseDailyColdOhlcvStorage/)
-  assert.match(service, /Promise\.allSettled\(\[/)
   assert.match(service, /loadDailyRows/)
-  assert.match(service, /dailyColdStorage\.readIntersectingRange/)
   assert.match(service, /detectDailySessionGaps/)
-  assert.match(service, /source: "cold"/)
   assert.match(service, /source: "daily"/)
+  assert.match(service, /CANONICAL_DAILY_POSTGRES/)
+  assert.doesNotMatch(service, /createSupabaseDailyColdOhlcvStorage/)
+  assert.doesNotMatch(service, /dailyColdStorage\.readIntersectingRange/)
   assert.match(normalize, /daily: 3/)
-  assert.match(normalize, /cold: 2/)
 })
 
-test("QEO-106 Hot aging blocks unresolved Daily evidence before immutable Cold archive", () => {
+test("QEO-106 legacy Hot aging remains fail-closed while cleanup is deferred", () => {
   const history = source("modules/market/history/daily-cold-history.ts")
   assert.match(history, /isCanonicalDailyHotRowUsable/)
   assert.match(history, /Unresolved Daily hot evidence prevents archive/)
@@ -156,7 +154,7 @@ test("QEO-106 Hot aging blocks unresolved Daily evidence before immutable Cold a
   assert.match(history, /provider_detail,source_url/)
 })
 
-test("QEO-106 deep backfill exhausts lower-priority providers when a provider has no trusted bars", () => {
+test("QEO-106 legacy deep backfill keeps provider evidence rules while inactive", () => {
   const historyIndex = source("modules/market/history/index.ts")
   const coldHistory = source("modules/market/history/daily-cold-history.ts")
   assert.match(historyIndex, /DailyHistoryBarPolicy/)
@@ -173,7 +171,7 @@ test("QEO-106 deep backfill exhausts lower-priority providers when a provider ha
   assert.match(coldHistory, /bar\.volume > 0/)
 })
 
-test("QEO-106 unresolved Hot aging stays fail-closed without blocking deeper Cold history", () => {
+test("QEO-106 legacy unresolved Hot aging stays fail-closed until cleanup", () => {
   const history = source("modules/market/history/daily-cold-history.ts")
   assert.match(history, /Unresolved Daily hot evidence prevents archive/)
   assert.match(history, /hotArchiveSkippedForAuthority/)
@@ -196,24 +194,16 @@ test("QEO-106 integrity repair scopes the expensive audit to the requested ticke
   assert.equal((integrity.match(/loadIntegrityReport\(supabase, tickers\)/g) ?? []).length, 2)
 })
 
-test("QEO-106 deep Daily history is resumable, bounded, provider-backed and archive-before-prune", () => {
+test("QEO-108 Daily deep-cold backfill endpoint is retired but remains authenticated", () => {
   const history = source("modules/market/history/daily-cold-history.ts")
   const route = source("app/api/admin/market/daily-history/backfill/route.ts")
   assert.match(history, /DAILY_BACKFILL_DAYS/)
-  assert.match(history, /fetchDailyMarketHistoryWindow/)
-  assert.match(history, /createSupabaseDailyColdOhlcvStorage/)
-  assert.match(history, /chart_daily_history_state/)
-  assert.match(history, /maxChunksPerTicker/)
   assert.match(history, /archiveVerifiedPartition/)
-  assert.match(history, /qeo_prune_verified_chart_daily_partition/)
-  assert.match(history, /providerExhaustedWithoutData/)
-  assert.match(history, /deepHistoryBarPolicy/)
-  assert.match(history, /bar\.volume > 0/)
-  assert.ok(history.indexOf("archiveVerifiedPartition") < history.lastIndexOf("qeo_prune_verified_chart_daily_partition"))
   assert.doesNotMatch(history, /synthetic|fillForward|fabricate/i)
   assert.match(route, /isMachineRequestAuthorized/)
-  assert.match(route, /backfillDailyColdHistory/)
-  assert.match(route, /10/)
+  assert.match(route, /DAILY_DEEP_COLD_RETIRED/)
+  assert.match(route, /status: 410/)
+  assert.doesNotMatch(route, /backfillDailyColdHistory/)
 })
 
 test("QEO-100 incomplete stored coverage backfills the missing head instead of trusting lastStored", () => {
