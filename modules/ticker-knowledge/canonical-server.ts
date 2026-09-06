@@ -216,6 +216,7 @@ export async function runServerResearchReportKnowledgeBackfillPage(input: {
     batchSize: input.batchSize,
     loadPage: (cursor, limit) => loadCanonicalResearchReportBackfillPage({ cursor, batchSize: limit, source }),
     syncRow: (row) => syncResearchReportKnowledge(index, row),
+    failureId: (row) => row.report.id,
   })
 }
 
@@ -230,5 +231,6 @@ export async function runServerCouncilKnowledgeBackfillPage(input: {
     batchSize: input.batchSize,
     loadPage: (cursor, limit) => loadCanonicalCouncilBackfillPage({ cursor, batchSize: limit, source }),
     syncRow: (row) => syncCouncilHistoryKnowledge(index, row),
+    failureId: (row) => row.id,
   })
 }
