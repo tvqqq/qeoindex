@@ -1,4 +1,4 @@
-name: QEO-129 DNSE Raw Basis Probe
+name: QEO-129 VCI Raw Basis Probe
 
 on:
   push:
@@ -14,130 +14,65 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      DNSE_API_KEY: ${{ secrets.DNSE_API_KEY }}
-      DNSE_API_SECRET: ${{ secrets.DNSE_API_SECRET }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Probe bounded VHM Daily anchors without exposing credentials
+      - name: Probe VCI native ONE_DAY VHM anchors
         run: |
           node --input-type=module <<'NODE'
-          import { createHmac, randomUUID } from 'node:crypto'
-
-          const apiKey = process.env.DNSE_API_KEY ?? ''
-          const apiSecret = process.env.DNSE_API_SECRET ?? ''
-          if (!apiKey || !apiSecret) {
-            console.log(JSON.stringify({ configured: false, provider: 'DNSE' }))
+          const endpoint = 'https://trading.vietcap.com.vn/api/chart/OHLCChart/gap-chart'
+          const now = new Date('2026-08-07T23:59:59.000Z')
+          const to = Math.floor(now.getTime() / 1000)
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/json, text/plain, */*',
+              'Accept-Encoding': 'identity',
+              'Content-Type': 'application/json',
+              Origin: 'https://trading.vietcap.com.vn',
+              Referer: 'https://trading.vietcap.com.vn/',
+              'User-Agent': 'Mozilla/5.0 QeoIndex/1.0',
+            },
+            body: JSON.stringify({ timeFrame: 'ONE_DAY', symbols: ['VHM'], to, countBack: 400 }),
+            signal: AbortSignal.timeout(8000),
+          })
+          if (!response.ok) {
+            console.log(JSON.stringify({ provider:'VCI', usable:false, httpStatus:response.status }))
             process.exit(2)
           }
-
-          function formatDateHeader(date) {
-            const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
-            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-            const pad = (value) => String(value).padStart(2, '0')
-            return `${days[date.getUTCDay()]}, ${pad(date.getUTCDate())} ${months[date.getUTCMonth()]} ${date.getUTCFullYear()} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())} +0000`
+          const payload = await response.json()
+          const vectors = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : []
+          const vector = vectors.find((item) => String(item?.symbol ?? '').trim().toUpperCase() === 'VHM') ?? vectors[0]
+          if (!vector || !Array.isArray(vector.t)) {
+            console.log(JSON.stringify({ provider:'VCI', usable:false, reason:'MISSING_VECTOR' }))
+            process.exit(3)
           }
-
-          function signatureHeaders(method, path) {
-            const dateValue = formatDateHeader(new Date())
-            const nonce = randomUUID().replaceAll('-', '')
-            const signingString = `(request-target): ${method.toLowerCase()} ${path}\ndate: ${dateValue}\nnonce: ${nonce}`
-            const raw = createHmac('sha256', Buffer.from(apiSecret, 'utf8')).update(signingString, 'utf8').digest('base64')
-            return {
-              Date: dateValue,
-              'X-Signature': `Signature keyId="${apiKey}",algorithm="hmac-sha256",headers="(request-target) date",signature="${encodeURIComponent(raw)}",nonce="${nonce}"`,
-              'x-api-key': apiKey,
-            }
+          const fields = ['t','o','h','l','c','v']
+          if (fields.some((field) => !Array.isArray(vector[field]) || vector[field].length !== vector.t.length)) {
+            console.log(JSON.stringify({ provider:'VCI', usable:false, reason:'MISALIGNED_VECTORS' }))
+            process.exit(4)
           }
-
-          function arrays(value) {
-            return Array.isArray(value) ? value.map(Number) : []
-          }
-
-          function normalize(raw) {
-            const payload = typeof raw === 'string' ? JSON.parse(raw) : raw
-            const source = payload?.data ?? payload?.result ?? payload
-            if (Array.isArray(source)) {
-              return source.map((row) => ({
-                time: Number(row.time ?? row.t ?? row.timestamp ?? row.ts),
-                open: Number(row.open ?? row.o), high: Number(row.high ?? row.h),
-                low: Number(row.low ?? row.l), close: Number(row.close ?? row.c),
-                volume: Number(row.volume ?? row.v ?? 0),
-              })).filter((bar) => Object.values(bar).every(Number.isFinite))
-            }
-            const t = arrays(source?.t ?? source?.time ?? source?.timestamps)
-            const o = arrays(source?.o ?? source?.open)
-            const h = arrays(source?.h ?? source?.high)
-            const l = arrays(source?.l ?? source?.low)
-            const c = arrays(source?.c ?? source?.close)
-            const v = arrays(source?.v ?? source?.volume)
-            const length = Math.min(t.length, o.length, h.length, l.length, c.length, v.length || Number.POSITIVE_INFINITY)
-            if (!Number.isFinite(length) || length <= 0) return []
-            return Array.from({ length }, (_, i) => ({ time:t[i], open:o[i], high:h[i], low:l[i], close:c[i], volume:v[i] ?? 0 }))
-              .filter((bar) => Object.values(bar).every(Number.isFinite))
-          }
-
-          async function request(resolution, from, to) {
-            const path = '/price/ohlc'
-            const url = new URL(`https://openapi.dnse.com.vn${path}`)
-            url.searchParams.set('symbol', 'VHM')
-            url.searchParams.set('resolution', resolution)
-            url.searchParams.set('from', String(from))
-            url.searchParams.set('to', String(to))
-            url.searchParams.set('type', 'STOCK')
-            const response = await fetch(url, { headers: signatureHeaders('GET', path), signal: AbortSignal.timeout(8000) })
-            const body = await response.text()
-            if (!response.ok) throw new Error(`DNSE ${resolution} HTTP ${response.status}: ${body.slice(0,120)}`)
-            return normalize(body)
-          }
-
           function vnDate(seconds) {
-            const parts = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Ho_Chi_Minh', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(new Date(seconds * 1000))
+            const parts = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Ho_Chi_Minh', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(new Date(Number(seconds) * 1000))
             const get = (type) => parts.find((part) => part.type === type)?.value ?? ''
             return `${get('year')}-${get('month')}-${get('day')}`
           }
-
-          const from = Math.floor(Date.parse('2025-10-10T00:00:00Z') / 1000)
-          const to = Math.floor(Date.parse('2026-08-07T23:59:59Z') / 1000)
-          let bars = []
-          let resolution = null
-          const errors = []
-          for (const candidate of ['1D', 'D']) {
-            try {
-              bars = await request(candidate, from, to)
-              if (bars.length) { resolution = candidate; break }
-            } catch (error) {
-              errors.push(error instanceof Error ? error.message : String(error))
-            }
-          }
-          if (!bars.length) {
-            console.log(JSON.stringify({ configured: true, provider:'DNSE', usable:false, errors }))
-            process.exit(3)
-          }
-
+          const bars = vector.t.map((time, index) => ({
+            date: vnDate(time),
+            open: Number(vector.o[index]) / 1000,
+            high: Number(vector.h[index]) / 1000,
+            low: Number(vector.l[index]) / 1000,
+            close: Number(vector.c[index]) / 1000,
+            volume: Number(vector.v[index]),
+          })).filter((bar) => Object.values(bar).every((value) => typeof value === 'string' || Number.isFinite(value)))
           const wanted = new Set(['2025-10-13','2025-10-14','2025-10-15','2025-10-16','2025-10-17','2026-06-26','2026-08-05'])
-          const anchors = bars
-            .map((bar) => ({ date:vnDate(bar.time), open:bar.open, high:bar.high, low:bar.low, close:bar.close, volume:bar.volume }))
-            .filter((bar) => wanted.has(bar.date))
-            .sort((a,b) => a.date.localeCompare(b.date))
-
+          const anchors = bars.filter((bar) => wanted.has(bar.date)).sort((a,b) => a.date.localeCompare(b.date))
           const golden = anchors.filter((bar) => bar.date.startsWith('2025-10-'))
           console.log(JSON.stringify({
-            configured: true,
-            provider: 'DNSE',
-            usable: true,
-            resolution,
-            barCount: bars.length,
+            provider:'VCI', usable:true, timeFrame:'ONE_DAY', barCount:bars.length,
             anchors,
-            goldenWeek: golden.length ? {
-              high: Math.max(...golden.map((bar) => bar.high)),
-              low: Math.min(...golden.map((bar) => bar.low)),
-              sessions: golden.length,
-            } : null,
+            goldenWeek: golden.length ? { high:Math.max(...golden.map((bar)=>bar.high)), low:Math.min(...golden.map((bar)=>bar.low)), sessions:golden.length } : null,
           }))
           NODE
-
-# QEO-129 one-shot trigger: 2026-09-07-v2
