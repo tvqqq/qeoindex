@@ -63,6 +63,13 @@ jobs:
               bucket: 'canonical',
               suites: ['fast'],
             },
+            {
+              path: 'tests/qeo-124-lineage-portability.test.ts',
+              owner: 'market',
+              invariant: 'QEO-124 factor lineage is stable across databases when canonical source facts are identical but generated corporate-action UUIDs differ.',
+              bucket: 'canonical',
+              suites: ['fast'],
+            },
           ]
           const byPath = new Map(doc.entries.map((entry) => [entry.path, entry]))
           for (const entry of desired) byPath.set(entry.path, entry)
@@ -88,8 +95,8 @@ jobs:
           for (const [pattern, replacement] of replacements) text = text.replace(pattern, replacement)
           fs.writeFileSync(path, text)
           NODE
-      - name: Verify monetary unit GREEN contracts
-        run: node --test tests/qeo-124-monetary-unit.test.ts tests/corporate-actions/qeo124-adjustment-engine.test.ts
+      - name: Verify QEO-124 focused contracts
+        run: node --test tests/qeo-124-monetary-unit.test.ts tests/qeo-124-lineage-portability.test.ts tests/corporate-actions/qeo124-adjustment-engine.test.ts
       - name: Commit manifest and fixture alignment
         run: |
           git config user.name "github-actions[bot]"
@@ -99,5 +106,5 @@ jobs:
             echo "QEO-124 contracts already synchronized"
             exit 0
           fi
-          git commit -m "test(QEO-124): align monetary fixtures with VND contract"
+          git commit -m "test(QEO-124): register portable lineage contract"
           git push origin HEAD:feat/qeo-124-adjustment-engine
