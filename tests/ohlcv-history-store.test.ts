@@ -23,6 +23,10 @@ import {
   EodHistoryRefreshError,
   type OhlcvUniverseRefreshResult,
 } from "../modules/eod/history-refresh.ts"
+import {
+  chartHotRetentionCutoff,
+  maxChartHistorySeconds,
+} from "../modules/market/chart-data/history-policy.ts"
 
 const NOW = new Date("2026-08-25T08:35:00.000Z")
 const dnseHistorySource = readFileSync("modules/market/providers/dnse/history.ts", "utf8")
@@ -266,4 +270,21 @@ test("EOD HISTORY_REFRESH summary is compact and fail-closed on provider/runtime
     assert.match(error.message, /1\/2/)
     return true
   })
+})
+
+test("QEO-108 keeps the 31-day 1m product horizon while HOT retention is five Vietnam trading sessions", () => {
+  const DAY_SECONDS = 86400
+  assert.equal(maxChartHistorySeconds("1m"), 31 * DAY_SECONDS)
+
+  const sunday = new Date("2026-09-06T08:00:00+07:00")
+  assert.equal(
+    new Date(chartHotRetentionCutoff(sunday) * 1000).toISOString(),
+    "2026-08-25T17:00:00.000Z",
+  )
+
+  const mondaySession = new Date("2026-09-07T10:00:00+07:00")
+  assert.equal(
+    new Date(chartHotRetentionCutoff(mondaySession) * 1000).toISOString(),
+    "2026-08-26T17:00:00.000Z",
+  )
 })
