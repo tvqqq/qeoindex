@@ -7,6 +7,14 @@ import {
   runServerResearchReportKnowledgeBackfillPage,
 } from "@/modules/ticker-knowledge/canonical-server"
 import { normalizeTickerKnowledgeAcceptanceCommand } from "@/modules/ticker-knowledge/production-acceptance"
+import {
+  resetServerTickerKnowledgeDerivedCollection,
+  runServerCouncilKnowledgeCanary,
+  runServerReportQaCanary,
+  runServerStockQaCanary,
+  runServerTickerKnowledgeBenchmark,
+  runServerTickerKnowledgeInventory,
+} from "@/modules/ticker-knowledge/production-live"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -44,6 +52,33 @@ async function isAcceptanceRunnerAuthorized(request: Request) {
   return !error && data === true
 }
 
+async function runCommand(command: ReturnType<typeof normalizeTickerKnowledgeAcceptanceCommand>) {
+  switch (command.action) {
+    case "backfill_reports":
+      return runServerResearchReportKnowledgeBackfillPage({
+        cursor: command.cursor,
+        batchSize: command.batchSize,
+      })
+    case "backfill_council":
+      return runServerCouncilKnowledgeBackfillPage({
+        cursor: command.cursor,
+        batchSize: command.batchSize,
+      })
+    case "inventory":
+      return runServerTickerKnowledgeInventory()
+    case "benchmark":
+      return runServerTickerKnowledgeBenchmark()
+    case "canary_report":
+      return runServerReportQaCanary()
+    case "canary_stock":
+      return runServerStockQaCanary()
+    case "canary_council":
+      return runServerCouncilKnowledgeCanary()
+    case "reset_collection":
+      return resetServerTickerKnowledgeDerivedCollection(command.confirm)
+  }
+}
+
 export async function POST(request: Request) {
   if (!(await isAcceptanceRunnerAuthorized(request))) {
     return json({ ok: false, error: "Unauthorized" }, 401)
@@ -51,16 +86,7 @@ export async function POST(request: Request) {
 
   try {
     const command = normalizeTickerKnowledgeAcceptanceCommand(await request.json())
-    const result = command.action === "backfill_reports"
-      ? await runServerResearchReportKnowledgeBackfillPage({
-          cursor: command.cursor,
-          batchSize: command.batchSize,
-        })
-      : await runServerCouncilKnowledgeBackfillPage({
-          cursor: command.cursor,
-          batchSize: command.batchSize,
-        })
-
+    const result = await runCommand(command)
     return json({ ok: true, action: command.action, result })
   } catch {
     return json({ ok: false, error: "Ticker knowledge production acceptance operation failed" }, 400)
