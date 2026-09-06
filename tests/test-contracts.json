@@ -168,6 +168,24 @@
       ]
     },
     {
+      "path": "tests/corporate-actions/qeo124-adjustment-engine.test.ts",
+      "owner": "market",
+      "invariant": "QEO-124 keeps corporate-action adjustment formulas deterministic, action-type-specific, order-independent, and fail-closed.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/corporate-actions/qeo124-factor-schema.test.ts",
+      "owner": "db",
+      "invariant": "QEO-124 preserves versioned factor-run storage, one combined transition per effective session, and private RLS-protected derived state.",
+      "bucket": "deep-safety",
+      "suites": [
+        "db"
+      ]
+    },
+    {
       "path": "tests/cron-job-evidence.test.ts",
       "owner": "admin",
       "invariant": "Preserve the current cron job evidence contract.",
