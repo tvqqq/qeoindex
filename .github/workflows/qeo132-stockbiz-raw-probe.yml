@@ -46,9 +46,7 @@ jobs:
             const rows = []
             for (const match of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
               const cells = [...match[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((cell) => decode(cell[1]))
-              if (cells.length < 8 || !/^\d{2}\/\d{2}\/\d{4}$/.test(cells[0] ?? '')) continue
-              const offset = cells.length >= 9 ? 0 : null
-              if (offset === null) continue
+              if (cells.length < 9 || !/^\d{2}\/\d{2}\/\d{4}$/.test(cells[0] ?? '')) continue
               rows.push({
                 date: cells[0],
                 open: parseNumber(cells[2]),
@@ -88,6 +86,8 @@ jobs:
             pages: evidence.map(({date,httpStatus,latencyMs,rows}) => ({date,httpStatus,latencyMs,rowCount:rows.length})),
             anchors,
             rawGoldenWeek: golden.length === 5 ? { high: Math.max(...golden.map((row) => row.high)), low: Math.min(...golden.map((row) => row.low)), sessions: golden.length } : null,
-            adjustedGoldenWeek: golden.length === 5 ? { high: Math.max(...golden.map((row) => row.high)), lowAdjustedClose: Math.min(...golden.map((row) => row.adjustedClose)), sessions: golden.length } : null,
+            adjustedCloseGoldenWeek: golden.length === 5 ? { max: Math.max(...golden.map((row) => row.adjustedClose)), min: Math.min(...golden.map((row) => row.adjustedClose)), sessions: golden.length } : null,
           }))
           NODE
+
+# one-shot trigger 2026-09-07
