@@ -91,6 +91,31 @@ test("QEO-115 character budget bounds items and retrieved identities, not only r
   assert.ok(result.items.every((value) => result.text.includes(value.text.slice(0, 24))))
 })
 
+test("QEO-115 partial-fit structured item carries only the bounded rendered text", async () => {
+  const huge = item({
+    key: "huge-thesis",
+    text: `Huge canonical thesis ${"H".repeat(5_000)}`,
+    authority: "CANONICAL_THESIS",
+    sourceType: "NOTION_THESIS",
+  })
+
+  const result = await buildTickerContext({
+    index: index([]),
+    ticker: "MSN",
+    query: "current thesis",
+    mandatory: [huge],
+    maxChars: 500,
+    now: "2026-09-06T00:00:00.000Z",
+  })
+
+  assert.equal(result.items.length, 1)
+  assert.equal(result.items[0].id, huge.id)
+  assert.equal(result.items[0].provenance.sourceVersion, huge.provenance.sourceVersion)
+  assert.ok(result.items[0].text.length < huge.text.length)
+  assert.ok(result.items[0].text.endsWith("…"))
+  assert.ok(result.text.length <= 500)
+})
+
 test("QEO-115 preserves contradictory authorities as separate ordered items instead of averaging them", async () => {
   const deterministic = item({
     key: "deterministic",
