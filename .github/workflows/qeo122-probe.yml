@@ -32,3 +32,26 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
       - name: Run QEO-122 probe regressions
         run: node --test scripts/probes/qeo122-*.test.ts
+
+  live-source-matrix:
+    needs: probe-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run live VSDC/VSD matrix twice per source
+        run: |
+          set -o pipefail
+          node scripts/probes/qeo122-live-source-matrix.ts | tee qeo122-live-source-matrix.json
+      - name: Upload live-source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo122-live-source-matrix
+          path: qeo122-live-source-matrix.json
+          if-no-files-found: warn
