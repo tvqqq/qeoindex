@@ -169,3 +169,43 @@ test("QEO-115 context builder rejects cross-ticker results even when the retriev
   assert.deepEqual(context.items, [])
   assert.doesNotMatch(context.text, /VIC/)
 })
+
+test("QEO-115 point-in-time context rejects future retrieved and mandatory evidence", async () => {
+  const { buildTickerContext } = await import("../../modules/ticker-knowledge/context.ts")
+  const { createTickerKnowledgeItem } = await import("../../modules/ticker-knowledge/domain.ts")
+  const future = createTickerKnowledgeItem({
+    ticker: "MSN",
+    knowledgeType: "COUNCIL_OUTCOME",
+    authority: "VERIFIED_FACT",
+    sourceType: "AI_COUNCIL",
+    logicalKey: "future-outcome",
+    text: "Future outcome should not be visible in historical replay.",
+    provenance: { sourceId: "run-future", sourceVersion: "v1", asOf: "2026-09-10T08:00:00.000Z" },
+    projectionVersion: "test-v1",
+  })
+  const index = {
+    ensureReady: async () => undefined,
+    upsert: async () => undefined,
+    deleteSourceVersion: async () => undefined,
+    query: async () => [{
+      id: future.id,
+      score: 1,
+      item: future,
+      derivedVersions: { embeddingModel: "x", embeddingVersion: "x", sparseEncoder: "x", sparseVersion: "x" },
+    }],
+  }
+
+  const context = await buildTickerContext({
+    index,
+    ticker: "MSN",
+    query: "what did we know then?",
+    consumer: "HISTORICAL_CASE_SEARCH",
+    mandatory: [future],
+    asOf: "2026-09-06T23:59:59.999+07:00",
+    now: "2026-09-06T23:59:59.999+07:00",
+  })
+
+  assert.deepEqual(context.items, [])
+  assert.deepEqual(context.retrievedPointIds, [])
+  assert.doesNotMatch(context.text, /Future outcome/)
+})
