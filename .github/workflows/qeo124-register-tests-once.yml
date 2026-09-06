@@ -70,6 +70,13 @@ jobs:
               bucket: 'canonical',
               suites: ['fast'],
             },
+            {
+              path: 'tests/qeo-124-vhm-golden.test.ts',
+              owner: 'market',
+              invariant: 'QEO-124 VHM canonical event lineage reproduces the 13-17/10/2025 adjusted weekly H/L through the QEO-93 Daily-to-weekly aggregation contract without moving session identities.',
+              bucket: 'canonical',
+              suites: ['fast'],
+            },
           ]
           const byPath = new Map(doc.entries.map((entry) => [entry.path, entry]))
           for (const entry of desired) byPath.set(entry.path, entry)
@@ -77,7 +84,7 @@ jobs:
           fs.writeFileSync(path, JSON.stringify(doc, null, 2) + '\n')
           NODE
       - name: Verify QEO-124 focused contracts
-        run: node --test tests/qeo-124-monetary-unit.test.ts tests/qeo-124-lineage-portability.test.ts tests/corporate-actions/qeo124-adjustment-engine.test.ts
+        run: node --test tests/qeo-124-monetary-unit.test.ts tests/qeo-124-lineage-portability.test.ts tests/qeo-124-vhm-golden.test.ts tests/corporate-actions/qeo124-adjustment-engine.test.ts
       - name: Commit manifest
         run: |
           git config user.name "github-actions[bot]"
@@ -87,5 +94,5 @@ jobs:
             echo "QEO-124 contracts already synchronized"
             exit 0
           fi
-          git commit -m "test(QEO-124): register portable lineage contract"
+          git commit -m "test(QEO-124): register VHM golden contract"
           git push origin HEAD:feat/qeo-124-adjustment-engine
