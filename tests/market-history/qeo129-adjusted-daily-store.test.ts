@@ -12,6 +12,8 @@ function fakeSupabase(options: {
   runLineage?: string
   omitReadbackSession?: string
   badReadbackCloseSession?: string
+  rawProvider?: string
+  rawProviderDetail?: string
 } = {}) {
   const calls: Array<{ kind: string; value: unknown }> = []
   const runRow = {
@@ -27,6 +29,8 @@ function fakeSupabase(options: {
     cumulative_price_factor: 0.5,
     cumulative_volume_factor: 2,
   }]
+  const provider = options.rawProvider ?? "DNSE"
+  const providerDetail = options.rawProviderDetail ?? "DNSE direct Daily OHLCV"
   const rawRows = [
     {
       ticker: "VHM",
@@ -36,6 +40,9 @@ function fakeSupabase(options: {
       low: 95,
       close: 105,
       volume: 1_000,
+      provider,
+      provider_detail: providerDetail,
+      source_url: "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock",
     },
     {
       ticker: "VHM",
@@ -45,6 +52,9 @@ function fakeSupabase(options: {
       low: 100,
       close: 115,
       volume: 2_000,
+      provider,
+      provider_detail: providerDetail,
+      source_url: "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock",
     },
   ]
 
@@ -216,6 +226,36 @@ test("QEO-129 persists shadow rollout only after complete exact readback", async
   assert.equal(rollout.activated_at, null)
   assert.equal(rollout.blocked_reason, null)
   assert.equal(typeof rollout.verified_at, "string")
+})
+
+test("QEO-129 refuses adjusted or unknown persisted Daily provenance before any adjusted write", async () => {
+  const invalidSources = [
+    {
+      rawProvider: "Fallback",
+      rawProviderDetail: "Yahoo Finance .VN | adjusted OHLC via adjclose/close | source basis: adjusted",
+    },
+    {
+      rawProvider: "TitanLabs",
+      rawProviderDetail: "legacy history",
+    },
+  ]
+
+  for (const source of invalidSources) {
+    const fake = fakeSupabase(source)
+    await assert.rejects(
+      rebuildAdjustedDailyRange({
+        supabase: fake.client as never,
+        ticker: "VHM",
+        fromDate: "2026-08-04",
+        toDate: "2026-08-05",
+        expectedFactorRunId: RUN_ID,
+        expectedLineageHash: LINEAGE,
+      }),
+      /raw price basis/i,
+    )
+    assert.equal(fake.calls.some((call) => call.kind === "upsert:adjusted"), false)
+    assert.equal(fake.calls.some((call) => call.kind === "upsert:rollout"), false)
+  }
 })
 
 test("QEO-129 fails closed before persistence for blocked/superseded or wrong-lineage runs", async () => {
