@@ -78,6 +78,7 @@ test("QEO-29 keeps phase detail for 1 day and terminal run summaries for 7 days"
   assert.match(sql, /delete\s+from\s+public\.system_job_phases[\s\S]*?status\s+in\s*\(\s*'succeeded'\s*,\s*'failed'\s*,\s*'skipped'\s*\)[\s\S]*?v_phase_cutoff/i)
   assert.match(sql, /delete\s+from\s+public\.system_job_runs[\s\S]*?status\s+in\s*\(\s*'succeeded'\s*,\s*'failed'\s*,\s*'skipped'\s*\)[\s\S]*?v_job_cutoff/i)
   assert.match(active, /rpc\("qeo_run_job_telemetry_cleanup"/)
+  assert.doesNotMatch(sql, /delete\s+from\s+public\.system_audit_log/i)
   assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
 })
 
