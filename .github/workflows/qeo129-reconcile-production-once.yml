@@ -1,0 +1,89 @@
+name: QEO-129 Reconcile Production Once
+
+on:
+  push:
+    branches:
+      - feat/qeo-129-adjusted-daily-shadow
+    paths:
+      - .github/workflows/qeo129-reconcile-production-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - run: pnpm install --frozen-lockfile
+      - name: Reconcile QEO-129 production migration identity
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+
+          const logicalName = 'qeo129_adjusted_daily_shadow'
+          const repositoryVersion = '20260906170000'
+          const productionVersion = '20260906223014'
+
+          const equivalencePath = 'supabase/migration-equivalence.json'
+          const equivalence = JSON.parse(fs.readFileSync(equivalencePath, 'utf8'))
+          const mapping = {
+            logicalName,
+            repositoryVersion,
+            productionVersion,
+            state: 'MAPPED',
+            evidence: 'qeo129-production-ledger-schema-rls-readback-and-rollback-smoke',
+            rationale: 'QEO-129 adjusted Daily shadow schema was promoted only after zero-to-latest replay, exact OHLCV SQL readback, DB lint, generated-type verification, TypeScript and EOD v4 passed. Production rollback-only smoke then verified RLS, service-role-only access, exact OHLCV/run/lineage readback, wrong-run/wrong-lineage rejection and zero residual synthetic rows. Supabase assigned runtime version 20260906223014 while repository replay keeps 20260906170000.'
+          }
+          const mappingIndex = equivalence.migrations.findIndex((item) => item.logicalName === logicalName)
+          if (mappingIndex >= 0) equivalence.migrations[mappingIndex] = mapping
+          else equivalence.migrations.push(mapping)
+          equivalence.migrations.sort((a, b) => String(a.repositoryVersion).localeCompare(String(b.repositoryVersion)))
+          fs.writeFileSync(equivalencePath, `${JSON.stringify(equivalence, null, 2)}\n`)
+
+          const ledgerPath = 'docs/db/evidence/production-migration-ledger-2026-09-06.json'
+          const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'))
+          const migration = { version: productionVersion, name: logicalName }
+          const ledgerIndex = ledger.migrations.findIndex((item) => item.name === logicalName)
+          if (ledgerIndex >= 0) ledger.migrations[ledgerIndex] = migration
+          else ledger.migrations.push(migration)
+          ledger.migrations.sort((a, b) => String(a.version).localeCompare(String(b.version)))
+          ledger.capturedAt = new Date().toISOString()
+          ledger.reviewScope = 'QEO-119, QEO-123, QEO-124 and QEO-129 reviewed production migration reconciliation; all promoted migration sets are included in the canonical ledger.'
+          fs.writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`)
+          NODE
+      - name: Verify reviewed production identity
+        run: |
+          node scripts/db/verify-migration-drift.mjs
+          node --test tests/db-migration-drift.test.ts tests/db/qeo129-schema-contract.test.ts tests/market-history/qeo129-adjusted-daily-store.test.ts tests/market-history/qeo129-adjusted-daily-read.test.ts tests/market-history/qeo129-adjusted-daily-shadow.test.ts
+          pnpm test:manifest
+          pnpm typecheck
+      - name: Rehearse zero to latest after reconciliation
+        run: |
+          supabase start
+          pnpm db:replay:verify
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f tests/db/qeo129-adjusted-daily-persistence.sql
+      - name: Commit reconciliation and remove helper
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/qeo129-reconcile-production-once.yml
+          git add supabase/migration-equivalence.json docs/db/evidence/production-migration-ledger-2026-09-06.json
+          git commit -m 'chore(QEO-129): reconcile production migration'
+          git push origin HEAD:feat/qeo-129-adjusted-daily-shadow
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
