@@ -1,6 +1,12 @@
 {
-  "capturedAt": "2026-09-06T04:29:58Z",
+  "capturedAt": "2026-09-06T13:22:50Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
+  "reviewScope": "QEO-123 post-production reconciliation. Concurrent QEO-119 production promotions remain owned by their rollout PR and are explicitly excluded from this reviewed set until that reconciliation lands.",
+  "excludedConcurrentProductionMigrations": [
+    {"version":"20260906082336","name":"qeo106_semantic_daily_basis_precedence","owner":"QEO-119 / PR #352"},
+    {"version":"20260906123024","name":"qeo117_ai_council_ticker_knowledge","owner":"QEO-119 / PR #352"},
+    {"version":"20260906132050","name":"qeo116_report_qa_hydration","owner":"QEO-119 rollout reconciliation"}
+  ],
   "migrations": [
     {"version":"20260818","name":"orderbook_snapshots"},
     {"version":"20260818183000","name":"enable_realtime_orderbook"},
@@ -103,6 +109,8 @@
     {"version":"20260905235254","name":"qeo106_daily_prune_error_evidence_fix"},
     {"version":"20260906002919","name":"qeo106_scoped_daily_integrity_report"},
     {"version":"20260906030037","name":"qeo108_chart_capacity_and_index_cleanup"},
-    {"version":"20260906042922","name":"qeo107_hot_session_coverage_gate"}
+    {"version":"20260906042922","name":"qeo107_hot_session_coverage_gate"},
+    {"version":"20260906130930","name":"qeo123_corporate_actions"},
+    {"version":"20260906130959","name":"qeo123_corporate_action_persistence"}
   ]
 }
