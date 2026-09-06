@@ -11,6 +11,7 @@ import {
   chartHotSessionRetentionCutoff,
 } from "./history-policy"
 import {
+  dropEmptyHotIntradaySessionPartition,
   listExpiredHotPartitions,
   pruneVerifiedHotIntradayPartition,
   readHotIntradayRange,
@@ -44,6 +45,7 @@ export interface ChartIntradayArchiveMetrics {
   bytesWritten: number
   hourlyRowsCached: number
   rowsPruned: number
+  sessionPartitionsDropped: number
   failures: ChartArchiveFailure[]
   oldestHotBar: string | null
 }
@@ -87,6 +89,7 @@ export async function runChartIntradayArchiveLifecycle(
   let bytesWritten = 0
   let hourlyRowsCached = 0
   let rowsPruned = 0
+  let sessionPartitionsDropped = 0
   const failures: ChartArchiveFailure[] = []
 
   for (const partition of partitions) {
@@ -113,6 +116,8 @@ export async function runChartIntradayArchiveLifecycle(
         sha256: archived.sha256,
         rowCount: archived.rowCount,
       })
+      const reclaim = await dropEmptyHotIntradaySessionPartition(supabase, partition.tradingDate)
+      if (reclaim?.status === "dropped") sessionPartitionsDropped += 1
       partitionsArchived += 1
       if (archived.reused) reusedArchives += 1
       rowsArchived += archived.rowCount
@@ -137,6 +142,7 @@ export async function runChartIntradayArchiveLifecycle(
     bytesWritten,
     hourlyRowsCached,
     rowsPruned,
+    sessionPartitionsDropped,
     failures,
     oldestHotBar: oldestHotEpoch == null ? null : new Date(oldestHotEpoch * 1000).toISOString(),
   }
