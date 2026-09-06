@@ -258,6 +258,15 @@
       ]
     },
     {
+      "path": "tests/db/qeo129-schema-contract.test.ts",
+      "owner": "db",
+      "invariant": "QEO-129 adjusted Daily shadow schema remains private, lineage-bound, replayable, and exact-readback verified.",
+      "bucket": "deep-safety",
+      "suites": [
+        "db"
+      ]
+    },
+    {
       "path": "tests/dnse-request-windows.test.ts",
       "owner": "market",
       "invariant": "Preserve the current dnse request windows contract.",
@@ -480,6 +489,15 @@
       "path": "tests/market-data-contract.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market data contract contract.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/market-history/qeo129-adjusted-daily-shadow.test.ts",
+      "owner": "market",
+      "invariant": "QEO-129 adjusted Daily remains a pure raw plus exact-factor derivation with strict next-effective-session projection and no raw fallback.",
       "bucket": "canonical",
       "suites": [
         "fast"
