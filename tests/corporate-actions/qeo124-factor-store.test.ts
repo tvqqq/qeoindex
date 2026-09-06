@@ -8,6 +8,16 @@ const RUN_ID = "00000000-0000-4000-8000-000000000401"
 const ACTION_ID = "00000000-0000-4000-8000-000000000402"
 const RUN_HASH = "a".repeat(64)
 const EVENT_HASH = "b".repeat(64)
+const FORMULA_INPUTS = {
+  previousRawClose: 100,
+  totalCashPerShare: 10,
+  freeShareRatio: 0,
+  rightsRatio: 0,
+  rightsSubscriptionValue: 0,
+  splitMultiplier: 1,
+  postEventShareUnits: 1,
+  corporateActionIds: [ACTION_ID],
+}
 
 function candidate(): FactorRunCandidate {
   return {
@@ -30,7 +40,7 @@ function candidate(): FactorRunCandidate {
       cumulativeVolumeFactor: 1,
       corporateActionIds: [ACTION_ID],
       eventLineageHash: EVENT_HASH,
-      formulaInputs: { cashDividend: 10 },
+      formulaInputs: FORMULA_INPUTS,
     }],
   }
 }
@@ -61,7 +71,7 @@ function fakeSupabase(options: { badReadback?: boolean; rpcError?: boolean } = {
     cumulative_volume_factor: 1,
     corporate_action_ids: [ACTION_ID],
     event_lineage_hash: EVENT_HASH,
-    formula_inputs: { cashDividend: 10 },
+    formula_inputs: FORMULA_INPUTS,
   }
 
   return {
