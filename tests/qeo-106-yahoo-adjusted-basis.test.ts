@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import test from "node:test"
 
 import { fetchYahooDailyOhlcv } from "../modules/market/providers/yahoo/history.ts"
@@ -63,4 +63,25 @@ test("QEO-106 partial provider windows fall back per unresolved trading session"
   assert.match(integrity, /for \(const sessionDate of unresolvedSessions\)/)
   assert.match(integrity, /fetchDailyMarketHistoryWindow\([\s\S]*?\(_provider, bar\) => vietnamDateKey\(bar\.time \* 1000\) === sessionDate/)
   assert.match(integrity, /QEO-106 per-session Daily integrity repair/)
+})
+
+test("QEO-106 semantic basis repair can replace legacy Yahoo rows and counts only persisted dates", () => {
+  const migrationDirs = [
+    new URL("../supabase/migrations/", import.meta.url),
+    new URL("../supabase/pending-migrations/", import.meta.url),
+  ]
+  const migrationSources = migrationDirs.flatMap((dir) => readdirSync(dir)
+    .filter((name) => name.endsWith(".sql"))
+    .map((name) => readFileSync(new URL(name, dir), "utf8")))
+  const semanticPrecedence = migrationSources.find((source) => source.includes("QEO-106 semantic Daily basis precedence"))
+  assert.ok(semanticPrecedence, "expected a QEO-106 semantic basis precedence migration")
+  assert.match(semanticPrecedence, /old_semantic_valid/)
+  assert.match(semanticPrecedence, /query1\.finance\.yahoo\.com\/v8\/finance\/chart\//)
+  assert.match(semanticPrecedence, /adjusted OHLC/i)
+  assert.match(semanticPrecedence, /not old_semantic_valid and new_valid/)
+
+  const integrity = readFileSync(new URL("../modules/market/history/daily-integrity.ts", import.meta.url), "utf8")
+  assert.match(integrity, /verifyPersistedRepairDates/)
+  assert.match(integrity, /persistedDates/)
+  assert.match(integrity, /QEO-106 repair readback/)
 })
