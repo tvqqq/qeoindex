@@ -36,6 +36,7 @@ A second production defect also proved that an in-memory repair candidate is not
 - Do not silently infer ambiguous ex-dates or rights terms.
 - Do not apply a future announced action to historical prices before its canonical ex-date.
 - Do not create separate adjustment logic for weekly/monthly/quarterly/yearly candles.
+- Do not silently repurpose or delete the existing raw/evidence Daily storage during rollout.
 
 ## 4. Source authority
 
@@ -134,7 +135,7 @@ The table is recomputable. Corporate-action events are the source facts; factors
 
 ### 5.3 Raw versus adjusted Daily
 
-Long-term contract:
+Long-term logical contract:
 
 ```text
 raw/provider Daily evidence
@@ -142,7 +143,21 @@ raw/provider Daily evidence
         -> chart-facing canonical adjusted 1D
 ```
 
-Raw/provider evidence must remain available for audit/recomputation. The exact physical table split may be staged to control storage cost, but chart consumers must never receive a mixed-basis series.
+Raw/provider evidence must remain available for audit/recomputation. Chart consumers must never receive a mixed-basis series.
+
+### 5.4 Physical storage and migration boundary
+
+QEO-106 currently treats `market_ohlcv_history` as the canonical raw/evidence Daily store. QEO-121 does **not** silently change that table's meaning during implementation.
+
+Rollout must use an explicit cutover boundary:
+
+1. Keep existing raw/provider Daily evidence intact and readable by current operational code while QEO-123/QEO-124 are built.
+2. Build adjusted Daily behind a separate physical table, materialized read model, or versioned service boundary selected during QEO-125 implementation planning.
+3. Validate VHM and the staged regression set against the adjusted boundary while existing consumers remain on the old boundary.
+4. Atomically switch chart/EOD/Wyckoff/indicator consumers to the adjusted Daily read contract only after production acceptance.
+5. Preserve raw evidence after cutover for factor recomputation and audit. Renaming/deleting raw history is not part of this project unless a later zero-consumer storage issue explicitly approves it.
+
+This resolves the current QEO-106 `raw 1D` wording without creating a silent semantic change in an existing table.
 
 ## 6. Adjustment engine semantics
 
@@ -202,6 +217,8 @@ EOD v4
   -> LLM Council
 ```
 
+EOD v4 is the **single scheduled owner** of corporate-action maintenance. A manual authenticated recovery action may reuse the same service for operational recovery, but this design does not add a second recurring cron owner.
+
 ### 7.1 `CORPORATE_ACTION_SYNC`
 
 For the frozen canonical universe:
@@ -255,7 +272,7 @@ Wyckoff, indicators and AI Council must consume the rebuilt canonical adjusted D
 
 QEO-93 remains authoritative:
 
-- `1D` = canonical adjusted Daily;
+- `1D` = canonical adjusted Daily after the QEO-125 cutover;
 - `3D/1W/1M/1Q/1Y` derive only from canonical adjusted Daily;
 - no provider-specific weekly/monthly history;
 - no second adjustment pass after aggregation.
@@ -496,9 +513,10 @@ Approved design decisions:
 
 - Prefer free authoritative corporate-action source first; FiinGroup remains fallback only after spike NO-GO.
 - QeoIndex owns adjustment-factor computation.
-- Chart-facing Daily uses one adjusted basis.
+- Chart-facing Daily uses one adjusted basis after an explicit migration/cutover; raw provider evidence remains preserved.
 - Future events are synced/displayed immediately but do not alter historical pricing before ex-date.
 - Corporate-action maintenance is nested inside EOD v4 `HISTORY_REFRESH`, preserving seven business phases.
+- EOD v4 remains the single scheduled owner; manual recovery may reuse the same service but no second cron is introduced.
 - Only changed tickers/ranges rebuild.
 - Chart events anchor to canonical ex-date.
 - Stock Detail gets a dedicated corporate-action tab.
