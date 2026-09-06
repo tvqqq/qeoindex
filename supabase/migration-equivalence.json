@@ -152,7 +152,7 @@
       "productionVersion": "20260902061549",
       "state": "MAPPED",
       "evidence": "production-ledger-and-service-role-rpc-smoke",
-      "rationale": "QEO-21 bounded job telemetry cleanup was applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
+      "rationale": "QEO-21 service-role retention RPC was applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
     },
     {
       "logicalName": "qeo20_compatibility_columns_cleanup",
