@@ -5,6 +5,8 @@ import type {
   StepAdjustmentFormulaInputs,
 } from "./types.ts"
 
+const VND_PER_KILO_VND = 1_000
+
 export type AdjustmentFactorErrorCode =
   | "INVALID_REFERENCE_CLOSE"
   | "EVENT_TICKER_MISMATCH"
@@ -35,6 +37,10 @@ function isFinitePositive(value: number | null): value is number {
 
 function isFiniteNonNegative(value: number | null): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
+}
+
+function canonicalVndToDailyPriceUnit(value: number) {
+  return value / VND_PER_KILO_VND
 }
 
 function hasStockTerms(action: CanonicalFactorAction) {
@@ -139,6 +145,9 @@ export function computeStepAdjustment(input: AdjustmentEventSet): StepAdjustment
     )
   }
 
+  // QEO-123 canonical corporate-action monetary terms are stored in VND, while
+  // the canonical Daily OHLC contract uses thousand-VND price units. Convert
+  // exactly once at the factor boundary before any TERP arithmetic.
   let totalCashPerShare = 0
   let freeShareRatio = 0
   let rightsRatio = 0
@@ -147,7 +156,7 @@ export function computeStepAdjustment(input: AdjustmentEventSet): StepAdjustment
 
   for (const action of orderedEvents) {
     if (action.actionType === "cash_dividend") {
-      totalCashPerShare += action.cashPerShare as number
+      totalCashPerShare += canonicalVndToDailyPriceUnit(action.cashPerShare as number)
       continue
     }
 
@@ -164,7 +173,7 @@ export function computeStepAdjustment(input: AdjustmentEventSet): StepAdjustment
     if (action.actionType === "rights_issue") {
       const entitlement = ratio(action.rightsRatioDenominator, action.rightsRatioNumerator, "INVALID_RIGHTS_RATIO")
       rightsRatio += entitlement
-      rightsSubscriptionValue += entitlement * (action.subscriptionPrice as number)
+      rightsSubscriptionValue += entitlement * canonicalVndToDailyPriceUnit(action.subscriptionPrice as number)
     }
   }
 
