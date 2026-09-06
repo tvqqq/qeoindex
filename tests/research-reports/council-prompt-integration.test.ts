@@ -311,7 +311,7 @@ test("QEO-113 canonical backfill loaders are bounded, resumable, and advance pas
         return [{ analysis_id: "a2", ticker: "MSN", stance: "positive", recommendation_text: "BUY", target_price: 110000, target_currency: "VND", rationale: "recovery", evidence: [{ page: 4, snippet: "target" }] }]
       },
       loadChunks: async (selectors) => {
-        assert.deepEqual(selectors, [{ reportId: "r2", contentHash: "2".repeat(64), chunkVersion: "v2", pages: [4] }])
+        assert.deepEqual(selectors, [{ reportId: "r2", contentHash: "2".repeat(64), chunkVersion: "v2", pages: null }])
         return [{ id: "c2", report_id: "r2", content_hash: "2".repeat(64), chunk_version: "v2", page_number: 4, chunk_index: 0, content: "target 110000", chunk_hash: "3".repeat(64) }]
       },
     },
