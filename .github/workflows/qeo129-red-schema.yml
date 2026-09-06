@@ -1,0 +1,25 @@
+name: QEO-129 Schema RED Gate
+
+on:
+  push:
+    branches:
+      - feat/qeo-129-adjusted-daily-shadow
+    paths:
+      - .github/workflows/qeo129-red-schema.yml
+
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run QEO-129 schema contract
+        run: pnpm exec tsx --test tests/db/qeo129-schema-contract.test.ts
