@@ -119,18 +119,6 @@ function hrefSecurityId(value: unknown) {
   return value.match(/\/(?:vi\/)?s-detail\/(\d+)(?:[/?#]|$)/i)?.[1] ?? null
 }
 
-function securityIdFromSuggestion(row: Record<string, unknown> | null) {
-  if (!row) return null
-  for (const [key, value] of Object.entries(row)) {
-    if (/^(?:id|securityId|issuerOrgId|value)$/i.test(key) && /^\d+$/.test(String(value ?? ""))) {
-      return String(value)
-    }
-    const fromHref = hrefSecurityId(value)
-    if (fromHref) return fromHref
-  }
-  return null
-}
-
 function exactVhmGlobalSearch(parsed: unknown) {
   if (!parsed || typeof parsed !== "object") return null
   const data = (parsed as { data?: unknown }).data
@@ -140,11 +128,12 @@ function exactVhmGlobalSearch(parsed: unknown) {
     const record = row as Record<string, unknown>
     const content = typeof record.content === "string" ? record.content.trim() : ""
     const href = typeof record.href === "string" ? record.href.trim() : ""
-    if (/\bVHM\b/i.test(content) && hrefSecurityId(href)) {
+    const securityId = hrefSecurityId(href)
+    if (/\bVHM\b/i.test(content) && securityId) {
       return {
         content: content.slice(0, 300),
         href: href.slice(0, 300),
-        securityId: hrefSecurityId(href),
+        securityId,
       }
     }
   }
@@ -193,8 +182,8 @@ async function main() {
   let globalSearchJson: unknown = null
   try { globalSearchJson = JSON.parse(globalSearch.body) } catch { globalSearchJson = null }
   const exactGlobal = exactVhmGlobalSearch(globalSearchJson)
+  const resolvedSecurityId = exactGlobal?.securityId ?? null
 
-  const resolvedSecurityId = securityIdFromSuggestion(exactSuggestion) ?? exactGlobal?.securityId ?? null
   if (suggestion.status !== 200 || !exactSuggestion) {
     throw new Error(`VSDC ticker suggestion failed closed: status=${suggestion.status}`)
   }
