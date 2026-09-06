@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { answerResearchReportQuestion } from "../../modules/research-reports/qa/service.ts"
+import {
+  answerResearchReportQuestion,
+  type ResearchReportQaRetrievalComparison,
+} from "../../modules/research-reports/qa/service.ts"
 import type {
   ResearchReportQaAudit,
   ResearchReportQaEvidence,
@@ -69,9 +72,14 @@ function answerCapturingEvidence(captured: ResearchReportQaEvidence[][]) {
   }
 }
 
-test("QEO-116 shadow mode measures hybrid but keeps lexical evidence as user-visible authority", async () => {
+function assertMeasuredLatency(value: number) {
+  assert.equal(Number.isFinite(value), true)
+  assert.ok(value >= 0)
+}
+
+test("QEO-116 shadow mode measures latency + canonical hydration loss but keeps lexical evidence as user-visible authority", async () => {
   const captured: ResearchReportQaEvidence[][] = []
-  const metrics: unknown[] = []
+  const metrics: ResearchReportQaRetrievalComparison[] = []
   let hybridCalls = 0
 
   await answerResearchReportQuestion(client, {
@@ -82,7 +90,13 @@ test("QEO-116 shadow mode measures hybrid but keeps lexical evidence as user-vis
     retrieveEvidence: async () => [LEXICAL],
     retrieveHybridEvidence: async () => {
       hybridCalls += 1
-      return { status: "ready" as const, evidence: [HYBRID], pointIds: ["point-1"], retrievalMs: 2, hydrationMs: 1 }
+      return {
+        status: "ready" as const,
+        evidence: [HYBRID],
+        pointIds: ["point-1", "point-2"],
+        retrievalMs: 12,
+        hydrationMs: 4,
+      }
     },
     retrievalMode: "shadow",
     recordRetrievalComparison: (metric) => { metrics.push(metric) },
@@ -92,12 +106,18 @@ test("QEO-116 shadow mode measures hybrid but keeps lexical evidence as user-vis
   assert.equal(hybridCalls, 1)
   assert.deepEqual(captured[0].map((row) => row.chunkId), [LEXICAL.chunkId])
   assert.equal(metrics.length, 1)
-  assert.deepEqual(metrics[0], {
+  assertMeasuredLatency(metrics[0].lexicalMs)
+  assert.deepEqual({ ...metrics[0], lexicalMs: 0 }, {
     mode: "shadow",
     selected: "lexical",
     fallbackUsed: false,
     lexicalCount: 1,
+    lexicalMs: 0,
+    hybridPointCount: 2,
     hybridCount: 1,
+    hybridRetrievalMs: 12,
+    hybridHydrationMs: 4,
+    hybridResolutionRatio: 0.5,
     overlapCount: 0,
     overlapRatio: 0,
     hybridStatus: "ready",
@@ -106,7 +126,7 @@ test("QEO-116 shadow mode measures hybrid but keeps lexical evidence as user-vis
 
 test("QEO-116 hybrid mode selects canonical hydrated evidence while keeping lexical shadow comparison", async () => {
   const captured: ResearchReportQaEvidence[][] = []
-  const metrics: unknown[] = []
+  const metrics: ResearchReportQaRetrievalComparison[] = []
 
   await answerResearchReportQuestion(client, {
     reportId: REPORT_ID,
@@ -118,8 +138,8 @@ test("QEO-116 hybrid mode selects canonical hydrated evidence while keeping lexi
       status: "ready" as const,
       evidence: [HYBRID],
       pointIds: ["point-1"],
-      retrievalMs: 2,
-      hydrationMs: 1,
+      retrievalMs: 8,
+      hydrationMs: 3,
     }),
     retrievalMode: "hybrid",
     recordRetrievalComparison: (metric) => { metrics.push(metric) },
@@ -127,12 +147,18 @@ test("QEO-116 hybrid mode selects canonical hydrated evidence while keeping lexi
   })
 
   assert.deepEqual(captured[0].map((row) => row.chunkId), [HYBRID.chunkId])
-  assert.deepEqual(metrics[0], {
+  assertMeasuredLatency(metrics[0].lexicalMs)
+  assert.deepEqual({ ...metrics[0], lexicalMs: 0 }, {
     mode: "hybrid",
     selected: "hybrid",
     fallbackUsed: false,
     lexicalCount: 1,
+    lexicalMs: 0,
+    hybridPointCount: 1,
     hybridCount: 1,
+    hybridRetrievalMs: 8,
+    hybridHydrationMs: 3,
+    hybridResolutionRatio: 1,
     overlapCount: 0,
     overlapRatio: 0,
     hybridStatus: "ready",
@@ -141,7 +167,7 @@ test("QEO-116 hybrid mode selects canonical hydrated evidence while keeping lexi
 
 test("QEO-116 hybrid mode falls back to bounded lexical evidence when Qdrant is unavailable", async () => {
   const captured: ResearchReportQaEvidence[][] = []
-  const metrics: unknown[] = []
+  const metrics: ResearchReportQaRetrievalComparison[] = []
 
   await answerResearchReportQuestion(client, {
     reportId: REPORT_ID,
@@ -154,7 +180,7 @@ test("QEO-116 hybrid mode falls back to bounded lexical evidence when Qdrant is 
       evidence: [] as const,
       pointIds: [] as const,
       reason: "qdrant_unavailable" as const,
-      retrievalMs: 2,
+      retrievalMs: 7,
       hydrationMs: 0 as const,
     }),
     retrievalMode: "hybrid",
@@ -163,12 +189,18 @@ test("QEO-116 hybrid mode falls back to bounded lexical evidence when Qdrant is 
   })
 
   assert.deepEqual(captured[0].map((row) => row.chunkId), [LEXICAL.chunkId])
-  assert.deepEqual(metrics[0], {
+  assertMeasuredLatency(metrics[0].lexicalMs)
+  assert.deepEqual({ ...metrics[0], lexicalMs: 0 }, {
     mode: "hybrid",
     selected: "lexical",
     fallbackUsed: true,
     lexicalCount: 1,
+    lexicalMs: 0,
+    hybridPointCount: 0,
     hybridCount: 0,
+    hybridRetrievalMs: 7,
+    hybridHydrationMs: 0,
+    hybridResolutionRatio: 0,
     overlapCount: 0,
     overlapRatio: 0,
     hybridStatus: "unavailable",
