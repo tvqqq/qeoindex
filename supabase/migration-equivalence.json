@@ -337,6 +337,22 @@
       "state": "QUARANTINED",
       "evidence": "qeo116-shadow-evaluation-pending-production-hydration-cutover",
       "rationale": "Exact-version report Q&A hydration RPC remains quarantined until QEO-116 shadow evaluation, exact-head DB replay/types, canonical backfill, and production retrieval smoke are approved."
+    },
+    {
+      "logicalName": "qeo123_corporate_actions",
+      "repositoryVersion": "20260906163000",
+      "productionVersion": "20260906130930",
+      "state": "MAPPED",
+      "evidence": "qeo123-production-ledger-schema-rls-rpc-and-rollback-smoke",
+      "rationale": "QEO-123 canonical corporate-action schema was promoted after GREEN preprod rehearsal. Production readback verified the applied ledger row, RLS/policy surface and table contract; repository replay keeps the reviewed source ordering."
+    },
+    {
+      "logicalName": "qeo123_corporate_action_persistence",
+      "repositoryVersion": "20260906164000",
+      "productionVersion": "20260906130959",
+      "state": "MAPPED",
+      "evidence": "qeo123-production-ledger-rpc-grants-vhm-idempotency-amendment-atomicity-smoke",
+      "rationale": "QEO-123 persistence RPC was promoted under a production timestamp different from repository replay. Rollback-only production smoke proved VHM multi-component persistence, exact replay idempotency, newer-amendment precedence, stale-evidence retention without canonical rollback, and atomic failure with zero residual fixture rows."
     }
   ]
 }
