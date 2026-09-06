@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-06T03:01:00Z",
+  "capturedAt": "2026-09-06T04:29:58Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
   "migrations": [
     {"version":"20260818","name":"orderbook_snapshots"},
@@ -102,6 +102,7 @@
     {"version":"20260905235144","name":"qeo106_daily_hot_cold_history"},
     {"version":"20260905235254","name":"qeo106_daily_prune_error_evidence_fix"},
     {"version":"20260906002919","name":"qeo106_scoped_daily_integrity_report"},
-    {"version":"20260906030037","name":"qeo108_chart_capacity_and_index_cleanup"}
+    {"version":"20260906030037","name":"qeo108_chart_capacity_and_index_cleanup"},
+    {"version":"20260906042922","name":"qeo107_hot_session_coverage_gate"}
   ]
 }
