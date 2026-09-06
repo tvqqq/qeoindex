@@ -1,0 +1,55 @@
+name: QEO-123 Preprod Rehearsal
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/qeo123-preprod.yml"
+      - "modules/market/corporate-actions/**"
+      - "supabase/migrations/*_qeo123_corporate_actions.sql"
+      - "tests/corporate-actions/**"
+      - "tests/db-schema-contract.test.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - run: pnpm install --frozen-lockfile
+      - name: Start local Supabase
+        run: supabase start
+      - name: Replay migrations from zero through QEO-123
+        run: pnpm db:replay:verify
+      - name: Lint replayed local database
+        run: supabase db lint --local --level warning
+      - name: Run QEO-123 deterministic contracts
+        run: node --test tests/corporate-actions/domain.test.ts
+      - name: Generate QEO-123 Database type candidate
+        run: |
+          mkdir -p artifacts/qeo123
+          supabase gen types typescript --local --schema public > artifacts/qeo123/database.types.ts
+      - name: Upload Database type candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo123-database-types
+          path: artifacts/qeo123/database.types.ts
+          retention-days: 3
+      - name: Compile TypeScript
+        run: pnpm typecheck
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
