@@ -1,9 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { ResearchData } from "../research/types.ts"
 import {
   projectCouncilHistoryKnowledge,
-  projectCurrentThesisKnowledge,
   type CouncilHistoryKnowledgeProjectionInput,
 } from "../ticker-knowledge/projections.ts"
 import { normalizeTicker, type TickerKnowledgeItem } from "../ticker-knowledge/domain.ts"
@@ -30,7 +28,6 @@ export interface TickerQaLatestCouncilRun {
 }
 
 export interface TickerQaMandatoryDependencies {
-  loadResearchTickerData?: (ticker: string) => Promise<ResearchData>
   loadLatestCouncilRun?: (client: SupabaseClient, ticker: string) => Promise<TickerQaLatestCouncilRun | null>
 }
 
@@ -58,11 +55,6 @@ function nullableNumber(value: unknown) {
   if (value == null || value === "") return null
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
-}
-
-async function loadResearchTickerDataDefault(ticker: string): Promise<ResearchData> {
-  const { getCachedResearchTickerData } = await import("../shared/cache/request-cache.ts")
-  return getCachedResearchTickerData(ticker)
 }
 
 async function loadLatestCouncilRunFromPostgres(
@@ -127,29 +119,10 @@ export async function loadTickerQaMandatoryContext(
   deps: TickerQaMandatoryDependencies = {},
 ): Promise<TickerQaMandatoryContext> {
   const ticker = normalizeTicker(rawTicker)
-  const loadResearch = deps.loadResearchTickerData ?? loadResearchTickerDataDefault
   const loadCouncil = deps.loadLatestCouncilRun ?? loadLatestCouncilRunFromPostgres
   const items: TickerKnowledgeItem[] = []
   const limitations: string[] = []
   let infrastructureFailure = false
-
-  try {
-    const research = await loadResearch(ticker)
-    if (research.connection.notionLive === true) {
-      const thesis = research.theses.find((row) => (
-        normalizeTicker(row.ticker) === ticker
-        && row.status.trim().toLowerCase() === "current"
-      ))
-      if (thesis) items.push(projectCurrentThesisKnowledge(thesis))
-      else limitations.push(`CURRENT_THESIS unavailable for ${ticker}`)
-    } else {
-      infrastructureFailure = true
-      limitations.push(`CURRENT_THESIS canonical Notion source unavailable for ${ticker}`)
-    }
-  } catch {
-    infrastructureFailure = true
-    limitations.push(`CURRENT_THESIS canonical Notion source unavailable for ${ticker}`)
-  }
 
   try {
     const run = await loadCouncil(client, ticker)

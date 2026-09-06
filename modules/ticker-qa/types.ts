@@ -18,7 +18,7 @@ export type TickerQaTurn = {
 
 export type TickerQaRetrievalStatus = "ready" | "unavailable"
 
-export type TickerQaSourceType = "NOTION_THESIS" | "RESEARCH_REPORT" | "AI_COUNCIL"
+export type TickerQaSourceType = "RESEARCH_REPORT" | "AI_COUNCIL"
 
 export interface TickerQaCitation {
   id: string

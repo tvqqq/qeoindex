@@ -1,5 +1,3 @@
-import type { Thesis } from "@/modules/research/types"
-
 import {
   normalizeTicker,
   type TickerKnowledgeIndex,
@@ -8,7 +6,6 @@ import {
 } from "./domain.ts"
 import {
   projectCouncilHistoryKnowledge,
-  projectCurrentThesisKnowledge,
   projectResearchReportKnowledge,
   type CouncilHistoryKnowledgeProjectionInput,
   type ResearchReportKnowledgeProjectionInput,
@@ -63,14 +60,6 @@ export async function syncCouncilHistoryKnowledge(
   input: CouncilHistoryKnowledgeProjectionInput,
 ) {
   return syncProjection(index, projectCouncilHistoryKnowledge(input))
-}
-
-export async function syncCurrentThesisKnowledge(
-  index: TickerKnowledgeIndex,
-  thesis: Thesis,
-) {
-  const item = projectCurrentThesisKnowledge(thesis)
-  return syncProjection(index, [item])
 }
 
 export interface TickerKnowledgeSourceVersionTombstone {

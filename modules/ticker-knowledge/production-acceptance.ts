@@ -6,15 +6,11 @@ import {
 
 const DEFAULT_BACKFILL_BATCH_SIZE = 25
 const MAX_BACKFILL_BATCH_SIZE = 100
-const DEFAULT_MAX_THESES = 200
-const MAX_THESES = 200
 const MAX_CURSOR_LENGTH = 256
-const MAX_TICKERS = 200
 
 export type TickerKnowledgeAcceptanceCommand =
   | { action: "backfill_reports"; cursor: string | null; batchSize: number }
   | { action: "backfill_council"; cursor: string | null; batchSize: number }
-  | { action: "rebuild_theses"; tickers: string[]; maxTheses: number }
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -38,22 +34,6 @@ function normalizedCursor(value: unknown) {
   return cursor
 }
 
-function normalizedTickers(value: unknown) {
-  if (value === undefined || value === null) return []
-  if (!Array.isArray(value)) throw new Error("Ticker knowledge thesis tickers must be an array")
-  if (value.length > MAX_TICKERS) throw new Error(`Ticker knowledge thesis rebuild is limited to ${MAX_TICKERS} tickers`)
-  const result: string[] = []
-  const seen = new Set<string>()
-  for (const raw of value) {
-    if (typeof raw !== "string") throw new Error("Ticker knowledge thesis ticker must be a string")
-    const ticker = normalizeTicker(raw)
-    if (seen.has(ticker)) continue
-    seen.add(ticker)
-    result.push(ticker)
-  }
-  return result
-}
-
 export function normalizeTickerKnowledgeAcceptanceCommand(value: unknown): TickerKnowledgeAcceptanceCommand {
   const input = record(value)
   const action = typeof input.action === "string" ? input.action.trim() : ""
@@ -62,13 +42,6 @@ export function normalizeTickerKnowledgeAcceptanceCommand(value: unknown): Ticke
       action,
       cursor: normalizedCursor(input.cursor),
       batchSize: boundedInteger(input.batchSize, DEFAULT_BACKFILL_BATCH_SIZE, MAX_BACKFILL_BATCH_SIZE),
-    }
-  }
-  if (action === "rebuild_theses") {
-    return {
-      action,
-      tickers: normalizedTickers(input.tickers),
-      maxTheses: boundedInteger(input.maxTheses, DEFAULT_MAX_THESES, MAX_THESES),
     }
   }
   throw new Error(`Unsupported ticker knowledge acceptance action: ${action || "missing"}`)
