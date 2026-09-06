@@ -53,11 +53,32 @@ test("QEO-107 only treats a ticker as HOT-complete after five distinct trading s
   assert.match(migration, /grant execute on function public\.qeo_chart_intraday_session_coverage\(text\[\], timestamptz\) to service_role/)
 })
 
+test("QEO-107 staged rollout is canonical-only, capped at twenty tickers, and keeps canonical-200 as the default", () => {
+  const route = source("app/api/qeoindex/eod/route.ts")
+  const steps = source("modules/market/chart-data/bootstrap-workflow-steps.ts")
+  const workflow = source("workflows/chart-intraday-bootstrap.ts")
+
+  assert.match(steps, /QEO107_STAGED_MAX_TICKERS\s*=\s*20/)
+  assert.match(steps, /normalizeRequestedTickers/)
+  assert.match(steps, /canonicalByTicker/)
+  assert.match(steps, /staged ticker is outside canonical universe/)
+  assert.match(steps, /scope:\s*requestedTickers\.length \? "staged" : "canonical_200"/)
+
+  assert.match(workflow, /requestedTickers:\s*string\[\]\s*=\s*\[\]/)
+  assert.match(workflow, /startChartIntradayBootstrapStep\(startedAtIso, requestedTickers\)/)
+
+  assert.match(route, /stagedBootstrapTickers\(request\.nextUrl\.searchParams\.get\("tickers"\)\)/)
+  assert.match(route, /QEO107_STAGED_MAX_TICKERS/)
+  assert.match(route, /outsideCanonical/)
+  assert.match(route, /start\(chartIntradayBootstrapWorkflow, \[startedAt, requestedTickers\]\)/)
+  assert.match(route, /scope:\s*requestedTickers\.length \? "staged" : "canonical_200"/)
+})
+
 test("QEO-107 operations expose authenticated bootstrap and five-session coverage", () => {
   const route = source("app/api/qeoindex/eod/route.ts")
   const migration = source("supabase/migrations/20260905213000_qeo107_chart_intraday_coverage_report.sql")
   assert.match(route, /mode === "chart-bootstrap"/)
-  assert.match(route, /start\(chartIntradayBootstrapWorkflow, \[startedAt\]\)/)
+  assert.match(route, /start\(chartIntradayBootstrapWorkflow, \[startedAt, requestedTickers\]\)/)
   assert.match(route, /mode === "chart-coverage"/)
   assert.match(route, /hotRetentionSessions:\s*QEO107_HOT_RETENTION_SESSIONS/)
   assert.doesNotMatch(route, /targetDays:\s*366/)
