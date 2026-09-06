@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import {
   applyDailyAdjustment,
+  type DailySourcePriceBasis,
   type RawDailyBar,
   type ShadowFactorRun,
   type ShadowFactorTransition,
@@ -44,6 +45,9 @@ type RawDailyRow = {
   low: number | string
   close: number | string
   volume: number | string
+  provider: string | null
+  provider_detail: string | null
+  source_url: string | null
 }
 
 type ReadbackRow = {
@@ -122,6 +126,22 @@ function toTransition(row: FactorTransitionRow): ShadowFactorTransition {
   }
 }
 
+function storedDailyPriceBasis(row: RawDailyRow): DailySourcePriceBasis {
+  const provider = String(row.provider ?? "").trim().toUpperCase()
+  const detail = String(row.provider_detail ?? "").trim().toLowerCase()
+
+  if (detail.includes("source basis: adjusted") || detail.includes("adjusted ohlc")) {
+    return "ADJUSTED"
+  }
+  if (detail.includes("source basis: raw")) {
+    return "RAW"
+  }
+  if (provider === "DNSE" || provider === "VCI") {
+    return "RAW"
+  }
+  return "UNKNOWN"
+}
+
 function toRawDaily(row: RawDailyRow): RawDailyBar {
   return {
     ticker: row.ticker,
@@ -132,6 +152,7 @@ function toRawDaily(row: RawDailyRow): RawDailyBar {
     low: Number(row.low),
     close: Number(row.close),
     volume: Number(row.volume),
+    sourcePriceBasis: storedDailyPriceBasis(row),
   }
 }
 
@@ -233,7 +254,7 @@ export async function rebuildAdjustedDailyRange(input: {
 
   const { data: rawData, error: rawError } = await input.supabase
     .from("market_ohlcv_history")
-    .select("ticker,bar_time,open,high,low,close,volume")
+    .select("ticker,bar_time,open,high,low,close,volume,provider,provider_detail,source_url")
     .eq("ticker", input.ticker)
     .eq("timeframe", "1D")
     .gte("bar_time", canonicalDailyTimestamp(input.fromDate))
