@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { getCachedResearchTickerData } from "../shared/cache/request-cache.ts"
 import type { ResearchData } from "../research/types.ts"
 import {
   projectCouncilHistoryKnowledge,
@@ -59,6 +58,11 @@ function nullableNumber(value: unknown) {
   if (value == null || value === "") return null
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+async function loadResearchTickerDataDefault(ticker: string): Promise<ResearchData> {
+  const { getCachedResearchTickerData } = await import("../shared/cache/request-cache.ts")
+  return getCachedResearchTickerData(ticker)
 }
 
 async function loadLatestCouncilRunFromPostgres(
@@ -123,7 +127,7 @@ export async function loadTickerQaMandatoryContext(
   deps: TickerQaMandatoryDependencies = {},
 ): Promise<TickerQaMandatoryContext> {
   const ticker = normalizeTicker(rawTicker)
-  const loadResearch = deps.loadResearchTickerData ?? getCachedResearchTickerData
+  const loadResearch = deps.loadResearchTickerData ?? loadResearchTickerDataDefault
   const loadCouncil = deps.loadLatestCouncilRun ?? loadLatestCouncilRunFromPostgres
   const items: TickerKnowledgeItem[] = []
   const limitations: string[] = []
