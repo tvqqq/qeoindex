@@ -5,11 +5,16 @@ on:
     paths:
       - ".github/workflows/qeo123-preprod.yml"
       - "modules/market/corporate-actions/**"
+      - "modules/market/history/adjusted-daily*.ts"
       - "scripts/probes/qeo123-vsdc-discovery.ts"
       - "supabase/migrations/*_qeo123_corporate_action*.sql"
       - "supabase/migrations/*_qeo124_adjustment_factor*.sql"
+      - "supabase/migrations/*_qeo129_adjusted_daily*.sql"
       - "tests/corporate-actions/**"
+      - "tests/db/qeo129-adjusted-daily-persistence.sql"
+      - "tests/db/qeo129-schema-contract.test.ts"
       - "tests/db-schema-contract.test.ts"
+      - "tests/market-history/qeo129-adjusted-daily*.test.ts"
   workflow_dispatch:
 
 permissions:
@@ -31,6 +36,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Run corporate-action deterministic contracts
         run: node --test tests/corporate-actions/*.test.ts
+      - name: Run QEO-129 adjusted Daily contracts
+        run: node --test tests/market-history/qeo129-adjusted-daily*.test.ts tests/db/qeo129-schema-contract.test.ts
       - name: Compile TypeScript
         run: pnpm typecheck
 
@@ -81,6 +88,10 @@ jobs:
           for contract in tests/corporate-actions/persistence*.sql tests/corporate-actions/qeo124-factor-persistence.sql; do
             psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$contract"
           done
+      - name: Verify QEO-129 adjusted Daily exact persistence/readback
+        run: |
+          eval "$(supabase status -o env)"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f tests/db/qeo129-adjusted-daily-persistence.sql
       - name: Lint replayed local database
         run: supabase db lint --local --level warning
       - name: Generate Database type candidate
