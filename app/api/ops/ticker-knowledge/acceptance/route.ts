@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import {
   runServerCouncilKnowledgeBackfillPage,
   runServerResearchReportKnowledgeBackfillPage,
@@ -20,12 +21,31 @@ function json(body: unknown, status = 200) {
   })
 }
 
-export async function POST(request: Request) {
-  if (!isMachineRequestAuthorized(
+function bearerToken(request: Request) {
+  const authorization = request.headers.get("authorization") ?? ""
+  if (!authorization.startsWith("Bearer ")) return ""
+  return authorization.slice("Bearer ".length).trim()
+}
+
+async function isAcceptanceRunnerAuthorized(request: Request) {
+  if (isMachineRequestAuthorized(
     request,
     [process.env.CRON_SECRET],
     { allowUnconfiguredInDevelopment: true },
-  )) {
+  )) return true
+
+  const token = bearerToken(request)
+  if (!token) return false
+
+  const supabase = getSupabaseServerClient()
+  if (!supabase) return false
+
+  const { data, error } = await supabase.rpc("qeo_verify_eod_scheduler_secret", { p_secret: token })
+  return !error && data === true
+}
+
+export async function POST(request: Request) {
+  if (!(await isAcceptanceRunnerAuthorized(request))) {
     return json({ ok: false, error: "Unauthorized" }, 401)
   }
 
