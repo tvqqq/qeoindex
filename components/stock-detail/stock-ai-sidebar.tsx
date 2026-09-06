@@ -1,32 +1,89 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
-  Activity,
-  BarChart3,
   BrainCircuit,
   Gauge,
-  LineChart,
   Send,
-  ShieldCheck,
   Sparkles,
 } from "lucide-react"
 
-import type { StockDetailData } from "./types"
 import { cn } from "@/modules/shared/ui/cn"
+
+import { boundTickerChatHistory } from "./stock-ai-chat-state"
+import type { StockDetailData } from "./types"
+
+type ChatCitation = {
+  id: string
+  sourceType: "NOTION_THESIS" | "RESEARCH_REPORT" | "AI_COUNCIL"
+  authority: string
+  label: string
+  excerpt: string
+  href: string | null
+  reportId?: string
+  page?: number
+  runId?: string
+  sourceVersion?: string
+}
+
+type ChatClaim = {
+  text: string
+  authority: string
+  citationIds: string[]
+}
+
+type ChatContradiction = {
+  leftEvidenceId: string
+  rightEvidenceId: string
+  explanation: string
+}
+
+type TickerQaResult = {
+  ticker: string
+  status: "answered" | "not_found"
+  answer: string
+  claims: ChatClaim[]
+  citations: ChatCitation[]
+  contradictions: ChatContradiction[]
+  retrievalStatus: "ready" | "unavailable"
+  limitation: string | null
+}
+
+type TickerQaPayload =
+  | { ok: true; result: TickerQaResult }
+  | { ok: false; error?: string; code?: string }
 
 interface Message {
   id: string
   sender: "user" | "ai"
   text: string
   timestamp: string
+  claims?: ChatClaim[]
+  citations?: ChatCitation[]
+  contradictions?: ChatContradiction[]
+  retrievalStatus?: "ready" | "unavailable"
+  limitation?: string | null
 }
 
-function scoreTone(score: number | null) {
-  if (score == null) return "text-slate-500"
-  if (score >= 65) return "text-emerald-400"
-  if (score <= 40) return "text-rose-400"
-  return "text-slate-300"
+function chatErrorMessage(code: string | undefined, status: number) {
+  if (code === "feature_disabled") return "Quick AI Assistant hiện chưa được bật cho môi trường này."
+  if (code === "invalid_request") return "Câu hỏi chưa hợp lệ. Vui lòng rút gọn nội dung và thử lại."
+  if (code === "service_unavailable" || code === "provider_failed" || code === "invalid_model_output" || status >= 500) {
+    return "Quick AI Assistant tạm thời chưa khả dụng."
+  }
+  return "Không thể gửi câu hỏi này. Vui lòng thử lại."
+}
+
+function authorityLabel(authority: string) {
+  switch (authority) {
+    case "VERIFIED_FACT": return "Verified fact"
+    case "CANONICAL_THESIS": return "Current thesis"
+    case "DETERMINISTIC_SIGNAL": return "AI Council"
+    case "SOURCE_OPINION": return "Source opinion"
+    case "HISTORICAL_LESSON": return "Historical lesson"
+    case "AI_INFERENCE": return "AI inference"
+    default: return authority
+  }
 }
 
 const RADIUS = 72
@@ -137,9 +194,8 @@ const CONFIDENCE_TIERS = [
 ] as const
 
 export function StockAiSidebar({ data }: { data: StockDetailData }) {
-  const { ticker, price, changePct, aiStock, scan, thesis, fa } = data
+  const { ticker, aiStock, scan, thesis, fa } = data
 
-  const score = aiStock?.councilScore ?? (scan ? Math.min(95, Math.max(40, Math.round(50 + (scan.rsi14 ? (scan.rsi14 - 50) * 0.5 : 0) + (scan.relVolume ? (scan.relVolume - 1) * 10 : 0)))) : 75)
   const signal = aiStock?.signal ?? (scan?.taBias === "Bullish" ? "BUY" : scan?.taBias === "Bearish" ? "REDUCE" : "WAIT")
   const consensus = aiStock?.consensus ?? 85
   const confidence = aiStock?.confidence ?? 80
@@ -205,34 +261,39 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
   const activeTier =
     CONFIDENCE_TIERS.find((t) => confidence >= t.min && confidence <= t.max) ||
     CONFIDENCE_TIERS[1]
-  const supportLevel = aiStock?.support || scan?.support || thesis?.support || (price ? (price * 0.96).toFixed(1) : "—")
-  const resistanceLevel = aiStock?.resistance || scan?.resistance || thesis?.resistance || (price ? (price * 1.07).toFixed(1) : "—")
-  const stopLoss = aiStock?.invalidation || scan?.invalidation || (price ? (price * 0.935).toFixed(1) : "—")
   const signalLines = formatSignalLines(signalText)
 
-  // Chat state
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
       sender: "ai",
-      text: `Chào bạn! Tôi nắm toàn diện dữ liệu kỹ thuật, Wyckoff, BCTC và dòng tiền của **${ticker}**. Bạn muốn giải đáp về góc nhìn nào?`,
+      text: `Tôi trả lời câu hỏi về ${ticker} dựa trên bằng chứng QeoIndex hiện có và sẽ hiển thị nguồn khi có thể truy vết.`,
       timestamp: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
     },
   ])
   const [inputVal, setInputVal] = useState("")
   const [isTyping, setIsTyping] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const chatBottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, isTyping])
+  }, [messages, isTyping, errorMessage])
 
-  function handleSend(textToSend?: string) {
-    const text = (textToSend || inputVal).trim()
-    if (!text || isTyping) return
+  async function handleSend(textToSend?: string) {
+    const text = (textToSend || inputVal).replace(/\s+/g, " ").trim()
+    if (!text || text.length > 2_000 || isTyping) return
 
+    const history = boundTickerChatHistory(
+      messages
+        .filter((message) => message.id !== "welcome")
+        .map((message) => ({
+          role: message.sender === "user" ? "user" as const : "assistant" as const,
+          content: message.text,
+        })),
+    )
     const userMsg: Message = {
-      id: Math.random().toString(),
+      id: `user-${Date.now()}-${Math.random()}`,
       sender: "user",
       text,
       timestamp: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
@@ -240,34 +301,43 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
 
     setMessages((prev) => [...prev, userMsg])
     if (!textToSend) setInputVal("")
+    setErrorMessage(null)
     setIsTyping(true)
 
-    setTimeout(() => {
-      let response = ""
-      const q = text.toLowerCase()
-      if (q.includes("dòng tiền") || q.includes("smart money") || q.includes("lớn")) {
-        response = `Dòng tiền vào **${ticker}** phiên hiện tại có tỷ lệ mua chủ động 58.4%. Khối lượng khớp đạt ${scan?.volume ? scan.volume.toLocaleString() : "khá tốt"}, chỉ báo Relative Volume đạt ${scan?.relVolume ? scan.relVolume.toFixed(2) + "x" : "1.35x"} so with trung bình 20 phiên.`
-      } else if (q.includes("hỗ trợ") || q.includes("kháng cự") || q.includes("vùng")) {
-        response = `Vùng hỗ trợ then chốt của **${ticker}** là **${supportLevel}** (nền MA20/MA50). Kháng cự kỹ thuật mục tiêu gần nhất là **${resistanceLevel}**. Mức dừng lỗ đề xuất vi phạm khi đóng nến dưới **${stopLoss}**.`
-      } else if (q.includes("rủi ro") || q.includes("cảnh báo") || q.includes("xấu")) {
-        response = `Rủi ro chính của **${ticker}**: ${aiStock?.dissent || "Áp lực cung chốt lời ngắn hạn khi chỉ số tiệm cận vùng kháng cự. Cần quản trị tỷ trọng danh mục và tuân thủ kỷ luật dừng lỗ."}`
-      } else if (q.includes("wyckoff") || q.includes("cấu trúc") || q.includes("phase")) {
-        response = `Cấu trúc Wyckoff của **${ticker}**: ${scan?.wyckoffState || "Pha tái tích lũy (Re-accumulation)"}, Phase ${scan?.phase || "D (Sign of Strength)"}. Cổ phiếu đang kiểm định lại lực cung ở biên trên.`
-      } else {
-        response = `Dựa trên tổng hợp Hội đồng AI, **${ticker}** có điểm số Council **${score}/100**, tín hiệu **${signalText}**. Khuyến nghị: Mở vị thế thăm dò từng phần quanh vùng giá hiện tại, tuân thủ ngưỡng vô hiệu **${stopLoss}**.`
+    try {
+      const response = await fetch(`/api/insights/${encodeURIComponent(ticker)}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: text, history }),
+      })
+      const payload = await response.json().catch(() => null) as TickerQaPayload | null
+      if (!response.ok || !payload || !payload.ok) {
+        setErrorMessage(chatErrorMessage(payload && !payload.ok ? payload.code : undefined, response.status))
+        return
       }
 
+      const result = payload.result
       setMessages((prev) => [
         ...prev,
         {
-          id: Math.random().toString(),
+          id: `ai-${Date.now()}-${Math.random()}`,
           sender: "ai",
-          text: response,
+          text: result.status === "not_found"
+            ? "Không tìm thấy bằng chứng QeoIndex đủ để trả lời câu hỏi này."
+            : result.answer,
           timestamp: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+          claims: result.claims,
+          citations: result.citations,
+          contradictions: result.contradictions,
+          retrievalStatus: result.retrievalStatus,
+          limitation: result.limitation,
         },
       ])
+    } catch {
+      setErrorMessage("Quick AI Assistant tạm thời chưa khả dụng.")
+    } finally {
       setIsTyping(false)
-    }, 550)
+    }
   }
 
   return (
@@ -306,7 +376,6 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
                   </feMerge>
                 </filter>
               </defs>
-              {/* Base track */}
               <circle
                 cx="100"
                 cy="100"
@@ -315,7 +384,6 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
                 stroke="rgba(255, 255, 255, 0.08)"
                 strokeWidth="14"
               />
-              {/* Progress Arc */}
               <circle
                 cx="100"
                 cy="100"
@@ -331,12 +399,11 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
               />
             </svg>
 
-            {/* In the center of the ring: ONLY Recommendation split across lines */}
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center px-4">
               <div
                 className={cn(
                   "font-ticker text-base sm:text-lg font-black tracking-wide uppercase leading-tight text-center",
-                  signalTone
+                  signalTone,
                 )}
               >
                 {signalLines.map((line, idx) => (
@@ -348,12 +415,11 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
             </div>
           </div>
 
-          {/* Consensus label and conviction description with confidence merged */}
           <div className="flex flex-col items-center gap-2 px-1 text-center">
             <span
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1 font-mono text-[11px] font-bold shadow-[0_0_12px_rgba(0,0,0,0.4)]",
-                activeTier.badgeColor
+                activeTier.badgeColor,
               )}
             >
               <span className={cn("size-1.5 rounded-full", activeTier.dotColor)} />
@@ -400,9 +466,8 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
         </div>
       </div>
 
-      {/* Quick Chatbox với AI (Comfortable padding and rounded card) */}
+      {/* Existing Quick AI Assistant — now grounded by QEO-118 */}
       <div className="flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13]">
-        {/* Chat Header */}
         <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#0a0f16] px-3.5 py-2.5">
           <div className="flex items-center gap-2">
             <Sparkles className="size-3.5 text-cyan-400" />
@@ -413,8 +478,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
           </span>
         </div>
 
-        {/* Message Stream */}
-        <div className="h-44 space-y-2.5 overflow-y-auto p-3 text-[11px] leading-relaxed no-scrollbar">
+        <div className="h-64 space-y-2.5 overflow-y-auto p-3 text-[11px] leading-relaxed no-scrollbar">
           {messages.map((m) => (
             <div
               key={m.id}
@@ -422,13 +486,66 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
             >
               <div
                 className={cn(
-                  "max-w-[85%] rounded-2xl p-2.5 text-[11px] leading-relaxed",
+                  "max-w-[90%] rounded-2xl p-2.5 text-[11px] leading-relaxed",
                   m.sender === "user"
                     ? "rounded-tr-none border border-cyan-400/30 bg-cyan-400/10 text-slate-100"
-                    : "rounded-tl-none border border-white/[0.08] bg-black/20 text-slate-300"
+                    : "rounded-tl-none border border-white/[0.08] bg-black/20 text-slate-300",
                 )}
               >
-                {m.text}
+                <p className="whitespace-pre-wrap">{m.text}</p>
+
+                {m.claims?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {[...new Set(m.claims.map((claim) => claim.authority))].map((authority) => (
+                      <span key={authority} className="rounded-full border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-slate-500">
+                        {authorityLabel(authority)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                {m.citations?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Nguồn dẫn câu trả lời">
+                    {m.citations.map((citation, index) => {
+                      const label = citation.page ? `${citation.label} · p.${citation.page}` : citation.label
+                      const className = "rounded-lg border border-cyan-400/15 bg-cyan-400/[0.04] px-2 py-1 text-[9px] text-cyan-200/80"
+                      return citation.href ? (
+                        <a
+                          key={`${citation.id}-${index}`}
+                          href={citation.href}
+                          className={className}
+                          title={citation.excerpt}
+                        >
+                          {label} · {authorityLabel(citation.authority)}
+                        </a>
+                      ) : (
+                        <span
+                          key={`${citation.id}-${index}`}
+                          className={className}
+                          title={citation.excerpt}
+                        >
+                          {label} · {authorityLabel(citation.authority)}
+                        </span>
+                      )
+                    })}
+                  </div>
+                ) : null}
+
+                {m.contradictions?.length ? (
+                  <div className="mt-2 rounded-lg border border-amber-400/15 bg-amber-400/[0.04] px-2 py-1.5 text-[9px] leading-4 text-amber-100/70">
+                    <span className="font-bold uppercase tracking-wide">Mâu thuẫn nguồn</span>
+                    {m.contradictions.map((item, index) => (
+                      <p key={`${item.leftEvidenceId}-${item.rightEvidenceId}-${index}`} className="mt-1">{item.explanation}</p>
+                    ))}
+                  </div>
+                ) : null}
+
+                {m.retrievalStatus === "unavailable" ? (
+                  <div className="mt-2 rounded-lg border border-amber-400/15 bg-amber-400/[0.04] px-2 py-1 text-[9px] text-amber-100/70">
+                    Semantic retrieval degraded · đang dùng canonical context khả dụng.
+                  </div>
+                ) : null}
+                {m.limitation ? <p className="mt-1 text-[8px] leading-4 text-slate-600">{m.limitation}</p> : null}
               </div>
             </div>
           ))}
@@ -445,49 +562,57 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
               </div>
             </div>
           )}
+          {errorMessage ? (
+            <p role="alert" className="rounded-lg border border-amber-400/15 bg-amber-400/[0.04] px-2.5 py-2 text-[10px] text-amber-100/75">
+              {errorMessage}
+            </p>
+          ) : null}
           <div ref={chatBottomRef} />
         </div>
 
-        {/* Preset Prompt Chips */}
         <div className="border-t border-white/[0.06] bg-[#090d13] p-2 flex gap-1.5 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => handleSend("Đánh giá dòng tiền lớn hôm nay?")}
-            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
+            disabled={isTyping}
+            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200 disabled:opacity-40"
           >
             ⚡ Dòng tiền?
           </button>
           <button
             type="button"
             onClick={() => handleSend("Hỗ trợ kháng cự gần nhất?")}
-            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
+            disabled={isTyping}
+            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200 disabled:opacity-40"
           >
             🎯 Hỗ trợ / Kháng cự?
           </button>
           <button
             type="button"
             onClick={() => handleSend("Rủi ro lớn nhất là gì?")}
-            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200"
+            disabled={isTyping}
+            className="whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-200 disabled:opacity-40"
           >
             ⚠️ Rủi ro?
           </button>
         </div>
 
-        {/* Input Bar */}
         <div className="border-t border-white/[0.06] bg-[#0a0f16] p-2">
           <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              handleSend()
+            onSubmit={(event) => {
+              event.preventDefault()
+              void handleSend()
             }}
             className="relative flex items-center"
           >
             <input
               type="text"
               value={inputVal}
-              onChange={(e) => setInputVal(e.target.value)}
+              onChange={(event) => setInputVal(event.target.value)}
+              maxLength={2_000}
               placeholder="Hỏi AI về cổ phiếu..."
-              className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-1.5 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-cyan-400/40 focus:outline-none"
+              disabled={isTyping}
+              className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-1.5 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-cyan-400/40 focus:outline-none disabled:opacity-50"
             />
             <button
               type="submit"
