@@ -12,6 +12,15 @@ import {
 const DEFAULT_MAX_CHARS = 18_000
 const DEFAULT_LIMIT = 12
 
+export type TickerContextConsumer = "STOCK_QA" | "REPORT_QA" | "AI_COUNCIL" | "HISTORICAL_CASE_SEARCH"
+
+const CONSUMER_POLICY: Record<TickerContextConsumer, { limit: number; maxChars: number }> = {
+  STOCK_QA: { limit: 12, maxChars: 18_000 },
+  REPORT_QA: { limit: 8, maxChars: 16_000 },
+  AI_COUNCIL: { limit: 8, maxChars: 12_000 },
+  HISTORICAL_CASE_SEARCH: { limit: 16, maxChars: 22_000 },
+}
+
 const AUTHORITY_WEIGHT: Record<TickerKnowledgeAuthority, number> = {
   VERIFIED_FACT: 1,
   CANONICAL_THESIS: 0.95,
@@ -25,6 +34,7 @@ export interface BuildTickerContextInput {
   index: TickerKnowledgeIndex
   ticker: string
   query: string
+  consumer?: TickerContextConsumer
   mandatory?: readonly TickerKnowledgeItem[]
   knowledgeTypes?: TickerKnowledgeQuery["knowledgeTypes"]
   sourceTypes?: TickerKnowledgeQuery["sourceTypes"]
@@ -35,15 +45,33 @@ export interface BuildTickerContextInput {
   now?: string
 }
 
+export interface TickerContextTelemetry {
+  totalMs: number
+  alwaysLoadMs: number
+  retrievalMs: number
+  rerankMs: number
+  buildMs: number
+}
+
 export interface TickerContext {
   ticker: string
   query: string
+  consumer: TickerContextConsumer | null
   retrievalStatus: "ready" | "unavailable"
   retrievalReason: TickerKnowledgeUnavailableReason | null
   items: TickerKnowledgeItem[]
   retrievedPointIds: string[]
   text: string
   truncated: boolean
+  telemetry: TickerContextTelemetry
+}
+
+function monotonicNow() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now()
+}
+
+function durationSince(start: number) {
+  return Math.max(0, monotonicNow() - start)
 }
 
 function timestamp(value: string | null | undefined) {
@@ -116,10 +144,17 @@ function buildBoundedText(items: readonly TickerKnowledgeItem[], maxChars: numbe
 }
 
 export async function buildTickerContext(input: BuildTickerContextInput): Promise<TickerContext> {
+  const totalStarted = monotonicNow()
   const ticker = normalizeTicker(input.ticker)
   const query = input.query.replace(/\s+/g, " ").trim()
   if (!query) throw new Error("Ticker context query is required")
+  const policy = input.consumer ? CONSUMER_POLICY[input.consumer] : null
+
+  const alwaysLoadStarted = monotonicNow()
   const mandatory = (input.mandatory ?? []).filter((item) => item.ticker === ticker)
+  const alwaysLoadMs = durationSince(alwaysLoadStarted)
+
+  const retrievalStarted = monotonicNow()
   const retrieval = await queryTickerKnowledgeSafely(input.index, {
     ticker,
     text: query,
@@ -127,8 +162,11 @@ export async function buildTickerContext(input: BuildTickerContextInput): Promis
     sourceTypes: input.sourceTypes,
     authorities: input.authorities,
     asOf: input.asOf,
-    limit: input.limit ?? DEFAULT_LIMIT,
+    limit: input.limit ?? policy?.limit ?? DEFAULT_LIMIT,
   })
+  const retrievalMs = durationSince(retrievalStarted)
+
+  const rerankStarted = monotonicNow()
   const nowMs = timestamp(input.now) ?? Date.now()
   const retrieved = retrieval.status === "ready" ? rankRetrieved(retrieval.results, nowMs) : []
   const seen = new Set<string>()
@@ -143,16 +181,29 @@ export async function buildTickerContext(input: BuildTickerContextInput): Promis
     seen.add(result.item.id)
     items.push(result.item)
   }
-  const maxChars = Math.max(500, Math.min(60_000, Math.floor(input.maxChars ?? DEFAULT_MAX_CHARS)))
+  const rerankMs = durationSince(rerankStarted)
+
+  const buildStarted = monotonicNow()
+  const maxChars = Math.max(500, Math.min(60_000, Math.floor(input.maxChars ?? policy?.maxChars ?? DEFAULT_MAX_CHARS)))
   const bounded = buildBoundedText(items, maxChars)
+  const buildMs = durationSince(buildStarted)
+
   return {
     ticker,
     query,
+    consumer: input.consumer ?? null,
     retrievalStatus: retrieval.status,
     retrievalReason: retrieval.status === "unavailable" ? retrieval.reason : null,
     items,
     retrievedPointIds: retrieved.map((result) => result.id),
     text: bounded.text,
     truncated: bounded.truncated,
+    telemetry: {
+      totalMs: durationSince(totalStarted),
+      alwaysLoadMs,
+      retrievalMs,
+      rerankMs,
+      buildMs,
+    },
   }
 }
