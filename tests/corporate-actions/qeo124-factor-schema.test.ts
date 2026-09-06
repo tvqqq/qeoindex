@@ -27,10 +27,11 @@ test("QEO-124 stores one versioned factor run and one combined transition per ef
   assert.match(sql, /as_of_date\s+date\s+not\s+null/i)
   assert.match(sql, /status\s+text\s+not\s+null/i)
   assert.match(sql, /unique\s*\(ticker,\s*factor_version\)/i)
+  assert.match(sql, /unique\s*\(id,\s*ticker\)/i)
   assert.match(sql, /where\s+status\s*=\s*'active'/i)
 
   assert.match(sql, /create\s+table\s+public\.market_price_adjustment_factors/i)
-  assert.match(sql, /run_id\s+uuid\s+not\s+null[\s\S]*?references\s+public\.market_adjustment_factor_runs\s*\(id\)/i)
+  assert.match(sql, /foreign\s+key\s*\(run_id,\s*ticker\)[\s\S]*?references\s+public\.market_adjustment_factor_runs\s*\(id,\s*ticker\)/i)
   assert.match(sql, /effective_session\s+date\s+not\s+null/i)
   assert.match(sql, /reference_session\s+date\s+not\s+null/i)
   assert.match(sql, /reference_raw_close\s+numeric\s+not\s+null/i)
