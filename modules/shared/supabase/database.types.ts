@@ -619,6 +619,50 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_council_ticker_knowledge_snapshots: {
+        Row: {
+          as_of_date: string
+          captured_at: string
+          context_hash: string
+          context_payload: Json
+          context_version: string
+          point_ids: Json
+          run_id: string
+          status: string
+          ticker: string
+        }
+        Insert: {
+          as_of_date: string
+          captured_at?: string
+          context_hash: string
+          context_payload: Json
+          context_version: string
+          point_ids?: Json
+          run_id: string
+          status: string
+          ticker: string
+        }
+        Update: {
+          as_of_date?: string
+          captured_at?: string
+          context_hash?: string
+          context_payload?: Json
+          context_version?: string
+          point_ids?: Json
+          run_id?: string
+          status?: string
+          ticker?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_council_ticker_knowledge_snapshots_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: true
+            referencedRelation: "ai_council_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_council_votes: {
         Row: {
           agent_key: string
