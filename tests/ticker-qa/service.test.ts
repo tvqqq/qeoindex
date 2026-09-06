@@ -184,7 +184,7 @@ test("QEO-118 mandatory thesis fails closed when canonical Notion is unavailable
 test("QEO-118 calls the shared Context Builder in STOCK_QA mode and post-filters cross-ticker leakage", async () => {
   const msn = knowledgeItem({ ticker: "MSN", logicalKey: "msn" })
   const vcb = knowledgeItem({ ticker: "VCB", logicalKey: "vcb" })
-  let builderInput: Record<string, unknown> | null = null
+  const builderInputs: Array<Record<string, unknown>> = []
   let resolverItems: readonly TickerKnowledgeItem[] = []
 
   const prepared = await prepareTickerQaContext(fakeClient, {
@@ -194,7 +194,7 @@ test("QEO-118 calls the shared Context Builder in STOCK_QA mode and post-filters
   }, {
     loadMandatory: async () => ({ items: [], limitations: [] }),
     buildContext: async (input) => {
-      builderInput = input as unknown as Record<string, unknown>
+      builderInputs.push(input as unknown as Record<string, unknown>)
       return {
         ticker: "MSN",
         query: input.query,
@@ -224,9 +224,11 @@ test("QEO-118 calls the shared Context Builder in STOCK_QA mode and post-filters
     },
   })
 
-  assert.equal(builderInput?.consumer, "STOCK_QA")
-  assert.equal(builderInput?.ticker, "MSN")
-  assert.equal(builderInput?.query, "Broker gần đây nói gì?")
+  assert.equal(builderInputs.length, 1)
+  const builderInput = builderInputs[0]
+  assert.equal(builderInput.consumer, "STOCK_QA")
+  assert.equal(builderInput.ticker, "MSN")
+  assert.equal(builderInput.query, "Broker gần đây nói gì?")
   assert.deepEqual(resolverItems.map((item) => item.ticker), ["MSN"])
   assert.deepEqual(prepared.evidence.map((item) => item.item.ticker), ["MSN"])
 })
