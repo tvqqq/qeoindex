@@ -2,7 +2,11 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { freezeCouncilTickerKnowledge, type FrozenCouncilTickerKnowledge } from "@/modules/ai-council/ticker-knowledge-context"
+import {
+  freezeCouncilTickerKnowledge,
+  type CouncilTickerKnowledgeSnapshotClient,
+  type FrozenCouncilTickerKnowledge,
+} from "@/modules/ai-council/ticker-knowledge-context"
 import { getResearchOverviewData } from "@/modules/research/data"
 import { buildTickerContext } from "@/modules/ticker-knowledge/context"
 import type { TickerKnowledgeIndex, TickerKnowledgeItem } from "@/modules/ticker-knowledge/domain"
@@ -31,6 +35,12 @@ function itemIsAvailableAsOf(item: TickerKnowledgeItem, asOf: string) {
 
 function contextQuery(ticker: string) {
   return `${CONTEXT_QUERY_VERSION} ${ticker} current thesis historical Council decisions outcomes risks catalysts research views contradictions and reusable lessons`
+}
+
+function asSnapshotClient(supabase: SupabaseClient): CouncilTickerKnowledgeSnapshotClient {
+  // Keep Supabase's generated recursive query-builder generics outside the immutable snapshot boundary.
+  // Runtime methods used here are intentionally limited to the narrow interface above.
+  return supabase as unknown as CouncilTickerKnowledgeSnapshotClient
 }
 
 export interface AiCouncilTickerKnowledgeRuntime {
@@ -73,7 +83,7 @@ export function createAiCouncilTickerKnowledgeRuntime(): AiCouncilTickerKnowledg
       if (!isEnabled) return null
       const asOf = endOfVietnamDate(input.asOfDate)
       const query = contextQuery(input.ticker)
-      return freezeCouncilTickerKnowledge(supabase, {
+      return freezeCouncilTickerKnowledge(asSnapshotClient(supabase), {
         runId: input.runId,
         ticker: input.ticker,
         asOfDate: input.asOfDate,
