@@ -161,10 +161,13 @@ function parseJson(text: string) {
 
 class VsdcBrowserSession {
   private readonly cookies = new Map<string, string>()
+  private readonly fetchImpl: typeof fetch
   private vpToken: string | null = null
   private referer = VSDC_BOOTSTRAP_URL
 
-  constructor(private readonly fetchImpl: typeof fetch) {}
+  constructor(fetchImpl: typeof fetch) {
+    this.fetchImpl = fetchImpl
+  }
 
   isReady() {
     return Boolean(this.vpToken && this.cookies.has("__VPToken"))
