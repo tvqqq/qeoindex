@@ -259,3 +259,67 @@ test("QEO-114 server rebuild reads fresh canonical Notion rather than cached ove
   assert.match(server, /rebuildCurrentThesisKnowledge/)
   assert.doesNotMatch(server, /getResearchOverviewData/)
 })
+
+test("QEO-113 canonical report assembler selects only current content hash, exact analysis and exact chunk version", async () => {
+  const { assembleResearchReportProjectionInputs } = await import("../../modules/ticker-knowledge/canonical.ts")
+  const currentHash = "a".repeat(64)
+  const staleHash = "b".repeat(64)
+  const inputs = assembleResearchReportProjectionInputs({
+    reports: [{ id: "r1", title: "MSN update", source_name: "Broker", publish_date: "2026-09-01", content_hash: currentHash, analysis_status: "ready" }],
+    analyses: [
+      { id: "a-stale", report_id: "r1", content_hash: staleHash, chunk_version: "chunk-v1", executive_summary: "stale", key_points: [], market_view: null, sector_outlook: null, catalysts: [], risks: [], processed_at: "2026-09-02T00:00:00Z", created_at: "2026-09-02T00:00:00Z" },
+      { id: "a-current", report_id: "r1", content_hash: currentHash, chunk_version: "chunk-v2", executive_summary: "current", key_points: ["kp"], market_view: null, sector_outlook: null, catalysts: ["c"], risks: ["r"], processed_at: "2026-09-03T00:00:00Z", created_at: "2026-09-03T00:00:00Z" },
+    ],
+    mentions: [
+      { analysis_id: "a-stale", ticker: "MSN", stance: "negative", recommendation_text: "old", target_price: 1, target_currency: "VND", rationale: "stale", evidence: [{ page: 2, snippet: "old" }] },
+      { analysis_id: "a-current", ticker: "MSN", stance: "positive", recommendation_text: "BUY", target_price: 110000, target_currency: "VND", rationale: "current", evidence: [{ page: 3, snippet: "new" }] },
+    ],
+    chunks: [
+      { id: "c-wrong-version", report_id: "r1", content_hash: currentHash, chunk_version: "chunk-v1", page_number: 3, chunk_index: 0, content: "wrong version", chunk_hash: "c".repeat(64) },
+      { id: "c-right", report_id: "r1", content_hash: currentHash, chunk_version: "chunk-v2", page_number: 3, chunk_index: 1, content: "right version", chunk_hash: "d".repeat(64) },
+    ],
+  })
+
+  assert.equal(inputs.length, 1)
+  assert.equal(inputs[0].analysis.id, "a-current")
+  assert.equal(inputs[0].mentions.length, 1)
+  assert.equal(inputs[0].mentions[0].recommendationText, "BUY")
+  assert.deepEqual(inputs[0].chunks.map((chunk) => chunk.id), ["c-right"])
+})
+
+test("QEO-113 canonical Council assembler preserves deterministic scenarios, outcomes and explicit persisted LLM errors", async () => {
+  const { assembleCouncilProjectionInputs } = await import("../../modules/ticker-knowledge/canonical.ts")
+  const inputs = assembleCouncilProjectionInputs({
+    runs: [{
+      id: "run-1", ticker: "MSN", as_of_date: "2026-09-01", signal: "WAIT", council_score: 62, confidence: 70, consensus: 65,
+      risk_status: "CAUTION", price: 80, policy_version: "policy-v1", evidence_hash: "e".repeat(64), created_at: "2026-09-01T08:00:00Z",
+      bull_case: { thesis: "break 86" }, bear_case: { thesis: "lose 78" }, confirmation: "hold above 86", invalidation: "accept below 78",
+      what_changes_decision: ["break 86", "lose 78"], decision_payload: { probabilities: { bull: 30, base: 50, bear: 20 } },
+    }],
+    outcomes: [{ run_id: "run-1", outcome_status: "matured", sessions_observed: 20, evaluated_through_date: "2026-09-29", return_1d_pct: 1, return_5d_pct: 3, return_20d_pct: 8, mfe_20d_pct: 12, mae_20d_pct: -4, direction_correct_5d: true }],
+    debates: [{ run_id: "run-1", status: "partial", prompt_version: "prompt-v4", error: "chair validation failed", completed_at: "2026-09-01T09:00:00Z" }],
+  })
+
+  assert.equal(inputs.length, 1)
+  assert.deepEqual(inputs[0].scenario?.probabilities, { bull: 30, base: 50, bear: 20 })
+  assert.equal(inputs[0].scenario?.confirmation, "hold above 86")
+  assert.equal(inputs[0].outcome?.status, "matured")
+  assert.equal(inputs[0].debate?.promptVersion, "prompt-v4")
+  assert.equal(inputs[0].debate?.error, "chair validation failed")
+})
+
+test("QEO-113 Council projection emits compact scenario and explicit operational error without inventing lessons", async () => {
+  const { projectCouncilHistoryKnowledge } = await import("../../modules/ticker-knowledge/projections.ts")
+  const items = projectCouncilHistoryKnowledge({
+    id: "run-1", ticker: "MSN", asOfDate: "2026-09-01", signal: "WAIT", councilScore: 62, confidence: 70, consensus: 65,
+    riskStatus: "CAUTION", price: 80, policyVersion: "policy-v1", evidenceHash: "e".repeat(64), createdAt: "2026-09-01T08:00:00Z",
+    scenario: { bullCase: { thesis: "break 86" }, bearCase: { thesis: "lose 78" }, probabilities: { bull: 30, base: 50, bear: 20 }, confirmation: "hold above 86", invalidation: "accept below 78", whatChangesDecision: ["break 86", "lose 78"] },
+    outcome: null,
+    debate: { status: "partial", promptVersion: "prompt-v4", error: "chair validation failed", completedAt: "2026-09-01T09:00:00Z" },
+  })
+
+  assert.ok(items.some((item) => item.knowledgeType === "COUNCIL_MEMORY"))
+  assert.ok(items.some((item) => item.knowledgeType === "COUNCIL_SCENARIO" && item.authority === "DETERMINISTIC_SIGNAL"))
+  assert.ok(items.some((item) => item.knowledgeType === "COUNCIL_ERROR" && item.authority === "VERIFIED_FACT"))
+  assert.ok(!items.some((item) => item.knowledgeType === "LESSON"))
+})
