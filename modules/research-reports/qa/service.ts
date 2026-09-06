@@ -36,7 +36,13 @@ export interface ResearchReportQaRetrievalComparison {
   selected: ResearchReportQaRetrievalSelection
   fallbackUsed: boolean
   lexicalCount: number
+  lexicalMs: number
+  hybridPointCount: number
+  hybridCanonicalCount: number
   hybridCount: number
+  hybridRetrievalMs: number
+  hybridHydrationMs: number
+  hybridResolutionRatio: number
   overlapCount: number
   overlapRatio: number
   hybridStatus: ResearchReportQaHybridStatus
@@ -117,6 +123,21 @@ export interface ResearchReportQaServiceDependencies {
   answerWithAi?: AnswerWithAi
 }
 
+interface LexicalAttempt {
+  evidence: ResearchReportQaEvidence[]
+  elapsedMs: number
+  error: unknown | null
+}
+
+interface HybridAttempt {
+  status: ResearchReportQaHybridStatus
+  evidence: ResearchReportQaEvidence[]
+  pointCount: number
+  canonicalCount: number
+  retrievalMs: number
+  hydrationMs: number
+}
+
 function normalizeText(value: string) {
   return value.replace(/\s+/g, " ").trim()
 }
@@ -129,6 +150,14 @@ function sanitizeErrorMessage(value: unknown) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 400)
+}
+
+function measuredMs(startedAt: number) {
+  return Math.max(0, Date.now() - startedAt)
+}
+
+function metricMs(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0
 }
 
 function validateRequest(input: ResearchReportQaRequest): {
@@ -215,28 +244,88 @@ function projectAnswer(
   }
 }
 
+async function retrieveLexicalAttempt(
+  retrieveEvidence: RetrieveEvidence,
+  client: ResearchReportQaRetrievalClient,
+  identity: ResearchReportQaEvidenceIdentity,
+  lexicalQuery: string,
+): Promise<LexicalAttempt> {
+  const startedAt = Date.now()
+  try {
+    return {
+      evidence: boundResearchReportQaEvidence(await retrieveEvidence(client, identity, lexicalQuery)),
+      elapsedMs: measuredMs(startedAt),
+      error: null,
+    }
+  } catch (error) {
+    return {
+      evidence: [],
+      elapsedMs: measuredMs(startedAt),
+      error,
+    }
+  }
+}
+
+async function retrieveHybridAttempt(
+  retrieveHybridEvidence: RetrieveHybridEvidence,
+  client: ResearchReportQaRetrievalClient,
+  identity: ResearchReportQaEvidenceIdentity,
+  lexicalQuery: string,
+): Promise<HybridAttempt> {
+  try {
+    const result = await retrieveHybridEvidence(client, identity, lexicalQuery)
+    const canonical = result.status === "ready" ? [...result.evidence] : []
+    return {
+      status: result.status,
+      evidence: result.status === "ready" ? boundResearchReportQaEvidence(canonical) : [],
+      pointCount: result.pointIds?.length ?? 0,
+      canonicalCount: canonical.length,
+      retrievalMs: metricMs(result.retrievalMs),
+      hydrationMs: metricMs(result.hydrationMs),
+    }
+  } catch {
+    return {
+      status: "unavailable",
+      evidence: [],
+      pointCount: 0,
+      canonicalCount: 0,
+      retrievalMs: 0,
+      hydrationMs: 0,
+    }
+  }
+}
+
 function retrievalComparison(input: {
   mode: Exclude<ResearchReportQaRetrievalMode, "lexical">
   selected: ResearchReportQaRetrievalSelection
   fallbackUsed: boolean
-  lexical: readonly ResearchReportQaEvidence[]
-  hybrid: readonly ResearchReportQaEvidence[]
-  hybridStatus: ResearchReportQaHybridStatus
+  lexical: LexicalAttempt
+  hybrid: HybridAttempt
 }): ResearchReportQaRetrievalComparison {
-  const lexicalIds = new Set(input.lexical.map((row) => row.chunkId))
-  const hybridIds = new Set(input.hybrid.map((row) => row.chunkId))
+  const lexicalIds = new Set(input.lexical.evidence.map((row) => row.chunkId))
+  const hybridIds = new Set(input.hybrid.evidence.map((row) => row.chunkId))
   let overlapCount = 0
   for (const id of hybridIds) if (lexicalIds.has(id)) overlapCount += 1
   const denominator = Math.min(lexicalIds.size, hybridIds.size)
+  const resolutionRatio = input.hybrid.pointCount > 0
+    ? Math.min(1, input.hybrid.canonicalCount / input.hybrid.pointCount)
+    : 0
+
   return {
     mode: input.mode,
     selected: input.selected,
     fallbackUsed: input.fallbackUsed,
-    lexicalCount: input.lexical.length,
-    hybridCount: input.hybrid.length,
+    lexicalCount: input.lexical.evidence.length,
+    lexicalMs: input.lexical.elapsedMs,
+    hybridPointCount: input.hybrid.pointCount,
+    hybridCanonicalCount: input.hybrid.canonicalCount,
+    hybridCount: input.hybrid.evidence.length,
+    hybridRetrievalMs: input.hybrid.retrievalMs,
+    hybridHydrationMs: input.hybrid.hydrationMs,
+    hybridResolutionRatio: resolutionRatio,
     overlapCount,
     overlapRatio: denominator > 0 ? overlapCount / denominator : 0,
-    hybridStatus: input.hybridStatus,
+    hybridStatus: input.hybrid.status,
   }
 }
 
@@ -250,6 +339,14 @@ async function recordComparisonSafely(
   } catch {
     // Observability must never become a user-visible Q&A dependency.
   }
+}
+
+function throwRetrievalFailure(error: unknown): never {
+  throw new ResearchReportQaError(
+    "retrieval_failed",
+    502,
+    sanitizeErrorMessage(error),
+  )
 }
 
 export async function answerResearchReportQuestion(
@@ -268,11 +365,7 @@ export async function answerResearchReportQuestion(
   try {
     resolution = await resolveIdentity(client, request.reportId)
   } catch (error) {
-    throw new ResearchReportQaError(
-      "retrieval_failed",
-      502,
-      sanitizeErrorMessage(error),
-    )
+    throwRetrievalFailure(error)
   }
 
   if (resolution.status === "not_found") {
@@ -286,98 +379,71 @@ export async function answerResearchReportQuestion(
   let evidence: ResearchReportQaEvidence[] = []
 
   if (retrievalMode === "lexical" || !retrieveHybridEvidence) {
-    try {
-      evidence = boundResearchReportQaEvidence(
-        await retrieveEvidence(client, resolution.identity, lexicalQuery),
-      )
-    } catch (error) {
-      throw new ResearchReportQaError(
-        "retrieval_failed",
-        502,
-        sanitizeErrorMessage(error),
-      )
-    }
+    const lexical = await retrieveLexicalAttempt(
+      retrieveEvidence,
+      client,
+      resolution.identity,
+      lexicalQuery,
+    )
+    if (lexical.error) throwRetrievalFailure(lexical.error)
+    evidence = lexical.evidence
   } else if (retrievalMode === "shadow") {
-    let lexical: ResearchReportQaEvidence[]
-    try {
-      lexical = boundResearchReportQaEvidence(
-        await retrieveEvidence(client, resolution.identity, lexicalQuery),
-      )
-    } catch (error) {
-      throw new ResearchReportQaError(
-        "retrieval_failed",
-        502,
-        sanitizeErrorMessage(error),
-      )
-    }
+    const lexical = await retrieveLexicalAttempt(
+      retrieveEvidence,
+      client,
+      resolution.identity,
+      lexicalQuery,
+    )
+    if (lexical.error) throwRetrievalFailure(lexical.error)
 
-    let hybrid: ResearchReportQaEvidence[] = []
-    let hybridStatus: ResearchReportQaHybridStatus = "unavailable"
-    try {
-      const result = await retrieveHybridEvidence(client, resolution.identity, lexicalQuery)
-      hybridStatus = result.status
-      hybrid = result.status === "ready" ? boundResearchReportQaEvidence(result.evidence) : []
-    } catch {
-      hybridStatus = "unavailable"
-    }
+    const hybrid = await retrieveHybridAttempt(
+      retrieveHybridEvidence,
+      client,
+      resolution.identity,
+      lexicalQuery,
+    )
 
-    evidence = lexical
+    evidence = lexical.evidence
     await recordComparisonSafely(deps.recordRetrievalComparison, retrievalComparison({
       mode: "shadow",
       selected: "lexical",
       fallbackUsed: false,
       lexical,
       hybrid,
-      hybridStatus,
     }))
   } else {
-    let hybrid: ResearchReportQaEvidence[] = []
-    let hybridStatus: ResearchReportQaHybridStatus = "unavailable"
-    try {
-      const result = await retrieveHybridEvidence(client, resolution.identity, lexicalQuery)
-      hybridStatus = result.status
-      hybrid = result.status === "ready" ? boundResearchReportQaEvidence(result.evidence) : []
-    } catch {
-      hybridStatus = "unavailable"
-    }
+    const hybrid = await retrieveHybridAttempt(
+      retrieveHybridEvidence,
+      client,
+      resolution.identity,
+      lexicalQuery,
+    )
+    const lexical = await retrieveLexicalAttempt(
+      retrieveEvidence,
+      client,
+      resolution.identity,
+      lexicalQuery,
+    )
 
-    let lexical: ResearchReportQaEvidence[] = []
-    let lexicalError: unknown = null
-    try {
-      lexical = boundResearchReportQaEvidence(
-        await retrieveEvidence(client, resolution.identity, lexicalQuery),
-      )
-    } catch (error) {
-      lexicalError = error
-    }
-
-    const useHybrid = hybridStatus === "ready" && hybrid.length > 0
+    const useHybrid = hybrid.status === "ready" && hybrid.evidence.length > 0
     if (useHybrid) {
-      evidence = hybrid
+      evidence = hybrid.evidence
       await recordComparisonSafely(deps.recordRetrievalComparison, retrievalComparison({
         mode: "hybrid",
         selected: "hybrid",
         fallbackUsed: false,
         lexical,
         hybrid,
-        hybridStatus,
       }))
     } else {
-      if (lexicalError) {
-        throw new ResearchReportQaError(
-          "retrieval_failed",
-          502,
-          sanitizeErrorMessage(lexicalError),
-        )
-      }
-      evidence = lexical
+      if (lexical.error) throwRetrievalFailure(lexical.error)
+      evidence = lexical.evidence
       await recordComparisonSafely(deps.recordRetrievalComparison, retrievalComparison({
         mode: "hybrid",
         selected: "lexical",
         fallbackUsed: true,
         lexical,
         hybrid,
-        hybridStatus,
       }))
     }
   }
