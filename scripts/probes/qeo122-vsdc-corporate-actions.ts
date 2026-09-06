@@ -47,10 +47,40 @@ function decodeHtml(value: string) {
     .replace(/&gt;/gi, ">")
 }
 
+function stripElementBlocks(value: string, tagName: "script" | "style") {
+  const lower = value.toLocaleLowerCase("en-US")
+  const openNeedle = `<${tagName}`
+  const closeNeedle = `</${tagName}`
+  const chunks: string[] = []
+  let cursor = 0
+
+  while (cursor < value.length) {
+    const openStart = lower.indexOf(openNeedle, cursor)
+    if (openStart < 0) {
+      chunks.push(value.slice(cursor))
+      break
+    }
+
+    chunks.push(value.slice(cursor, openStart))
+    const openEnd = lower.indexOf(">", openStart + openNeedle.length)
+    if (openEnd < 0) break
+
+    const closeStart = lower.indexOf(closeNeedle, openEnd + 1)
+    if (closeStart < 0) break
+    const closeEnd = lower.indexOf(">", closeStart + closeNeedle.length)
+    if (closeEnd < 0) break
+
+    chunks.push(" ")
+    cursor = closeEnd + 1
+  }
+
+  return chunks.join("")
+}
+
 function htmlToText(html: string) {
-  const withBreaks = html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+  const withoutScript = stripElementBlocks(html, "script")
+  const withoutScriptOrStyle = stripElementBlocks(withoutScript, "style")
+  const withBreaks = withoutScriptOrStyle
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(?:article|section|div|p|h[1-6]|li|tr|td|th)>/gi, "\n")
     .replace(/<(?:article|section|div|p|h[1-6]|li|tr|td|th)\b[^>]*>/gi, "")
