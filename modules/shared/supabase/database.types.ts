@@ -3796,6 +3796,23 @@ export type Database = {
       qeo_get_kfsp_credentials: { Args: never; Returns: Json }
       qeo_get_kfsp_provider_token_cache: { Args: never; Returns: Json }
       qeo_get_market_close_sync_secret: { Args: never; Returns: string }
+      qeo_hydrate_research_report_chunks: {
+        Args: {
+          p_chunk_ids: string[]
+          p_chunk_version: string
+          p_content_hash: string
+          p_report_id: string
+        }
+        Returns: {
+          chunk_index: number
+          chunk_version: string
+          content: string
+          content_hash: string
+          id: string
+          page_number: number
+          report_id: string
+        }[]
+      }
       qeo_market_daily_integrity_report: {
         Args: never
         Returns: {

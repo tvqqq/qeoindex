@@ -332,11 +332,11 @@
     },
     {
       "logicalName": "qeo116_report_qa_hydration",
-      "repositoryVersion": "20260906111500",
-      "productionVersion": null,
-      "state": "QUARANTINED",
-      "evidence": "qeo116-shadow-evaluation-pending-production-hydration-cutover",
-      "rationale": "Exact-version report Q&A hydration RPC remains quarantined until QEO-116 shadow evaluation, exact-head DB replay/types, canonical backfill, and production retrieval smoke are approved."
+      "repositoryVersion": "20260906132050",
+      "productionVersion": "20260906132050",
+      "state": "EXACT",
+      "evidence": "qeo119-exact-head-db-drift-production-hydration-smoke",
+      "rationale": "QEO-116 exact-version Report Q&A hydration RPC was promoted only after exact-head Verify, zero-to-latest DB replay/generated-types, canonical backfill, and production smoke proved service-role-only execution plus exact report/content-hash/chunk-version/chunk-id hydration."
     }
   ]
 }
