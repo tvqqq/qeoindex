@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { fetchYahooDailyOhlcv } from "../modules/market/providers/yahoo/history.ts"
@@ -43,4 +44,14 @@ test("QEO-106 Yahoo Daily applies adjusted-close ratio to OHLC while preserving 
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+test("QEO-106 repair worker reconciles persisted legacy Yahoo Daily rows on the adjusted basis", () => {
+  const integrity = readFileSync(new URL("../modules/market/history/daily-integrity.ts", import.meta.url), "utf8")
+  assert.match(integrity, /fetchYahooDailyOhlcv/)
+  assert.match(integrity, /loadLegacyYahooBasisRows/)
+  assert.match(integrity, /legacyYahooRowsByTicker/)
+  assert.match(integrity, /Yahoo Finance \.VN adjusted OHLC fallback · QEO-106 basis reconcile/)
+  assert.match(integrity, /provider:\s*"Fallback"/)
+  assert.match(integrity, /legacyYahooDates/)
 })
