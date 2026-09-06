@@ -69,6 +69,7 @@ interface ResearchContextAuditRow {
 }
 
 type ReportSnapshotStatus = "ready" | "empty" | "unavailable"
+type TickerKnowledgeRetrievalStatus = "ready" | "unavailable"
 
 interface ReportEvidenceSnapshotRow {
   run_id: string
@@ -78,6 +79,16 @@ interface ReportEvidenceSnapshotRow {
   context_payload: unknown
   report_ids: unknown
   analysis_ids: unknown
+  captured_at: string
+}
+
+interface TickerKnowledgeSnapshotRow {
+  run_id: string
+  context_version: string
+  context_hash: string
+  status: ReportSnapshotStatus
+  context_payload: unknown
+  point_ids: unknown
   captured_at: string
 }
 
@@ -119,8 +130,14 @@ export interface AiCouncilDebateDashboardProvenance {
   reportStatus: ReportSnapshotStatus | null
   reportCount: number
   reportCapturedAt: string | null
+  tickerKnowledgeContextVersion: string | null
+  tickerKnowledgeContextHash: string | null
+  tickerKnowledgeStatus: ReportSnapshotStatus | null
+  tickerKnowledgeRetrievalStatus: TickerKnowledgeRetrievalStatus | null
+  tickerKnowledgeCount: number
+  tickerKnowledgeCapturedAt: string | null
   promptIdentityHash: string
-  cacheIdentityMode: "prompt-identity-v2-report-evidence" | "prompt-identity-v1" | "legacy-evidence-hash"
+  cacheIdentityMode: "prompt-identity-v3-ticker-knowledge" | "prompt-identity-v2-report-evidence" | "prompt-identity-v1" | "legacy-evidence-hash"
 }
 
 export interface AiCouncilDebateDashboardRow extends Omit<AiCouncilLlmDebateRecord, "evidenceProvenance"> {
@@ -203,6 +220,17 @@ function reportSnapshotStatus(value: unknown): ReportSnapshotStatus | null {
   return value === "ready" || value === "empty" || value === "unavailable" ? value : null
 }
 
+function tickerKnowledgeRetrievalStatus(snapshot: TickerKnowledgeSnapshotRow | undefined): TickerKnowledgeRetrievalStatus | null {
+  const value = record(snapshot?.context_payload).retrievalStatus
+  return value === "ready" || value === "unavailable" ? value : null
+}
+
+function tickerKnowledgeItemCount(snapshot: TickerKnowledgeSnapshotRow | undefined) {
+  if (reportSnapshotStatus(snapshot?.status) !== "ready") return 0
+  const items = record(snapshot?.context_payload).items
+  return Array.isArray(items) ? items.length : 0
+}
+
 function relatedReports(snapshot: ReportEvidenceSnapshotRow | undefined, ticker: string): AiCouncilRelatedReport[] {
   if (!snapshot || snapshot.status !== "ready") return []
   const reports = record(snapshot.context_payload).reports
@@ -237,6 +265,7 @@ function normalize(
   rawEvidence: RawEvidenceAuditRow | undefined,
   researchContext: ResearchContextAuditRow | undefined,
   reportSnapshot: ReportEvidenceSnapshotRow | undefined,
+  tickerKnowledgeSnapshot: TickerKnowledgeSnapshotRow | undefined,
 ): AiCouncilDebateDashboardRow {
   const status = row.status === "completed" || row.status === "partial" || row.status === "failed" ? row.status : "pending"
   const reportEvidenceContext = row.prompt_version === "llm-debate-v4-research-report-evidence"
@@ -247,6 +276,11 @@ function normalize(
   const reportParticipatesInPrompt = reportEvidenceContext
     && (reportStatus === "ready" || reportStatus === "empty")
     && Boolean(reportContextHash)
+  const tickerKnowledgeStatus = reportSnapshotStatus(tickerKnowledgeSnapshot?.status)
+  const tickerKnowledgeContextHash = validHash(tickerKnowledgeSnapshot?.context_hash)
+  const tickerKnowledgeParticipatesInPrompt = firstClassContext
+    && (tickerKnowledgeStatus === "ready" || tickerKnowledgeStatus === "empty")
+    && Boolean(tickerKnowledgeContextHash)
 
   const promptIdentityHash = firstClassContext
     ? resolveAiCouncilPromptIdentityHash({
@@ -260,6 +294,9 @@ function normalize(
         } : {}),
         ...(reportParticipatesInPrompt && reportContextHash ? {
           reportEvidence: { contextHash: reportContextHash },
+        } : {}),
+        ...(tickerKnowledgeParticipatesInPrompt && tickerKnowledgeContextHash ? {
+          tickerKnowledge: { contextHash: tickerKnowledgeContextHash },
         } : {}),
       }, row.prompt_version)
     : row.evidence_hash
@@ -291,12 +328,20 @@ function normalize(
       reportStatus,
       reportCount: reportStatus === "ready" ? reportIds.length : 0,
       reportCapturedAt: reportSnapshot?.captured_at || null,
+      tickerKnowledgeContextVersion: tickerKnowledgeSnapshot?.context_version || null,
+      tickerKnowledgeContextHash,
+      tickerKnowledgeStatus,
+      tickerKnowledgeRetrievalStatus: tickerKnowledgeRetrievalStatus(tickerKnowledgeSnapshot),
+      tickerKnowledgeCount: tickerKnowledgeItemCount(tickerKnowledgeSnapshot),
+      tickerKnowledgeCapturedAt: tickerKnowledgeSnapshot?.captured_at || null,
       promptIdentityHash,
-      cacheIdentityMode: reportEvidenceContext
-        ? "prompt-identity-v2-report-evidence"
-        : firstClassContext
-          ? "prompt-identity-v1"
-          : "legacy-evidence-hash",
+      cacheIdentityMode: tickerKnowledgeParticipatesInPrompt
+        ? "prompt-identity-v3-ticker-knowledge"
+        : reportEvidenceContext
+          ? "prompt-identity-v2-report-evidence"
+          : firstClassContext
+            ? "prompt-identity-v1"
+            : "legacy-evidence-hash",
     },
     relatedReports: frozenReports,
     selectionReasons: debateReasons(row.selection_reasons),
@@ -367,9 +412,10 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
   const rawEvidenceByRun = new Map<string, RawEvidenceAuditRow>()
   const researchContextByRun = new Map<string, ResearchContextAuditRow>()
   const reportSnapshotByRun = new Map<string, ReportEvidenceSnapshotRow>()
+  const tickerKnowledgeSnapshotByRun = new Map<string, TickerKnowledgeSnapshotRow>()
 
   if (runIds.length) {
-    const [rawEvidenceResult, researchContextResult, reportSnapshotResult] = await Promise.all([
+    const [rawEvidenceResult, researchContextResult, reportSnapshotResult, tickerKnowledgeSnapshotResult] = await Promise.all([
       supabase
         .from("ai_council_llm_evidence")
         .select("run_id,context_version,context_hash,captured_at")
@@ -381,6 +427,10 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
       snapshotDb(supabase)
         .from("ai_council_report_evidence_snapshots")
         .select("run_id,context_version,context_hash,status,context_payload,report_ids,analysis_ids,captured_at")
+        .in("run_id", runIds),
+      snapshotDb(supabase)
+        .from("ai_council_ticker_knowledge_snapshots")
+        .select("run_id,context_version,context_hash,status,context_payload,point_ids,captured_at")
         .in("run_id", runIds),
     ])
 
@@ -395,6 +445,11 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
         reportSnapshotByRun.set(row.run_id, row)
       }
     }
+    if (!tickerKnowledgeSnapshotResult.error) {
+      for (const row of (tickerKnowledgeSnapshotResult.data || []) as TickerKnowledgeSnapshotRow[]) {
+        tickerKnowledgeSnapshotByRun.set(row.run_id, row)
+      }
+    }
   }
 
   const rows = debateRows.map((row) => normalize(
@@ -402,6 +457,7 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
     rawEvidenceByRun.get(row.run_id),
     researchContextByRun.get(row.run_id),
     reportSnapshotByRun.get(row.run_id),
+    tickerKnowledgeSnapshotByRun.get(row.run_id),
   ))
   const latestDate = rows[0]?.asOfDate || null
   const latestRows = latestDate ? rows.filter((row) => row.asOfDate === latestDate) : []
@@ -425,7 +481,7 @@ export async function getAiCouncilDebateDashboardData(supabase: SupabaseClient):
       ? Number(costRows.reduce((sum, row) => sum + (row.estimatedCostUsd || 0), 0).toFixed(6))
       : null,
     message: rows.length
-      ? "P4.4 uses frozen raw/research/report evidence, semantic grounding, prompt-identity cache telemetry and severe-conflict Sol escalation. Historical Research Reports are read from immutable Council snapshots only; debates remain advisory-only."
+      ? "P4.4 uses frozen raw/research/report/ticker-knowledge evidence, semantic grounding, prompt-identity cache telemetry and severe-conflict Sol escalation. Historical Research Reports and ticker knowledge are read from immutable Council snapshots only; debates remain advisory-only."
       : enabledByConfiguration
         ? "Runtime đã nhận OPENAI_API_KEY. Chưa có P4 debate vì cron chỉ chạy khi deterministic Council có event đáng tranh luận."
         : "P4 code đã sẵn sàng nhưng OPENAI_API_KEY chưa được cấu hình hoặc AI_COUNCIL_LLM_ENABLED đang tắt.",

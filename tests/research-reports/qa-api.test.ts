@@ -85,3 +85,20 @@ test("QEO-82 README documents current-version grounded Q&A and keeps follow-up s
   assert.match(readme, /vector search/i)
   assert.match(readme, /AI Council/i)
 })
+
+test("QEO-116 chat API defaults to shadow hybrid retrieval and degrades to lexical when Qdrant is unavailable", () => {
+  const code = routeSource()
+  const serverClient = code.indexOf("getSupabaseServerClient()")
+  const vectorIndex = code.indexOf("createServerTickerKnowledgeIndex()")
+  const qaCall = code.indexOf("answerResearchReportQuestion(")
+
+  assert.match(code, /RESEARCH_REPORT_QA_RETRIEVAL_MODE/)
+  assert.match(code, /\?\?\s*["']shadow["']/)
+  assert.match(code, /retrieveResearchReportQaHybridEvidence/)
+  assert.match(code, /retrievalMode/)
+  assert.match(code, /retrieveHybridEvidence/)
+  assert.match(code, /recordRetrievalComparison/)
+  assert.match(code, /catch\s*\{[\s\S]{0,240}retrieveHybridEvidence\s*=\s*undefined/)
+  assert.ok(vectorIndex > serverClient, "Qdrant dependency must be created only after auth and service-role client")
+  assert.ok(qaCall > vectorIndex, "Q&A must receive the resolved retrieval dependencies")
+})

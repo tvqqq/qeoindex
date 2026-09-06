@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+import { boundTickerChatHistory } from "../components/stock-detail/stock-ai-chat-state.ts"
+
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
@@ -61,4 +63,39 @@ test("Vùng kích hoạt & Quản trị is removed from sidebar and moved to Tab
   assert.match(tabsCode, /Vùng Hỗ trợ/)
   assert.match(tabsCode, /Vùng Kháng cự/)
   assert.match(tabsCode, /Dừng lỗ & Vô hiệu/)
+})
+
+test("QEO-118 bounds ephemeral stock AI chat history to latest six normalized turns", () => {
+  const bounded = boundTickerChatHistory([
+    { role: "assistant", content: "  zero   " },
+    ...Array.from({ length: 7 }, (_, index) => ({ role: "user" as const, content: `  turn   ${index}  ` })),
+  ])
+  assert.equal(bounded.length, 6)
+  assert.equal(bounded[0]?.content, "turn 1")
+  assert.equal(bounded[5]?.content, "turn 6")
+
+  const long = boundTickerChatHistory([{ role: "user", content: "x".repeat(1_500) }])
+  assert.equal(long[0]?.content.length, 1_200)
+})
+
+test("QEO-118 upgrades the existing Quick AI Assistant to the grounded ticker API", () => {
+  const code = source("components/stock-detail/stock-ai-sidebar.tsx")
+
+  assert.match(code, /\/api\/insights\/\$\{encodeURIComponent\(ticker\)\}\/chat/)
+  assert.match(code, /boundTickerChatHistory/)
+  assert.match(code, /citations/)
+  assert.match(code, /authority/)
+  assert.match(code, /retrievalStatus/)
+  assert.match(code, /limitation/)
+  assert.match(code, /contradictions/)
+  assert.doesNotMatch(code, /setTimeout\s*\(/)
+  assert.doesNotMatch(code, /58\.4%|1\.35x/)
+  assert.doesNotMatch(code, /Tôi nắm toàn diện/)
+})
+
+test("QEO-118 preset chips share handleSend and never fall back to local fabricated finance answers", () => {
+  const code = source("components/stock-detail/stock-ai-sidebar.tsx")
+  assert.match(code, /onClick=\{\(\) => handleSend\(/)
+  assert.match(code, /fetch\(`/)
+  assert.doesNotMatch(code, /q\.includes\("dòng tiền"\)|q\.includes\("hỗ trợ"\)|q\.includes\("wyckoff"\)/)
 })

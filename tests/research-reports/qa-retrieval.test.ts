@@ -13,6 +13,10 @@ import {
   resolveResearchReportQaEvidenceIdentity,
   retrieveResearchReportQaEvidence,
 } from "../../modules/research-reports/qa/retrieval.ts"
+import type {
+  TickerKnowledgeIndex,
+  TickerKnowledgeQuery,
+} from "../../modules/ticker-knowledge/domain.ts"
 
 const REPORT_ID = "11111111-1111-4111-8111-111111111111"
 const OTHER_REPORT_ID = "22222222-2222-4222-8222-222222222222"
@@ -251,4 +255,143 @@ test("QEO-82 evidence bounding is deterministic and never exceeds chunk or chara
   assert.ok(first.reduce((sum, row) => sum + row.content.length, 0) <= RESEARCH_REPORT_QA_LIMITS.evidenceChars)
   assert.deepEqual(first, second)
   assert.deepEqual(first.map((row) => row.evidenceId), fixture.slice(0, first.length).map((row) => row.evidenceId))
+})
+
+test("QEO-116 REPORT_QA context forwards exact report provenance filters and rejects backend leakage", async () => {
+  const { buildTickerContext } = await import("../../modules/ticker-knowledge/context.ts")
+  const { createTickerKnowledgeItem } = await import("../../modules/ticker-knowledge/domain.ts")
+  const sourceVersion = `${HASH}:${ANALYSIS_ID}:${CHUNK_VERSION}`
+  const valid = createTickerKnowledgeItem({
+    ticker: "MSN",
+    knowledgeType: "REPORT_CHUNK",
+    authority: "SOURCE_OPINION",
+    sourceType: "RESEARCH_REPORT",
+    logicalKey: "valid",
+    text: "MSN target price is 110,000 VND.",
+    provenance: {
+      sourceId: REPORT_ID,
+      sourceVersion,
+      contentHash: HASH,
+      reportId: REPORT_ID,
+      analysisId: ANALYSIS_ID,
+      chunkVersion: CHUNK_VERSION,
+      page: 7,
+      chunkId: CHUNK_ID,
+      chunkIndex: 1,
+    },
+    projectionVersion: "test-v1",
+  })
+  const leaked = createTickerKnowledgeItem({
+    ticker: "MSN",
+    knowledgeType: "REPORT_CHUNK",
+    authority: "SOURCE_OPINION",
+    sourceType: "RESEARCH_REPORT",
+    logicalKey: "leaked",
+    text: "Wrong historical report target 999,000 VND.",
+    provenance: {
+      sourceId: OTHER_REPORT_ID,
+      sourceVersion: `${OLD_HASH}:${ANALYSIS_ID}:${CHUNK_VERSION}`,
+      contentHash: OLD_HASH,
+      reportId: OTHER_REPORT_ID,
+      analysisId: ANALYSIS_ID,
+      chunkVersion: CHUNK_VERSION,
+      page: 1,
+      chunkId: "77777777-7777-4777-8777-777777777777",
+      chunkIndex: 0,
+    },
+    projectionVersion: "test-v1",
+  })
+  const queries: TickerKnowledgeQuery[] = []
+  const index: TickerKnowledgeIndex = {
+    ensureReady: async () => undefined,
+    upsert: async () => undefined,
+    deleteSourceVersion: async () => undefined,
+    query: async (input) => {
+      queries.push(input)
+      return [valid, leaked].map((item, index) => ({
+        id: item.id,
+        score: 1 - index / 10,
+        item,
+        derivedVersions: { embeddingModel: "x", embeddingVersion: "x", sparseEncoder: "x", sparseVersion: "x" },
+      }))
+    },
+  }
+
+  const context = await buildTickerContext({
+    index,
+    ticker: "MSN",
+    query: "định giá mục tiêu",
+    consumer: "REPORT_QA",
+    knowledgeTypes: ["REPORT_CHUNK"],
+    sourceTypes: ["RESEARCH_REPORT"],
+    reportId: REPORT_ID,
+    analysisId: ANALYSIS_ID,
+    sourceId: REPORT_ID,
+    sourceVersion,
+    contentHash: HASH,
+    chunkVersion: CHUNK_VERSION,
+  })
+
+  assert.equal(queries.length, 1)
+  assert.equal(queries[0].reportId, REPORT_ID)
+  assert.equal(queries[0].analysisId, ANALYSIS_ID)
+  assert.equal(queries[0].sourceId, REPORT_ID)
+  assert.equal(queries[0].sourceVersion, sourceVersion)
+  assert.equal(queries[0].contentHash, HASH)
+  assert.equal(queries[0].chunkVersion, CHUNK_VERSION)
+  assert.deepEqual(context.items.map((item) => item.id), [valid.id])
+  assert.doesNotMatch(context.text, /999,000/)
+})
+
+test("QEO-116 Qdrant request carries exact report provenance payload filters", async () => {
+  const { createQdrantTickerKnowledgeIndex } = await import("../../modules/ticker-knowledge/qdrant.ts")
+  const calls: Array<Record<string, unknown>> = []
+  const index = createQdrantTickerKnowledgeIndex({
+    baseUrl: "https://example.qdrant.io",
+    apiKey: "test-qdrant-key",
+    vectorSize: 3,
+    fetchImpl: async (_input, init) => {
+      calls.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>)
+      return new Response(JSON.stringify({ result: { points: [] }, status: "ok" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    },
+    embeddingProvider: {
+      model: "test-embedding",
+      version: "test-embedding-v1",
+      dimensions: 3,
+      embed: async () => [[0.1, 0.2, 0.3]],
+    },
+  })
+  const sourceVersion = `${HASH}:${ANALYSIS_ID}:${CHUNK_VERSION}`
+
+  await index.query({
+    ticker: "MSN",
+    text: "định giá mục tiêu",
+    knowledgeTypes: ["REPORT_CHUNK"],
+    sourceTypes: ["RESEARCH_REPORT"],
+    reportId: REPORT_ID,
+    analysisId: ANALYSIS_ID,
+    sourceId: REPORT_ID,
+    sourceVersion,
+    contentHash: HASH,
+    chunkVersion: CHUNK_VERSION,
+    limit: 8,
+  } as never)
+
+  assert.equal(calls.length, 1)
+  const filter = calls[0].filter as { must: Array<{ key: string; match?: { value?: string } }> }
+  const exact = Object.fromEntries(filter.must.map((entry) => [entry.key, entry.match?.value]))
+  assert.deepEqual(exact, {
+    ticker: "MSN",
+    knowledge_type: undefined,
+    source_type: undefined,
+    report_id: REPORT_ID,
+    analysis_id: ANALYSIS_ID,
+    source_id: REPORT_ID,
+    source_version: sourceVersion,
+    content_hash: HASH,
+    chunk_version: CHUNK_VERSION,
+  })
 })
