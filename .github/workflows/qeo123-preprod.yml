@@ -74,6 +74,10 @@ jobs:
         run: supabase start
       - name: Replay migrations from zero through QEO-123
         run: pnpm db:replay:verify
+      - name: Verify QEO-123 atomic persistence
+        run: |
+          eval "$(supabase status -o env)"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f tests/corporate-actions/persistence.sql
       - name: Lint replayed local database
         run: supabase db lint --local --level warning
       - name: Generate QEO-123 Database type candidate
