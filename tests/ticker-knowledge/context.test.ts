@@ -13,6 +13,7 @@ function item(input: {
   text: string
   authority?: "CANONICAL_THESIS" | "SOURCE_OPINION" | "DETERMINISTIC_SIGNAL"
   sourceType?: "NOTION_THESIS" | "RESEARCH_REPORT" | "AI_COUNCIL"
+  asOf?: string
 }) {
   const sourceType = input.sourceType ?? "RESEARCH_REPORT"
   return createTickerKnowledgeItem({
@@ -25,7 +26,7 @@ function item(input: {
     provenance: {
       sourceId: `source-${input.key}`,
       sourceVersion: `version-${input.key}`,
-      asOf: "2026-09-05T00:00:00.000Z",
+      asOf: input.asOf ?? "2026-09-05T00:00:00.000Z",
     },
     projectionVersion: "test-v1",
   })
@@ -117,4 +118,37 @@ test("QEO-115 preserves contradictory authorities as separate ordered items inst
   assert.match(result.text, /Deterministic signal: REDUCE/)
   assert.match(result.text, /Broker opinion: BUY, target 120/)
   assert.doesNotMatch(result.text, /consensus|average/i)
+})
+
+test("QEO-115 historical ranking uses asOf as the default recency clock", async () => {
+  const olderHighSemantic = item({
+    key: "older-high-semantic",
+    text: "Older high semantic match",
+    asOf: "2024-03-01T00:00:00.000Z",
+  })
+  const recentNearEqual = item({
+    key: "recent-near-equal",
+    text: "Recent near-equal semantic match",
+    asOf: "2024-09-05T00:00:00.000Z",
+  })
+  const normalizationFloor = item({
+    key: "normalization-floor",
+    text: "Low relevance floor",
+    asOf: "2024-01-01T00:00:00.000Z",
+  })
+
+  const result = await buildTickerContext({
+    index: index([
+      searchResult(olderHighSemantic, 1),
+      searchResult(recentNearEqual, 0.99),
+      searchResult(normalizationFloor, 0),
+    ]),
+    ticker: "MSN",
+    query: "historical view",
+    asOf: "2024-09-06T00:00:00.000Z",
+    maxChars: 4000,
+  })
+
+  assert.equal(result.items[0].id, recentNearEqual.id)
+  assert.equal(result.items[1].id, olderHighSemantic.id)
 })
