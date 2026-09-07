@@ -1643,56 +1643,6 @@ export type Database = {
         }
         Relationships: []
       }
-      market_adjusted_daily_rollout: {
-        Row: {
-          activated_at: string | null
-          blocked_reason: string | null
-          event_lineage_hash: string | null
-          factor_run_id: string | null
-          factor_version: string | null
-          status: string
-          ticker: string
-          updated_at: string
-          verified_at: string | null
-          verified_from: string | null
-          verified_through: string | null
-        }
-        Insert: {
-          activated_at?: string | null
-          blocked_reason?: string | null
-          event_lineage_hash?: string | null
-          factor_run_id?: string | null
-          factor_version?: string | null
-          status?: string
-          ticker: string
-          updated_at?: string
-          verified_at?: string | null
-          verified_from?: string | null
-          verified_through?: string | null
-        }
-        Update: {
-          activated_at?: string | null
-          blocked_reason?: string | null
-          event_lineage_hash?: string | null
-          factor_run_id?: string | null
-          factor_version?: string | null
-          status?: string
-          ticker?: string
-          updated_at?: string
-          verified_at?: string | null
-          verified_from?: string | null
-          verified_through?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "market_adjusted_daily_rollout_factor_run_fk"
-            columns: ["factor_run_id", "ticker"]
-            isOneToOne: false
-            referencedRelation: "market_adjustment_factor_runs"
-            referencedColumns: ["id", "ticker"]
-          },
-        ]
-      }
       market_adjustment_factor_runs: {
         Row: {
           as_of_date: string
@@ -2312,65 +2262,6 @@ export type Database = {
         }
         Relationships: []
       }
-      market_ohlcv_adjusted_daily: {
-        Row: {
-          adjustment_engine_version: string
-          bar_time: string
-          close: number
-          event_lineage_hash: string
-          factor_run_id: string
-          factor_version: string
-          high: number
-          low: number
-          open: number
-          raw_bar_time: string
-          rebuilt_at: string
-          session_date: string
-          ticker: string
-          volume: number
-        }
-        Insert: {
-          adjustment_engine_version: string
-          bar_time: string
-          close: number
-          event_lineage_hash: string
-          factor_run_id: string
-          factor_version: string
-          high: number
-          low: number
-          open: number
-          raw_bar_time: string
-          rebuilt_at?: string
-          session_date: string
-          ticker: string
-          volume: number
-        }
-        Update: {
-          adjustment_engine_version?: string
-          bar_time?: string
-          close?: number
-          event_lineage_hash?: string
-          factor_run_id?: string
-          factor_version?: string
-          high?: number
-          low?: number
-          open?: number
-          raw_bar_time?: string
-          rebuilt_at?: string
-          session_date?: string
-          ticker?: string
-          volume?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "market_ohlcv_adjusted_daily_factor_run_fk"
-            columns: ["factor_run_id", "ticker"]
-            isOneToOne: false
-            referencedRelation: "market_adjustment_factor_runs"
-            referencedColumns: ["id", "ticker"]
-          },
-        ]
-      }
       market_ohlcv_bootstrap_state: {
         Row: {
           completed: boolean
@@ -2496,6 +2387,134 @@ export type Database = {
           source_url?: string
           ticker?: string
           timeframe?: string
+          volume?: number
+        }
+        Relationships: []
+      }
+      market_ohlcv_raw_daily: {
+        Row: {
+          close: number
+          evidence_id: string
+          high: number
+          low: number
+          normalization_version: string
+          open: number
+          price_basis: string
+          provider: string
+          provider_detail: string
+          raw_evidence_hash: string
+          selected_at: string
+          session_date: string
+          source_price_unit: string
+          source_url: string
+          ticker: string
+          updated_at: string
+          volume: number
+        }
+        Insert: {
+          close: number
+          evidence_id: string
+          high: number
+          low: number
+          normalization_version: string
+          open: number
+          price_basis: string
+          provider: string
+          provider_detail: string
+          raw_evidence_hash: string
+          selected_at?: string
+          session_date: string
+          source_price_unit: string
+          source_url: string
+          ticker: string
+          updated_at?: string
+          volume: number
+        }
+        Update: {
+          close?: number
+          evidence_id?: string
+          high?: number
+          low?: number
+          normalization_version?: string
+          open?: number
+          price_basis?: string
+          provider?: string
+          provider_detail?: string
+          raw_evidence_hash?: string
+          selected_at?: string
+          session_date?: string
+          source_price_unit?: string
+          source_url?: string
+          ticker?: string
+          updated_at?: string
+          volume?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_ohlcv_raw_daily_evidence_fkey"
+            columns: ["evidence_id", "ticker", "session_date"]
+            isOneToOne: false
+            referencedRelation: "market_ohlcv_raw_daily_evidence"
+            referencedColumns: ["id", "ticker", "session_date"]
+          },
+        ]
+      }
+      market_ohlcv_raw_daily_evidence: {
+        Row: {
+          close: number
+          created_at: string
+          fetched_at: string
+          high: number
+          id: string
+          low: number
+          normalization_version: string
+          open: number
+          price_basis: string
+          provider: string
+          provider_detail: string
+          raw_evidence_hash: string
+          session_date: string
+          source_price_unit: string
+          source_url: string
+          ticker: string
+          volume: number
+        }
+        Insert: {
+          close: number
+          created_at?: string
+          fetched_at: string
+          high: number
+          id?: string
+          low: number
+          normalization_version: string
+          open: number
+          price_basis: string
+          provider: string
+          provider_detail: string
+          raw_evidence_hash: string
+          session_date: string
+          source_price_unit: string
+          source_url: string
+          ticker: string
+          volume: number
+        }
+        Update: {
+          close?: number
+          created_at?: string
+          fetched_at?: string
+          high?: number
+          id?: string
+          low?: number
+          normalization_version?: string
+          open?: number
+          price_basis?: string
+          provider?: string
+          provider_detail?: string
+          raw_evidence_hash?: string
+          session_date?: string
+          source_price_unit?: string
+          source_url?: string
+          ticker?: string
           volume?: number
         }
         Relationships: []
@@ -4077,29 +4096,6 @@ export type Database = {
           outcome: string
         }[]
       }
-      qeo_adjusted_daily_readback: {
-        Args: {
-          p_factor_run_id: string
-          p_from: string
-          p_lineage_hash: string
-          p_ticker: string
-          p_to: string
-        }
-        Returns: {
-          adjustment_engine_version: string
-          bar_time: string
-          close: number
-          event_lineage_hash: string
-          factor_run_id: string
-          factor_version: string
-          high: number
-          low: number
-          open: number
-          raw_bar_time: string
-          session_date: string
-          volume: number
-        }[]
-      }
       qeo_admin_cron_snapshot: { Args: never; Returns: Json }
       qeo_admin_reset_system_setting: {
         Args: {
@@ -4295,6 +4291,13 @@ export type Database = {
           p_transitions: Json
         }
         Returns: string
+      }
+      qeo_persist_raw_daily_observation: {
+        Args: { p_observation: Json; p_select_canonical?: boolean }
+        Returns: {
+          canonical_selected: boolean
+          evidence_id: string
+        }[]
       }
       qeo_prune_noncanonical_orderbook_snapshots: {
         Args: { p_run_id: string }

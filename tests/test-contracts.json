@@ -240,6 +240,15 @@
       ]
     },
     {
+      "path": "tests/db-migration-production-ahead.test.ts",
+      "owner": "db",
+      "invariant": "Fail closed on unexplained production-only migrations while allowing only explicitly reviewed production-ahead state with no active or pending source and an exact production ledger version.",
+      "bucket": "deep-safety",
+      "suites": [
+        "db"
+      ]
+    },
+    {
       "path": "tests/db-recovery-rehearsal.test.ts",
       "owner": "db",
       "invariant": "Preserve the current db recovery rehearsal contract.",
@@ -252,15 +261,6 @@
       "path": "tests/db-schema-contract.test.ts",
       "owner": "db",
       "invariant": "Preserve the current db schema contract contract.",
-      "bucket": "deep-safety",
-      "suites": [
-        "db"
-      ]
-    },
-    {
-      "path": "tests/db/qeo129-schema-contract.test.ts",
-      "owner": "db",
-      "invariant": "QEO-129 adjusted Daily shadow schema remains private, lineage-bound, replayable, and exact-readback verified.",
       "bucket": "deep-safety",
       "suites": [
         "db"
@@ -489,33 +489,6 @@
       "path": "tests/market-data-contract.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market data contract contract.",
-      "bucket": "canonical",
-      "suites": [
-        "fast"
-      ]
-    },
-    {
-      "path": "tests/market-history/qeo129-adjusted-daily-read.test.ts",
-      "owner": "market",
-      "invariant": "Preserve QEO-129 adjusted-only shadow Daily read completeness, exact lineage, fail-closed behavior, and consumer isolation.",
-      "bucket": "canonical",
-      "suites": [
-        "fast"
-      ]
-    },
-    {
-      "path": "tests/market-history/qeo129-adjusted-daily-shadow.test.ts",
-      "owner": "market",
-      "invariant": "QEO-129 adjusted Daily remains a pure raw plus exact-factor derivation with strict next-effective-session projection and no raw fallback.",
-      "bucket": "canonical",
-      "suites": [
-        "fast"
-      ]
-    },
-    {
-      "path": "tests/market-history/qeo129-adjusted-daily-store.test.ts",
-      "owner": "market",
-      "invariant": "Preserve QEO-129 exact factor-run adjusted Daily persistence, OHLCV readback, and shadow-only rollout contract.",
       "bucket": "canonical",
       "suites": [
         "fast"

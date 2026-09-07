@@ -364,11 +364,19 @@
     },
     {
       "logicalName": "qeo129_adjusted_daily_shadow",
-      "repositoryVersion": "20260906170000",
+      "repositoryVersion": null,
       "productionVersion": "20260906223014",
+      "state": "PRODUCTION_AHEAD",
+      "evidence": "qeo129-production-schema-promoted-before-qeo132-source-merge",
+      "rationale": "Production already contains the reviewed QEO-129 shadow schema, while its source PR remains intentionally unmerged until QEO-132 establishes the canonical RAW Daily boundary. PRODUCTION_AHEAD records that narrow temporary production/source asymmetry without importing QEO-129 source into QEO-132."
+    },
+    {
+      "logicalName": "qeo132_raw_daily_basis",
+      "repositoryVersion": "20260906169000",
+      "productionVersion": "20260907003316",
       "state": "MAPPED",
-      "evidence": "qeo129-production-ledger-schema-rls-readback-and-rollback-smoke",
-      "rationale": "QEO-129 adjusted Daily shadow schema was promoted only after zero-to-latest replay, exact OHLCV SQL readback, DB lint, generated-type verification, TypeScript and EOD v4 passed. Production rollback-only smoke then verified RLS, service-role-only access, exact OHLCV/run/lineage readback, wrong-run/wrong-lineage rejection and zero residual synthetic rows. Supabase assigned runtime version 20260906223014 while repository replay keeps 20260906170000."
+      "evidence": "qeo132-production-ledger-schema-rls-rpc-and-rollback-smoke",
+      "rationale": "QEO-132 was promoted only after parser, schema, store, TypeScript and zero-to-latest local Supabase rehearsal passed. Production readback verified private RLS-enabled RAW tables, service-role-only persistence, SECURITY DEFINER fixed search_path, append-only evidence, and rollback-only replay/correction/non-RAW atomicity with zero residual rows. Production timestamp differs from repository replay ordering."
     }
   ]
 }
