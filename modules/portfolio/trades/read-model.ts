@@ -7,6 +7,7 @@ type TradeReadRow = {
   ticker: string
   mode: TradeMode
   status: TradeStatus
+  money_management_plan_id?: string | null
   planned_entry?: number | null
   initial_stop_loss_exit?: number | null
   initial_account_equity?: number | null
@@ -62,6 +63,7 @@ export type TradeReadModel = {
   fills: FillReadRow[]
   stopEvents: StopReadRow[]
   journalEntries: JournalReadRow[]
+  moneyManagementPlanId: string | null
   latestStop: {
     price: number
     source: string
@@ -78,6 +80,7 @@ export type TradeReadModel = {
     stopState: "known" | "unknown"
     initialRiskState: "available" | "partial" | "unknown"
     journalState: "available" | "unavailable"
+    moneyManagementPlanState: "available" | "unknown"
   }
 }
 
@@ -156,12 +159,14 @@ export function buildTradeReadModel({
           effectiveAt: trade.opened_at ?? null,
         }
       : null
+  const moneyManagementPlanId = trade.money_management_plan_id ?? null
 
   return {
     trade,
     fills: groupedFills,
     stopEvents: chronologicalStops,
     journalEntries: chronologicalJournal,
+    moneyManagementPlanId,
     latestStop,
     initialRiskSnapshot: {
       accountEquity: trade.initial_account_equity ?? null,
@@ -174,6 +179,7 @@ export function buildTradeReadModel({
       stopState: latestStop ? "known" : "unknown",
       initialRiskState: initialRiskState(trade),
       journalState: chronologicalJournal.length > 0 ? "available" : "unavailable",
+      moneyManagementPlanState: moneyManagementPlanId ? "available" : "unknown",
     },
   }
 }
