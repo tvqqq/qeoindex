@@ -5,7 +5,7 @@ import test from "node:test"
 
 const migrationPath = path.join(
   process.cwd(),
-  "supabase/migrations/20260907130000_qeo138_risk_plan.sql",
+  "supabase/migrations/20260907124742_qeo138_risk_plan.sql",
 )
 
 test("QEO-138 migration creates immutable per-portfolio profile and plan history", () => {
@@ -81,8 +81,13 @@ test("QEO-138 migration creates immutable per-portfolio profile and plan history
 test("QEO-138 migration does not fabricate legacy profile, plan, or Trade provenance rows", () => {
   assert.equal(fs.existsSync(migrationPath), true)
   const sql = fs.readFileSync(migrationPath, "utf8")
-  assert.doesNotMatch(sql, /insert\s+into\s+public\.portfolio_risk_profile_attempts/i)
-  assert.doesNotMatch(sql, /insert\s+into\s+public\.portfolio_discipline_profile_attempts/i)
-  assert.doesNotMatch(sql, /insert\s+into\s+public\.portfolio_money_management_plans/i)
+  const ddlBeforeExplicitSaveRpc = sql.split(
+    /create\s+or\s+replace\s+function\s+public\.qeo_create_portfolio_money_management_plan/i,
+    1,
+  )[0]
+
+  assert.doesNotMatch(ddlBeforeExplicitSaveRpc, /insert\s+into\s+public\.portfolio_risk_profile_attempts/i)
+  assert.doesNotMatch(ddlBeforeExplicitSaveRpc, /insert\s+into\s+public\.portfolio_discipline_profile_attempts/i)
+  assert.doesNotMatch(ddlBeforeExplicitSaveRpc, /insert\s+into\s+public\.portfolio_money_management_plans/i)
   assert.doesNotMatch(sql, /update\s+public\.portfolio_trades\s+set\s+money_management_plan_id/i)
 })
