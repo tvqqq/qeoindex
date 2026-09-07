@@ -106,6 +106,12 @@ export function MoneyManagementPlanForm({
   const [dailyHolidayEnabled, setDailyHolidayEnabled] = useState(false)
   const [dailyLosingTrades, setDailyLosingTrades] = useState("")
   const [dailyLossPercent, setDailyLossPercent] = useState("")
+  const [weeklyHolidayEnabled, setWeeklyHolidayEnabled] = useState(false)
+  const [weeklyLosingTrades, setWeeklyLosingTrades] = useState("")
+  const [weeklyLossPercent, setWeeklyLossPercent] = useState("")
+  const [monthlyHolidayEnabled, setMonthlyHolidayEnabled] = useState(false)
+  const [monthlyLosingTrades, setMonthlyLosingTrades] = useState("")
+  const [monthlyLossPercent, setMonthlyLossPercent] = useState("")
 
   const [defineInitialStop, setDefineInitialStop] = useState(false)
   const [honorStop, setHonorStop] = useState(false)
@@ -175,15 +181,35 @@ export function MoneyManagementPlanForm({
         enabled: rollingEnabled,
         tradeCount: rollingEnabled ? numeric(rollingCount) : null,
       },
-      holidayRules: dailyHolidayEnabled
-        ? {
-            daily: {
-              enabled: true,
-              ...(numeric(dailyLosingTrades) != null ? { consecutiveLosingTrades: numeric(dailyLosingTrades) } : {}),
-              ...(numeric(dailyLossPercent) != null ? { lossPercent: numeric(dailyLossPercent) } : {}),
-            },
-          }
-        : {},
+      holidayRules: {
+        ...(dailyHolidayEnabled
+          ? {
+              daily: {
+                enabled: true,
+                ...(numeric(dailyLosingTrades) != null ? { consecutiveLosingTrades: numeric(dailyLosingTrades) } : {}),
+                ...(numeric(dailyLossPercent) != null ? { lossPercent: numeric(dailyLossPercent) } : {}),
+              },
+            }
+          : {}),
+        ...(weeklyHolidayEnabled
+          ? {
+              weekly: {
+                enabled: true,
+                ...(numeric(weeklyLosingTrades) != null ? { consecutiveLosingTrades: numeric(weeklyLosingTrades) } : {}),
+                ...(numeric(weeklyLossPercent) != null ? { lossPercent: numeric(weeklyLossPercent) } : {}),
+              },
+            }
+          : {}),
+        ...(monthlyHolidayEnabled
+          ? {
+              monthly: {
+                enabled: true,
+                ...(numeric(monthlyLosingTrades) != null ? { consecutiveLosingTrades: numeric(monthlyLosingTrades) } : {}),
+                ...(numeric(monthlyLossPercent) != null ? { lossPercent: numeric(monthlyLossPercent) } : {}),
+              },
+            }
+          : {}),
+      },
       executionRules: {
         defineInitialStopBeforeEntry: defineInitialStop,
         honorStopWhenHit: honorStop,
@@ -319,21 +345,60 @@ export function MoneyManagementPlanForm({
                 <NumberField ariaLabel="Rolling Trade Count" value={rollingCount} onChange={setRollingCount} placeholder="Trade count" step="1" min={1} />
               </div>
             )}
-            <Toggle checked={dailyHolidayEnabled} onChange={setDailyHolidayEnabled} ariaLabel="Daily Trading Holiday">
-              <RiskTermTooltip label="Daily Trading Holiday" help="Rule tạm nghỉ giao dịch trong ngày khi một trigger do bạn chọn xảy ra. QeoIndex không tự điền ngưỡng từ ví dụ trong sách." />
-            </Toggle>
-            {dailyHolidayEnabled && (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <RiskTermTooltip label="Daily Losing Trades" help="Số Trade thua trong ngày dùng làm trigger nghỉ; nếu nhập phải là số nguyên dương." />
-                  <NumberField ariaLabel="Daily Losing Trades" value={dailyLosingTrades} onChange={setDailyLosingTrades} placeholder="Losing Trades" step="1" min={1} />
+
+            <div className="rounded-lg border border-white/[0.05] bg-black/10 p-3">
+              <Toggle checked={dailyHolidayEnabled} onChange={setDailyHolidayEnabled} ariaLabel="Daily Trading Holiday">
+                <RiskTermTooltip label="Daily Trading Holiday" help="Rule tạm nghỉ giao dịch trong ngày khi một trigger do bạn chọn xảy ra. QeoIndex không tự điền ngưỡng từ ví dụ trong sách." />
+              </Toggle>
+              {dailyHolidayEnabled && (
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <RiskTermTooltip label="Daily Losing Trades" help="Số Trade thua trong ngày dùng làm trigger nghỉ; nếu nhập phải là số nguyên dương." />
+                    <NumberField ariaLabel="Daily Losing Trades" value={dailyLosingTrades} onChange={setDailyLosingTrades} placeholder="Losing Trades" step="1" min={1} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <RiskTermTooltip label="Daily Loss Percent" help="Mức lỗ phần trăm trong ngày dùng làm trigger nghỉ; đây là tham số do bạn tự cấu hình." />
+                    <NumberField ariaLabel="Daily Loss Percent" value={dailyLossPercent} onChange={setDailyLossPercent} placeholder="Loss %" min={0.01} max={100} />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <RiskTermTooltip label="Daily Loss Percent" help="Mức lỗ phần trăm trong ngày dùng làm trigger nghỉ; đây là tham số do bạn tự cấu hình." />
-                  <NumberField ariaLabel="Daily Loss Percent" value={dailyLossPercent} onChange={setDailyLossPercent} placeholder="Loss %" min={0.01} max={100} />
+              )}
+            </div>
+
+            <div className="rounded-lg border border-white/[0.05] bg-black/10 p-3">
+              <Toggle checked={weeklyHolidayEnabled} onChange={setWeeklyHolidayEnabled} ariaLabel="Weekly Trading Holiday">
+                <RiskTermTooltip label="Weekly Trading Holiday" help="Rule nghỉ/review cho phạm vi một tuần. Trigger được bạn tự cấu hình; các ví dụ trong sách không được tự lưu thành mặc định." />
+              </Toggle>
+              {weeklyHolidayEnabled && (
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <RiskTermTooltip label="Weekly Losing Trades" help="Số Trade thua trong tuần dùng làm trigger nghỉ/review; nếu nhập phải là số nguyên dương." />
+                    <NumberField ariaLabel="Weekly Losing Trades" value={weeklyLosingTrades} onChange={setWeeklyLosingTrades} placeholder="Losing Trades" step="1" min={1} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <RiskTermTooltip label="Weekly Loss Percent" help="Mức lỗ phần trăm trong tuần dùng làm trigger nghỉ/review do bạn tự cấu hình." />
+                    <NumberField ariaLabel="Weekly Loss Percent" value={weeklyLossPercent} onChange={setWeeklyLossPercent} placeholder="Loss %" min={0.01} max={100} />
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+
+            <div className="rounded-lg border border-white/[0.05] bg-black/10 p-3">
+              <Toggle checked={monthlyHolidayEnabled} onChange={setMonthlyHolidayEnabled} ariaLabel="Monthly Trading Holiday">
+                <RiskTermTooltip label="Monthly Trading Holiday" help="Rule nghỉ/review cho phạm vi một tháng. Trigger là cấu hình người dùng, không phải mức universal do hệ thống áp đặt." />
+              </Toggle>
+              {monthlyHolidayEnabled && (
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <RiskTermTooltip label="Monthly Losing Trades" help="Số Trade thua trong tháng dùng làm trigger nghỉ/review; nếu nhập phải là số nguyên dương." />
+                    <NumberField ariaLabel="Monthly Losing Trades" value={monthlyLosingTrades} onChange={setMonthlyLosingTrades} placeholder="Losing Trades" step="1" min={1} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <RiskTermTooltip label="Monthly Loss Percent" help="Mức lỗ phần trăm trong tháng dùng làm trigger nghỉ/review do bạn tự cấu hình." />
+                    <NumberField ariaLabel="Monthly Loss Percent" value={monthlyLossPercent} onChange={setMonthlyLossPercent} placeholder="Loss %" min={0.01} max={100} />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
