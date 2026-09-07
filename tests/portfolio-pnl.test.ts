@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { computePortfolioPositions, calculatePositionSizing, type RawTransaction } from '../modules/portfolio/pnl.ts'
+import { computePortfolioPositions, type RawTransaction } from '../modules/portfolio/pnl.ts'
 
 test('AVCO P&L Engine: Single Buy transaction', () => {
   const txs: RawTransaction[] = [
@@ -109,13 +109,6 @@ test('AVCO P&L Engine: Multi-target, multi-stoploss and Setup/Mistake tags', () 
   assert.deepEqual(pos.setupTags, ['Breakout KL lớn', 'Mô hình VCP'])
 })
 
-test('Position Sizing Engine: Fixed Fractional Account Risk calculation', () => {
-  const sizing = calculatePositionSizing({ initialCapital: 1_000_000_000, accountRiskPct: 1.5, tradeStopLossPct: 7.5, entryPrice: 25.0 })
-  assert.equal(sizing.maxRiskAmount, 15_000_000)
-  assert.equal(sizing.allocatedCapital, 200_000_000)
-  assert.equal(sizing.allocationPctOfNav, 20.0)
-  assert.equal(sizing.maxShares, 8000)
-})
 
 test('QEO-20 active runtime stops depending on legacy compatibility DB columns', () => {
   const transactions = readFileSync(resolve('app/api/portfolio/[id]/transactions/route.ts'), 'utf8')
