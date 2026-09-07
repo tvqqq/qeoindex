@@ -23,7 +23,7 @@ test("QEO-132 creates separate append-only raw evidence and canonical raw Daily 
   assert.match(sql, /price_basis\s*=\s*'RAW'/i)
   assert.match(sql, /raw_evidence_hash\s+text\s+not\s+null/i)
   assert.match(sql, /raw_evidence_hash\s*~\s*'\^\[a-f0-9\]\{64\}\$'/i)
-  assert.match(sql, /foreign\s+key\s*\(evidence_id\)[\s\S]*?references\s+public\.market_ohlcv_raw_daily_evidence\s*\(id\)/i)
+  assert.match(sql, /foreign\s+key\s*\(evidence_id,\s*ticker,\s*session_date\)[\s\S]*?references\s+public\.market_ohlcv_raw_daily_evidence\s*\(id,\s*ticker,\s*session_date\)/i)
   assert.match(sql, /primary\s+key\s*\(ticker,\s*session_date\)/i)
 
   for (const column of ["open", "high", "low", "close"]) {
