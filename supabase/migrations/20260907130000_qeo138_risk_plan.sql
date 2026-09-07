@@ -266,4 +266,94 @@ create policy portfolio_money_management_plans_insert_own
   for insert to authenticated
   with check (user_id = (select auth.uid()));
 
+-- Version allocation is serialized per portfolio inside the same transaction as the insert.
+-- The function is SECURITY INVOKER so normal RLS/ownership rules remain authoritative.
+create or replace function public.qeo_create_portfolio_money_management_plan(
+  p_portfolio_id uuid,
+  p_payload jsonb
+)
+returns public.portfolio_money_management_plans
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_version integer;
+  v_row public.portfolio_money_management_plans;
+begin
+  if v_user_id is null then
+    raise exception 'authenticated user required' using errcode = '42501';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_portfolio_id::text, 138)
+  );
+
+  select coalesce(max(version), 0) + 1
+    into v_version
+    from public.portfolio_money_management_plans
+   where portfolio_id = p_portfolio_id
+     and user_id = v_user_id;
+
+  insert into public.portfolio_money_management_plans (
+    portfolio_id,
+    user_id,
+    version,
+    risk_profile_attempt_id,
+    discipline_profile_attempt_id,
+    schema_version,
+    default_trade_risk_percent,
+    advanced_risk_override_acknowledged,
+    max_active_risk_percent,
+    drawdown_reduce_enabled,
+    drawdown_reduce_threshold_percent,
+    risk_reduction_factor,
+    drawdown_pause_enabled,
+    drawdown_pause_threshold_percent,
+    consecutive_stop_outs_enabled,
+    consecutive_stop_outs_threshold,
+    rolling_trade_loss_enabled,
+    rolling_trade_count,
+    holiday_rules,
+    execution_rules,
+    scale_rules,
+    diversification_rules,
+    risk_capital_policy,
+    notes
+  ) values (
+    p_portfolio_id,
+    v_user_id,
+    v_version,
+    nullif(p_payload ->> 'risk_profile_attempt_id', '')::uuid,
+    nullif(p_payload ->> 'discipline_profile_attempt_id', '')::uuid,
+    coalesce(nullif(p_payload ->> 'schema_version', '')::integer, 1),
+    (p_payload ->> 'default_trade_risk_percent')::numeric,
+    coalesce((p_payload ->> 'advanced_risk_override_acknowledged')::boolean, false),
+    (p_payload ->> 'max_active_risk_percent')::numeric,
+    coalesce((p_payload ->> 'drawdown_reduce_enabled')::boolean, false),
+    nullif(p_payload ->> 'drawdown_reduce_threshold_percent', '')::numeric,
+    nullif(p_payload ->> 'risk_reduction_factor', '')::numeric,
+    coalesce((p_payload ->> 'drawdown_pause_enabled')::boolean, false),
+    nullif(p_payload ->> 'drawdown_pause_threshold_percent', '')::numeric,
+    coalesce((p_payload ->> 'consecutive_stop_outs_enabled')::boolean, false),
+    nullif(p_payload ->> 'consecutive_stop_outs_threshold', '')::integer,
+    coalesce((p_payload ->> 'rolling_trade_loss_enabled')::boolean, false),
+    nullif(p_payload ->> 'rolling_trade_count', '')::integer,
+    coalesce(p_payload -> 'holiday_rules', '{}'::jsonb),
+    coalesce(p_payload -> 'execution_rules', '{}'::jsonb),
+    coalesce(p_payload -> 'scale_rules', '{}'::jsonb),
+    coalesce(p_payload -> 'diversification_rules', '{}'::jsonb),
+    coalesce(p_payload -> 'risk_capital_policy', '{"mode":"disabled"}'::jsonb),
+    nullif(pg_catalog.btrim(p_payload ->> 'notes'), '')
+  )
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+revoke all on function public.qeo_create_portfolio_money_management_plan(uuid, jsonb) from public, anon;
+grant execute on function public.qeo_create_portfolio_money_management_plan(uuid, jsonb) to authenticated;
+
 commit;
