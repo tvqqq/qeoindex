@@ -1,0 +1,47 @@
+name: QEO-139 Risk Sizing
+
+on:
+  pull_request:
+    paths:
+      - "modules/portfolio/**"
+      - "app/api/portfolio/**"
+      - "components/portfolio/**"
+      - "tests/portfolio/qeo139-*.test.ts"
+      - "tests/portfolio-pnl.test.ts"
+      - ".github/workflows/qeo139-preprod.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo139-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  risk-sizing-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-139 risk-sizing contracts
+        run: node --test tests/portfolio/qeo139-*.test.ts
+      - name: QEO-137 Trade regressions
+        run: node --test tests/portfolio/qeo137-trade-domain.test.ts tests/portfolio/qeo137-trade-read-model.test.ts
+      - name: QEO-138 Risk Plan regressions
+        run: node --test tests/portfolio/qeo138-risk-plan-domain.test.ts tests/portfolio/qeo138-risk-profile-evidence.test.ts tests/portfolio/qeo138-risk-plan-server-api.test.ts
+      - name: Portfolio AVCO regression
+        run: node --test tests/portfolio-pnl.test.ts
+      - name: Application lint
+        run: pnpm lint:touched
+      - name: TypeScript
+        run: pnpm typecheck
+      - name: Production build
+        run: pnpm build
