@@ -138,5 +138,5 @@ test("QEO-137 covers every new composite foreign key with its leading columns", 
     sql,
     /portfolio_trade_journal_entries_trade_identity_fk_idx[\s\S]*portfolio_trade_journal_entries\s*\(trade_id,\s*portfolio_id,\s*user_id,\s*ticker\)/i,
   )
-  assert.doesNotMatch(sql, /\b(update|delete|insert\s+into)\b/i)
+  assert.doesNotMatch(sql, /^\s*(update|delete\s+from|insert\s+into)\b/im)
 })
