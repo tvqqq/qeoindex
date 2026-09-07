@@ -8,6 +8,7 @@ import type {
 export type RiskPlanDomainErrorCode =
   | "INVALID_PLAN"
   | "ADVANCED_RISK_ACK_REQUIRED"
+  | "NOT_FOUND"
 
 export class RiskPlanDomainError extends Error {
   readonly code: RiskPlanDomainErrorCode
