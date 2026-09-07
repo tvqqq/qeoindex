@@ -74,6 +74,19 @@ export function reconcileMigrations({ activeFiles, pendingFiles, productionLedge
       continue
     }
 
+    if (state === "PRODUCTION_AHEAD") {
+      if (source) errors.push(`${logicalName}: production-ahead migration must not have an active source migration`)
+      if (queued) errors.push(`${logicalName}: production-ahead migration must not remain pending`)
+      if (!prod) errors.push(`${logicalName}: production-ahead migration requires a production ledger row`)
+      if (repositoryVersion !== null) errors.push(`${logicalName}: production-ahead repositoryVersion must be null`)
+      if (productionVersion === null || productionVersion === undefined) {
+        errors.push(`${logicalName}: production-ahead productionVersion must be recorded`)
+      } else if (prod && prod.version !== productionVersion) {
+        errors.push(`${logicalName}: production version ${prod.version} does not match manifest ${productionVersion}`)
+      }
+      continue
+    }
+
     if (!source) {
       errors.push(`${logicalName}: manifest state ${state} requires an active source migration`)
       continue
