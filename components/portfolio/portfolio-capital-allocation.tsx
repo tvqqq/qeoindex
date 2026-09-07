@@ -1,11 +1,13 @@
 "use client"
 
 import React, { useState, useMemo, memo } from "react"
-import { ShieldCheck, PieChart, ArrowRight, TrendingDown, DollarSign } from "lucide-react"
+import { ShieldCheck, PieChart, ArrowRight, DollarSign } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
-import { PortfolioPosition } from "@/modules/portfolio/pnl"
-import { PortfolioMeta } from "@/components/portfolio/portfolio-selector"
+import type { PortfolioPosition } from "@/modules/portfolio/pnl"
+import type { PortfolioMeta } from "@/components/portfolio/portfolio-selector"
+import { buildAccountEquityContext } from "@/modules/portfolio/risk-sizing/calculator"
+import { kvndToVnd } from "@/modules/portfolio/risk-sizing/units"
 import { cn } from "@/modules/shared/ui/cn"
 
 interface PortfolioCapitalAllocationProps {
@@ -13,6 +15,7 @@ interface PortfolioCapitalAllocationProps {
   activePortfolioId: string
   positions: PortfolioPosition[]
   currentPrices: Record<string, number>
+  totalRealizedPnlKvnd: number
 }
 
 function formatVNDFull(vnd: number): string {
@@ -32,6 +35,7 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
   activePortfolioId,
   positions,
   currentPrices,
+  totalRealizedPnlKvnd,
 }: PortfolioCapitalAllocationProps) {
   const activePortfolio = portfolios.find((p) => p.id === activePortfolioId)
 
@@ -56,10 +60,15 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
     return positions.reduce((sum, p) => sum + p.totalInvested * 1000, 0)
   }, [positions])
 
-  // Total realized P&L (k₫ * 1000 = VNĐ)
-  const totalRealizedPnl = useMemo(() => {
-    return positions.reduce((sum, p) => sum + p.realizedPnl * 1000, 0)
-  }, [positions])
+  // Portfolio-level realized P&L includes fully closed tickers; do not derive it from open positions.
+  const totalRealizedPnlVnd = kvndToVnd(totalRealizedPnlKvnd)
+
+  const accountEquityContext = useMemo(() => buildAccountEquityContext({
+    initialCapitalVnd: capital,
+    totalRealizedPnlKvnd,
+    positions: positions.map(({ ticker, openQty, avgCost }) => ({ ticker, openQty, avgCost })),
+    currentPricesKvnd: currentPrices,
+  }), [capital, totalRealizedPnlKvnd, positions, currentPrices])
 
   // Current market value of stocks
   const totalStockMarketValue = useMemo(() => {
@@ -70,7 +79,7 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
   }, [positions, currentPrices])
 
   // Available cash = Initial Capital + Realized PnL - Stock Cost Basis
-  const availableCash = Math.max(0, capital + totalRealizedPnl - totalStockCostBasis)
+  const availableCash = Math.max(0, capital + totalRealizedPnlVnd - totalStockCostBasis)
 
   // ── 2. Position Sizing for Next Deal (Panel 1 & Panel 3) ──
   // Max loss allowed on account = Capital * (accRisk / 100)
@@ -111,7 +120,7 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
                 Vốn danh mục
               </span>
               <span className="font-ticker text-base sm:text-lg font-black text-white">
-                {formatShortVND(capital)}
+                {formatShortVND(accountEquityContext.valueVnd)}
               </span>
             </div>
             <div className="rounded-2xl border border-purple-500/30 bg-purple-500/10 px-4 py-2 text-right">
@@ -257,15 +266,15 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
                 <span
                   className={cn(
                     "font-bold",
-                    totalRealizedPnl > 0
+                    totalRealizedPnlVnd > 0
                       ? "text-[var(--color-up)]"
-                      : totalRealizedPnl < 0
+                      : totalRealizedPnlVnd < 0
                       ? "text-[var(--color-down)]"
                       : "text-white",
                   )}
                 >
-                  {totalRealizedPnl > 0 ? "+" : ""}
-                  {formatVNDFull(totalRealizedPnl)}
+                  {totalRealizedPnlVnd > 0 ? "+" : ""}
+                  {formatVNDFull(totalRealizedPnlVnd)}
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-white/5">
@@ -286,7 +295,7 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
             <div className="flex flex-col items-center justify-center p-2 rounded-2xl bg-black/30 border border-white/5">
               <MiniAllocationDonut
                 cash={availableCash}
-                total={capital + totalRealizedPnl}
+                total={capital + totalRealizedPnlVnd}
                 size={90}
               />
               <div className="mt-2 text-center text-[10px] space-y-0.5">
@@ -415,7 +424,7 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
             <div className="flex flex-col items-center justify-center p-2 rounded-2xl bg-black/30 border border-white/5">
               <MiniAllocationDonut
                 cash={simulatedAvailableCash}
-                total={capital + totalRealizedPnl}
+                total={capital + totalRealizedPnlVnd}
                 size={90}
               />
               <div className="mt-2 text-center text-[10px] space-y-0.5">

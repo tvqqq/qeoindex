@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { computePortfolioPositions, type RawTransaction } from "../../modules/portfolio/pnl.ts"
 import {
   buildAccountEquityContext,
   calculateBookTradeSize,
@@ -134,4 +135,25 @@ test("missing market prices keep Account Equity explicitly partial", () => {
   assert.equal(context.source, "portfolio_partial")
   assert.deepEqual(context.missingPriceTickers, ["VIC"])
   assert.equal(context.valueVnd, 520_000_000)
+})
+
+
+test("Account Equity preserves realized P&L from a fully closed ticker", () => {
+  const transactions: RawTransaction[] = [
+    { id: "fpt-buy", ticker: "FPT", action: "buy", quantity: 1000, price: 100, fee: 0, transaction_date: "2026-09-01", tags: [] },
+    { id: "fpt-sell", ticker: "FPT", action: "sell", quantity: 1000, price: 110, fee: 0, transaction_date: "2026-09-02", tags: [] },
+    { id: "vic-buy", ticker: "VIC", action: "buy", quantity: 100, price: 80, fee: 0, transaction_date: "2026-09-03", tags: [] },
+  ]
+  const summary = computePortfolioPositions(transactions)
+  assert.equal(summary.positions.length, 1)
+  assert.equal(summary.positions[0].ticker, "VIC")
+  assert.equal(summary.totalRealizedPnl, 10_000)
+
+  const context = buildAccountEquityContext({
+    initialCapitalVnd: 500_000_000,
+    totalRealizedPnlKvnd: summary.totalRealizedPnl,
+    positions: summary.positions,
+    currentPricesKvnd: { VIC: 85 },
+  })
+  assert.equal(context.valueVnd, 510_500_000)
 })

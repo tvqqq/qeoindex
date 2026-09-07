@@ -275,10 +275,11 @@ export function PortfolioPage() {
     })
   }, [activePortfolioId, loadTransactions])
 
-  // ── Compute positions from transactions ──
-  const { positions } = useMemo(() => {
+  // ── Compute portfolio-level accounting summary from all transactions ──
+  const portfolioSummary = useMemo(() => {
     return computePortfolioPositions(transactions)
   }, [transactions])
+  const { positions, totalRealizedPnl } = portfolioSummary
 
   const tickers = useMemo(() => {
     return Array.from(new Set(positions.map((p) => p.ticker)))
@@ -578,6 +579,7 @@ export function PortfolioPage() {
               activePortfolioId={activePortfolioId ?? ""}
               positions={positions}
               currentPrices={currentPrices}
+              totalRealizedPnlKvnd={totalRealizedPnl}
             />
             {activePortfolioId && (
               <PortfolioRiskPlan key={activePortfolioId} portfolioId={activePortfolioId} />
