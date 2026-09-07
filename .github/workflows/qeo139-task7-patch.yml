@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - "tvq9612/qeo-139-portfolio-riskp3-proper-trade-size-calculator-stop-first"
+    paths:
+      - ".github/workflows/qeo139-task7-patch.yml"
 
 permissions:
   contents: write
@@ -26,8 +28,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Remove legacy helper and register canonical QEO-139 contracts
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
           import json
           import re
@@ -105,73 +108,17 @@ jobs:
               entries.insert(insert_at, addition)
               existing.add(addition["path"])
           manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
-
-          workflow_path = Path(".github/workflows/qeo139-preprod.yml")
-          workflow_path.write_text('''name: QEO-139 Risk Sizing
-
-on:
-  pull_request:
-    paths:
-      - "modules/portfolio/risk-sizing/**"
-      - "modules/portfolio/pnl.ts"
-      - "components/portfolio/**"
-      - "app/api/portfolio/**"
-      - "tests/portfolio/qeo139-*.test.ts"
-      - "tests/portfolio-pnl.test.ts"
-      - "tests/test-contracts.json"
-      - ".github/workflows/qeo139-preprod.yml"
-
-permissions:
-  contents: read
-
-concurrency:
-  group: qeo139-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  risk-sizing-contract:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: QEO-139 sizing formula contract
-        run: node --test tests/portfolio/qeo139-risk-sizing.test.ts
-      - name: QEO-139 projected Active Risk contract
-        run: node --test tests/portfolio/qeo139-risk-projection.test.ts
-      - name: QEO-139 server/API contract
-        run: node --test tests/portfolio/qeo139-risk-sizing-server-api.test.ts
-      - name: QEO-139 UI contract
-        run: node --test tests/portfolio/qeo139-trade-size-ui.test.ts
-      - name: Portfolio AVCO regression
-        run: node --test tests/portfolio-pnl.test.ts
-      - name: QEO-137 Trade regressions
-        run: node --test tests/portfolio/qeo137-trade-domain.test.ts tests/portfolio/qeo137-trade-read-model.test.ts
-      - name: QEO-138 Risk Plan regressions
-        run: node --test tests/portfolio/qeo138-risk-plan-domain.test.ts tests/portfolio/qeo138-risk-profile-evidence.test.ts tests/portfolio/qeo138-risk-plan-server-api.test.ts tests/portfolio/qeo138-risk-plan-ui.test.ts
-      - name: Application lint
-        run: pnpm lint:touched
-      - name: TypeScript
-        run: pnpm typecheck
-      - name: Production build
-        run: pnpm exec next build
-''')
+          PY
       - name: Canonical manifest
         run: pnpm test:manifest
       - name: Task 7 targeted contracts
         run: node --test tests/portfolio/qeo139-*.test.ts tests/portfolio-pnl.test.ts
       - name: Commit canonical sizing contract
+        shell: bash
         run: |
           git config user.name "qeoindex-ci"
           git config user.email "qeoindex-ci@users.noreply.github.com"
-          git add modules/portfolio/pnl.ts tests/portfolio-pnl.test.ts tests/test-contracts.json .github/workflows/qeo139-preprod.yml tests/portfolio/qeo139-trade-size-ui.test.ts
+          git add modules/portfolio/pnl.ts tests/portfolio-pnl.test.ts tests/test-contracts.json
           git diff --cached --check
           git commit -m "test(qeo-139): make stop-first sizing the canonical contract"
           git push origin HEAD:tvq9612/qeo-139-portfolio-riskp3-proper-trade-size-calculator-stop-first
