@@ -1,0 +1,1 @@
+QEO-138 contract tests are activated task-by-task under the approved TDD plan. Placeholder skipped tests keep the dedicated workflow structurally runnable while preserving RED-before-production for each subsequent task.
