@@ -3,10 +3,25 @@ import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 const serverUrl = new URL("../../modules/portfolio/trades/server.ts", import.meta.url)
+const routePaths = [
+  "../../app/api/portfolio/[id]/trades/route.ts",
+  "../../app/api/portfolio/[id]/trades/[tradeId]/route.ts",
+  "../../app/api/portfolio/[id]/trades/[tradeId]/fills/route.ts",
+  "../../app/api/portfolio/[id]/trades/[tradeId]/stops/route.ts",
+  "../../app/api/portfolio/[id]/trades/[tradeId]/journal/route.ts",
+] as const
 
 function serverSource() {
   assert.equal(existsSync(serverUrl), true, "QEO-137 Trade server module must exist")
   return readFileSync(serverUrl, "utf8")
+}
+
+function routeSources() {
+  return routePaths.map((path) => {
+    const url = new URL(path, import.meta.url)
+    assert.equal(existsSync(url), true, `${path} must exist`)
+    return { path, source: readFileSync(url, "utf8") }
+  })
 }
 
 test("Trade persistence is server-only and uses the authenticated ServerAuthContext", () => {
@@ -81,4 +96,44 @@ test("canonical portfolio Trade context uses deterministic read-model assembly",
   assert.match(source, /trade_id/)
   assert.match(source, /portfolio_trade_stop_events/)
   assert.match(source, /portfolio_trade_journal_entries/)
+})
+
+test("Trade HTTP routes are thin authenticated adapters, not direct Supabase owners", () => {
+  const routes = routeSources()
+
+  for (const { path, source } of routes) {
+    assert.match(source, /requireApiUser\(/, `${path} authenticates`)
+    assert.match(source, /Cache-Control.*no-store/s, `${path} disables caching`)
+    assert.doesNotMatch(source, /\.from\("portfolio_(trades|transactions|trade_)/, `${path} must not query Supabase directly`)
+  }
+})
+
+test("Trade routes delegate every lifecycle/evidence operation to the domain server", () => {
+  const all = routeSources().map((route) => route.source).join("\n")
+
+  for (const name of [
+    "createTrade",
+    "updatePlannedTrade",
+    "transitionTrade",
+    "getTrade",
+    "listTrades",
+    "attachFillToTrade",
+    "detachFillFromTrade",
+    "addStopEvent",
+    "listStopEvents",
+    "addJournalEntry",
+    "listJournalEntries",
+  ]) {
+    assert.match(all, new RegExp(`${name}\\(`), name)
+  }
+})
+
+test("HTTP boundary maps validation/not-found/conflict errors explicitly", () => {
+  const all = routeSources().map((route) => route.source).join("\n")
+
+  assert.match(all, /TradeDomainError/)
+  assert.match(all, /NOT_FOUND/)
+  assert.match(all, /409/)
+  assert.match(all, /400/)
+  assert.match(all, /404/)
 })
