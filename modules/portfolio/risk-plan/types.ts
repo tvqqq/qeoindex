@@ -7,6 +7,7 @@ export type ProfileMetricEvidence = {
   periodStart: string | null
   periodEnd: string | null
   sampleSize: number | null
+  excludedCount: number | null
   completeness: "complete" | "partial" | "insufficient"
   computedAt: string | null
   note?: string
