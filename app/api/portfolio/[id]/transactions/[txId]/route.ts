@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 
 import { requireApiUser } from "@/modules/auth/server"
+import { validateTradeFillLink } from "@/modules/portfolio/trades/fill-link"
+import { TradeDomainError } from "@/modules/portfolio/trades/validation"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -11,10 +13,22 @@ const TICKER_RE = /^[A-Z0-9]{2,12}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const SELECT_FIELDS =
-  "id,portfolio_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,note,tags,setup_tags,mistake_tags,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3,created_at,updated_at"
+  "id,portfolio_id,trade_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,note,tags,setup_tags,mistake_tags,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3,created_at,updated_at"
 
 function err(msg: string, status = 500) {
   return NextResponse.json({ ok: false, error: msg }, { status, headers: NO_STORE })
+}
+
+function tradeLinkErr(error: unknown) {
+  if (error instanceof TradeDomainError) {
+    const conflict = ["TRADE_CANCELLED", "TICKER_MISMATCH", "INVALID_FILL_ACTION"].includes(error.code)
+    return NextResponse.json(
+      { ok: false, error: error.message, code: error.code },
+      { status: error.code === "NOT_FOUND" ? 404 : conflict ? 409 : 400, headers: NO_STORE },
+    )
+  }
+  console.error("[Portfolio Transaction] Trade link validation failed", error)
+  return err("Failed to validate Trade link.")
 }
 
 function validateUUID(id: string) {
@@ -56,6 +70,21 @@ export async function PATCH(
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null
   if (!body) return err("Request body không hợp lệ.", 400)
+
+  const existingResult = await auth.context.supabase
+    .from("portfolio_transactions")
+    .select("id,portfolio_id,user_id,trade_id,ticker,action")
+    .eq("id", transactionId)
+    .eq("portfolio_id", portfolioId)
+    .eq("user_id", auth.context.user.id)
+    .maybeSingle()
+
+  if (existingResult.error) {
+    console.error("[Portfolio Transaction] load-before-PATCH failed", existingResult.error)
+    return err("Failed to load transaction.")
+  }
+  if (!existingResult.data) return err("Giao dịch không tồn tại.", 404)
+  const existingTransaction = existingResult.data
 
   const updates: Record<string, unknown> = {}
 
@@ -125,14 +154,28 @@ export async function PATCH(
       : []
   }
 
-  // Canonical keys win when both canonical and legacy request aliases are provided.
-  // The legacy aliases remain accepted at the HTTP boundary only; they are never DB columns again.
   setCanonicalNumber(updates, body, "target_price_1", "target_price")
   setCanonicalNumber(updates, body, "target_price_2")
   setCanonicalNumber(updates, body, "target_price_3")
   setCanonicalNumber(updates, body, "stop_loss_1", "stop_loss")
   setCanonicalNumber(updates, body, "stop_loss_2")
   setCanonicalNumber(updates, body, "stop_loss_3")
+
+  const nextTicker = String(updates.ticker ?? existingTransaction.ticker)
+  const nextAction = String(updates.action ?? existingTransaction.action)
+  const requestedTradeId = body.trade_id !== undefined
+    ? (body.trade_id == null || body.trade_id === "" ? null : String(body.trade_id))
+    : existingTransaction.trade_id
+
+  if (body.trade_id !== undefined) updates.trade_id = requestedTradeId
+
+  if (requestedTradeId) {
+    try {
+      await validateTradeFillLink(auth.context, portfolioId, requestedTradeId, nextTicker, nextAction)
+    } catch (error) {
+      return tradeLinkErr(error)
+    }
+  }
 
   if (Object.keys(updates).length === 0) {
     return err("Không có thông tin cần cập nhật.", 400)
