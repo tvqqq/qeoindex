@@ -55,3 +55,12 @@ test("allocation tab keeps existing calculator and adds the risk-plan surface", 
   assert.match(page, /PortfolioRiskPlan/)
   assert.match(page, /activeTab === "allocation"/)
 })
+
+test("switching portfolios remounts the risk-plan surface so draft and overview state cannot leak", () => {
+  const page = read("components/portfolio/portfolio-page.tsx")
+  assert.match(
+    page,
+    /<PortfolioRiskPlan\s+key=\{activePortfolioId\}\s+portfolioId=\{activePortfolioId\}\s*\/>/,
+    "PortfolioRiskPlan must be keyed by activePortfolioId so local draft state and in-flight overview state are discarded on portfolio switch",
+  )
+})
