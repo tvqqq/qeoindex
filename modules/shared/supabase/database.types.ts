@@ -4608,6 +4608,43 @@ export type Database = {
         }[]
       }
       qeo_chart_storage_capacity: { Args: never; Returns: Json }
+      qeo_create_portfolio_money_management_plan: {
+        Args: { p_payload: Json; p_portfolio_id: string }
+        Returns: {
+          advanced_risk_override_acknowledged: boolean
+          consecutive_stop_outs_enabled: boolean
+          consecutive_stop_outs_threshold: number | null
+          created_at: string
+          default_trade_risk_percent: number
+          discipline_profile_attempt_id: string | null
+          diversification_rules: Json
+          drawdown_pause_enabled: boolean
+          drawdown_pause_threshold_percent: number | null
+          drawdown_reduce_enabled: boolean
+          drawdown_reduce_threshold_percent: number | null
+          execution_rules: Json
+          holiday_rules: Json
+          id: string
+          max_active_risk_percent: number
+          notes: string | null
+          portfolio_id: string
+          risk_capital_policy: Json
+          risk_profile_attempt_id: string | null
+          risk_reduction_factor: number | null
+          rolling_trade_count: number | null
+          rolling_trade_loss_enabled: boolean
+          scale_rules: Json
+          schema_version: number
+          user_id: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "portfolio_money_management_plans"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       qeo_current_market_universe: {
         Args: { p_universe_key?: string }
         Returns: Json
