@@ -48,8 +48,22 @@ class SsiFastConnectProbeTest(unittest.TestCase):
             ["SSI_CLIENT_ID", "SSI_API_KEY", "SSI_API_SECRET"],
         )
         self.assertEqual(payload["provider_call"], "skipped")
-        self.assertNotIn("secret", result.stdout.lower())
-        self.assertNotIn("token", result.stdout.lower())
+
+    def test_credential_state_never_returns_credential_values(self):
+        probe = load_probe_module()
+        state = probe.credential_state(
+            {
+                "SSI_CLIENT_ID": "client-value-qeo135",
+                "SSI_API_KEY": "api-key-value-qeo135",
+                "SSI_API_SECRET": "api-secret-value-qeo135",
+            }
+        )
+
+        encoded = json.dumps(state, sort_keys=True)
+        self.assertEqual(state, {"configured": True, "missing_credentials": []})
+        self.assertNotIn("client-value-qeo135", encoded)
+        self.assertNotIn("api-key-value-qeo135", encoded)
+        self.assertNotIn("api-secret-value-qeo135", encoded)
 
     def test_raw_anchor_classifier_accepts_provider_prices_in_thousand_vnd(self):
         probe = load_probe_module()
