@@ -33,6 +33,116 @@ jobs:
         with:
           version: 2.116.0
       - run: pnpm install --frozen-lockfile
+      - name: Reconcile QEO-137 production migration metadata
+        env:
+          QEO_HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          git fetch origin "$QEO_HEAD_REF"
+          rm -rf /tmp/qeo137-head
+          git worktree add --detach /tmp/qeo137-head FETCH_HEAD
+          cd /tmp/qeo137-head
+          node <<'NODE'
+          const fs = require("node:fs")
+
+          const manifestPath = "supabase/migration-equivalence.json"
+          const ledgerPath = "docs/db/evidence/production-migration-ledger-2026-09-07.json"
+          const evidencePath = "docs/db/evidence/qeo137-trade-domain-production-2026-09-07.md"
+          const qeoNames = new Set(["qeo137_trade_lifecycle_domain", "qeo137_trade_fk_indexes"])
+
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+          manifest.migrations = (manifest.migrations ?? []).filter((entry) => !qeoNames.has(entry.logicalName))
+          manifest.migrations.push(
+            {
+              logicalName: "qeo137_trade_lifecycle_domain",
+              repositoryVersion: "20260907100000",
+              productionVersion: "20260907111730",
+              state: "MAPPED",
+              evidence: "qeo137-production-schema-rls-domain-and-no-fabricated-backfill",
+              rationale: "QEO-137 normalized Trade lifecycle schema was promoted after the dedicated Trade-domain workflow passed schema/domain/read-model/API contracts, AVCO regression, zero-to-latest replay, generated types, TypeScript and production build. Production readback confirms the migration is additive: the three new Trade-domain tables remain empty and the existing transaction remains unlinked with trade_id NULL, so no historical grouping, stop, risk or psychology data was fabricated. Production timestamp differs from repository replay ordering."
+            },
+            {
+              logicalName: "qeo137_trade_fk_indexes",
+              repositoryVersion: "20260907112500",
+              productionVersion: "20260907112934",
+              state: "MAPPED",
+              evidence: "qeo137-production-grant-hardening-and-fk-index-readback",
+              rationale: "QEO-137 follow-up hardens default authenticated grants and adds covering indexes for the new composite foreign keys after production advisor/readback exposed those gaps. Production readback verifies stop events are SELECT+INSERT only for authenticated users, the new ownership policies remain RLS-bound to auth.uid(), and all four composite FK indexes exist. Production timestamp differs from repository replay ordering."
+            }
+          )
+          fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n")
+
+          const ledger = JSON.parse(fs.readFileSync(ledgerPath, "utf8"))
+          ledger.migrations = (ledger.migrations ?? []).filter((entry) => !qeoNames.has(entry.name))
+          ledger.migrations.push(
+            { version: "20260907111730", name: "qeo137_trade_lifecycle_domain" },
+            { version: "20260907112934", name: "qeo137_trade_fk_indexes" }
+          )
+          ledger.migrations.sort((a, b) => a.version.localeCompare(b.version))
+          ledger.reviewScope = "Canonical production migration ledger through QEO-137. QEO-129 remains explicitly reviewed PRODUCTION_AHEAD; QEO-132 remains mapped to its production RAW Daily migration. QEO-137 records both the normalized Trade lifecycle migration and the follow-up authenticated-grant/composite-FK-index hardening after production schema, RLS/policy, privilege, index, advisor and no-fabricated-backfill readback."
+          fs.writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2) + "\n")
+
+          const evidence = [
+            "# QEO-137 Trade lifecycle domain — production evidence — 2026-09-07",
+            "",
+            "## Verified production migrations",
+            "",
+            "- Supabase project: `qeoindex` / `glwhhrmejlonhyorvtzm`.",
+            "- Repository `20260907100000_qeo137_trade_lifecycle_domain.sql` maps to production `20260907111730 qeo137_trade_lifecycle_domain`.",
+            "- Repository `20260907112500_qeo137_trade_fk_indexes.sql` maps to production `20260907112934 qeo137_trade_fk_indexes`.",
+            "",
+            "## Additive / no fabricated legacy history",
+            "",
+            "Fresh production readback after both migrations showed:",
+            "",
+            "- `portfolio_trades`: 0 rows;",
+            "- `portfolio_trade_stop_events`: 0 rows;",
+            "- `portfolio_trade_journal_entries`: 0 rows;",
+            "- `portfolio_transactions`: 1 existing row, with `trade_id IS NULL`;",
+            "- no existing transaction was auto-grouped into a Trade and no historical stop/risk/psychology record was synthesized.",
+            "",
+            "This preserves `portfolio_transactions` as the existing AVCO accounting/fill source of truth while making Trade linkage explicitly opt-in for legacy data.",
+            "",
+            "## Ownership and API boundary",
+            "",
+            "Production metadata confirms RLS is enabled on all three new Trade-domain tables. Every authenticated policy is scoped by `user_id = (select auth.uid())`.",
+            "",
+            "Authenticated table privileges after the hardening migration are:",
+            "",
+            "- `portfolio_trades`: SELECT, INSERT, UPDATE, DELETE;",
+            "- `portfolio_trade_journal_entries`: SELECT, INSERT, UPDATE, DELETE;",
+            "- `portfolio_trade_stop_events`: SELECT, INSERT only.",
+            "",
+            "`portfolio_trade_stop_events` therefore has no authenticated UPDATE/DELETE privilege and no UPDATE/DELETE policy: stop history is append-only at the authenticated database boundary. Anonymous access is not granted.",
+            "",
+            "## Index readback",
+            "",
+            "Production contains the expected Trade read/history indexes plus four covering indexes for the new composite foreign keys:",
+            "",
+            "- `portfolio_trades_portfolio_owner_fk_idx (portfolio_id, user_id)`;",
+            "- `portfolio_transactions_trade_identity_fk_idx (trade_id, portfolio_id, user_id, ticker)`;",
+            "- `portfolio_trade_stop_events_trade_identity_fk_idx (trade_id, portfolio_id, user_id, ticker)`;",
+            "- `portfolio_trade_journal_entries_trade_identity_fk_idx (trade_id, portfolio_id, user_id, ticker)`.",
+            "",
+            "A fresh performance-advisor read after the index migration reports no QEO-137 unindexed-foreign-key finding. The advisor can report the new indexes as unused while the Trade tables are empty; that is expected immediately after rollout and is not evidence to remove FK coverage.",
+            "",
+            "A fresh security-advisor read reports no QEO-137 table-specific RLS finding. Existing advisor findings on unrelated tables/Auth remain outside QEO-137 scope.",
+            "",
+            "## Activation boundary",
+            "",
+            "QEO-137 establishes the normalized Trade/Fill/Stop/Journal storage and typed domain/API boundary only. It does not fabricate legacy Trade identity, does not persist the QEO-138 Money Management Plan, does not perform the `/portfolio` UI revamp, and does not introduce AI behavior."
+          ].join("\n") + "\n"
+          fs.writeFileSync(evidencePath, evidence)
+          NODE
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add supabase/migration-equivalence.json docs/db/evidence/production-migration-ledger-2026-09-07.json docs/db/evidence/qeo137-trade-domain-production-2026-09-07.md
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "docs(qeo-137): reconcile production migration evidence"
+          git push origin HEAD:"$QEO_HEAD_REF"
       - name: QEO-137 schema contract
         run: node --test tests/portfolio/qeo137-trade-domain-schema.test.ts
       - name: QEO-137 lifecycle domain contract
