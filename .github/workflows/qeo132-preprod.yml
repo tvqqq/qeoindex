@@ -34,3 +34,45 @@ jobs:
         run: node --test tests/market-history/qeo132-stockbiz-raw-daily.test.ts
       - name: Run QEO-132 raw Daily schema contract
         run: node --test tests/db/qeo132-raw-daily-schema.test.ts
+      - name: Compile TypeScript
+        run: pnpm typecheck
+
+  schema-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - run: pnpm install --frozen-lockfile
+      - name: Start local Supabase
+        run: supabase start
+      - name: Replay migrations from zero through QEO-132
+        run: pnpm db:replay:verify
+      - name: Verify QEO-132 atomic RAW Daily persistence
+        run: |
+          eval "$(supabase status -o env)"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f tests/db/qeo132-raw-daily-persistence.sql
+      - name: Lint replayed local database
+        run: supabase db lint --local --level warning
+      - name: Generate Database type candidate
+        run: |
+          mkdir -p artifacts/qeo132
+          supabase gen types typescript --local --schema public > artifacts/qeo132/database.types.ts
+      - name: Upload Database type candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo132-database-types
+          path: artifacts/qeo132/database.types.ts
+          retention-days: 3
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
