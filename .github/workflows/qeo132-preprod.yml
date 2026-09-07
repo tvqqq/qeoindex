@@ -8,9 +8,11 @@ on:
     paths:
       - 'modules/market/providers/stockbiz/**'
       - 'modules/market/history/raw-daily-*'
+      - 'scripts/db/migration-drift-lib.mjs'
       - 'supabase/migrations/*qeo132*'
       - 'tests/market-history/qeo132-*'
       - 'tests/db/qeo132-*'
+      - 'tests/db-migration-production-ahead.test.ts'
       - '.github/workflows/qeo132-preprod.yml'
 
 permissions:
@@ -36,6 +38,8 @@ jobs:
         run: node --test tests/db/qeo132-raw-daily-schema.test.ts
       - name: Run QEO-132 canonical raw Daily store contract
         run: node --test tests/market-history/qeo132-raw-daily-store.test.ts
+      - name: Run production-ahead drift contract
+        run: node --test tests/db-migration-production-ahead.test.ts
       - name: Compile TypeScript
         run: pnpm typecheck
 
