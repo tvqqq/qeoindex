@@ -6,6 +6,7 @@ import {
   vietnamDateKey,
 } from "../calendar.ts"
 import type { OhlcvBar } from "../../shared/technical/indicators.ts"
+import { readCanonicalRawDaily } from "./raw-daily-store.ts"
 
 const TICKER = /^[A-Z0-9]{2,12}$/
 const LINEAGE_HASH = /^[a-f0-9]{64}$/
@@ -57,7 +58,7 @@ function addCalendarDay(dateKey: string) {
   return date.toISOString().slice(0, 10)
 }
 
-function expectedTradingSessions(fromMs: number, toMs: number) {
+function requestedTradingRange(fromMs: number, toMs: number) {
   if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || fromMs > toMs) {
     throw new Error("Adjusted Daily read range is invalid")
   }
@@ -71,14 +72,14 @@ function expectedTradingSessions(fromMs: number, toMs: number) {
     throw new Error("Adjusted Daily read range is outside authoritative trading-calendar coverage")
   }
 
-  const sessions: string[] = []
+  const exchangeSessions: string[] = []
   for (let dateKey = from; dateKey <= to; dateKey = addCalendarDay(dateKey)) {
     if (!hasVietnamSecuritiesTradingCalendarCoverage(dateKey)) {
       throw new Error("Adjusted Daily read range crosses unsupported trading-calendar coverage")
     }
-    if (isVietnamSecuritiesTradingDateKey(dateKey)) sessions.push(dateKey)
+    if (isVietnamSecuritiesTradingDateKey(dateKey)) exchangeSessions.push(dateKey)
   }
-  return { from, to, sessions }
+  return { from, to, exchangeSessions }
 }
 
 function invalidResult(
@@ -160,8 +161,8 @@ export async function loadAdjustedDailyRange(
   const normalizedTicker = ticker.trim().toUpperCase()
   if (!TICKER.test(normalizedTicker)) throw new Error("Adjusted Daily read ticker is invalid")
 
-  const range = expectedTradingSessions(fromMs, toMs)
-  const unresolvedAll = [...range.sessions]
+  const range = requestedTradingRange(fromMs, toMs)
+  const unresolvedExchangeSessions = [...range.exchangeSessions]
 
   const { data: rolloutData, error: rolloutError } = await supabase
     .from("market_adjusted_daily_rollout")
@@ -171,7 +172,7 @@ export async function loadAdjustedDailyRange(
 
   const rollout = rolloutData as RolloutRow | null
   if (rolloutError || !rollout || !validRollout(rollout, normalizedTicker)) {
-    return invalidResult(unresolvedAll)
+    return invalidResult(unresolvedExchangeSessions)
   }
 
   const identity = {
@@ -180,12 +181,44 @@ export async function loadAdjustedDailyRange(
     lineageHash: rollout.event_lineage_hash,
   }
 
-  if (range.sessions.length > 0) {
-    const firstExpected = range.sessions[0]
-    const lastExpected = range.sessions[range.sessions.length - 1]
-    if (rollout.verified_from! > firstExpected || rollout.verified_through! < lastExpected) {
-      return invalidResult(unresolvedAll, identity)
+  let rawSessions: string[]
+  try {
+    const canonicalRaw = await readCanonicalRawDaily(supabase, {
+      ticker: normalizedTicker,
+      from: range.from,
+      to: range.to,
+    })
+    rawSessions = canonicalRaw.map((row) => row.sessionDate)
+  } catch {
+    return invalidResult(unresolvedExchangeSessions, identity)
+  }
+
+  const rawSessionSet = new Set(rawSessions)
+  if (
+    rawSessionSet.size !== rawSessions.length
+    || rawSessions.some((sessionDate) => !isVietnamSecuritiesTradingDateKey(sessionDate))
+  ) {
+    return invalidResult(rawSessions.length > 0 ? rawSessions : unresolvedExchangeSessions, identity)
+  }
+
+  if (rawSessions.length === 0) {
+    if (range.exchangeSessions.length === 0) {
+      return {
+        bars: [],
+        factorRunId: rollout.factor_run_id,
+        factorVersion: rollout.factor_version,
+        lineageHash: rollout.event_lineage_hash,
+        complete: true,
+        unresolvedSessions: [],
+      }
     }
+    return invalidResult(unresolvedExchangeSessions, identity)
+  }
+
+  const firstExpected = rawSessions[0]
+  const lastExpected = rawSessions[rawSessions.length - 1]
+  if (rollout.verified_from! > firstExpected || rollout.verified_through! < lastExpected) {
+    return invalidResult(rawSessions, identity)
   }
 
   const { data: adjustedData, error: adjustedError } = await supabase
@@ -197,33 +230,31 @@ export async function loadAdjustedDailyRange(
     .order("session_date", { ascending: true })
 
   if (adjustedError || !Array.isArray(adjustedData)) {
-    return invalidResult(unresolvedAll, identity)
+    return invalidResult(rawSessions, identity)
   }
 
   const rows = adjustedData as AdjustedRow[]
-  const expectedSet = new Set(range.sessions)
   const counts = new Map<string, number>()
   const invalidSessions = new Set<string>()
   let previousSession: string | null = null
 
   for (const row of rows) {
     counts.set(row.session_date, (counts.get(row.session_date) ?? 0) + 1)
-    if (
-      previousSession !== null
-      && row.session_date <= previousSession
-    ) invalidSessions.add(row.session_date)
+    if (previousSession !== null && row.session_date <= previousSession) {
+      invalidSessions.add(row.session_date)
+    }
     previousSession = row.session_date
 
-    if (!expectedSet.has(row.session_date) || !rowMatchesRollout(row, rollout, normalizedTicker)) {
+    if (!rawSessionSet.has(row.session_date) || !rowMatchesRollout(row, rollout, normalizedTicker)) {
       invalidSessions.add(row.session_date)
     }
   }
 
-  for (const session of range.sessions) {
+  for (const session of rawSessions) {
     if ((counts.get(session) ?? 0) !== 1) invalidSessions.add(session)
   }
 
-  if (invalidSessions.size > 0 || rows.length !== range.sessions.length) {
+  if (invalidSessions.size > 0 || rows.length !== rawSessions.length) {
     return invalidResult([...invalidSessions], identity)
   }
 
