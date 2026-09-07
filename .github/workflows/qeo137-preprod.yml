@@ -1,0 +1,34 @@
+name: QEO-137 Trade Domain
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "modules/portfolio/**"
+      - "app/api/portfolio/**"
+      - "tests/portfolio/qeo137-*.test.ts"
+      - ".github/workflows/qeo137-preprod.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo137-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trade-domain-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-137 schema contract
+        run: node --test tests/portfolio/qeo137-trade-domain-schema.test.ts
