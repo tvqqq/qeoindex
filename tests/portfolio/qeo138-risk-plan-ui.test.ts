@@ -113,3 +113,28 @@ test("switching portfolios remounts the risk-plan surface so draft and overview 
     "PortfolioRiskPlan must be keyed by activePortfolioId so local draft state and in-flight overview state are discarded on portfolio switch",
   )
 })
+
+test("Risk and Discipline Profile use a three-stop slider instead of dropdown scoring", () => {
+  const risk = read("components/portfolio/risk-plan/risk-profile-form.tsx")
+  const discipline = read("components/portfolio/risk-plan/discipline-profile-form.tsx")
+  const source = `${risk}\n${discipline}`
+
+  assert.match(source, /PointSlider/)
+  assert.match(source, /5\s*[,|/]\s*10\s*[,|/]\s*15|\[5,\s*10,\s*15\]/)
+  assert.doesNotMatch(risk, /<select\b/)
+  assert.doesNotMatch(discipline, /<select\b/)
+})
+
+test("saved profile attempts are displayed and can hydrate a retake", () => {
+  const parent = read("components/portfolio/portfolio-risk-plan.tsx")
+  const risk = read("components/portfolio/risk-plan/risk-profile-form.tsx")
+  const discipline = read("components/portfolio/risk-plan/discipline-profile-form.tsx")
+
+  assert.match(parent, /latestAttempt=\{overview\?\.latestRiskProfileAttempt/)
+  assert.match(parent, /latestAttempt=\{overview\?\.latestDisciplineProfileAttempt/)
+  assert.match(risk, /latestAttempt/)
+  assert.match(discipline, /latestAttempt/)
+  assert.match(`${risk}\n${discipline}`, /Retake|Chỉnh sửa/i)
+  assert.match(`${risk}\n${discipline}`, /created_at/)
+  assert.match(`${risk}\n${discipline}`, /total_score/)
+})
