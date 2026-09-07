@@ -46,7 +46,7 @@ test("QEO-106 Yahoo Daily applies adjusted-close ratio to OHLC while preserving 
   }
 })
 
-test("QEO-106 repair worker treats legacy raw Yahoo Daily rows as suspect and refetches through provider priority", () => {
+test("QEO-106 repair worker treats Yahoo Daily fallback rows as suspect and refetches through provider priority", () => {
   const integrity = readFileSync(new URL("../modules/market/history/daily-integrity.ts", import.meta.url), "utf8")
   assert.match(integrity, /loadLegacyYahooBasisRows/)
   assert.match(integrity, /legacyYahooRowsByTicker/)
@@ -56,6 +56,11 @@ test("QEO-106 repair worker treats legacy raw Yahoo Daily rows as suspect and re
   assert.match(integrity, /provider_detail/)
   assert.match(integrity, /fetchDailyMarketHistoryWindow/)
   assert.match(integrity, /\.\.\.legacyYahooDates/)
+  assert.doesNotMatch(
+    integrity,
+    /if \(\/adjusted OHLC\/i\.test\(detail\)\) continue/,
+    "VCI recovery must be allowed to promote Yahoo/Fallback rows even when Yahoo already labels them adjusted",
+  )
 })
 
 test("QEO-106 partial provider windows fall back per unresolved trading session", () => {
