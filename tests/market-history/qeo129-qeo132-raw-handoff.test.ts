@@ -7,7 +7,7 @@ const RUN_ID = "00000000-0000-4000-8000-000000000129"
 const LINEAGE = "a".repeat(64)
 const FACTOR_VERSION = `qeo124-v1:${LINEAGE}`
 
-function fakeSupabase() {
+function fakeSupabase(options: { tradingSessions?: string[] } = {}) {
   const calls: string[] = []
   let adjusted: Array<Record<string, unknown>> = []
 
@@ -35,6 +35,20 @@ function fakeSupabase() {
       gte() { return this },
       lte() { return this },
       async order() { return { data: rawRows, error: null } },
+    }
+  }
+
+  function tradingSessionQuery() {
+    return {
+      eq() { return this },
+      gte() { return this },
+      lte() { return this },
+      async order() {
+        return {
+          data: (options.tradingSessions ?? ["2026-08-05"]).map((session_date) => ({ session_date })),
+          error: null,
+        }
+      },
     }
   }
 
@@ -71,6 +85,7 @@ function fakeSupabase() {
           }) }
         }
         if (table === "market_ohlcv_raw_daily") return { select: () => rawQuery() }
+        if (table === "market_trading_sessions") return { select: () => tradingSessionQuery() }
         if (table === "market_ohlcv_history") throw new Error("legacy Daily history must not be read by QEO-129")
         if (table === "market_ohlcv_adjusted_daily") {
           return { async upsert(payload: Array<Record<string, unknown>>) {
@@ -119,4 +134,23 @@ test("QEO-129 rebuild consumes only QEO-132 canonical RAW Daily", async () => {
   assert.deepEqual(result.unresolvedSessions, [])
   assert.equal(fake.calls.includes("market_ohlcv_raw_daily"), true)
   assert.equal(fake.calls.includes("market_ohlcv_history"), false)
+})
+
+test("QEO-129 rejects a sparse canonical RAW range before shadow materialization", async () => {
+  const fake = fakeSupabase({ tradingSessions: ["2026-08-04", "2026-08-05"] })
+
+  await assert.rejects(
+    rebuildAdjustedDailyRange({
+      supabase: fake.client as never,
+      ticker: "VHM",
+      fromDate: "2026-08-04",
+      toDate: "2026-08-05",
+      expectedFactorRunId: RUN_ID,
+      expectedLineageHash: LINEAGE,
+    }),
+    /canonical RAW range is incomplete/i,
+  )
+
+  assert.equal(fake.calls.includes("market_ohlcv_adjusted_daily"), false)
+  assert.equal(fake.calls.includes("market_adjusted_daily_rollout"), false)
 })
