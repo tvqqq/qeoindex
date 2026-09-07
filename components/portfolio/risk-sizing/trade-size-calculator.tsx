@@ -8,6 +8,7 @@ import {
   calculateTradeSize,
   DEFAULT_REGULAR_LOT_SHARES,
 } from "@/modules/portfolio/risk-sizing/calculator"
+import { calculateOptimalF } from "@/modules/portfolio/risk-sizing/optimal-f"
 import { projectActiveRisk } from "@/modules/portfolio/risk-sizing/projection"
 import type { AccountEquityContext, TradeSizeStatus } from "@/modules/portfolio/risk-sizing/types"
 import { cn } from "@/modules/shared/ui/cn"
@@ -139,6 +140,13 @@ export function TradeSizeCalculator({
     riskContext?.maxActiveRiskPercent,
     riskContext?.unknownRiskTradeCount,
   ])
+  const optimalF = useMemo(
+    () => calculateOptimalF(
+      riskContext?.winRatioPercent ?? null,
+      riskContext?.payoffRatio ?? null,
+    ),
+    [riskContext?.winRatioPercent, riskContext?.payoffRatio],
+  )
 
   const hasUnknownRisk = (riskContext?.unknownRiskTradeCount ?? 0) > 0
   const ready = result.status === "ready"
@@ -287,6 +295,52 @@ export function TradeSizeCalculator({
           <p className="mt-4 text-xs font-bold text-emerald-300">Projected known Active Risk nằm trong configured Max Active Risk.</p>
         ) : null}
       </section>
+
+      <details className="group rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-extrabold uppercase tracking-wide text-white">Advanced Evidence</h3>
+            <p className="mt-1 text-[11px] text-[var(--color-muted-2)]">Win/Payoff evidence and informational Optimal f.</p>
+          </div>
+          <Badge>Evidence: {riskContext?.evidenceCompleteness ?? "insufficient"}</Badge>
+        </summary>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <RiskCard
+            term="winRatio"
+            value={loadingContext
+              ? "Loading…"
+              : riskContext?.winRatioPercent == null
+                ? "Insufficient History"
+                : formatPercent(riskContext.winRatioPercent)}
+          />
+          <RiskCard
+            term="payoffRatio"
+            value={loadingContext
+              ? "Loading…"
+              : riskContext?.payoffRatio == null
+                ? "Insufficient History"
+                : formatRatio(riskContext.payoffRatio)}
+          />
+          <RiskCard
+            term="optimalF"
+            value={loadingContext
+              ? "Loading…"
+              : optimalF.status === "available" && optimalF.value != null
+                ? formatPercent(optimalF.value * 100)
+                : optimalF.status === "invalid"
+                  ? "Invalid Evidence"
+                  : "Insufficient History"}
+          />
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-purple-500/20 bg-purple-500/[0.07] p-4 text-xs leading-relaxed text-slate-300">
+          <p className="font-bold text-purple-200">Optimal f is informational only.</p>
+          <p className="mt-1">
+            It is more aggressive than the zero-ROR sizing examples, is not auto-applied to Risk per Trade or Trade Size, and is not a zero-ROR guarantee. QeoIndex only shows the deterministic value when Win Ratio and Payoff Ratio evidence are available.
+          </p>
+        </div>
+      </details>
     </div>
   )
 }
@@ -365,6 +419,11 @@ function formatKvnd(value: number | null): string {
 function formatPercent(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return "—"
   return `${value.toLocaleString("vi-VN", { maximumFractionDigits: 2 })}%`
+}
+
+function formatRatio(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return "—"
+  return `${value.toLocaleString("vi-VN", { maximumFractionDigits: 2 })}:1`
 }
 
 function statusHelp(status: TradeSizeStatus): string {
