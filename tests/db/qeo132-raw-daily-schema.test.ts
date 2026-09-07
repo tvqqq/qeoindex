@@ -4,6 +4,7 @@ import test from "node:test"
 
 const migrationName = "20260906169000_qeo132_raw_daily_basis.sql"
 const migrationPath = `supabase/migrations/${migrationName}`
+const generatedTypesPath = "modules/shared/supabase/database.types.ts"
 
 function migrationSql() {
   assert.equal(existsSync(migrationPath), true, `${migrationName} must exist after QEO-124 and before QEO-129`)
@@ -47,6 +48,14 @@ test("QEO-132 keeps raw evidence private and exposes only service-role persisten
   // Evidence is append-only: service role gets SELECT/INSERT only, never UPDATE/DELETE.
   assert.match(sql, /grant\s+select,\s*insert\s+on\s+table\s+public\.market_ohlcv_raw_daily_evidence\s+to\s+service_role/i)
   assert.doesNotMatch(sql, /grant[^;]*(?:update|delete)[^;]*market_ohlcv_raw_daily_evidence/i)
+})
+
+test("QEO-132 generated database types expose RAW tables and persistence RPC", () => {
+  assert.equal(existsSync(generatedTypesPath), true, "generated database types must be committed")
+  const types = readFileSync(generatedTypesPath, "utf8")
+  assert.match(types, /market_ohlcv_raw_daily:\s*\{/)
+  assert.match(types, /market_ohlcv_raw_daily_evidence:\s*\{/)
+  assert.match(types, /qeo_persist_raw_daily_observation:\s*\{/)
 })
 
 test("QEO-132 never rewrites the legacy adjusted market_ohlcv_history table", () => {
