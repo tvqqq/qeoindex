@@ -6,7 +6,7 @@ const migrationUrl = new URL(
   "../../supabase/migrations/20260907100000_qeo137_trade_lifecycle_domain.sql",
   import.meta.url,
 )
-const fkIndexMigrationUrl = new URL(
+const hardeningMigrationUrl = new URL(
   "../../supabase/migrations/20260907112500_qeo137_trade_fk_indexes.sql",
   import.meta.url,
 )
@@ -20,13 +20,13 @@ function migrationSql() {
   return readFileSync(migrationUrl, "utf8")
 }
 
-function fkIndexMigrationSql() {
+function hardeningMigrationSql() {
   assert.equal(
-    existsSync(fkIndexMigrationUrl),
+    existsSync(hardeningMigrationUrl),
     true,
-    "QEO-137 composite foreign-key indexes must ship with the Trade domain",
+    "QEO-137 production hardening migration must ship with the Trade domain",
   )
-  return readFileSync(fkIndexMigrationUrl, "utf8")
+  return readFileSync(hardeningMigrationUrl, "utf8")
 }
 
 test("QEO-137 migration exists", () => {
@@ -107,8 +107,20 @@ test("QEO-137 adds indexes for portfolio Trade reads and chronological event his
   assert.match(sql, /portfolio_trade_journal_entries_trade_time_idx/i)
 })
 
+test("QEO-137 hardens authenticated grants against broad default privileges", () => {
+  const sql = hardeningMigrationSql()
+
+  assert.match(sql, /revoke all on public\.portfolio_trades from anon, authenticated/i)
+  assert.match(sql, /revoke all on public\.portfolio_trade_stop_events from anon, authenticated/i)
+  assert.match(sql, /revoke all on public\.portfolio_trade_journal_entries from anon, authenticated/i)
+  assert.match(sql, /grant select, insert, update, delete on public\.portfolio_trades to authenticated/i)
+  assert.match(sql, /grant select, insert on public\.portfolio_trade_stop_events to authenticated/i)
+  assert.match(sql, /grant select, insert, update, delete on public\.portfolio_trade_journal_entries to authenticated/i)
+  assert.doesNotMatch(sql, /grant[^;]*truncate[^;]*authenticated/i)
+})
+
 test("QEO-137 covers every new composite foreign key with its leading columns", () => {
-  const sql = fkIndexMigrationSql()
+  const sql = hardeningMigrationSql()
 
   assert.match(
     sql,
