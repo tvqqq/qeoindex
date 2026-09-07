@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import test from "node:test"
 
 import { rebuildAdjustedDailyRange } from "../../modules/market/history/adjusted-daily-store.ts"
@@ -6,6 +7,8 @@ import { rebuildAdjustedDailyRange } from "../../modules/market/history/adjusted
 const RUN_ID = "00000000-0000-4000-8000-000000000129"
 const LINEAGE = "a".repeat(64)
 const FACTOR_VERSION = `qeo124-v1:${LINEAGE}`
+const RAW_SESSIONS = ["2026-08-04", "2026-08-05"]
+const RAW_SESSION_IDENTITY_HASH = createHash("sha256").update(RAW_SESSIONS.join("\n")).digest("hex")
 
 function fakeSupabase(options: {
   runStatus?: "candidate" | "active" | "blocked" | "superseded"
@@ -14,6 +17,7 @@ function fakeSupabase(options: {
   badReadbackCloseSession?: string
   rawProvider?: string
   rawProviderDetail?: string
+  rawPriceBasis?: string
 } = {}) {
   const calls: Array<{ kind: string; value: unknown }> = []
   const runRow = {
@@ -29,32 +33,43 @@ function fakeSupabase(options: {
     cumulative_price_factor: 0.5,
     cumulative_volume_factor: 2,
   }]
-  const provider = options.rawProvider ?? "DNSE"
-  const providerDetail = options.rawProviderDetail ?? "DNSE direct Daily OHLCV | source basis: raw"
+  const provider = options.rawProvider ?? "StockBiz"
+  const providerDetail = options.rawProviderDetail ?? "bounded raw Daily evidence"
+  const priceBasis = options.rawPriceBasis ?? "RAW"
   const rawRows = [
     {
       ticker: "VHM",
-      bar_time: "2026-08-04T02:00:00.000Z",
+      session_date: "2026-08-04",
+      evidence_id: "00000000-0000-4000-8000-000000000131",
       open: 100,
       high: 110,
       low: 95,
       close: 105,
       volume: 1_000,
+      price_basis: priceBasis,
       provider,
       provider_detail: providerDetail,
-      source_url: "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock",
+      source_url: "https://web.stockbiz.vn/Stocks/VHM/LookupQuote.aspx?Date=04%2F08%2F2026",
+      source_price_unit: "VND_THOUSANDS",
+      normalization_version: "qeo132-v1",
+      raw_evidence_hash: "b".repeat(64),
     },
     {
       ticker: "VHM",
-      bar_time: "2026-08-05T02:00:00.000Z",
+      session_date: "2026-08-05",
+      evidence_id: "00000000-0000-4000-8000-000000000132",
       open: 110,
       high: 120,
       low: 100,
       close: 115,
       volume: 2_000,
+      price_basis: priceBasis,
       provider,
       provider_detail: providerDetail,
-      source_url: "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock",
+      source_url: "https://web.stockbiz.vn/Stocks/VHM/LookupQuote.aspx?Date=05%2F08%2F2026",
+      source_price_unit: "VND_THOUSANDS",
+      normalization_version: "qeo132-v1",
+      raw_evidence_hash: "c".repeat(64),
     },
   ]
 
@@ -95,8 +110,11 @@ function fakeSupabase(options: {
         if (table === "market_price_adjustment_factors") {
           return { select: () => transitionsQuery() }
         }
-        if (table === "market_ohlcv_history") {
+        if (table === "market_ohlcv_raw_daily") {
           return { select: () => rawQuery() }
+        }
+        if (table === "market_ohlcv_history") {
+          throw new Error("legacy adjusted Daily history must not be read by QEO-129")
         }
         if (table === "market_ohlcv_adjusted_daily") {
           return {
@@ -144,16 +162,22 @@ function fakeSupabase(options: {
   }
 }
 
-test("QEO-129 counts rebuilt sessions only from exact persisted DB readback", async () => {
-  const fake = fakeSupabase({ omitReadbackSession: "2026-08-05" })
-  const result = await rebuildAdjustedDailyRange({
-    supabase: fake.client as never,
+function rebuildInput(client: unknown) {
+  return {
+    supabase: client as never,
     ticker: "VHM",
     fromDate: "2026-08-04",
     toDate: "2026-08-05",
     expectedFactorRunId: RUN_ID,
     expectedLineageHash: LINEAGE,
-  })
+    expectedRawSessionCount: RAW_SESSIONS.length,
+    expectedRawSessionIdentityHash: RAW_SESSION_IDENTITY_HASH,
+  }
+}
+
+test("QEO-129 counts rebuilt sessions only from exact persisted DB readback", async () => {
+  const fake = fakeSupabase({ omitReadbackSession: "2026-08-05" })
+  const result = await rebuildAdjustedDailyRange(rebuildInput(fake.client))
 
   assert.equal(result.rebuiltSessions, 1)
   assert.deepEqual(result.unresolvedSessions, ["2026-08-05"])
@@ -179,14 +203,7 @@ test("QEO-129 counts rebuilt sessions only from exact persisted DB readback", as
 
 test("QEO-129 blocks rollout when persisted OHLCV differs despite matching run and lineage", async () => {
   const fake = fakeSupabase({ badReadbackCloseSession: "2026-08-05" })
-  const result = await rebuildAdjustedDailyRange({
-    supabase: fake.client as never,
-    ticker: "VHM",
-    fromDate: "2026-08-04",
-    toDate: "2026-08-05",
-    expectedFactorRunId: RUN_ID,
-    expectedLineageHash: LINEAGE,
-  })
+  const result = await rebuildAdjustedDailyRange(rebuildInput(fake.client))
 
   assert.equal(result.rebuiltSessions, 1)
   assert.deepEqual(result.unresolvedSessions, ["2026-08-05"])
@@ -200,14 +217,7 @@ test("QEO-129 blocks rollout when persisted OHLCV differs despite matching run a
 
 test("QEO-129 persists shadow rollout only after complete exact readback", async () => {
   const fake = fakeSupabase()
-  const result = await rebuildAdjustedDailyRange({
-    supabase: fake.client as never,
-    ticker: "VHM",
-    fromDate: "2026-08-04",
-    toDate: "2026-08-05",
-    expectedFactorRunId: RUN_ID,
-    expectedLineageHash: LINEAGE,
-  })
+  const result = await rebuildAdjustedDailyRange(rebuildInput(fake.client))
 
   assert.equal(result.rebuiltSessions, 2)
   assert.deepEqual(result.unresolvedSessions, [])
@@ -228,38 +238,16 @@ test("QEO-129 persists shadow rollout only after complete exact readback", async
   assert.equal(typeof rollout.verified_at, "string")
 })
 
-test("QEO-129 refuses adjusted or unknown persisted Daily provenance before any adjusted write", async () => {
-  const invalidSources = [
-    {
-      rawProvider: "Fallback",
-      rawProviderDetail: "Yahoo Finance .VN | adjusted OHLC via adjclose/close | source basis: adjusted",
-    },
-    {
-      rawProvider: "TitanLabs",
-      rawProviderDetail: "legacy history",
-    },
-    {
-      rawProvider: "VCI",
-      rawProviderDetail: "VCI native ONE_DAY · 620d window",
-    },
-    {
-      rawProvider: "DNSE",
-      rawProviderDetail: "DNSE direct Daily OHLCV",
-    },
-  ]
-
-  for (const source of invalidSources) {
-    const fake = fakeSupabase(source)
+test("QEO-129 refuses any canonical row that is not explicitly RAW regardless of provider name", async () => {
+  for (const source of [
+    { rawProvider: "Fallback", rawProviderDetail: "Yahoo Finance .VN adjusted history" },
+    { rawProvider: "TitanLabs", rawProviderDetail: "adjusted history" },
+    { rawProvider: "VCI", rawProviderDetail: "native ONE_DAY adjusted history" },
+  ]) {
+    const fake = fakeSupabase({ ...source, rawPriceBasis: "ADJUSTED" })
     await assert.rejects(
-      rebuildAdjustedDailyRange({
-        supabase: fake.client as never,
-        ticker: "VHM",
-        fromDate: "2026-08-04",
-        toDate: "2026-08-05",
-        expectedFactorRunId: RUN_ID,
-        expectedLineageHash: LINEAGE,
-      }),
-      /raw price basis/i,
+      rebuildAdjustedDailyRange(rebuildInput(fake.client)),
+      /canonical RAW range could not be loaded/i,
     )
     assert.equal(fake.calls.some((call) => call.kind === "upsert:adjusted"), false)
     assert.equal(fake.calls.some((call) => call.kind === "upsert:rollout"), false)
@@ -270,14 +258,7 @@ test("QEO-129 fails closed before persistence for blocked/superseded or wrong-li
   for (const runStatus of ["blocked", "superseded"] as const) {
     const fake = fakeSupabase({ runStatus })
     await assert.rejects(
-      rebuildAdjustedDailyRange({
-        supabase: fake.client as never,
-        ticker: "VHM",
-        fromDate: "2026-08-04",
-        toDate: "2026-08-05",
-        expectedFactorRunId: RUN_ID,
-        expectedLineageHash: LINEAGE,
-      }),
+      rebuildAdjustedDailyRange(rebuildInput(fake.client)),
       /factor run/i,
     )
     assert.equal(fake.calls.some((call) => call.kind === "upsert:adjusted"), false)
@@ -285,14 +266,7 @@ test("QEO-129 fails closed before persistence for blocked/superseded or wrong-li
 
   const wrongLineage = fakeSupabase({ runLineage: "b".repeat(64) })
   await assert.rejects(
-    rebuildAdjustedDailyRange({
-      supabase: wrongLineage.client as never,
-      ticker: "VHM",
-      fromDate: "2026-08-04",
-      toDate: "2026-08-05",
-      expectedFactorRunId: RUN_ID,
-      expectedLineageHash: LINEAGE,
-    }),
+    rebuildAdjustedDailyRange(rebuildInput(wrongLineage.client)),
     /lineage/i,
   )
   assert.equal(wrongLineage.calls.some((call) => call.kind === "upsert:adjusted"), false)
