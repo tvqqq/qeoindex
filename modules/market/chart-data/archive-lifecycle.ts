@@ -14,6 +14,7 @@ import {
   dropEmptyHotIntradaySessionPartition,
   listExpiredHotPartitions,
   pruneVerifiedHotIntradayPartition,
+  proveHotArchivePartitionsEligibility,
   readHotIntradayRange,
   readOldestHotIntradayTime,
   type HotArchivePartition,
@@ -34,6 +35,16 @@ export interface ChartArchiveFailure {
   error: string
 }
 
+export interface ChartArchiveDeferredPartition {
+  ticker: string
+  tradingDate: string
+  reason: string
+  newerTradingDates: string[]
+  rowsScanned: number
+  pagesRead: number
+  error?: string
+}
+
 export interface ChartIntradayArchiveMetrics {
   status: "succeeded" | "partial" | "skipped"
   referenceAt: string
@@ -47,6 +58,8 @@ export interface ChartIntradayArchiveMetrics {
   rowsPruned: number
   sessionPartitionsDropped: number
   failures: ChartArchiveFailure[]
+  partitionsDeferred: number
+  deferred: ChartArchiveDeferredPartition[]
   oldestHotBar: string | null
 }
 
@@ -81,6 +94,7 @@ export async function runChartIntradayArchiveLifecycle(
   const cutoff = chartHotSessionRetentionCutoff(referenceAt)
   const maxPartitions = Math.max(1, Math.min(48, Math.floor(input.maxPartitions ?? DEFAULT_ARCHIVE_PARTITIONS_PER_RUN)))
   const partitions = await listExpiredHotPartitions(supabase, { cutoff, maxPartitions })
+  const retentionProofs = await proveHotArchivePartitionsEligibility(supabase, partitions)
   const cold = createSupabaseColdOhlcvStorage(supabase)
 
   let partitionsArchived = 0
@@ -91,9 +105,27 @@ export async function runChartIntradayArchiveLifecycle(
   let rowsPruned = 0
   let sessionPartitionsDropped = 0
   const failures: ChartArchiveFailure[] = []
+  const deferred: ChartArchiveDeferredPartition[] = []
 
   for (const partition of partitions) {
     try {
+      // Discovery's global cutoff is only a bounded candidate hint. The
+      // per-ticker proof is the final latest-five-session HOT guard.
+      const retentionProof = retentionProofs.get(`${partition.ticker}:${partition.tradingDate}`)
+      if (!retentionProof) throw new Error("Chart HOT retention proof missing for discovered partition")
+      if (!retentionProof.eligible) {
+        deferred.push({
+          ticker: partition.ticker,
+          tradingDate: partition.tradingDate,
+          reason: retentionProof.reason,
+          newerTradingDates: retentionProof.newerTradingDates,
+          rowsScanned: retentionProof.rowsScanned,
+          pagesRead: retentionProof.pagesRead,
+          ...(retentionProof.error ? { error: retentionProof.error } : {}),
+        })
+        continue
+      }
+
       const beforeArchive = await readPartition(supabase, partition, cutoff)
       if (!beforeArchive.length) continue
       const archived = await cold.archiveVerifiedPartition({ ticker: partition.ticker, bars: beforeArchive })
@@ -130,7 +162,12 @@ export async function runChartIntradayArchiveLifecycle(
   }
 
   const oldestHotEpoch = await readOldestHotIntradayTime(supabase)
-  const status = partitions.length === 0 ? "skipped" : failures.length > 0 ? "partial" : "succeeded"
+  const uncertainDeferrals = deferred.filter((item) => item.reason !== "fewer_newer_trading_sessions")
+  const status = partitions.length === 0
+    ? "skipped"
+    : failures.length > 0 || uncertainDeferrals.length > 0
+      ? "partial"
+      : "succeeded"
   return {
     status,
     referenceAt: referenceAt.toISOString(),
@@ -144,6 +181,8 @@ export async function runChartIntradayArchiveLifecycle(
     rowsPruned,
     sessionPartitionsDropped,
     failures,
+    partitionsDeferred: deferred.length,
+    deferred,
     oldestHotBar: oldestHotEpoch == null ? null : new Date(oldestHotEpoch * 1000).toISOString(),
   }
 }

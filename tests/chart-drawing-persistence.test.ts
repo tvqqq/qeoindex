@@ -12,6 +12,11 @@ import {
   type PersistedDrawingV2,
   type UserChartSettingsPayloadV2,
 } from "../components/stock-detail/chart/drawings/index.ts"
+import {
+  canEditChartDrawings,
+  mergeRemoteChartSettingsIntoPending,
+  shouldApplyRemoteChartSettings,
+} from "../components/stock-detail/chart/chart-settings-hydration.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -189,6 +194,89 @@ test("new runtime drawings retain their creation timeframe across later timefram
   assert.match(code, /sourceTimeframe:\s*runtimeDrawing\.sourceTimeframe\s*\?\?\s*timeframe/)
   assert.match(code, /visibility:\s*runtimeDrawing\.visibility\s*\?\?\s*"global"/)
 })
+
+test("slow remote chart hydration cannot overwrite a newer local selection", () => {
+  assert.equal(shouldApplyRemoteChartSettings(4, 4, false), true)
+  assert.equal(shouldApplyRemoteChartSettings(4, 5, false), false)
+  assert.equal(shouldApplyRemoteChartSettings(4, 4, true), false)
+})
+
+test("field-level chart hydration keeps a local timeframe while preserving remote drawings", () => {
+  const pending: UserChartSettingsPayloadV2 = {
+    ticker: "VIC",
+    timeframe: "1h",
+    chartStyle: "candles",
+    indicators: { ...originalIndicators(), showMa: false },
+    drawingsSchemaVersion: 2,
+    drawings: [],
+  }
+  const remote: UserChartSettingsPayloadV2 = {
+    ...pending,
+    timeframe: "1D",
+    chartStyle: "bars",
+    indicators: { ...originalIndicators(), showMa: true },
+    drawings: [
+      {
+        schemaVersion: 2,
+        id: "remote-drawing",
+        tool: "horizontal",
+        anchors: [{ time: 1700000000, price: 25 }],
+        sourceTimeframe: "1D",
+        visibility: "global",
+        style: { color: "#00f0ff", lineWidth: 2 },
+      },
+    ],
+  }
+  const merged = mergeRemoteChartSettingsIntoPending(
+    pending,
+    remote,
+    new Set(["timeframe"]),
+    false,
+  )
+
+  assert.equal(merged.timeframe, "1h")
+  assert.equal(merged.chartStyle, "bars")
+  assert.equal(merged.indicators.showMa, true)
+  assert.equal(merged.drawings[0]?.id, "remote-drawing")
+
+  const localEditWins = mergeRemoteChartSettingsIntoPending(
+    { ...pending, drawings: [{ ...remote.drawings[0], id: "local-drawing" }] },
+    remote,
+    new Set(["timeframe", "drawings"]),
+    true,
+  )
+  assert.equal(localEditWins.drawings[0]?.id, "local-drawing")
+})
+
+test("failed chart hydration blocks every full-payload remote save", () => {
+  const code = source("components/stock-detail/chart/use-user-chart-sync.ts")
+
+  assert.match(code, /if \(generation\.hydrationFailed\) return false/)
+  assert.doesNotMatch(code, /hydrationFailed && !generation\.localDrawingEditIntent/)
+})
+
+test("drawing mutations wait for successful remote hydration", () => {
+  assert.equal(canEditChartDrawings(false, false, false), false)
+  assert.equal(canEditChartDrawings(false, false, true), false)
+  assert.equal(canEditChartDrawings(true, true, true), false)
+  assert.equal(canEditChartDrawings(true, false, false), false)
+  assert.equal(canEditChartDrawings(true, false, true), true)
+
+  const code = source("components/stock-detail/chart/use-user-chart-sync.ts")
+  assert.match(code, /canEditChartDrawings\(/)
+  assert.match(code, /generation\.remoteSettings !== null/)
+})
+
+function originalIndicators() {
+  return {
+    showMa: true,
+    showRsi: false,
+    showMacd: true,
+    showIchimoku: false,
+    showBollinger: false,
+    showVolumeProfile: true,
+  }
+}
 
 test("useUserChartSync keeps full persistence set while exposing current-timeframe drawings", () => {
   const code = source("components/stock-detail/chart/use-user-chart-sync.ts")

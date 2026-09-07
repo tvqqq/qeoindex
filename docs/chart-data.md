@@ -40,6 +40,23 @@ If overlapping canonical sources disagree, the selected bar follows deterministi
 - the lifecycle is bounded and failures are partition-isolated;
 - provider/provenance evidence remains batch-scoped in `chart_ohlcv_provenance_batches`.
 
+The global five-session cutoff is an efficient discovery bound only. Before a
+candidate ticker/session enters the archive sequence, the lifecycle pages that
+ticker's `1m` HOT rows in descending `bar_time` order and proves that at least
+`CHART_HOT_RETENTION_SESSIONS` distinct, valid Vietnam trading dates are
+strictly newer than the candidate boundary. A ticker with only four newer
+sessions therefore remains HOT even when another ticker has enough history;
+the candidate is eligible only when it is sixth-or-older for that ticker.
+Malformed timestamps, query failures, a bounded proof-page cap, and fewer than
+five newer sessions all defer the candidate. Deferred partitions are recorded
+in archive metrics and never reach archive, cache, or prune. A candidate with
+fewer than five newer sessions is a normal protected partition; read failures,
+malformed evidence, and proof-cap exhaustion keep the lifecycle partial.
+
+Bootstrap and provider-coverage discovery continue to use the bounded global
+cutoff in this release. An exact per-ticker coverage RPC can be introduced as a
+follow-up if bootstrap coverage needs the same stronger proof.
+
 The base QEO-92 schema was activated by migration `20260905065836_qeo92_chart_ohlcv_intraday`. QEO-103 extends the lifecycle through `20260905115319_qeo103_chart_storage_lifecycle`.
 
 ## Cold raw 1m archive
@@ -103,6 +120,43 @@ Until every verified cold manifest intersecting an hourly request has derived ev
 The server clamps ranges to these horizons. For `1h/2h/4h`, history older than the hot boundary normally comes from `chart_ohlcv_derived_hourly`; only the recent hot segment loads canonical raw `1m`. The normal steady-state hourly path therefore does not download one year of cold raw objects and does not refill old raw minute bars into Postgres.
 
 At the hot/derived boundary, recent hot-derived `1h` wins deterministic timestamp dedupe. During legacy recovery, incomplete derived-manifest coverage selects verified cold raw fallback for the affected old segment rather than returning a partially populated cache. No synthetic candles are fabricated.
+
+## Interactive renderer boundary
+
+The stock detail renderer keeps market data and interaction ownership explicit:
+
+```text
+canonical real OHLCV ──> Lightweight Charts candles / volume / panes
+        │                         │
+        ├── future whitespace ────┤  (addressable time horizon, no OHLC)
+        │                         │
+        └── indicators/drawings ──> coordinate adapter -> clipped overlay
+                                      (price/time scales remain LWC-owned)
+```
+
+Lightweight Charts owns the Japanese candlestick series, volume series, price
+scales, time scale, crosshair, pan/zoom and pane-local axes. Future timestamps
+are supplied by a dedicated invisible whitespace series; `setData` and
+incremental `update` on the candlestick series receive real bars only. Drawing
+anchors remain canonical epoch time plus price, so a timestamp absent from an
+aggregated timeframe is interpolated between the known real/future timeline
+points for display and is never rewritten during persistence.
+
+The chart settings queue is ticker-generation scoped. Remote hydration merges
+each field independently: a newer local timeframe/style/indicator/drawing edit
+keeps ownership of that field while untouched remote drawings and preferences
+are merged into the pending save. A pending save waits for hydration before it
+can send an unowned drawing set, preventing a slow initial response from
+turning the remote collection into `[]`. Drawing controls stay disabled until
+the remote collection is known; a failed GET shows an offline/retry state and
+does not authorize destructive replacement.
+
+Renderer verification covers numeric coordinate round trips, bounded pointer
+conversion, exact eight-bar initial/reset offset, future whitespace ownership,
+pane visibility and collapse behavior, indicator repaint after pan/zoom, and
+real-versus-empty/loading states. Production evidence is separate from these
+source/unit gates: intraday lazy-fill and older provenance gaps remain explicit
+coverage metadata rather than fabricated history.
 
 ## Provider backfill
 

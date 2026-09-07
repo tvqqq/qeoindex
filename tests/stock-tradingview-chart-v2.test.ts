@@ -272,15 +272,18 @@ test("QEO-93 workstation uses unified history wrapper and lazy-load intent", () 
   assert.doesNotMatch(timeframeSource, /groupBars|aggregateWeekly|aggregateMonthly|aggregateQuarterly|aggregateYearly/)
 })
 
-test("StockTradingViewChart implements standard compact mode and full maximized mode", () => {
+test("StockTradingViewChart keeps one native chart instance across compact and maximized modes", () => {
   const code = source("components/stock-detail/stock-tradingview-chart.tsx")
 
   assert.match(code, /isMaximized \?/)
   assert.match(code, /Maximize2/)
   assert.match(code, /Minimize2/)
 
-  assert.match(code, /const hasRsi = isMaximized/)
-  assert.match(code, /const hasMacd = isMaximized/)
+  assert.match(code, /loadLightweightCharts/)
+  assert.match(code, /runtime\.createChart/)
+  assert.match(code, /runtime\.CandlestickSeries/)
+  assert.match(code, /chart\.panes\(\)/)
+  assert.match(code, /setHeight\(isMaximized/)
   assert.doesNotMatch(code, /indicators\.showRsi/)
   assert.doesNotMatch(code, /indicators\.showMacd/)
   assert.match(code, /indicators\.showIchimoku/)
@@ -295,8 +298,8 @@ test("StockTradingViewChart renders explicit unavailable state for unsupported i
   const code = source("components/stock-detail/stock-tradingview-chart.tsx")
 
   assert.match(code, /displayBars\.length\s*===\s*0/)
-  assert.match(code, /Dữ liệu timeframe này chưa sẵn sàng/)
-  assert.match(code, /QEO-93/)
+  assert.match(code, /Khung \$\{timeframe\} hiện chưa có dữ liệu nến hoàn tất/)
+  assert.doesNotMatch(code, /if \(!displayBars\.length/)
 })
 
 test("StockDetailWorkstation handles isChartMaximized and hides sidebar/tabs", () => {
@@ -317,7 +320,7 @@ test("StockTradingViewChart cannot trap an empty persisted timeframe behind the 
   const code = source("components/stock-detail/stock-tradingview-chart.tsx")
 
   assert.doesNotMatch(code, /if \(!displayBars\.length \|\| !chartMetrics \|\| visibleBars\.length === 0\)/)
-  assert.match(code, /Dữ liệu timeframe này chưa sẵn sàng/)
+  assert.match(code, /Khung \$\{timeframe\} hiện chưa có dữ liệu nến hoàn tất/)
 })
 
 test("StockTradingViewChart consumes canonical raw 1m from the chart-data API", () => {

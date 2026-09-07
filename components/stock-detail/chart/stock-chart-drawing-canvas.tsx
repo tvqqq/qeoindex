@@ -31,10 +31,11 @@ interface DrawingCanvasProps {
   selectedIconType: DrawingIconType
   isLocked: boolean
   isHidden: boolean
-  priceToY?: (price: number) => number
-  yToPrice?: (y: number) => number
-  timeToX?: (time: number) => number
-  xToTime?: (x: number) => number
+  priceToY?: (price: number) => number | null | undefined
+  yToPrice?: (y: number) => number | null | undefined
+  timeToX?: (time: number) => number | null | undefined
+  xToTime?: (x: number) => number | null | undefined
+  drawingReady?: boolean
 }
 
 const PALETTE_COLORS = ["#00f0ff", "#a855f7", "#10b981", "#f59e0b", "#f43f5e", "#ffffff"]
@@ -69,6 +70,7 @@ export function StockChartDrawingCanvas({
   yToPrice,
   timeToX,
   xToTime,
+  drawingReady = true,
 }: DrawingCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null)
 
@@ -88,7 +90,7 @@ export function StockChartDrawingCanvas({
   // Keyboard shortcut for deleting selected drawing
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!selectedId || isLocked) return
+      if (!drawingReady || !selectedId || isLocked) return
       if (e.key === "Delete" || e.key === "Backspace") {
         const activeEl = document.activeElement
         if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) return
@@ -102,7 +104,7 @@ export function StockChartDrawingCanvas({
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [selectedId, isLocked, onDeleteDrawing, onSelectDrawing])
+  }, [drawingReady, selectedId, isLocked, onDeleteDrawing, onSelectDrawing])
 
   if (isHidden) return null
 
@@ -150,11 +152,11 @@ export function StockChartDrawingCanvas({
     let y = pt.y
     if (pt.time !== undefined && timeToX) {
       const computedX = timeToX(pt.time)
-      if (Number.isFinite(computedX)) x = computedX
+      if (typeof computedX === "number" && Number.isFinite(computedX)) x = computedX
     }
     if (pt.price !== undefined && priceToY) {
       const computedY = priceToY(pt.price)
-      if (Number.isFinite(computedY)) y = computedY
+      if (typeof computedY === "number" && Number.isFinite(computedY)) y = computedY
     }
     return { x, y }
   }
@@ -184,7 +186,7 @@ export function StockChartDrawingCanvas({
 
   // Mouse Down handler
   const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (isLocked) return
+    if (!drawingReady || isLocked) return
 
     // If eraser tool is active, clicking canvas does nothing
     if (activeTool === "eraser") return
@@ -246,6 +248,7 @@ export function StockChartDrawingCanvas({
 
   // Mouse Move handler
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!drawingReady) return
     const coords = getSvgCoordinates(e)
 
     // Handle dragging existing shape or handle
@@ -287,6 +290,12 @@ export function StockChartDrawingCanvas({
 
   // Mouse Up handler
   const handleMouseUp = () => {
+    if (!drawingReady) {
+      setCurrentStart(null)
+      setCurrentEnd(null)
+      setDragState(null)
+      return
+    }
     if (dragState) {
       setDragState(null)
       return
@@ -339,7 +348,9 @@ export function StockChartDrawingCanvas({
         viewBox={`0 0 ${width} ${height}`}
         className="absolute inset-0 size-full select-none"
         style={{
-          pointerEvents: "auto",
+          // Leave the chart's native pan/zoom/crosshair handlers in charge when
+          // the cursor tool is selected. Drawing gestures opt into the overlay.
+          pointerEvents: !drawingReady || activeTool === "cursor" ? "none" : "auto",
           cursor:
             dragState
               ? "grabbing"
@@ -392,6 +403,7 @@ export function StockChartDrawingCanvas({
 
           const handleClickDrawing = (e: React.MouseEvent) => {
             e.stopPropagation()
+            if (!drawingReady) return
             if (activeTool === "eraser" && !isLocked && !draw.locked) {
               onDeleteDrawing(draw.id)
               if (selectedId === draw.id) onSelectDrawing(null)
@@ -404,13 +416,14 @@ export function StockChartDrawingCanvas({
 
           const handleDoubleClickDrawing = (e: React.MouseEvent) => {
             e.stopPropagation()
+            if (!drawingReady) return
             if (draw.tool === "text") {
               onEditText(draw.id)
             }
           }
 
           const handleStartBodyDrag = (e: React.MouseEvent) => {
-            if (activeTool !== "cursor" || draw.locked || isLocked) return
+            if (!drawingReady || activeTool !== "cursor" || draw.locked || isLocked) return
             e.stopPropagation()
             onSelectDrawing(draw.id)
             const coords = getSvgCoordinates(e)
@@ -577,7 +590,7 @@ export function StockChartDrawingCanvas({
               {draw.tool === "icon" && (
                 <g
                   transform={`translate(${p1.x - 8}, ${p1.y - 8})`}
-                  className={isSelected ? "filter drop-shadow-[0_0_6px_rgba(0,240,255,0.8)]" : ""}
+                  className={isSelected ? "" : ""}
                 >
                   {renderIcon(draw.iconType)}
                 </g>

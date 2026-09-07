@@ -1,229 +1,195 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
+import {
+  boundChartTimeToTimeline,
+  bridgeCoordinateToTime,
+  bridgeTimeToCoordinate,
+} from "../components/stock-detail/chart/chart-coordinate-bridge.ts"
+import {
+  canIncrementallyUpdateLatest,
+  fingerprintOhlcvPrefix,
+} from "../components/stock-detail/chart/chart-render-diff.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
-test("StockTradingViewChart implements 100% TradingView scroll, zoom out, and coordinate pinning", () => {
+test("stock detail chart uses native Lightweight Charts for the market plot", () => {
   const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+  const runtimeCode = source("modules/shared/charts/lightweight-charts-runtime.ts")
 
-  // 1. Viewport slice with visibleBarsCount and scrollOffset
-  assert.match(chartCode, /visibleBarsCount/)
-  assert.match(chartCode, /scrollOffset/)
-  assert.match(chartCode, /displayBars\.slice\(startIdx, endIdx\)/)
+  assert.match(chartCode, /loadLightweightCharts/)
+  assert.match(chartCode, /runtime\.createChart/)
+  assert.match(chartCode, /runtime\.CandlestickSeries/)
+  assert.match(chartCode, /runtime\.HistogramSeries/)
+  assert.match(chartCode, /runtime\.LineSeries/)
+  assert.match(chartCode, /candles\.setData|series\.candles\.setData/)
+  assert.match(chartCode, /candles\.update|series\.candles\.update/)
+  assert.match(chartCode, /futureAxisData/)
+  assert.match(chartCode, /series\.futureAxis\.setData/)
+  assert.doesNotMatch(chartCode, /candleData\(displayBars, futureTimes\)/)
+  assert.doesNotMatch(chartCode, /<svg|<path|<line|<rect/)
+  assert.doesNotMatch(chartCode, /transition-all|backdrop-blur|filter=\{/)
+  assert.match(runtimeCode, /timeToCoordinate/)
+  assert.match(runtimeCode, /coordinateToTime/)
+  assert.match(runtimeCode, /priceToCoordinate/)
+  assert.match(runtimeCode, /coordinateToPrice/)
+})
 
-  // 2. Mouse Wheel Zoom in and Zoom out
-  assert.match(chartCode, /onWheel=\{handleWheel\}/)
-  assert.match(chartCode, /deltaY > 0 \? 1 : -1/)
+test("chart drawing anchors use live LWC coordinates and cursor mode leaves native navigation available", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+  const canvasCode = source("components/stock-detail/chart/stock-chart-drawing-canvas.tsx")
 
-  // 3. Mouse Panning & Scrolling
-  assert.match(chartCode, /onMouseDown=\{handleMouseDownCanvas\}/)
-  assert.match(chartCode, /onMouseMove=\{handleMouseMoveCanvas\}/)
-  assert.match(chartCode, /onMouseUp=\{handleMouseUpCanvas\}/)
-  assert.match(chartCode, /isPanningRef\.current/)
-
-  // 4. Coordinate transforms for pinning drawings to price and time
+  assert.match(chartCode, /priceToY = useCallback/)
+  assert.match(chartCode, /candles\.priceToCoordinate/)
+  assert.match(chartCode, /candles\.coordinateToPrice/)
+  assert.match(chartCode, /timeScale\(\)\.timeToCoordinate/)
+  assert.match(chartCode, /timeScale\(\)\.coordinateToTime/)
   assert.match(chartCode, /priceToY=\{priceToY\}/)
   assert.match(chartCode, /yToPrice=\{yToPrice\}/)
   assert.match(chartCode, /timeToX=\{timeToX\}/)
   assert.match(chartCode, /xToTime=\{xToTime\}/)
-
-  // 5. Auto-scale reset action
-  assert.match(chartCode, /handleResetView/)
+  assert.match(canvasCode, /pointerEvents: !drawingReady \|\| activeTool === "cursor" \? "none" : "auto"/)
+  assert.match(canvasCode, /Canonical market coordinates always win over stale runtime x\/y values/)
 })
 
-test("StockTradingViewChart keeps TradingView-style future space and scalable price rail", () => {
+test("corrected prior candle forces a full render instead of latest-only update", () => {
+  const bars = [
+    { time: 100, open: 10, high: 12, low: 9, close: 11, volume: 1000 },
+    { time: 200, open: 11, high: 13, low: 10, close: 12, volume: 1100 },
+    { time: 300, open: 12, high: 14, low: 11, close: 13, volume: 1200 },
+  ]
+  const previous = {
+    actualLength: bars.length,
+    firstTime: bars[0].time,
+    latestTime: bars.at(-1)!.time,
+    fingerprint: fingerprintOhlcvPrefix(bars),
+  }
+  assert.equal(canIncrementallyUpdateLatest(previous, bars), true)
+  assert.equal(canIncrementallyUpdateLatest(previous, [
+    bars[0],
+    bars[1],
+    { ...bars[2], close: 13.5, volume: 1250 },
+  ]), true)
+  assert.equal(canIncrementallyUpdateLatest(previous, [
+    bars[0],
+    { ...bars[1], high: 15, volume: 1300 },
+    bars[2],
+  ]), false)
+
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+  assert.match(chartCode, /canIncrementallyUpdateLatest\(previous, displayBars\)/)
+  assert.match(chartCode, /barFingerprint/)
+})
+
+test("coordinate bridge interpolates missing anchors and keeps pointer work logarithmic", () => {
+  const timeline = [100, 200, 300, 400, 500]
+  const coordinateForTime = (time: number) => time / 10
+
+  assert.equal(bridgeTimeToCoordinate(250, timeline, coordinateForTime), 25)
+  assert.equal(bridgeCoordinateToTime(25, timeline, coordinateForTime), 250)
+  assert.equal(bridgeTimeToCoordinate(50, timeline, coordinateForTime), null)
+  assert.equal(bridgeCoordinateToTime(-1, timeline, coordinateForTime), null)
+  assert.equal(boundChartTimeToTimeline(500, timeline), 500)
+  assert.equal(boundChartTimeToTimeline(501, timeline), null)
+
+  let calls = 0
+  const denseTimeline = Array.from({ length: 100_001 }, (_, index) => index)
+  const denseCoordinate = (time: number) => {
+    calls += 1
+    return time * 2
+  }
+  assert.equal(bridgeCoordinateToTime(100_000, denseTimeline, denseCoordinate), 50_000)
+  assert.ok(calls < 40, `binary search should not scan ${denseTimeline.length} timestamps (calls=${calls})`)
+})
+
+test("future timestamps are real LWC whitespace and reserve at least half a viewport", () => {
   const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
 
-  // Latest candle can sit left of the price rail and pan to at least half the visible candle count.
-  assert.match(chartCode, /DEFAULT_RIGHT_OFFSET_BARS = 8/)
-  assert.match(chartCode, /MIN_MAX_RIGHT_OFFSET_BARS = 32/)
-  assert.match(chartCode, /Math\.ceil\(visibleBars\.length \* 0\.5\)/)
-  assert.match(chartCode, /maxRightOffsetBars/)
-  assert.match(chartCode, /scrollOffset - rightOffsetBars/)
-  assert.match(chartCode, /setRightOffsetBars\(Math\.max\(0, -nextPosition\)\)/)
-  assert.match(chartCode, /visibleBars\.length \+ rightOffsetBars/)
-
-  // Future blank space owns real projected timestamps so canonical drawings can be created there.
   assert.match(chartCode, /projectFutureTimes/)
-  assert.match(chartCode, /futureTimes\[slotIndex - visibleBars\.length\]/)
-  assert.match(chartCode, /futureTimes\.findIndex/)
-
-  // Wheel on the Y rail changes only the manual price domain and supports auto-scale reset.
-  assert.match(chartCode, /manualPriceDomain/)
-  assert.match(chartCode, /isOverPriceAxis/)
-  assert.match(chartCode, /setManualPriceDomain\(\{ min: nextMax - nextRange, max: nextMax \}\)/)
-  assert.match(chartCode, /onDoubleClick=\{handleResetPriceScale\}/)
-  assert.match(chartCode, /cursor-ns-resize/)
+  assert.match(chartCode, /futureTimes\.map\(\(time\) => \(\{ time \}\)\)/)
+  assert.match(chartCode, /Math\.ceil\(Math\.max\(1, displayBars\.length\) \* 0\.5\)/)
+  assert.match(chartCode, /const rightOffset = DEFAULT_RIGHT_OFFSET_BARS/)
+  assert.doesNotMatch(chartCode, /Math\.max\(DEFAULT_RIGHT_OFFSET_BARS, Math\.ceil\(visibleBars \* 0\.5\)\)/)
+  assert.match(chartCode, /setVisibleLogicalRange/)
+  assert.match(chartCode, /Prepending older history shifts logical indexes/)
 })
 
-test("StockTradingViewChart exposes future Ichimoku, volume MA20 and collapsible lower panes", () => {
+test("native panes own volume, permanent maximized RSI/MACD and collapse heights", () => {
   const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
-  const indicatorCode = source("components/stock-detail/chart/stock-chart-indicators.ts")
 
-  assert.match(indicatorCode, /ICHIMOKU_DISPLACEMENT = 26/)
-  assert.match(indicatorCode, /Array\(n \+ ICHIMOKU_DISPLACEMENT\)/)
-  assert.match(indicatorCode, /calculateVolumeSma/)
-  assert.match(chartCode, /calculateVolumeSma/)
-  assert.match(chartCode, /volumeMa20Path/)
+  assert.match(chartCode, /calculateRsiSeries/)
+  assert.match(chartCode, /calculateMacdSeries/)
+  assert.match(chartCode, /runtime\.HistogramSeries/)
+  assert.match(chartCode, /chart\.panes\(\)/)
+  assert.match(chartCode, /setHeight\(isMaximized/)
   assert.match(chartCode, /isRsiCollapsed/)
   assert.match(chartCode, /isMacdCollapsed/)
-  assert.match(chartCode, /EXPANDED_SUBPANE_HEIGHT = 92/)
-  assert.match(chartCode, /vectorEffect="non-scaling-stroke"/)
-  assert.match(chartCode, /<CalendarDays/)
+  assert.match(chartCode, /priceFormat: \{ type: "price", precision: 2, minMove: 0\.01 \}/)
+  assert.match(chartCode, /priceFormat: \{ type: "price", precision: 4, minMove: 0\.0001 \}/)
+  assert.doesNotMatch(chartCode, /showRsi|showMacd/)
 })
 
-test("StockChartDrawingCanvas supports object selection, dragging, and anchor handles", () => {
-  const canvasCode = source("components/stock-detail/chart/stock-chart-drawing-canvas.tsx")
-
-  // Selected state and anchor handles
-  assert.match(canvasCode, /selectedId/)
-  assert.match(canvasCode, /onSelectDrawing/)
-  assert.match(canvasCode, /dragState/)
-  assert.match(canvasCode, /handleIndex/)
-
-  // Floating action toolbar when selected
-  assert.match(canvasCode, /selectedDrawing/)
-  assert.match(canvasCode, /onUpdateDrawing/)
-
-  // Keyboard shortcut delete listener
-  assert.match(canvasCode, /e\.key === "Delete" \|\| e\.key === "Backspace"/)
-})
-
-test("StockChartObjectManager provides clear object tree management and text editing", () => {
-  const managerCode = source("components/stock-detail/chart/stock-chart-object-manager.tsx")
-  const editorCode = source("components/stock-detail/chart/stock-chart-text-editor.tsx")
-  const toolsCode = source("components/stock-detail/chart/stock-chart-drawing-tools.tsx")
-
-  // Object manager features
-  assert.match(managerCode, /Quản lý đối tượng/)
-  assert.match(managerCode, /onToggleHide/)
-  assert.match(managerCode, /onToggleLock/)
-  assert.match(managerCode, /onEditText/)
-  assert.match(managerCode, /onDelete/)
-  assert.match(managerCode, /onClearAll/)
-
-  // Text editor features
-  assert.match(editorCode, /StockChartTextEditor/)
-  assert.match(editorCode, /initialFontSize/)
-  assert.match(editorCode, /FONT_SIZES/)
-  assert.match(editorCode, /onSave/)
-
-  // Drawing tools button for Object Tree
-  assert.match(toolsCode, /onToggleObjectManager/)
-  assert.match(toolsCode, /drawingsCount/)
-  assert.match(toolsCode, /saveStatus/)
-
-  // Ray and arrow must remain visually distinct tools.
-  assert.match(toolsCode, /function RayToolIcon/)
-  assert.match(toolsCode, /id: "ray"[^\n]+RayToolIcon/)
-  assert.match(toolsCode, /id: "arrow"[^\n]+ArrowUpRight/)
-})
-
-test("useUserChartSync manages database persistence and local cache fallback", () => {
-  const syncCode = source("components/stock-detail/chart/use-user-chart-sync.ts")
-
-  // Local storage immediate load and save
-  assert.match(syncCode, /localStorage\.getItem/)
-  assert.match(syncCode, /localStorage\.setItem/)
-
-  // Remote Supabase API sync with debounced POST
-  assert.match(syncCode, /fetch\(`\/api\/user\/chart-drawings/)
-  assert.match(syncCode, /method: "POST"/)
-  assert.match(syncCode, /saveStatus/)
-})
-
-test("StockTradingViewChart renders TradingView-style 4 horizontal columns timeframe panel with checkmark", () => {
-  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
-
-  // 4 horizontal columns with divider
-  assert.match(chartCode, /grid grid-cols-4 divide-x divide-white\/\[0\.08\]/)
-  assert.match(chartCode, /title: "Phút"/)
-  assert.match(chartCode, /title: "Giờ"/)
-  assert.match(chartCode, /title: "Ngày"/)
-  assert.match(chartCode, /title: "Năm"/)
-
-  // Row item with fixed-width timeframe ID, label, and active checkmark
-  assert.match(chartCode, /font-mono text-\[11px\] font-bold w-8 text-left shrink-0/)
-  assert.match(chartCode, /Check className="size-3\.5 text-cyan-400 shrink-0/)
-
-  // Backdrop overlay to close when clicking outside
-  assert.match(chartCode, /fixed inset-0 z-40/)
-})
-
-test("StockTradingViewChart renders dedicated X-axis (time) and Y-axis (price) rails with crosshairs", () => {
-  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
-
-  // Dedicated geometry with right rail (padRight: 68) and bottom rail (padBottom: 26)
-  assert.match(chartCode, /padRight = 68/)
-  assert.match(chartCode, /padBottom = 26/)
-
-  // Y-axis Price Levels and Grid Lines
-  assert.match(chartCode, /priceLevels/)
-  assert.match(chartCode, /p\.toFixed\(1\)/)
-
-  // X-axis Time Ticks and Grid Lines
-  assert.match(chartCode, /timeTicks/)
-  assert.match(chartCode, /height - padBottom \+ 16/)
-
-  // Crosshair hover tracking on both axes
-  assert.match(chartCode, /hoverY/)
-  assert.match(chartCode, /yToPrice\(hoverY\)\.toFixed\(1\)/)
-})
-
-test("StockTradingViewChart implements TitanLabs-style bottom range presets and auto-fit reset", () => {
-  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
-
-  // Presets and TradingView-style status controls
-  assert.match(chartCode, /label: "5N"/)
-  assert.match(chartCode, /label: "3N"/)
-  assert.match(chartCode, /label: "1N"/)
-  assert.match(chartCode, /label: "6T"/)
-  assert.match(chartCode, /label: "3T"/)
-  assert.match(chartCode, /label: "1T"/)
-  assert.match(chartCode, /label: "Tất cả"/)
-  assert.match(chartCode, /UTC\+7/)
-  assert.match(chartCode, /tự động/)
-
-  // Cursor-anchored wheel zoom calculations
-  assert.match(chartCode, /cursorRatio = Math\.max\(0, Math\.min\(1, mouseX \/ Math\.max\(1, plotPx\)\)\)/)
-  assert.match(chartCode, /offsetDelta = Math\.round\(diff \* \(1 - cursorRatio\)\)/)
-})
-
-test("latest-edge zoom out preserves the newest candle instead of shifting the viewport into history", () => {
-  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
-
-  assert.match(chartCode, /const isAtLatestEdge = scrollOffset === 0/)
-  assert.match(chartCode, /isAtLatestEdge && diff > 0 \? 0 :/)
-})
-
-test("maximized drawing tools remain a floating rounded capsule instead of a fixed full-height rail", () => {
-  const toolsCode = source("components/stock-detail/chart/stock-chart-drawing-tools.tsx")
-  const shellCode = source("components/stock-detail/chart/stock-chart-terminal-shell.module.css")
-
-  assert.match(toolsCode, /rounded-\[22px\]/)
-  assert.match(toolsCode, /left-3 top-14/)
-  assert.doesNotMatch(shellCode, /bottom:\s*0;/)
-  assert.doesNotMatch(shellCode, /border-radius:\s*0\s*!important/)
-})
-
-test("chart is Japanese-candles only and renders OHLCV inside the plot", () => {
-  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
-
-  assert.doesNotMatch(chartCode, /showStyleDropdown/)
-  assert.doesNotMatch(chartCode, /Đường Line/)
-  assert.match(chartCode, /data-chart-ohlcv-overlay/)
-  assert.match(chartCode, /Nến Nhật/)
-})
-
-test("RSI and MACD are permanent lower panes and are not indicator-checkbox options", () => {
+test("indicator controls cover all persisted overlays with aligned cloud and volume profile", () => {
   const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
   const modalCode = source("components/stock-detail/chart/stock-chart-indicator-modal.tsx")
 
-  assert.match(chartCode, /const hasRsi = isMaximized/)
-  assert.match(chartCode, /const hasMacd = isMaximized/)
-  assert.doesNotMatch(modalCode, /key: "showRsi"/)
-  assert.doesNotMatch(modalCode, /key: "showMacd"/)
+  for (const token of ["showMa", "showIchimoku", "showQeoBase129", "showBollinger", "showVolumeProfile"]) {
+    assert.match(chartCode, new RegExp(token))
+    assert.match(modalCode, new RegExp(token))
+  }
+  assert.match(chartCode, /calculateVolumeProfile/)
+  assert.match(chartCode, /data-chart-indicator-overlay="aligned"/)
+  assert.match(chartCode, /Ichimoku Cloud/)
+  assert.match(chartCode, /ichimokuSpanA/)
+  assert.match(chartCode, /ichimokuSpanB/)
+})
+
+test("runtime and resize cleanup invalidate stale async chart initialization", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+  const wrapperCode = source("components/stock-detail/stock-tradingview-chart-data.tsx")
+
+  assert.match(chartCode, /chartGenerationRef/)
+  assert.match(chartCode, /if \(disposed \|\| chartGenerationRef\.current !== generation/)
+  assert.match(chartCode, /ResizeObserver/)
+  assert.match(chartCode, /resizeObserver\?\.disconnect\(\)/)
+  assert.match(chartCode, /chart\?\.remove\(\)/)
+  assert.match(chartCode, /unsubscribeVisibleLogicalRangeChange/)
+  assert.doesNotMatch(wrapperCode, /HistoryBoundChart key=\{`\$\{props\.ticker\}:\$\{timeframe\}`\}/)
+})
+
+test("chart keeps real export and truthful loading/empty states", () => {
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.match(chartCode, /toPng\(/)
+  assert.doesNotMatch(chartCode, /window\.alert/)
+  assert.match(chartCode, /Đang tải dữ liệu nến/)
+  assert.match(chartCode, /Khung \$\{timeframe\} hiện chưa có dữ liệu nến hoàn tất/)
+  assert.match(chartCode, /Nến Nhật/)
+  assert.match(chartCode, /data-chart-ohlcv-overlay/)
+})
+
+test("drawing tools retain object management, text editing, and persistence", () => {
+  const toolsCode = source("components/stock-detail/chart/stock-chart-drawing-tools.tsx")
+  const managerCode = source("components/stock-detail/chart/stock-chart-object-manager.tsx")
+  const editorCode = source("components/stock-detail/chart/stock-chart-text-editor.tsx")
+  const syncCode = source("components/stock-detail/chart/use-user-chart-sync.ts")
+  const canvasCode = source("components/stock-detail/chart/stock-chart-drawing-canvas.tsx")
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.match(toolsCode, /id: "ray"/)
+  assert.match(toolsCode, /onToggleObjectManager/)
+  assert.match(managerCode, /onToggleHide/)
+  assert.match(managerCode, /onToggleLock/)
+  assert.match(managerCode, /onEditText/)
+  assert.match(editorCode, /initialFontSize/)
+  assert.match(syncCode, /runtimeDrawingToPersistedV2/)
+  assert.match(syncCode, /isDrawingVisibleOnTimeframe/)
+  assert.match(syncCode, /drawingSyncStatus/)
+  assert.match(syncCode, /retryChartHydration/)
+  assert.match(chartCode, /drawingReady=\{drawingSyncStatus === "ready"\}/)
+  assert.match(toolsCode, /Đang đồng bộ nét vẽ/)
+  assert.match(toolsCode, /disabled=\{!drawingReady\}/)
+  assert.match(canvasCode, /pointerEvents: !drawingReady/)
 })

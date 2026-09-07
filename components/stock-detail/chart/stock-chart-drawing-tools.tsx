@@ -43,6 +43,8 @@ interface DrawingToolsProps {
   isObjectManagerOpen?: boolean
   drawingsCount?: number
   saveStatus?: "saved" | "saving" | "offline"
+  drawingSyncStatus?: "hydrating" | "ready" | "offline"
+  onRetryDrawingSync?: () => void
 }
 
 function RayToolIcon({ className }: { className?: string }) {
@@ -81,9 +83,13 @@ export function StockChartDrawingTools({
   isObjectManagerOpen = false,
   drawingsCount = 0,
   saveStatus = "saved",
+  drawingSyncStatus = "ready",
+  onRetryDrawingSync,
 }: DrawingToolsProps) {
   const [showPalette, setShowPalette] = useState(false)
   const [showIconPicker, setShowIconPicker] = useState(false)
+  const drawingReady = drawingSyncStatus === "ready"
+  const drawingSyncLabel = drawingSyncStatus === "hydrating" ? "Đang đồng bộ nét vẽ…" : "Nét vẽ offline — chưa thể sửa"
 
   const toolButtons: { id: DrawingTool; label: string; icon: React.ReactNode }[] = [
     { id: "cursor", label: "Con trỏ (Crosshair)", icon: <Crosshair className="size-4" /> },
@@ -99,8 +105,22 @@ export function StockChartDrawingTools({
   return (
     <aside
       aria-label="Thanh công cụ vẽ TradingView"
-      className="absolute left-3 top-14 z-30 flex max-h-[calc(100%-72px)] flex-col items-center gap-1 overflow-y-auto rounded-[22px] border border-white/[0.1] bg-[#0a0f16]/94 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.72)] backdrop-blur-md"
+      className={cn("absolute left-3 top-14 z-30 flex max-h-[calc(100%-72px)] flex-col items-center gap-1 overflow-y-auto rounded-[22px] border border-white/[0.1] bg-[#0a0f16]/94 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.72)] backdrop-blur-md", !drawingReady && "opacity-90")}
     >
+      {!drawingReady && (
+        <div className="max-w-32 rounded-lg border border-amber-300/20 bg-amber-300/[0.06] px-2 py-1 text-center font-mono text-[9px] leading-tight text-amber-200/80" title={drawingSyncLabel} role="status">
+          <span>{drawingSyncLabel}</span>
+          {drawingSyncStatus === "offline" && onRetryDrawingSync && (
+            <button
+              type="button"
+              className="mt-1 block w-full rounded border border-amber-200/20 px-1 py-0.5 text-[9px] text-amber-100 hover:bg-amber-200/10"
+              onClick={onRetryDrawingSync}
+            >
+              Thử lại
+            </button>
+          )}
+        </div>
+      )}
       {/* Drawing Tool Buttons */}
       {toolButtons.map((item) => {
         const isActive = activeTool === item.id
@@ -108,6 +128,7 @@ export function StockChartDrawingTools({
           <button
             key={item.id}
             type="button"
+            disabled={!drawingReady}
             title={item.label}
             onClick={() => {
               onSelectTool(item.id)
@@ -115,7 +136,7 @@ export function StockChartDrawingTools({
               setShowIconPicker(false)
             }}
             className={cn(
-              "flex size-7 items-center justify-center rounded-lg transition-colors",
+              "flex size-7 items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-40",
               isActive
                 ? "border border-white/25 bg-white/15 text-slate-100"
                 : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
@@ -130,6 +151,7 @@ export function StockChartDrawingTools({
       <div className="relative">
         <button
           type="button"
+          disabled={!drawingReady}
           title="Chèn biểu tượng / Sticker"
           onClick={() => {
             onSelectTool("icon")
@@ -137,7 +159,7 @@ export function StockChartDrawingTools({
             setShowPalette(false)
           }}
           className={cn(
-            "flex size-7 items-center justify-center rounded-lg transition-colors",
+            "flex size-7 items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-40",
             activeTool === "icon"
               ? "border border-white/25 bg-white/15 text-slate-100"
               : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
@@ -156,13 +178,14 @@ export function StockChartDrawingTools({
               <button
                 key={ic}
                 type="button"
+                disabled={!drawingReady}
                 onClick={() => {
                   onSelectIconType(ic)
                   onSelectTool("icon")
                   setShowIconPicker(false)
                 }}
                 className={cn(
-                  "flex size-6 items-center justify-center rounded p-1 transition-colors",
+                  "flex size-6 items-center justify-center rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40",
                   selectedIconType === ic ? "bg-white/20 text-slate-100" : "text-slate-400 hover:text-white",
                 )}
               >
@@ -183,12 +206,13 @@ export function StockChartDrawingTools({
       <div className="relative">
         <button
           type="button"
+          disabled={!drawingReady}
           title="Màu sắc và nét vẽ"
           onClick={() => {
             setShowPalette((prev) => !prev)
             setShowIconPicker(false)
           }}
-          className="flex size-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white/[0.06] hover:text-white transition-colors"
+          className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
           <div className="size-3.5 rounded-full border border-white/50" style={{ backgroundColor: activeColor }} />
         </button>
@@ -204,13 +228,14 @@ export function StockChartDrawingTools({
                   <button
                     key={c.hex}
                     type="button"
+                    disabled={!drawingReady}
                     title={c.label}
                     onClick={() => {
                       onChangeColor(c.hex)
                       setShowPalette(false)
                     }}
                     className={cn(
-                      "size-6 rounded-md border flex items-center justify-center transition-transform hover:scale-110",
+                      "size-6 rounded-md border flex items-center justify-center transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:opacity-40",
                       activeColor === c.hex ? "border-white scale-110" : "border-white/20",
                     )}
                     style={{ backgroundColor: c.hex }}
@@ -228,12 +253,13 @@ export function StockChartDrawingTools({
                   <button
                     key={w}
                     type="button"
+                    disabled={!drawingReady}
                     onClick={() => {
                       onChangeLineWidth(w)
                       setShowPalette(false)
                     }}
                     className={cn(
-                      "flex-1 rounded py-0.5 text-[11px] font-mono font-bold transition-colors",
+                      "flex-1 rounded py-0.5 text-[11px] font-mono font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40",
                       lineWidth === w ? "bg-white/15 text-slate-100 border border-white/25" : "text-slate-400 hover:bg-white/[0.05]",
                     )}
                   >
@@ -249,6 +275,7 @@ export function StockChartDrawingTools({
       {/* Eraser Tool */}
       <button
         type="button"
+        disabled={!drawingReady}
         title="Tẩy nét vẽ (Click vào đối tượng để xoá)"
         onClick={() => {
           onSelectTool("eraser")
@@ -256,7 +283,7 @@ export function StockChartDrawingTools({
           setShowIconPicker(false)
         }}
         className={cn(
-          "flex size-7 items-center justify-center rounded-lg transition-colors",
+          "flex size-7 items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-40",
           activeTool === "eraser"
             ? "border border-rose-400/40 bg-rose-400/20 text-rose-300 shadow-[0_0_10px_rgba(244,63,94,0.3)]"
             : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
@@ -270,10 +297,11 @@ export function StockChartDrawingTools({
       {/* Lock Objects Toggle */}
       <button
         type="button"
+        disabled={!drawingReady}
         title={isLocked ? "Mở khóa bản vẽ" : "Khóa tất cả hình vẽ"}
         onClick={onToggleLock}
         className={cn(
-          "flex size-7 items-center justify-center rounded-lg transition-colors",
+          "flex size-7 items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-40",
           isLocked
             ? "border border-white/20 bg-white/10 text-slate-200"
             : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
@@ -302,10 +330,11 @@ export function StockChartDrawingTools({
         <div className="relative">
           <button
             type="button"
+            disabled={!drawingReady}
             title={`Quản lý đối tượng (${drawingsCount})`}
             onClick={onToggleObjectManager}
             className={cn(
-              "flex size-7 items-center justify-center rounded-lg transition-colors relative",
+              "flex size-7 items-center justify-center rounded-lg transition-colors relative disabled:cursor-not-allowed disabled:opacity-40",
               isObjectManagerOpen
                 ? "border border-white/25 bg-white/15 text-slate-100"
                 : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
@@ -324,9 +353,10 @@ export function StockChartDrawingTools({
       {/* Clear All Drawings */}
       <button
         type="button"
+        disabled={!drawingReady}
         title="Xóa tất cả hình vẽ"
         onClick={onClearAll}
-        className="flex size-7 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/20 hover:text-rose-300 transition-colors"
+        className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-rose-500/20 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <Trash2 className="size-3.5" />
       </button>
