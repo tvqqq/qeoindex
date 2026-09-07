@@ -26,8 +26,12 @@ test("QEO-137 creates normalized Trade tables and nullable fill linkage", () => 
   assert.match(sql, /create table public\.portfolio_trades\s*\(/i)
   assert.match(sql, /create table public\.portfolio_trade_stop_events\s*\(/i)
   assert.match(sql, /create table public\.portfolio_trade_journal_entries\s*\(/i)
-  assert.match(sql, /alter table public\.portfolio_transactions[\s\S]*add column trade_id uuid/i)
-  assert.doesNotMatch(sql, /trade_id uuid\s+not null/i)
+
+  const fillLink = sql.match(
+    /alter table public\.portfolio_transactions\s+add column trade_id uuid[^;]*;/i,
+  )?.[0]
+  assert.ok(fillLink, "portfolio_transactions must receive a trade_id column")
+  assert.doesNotMatch(fillLink, /not null/i)
 })
 
 test("QEO-137 enforces relational portfolio and Trade ownership", () => {
