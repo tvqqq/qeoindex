@@ -3169,6 +3169,219 @@ export type Database = {
         }
         Relationships: []
       }
+      portfolio_trade_journal_entries: {
+        Row: {
+          adherence_status: string | null
+          behavior_tags: string[]
+          created_at: string
+          emotion_tags: string[]
+          id: string
+          note: string
+          occurred_at: string
+          override_reason: string | null
+          phase: string
+          portfolio_id: string
+          ticker: string
+          trade_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          adherence_status?: string | null
+          behavior_tags?: string[]
+          created_at?: string
+          emotion_tags?: string[]
+          id?: string
+          note: string
+          occurred_at: string
+          override_reason?: string | null
+          phase: string
+          portfolio_id: string
+          ticker: string
+          trade_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          adherence_status?: string | null
+          behavior_tags?: string[]
+          created_at?: string
+          emotion_tags?: string[]
+          id?: string
+          note?: string
+          occurred_at?: string
+          override_reason?: string | null
+          phase?: string
+          portfolio_id?: string
+          ticker?: string
+          trade_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_trade_journal_entri_trade_id_portfolio_id_user_i_fkey"
+            columns: ["trade_id", "portfolio_id", "user_id", "ticker"]
+            isOneToOne: false
+            referencedRelation: "portfolio_trades"
+            referencedColumns: ["id", "portfolio_id", "user_id", "ticker"]
+          },
+        ]
+      }
+      portfolio_trade_stop_events: {
+        Row: {
+          created_at: string
+          effective_at: string
+          id: string
+          portfolio_id: string
+          price: number
+          quantity_covered: number | null
+          reason: string | null
+          signal: string | null
+          stop_type: string
+          ticker: string
+          trade_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          effective_at: string
+          id?: string
+          portfolio_id: string
+          price: number
+          quantity_covered?: number | null
+          reason?: string | null
+          signal?: string | null
+          stop_type: string
+          ticker: string
+          trade_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          effective_at?: string
+          id?: string
+          portfolio_id?: string
+          price?: number
+          quantity_covered?: number | null
+          reason?: string | null
+          signal?: string | null
+          stop_type?: string
+          ticker?: string
+          trade_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_trade_stop_events_trade_id_portfolio_id_user_id__fkey"
+            columns: ["trade_id", "portfolio_id", "user_id", "ticker"]
+            isOneToOne: false
+            referencedRelation: "portfolio_trades"
+            referencedColumns: ["id", "portfolio_id", "user_id", "ticker"]
+          },
+        ]
+      }
+      portfolio_trades: {
+        Row: {
+          closed_at: string | null
+          created_at: string
+          estimated_commission: number | null
+          final_review: string | null
+          id: string
+          initial_account_equity: number | null
+          initial_risk_amount: number | null
+          initial_risk_amount_per_share: number | null
+          initial_risk_percent: number | null
+          initial_stop_loss_exit: number | null
+          lesson_learned: string | null
+          mode: string
+          opened_at: string | null
+          planned_entry: number | null
+          planned_position_value: number | null
+          planned_trade_size: number | null
+          portfolio_id: string
+          pre_trade_plan: string | null
+          setup_tags: string[]
+          slippage_allowance: number | null
+          status: string
+          system_tags: string[]
+          thesis_summary: string | null
+          ticker: string
+          timeframe: string | null
+          trade_type: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          closed_at?: string | null
+          created_at?: string
+          estimated_commission?: number | null
+          final_review?: string | null
+          id?: string
+          initial_account_equity?: number | null
+          initial_risk_amount?: number | null
+          initial_risk_amount_per_share?: number | null
+          initial_risk_percent?: number | null
+          initial_stop_loss_exit?: number | null
+          lesson_learned?: string | null
+          mode?: string
+          opened_at?: string | null
+          planned_entry?: number | null
+          planned_position_value?: number | null
+          planned_trade_size?: number | null
+          portfolio_id: string
+          pre_trade_plan?: string | null
+          setup_tags?: string[]
+          slippage_allowance?: number | null
+          status?: string
+          system_tags?: string[]
+          thesis_summary?: string | null
+          ticker: string
+          timeframe?: string | null
+          trade_type?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          closed_at?: string | null
+          created_at?: string
+          estimated_commission?: number | null
+          final_review?: string | null
+          id?: string
+          initial_account_equity?: number | null
+          initial_risk_amount?: number | null
+          initial_risk_amount_per_share?: number | null
+          initial_risk_percent?: number | null
+          initial_stop_loss_exit?: number | null
+          lesson_learned?: string | null
+          mode?: string
+          opened_at?: string | null
+          planned_entry?: number | null
+          planned_position_value?: number | null
+          planned_trade_size?: number | null
+          portfolio_id?: string
+          pre_trade_plan?: string | null
+          setup_tags?: string[]
+          slippage_allowance?: number | null
+          status?: string
+          system_tags?: string[]
+          thesis_summary?: string | null
+          ticker?: string
+          timeframe?: string | null
+          trade_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_trades_portfolio_id_user_id_fkey"
+            columns: ["portfolio_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       portfolio_transactions: {
         Row: {
           action: string
@@ -3190,6 +3403,7 @@ export type Database = {
           target_price_2: number | null
           target_price_3: number | null
           ticker: string
+          trade_id: string | null
           transaction_date: string
           updated_at: string
           user_id: string
@@ -3214,6 +3428,7 @@ export type Database = {
           target_price_2?: number | null
           target_price_3?: number | null
           ticker: string
+          trade_id?: string | null
           transaction_date: string
           updated_at?: string
           user_id: string
@@ -3238,6 +3453,7 @@ export type Database = {
           target_price_2?: number | null
           target_price_3?: number | null
           ticker?: string
+          trade_id?: string | null
           transaction_date?: string
           updated_at?: string
           user_id?: string
@@ -3249,6 +3465,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portfolios"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portfolio_transactions_trade_identity_fkey"
+            columns: ["trade_id", "portfolio_id", "user_id", "ticker"]
+            isOneToOne: false
+            referencedRelation: "portfolio_trades"
+            referencedColumns: ["id", "portfolio_id", "user_id", "ticker"]
           },
         ]
       }
