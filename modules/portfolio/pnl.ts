@@ -14,6 +14,7 @@ export type TransactionAction =
 
 export interface RawTransaction {
   id: string
+  trade_id?: string | null
   ticker: string
   action: TransactionAction
   quantity: number
