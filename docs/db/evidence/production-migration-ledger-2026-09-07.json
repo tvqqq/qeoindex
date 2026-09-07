@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-07T00:42:42.846Z",
+  "capturedAt": "2026-09-07T13:19:31.000Z",
   "projectRef": "glwhhrmejlonhyorvtzm",
   "migrations": [
     {
@@ -449,7 +449,15 @@
     {
       "version": "20260907112934",
       "name": "qeo137_trade_fk_indexes"
+    },
+    {
+      "version": "20260907124742",
+      "name": "qeo138_risk_plan"
+    },
+    {
+      "version": "20260907124940",
+      "name": "qeo138_profile_user_fk_indexes"
     }
   ],
-  "reviewScope": "Canonical production migration ledger through QEO-137. QEO-129 remains explicitly reviewed PRODUCTION_AHEAD; QEO-132 remains mapped to its production RAW Daily migration. QEO-137 records both the normalized Trade lifecycle migration and the follow-up authenticated-grant/composite-FK-index hardening after production schema, RLS/policy, privilege, index, advisor and no-fabricated-backfill readback."
+  "reviewScope": "Canonical production migration ledger through QEO-138. QEO-129 remains explicitly reviewed PRODUCTION_AHEAD; QEO-132 remains mapped to its production RAW Daily migration. QEO-137 records normalized Trade lifecycle and FK/grant hardening. QEO-138 records the immutable per-portfolio Risk Profile, Discipline Profile and versioned Money Management Plan schema plus direct auth.users FK covering indexes after production RLS/privilege/RPC/index/advisor and no-fabricated-backfill readback."
 }
