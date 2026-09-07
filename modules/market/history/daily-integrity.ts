@@ -136,11 +136,9 @@ async function loadLegacyYahooBasisRows(supabase: SupabaseClient, tickers: strin
     for (const row of page) {
       const ticker = String(row.ticker || "").trim().toUpperCase()
       const sourceUrl = String(row.source_url || "")
-      const detail = String(row.provider_detail || "")
       const dateKey = storedSessionDate(row)
       if (!ticker || !dateKey || Number(row.volume) <= 0) continue
       if (!sourceUrl.includes(YAHOO_CHART_SOURCE)) continue
-      if (/adjusted OHLC/i.test(detail)) continue
       const current = rowsByTicker.get(ticker) ?? []
       current.push(row)
       rowsByTicker.set(ticker, current)
