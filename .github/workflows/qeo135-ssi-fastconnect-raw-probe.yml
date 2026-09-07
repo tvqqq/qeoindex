@@ -41,15 +41,27 @@ jobs:
           fi
 
       - name: Run sanitized bounded VHM probe
+        id: live_probe
+        continue-on-error: true
         run: |
           mkdir -p artifacts/qeo135
           python scripts/market/ssi_fastconnect_vhm_probe.py > artifacts/qeo135/ssi-vhm-probe.json
           python -m json.tool artifacts/qeo135/ssi-vhm-probe.json
 
       - name: Upload sanitized evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: qeo135-ssi-vhm-probe
           path: artifacts/qeo135/ssi-vhm-probe.json
           if-no-files-found: error
           retention-days: 7
+
+      - name: Enforce configured live probe result
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ steps.live_probe.outcome }}" != "success" ]]; then
+            echo 'Configured SSI probe failed or did not match all pinned RAW anchors; sanitized artifact was preserved.'
+            exit 1
+          fi
