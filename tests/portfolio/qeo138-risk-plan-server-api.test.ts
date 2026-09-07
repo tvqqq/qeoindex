@@ -4,7 +4,7 @@ import path from "node:path"
 import test from "node:test"
 
 const serverPath = path.join(process.cwd(), "modules/portfolio/risk-plan/server.ts")
-const migrationPath = path.join(process.cwd(), "supabase/migrations/20260907130000_qeo138_risk_plan.sql")
+const migrationPath = path.join(process.cwd(), "supabase/migrations/20260907124742_qeo138_risk_plan.sql")
 
 function loadText(filePath: string, label: string) {
   assert.equal(fs.existsSync(filePath), true, `${label} must exist`)
