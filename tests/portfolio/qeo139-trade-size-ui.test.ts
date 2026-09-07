@@ -6,29 +6,38 @@ const calculatorPath = "components/portfolio/risk-sizing/trade-size-calculator.t
 const tooltipPath = "components/portfolio/risk-sizing/risk-metric-tooltip.tsx"
 const allocationPath = "components/portfolio/portfolio-capital-allocation.tsx"
 const pagePath = "components/portfolio/portfolio-page.tsx"
+const terminologyPath = "modules/portfolio/risk-sizing/terminology.ts"
 
 function read(path: string) {
   return existsSync(path) ? readFileSync(path, "utf8") : ""
 }
 
-test("stop-first Trade Size surface exposes canonical McDowell/QeoIndex terms", () => {
-  const source = read(calculatorPath)
-  for (const label of [
-    "Account Equity",
-    "Risk per Trade",
-    "Risk Amount",
-    "Planned Entry",
-    "Initial Stop",
-    "Risk per Share",
-    "Estimated Commission",
-    "Slippage Allowance",
-    "Trade Size",
-    "Position Value",
-    "Active Risk",
-    "Max Active Risk",
-    "Remaining Risk Budget",
-  ]) {
-    assert.match(source, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing ${label}`)
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+test("stop-first Trade Size surface exposes canonical McDowell/QeoIndex terms through shared metadata", () => {
+  const calculator = read(calculatorPath)
+  const terminology = read(terminologyPath)
+  const terms = [
+    ["accountEquity", "Account Equity"],
+    ["riskPerTrade", "Risk per Trade"],
+    ["riskAmount", "Risk Amount"],
+    ["plannedEntry", "Planned Entry"],
+    ["initialStop", "Initial Stop"],
+    ["riskPerShare", "Risk per Share"],
+    ["estimatedCommission", "Estimated Commission"],
+    ["slippageAllowance", "Slippage Allowance"],
+    ["tradeSize", "Trade Size"],
+    ["positionValue", "Position Value"],
+    ["activeRisk", "Active Risk"],
+    ["maxActiveRisk", "Max Active Risk"],
+    ["remainingRiskBudget", "Remaining Risk Budget"],
+  ] as const
+
+  for (const [term, label] of terms) {
+    assert.match(terminology, new RegExp(`label:\\s*"${escapeRegExp(label)}"`), `missing shared label ${label}`)
+    assert.match(calculator, new RegExp(`term="${term}"`), `calculator does not render ${term}`)
   }
 })
 
@@ -74,10 +83,13 @@ test("stop-first guidance states stop provenance and execution risks without gua
 })
 
 test("projected risk panel fails closed when open Trade risk is unknown", () => {
-  const source = read(calculatorPath)
-  assert.match(source, /Risk Added by Planned Trade/)
-  assert.match(source, /Projected Active Risk/)
-  assert.match(source, /Risk Unknown/)
-  assert.match(source, /unknownRiskTradeCount/)
-  assert.doesNotMatch(source, /unknownRiskTradeCount[^\n]{0,80}within plan/i)
+  const calculator = read(calculatorPath)
+  const terminology = read(terminologyPath)
+  assert.match(calculator, /term="riskAddedByPlannedTrade"/)
+  assert.match(calculator, /term="projectedActiveRisk"/)
+  assert.match(terminology, /label:\s*"Risk Added by Planned Trade"/)
+  assert.match(terminology, /label:\s*"Projected Active Risk"/)
+  assert.match(calculator, /Risk Unknown/)
+  assert.match(calculator, /unknownRiskTradeCount/)
+  assert.doesNotMatch(calculator, /unknownRiskTradeCount[^\n]{0,80}within plan/i)
 })
