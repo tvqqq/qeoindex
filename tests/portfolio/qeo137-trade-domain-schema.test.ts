@@ -6,6 +6,10 @@ const migrationUrl = new URL(
   "../../supabase/migrations/20260907100000_qeo137_trade_lifecycle_domain.sql",
   import.meta.url,
 )
+const fkIndexMigrationUrl = new URL(
+  "../../supabase/migrations/20260907112500_qeo137_trade_fk_indexes.sql",
+  import.meta.url,
+)
 
 function migrationSql() {
   assert.equal(
@@ -14,6 +18,15 @@ function migrationSql() {
     "QEO-137 migration must exist before the Trade domain can ship",
   )
   return readFileSync(migrationUrl, "utf8")
+}
+
+function fkIndexMigrationSql() {
+  assert.equal(
+    existsSync(fkIndexMigrationUrl),
+    true,
+    "QEO-137 composite foreign-key indexes must ship with the Trade domain",
+  )
+  return readFileSync(fkIndexMigrationUrl, "utf8")
 }
 
 test("QEO-137 migration exists", () => {
@@ -92,4 +105,26 @@ test("QEO-137 adds indexes for portfolio Trade reads and chronological event his
   assert.match(sql, /portfolio_transactions_trade_idx/i)
   assert.match(sql, /portfolio_trade_stop_events_trade_time_idx/i)
   assert.match(sql, /portfolio_trade_journal_entries_trade_time_idx/i)
+})
+
+test("QEO-137 covers every new composite foreign key with its leading columns", () => {
+  const sql = fkIndexMigrationSql()
+
+  assert.match(
+    sql,
+    /portfolio_trades_portfolio_owner_fk_idx[\s\S]*portfolio_trades\s*\(portfolio_id,\s*user_id\)/i,
+  )
+  assert.match(
+    sql,
+    /portfolio_transactions_trade_identity_fk_idx[\s\S]*portfolio_transactions\s*\(trade_id,\s*portfolio_id,\s*user_id,\s*ticker\)/i,
+  )
+  assert.match(
+    sql,
+    /portfolio_trade_stop_events_trade_identity_fk_idx[\s\S]*portfolio_trade_stop_events\s*\(trade_id,\s*portfolio_id,\s*user_id,\s*ticker\)/i,
+  )
+  assert.match(
+    sql,
+    /portfolio_trade_journal_entries_trade_identity_fk_idx[\s\S]*portfolio_trade_journal_entries\s*\(trade_id,\s*portfolio_id,\s*user_id,\s*ticker\)/i,
+  )
+  assert.doesNotMatch(sql, /\b(update|delete|insert\s+into)\b/i)
 })
