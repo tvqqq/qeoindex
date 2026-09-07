@@ -36,16 +36,23 @@ const HEADER_ALIASES: Record<RequiredColumn, Set<string>> = {
   volume: new Set(["khoi luong", "volume"]),
 }
 
+const HTML_ENTITY_VALUES: Record<string, string> = {
+  "&nbsp;": " ",
+  "&#160;": " ",
+  "&amp;": "&",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&lt;": "<",
+  "&gt;": ">",
+}
+
 function decodeHtml(value: string) {
+  // Strip actual markup first, then decode supported entities exactly once.
+  // A single replace pass prevents inputs such as &amp;lt;...&amp;gt; from
+  // recursively becoming markup and then being interpreted as semantic text.
   return value
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&#160;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
     .replace(/<[^>]+>/g, " ")
+    .replace(/&(nbsp|#160|amp|quot|#39|lt|gt);/gi, (entity) => HTML_ENTITY_VALUES[entity.toLowerCase()] ?? entity)
     .replace(/\s+/g, " ")
     .trim()
 }
