@@ -74,6 +74,7 @@ declare
   );
 begin
   select evidence_id into v_first from public.qeo_persist_raw_daily_observation(v_payload, true);
+  v_payload := jsonb_set(v_payload, '{fetched_at}', '"2026-09-08T00:00:00Z"'::jsonb);
   select evidence_id into v_replay from public.qeo_persist_raw_daily_observation(v_payload, true);
   if v_first <> v_replay then
     raise exception 'exact raw observation replay created a second evidence identity';

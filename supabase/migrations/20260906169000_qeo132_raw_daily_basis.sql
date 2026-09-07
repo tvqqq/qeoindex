@@ -263,8 +263,7 @@ begin
        or v_evidence.price_basis <> v_price_basis
        or v_evidence.provider_detail <> v_provider_detail
        or v_evidence.source_url <> v_source_url
-       or v_evidence.source_price_unit <> v_source_price_unit
-       or v_evidence.fetched_at <> v_fetched_at then
+       or v_evidence.source_price_unit <> v_source_price_unit then
       raise exception 'raw Daily evidence hash/replay mismatch';
     end if;
   end if;
