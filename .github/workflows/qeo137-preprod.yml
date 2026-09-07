@@ -10,7 +10,7 @@ on:
       - ".github/workflows/qeo137-preprod.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: qeo137-${{ github.event.pull_request.number || github.ref }}
@@ -50,6 +50,8 @@ jobs:
       - name: Replay migrations from zero
         run: pnpm db:replay:verify
       - name: Verify generated Database types
+        id: db-types
+        continue-on-error: true
         run: pnpm db:types:verify
       - name: Upload generated Database type candidate
         if: always()
@@ -59,10 +61,37 @@ jobs:
           path: artifacts/qeo23/database.types.ts
           if-no-files-found: ignore
           retention-days: 3
+      - name: Sync generated Database types to feature branch
+        if: steps.db-types.outcome == 'failure'
+        env:
+          QEO_HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          candidate="artifacts/qeo23/database.types.ts"
+          test -f "$candidate"
+          cp "$candidate" modules/shared/supabase/database.types.ts
+          git fetch origin "$QEO_HEAD_REF"
+          rm -rf /tmp/qeo137-head
+          git worktree add --detach /tmp/qeo137-head FETCH_HEAD
+          cp "$candidate" /tmp/qeo137-head/modules/shared/supabase/database.types.ts
+          cd /tmp/qeo137-head
+          if git diff --quiet -- modules/shared/supabase/database.types.ts; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add modules/shared/supabase/database.types.ts
+          git commit -m "chore(db): regenerate Supabase types for QEO-137"
+          git push origin HEAD:"$QEO_HEAD_REF"
       - name: TypeScript
         run: pnpm typecheck
       - name: Production build
         run: pnpm build
+      - name: Require committed generated types
+        if: steps.db-types.outcome == 'failure'
+        run: |
+          echo "Generated Database types were synchronized; rerun on the new commit is required."
+          exit 1
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
