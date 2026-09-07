@@ -1,4 +1,4 @@
-name: QEO-129 Sync Public Database Types Once
+name: QEO-129 Post-Promotion Doc Reconciliation Once
 
 on:
   push:
@@ -11,43 +11,87 @@ permissions:
   contents: write
 
 jobs:
-  sync-public-types:
+  reconcile-docs:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feat/qeo-129-adjusted-daily-shadow
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - uses: supabase/setup-cli@v1
-        with:
-          version: 2.116.0
-      - run: pnpm install --frozen-lockfile
-      - name: Start local Supabase
-        run: supabase start
-      - name: Replay migrations from zero
-        run: pnpm db:replay:verify
-      - name: Generate exact public Database types
-        run: supabase gen types typescript --local --schema public > modules/shared/supabase/database.types.ts
-      - name: Prove generated types match verifier
-        run: pnpm db:types:verify
-      - name: Commit exact public type sync
+      - name: Reconcile promoted-schema instructions
         run: |
-          if git diff --quiet -- modules/shared/supabase/database.types.ts; then
-            echo 'Public Database types already synchronized.'
-            exit 0
-          fi
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+            "docs/superpowers/plans/2026-09-06-qeo-129-adjusted-daily-shadow.md": [
+              (
+                "### Task 5: Pre-production verification + real migration promotion",
+                "### Task 5: Post-promotion reconciliation + exact-head verification",
+              ),
+              (
+                "**Files after real promotion:**\n- Modify: `supabase/migration-equivalence.json`\n- Modify: `docs/db/evidence/production-migration-ledger-2026-09-06.json`\n- Create: `docs/db/evidence/qeo129-vhm-adjusted-daily-shadow.md`",
+                "**Current promoted-schema evidence:**\n- `supabase/migration-equivalence.json`: QEO-129 is mapped `20260906170000 -> 20260906223014`.\n- reviewed production migration ledger contains production QEO-129 schema version `20260906223014`.\n- `docs/db/evidence/qeo129-vhm-raw-range-gate-2026-09-07.md` remains the authoritative release gate.\n\n**Important:** schema promotion is already complete. Do not re-apply the QEO-129 migration while completing this plan.",
+              ),
+              (
+                "- [ ] **Step 2: Run exact pre-promotion gates** — Verify code/contracts/lint/TS/build, preprod zero→latest + SQL persistence + DB lint, EOD v4. DB Drift may fail only because `20260906170000` is repo-only; any other failure blocks promotion.",
+                "- [ ] **Step 2: Run exact-head gates** — Verify code/contracts/lint/TS/build, preprod zero→latest + SQL persistence + DB lint, DB Drift including generated public Database types, and EOD v4 must all be GREEN. Any red gate blocks merge readiness.",
+              ),
+              (
+                "- [ ] **Step 3: Apply only the QEO-129 migration to production Supabase** and record the migration version returned by Supabase as `actualProductionVersion`.",
+                "- [ ] **Step 3: Do not re-apply QEO-129 DDL.** Re-read production ledger/schema and require the already-promoted version `20260906223014` plus the reviewed repository mapping `20260906170000 -> 20260906223014`.",
+              ),
+              (
+                "- [ ] **Step 4: Run rollback-only production smoke** — tables/RLS/grants/RPC security, exact synthetic readback, wrong run/lineage returns zero, rollback leaves zero synthetic QEO-129 rows.",
+                "- [ ] **Step 4: Re-verify production boundary without persistent mutation** — inspect tables/RLS/grants/RPC security and, only if a fresh behavioral smoke is required, use a rollback-only synthetic transaction proving exact readback, wrong run/lineage rejection and zero residual rows.",
+              ),
+              (
+                "- [ ] **Step 5: Reconcile migration identity using the captured runtime value**. Add a mapping whose `repositoryVersion` is `20260906170000`, whose `productionVersion` is the exact `actualProductionVersion` captured in Step 3, `state` is `MAPPED`, evidence is `qeo129-production-ledger-schema-rls-readback-and-rollback-smoke`, and rationale records successful replay + rollback smoke. Insert the same exact production version into the reviewed ledger in chronological order.",
+                "- [ ] **Step 5: Verify migration identity remains reconciled** — `repositoryVersion=20260906170000`, `productionVersion=20260906223014`, `state=MAPPED`; do not create a second migration or duplicate ledger row.",
+              ),
+              (
+                "- [ ] **Step 6: Regenerate combined-schema types and obtain exact-head GREEN** — Verify, DB Drift, Preprod, EOD v4 all GREEN. Do not merge yet; VHM shadow acceptance remains required.",
+                "- [ ] **Step 6: Regenerate/verify `public` Database types using the same command as `db:types:verify` and obtain exact-head GREEN** — Verify, DB Drift, Preprod and EOD v4 all GREEN. Do not merge yet; retained production VHM canonical RAW + VHM shadow acceptance remain required.",
+              ),
+            ],
+            "docs/superpowers/specs/2026-09-06-qeo-129-adjusted-daily-shadow-design.md": [
+              (
+                "If Supabase applies a different production timestamp, repository-to-production equivalence must be recorded explicitly in `supabase/migration-equivalence.json` and the reviewed production migration ledger before DB Drift can be GREEN.",
+                "Production has already promoted the reviewed QEO-129 schema as `20260906223014`; repository replay remains `20260906170000`, explicitly reconciled as `MAPPED` in `supabase/migration-equivalence.json` and the reviewed production migration ledger. This is migration-history equivalence only and does not satisfy the retained VHM canonical RAW release gate. The migration must not be applied a second time.",
+              ),
+              (
+                "1. Apply and reconcile the QEO-129 migration only after local zero-to-latest replay, schema contracts, generated types and TypeScript are GREEN.",
+                "1. Treat QEO-129 schema promotion as already complete (`repo 20260906170000 -> production 20260906223014`). Re-verify ledger/schema/security plus exact-head zero-to-latest replay, generated `public` Database types and TypeScript; do not re-apply the migration.",
+              ),
+            ],
+          }
+
+          for path_str, pairs in replacements.items():
+            path = Path(path_str)
+            text = path.read_text()
+            for old, new in pairs:
+              count = text.count(old)
+              if count != 1:
+                raise SystemExit(f"{path}: expected one match, found {count}: {old[:120]!r}")
+              text = text.replace(old, new)
+            path.write_text(text)
+          PY
+          git diff --check
+
+      - name: Verify no double-apply instruction remains
+        run: |
+          grep -F 'Do not re-apply QEO-129 DDL.' docs/superpowers/plans/2026-09-06-qeo-129-adjusted-daily-shadow.md
+          grep -F 'The migration must not be applied a second time.' docs/superpowers/specs/2026-09-06-qeo-129-adjusted-daily-shadow-design.md
+          ! grep -F 'Apply only the QEO-129 migration to production Supabase' docs/superpowers/plans/2026-09-06-qeo-129-adjusted-daily-shadow.md
+          ! grep -F 'Apply and reconcile the QEO-129 migration only after' docs/superpowers/specs/2026-09-06-qeo-129-adjusted-daily-shadow-design.md
+
+      - name: Commit docs and remove one-shot workflow
+        run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add modules/shared/supabase/database.types.ts
-          git commit -m 'chore(QEO-129): sync exact public database types'
+          git rm .github/workflows/qeo129-sync-public-db-types-once.yml
+          git add \
+            docs/superpowers/plans/2026-09-06-qeo-129-adjusted-daily-shadow.md \
+            docs/superpowers/specs/2026-09-06-qeo-129-adjusted-daily-shadow-design.md
+          git commit -m 'docs(QEO-129): reconcile post-promotion release steps'
           git push origin HEAD:feat/qeo-129-adjusted-daily-shadow
-      - name: Stop local Supabase
-        if: always()
-        run: supabase stop --no-backup
