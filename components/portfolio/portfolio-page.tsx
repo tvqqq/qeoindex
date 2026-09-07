@@ -579,7 +579,9 @@ export function PortfolioPage() {
               positions={positions}
               currentPrices={currentPrices}
             />
-            {activePortfolioId && <PortfolioRiskPlan portfolioId={activePortfolioId} />}
+            {activePortfolioId && (
+              <PortfolioRiskPlan key={activePortfolioId} portfolioId={activePortfolioId} />
+            )}
           </div>
         )}
 
