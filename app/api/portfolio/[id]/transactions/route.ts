@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 
-import { requireApiUser } from "@/modules/auth/server"
+import { requireApiUser, type ServerAuthContext } from "@/modules/auth/server"
+import { validateTradeFillLink } from "@/modules/portfolio/trades/fill-link"
+import { TradeDomainError } from "@/modules/portfolio/trades/validation"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -15,6 +17,18 @@ function err(msg: string, status = 500) {
   return NextResponse.json({ ok: false, error: msg }, { status, headers: NO_STORE })
 }
 
+function tradeLinkErr(error: unknown) {
+  if (error instanceof TradeDomainError) {
+    const conflict = ["TRADE_CANCELLED", "TICKER_MISMATCH", "INVALID_FILL_ACTION"].includes(error.code)
+    return NextResponse.json(
+      { ok: false, error: error.message, code: error.code },
+      { status: error.code === "NOT_FOUND" ? 404 : conflict ? 409 : 400, headers: NO_STORE },
+    )
+  }
+  console.error("[Portfolio Transactions] Trade link validation failed", error)
+  return err("Failed to validate Trade link.")
+}
+
 function validatePortfolioId(id: string) {
   return UUID_RE.test(id) ? id : null
 }
@@ -27,8 +41,21 @@ function canonicalOrLegacy(body: Record<string, unknown>, canonicalKey: string, 
   return body[canonicalKey] !== undefined ? body[canonicalKey] : body[legacyKey]
 }
 
+async function validatedTradeId(
+  context: ServerAuthContext,
+  portfolioId: string,
+  rawTradeId: unknown,
+  ticker: string,
+  action: string,
+) {
+  if (rawTradeId == null || rawTradeId === "") return null
+  const tradeId = String(rawTradeId)
+  await validateTradeFillLink(context, portfolioId, tradeId, ticker, action)
+  return tradeId
+}
+
 const SELECT_FIELDS =
-  "id,portfolio_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,note,tags,setup_tags,mistake_tags,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3,created_at,updated_at"
+  "id,portfolio_id,trade_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,note,tags,setup_tags,mistake_tags,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3,created_at,updated_at"
 
 /** GET /api/portfolio/[id]/transactions — list transactions for a portfolio */
 export async function GET(
@@ -105,9 +132,17 @@ export async function POST(
       const date = String(item.transaction_date ?? "")
       if (!DATE_RE.test(date)) return err("Ngày giao dịch không hợp lệ.", 400)
 
+      let trade_id: string | null
+      try {
+        trade_id = await validatedTradeId(auth.context, portfolioId, item.trade_id, ticker, action)
+      } catch (error) {
+        return tradeLinkErr(error)
+      }
+
       rowsToInsert.push({
         portfolio_id: portfolioId,
         user_id: auth.context.user.id,
+        trade_id,
         ticker,
         action,
         quantity: qty,
@@ -170,6 +205,13 @@ export async function POST(
     return err("Ngày giao dịch không hợp lệ (YYYY-MM-DD).", 400)
   }
 
+  let trade_id: string | null
+  try {
+    trade_id = await validatedTradeId(auth.context, portfolioId, body.trade_id, ticker, action)
+  } catch (error) {
+    return tradeLinkErr(error)
+  }
+
   const target_price_1 = parseNullableNumber(canonicalOrLegacy(body, "target_price_1", "target_price"))
   const target_price_2 = parseNullableNumber(body.target_price_2)
   const target_price_3 = parseNullableNumber(body.target_price_3)
@@ -193,6 +235,7 @@ export async function POST(
     .insert({
       portfolio_id: portfolioId,
       user_id: auth.context.user.id,
+      trade_id,
       ticker,
       action,
       quantity,
