@@ -34,3 +34,5 @@ jobs:
         run: node --test tests/portfolio/qeo137-trade-domain-schema.test.ts
       - name: QEO-137 lifecycle domain contract
         run: node --test tests/portfolio/qeo137-trade-domain.test.ts
+      - name: QEO-137 read-model contract
+        run: node --test tests/portfolio/qeo137-trade-read-model.test.ts
