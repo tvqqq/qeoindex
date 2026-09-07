@@ -10,12 +10,12 @@ export type RiskPlanDomainErrorCode =
   | "ADVANCED_RISK_ACK_REQUIRED"
 
 export class RiskPlanDomainError extends Error {
-  constructor(
-    public readonly code: RiskPlanDomainErrorCode,
-    message: string,
-  ) {
+  readonly code: RiskPlanDomainErrorCode
+
+  constructor(code: RiskPlanDomainErrorCode, message: string) {
     super(message)
     this.name = "RiskPlanDomainError"
+    this.code = code
   }
 }
 
