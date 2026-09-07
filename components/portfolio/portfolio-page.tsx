@@ -575,6 +575,7 @@ export function PortfolioPage() {
         {activeTab === "allocation" && (
           <div className="space-y-6">
             <PortfolioCapitalAllocation
+              key={activePortfolioId ?? ""}
               portfolios={portfolios}
               activePortfolioId={activePortfolioId ?? ""}
               positions={positions}
