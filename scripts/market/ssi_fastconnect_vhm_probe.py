@@ -30,6 +30,22 @@ ANCHOR_RANGES = (
     ("2026/08/05", "2026/08/05"),
 )
 
+RAW_SESSION_SPECS = {
+    "2025-10-13": {"open": 123.0, "high": 126.0, "low": 122.1, "close": 124.2},
+    "2025-10-14": {"open": 124.5, "high": 131.5, "low": 124.5, "close": 127.0},
+    "2025-10-15": {"open": 127.5, "high": 127.6, "low": 122.6, "close": 124.0},
+    "2025-10-16": {"open": 123.8, "high": 123.8, "low": 120.4, "close": 122.0},
+    "2025-10-17": {"open": 122.0, "high": 122.0, "low": 114.6, "close": 116.0},
+    "2026-06-26": {"open": 157.5, "high": 163.9, "low": 156.5, "close": 162.0},
+    "2026-08-05": {"open": 154.2, "high": 158.8, "low": 153.0, "close": 153.0},
+}
+WEEK_SESSIONS = (
+    "2025-10-13",
+    "2025-10-14",
+    "2025-10-15",
+    "2025-10-16",
+    "2025-10-17",
+)
 PRICE_TOLERANCE = 0.051
 PRICE_SCALE_CANDIDATES = (1, 1000)
 
@@ -125,46 +141,57 @@ def _scaled(row: Mapping[str, Any], divisor: int, field: str) -> float:
 
 
 def _assess_for_scale(rows_by_session: Mapping[str, Mapping[str, Any]], divisor: int) -> dict[str, Any]:
-    week_rows = [
-        row
-        for session, row in rows_by_session.items()
-        if "2025-10-13" <= session <= "2025-10-17"
-    ]
-    week_match = False
-    week_observed: dict[str, Any] = {"sessions": len(week_rows)}
-    if week_rows:
-        observed_high = max(_scaled(row, divisor, "high") for row in week_rows)
-        observed_low = min(_scaled(row, divisor, "low") for row in week_rows)
-        week_observed.update({"high": observed_high, "low": observed_low})
-        week_match = _close_enough(observed_high, 131.5) and _close_enough(observed_low, 114.6)
+    expected_sessions = set(RAW_SESSION_SPECS)
+    observed_sessions = set(rows_by_session)
+    missing_sessions = sorted(expected_sessions - observed_sessions)
+    unexpected_sessions = sorted(observed_sessions - expected_sessions)
 
-    exact_specs = {
-        "2026-06-26": {"open": 157.5, "high": 163.9, "low": 156.5, "close": 162.0},
-        "2026-08-05": {"open": 154.2, "high": 158.8, "low": 153.0, "close": 153.0},
-    }
-    exact_results: dict[str, Any] = {}
-    exact_matches = 0
-    for session, expected in exact_specs.items():
+    session_results: dict[str, Any] = {}
+    sessions_matched = 0
+    for session, expected in RAW_SESSION_SPECS.items():
         row = rows_by_session.get(session)
-        matched = False
         observed = None
+        matched = False
         if row is not None:
             observed = {field: _scaled(row, divisor, field) for field in expected}
             matched = all(_close_enough(observed[field], target) for field, target in expected.items())
         if matched:
-            exact_matches += 1
-        exact_results[session] = {"matched": matched, "observed": observed, "expected": expected}
+            sessions_matched += 1
+        session_results[session] = {
+            "matched": matched,
+            "observed": observed,
+            "expected": expected,
+        }
 
-    anchors_matched = int(week_match) + exact_matches
+    week_rows = [rows_by_session[session] for session in WEEK_SESSIONS if session in rows_by_session]
+    week_observed: dict[str, Any] = {"sessions": len(week_rows)}
+    week_extremes_match = False
+    if week_rows:
+        observed_high = max(_scaled(row, divisor, "high") for row in week_rows)
+        observed_low = min(_scaled(row, divisor, "low") for row in week_rows)
+        week_observed.update({"high": observed_high, "low": observed_low})
+        week_extremes_match = _close_enough(observed_high, 131.5) and _close_enough(observed_low, 114.6)
+
+    week_exact_match = week_extremes_match and all(session_results[session]["matched"] for session in WEEK_SESSIONS)
+    june_match = session_results["2026-06-26"]["matched"]
+    august_match = session_results["2026-08-05"]["matched"]
+    complete_session_set = not missing_sessions and not unexpected_sessions
+    anchors_matched = int(week_exact_match) + int(june_match) + int(august_match)
+
     return {
         "divisor": divisor,
         "anchors_matched": anchors_matched,
+        "sessions_matched": sessions_matched,
+        "complete_session_set": complete_session_set,
+        "missing_sessions": missing_sessions,
+        "unexpected_sessions": unexpected_sessions,
         "week_2025_10_13_17": {
-            "matched": week_match,
+            "matched": week_exact_match,
+            "extremes_matched": week_extremes_match,
             "observed": week_observed,
-            "expected": {"high": 131.5, "low": 114.6},
+            "expected": {"sessions": 5, "high": 131.5, "low": 114.6},
         },
-        "exact_sessions": exact_results,
+        "exact_sessions": session_results,
     }
 
 
@@ -177,19 +204,26 @@ def assess_raw_basis(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
                 "status": "RAW_ANCHOR_MISMATCH",
                 "price_scale_divisor": None,
                 "anchors_matched": 0,
+                "sessions_matched": 0,
                 "reason": f"duplicate session {session}",
                 "scale_candidates": [],
             }
         rows_by_session[session] = row
 
     candidates = [_assess_for_scale(rows_by_session, divisor) for divisor in PRICE_SCALE_CANDIDATES]
-    best = max(candidates, key=lambda item: item["anchors_matched"], default=None)
-    if best is not None and best["anchors_matched"] == 3:
+    best = max(candidates, key=lambda item: (item["anchors_matched"], item["sessions_matched"]), default=None)
+    if (
+        best is not None
+        and best["anchors_matched"] == 3
+        and best["sessions_matched"] == len(RAW_SESSION_SPECS)
+        and best["complete_session_set"]
+    ):
         return {
             "status": "RAW_ANCHOR_MATCH",
             "price_scale_divisor": best["divisor"],
             "anchors_matched": 3,
-            "reason": "provider OHLC independently matches all pinned VHM RAW anchors",
+            "sessions_matched": len(RAW_SESSION_SPECS),
+            "reason": "provider OHLC independently matches all seven pinned VHM RAW sessions under one unit scale",
             "scale_candidates": candidates,
         }
 
@@ -197,7 +231,8 @@ def assess_raw_basis(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
         "status": "RAW_ANCHOR_MISMATCH",
         "price_scale_divisor": None,
         "anchors_matched": best["anchors_matched"] if best else 0,
-        "reason": "provider OHLC does not match all pinned VHM RAW anchors at allowed unit scales",
+        "sessions_matched": best["sessions_matched"] if best else 0,
+        "reason": "provider OHLC/session set does not match all pinned VHM RAW sessions at allowed unit scales",
         "scale_candidates": candidates,
     }
 
