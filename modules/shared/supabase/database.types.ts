@@ -7,6 +7,31 @@ export type Json =
   | Json[]
 
 export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       ai_council_agent_stats: {
@@ -1643,6 +1668,56 @@ export type Database = {
         }
         Relationships: []
       }
+      market_adjusted_daily_rollout: {
+        Row: {
+          activated_at: string | null
+          blocked_reason: string | null
+          event_lineage_hash: string | null
+          factor_run_id: string | null
+          factor_version: string | null
+          status: string
+          ticker: string
+          updated_at: string
+          verified_at: string | null
+          verified_from: string | null
+          verified_through: string | null
+        }
+        Insert: {
+          activated_at?: string | null
+          blocked_reason?: string | null
+          event_lineage_hash?: string | null
+          factor_run_id?: string | null
+          factor_version?: string | null
+          status?: string
+          ticker: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_from?: string | null
+          verified_through?: string | null
+        }
+        Update: {
+          activated_at?: string | null
+          blocked_reason?: string | null
+          event_lineage_hash?: string | null
+          factor_run_id?: string | null
+          factor_version?: string | null
+          status?: string
+          ticker?: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_from?: string | null
+          verified_through?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_adjusted_daily_rollout_factor_run_fk"
+            columns: ["factor_run_id", "ticker"]
+            isOneToOne: false
+            referencedRelation: "market_adjustment_factor_runs"
+            referencedColumns: ["id", "ticker"]
+          },
+        ]
+      }
       market_adjustment_factor_runs: {
         Row: {
           as_of_date: string
@@ -2261,6 +2336,65 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      market_ohlcv_adjusted_daily: {
+        Row: {
+          adjustment_engine_version: string
+          bar_time: string
+          close: number
+          event_lineage_hash: string
+          factor_run_id: string
+          factor_version: string
+          high: number
+          low: number
+          open: number
+          raw_bar_time: string
+          rebuilt_at: string
+          session_date: string
+          ticker: string
+          volume: number
+        }
+        Insert: {
+          adjustment_engine_version: string
+          bar_time: string
+          close: number
+          event_lineage_hash: string
+          factor_run_id: string
+          factor_version: string
+          high: number
+          low: number
+          open: number
+          raw_bar_time: string
+          rebuilt_at?: string
+          session_date: string
+          ticker: string
+          volume: number
+        }
+        Update: {
+          adjustment_engine_version?: string
+          bar_time?: string
+          close?: number
+          event_lineage_hash?: string
+          factor_run_id?: string
+          factor_version?: string
+          high?: number
+          low?: number
+          open?: number
+          raw_bar_time?: string
+          rebuilt_at?: string
+          session_date?: string
+          ticker?: string
+          volume?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_ohlcv_adjusted_daily_factor_run_fk"
+            columns: ["factor_run_id", "ticker"]
+            isOneToOne: false
+            referencedRelation: "market_adjustment_factor_runs"
+            referencedColumns: ["id", "ticker"]
+          },
+        ]
       }
       market_ohlcv_bootstrap_state: {
         Row: {
@@ -4096,6 +4230,29 @@ export type Database = {
           outcome: string
         }[]
       }
+      qeo_adjusted_daily_readback: {
+        Args: {
+          p_factor_run_id: string
+          p_from: string
+          p_lineage_hash: string
+          p_ticker: string
+          p_to: string
+        }
+        Returns: {
+          adjustment_engine_version: string
+          bar_time: string
+          close: number
+          event_lineage_hash: string
+          factor_run_id: string
+          factor_version: string
+          high: number
+          low: number
+          open: number
+          raw_bar_time: string
+          session_date: string
+          volume: number
+        }[]
+      }
       qeo_admin_cron_snapshot: { Args: never; Returns: Json }
       qeo_admin_reset_system_setting: {
         Args: {
@@ -4549,6 +4706,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
