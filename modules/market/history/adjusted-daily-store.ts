@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { readCanonicalRawDaily, type CanonicalRawDailyBar } from "./raw-daily-store.ts"
 import {
   applyDailyAdjustment,
-  type DailySourcePriceBasis,
   type RawDailyBar,
   type ShadowFactorRun,
   type ShadowFactorTransition,
@@ -37,19 +37,6 @@ type FactorTransitionRow = {
   cumulative_volume_factor: number | string
 }
 
-type RawDailyRow = {
-  ticker: string
-  bar_time: string
-  open: number | string
-  high: number | string
-  low: number | string
-  close: number | string
-  volume: number | string
-  provider: string | null
-  provider_detail: string | null
-  source_url: string | null
-}
-
 type ReadbackRow = {
   session_date: string
   bar_time: string
@@ -69,27 +56,6 @@ function validIsoDate(value: string) {
   if (!ISO_DATE.test(value)) return false
   const parsed = new Date(`${value}T00:00:00.000Z`)
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
-}
-
-function vietnamSessionDate(value: string) {
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error("Adjusted Daily raw bar_time is invalid")
-  }
-
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(parsed)
-  const year = parts.find((part) => part.type === "year")?.value
-  const month = parts.find((part) => part.type === "month")?.value
-  const day = parts.find((part) => part.type === "day")?.value
-  if (!year || !month || !day) {
-    throw new Error("Adjusted Daily raw session date is invalid")
-  }
-  return `${year}-${month}-${day}`
 }
 
 function canonicalDailyTimestamp(sessionDate: string) {
@@ -126,29 +92,17 @@ function toTransition(row: FactorTransitionRow): ShadowFactorTransition {
   }
 }
 
-function storedDailyPriceBasis(row: RawDailyRow): DailySourcePriceBasis {
-  const detail = String(row.provider_detail ?? "").trim().toLowerCase()
-
-  if (detail.includes("source basis: adjusted") || detail.includes("adjusted ohlc")) {
-    return "ADJUSTED"
-  }
-  if (detail.includes("source basis: raw")) {
-    return "RAW"
-  }
-  return "UNKNOWN"
-}
-
-function toRawDaily(row: RawDailyRow): RawDailyBar {
+function toRawDaily(row: CanonicalRawDailyBar): RawDailyBar {
   return {
     ticker: row.ticker,
-    sessionDate: vietnamSessionDate(row.bar_time),
-    barTime: row.bar_time,
-    open: Number(row.open),
-    high: Number(row.high),
-    low: Number(row.low),
-    close: Number(row.close),
-    volume: Number(row.volume),
-    sourcePriceBasis: storedDailyPriceBasis(row),
+    sessionDate: row.sessionDate,
+    barTime: canonicalDailyTimestamp(row.sessionDate),
+    open: row.open,
+    high: row.high,
+    low: row.low,
+    close: row.close,
+    volume: row.volume,
+    sourcePriceBasis: row.priceBasis,
   }
 }
 
@@ -190,9 +144,7 @@ async function persistRollout(
   const { error } = await supabase
     .from("market_adjusted_daily_rollout")
     .upsert(payload, { onConflict: "ticker" })
-  if (error) {
-    throw new Error("Adjusted Daily rollout persistence failed")
-  }
+  if (error) throw new Error("Adjusted Daily rollout persistence failed")
 }
 
 export async function rebuildAdjustedDailyRange(input: {
@@ -248,20 +200,18 @@ export async function rebuildAdjustedDailyRange(input: {
   }
   const transitions = (transitionData as FactorTransitionRow[]).map(toTransition)
 
-  const { data: rawData, error: rawError } = await input.supabase
-    .from("market_ohlcv_history")
-    .select("ticker,bar_time,open,high,low,close,volume,provider,provider_detail,source_url")
-    .eq("ticker", input.ticker)
-    .eq("timeframe", "1D")
-    .gte("bar_time", canonicalDailyTimestamp(input.fromDate))
-    .lte("bar_time", canonicalDailyTimestamp(input.toDate))
-    .order("bar_time", { ascending: true })
-
-  if (rawError || !Array.isArray(rawData)) {
-    throw new Error("Adjusted Daily raw range could not be loaded")
+  let canonicalRaw: CanonicalRawDailyBar[]
+  try {
+    canonicalRaw = await readCanonicalRawDaily(input.supabase, {
+      ticker: input.ticker,
+      from: input.fromDate,
+      to: input.toDate,
+    })
+  } catch {
+    throw new Error("Adjusted Daily canonical RAW range could not be loaded")
   }
 
-  const rawBars = (rawData as RawDailyRow[]).map(toRawDaily)
+  const rawBars = canonicalRaw.map(toRawDaily)
   const sessionSet = new Set<string>()
   for (const raw of rawBars) {
     if (raw.sessionDate < input.fromDate || raw.sessionDate > input.toDate) {
@@ -296,9 +246,7 @@ export async function rebuildAdjustedDailyRange(input: {
     const { error: persistError } = await input.supabase
       .from("market_ohlcv_adjusted_daily")
       .upsert(payload, { onConflict: "ticker,session_date" })
-    if (persistError) {
-      throw new Error("Adjusted Daily persistence failed")
-    }
+    if (persistError) throw new Error("Adjusted Daily persistence failed")
   }
 
   const { data: readbackData, error: readbackError } = await input.supabase.rpc(
@@ -360,7 +308,7 @@ export async function rebuildAdjustedDailyRange(input: {
       verified_through: null,
       verified_at: null,
       activated_at: null,
-      blocked_reason: adjusted.length === 0 ? "NO_RAW_DAILY_SESSIONS" : "PERSISTED_READBACK_MISMATCH",
+      blocked_reason: adjusted.length === 0 ? "NO_CANONICAL_RAW_DAILY_SESSIONS" : "PERSISTED_READBACK_MISMATCH",
     })
   } else {
     await persistRollout(input.supabase, {
