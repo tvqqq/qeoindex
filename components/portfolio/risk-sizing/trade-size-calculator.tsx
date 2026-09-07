@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { AlertTriangle, Calculator, ShieldCheck } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
@@ -31,6 +31,7 @@ type RiskSizingResponse = {
 }
 
 type RiskProvenance = "Money Management Plan" | "Onboarding default" | "Manual override"
+type RiskTerm = Parameters<typeof RiskMetricTooltip>[0]["term"]
 
 export function TradeSizeCalculator({
   portfolioId,
@@ -151,9 +152,7 @@ export function TradeSizeCalculator({
               <ShieldCheck className="h-4 w-4" />
               Stop-first risk sizing
             </div>
-            <h2 className="text-xl font-extrabold tracking-tight text-white sm:text-2xl">
-              Trade Size Calculator
-            </h2>
+            <h2 className="text-xl font-extrabold tracking-tight text-white sm:text-2xl">Trade Size Calculator</h2>
             <p className="mt-2 max-w-3xl text-xs leading-relaxed text-[var(--color-muted-2)] sm:text-sm">
               Xác định Initial Stop trước Planned Entry, sau đó tính Trade Size từ Risk Amount và khoảng Entry–Stop. Mức 2% là điểm khởi đầu/trần ví dụ trong McDowell, không phải cam kết về kết quả giao dịch.
             </p>
@@ -195,36 +194,10 @@ export function TradeSizeCalculator({
               step="0.1"
               suffix="%"
             />
-            <MetricInput
-              term="plannedEntry"
-              value={plannedEntryInput}
-              onChange={setPlannedEntryInput}
-              step="0.1"
-              suffix="k₫"
-              placeholder="VD: 25.0"
-            />
-            <MetricInput
-              term="initialStop"
-              value={initialStopInput}
-              onChange={setInitialStopInput}
-              step="0.1"
-              suffix="k₫"
-              placeholder="Xác định trước entry"
-            />
-            <MetricInput
-              term="estimatedCommission"
-              value={commissionInput}
-              onChange={setCommissionInput}
-              step="1000"
-              suffix="VNĐ"
-            />
-            <MetricInput
-              term="slippageAllowance"
-              value={slippageInput}
-              onChange={setSlippageInput}
-              step="1000"
-              suffix="VNĐ"
-            />
+            <MetricInput term="plannedEntry" value={plannedEntryInput} onChange={setPlannedEntryInput} step="0.1" suffix="k₫" placeholder="VD: 25.0" />
+            <MetricInput term="initialStop" value={initialStopInput} onChange={setInitialStopInput} step="0.1" suffix="k₫" placeholder="Xác định trước entry" />
+            <MetricInput term="estimatedCommission" value={commissionInput} onChange={setCommissionInput} step="1000" suffix="VNĐ" />
+            <MetricInput term="slippageAllowance" value={slippageInput} onChange={setSlippageInput} step="1000" suffix="VNĐ" />
           </div>
 
           {riskPercent > 2 ? (
@@ -235,9 +208,7 @@ export function TradeSizeCalculator({
                 onChange={(event) => setAdvancedAcknowledged(event.target.checked)}
                 className="mt-0.5 h-4 w-4"
               />
-              <span>
-                Tôi xác nhận đây là advanced manual override trên mức 2%; profile/plan không tự động cho phép tăng risk chỉ vì điểm số thấp.
-              </span>
+              <span>Tôi xác nhận đây là advanced manual override trên mức 2%; profile/plan không tự động cho phép tăng risk chỉ vì điểm số thấp.</span>
             </label>
           ) : null}
 
@@ -264,17 +235,12 @@ export function TradeSizeCalculator({
           {ready ? (
             <div className="space-y-3">
               <MetricRow term="riskAmount" value={formatVnd(result.riskAmountVnd)} />
-              <MetricRow
-                term="initialStop"
-                value={`${formatKvnd(result.stopDistanceKvnd)} distance · ${formatPercent(result.stopDistancePercent)}`}
-              />
+              <MetricRow term="stopDistance" value={`${formatKvnd(result.stopDistanceKvnd)} · ${formatPercent(result.stopDistancePercent)}`} />
               <MetricRow term="riskPerShare" value={formatVnd(result.riskPerShareVnd)} />
+              <MetricRow term="availableTradeRiskBudget" value={formatVnd(result.availableRiskBudgetVnd)} />
               <MetricRow term="tradeSize" value={`${result.tradeSizeShares.toLocaleString("vi-VN")} shares`} emphasized />
               <MetricRow term="positionValue" value={formatVnd(result.positionValueVnd)} />
-              <div className="flex items-center justify-between gap-4 border-t border-white/5 pt-3 text-xs">
-                <span className="text-slate-400">Available Risk Budget after costs</span>
-                <span className="font-bold text-white">{formatVnd(result.availableRiskBudgetVnd)}</span>
-              </div>
+              <MetricRow term="riskAddedByPlannedTrade" value={formatVnd(result.totalRiskConsumptionVnd)} />
             </div>
           ) : (
             <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs leading-relaxed text-amber-100">
@@ -325,15 +291,8 @@ export function TradeSizeCalculator({
   )
 }
 
-function MetricInput({
-  term,
-  value,
-  onChange,
-  step,
-  suffix,
-  placeholder,
-}: {
-  term: Parameters<typeof RiskMetricTooltip>[0]["term"]
+function MetricInput({ term, value, onChange, step, suffix, placeholder }: {
+  term: RiskTerm
   value: string
   onChange: (value: string) => void
   step: string
@@ -359,15 +318,7 @@ function MetricInput({
   )
 }
 
-function MetricRow({
-  term,
-  value,
-  emphasized = false,
-}: {
-  term: Parameters<typeof RiskMetricTooltip>[0]["term"]
-  value: string
-  emphasized?: boolean
-}) {
+function MetricRow({ term, value, emphasized = false }: { term: RiskTerm; value: string; emphasized?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-white/5 pb-3 text-xs">
       <RiskMetricTooltip term={term} />
@@ -376,13 +327,7 @@ function MetricRow({
   )
 }
 
-function RiskCard({
-  term,
-  value,
-}: {
-  term: Parameters<typeof RiskMetricTooltip>[0]["term"]
-  value: string
-}) {
+function RiskCard({ term, value }: { term: RiskTerm; value: string }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-black/20 p-4">
       <div className="text-[11px]"><RiskMetricTooltip term={term} /></div>
@@ -391,12 +336,8 @@ function RiskCard({
   )
 }
 
-function Badge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded-full border border-purple-500/25 bg-purple-500/10 px-3 py-1 text-[11px] font-bold text-purple-200">
-      {children}
-    </span>
-  )
+function Badge({ children }: { children: ReactNode }) {
+  return <span className="rounded-full border border-purple-500/25 bg-purple-500/10 px-3 py-1 text-[11px] font-bold text-purple-200">{children}</span>
 }
 
 function finiteNumber(value: string, fallback: number): number {
@@ -428,27 +369,16 @@ function formatPercent(value: number | null): string {
 
 function statusHelp(status: TradeSizeStatus): string {
   switch (status) {
-    case "incomplete":
-      return "Nhập Planned Entry và Initial Stop trước khi tính Trade Size."
-    case "invalid_account_equity":
-      return "Account Equity phải lớn hơn 0."
-    case "invalid_risk_percent":
-      return "Risk per Trade phải lớn hơn 0 và không vượt 100%."
-    case "advanced_override_required":
-      return "Risk per Trade trên 2% cần advanced acknowledgement rõ ràng."
-    case "invalid_entry":
-      return "Planned Entry phải lớn hơn 0."
-    case "invalid_stop_direction":
-      return "Với long Trade, Initial Stop phải thấp hơn Planned Entry."
-    case "zero_stop_distance":
-      return "Initial Stop trùng Planned Entry nên không có khoảng risk hợp lệ."
-    case "invalid_cost":
-      return "Estimated Commission và Slippage Allowance phải là số không âm."
-    case "costs_consume_risk_budget":
-      return "Estimated costs đã dùng hết Risk Amount; không còn risk budget cho Trade Size."
-    case "below_regular_lot":
-      return "Không có valid regular-lot Trade Size dưới risk budget đã chọn."
-    case "ready":
-      return "Ready."
+    case "incomplete": return "Nhập Planned Entry và Initial Stop trước khi tính Trade Size."
+    case "invalid_account_equity": return "Account Equity phải lớn hơn 0."
+    case "invalid_risk_percent": return "Risk per Trade phải lớn hơn 0 và không vượt 100%."
+    case "advanced_override_required": return "Risk per Trade trên 2% cần advanced acknowledgement rõ ràng."
+    case "invalid_entry": return "Planned Entry phải lớn hơn 0."
+    case "invalid_stop_direction": return "Với long Trade, Initial Stop phải thấp hơn Planned Entry."
+    case "zero_stop_distance": return "Initial Stop trùng Planned Entry nên không có khoảng risk hợp lệ."
+    case "invalid_cost": return "Estimated Commission và Slippage Allowance phải là số không âm."
+    case "costs_consume_risk_budget": return "Estimated costs đã dùng hết Risk Amount; không còn risk budget cho Trade Size."
+    case "below_regular_lot": return "Không có valid regular-lot Trade Size dưới risk budget đã chọn."
+    case "ready": return "Ready."
   }
 }
