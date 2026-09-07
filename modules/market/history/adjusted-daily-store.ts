@@ -37,6 +37,10 @@ type FactorTransitionRow = {
   cumulative_volume_factor: number | string
 }
 
+type TradingSessionRow = {
+  session_date: string
+}
+
 type ReadbackRow = {
   session_date: string
   bar_time: string
@@ -104,6 +108,30 @@ function toRawDaily(row: CanonicalRawDailyBar): RawDailyBar {
     volume: row.volume,
     sourcePriceBasis: row.priceBasis,
   }
+}
+
+async function readExpectedTradingSessions(
+  supabase: SupabaseClient,
+  fromDate: string,
+  toDate: string,
+) {
+  const { data, error } = await supabase
+    .from("market_trading_sessions")
+    .select("session_date")
+    .eq("is_trading_day", true)
+    .gte("session_date", fromDate)
+    .lte("session_date", toDate)
+    .order("session_date", { ascending: true })
+
+  if (error || !Array.isArray(data)) {
+    throw new Error("Adjusted Daily trading sessions could not be loaded")
+  }
+
+  const sessions = (data as TradingSessionRow[]).map((row) => row.session_date)
+  if (sessions.some((sessionDate) => !validIsoDate(sessionDate))) {
+    throw new Error("Adjusted Daily trading sessions could not be loaded")
+  }
+  return sessions
 }
 
 function readbackMatches(
@@ -221,6 +249,19 @@ export async function rebuildAdjustedDailyRange(input: {
       throw new Error("Adjusted Daily raw range contains duplicate canonical sessions")
     }
     sessionSet.add(raw.sessionDate)
+  }
+
+  const expectedSessions = await readExpectedTradingSessions(
+    input.supabase,
+    input.fromDate,
+    input.toDate,
+  )
+  const rawSessions = rawBars.map((bar) => bar.sessionDate)
+  if (
+    rawSessions.length !== expectedSessions.length
+    || rawSessions.some((sessionDate, index) => sessionDate !== expectedSessions[index])
+  ) {
+    throw new Error("Adjusted Daily canonical RAW range is incomplete")
   }
 
   const adjusted = rawBars.map((raw) => applyDailyAdjustment({ raw, run, transitions }))
