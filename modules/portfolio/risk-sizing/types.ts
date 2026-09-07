@@ -56,3 +56,39 @@ export type TradeSizeResult = {
   positionValueVnd: number | null
   totalRiskConsumptionVnd: number | null
 }
+
+export type RiskState = "normal" | "reduce_risk" | "pause_and_review" | "unknown"
+
+export type CurrentActiveRiskContext = {
+  knownActiveRiskVnd: number
+  accountEquityVnd: number
+  maxActiveRiskPercent: number | null
+  unknownRiskTradeCount: number
+  riskState?: RiskState
+}
+
+export type ProjectedRiskStatus =
+  | "within_plan"
+  | "exceeds_plan"
+  | "risk_unknown"
+  | "no_cap"
+  | "review_required"
+
+export type ProjectedRiskResult = {
+  status: ProjectedRiskStatus
+  knownActiveRiskVnd: number
+  plannedTradeRiskVnd: number
+  projectedKnownActiveRiskVnd: number
+  maxActiveRiskVnd: number | null
+  remainingRiskBudgetVnd: number | null
+  unknownRiskTradeCount: number
+}
+
+export type RiskTermSourceKind = "book" | "product" | "extension"
+
+export type RiskSizingTerm = {
+  label: string
+  help: string
+  sourceKind: RiskTermSourceKind
+  formula?: string
+}
