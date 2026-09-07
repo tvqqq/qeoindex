@@ -79,7 +79,9 @@ test("stop-first guidance states stop provenance and execution risks without gua
   assert.match(source, /liquidity/i)
   assert.match(source, /overnight/i)
   assert.match(source, /slippage/i)
-  assert.doesNotMatch(source, /guarantee|bảo đảm.*không.*thua|không thể cháy/i)
+
+  const sourceWithoutExplicitNoGuaranteeDisclaimer = source.replace(/not a zero-ROR guarantee/gi, "")
+  assert.doesNotMatch(sourceWithoutExplicitNoGuaranteeDisclaimer, /guarantee|bảo đảm.*không.*thua|không thể cháy/i)
 })
 
 test("projected risk panel fails closed when open Trade risk is unknown", () => {
