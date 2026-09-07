@@ -1,0 +1,97 @@
+name: QEO-137 Trade Domain
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "modules/portfolio/**"
+      - "app/api/portfolio/**"
+      - "tests/portfolio/qeo137-*.test.ts"
+      - ".github/workflows/qeo137-preprod.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qeo137-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trade-domain-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-137 schema contract
+        run: node --test tests/portfolio/qeo137-trade-domain-schema.test.ts
+      - name: QEO-137 lifecycle domain contract
+        run: node --test tests/portfolio/qeo137-trade-domain.test.ts
+      - name: QEO-137 read-model contract
+        run: node --test tests/portfolio/qeo137-trade-read-model.test.ts
+      - name: QEO-137 server boundary contract
+        run: node --test tests/portfolio/qeo137-trade-api-contract.test.ts
+      - name: Portfolio AVCO regression
+        run: node --test tests/portfolio-pnl.test.ts
+      - name: Application lint
+        run: pnpm lint:touched
+      - name: Start local Supabase
+        run: supabase start
+      - name: Replay migrations from zero
+        run: pnpm db:replay:verify
+      - name: Verify generated Database types
+        id: db-types
+        continue-on-error: true
+        run: pnpm db:types:verify
+      - name: Upload generated Database type candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo137-database-types
+          path: artifacts/qeo23/database.types.ts
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Sync generated Database types to feature branch
+        if: steps.db-types.outcome == 'failure'
+        env:
+          QEO_HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          candidate="artifacts/qeo23/database.types.ts"
+          test -f "$candidate"
+          cp "$candidate" modules/shared/supabase/database.types.ts
+          git fetch origin "$QEO_HEAD_REF"
+          rm -rf /tmp/qeo137-head
+          git worktree add --detach /tmp/qeo137-head FETCH_HEAD
+          cp "$candidate" /tmp/qeo137-head/modules/shared/supabase/database.types.ts
+          cd /tmp/qeo137-head
+          if git diff --quiet -- modules/shared/supabase/database.types.ts; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add modules/shared/supabase/database.types.ts
+          git commit -m "chore(db): regenerate Supabase types for QEO-137"
+          git push origin HEAD:"$QEO_HEAD_REF"
+      - name: TypeScript
+        run: pnpm typecheck
+      - name: Production build
+        run: pnpm build
+      - name: Require committed generated types
+        if: steps.db-types.outcome == 'failure'
+        run: |
+          echo "Generated Database types were synchronized; rerun on the new commit is required."
+          exit 1
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup

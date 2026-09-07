@@ -441,7 +441,15 @@
     {
       "version": "20260907003316",
       "name": "qeo132_raw_daily_basis"
+    },
+    {
+      "version": "20260907111730",
+      "name": "qeo137_trade_lifecycle_domain"
+    },
+    {
+      "version": "20260907112934",
+      "name": "qeo137_trade_fk_indexes"
     }
   ],
-  "reviewScope": "Canonical production migration ledger through QEO-132. Includes QEO-129 as explicitly reviewed PRODUCTION_AHEAD because its production shadow schema was promoted before source merge; QEO-132 is fully mapped to its production migration after schema/RLS/RPC and rollback-only behavioral smoke."
+  "reviewScope": "Canonical production migration ledger through QEO-137. QEO-129 remains explicitly reviewed PRODUCTION_AHEAD; QEO-132 remains mapped to its production RAW Daily migration. QEO-137 records both the normalized Trade lifecycle migration and the follow-up authenticated-grant/composite-FK-index hardening after production schema, RLS/policy, privilege, index, advisor and no-fabricated-backfill readback."
 }

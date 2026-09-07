@@ -377,6 +377,22 @@
       "state": "MAPPED",
       "evidence": "qeo132-production-ledger-schema-rls-rpc-and-rollback-smoke",
       "rationale": "QEO-132 was promoted only after parser, schema, store, TypeScript and zero-to-latest local Supabase rehearsal passed. Production readback verified private RLS-enabled RAW tables, service-role-only persistence, SECURITY DEFINER fixed search_path, append-only evidence, and rollback-only replay/correction/non-RAW atomicity with zero residual rows. Production timestamp differs from repository replay ordering."
+    },
+    {
+      "logicalName": "qeo137_trade_lifecycle_domain",
+      "repositoryVersion": "20260907100000",
+      "productionVersion": "20260907111730",
+      "state": "MAPPED",
+      "evidence": "qeo137-production-schema-rls-domain-and-no-fabricated-backfill",
+      "rationale": "QEO-137 normalized Trade lifecycle schema was promoted after the dedicated Trade-domain workflow passed schema/domain/read-model/API contracts, AVCO regression, zero-to-latest replay, generated types, TypeScript and production build. Production readback confirms the migration is additive: the three new Trade-domain tables remain empty and the existing transaction remains unlinked with trade_id NULL, so no historical grouping, stop, risk or psychology data was fabricated. Production timestamp differs from repository replay ordering."
+    },
+    {
+      "logicalName": "qeo137_trade_fk_indexes",
+      "repositoryVersion": "20260907112500",
+      "productionVersion": "20260907112934",
+      "state": "MAPPED",
+      "evidence": "qeo137-production-grant-hardening-and-fk-index-readback",
+      "rationale": "QEO-137 follow-up hardens default authenticated grants and adds covering indexes for the new composite foreign keys after production advisor/readback exposed those gaps. Production readback verifies stop events are SELECT+INSERT only for authenticated users, the new ownership policies remain RLS-bound to auth.uid(), and all four composite FK indexes exist. Production timestamp differs from repository replay ordering."
     }
   ]
 }
