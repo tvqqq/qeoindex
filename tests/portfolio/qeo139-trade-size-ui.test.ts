@@ -7,6 +7,8 @@ const tooltipPath = "components/portfolio/risk-sizing/risk-metric-tooltip.tsx"
 const allocationPath = "components/portfolio/portfolio-capital-allocation.tsx"
 const pagePath = "components/portfolio/portfolio-page.tsx"
 const terminologyPath = "modules/portfolio/risk-sizing/terminology.ts"
+const pnlPath = "modules/portfolio/pnl.ts"
+const pnlTestPath = "tests/portfolio-pnl.test.ts"
 
 function read(path: string) {
   return existsSync(path) ? readFileSync(path, "utf8") : ""
@@ -55,6 +57,14 @@ test("legacy fixed-stop assumptions and unsafe risk claims are removed from the 
   assert.doesNotMatch(source, /triệt tiêu hoàn toàn nguy cơ/i)
   assert.doesNotMatch(source, /dealStopLossPct|7\.0.*Stoploss/i)
   assert.doesNotMatch(source, /% Cắt lỗ deal tiếp theo/i)
+})
+
+test("legacy fixed-fractional sizing helper is removed from the portfolio domain", () => {
+  const pnl = read(pnlPath)
+  const pnlTest = read(pnlTestPath)
+
+  assert.doesNotMatch(pnl, /export function calculatePositionSizing/)
+  assert.doesNotMatch(pnlTest, /calculatePositionSizing|Fixed Fractional Account Risk/)
 })
 
 test("draft sizing state cannot leak across portfolio switches", () => {
