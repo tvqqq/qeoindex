@@ -74,3 +74,22 @@ test("Money Management Plan provenance is mutable only while Trade is planned", 
     {},
   ))
 })
+
+test("risk-plan HTTP routes stay thin and delegate to the authenticated server domain", () => {
+  const routes = [
+    ["app/api/portfolio/[id]/risk-plan/route.ts", "getRiskPlanOverview"],
+    ["app/api/portfolio/[id]/risk-plan/risk-profile/route.ts", "createRiskProfileAttempt"],
+    ["app/api/portfolio/[id]/risk-plan/discipline-profile/route.ts", "createDisciplineProfileAttempt"],
+    ["app/api/portfolio/[id]/risk-plan/plans/route.ts", "createMoneyManagementPlanVersion"],
+  ] as const
+
+  for (const [relativePath, delegate] of routes) {
+    const source = loadText(path.join(process.cwd(), relativePath), relativePath)
+    assert.match(source, /requireApiUser\(\)/)
+    assert.match(source, new RegExp(`\\b${delegate}\\b`))
+    assert.match(source, /runtime = "nodejs"/)
+    assert.match(source, /dynamic = "force-dynamic"/)
+    assert.match(source, /Cache-Control.*no-store/)
+    assert.doesNotMatch(source, /\.from\("portfolio_(?:risk_profile_attempts|discipline_profile_attempts|money_management_plans)"\)/)
+  }
+})
