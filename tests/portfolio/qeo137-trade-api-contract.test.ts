@@ -3,6 +3,9 @@ import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 const serverUrl = new URL("../../modules/portfolio/trades/server.ts", import.meta.url)
+const transactionCollectionUrl = new URL("../../app/api/portfolio/[id]/transactions/route.ts", import.meta.url)
+const transactionDetailUrl = new URL("../../app/api/portfolio/[id]/transactions/[txId]/route.ts", import.meta.url)
+const pnlUrl = new URL("../../modules/portfolio/pnl.ts", import.meta.url)
 const routePaths = [
   "../../app/api/portfolio/[id]/trades/route.ts",
   "../../app/api/portfolio/[id]/trades/[tradeId]/route.ts",
@@ -136,4 +139,40 @@ test("HTTP boundary maps validation/not-found/conflict errors explicitly", () =>
   assert.match(all, /409/)
   assert.match(all, /400/)
   assert.match(all, /404/)
+})
+
+test("transaction read/write contract exposes optional trade_id while preserving legacy payloads", () => {
+  const collection = readFileSync(transactionCollectionUrl, "utf8")
+  const detail = readFileSync(transactionDetailUrl, "utf8")
+
+  assert.match(collection, /SELECT_FIELDS[\s\S]*trade_id/)
+  assert.match(detail, /SELECT_FIELDS[\s\S]*trade_id/)
+  assert.match(collection, /validateTradeFillLink\(/)
+  assert.match(detail, /validateTradeFillLink\(/)
+  assert.match(collection, /body\.trade_id|item\.trade_id/)
+  assert.match(detail, /body\.trade_id/)
+})
+
+test("transaction linking validates effective ticker/action before storing a Trade FK", () => {
+  const collection = readFileSync(transactionCollectionUrl, "utf8")
+  const detail = readFileSync(transactionDetailUrl, "utf8")
+  const server = serverSource()
+
+  assert.match(server, /export async function validateTradeFillLink\b/)
+  assert.match(server, /ticker\s*!==\s*trade\.ticker/)
+  assert.match(server, /FILL_ACTIONS\.has\(action\)/)
+  assert.match(detail, /existingTransaction/)
+  assert.match(detail, /nextTicker/)
+  assert.match(detail, /nextAction/)
+  assert.match(detail, /validateTradeFillLink\([^)]*nextTicker[^)]*nextAction/s)
+  assert.match(collection, /validateTradeFillLink\([^)]*ticker[^)]*action/s)
+})
+
+test("AVCO accounting accepts trade_id metadata but never uses it in P&L math", () => {
+  const pnl = readFileSync(pnlUrl, "utf8")
+  assert.match(pnl, /trade_id\?:\s*string\s*\|\s*null/)
+
+  const engine = pnl.match(/export function computePortfolioPositions[\s\S]*?export function calculatePositionSizing/)?.[0] ?? ""
+  assert.ok(engine, "AVCO engine source must be found")
+  assert.doesNotMatch(engine, /trade_id/)
 })
