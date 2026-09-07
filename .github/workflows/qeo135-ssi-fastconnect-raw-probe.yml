@@ -1,0 +1,55 @@
+name: QEO-135 SSI FastConnect RAW Probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/qeo-135-ssi-fastconnect-raw-probe
+    paths:
+      - '.github/workflows/qeo135-ssi-fastconnect-raw-probe.yml'
+      - 'scripts/market/ssi_fastconnect_vhm_probe.py'
+      - 'tests/market-data/ssi_fastconnect_probe_test.py'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SSI_CLIENT_ID: ${{ secrets.SSI_CLIENT_ID }}
+      SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
+      SSI_API_SECRET: ${{ secrets.SSI_API_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run deterministic probe tests
+        run: python tests/market-data/ssi_fastconnect_probe_test.py
+
+      - name: Install official SSI SDK only when credentials are configured
+        shell: bash
+        run: |
+          if [[ -n "$SSI_CLIENT_ID" && -n "$SSI_API_KEY" && -n "$SSI_API_SECRET" ]]; then
+            python -m pip install --disable-pip-version-check 'ssi-sdk==3.2.1'
+          else
+            echo 'SSI FastConnect credentials are not configured; live provider call will be skipped.'
+          fi
+
+      - name: Run sanitized bounded VHM probe
+        run: |
+          mkdir -p artifacts/qeo135
+          python scripts/market/ssi_fastconnect_vhm_probe.py > artifacts/qeo135/ssi-vhm-probe.json
+          python -m json.tool artifacts/qeo135/ssi-vhm-probe.json
+
+      - name: Upload sanitized evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo135-ssi-vhm-probe
+          path: artifacts/qeo135/ssi-vhm-probe.json
+          if-no-files-found: error
+          retention-days: 7
