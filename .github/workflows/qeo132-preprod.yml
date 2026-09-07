@@ -34,6 +34,8 @@ jobs:
         run: node --test tests/market-history/qeo132-stockbiz-raw-daily.test.ts
       - name: Run QEO-132 raw Daily schema contract
         run: node --test tests/db/qeo132-raw-daily-schema.test.ts
+      - name: Run QEO-132 canonical raw Daily store contract
+        run: node --test tests/market-history/qeo132-raw-daily-store.test.ts
       - name: Compile TypeScript
         run: pnpm typecheck
 
