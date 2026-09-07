@@ -58,6 +58,14 @@ const PortfolioCapitalAllocation = dynamic(
   { ssr: false },
 )
 
+const PortfolioRiskPlan = dynamic(
+  () =>
+    import("@/components/portfolio/portfolio-risk-plan").then(
+      (m) => m.PortfolioRiskPlan,
+    ),
+  { ssr: false },
+)
+
 const PortfolioBenchmarkChart = dynamic(
   () =>
     import("@/components/portfolio/portfolio-benchmark-chart").then(
@@ -564,12 +572,15 @@ export function PortfolioPage() {
 
         {/* ── 3. TAB: PHÂN BỔ VỐN (CAPITAL ALLOCATION) ── */}
         {activeTab === "allocation" && (
-          <PortfolioCapitalAllocation
-            portfolios={portfolios}
-            activePortfolioId={activePortfolioId ?? ""}
-            positions={positions}
-            currentPrices={currentPrices}
-          />
+          <div className="space-y-6">
+            <PortfolioCapitalAllocation
+              portfolios={portfolios}
+              activePortfolioId={activePortfolioId ?? ""}
+              positions={positions}
+              currentPrices={currentPrices}
+            />
+            {activePortfolioId && <PortfolioRiskPlan portfolioId={activePortfolioId} />}
+          </div>
         )}
 
         {/* ── 4. TAB: HIỆU SUẤT (BENCHMARK VS VNINDEX) ── */}
