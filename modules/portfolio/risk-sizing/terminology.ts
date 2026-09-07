@@ -31,6 +31,11 @@ export const RISK_SIZING_TERMS = {
     help: "Tên rút gọn của Initial Stop-Loss Exit. Stop phải được xác định trước entry từ cấu trúc giá, volatility hoặc rule của hệ thống; không suy ra từ một % cố định.",
     sourceKind: "book",
   },
+  stopDistance: {
+    label: "Stop Distance",
+    help: "Khoảng cách tuyệt đối và phần trăm giữa Planned Entry và Initial Stop. Đây là phép tính sản phẩm từ chênh lệch Entry–Stop dùng trong công thức Trade Size.",
+    sourceKind: "product",
+  },
   riskPerShare: {
     label: "Risk per Share",
     help: "Khoảng tiền giữa Planned Entry và Initial Stop cho mỗi cổ phiếu trong long Trade.",
@@ -44,6 +49,11 @@ export const RISK_SIZING_TERMS = {
   slippageAllowance: {
     label: "Slippage Allowance",
     help: "Phần đệm trượt giá do QeoIndex tách riêng để tính thận trọng hơn. Đây là product extension; công thức in trong sách không có hạng mục riêng này.",
+    sourceKind: "extension",
+  },
+  availableTradeRiskBudget: {
+    label: "Available Risk Budget",
+    help: "Risk Amount còn lại sau Estimated Commission và Slippage Allowance. Đây là product extension để tách rõ phần ngân sách còn dùng cho khoảng Entry–Stop.",
     sourceKind: "extension",
   },
   tradeSize: {
