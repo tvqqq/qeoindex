@@ -104,6 +104,18 @@ test("QEO-132 fails closed when StockBiz semantic columns are missing or ambiguo
   assert.throws(() => parseStockBizRawDailyHtml(duplicateCloseHeader, { ticker: "VHM" }), /column|header|adjusted|ambiguous/i)
 })
 
+test("QEO-132 does not recursively unescape double-escaped semantic headers", () => {
+  const doubleEscapedDateHeader = table(
+    row("05/08/2026", 154.2, 158.8, 153, 153, 155.69, 76.5, 10_681_100),
+    ["&amp;lt;span&amp;gt;Ngày&amp;lt;/span&amp;gt;", "Thay đổi", "Mở cửa", "Cao nhất", "Thấp nhất", "Đóng cửa", "TB", "Đóng cửa ĐC", "Khối lượng"],
+  )
+
+  assert.throws(
+    () => parseStockBizRawDailyHtml(doubleEscapedDateHeader, { ticker: "VHM" }),
+    /column|header|missing|ambiguous/i,
+  )
+})
+
 test("QEO-132 rejects invalid OHLC, volume, date and duplicate session evidence", () => {
   const invalidOhlc = table(row("05/08/2026", 154.2, 152, 153, 153, 153.5, 76.5, 10_681_100))
   assert.throws(() => parseStockBizRawDailyHtml(invalidOhlc, { ticker: "VHM" }), /OHLC|high/i)
