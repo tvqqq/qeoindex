@@ -45,7 +45,7 @@ jobs:
           )
           if count != 1:
               raise SystemExit(f"expected one calculatePositionSizing helper, found {count}")
-          pnl_path.write_text(updated_pnl)
+          pnl_path.write_text(updated_pnl.rstrip() + "\n")
 
           pnl_test_path = Path("tests/portfolio-pnl.test.ts")
           pnl_test = pnl_test_path.read_text()
@@ -62,7 +62,7 @@ jobs:
           )
           if count != 1:
               raise SystemExit(f"expected one legacy sizing test, found {count}")
-          pnl_test_path.write_text(pnl_test)
+          pnl_test_path.write_text(pnl_test.rstrip() + "\n")
 
           manifest_path = Path("tests/test-contracts.json")
           manifest = json.loads(manifest_path.read_text())
