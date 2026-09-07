@@ -5,6 +5,7 @@ import { buildTradeReadModel } from "./read-model.ts"
 import {
   TradeDomainError,
   assertFrozenTradeFieldsUnchanged,
+  assertMoneyManagementPlanReferenceUnchanged,
   assertTradeTransition,
   normalizeJournalEntryInput,
   normalizeStopEventInput,
@@ -14,7 +15,7 @@ import { type TradeStatus } from "./types.ts"
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-const TRADE_SELECT = "id,portfolio_id,user_id,ticker,mode,status,trade_type,timeframe,system_tags,setup_tags,planned_entry,initial_stop_loss_exit,initial_account_equity,initial_risk_percent,initial_risk_amount,initial_risk_amount_per_share,planned_trade_size,planned_position_value,estimated_commission,slippage_allowance,opened_at,closed_at,pre_trade_plan,thesis_summary,final_review,lesson_learned,created_at,updated_at" as const
+const TRADE_SELECT = "id,portfolio_id,user_id,ticker,mode,status,trade_type,timeframe,system_tags,setup_tags,money_management_plan_id,planned_entry,initial_stop_loss_exit,initial_account_equity,initial_risk_percent,initial_risk_amount,initial_risk_amount_per_share,planned_trade_size,planned_position_value,estimated_commission,slippage_allowance,opened_at,closed_at,pre_trade_plan,thesis_summary,final_review,lesson_learned,created_at,updated_at" as const
 
 const FILL_SELECT = "id,portfolio_id,user_id,trade_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,created_at,updated_at" as const
 
@@ -29,6 +30,7 @@ const PLAN_FIELDS = [
   "timeframe",
   "system_tags",
   "setup_tags",
+  "money_management_plan_id",
   "planned_entry",
   "initial_stop_loss_exit",
   "initial_account_equity",
@@ -56,6 +58,7 @@ type TradeRow = Record<string, unknown> & {
   timeframe: string | null
   system_tags: string[]
   setup_tags: string[]
+  money_management_plan_id: string | null
   planned_entry: number | null
   initial_stop_loss_exit: number | null
   initial_account_equity: number | null
@@ -165,6 +168,10 @@ function normalizedPlanPatch(trade: TradeRow, input: unknown) {
     timeframe: body.timeframe !== undefined ? body.timeframe : trade.timeframe,
     system_tags: body.system_tags !== undefined ? body.system_tags : trade.system_tags,
     setup_tags: body.setup_tags !== undefined ? body.setup_tags : trade.setup_tags,
+    money_management_plan_id:
+      body.money_management_plan_id !== undefined
+        ? body.money_management_plan_id
+        : trade.money_management_plan_id,
     planned_entry: body.planned_entry !== undefined ? body.planned_entry : trade.planned_entry,
     initial_stop_loss_exit:
       body.initial_stop_loss_exit !== undefined ? body.initial_stop_loss_exit : trade.initial_stop_loss_exit,
@@ -226,6 +233,7 @@ export async function updatePlannedTrade(
   const trade = await loadOwnedTrade(context, portfolioId, tradeId)
   const patch = normalizedPlanPatch(trade, input)
   assertFrozenTradeFieldsUnchanged(trade, patch)
+  assertMoneyManagementPlanReferenceUnchanged(trade, patch)
   if (trade.status !== "planned") {
     throw new TradeDomainError("TRADE_NOT_PLANNED", "Only a planned Trade may edit its plan")
   }
@@ -255,6 +263,7 @@ export async function transitionTrade(
   const body = asInputRecord(input)
   const planPatch = normalizedPlanPatch(trade, body)
   assertFrozenTradeFieldsUnchanged(trade, planPatch)
+  assertMoneyManagementPlanReferenceUnchanged(trade, planPatch)
 
   const updates: Record<string, unknown> = { ...planPatch, status: targetStatus }
   if (targetStatus === "open") {
