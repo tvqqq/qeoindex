@@ -10,88 +10,17 @@ import {
   normalizeStopEventInput,
   normalizeTradeCreateInput,
 } from "./validation.ts"
-import { FROZEN_TRADE_FIELDS, type TradeStatus } from "./types.ts"
+import { type TradeStatus } from "./types.ts"
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-const TRADE_SELECT = [
-  "id",
-  "portfolio_id",
-  "user_id",
-  "ticker",
-  "mode",
-  "status",
-  "trade_type",
-  "timeframe",
-  "system_tags",
-  "setup_tags",
-  "planned_entry",
-  "initial_stop_loss_exit",
-  "initial_account_equity",
-  "initial_risk_percent",
-  "initial_risk_amount",
-  "initial_risk_amount_per_share",
-  "planned_trade_size",
-  "planned_position_value",
-  "estimated_commission",
-  "slippage_allowance",
-  "opened_at",
-  "closed_at",
-  "pre_trade_plan",
-  "thesis_summary",
-  "final_review",
-  "lesson_learned",
-  "created_at",
-  "updated_at",
-].join(",")
+const TRADE_SELECT = "id,portfolio_id,user_id,ticker,mode,status,trade_type,timeframe,system_tags,setup_tags,planned_entry,initial_stop_loss_exit,initial_account_equity,initial_risk_percent,initial_risk_amount,initial_risk_amount_per_share,planned_trade_size,planned_position_value,estimated_commission,slippage_allowance,opened_at,closed_at,pre_trade_plan,thesis_summary,final_review,lesson_learned,created_at,updated_at" as const
 
-const FILL_SELECT = [
-  "id",
-  "portfolio_id",
-  "user_id",
-  "trade_id",
-  "ticker",
-  "action",
-  "quantity",
-  "price",
-  "fee",
-  "fee_rate",
-  "transaction_date",
-  "created_at",
-  "updated_at",
-].join(",")
+const FILL_SELECT = "id,portfolio_id,user_id,trade_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,created_at,updated_at" as const
 
-const STOP_SELECT = [
-  "id",
-  "trade_id",
-  "portfolio_id",
-  "user_id",
-  "ticker",
-  "stop_type",
-  "price",
-  "quantity_covered",
-  "signal",
-  "reason",
-  "effective_at",
-  "created_at",
-].join(",")
+const STOP_SELECT = "id,trade_id,portfolio_id,user_id,ticker,stop_type,price,quantity_covered,signal,reason,effective_at,created_at" as const
 
-const JOURNAL_SELECT = [
-  "id",
-  "trade_id",
-  "portfolio_id",
-  "user_id",
-  "ticker",
-  "phase",
-  "note",
-  "emotion_tags",
-  "behavior_tags",
-  "adherence_status",
-  "override_reason",
-  "occurred_at",
-  "created_at",
-  "updated_at",
-].join(",")
+const JOURNAL_SELECT = "id,trade_id,portfolio_id,user_id,ticker,phase,note,emotion_tags,behavior_tags,adherence_status,override_reason,occurred_at,created_at,updated_at" as const
 
 const PLAN_FIELDS = [
   "ticker",
