@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
 import {
   chartHistoryClass,
@@ -19,8 +20,50 @@ import {
   ssiIboardResolutionToken,
 } from "../modules/market/provider-benchmark/providers/ssi-iboard.ts"
 import { isCanonicalDailyHotRowUsable } from "../modules/market/chart-data/daily-authority.ts"
+import {
+  CHART_HOT_RETENTION_PROOF_PAGE_SIZE,
+  proveHotArchivePartitionEligibility,
+  proveHotArchivePartitionsEligibility,
+} from "../modules/market/chart-data/hot-retention.ts"
 
 const DAY = 86400
+
+function vietnamMidnight(dateKey: string) {
+  return Math.floor(new Date(`${dateKey}T00:00:00+07:00`).getTime() / 1000)
+}
+
+function retentionRow(dateKey: string, index = 0) {
+  return { bar_time: new Date((vietnamMidnight(dateKey) + 9 * 3600 + 15 * 60 + index) * 1000).toISOString() }
+}
+
+function fakeRetentionSupabase(input: {
+  rows?: Array<Record<string, unknown>>
+  error?: { message: string } | null
+  throwError?: Error
+}) {
+  const ranges: Array<[number, number]> = []
+  const client = {
+    ranges,
+    from() {
+      const builder = {
+        select() { return builder },
+        eq() { return builder },
+        gt() { return builder },
+        order() { return builder },
+        range(from: number, to: number) {
+          ranges.push([from, to])
+          if (input.throwError) throw input.throwError
+          return Promise.resolve({
+            data: (input.rows ?? []).slice(from, to + 1),
+            error: input.error ?? null,
+          })
+        },
+      }
+      return builder
+    },
+  }
+  return client as unknown as SupabaseClient & { ranges: Array<[number, number]> }
+}
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -56,6 +99,100 @@ test("QEO-100 history clamp never expands a request and clamps only short/mid lo
 test("QEO-103 product hot retention cutoff keeps complete Vietnam calendar dates", () => {
   const referenceAt = new Date("2026-09-05T12:34:00+07:00")
   assert.equal(new Date(chartHotRetentionCutoff(referenceAt) * 1000).toISOString(), "2026-08-05T17:00:00.000Z")
+})
+
+test("QEO-90 per-ticker HOT proof retains a ticker with only four newer sessions", async () => {
+  const supabase = fakeRetentionSupabase({
+    rows: ["2026-08-26", "2026-08-25", "2026-08-24", "2026-08-21"].map(retentionRow),
+  })
+  const result = await proveHotArchivePartitionEligibility(supabase, {
+    ticker: "MISSING_CURRENT",
+    toExclusive: vietnamMidnight("2026-08-20") + DAY,
+  })
+
+  assert.equal(result.eligible, false)
+  assert.equal(result.reason, "fewer_newer_trading_sessions")
+  assert.deepEqual(result.newerTradingDates, ["2026-08-26", "2026-08-25", "2026-08-24", "2026-08-21"])
+  assert.equal(result.pagesRead, 1)
+})
+
+test("QEO-90 per-ticker HOT proof pages dense sessions and permits a sixth-or-older candidate", async () => {
+  const denseLatestSession = Array.from({ length: CHART_HOT_RETENTION_PROOF_PAGE_SIZE }, (_, index) => retentionRow("2026-08-27", index))
+  const fiveNewerSessions = ["2026-08-26", "2026-08-25", "2026-08-24", "2026-08-21", "2026-08-20"].map(retentionRow)
+  const supabase = fakeRetentionSupabase({ rows: [...denseLatestSession, ...fiveNewerSessions] })
+  const result = await proveHotArchivePartitionEligibility(supabase, {
+    ticker: "SIXTH_SESSION",
+    toExclusive: vietnamMidnight("2026-08-19") + DAY,
+  })
+
+  assert.equal(result.eligible, true)
+  assert.equal(result.reason, "eligible")
+  assert.equal(result.newerTradingDates.length, 5)
+  assert.deepEqual(supabase.ranges, [[0, CHART_HOT_RETENTION_PROOF_PAGE_SIZE - 1], [CHART_HOT_RETENTION_PROOF_PAGE_SIZE, CHART_HOT_RETENTION_PROOF_PAGE_SIZE * 2 - 1]])
+})
+
+test("QEO-90 per-ticker HOT proof fails closed on read/query failure", async () => {
+  const supabase = fakeRetentionSupabase({ error: { message: "temporary read failure" } })
+  const result = await proveHotArchivePartitionEligibility(supabase, {
+    ticker: "QUERY_FAILURE",
+    toExclusive: vietnamMidnight("2026-08-20") + DAY,
+  })
+
+  assert.equal(result.eligible, false)
+  assert.equal(result.reason, "query_error")
+  assert.match(result.error ?? "", /temporary read failure/)
+})
+
+test("QEO-90 per-ticker HOT proof fails closed on malformed bar time", async () => {
+  const supabase = fakeRetentionSupabase({ rows: [{ bar_time: "not-a-timestamp" }] })
+  const result = await proveHotArchivePartitionEligibility(supabase, {
+    ticker: "MALFORMED_TIME",
+    toExclusive: vietnamMidnight("2026-08-20") + DAY,
+  })
+
+  assert.equal(result.eligible, false)
+  assert.equal(result.reason, "malformed_bar_time")
+})
+
+test("QEO-90 HOT proof accepts epoch-second timestamps without mistaking them for milliseconds", async () => {
+  const supabase = fakeRetentionSupabase({
+    rows: ["2026-08-26", "2026-08-25", "2026-08-24", "2026-08-21", "2026-08-20"].map((dateKey) => ({
+      bar_time: vietnamMidnight(dateKey) + 9 * 3600 + 15 * 60,
+    })),
+  })
+  const result = await proveHotArchivePartitionEligibility(supabase, {
+    ticker: "EPOCH_SECONDS",
+    toExclusive: vietnamMidnight("2026-08-19") + DAY,
+  })
+
+  assert.equal(result.eligible, true)
+  assert.equal(result.newerTradingDates.length, 5)
+})
+
+test("QEO-90 lifecycle proof scans each ticker once and reuses candidate session evidence", async () => {
+  const supabase = fakeRetentionSupabase({
+    rows: ["2026-08-26", "2026-08-25", "2026-08-24", "2026-08-21"].map(retentionRow),
+  })
+  const result = await proveHotArchivePartitionsEligibility(supabase, [
+    { ticker: "SPARSE", tradingDate: "2026-08-19", toExclusive: vietnamMidnight("2026-08-20") },
+    { ticker: "SPARSE", tradingDate: "2026-08-18", toExclusive: vietnamMidnight("2026-08-19") },
+  ])
+
+  assert.equal(supabase.ranges.length, 1)
+  assert.equal(result.get("SPARSE:2026-08-19")?.eligible, false)
+  assert.equal(result.get("SPARSE:2026-08-18")?.eligible, true)
+})
+
+test("QEO-90 archive guard runs before archive and verified prune", () => {
+  const lifecycle = source("modules/market/chart-data/archive-lifecycle.ts")
+  const guard = lifecycle.indexOf("const retentionProofs = await proveHotArchivePartitionsEligibility")
+  const archive = lifecycle.indexOf("const archived = await cold.archiveVerifiedPartition")
+  const prune = lifecycle.indexOf("const deletedRows = await pruneVerifiedHotIntradayPartition")
+  assert.ok(guard >= 0)
+  assert.ok(guard < archive)
+  assert.ok(guard < prune)
+  assert.match(lifecycle, /if \(!retentionProof\.eligible\) \{[\s\S]*?continue\s*\}/)
+  assert.match(lifecycle, /proveHotArchivePartitionsEligibility/)
 })
 
 test("QEO-108 hourly read path splits physical HOT/COLD at the five-session boundary", () => {

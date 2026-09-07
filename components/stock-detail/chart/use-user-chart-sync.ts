@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import {
   DEFAULT_INDICATOR_CONFIG,
   type ChartStyle,
@@ -19,6 +19,12 @@ import {
   type RuntimeDrawingObject,
   type UserChartSettingsPayloadV2,
 } from "./drawings"
+import {
+  canEditChartDrawings,
+  mergeRemoteChartSettingsIntoPending,
+  shouldApplyRemoteChartSettings,
+  type ChartSettingsField,
+} from "./chart-settings-hydration"
 
 interface UseUserChartSyncOptions {
   ticker: string
@@ -28,7 +34,27 @@ interface UseUserChartSyncOptions {
 }
 
 export type SaveStatus = "saved" | "saving" | "offline"
+export type DrawingSyncStatus = "hydrating" | "ready" | "offline"
 export const CHART_TIMEFRAME_EVENT = "qeo:chart-timeframe"
+export { shouldApplyRemoteChartSettings } from "./chart-settings-hydration"
+
+interface ChartSyncGeneration {
+  id: number
+  ticker: string
+  requestRevision: number
+  hydrated: boolean
+  hydrationFailed: boolean
+  localFieldIntents: Set<ChartSettingsField>
+  localDrawingEditIntent: boolean
+  remoteSettings: UserChartSettingsPayloadV2 | null
+  unresolvedLegacyDrawings: LegacyDrawing[]
+}
+
+interface PendingChartSave {
+  generationId: number
+  revision: number
+  payload: UserChartSettingsPayloadV2
+}
 
 function getLocalKey(ticker: string) {
   return `qeo_chart_settings_${ticker.toUpperCase()}`
@@ -107,13 +133,34 @@ export function useUserChartSync({
   const isLoadedRef = useRef(false)
   const currentTickerRef = useRef(ticker)
   const unresolvedLegacyDrawingsRef = useRef<LegacyDrawing[]>([])
+  const generationSequenceRef = useRef(0)
+  const activeGenerationRef = useRef<ChartSyncGeneration>({
+    id: 0,
+    ticker: ticker.toUpperCase(),
+    requestRevision: 0,
+    hydrated: false,
+    hydrationFailed: false,
+    localFieldIntents: new Set(),
+    localDrawingEditIntent: false,
+    remoteSettings: null,
+    unresolvedLegacyDrawings: [],
+  })
+  const generationsRef = useRef(new Map<number, ChartSyncGeneration>())
   const localRevisionRef = useRef(0)
-  const inFlightRevisionRef = useRef<number | null>(null)
-  const pendingSaveRef = useRef<{
-    revision: number
-    payload: UserChartSettingsPayloadV2
-  } | null>(null)
+  const inFlightSaveRef = useRef<PendingChartSave | null>(null)
+  const pendingSaveRef = useRef(new Map<number, PendingChartSave>())
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const retryHydrationRef = useRef<(() => void) | null>(null)
+  const [drawingSyncStatus, setDrawingSyncStatus] = useState<DrawingSyncStatus>("hydrating")
+
+  const normalizedTicker = ticker.toUpperCase()
+
+  // Update the cross-ticker guard before browser events can reach the newly
+  // committed chart. The save callback also compares its render-time ticker
+  // so a click in the narrow pre-effect window cannot target the old queue.
+  useLayoutEffect(() => {
+    currentTickerRef.current = normalizedTicker
+  }, [normalizedTicker])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -122,28 +169,83 @@ export function useUserChartSync({
     }))
   }, [ticker, timeframe])
 
-  // Remote coalesced queue execution worker
+  const writeLocalPayload = useCallback((payload: UserChartSettingsPayloadV2) => {
+    try {
+      localStorage.setItem(getLocalKey(payload.ticker), JSON.stringify(payload))
+    } catch {
+      // Local storage is a best-effort cache; remote persistence remains the authority.
+    }
+  }, [])
+
+  const mergeRemoteFieldsIntoPendingSave = useCallback((generation: ChartSyncGeneration) => {
+    const remote = generation.remoteSettings
+    if (!remote) return
+    const pending = pendingSaveRef.current.get(generation.id)
+    if (!pending) return
+
+    const mergedRemote = mergeRemoteChartSettingsIntoPending(
+      pending.payload,
+      remote,
+      generation.localFieldIntents,
+      generation.localDrawingEditIntent,
+    )
+    const payload: UserChartSettingsPayloadV2 = {
+      ...mergedRemote,
+      ...(remote.unresolvedLegacyDrawings && remote.unresolvedLegacyDrawings.length > 0
+        ? { unresolvedLegacyDrawings: mergeUnresolvedLegacyDrawings(
+            pending.payload.unresolvedLegacyDrawings ?? [],
+            remote.unresolvedLegacyDrawings,
+          ) }
+        : {}),
+    }
+    const merged = { ...pending, payload }
+    pendingSaveRef.current.set(generation.id, merged)
+    writeLocalPayload(payload)
+  }, [writeLocalPayload])
+
+  // Remote coalesced queue execution worker. Each generation owns its ticker
+  // and payload, so switching tickers can never retarget an older save.
   const drainSaveQueue = useCallback(() => {
     async function execute() {
-      if (inFlightRevisionRef.current !== null) {
+      if (inFlightSaveRef.current !== null) {
         return
       }
 
-      if (!pendingSaveRef.current) {
-        setSaveStatus("saved")
+      const pending = [...pendingSaveRef.current.values()]
+        .sort((left, right) => left.revision - right.revision)
+        .find((candidate) => {
+          const generation = generationsRef.current.get(candidate.generationId)
+          if (!generation?.hydrated) return false
+          // A failed hydration leaves the remote drawing set unknown. Even a
+          // deliberate local edit must wait for a successful merge so a full
+          // payload can never replace unknown remote objects with a partial set.
+          if (generation.hydrationFailed) return false
+          return true
+        })
+
+      if (!pending) {
+        if (pendingSaveRef.current.size === 0) {
+          const active = activeGenerationRef.current
+          setSaveStatus(!active.hydrated ? "saving" : active.hydrationFailed ? "offline" : "saved")
+        } else {
+          const waitingForHydration = [...pendingSaveRef.current.values()].some((candidate) => {
+            const generation = generationsRef.current.get(candidate.generationId)
+            return Boolean(generation && !generation.hydrated && !generation.hydrationFailed)
+          })
+          setSaveStatus(waitingForHydration ? "saving" : "offline")
+        }
         return
       }
 
-      const { revision, payload } = pendingSaveRef.current
-      pendingSaveRef.current = null
-      inFlightRevisionRef.current = revision
+      pendingSaveRef.current.delete(pending.generationId)
+      inFlightSaveRef.current = pending
       setSaveStatus("saving")
 
       try {
         const res = await fetch("/api/user/chart-drawings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(pending.payload),
         })
         if (!res.ok) {
           setSaveStatus("offline")
@@ -151,11 +253,17 @@ export function useUserChartSync({
       } catch {
         setSaveStatus("offline")
       } finally {
-        inFlightRevisionRef.current = null
-        if (pendingSaveRef.current !== null) {
+        inFlightSaveRef.current = null
+        const generation = generationsRef.current.get(pending.generationId)
+        if (generation && pendingSaveRef.current.has(generation.id)) {
+          void execute()
+        } else if (pendingSaveRef.current.size > 0) {
           void execute()
         } else {
           setSaveStatus((prev) => (prev === "offline" ? "offline" : "saved"))
+        }
+        if (generation && generation.id !== activeGenerationRef.current.id && !pendingSaveRef.current.has(generation.id)) {
+          generationsRef.current.delete(generation.id)
         }
       }
     }
@@ -163,26 +271,53 @@ export function useUserChartSync({
     void execute()
   }, [])
 
+  const markLocalFieldIntent = useCallback((field: ChartSettingsField) => {
+    const generation = activeGenerationRef.current
+    generation.localFieldIntents.add(field)
+    if (field === "drawings") generation.localDrawingEditIntent = true
+  }, [])
+
   // 1. Load data on mount or ticker change
   useEffect(() => {
-    currentTickerRef.current = ticker
+    const generation: ChartSyncGeneration = {
+      id: generationSequenceRef.current + 1,
+      ticker: ticker.toUpperCase(),
+      requestRevision: localRevisionRef.current,
+      hydrated: false,
+      hydrationFailed: false,
+      localFieldIntents: new Set(),
+      localDrawingEditIntent: false,
+      remoteSettings: null,
+      unresolvedLegacyDrawings: [],
+    }
+    generationSequenceRef.current = generation.id
+    generationsRef.current.set(generation.id, generation)
+    activeGenerationRef.current = generation
+    currentTickerRef.current = generation.ticker
     unresolvedLegacyDrawingsRef.current = []
     isLoadedRef.current = false
+    setDrawingSyncStatus("hydrating")
     setAllDrawings([])
     let isCancelled = false
 
     async function syncSettings() {
-      // Check local storage if ticker changed
+      generation.hydrated = false
+      generation.hydrationFailed = false
+      generation.remoteSettings = null
+      if (!isCancelled && activeGenerationRef.current.id === generation.id) {
+        setDrawingSyncStatus("hydrating")
+      }
       const { settings: local, raw } = readLocalChartSettings(ticker)
       if (raw && !raw.includes('\"drawingsSchemaVersion\":2')) {
         backupLegacyLocalSettings(ticker, raw)
       }
 
-      if (local && !isCancelled) {
-        unresolvedLegacyDrawingsRef.current = mergeUnresolvedLegacyDrawings(
-          unresolvedLegacyDrawingsRef.current,
+      if (local && !isCancelled && activeGenerationRef.current.id === generation.id) {
+        generation.unresolvedLegacyDrawings = mergeUnresolvedLegacyDrawings(
+          generation.unresolvedLegacyDrawings,
           local.unresolvedLegacyDrawings,
         )
+        unresolvedLegacyDrawingsRef.current = generation.unresolvedLegacyDrawings
         if (local.timeframe) setTimeframe(local.timeframe)
         if (local.chartStyle) setChartStyle(local.chartStyle)
         if (local.indicators) setIndicators({ ...defaultIndicators, ...local.indicators })
@@ -191,43 +326,71 @@ export function useUserChartSync({
         }
       }
 
-      // Fetch remote settings from Supabase API
+      const requestRevision = generation.requestRevision
       try {
         const res = await fetch(`/api/user/chart-drawings?ticker=${encodeURIComponent(ticker)}`, {
           cache: "no-store",
         })
-        if (!res.ok) return
+        if (!res.ok) throw new Error(`Chart settings request failed with ${res.status}`)
         const body = await res.json()
-        if (isCancelled || !body.ok || !body.data) return
+        if (!body.ok || !body.data) throw new Error("Chart settings response was missing data")
 
         const { settings: remote } = deserializeUserChartSettings(body.data)
-        unresolvedLegacyDrawingsRef.current = mergeUnresolvedLegacyDrawings(
-          unresolvedLegacyDrawingsRef.current,
+        generation.remoteSettings = remote
+        const current = !isCancelled && activeGenerationRef.current.id === generation.id
+        if (current) setDrawingSyncStatus("ready")
+        const revisionMatches = shouldApplyRemoteChartSettings(
+          requestRevision,
+          localRevisionRef.current,
+          false,
+        )
+        const canApplyField = (field: ChartSettingsField) =>
+          current && (revisionMatches || !generation.localFieldIntents.has(field))
+
+        generation.unresolvedLegacyDrawings = mergeUnresolvedLegacyDrawings(
+          generation.unresolvedLegacyDrawings,
           remote.unresolvedLegacyDrawings,
         )
-        if (remote.timeframe) setTimeframe(remote.timeframe)
-        if (remote.chartStyle) setChartStyle(remote.chartStyle)
-        if (remote.indicators && Object.keys(remote.indicators).length > 0) {
-          setIndicators({ ...DEFAULT_INDICATOR_CONFIG, ...remote.indicators })
-        }
-        if (Array.isArray(remote.drawings)) {
+        if (current) unresolvedLegacyDrawingsRef.current = generation.unresolvedLegacyDrawings
+        if (canApplyField("timeframe")) setTimeframe(remote.timeframe)
+        if (canApplyField("chartStyle")) setChartStyle(remote.chartStyle)
+        if (canApplyField("indicators")) setIndicators({ ...DEFAULT_INDICATOR_CONFIG, ...remote.indicators })
+        if (canApplyField("drawings") && !generation.localDrawingEditIntent) {
           setAllDrawings(remote.drawings.map((d) => persistedV2ToRuntimeDrawing(d)))
         }
+        mergeRemoteFieldsIntoPendingSave(generation)
       } catch (err) {
-        console.warn("[useUserChartSync] Failed to fetch remote settings, using local:", err)
+        generation.hydrationFailed = true
+        if (!isCancelled && activeGenerationRef.current.id === generation.id) {
+          setDrawingSyncStatus("offline")
+          setSaveStatus("offline")
+          console.warn("[useUserChartSync] Failed to fetch remote settings, using local:", err)
+        }
       } finally {
-        if (!isCancelled) {
+        generation.hydrated = true
+        if (!isCancelled && activeGenerationRef.current.id === generation.id) {
           isLoadedRef.current = true
         }
+        drainSaveQueue()
       }
     }
 
+    const retry = () => {
+      if (isCancelled || activeGenerationRef.current.id !== generation.id) return
+      void syncSettings()
+    }
+    retryHydrationRef.current = retry
     void syncSettings()
 
     return () => {
       isCancelled = true
+      if (retryHydrationRef.current === retry) retryHydrationRef.current = null
     }
-  }, [ticker, defaultTimeframe, defaultChartStyle, defaultIndicators])
+  }, [defaultChartStyle, defaultIndicators, defaultTimeframe, drainSaveQueue, mergeRemoteFieldsIntoPendingSave, ticker])
+
+  const retryChartHydration = useCallback(() => {
+    retryHydrationRef.current?.()
+  }, [])
 
   // 2. Debounced coalesced remote save and immediate localStorage write
   const scheduleSave = useCallback(
@@ -237,7 +400,9 @@ export function useUserChartSync({
       newIndicators: IndicatorConfig,
       newDrawings: (DrawingObject | PersistedDrawingV2)[],
     ) => {
+      const generation = activeGenerationRef.current
       const currentTicker = currentTickerRef.current
+      if (!generation.ticker || generation.ticker !== currentTicker || generation.ticker !== normalizedTicker) return
       localRevisionRef.current += 1
       const currentRevision = localRevisionRef.current
 
@@ -255,7 +420,7 @@ export function useUserChartSync({
       }
 
       const payload: UserChartSettingsPayloadV2 = {
-        ticker: currentTicker,
+        ticker: generation.ticker,
         timeframe: newTimeframe,
         chartStyle: newStyle,
         indicators: newIndicators,
@@ -267,22 +432,13 @@ export function useUserChartSync({
         updatedAt: new Date().toISOString(),
       }
 
-      // Immediate local save with legacy backup safeguard
-      try {
-        const rawExisting = localStorage.getItem(getLocalKey(currentTicker))
-        if (rawExisting && !rawExisting.includes('\"drawingsSchemaVersion\":2')) {
-          backupLegacyLocalSettings(currentTicker, rawExisting)
-        }
-        localStorage.setItem(getLocalKey(currentTicker), JSON.stringify(payload))
-      } catch {
-        // Quota exceeded fallback
-      }
+      writeLocalPayload(payload)
 
-      // Enqueue latest revision
-      pendingSaveRef.current = {
+      pendingSaveRef.current.set(generation.id, {
+        generationId: generation.id,
         revision: currentRevision,
         payload,
-      }
+      })
       setSaveStatus("saving")
 
       if (saveTimeoutRef.current) {
@@ -293,46 +449,56 @@ export function useUserChartSync({
         drainSaveQueue()
       }, 750)
     },
-    [drainSaveQueue],
+    [drainSaveQueue, normalizedTicker, writeLocalPayload],
   )
 
   // Wrapper setters that trigger sync
   const updateTimeframe = useCallback(
     (tf: ChartTimeframe) => {
+      markLocalFieldIntent("timeframe")
       setTimeframe(tf)
       scheduleSave(tf, chartStyle, indicators, allDrawings)
     },
-    [chartStyle, indicators, allDrawings, scheduleSave],
+    [allDrawings, chartStyle, indicators, markLocalFieldIntent, scheduleSave],
   )
 
   const updateChartStyle = useCallback(
     (st: ChartStyle) => {
+      markLocalFieldIntent("chartStyle")
       setChartStyle(st)
       scheduleSave(timeframe, st, indicators, allDrawings)
     },
-    [timeframe, indicators, allDrawings, scheduleSave],
+    [allDrawings, indicators, markLocalFieldIntent, scheduleSave, timeframe],
   )
 
   const updateIndicators = useCallback(
     (newInd: IndicatorConfig | ((prev: IndicatorConfig) => IndicatorConfig)) => {
+      markLocalFieldIntent("indicators")
       setIndicators((prev) => {
         const next = typeof newInd === "function" ? newInd(prev) : newInd
         scheduleSave(timeframe, chartStyle, next, allDrawings)
         return next
       })
     },
-    [timeframe, chartStyle, allDrawings, scheduleSave],
+    [allDrawings, chartStyle, markLocalFieldIntent, scheduleSave, timeframe],
   )
 
   const updateDrawings = useCallback(
     (newDrawings: DrawingObject[] | ((prev: DrawingObject[]) => DrawingObject[])) => {
+      const generation = activeGenerationRef.current
+      if (!canEditChartDrawings(
+        generation.hydrated,
+        generation.hydrationFailed,
+        generation.remoteSettings !== null,
+      )) return
+      markLocalFieldIntent("drawings")
       setAllDrawings((prev) => {
         const next = typeof newDrawings === "function" ? newDrawings(prev) : newDrawings
         scheduleSave(timeframe, chartStyle, indicators, next)
         return next
       })
     },
-    [timeframe, chartStyle, indicators, scheduleSave],
+    [chartStyle, indicators, markLocalFieldIntent, scheduleSave, timeframe],
   )
 
   const addDrawing = useCallback(
@@ -382,5 +548,7 @@ export function useUserChartSync({
     deleteDrawing,
     clearAllDrawings,
     saveStatus,
+    drawingSyncStatus,
+    retryChartHydration,
   }
 }

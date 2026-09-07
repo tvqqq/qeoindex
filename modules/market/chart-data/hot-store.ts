@@ -2,7 +2,15 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { CanonicalOhlcvBar } from "./contract"
+import {
+  proveHotArchivePartitionEligibility,
+  proveHotArchivePartitionsEligibility,
+  type HotArchiveRetentionProof,
+} from "./hot-retention"
 import type { ProviderCoverageRange } from "./provider-coverage"
+
+export { proveHotArchivePartitionEligibility, proveHotArchivePartitionsEligibility }
+export type { HotArchiveRetentionProof }
 
 const UPSERT_CHUNK_SIZE = 500
 const ARCHIVE_DISCOVERY_ROWS_PER_PARTITION = 300
@@ -103,6 +111,11 @@ export async function readHotIntradayRange(supabase: SupabaseClient, ticker: str
   return (data || []).map((row) => storedRowToBar(row as Record<string, unknown>)).filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
 }
 
+/**
+ * Discover bounded candidates with the global session cutoff. The returned
+ * partitions still require proveHotArchivePartitionEligibility before any
+ * archive or prune authority is reached.
+ */
 export async function listExpiredHotPartitions(supabase: SupabaseClient, input: { cutoff: number; maxPartitions?: number }): Promise<HotArchivePartition[]> {
   const maxPartitions = Math.max(1, Math.min(48, Math.floor(input.maxPartitions ?? 12)))
   const discoveryLimit = Math.min(ARCHIVE_DISCOVERY_MAX_ROWS, Math.max(1_000, maxPartitions * ARCHIVE_DISCOVERY_ROWS_PER_PARTITION))

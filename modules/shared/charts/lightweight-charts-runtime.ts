@@ -8,8 +8,14 @@ export interface LightweightSeriesApi {
   setData(data: ReadonlyArray<Record<string, unknown>>): void
   update(data: Record<string, unknown>): void
   applyOptions(options: Record<string, unknown>): void
+  priceToCoordinate?(price: number): number | null
+  coordinateToPrice?(coordinate: number): number | null
   createPriceLine?(options: Record<string, unknown>): LightweightPriceLineApi
   removePriceLine?(line: LightweightPriceLineApi): void
+}
+
+export interface LightweightPriceScaleApi {
+  applyOptions(options: Record<string, unknown>): void
 }
 
 export interface LightweightSeriesMarkersApi {
@@ -25,19 +31,24 @@ export interface LightweightTimeScaleApi {
   fitContent(): void
   setVisibleLogicalRange(range: LightweightLogicalRange): void
   timeToCoordinate(time: number): number | null
+  coordinateToTime?(coordinate: number): unknown
   subscribeVisibleLogicalRangeChange(handler: (range: LightweightLogicalRange | null) => void): void
   unsubscribeVisibleLogicalRangeChange(handler: (range: LightweightLogicalRange | null) => void): void
 }
 
 export interface LightweightPaneApi {
   setHeight(height: number): void
+  getRightPriceScale?(): LightweightPriceScaleApi
 }
 
 export interface LightweightChartApi {
   addSeries(definition: unknown, options?: Record<string, unknown>, paneIndex?: number): LightweightSeriesApi
   applyOptions(options: Record<string, unknown>): void
+  resize?(width: number, height: number, forceRepaint?: boolean): void
   timeScale(): LightweightTimeScaleApi
   panes(): LightweightPaneApi[]
+  subscribeCrosshairMove?(handler: (param: unknown) => void): void
+  unsubscribeCrosshairMove?(handler: (param: unknown) => void): void
   remove(): void
 }
 

@@ -112,6 +112,7 @@ function HistoryBoundChart({
           ticker={ticker}
           bars={resolvedBars}
           hourlyBars={resolvedBars}
+          isLoading={loading}
           isMaximized={isMaximized}
           onToggleMaximize={onToggleMaximize}
           currentPrice={currentPrice}
@@ -178,5 +179,5 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
     return () => window.removeEventListener(CHART_TIMEFRAME_EVENT, onTimeframe)
   }, [props.ticker])
 
-  return <HistoryBoundChart key={`${props.ticker}:${timeframe}`} {...props} timeframe={timeframe} />
+  return <HistoryBoundChart {...props} timeframe={timeframe} />
 }

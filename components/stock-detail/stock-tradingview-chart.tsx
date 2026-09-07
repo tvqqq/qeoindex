@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useCallback, useMemo, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { toPng } from "html-to-image"
 import {
   CalendarDays,
   Camera,
@@ -12,12 +13,19 @@ import {
   SlidersHorizontal,
 } from "lucide-react"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
+import {
+  loadLightweightCharts,
+  type LightweightChartApi,
+  type LightweightSeriesApi,
+} from "@/modules/shared/charts/lightweight-charts-runtime"
 import { cn } from "@/modules/shared/ui/cn"
 import { StockChartDrawingCanvas } from "./chart/stock-chart-drawing-canvas"
 import { StockChartDrawingTools } from "./chart/stock-chart-drawing-tools"
 import { StockChartIndicatorModal } from "./chart/stock-chart-indicator-modal"
 import { StockChartObjectManager } from "./chart/stock-chart-object-manager"
 import { StockChartTextEditor } from "./chart/stock-chart-text-editor"
+import { boundChartTimeToTimeline, bridgeCoordinateToTime, bridgeTimeToCoordinate } from "./chart/chart-coordinate-bridge"
+import { canIncrementallyUpdateLatest, fingerprintOhlcvPrefix } from "./chart/chart-render-diff"
 import {
   calculateBollingerBands,
   calculateIchimokuBaseSeries,
@@ -27,9 +35,8 @@ import {
   calculateSma,
   calculateVolumeProfile,
   calculateVolumeSma,
-  ICHIMOKU_DISPLACEMENT,
 } from "./chart/stock-chart-indicators"
-import { formatFutureTimelineLabel, projectFutureTimes } from "./chart/future-timeline"
+import { projectFutureTimes } from "./chart/future-timeline"
 import { aggregateBarsByTimeframe } from "./chart/stock-chart-timeframes"
 import {
   ALL_TIMEFRAMES,
@@ -38,6 +45,7 @@ import {
   type ChartTimeframe,
   type DrawingIconType,
   type DrawingTool,
+  type VolumeProfileData,
 } from "./chart/stock-chart-types"
 import { useUserChartSync } from "./chart/use-user-chart-sync"
 import { useCanonicalMinuteBars } from "./chart/use-canonical-minute-bars"
@@ -46,6 +54,7 @@ interface StockTradingViewChartProps {
   ticker: string
   bars: OhlcvBar[]
   hourlyBars?: OhlcvBar[]
+  isLoading?: boolean
   isMaximized?: boolean
   onToggleMaximize?: () => void
   currentPrice?: number
@@ -56,7 +65,105 @@ const DEFAULT_RIGHT_OFFSET_BARS = 8
 const MIN_MAX_RIGHT_OFFSET_BARS = 32
 const EXPANDED_SUBPANE_HEIGHT = 92
 const COLLAPSED_SUBPANE_HEIGHT = 24
-const SUBPANE_GAP = 8
+const VOLUME_PANE_HEIGHT = 64
+const INITIAL_MAX_VISIBLE_BARS = 180
+
+type ChartDimensions = { width: number; height: number }
+
+type RenderedData = {
+  actualLength: number
+  firstTime: number
+  latestTime: number
+  futureLength: number
+  fingerprint: string
+}
+
+type ChartSeries = {
+  candles: LightweightSeriesApi
+  futureAxis: LightweightSeriesApi
+  volume: LightweightSeriesApi
+  volumeMa: LightweightSeriesApi
+  ma20: LightweightSeriesApi
+  ma50: LightweightSeriesApi
+  ma200: LightweightSeriesApi
+  bollingerUpper: LightweightSeriesApi
+  bollingerMiddle: LightweightSeriesApi
+  bollingerLower: LightweightSeriesApi
+  ichimokuTenkan: LightweightSeriesApi
+  ichimokuKijun: LightweightSeriesApi
+  ichimokuSpanA: LightweightSeriesApi
+  ichimokuSpanB: LightweightSeriesApi
+  ichimokuChikou: LightweightSeriesApi
+  qeoBase129: LightweightSeriesApi
+  rsi: LightweightSeriesApi
+  macd: LightweightSeriesApi
+  macdSignal: LightweightSeriesApi
+  macdHistogram: LightweightSeriesApi
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? value as Record<string, unknown> : null
+}
+
+function toEpochSeconds(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  const businessDay = asRecord(value)
+  if (!businessDay) return null
+  const year = businessDay.year
+  const month = businessDay.month
+  const day = businessDay.day
+  if (
+    typeof year !== "number" || !Number.isInteger(year)
+    || typeof month !== "number" || !Number.isInteger(month)
+    || typeof day !== "number" || !Number.isInteger(day)
+  ) return null
+  return Math.floor(Date.UTC(year, month - 1, day) / 1000)
+}
+
+function formatAxisTime(value: unknown, timeframe: ChartTimeframe): string {
+  const seconds = toEpochSeconds(value)
+  if (seconds == null) return ""
+  const date = new Date(seconds * 1000)
+  if (timeframe.includes("m") || timeframe.includes("h")) {
+    return new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date)
+  }
+  return new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    day: "2-digit",
+    month: "2-digit",
+  }).format(date)
+}
+
+function formatCrosshairTime(value: unknown, timeframe: ChartTimeframe): string {
+  const seconds = toEpochSeconds(value)
+  if (seconds == null) return ""
+  const date = new Date(seconds * 1000)
+  if (timeframe.includes("m") || timeframe.includes("h")) {
+    return new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date)
+  }
+  return new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date)
+}
 
 function formatCompactVolume(volume: number | null | undefined) {
   if (typeof volume !== "number" || !Number.isFinite(volume)) return "—"
@@ -66,16 +173,190 @@ function formatCompactVolume(volume: number | null | undefined) {
   return Math.round(volume).toLocaleString("vi-VN")
 }
 
+function normalizeBars(bars: OhlcvBar[]): OhlcvBar[] {
+  const byTime = new Map<number, OhlcvBar>()
+  for (const bar of bars) {
+    if (!Number.isFinite(bar.time)) continue
+    byTime.set(bar.time, bar)
+  }
+  return [...byTime.values()].sort((left, right) => left.time - right.time)
+}
+
+function candleData(bars: OhlcvBar[]): Record<string, unknown>[] {
+  return bars.map((bar) => ({
+    time: bar.time,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+  }))
+}
+
+function futureAxisData(futureTimes: number[]): Record<string, unknown>[] {
+  // Whitespace keeps future timestamps addressable without synthetic OHLC.
+  return futureTimes.map((time) => ({ time }))
+}
+
+function volumeData(bars: OhlcvBar[]): Record<string, unknown>[] {
+  return bars.map((bar) => ({
+    time: bar.time,
+    value: bar.volume,
+    color: bar.close >= bar.open ? "rgba(34,201,138,0.42)" : "rgba(255,71,87,0.42)",
+  }))
+}
+
+function lineData(values: Array<number | null>, times: number[]): Record<string, unknown>[] {
+  const result: Record<string, unknown>[] = []
+  for (let index = 0; index < values.length && index < times.length; index += 1) {
+    const value = values[index]
+    if (typeof value !== "number" || !Number.isFinite(value)) continue
+    result.push({ time: times[index], value })
+  }
+  return result
+}
+
+function chartSeriesOptions(visible: boolean, color: string, lineWidth = 1): Record<string, unknown> {
+  return {
+    color,
+    lineWidth,
+    visible,
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: false,
+  }
+}
+
+function findBarAtTime(bars: OhlcvBar[], time: number | null): OhlcvBar | null {
+  if (time == null) return null
+  return bars.find((bar) => bar.time === time) ?? null
+}
+
+interface AlignedIndicatorCanvasProps {
+  width: number
+  height: number
+  clipHeight: number
+  revision: number
+  times: number[]
+  spanA: Array<number | null>
+  spanB: Array<number | null>
+  volumeProfile: VolumeProfileData | null
+  timeToX: (time: number) => number | null
+  priceToY: (price: number) => number | null
+}
+
+/**
+ * Lightweight Charts owns the market plot and all axes. This canvas is only
+ * for indicator fills that the pinned runtime cannot express as a built-in
+ * series: the Ichimoku cloud and a bounded, price-aligned volume profile.
+ */
+function AlignedIndicatorCanvas({
+  width,
+  height,
+  clipHeight,
+  revision,
+  times,
+  spanA,
+  spanB,
+  volumeProfile,
+  timeToX,
+  priceToY,
+}: AlignedIndicatorCanvasProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || width <= 0 || height <= 0) return
+    const ratio = typeof window === "undefined" ? 1 : Math.max(1, window.devicePixelRatio || 1)
+    canvas.width = Math.max(1, Math.round(width * ratio))
+    canvas.height = Math.max(1, Math.round(height * ratio))
+    canvas.style.width = `${width}px`
+    canvas.style.height = `${height}px`
+
+    const context = canvas.getContext("2d")
+    if (!context) return
+    context.setTransform(ratio, 0, 0, ratio, 0, 0)
+    context.clearRect(0, 0, width, height)
+    context.save()
+    context.beginPath()
+    context.rect(0, 0, width, Math.max(0, Math.min(height, clipHeight)))
+    context.clip()
+
+    if (volumeProfile && volumeProfile.maxBucketVol > 0 && volumeProfile.buckets.length > 0) {
+      const centers = volumeProfile.buckets.map((bucket) => bucket.price)
+      const step = centers.length > 1
+        ? Math.abs(centers[1] - centers[0])
+        : Math.max(Math.abs(centers[0]) * 0.01, 0.01)
+      const maxWidth = Math.min(180, Math.max(56, width * 0.24))
+      for (const bucket of volumeProfile.buckets) {
+        const topCoordinate = priceToY(bucket.price + step / 2)
+        const bottomCoordinate = priceToY(bucket.price - step / 2)
+        if (topCoordinate == null || bottomCoordinate == null) continue
+        const top = Math.min(topCoordinate, bottomCoordinate)
+        const bucketHeight = Math.max(1, Math.abs(bottomCoordinate - topCoordinate) - 1)
+        const widthRatio = Math.max(0, Math.min(1, bucket.volume / volumeProfile.maxBucketVol))
+        const barWidth = Math.max(1, maxWidth * widthRatio)
+        context.fillStyle = bucket.isPoc ? "rgba(245,158,11,0.54)" : "rgba(245,158,11,0.22)"
+        context.fillRect(Math.max(0, width - barWidth - 4), top, barWidth, bucketHeight)
+      }
+    }
+
+    const spanLength = Math.min(times.length, spanA.length, spanB.length)
+    for (let index = 1; index < spanLength; index += 1) {
+      const previousA = spanA[index - 1]
+      const previousB = spanB[index - 1]
+      const currentA = spanA[index]
+      const currentB = spanB[index]
+      if (
+        typeof previousA !== "number" || !Number.isFinite(previousA)
+        || typeof previousB !== "number" || !Number.isFinite(previousB)
+        || typeof currentA !== "number" || !Number.isFinite(currentA)
+        || typeof currentB !== "number" || !Number.isFinite(currentB)
+      ) continue
+      const previousX = timeToX(times[index - 1])
+      const currentX = timeToX(times[index])
+      const previousAY = priceToY(previousA)
+      const previousBY = priceToY(previousB)
+      const currentAY = priceToY(currentA)
+      const currentBY = priceToY(currentB)
+      if (
+        previousX == null || currentX == null
+        || previousAY == null || previousBY == null
+        || currentAY == null || currentBY == null
+      ) continue
+      context.beginPath()
+      context.moveTo(previousX, previousAY)
+      context.lineTo(currentX, currentAY)
+      context.lineTo(currentX, currentBY)
+      context.lineTo(previousX, previousBY)
+      context.closePath()
+      context.fillStyle = (previousA + currentA) / 2 >= (previousB + currentB) / 2
+        ? "rgba(34,197,94,0.10)"
+        : "rgba(239,68,68,0.10)"
+      context.fill()
+    }
+    context.restore()
+  }, [clipHeight, height, priceToY, revision, spanA, spanB, timeToX, times, volumeProfile, width])
+
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 z-[2]"
+      data-chart-indicator-overlay="aligned"
+    />
+  )
+}
+
 export function StockTradingViewChart({
   ticker,
   bars,
   hourlyBars,
+  isLoading = false,
   isMaximized = false,
   onToggleMaximize,
   currentPrice,
   changePct,
 }: StockTradingViewChartProps) {
-  // 1. Persistent User Chart Settings & Drawings Hook
   const {
     timeframe,
     setTimeframe,
@@ -87,6 +368,8 @@ export function StockTradingViewChart({
     deleteDrawing,
     clearAllDrawings,
     saveStatus,
+    drawingSyncStatus,
+    retryChartHydration,
   } = useUserChartSync({
     ticker,
     defaultTimeframe: "1D",
@@ -95,1652 +378,894 @@ export function StockTradingViewChart({
   })
 
   const minuteBars = useCanonicalMinuteBars({ ticker, enabled: timeframe === "1m" })
+  const displayBars = useMemo(
+    () => normalizeBars(
+      timeframe === "1m"
+        ? minuteBars.bars
+        : aggregateBarsByTimeframe(bars, hourlyBars, timeframe),
+    ),
+    [bars, hourlyBars, minuteBars.bars, timeframe],
+  )
+  const futureCount = Math.max(
+    MIN_MAX_RIGHT_OFFSET_BARS,
+    Math.ceil(Math.max(1, displayBars.length) * 0.5),
+  )
+  const futureTimes = useMemo(() => {
+    const lastTime = displayBars.at(-1)?.time
+    return lastTime == null ? [] : projectFutureTimes(lastTime, timeframe, futureCount)
+  }, [displayBars, futureCount, timeframe])
+  const allTimes = useMemo(
+    () => [...displayBars.map((bar) => bar.time), ...futureTimes],
+    [displayBars, futureTimes],
+  )
+  const barTimes = useMemo(() => displayBars.map((bar) => bar.time), [displayBars])
+  const barFingerprint = useMemo(() => fingerprintOhlcvPrefix(displayBars), [displayBars])
 
-  // Dropdown states
+  const ma20 = useMemo(() => calculateSma(displayBars, 20), [displayBars])
+  const ma50 = useMemo(() => calculateSma(displayBars, 50), [displayBars])
+  const ma200 = useMemo(() => calculateSma(displayBars, 200), [displayBars])
+  const volumeMa20 = useMemo(() => calculateVolumeSma(displayBars, 20), [displayBars])
+  const bollinger = useMemo(
+    () => indicators.showBollinger ? calculateBollingerBands(displayBars, 20, 2) : null,
+    [displayBars, indicators.showBollinger],
+  )
+  const ichimoku = useMemo(
+    () => indicators.showIchimoku ? calculateIchimokuSeries(displayBars) : null,
+    [displayBars, indicators.showIchimoku],
+  )
+  const qeoBase129 = useMemo(
+    () => indicators.showQeoBase129 ? calculateIchimokuBaseSeries(displayBars, 129) : [],
+    [displayBars, indicators.showQeoBase129],
+  )
+  const rsi = useMemo(
+    () => isMaximized ? calculateRsiSeries(displayBars, 14) : [],
+    [displayBars, isMaximized],
+  )
+  const macd = useMemo(
+    () => isMaximized ? calculateMacdSeries(displayBars) : null,
+    [displayBars, isMaximized],
+  )
+
+  const renderPayload = useMemo(() => ({
+    candle: candleData(displayBars),
+    futureAxis: futureAxisData(futureTimes),
+    volume: volumeData(displayBars),
+    volumeMa: lineData(volumeMa20, barTimes),
+    ma20: lineData(ma20, barTimes),
+    ma50: lineData(ma50, barTimes),
+    ma200: lineData(ma200, barTimes),
+    bollingerUpper: lineData(bollinger?.upper ?? [], barTimes),
+    bollingerMiddle: lineData(bollinger?.middle ?? [], barTimes),
+    bollingerLower: lineData(bollinger?.lower ?? [], barTimes),
+    ichimokuTenkan: lineData(ichimoku?.tenkan ?? [], barTimes),
+    ichimokuKijun: lineData(ichimoku?.kijun ?? [], barTimes),
+    ichimokuSpanA: lineData(ichimoku?.spanA ?? [], allTimes),
+    ichimokuSpanB: lineData(ichimoku?.spanB ?? [], allTimes),
+    ichimokuChikou: lineData(ichimoku?.chikou ?? [], barTimes),
+    qeoBase129: lineData(qeoBase129, barTimes),
+    rsi: lineData(rsi, barTimes),
+    macd: lineData(macd?.macd ?? [], barTimes),
+    macdSignal: lineData(macd?.signal ?? [], barTimes),
+    macdHistogram: lineData(macd?.histogram ?? [], barTimes),
+  }), [
+    allTimes,
+    barTimes,
+    bollinger,
+    displayBars,
+    futureTimes,
+    ichimoku,
+    ma20,
+    ma50,
+    ma200,
+    macd,
+    qeoBase129,
+    rsi,
+    volumeMa20,
+  ])
+
+  const plotContainerRef = useRef<HTMLDivElement>(null)
+  const chartHostRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<LightweightChartApi | null>(null)
+  const seriesRef = useRef<ChartSeries | null>(null)
+  const chartGenerationRef = useRef(0)
+  const renderedRef = useRef<RenderedData | null>(null)
+  const visibleRangeRef = useRef<{ from: number; to: number } | null>(null)
+  const overlayFrameRef = useRef<number | null>(null)
+  const [chartReady, setChartReady] = useState(false)
+  const [runtimeError, setRuntimeError] = useState<string | null>(null)
+  const [dimensions, setDimensions] = useState<ChartDimensions>({ width: 0, height: 0 })
+  const [visibleRangeState, setVisibleRangeState] = useState<{ from: number; to: number } | null>(null)
+  const [overlayRevision, setOverlayRevision] = useState(0)
+  const [crosshairTime, setCrosshairTime] = useState<number | null>(null)
   const [showTfDropdown, setShowTfDropdown] = useState(false)
   const [showIndicatorModal, setShowIndicatorModal] = useState(false)
-
-  // Drawing tools state
+  const [exportStatus, setExportStatus] = useState<string | null>(null)
   const [activeTool, setActiveTool] = useState<DrawingTool>("cursor")
-  const [activeColor, setActiveColor] = useState<string>("#00f0ff")
-  const [lineWidth, setLineWidth] = useState<number>(2)
+  const [activeColor, setActiveColor] = useState("#00f0ff")
+  const [lineWidth, setLineWidth] = useState(2)
   const [selectedIconType, setSelectedIconType] = useState<DrawingIconType>("flag")
   const [isDrawingsLocked, setIsDrawingsLocked] = useState(false)
   const [isDrawingsHidden, setIsDrawingsHidden] = useState(false)
-
-  // Interactive selection, Object Manager & Text Editor states
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null)
   const [isObjectManagerOpen, setIsObjectManagerOpen] = useState(false)
   const [editingTextDrawingId, setEditingTextDrawingId] = useState<string | null>(null)
-
-  // Viewport zoom and scroll state (TradingView style)
-  const [visibleBarsCount, setVisibleBarsCount] = useState<number>(75)
-  const [scrollOffset, setScrollOffset] = useState<number>(0) // >0 = scrolled left into history
-  const [rightOffsetBars, setRightOffsetBars] = useState<number>(DEFAULT_RIGHT_OFFSET_BARS)
-  const [manualPriceDomain, setManualPriceDomain] = useState<{ min: number; max: number } | null>(null)
   const [isRsiCollapsed, setIsRsiCollapsed] = useState(false)
   const [isMacdCollapsed, setIsMacdCollapsed] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const isPanningRef = useRef(false)
-  const panStartXRef = useRef(0)
-  const panStartOffsetRef = useRef(0) // signed viewport position: history > 0, future space < 0
 
-  // Hover crosshair state (X bar index and Y position in SVG space)
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-  const [hoverY, setHoverY] = useState<number | null>(null)
+  const scheduleOverlayPaint = useCallback(() => {
+    if (typeof window === "undefined" || overlayFrameRef.current !== null) return
+    overlayFrameRef.current = window.requestAnimationFrame(() => {
+      overlayFrameRef.current = null
+      setOverlayRevision((revision) => revision + 1)
+    })
+  }, [])
 
-  // Canonical raw 1m is loaded from QEO-92. Derived timeframes remain owned by QEO-93.
-  const displayBars = useMemo(() => {
-    if (timeframe === "1m") return minuteBars.bars
-    return aggregateBarsByTimeframe(bars, hourlyBars, timeframe)
-  }, [bars, hourlyBars, minuteBars.bars, timeframe])
-
-  // Compute visible slice of bars based on scrollOffset & visibleBarsCount
-  const totalBars = displayBars.length
-  const maxScrollOffset = Math.max(0, totalBars - 15)
-  const clampedScrollOffset = Math.max(0, Math.min(maxScrollOffset, scrollOffset))
-  const endIdx = Math.max(15, totalBars - clampedScrollOffset)
-  const startIdx = Math.max(0, endIdx - visibleBarsCount)
-
-  const visibleBars = useMemo(() => {
-    if (displayBars.length === 0) return []
-    return displayBars.slice(startIdx, endIdx)
-  }, [displayBars, startIdx, endIdx])
-
-  const maxRightOffsetBars = Math.max(
-    MIN_MAX_RIGHT_OFFSET_BARS,
-    ICHIMOKU_DISPLACEMENT,
-    Math.ceil(visibleBars.length * 0.5),
+  const activeBar = findBarAtTime(displayBars, crosshairTime) ?? displayBars.at(-1) ?? null
+  const overlayWidth = dimensions.width || 1000
+  const overlayHeight = dimensions.height || (isMaximized ? 640 : 340)
+  const mainPaneHeight = Math.max(
+    1,
+    overlayHeight
+      - VOLUME_PANE_HEIGHT
+      - (isMaximized ? (isRsiCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0)
+      - (isMaximized ? (isMacdCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0),
   )
 
-  const futureTimes = useMemo(() => {
-    const lastTime = visibleBars.at(-1)?.time
-    if (!lastTime) return []
-    return projectFutureTimes(lastTime, timeframe, maxRightOffsetBars)
-  }, [visibleBars, timeframe, maxRightOffsetBars])
-
-  // Technical Indicators calculations on full displayBars, then mapped
-  const ma20All = useMemo(() => calculateSma(displayBars, 20), [displayBars])
-  const ma50All = useMemo(() => calculateSma(displayBars, 50), [displayBars])
-  const ma200All = useMemo(() => calculateSma(displayBars, 200), [displayBars])
-  const volumeMa20All = useMemo(() => calculateVolumeSma(displayBars, 20), [displayBars])
-
-  const rsiSeriesAll = useMemo(() => {
-    return isMaximized ? calculateRsiSeries(displayBars, 14) : []
-  }, [displayBars, isMaximized])
-
-  const macdSeriesAllRaw = useMemo(() => {
-    return isMaximized ? calculateMacdSeries(displayBars) : null
-  }, [displayBars, isMaximized])
-
-  const macdSeriesAll = useMemo(() => {
-    if (!macdSeriesAllRaw) return null
-    return {
-      macd: macdSeriesAllRaw.macd.slice(startIdx, endIdx),
-      signal: macdSeriesAllRaw.signal.slice(startIdx, endIdx),
-      histogram: macdSeriesAllRaw.histogram.slice(startIdx, endIdx),
-    }
-  }, [macdSeriesAllRaw, startIdx, endIdx])
-
-  const ichimokuAll = useMemo(() => {
-    return isMaximized && indicators.showIchimoku ? calculateIchimokuSeries(displayBars) : null
-  }, [displayBars, isMaximized, indicators.showIchimoku])
-
-  const bollingerAll = useMemo(() => {
-    return isMaximized && indicators.showBollinger ? calculateBollingerBands(displayBars, 20, 2) : null
-  }, [displayBars, isMaximized, indicators.showBollinger])
-
-  const qeoBase129All = useMemo(() => {
-    return isMaximized && indicators.showQeoBase129 ? calculateIchimokuBaseSeries(displayBars, 129) : []
-  }, [displayBars, isMaximized, indicators.showQeoBase129])
-
-  // Visible slices of indicators
-  const ma20 = useMemo(() => ma20All.slice(startIdx, endIdx), [ma20All, startIdx, endIdx])
-  const ma50 = useMemo(() => ma50All.slice(startIdx, endIdx), [ma50All, startIdx, endIdx])
-  const ma200 = useMemo(() => ma200All.slice(startIdx, endIdx), [ma200All, startIdx, endIdx])
-  const volumeMa20 = useMemo(() => volumeMa20All.slice(startIdx, endIdx), [volumeMa20All, startIdx, endIdx])
-  const rsiSeries = useMemo(() => rsiSeriesAll.slice(startIdx, endIdx), [rsiSeriesAll, startIdx, endIdx])
-  const macdSeries = macdSeriesAll
-
-  const ichimoku = useMemo(() => {
-    if (!ichimokuAll) return null
-    const visibleFutureCount = endIdx === displayBars.length
-      ? Math.min(ICHIMOKU_DISPLACEMENT, rightOffsetBars)
-      : 0
-    const spanEndIdx = endIdx + visibleFutureCount
-    return {
-      tenkan: ichimokuAll.tenkan.slice(startIdx, endIdx),
-      kijun: ichimokuAll.kijun.slice(startIdx, endIdx),
-      spanA: ichimokuAll.spanA.slice(startIdx, spanEndIdx),
-      spanB: ichimokuAll.spanB.slice(startIdx, spanEndIdx),
-    }
-  }, [ichimokuAll, startIdx, endIdx, displayBars.length, rightOffsetBars])
-
-  const bollinger = useMemo(() => {
-    if (!bollingerAll) return null
-    return {
-      upper: bollingerAll.upper.slice(startIdx, endIdx),
-      middle: bollingerAll.middle.slice(startIdx, endIdx),
-      lower: bollingerAll.lower.slice(startIdx, endIdx),
-    }
-  }, [bollingerAll, startIdx, endIdx])
-
-  const qeoBase129 = useMemo(
-    () => qeoBase129All.slice(startIdx, endIdx),
-    [qeoBase129All, startIdx, endIdx],
-  )
+  // LWC owns the scales. Drawings are the only SVG overlay and always derive
+  // their screen coordinates from current LWC series/time-scale coordinates.
+  const priceToY = useCallback((price: number) => {
+    return seriesRef.current?.candles.priceToCoordinate?.(price) ?? null
+  }, [])
+  const yToPrice = useCallback((y: number) => {
+    return seriesRef.current?.candles.coordinateToPrice?.(y) ?? null
+  }, [])
+  const timeToX = useCallback((time: number) => {
+    return bridgeTimeToCoordinate(
+      time,
+      allTimes,
+      (candidate) => chartRef.current?.timeScale().timeToCoordinate(candidate) ?? null,
+    )
+  }, [allTimes])
+  const xToTime = useCallback((x: number) => {
+    const value = chartRef.current?.timeScale().coordinateToTime?.(x)
+    const native = toEpochSeconds(value)
+    if (native != null) return boundChartTimeToTimeline(native, allTimes)
+    return bridgeCoordinateToTime(
+      x,
+      allTimes,
+      (candidate) => chartRef.current?.timeScale().timeToCoordinate(candidate) ?? null,
+    )
+  }, [allTimes])
 
   const volumeProfile = useMemo(() => {
-    return isMaximized && indicators.showVolumeProfile ? calculateVolumeProfile(visibleBars, 24) : null
-  }, [visibleBars, isMaximized, indicators.showVolumeProfile])
+    if (!indicators.showVolumeProfile || displayBars.length === 0) return null
+    const range = visibleRangeState
+    if (!range) return calculateVolumeProfile(displayBars, 20)
+    const from = Math.max(0, Math.floor(range.from))
+    const to = Math.min(displayBars.length, Math.ceil(range.to) + 1)
+    return calculateVolumeProfile(displayBars.slice(from, Math.max(from, to)), 20)
+  }, [displayBars, indicators.showVolumeProfile, visibleRangeState])
 
-  // Layout Geometry (TitanLabs & TradingView Standard Structure)
-  const width = 1000
-  const height = isMaximized ? 640 : 340
-  const padLeft = 8
-  const padRight = 68 // Dedicated Y-axis price rail on the right
-  const padTop = 16
-  const padBottom = 26 // Dedicated X-axis time rail at the bottom
-  const plotWidth = width - padLeft - padRight
+  const setLatestVisibleRange = useCallback(() => {
+    const chart = chartRef.current
+    if (!chart || displayBars.length === 0) return
+    const visibleBars = Math.min(
+      displayBars.length,
+      Math.max(30, Math.min(INITIAL_MAX_VISIBLE_BARS, Math.round(displayBars.length * 0.75))),
+    )
+    // Future whitespace provides the addressable projection horizon. Keep the
+    // initial/reset viewport anchored at the product default instead of
+    // forcing half of the first view to be empty.
+    const rightOffset = DEFAULT_RIGHT_OFFSET_BARS
+    chart.applyOptions({ timeScale: { rightOffset } })
+    const range = {
+      from: Math.max(-0.5, displayBars.length - visibleBars),
+      to: displayBars.length - 1 + rightOffset,
+    }
+    chart.timeScale().setVisibleLogicalRange(range)
+    visibleRangeRef.current = range
+    setVisibleRangeState(range)
+  }, [displayBars.length])
 
-  const hasRsi = isMaximized
-  const hasMacd = isMaximized
-  const rsiPaneHeight = hasRsi ? (isRsiCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0
-  const macdPaneHeight = hasMacd ? (isMacdCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0
+  const setVisibleBars = useCallback((count: number) => {
+    const chart = chartRef.current
+    if (!chart || displayBars.length === 0) return
+    const visible = Math.min(displayBars.length, Math.max(15, count))
+    const rightOffset = DEFAULT_RIGHT_OFFSET_BARS
+    const range = {
+      from: Math.max(-0.5, displayBars.length - visible),
+      to: displayBars.length - 1 + rightOffset,
+    }
+    chart.applyOptions({ timeScale: { rightOffset } })
+    chart.timeScale().setVisibleLogicalRange(range)
+    visibleRangeRef.current = range
+    setVisibleRangeState(range)
+  }, [displayBars.length])
 
-  const volHeight = isMaximized ? 55 : 40
-  const indicatorPaneTotal =
-    (hasRsi ? rsiPaneHeight + SUBPANE_GAP : 0) +
-    (hasMacd ? macdPaneHeight + SUBPANE_GAP : 0)
-  const mainPriceHeight = height - padTop - padBottom - volHeight - 10 - indicatorPaneTotal
-  const volTop = padTop + mainPriceHeight + 10
-  const rsiTop = volTop + volHeight + SUBPANE_GAP
-  const macdTop = hasRsi
-    ? rsiTop + rsiPaneHeight + SUBPANE_GAP
-    : volTop + volHeight + SUBPANE_GAP
+  const handleResetView = useCallback(() => {
+    setLatestVisibleRange()
+    chartRef.current?.applyOptions({ rightPriceScale: { autoScale: true } })
+  }, [setLatestVisibleRange])
 
-  // Auto metrics remain the source for reset bounds and volume scaling.
-  const autoChartMetrics = useMemo(() => {
-    if (visibleBars.length === 0) return null
-
-    let minPrice = Infinity
-    let maxPrice = -Infinity
-    let maxVol = 0
-
-    visibleBars.forEach((bar) => {
-      if (bar.low < minPrice) minPrice = bar.low
-      if (bar.high > maxPrice) maxPrice = bar.high
-      if (bar.volume > maxVol) maxVol = bar.volume
-    })
-
-    if (bollinger) {
-      bollinger.upper.forEach((v) => {
-        if (v != null && v > maxPrice) maxPrice = v
+  const handleExport = useCallback(async () => {
+    const target = plotContainerRef.current
+    if (!target) return
+    setExportStatus("Đang tạo ảnh…")
+    try {
+      const dataUrl = await toPng(target, {
+        cacheBust: true,
+        backgroundColor: "#080b10",
+        pixelRatio: 2,
       })
-      bollinger.lower.forEach((v) => {
-        if (v != null && v < minPrice) minPrice = v
-      })
+      const link = document.createElement("a")
+      link.download = `${ticker.toUpperCase()}-${timeframe}-chart.png`
+      link.href = dataUrl
+      link.click()
+      setExportStatus("Đã xuất ảnh")
+    } catch {
+      setExportStatus("Không thể xuất ảnh")
     }
+    window.setTimeout(() => setExportStatus(null), 1800)
+  }, [ticker, timeframe])
 
-    if (ichimoku) {
-      for (const value of [...ichimoku.spanA, ...ichimoku.spanB]) {
-        if (value == null) continue
-        if (value > maxPrice) maxPrice = value
-        if (value < minPrice) minPrice = value
-      }
-    }
+  // A ticker/timeframe generation owns one LWC instance. Cleanup invalidates
+  // the generation before a slow CDN promise can resolve.
+  useEffect(() => {
+    const host = chartHostRef.current
+    if (!host) return
+    const generation = ++chartGenerationRef.current
+    let disposed = false
+    let chart: LightweightChartApi | null = null
+    let resizeObserver: ResizeObserver | null = null
+    let rangeHandler: ((range: { from: number; to: number } | null) => void) | null = null
+    let crosshairHandler: ((param: unknown) => void) | null = null
 
-    const padding = (maxPrice - minPrice) * 0.08 || 1
-    const priceRange = maxPrice - minPrice + padding * 2
+    setChartReady(false)
+    setRuntimeError(null)
+    renderedRef.current = null
+    visibleRangeRef.current = null
+    seriesRef.current = null
 
-    return {
-      min: minPrice - padding,
-      max: maxPrice + padding,
-      range: priceRange,
-      maxVol: Math.max(maxVol, 1),
-    }
-  }, [visibleBars, bollinger, ichimoku])
+    void loadLightweightCharts()
+      .then((runtime) => {
+        if (disposed || chartGenerationRef.current !== generation || !host.isConnected) return
 
-  // Manual Y-axis scaling overrides only the price domain; volume remains auto-scaled.
-  const chartMetrics = useMemo(() => {
-    if (!autoChartMetrics) return null
-    if (!manualPriceDomain) return autoChartMetrics
+        chart = runtime.createChart(host, {
+          width: Math.max(1, host.clientWidth),
+          height: Math.max(1, host.clientHeight),
+          layout: {
+            attributionLogo: true,
+            background: { type: runtime.ColorType.Solid, color: "#080b10" },
+            textColor: "#94a3b8",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            panes: {
+              separatorColor: "rgba(255,255,255,0.08)",
+              separatorHoverColor: "rgba(34,201,138,0.28)",
+              enableResize: true,
+            },
+          },
+          grid: {
+            vertLines: { color: "rgba(255,255,255,0.028)" },
+            horzLines: { color: "rgba(255,255,255,0.035)" },
+          },
+          rightPriceScale: {
+            visible: true,
+            ticksVisible: true,
+            borderColor: "rgba(255,255,255,0.08)",
+            scaleMargins: { top: 0.08, bottom: 0.12 },
+          },
+          timeScale: {
+            borderColor: "rgba(255,255,255,0.08)",
+            timeVisible: timeframe.includes("m") || timeframe.includes("h"),
+            secondsVisible: false,
+            rightOffset: DEFAULT_RIGHT_OFFSET_BARS,
+            barSpacing: 7,
+            minBarSpacing: 2,
+            tickMarkFormatter: (time: unknown) => formatAxisTime(time, timeframe),
+          },
+          localization: {
+            locale: "vi-VN",
+            timeFormatter: (time: unknown) => formatCrosshairTime(time, timeframe),
+          },
+          crosshair: {
+            vertLine: { color: "rgba(148,163,184,0.42)", labelBackgroundColor: "#334155" },
+            horzLine: { color: "rgba(148,163,184,0.42)", labelBackgroundColor: "#334155" },
+          },
+          handleScroll: {
+            mouseWheel: true,
+            pressedMouseMove: true,
+            horzTouchDrag: true,
+            vertTouchDrag: true,
+          },
+          handleScale: {
+            mouseWheel: true,
+            pinch: true,
+            axisPressedMouseMove: { time: true, price: true },
+          },
+        })
 
-    const range = Math.max(0.0001, manualPriceDomain.max - manualPriceDomain.min)
-    return {
-      ...autoChartMetrics,
-      min: manualPriceDomain.min,
-      max: manualPriceDomain.max,
-      range,
-    }
-  }, [autoChartMetrics, manualPriceDomain])
-
-  // Price Grid Levels for Y-Axis (5 clean horizontal levels)
-  const priceLevels = useMemo(() => {
-    if (!chartMetrics) return []
-    const levels: number[] = []
-    const count = 5
-    for (let i = 0; i <= count; i++) {
-      const p = chartMetrics.min + (chartMetrics.range * i) / count
-      levels.push(p)
-    }
-    return levels
-  }, [chartMetrics])
-
-  const visibleTimelineSlots = Math.max(1, visibleBars.length + rightOffsetBars)
-  const xSlotSpan = Math.max(1, visibleTimelineSlots - 1)
-  const visibleSlotCount = visibleTimelineSlots
-
-  // Time Ticks for X-Axis span real candles and the currently opened future area.
-  const timeTicks = useMemo(() => {
-    if (visibleBars.length === 0) return []
-    const count = 6
-    const lastSlotIndex = Math.max(0, visibleTimelineSlots - 1)
-    const step = Math.max(1, Math.round(lastSlotIndex / count))
-    const ticks: { index: number; time: number; label: string }[] = []
-
-    for (let slotIndex = 0; slotIndex <= lastSlotIndex; slotIndex += step) {
-      const time = slotIndex < visibleBars.length
-        ? visibleBars[slotIndex]?.time
-        : futureTimes[slotIndex - visibleBars.length]
-      if (!time) continue
-      ticks.push({ index: slotIndex, time, label: formatFutureTimelineLabel(time, timeframe) })
-    }
-
-    const finalTime = rightOffsetBars > 0
-      ? futureTimes[rightOffsetBars - 1]
-      : visibleBars.at(-1)?.time
-    if (finalTime && ticks.at(-1)?.index !== lastSlotIndex) {
-      ticks.push({ index: lastSlotIndex, time: finalTime, label: formatFutureTimelineLabel(finalTime, timeframe) })
-    }
-
-    return ticks
-  }, [visibleBars, visibleTimelineSlots, rightOffsetBars, futureTimes, timeframe])
-
-  // Coordinate Mapping
-  const getX = useCallback(
-    (idx: number) => padLeft + (idx / xSlotSpan) * plotWidth,
-    [padLeft, plotWidth, xSlotSpan],
-  )
-  const getY = useCallback(
-    (price: number) => {
-      if (!chartMetrics) return 0
-      return padTop + ((chartMetrics.max - price) / chartMetrics.range) * mainPriceHeight
-    },
-    [chartMetrics, padTop, mainPriceHeight],
-  )
-
-  const priceToY = (price: number) => getY(price)
-  const yToPrice = (y: number) => {
-    if (!chartMetrics) return 0
-    return chartMetrics.max - ((y - padTop) / mainPriceHeight) * chartMetrics.range
-  }
-
-  const timeToX = (time: number) => {
-    if (visibleBars.length === 0) return 0
-    if (time < visibleBars[0].time) return -60 // offscreen left
-
-    const lastRealTime = visibleBars.at(-1)!.time
-    if (time <= lastRealTime) {
-      for (let i = 0; i < visibleBars.length; i++) {
-        if (visibleBars[i].time >= time) {
-          if (i === 0 || visibleBars[i].time === time) return getX(i)
-          const t0 = visibleBars[i - 1].time
-          const t1 = visibleBars[i].time
-          const frac = (time - t0) / Math.max(1, t1 - t0)
-          return getX(i - 1) + frac * (getX(i) - getX(i - 1))
-        }
-      }
-      return getX(visibleBars.length - 1)
-    }
-
-    const futureIdx = futureTimes.findIndex((futureTime) => futureTime >= time)
-    if (futureIdx < 0) return width + 60
-
-    const targetIndex = visibleBars.length + futureIdx
-    const previousTime = futureIdx === 0 ? lastRealTime : futureTimes[futureIdx - 1]
-    const previousIndex = targetIndex - 1
-    const targetTime = futureTimes[futureIdx]
-    if (targetTime === time || targetTime <= previousTime) return getX(targetIndex)
-    const frac = (time - previousTime) / Math.max(1, targetTime - previousTime)
-    return getX(previousIndex) + frac * (getX(targetIndex) - getX(previousIndex))
-  }
-
-  const xToTime = (x: number) => {
-    if (visibleBars.length === 0) return 0
-    const ratio = Math.max(0, Math.min(1, (x - padLeft) / plotWidth))
-    const slotIndex = Math.round(ratio * xSlotSpan)
-    if (slotIndex < visibleBars.length) {
-      return visibleBars[Math.max(0, slotIndex)]?.time || visibleBars[0]?.time || 0
-    }
-    return futureTimes[slotIndex - visibleBars.length] || futureTimes.at(-1) || visibleBars.at(-1)?.time || 0
-  }
-
-  const makeLinePath = useCallback(
-    (series: Array<number | null>) => {
-      let path = ""
-      series.forEach((val, i) => {
-        if (val === null) return
-        const x = getX(i)
-        const y = getY(val)
-        path += path === "" ? `M ${x} ${y}` : ` L ${x} ${y}`
-      })
-      return path
-    },
-    [getX, getY],
-  )
-
-  const makeVolumePath = useCallback(
-    (series: Array<number | null>) => {
-      let path = ""
-      series.forEach((value, i) => {
-        if (value == null) return
-        const x = getX(i)
-        const y = volTop + volHeight - (value / Math.max(1, chartMetrics?.maxVol ?? 1)) * volHeight
-        path += path === "" ? `M ${x} ${y}` : ` L ${x} ${y}`
-      })
-      return path
-    },
-    [getX, volTop, volHeight, chartMetrics?.maxVol],
-  )
-
-  const ma20Path = useMemo(() => makeLinePath(ma20), [ma20, makeLinePath])
-  const ma50Path = useMemo(() => makeLinePath(ma50), [ma50, makeLinePath])
-  const ma200Path = useMemo(() => makeLinePath(ma200), [ma200, makeLinePath])
-  const volumeMa20Path = useMemo(() => makeVolumePath(volumeMa20), [volumeMa20, makeVolumePath])
-  const ichimokuSpanAPath = useMemo(() => makeLinePath(ichimoku?.spanA ?? []), [ichimoku, makeLinePath])
-  const ichimokuSpanBPath = useMemo(() => makeLinePath(ichimoku?.spanB ?? []), [ichimoku, makeLinePath])
-  const bollingerUpperPath = useMemo(() => makeLinePath(bollinger?.upper ?? []), [bollinger, makeLinePath])
-  const bollingerLowerPath = useMemo(() => makeLinePath(bollinger?.lower ?? []), [bollinger, makeLinePath])
-  const qeoBase129Path = useMemo(() => makeLinePath(qeoBase129), [qeoBase129, makeLinePath])
-
-  // Mouse wheel Zooming (cursor-centered X zoom + TradingView-style Y-axis scaling)
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    const container = containerRef.current
-    let cursorRatio = 0.5
-
-    if (container) {
-      const rect = container.getBoundingClientRect()
-      const pointerX = e.clientX - rect.left
-      const pointerY = e.clientY - rect.top
-      const yAxisStartPx = ((width - padRight) / width) * rect.width
-      const mainPriceBottomPx = ((padTop + mainPriceHeight) / height) * rect.height
-      const isOverPriceAxis = pointerX >= yAxisStartPx && pointerY >= 0 && pointerY <= mainPriceBottomPx
-
-      if (isOverPriceAxis && chartMetrics && autoChartMetrics) {
-        const svgY = (pointerY / Math.max(1, rect.height)) * height
-        const anchorRatio = Math.max(0, Math.min(1, (svgY - padTop) / Math.max(1, mainPriceHeight)))
-        const currentRange = chartMetrics.range
-        const zoomFactor = e.deltaY > 0 ? 1.12 : 0.89
-        const nextRange = Math.max(
-          autoChartMetrics.range * 0.25,
-          Math.min(autoChartMetrics.range * 6, currentRange * zoomFactor),
+        const candles = chart.addSeries(runtime.CandlestickSeries, {
+          upColor: "#22c98a",
+          downColor: "#ff4757",
+          wickUpColor: "#22c98a",
+          wickDownColor: "#ff4757",
+          borderUpColor: "#22c98a",
+          borderDownColor: "#ff4757",
+          borderVisible: false,
+          priceLineVisible: true,
+          lastValueVisible: true,
+        }, 0)
+        const volume = chart.addSeries(runtime.HistogramSeries, {
+          priceFormat: { type: "volume" },
+          priceScaleId: "right",
+          priceLineVisible: false,
+          lastValueVisible: false,
+        }, 1)
+        const volumeMa = chart.addSeries(runtime.LineSeries, {
+          ...chartSeriesOptions(true, "#f59e0b", 1),
+          title: "Volume MA20",
+        }, 1)
+        const addMainLine = (color: string, width = 1) => chart!.addSeries(
+          runtime.LineSeries,
+          chartSeriesOptions(false, color, width),
+          0,
         )
-        const anchorPrice = chartMetrics.max - anchorRatio * currentRange
-        const nextMax = anchorPrice + anchorRatio * nextRange
+        const series: ChartSeries = {
+          candles,
+          futureAxis: chart.addSeries(runtime.LineSeries, {
+            color: "rgba(0,0,0,0)",
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          }, 0),
+          volume,
+          volumeMa,
+          ma20: addMainLine("#f8fafc"),
+          ma50: addMainLine("#8b5cf6", 2),
+          ma200: addMainLine("#f97316", 2),
+          bollingerUpper: addMainLine("#38bdf8"),
+          bollingerMiddle: addMainLine("#0ea5e9"),
+          bollingerLower: addMainLine("#38bdf8"),
+          ichimokuTenkan: addMainLine("#ef4444"),
+          ichimokuKijun: addMainLine("#f59e0b"),
+          ichimokuSpanA: addMainLine("#22c55e"),
+          ichimokuSpanB: addMainLine("#ef4444"),
+          ichimokuChikou: addMainLine("#94a3b8"),
+          qeoBase129: addMainLine("#ec4899", 2),
+          rsi: chart.addSeries(runtime.LineSeries, {
+            ...chartSeriesOptions(false, "#a78bfa", 1),
+            priceScaleId: "right",
+            priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+            title: "RSI 14",
+          }, 2),
+          macd: chart.addSeries(runtime.LineSeries, {
+            ...chartSeriesOptions(false, "#2196f3", 1),
+            priceScaleId: "right",
+            priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
+            title: "MACD",
+          }, 3),
+          macdSignal: chart.addSeries(runtime.LineSeries, {
+            ...chartSeriesOptions(false, "#f97316", 1),
+            priceScaleId: "right",
+            priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
+            title: "Signal",
+          }, 3),
+          macdHistogram: chart.addSeries(runtime.HistogramSeries, {
+            visible: false,
+            priceScaleId: "right",
+            priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
+            priceLineVisible: false,
+            lastValueVisible: false,
+          }, 3),
+        }
+        chartRef.current = chart
+        seriesRef.current = series
 
-        setManualPriceDomain({ min: nextMax - nextRange, max: nextMax })
-        return
+        rangeHandler = (range) => {
+          if (range) {
+            visibleRangeRef.current = range
+            setVisibleRangeState(range)
+          }
+          scheduleOverlayPaint()
+        }
+        chart.timeScale().subscribeVisibleLogicalRangeChange(rangeHandler)
+        crosshairHandler = (param) => {
+          const payload = asRecord(param)
+          setCrosshairTime(toEpochSeconds(payload?.time))
+          // Price-axis drags do not necessarily emit a logical-range event;
+          // repaint the coordinate overlay on the same pointer frame so the
+          // cloud and profile follow the native price scale during zoom.
+          scheduleOverlayPaint()
+        }
+        chart.subscribeCrosshairMove?.(crosshairHandler)
+
+        if (typeof ResizeObserver !== "undefined") {
+          resizeObserver = new ResizeObserver(() => {
+            const width = host.clientWidth
+            const height = host.clientHeight
+            if (width > 0 && height > 0) {
+              chart?.resize?.(width, height, true)
+              setDimensions((current) => current.width === width && current.height === height
+                ? current
+                : { width, height })
+              scheduleOverlayPaint()
+            }
+          })
+          resizeObserver.observe(host)
+        }
+        const width = host.clientWidth
+        const height = host.clientHeight
+        if (width > 0 && height > 0) setDimensions({ width, height })
+        setChartReady(true)
+      })
+      .catch((cause: unknown) => {
+        if (!disposed && chartGenerationRef.current === generation) {
+          setRuntimeError(cause instanceof Error ? cause.message : "Không thể khởi tạo biểu đồ")
+        }
+      })
+
+    return () => {
+      disposed = true
+      chartGenerationRef.current += 1
+      resizeObserver?.disconnect()
+      if (rangeHandler && chart) chart.timeScale().unsubscribeVisibleLogicalRangeChange(rangeHandler)
+      if (crosshairHandler && chart) chart.unsubscribeCrosshairMove?.(crosshairHandler)
+      chart?.remove()
+      if (overlayFrameRef.current !== null) {
+        window.cancelAnimationFrame(overlayFrameRef.current)
+        overlayFrameRef.current = null
       }
+      chart = null
+      chartRef.current = null
+      seriesRef.current = null
+      renderedRef.current = null
+      visibleRangeRef.current = null
+      setChartReady(false)
+    }
+  }, [scheduleOverlayPaint, ticker, timeframe])
 
-      const mouseX = pointerX - (padLeft * rect.width) / width
-      const plotPx = (plotWidth * rect.width) / width
-      cursorRatio = Math.max(0, Math.min(1, mouseX / Math.max(1, plotPx)))
+  useEffect(() => {
+    const chart = chartRef.current
+    const series = seriesRef.current
+    if (!chart || !series || !chartReady) return
+
+    series.ma20.applyOptions({ visible: indicators.showMa })
+    series.ma50.applyOptions({ visible: indicators.showMa })
+    series.ma200.applyOptions({ visible: indicators.showMa })
+    series.bollingerUpper.applyOptions({ visible: indicators.showBollinger })
+    series.bollingerMiddle.applyOptions({ visible: indicators.showBollinger })
+    series.bollingerLower.applyOptions({ visible: indicators.showBollinger })
+    series.ichimokuTenkan.applyOptions({ visible: indicators.showIchimoku })
+    series.ichimokuKijun.applyOptions({ visible: indicators.showIchimoku })
+    series.ichimokuSpanA.applyOptions({ visible: indicators.showIchimoku })
+    series.ichimokuSpanB.applyOptions({ visible: indicators.showIchimoku })
+    series.ichimokuChikou.applyOptions({ visible: indicators.showIchimoku })
+    series.qeoBase129.applyOptions({ visible: Boolean(indicators.showQeoBase129) })
+    series.rsi.applyOptions({ visible: isMaximized })
+    series.macd.applyOptions({ visible: isMaximized })
+    series.macdSignal.applyOptions({ visible: isMaximized })
+    series.macdHistogram.applyOptions({ visible: isMaximized })
+
+    const previous = renderedRef.current
+    const latest = displayBars.at(-1)
+    const canUpdateLatest = canIncrementallyUpdateLatest(previous, displayBars)
+      && previous?.futureLength === futureTimes.length
+
+    series.futureAxis.setData(renderPayload.futureAxis)
+    if (displayBars.length === 0) {
+      series.candles.setData([])
+      series.volume.setData([])
+      renderedRef.current = null
+    } else if (canUpdateLatest) {
+      const last = displayBars.at(-1)!
+      series.candles.update({ time: last.time, open: last.open, high: last.high, low: last.low, close: last.close })
+      series.volume.update({
+        time: last.time,
+        value: last.volume,
+        color: last.close >= last.open ? "rgba(34,201,138,0.42)" : "rgba(255,71,87,0.42)",
+      })
+    } else {
+      series.candles.setData(renderPayload.candle)
+      series.volume.setData(renderPayload.volume)
     }
 
-    const zoomDir = e.deltaY > 0 ? 1 : -1 // wheel down = zoom out; wheel up = zoom in
-    const step = Math.max(3, Math.round(visibleBarsCount * 0.12))
-    const nextCount = Math.min(Math.max(15, visibleBarsCount + zoomDir * step), displayBars.length)
-    const diff = nextCount - visibleBarsCount
+    series.volumeMa.setData(renderPayload.volumeMa)
+    series.ma20.setData(renderPayload.ma20)
+    series.ma50.setData(renderPayload.ma50)
+    series.ma200.setData(renderPayload.ma200)
+    series.bollingerUpper.setData(renderPayload.bollingerUpper)
+    series.bollingerMiddle.setData(renderPayload.bollingerMiddle)
+    series.bollingerLower.setData(renderPayload.bollingerLower)
+    series.ichimokuTenkan.setData(renderPayload.ichimokuTenkan)
+    series.ichimokuKijun.setData(renderPayload.ichimokuKijun)
+    series.ichimokuSpanA.setData(renderPayload.ichimokuSpanA)
+    series.ichimokuSpanB.setData(renderPayload.ichimokuSpanB)
+    series.ichimokuChikou.setData(renderPayload.ichimokuChikou)
+    series.qeoBase129.setData(renderPayload.qeoBase129)
+    series.rsi.setData(renderPayload.rsi)
+    series.macd.setData(renderPayload.macd)
+    series.macdSignal.setData(renderPayload.macdSignal)
+    series.macdHistogram.setData(renderPayload.macdHistogram)
 
-    // At the latest edge, zoom-out reveals older candles on the left without
-    // moving endIdx away from the newest candle. After the user pans into
-    // history, preserve the existing cursor-centered behavior.
-    const offsetDelta = Math.round(diff * (1 - cursorRatio))
-    const isAtLatestEdge = scrollOffset === 0
-    const nextOffset = isAtLatestEdge && diff > 0 ? 0 : Math.max(0, Math.min(maxScrollOffset, scrollOffset + offsetDelta))
-
-    setVisibleBarsCount(nextCount)
-    setScrollOffset(nextOffset)
-  }
-
-  // Mouse Panning & Scrolling. Signed position allows recent candles to move left into future space.
-  const handleMouseDownCanvas = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (activeTool === "cursor") {
-      isPanningRef.current = true
-      panStartXRef.current = e.clientX
-      panStartOffsetRef.current = scrollOffset - rightOffsetBars
-    }
-  }
-
-  const handleMouseMoveCanvas = (e: React.MouseEvent<HTMLDivElement>) => {
-    const container = containerRef.current
-    if (!container) return
-    const rect = container.getBoundingClientRect()
-
-    if (isPanningRef.current) {
-      const dx = e.clientX - panStartXRef.current
-      const barPx = Math.max(1, (plotWidth * rect.width) / width / Math.max(1, visibleSlotCount))
-      const deltaBars = Math.round(dx / barPx)
-      const nextPosition = Math.max(
-        -maxRightOffsetBars,
-        Math.min(maxScrollOffset, panStartOffsetRef.current + deltaBars),
-      )
-
-      setScrollOffset(Math.max(0, nextPosition))
-      setRightOffsetBars(Math.max(0, -nextPosition))
-      return
+    if (displayBars.length > 0 && !previous) {
+      setLatestVisibleRange()
+    } else if (previous && visibleRangeRef.current && displayBars[0]?.time < previous.firstTime) {
+      // Prepending older history shifts logical indexes. Preserve the user's
+      // current viewport instead of fitting the chart on every refresh.
+      const shift = displayBars.length - previous.actualLength
+      const range = {
+        from: visibleRangeRef.current.from + shift,
+        to: visibleRangeRef.current.to + shift,
+      }
+      chart.timeScale().setVisibleLogicalRange(range)
+      visibleRangeRef.current = range
+      setVisibleRangeState(range)
     }
 
-    if (activeTool === "cursor") {
-      const relX = e.clientX - rect.left - (padLeft * rect.width) / width
-      const effectiveWidth = (plotWidth * rect.width) / width
-      const ratio = Math.max(0, Math.min(1, relX / Math.max(1, effectiveWidth)))
-      const slotIndex = Math.round(ratio * xSlotSpan)
-      setHoverIndex(slotIndex < visibleBars.length ? Math.max(0, slotIndex) : null)
-
-      const relY = e.clientY - rect.top
-      const svgY = (relY / Math.max(1, rect.height)) * height
-      setHoverY(svgY)
+    if (latest) {
+      renderedRef.current = {
+        actualLength: displayBars.length,
+        firstTime: displayBars[0].time,
+        latestTime: latest.time,
+        futureLength: futureTimes.length,
+        fingerprint: barFingerprint,
+      }
     }
-  }
+    scheduleOverlayPaint()
+  }, [
+    chartReady,
+    displayBars,
+    barFingerprint,
+    futureTimes.length,
+    indicators,
+    isMaximized,
+    renderPayload,
+    scheduleOverlayPaint,
+    setLatestVisibleRange,
+  ])
 
-  const handleMouseUpCanvas = () => {
-    isPanningRef.current = false
-  }
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart || !chartReady) return
+    const panes = chart.panes()
+    panes[1]?.setHeight(VOLUME_PANE_HEIGHT)
+    panes[2]?.setHeight(isMaximized ? (isRsiCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0)
+    panes[3]?.setHeight(isMaximized ? (isMacdCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0)
+    panes[1]?.getRightPriceScale?.().applyOptions({
+      visible: true,
+      ticksVisible: true,
+      borderVisible: true,
+    })
+    panes[2]?.getRightPriceScale?.().applyOptions({
+      visible: isMaximized,
+      ticksVisible: isMaximized,
+      borderVisible: isMaximized,
+      scaleMargins: { top: 0.08, bottom: 0.08 },
+    })
+    panes[3]?.getRightPriceScale?.().applyOptions({
+      visible: isMaximized,
+      ticksVisible: isMaximized,
+      borderVisible: isMaximized,
+      scaleMargins: { top: 0.08, bottom: 0.08 },
+    })
+    scheduleOverlayPaint()
+  }, [chartReady, isMacdCollapsed, isMaximized, isRsiCollapsed, scheduleOverlayPaint])
 
-  const handleResetPriceScale = () => {
-    setManualPriceDomain(null)
-  }
+  const updateDrawingFlag = useCallback((id: string, key: "hidden" | "locked") => {
+    const drawing = drawings.find((item) => item.id === id)
+    if (drawing) modifyDrawing(id, { [key]: !drawing[key] })
+  }, [drawings, modifyDrawing])
 
-  const handleResetView = () => {
-    setScrollOffset(0)
-    setRightOffsetBars(DEFAULT_RIGHT_OFFSET_BARS)
-    setVisibleBarsCount(75)
-    setManualPriceDomain(null)
-  }
-
-  const activeBar = hoverIndex !== null && visibleBars[hoverIndex] ? visibleBars[hoverIndex] : visibleBars.at(-1)
-  const latestVolume = visibleBars.at(-1)?.volume
-  const latestVolumeMa20 = volumeMa20.at(-1)
-
-  const activeIndicatorsCount = [
-    indicators.showMa,
-    indicators.showIchimoku,
-    indicators.showQeoBase129,
-    indicators.showBollinger,
-    indicators.showVolumeProfile,
-  ].filter(Boolean).length
-  const editingDrawing = drawings.find((d) => d.id === editingTextDrawingId)
+  const editingTextDrawing = editingTextDrawingId
+    ? drawings.find((drawing) => drawing.id === editingTextDrawingId) ?? null
+    : null
+  const editingPosition = editingTextDrawing?.points[0] ?? { x: 24, y: 24 }
+  const timeframeGroups = useMemo(() => {
+    const groups = new Map<string, typeof ALL_TIMEFRAMES>()
+    for (const item of ALL_TIMEFRAMES) {
+      const group = groups.get(item.group) ?? []
+      group.push(item)
+      groups.set(item.group, group)
+    }
+    return [...groups.entries()]
+  }, [])
+  const unsupportedEmpty = displayBars.length === 0 && !isLoading && !(timeframe === "1m" && minuteBars.status === "loading")
+  const loadingState = isLoading || (timeframe === "1m" && minuteBars.status === "loading")
 
   return (
-    <div
-      className={cn(
-        "relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13] shadow-[0_8px_32px_rgba(0,0,0,0.6)] font-ticker",
-        isMaximized ? "h-full min-h-[620px]" : "h-auto",
-      )}
-    >
-      {/* ========================================================================= */}
-      {/* TOP CONTROLS & TRADINGVIEW TOOLBAR                                        */}
-      {/* ========================================================================= */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-white/[0.08] bg-[#0a0f16] px-3.5 py-2 text-xs">
-        {/* Left Section: Ticker Info & Timeframe Bar */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* In Maximized Mode: Show Ticker badge & Live Price */}
-          {isMaximized && (
-            <div className="flex items-center gap-2 mr-1">
-              <span className="font-ticker text-base font-extrabold text-cyan-300 tracking-tight">{ticker}</span>
-              {currentPrice ? (
-                <span className="font-mono text-[11px] font-bold text-white">
-                  {currentPrice.toLocaleString("vi-VN")}
-                </span>
-              ) : null}
-              {changePct !== undefined ? (
-                <span
-                  className={cn(
-                    "rounded px-1.5 py-0.5 font-mono text-[9px] font-bold",
-                    changePct >= 0 ? "bg-emerald-400/20 text-emerald-300" : "bg-rose-400/20 text-rose-300",
-                  )}
-                >
-                  {changePct >= 0 ? `+${changePct.toFixed(2)}%` : `${changePct.toFixed(2)}%`}
-                </span>
-              ) : null}
-              <div className="mx-1 h-3.5 w-px bg-white/[0.1]" />
-            </div>
-          )}
-
-          {/* Quick Timeframes */}
-          <div className="flex items-center gap-1">
-            {QUICK_TIMEFRAMES.map((tf) => (
-              <button
-                key={tf}
-                type="button"
-                onClick={() => setTimeframe(tf)}
-                className={cn(
-                  "rounded-md px-2 py-0.5 font-mono text-[11px] font-bold transition-colors",
-                  timeframe === tf
-                    ? "border border-white/25 bg-white/15 text-slate-100 font-bold"
-                    : "text-slate-400 hover:bg-white/[0.05] hover:text-slate-200",
-                )}
-              >
-                {tf}
-              </button>
-            ))}
-
-            {/* Timeframes Dropdown (All 12 timeframes) */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowTfDropdown((prev) => !prev)}
-                className={cn(
-                  "flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px] transition-colors",
-                  !QUICK_TIMEFRAMES.includes(timeframe)
-                    ? "border border-white/25 bg-white/15 text-slate-100 font-bold"
-                    : showTfDropdown
-                    ? "bg-white/[0.08] text-slate-200"
-                    : "text-slate-400 hover:bg-white/[0.05] hover:text-slate-200",
-                )}
-                title="Tất cả các khung thời gian"
-              >
-                {!QUICK_TIMEFRAMES.includes(timeframe) && <span>{timeframe}</span>}
-                <ChevronDown className={cn("size-3 transition-transform duration-150", showTfDropdown && "rotate-180")} />
-              </button>
-
-              {showTfDropdown && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowTfDropdown(false)}
-                  />
-                  <div className="absolute left-0 top-8 z-50 w-[540px] max-w-[calc(100vw-24px)] rounded-xl border border-white/[0.12] bg-[#0c131c] p-2.5 shadow-2xl">
-                    <div className="grid grid-cols-4 divide-x divide-white/[0.08]">
-                      {[
-                        { title: "Phút", group: "Phút" },
-                        { title: "Giờ", group: "Giờ" },
-                        { title: "Ngày", group: "Ngày / Tuần" },
-                        { title: "Năm", group: "Tháng / Quý / Năm" },
-                      ].map((grp, colIdx) => {
-                        const items = ALL_TIMEFRAMES.filter((t) => t.group === grp.group)
-                        return (
-                          <div
-                            key={grp.title}
-                            className={cn(
-                              "flex flex-col",
-                              colIdx === 0 ? "pr-2" : colIdx === 3 ? "pl-2" : "px-2",
-                            )}
-                          >
-                            <span className="block px-2 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">
-                              {grp.title}
-                            </span>
-                            <div className="flex flex-col space-y-0.5 mt-0.5">
-                              {items.map((it) => {
-                                const isActive = timeframe === it.id
-                                return (
-                                  <button
-                                    key={it.id}
-                                    type="button"
-                                    onClick={() => {
-                                      setTimeframe(it.id)
-                                      setShowTfDropdown(false)
-                                    }}
-                                    className={cn(
-                                      "w-full flex items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors group",
-                                      isActive
-                                        ? "bg-white/15 text-slate-100 font-semibold"
-                                        : "text-slate-300 hover:bg-white/[0.06] hover:text-slate-100",
-                                    )}
-                                  >
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <span
-                                        className={cn(
-                                          "font-mono text-[11px] font-bold w-8 text-left shrink-0",
-                                          isActive
-                                            ? "text-slate-100"
-                                            : "text-slate-400 group-hover:text-slate-200",
-                                        )}
-                                      >
-                                        {it.id}
-                                      </span>
-                                      <span className="text-[11.5px] truncate">{it.label}</span>
-                                    </div>
-                                    {isActive && (
-                                      <Check className="size-3.5 text-cyan-400 shrink-0 ml-1" />
-                                    )}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Japanese candles are the single canonical chart presentation. */}
-          {isMaximized && (
-            <div className="flex items-center ml-1">
-              <div className="mx-1 h-3.5 w-px bg-white/[0.1]" />
-              <span className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-slate-300">Nến Nhật</span>
-            </div>
-          )}
-
-          {/* Maximized: Indicators Popover Button */}
-          {isMaximized && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowIndicatorModal((prev) => !prev)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-[11px] font-semibold transition-colors border",
-                  activeIndicatorsCount > 0
-                    ? "border-white/25 bg-white/15 text-slate-100"
-                    : "border-white/[0.08] text-slate-300 hover:bg-white/[0.06]",
-                )}
-              >
-                <SlidersHorizontal className="size-3" />
-                <span>Chỉ báo</span>
-                {activeIndicatorsCount > 0 && (
-                  <span className="size-4 rounded-full bg-white/20 border border-white/30 text-[10px] font-bold text-slate-100 flex items-center justify-center">
-                    {activeIndicatorsCount}
-                  </span>
-                )}
-              </button>
-
-              {showIndicatorModal && (
-                <StockChartIndicatorModal
-                  config={indicators}
-                  onChange={setIndicators}
-                  onClose={() => setShowIndicatorModal(false)}
-                />
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Right Section: OHLCV Readout, Zoom/Pan Reset & Maximize/Minimize */}
-        <div className="flex items-center gap-3">
-          {/* Action Buttons: Reset View, Screenshot, Maximize/Minimize */}
-          <div className="flex items-center gap-1">
-            {isMaximized && (
+    <div className={cn("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] border border-white/10 bg-[#080b10]", isMaximized ? "h-full" : "min-h-[340px]")}>
+      <div className="relative z-30 flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.08] bg-[#0d1118] px-2 py-1.5">
+        <div className="flex min-w-0 items-center gap-1">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowTfDropdown((open) => !open)}
+              className="flex items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.04] px-2 py-1 font-mono text-[11px] font-bold text-slate-200 transition-colors hover:bg-white/[0.08]"
+              aria-label="Chọn khung thời gian"
+            >
+              {timeframe}
+              <ChevronDown className="size-3 text-slate-500" />
+            </button>
+            {showTfDropdown && (
               <>
                 <button
                   type="button"
-                  title="Đặt lại góc nhìn (Reset View & Zoom)"
-                  onClick={handleResetView}
-                  className="rounded-md p-1.5 text-slate-400 hover:bg-white/[0.06] hover:text-white transition-colors"
-                >
-                  <RotateCcw className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title="Chụp ảnh biểu đồ"
-                  onClick={() => alert("Tính năng chụp biểu đồ đã sẵn sàng")}
-                  className="rounded-md p-1.5 text-slate-400 hover:bg-white/[0.06] hover:text-white transition-colors"
-                >
-                  <Camera className="size-3.5" />
-                </button>
+                  aria-label="Đóng chọn khung thời gian"
+                  className="fixed inset-0 z-40 cursor-default"
+                  onClick={() => setShowTfDropdown(false)}
+                />
+                <div className="absolute left-0 top-8 z-50 w-[min(520px,calc(100vw-24px))] rounded-lg border border-white/[0.12] bg-[#0b0f15] p-2 shadow-[0_18px_52px_rgba(0,0,0,0.82)]">
+                  <div className="grid grid-cols-4 divide-x divide-white/[0.08]">
+                    {timeframeGroups.map(([group, items]) => (
+                      <div key={group} className="min-w-0 px-2 first:pl-0 last:pr-0">
+                        <div className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-600">{group}</div>
+                        {items.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setTimeframe(item.id)
+                              setShowTfDropdown(false)
+                            }}
+                            className="flex w-full items-center gap-2 rounded px-1 py-1 text-left text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-100"
+                          >
+                            <span className="w-8 shrink-0 text-left font-mono text-[11px] font-bold">{item.id}</span>
+                            <span className="truncate text-[10px]">{item.label}</span>
+                            {item.id === timeframe && <Check className="ml-auto size-3.5 shrink-0 text-cyan-400" />}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </>
             )}
+          </div>
 
-            {onToggleMaximize && (
+          <div className="hidden items-center gap-0.5 sm:flex">
+            {QUICK_TIMEFRAMES.map((item) => (
               <button
+                key={item}
                 type="button"
-                onClick={onToggleMaximize}
-                title={isMaximized ? "Thu nhỏ chart" : "Phóng to chart"}
+                onClick={() => setTimeframe(item)}
                 className={cn(
-                  "flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold font-mono transition-all border",
-                  "border-white/20 bg-white/10 text-slate-200 hover:bg-white/15 hover:text-white",
+                  "rounded px-1.5 py-1 font-mono text-[10px] transition-colors",
+                  timeframe === item ? "bg-cyan-300/10 text-cyan-200" : "text-slate-500 hover:bg-white/[0.05] hover:text-slate-200",
                 )}
               >
-                {isMaximized ? (
-                  <>
-                    <Minimize2 className="size-3.5" />
-                    <span>Thu nhỏ</span>
-                  </>
-                ) : (
-                  <>
-                    <Maximize2 className="size-3.5" />
-                    <span>Phóng to</span>
-                  </>
-                )}
+                {item}
               </button>
+            ))}
+          </div>
+
+          <div className="relative">
+            <button
+              type="button"
+              title="Chỉ báo kỹ thuật"
+              onClick={() => setShowIndicatorModal((open) => !open)}
+              className="flex items-center gap-1 rounded px-1.5 py-1 font-mono text-[10px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
+            >
+              <SlidersHorizontal className="size-3.5" />
+              <span className="hidden md:inline">Indicators</span>
+            </button>
+            {showIndicatorModal && (
+              <StockChartIndicatorModal
+                config={indicators}
+                onChange={setIndicators}
+                onClose={() => setShowIndicatorModal(false)}
+              />
             )}
           </div>
+          <span className="hidden rounded border border-white/[0.08] px-1.5 py-1 font-mono text-[9px] text-slate-600 lg:inline">Nến Nhật</span>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1">
+          <div className="hidden items-center gap-2 px-1 font-mono text-[10px] text-slate-500 md:flex">
+            <span>{ticker.toUpperCase()}</span>
+            {typeof currentPrice === "number" && <span className="text-slate-300">{currentPrice.toFixed(2)}</span>}
+            {typeof changePct === "number" && (
+              <span className={changePct >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            title="Tải ảnh biểu đồ"
+            onClick={() => void handleExport()}
+            className="flex items-center gap-1 rounded-md border border-white/[0.1] px-2 py-1 font-mono text-[10px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
+          >
+            <Camera className="size-3.5" />
+            <span className="hidden xl:inline">{exportStatus ?? "Ảnh"}</span>
+          </button>
+          <button
+            type="button"
+            title="Khôi phục khung nhìn"
+            onClick={handleResetView}
+            className="flex size-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-100"
+          >
+            <RotateCcw className="size-3.5" />
+          </button>
+          {onToggleMaximize && (
+            <button
+              type="button"
+              title={isMaximized ? "Thu nhỏ chart" : "Phóng to chart"}
+              onClick={onToggleMaximize}
+              className="flex size-7 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-slate-300 transition-colors hover:bg-white/[0.1] hover:text-white"
+            >
+              {isMaximized ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* CHART MAIN CANVAS & DRAWING SUITE (SCROLL & ZOOMABLE)                     */}
-      {/* ========================================================================= */}
       <div
-        ref={containerRef}
-        className={cn(
-          "relative w-full flex-1 select-none overflow-hidden",
-          isMaximized ? "min-h-[560px]" : "min-h-[280px]",
-          activeTool === "cursor" ? "cursor-grab active:cursor-grabbing" : "cursor-crosshair",
-        )}
-        onWheel={handleWheel}
-        onMouseDown={handleMouseDownCanvas}
-        onMouseMove={handleMouseMoveCanvas}
-        onMouseUp={handleMouseUpCanvas}
-        onMouseLeave={() => {
-          isPanningRef.current = false
-          setHoverIndex(null)
-          setHoverY(null)
-        }}
+        ref={plotContainerRef}
+        className={cn("relative min-h-0 flex-1 overflow-hidden bg-[#080b10]", isMaximized ? "min-h-0" : "min-h-[300px]")}
+        data-chart-plot="lightweight"
       >
-        {/* Floating Drawing Toolbar on the Left (Only in Maximized Mode) */}
-        {isMaximized && (
-          <StockChartDrawingTools
-            activeTool={activeTool}
-            onSelectTool={setActiveTool}
-            activeColor={activeColor}
-            onChangeColor={setActiveColor}
-            lineWidth={lineWidth}
-            onChangeLineWidth={setLineWidth}
-            selectedIconType={selectedIconType}
-            onSelectIconType={setSelectedIconType}
-            isLocked={isDrawingsLocked}
-            onToggleLock={() => setIsDrawingsLocked((p) => !p)}
-            isHidden={isDrawingsHidden}
-            onToggleHide={() => setIsDrawingsHidden((p) => !p)}
-            onClearAll={clearAllDrawings}
-            onToggleObjectManager={() => setIsObjectManagerOpen((prev) => !prev)}
-            isObjectManagerOpen={isObjectManagerOpen}
-            drawingsCount={drawings.length}
-            saveStatus={saveStatus}
-          />
-        )}
+        <div ref={chartHostRef} className="absolute inset-0" data-chart-runtime="lightweight-charts-v5" />
 
-        {/* In-plot OHLCV readout under the timeframe bar. */}
-        {isMaximized && activeBar && (
-          <div
-            data-chart-ohlcv-overlay
-            className="pointer-events-none absolute left-14 top-3 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-white/[0.06] bg-[#080d13]/72 px-2.5 py-1 font-mono text-[10px] text-slate-400 backdrop-blur-sm"
-          >
-            <span className="text-slate-500">
-              {new Date(activeBar.time * 1000).toLocaleDateString("vi-VN", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              })}
-            </span>
-            <span>O: <b className="text-slate-200">{activeBar.open.toLocaleString()}</b></span>
-            <span>H: <b className="text-emerald-300">{activeBar.high.toLocaleString()}</b></span>
-            <span>L: <b className="text-rose-300">{activeBar.low.toLocaleString()}</b></span>
-            <span>C: <b className={activeBar.close >= activeBar.open ? "text-emerald-300" : "text-rose-300"}>{activeBar.close.toLocaleString()}</b></span>
-            <span>V: <b className="text-slate-200">{formatCompactVolume(activeBar.volume)}</b></span>
+        <AlignedIndicatorCanvas
+          width={overlayWidth}
+          height={overlayHeight}
+          clipHeight={mainPaneHeight}
+          revision={overlayRevision}
+          times={allTimes}
+          spanA={ichimoku?.spanA ?? []}
+          spanB={ichimoku?.spanB ?? []}
+          volumeProfile={volumeProfile}
+          timeToX={timeToX}
+          priceToY={priceToY}
+        />
+
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between p-2">
+          {activeBar ? (
+            <div data-chart-ohlcv-overlay className="flex flex-wrap items-center gap-2 rounded border border-white/[0.06] bg-[#080d13]/95 px-2.5 py-1 font-mono text-[10px] text-slate-400">
+              <span className="text-slate-500">{formatCrosshairTime(activeBar.time, timeframe)}</span>
+              <span>O <b className="text-slate-200">{activeBar.open.toFixed(2)}</b></span>
+              <span>H <b className="text-emerald-300">{activeBar.high.toFixed(2)}</b></span>
+              <span>L <b className="text-rose-300">{activeBar.low.toFixed(2)}</b></span>
+              <span>C <b className={activeBar.close >= activeBar.open ? "text-emerald-300" : "text-rose-300"}>{activeBar.close.toFixed(2)}</b></span>
+              <span>V <b className="text-slate-200">{formatCompactVolume(activeBar.volume)}</b></span>
+            </div>
+          ) : (
+            <div data-chart-ohlcv-overlay className="rounded border border-white/[0.06] bg-[#080d13]/95 px-2.5 py-1 font-mono text-[10px] text-slate-600">OHLCV —</div>
+          )}
+          <div className="flex items-center gap-1">
+            {indicators.showVolumeProfile && <span className="rounded border border-amber-300/20 bg-[#0b0f15]/95 px-2 py-1 font-mono text-[9px] text-amber-200/75">Volume Profile · vùng hiển thị</span>}
+            {indicators.showIchimoku && <span className="rounded border border-emerald-300/20 bg-[#0b0f15]/95 px-2 py-1 font-mono text-[9px] text-emerald-200/75">Ichimoku Cloud</span>}
+            {runtimeError && <span className="rounded border border-rose-300/20 bg-[#170d12]/95 px-2 py-1 font-mono text-[9px] text-rose-200">{runtimeError}</span>}
           </div>
-        )}
+        </div>
 
-        {/* Object Management Panel (Object Tree / Layers) */}
-        {isMaximized && isObjectManagerOpen && (
+        <StockChartDrawingTools
+          activeTool={activeTool}
+          onSelectTool={setActiveTool}
+          activeColor={activeColor}
+          onChangeColor={setActiveColor}
+          lineWidth={lineWidth}
+          onChangeLineWidth={setLineWidth}
+          selectedIconType={selectedIconType}
+          onSelectIconType={setSelectedIconType}
+          isLocked={isDrawingsLocked}
+          onToggleLock={() => setIsDrawingsLocked((value) => !value)}
+          isHidden={isDrawingsHidden}
+          onToggleHide={() => setIsDrawingsHidden((value) => !value)}
+          onClearAll={clearAllDrawings}
+          onToggleObjectManager={() => setIsObjectManagerOpen((value) => !value)}
+          isObjectManagerOpen={isObjectManagerOpen}
+          drawingsCount={drawings.length}
+          saveStatus={saveStatus}
+          drawingSyncStatus={drawingSyncStatus}
+          onRetryDrawingSync={retryChartHydration}
+        />
+
+        {isObjectManagerOpen && (
           <StockChartObjectManager
             drawings={drawings}
             selectedId={selectedDrawingId}
-            onSelect={(id) => setSelectedDrawingId(id)}
-            onToggleHide={(id) => {
-              const target = drawings.find((d) => d.id === id)
-              if (target) modifyDrawing(id, { hidden: !target.hidden })
-            }}
-            onToggleLock={(id) => {
-              const target = drawings.find((d) => d.id === id)
-              if (target) modifyDrawing(id, { locked: !target.locked })
-            }}
+            onSelect={setSelectedDrawingId}
+            onToggleHide={(id) => updateDrawingFlag(id, "hidden")}
+            onToggleLock={(id) => updateDrawingFlag(id, "locked")}
             onDelete={(id) => {
               deleteDrawing(id)
               if (selectedDrawingId === id) setSelectedDrawingId(null)
             }}
-            onEditText={(id) => setEditingTextDrawingId(id)}
+            onEditText={setEditingTextDrawingId}
             onClearAll={clearAllDrawings}
             onClose={() => setIsObjectManagerOpen(false)}
           />
         )}
 
-        {/* Text Edit Modal / Popover */}
-        {editingDrawing && editingDrawing.tool === "text" && (
+        {editingTextDrawing && (
           <StockChartTextEditor
-            initialText={editingDrawing.text || ""}
-            initialColor={editingDrawing.color}
-            initialFontSize={editingDrawing.fontSize || 13}
-            position={{
-              x: timeToX(editingDrawing.points[0]?.time || 0) || editingDrawing.points[0]?.x || width / 2,
-              y: priceToY(editingDrawing.points[0]?.price || 0) || editingDrawing.points[0]?.y || height / 2,
-            }}
-            containerWidth={width}
-            containerHeight={height}
-            onSave={(newText, newColor, newFontSize) => {
-              modifyDrawing(editingDrawing.id, {
-                text: newText,
-                color: newColor,
-                fontSize: newFontSize,
-              })
+            initialText={editingTextDrawing.text ?? ""}
+            initialColor={editingTextDrawing.color}
+            initialFontSize={editingTextDrawing.fontSize}
+            position={editingPosition}
+            containerWidth={overlayWidth}
+            containerHeight={overlayHeight}
+            onSave={(text, color, fontSize) => {
+              modifyDrawing(editingTextDrawing.id, { text, color, fontSize })
               setEditingTextDrawingId(null)
             }}
             onCancel={() => setEditingTextDrawingId(null)}
           />
         )}
 
-        {displayBars.length === 0 && (
-          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6">
+        {!runtimeError && !loadingState && unsupportedEmpty && (
+          <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center p-6">
             <div className="rounded-xl border border-white/[0.08] bg-[#0c131c]/95 px-5 py-4 text-center shadow-xl">
-              <div className="text-sm font-semibold text-slate-200">
-                {timeframe === "1m"
-                  ? minuteBars.status === "loading"
-                    ? "Đang nạp dữ liệu 1m canonical"
-                    : "Không tải được dữ liệu 1m canonical"
-                  : "Dữ liệu timeframe này chưa sẵn sàng"}
-              </div>
-              <div className="mt-1 text-xs text-slate-500">
-                {timeframe === "1m"
-                  ? minuteBars.status === "loading"
-                    ? "Đang đọc dữ liệu thật từ canonical hot/cold storage..."
-                    : minuteBars.error || "Không có candle 1m trong khoảng dữ liệu yêu cầu."
-                  : `${timeframe} chưa có canonical candles. QEO-93 sẽ aggregate từ raw 1m.`}
-              </div>
+              <div className="text-sm font-semibold text-slate-200">{`Khung ${timeframe} hiện chưa có dữ liệu nến hoàn tất.`}</div>
+              <div className="mt-1 text-xs text-slate-500">Không có dữ liệu OHLCV thật trong khoảng thời gian yêu cầu.</div>
+            </div>
+          </div>
+        )}
+        {loadingState && (
+          <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center p-6">
+            <div className="rounded-xl border border-white/[0.08] bg-[#0c131c]/95 px-5 py-4 text-center shadow-xl">
+              <div className="text-sm font-semibold text-slate-200">Đang tải dữ liệu nến…</div>
+              <div className="mt-1 text-xs text-slate-500">Đang đọc dữ liệu thị trường thật…</div>
             </div>
           </div>
         )}
 
-        {/* Primary SVG Chart */}
-        <svg viewBox={`0 0 ${width} ${height}`} className="size-full" preserveAspectRatio="none">
-          {/* Right Y-Axis Price Rail Background */}
-          <rect
-            x={width - padRight}
-            y={0}
-            width={padRight}
-            height={height - padBottom}
-            fill="#090d14"
-          />
-          <line
-            x1={width - padRight}
-            y1={0}
-            x2={width - padRight}
-            y2={height - padBottom}
-            stroke="#1c2836"
-            strokeWidth="1"
-          />
+        <StockChartDrawingCanvas
+          width={overlayWidth}
+          height={overlayHeight}
+          drawings={drawings}
+          selectedId={selectedDrawingId}
+          onSelectDrawing={setSelectedDrawingId}
+          onAddDrawing={addDrawing}
+          onUpdateDrawing={modifyDrawing}
+          onDeleteDrawing={deleteDrawing}
+          onEditText={setEditingTextDrawingId}
+          activeTool={activeTool}
+          activeColor={activeColor}
+          lineWidth={lineWidth}
+          selectedIconType={selectedIconType}
+          isLocked={isDrawingsLocked}
+          isHidden={isDrawingsHidden}
+          priceToY={priceToY}
+          yToPrice={yToPrice}
+          timeToX={timeToX}
+          xToTime={xToTime}
+          drawingReady={drawingSyncStatus === "ready"}
+        />
 
-          {/* Bottom X-Axis Time Rail Background */}
-          <rect
-            x={0}
-            y={height - padBottom}
-            width={width}
-            height={padBottom}
-            fill="#090d14"
-          />
-          <line
-            x1={0}
-            y1={height - padBottom}
-            x2={width}
-            y2={height - padBottom}
-            stroke="#1c2836"
-            strokeWidth="1"
-          />
-
-          {/* Corner Junction */}
-          <rect
-            x={width - padRight}
-            y={height - padBottom}
-            width={padRight}
-            height={padBottom}
-            fill="#06090f"
-          />
-
-          {/* Y-Axis Price Grid Lines & Labels */}
-          {priceLevels.map((p, idx) => {
-            const y = getY(p)
-            if (y < padTop || y > padTop + mainPriceHeight) return null
-            return (
-              <g key={`pl-${idx}`}>
-                <line
-                  x1={padLeft}
-                  y1={y}
-                  x2={width - padRight}
-                  y2={y}
-                  stroke="#182330"
-                  strokeDasharray="3 3"
-                  opacity="0.65"
-                />
-                <line
-                  x1={width - padRight}
-                  y1={y}
-                  x2={width - padRight + 4}
-                  y2={y}
-                  stroke="#334155"
-                />
-                <text
-                  x={width - padRight + 7}
-                  y={y + 4}
-                  fill="#91a2b3"
-                  fontSize="10.5"
-                  fontFamily="monospace"
-                >
-                  {p.toFixed(1)}
-                </text>
-              </g>
-            )
-          })}
-
-          {/* X-Axis Time Grid Lines, Ticks & Labels */}
-          {timeTicks.map((t) => {
-            const x = getX(t.index)
-            return (
-              <g key={`tt-${t.index}-${t.time}`}>
-                <line
-                  x1={x}
-                  y1={padTop}
-                  x2={x}
-                  y2={height - padBottom}
-                  stroke="#141f2d"
-                  strokeDasharray="3 3"
-                  opacity="0.5"
-                />
-                <line
-                  x1={x}
-                  y1={height - padBottom}
-                  x2={x}
-                  y2={height - padBottom + 4}
-                  stroke="#334155"
-                />
-                <text
-                  x={x}
-                  y={height - padBottom + 16}
-                  textAnchor="middle"
-                  fill="#7d8da0"
-                  fontSize="9.5"
-                  fontFamily="monospace"
-                >
-                  {t.label}
-                </text>
-              </g>
-            )
-          })}
-
-          {/* Volume Baseline & labels */}
-          <line
-            x1={padLeft}
-            y1={volTop + volHeight}
-            x2={width - padRight}
-            y2={volTop + volHeight}
-            stroke="#1c2836"
-            opacity="0.9"
-          />
-          <text
-            x={padLeft + 8}
-            y={volTop + 11}
-            fill="#94a3b8"
-            fontSize="9.5"
-            fontFamily="monospace"
-          >
-            Vol <tspan fill="#d7e0ea" fontWeight="bold">{formatCompactVolume(latestVolume)}</tspan>
-            {"  "}MA20 <tspan fill="#f59e0b" fontWeight="bold">{formatCompactVolume(latestVolumeMa20)}</tspan>
-          </text>
-          <text
-            x={width - padRight + 7}
-            y={volTop + 12}
-            fill="#c7d2df"
-            fontSize="10"
-            fontFamily="monospace"
-            fontWeight="bold"
-          >
-            {formatCompactVolume(latestVolume)}
-          </text>
-          <text
-            x={width - padRight + 7}
-            y={volTop + 25}
-            fill="#f59e0b"
-            fontSize="8.5"
-            fontFamily="monospace"
-          >
-            MA {formatCompactVolume(latestVolumeMa20)}
-          </text>
-
-          {/* 1. Volume Profile Bars + explicit POC price badge */}
-          {volumeProfile && (
-            <g opacity="0.78">
-              {volumeProfile.buckets.map((b, idx) => {
-                const bY = getY(b.price)
-                const barLen = (b.volume / volumeProfile.maxBucketVol) * (plotWidth * 0.22)
-                const isPoc = b.isPoc
-                return (
-                  <g key={`vp-${idx}`}>
-                    <rect
-                      x={width - padRight - barLen}
-                      y={bY - 4}
-                      width={barLen}
-                      height={8}
-                      fill={isPoc ? "#f43f5e" : "#3b82f6"}
-                      fillOpacity={isPoc ? 0.45 : 0.18}
-                      stroke={isPoc ? "#f43f5e" : "none"}
-                      strokeWidth={1}
-                    />
-                    {isPoc && (
-                      <line
-                        x1={padLeft}
-                        y1={bY}
-                        x2={width - padRight}
-                        y2={bY}
-                        stroke="#f43f5e"
-                        strokeWidth="1.5"
-                        strokeDasharray="4 2"
-                      />
-                    )}
-                  </g>
-                )
-              })}
-              {(() => {
-                const pocY = getY(volumeProfile.pocPrice)
-                const badgeY = Math.max(padTop + 1, Math.min(padTop + mainPriceHeight - 15, pocY - 7))
-                return (
-                  <g>
-                    <rect
-                      x={width - padRight + 1}
-                      y={badgeY}
-                      width={padRight - 2}
-                      height={14}
-                      rx="2"
-                      fill="#be123c"
-                      stroke="#fb7185"
-                      strokeWidth="0.8"
-                    />
-                    <text
-                      x={width - padRight + 5}
-                      y={badgeY + 9.5}
-                      fill="#fff1f2"
-                      fontFamily="monospace"
-                      fontWeight="bold"
-                      fontSize="8.4"
-                    >
-                      POC {volumeProfile.pocPrice.toFixed(1)}
-                    </text>
-                  </g>
-                )
-              })()}
-            </g>
-          )}
-
-          {/* 2. Ichimoku Cloud — future-aware muted TradingView-like bull/bear colors */}
-          {ichimoku && (
-            <g>
-              {Array.from({ length: ichimoku.spanA.length }, (_, i) => i).map((i) => {
-                if (i === 0) return null
-                const spanA1 = ichimoku.spanA[i - 1]
-                const spanB1 = ichimoku.spanB[i - 1]
-                const spanA2 = ichimoku.spanA[i]
-                const spanB2 = ichimoku.spanB[i]
-                if (spanA1 == null || spanB1 == null || spanA2 == null || spanB2 == null) return null
-
-                const x1 = getX(i - 1)
-                const x2 = getX(i)
-                const yA1 = getY(spanA1)
-                const yB1 = getY(spanB1)
-                const yA2 = getY(spanA2)
-                const yB2 = getY(spanB2)
-                const isBull = spanA2 >= spanB2
-                const cloudPoints = `${x1},${yA1} ${x2},${yA2} ${x2},${yB2} ${x1},${yB1}`
-                return (
-                  <polygon
-                    key={`kumo-${i}`}
-                    points={cloudPoints}
-                    fill={isBull ? "#214a39" : "#4a2b29"}
-                    fillOpacity="0.42"
-                  />
-                )
-              })}
-              <path
-                d={ichimokuSpanAPath}
-                fill="none"
-                stroke="#9ad7b8"
-                strokeWidth="1"
-                opacity="0.9"
-              />
-              <path
-                d={ichimokuSpanBPath}
-                fill="none"
-                stroke="#d9a184"
-                strokeWidth="1"
-                opacity="0.9"
-              />
-            </g>
-          )}
-
-          {/* 3. Bollinger Bands — muted white dashed upper/lower lines */}
-          {bollinger && (
-            <g opacity="0.48">
-              <path
-                d={bollingerUpperPath}
-                fill="none"
-                stroke="#f8fafc"
-                strokeWidth="1"
-                strokeDasharray="6 4"
-              />
-              <path
-                d={bollingerLowerPath}
-                fill="none"
-                stroke="#f8fafc"
-                strokeWidth="1"
-                strokeDasharray="6 4"
-              />
-            </g>
-          )}
-
-          {/* 4. Volume Bars (Standard Volume Pane) */}
-          {visibleBars.map((bar, i) => {
-            const x = getX(i)
-            const vH = (bar.volume / (chartMetrics?.maxVol ?? 1)) * volHeight
-            const isBull = bar.close >= bar.open
-            const barW = Math.max(2, plotWidth / visibleSlotCount - 1.5)
-            return (
-              <rect
-                key={`v-${bar.time}-${i}`}
-                x={x - barW / 2}
-                y={volTop + volHeight - vH}
-                width={barW}
-                height={vH}
-                fill={isBull ? "#10b981" : "#f43f5e"}
-                opacity="0.35"
-                rx="0.5"
-              />
-            )
-          })}
-          <path
-            d={volumeMa20Path}
-            fill="none"
-            stroke="#f59e0b"
-            strokeWidth="1"
-            vectorEffect="non-scaling-stroke"
-            opacity="0.95"
-          />
-
-          {/* 5. Main Candlesticks — Japanese candles are the only presentation. */}
-          {visibleBars.map((bar, i) => {
-            const x = getX(i)
-            const isBull = bar.close >= bar.open
-            const color = isBull ? "#10b981" : "#f43f5e"
-            const highY = getY(bar.high)
-            const lowY = getY(bar.low)
-            const openY = getY(bar.open)
-            const closeY = getY(bar.close)
-            const bodyTop = Math.min(openY, closeY)
-            const bodyHeight = Math.max(1.5, Math.abs(closeY - openY))
-            const candleW = Math.max(2, plotWidth / visibleSlotCount - 2)
-
-            return (
-              <g key={`c-${bar.time}-${i}`}>
-                <line x1={x} y1={highY} x2={x} y2={lowY} stroke={color} strokeWidth="1.2" />
-                <rect
-                  x={x - candleW / 2}
-                  y={bodyTop}
-                  width={candleW}
-                  height={bodyHeight}
-                  fill={color}
-                  stroke={color}
-                  strokeWidth="0"
-                  rx="1"
-                />
-              </g>
-            )
-          })}
-
-          {/* Moving Averages — requested visual hierarchy */}
-          {(isMaximized ? indicators.showMa : false) && (
-            <>
-              <path d={ma20Path} fill="none" stroke="#f8fafc" strokeWidth="1" opacity="0.95" />
-              <path d={ma50Path} fill="none" stroke="#8b5cf6" strokeWidth="2" opacity="0.95" />
-              <path d={ma200Path} fill="none" stroke="#facc15" strokeWidth="3" opacity="0.95" />
-            </>
-          )}
-
-          {/* QeoIndex proprietary 129-bar Ichimoku base line */}
-          {isMaximized && indicators.showQeoBase129 && qeoBase129Path && (
-            <>
-              <path
-                d={qeoBase129Path}
-                fill="none"
-                stroke="#f472b6"
-                strokeWidth="8"
-                opacity="0.18"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                filter={`url(#qeo-base-glow-${ticker})`}
-              />
-              <path
-                d={qeoBase129Path}
-                fill="none"
-                stroke="#ff4da6"
-                strokeWidth="3"
-                opacity="0.98"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </>
-          )}
-
-          {/* Current Price Dashed Line & Badge on Y-Axis */}
-          {activeBar && (
-            <g>
-              <line
-                x1={padLeft}
-                y1={getY(activeBar.close)}
-                x2={width - padRight}
-                y2={getY(activeBar.close)}
-                stroke={activeBar.close >= activeBar.open ? "#10b981" : "#f43f5e"}
-                strokeDasharray="4 2"
-                strokeWidth="1"
-                opacity="0.9"
-              />
-              <rect
-                x={width - padRight + 1}
-                y={getY(activeBar.close) - 9}
-                width={padRight - 2}
-                height={18}
-                fill={activeBar.close >= activeBar.open ? "#10b981" : "#f43f5e"}
-                rx="2"
-              />
-              <text
-                x={width - padRight + 6}
-                y={getY(activeBar.close) + 4}
-                fill="#ffffff"
-                fontSize="10.5"
-                fontWeight="bold"
-                fontFamily="monospace"
-              >
-                {activeBar.close.toFixed(1)}
-              </text>
-            </g>
-          )}
-
-          {/* Crosshair indicator with X-axis and Y-axis tracking */}
-          {hoverIndex !== null && visibleBars[hoverIndex] && (
-            <g>
-              {/* Vertical crosshair line */}
-              <line
-                x1={getX(hoverIndex)}
-                y1={padTop}
-                x2={getX(hoverIndex)}
-                y2={height - padBottom}
-                stroke="#64748b"
-                strokeWidth="1"
-                strokeDasharray="3 3"
-                opacity="0.75"
-              />
-
-              {/* Horizontal crosshair line & Y-axis Price Badge */}
-              {hoverY !== null && hoverY >= padTop && hoverY <= height - padBottom && (
-                <>
-                  <line
-                    x1={padLeft}
-                    y1={hoverY}
-                    x2={width - padRight}
-                    y2={hoverY}
-                    stroke="#64748b"
-                    strokeWidth="1"
-                    strokeDasharray="3 3"
-                    opacity="0.75"
-                  />
-                  <rect
-                    x={width - padRight + 1}
-                    y={hoverY - 9}
-                    width={padRight - 2}
-                    height={18}
-                    fill="#111827"
-                    stroke="rgba(255,255,255,0.2)"
-                    strokeWidth="1"
-                    rx="2"
-                  />
-                  <text
-                    x={width - padRight + 6}
-                    y={hoverY + 4}
-                    fill="#e2e8f0"
-                    fontSize="10.5"
-                    fontWeight="bold"
-                    fontFamily="monospace"
-                  >
-                    {yToPrice(hoverY).toFixed(1)}
-                  </text>
-                </>
-              )}
-
-              {/* X-axis Date/Time Badge */}
-              {(() => {
-                const hBar = visibleBars[hoverIndex]
-                const d = new Date(hBar.time * 1000)
-                const dateStr =
-                  timeframe.includes("m") || timeframe.includes("h")
-                    ? `${d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} ${d.getDate()}/${d.getMonth() + 1}`
-                    : `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`
-                const hX = getX(hoverIndex)
-                const pillW = 80
-                const pillX = Math.max(padLeft, Math.min(width - padRight - pillW, hX - pillW / 2))
-                return (
-                  <g>
-                    <rect
-                      x={pillX}
-                      y={height - padBottom + 3}
-                      width={pillW}
-                      height={17}
-                      fill="#111827"
-                      stroke="rgba(255,255,255,0.2)"
-                      strokeWidth="1"
-                      rx="2"
-                    />
-                    <text
-                      x={pillX + pillW / 2}
-                      y={height - padBottom + 14}
-                      textAnchor="middle"
-                      fill="#e2e8f0"
-                      fontSize="8.5"
-                      fontWeight="bold"
-                      fontFamily="monospace"
-                    >
-                      {dateStr}
-                    </text>
-                  </g>
-                )
-              })()}
-            </g>
-          )}
-
-          {/* 6. RSI Subpane — expanded/collapsible TradingView-like pane */}
-          {hasRsi && (
-            <g>
-              <line x1={padLeft} y1={rsiTop} x2={width - padRight} y2={rsiTop} stroke="#334155" opacity="0.7" />
-              <text x={padLeft + 8} y={rsiTop + 14} fill="#cbd5e1" fontSize="9.5" fontFamily="monospace">
-                RSI 14
-              </text>
-              <text x={padLeft + 50} y={rsiTop + 14} fill="#8b5cf6" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
-                {rsiSeries.at(-1)?.toFixed(2) ?? "—"}
-              </text>
-
-              {!isRsiCollapsed && (() => {
-                const yForRsi = (value: number) => rsiTop + ((100 - value) / 100) * rsiPaneHeight
-                const rsi70Y = yForRsi(70)
-                const rsi30Y = yForRsi(30)
-                const latestRsi = rsiSeries.at(-1)
-                let rsiPath = ""
-                rsiSeries.forEach((val, i) => {
-                  if (val == null) return
-                  const x = getX(i)
-                  const y = yForRsi(val)
-                  rsiPath += rsiPath === "" ? `M ${x} ${y}` : ` L ${x} ${y}`
-                })
-
-                return (
-                  <>
-                    <rect
-                      x={padLeft}
-                      y={rsi70Y}
-                      width={plotWidth}
-                      height={rsi30Y - rsi70Y}
-                      fill="#7c3aed"
-                      fillOpacity="0.08"
-                    />
-                    <line x1={padLeft} y1={rsi70Y} x2={width - padRight} y2={rsi70Y} stroke="#a78bfa" strokeDasharray="5 5" opacity="0.55" />
-                    <line x1={padLeft} y1={rsi30Y} x2={width - padRight} y2={rsi30Y} stroke="#a78bfa" strokeDasharray="5 5" opacity="0.55" />
-
-                    {[80, 60, 40, 20].map((tick) => (
-                      <text
-                        key={`rsi-tick-${tick}`}
-                        x={width - padRight + 8}
-                        y={yForRsi(tick) + 3}
-                        fill="#94a3b8"
-                        fontSize="8.5"
-                        fontFamily="monospace"
-                      >
-                        {tick}
-                      </text>
-                    ))}
-
-                    <path
-                      d={rsiPath}
-                      fill="none"
-                      stroke="#8b5cf6"
-                      strokeWidth="0.75"
-                      vectorEffect="non-scaling-stroke"
-                    />
-
-                    {typeof latestRsi === "number" && (
-                      <g>
-                        <rect
-                          x={width - padRight + 1}
-                          y={Math.max(rsiTop + 1, Math.min(rsiTop + rsiPaneHeight - 16, yForRsi(latestRsi) - 7.5))}
-                          width={padRight - 2}
-                          height={15}
-                          fill="#7c3aed"
-                          rx="2"
-                        />
-                        <text
-                          x={width - padRight + 7}
-                          y={Math.max(rsiTop + 1, Math.min(rsiTop + rsiPaneHeight - 16, yForRsi(latestRsi) - 7.5)) + 10.5}
-                          fill="#f5f3ff"
-                          fontSize="9.5"
-                          fontFamily="monospace"
-                          fontWeight="bold"
-                        >
-                          {latestRsi.toFixed(2)}
-                        </text>
-                      </g>
-                    )}
-                  </>
-                )
-              })()}
-              <line x1={padLeft} y1={rsiTop + rsiPaneHeight} x2={width - padRight} y2={rsiTop + rsiPaneHeight} stroke="#334155" opacity="0.7" />
-            </g>
-          )}
-
-          {/* 7. MACD Subpane — expanded/collapsible independent symmetric scale */}
-          {hasMacd && macdSeries && (
-            <g>
-              <line x1={padLeft} y1={macdTop} x2={width - padRight} y2={macdTop} stroke="#334155" opacity="0.65" />
-              <text x={padLeft + 8} y={macdTop + 14} fill="#cbd5e1" fontSize="9" fontFamily="monospace">
-                MACD 12 26 close 9
-              </text>
-
-              {!isMacdCollapsed && (() => {
-                const numericValues = [
-                  ...macdSeries.macd,
-                  ...macdSeries.signal,
-                  ...macdSeries.histogram,
-                ].filter((value): value is number => typeof value === "number" && Number.isFinite(value))
-                const maxAbs = Math.max(0.0001, ...numericValues.map((value) => Math.abs(value)))
-                const zeroY = macdTop + macdPaneHeight / 2
-                const yForMacd = (value: number) => zeroY - (value / maxAbs) * (macdPaneHeight * 0.42)
-                const makeMacdPath = (series: Array<number | null>) => {
-                  let path = ""
-                  series.forEach((value, i) => {
-                    if (value == null) return
-                    const x = getX(i)
-                    const y = yForMacd(value)
-                    path += path === "" ? `M ${x} ${y}` : ` L ${x} ${y}`
-                  })
-                  return path
-                }
-                const latestMacd = macdSeries.macd.at(-1)
-                const latestSignal = macdSeries.signal.at(-1)
-                const latestHist = macdSeries.histogram.at(-1)
-
-                const badges = [
-                  typeof latestSignal === "number" ? { key: "signal", value: latestSignal, color: "#f97316" } : null,
-                  typeof latestMacd === "number" ? { key: "macd", value: latestMacd, color: "#2196f3" } : null,
-                  typeof latestHist === "number" ? { key: "hist", value: latestHist, color: latestHist >= 0 ? "#0f9f91" : "#ef4444" } : null,
-                ].filter((item): item is { key: string; value: number; color: string } => item !== null)
-
-                return (
-                  <>
-                    <line x1={padLeft} y1={zeroY} x2={width - padRight} y2={zeroY} stroke="#64748b" strokeWidth="1" opacity="0.7" />
-
-                    {macdSeries.histogram.map((val, i) => {
-                      if (val == null) return null
-                      const x = getX(i)
-                      const valueY = yForMacd(val)
-                      const prev = macdSeries.histogram[i - 1]
-                      const strengthening =
-                        typeof prev === "number" &&
-                        Math.sign(prev) === Math.sign(val) &&
-                        Math.abs(val) >= Math.abs(prev)
-                      const fill = val >= 0
-                        ? strengthening ? "#22b8a7" : "#9adfd5"
-                        : strengthening ? "#ff5252" : "#f4b5b5"
-                      return (
-                        <rect
-                          key={`macd-hist-${i}`}
-                          x={x - 2}
-                          y={Math.min(zeroY, valueY)}
-                          width={4}
-                          height={Math.max(0.8, Math.abs(valueY - zeroY))}
-                          fill={fill}
-                          opacity="0.95"
-                        />
-                      )
-                    })}
-
-                    <path d={makeMacdPath(macdSeries.macd)} fill="none" stroke="#2196f3" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-                    <path d={makeMacdPath(macdSeries.signal)} fill="none" stroke="#f97316" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-
-                    {typeof latestHist === "number" && (
-                      <text x={padLeft + 122} y={macdTop + 14} fill={latestHist >= 0 ? "#22b8a7" : "#ff5252"} fontSize="9" fontFamily="monospace">
-                        {latestHist.toFixed(2)}
-                      </text>
-                    )}
-                    {typeof latestMacd === "number" && (
-                      <text x={padLeft + 154} y={macdTop + 14} fill="#2196f3" fontSize="9" fontFamily="monospace">
-                        {latestMacd.toFixed(2)}
-                      </text>
-                    )}
-                    {typeof latestSignal === "number" && (
-                      <text x={padLeft + 186} y={macdTop + 14} fill="#f97316" fontSize="9" fontFamily="monospace">
-                        {latestSignal.toFixed(2)}
-                      </text>
-                    )}
-
-                    {badges.map((badge) => {
-                      const rawY = yForMacd(badge.value)
-                      const badgeY = Math.max(macdTop + 1, Math.min(macdTop + macdPaneHeight - 16, rawY - 7.5))
-                      return (
-                        <g key={`macd-badge-${badge.key}`}>
-                          <rect
-                            x={width - padRight + 1}
-                            y={badgeY}
-                            width={padRight - 2}
-                            height={15}
-                            fill={badge.color}
-                            rx="1.5"
-                          />
-                          <text
-                            x={width - padRight + 7}
-                            y={badgeY + 10.5}
-                            fill="#ffffff"
-                            fontSize="9.5"
-                            fontFamily="monospace"
-                            fontWeight="bold"
-                          >
-                            {badge.value.toFixed(2)}
-                          </text>
-                        </g>
-                      )
-                    })}
-                  </>
-                )
-              })()}
-              <line x1={padLeft} y1={macdTop + macdPaneHeight} x2={width - padRight} y2={macdTop + macdPaneHeight} stroke="#334155" opacity="0.65" />
-            </g>
-          )}
-
-          {/* Price Axis Wheel Zoom / Double-click Auto-scale Trigger */}
-          <rect
-            x={width - padRight}
-            y={0}
-            width={padRight}
-            height={padTop + mainPriceHeight}
-            fill="transparent"
-            className="cursor-ns-resize"
-            onDoubleClick={handleResetPriceScale}
-          >
-            <title>Lăn chuột để thu/phóng trục giá · Nhấn đúp để Auto Scale</title>
-          </rect>
-
-          {/* Shared SVG definitions */}
-          <defs>
-            <linearGradient id="area-gradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#cbd5e1" stopOpacity="0.5" />
-              <stop offset="100%" stopColor="#cbd5e1" stopOpacity="0" />
-            </linearGradient>
-            <filter id={`qeo-base-glow-${ticker}`} x="-20%" y="-60%" width="140%" height="220%">
-              <feGaussianBlur stdDeviation="3" />
-            </filter>
-          </defs>
-        </svg>
-
-        {/* Interactive Drawing Canvas Layer with Handles, Coordinates & Selection */}
         {isMaximized && (
-          <StockChartDrawingCanvas
-            width={width}
-            height={height}
-            drawings={drawings}
-            selectedId={selectedDrawingId}
-            onSelectDrawing={(id) => setSelectedDrawingId(id)}
-            onAddDrawing={addDrawing}
-            onUpdateDrawing={modifyDrawing}
-            onDeleteDrawing={deleteDrawing}
-            onEditText={(id) => setEditingTextDrawingId(id)}
-            activeTool={activeTool}
-            activeColor={activeColor}
-            lineWidth={lineWidth}
-            selectedIconType={selectedIconType}
-            isLocked={isDrawingsLocked}
-            isHidden={isDrawingsHidden}
-            priceToY={priceToY}
-            yToPrice={yToPrice}
-            timeToX={timeToX}
-            xToTime={xToTime}
-          />
-        )}
-
-        {hasRsi && (
-          <button
-            type="button"
-            title={isRsiCollapsed ? "Mở pane RSI" : "Thu gọn pane RSI"}
-            onClick={(event) => {
-              event.stopPropagation()
-              setIsRsiCollapsed((value) => !value)
-            }}
-            className="absolute z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow hover:bg-white/10 hover:text-white"
-            style={{
-              top: `${((rsiTop + 3) / height) * 100}%`,
-              right: `${(padRight / width) * 100 + 0.6}%`,
-            }}
-          >
-            {isRsiCollapsed ? "+" : "−"}
-          </button>
-        )}
-
-        {hasMacd && (
-          <button
-            type="button"
-            title={isMacdCollapsed ? "Mở pane MACD" : "Thu gọn pane MACD"}
-            onClick={(event) => {
-              event.stopPropagation()
-              setIsMacdCollapsed((value) => !value)
-            }}
-            className="absolute z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow hover:bg-white/10 hover:text-white"
-            style={{
-              top: `${((macdTop + 3) / height) * 100}%`,
-              right: `${(padRight / width) * 100 + 0.6}%`,
-            }}
-          >
-            {isMacdCollapsed ? "+" : "−"}
-          </button>
+          <>
+            <button
+              type="button"
+              title={isRsiCollapsed ? "Mở pane RSI" : "Thu gọn pane RSI"}
+              onClick={() => {
+                setIsRsiCollapsed((value) => !value)
+                const next = !isRsiCollapsed
+                chartRef.current?.panes()[2]?.setHeight(next ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT)
+              }}
+              className="absolute right-2 top-[62%] z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow transition-colors hover:bg-white/10 hover:text-white"
+            >
+              {isRsiCollapsed ? "+" : "−"}
+            </button>
+            <button
+              type="button"
+              title={isMacdCollapsed ? "Mở pane MACD" : "Thu gọn pane MACD"}
+              onClick={() => {
+                setIsMacdCollapsed((value) => !value)
+                const next = !isMacdCollapsed
+                chartRef.current?.panes()[3]?.setHeight(next ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT)
+              }}
+              className="absolute right-2 bottom-2 z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow transition-colors hover:bg-white/10 hover:text-white"
+            >
+              {isMacdCollapsed ? "+" : "−"}
+            </button>
+          </>
         )}
       </div>
 
-      {/* TradingView-style bottom range/navigation bar */}
-      <div className="flex shrink-0 flex-wrap items-center justify-between border-t border-white/[0.08] bg-[#070b10] px-2 py-1 text-[10px] font-mono select-none">
+      <div className="flex shrink-0 items-center justify-between gap-2 overflow-x-auto border-t border-white/[0.08] bg-[#070b10] px-2 py-1 text-[10px] font-mono select-none">
         <div className="flex items-center gap-0.5">
           {[
             { label: "5N", bars: 1250, title: "5 năm gần nhất" },
@@ -1755,18 +1280,8 @@ export function StockTradingViewChart({
               key={preset.label}
               type="button"
               title={preset.title}
-              onClick={() => {
-                setScrollOffset(0)
-                setRightOffsetBars(DEFAULT_RIGHT_OFFSET_BARS)
-                setManualPriceDomain(null)
-                setVisibleBarsCount(Math.min(displayBars.length, Math.max(15, preset.bars)))
-              }}
-              className={cn(
-                "rounded-sm px-2 py-0.5 font-semibold transition-colors",
-                scrollOffset === 0 && Math.abs(visibleBarsCount - Math.min(displayBars.length, preset.bars)) <= 5
-                  ? "bg-white/[0.08] text-slate-100"
-                  : "text-slate-400 hover:bg-white/[0.05] hover:text-slate-100",
-              )}
+              onClick={() => setVisibleBars(preset.bars)}
+              className="rounded-sm px-2 py-0.5 font-semibold text-slate-400 transition-colors hover:bg-white/[0.05] hover:text-slate-100"
             >
               {preset.label}
             </button>
@@ -1777,20 +1292,19 @@ export function StockTradingViewChart({
           </span>
         </div>
 
-        <div className="flex items-center gap-1 text-slate-500">
-          <span className="hidden md:inline px-1.5">UTC+7</span>
+        <div className="flex shrink-0 items-center gap-1 text-slate-500">
+          <span className="hidden px-1.5 md:inline">UTC+7</span>
           <span className="rounded-sm px-1.5 py-0.5">%</span>
-          <span className="rounded-sm px-1.5 py-0.5">log</span>
           <button
             type="button"
-            title="Tự căn khung nhìn vừa dữ liệu (Auto Fit)"
+            title="Tự căn khung nhìn vừa dữ liệu"
             onClick={handleResetView}
-            className="rounded-sm px-1.5 py-0.5 font-semibold text-cyan-400 hover:bg-white/[0.05] hover:text-cyan-300 transition-colors"
+            className="rounded-sm px-1.5 py-0.5 font-semibold text-cyan-400 transition-colors hover:bg-white/[0.05] hover:text-cyan-300"
           >
             tự động
           </button>
-          <span className="hidden lg:inline pl-2 text-[9px] text-slate-600">
-            {visibleBars.length} nến · vùng trống +{rightOffsetBars}/{maxRightOffsetBars}
+          <span className="hidden pl-2 text-[9px] text-slate-600 lg:inline">
+            {displayBars.length} nến · vùng trống +{futureTimes.length}
           </span>
         </div>
       </div>
