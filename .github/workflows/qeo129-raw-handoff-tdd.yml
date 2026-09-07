@@ -7,6 +7,7 @@ on:
     paths:
       - 'modules/market/history/adjusted-daily-store.ts'
       - 'tests/market-history/qeo129-qeo132-raw-handoff.test.ts'
+      - 'tests/market-history/qeo129-adjusted-daily-store.test.ts'
       - '.github/workflows/qeo129-raw-handoff-tdd.yml'
 
 permissions:
@@ -26,7 +27,10 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Run QEO-129 canonical RAW handoff contract
-        run: node --test tests/market-history/qeo129-qeo132-raw-handoff.test.ts
+      - name: Run QEO-129 canonical RAW handoff contracts
+        run: >-
+          node --test
+          tests/market-history/qeo129-qeo132-raw-handoff.test.ts
+          tests/market-history/qeo129-adjusted-daily-store.test.ts
       - name: Compile TypeScript
         run: pnpm typecheck
