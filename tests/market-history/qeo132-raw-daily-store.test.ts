@@ -83,8 +83,9 @@ test("QEO-132 persists through service RPC and requires exact canonical RAW read
   const result = await persistRawDailyObservation(client as never, observation, { selectCanonical: true })
   assert.deepEqual(result, { evidenceId, canonicalSelected: true })
   assert.notEqual(rpcArgs, null)
-  assert.deepEqual((rpcArgs as Record<string, unknown>).p_observation, canonical)
-  assert.equal((rpcArgs as Record<string, unknown>).p_select_canonical, true)
+  const capturedArgs = rpcArgs as unknown as Record<string, unknown>
+  assert.deepEqual(capturedArgs.p_observation, canonical)
+  assert.equal(capturedArgs.p_select_canonical, true)
 })
 
 test("QEO-132 rejects persistence success when canonical read-back differs", async () => {
