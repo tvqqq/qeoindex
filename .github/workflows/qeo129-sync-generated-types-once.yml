@@ -1,4 +1,4 @@
-name: QEO-129 Sync Generated Types Once
+name: QEO-129 Canonical RAW Doc Cleanup Once
 
 on:
   push:
@@ -11,41 +11,142 @@ permissions:
   contents: write
 
 jobs:
-  sync-types:
+  cleanup-docs:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feat/qeo-129-adjusted-daily-shadow
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - uses: supabase/setup-cli@v1
-        with:
-          version: 2.116.0
-      - run: pnpm install --frozen-lockfile
-      - name: Start local Supabase
-        run: supabase start
-      - name: Replay migrations from zero
-        run: pnpm db:replay:verify
-      - name: Generate exact Database types
-        run: supabase gen types typescript --local > modules/shared/supabase/database.types.ts
-      - name: Commit generated type sync
+      - name: Apply QEO-132 canonical RAW supersession corrections
         run: |
-          if git diff --quiet -- modules/shared/supabase/database.types.ts; then
-            echo 'Generated Database types already synchronized.'
-            exit 0
-          fi
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              "docs/superpowers/plans/2026-09-06-qeo-129-adjusted-daily-shadow.md": [
+                  (
+                      "# QEO-129 Adjusted Daily Shadow Foundation Implementation Plan\n",
+                      "# QEO-129 Adjusted Daily Shadow Foundation Implementation Plan\n\n> **2026-09-07 supersession:** QEO-132 established `market_ohlcv_raw_daily` as the only canonical RAW Daily boundary. Any older step below that treats legacy `market_ohlcv_history` OHLCV as RAW is superseded by this note and the corrected steps in this plan. Legacy history remains immutable adjusted/provider compatibility evidence only.\n",
+                  ),
+                  (
+                      "**Architecture:** Preserve `market_ohlcv_history` as raw/provider evidence. Persist recomputable adjusted rows in `market_ohlcv_adjusted_daily`, keyed by canonical ticker/session and linked to one exact QEO-124 `factor_run_id`; project transition-level cumulative factors to Daily sessions using strict next-effective-session semantics. Track verification in `market_adjusted_daily_rollout`, keep QEO-129 rollout `shadow`, and count success only from exact persisted DB readback.",
+                      "**Architecture:** Preserve legacy `market_ohlcv_history` unchanged as adjusted/provider compatibility history. Consume only QEO-132 `market_ohlcv_raw_daily` canonical RAW evidence, require an independent retained ticker-session attestation before materialization, and persist recomputable adjusted rows in `market_ohlcv_adjusted_daily` linked to one exact QEO-124 `factor_run_id`. Project transition-level cumulative factors to canonical RAW Daily sessions using strict next-effective-session semantics. Track verification in `market_adjusted_daily_rollout`, keep QEO-129 rollout `shadow`, and count success only from exact persisted DB readback.",
+                  ),
+                  (
+                      "- Never update/delete/rename/repurpose `market_ohlcv_history` in QEO-129.",
+                      "- Never update/delete/rename/repurpose `market_ohlcv_history` in QEO-129; it is a legacy adjusted/provider compatibility store and is never a QEO-129 RAW input.",
+                  ),
+                  (
+                      "- [ ] **Step 6: Load raw `1D` range** from `market_ohlcv_history`; canonicalize `bar_time` with existing Asia/Ho_Chi_Minh session rules; reject duplicate canonical dates.",
+                      "- [ ] **Step 6: Load canonical RAW Daily range** only from QEO-132 `market_ohlcv_raw_daily` through `readCanonicalRawDaily`; reject duplicate/out-of-range sessions and require `expectedRawSessionCount` plus the ordered canonical RAW session-identity SHA256 before any adjusted-row or rollout write.",
+                  ),
+                  (
+                      "- [ ] **Step 2: RED fail-closed tests** — missing row, duplicate canonical session, row/rollout lineage mismatch or missing rollout => `complete=false`; loader never queries/merges raw history.",
+                      "- [ ] **Step 2: RED fail-closed tests** — a missing adjusted row relative to the QEO-132 canonical RAW session set, duplicate canonical session, row/rollout lineage mismatch or missing rollout => `complete=false`; loader never fills adjusted holes with RAW or legacy OHLCV.",
+                  ),
+                  (
+                      "- [ ] **Step 3: Implement loader** — query rollout then adjusted table only; validate one expected run/lineage and ordered canonical sessions.",
+                      "- [ ] **Step 3: Implement loader** — read QEO-132 canonical RAW rows only to establish the expected per-ticker session identities, then query rollout + adjusted rows; validate exact session-set equality and one expected run/lineage. Do not use exchange-calendar equality as per-ticker completeness authority.",
+                  ),
+                  (
+                      "- [ ] **Step 1: Capture raw VHM pre-rebuild evidence** — `1D` row count, first/last session, distinct canonical sessions, stable checksum over raw OHLCV/provider identity.",
+                      "- [ ] **Step 1: Capture VHM pre-rebuild guards** — QEO-132 canonical RAW row/session count + ordered session-identity hash, plus separate immutable checksums for legacy `market_ohlcv_history` row/session/OHLCV/provider identity. Legacy values are mutation guards only, never RAW input.",
+                  ),
+                  (
+                      "- [ ] **Step 6: Re-run raw evidence query** and require row count/session/checksum unchanged.",
+                      "- [ ] **Step 6: Re-run QEO-132 canonical RAW evidence/session checks and the separate legacy mutation guards**; require both evidence boundaries unchanged by QEO-129 materialization.",
+                  ),
+              ],
+              "docs/superpowers/specs/2026-09-06-qeo-129-adjusted-daily-shadow-design.md": [
+                  (
+                      "# QEO-129 Adjusted Daily Shadow Design\n",
+                      "# QEO-129 Adjusted Daily Shadow Design\n\n> **2026-09-07 supersession:** QEO-132 established `market_ohlcv_raw_daily` as the only canonical RAW Daily input boundary. Legacy `market_ohlcv_history` is adjusted/provider compatibility history and must not be interpreted or consumed as RAW by QEO-129.\n",
+                  ),
+                  (
+                      "Depends on: QEO-123, QEO-124",
+                      "Depends on: QEO-123, QEO-124, QEO-132; production RAW acquisition is additionally gated by QEO-133 source-operation acceptance",
+                  ),
+                  (
+                      "The existing `market_ohlcv_history` table remains raw/provider evidence. QEO-129 adds a separate adjusted Daily store derived from raw Daily plus one exact QEO-124 factor run. Production consumers remain on the pre-QEO-129 source until QEO-126 maintains the shadow state through EOD and QEO-125 performs the later consumer cutover.",
+                      "The existing `market_ohlcv_history` table remains immutable adjusted/provider compatibility history. QEO-129 adds a separate adjusted Daily store derived only from QEO-132 `market_ohlcv_raw_daily` canonical RAW Daily plus one exact QEO-124 factor run. Production consumers remain on the pre-QEO-129 source until QEO-126 maintains the shadow state through EOD and QEO-125 performs the later consumer cutover.",
+                  ),
+                  (
+                      "`raw Daily + exact QEO-124 factor run -> adjusted Daily`",
+                      "`QEO-132 canonical RAW Daily + exact QEO-124 factor run -> adjusted Daily`",
+                  ),
+                  (
+                      "2. Load canonical raw `1D` rows from `market_ohlcv_history` using existing session rules.",
+                      "2. Load canonical RAW Daily rows only from QEO-132 `market_ohlcv_raw_daily`; reject duplicate/out-of-range sessions and require the independently recorded retained ticker-session attestation before any adjusted write.",
+                  ),
+                  (
+                      "- incomplete adjusted coverage returns `complete=false`;\n- the loader never fills holes from raw Daily;",
+                      "- incomplete adjusted coverage relative to the QEO-132 canonical RAW session set returns `complete=false`;\n- the loader may read QEO-132 RAW rows to establish expected per-ticker session identities, but it never fills adjusted holes from RAW OHLCV or legacy history;\n- exchange-calendar equality alone is not a valid per-ticker completeness authority;",
+                  ),
+                  (
+                      "7. Raw VHM `market_ohlcv_history` row count/session identities and a stable value checksum are unchanged before versus after shadow rebuild.",
+                      "7. QEO-132 VHM canonical RAW evidence/session identity remains unchanged, and separate legacy `market_ohlcv_history` row/session/OHLCV/provider checksums remain unchanged as mutation guards. Legacy price values are not RAW evidence.",
+                  ),
+                  (
+                      "### Raw Daily mutation during rebuild\n\nThe adjusted rebuild does not mutate raw Daily. Production acceptance compares raw evidence before/after; any change invalidates QEO-129 acceptance until explained independently.",
+                      "### Canonical RAW or legacy mutation during rebuild\n\nThe adjusted rebuild does not mutate QEO-132 canonical RAW Daily or legacy compatibility history. Production acceptance compares QEO-132 append-only/canonical RAW evidence plus separate legacy mutation guards before/after; any unexplained change invalidates QEO-129 acceptance.",
+                  ),
+                  (
+                      "This ordering removes the old QEO-125/QEO-126 dependency cycle while keeping raw evidence and consumer authority explicit.",
+                      "This ordering removes the old QEO-125/QEO-126 dependency cycle while keeping QEO-132 canonical RAW evidence, legacy compatibility history and consumer authority explicit.",
+                  ),
+                  (
+                      "- dedicated shadow table, not a view and not a rewrite of raw history;",
+                      "- dedicated shadow table, not a view and not a rewrite of QEO-132 canonical RAW evidence or legacy compatibility history;",
+                  ),
+              ],
+              "docs/db/evidence/qeo129-vhm-price-basis-provider-probe-2026-09-07.md": [
+                  (
+                      "QEO-129 production shadow acceptance requires `market_ohlcv_history` input rows to be auditable **raw/provider Daily** before QEO-124 factors are applied. This note records the bounded provider probes performed after production VHM history was found to be predominantly legacy adjusted-basis.",
+                      "This investigation began when QEO-129 still assumed retained `market_ohlcv_history` might serve as raw/provider input. The VHM probes disproved that assumption. QEO-132 subsequently established `market_ohlcv_raw_daily` as the only canonical RAW Daily input boundary; legacy `market_ohlcv_history` remains adjusted/provider compatibility evidence only.",
+                  ),
+                  (
+                      "## Code hardening produced by this investigation\n\nQEO-129 no longer infers raw price basis from provider names. Persisted Daily rows are classified:",
+                      "## Code hardening produced by this investigation\n\nThe initial hardening stopped QEO-129 from inferring RAW price basis from provider names. QEO-132 then replaced that provisional classification boundary with explicit canonical `price_basis='RAW'` persistence. Historical classification findings remain useful for rejecting adjusted providers:",
+                  ),
+                  (
+                      "Linear `QEO-132` now owns restoring an auditable raw Daily boundary before VHM shadow materialization.\n\nQEO-129 must remain blocked until QEO-132 provides a retained VHM raw/provider input range with explicit `source basis: raw` provenance. QEO-129 itself must not mutate that raw baseline; its production acceptance requires the pre/post raw checksum to remain identical.",
+                      "QEO-132 now provides the auditable RAW Daily schema/persistence boundary, but production still has no retained VHM canonical RAW range. QEO-133 owns source-operation acceptance: StockBiz remains bounded/manual evidence only unless written permission/licensed use is established, or another documented provider RAW source is selected.\n\nQEO-129 must remain blocked until production contains a retained VHM QEO-132 canonical RAW range with explicit `price_basis='RAW'` provenance and exact retained-session identity. QEO-129 must not mutate QEO-132 RAW evidence or legacy compatibility history during shadow materialization.",
+                  ),
+              ],
+          }
+
+          for path_str, pairs in replacements.items():
+              path = Path(path_str)
+              text = path.read_text()
+              for old, new in pairs:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f"{path}: expected exactly one match, found {count}: {old[:100]!r}")
+                  text = text.replace(old, new)
+              path.write_text(text)
+          PY
+
+          git diff --check
+
+      - name: Verify canonical RAW wording
+        run: |
+          grep -F 'QEO-132 `market_ohlcv_raw_daily`' docs/superpowers/plans/2026-09-06-qeo-129-adjusted-daily-shadow.md
+          grep -F 'QEO-132 `market_ohlcv_raw_daily`' docs/superpowers/specs/2026-09-06-qeo-129-adjusted-daily-shadow-design.md
+          grep -F 'QEO-132 subsequently established `market_ohlcv_raw_daily`' docs/db/evidence/qeo129-vhm-price-basis-provider-probe-2026-09-07.md
+          ! grep -F 'Preserve `market_ohlcv_history` as raw/provider evidence' docs/superpowers/plans/2026-09-06-qeo-129-adjusted-daily-shadow.md
+          ! grep -F 'Load raw `1D` range** from `market_ohlcv_history`' docs/superpowers/plans/2026-09-06-qeo-129-adjusted-daily-shadow.md
+          ! grep -F 'The existing `market_ohlcv_history` table remains raw/provider evidence' docs/superpowers/specs/2026-09-06-qeo-129-adjusted-daily-shadow-design.md
+          ! grep -F 'Load canonical raw `1D` rows from `market_ohlcv_history`' docs/superpowers/specs/2026-09-06-qeo-129-adjusted-daily-shadow-design.md
+
+      - name: Commit semantic doc cleanup
+        run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add modules/shared/supabase/database.types.ts
-          git commit -m 'chore(QEO-129): sync generated database types'
+          git add \
+            docs/superpowers/plans/2026-09-06-qeo-129-adjusted-daily-shadow.md \
+            docs/superpowers/specs/2026-09-06-qeo-129-adjusted-daily-shadow-design.md \
+            docs/db/evidence/qeo129-vhm-price-basis-provider-probe-2026-09-07.md
+          git diff --cached --quiet && { echo 'No doc changes required.'; exit 0; }
+          git commit -m 'docs(QEO-129): align canonical RAW boundary'
           git push origin HEAD:feat/qeo-129-adjusted-daily-shadow
-      - name: Stop local Supabase
-        if: always()
-        run: supabase stop --no-backup
