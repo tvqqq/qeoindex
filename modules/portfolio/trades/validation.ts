@@ -26,12 +26,12 @@ const TRANSITIONS: Readonly<Record<TradeStatus, readonly TradeStatus[]>> = {
 }
 
 export class TradeDomainError extends Error {
-  constructor(
-    public readonly code: string,
-    message: string,
-  ) {
+  readonly code: string
+
+  constructor(code: string, message: string) {
     super(message)
     this.name = "TradeDomainError"
+    this.code = code
   }
 }
 
