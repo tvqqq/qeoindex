@@ -138,6 +138,38 @@ class SsiFastConnectProbeTest(unittest.TestCase):
             ],
         )
 
+    def test_ci_exit_code_is_fail_closed_only_when_live_probe_is_configured(self):
+        probe = load_probe_module()
+
+        self.assertEqual(
+            probe.ci_exit_code({"configured": False, "provider_call": "skipped"}),
+            0,
+        )
+        self.assertNotEqual(
+            probe.ci_exit_code({"configured": True, "provider_call": "failed"}),
+            0,
+        )
+        self.assertNotEqual(
+            probe.ci_exit_code(
+                {
+                    "configured": True,
+                    "provider_call": "completed",
+                    "raw_basis_assessment": {"status": "RAW_ANCHOR_MISMATCH"},
+                }
+            ),
+            0,
+        )
+        self.assertEqual(
+            probe.ci_exit_code(
+                {
+                    "configured": True,
+                    "provider_call": "completed",
+                    "raw_basis_assessment": {"status": "RAW_ANCHOR_MATCH"},
+                }
+            ),
+            0,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
