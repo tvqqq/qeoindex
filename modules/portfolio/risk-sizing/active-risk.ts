@@ -42,7 +42,10 @@ export function computeOpenTradeRiskContext({
     const position = summary.positions.find((candidate) => candidate.ticker === trade.ticker)
     const readModel = buildTradeReadModel({
       trade,
-      fills: linkedFills,
+      // RawTransaction is an interface and intentionally has no catch-all index signature.
+      // Spread into a fresh structural object so it satisfies the Trade read-model row shape
+      // without weakening either domain's public type contract or using an unsafe cast.
+      fills: linkedFills.map((fill) => ({ ...fill })),
       stopEvents: linkedStops,
       journalEntries: [],
     })
