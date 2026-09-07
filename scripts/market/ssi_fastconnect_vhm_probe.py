@@ -300,11 +300,22 @@ def build_output(env: Mapping[str, str]) -> dict[str, Any]:
         }
 
 
+def ci_exit_code(output: Mapping[str, Any]) -> int:
+    if not output.get("configured"):
+        return 0
+    if output.get("provider_call") != "completed":
+        return 2
+    assessment = output.get("raw_basis_assessment")
+    if not isinstance(assessment, Mapping) or assessment.get("status") != "RAW_ANCHOR_MATCH":
+        return 3
+    return 0
+
+
 def main() -> int:
     output = build_output(os.environ)
     json.dump(output, sys.stdout, ensure_ascii=False, sort_keys=True, indent=2)
     sys.stdout.write("\n")
-    return 0
+    return ci_exit_code(output)
 
 
 if __name__ == "__main__":
