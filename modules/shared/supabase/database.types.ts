@@ -2391,6 +2391,134 @@ export type Database = {
         }
         Relationships: []
       }
+      market_ohlcv_raw_daily: {
+        Row: {
+          close: number
+          evidence_id: string
+          high: number
+          low: number
+          normalization_version: string
+          open: number
+          price_basis: string
+          provider: string
+          provider_detail: string
+          raw_evidence_hash: string
+          selected_at: string
+          session_date: string
+          source_price_unit: string
+          source_url: string
+          ticker: string
+          updated_at: string
+          volume: number
+        }
+        Insert: {
+          close: number
+          evidence_id: string
+          high: number
+          low: number
+          normalization_version: string
+          open: number
+          price_basis: string
+          provider: string
+          provider_detail: string
+          raw_evidence_hash: string
+          selected_at?: string
+          session_date: string
+          source_price_unit: string
+          source_url: string
+          ticker: string
+          updated_at?: string
+          volume: number
+        }
+        Update: {
+          close?: number
+          evidence_id?: string
+          high?: number
+          low?: number
+          normalization_version?: string
+          open?: number
+          price_basis?: string
+          provider?: string
+          provider_detail?: string
+          raw_evidence_hash?: string
+          selected_at?: string
+          session_date?: string
+          source_price_unit?: string
+          source_url?: string
+          ticker?: string
+          updated_at?: string
+          volume?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_ohlcv_raw_daily_evidence_fkey"
+            columns: ["evidence_id", "ticker", "session_date"]
+            isOneToOne: false
+            referencedRelation: "market_ohlcv_raw_daily_evidence"
+            referencedColumns: ["id", "ticker", "session_date"]
+          },
+        ]
+      }
+      market_ohlcv_raw_daily_evidence: {
+        Row: {
+          close: number
+          created_at: string
+          fetched_at: string
+          high: number
+          id: string
+          low: number
+          normalization_version: string
+          open: number
+          price_basis: string
+          provider: string
+          provider_detail: string
+          raw_evidence_hash: string
+          session_date: string
+          source_price_unit: string
+          source_url: string
+          ticker: string
+          volume: number
+        }
+        Insert: {
+          close: number
+          created_at?: string
+          fetched_at: string
+          high: number
+          id?: string
+          low: number
+          normalization_version: string
+          open: number
+          price_basis: string
+          provider: string
+          provider_detail: string
+          raw_evidence_hash: string
+          session_date: string
+          source_price_unit: string
+          source_url: string
+          ticker: string
+          volume: number
+        }
+        Update: {
+          close?: number
+          created_at?: string
+          fetched_at?: string
+          high?: number
+          id?: string
+          low?: number
+          normalization_version?: string
+          open?: number
+          price_basis?: string
+          provider?: string
+          provider_detail?: string
+          raw_evidence_hash?: string
+          session_date?: string
+          source_price_unit?: string
+          source_url?: string
+          ticker?: string
+          volume?: number
+        }
+        Relationships: []
+      }
       market_price_adjustment_factors: {
         Row: {
           computed_at: string
@@ -4163,6 +4291,13 @@ export type Database = {
           p_transitions: Json
         }
         Returns: string
+      }
+      qeo_persist_raw_daily_observation: {
+        Args: { p_observation: Json; p_select_canonical?: boolean }
+        Returns: {
+          canonical_selected: boolean
+          evidence_id: string
+        }[]
       }
       qeo_prune_noncanonical_orderbook_snapshots: {
         Args: { p_run_id: string }

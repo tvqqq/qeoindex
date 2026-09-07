@@ -240,6 +240,15 @@
       ]
     },
     {
+      "path": "tests/db-migration-production-ahead.test.ts",
+      "owner": "db",
+      "invariant": "Fail closed on unexplained production-only migrations while allowing only explicitly reviewed production-ahead state with no active or pending source and an exact production ledger version.",
+      "bucket": "deep-safety",
+      "suites": [
+        "db"
+      ]
+    },
+    {
       "path": "tests/db-recovery-rehearsal.test.ts",
       "owner": "db",
       "invariant": "Preserve the current db recovery rehearsal contract.",
