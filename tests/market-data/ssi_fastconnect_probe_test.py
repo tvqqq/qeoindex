@@ -23,6 +23,18 @@ def load_probe_module():
     return module
 
 
+def canonical_raw_rows(scale: int = 1):
+    return [
+        {"session_date": "2025-10-13", "open": 123 * scale, "high": 126 * scale, "low": 122.1 * scale, "close": 124.2 * scale, "volume": 13_782_200},
+        {"session_date": "2025-10-14", "open": 124.5 * scale, "high": 131.5 * scale, "low": 124.5 * scale, "close": 127 * scale, "volume": 14_600_200},
+        {"session_date": "2025-10-15", "open": 127.5 * scale, "high": 127.6 * scale, "low": 122.6 * scale, "close": 124 * scale, "volume": 8_062_500},
+        {"session_date": "2025-10-16", "open": 123.8 * scale, "high": 123.8 * scale, "low": 120.4 * scale, "close": 122 * scale, "volume": 9_614_900},
+        {"session_date": "2025-10-17", "open": 122 * scale, "high": 122 * scale, "low": 114.6 * scale, "close": 116 * scale, "volume": 12_213_500},
+        {"session_date": "2026-06-26", "open": 157.5 * scale, "high": 163.9 * scale, "low": 156.5 * scale, "close": 162 * scale, "volume": 12_073_300},
+        {"session_date": "2026-08-05", "open": 154.2 * scale, "high": 158.8 * scale, "low": 153 * scale, "close": 153 * scale, "volume": 10_681_100},
+    ]
+
+
 class SsiFastConnectProbeTest(unittest.TestCase):
     def test_missing_credentials_skips_sdk_and_network_with_sanitized_json(self):
         env = os.environ.copy()
@@ -65,52 +77,45 @@ class SsiFastConnectProbeTest(unittest.TestCase):
         self.assertNotIn("api-key-value-qeo135", encoded)
         self.assertNotIn("api-secret-value-qeo135", encoded)
 
-    def test_raw_anchor_classifier_accepts_provider_prices_in_thousand_vnd(self):
+    def test_raw_anchor_classifier_accepts_exact_canonical_rows_in_thousand_vnd(self):
         probe = load_probe_module()
-        rows = [
-            {"session_date": "2025-10-13", "open": 120.0, "high": 125.0, "low": 114.6, "close": 122.0, "volume": 10},
-            {"session_date": "2025-10-14", "open": 123.0, "high": 131.5, "low": 120.0, "close": 130.0, "volume": 11},
-            {"session_date": "2025-10-15", "open": 129.0, "high": 130.0, "low": 121.0, "close": 124.0, "volume": 12},
-            {"session_date": "2025-10-16", "open": 124.0, "high": 127.0, "low": 118.0, "close": 120.0, "volume": 13},
-            {"session_date": "2025-10-17", "open": 120.0, "high": 123.0, "low": 116.0, "close": 118.0, "volume": 14},
-            {"session_date": "2026-06-26", "open": 157.5, "high": 163.9, "low": 156.5, "close": 162.0, "volume": 20},
-            {"session_date": "2026-08-05", "open": 154.2, "high": 158.8, "low": 153.0, "close": 153.0, "volume": 21},
-        ]
-
-        assessment = probe.assess_raw_basis(rows)
+        assessment = probe.assess_raw_basis(canonical_raw_rows())
 
         self.assertEqual(assessment["status"], "RAW_ANCHOR_MATCH")
         self.assertEqual(assessment["price_scale_divisor"], 1)
         self.assertEqual(assessment["anchors_matched"], 3)
+        self.assertEqual(assessment["sessions_matched"], 7)
 
-    def test_raw_anchor_classifier_accepts_provider_prices_in_vnd(self):
+    def test_raw_anchor_classifier_accepts_exact_canonical_rows_in_vnd(self):
         probe = load_probe_module()
-        rows = [
-            {"session_date": "2025-10-13", "open": 120000, "high": 125000, "low": 114600, "close": 122000, "volume": 10},
-            {"session_date": "2025-10-14", "open": 123000, "high": 131500, "low": 120000, "close": 130000, "volume": 11},
-            {"session_date": "2025-10-15", "open": 129000, "high": 130000, "low": 121000, "close": 124000, "volume": 12},
-            {"session_date": "2025-10-16", "open": 124000, "high": 127000, "low": 118000, "close": 120000, "volume": 13},
-            {"session_date": "2025-10-17", "open": 120000, "high": 123000, "low": 116000, "close": 118000, "volume": 14},
-            {"session_date": "2026-06-26", "open": 157500, "high": 163900, "low": 156500, "close": 162000, "volume": 20},
-            {"session_date": "2026-08-05", "open": 154200, "high": 158800, "low": 153000, "close": 153000, "volume": 21},
-        ]
-
-        assessment = probe.assess_raw_basis(rows)
+        assessment = probe.assess_raw_basis(canonical_raw_rows(1000))
 
         self.assertEqual(assessment["status"], "RAW_ANCHOR_MATCH")
         self.assertEqual(assessment["price_scale_divisor"], 1000)
         self.assertEqual(assessment["anchors_matched"], 3)
+        self.assertEqual(assessment["sessions_matched"], 7)
+
+    def test_week_session_ohlc_mismatch_fails_even_when_weekly_high_low_still_match(self):
+        probe = load_probe_module()
+        rows = canonical_raw_rows()
+        rows[0] = {**rows[0], "close": 125.2}
+
+        assessment = probe.assess_raw_basis(rows)
+
+        self.assertEqual(assessment["status"], "RAW_ANCHOR_MISMATCH")
+        self.assertIsNone(assessment["price_scale_divisor"])
+        self.assertLess(assessment["sessions_matched"], 7)
 
     def test_adjusted_like_prices_are_rejected_as_raw(self):
         probe = load_probe_module()
         rows = [
-            {"session_date": "2025-10-13", "open": 60.0, "high": 62.0, "low": 57.3, "close": 61.0, "volume": 10},
-            {"session_date": "2025-10-14", "open": 61.0, "high": 65.75, "low": 60.0, "close": 65.0, "volume": 11},
-            {"session_date": "2025-10-15", "open": 64.5, "high": 65.0, "low": 60.5, "close": 62.0, "volume": 12},
-            {"session_date": "2025-10-16", "open": 62.0, "high": 63.5, "low": 59.0, "close": 60.0, "volume": 13},
-            {"session_date": "2025-10-17", "open": 60.0, "high": 61.5, "low": 58.0, "close": 59.0, "volume": 14},
-            {"session_date": "2026-06-26", "open": 78.75, "high": 81.95, "low": 78.25, "close": 81.0, "volume": 20},
-            {"session_date": "2026-08-05", "open": 77.1, "high": 79.4, "low": 76.5, "close": 76.5, "volume": 21},
+            {"session_date": "2025-10-13", "open": 59.3, "high": 60.7, "low": 58.84, "close": 59.8, "volume": 13_782_200},
+            {"session_date": "2025-10-14", "open": 60.0, "high": 63.31, "low": 60.0, "close": 61.15, "volume": 14_600_200},
+            {"session_date": "2025-10-15", "open": 61.4, "high": 61.45, "low": 59.0, "close": 59.7, "volume": 8_062_500},
+            {"session_date": "2025-10-16", "open": 59.6, "high": 59.6, "low": 58.0, "close": 58.74, "volume": 9_614_900},
+            {"session_date": "2025-10-17", "open": 58.7, "high": 58.7, "low": 55.18, "close": 55.85, "volume": 12_213_500},
+            {"session_date": "2026-06-26", "open": 78.75, "high": 81.95, "low": 78.25, "close": 78.0, "volume": 12_073_300},
+            {"session_date": "2026-08-05", "open": 77.1, "high": 79.4, "low": 76.5, "close": 76.5, "volume": 10_681_100},
         ]
 
         assessment = probe.assess_raw_basis(rows)
