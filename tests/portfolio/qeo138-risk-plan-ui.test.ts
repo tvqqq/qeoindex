@@ -43,6 +43,49 @@ test("risk planning UI uses canonical McDowell labels and shared Vietnamese tool
   assert.doesNotMatch(source, /left[- ]brain|right[- ]brain/i)
 })
 
+test("every Money Management Plan rule and editable parameter has shared Vietnamese tooltip help", () => {
+  const source = read("components/portfolio/risk-plan/money-management-plan-form.tsx")
+  const labels = [
+    "Risk per Trade",
+    "Max Active Risk",
+    "Account Drawdown",
+    "Drawdown Reduce Threshold",
+    "Risk Reduction Factor",
+    "Drawdown Pause Threshold",
+    "Consecutive Stop-Outs",
+    "Rolling Trade Loss Window",
+    "Daily Trading Holiday",
+    "Daily Losing Trades",
+    "Daily Loss Percent",
+    "Define Initial Stop-Loss Exit",
+    "Honor Stop When Hit",
+    "Market/System Stop Rules",
+    "Trailing Stops",
+    "Emotional Stop Movement",
+    "Recalculate Risk When Scaling In",
+    "Daily Record Keeping",
+    "Scale In Only To Winning Position",
+    "Doubling Down",
+    "Scale-Out Mode",
+    "Custom Scale-Out Percentages",
+    "Diversification Limits",
+    "Max Sector Risk",
+    "Concentration Warning",
+    "Risk Capital Policy",
+    "Risk Capital Value",
+    "Plan Notes",
+  ]
+
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    assert.match(
+      source,
+      new RegExp(`RiskTermTooltip[^>]*label=["']${escaped}["']`, "i"),
+      `${label} must use RiskTermTooltip`,
+    )
+  }
+})
+
 test("risk planning UI talks only to authenticated portfolio APIs", () => {
   const source = uiFiles.map(read).join("\n")
   assert.match(source, /\/api\/portfolio\/\$\{portfolioId\}\/risk-plan/)
