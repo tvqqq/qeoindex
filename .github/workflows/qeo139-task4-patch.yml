@@ -48,8 +48,8 @@ jobs:
           )
           page = replace_once(
               page,
-              '''              positions={positions}\n              currentPrices={currentPrices}\n''',
-              '''              positions={positions}\n              currentPrices={currentPrices}\n              totalRealizedPnlKvnd={totalRealizedPnl}\n''',
+              '''            <PortfolioCapitalAllocation\n              portfolios={portfolios}\n              activePortfolioId={activePortfolioId ?? ""}\n              positions={positions}\n              currentPrices={currentPrices}\n            />''',
+              '''            <PortfolioCapitalAllocation\n              portfolios={portfolios}\n              activePortfolioId={activePortfolioId ?? ""}\n              positions={positions}\n              currentPrices={currentPrices}\n              totalRealizedPnlKvnd={totalRealizedPnl}\n            />''',
               "allocation realized pnl prop",
           )
           page_path.write_text(page)
@@ -86,18 +86,24 @@ jobs:
               '''  // Portfolio-level realized P&L includes fully closed tickers; do not derive it from open positions.\n  const totalRealizedPnlVnd = kvndToVnd(totalRealizedPnlKvnd)\n\n  const accountEquityContext = useMemo(() => buildAccountEquityContext({\n    initialCapitalVnd: capital,\n    totalRealizedPnlKvnd,\n    positions: positions.map(({ ticker, openQty, avgCost }) => ({ ticker, openQty, avgCost })),\n    currentPricesKvnd: currentPrices,\n  }), [capital, totalRealizedPnlKvnd, positions, currentPrices])\n\n''',
               "portfolio realized pnl reduction",
           )
-          allocation = allocation.replace("totalRealizedPnl", "totalRealizedPnlVnd")
-          # The global rename also changed the prop identifier; restore its canonical kVND contract name.
-          allocation = allocation.replace("totalRealizedPnlVndKvnd", "totalRealizedPnlKvnd")
-          allocation = allocation.replace("kvndToVnd(totalRealizedPnlVndKvnd)", "kvndToVnd(totalRealizedPnlKvnd)")
-          allocation = allocation.replace("    totalRealizedPnlVndKvnd,", "    totalRealizedPnlKvnd,")
-          allocation = allocation.replace("[capital, totalRealizedPnlVndKvnd, positions, currentPrices]", "[capital, totalRealizedPnlKvnd, positions, currentPrices]")
+          allocation = replace_once(
+              allocation,
+              "const availableCash = Math.max(0, capital + totalRealizedPnl - totalStockCostBasis)",
+              "const availableCash = Math.max(0, capital + totalRealizedPnlVnd - totalStockCostBasis)",
+              "available cash realized pnl",
+          )
           allocation = replace_once(
               allocation,
               "{formatShortVND(capital)}",
               "{formatShortVND(accountEquityContext.valueVnd)}",
               "account equity banner",
           )
+          allocation = allocation.replace("totalRealizedPnl > 0", "totalRealizedPnlVnd > 0")
+          allocation = allocation.replace("totalRealizedPnl < 0", "totalRealizedPnlVnd < 0")
+          allocation = allocation.replace("formatVNDFull(totalRealizedPnl)", "formatVNDFull(totalRealizedPnlVnd)")
+          allocation = allocation.replace("total={capital + totalRealizedPnl}", "total={capital + totalRealizedPnlVnd}")
+          if "totalRealizedPnl >" in allocation or "totalRealizedPnl <" in allocation or "formatVNDFull(totalRealizedPnl)" in allocation:
+              raise SystemExit("legacy realized P&L display reference remains")
           allocation_path.write_text(allocation)
 
           sizing_path = Path("tests/portfolio/qeo139-risk-sizing.test.ts")
