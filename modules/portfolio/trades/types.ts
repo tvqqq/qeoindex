@@ -56,6 +56,7 @@ export type TradeCreateInput = {
   timeframe: string | null
   system_tags: string[]
   setup_tags: string[]
+  money_management_plan_id: string | null
   planned_entry: number | null
   initial_stop_loss_exit: number | null
   initial_account_equity: number | null
@@ -91,4 +92,9 @@ export type TradeJournalEntryInput = {
 
 export type FrozenTradeSnapshot = Partial<Record<FrozenTradeField, number | null>> & {
   status: TradeStatus
+}
+
+export type TradePlanReferenceSnapshot = {
+  status: TradeStatus
+  money_management_plan_id: string | null
 }
