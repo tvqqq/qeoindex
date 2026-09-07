@@ -19,7 +19,7 @@ concurrency:
 jobs:
   trade-domain-contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -38,3 +38,11 @@ jobs:
         run: node --test tests/portfolio/qeo137-trade-read-model.test.ts
       - name: QEO-137 server boundary contract
         run: node --test tests/portfolio/qeo137-trade-api-contract.test.ts
+      - name: Portfolio AVCO regression
+        run: node --test tests/portfolio-pnl.test.ts
+      - name: Application lint
+        run: pnpm lint:touched
+      - name: TypeScript
+        run: pnpm typecheck
+      - name: Production build
+        run: pnpm build
