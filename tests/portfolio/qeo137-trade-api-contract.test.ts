@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 const serverUrl = new URL("../../modules/portfolio/trades/server.ts", import.meta.url)
+const fillLinkUrl = new URL("../../modules/portfolio/trades/fill-link.ts", import.meta.url)
 const transactionCollectionUrl = new URL("../../app/api/portfolio/[id]/transactions/route.ts", import.meta.url)
 const transactionDetailUrl = new URL("../../app/api/portfolio/[id]/transactions/[txId]/route.ts", import.meta.url)
 const pnlUrl = new URL("../../modules/portfolio/pnl.ts", import.meta.url)
@@ -154,13 +155,18 @@ test("transaction read/write contract exposes optional trade_id while preserving
 })
 
 test("transaction linking validates effective ticker/action before storing a Trade FK", () => {
+  assert.equal(existsSync(fillLinkUrl), true, "fill-link domain validator must exist")
   const collection = readFileSync(transactionCollectionUrl, "utf8")
   const detail = readFileSync(transactionDetailUrl, "utf8")
-  const server = serverSource()
+  const fillLink = readFileSync(fillLinkUrl, "utf8")
 
-  assert.match(server, /export async function validateTradeFillLink\b/)
-  assert.match(server, /ticker\s*!==\s*trade\.ticker/)
-  assert.match(server, /FILL_ACTIONS\.has\(action\)/)
+  assert.match(fillLink, /^import "server-only"/m)
+  assert.match(fillLink, /export async function validateTradeFillLink\b/)
+  assert.match(fillLink, /\.from\("portfolio_trades"\)/)
+  assert.match(fillLink, /\.eq\("portfolio_id",\s*portfolioId\)/)
+  assert.match(fillLink, /\.eq\("user_id",\s*context\.user\.id\)/)
+  assert.match(fillLink, /ticker\s*!==\s*trade\.ticker/)
+  assert.match(fillLink, /FILL_ACTIONS\.has\(action\)/)
   assert.match(detail, /existingTransaction/)
   assert.match(detail, /nextTicker/)
   assert.match(detail, /nextAction/)
