@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useState } from "react"
 import { ShieldCheck } from "lucide-react"
 
-import { DisciplineProfileForm } from "./risk-plan/discipline-profile-form"
+import { DisciplineProfileForm, type DisciplineProfileAttempt } from "./risk-plan/discipline-profile-form"
 import { MoneyManagementPlanForm } from "./risk-plan/money-management-plan-form"
-import { RiskProfileForm, type RiskProfileEvidence } from "./risk-plan/risk-profile-form"
+import {
+  RiskProfileForm,
+  type RiskProfileAttempt,
+  type RiskProfileEvidence,
+} from "./risk-plan/risk-profile-form"
 
-type ProfileAttempt = {
+type ProfileAttemptSummary = {
   id: string
   total_score: number
   score_band: "low" | "middle" | "high"
@@ -23,8 +27,8 @@ type Plan = {
 }
 
 type Overview = {
-  latestRiskProfileAttempt: ProfileAttempt | null
-  latestDisciplineProfileAttempt: ProfileAttempt | null
+  latestRiskProfileAttempt: RiskProfileAttempt | null
+  latestDisciplineProfileAttempt: DisciplineProfileAttempt | null
   currentMoneyManagementPlan: Plan | null
   riskProfileAttemptCount: number
   disciplineProfileAttemptCount: number
@@ -32,7 +36,7 @@ type Overview = {
   evidence: RiskProfileEvidence
 }
 
-function ProfileBadge({ attempt }: { attempt: ProfileAttempt | null }) {
+function ProfileBadge({ attempt }: { attempt: ProfileAttemptSummary | null }) {
   if (!attempt) return <span className="text-xs font-semibold text-slate-500">Chưa có attempt</span>
   return (
     <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-xs font-bold text-purple-300">
@@ -116,9 +120,14 @@ export function PortfolioRiskPlan({ portfolioId }: { portfolioId: string }) {
         <RiskProfileForm
           portfolioId={portfolioId}
           evidence={overview?.evidence ?? null}
+          latestAttempt={overview?.latestRiskProfileAttempt ?? null}
           onSaved={load}
         />
-        <DisciplineProfileForm portfolioId={portfolioId} onSaved={load} />
+        <DisciplineProfileForm
+          portfolioId={portfolioId}
+          latestAttempt={overview?.latestDisciplineProfileAttempt ?? null}
+          onSaved={load}
+        />
       </div>
 
       <MoneyManagementPlanForm
