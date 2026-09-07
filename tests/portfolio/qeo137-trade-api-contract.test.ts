@@ -80,7 +80,10 @@ test("fill attachment validates Trade and accounting row without rewriting accou
   const attachBlock = source.match(
     /export async function attachFillToTrade[\s\S]*?export async function detachFillFromTrade/,
   )?.[0] ?? ""
-  assert.doesNotMatch(attachBlock, /\.update\(\{[^}]*\b(price|quantity|fee|transaction_date)\b/s)
+  assert.doesNotMatch(
+    attachBlock,
+    /\.update\(\{[\s\S]*?\b(price|quantity|fee|transaction_date)\b/,
+  )
 })
 
 test("server enforces lifecycle transition and frozen initial snapshot invariants", () => {
@@ -107,7 +110,7 @@ test("Trade HTTP routes are thin authenticated adapters, not direct Supabase own
 
   for (const { path, source } of routes) {
     assert.match(source, /requireApiUser\(/, `${path} authenticates`)
-    assert.match(source, /Cache-Control.*no-store/s, `${path} disables caching`)
+    assert.match(source, /Cache-Control[\s\S]*no-store/, `${path} disables caching`)
     assert.doesNotMatch(source, /\.from\("portfolio_(trades|transactions|trade_)/, `${path} must not query Supabase directly`)
   }
 })
@@ -171,8 +174,8 @@ test("transaction linking validates effective ticker/action before storing a Tra
   assert.match(detail, /existingTransaction/)
   assert.match(detail, /nextTicker/)
   assert.match(detail, /nextAction/)
-  assert.match(detail, /validateTradeFillLink\([^)]*nextTicker[^)]*nextAction/s)
-  assert.match(collection, /validateTradeFillLink\([^)]*ticker[^)]*action/s)
+  assert.match(detail, /validateTradeFillLink\([^)]*nextTicker[^)]*nextAction/)
+  assert.match(collection, /validateTradeFillLink\([^)]*ticker[^)]*action/)
 })
 
 test("AVCO accounting accepts trade_id metadata but never uses it in P&L math", () => {
