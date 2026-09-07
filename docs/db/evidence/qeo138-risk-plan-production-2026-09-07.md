@@ -40,6 +40,17 @@ Production contains `public.qeo_create_portfolio_money_management_plan(uuid, jso
 
 The reviewed function takes a transaction-scoped advisory lock keyed by portfolio before allocating `max(version) + 1` and inserting the new immutable version in the same transaction. Normal RLS remains authoritative because the function is security-invoker.
 
+### Rollback-only authenticated production smoke
+
+A production smoke was executed inside an explicit transaction using the `authenticated` role and an existing owned portfolio identity, then rolled back:
+
+- the version allocator inserted the expected next version for the authenticated owner under RLS;
+- the returned row remained bound to the same portfolio/user ownership tuple;
+- a second rollback-only attempt with `Risk per Trade = 2.5%` and `advanced_risk_override_acknowledged = false` was rejected by the database check constraint;
+- after rollback, all three QEO-138 history tables still contained `0` rows.
+
+The smoke therefore exercised the real production RLS/function/constraint path without leaving test profile or Money Management Plan data behind.
+
 ## Foreign-key index readback
 
 Production contains the three advisor-driven direct-owner indexes:
