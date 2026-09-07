@@ -1,16 +1,18 @@
 # QEO-129 Adjusted Daily Shadow Design
 
+> **2026-09-07 supersession:** QEO-132 established `market_ohlcv_raw_daily` as the only canonical RAW Daily input boundary. Legacy `market_ohlcv_history` is adjusted/provider compatibility history and must not be interpreted or consumed as RAW by QEO-129.
+
 Date: 2026-09-06
 Status: Approved in chat; written-spec review pending
 Parent: QEO-125
-Depends on: QEO-123, QEO-124
+Depends on: QEO-123, QEO-124, QEO-132; production RAW acquisition is additionally gated by QEO-133 source-operation acceptance
 Unblocks: QEO-126, then QEO-125 consumer cutover
 
 ## 1. Purpose
 
 QEO-129 creates the production-safe shadow foundation for corporate-action-adjusted Daily OHLCV without changing any current Chart, Wyckoff, indicator, AI Council or EOD consumer source.
 
-The existing `market_ohlcv_history` table remains raw/provider evidence. QEO-129 adds a separate adjusted Daily store derived from raw Daily plus one exact QEO-124 factor run. Production consumers remain on the pre-QEO-129 source until QEO-126 maintains the shadow state through EOD and QEO-125 performs the later consumer cutover.
+The existing `market_ohlcv_history` table remains immutable adjusted/provider compatibility history. QEO-129 adds a separate adjusted Daily store derived only from QEO-132 `market_ohlcv_raw_daily` canonical RAW Daily plus one exact QEO-124 factor run. Production consumers remain on the pre-QEO-129 source until QEO-126 maintains the shadow state through EOD and QEO-125 performs the later consumer cutover.
 
 ## 2. Non-goals
 
@@ -109,7 +111,7 @@ It returns only the persisted session identities and exact lineage fields needed
 
 QEO-129 adds one provider-agnostic pure transformation:
 
-`raw Daily + exact QEO-124 factor run -> adjusted Daily`
+`QEO-132 canonical RAW Daily + exact QEO-124 factor run -> adjusted Daily`
 
 ### 6.1 Factor-run status contract
 
@@ -156,7 +158,7 @@ Server-only API:
 Flow:
 
 1. Validate ticker/range and expected lineage.
-2. Load canonical raw `1D` rows from `market_ohlcv_history` using existing session rules.
+2. Load canonical RAW Daily rows only from QEO-132 `market_ohlcv_raw_daily`; reject duplicate/out-of-range sessions and require the independently recorded retained ticker-session attestation before any adjusted write.
 3. Load the exact QEO-124 run and all transitions for that run.
 4. Require run status `candidate | active` and exact ticker/version/lineage agreement.
 5. Project one deterministic price/volume factor pair for every raw session using Section 6.2.
@@ -189,8 +191,9 @@ Rules:
 
 - one ticker range may expose only one verified factor lineage expected by rollout metadata;
 - duplicate canonical session dates fail closed;
-- incomplete adjusted coverage returns `complete=false`;
-- the loader never fills holes from raw Daily;
+- incomplete adjusted coverage relative to the QEO-132 canonical RAW session set returns `complete=false`;
+- the loader may read QEO-132 RAW rows to establish expected per-ticker session identities, but it never fills adjusted holes from RAW OHLCV or legacy history;
+- exchange-calendar equality alone is not a valid per-ticker completeness authority;
 - QEO-129 does not wire this loader into current production consumers.
 
 ## 9. Production VHM shadow acceptance
@@ -205,7 +208,7 @@ Required evidence:
 4. Exact readback proves complete expected session coverage and one expected factor run/lineage.
 5. Zero duplicate or shifted VHM sessions.
 6. QEO-93 aggregation of 13-17/10/2025 adjusted Daily reproduces the pinned independent benchmark approximately `H=63.31`, `L=55.18` within documented market-data tolerance.
-7. Raw VHM `market_ohlcv_history` row count/session identities and a stable value checksum are unchanged before versus after shadow rebuild.
+7. QEO-132 VHM canonical RAW evidence/session identity remains unchanged, and separate legacy `market_ohlcv_history` row/session/OHLCV/provider checksums remain unchanged as mutation guards. Legacy price values are not RAW evidence.
 8. No Chart/Wyckoff/AI Council consumer import/query path changes to the adjusted store.
 9. Measure adjusted-table row count, table size and incremental database growth before unblocking QEO-126.
 
@@ -223,9 +226,9 @@ Set/retain rollout `blocked` with a bounded reason. Do not derive or persist adj
 
 If upsert succeeds but exact DB readback is missing a session, has a different factor run, or has a different lineage hash, that session is unresolved and the rebuild does not count as complete.
 
-### Raw Daily mutation during rebuild
+### Canonical RAW or legacy mutation during rebuild
 
-The adjusted rebuild does not mutate raw Daily. Production acceptance compares raw evidence before/after; any change invalidates QEO-129 acceptance until explained independently.
+The adjusted rebuild does not mutate QEO-132 canonical RAW Daily or legacy compatibility history. Production acceptance compares QEO-132 append-only/canonical RAW evidence plus separate legacy mutation guards before/after; any unexplained change invalidates QEO-129 acceptance.
 
 ## 11. Testing strategy
 
@@ -247,13 +250,13 @@ TDD order:
 3. QEO-125: atomically activates verified adjusted Daily for Chart/Wyckoff/AI Council per ticker and stages canonical-200.
 4. QEO-98: final production price-basis/data/visual acceptance.
 
-This ordering removes the old QEO-125/QEO-126 dependency cycle while keeping raw evidence and consumer authority explicit.
+This ordering removes the old QEO-125/QEO-126 dependency cycle while keeping QEO-132 canonical RAW evidence, legacy compatibility history and consumer authority explicit.
 
 ## 13. Decision summary
 
 Approved decisions:
 
-- dedicated shadow table, not a view and not a rewrite of raw history;
+- dedicated shadow table, not a view and not a rewrite of QEO-132 canonical RAW evidence or legacy compatibility history;
 - migration version `20260906170000` because `165000` belongs to QEO-124;
 - adjusted rows reference exact QEO-124 `factor_run_id` in addition to text lineage fields;
 - QEO-124 transition factors project to sessions using the strict-next-effective-session algorithm in Section 6.2;

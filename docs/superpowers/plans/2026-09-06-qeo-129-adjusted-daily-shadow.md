@@ -1,10 +1,12 @@
 # QEO-129 Adjusted Daily Shadow Foundation Implementation Plan
 
+> **2026-09-07 supersession:** QEO-132 established `market_ohlcv_raw_daily` as the only canonical RAW Daily boundary. Any older step below that treats legacy `market_ohlcv_history` OHLCV as RAW is superseded by this note and the corrected steps in this plan. Legacy history remains immutable adjusted/provider compatibility evidence only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the adjusted-Daily shadow store, exact factor/session projection, bounded rebuild API and exact-readback verification required before EOD activation, while keeping every current production consumer on raw Daily.
 
-**Architecture:** Preserve `market_ohlcv_history` as raw/provider evidence. Persist recomputable adjusted rows in `market_ohlcv_adjusted_daily`, keyed by canonical ticker/session and linked to one exact QEO-124 `factor_run_id`; project transition-level cumulative factors to Daily sessions using strict next-effective-session semantics. Track verification in `market_adjusted_daily_rollout`, keep QEO-129 rollout `shadow`, and count success only from exact persisted DB readback.
+**Architecture:** Preserve legacy `market_ohlcv_history` unchanged as adjusted/provider compatibility history. Consume only QEO-132 `market_ohlcv_raw_daily` canonical RAW evidence, require an independent retained ticker-session attestation before materialization, and persist recomputable adjusted rows in `market_ohlcv_adjusted_daily` linked to one exact QEO-124 `factor_run_id`. Project transition-level cumulative factors to canonical RAW Daily sessions using strict next-effective-session semantics. Track verification in `market_adjusted_daily_rollout`, keep QEO-129 rollout `shadow`, and count success only from exact persisted DB readback.
 
 **Tech Stack:** Supabase/PostgreSQL, TypeScript, existing `modules/market/history/*`, QEO-124 factor tables/store, QEO-93 timeframe aggregation, GitHub Actions replay/type generation.
 
@@ -14,7 +16,7 @@
 
 - QEO-123 and QEO-124 are production dependencies.
 - Repository migration version is exactly `20260906170000`; QEO-124 owns `20260906165000`.
-- Never update/delete/rename/repurpose `market_ohlcv_history` in QEO-129.
+- Never update/delete/rename/repurpose `market_ohlcv_history` in QEO-129; it is a legacy adjusted/provider compatibility store and is never a QEO-129 RAW input.
 - No Chart/Wyckoff/indicator/AI Council consumer cutover.
 - QEO-129 may write rollout `shadow|blocked`, never `active`.
 - Shadow rebuild accepts an exact verified QEO-124 run in `candidate|active`; `blocked|superseded` fail closed.
@@ -275,7 +277,7 @@ export async function rebuildAdjustedDailyRange(input: {
 
 - [ ] **Step 5: Implement exact factor loading** — select the expected run by ID/ticker, validate expected lineage/status, then load its transitions ascending. Never choose “latest” implicitly.
 
-- [ ] **Step 6: Load raw `1D` range** from `market_ohlcv_history`; canonicalize `bar_time` with existing Asia/Ho_Chi_Minh session rules; reject duplicate canonical dates.
+- [ ] **Step 6: Load canonical RAW Daily range** only from QEO-132 `market_ohlcv_raw_daily` through `readCanonicalRawDaily`; reject duplicate/out-of-range sessions and require `expectedRawSessionCount` plus the ordered canonical RAW session-identity SHA256 before any adjusted-row or rollout write.
 
 - [ ] **Step 7: Derive/upsert adjusted rows in bounded batches** using Task 2 only.
 
@@ -329,8 +331,8 @@ export async function loadAdjustedDailyRange(
 ```
 
 - [ ] **Step 1: RED complete-read test** — rollout lineage matches ordered unique adjusted sessions => `complete=true`.
-- [ ] **Step 2: RED fail-closed tests** — missing row, duplicate canonical session, row/rollout lineage mismatch or missing rollout => `complete=false`; loader never queries/merges raw history.
-- [ ] **Step 3: Implement loader** — query rollout then adjusted table only; validate one expected run/lineage and ordered canonical sessions.
+- [ ] **Step 2: RED fail-closed tests** — a missing adjusted row relative to the QEO-132 canonical RAW session set, duplicate canonical session, row/rollout lineage mismatch or missing rollout => `complete=false`; loader never fills adjusted holes with RAW or legacy OHLCV.
+- [ ] **Step 3: Implement loader** — read QEO-132 canonical RAW rows only to establish the expected per-ticker session identities, then query rollout + adjusted rows; validate exact session-set equality and one expected run/lineage. Do not use exchange-calendar equality as per-ticker completeness authority.
 - [ ] **Step 4: Add consumer-isolation contract** — current Chart, Wyckoff and AI Council source paths must not import `adjusted-daily-read.ts` or query `market_ohlcv_adjusted_daily` in QEO-129.
 - [ ] **Step 5: Run GREEN**
 
@@ -372,12 +374,12 @@ git commit -m "feat(QEO-129): add shadow Daily read boundary"
 - Create/update: `docs/db/evidence/qeo129-vhm-adjusted-daily-shadow.md`
 - Update: Linear QEO-129
 
-- [ ] **Step 1: Capture raw VHM pre-rebuild evidence** — `1D` row count, first/last session, distinct canonical sessions, stable checksum over raw OHLCV/provider identity.
+- [ ] **Step 1: Capture VHM pre-rebuild guards** — QEO-132 canonical RAW row/session count + ordered session-identity hash, plus separate immutable checksums for legacy `market_ohlcv_history` row/session/OHLCV/provider identity. Legacy values are mutation guards only, never RAW input.
 - [ ] **Step 2: Materialize/reuse one exact persisted QEO-124 VHM factor run**. `candidate` is valid for QEO-129 shadow after exact QEO-124 persistence/readback; do not activate it here.
 - [ ] **Step 3: Rebuild retained VHM adjusted Daily in bounded ranges** using exact expected run ID + lineage. Any unresolved session blocks acceptance.
 - [ ] **Step 4: Verify integrity** — adjusted count equals expected raw canonical sessions for verified range, zero duplicate/shifted sessions, one exact run/version/lineage, rollout `shadow`, `activated_at is null`.
 - [ ] **Step 5: Run QEO-93 VHM golden** for 13–17/10/2025; require approximately `H=63.31`, `L=55.18` within documented tolerance, with no weekly special-case adjustment.
-- [ ] **Step 6: Re-run raw evidence query** and require row count/session/checksum unchanged.
+- [ ] **Step 6: Re-run QEO-132 canonical RAW evidence/session checks and the separate legacy mutation guards**; require both evidence boundaries unchanged by QEO-129 materialization.
 - [ ] **Step 7: Prove consumer isolation** — Chart/Wyckoff/AI Council production source remains pre-QEO-129.
 - [ ] **Step 8: Measure capacity** — adjusted row count, both QEO-129 relation sizes, measured bytes/row, and an explicitly labeled canonical-200 extrapolation.
 - [ ] **Step 9: Update evidence + Linear**; mark QEO-129 Done only with actual production evidence and record QEO-126 unblocked.

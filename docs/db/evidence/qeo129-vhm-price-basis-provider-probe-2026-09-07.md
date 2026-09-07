@@ -2,7 +2,7 @@
 
 ## Purpose
 
-QEO-129 production shadow acceptance requires `market_ohlcv_history` input rows to be auditable **raw/provider Daily** before QEO-124 factors are applied. This note records the bounded provider probes performed after production VHM history was found to be predominantly legacy adjusted-basis.
+This investigation began when QEO-129 still assumed retained `market_ohlcv_history` might serve as raw/provider input. The VHM probes disproved that assumption. QEO-132 subsequently established `market_ohlcv_raw_daily` as the only canonical RAW Daily input boundary; legacy `market_ohlcv_history` remains adjusted/provider compatibility evidence only.
 
 This evidence does **not** authorize any provider as raw merely from its name, unit scale, or successful HTTP response.
 
@@ -130,7 +130,7 @@ Production-source classification: **HOLD**. The public site exposes `Điều kho
 
 ## Code hardening produced by this investigation
 
-QEO-129 no longer infers raw price basis from provider names. Persisted Daily rows are classified:
+The initial hardening stopped QEO-129 from inferring RAW price basis from provider names. QEO-132 then replaced that provisional classification boundary with explicit canonical `price_basis='RAW'` persistence. Historical classification findings remain useful for rejecting adjusted providers:
 
 - explicit `source basis: adjusted` or `adjusted OHLC` marker -> `ADJUSTED`
 - explicit `source basis: raw` marker -> `RAW`
@@ -153,6 +153,6 @@ The blocker is not QEO-129 factor arithmetic. It is a migration gap between:
 - QEO-106: legacy canonical Daily was intentionally normalized onto provider-adjusted basis; and
 - QEO-121: approved final architecture requires auditable raw/provider Daily as adjustment-engine input.
 
-Linear `QEO-132` now owns restoring an auditable raw Daily boundary before VHM shadow materialization.
+QEO-132 now provides the auditable RAW Daily schema/persistence boundary, but production still has no retained VHM canonical RAW range. QEO-133 owns source-operation acceptance: StockBiz remains bounded/manual evidence only unless written permission/licensed use is established, or another documented provider RAW source is selected.
 
-QEO-129 must remain blocked until QEO-132 provides a retained VHM raw/provider input range with explicit `source basis: raw` provenance. QEO-129 itself must not mutate that raw baseline; its production acceptance requires the pre/post raw checksum to remain identical.
+QEO-129 must remain blocked until production contains a retained VHM QEO-132 canonical RAW range with explicit `price_basis='RAW'` provenance and exact retained-session identity. QEO-129 must not mutate QEO-132 RAW evidence or legacy compatibility history during shadow materialization.
