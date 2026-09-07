@@ -8,6 +8,7 @@ import {
   createSanitizedServerAuthTransportFailure,
   reportServerAuthTransportFailure,
 } from "@/modules/auth/server-observability"
+import type { Database } from "@/modules/shared/supabase/database.types"
 
 export const AUTH_COOKIE_NAME = "qeoindex_access_token"
 
@@ -15,7 +16,7 @@ export type UserFeatureKey = "market_board" | "research" | "signals" | "finhay_l
 
 export type ServerAuthContext = {
   user: User
-  supabase: SupabaseClient
+  supabase: SupabaseClient<Database>
   accessToken: string
 }
 
@@ -30,11 +31,11 @@ export function isServerAuthConfigured() {
   return Boolean(getPublicSupabaseConfig())
 }
 
-export function createUserScopedSupabaseClient(accessToken: string): SupabaseClient | null {
+export function createUserScopedSupabaseClient(accessToken: string): SupabaseClient<Database> | null {
   const config = getPublicSupabaseConfig()
   if (!config) return null
 
-  return createClient(config.url, config.anonKey, {
+  return createClient<Database>(config.url, config.anonKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
