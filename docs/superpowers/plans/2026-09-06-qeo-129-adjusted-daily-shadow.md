@@ -352,19 +352,21 @@ git commit -m "feat(QEO-129): add shadow Daily read boundary"
 
 ---
 
-### Task 5: Pre-production verification + real migration promotion
+### Task 5: Post-promotion reconciliation + exact-head verification
 
-**Files after real promotion:**
-- Modify: `supabase/migration-equivalence.json`
-- Modify: `docs/db/evidence/production-migration-ledger-2026-09-06.json`
-- Create: `docs/db/evidence/qeo129-vhm-adjusted-daily-shadow.md`
+**Current promoted-schema evidence:**
+- `supabase/migration-equivalence.json`: QEO-129 is mapped `20260906170000 -> 20260906223014`.
+- reviewed production migration ledger contains production QEO-129 schema version `20260906223014`.
+- `docs/db/evidence/qeo129-vhm-raw-range-gate-2026-09-07.md` remains the authoritative release gate.
+
+**Important:** schema promotion is already complete. Do not re-apply the QEO-129 migration while completing this plan.
 
 - [ ] **Step 1: Sync latest `main`**, semantic-merge shared ledger/types if necessary.
-- [ ] **Step 2: Run exact pre-promotion gates** — Verify code/contracts/lint/TS/build, preprod zero→latest + SQL persistence + DB lint, EOD v4. DB Drift may fail only because `20260906170000` is repo-only; any other failure blocks promotion.
-- [ ] **Step 3: Apply only the QEO-129 migration to production Supabase** and record the migration version returned by Supabase as `actualProductionVersion`.
-- [ ] **Step 4: Run rollback-only production smoke** — tables/RLS/grants/RPC security, exact synthetic readback, wrong run/lineage returns zero, rollback leaves zero synthetic QEO-129 rows.
-- [ ] **Step 5: Reconcile migration identity using the captured runtime value**. Add a mapping whose `repositoryVersion` is `20260906170000`, whose `productionVersion` is the exact `actualProductionVersion` captured in Step 3, `state` is `MAPPED`, evidence is `qeo129-production-ledger-schema-rls-readback-and-rollback-smoke`, and rationale records successful replay + rollback smoke. Insert the same exact production version into the reviewed ledger in chronological order.
-- [ ] **Step 6: Regenerate combined-schema types and obtain exact-head GREEN** — Verify, DB Drift, Preprod, EOD v4 all GREEN. Do not merge yet; VHM shadow acceptance remains required.
+- [ ] **Step 2: Run exact-head gates** — Verify code/contracts/lint/TS/build, preprod zero→latest + SQL persistence + DB lint, DB Drift including generated public Database types, and EOD v4 must all be GREEN. Any red gate blocks merge readiness.
+- [ ] **Step 3: Do not re-apply QEO-129 DDL.** Re-read production ledger/schema and require the already-promoted version `20260906223014` plus the reviewed repository mapping `20260906170000 -> 20260906223014`.
+- [ ] **Step 4: Re-verify production boundary without persistent mutation** — inspect tables/RLS/grants/RPC security and, only if a fresh behavioral smoke is required, use a rollback-only synthetic transaction proving exact readback, wrong run/lineage rejection and zero residual rows.
+- [ ] **Step 5: Verify migration identity remains reconciled** — `repositoryVersion=20260906170000`, `productionVersion=20260906223014`, `state=MAPPED`; do not create a second migration or duplicate ledger row.
+- [ ] **Step 6: Regenerate/verify `public` Database types using the same command as `db:types:verify` and obtain exact-head GREEN** — Verify, DB Drift, Preprod and EOD v4 all GREEN. Do not merge yet; retained production VHM canonical RAW + VHM shadow acceptance remain required.
 
 ---
 

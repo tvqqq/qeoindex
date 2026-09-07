@@ -31,7 +31,7 @@ QEO-129 therefore uses:
 
 `20260906170000_qeo129_adjusted_daily_shadow.sql`
 
-If Supabase applies a different production timestamp, repository-to-production equivalence must be recorded explicitly in `supabase/migration-equivalence.json` and the reviewed production migration ledger before DB Drift can be GREEN.
+Production has already promoted the reviewed QEO-129 schema as `20260906223014`; repository replay remains `20260906170000`, explicitly reconciled as `MAPPED` in `supabase/migration-equivalence.json` and the reviewed production migration ledger. This is migration-history equivalence only and does not satisfy the retained VHM canonical RAW release gate. The migration must not be applied a second time.
 
 ## 4. Storage model
 
@@ -202,7 +202,7 @@ QEO-129 terminal gate is VHM-only production shadow acceptance.
 
 Required evidence:
 
-1. Apply and reconcile the QEO-129 migration only after local zero-to-latest replay, schema contracts, generated types and TypeScript are GREEN.
+1. Treat QEO-129 schema promotion as already complete (`repo 20260906170000 -> production 20260906223014`). Re-verify ledger/schema/security plus exact-head zero-to-latest replay, generated `public` Database types and TypeScript; do not re-apply the migration.
 2. Materialize or reuse one verified QEO-124 VHM `candidate` factor run covering the retained Daily history required for the golden test.
 3. Rebuild VHM adjusted Daily into `market_ohlcv_adjusted_daily` with rollout status `shadow`.
 4. Exact readback proves complete expected session coverage and one expected factor run/lineage.
