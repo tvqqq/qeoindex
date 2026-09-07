@@ -3169,6 +3169,228 @@ export type Database = {
         }
         Relationships: []
       }
+      portfolio_discipline_profile_attempts: {
+        Row: {
+          bills_expenses_points: number
+          created_at: string
+          diet_self_control_points: number
+          exercise_routine_points: number
+          id: string
+          office_clutter_points: number
+          portfolio_id: string
+          punctuality_points: number
+          record_keeping_points: number
+          score_band: string | null
+          total_score: number | null
+          user_id: string
+        }
+        Insert: {
+          bills_expenses_points: number
+          created_at?: string
+          diet_self_control_points: number
+          exercise_routine_points: number
+          id?: string
+          office_clutter_points: number
+          portfolio_id: string
+          punctuality_points: number
+          record_keeping_points: number
+          score_band?: string | null
+          total_score?: number | null
+          user_id: string
+        }
+        Update: {
+          bills_expenses_points?: number
+          created_at?: string
+          diet_self_control_points?: number
+          exercise_routine_points?: number
+          id?: string
+          office_clutter_points?: number
+          portfolio_id?: string
+          punctuality_points?: number
+          record_keeping_points?: number
+          score_band?: string | null
+          total_score?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_discipline_profile_attempts_portfolio_id_user_id_fkey"
+            columns: ["portfolio_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
+      portfolio_money_management_plans: {
+        Row: {
+          advanced_risk_override_acknowledged: boolean
+          consecutive_stop_outs_enabled: boolean
+          consecutive_stop_outs_threshold: number | null
+          created_at: string
+          default_trade_risk_percent: number
+          discipline_profile_attempt_id: string | null
+          diversification_rules: Json
+          drawdown_pause_enabled: boolean
+          drawdown_pause_threshold_percent: number | null
+          drawdown_reduce_enabled: boolean
+          drawdown_reduce_threshold_percent: number | null
+          execution_rules: Json
+          holiday_rules: Json
+          id: string
+          max_active_risk_percent: number
+          notes: string | null
+          portfolio_id: string
+          risk_capital_policy: Json
+          risk_profile_attempt_id: string | null
+          risk_reduction_factor: number | null
+          rolling_trade_count: number | null
+          rolling_trade_loss_enabled: boolean
+          scale_rules: Json
+          schema_version: number
+          user_id: string
+          version: number
+        }
+        Insert: {
+          advanced_risk_override_acknowledged?: boolean
+          consecutive_stop_outs_enabled?: boolean
+          consecutive_stop_outs_threshold?: number | null
+          created_at?: string
+          default_trade_risk_percent: number
+          discipline_profile_attempt_id?: string | null
+          diversification_rules?: Json
+          drawdown_pause_enabled?: boolean
+          drawdown_pause_threshold_percent?: number | null
+          drawdown_reduce_enabled?: boolean
+          drawdown_reduce_threshold_percent?: number | null
+          execution_rules?: Json
+          holiday_rules?: Json
+          id?: string
+          max_active_risk_percent: number
+          notes?: string | null
+          portfolio_id: string
+          risk_capital_policy?: Json
+          risk_profile_attempt_id?: string | null
+          risk_reduction_factor?: number | null
+          rolling_trade_count?: number | null
+          rolling_trade_loss_enabled?: boolean
+          scale_rules?: Json
+          schema_version?: number
+          user_id: string
+          version: number
+        }
+        Update: {
+          advanced_risk_override_acknowledged?: boolean
+          consecutive_stop_outs_enabled?: boolean
+          consecutive_stop_outs_threshold?: number | null
+          created_at?: string
+          default_trade_risk_percent?: number
+          discipline_profile_attempt_id?: string | null
+          diversification_rules?: Json
+          drawdown_pause_enabled?: boolean
+          drawdown_pause_threshold_percent?: number | null
+          drawdown_reduce_enabled?: boolean
+          drawdown_reduce_threshold_percent?: number | null
+          execution_rules?: Json
+          holiday_rules?: Json
+          id?: string
+          max_active_risk_percent?: number
+          notes?: string | null
+          portfolio_id?: string
+          risk_capital_policy?: Json
+          risk_profile_attempt_id?: string | null
+          risk_reduction_factor?: number | null
+          rolling_trade_count?: number | null
+          rolling_trade_loss_enabled?: boolean
+          scale_rules?: Json
+          schema_version?: number
+          user_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_money_management_pl_discipline_profile_attempt_i_fkey"
+            columns: [
+              "discipline_profile_attempt_id",
+              "portfolio_id",
+              "user_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "portfolio_discipline_profile_attempts"
+            referencedColumns: ["id", "portfolio_id", "user_id"]
+          },
+          {
+            foreignKeyName: "portfolio_money_management_pl_risk_profile_attempt_id_port_fkey"
+            columns: ["risk_profile_attempt_id", "portfolio_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_risk_profile_attempts"
+            referencedColumns: ["id", "portfolio_id", "user_id"]
+          },
+          {
+            foreignKeyName: "portfolio_money_management_plans_portfolio_id_user_id_fkey"
+            columns: ["portfolio_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
+      portfolio_risk_profile_attempts: {
+        Row: {
+          active_return_12m_points: number
+          created_at: string
+          experience_points: number
+          id: string
+          market_risk_points: number
+          metric_evidence: Json
+          payoff_ratio_points: number
+          personal_risk_tolerance_points: number
+          portfolio_id: string
+          score_band: string | null
+          total_score: number | null
+          user_id: string
+          win_ratio_points: number
+        }
+        Insert: {
+          active_return_12m_points: number
+          created_at?: string
+          experience_points: number
+          id?: string
+          market_risk_points: number
+          metric_evidence?: Json
+          payoff_ratio_points: number
+          personal_risk_tolerance_points: number
+          portfolio_id: string
+          score_band?: string | null
+          total_score?: number | null
+          user_id: string
+          win_ratio_points: number
+        }
+        Update: {
+          active_return_12m_points?: number
+          created_at?: string
+          experience_points?: number
+          id?: string
+          market_risk_points?: number
+          metric_evidence?: Json
+          payoff_ratio_points?: number
+          personal_risk_tolerance_points?: number
+          portfolio_id?: string
+          score_band?: string | null
+          total_score?: number | null
+          user_id?: string
+          win_ratio_points?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_risk_profile_attempts_portfolio_id_user_id_fkey"
+            columns: ["portfolio_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       portfolio_trade_journal_entries: {
         Row: {
           adherence_status: string | null
@@ -3295,6 +3517,7 @@ export type Database = {
           initial_stop_loss_exit: number | null
           lesson_learned: string | null
           mode: string
+          money_management_plan_id: string | null
           opened_at: string | null
           planned_entry: number | null
           planned_position_value: number | null
@@ -3325,6 +3548,7 @@ export type Database = {
           initial_stop_loss_exit?: number | null
           lesson_learned?: string | null
           mode?: string
+          money_management_plan_id?: string | null
           opened_at?: string | null
           planned_entry?: number | null
           planned_position_value?: number | null
@@ -3355,6 +3579,7 @@ export type Database = {
           initial_stop_loss_exit?: number | null
           lesson_learned?: string | null
           mode?: string
+          money_management_plan_id?: string | null
           opened_at?: string | null
           planned_entry?: number | null
           planned_position_value?: number | null
@@ -3373,6 +3598,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "portfolio_trades_money_management_plan_identity_fkey"
+            columns: ["money_management_plan_id", "portfolio_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_money_management_plans"
+            referencedColumns: ["id", "portfolio_id", "user_id"]
+          },
           {
             foreignKeyName: "portfolio_trades_portfolio_id_user_id_fkey"
             columns: ["portfolio_id", "user_id"]
