@@ -9,11 +9,13 @@ import {
   type FrozenTradeSnapshot,
   type TradeCreateInput,
   type TradeJournalEntryInput,
+  type TradePlanReferenceSnapshot,
   type TradeStatus,
   type TradeStopEventInput,
 } from "./types.ts"
 
 const TICKER_RE = /^[A-Z0-9]{2,12}$/
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const MAX_TAGS = 20
 const MAX_TAG_LENGTH = 50
 
@@ -46,6 +48,13 @@ function requiredTicker(value: unknown): string {
   const ticker = String(value ?? "").trim().toUpperCase()
   if (!TICKER_RE.test(ticker)) throw new TradeDomainError("INVALID_TICKER", "Ticker is invalid")
   return ticker
+}
+
+function optionalUuid(value: unknown, label: string): string | null {
+  if (value == null || value === "") return null
+  const uuid = String(value).trim()
+  if (!UUID_RE.test(uuid)) throw new TradeDomainError("INVALID_ID", `${label} is invalid`)
+  return uuid
 }
 
 function enumValue<T extends readonly string[]>(
@@ -172,6 +181,7 @@ export function normalizeTradeCreateInput(input: unknown): TradeCreateInput {
     timeframe: optionalText(body.timeframe, "timeframe", 40),
     system_tags: normalizeTags(body.system_tags, "system_tags"),
     setup_tags: normalizeTags(body.setup_tags, "setup_tags"),
+    money_management_plan_id: optionalUuid(body.money_management_plan_id, "money_management_plan_id"),
     planned_entry: optionalNumber(body.planned_entry, "planned_entry", "positive"),
     initial_stop_loss_exit: optionalNumber(
       body.initial_stop_loss_exit,
@@ -234,6 +244,20 @@ export function assertFrozenTradeFieldsUnchanged(
       )
     }
   }
+}
+
+export function assertMoneyManagementPlanReferenceUnchanged(
+  existing: TradePlanReferenceSnapshot,
+  patch: { money_management_plan_id?: string | null },
+): void {
+  if (existing.status === "planned") return
+  if (!Object.prototype.hasOwnProperty.call(patch, "money_management_plan_id")) return
+  if (Object.is(existing.money_management_plan_id, patch.money_management_plan_id)) return
+
+  throw new TradeDomainError(
+    "FROZEN_INITIAL_SNAPSHOT",
+    "money_management_plan_id is frozen after Trade opens",
+  )
 }
 
 export function normalizeStopEventInput(input: unknown): TradeStopEventInput {
