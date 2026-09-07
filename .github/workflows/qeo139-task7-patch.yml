@@ -1,0 +1,177 @@
+name: QEO-139 Task 7 Canonical Cleanup
+
+on:
+  push:
+    branches:
+      - "tvq9612/qeo-139-portfolio-riskp3-proper-trade-size-calculator-stop-first"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: "tvq9612/qeo-139-portfolio-riskp3-proper-trade-size-calculator-stop-first"
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Remove legacy helper and register canonical QEO-139 contracts
+        shell: python
+        run: |
+          from pathlib import Path
+          import json
+          import re
+
+          pnl_path = Path("modules/portfolio/pnl.ts")
+          pnl = pnl_path.read_text()
+          updated_pnl, count = re.subn(
+              r"\nexport function calculatePositionSizing\(\{[\s\S]*?\n\}\n?$",
+              "\n",
+              pnl,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f"expected one calculatePositionSizing helper, found {count}")
+          pnl_path.write_text(updated_pnl)
+
+          pnl_test_path = Path("tests/portfolio-pnl.test.ts")
+          pnl_test = pnl_test_path.read_text()
+          old_import = "import { computePortfolioPositions, calculatePositionSizing, type RawTransaction } from '../modules/portfolio/pnl.ts'"
+          new_import = "import { computePortfolioPositions, type RawTransaction } from '../modules/portfolio/pnl.ts'"
+          if old_import not in pnl_test:
+              raise SystemExit("legacy calculatePositionSizing import not found")
+          pnl_test = pnl_test.replace(old_import, new_import, 1)
+          pnl_test, count = re.subn(
+              r"\ntest\('Position Sizing Engine: Fixed Fractional Account Risk calculation', \(\) => \{[\s\S]*?\n\}\)\n",
+              "\n",
+              pnl_test,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f"expected one legacy sizing test, found {count}")
+          pnl_test_path.write_text(pnl_test)
+
+          manifest_path = Path("tests/test-contracts.json")
+          manifest = json.loads(manifest_path.read_text())
+          additions = [
+              {
+                  "path": "tests/portfolio/qeo139-risk-projection.test.ts",
+                  "owner": "portfolio-risk",
+                  "invariant": "QEO-139 keeps projected Active Risk deterministic, cap-aware, and fail-closed when open Trade risk is unknown.",
+                  "bucket": "canonical",
+                  "suites": ["fast"],
+              },
+              {
+                  "path": "tests/portfolio/qeo139-risk-sizing-server-api.test.ts",
+                  "owner": "portfolio-risk",
+                  "invariant": "QEO-139 keeps risk-sizing context authenticated, ownership-scoped, read-only, and based on canonical Trade evidence.",
+                  "bucket": "canonical",
+                  "suites": ["fast"],
+              },
+              {
+                  "path": "tests/portfolio/qeo139-risk-sizing.test.ts",
+                  "owner": "portfolio-risk",
+                  "invariant": "QEO-139 keeps stop-first Trade Size sizing deterministic, unit-safe, cost-aware and source-faithful.",
+                  "bucket": "canonical",
+                  "suites": ["fast"],
+              },
+              {
+                  "path": "tests/portfolio/qeo139-trade-size-ui.test.ts",
+                  "owner": "portfolio-risk",
+                  "invariant": "QEO-139 keeps the portfolio allocation UI stop-first, tooltip-driven, fail-closed, and free of legacy fixed-stop assumptions.",
+                  "bucket": "canonical",
+                  "suites": ["fast", "ui-contracts"],
+              },
+          ]
+          entries = manifest["entries"]
+          existing = {entry["path"] for entry in entries}
+          for addition in additions:
+              if addition["path"] in existing:
+                  continue
+              insert_at = next(
+                  (index for index, entry in enumerate(entries) if entry["path"] > addition["path"]),
+                  len(entries),
+              )
+              entries.insert(insert_at, addition)
+              existing.add(addition["path"])
+          manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+
+          workflow_path = Path(".github/workflows/qeo139-preprod.yml")
+          workflow_path.write_text('''name: QEO-139 Risk Sizing
+
+on:
+  pull_request:
+    paths:
+      - "modules/portfolio/risk-sizing/**"
+      - "modules/portfolio/pnl.ts"
+      - "components/portfolio/**"
+      - "app/api/portfolio/**"
+      - "tests/portfolio/qeo139-*.test.ts"
+      - "tests/portfolio-pnl.test.ts"
+      - "tests/test-contracts.json"
+      - ".github/workflows/qeo139-preprod.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo139-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  risk-sizing-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-139 sizing formula contract
+        run: node --test tests/portfolio/qeo139-risk-sizing.test.ts
+      - name: QEO-139 projected Active Risk contract
+        run: node --test tests/portfolio/qeo139-risk-projection.test.ts
+      - name: QEO-139 server/API contract
+        run: node --test tests/portfolio/qeo139-risk-sizing-server-api.test.ts
+      - name: QEO-139 UI contract
+        run: node --test tests/portfolio/qeo139-trade-size-ui.test.ts
+      - name: Portfolio AVCO regression
+        run: node --test tests/portfolio-pnl.test.ts
+      - name: QEO-137 Trade regressions
+        run: node --test tests/portfolio/qeo137-trade-domain.test.ts tests/portfolio/qeo137-trade-read-model.test.ts
+      - name: QEO-138 Risk Plan regressions
+        run: node --test tests/portfolio/qeo138-risk-plan-domain.test.ts tests/portfolio/qeo138-risk-profile-evidence.test.ts tests/portfolio/qeo138-risk-plan-server-api.test.ts tests/portfolio/qeo138-risk-plan-ui.test.ts
+      - name: Application lint
+        run: pnpm lint:touched
+      - name: TypeScript
+        run: pnpm typecheck
+      - name: Production build
+        run: pnpm exec next build
+''')
+      - name: Canonical manifest
+        run: pnpm test:manifest
+      - name: Task 7 targeted contracts
+        run: node --test tests/portfolio/qeo139-*.test.ts tests/portfolio-pnl.test.ts
+      - name: Commit canonical sizing contract
+        run: |
+          git config user.name "qeoindex-ci"
+          git config user.email "qeoindex-ci@users.noreply.github.com"
+          git add modules/portfolio/pnl.ts tests/portfolio-pnl.test.ts tests/test-contracts.json .github/workflows/qeo139-preprod.yml tests/portfolio/qeo139-trade-size-ui.test.ts
+          git diff --cached --check
+          git commit -m "test(qeo-139): make stop-first sizing the canonical contract"
+          git push origin HEAD:tvq9612/qeo-139-portfolio-riskp3-proper-trade-size-calculator-stop-first
