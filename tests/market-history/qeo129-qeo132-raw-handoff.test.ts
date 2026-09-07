@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import test from "node:test"
 
 import { rebuildAdjustedDailyRange } from "../../modules/market/history/adjusted-daily-store.ts"
@@ -6,6 +7,10 @@ import { rebuildAdjustedDailyRange } from "../../modules/market/history/adjusted
 const RUN_ID = "00000000-0000-4000-8000-000000000129"
 const LINEAGE = "a".repeat(64)
 const FACTOR_VERSION = `qeo124-v1:${LINEAGE}`
+
+function sessionIdentityHash(sessionDates: string[]) {
+  return createHash("sha256").update(sessionDates.join("\n")).digest("hex")
+}
 
 function fakeSupabase(options: { tradingSessions?: string[] } = {}) {
   const calls: string[] = []
@@ -121,6 +126,7 @@ function fakeSupabase(options: { tradingSessions?: string[] } = {}) {
 
 test("QEO-129 rebuild consumes only QEO-132 canonical RAW Daily", async () => {
   const fake = fakeSupabase()
+  const expectedSessions = ["2026-08-05"]
   const result = await rebuildAdjustedDailyRange({
     supabase: fake.client as never,
     ticker: "VHM",
@@ -128,6 +134,8 @@ test("QEO-129 rebuild consumes only QEO-132 canonical RAW Daily", async () => {
     toDate: "2026-08-05",
     expectedFactorRunId: RUN_ID,
     expectedLineageHash: LINEAGE,
+    expectedRawSessionCount: expectedSessions.length,
+    expectedRawSessionIdentityHash: sessionIdentityHash(expectedSessions),
   })
 
   assert.equal(result.rebuiltSessions, 1)
@@ -138,6 +146,7 @@ test("QEO-129 rebuild consumes only QEO-132 canonical RAW Daily", async () => {
 
 test("QEO-129 rejects a sparse canonical RAW range before shadow materialization", async () => {
   const fake = fakeSupabase({ tradingSessions: ["2026-08-04", "2026-08-05"] })
+  const expectedSessions = ["2026-08-04", "2026-08-05"]
 
   await assert.rejects(
     rebuildAdjustedDailyRange({
@@ -147,10 +156,32 @@ test("QEO-129 rejects a sparse canonical RAW range before shadow materialization
       toDate: "2026-08-05",
       expectedFactorRunId: RUN_ID,
       expectedLineageHash: LINEAGE,
+      expectedRawSessionCount: expectedSessions.length,
+      expectedRawSessionIdentityHash: sessionIdentityHash(expectedSessions),
     }),
     /canonical RAW range is incomplete/i,
   )
 
   assert.equal(fake.calls.includes("market_ohlcv_adjusted_daily"), false)
   assert.equal(fake.calls.includes("market_adjusted_daily_rollout"), false)
+})
+
+test("QEO-129 uses retained ticker session identity rather than assuming every exchange session has a bar", async () => {
+  const fake = fakeSupabase({ tradingSessions: ["2026-08-04", "2026-08-05"] })
+  const expectedSessions = ["2026-08-05"]
+
+  const result = await rebuildAdjustedDailyRange({
+    supabase: fake.client as never,
+    ticker: "VHM",
+    fromDate: "2026-08-04",
+    toDate: "2026-08-05",
+    expectedFactorRunId: RUN_ID,
+    expectedLineageHash: LINEAGE,
+    expectedRawSessionCount: expectedSessions.length,
+    expectedRawSessionIdentityHash: sessionIdentityHash(expectedSessions),
+  })
+
+  assert.equal(result.rebuiltSessions, 1)
+  assert.equal(fake.calls.includes("market_trading_sessions"), false)
+  assert.equal(fake.calls.includes("market_ohlcv_history"), false)
 })
