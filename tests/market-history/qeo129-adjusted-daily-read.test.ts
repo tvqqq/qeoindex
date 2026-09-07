@@ -55,9 +55,64 @@ const BASE_ROWS = [
   },
 ]
 
+const RAW_ROWS = [
+  {
+    ticker: "VHM",
+    session_date: "2026-08-03",
+    evidence_id: "00000000-0000-4000-8000-000000000131",
+    open: 100,
+    high: 110,
+    low: 96,
+    close: 105,
+    volume: 1_000,
+    price_basis: "RAW",
+    provider: "StockBiz",
+    provider_detail: "bounded raw Daily evidence",
+    source_url: "https://example.invalid/vhm/2026-08-03",
+    source_price_unit: "VND_THOUSANDS",
+    normalization_version: "qeo132-v1",
+    raw_evidence_hash: "b".repeat(64),
+  },
+  {
+    ticker: "VHM",
+    session_date: "2026-08-04",
+    evidence_id: "00000000-0000-4000-8000-000000000132",
+    open: 104,
+    high: 112,
+    low: 102,
+    close: 110,
+    volume: 1_100,
+    price_basis: "RAW",
+    provider: "StockBiz",
+    provider_detail: "bounded raw Daily evidence",
+    source_url: "https://example.invalid/vhm/2026-08-04",
+    source_price_unit: "VND_THOUSANDS",
+    normalization_version: "qeo132-v1",
+    raw_evidence_hash: "c".repeat(64),
+  },
+  {
+    ticker: "VHM",
+    session_date: "2026-08-05",
+    evidence_id: "00000000-0000-4000-8000-000000000133",
+    open: 110,
+    high: 116,
+    low: 108,
+    close: 114,
+    volume: 1_200,
+    price_basis: "RAW",
+    provider: "StockBiz",
+    provider_detail: "bounded raw Daily evidence",
+    source_url: "https://example.invalid/vhm/2026-08-05",
+    source_price_unit: "VND_THOUSANDS",
+    normalization_version: "qeo132-v1",
+    raw_evidence_hash: "d".repeat(64),
+  },
+]
+
 function fakeSupabase(options: {
   rollout?: null | Record<string, unknown>
   rows?: Array<Record<string, unknown>>
+  rawRows?: Array<Record<string, unknown>>
 } = {}) {
   const calls: Array<{ table: string; op: string }> = []
   const rollout = options.rollout === undefined
@@ -72,6 +127,7 @@ function fakeSupabase(options: {
       }
     : options.rollout
   const rows = options.rows ?? BASE_ROWS
+  const rawRows = options.rawRows ?? RAW_ROWS
 
   return {
     calls,
@@ -85,6 +141,19 @@ function fakeSupabase(options: {
               return {
                 eq() { return this },
                 async maybeSingle() { return { data: rollout, error: null } },
+              }
+            },
+          }
+        }
+        if (table === "market_ohlcv_raw_daily") {
+          return {
+            select() {
+              calls.push({ table, op: "select" })
+              return {
+                eq() { return this },
+                gte() { return this },
+                lte() { return this },
+                async order() { return { data: rawRows, error: null } },
               }
             },
           }
@@ -122,10 +191,11 @@ test("QEO-129 shadow read returns complete ordered adjusted Daily range with exa
     Math.floor(Date.parse("2026-08-04T02:00:00.000Z") / 1000),
     Math.floor(Date.parse("2026-08-05T02:00:00.000Z") / 1000),
   ])
+  assert.equal(fake.calls.some((call) => call.table === "market_ohlcv_raw_daily"), true)
   assert.equal(fake.calls.some((call) => call.table === "market_ohlcv_history"), false)
 })
 
-test("QEO-129 shadow read fails closed on a missing expected trading session without raw fallback", async () => {
+test("QEO-129 shadow read fails closed on a missing canonical RAW session without legacy fallback", async () => {
   const fake = fakeSupabase({ rows: BASE_ROWS.filter((row) => row.session_date !== "2026-08-04") })
   const result = await loadAdjustedDailyRange(fake.client as never, "VHM", FROM_MS, TO_MS)
 
@@ -133,6 +203,21 @@ test("QEO-129 shadow read fails closed on a missing expected trading session wit
   assert.deepEqual(result.bars, [])
   assert.deepEqual(result.unresolvedSessions, ["2026-08-04"])
   assert.equal(fake.calls.some((call) => call.table === "market_ohlcv_history"), false)
+})
+
+test("QEO-129 shadow read accepts retained ticker gaps when canonical RAW has the same session identity", async () => {
+  const retainedRows = BASE_ROWS.filter((row) => row.session_date !== "2026-08-04")
+  const retainedRawRows = RAW_ROWS.filter((row) => row.session_date !== "2026-08-04")
+  const fake = fakeSupabase({ rows: retainedRows, rawRows: retainedRawRows })
+
+  const result = await loadAdjustedDailyRange(fake.client as never, "VHM", FROM_MS, TO_MS)
+
+  assert.equal(result.complete, true)
+  assert.deepEqual(result.unresolvedSessions, [])
+  assert.deepEqual(result.bars.map((bar) => bar.time), [
+    Math.floor(Date.parse("2026-08-03T02:00:00.000Z") / 1000),
+    Math.floor(Date.parse("2026-08-05T02:00:00.000Z") / 1000),
+  ])
 })
 
 test("QEO-129 shadow read fails closed on duplicate session or row/rollout lineage mismatch", async () => {
@@ -165,6 +250,7 @@ test("QEO-129 shadow read fails closed without verified rollout and does not que
     unresolvedSessions: ["2026-08-03", "2026-08-04", "2026-08-05"],
   })
   assert.equal(fake.calls.some((call) => call.table === "market_ohlcv_adjusted_daily"), false)
+  assert.equal(fake.calls.some((call) => call.table === "market_ohlcv_raw_daily"), false)
   assert.equal(fake.calls.some((call) => call.table === "market_ohlcv_history"), false)
 })
 
