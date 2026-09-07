@@ -364,11 +364,11 @@
     },
     {
       "logicalName": "qeo129_adjusted_daily_shadow",
-      "repositoryVersion": null,
+      "repositoryVersion": "20260906170000",
       "productionVersion": "20260906223014",
-      "state": "PRODUCTION_AHEAD",
-      "evidence": "qeo129-production-schema-promoted-before-qeo132-source-merge",
-      "rationale": "Production already contains the reviewed QEO-129 shadow schema, while its source PR remains intentionally unmerged until QEO-132 establishes the canonical RAW Daily boundary. PRODUCTION_AHEAD records that narrow temporary production/source asymmetry without importing QEO-129 source into QEO-132."
+      "state": "MAPPED",
+      "evidence": "qeo129-production-ledger-and-source-schema-equivalence",
+      "rationale": "Production contains the reviewed QEO-129 shadow schema under version 20260906223014 while PR #356 carries the same schema under repository replay ordering 20260906170000. This mapping reconciles migration history only; it does not satisfy the retained canonical RAW range gate, activate any ticker rollout, or authorize PR #356 merge."
     },
     {
       "logicalName": "qeo132_raw_daily_basis",
