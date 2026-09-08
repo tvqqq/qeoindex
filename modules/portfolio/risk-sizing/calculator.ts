@@ -57,7 +57,7 @@ export function calculateTradeSize(input: TradeSizeInput): TradeSizeResult {
     return emptyResult("incomplete", riskAmountVnd)
   }
   if (!isFinitePositive(input.plannedEntryKvnd)) return emptyResult("invalid_entry", riskAmountVnd)
-  if (!Number.isFinite(input.initialStopKvnd) || input.initialStopKvnd < 0) {
+  if (!Number.isFinite(input.initialStopKvnd) || input.initialStopKvnd <= 0) {
     return emptyResult("invalid_stop_direction", riskAmountVnd)
   }
   if (input.initialStopKvnd === input.plannedEntryKvnd) return emptyResult("zero_stop_distance", riskAmountVnd)
