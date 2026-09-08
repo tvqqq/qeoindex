@@ -171,3 +171,56 @@ test("multiple fills remain grouped beneath one logical Trade", () => {
   assert.equal(model.fills.length, 3)
   assert.ok(model.fills.every((row) => row.trade_id === baseTrade.id))
 })
+
+test("closed Trade emits one deterministic posting-card outcome across scale-in and scale-out fills", () => {
+  const closedTrade = {
+    ...baseTrade,
+    status: "closed" as const,
+    initial_risk_amount: 2_000_000,
+    closed_at: "2026-09-08T07:00:00.000Z",
+  }
+  const fills = [
+    { ...fill, id: "b0000000-0000-4000-8000-000000000001", quantity: 100, price: 100, fee: 10 },
+    { ...fill, id: "b0000000-0000-4000-8000-000000000002", quantity: 100, price: 110, fee: 10 },
+    { ...fill, id: "b0000000-0000-4000-8000-000000000003", action: "sell", quantity: 50, price: 120, fee: 5 },
+    { ...fill, id: "b0000000-0000-4000-8000-000000000004", action: "sell", quantity: 150, price: 130, fee: 15 },
+  ]
+
+  const model = buildTradeReadModel({
+    trade: closedTrade,
+    fills,
+    stopEvents: [],
+    journalEntries: [],
+  })
+
+  assert.equal(model.closeReview.status, "available")
+  assert.equal(model.closeReview.outcome, "winner")
+  assert.equal(model.closeReview.totalPaidVnd, 21_020_000)
+  assert.equal(model.closeReview.totalReceivedVnd, 25_480_000)
+  assert.equal(model.closeReview.totalFeesVnd, 40_000)
+  assert.equal(model.closeReview.netPnlVnd, 4_460_000)
+  assert.ok(model.closeReview.pnlPercent != null && Math.abs(model.closeReview.pnlPercent - 21.21788772597526) < 1e-9)
+  assert.ok(model.closeReview.rMultiple != null && Math.abs(model.closeReview.rMultiple - 2.23) < 1e-9)
+  assert.equal(model.fills.length, 4)
+})
+
+test("Trade Posting Card fill history exposes running open quantity and canonical AVCO after every fill", () => {
+  const fills = [
+    { ...fill, id: "c0000000-0000-4000-8000-000000000001", quantity: 100, price: 100, fee: 10, transaction_date: "2026-09-07" },
+    { ...fill, id: "c0000000-0000-4000-8000-000000000002", quantity: 100, price: 110, fee: 10, transaction_date: "2026-09-08" },
+    { ...fill, id: "c0000000-0000-4000-8000-000000000003", action: "sell", quantity: 50, price: 120, fee: 5, transaction_date: "2026-09-09" },
+    { ...fill, id: "c0000000-0000-4000-8000-000000000004", action: "sell", quantity: 150, price: 130, fee: 15, transaction_date: "2026-09-10" },
+  ]
+
+  const model = buildTradeReadModel({
+    trade: { ...baseTrade, status: "closed" as const },
+    fills,
+    stopEvents: [],
+    journalEntries: [],
+  })
+
+  assert.deepEqual(model.fillHistory.map((row) => row.runningOpenQty), [100, 200, 150, 0])
+  assert.deepEqual(model.fillHistory.map((row) => row.runningAverageCostKvnd), [100.1, 105.1, 105.1, null])
+  assert.deepEqual(model.fillHistory.map((row) => row.runningRealizedPnlKvnd), [0, 0, 740, 4460])
+  assert.deepEqual(model.fillHistory.map((row) => row.fillId), fills.map((row) => row.id))
+})
