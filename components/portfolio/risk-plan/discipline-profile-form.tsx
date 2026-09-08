@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { PointSlider, type ProfilePointValue } from "./point-slider"
-import { RiskTermTooltip } from "./risk-term-tooltip"
+import { RiskTermTooltip, riskPlanLabelVi } from "./risk-term-tooltip"
 
 export type DisciplineProfileAttempt = {
   id: string
@@ -63,7 +63,7 @@ const QUESTIONS: Array<{ field: Field; attemptField: AttemptField; label: string
     field: "recordKeepingPoints",
     attemptField: "record_keeping_points",
     label: "Record Keeping",
-    help: "Mức độ duy trì ghi chép có hệ thống. Trong trading, record keeping hỗ trợ review quyết định và quản trị rủi ro.",
+    help: "Mức độ duy trì ghi chép có hệ thống. Trong giao dịch, ghi chép hỗ trợ rà soát quyết định và quản trị rủi ro.",
   },
   {
     field: "officeClutterPoints",
@@ -94,6 +94,12 @@ function fromAttempt(attempt: DisciplineProfileAttempt): FormState {
     billsExpensesPoints: attempt.bills_expenses_points as ProfilePointValue,
     exerciseRoutinePoints: attempt.exercise_routine_points as ProfilePointValue,
   }
+}
+
+function scoreBandLabel(value: DisciplineProfileAttempt["score_band"]): string {
+  if (value === "low") return "thấp"
+  if (value === "middle") return "trung bình"
+  return "cao"
 }
 
 export function DisciplineProfileForm({
@@ -134,11 +140,11 @@ export function DisciplineProfileForm({
         body: JSON.stringify(form),
       })
       const payload = await response.json().catch(() => null) as { error?: string } | null
-      if (!response.ok) throw new Error(payload?.error || "Không thể lưu Discipline Profile.")
+      if (!response.ok) throw new Error(payload?.error || "Không thể lưu Hồ sơ kỷ luật.")
       await onSaved()
       setEditing(false)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Không thể lưu Discipline Profile.")
+      setError(cause instanceof Error ? cause.message : "Không thể lưu Hồ sơ kỷ luật.")
     } finally {
       setSaving(false)
     }
@@ -154,14 +160,14 @@ export function DisciplineProfileForm({
     <section className="rounded-2xl border border-[#2a2e40] bg-[#0b0f16] p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-ticker text-base font-extrabold text-white">Discipline Profile</h3>
+          <h3 className="font-ticker text-base font-extrabold text-white">Hồ sơ kỷ luật</h3>
           <p className="mt-1 text-xs leading-relaxed text-slate-400">
-            Sáu câu tự đánh giá 5 / 10 / 15 điểm. Product bands: 30–45, 50–65, 70–90. Kết quả dùng cho self-review, không phải chẩn đoán tính cách.
+            Sáu câu tự đánh giá 5 / 10 / 15 điểm. Các dải diễn giải của sản phẩm: 30–45, 50–65, 70–90. Kết quả dùng cho tự rà soát, không phải chẩn đoán tính cách.
           </p>
         </div>
         {latestAttempt && !editing && (
           <Button type="button" size="sm" variant="outline" onClick={beginRetake}>
-            Retake / Chỉnh sửa
+            Đánh giá lại / Chỉnh sửa
           </Button>
         )}
       </div>
@@ -170,9 +176,9 @@ export function DisciplineProfileForm({
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-purple-500/20 bg-purple-500/[0.06] p-3">
             <div>
-              <div className="text-xs text-slate-400">Latest saved Discipline Profile</div>
+              <div className="text-xs text-slate-400">Hồ sơ kỷ luật được lưu gần nhất</div>
               <div className="mt-1 text-lg font-extrabold text-white">
-                {latestAttempt.total_score} points <span className="text-sm text-purple-300">· {latestAttempt.score_band}</span>
+                {latestAttempt.total_score} điểm <span className="text-sm text-purple-300">· {scoreBandLabel(latestAttempt.score_band)}</span>
               </div>
             </div>
             <div className="text-right text-xs text-slate-500">
@@ -183,7 +189,7 @@ export function DisciplineProfileForm({
             <div key={question.field} className="flex items-start justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
               <RiskTermTooltip label={question.label} help={question.help} />
               <div className="shrink-0 rounded-lg border border-purple-500/20 bg-purple-500/10 px-3 py-1.5 text-sm font-extrabold text-purple-300">
-                {latestAttempt[question.attemptField]} points
+                {latestAttempt[question.attemptField]} điểm
               </div>
             </div>
           ))}
@@ -196,7 +202,7 @@ export function DisciplineProfileForm({
                 <RiskTermTooltip label={question.label} help={question.help} />
                 <div className="mt-3">
                   <PointSlider
-                    label={question.label}
+                    label={riskPlanLabelVi(question.label)}
                     value={form[question.field]}
                     onChange={(value) => setForm((current) => ({ ...current, [question.field]: value }))}
                   />
@@ -217,7 +223,7 @@ export function DisciplineProfileForm({
               </Button>
             )}
             <Button type="button" size="sm" disabled={!complete || saving} onClick={() => void submit()}>
-              {saving ? "Đang lưu…" : latestAttempt ? "Save New Attempt" : "Save Discipline Profile"}
+              {saving ? "Đang lưu…" : latestAttempt ? "Lưu lần đánh giá mới" : "Lưu Hồ sơ kỷ luật"}
             </Button>
           </div>
         </>
