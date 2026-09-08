@@ -6,6 +6,8 @@ const calculatorPath = "components/portfolio/risk-sizing/trade-size-calculator.t
 const hookPath = "components/portfolio/risk-sizing/use-risk-sizing-context.ts"
 const tooltipPath = "components/portfolio/risk-sizing/risk-metric-tooltip.tsx"
 const allocationPath = "components/portfolio/portfolio-capital-allocation.tsx"
+const panel1Path = "components/portfolio/risk-sizing/portfolio-allocation-advisor.tsx"
+const panel2Path = "components/portfolio/risk-sizing/portfolio-current-state.tsx"
 const pagePath = "components/portfolio/portfolio-page.tsx"
 const terminologyPath = "modules/portfolio/risk-sizing/terminology.ts"
 const pnlPath = "modules/portfolio/pnl.ts"
@@ -59,6 +61,25 @@ test("allocation owns one authenticated risk-context fetch and calculator stays 
   assert.match(calculator, /projectActiveRisk/)
   assert.match(calculator, /RiskMetricTooltip/)
   assert.doesNotMatch(`${hook}\n${allocation}\n${calculator}`, /createClient|supabase\.|\.from\(/)
+})
+
+test("four-panel portfolio workflow restores Panels 1 and 2 without per-Trade fields in Panel 1", () => {
+  const allocation = read(allocationPath)
+  const panel1 = read(panel1Path)
+  const panel2 = read(panel2Path)
+  const composed = `${allocation}\n${panel1}\n${panel2}`
+
+  for (const heading of [
+    "1. Portfolio Allocation Advisor",
+    "2. Current Portfolio State",
+    "3. Trade Size Advisor",
+    "4. Combined Portfolio Simulation",
+  ]) {
+    assert.match(composed, new RegExp(escapeRegExp(heading)), `missing four-panel heading: ${heading}`)
+  }
+
+  assert.match(allocation, /lg:grid-cols-2/)
+  assert.doesNotMatch(panel1, /plannedEntry|initialStop/)
 })
 
 test("legacy fixed-stop assumptions and unsafe risk claims are removed from the allocation surface", () => {
