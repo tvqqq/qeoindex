@@ -1,3 +1,5 @@
+import { deriveTradeFillHistory, type TradeFillHistoryEntry } from "./fill-history.ts"
+import { deriveTradeCloseReview, type TradeCloseReview } from "./review.ts"
 import type { TradeMode, TradeStatus } from "./types.ts"
 
 type TradeReadRow = {
@@ -61,6 +63,7 @@ type JournalReadRow = {
 export type TradeReadModel = {
   trade: TradeReadRow
   fills: FillReadRow[]
+  fillHistory: TradeFillHistoryEntry[]
   stopEvents: StopReadRow[]
   journalEntries: JournalReadRow[]
   moneyManagementPlanId: string | null
@@ -76,6 +79,7 @@ export type TradeReadModel = {
     riskAmountPerShare: number | null
     tradeSize: number | null
   }
+  closeReview: TradeCloseReview
   completeness: {
     stopState: "known" | "unknown"
     initialRiskState: "available" | "partial" | "unknown"
@@ -130,6 +134,7 @@ export function buildTradeReadModel({
   const groupedFills = fills.filter(
     (fill) => fill.trade_id === trade.id && fill.ticker === trade.ticker,
   )
+  const fillHistory = deriveTradeFillHistory(groupedFills, trade.ticker)
   const chronologicalStops = [...stopEvents].sort((a, b) => {
     const effectiveDiff = timestampMs(a.effective_at) - timestampMs(b.effective_at)
     if (effectiveDiff !== 0) return effectiveDiff
@@ -160,10 +165,17 @@ export function buildTradeReadModel({
         }
       : null
   const moneyManagementPlanId = trade.money_management_plan_id ?? null
+  const closeReview = deriveTradeCloseReview({
+    status: trade.status,
+    ticker: trade.ticker,
+    fills: groupedFills,
+    initialRiskAmountVnd: trade.initial_risk_amount ?? null,
+  })
 
   return {
     trade,
     fills: groupedFills,
+    fillHistory,
     stopEvents: chronologicalStops,
     journalEntries: chronologicalJournal,
     moneyManagementPlanId,
@@ -175,6 +187,7 @@ export function buildTradeReadModel({
       riskAmountPerShare: trade.initial_risk_amount_per_share ?? null,
       tradeSize: trade.planned_trade_size ?? null,
     },
+    closeReview,
     completeness: {
       stopState: latestStop ? "known" : "unknown",
       initialRiskState: initialRiskState(trade),
