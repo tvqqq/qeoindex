@@ -94,7 +94,7 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
   if (!activePortfolioId || !activePortfolio) {
     return (
       <div className="rounded-[28px] border border-white/[0.08] bg-[#0b0e15] p-6 font-ticker text-sm text-[var(--color-muted-2)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]">
-        Chọn một portfolio để lập Trade Size plan.
+        Chọn một danh mục để lập kế hoạch khối lượng giao dịch.
       </div>
     )
   }
@@ -107,30 +107,30 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
           <div className="max-w-3xl">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-full border border-purple-400/20 bg-purple-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-purple-200">
-                <Layers3 className="h-3.5 w-3.5" /> Portfolio planner
+                <Layers3 className="h-3.5 w-3.5" /> Lập kế hoạch phân bổ vốn
               </span>
               <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[10px] font-bold text-slate-300">
                 {activePortfolio.name}
               </span>
               <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[10px] font-bold text-slate-400">
-                {positions.length} open holding{positions.length === 1 ? "" : "s"}
+                {positions.length} khoản đang nắm giữ
               </span>
             </div>
-            <h2 className="text-2xl font-black tracking-[-0.025em] text-white sm:text-3xl">Capital Allocation &amp; Trade Size</h2>
+            <h2 className="text-2xl font-black tracking-[-0.025em] text-white sm:text-3xl">Phân bổ vốn &amp; khối lượng giao dịch</h2>
             <p className="mt-2 max-w-2xl text-[11px] leading-relaxed text-slate-400 sm:text-xs">
-              Một workspace cho portfolio capacity, stop-first Trade Size và cumulative planning. Risk evidence được dùng chung; planned loss không phải guarantee cho actual execution loss.
+              Một không gian chung để xem sức chứa danh mục, tính khối lượng theo mức dừng lỗ và mô phỏng kế hoạch cộng dồn. Dữ liệu rủi ro được dùng chung; mức lỗ dự kiến không bảo đảm mức lỗ thực tế khi khớp lệnh.
             </p>
             <div className="mt-4 flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-wide text-slate-400">
-              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">1 · Capacity</span>
-              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">2 · Holdings</span>
-              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">3 · Trade Size</span>
-              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">4 · Simulation</span>
+              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">1 · Sức chứa</span>
+              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">2 · Danh mục hiện tại</span>
+              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">3 · Khối lượng giao dịch</span>
+              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">4 · Mô phỏng</span>
             </div>
           </div>
 
           <div className="grid w-full gap-2 sm:grid-cols-2 xl:w-auto xl:min-w-[360px]">
-            <HeaderMetric label="Account Equity" value={formatShortVnd(effectiveAccountEquityContext.valueVnd)} />
-            <HeaderMetric label="Estimated Cash" value={formatShortVnd(allocationSnapshot.estimatedAvailableCashVnd)} emphasis />
+            <HeaderMetric label="Vốn tài khoản" value={formatShortVnd(effectiveAccountEquityContext.valueVnd)} />
+            <HeaderMetric label="Tiền mặt ước tính" value={formatShortVnd(allocationSnapshot.estimatedAvailableCashVnd)} emphasis />
           </div>
         </div>
       </section>
@@ -161,12 +161,12 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
         <section className="min-w-0 overflow-hidden rounded-[28px] border border-amber-500/15 bg-gradient-to-b from-[#111018] to-[#0a0d13] p-4 shadow-[0_18px_55px_rgba(0,0,0,0.24)] ring-1 ring-white/[0.035] sm:p-5">
           <div className="mb-4 flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
             <div>
-              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-400/70">Position sizing</p>
+              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-400/70">Tính khối lượng vị thế</p>
               <h3 className="mt-1 flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-amber-200 sm:text-base">
-                <Scale className="h-4 w-4" /> 3. Trade Size Advisor
+                <Scale className="h-4 w-4" /> 3. Tư vấn khối lượng giao dịch
               </h3>
             </div>
-            <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-amber-200">Per Trade</span>
+            <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-amber-200">Theo từng giao dịch</span>
           </div>
           <TradeSizeAdvisor
             accountEquityContext={effectiveAccountEquityContext}
