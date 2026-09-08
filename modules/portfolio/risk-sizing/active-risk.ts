@@ -1,5 +1,6 @@
 import { computePortfolioPositions, type RawTransaction } from "../pnl.ts"
 import { buildTradeReadModel } from "../trades/read-model.ts"
+import type { OpenTradeRiskBreakdown } from "./types.ts"
 
 export type OpenTradeRiskRow = {
   id: string
@@ -21,16 +22,6 @@ export type StopRiskRow = {
   price: number
   effective_at: string
   created_at: string
-}
-
-export type OpenTradeRiskBreakdown = {
-  tradeId: string
-  ticker: string
-  openQty: number | null
-  avgCostKvnd: number | null
-  latestStopKvnd: number | null
-  activeRiskVnd: number | null
-  riskStatus: "known" | "unknown"
 }
 
 export function computeOpenTradeRiskContext({
