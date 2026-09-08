@@ -54,7 +54,7 @@ test("Optimal f follows McDowell formula and stays unavailable for insufficient 
   assert.equal(calculateOptimalF(101, 2).status, "invalid")
 })
 
-test("shared terminology covers every calculator metric with source classification", () => {
+test("shared terminology covers every calculator metric with bilingual labels and source classification", () => {
   const required = [
     "accountEquity",
     "riskPerTrade",
@@ -74,7 +74,8 @@ test("shared terminology covers every calculator metric with source classificati
   for (const key of required) {
     const term = RISK_SIZING_TERMS[key]
     assert.ok(term)
-    assert.ok(term.label.length > 0)
+    assert.ok(term.labelVi.length > 0)
+    assert.ok(term.labelEn.length > 0)
     assert.ok(term.help.length > 0)
     assert.ok(["book", "product", "extension"].includes(term.sourceKind))
   }
