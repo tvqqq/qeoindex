@@ -89,3 +89,21 @@ export type TradingScorecard = {
   }
   optimalF: MetricValue
 }
+
+export type DrawdownEpisode = {
+  peakKey: string
+  startKey: string
+  troughKey: string
+  recoveryKey: string | null
+  peakEquityVnd: number
+  troughEquityVnd: number
+  depthPercent: number
+  recovered: boolean
+}
+
+export type DrawdownAnalytics = {
+  maxDrawdownPercent: number | null
+  averageDrawdownPercent: number | null
+  episodes: DrawdownEpisode[]
+  completeness: "complete" | "insufficient"
+}
