@@ -186,3 +186,57 @@ export function simulatePlannedTrades(input: {
     }),
   }
 }
+
+function formatPlanningVnd(value: number): string {
+  return `${Math.round(value).toLocaleString("vi-VN")} VNĐ`
+}
+
+export function describePortfolioAdvisor(simulation: PortfolioPlanSimulation): string {
+  if (simulation.verdict === "UNAVAILABLE") {
+    return "Portfolio risk context is unavailable, so capacity and plan classification remain unavailable."
+  }
+  if (simulation.verdict === "RISK UNKNOWN") {
+    return `Portfolio risk remains unknown because ${simulation.unknownRiskItemCount} current risk item(s) lack canonical evidence.`
+  }
+  if (simulation.verdict === "EXCEEDS PLAN") {
+    const cap = simulation.maxActiveRiskVnd == null
+      ? "the configured cap"
+      : formatPlanningVnd(simulation.maxActiveRiskVnd)
+    const funding = simulation.fundingGapVnd > 0
+      ? ` A separate funding gap of ${formatPlanningVnd(simulation.fundingGapVnd)} also requires review; margin is not assumed.`
+      : ""
+    return `Projected known Active Risk ${formatPlanningVnd(simulation.projectedKnownActiveRiskVnd)} exceeds Max Active Risk ${cap}.${funding}`
+  }
+  if (simulation.fundingGapVnd > 0) {
+    return `Funding gap ${formatPlanningVnd(simulation.fundingGapVnd)} requires review; the planner does not assume margin.`
+  }
+  if (simulation.maxActiveRiskVnd == null) {
+    return "Max Active Risk is not configured, so the portfolio requires review before a within-plan conclusion."
+  }
+  if (simulation.verdict === "REVIEW REQUIRED") {
+    return "Portfolio evidence or configuration is incomplete, so the combined plan requires review."
+  }
+  return `Projected known Active Risk ${formatPlanningVnd(simulation.projectedKnownActiveRiskVnd)} remains within Max Active Risk ${formatPlanningVnd(simulation.maxActiveRiskVnd)}.`
+}
+
+export function describeTradeAdvisor(plannedTrades: PlannedTrade[]): string {
+  if (plannedTrades.length === 0) {
+    return "No planned Trades are in the current planning workspace."
+  }
+
+  const plannedPositionValueVnd = plannedTrades.reduce(
+    (sum, trade) => sum + trade.positionValueVnd,
+    0,
+  )
+  const plannedRiskAddedVnd = plannedTrades.reduce(
+    (sum, trade) => sum + trade.riskAddedVnd,
+    0,
+  )
+
+  if (plannedTrades.length === 1) {
+    const trade = plannedTrades[0]!
+    return `${trade.ticker}: Entry ${trade.plannedEntryKvnd} k₫ / Stop ${trade.initialStopKvnd} k₫ gives Trade Size ${trade.tradeSizeShares.toLocaleString("vi-VN")} shares, Position Value ${formatPlanningVnd(trade.positionValueVnd)}, and planned risk ${formatPlanningVnd(trade.riskAddedVnd)}.`
+  }
+
+  return `${plannedTrades.length} planned Trades total ${formatPlanningVnd(plannedPositionValueVnd)} Position Value and ${formatPlanningVnd(plannedRiskAddedVnd)} planned risk.`
+}
