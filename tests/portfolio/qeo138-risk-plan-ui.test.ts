@@ -17,7 +17,7 @@ function read(relativePath: string) {
   return fs.readFileSync(filePath, "utf8")
 }
 
-test("risk planning UI uses canonical McDowell labels and shared Vietnamese tooltips", () => {
+test("risk planning UI retains canonical McDowell English terms as tooltip keys with Vietnamese presentation", () => {
   const source = uiFiles.map(read).join("\n")
 
   for (const label of [
@@ -30,11 +30,11 @@ test("risk planning UI uses canonical McDowell labels and shared Vietnamese tool
     "Max Active Risk",
     "Account Drawdown",
   ]) {
-    assert.match(source, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), `${label} must be visible`)
+    assert.match(source, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), `${label} must remain available as canonical source terminology`)
   }
 
   assert.match(source, /RiskTermTooltip/)
-  assert.match(source, /Insufficient History/)
+  assert.match(source, /Chưa đủ lịch sử/)
   assert.match(source, /30–45|30-45/)
   assert.match(source, /50–65|50-65/)
   assert.match(source, /70–90|70-90/)
@@ -134,7 +134,7 @@ test("saved profile attempts are displayed and can hydrate a retake", () => {
   assert.match(parent, /latestAttempt=\{overview\?\.latestDisciplineProfileAttempt/)
   assert.match(risk, /latestAttempt/)
   assert.match(discipline, /latestAttempt/)
-  assert.match(`${risk}\n${discipline}`, /Retake|Chỉnh sửa/i)
+  assert.match(`${risk}\n${discipline}`, /Đánh giá lại|Chỉnh sửa/i)
   assert.match(`${risk}\n${discipline}`, /created_at/)
   assert.match(`${risk}\n${discipline}`, /total_score/)
 })
@@ -145,6 +145,7 @@ test("Portfolio Risk UI uses Vietnamese as the primary label and keeps canonical
   const planTooltip = read("components/portfolio/risk-plan/risk-term-tooltip.tsx")
   const allocation = read("components/portfolio/portfolio-capital-allocation.tsx")
   const riskPlan = read("components/portfolio/portfolio-risk-plan.tsx")
+  const moneyPlan = read("components/portfolio/risk-plan/money-management-plan-form.tsx")
   const planning = read("modules/portfolio/risk-sizing/planning.ts")
 
   assert.match(sizingTerms, /labelVi:/)
@@ -165,12 +166,16 @@ test("Portfolio Risk UI uses Vietnamese as the primary label and keeps canonical
     "Hồ sơ kỷ luật",
     "Kế hoạch quản trị vốn",
   ]) {
-    assert.match(`${allocation}\n${riskPlan}`, new RegExp(label, "i"), `missing Vietnamese primary label ${label}`)
+    assert.match(`${allocation}\n${riskPlan}\n${moneyPlan}`, new RegExp(label, "i"), `missing Vietnamese primary label ${label}`)
   }
 
   assert.doesNotMatch(allocation, />\s*Capital Allocation &amp; Trade Size\s*</)
   assert.doesNotMatch(allocation, />\s*Portfolio planner\s*</)
   assert.doesNotMatch(riskPlan, />\s*Risk Profile · Discipline Profile · Money Management Plan\s*</)
+  assert.doesNotMatch(moneyPlan, />\s*Money Management Plan\s*</)
+  assert.doesNotMatch(moneyPlan, />\s*Save Money Management Plan\s*</)
+  assert.doesNotMatch(moneyPlan, />\s*No scale-out rule\s*</)
+  assert.doesNotMatch(moneyPlan, />\s*Signal driven\s*</)
   assert.match(planning, /rủi ro danh mục/i)
   assert.match(planning, /không giả định margin/i)
 })
