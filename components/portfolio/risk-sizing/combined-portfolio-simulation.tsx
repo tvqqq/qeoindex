@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { Activity, AlertTriangle } from "lucide-react"
 
 import {
@@ -143,7 +144,7 @@ export function CombinedPortfolioSimulation({
   )
 }
 
-function StateColumn({ title, children }: { title: string; children: React.ReactNode }) {
+function StateColumn({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="rounded-2xl border border-white/[0.07] bg-black/20 p-4">
       <h4 className="text-[11px] font-black uppercase tracking-[0.16em] text-white">{title}</h4>
