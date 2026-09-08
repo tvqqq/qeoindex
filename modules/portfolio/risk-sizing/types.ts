@@ -99,15 +99,37 @@ export type PlannedTrade = {
   riskAddedVnd: number
 }
 
+export type OpenTradeRiskBreakdown = {
+  tradeId: string
+  ticker: string
+  openQty: number | null
+  avgCostKvnd: number | null
+  latestStopKvnd: number | null
+  activeRiskVnd: number | null
+  riskStatus: "known" | "unknown"
+}
+
 export type PortfolioAllocationSnapshot = {
   initialCapitalVnd: number
   totalRealizedPnlVnd: number
-  openPositionCostBasisVnd: number
-  stockMarketValueVnd: number
   totalUnrealizedPnlVnd: number
+  stockCostBasisVnd: number
+  stockMarketValueVnd: number
   estimatedAvailableCashVnd: number
   missingPriceTickers: string[]
-  marketPriceCoverageComplete: boolean
+}
+
+export type HoldingRiskSummary = {
+  ticker: string
+  activeRiskVnd: number | null
+  riskStatus: "known" | "unknown"
+  linkedTradeCount: number
+  unknownTradeCount: number
+}
+
+export type PortfolioRiskCoverage = {
+  holdingRisks: HoldingRiskSummary[]
+  unknownRiskItemCount: number
 }
 
 export type CombinedVerdict =
@@ -126,6 +148,7 @@ export type PortfolioPlanSimulation = {
   remainingRiskBudgetVnd: number | null
   projectedEstimatedCashVnd: number
   fundingGapVnd: number
+  unknownRiskItemCount: number
   verdict: CombinedVerdict
 }
 
