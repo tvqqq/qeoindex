@@ -669,6 +669,43 @@
       ]
     },
     {
+      "path": "tests/portfolio/qeo139-risk-projection.test.ts",
+      "owner": "portfolio",
+      "invariant": "QEO-139 keeps projected Active Risk deterministic, cap-aware, and fail-closed when open Trade risk is unknown.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/portfolio/qeo139-risk-sizing-server-api.test.ts",
+      "owner": "portfolio",
+      "invariant": "QEO-139 keeps risk-sizing context authenticated, ownership-scoped, read-only, and based on canonical Trade evidence.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/portfolio/qeo139-risk-sizing.test.ts",
+      "owner": "portfolio",
+      "invariant": "QEO-139 keeps stop-first Trade Size sizing deterministic, unit-safe, cost-aware and source-faithful.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/portfolio/qeo139-trade-size-ui.test.ts",
+      "owner": "portfolio",
+      "invariant": "QEO-139 keeps the portfolio allocation UI stop-first, tooltip-driven, fail-closed, and free of legacy fixed-stop assumptions.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
       "path": "tests/qeo-106-yahoo-adjusted-basis.test.ts",
       "owner": "market",
       "invariant": "Yahoo Daily fallback and persisted repairs must use one adjusted canonical price basis.",

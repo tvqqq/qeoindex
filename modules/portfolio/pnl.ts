@@ -240,31 +240,3 @@ export function computePortfolioPositions(
     },
   }
 }
-
-export function calculatePositionSizing({
-  initialCapital,
-  accountRiskPct,
-  tradeStopLossPct,
-  entryPrice,
-}: {
-  initialCapital: number
-  accountRiskPct: number
-  tradeStopLossPct: number
-  entryPrice?: number
-}) {
-  const maxRiskAmount = initialCapital * (accountRiskPct / 100)
-  const allocatedCapital =
-    tradeStopLossPct > 0 ? maxRiskAmount / (tradeStopLossPct / 100) : 0
-  const maxShares =
-    entryPrice && entryPrice > 0
-      ? Math.floor(allocatedCapital / (entryPrice * 1000))
-      : 0
-
-  return {
-    maxRiskAmount,
-    allocatedCapital,
-    maxShares,
-    allocationPctOfNav:
-      initialCapital > 0 ? (allocatedCapital / initialCapital) * 100 : 0,
-  }
-}

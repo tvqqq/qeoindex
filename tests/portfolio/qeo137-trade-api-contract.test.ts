@@ -182,7 +182,7 @@ test("AVCO accounting accepts trade_id metadata but never uses it in P&L math", 
   const pnl = readFileSync(pnlUrl, "utf8")
   assert.match(pnl, /trade_id\?:\s*string\s*\|\s*null/)
 
-  const engine = pnl.match(/export function computePortfolioPositions[\s\S]*?export function calculatePositionSizing/)?.[0] ?? ""
+  const engine = pnl.match(/export function computePortfolioPositions[\s\S]*$/)?.[0] ?? ""
   assert.ok(engine, "AVCO engine source must be found")
   assert.doesNotMatch(engine, /trade_id/)
 })
