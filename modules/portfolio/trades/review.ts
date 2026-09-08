@@ -45,6 +45,10 @@ function unavailable(reason: Exclude<TradeCloseReview["reason"], null>): TradeCl
   }
 }
 
+function kvndToIntegerVnd(valueKvnd: number): number {
+  return Math.round(valueKvnd * 1000)
+}
+
 export function deriveTradeCloseReview(input: {
   status: TradeStatus
   ticker: string
@@ -90,10 +94,11 @@ export function deriveTradeCloseReview(input: {
     return unavailable("open_quantity_remaining")
   }
 
-  const netPnlVnd = summary.totalRealizedPnl * 1000
-  const totalPaidVnd = totalPaidKvnd * 1000
-  const totalReceivedVnd = totalReceivedKvnd * 1000
-  const totalFeesVnd = totalFeesKvnd * 1000
+  // Portfolio accounting is kVND internally; close-review money is an integer-VND audit boundary.
+  const netPnlVnd = kvndToIntegerVnd(summary.totalRealizedPnl)
+  const totalPaidVnd = kvndToIntegerVnd(totalPaidKvnd)
+  const totalReceivedVnd = kvndToIntegerVnd(totalReceivedKvnd)
+  const totalFeesVnd = kvndToIntegerVnd(totalFeesKvnd)
   const pnlPercent = totalPaidVnd > 0 ? (netPnlVnd / totalPaidVnd) * 100 : null
   const rMultiple = input.initialRiskAmountVnd != null && input.initialRiskAmountVnd > 0
     ? netPnlVnd / input.initialRiskAmountVnd
