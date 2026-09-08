@@ -140,3 +140,13 @@ export type PeriodLedgerSet = {
   monthly: TradingLedgerPeriod[]
   annual: TradingLedgerPeriod[]
 }
+
+export type PerformanceSegment = {
+  dimension: "system" | "setup" | "timeframe" | "mode" | "behavior" | "mistake"
+  key: string
+  sampleSize: number
+  winRatioPercent: number | null
+  payoffRatio: number | null
+  netPnlVnd: number
+  smallSample: boolean
+}
