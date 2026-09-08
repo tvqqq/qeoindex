@@ -159,14 +159,14 @@ export function TradeSizeAdvisor({
   }
 
   return (
-    <div className="space-y-5 font-ticker">
-      <div className="rounded-2xl border border-white/[0.07] bg-black/20 p-4">
+    <div data-planner-advisor="trade-size" className="space-y-4 font-ticker">
+      <div className="rounded-2xl border border-amber-500/15 bg-gradient-to-br from-amber-500/[0.07] to-black/20 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-amber-300">
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-amber-200">
               <Calculator className="h-4 w-4" /> Stop-first sizing
             </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-muted-2)]">
+            <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
               Ticker là identity của một planned Trade. Entry, Stop, Commission, Slippage và Trade Size chỉ thuộc ticker đó.
             </p>
           </div>
@@ -177,15 +177,18 @@ export function TradeSizeAdvisor({
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2">
         <label className="space-y-2 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-4 md:col-span-2">
-          <span className="text-[11px] font-bold uppercase tracking-wide text-amber-200">Ticker</span>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-200">Ticker</span>
+            <span className="text-[9px] font-bold text-slate-500">One row per ticker</span>
+          </div>
           <Input
             value={tickerInput}
             onChange={(event) => setTickerInput(event.target.value.toUpperCase())}
             placeholder="VD: MSN"
             autoCapitalize="characters"
-            className="h-10 border-amber-500/20 bg-black/30 font-ticker text-base font-black uppercase tracking-wide text-white"
+            className="h-11 border-amber-500/20 bg-black/30 font-ticker text-lg font-black uppercase tracking-[0.12em] text-white"
           />
         </label>
 
@@ -232,24 +235,25 @@ export function TradeSizeAdvisor({
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-[#2a2e40] bg-black/20 p-4 text-xs leading-relaxed text-slate-300">
-        <p className="font-bold text-slate-100">Initial Stop guidance</p>
-        <p className="mt-1">
+      <div className="rounded-2xl border border-white/[0.07] bg-black/20 p-4 text-[10px] leading-relaxed text-slate-400">
+        <p className="font-black uppercase tracking-wide text-slate-200">Initial Stop guidance</p>
+        <p className="mt-1.5">
           Đặt stop từ structural support/resistance, volatility hoặc price activity, hay trading-system rule. Trailing stop chỉ áp dụng sau entry khi Trade phát triển. Actual loss có thể vượt planned stop do gap, liquidity, volatility, overnight moves và slippage.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-[#2a2e40] bg-black/20 p-4">
+      <div className="rounded-2xl border border-amber-500/15 bg-gradient-to-b from-amber-500/[0.045] to-black/20 p-4">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-extrabold uppercase tracking-wide text-purple-200">Deterministic Result</p>
-            <p className="mt-1 text-[10px] text-[var(--color-muted-2)]">Ready chỉ khi Ticker + Entry + Stop + risk budget tạo được regular-lot Trade Size.</p>
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-400/70">Deterministic output</p>
+            <p className="mt-1 text-xs font-extrabold uppercase tracking-wide text-white">Trade Size Result</p>
+            <p className="mt-1 text-[10px] text-slate-500">Ready khi Ticker + Entry + Stop + risk budget tạo được regular-lot Trade Size.</p>
           </div>
           {editingTicker ? <Badge>Editing {editingTicker}</Badge> : null}
         </div>
 
         {result.status === "ready" ? (
-          <div className="space-y-3">
+          <div className="space-y-2">
             <MetricRow term="riskAmount" value={formatVnd(result.riskAmountVnd)} />
             <MetricRow term="stopDistance" value={`${formatKvnd(result.stopDistanceKvnd)} · ${formatPercent(result.stopDistancePercent)}`} />
             <MetricRow term="riskPerShare" value={formatVnd(result.riskPerShareVnd)} />
@@ -259,7 +263,7 @@ export function TradeSizeAdvisor({
             <MetricRow term="riskAddedByPlannedTrade" value={formatVnd(result.totalRiskConsumptionVnd)} />
           </div>
         ) : (
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-100">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.07] p-3 text-xs leading-relaxed text-amber-100">
             {statusHelp(result.status)}
           </div>
         )}
@@ -273,9 +277,9 @@ export function TradeSizeAdvisor({
           onClick={addPlannedTrade}
           disabled={!ready}
           className={cn(
-            "mt-4 w-full rounded-xl border px-4 py-2.5 text-xs font-black uppercase tracking-wide transition",
+            "mt-4 w-full rounded-xl border px-4 py-3 text-xs font-black uppercase tracking-[0.12em] transition",
             ready
-              ? "border-amber-400/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
+              ? "border-amber-300/35 bg-amber-400 text-[#171006] shadow-[0_8px_30px_rgba(251,191,36,0.16)] hover:bg-amber-300"
               : "cursor-not-allowed border-white/5 bg-white/[0.03] text-slate-600",
           )}
         >
@@ -287,21 +291,21 @@ export function TradeSizeAdvisor({
         <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3">
           <div>
             <h4 className="text-xs font-extrabold uppercase tracking-wide text-white">Planned Trades</h4>
-            <p className="mt-1 text-[10px] text-[var(--color-muted-2)]">Planning workspace only · ephemeral client state · not saved.</p>
+            <p className="mt-1 text-[10px] text-slate-500">Planning workspace only · ephemeral client state · not saved.</p>
           </div>
           <Badge>{plannedTrades.length} ticker{plannedTrades.length === 1 ? "" : "s"}</Badge>
         </div>
 
         {plannedTrades.length === 0 ? (
-          <p className="py-5 text-center text-[11px] text-[var(--color-muted-2)]">Chưa có planned Trade.</p>
+          <div className="mt-3 rounded-xl border border-dashed border-white/[0.07] bg-black/15 py-6 text-center text-[10px] text-slate-500">Chưa có planned Trade.</div>
         ) : (
           <div className="mt-3 space-y-3">
             {plannedTrades.map((trade) => (
-              <article key={trade.ticker} className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
+              <article key={trade.ticker} className="rounded-xl border border-white/[0.07] bg-black/20 p-3 transition-colors hover:border-amber-500/15">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-sm font-black text-amber-200">{trade.ticker}</p>
-                    <p className="mt-1 text-[10px] text-[var(--color-muted-2)]">
+                    <p className="text-base font-black tracking-wide text-amber-200">{trade.ticker}</p>
+                    <p className="mt-1 text-[10px] text-slate-500">
                       Planned Entry {formatKvnd(trade.plannedEntryKvnd)} · Initial Stop {formatKvnd(trade.initialStopKvnd)} · Risk per Trade {formatPercent(trade.riskPercent)}
                     </p>
                   </div>
@@ -333,11 +337,11 @@ export function TradeSizeAdvisor({
         )}
       </section>
 
-      <details className="group rounded-2xl border border-[#2a2e40] bg-black/20 p-4">
+      <details className="group rounded-2xl border border-white/[0.07] bg-black/20 p-4">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
           <div>
             <h4 className="text-xs font-extrabold uppercase tracking-wide text-white">Advanced Evidence</h4>
-            <p className="mt-1 text-[10px] text-[var(--color-muted-2)]">Win/Payoff evidence and informational Optimal f.</p>
+            <p className="mt-1 text-[10px] text-slate-500">Win/Payoff evidence and informational Optimal f.</p>
           </div>
           <Badge>Evidence: {riskContextUnavailable ? "Unavailable" : riskContext?.evidenceCompleteness ?? "insufficient"}</Badge>
         </summary>
@@ -397,7 +401,7 @@ function MetricInput({ term, value, onChange, step, suffix, placeholder }: {
   placeholder?: string
 }) {
   return (
-    <label className="space-y-2 rounded-2xl border border-white/[0.06] bg-black/20 p-4">
+    <label className="space-y-2 rounded-xl border border-white/[0.06] bg-black/20 p-3.5">
       <RiskMetricTooltip term={term} />
       <div className="flex items-center gap-2">
         <Input
@@ -407,9 +411,9 @@ function MetricInput({ term, value, onChange, step, suffix, placeholder }: {
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
-          className="h-10 border-[#2a2e40] bg-black/30 font-ticker font-bold text-white"
+          className="h-10 border-white/[0.08] bg-black/30 font-ticker font-bold text-white"
         />
-        <span className="shrink-0 text-[11px] font-bold text-slate-500">{suffix}</span>
+        <span className="shrink-0 text-[10px] font-bold text-slate-500">{suffix}</span>
       </div>
     </label>
   )
@@ -417,7 +421,7 @@ function MetricInput({ term, value, onChange, step, suffix, placeholder }: {
 
 function ReadOnlyMetric({ term, value }: { term: RiskTerm; value: string }) {
   return (
-    <div className="space-y-2 rounded-2xl border border-white/[0.06] bg-black/20 p-4">
+    <div className="space-y-2 rounded-xl border border-white/[0.06] bg-black/20 p-3.5">
       <RiskMetricTooltip term={term} />
       <div className="text-sm font-black text-white">{value}</div>
     </div>
@@ -426,9 +430,12 @@ function ReadOnlyMetric({ term, value }: { term: RiskTerm; value: string }) {
 
 function MetricRow({ term, value, emphasized = false }: { term: RiskTerm; value: string; emphasized?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-white/5 pb-3 text-xs last:border-b-0 last:pb-0">
+    <div className={cn(
+      "flex items-center justify-between gap-4 border-b border-white/5 py-2 text-xs last:border-b-0",
+      emphasized && "my-1 rounded-xl border border-emerald-500/15 bg-emerald-500/[0.07] px-3 py-3",
+    )}>
       <RiskMetricTooltip term={term} />
-      <span className={cn("text-right font-bold text-white", emphasized && "text-base text-emerald-300")}>{value}</span>
+      <span className={cn("text-right font-black text-white", emphasized && "text-xl tracking-tight text-emerald-300")}>{value}</span>
     </div>
   )
 }
@@ -445,14 +452,14 @@ function RiskCard({ term, value }: { term: RiskTerm; value: string }) {
 function SmallMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-white/5 bg-black/20 px-2.5 py-2">
-      <div className="text-[9px] uppercase tracking-wide text-[var(--color-muted-2)]">{label}</div>
+      <div className="text-[9px] uppercase tracking-wide text-slate-500">{label}</div>
       <div className="mt-1 font-bold text-slate-100">{value}</div>
     </div>
   )
 }
 
 function Badge({ children }: { children: ReactNode }) {
-  return <span className="rounded-full border border-purple-500/25 bg-purple-500/10 px-3 py-1 text-[10px] font-bold text-purple-200">{children}</span>
+  return <span className="rounded-full border border-purple-500/20 bg-purple-500/[0.08] px-3 py-1 text-[9px] font-black text-purple-200">{children}</span>
 }
 
 function finiteNumber(value: string, fallback: number): number {
