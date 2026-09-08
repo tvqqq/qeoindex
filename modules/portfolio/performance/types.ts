@@ -54,3 +54,38 @@ export type ClosedTradeNormalization = {
   legacyUngroupedTransactionCount: number
   completeness: "complete" | "partial" | "insufficient"
 }
+
+export type MetricValue = {
+  value: number | null
+  status: "available" | "insufficient"
+  reason: string | null
+}
+
+export type TradingScorecard = {
+  population: PerformancePopulation
+  eligibleTradeCount: number
+  winnerCount: number
+  loserCount: number
+  breakevenCount: number
+  grossProfitVnd: number
+  grossLossVnd: number
+  commissionVnd: number
+  netPnlVnd: number
+  documentedPnlPercent: MetricValue
+  winRatioPercent: MetricValue
+  payoffRatio: MetricValue
+  commissionRatio: MetricValue
+  averageWinVnd: MetricValue
+  averageLossVnd: MetricValue
+  largestWinVnd: MetricValue
+  largestLossVnd: MetricValue
+  largestConsecutiveLosses: MetricValue
+  averageConsecutiveLosses: MetricValue
+  rolling25: {
+    sampleSize: number
+    netPnlVnd: number | null
+    status: "positive" | "breakeven" | "negative" | "insufficient"
+    isFullWindow: boolean
+  }
+  optimalF: MetricValue
+}
