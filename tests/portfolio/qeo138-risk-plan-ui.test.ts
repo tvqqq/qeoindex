@@ -160,7 +160,7 @@ test("Portfolio Risk UI uses Vietnamese as the primary label and keeps canonical
 
   for (const label of [
     "Lập kế hoạch phân bổ vốn",
-    "Phân bổ vốn & khối lượng giao dịch",
+    "Phân bổ vốn &amp; khối lượng giao dịch",
     "Tư vấn khối lượng giao dịch",
     "Hồ sơ rủi ro",
     "Hồ sơ kỷ luật",
