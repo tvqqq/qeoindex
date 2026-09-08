@@ -45,12 +45,18 @@ export function CombinedPortfolioSimulation({
   const verdict = loadingRiskContext ? "Loading…" : simulation.verdict
 
   return (
-    <section className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 shadow-sm">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3.5">
-        <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-emerald-300 sm:text-base">
-          <Activity className="h-4 w-4" /> 4. Combined Portfolio Simulation
-        </h3>
-        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+    <section
+      data-planner-panel="simulation"
+      className="overflow-hidden rounded-[28px] border border-emerald-500/15 bg-gradient-to-b from-[#0d1715] to-[#0a0d13] p-5 shadow-[0_18px_55px_rgba(0,0,0,0.24)] ring-1 ring-white/[0.035]"
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-400/70">Portfolio projection</p>
+          <h3 className="mt-1 flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-emerald-200 sm:text-base">
+            <Activity className="h-4 w-4" /> 4. Combined Portfolio Simulation
+          </h3>
+        </div>
+        <span className="rounded-full border border-emerald-500/25 bg-emerald-500/[0.08] px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-emerald-200">
           Before → After
         </span>
       </div>
@@ -62,8 +68,8 @@ export function CombinedPortfolioSimulation({
         </div>
       ) : null}
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-3">
-        <StateColumn title="Before">
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <StateColumn title="Before" eyebrow="Current portfolio" tone="neutral">
           <Metric label="Account Equity" value={formatVnd(accountEquityVnd)} />
           <Metric label="Estimated Available Cash" value={formatVnd(estimatedAvailableCashVnd)} />
           <Metric label="Stock Market Value" value={formatVnd(stockMarketValueVnd)} />
@@ -77,13 +83,13 @@ export function CombinedPortfolioSimulation({
           />
         </StateColumn>
 
-        <StateColumn title="Planned">
+        <StateColumn title="Planned" eyebrow="Basket delta" tone="planned">
           <Metric label="Planned Trades" value={plannedTrades.length.toLocaleString("vi-VN")} />
           <Metric label="Position Value" value={formatVnd(simulation.plannedPositionValueVnd)} />
           <Metric label="Risk Added" value={formatVnd(simulation.plannedRiskAddedVnd)} />
         </StateColumn>
 
-        <StateColumn title="After">
+        <StateColumn title="After" eyebrow="Projected state" tone="after">
           <Metric label="Projected Estimated Cash" value={formatVnd(simulation.projectedEstimatedCashVnd)} />
           <Metric
             label="Projected Active Risk"
@@ -105,7 +111,7 @@ export function CombinedPortfolioSimulation({
         </StateColumn>
       </div>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+      <div className="mt-3 grid gap-2 lg:grid-cols-2">
         <AdvisorMessage
           title="Portfolio Allocation Advisor"
           message={portfolioAdvisorMessage}
@@ -114,12 +120,18 @@ export function CombinedPortfolioSimulation({
         <AdvisorMessage title="Trade Size Advisor" message={tradeAdvisorMessage} />
       </div>
 
-      <div className="mt-4 rounded-2xl border border-white/[0.08] bg-black/25 p-4">
+      <div className={cn(
+        "mt-3 rounded-2xl border p-4",
+        verdict === "WITHIN PLAN" && "border-emerald-500/20 bg-emerald-500/[0.07]",
+        verdict === "EXCEEDS PLAN" && "border-rose-500/25 bg-rose-500/[0.07]",
+        (verdict === "RISK UNKNOWN" || verdict === "REVIEW REQUIRED") && "border-amber-500/25 bg-amber-500/[0.07]",
+        (verdict === "UNAVAILABLE" || verdict === "Loading…") && "border-white/[0.08] bg-black/25",
+      )}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--color-muted-2)]">Combined Verdict</p>
+            <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">Combined Verdict</p>
             <p className={cn(
-              "mt-1 text-base font-black",
+              "mt-1 text-xl font-black tracking-tight",
               verdict === "WITHIN PLAN" && "text-emerald-300",
               verdict === "EXCEEDS PLAN" && "text-rose-300",
               (verdict === "RISK UNKNOWN" || verdict === "REVIEW REQUIRED") && "text-amber-300",
@@ -133,7 +145,7 @@ export function CombinedPortfolioSimulation({
             <button
               type="button"
               onClick={onClearPlannedTrades}
-              className="rounded-xl border border-white/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-[var(--color-muted-2)] transition hover:bg-white/5 hover:text-white"
+              className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400 transition hover:border-white/20 hover:text-white"
             >
               Clear planned basket
             </button>
@@ -144,11 +156,27 @@ export function CombinedPortfolioSimulation({
   )
 }
 
-function StateColumn({ title, children }: { title: string; children: ReactNode }) {
+function StateColumn({
+  title,
+  eyebrow,
+  tone,
+  children,
+}: {
+  title: string
+  eyebrow: string
+  tone: "neutral" | "planned" | "after"
+  children: ReactNode
+}) {
   return (
-    <div className="rounded-2xl border border-white/[0.07] bg-black/20 p-4">
-      <h4 className="text-[11px] font-black uppercase tracking-[0.16em] text-white">{title}</h4>
-      <div className="mt-3 space-y-2">{children}</div>
+    <div className={cn(
+      "rounded-2xl border p-3.5",
+      tone === "neutral" && "border-white/[0.07] bg-black/20",
+      tone === "planned" && "border-amber-500/15 bg-amber-500/[0.045]",
+      tone === "after" && "border-emerald-500/15 bg-emerald-500/[0.045]",
+    )}>
+      <p className="text-[8px] font-black uppercase tracking-[0.16em] text-slate-600">{eyebrow}</p>
+      <h4 className="mt-1 text-[11px] font-black uppercase tracking-[0.16em] text-white">{title}</h4>
+      <div className="mt-3 space-y-1">{children}</div>
     </div>
   )
 }
@@ -156,8 +184,8 @@ function StateColumn({ title, children }: { title: string; children: ReactNode }
 function Metric({ label, value, warning = false }: { label: string; value: string; warning?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-white/5 py-1.5 last:border-b-0">
-      <span className="text-[10px] text-[var(--color-muted-2)]">{label}</span>
-      <span className={cn("text-right text-[11px] font-bold text-slate-100", warning && "text-amber-300")}>{value}</span>
+      <span className="text-[9px] leading-tight text-slate-500">{label}</span>
+      <span className={cn("text-right text-[10px] font-black text-slate-200", warning && "text-amber-300")}>{value}</span>
     </div>
   )
 }
@@ -165,13 +193,13 @@ function Metric({ label, value, warning = false }: { label: string; value: strin
 function AdvisorMessage({ title, message, warning = false }: { title: string; message: string; warning?: boolean }) {
   return (
     <div className={cn(
-      "rounded-2xl border p-4 text-[11px] leading-relaxed",
+      "rounded-2xl border p-3.5 text-[10px] leading-relaxed",
       warning
-        ? "border-amber-500/20 bg-amber-500/[0.06] text-amber-100"
-        : "border-white/[0.07] bg-black/20 text-slate-300",
+        ? "border-amber-500/20 bg-amber-500/[0.055] text-amber-100"
+        : "border-white/[0.07] bg-black/20 text-slate-400",
     )}>
-      <p className="font-bold uppercase tracking-wide text-white">{title}</p>
-      <p className="mt-1">{message}</p>
+      <p className="font-black uppercase tracking-wide text-white">{title}</p>
+      <p className="mt-1.5">{message}</p>
     </div>
   )
 }
