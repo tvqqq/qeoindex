@@ -138,3 +138,39 @@ test("saved profile attempts are displayed and can hydrate a retake", () => {
   assert.match(`${risk}\n${discipline}`, /created_at/)
   assert.match(`${risk}\n${discipline}`, /total_score/)
 })
+
+test("Portfolio Risk UI uses Vietnamese as the primary label and keeps canonical English inside tooltips", () => {
+  const sizingTerms = read("modules/portfolio/risk-sizing/terminology.ts")
+  const sizingTooltip = read("components/portfolio/risk-sizing/risk-metric-tooltip.tsx")
+  const planTooltip = read("components/portfolio/risk-plan/risk-term-tooltip.tsx")
+  const allocation = read("components/portfolio/portfolio-capital-allocation.tsx")
+  const riskPlan = read("components/portfolio/portfolio-risk-plan.tsx")
+  const planning = read("modules/portfolio/risk-sizing/planning.ts")
+
+  assert.match(sizingTerms, /labelVi:/)
+  assert.match(sizingTerms, /labelEn:/)
+  assert.match(sizingTooltip, /metadata\.labelVi/)
+  assert.match(sizingTooltip, /metadata\.labelEn/)
+  assert.match(sizingTooltip, /Thuật ngữ gốc:/)
+
+  assert.match(planTooltip, /labelVi/)
+  assert.match(planTooltip, /labelEn/)
+  assert.match(planTooltip, /Thuật ngữ gốc:/)
+
+  for (const label of [
+    "Lập kế hoạch phân bổ vốn",
+    "Phân bổ vốn & khối lượng giao dịch",
+    "Tư vấn khối lượng giao dịch",
+    "Hồ sơ rủi ro",
+    "Hồ sơ kỷ luật",
+    "Kế hoạch quản trị vốn",
+  ]) {
+    assert.match(`${allocation}\n${riskPlan}`, new RegExp(label, "i"), `missing Vietnamese primary label ${label}`)
+  }
+
+  assert.doesNotMatch(allocation, />\s*Capital Allocation &amp; Trade Size\s*</)
+  assert.doesNotMatch(allocation, />\s*Portfolio planner\s*</)
+  assert.doesNotMatch(riskPlan, />\s*Risk Profile · Discipline Profile · Money Management Plan\s*</)
+  assert.match(planning, /rủi ro danh mục/i)
+  assert.match(planning, /không giả định margin/i)
+})
