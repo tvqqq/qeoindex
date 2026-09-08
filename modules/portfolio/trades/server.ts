@@ -606,6 +606,7 @@ export async function readPortfolioTradeContext(
   if (allTransactions.error) dbFailure("read-context-fills", allTransactions.error)
 
   let stops: Record<string, unknown>[] = []
+  let stopExitFillLinks: StopExitFillLinkRow[] = []
   let journal: Record<string, unknown>[] = []
   if (tradeIds.length > 0) {
     const stopResult = await context.supabase
@@ -616,6 +617,17 @@ export async function readPortfolioTradeContext(
       .in("trade_id", tradeIds)
     if (stopResult.error) dbFailure("read-context-stops", stopResult.error)
     stops = (stopResult.data ?? []) as Record<string, unknown>[]
+
+    const stopExitFillLinkResult = await context.supabase
+      .from("portfolio_trade_stop_exit_fills")
+      .select(STOP_EXIT_FILL_LINK_SELECT)
+      .eq("portfolio_id", portfolioId)
+      .eq("user_id", context.user.id)
+      .in("trade_id", tradeIds)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+    if (stopExitFillLinkResult.error) dbFailure("read-context-stop-exit-fill-links", stopExitFillLinkResult.error)
+    stopExitFillLinks = (stopExitFillLinkResult.data ?? []) as StopExitFillLinkRow[]
 
     const journalResult = await context.supabase
       .from("portfolio_trade_journal_entries")
@@ -646,6 +658,7 @@ export async function readPortfolioTradeContext(
         trade,
         fills: transactions.filter((row) => row.trade_id === trade.id),
         stopEvents: stops.filter((row) => row.trade_id === trade.id) as never[],
+        stopExitFillLinks: stopExitFillLinks.filter((row) => row.trade_id === trade.id),
         journalEntries: journal.filter((row) => row.trade_id === trade.id) as never[],
       }),
     ),
