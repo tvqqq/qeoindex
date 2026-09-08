@@ -191,7 +191,7 @@
       "repositoryVersion": "20260902205000",
       "productionVersion": "20260902125303",
       "state": "MAPPED",
-      "evidence": "ledger-logical-name",
+      "evidence": "production-ledger-and-grouped-rpc-smoke",
       "rationale": "QEO-39 follow-up groups bounded per-ticker OHLCV bars into compact JSON rows to stay below Supabase/PostgREST result-row limits and bound long-history payload size without reducing 1700-bar history coverage."
     },
     {
@@ -207,7 +207,7 @@
       "repositoryVersion": "20260903142500",
       "productionVersion": "20260903145838",
       "state": "MAPPED",
-      "evidence": "qeo61-production-ledger-eod-v4-contract-and-full-verify",
+      "evidence": "production-ledger-eod-v4-contract-and-full-verify",
       "rationale": "QEO-61 partial parent status and append-only ticker attempt ledger were applied to production only after exact-head EOD v4, regression, TypeScript, lint, and production build verification passed; Supabase production timestamp differs from repository filename."
     },
     {
