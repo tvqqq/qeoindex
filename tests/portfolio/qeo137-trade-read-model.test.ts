@@ -224,3 +224,57 @@ test("Trade Posting Card fill history exposes running open quantity and canonica
   assert.deepEqual(model.fillHistory.map((row) => row.runningRealizedPnlKvnd), [0, 0, 740, 4460])
   assert.deepEqual(model.fillHistory.map((row) => row.fillId), fills.map((row) => row.id))
 })
+
+test("Trade Posting Card stop history exposes only explicit linked exit fills without changing accounting outputs", () => {
+  const stopA = {
+    id: "d0000000-0000-4000-8000-000000000001",
+    stop_type: "trailing",
+    price: 120,
+    effective_at: "2026-09-08T03:00:00.000Z",
+    created_at: "2026-09-08T03:00:01.000Z",
+  }
+  const stopB = {
+    id: "d0000000-0000-4000-8000-000000000002",
+    stop_type: "manual",
+    price: 123,
+    effective_at: "2026-09-09T03:00:00.000Z",
+    created_at: "2026-09-09T03:00:01.000Z",
+  }
+  const fills = [
+    { ...fill, id: "e0000000-0000-4000-8000-000000000001", quantity: 300, price: 125, fee: 30, transaction_date: "2026-09-07", created_at: "2026-09-07T03:00:00.000Z" },
+    { ...fill, id: "e0000000-0000-4000-8000-000000000002", action: "sell", quantity: 100, price: 121, fee: 10, transaction_date: "2026-09-08", created_at: "2026-09-08T04:02:00.000Z" },
+    { ...fill, id: "e0000000-0000-4000-8000-000000000003", action: "sell", quantity: 100, price: 120.5, fee: 10, transaction_date: "2026-09-08", created_at: "2026-09-08T04:01:00.000Z" },
+    { ...fill, id: "e0000000-0000-4000-8000-000000000004", action: "sell", quantity: 100, price: 124, fee: 10, transaction_date: "2026-09-09", created_at: "2026-09-09T04:00:00.000Z" },
+  ]
+  const closedTrade = {
+    ...baseTrade,
+    status: "closed" as const,
+    initial_risk_amount: 1_500_000,
+    closed_at: "2026-09-09T05:00:00.000Z",
+  }
+
+  const baseline = buildTradeReadModel({
+    trade: closedTrade,
+    fills,
+    stopEvents: [stopA, stopB],
+    journalEntries: [],
+  })
+  const linked = buildTradeReadModel({
+    trade: closedTrade,
+    fills,
+    stopEvents: [stopA, stopB],
+    stopExitFillLinks: [
+      { stop_event_id: stopA.id, transaction_id: fills[1]!.id, trade_id: baseTrade.id, ticker: "FPT", created_at: "2026-09-08T04:05:00.000Z" },
+      { stop_event_id: stopA.id, transaction_id: fills[2]!.id, trade_id: baseTrade.id, ticker: "FPT", created_at: "2026-09-08T04:06:00.000Z" },
+      { stop_event_id: stopB.id, transaction_id: fills[3]!.id, trade_id: baseTrade.id, ticker: "FPT", created_at: "2026-09-09T04:05:00.000Z" },
+      { stop_event_id: stopB.id, transaction_id: "ffffffff-ffff-4fff-8fff-ffffffffffff", trade_id: baseTrade.id, ticker: "FPT", created_at: "2026-09-09T04:06:00.000Z" },
+    ],
+    journalEntries: [],
+  })
+
+  assert.deepEqual(linked.stopEvents[0]?.linkedExitFills.map((row) => row.id), [fills[2]!.id, fills[1]!.id])
+  assert.deepEqual(linked.stopEvents[1]?.linkedExitFills.map((row) => row.id), [fills[3]!.id])
+  assert.deepEqual(linked.fills, baseline.fills)
+  assert.deepEqual(linked.fillHistory, baseline.fillHistory)
+  assert.deepEqual(linked.closeReview, baseline.closeReview)
+})
