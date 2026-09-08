@@ -1,3 +1,4 @@
+import { deriveTradeFillHistory, type TradeFillHistoryEntry } from "./fill-history.ts"
 import { deriveTradeCloseReview, type TradeCloseReview } from "./review.ts"
 import type { TradeMode, TradeStatus } from "./types.ts"
 
@@ -62,6 +63,7 @@ type JournalReadRow = {
 export type TradeReadModel = {
   trade: TradeReadRow
   fills: FillReadRow[]
+  fillHistory: TradeFillHistoryEntry[]
   stopEvents: StopReadRow[]
   journalEntries: JournalReadRow[]
   moneyManagementPlanId: string | null
@@ -132,6 +134,7 @@ export function buildTradeReadModel({
   const groupedFills = fills.filter(
     (fill) => fill.trade_id === trade.id && fill.ticker === trade.ticker,
   )
+  const fillHistory = deriveTradeFillHistory(groupedFills, trade.ticker)
   const chronologicalStops = [...stopEvents].sort((a, b) => {
     const effectiveDiff = timestampMs(a.effective_at) - timestampMs(b.effective_at)
     if (effectiveDiff !== 0) return effectiveDiff
@@ -172,6 +175,7 @@ export function buildTradeReadModel({
   return {
     trade,
     fills: groupedFills,
+    fillHistory,
     stopEvents: chronologicalStops,
     journalEntries: chronologicalJournal,
     moneyManagementPlanId,
