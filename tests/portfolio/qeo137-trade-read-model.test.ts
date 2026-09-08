@@ -203,3 +203,24 @@ test("closed Trade emits one deterministic posting-card outcome across scale-in 
   assert.ok(model.closeReview.rMultiple != null && Math.abs(model.closeReview.rMultiple - 2.23) < 1e-9)
   assert.equal(model.fills.length, 4)
 })
+
+test("Trade Posting Card fill history exposes running open quantity and canonical AVCO after every fill", () => {
+  const fills = [
+    { ...fill, id: "c0000000-0000-4000-8000-000000000001", quantity: 100, price: 100, fee: 10, transaction_date: "2026-09-07" },
+    { ...fill, id: "c0000000-0000-4000-8000-000000000002", quantity: 100, price: 110, fee: 10, transaction_date: "2026-09-08" },
+    { ...fill, id: "c0000000-0000-4000-8000-000000000003", action: "sell", quantity: 50, price: 120, fee: 5, transaction_date: "2026-09-09" },
+    { ...fill, id: "c0000000-0000-4000-8000-000000000004", action: "sell", quantity: 150, price: 130, fee: 15, transaction_date: "2026-09-10" },
+  ]
+
+  const model = buildTradeReadModel({
+    trade: { ...baseTrade, status: "closed" as const },
+    fills,
+    stopEvents: [],
+    journalEntries: [],
+  })
+
+  assert.deepEqual(model.fillHistory.map((row) => row.runningOpenQty), [100, 200, 150, 0])
+  assert.deepEqual(model.fillHistory.map((row) => row.runningAverageCostKvnd), [100.1, 105.1, 105.1, null])
+  assert.deepEqual(model.fillHistory.map((row) => row.runningRealizedPnlKvnd), [0, 0, 740, 4460])
+  assert.deepEqual(model.fillHistory.map((row) => row.fillId), fills.map((row) => row.id))
+})
