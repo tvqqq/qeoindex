@@ -1,9 +1,10 @@
 "use client"
 
 import { memo, useMemo, useState } from "react"
-import { Activity, Layers3, Scale } from "lucide-react"
+import { Layers3, Scale } from "lucide-react"
 
 import type { PortfolioMeta } from "@/components/portfolio/portfolio-selector"
+import { CombinedPortfolioSimulation } from "@/components/portfolio/risk-sizing/combined-portfolio-simulation"
 import { PortfolioAllocationAdvisor } from "@/components/portfolio/risk-sizing/portfolio-allocation-advisor"
 import { PortfolioCurrentState } from "@/components/portfolio/risk-sizing/portfolio-current-state"
 import { TradeSizeAdvisor } from "@/components/portfolio/risk-sizing/trade-size-advisor"
@@ -86,6 +87,10 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
     riskSizing.context,
   ])
 
+  const currentRemainingRiskBudgetVnd = combinedSimulation.maxActiveRiskVnd == null || riskSizing.context == null
+    ? null
+    : combinedSimulation.maxActiveRiskVnd - riskSizing.context.knownActiveRiskVnd
+
   if (!activePortfolioId || !activePortfolio) {
     return (
       <div className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 font-ticker text-sm text-[var(--color-muted-2)]">
@@ -93,8 +98,6 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
       </div>
     )
   }
-
-  const riskContextUnavailable = !riskSizing.loading && riskSizing.context == null
 
   return (
     <div className="space-y-6 font-ticker">
@@ -157,49 +160,19 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
           />
         </section>
 
-        <section className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 shadow-sm">
-          <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3.5">
-            <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-emerald-300 sm:text-base">
-              <Activity className="h-4 w-4" /> 4. Combined Portfolio Simulation
-            </h3>
-            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-200">Before → After</span>
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <SimulationMetric label="Current Account Equity" value={formatVnd(effectiveAccountEquityContext.valueVnd)} />
-            <SimulationMetric label="Estimated Available Cash" value={formatVnd(allocationSnapshot.estimatedAvailableCashVnd)} />
-            <SimulationMetric
-              label="Known Active Risk"
-              value={riskSizing.loading ? "Loading…" : riskContextUnavailable ? "Unavailable" : formatVnd(riskSizing.context?.knownActiveRiskVnd ?? null)}
-            />
-            <SimulationMetric
-              label="Unknown Risk Items"
-              value={riskSizing.loading ? "Loading…" : riskContextUnavailable ? "Unavailable" : riskCoverage.unknownRiskItemCount.toLocaleString("vi-VN")}
-            />
-            <SimulationMetric label="Planned Trades" value={plannedTrades.length.toLocaleString("vi-VN")} />
-            <SimulationMetric label="Planned Position Value" value={formatVnd(combinedSimulation.plannedPositionValueVnd)} />
-            <SimulationMetric label="Planned Risk Added" value={formatVnd(combinedSimulation.plannedRiskAddedVnd)} />
-            <SimulationMetric label="Projected Estimated Cash" value={formatVnd(combinedSimulation.projectedEstimatedCashVnd)} />
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-white/[0.07] bg-black/20 p-4 text-xs leading-relaxed text-slate-300">
-            <p className="font-bold uppercase tracking-wide text-emerald-200">Combined Verdict</p>
-            <p className="mt-1 font-black text-white">{riskSizing.loading ? "Loading…" : combinedSimulation.verdict}</p>
-            <p className="mt-2 text-[11px] text-[var(--color-muted-2)]">
-              Simulation dùng toàn bộ planned basket hiện tại. Same ticker được replace thay vì duplicate; không tạo synthetic margin hoặc persistence để lấp funding gap.
-            </p>
-          </div>
-
-          {plannedTrades.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => setPlannedTrades([])}
-              className="mt-4 rounded-xl border border-white/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-[var(--color-muted-2)] transition hover:bg-white/5 hover:text-white"
-            >
-              Clear planned basket
-            </button>
-          ) : null}
-        </section>
+        <CombinedPortfolioSimulation
+          accountEquityVnd={effectiveAccountEquityContext.valueVnd}
+          estimatedAvailableCashVnd={allocationSnapshot.estimatedAvailableCashVnd}
+          stockMarketValueVnd={allocationSnapshot.stockMarketValueVnd}
+          knownActiveRiskVnd={riskSizing.context?.knownActiveRiskVnd ?? null}
+          currentRemainingRiskBudgetVnd={currentRemainingRiskBudgetVnd}
+          plannedTrades={plannedTrades}
+          simulation={combinedSimulation}
+          loadingRiskContext={riskSizing.loading}
+          riskContextAvailable={riskSizing.context != null}
+          riskContextError={riskSizing.error}
+          onClearPlannedTrades={() => setPlannedTrades([])}
+        />
       </div>
     </div>
   )
@@ -215,20 +188,6 @@ function HeaderMetric({ label, value, emphasis = false }: { label: string; value
       <span className={emphasis ? "text-sm font-black text-[var(--color-up)]" : "text-sm font-black text-white"}>{value}</span>
     </div>
   )
-}
-
-function SimulationMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-white/[0.07] bg-black/20 px-3 py-3">
-      <div className="text-[9px] font-bold uppercase tracking-wide text-[var(--color-muted-2)]">{label}</div>
-      <div className="mt-1 text-xs font-black text-slate-100">{value}</div>
-    </div>
-  )
-}
-
-function formatVnd(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return "—"
-  return `${Math.round(value).toLocaleString("vi-VN")} VNĐ`
 }
 
 function formatShortVnd(value: number): string {
