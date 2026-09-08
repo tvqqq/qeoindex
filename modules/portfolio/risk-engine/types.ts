@@ -20,3 +20,30 @@ export type PortfolioActiveRiskResult = {
   totalInitialOpenRiskVnd: number
   initialRiskUnknownCount: number
 }
+
+export type AccountEquitySnapshot = {
+  equityVnd: number | null
+  estimatedCashVnd: number
+  marketValueVnd: number | null
+  realizedPnlVnd: number
+  unrealizedPnlVnd: number | null
+  missingPriceTickers: string[]
+  completeness: "complete" | "insufficient"
+  fundingWarning: boolean
+}
+
+export type EquityPoint = {
+  key: string
+  kind: "baseline" | "daily" | "current"
+  equityVnd: number | null
+  status: "complete" | "incomplete"
+  missingTickers: string[]
+}
+
+export type DrawdownSnapshot = {
+  peakEquityVnd: number | null
+  peakAt: string | null
+  drawdownVnd: number | null
+  drawdownPercent: number | null
+  completeness: "complete" | "insufficient"
+}
