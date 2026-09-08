@@ -169,23 +169,33 @@ Account Equity
 
 This intentionally reuses `computePortfolioPositions()` outputs, so buy/sell fees, rights, and cash dividends follow the existing accounting engine instead of parallel cash-flow math.
 
+`Estimated Cash` is **not clamped to zero**. If recorded buys/costs imply negative cash relative to Initial Capital, the canonical read model retains the negative value and exposes a funding/data-consistency warning. QEO-141 does not silently infer margin and does not hide the inconsistency by clamping.
+
 Current Account Equity is complete only when every open position has a valid current market mark. Missing current marks are not replaced with AVCO for canonical risk-state calculations.
 
 The UI may continue to render existing portfolio values for usability, but QEO-141 risk outputs must label the risk/equity state incomplete if canonical marks are missing.
 
-### 6.2 Historical daily equity points
+### 6.2 Historical equity baseline
 
-For each completed market session in the required lookback:
+The equity curve begins with an explicit baseline equal to `Initial Capital` immediately before the first recorded portfolio transaction. This baseline is required so an immediate loss after first deployment is measured against starting capital rather than treating the first marked-down portfolio value as the historical peak.
+
+If the portfolio has no transactions, the baseline/current equity is Initial Capital and Drawdown is zero when Initial Capital is valid.
+
+If Initial Capital is unavailable or non-positive, percentage Drawdown and percentage risk-cap outputs are unavailable rather than fabricated.
+
+### 6.3 Historical daily equity points
+
+For each completed market session in the required lookback after the baseline:
 
 1. include transactions effective up to that session date;
 2. reconstruct canonical positions and realized P&L using `computePortfolioPositions()`;
-3. compute Estimated Cash from the formula above;
+3. compute Estimated Cash from the formula above without clamping;
 4. mark each open ticker with that session's canonical RAW Daily close;
 5. compute Market Value and Account Equity.
 
 If any required RAW Daily close is missing for an open position, that session's equity point is `incomplete`; the engine does not substitute AVCO, adjusted close, zero, or a nearby session silently.
 
-### 6.3 Current intraday terminal point
+### 6.4 Current intraday terminal point
 
 Current Drawdown should reflect today's portfolio, not only the previous close.
 
@@ -198,12 +208,14 @@ If current marks are incomplete, current Account Equity and current Drawdown are
 QEO-141 operationalizes Account Drawdown as peak-to-current decline on the same canonical Account Equity series:
 
 ```text
-Peak Equity(t) = max(Account Equity from first eligible point through t)
+Peak Equity(t) = max(Account Equity from baseline through t)
 Drawdown Amount(t) = max(0, Peak Equity(t) − Account Equity(t))
 Drawdown %(t) = Peak Equity(t) > 0
   ? Drawdown Amount(t) / Peak Equity(t) × 100
   : unavailable
 ```
+
+Incomplete daily points do not become zero-valued equity points and do not establish a new peak/trough. Current Drawdown is complete only when the path needed to determine the peak and the current point is complete under the engine's evidence policy.
 
 The read model returns:
 
@@ -216,7 +228,7 @@ The read model returns:
 
 QEO-142 must later consume the same equity-series primitive for max/average drawdown analytics instead of implementing a separate formula.
 
-## 8. Closed Trade and behavioral evidence for guardrails
+## 8. Closed Trade and guardrail evidence
 
 Guardrails operate on normalized logical Trades, not transaction count.
 
@@ -234,22 +246,37 @@ This distinction is required for `consecutiveStopOuts`.
 
 ### 8.3 Rolling Trade loss
 
-`rollingTradeLoss` evaluates the configured latest N eligible closed logical Trades in deterministic close-time order. It uses net closed-Trade P&L and reports both the observed rolling total and sample completeness.
+`rollingTradeLoss.tradeCount = N` means: evaluate the latest N eligible closed logical Trades in deterministic close-time order and sum their canonical net P&L.
 
-If fewer than the configured N eligible closed Trades exist, the rule is not silently treated as passing; it is `insufficient` unless the Money Management Plan explicitly defines otherwise in a future schema version.
+```text
+Rolling N-Trade P&L = sum(net P&L of latest N eligible closed Trades)
+Triggered when Rolling N-Trade P&L < 0
+Clear when Rolling N-Trade P&L >= 0
+```
+
+If fewer than N eligible closed Trades exist, the rule is `insufficient`; it is not silently treated as passing or failing.
+
+The engine returns the configured N, observed sample size, aggregate net P&L, and completeness so later UI/scorecard surfaces can explain the result.
 
 ### 8.4 Daily/weekly/monthly holiday rule evidence
 
 Period rules derive lightweight guardrail evidence from closed logical Trades/equity primitives only. QEO-141 does not build a full ledger UI.
 
-For the current period, the engine may evaluate configured fields such as:
+Calendar grouping uses `Asia/Ho_Chi_Minh` trading dates.
 
-- net loss/profit amount;
-- net loss/profit percent relative to period-start Account Equity when available;
-- consecutive losing Trades;
-- consecutive losing days using deterministic daily net closed-Trade P&L.
+For each enabled period rule, configured fields have these deterministic meanings:
 
-Calendar grouping uses `Asia/Ho_Chi_Minh` trading dates. Missing period-start equity or incomplete closed-Trade evidence makes the affected threshold unevaluable rather than fabricated.
+- `consecutiveLosingTrades = N`: trigger when the most recent N eligible logical Trades within the current period are all losers;
+- `consecutiveLosingDays = N`: trigger when the most recent N eligible trading days with closed-Trade activity have negative net closed-Trade P&L;
+- `lossAmount = X`: trigger when current-period net closed-Trade P&L is `<= -X`;
+- `profitAmount = X`: trigger when current-period net closed-Trade P&L is `>= X`;
+- `lossPercent = X`: trigger when current-period net closed-Trade P&L / period-start Account Equity is `<= -X%`;
+- `profitPercent = X`: trigger when current-period net closed-Trade P&L / period-start Account Equity is `>= X%`;
+- `losingTradeWindow = N`: trigger when the latest N eligible logical Trades within the current period have aggregate net P&L `< 0`.
+
+A field that is not configured is ignored. If a holiday rule is enabled but no supported threshold is configured, or a configured percentage threshold lacks complete period-start equity, that rule is `insufficient` rather than implicitly clear.
+
+The currently shipped QEO-138 UI mainly persists `consecutiveLosingTrades` and `lossPercent`; the engine supports the typed schema without requiring QEO-141 to expose every optional field in the UI.
 
 These primitives are intentionally reusable by QEO-142.
 
@@ -322,13 +349,16 @@ When current Account Equity is complete and `max_active_risk_percent` is configu
 Max Active Risk VND
   = Account Equity × max_active_risk_percent / 100
 
+Known Active Risk %
+  = knownActiveRiskVnd / Account Equity × 100
+
 Remaining Risk Budget
   = Max Active Risk VND − knownActiveRiskVnd
 ```
 
-The raw arithmetic value may be negative to expose a cap breach.
+Percentage outputs require positive Account Equity. The raw Remaining Risk Budget may be negative to expose a cap breach.
 
-If any current open risk is unknown, Remaining Risk Budget is accompanied by incomplete coverage and must not be presented as safely available capacity.
+If any current open risk is unknown, `Known Active Risk %` and Remaining Risk Budget may still be returned as known-subtotal arithmetic, but both carry incomplete coverage and must not be presented as a complete/safe portfolio risk percentage or safely available capacity.
 
 If Account Equity or the configured cap is unavailable, cap/budget values are unavailable rather than derived from a default universal percentage.
 
@@ -366,6 +396,8 @@ The UI/API must expose:
 
 This affects the default suggestion only. It never silently edits the persisted Money Management Plan.
 
+If `REDUCE_RISK` is caused by an Active Risk cap breach and no valid reduction factor is configured, the engine does not invent a factor; the default percentage remains configured while the cap-breach state/verdict remains visible.
+
 ### 11.2 Pause state
 
 `PAUSE_AND_REVIEW` does not fabricate a 0% risk size and does not mutate the plan. The sizing/planning surface remains inspectable but must expose the pause state and its reasons before new planning decisions.
@@ -397,10 +429,11 @@ account
   realizedPnlVnd
   unrealizedPnlVnd
   completeness
+  warnings[]
 
 activeRisk
   knownActiveRiskVnd
-  activeRiskPercent
+  knownActiveRiskPercent
   unknownRiskItemCount
   maxActiveRiskVnd
   remainingRiskBudgetVnd
@@ -475,6 +508,7 @@ Examples:
 - missing RAW Daily mark → affected equity point incomplete;
 - missing current mark → current equity/drawdown incomplete;
 - incomplete current risk → known subtotal retained but coverage flagged;
+- negative Estimated Cash → preserved and warned, never silently clamped or labeled as margin;
 - missing plan cap → no Max Active Risk/Remaining Risk Budget conclusion;
 - fewer closed Trades than rolling window → insufficient rule evidence;
 - losing Trade with no explicit stop link → not a stop-out;
@@ -498,6 +532,9 @@ Implementation follows TDD. Required deterministic coverage includes at least:
 ### Account Equity / Drawdown
 
 - current equity reconciles Estimated Cash + current Market Value;
+- negative Estimated Cash is preserved rather than clamped;
+- initial-capital baseline prevents first-loss drawdown understatement;
+- no-transaction portfolio has equity = Initial Capital and Drawdown = zero when valid;
 - full close moves P&L into realized equity without double counting cost;
 - rights/cash dividend paths remain consistent with canonical AVCO engine;
 - historical daily equity uses RAW Daily marks;
@@ -514,9 +551,10 @@ Implementation follows TDD. Required deterministic coverage includes at least:
 - drawdown pause threshold → `PAUSE_AND_REVIEW`;
 - explicit consecutive stop-outs trigger only from linked stop-exit evidence;
 - ordinary losing Trades do not count as stop-outs;
-- rolling-N loss trigger and insufficient-sample behavior;
-- holiday-period trigger;
-- precedence: pause > reduce > unknown > normal as defined by evaluation algorithm;
+- rolling N-Trade aggregate net P&L `< 0` triggers and `>= 0` clears;
+- rolling-N insufficient-sample behavior;
+- daily/weekly/monthly period trigger semantics;
+- precedence follows pause → reduce → unknown → normal evaluation;
 - recovery after triggering conditions clear;
 - rule evidence includes threshold, observed value, source, and explanation.
 
@@ -564,7 +602,7 @@ QEO-141 is complete only when:
 
 - Active Risk reconciles from normalized open Trades + latest stop evidence;
 - no-stop positions/Trades remain explicitly unknown;
-- Account Equity and Drawdown have one deterministic tested definition;
+- Account Equity and Drawdown have one deterministic tested definition with Initial Capital baseline;
 - current risk state returns exact triggering rule evidence;
 - QEO-139 projected next-Trade risk consumes the same canonical current risk context;
 - existing holdings/P&L calculations remain unchanged;
