@@ -24,29 +24,34 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
-test("stop-first Trade Size surface exposes canonical McDowell/QeoIndex terms through shared metadata", () => {
+test("stop-first sizing keeps canonical English source terms in shared metadata while UI renders Vietnamese labels", () => {
   const surface = `${read(advisorPath)}\n${read(panel1Path)}`
   const terminology = read(terminologyPath)
+  const tooltip = read(tooltipPath)
   const terms = [
-    ["accountEquity", "Account Equity"],
-    ["riskPerTrade", "Risk per Trade"],
-    ["riskAmount", "Risk Amount"],
-    ["plannedEntry", "Planned Entry"],
-    ["initialStop", "Initial Stop"],
-    ["riskPerShare", "Risk per Share"],
-    ["estimatedCommission", "Estimated Commission"],
-    ["slippageAllowance", "Slippage Allowance"],
-    ["tradeSize", "Trade Size"],
-    ["positionValue", "Position Value"],
-    ["activeRisk", "Active Risk"],
-    ["maxActiveRisk", "Max Active Risk"],
-    ["remainingRiskBudget", "Remaining Risk Budget"],
+    ["accountEquity", "Account Equity", "Vốn tài khoản"],
+    ["riskPerTrade", "Risk per Trade", "Rủi ro mỗi giao dịch"],
+    ["riskAmount", "Risk Amount", "Số tiền rủi ro"],
+    ["plannedEntry", "Planned Entry", "Giá vào lệnh dự kiến"],
+    ["initialStop", "Initial Stop", "Mức dừng lỗ ban đầu"],
+    ["riskPerShare", "Risk per Share", "Rủi ro trên mỗi cổ phiếu"],
+    ["estimatedCommission", "Estimated Commission", "Phí giao dịch ước tính"],
+    ["slippageAllowance", "Slippage Allowance", "Phần đệm trượt giá"],
+    ["tradeSize", "Trade Size", "Khối lượng giao dịch"],
+    ["positionValue", "Position Value", "Giá trị vị thế"],
+    ["activeRisk", "Active Risk", "Rủi ro đang hoạt động"],
+    ["maxActiveRisk", "Max Active Risk", "Rủi ro đang hoạt động tối đa"],
+    ["remainingRiskBudget", "Remaining Risk Budget", "Ngân sách rủi ro còn lại"],
   ] as const
 
-  for (const [term, label] of terms) {
-    assert.match(terminology, new RegExp(`label:\\s*"${escapeRegExp(label)}"`), `missing shared label ${label}`)
+  for (const [term, labelEn, labelVi] of terms) {
+    assert.match(terminology, new RegExp(`labelEn:\\s*"${escapeRegExp(labelEn)}"`), `missing canonical source label ${labelEn}`)
+    assert.match(terminology, new RegExp(`labelVi:\\s*"${escapeRegExp(labelVi)}"`), `missing Vietnamese label ${labelVi}`)
     assert.match(surface, new RegExp(`term="${term}"`), `portfolio sizing surface does not render ${term}`)
   }
+  assert.match(tooltip, /metadata\.labelVi/)
+  assert.match(tooltip, /metadata\.labelEn/)
+  assert.match(tooltip, /Thuật ngữ gốc:/)
 })
 
 test("allocation owns one authenticated risk-context fetch and advisor stays deterministic", () => {
@@ -66,31 +71,30 @@ test("allocation owns one authenticated risk-context fetch and advisor stays det
   assert.doesNotMatch(`${hook}\n${allocation}\n${advisor}`, /createClient|supabase\.|\.from\(/)
 })
 
-test("four-panel portfolio workflow is locked in 1→4 order and Panel 1 stays portfolio-scoped", () => {
+test("four-panel portfolio workflow is locked in 1→4 order with Vietnamese primary headings and Panel 1 stays portfolio-scoped", () => {
   const allocation = read(allocationPath)
   const panel1 = read(panel1Path)
   const panel2 = read(panel2Path)
   const combined = read(combinedPath)
   const composed = `${allocation}\n${panel1}\n${panel2}\n${combined}`
   const headings = [
-    "1. Portfolio Allocation Advisor",
-    "2. Current Portfolio State",
-    "3. Trade Size Advisor",
-    "4. Combined Portfolio Simulation",
+    "1. Tư vấn phân bổ vốn",
+    "2. Trạng thái danh mục hiện tại",
+    "3. Tư vấn khối lượng giao dịch",
+    "4. Mô phỏng danh mục tổng hợp",
   ]
 
   for (const heading of headings) {
     assert.match(composed, new RegExp(escapeRegExp(heading)), `missing four-panel heading: ${heading}`)
   }
 
-  const panel1Index = panel1.indexOf(headings[0]!)
-  const panel2Index = panel2.indexOf(headings[1]!)
-  const panel3Index = allocation.indexOf(headings[2]!)
-  const panel4Index = combined.indexOf(headings[3]!)
-  assert.ok(panel1Index >= 0 && panel2Index >= 0 && panel3Index >= 0 && panel4Index >= 0)
-  assert.match(allocation, /<PortfolioAllocationAdvisor[\s\S]*<PortfolioCurrentState[\s\S]*3\. Trade Size Advisor[\s\S]*<CombinedPortfolioSimulation/)
+  assert.match(allocation, /<PortfolioAllocationAdvisor[\s\S]*<PortfolioCurrentState[\s\S]*3\. Tư vấn khối lượng giao dịch[\s\S]*<CombinedPortfolioSimulation/)
   assert.match(allocation, /lg:grid-cols-2/)
   assert.doesNotMatch(panel1, /plannedEntry|initialStop/)
+  assert.doesNotMatch(composed, />\s*1\. Portfolio Allocation Advisor\s*</)
+  assert.doesNotMatch(composed, />\s*2\. Current Portfolio State\s*</)
+  assert.doesNotMatch(composed, />\s*3\. Trade Size Advisor\s*</)
+  assert.doesNotMatch(composed, />\s*4\. Combined Portfolio Simulation\s*</)
 })
 
 test("Panel 2 never promotes compatibility stopLoss fields into canonical risk evidence", () => {
@@ -114,7 +118,7 @@ test("ui-first production pass exposes consistent planner hierarchy and one expl
   assert.match(panel2, /data-planner-panel="current-state"/)
   assert.match(advisor, /data-planner-advisor="trade-size"/)
   assert.match(combined, /data-planner-panel="simulation"/)
-  assert.match(combined, /Before[\s\S]*Planned[\s\S]*After/)
+  assert.match(combined, /Trước[\s\S]*Dự kiến[\s\S]*Sau/)
 
   assert.match(policy, /export function showPlannerUnavailableAlert/)
   assert.match(policy, /window\.alert/)
@@ -122,23 +126,23 @@ test("ui-first production pass exposes consistent planner hierarchy and one expl
   assert.doesNotMatch(surface, /window\.alert/)
 })
 
-test("ticker-first Trade Size Advisor owns ephemeral planned basket behavior", () => {
+test("ticker-first Trade Size Advisor owns ephemeral planned basket behavior with Vietnamese actions", () => {
   const advisor = read(advisorPath)
   const allocation = read(allocationPath)
 
   for (const label of [
-    "Ticker",
-    "Risk per Trade",
-    "Planned Entry",
-    "Initial Stop",
-    "Estimated Commission",
-    "Slippage Allowance",
-    "Add Planned Trade",
-    "Planned Trades",
-    "Edit",
-    "Remove",
+    "Mã cổ phiếu",
+    "Thêm giao dịch dự kiến",
+    "Các giao dịch dự kiến",
+    "Sửa",
+    "Xóa",
+    "không được lưu",
   ]) {
-    assert.match(advisor, new RegExp(escapeRegExp(label)), `Trade Size Advisor missing ${label}`)
+    assert.match(advisor, new RegExp(escapeRegExp(label), "i"), `Trade Size Advisor missing ${label}`)
+  }
+
+  for (const term of ["riskPerTrade", "plannedEntry", "initialStop", "estimatedCommission", "slippageAllowance", "tradeSize"]) {
+    assert.match(advisor, new RegExp(`term="${term}"`), `missing sizing tooltip term ${term}`)
   }
 
   assert.match(advisor, /calculateTradeSize/)
@@ -151,19 +155,19 @@ test("ticker-first Trade Size Advisor owns ephemeral planned basket behavior", (
   assert.doesNotMatch(advisor, /localStorage|sessionStorage|indexedDB/i)
 })
 
-test("combined simulation panel renders before planned after states and both deterministic advisors", () => {
+test("combined simulation panel renders Trước / Dự kiến / Sau states and deterministic advisors in Vietnamese", () => {
   const combined = read(combinedPath)
   const allocation = read(allocationPath)
 
   for (const label of [
-    "Before",
-    "Planned",
-    "After",
-    "Portfolio Allocation Advisor",
-    "Trade Size Advisor",
-    "Combined Verdict",
-    "Projected Active Risk",
-    "Funding Gap",
+    "Trước",
+    "Dự kiến",
+    "Sau",
+    "Tư vấn phân bổ vốn",
+    "Tư vấn khối lượng giao dịch",
+    "Kết luận tổng hợp",
+    "Rủi ro đang hoạt động dự kiến",
+    "Thiếu hụt nguồn tiền",
   ]) {
     assert.match(combined, new RegExp(escapeRegExp(label)), `Combined Portfolio Simulation missing ${label}`)
   }
@@ -196,26 +200,26 @@ test("draft sizing state cannot leak across portfolio switches", () => {
   assert.match(page, /<PortfolioCapitalAllocation[\s\S]*?key=\{activePortfolioId\s*\?\?\s*""\}/)
 })
 
-test("RiskMetricTooltip resolves shared terminology instead of duplicating formulas", () => {
+test("RiskMetricTooltip resolves shared bilingual terminology instead of duplicating formulas", () => {
   const tooltip = read(tooltipPath)
   assert.match(tooltip, /RISK_SIZING_TERMS/)
   assert.match(tooltip, /Tooltip/)
+  assert.match(tooltip, /Thuật ngữ gốc:/)
+  assert.match(tooltip, /Công thức gốc:/)
   assert.doesNotMatch(tooltip, /Risk Amount\s*=|Trade Size\s*=/)
 })
 
 test("stop-first guidance states stop provenance and execution risks without guarantees", () => {
   const source = read(advisorPath)
-  assert.match(source, /support|resistance/i)
-  assert.match(source, /volatility|price activity/i)
-  assert.match(source, /trading-system|system rule/i)
-  assert.match(source, /trailing stop/i)
+  assert.match(source, /hỗ trợ|kháng cự/i)
+  assert.match(source, /biến động|hoạt động giá/i)
+  assert.match(source, /quy tắc.*hệ thống|hệ thống giao dịch/i)
+  assert.match(source, /dừng lỗ kéo theo/i)
   assert.match(source, /gap/i)
-  assert.match(source, /liquidity/i)
-  assert.match(source, /overnight/i)
-  assert.match(source, /slippage/i)
-
-  const sourceWithoutExplicitNoGuaranteeDisclaimer = source.replace(/not a zero-ROR guarantee/gi, "")
-  assert.doesNotMatch(sourceWithoutExplicitNoGuaranteeDisclaimer, /guarantee|bảo đảm.*không.*thua|không thể cháy/i)
+  assert.match(source, /thanh khoản/i)
+  assert.match(source, /qua đêm|overnight/i)
+  assert.match(source, /trượt giá/i)
+  assert.doesNotMatch(source, /bảo đảm.*không.*thua|không thể cháy/i)
 })
 
 test("planned basket simulation stays fail-closed for unknown current risk evidence", () => {
@@ -227,14 +231,14 @@ test("planned basket simulation stays fail-closed for unknown current risk evide
   assert.match(allocation, /plannedTrades,/)
 })
 
-test("risk context failure remains explicit in advisor and combined simulation", () => {
+test("risk context failure remains explicit in Vietnamese and never becomes zero risk", () => {
   const advisor = read(advisorPath)
   const combined = read(combinedPath)
+  const panel1 = read(panel1Path)
   assert.match(advisor, /const riskContextUnavailable = !loadingRiskContext && riskContext == null/)
-  assert.match(advisor, /Risk context unavailable/)
+  assert.match(`${advisor}\n${combined}\n${panel1}`, /Không thể tải ngữ cảnh rủi ro|Không có ngữ cảnh rủi ro|Không khả dụng/i)
   assert.match(combined, /riskContextAvailable/)
-  assert.match(combined, /Risk context unavailable/)
-  assert.match(combined, /!riskContextAvailable\) return "Unavailable"/)
+  assert.doesNotMatch(`${advisor}\n${combined}\n${panel1}`, /ngữ cảnh rủi ro[^\n]{0,80}(?:=|là)\s*0/i)
 })
 
 test("Advanced evidence keeps Optimal f informational and unavailable without history", () => {
@@ -245,14 +249,14 @@ test("Advanced evidence keeps Optimal f informational and unavailable without hi
   assert.match(advisor, /term="winRatio"/)
   assert.match(advisor, /term="payoffRatio"/)
   assert.match(advisor, /term="optimalF"/)
-  assert.match(terminology, /label:\s*"Win Ratio"/)
-  assert.match(terminology, /label:\s*"Payoff Ratio"/)
-  assert.match(terminology, /label:\s*"Optimal f"/)
-  assert.match(advisor, /Insufficient History/)
-  assert.match(advisor, /informational/i)
-  assert.match(advisor, /more aggressive/i)
-  assert.match(advisor, /not auto-applied/i)
-  assert.match(advisor, /not a zero-ROR guarantee/i)
+  assert.match(terminology, /labelEn:\s*"Win Ratio"/)
+  assert.match(terminology, /labelEn:\s*"Payoff Ratio"/)
+  assert.match(terminology, /labelEn:\s*"Optimal f"/)
+  assert.match(advisor, /Chưa đủ lịch sử/)
+  assert.match(advisor, /chỉ dùng để tham khảo/i)
+  assert.match(advisor, /mạnh tay hơn/i)
+  assert.match(advisor, /không được tự động áp/i)
+  assert.match(advisor, /không bảo đảm Risk of Ruin bằng 0/i)
   assert.match(advisor, /calculateOptimalF/)
   assert.doesNotMatch(advisor, /Risk of Ruin probability|probability matrix|ROR probability table/i)
   assert.doesNotMatch(advisor, /setRiskPercentInput\([^\n]*optimal/i)

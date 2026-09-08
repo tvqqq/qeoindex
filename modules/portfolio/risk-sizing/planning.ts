@@ -193,35 +193,35 @@ function formatPlanningVnd(value: number): string {
 
 export function describePortfolioAdvisor(simulation: PortfolioPlanSimulation): string {
   if (simulation.verdict === "UNAVAILABLE") {
-    return "Portfolio risk context is unavailable, so capacity and plan classification remain unavailable."
+    return "Không có ngữ cảnh rủi ro danh mục, vì vậy sức chứa và phân loại kế hoạch đều không khả dụng."
   }
   if (simulation.verdict === "RISK UNKNOWN") {
-    return `Portfolio risk remains unknown because ${simulation.unknownRiskItemCount} current risk item(s) lack canonical evidence.`
+    return `Rủi ro danh mục chưa xác định vì ${simulation.unknownRiskItemCount} mục rủi ro hiện tại chưa có đủ bằng chứng chuẩn.`
   }
   if (simulation.verdict === "EXCEEDS PLAN") {
     const cap = simulation.maxActiveRiskVnd == null
-      ? "the configured cap"
+      ? "giới hạn đã cấu hình"
       : formatPlanningVnd(simulation.maxActiveRiskVnd)
     const funding = simulation.fundingGapVnd > 0
-      ? ` A separate funding gap of ${formatPlanningVnd(simulation.fundingGapVnd)} also requires review; margin is not assumed.`
+      ? ` Đồng thời còn thiếu nguồn tiền ${formatPlanningVnd(simulation.fundingGapVnd)} cần rà soát riêng; hệ thống không giả định margin.`
       : ""
-    return `Projected known Active Risk ${formatPlanningVnd(simulation.projectedKnownActiveRiskVnd)} exceeds Max Active Risk ${cap}.${funding}`
+    return `Rủi ro đang hoạt động dự kiến đã biết ${formatPlanningVnd(simulation.projectedKnownActiveRiskVnd)} vượt giới hạn rủi ro đang hoạt động tối đa ${cap}.${funding}`
   }
   if (simulation.fundingGapVnd > 0) {
-    return `Funding gap ${formatPlanningVnd(simulation.fundingGapVnd)} requires review; the planner does not assume margin.`
+    return `Thiếu nguồn tiền ${formatPlanningVnd(simulation.fundingGapVnd)} cần được rà soát; hệ thống không giả định margin.`
   }
   if (simulation.maxActiveRiskVnd == null) {
-    return "Max Active Risk is not configured, so the portfolio requires review before a within-plan conclusion."
+    return "Chưa cấu hình rủi ro đang hoạt động tối đa, vì vậy cần rà soát danh mục trước khi kết luận kế hoạch nằm trong giới hạn."
   }
   if (simulation.verdict === "REVIEW REQUIRED") {
-    return "Portfolio evidence or configuration is incomplete, so the combined plan requires review."
+    return "Bằng chứng hoặc cấu hình danh mục chưa đầy đủ, vì vậy kế hoạch tổng hợp cần được rà soát."
   }
-  return `Projected known Active Risk ${formatPlanningVnd(simulation.projectedKnownActiveRiskVnd)} remains within Max Active Risk ${formatPlanningVnd(simulation.maxActiveRiskVnd)}.`
+  return `Rủi ro đang hoạt động dự kiến đã biết ${formatPlanningVnd(simulation.projectedKnownActiveRiskVnd)} vẫn nằm trong giới hạn tối đa ${formatPlanningVnd(simulation.maxActiveRiskVnd)}.`
 }
 
 export function describeTradeAdvisor(plannedTrades: PlannedTrade[]): string {
   if (plannedTrades.length === 0) {
-    return "No planned Trades are in the current planning workspace."
+    return "Chưa có giao dịch dự kiến trong không gian lập kế hoạch hiện tại."
   }
 
   const plannedPositionValueVnd = plannedTrades.reduce(
@@ -235,8 +235,8 @@ export function describeTradeAdvisor(plannedTrades: PlannedTrade[]): string {
 
   if (plannedTrades.length === 1) {
     const trade = plannedTrades[0]!
-    return `${trade.ticker}: Entry ${trade.plannedEntryKvnd} k₫ / Stop ${trade.initialStopKvnd} k₫ gives Trade Size ${trade.tradeSizeShares.toLocaleString("vi-VN")} shares, Position Value ${formatPlanningVnd(trade.positionValueVnd)}, and planned risk ${formatPlanningVnd(trade.riskAddedVnd)}.`
+    return `${trade.ticker}: giá vào ${trade.plannedEntryKvnd} k₫ / dừng lỗ ${trade.initialStopKvnd} k₫ cho khối lượng ${trade.tradeSizeShares.toLocaleString("vi-VN")} cổ phiếu, giá trị vị thế ${formatPlanningVnd(trade.positionValueVnd)} và rủi ro dự kiến ${formatPlanningVnd(trade.riskAddedVnd)}.`
   }
 
-  return `${plannedTrades.length} planned Trades total ${formatPlanningVnd(plannedPositionValueVnd)} Position Value and ${formatPlanningVnd(plannedRiskAddedVnd)} planned risk.`
+  return `${plannedTrades.length} giao dịch dự kiến có tổng giá trị vị thế ${formatPlanningVnd(plannedPositionValueVnd)} và tổng rủi ro dự kiến ${formatPlanningVnd(plannedRiskAddedVnd)}.`
 }

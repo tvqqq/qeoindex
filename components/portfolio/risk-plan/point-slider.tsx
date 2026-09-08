@@ -31,8 +31,8 @@ export function PointSlider({
         step={1}
         value={index}
         disabled={disabled}
-        aria-label={`${label} points`}
-        aria-valuetext={value === "" ? "Chưa chọn" : `${value} points`}
+        aria-label={`${label} - điểm`}
+        aria-valuetext={value === "" ? "Chưa chọn" : `${value} điểm`}
         onChange={(event) => onChange(PROFILE_POINTS[Number(event.target.value)] ?? 10)}
         className="h-2 w-full cursor-pointer appearance-none rounded-full outline-none disabled:cursor-not-allowed disabled:opacity-50 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-purple-300 [&::-moz-range-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-purple-300 [&::-webkit-slider-thumb]:bg-purple-500"
         style={{
@@ -55,7 +55,7 @@ export function PointSlider({
               } disabled:cursor-not-allowed`}
               aria-pressed={selected}
             >
-              {point} points
+              {point} điểm
             </button>
           )
         })}

@@ -8,6 +8,7 @@ import {
   describeTradeAdvisor,
 } from "@/modules/portfolio/risk-sizing/planning"
 import type {
+  CombinedVerdict,
   PlannedTrade,
   PortfolioPlanSimulation,
 } from "@/modules/portfolio/risk-sizing/types"
@@ -39,10 +40,10 @@ export function CombinedPortfolioSimulation({
   onClearPlannedTrades: () => void
 }) {
   const portfolioAdvisorMessage = loadingRiskContext
-    ? "Loading portfolio risk evidence…"
+    ? "Đang tải bằng chứng rủi ro danh mục…"
     : describePortfolioAdvisor(simulation)
   const tradeAdvisorMessage = describeTradeAdvisor(plannedTrades)
-  const verdict = loadingRiskContext ? "Loading…" : simulation.verdict
+  const verdict = loadingRiskContext ? null : simulation.verdict
 
   return (
     <section
@@ -51,73 +52,73 @@ export function CombinedPortfolioSimulation({
     >
       <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
         <div>
-          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-400/70">Portfolio projection</p>
+          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-400/70">Dự phóng danh mục</p>
           <h3 className="mt-1 flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-emerald-200 sm:text-base">
-            <Activity className="h-4 w-4" /> 4. Combined Portfolio Simulation
+            <Activity className="h-4 w-4" /> 4. Mô phỏng danh mục tổng hợp
           </h3>
         </div>
         <span className="rounded-full border border-emerald-500/25 bg-emerald-500/[0.08] px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-emerald-200">
-          Before → After
+          Trước → Sau
         </span>
       </div>
 
       {riskContextError ? (
         <div className="mt-4 flex gap-2 rounded-2xl border border-rose-500/25 bg-rose-500/10 p-3 text-[11px] leading-relaxed text-rose-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>Risk context unavailable: {riskContextError}</span>
+          <span>Không thể tải ngữ cảnh rủi ro: {riskContextError}</span>
         </div>
       ) : null}
 
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        <StateColumn title="Before" eyebrow="Current portfolio" tone="neutral">
-          <Metric label="Account Equity" value={formatVnd(accountEquityVnd)} />
-          <Metric label="Estimated Available Cash" value={formatVnd(estimatedAvailableCashVnd)} />
-          <Metric label="Stock Market Value" value={formatVnd(stockMarketValueVnd)} />
+        <StateColumn title="Trước" eyebrow="Danh mục hiện tại" tone="neutral">
+          <Metric label="Vốn tài khoản" value={formatVnd(accountEquityVnd)} />
+          <Metric label="Tiền mặt khả dụng ước tính" value={formatVnd(estimatedAvailableCashVnd)} />
+          <Metric label="Giá trị thị trường cổ phiếu" value={formatVnd(stockMarketValueVnd)} />
           <Metric
-            label="Known Active Risk"
+            label="Rủi ro đang hoạt động đã biết"
             value={riskValue({ loadingRiskContext, riskContextAvailable, valueVnd: knownActiveRiskVnd })}
           />
           <Metric
-            label="Remaining Risk Budget"
+            label="Ngân sách rủi ro còn lại"
             value={riskValue({ loadingRiskContext, riskContextAvailable, valueVnd: currentRemainingRiskBudgetVnd, notConfiguredWhenNull: true })}
           />
         </StateColumn>
 
-        <StateColumn title="Planned" eyebrow="Basket delta" tone="planned">
-          <Metric label="Planned Trades" value={plannedTrades.length.toLocaleString("vi-VN")} />
-          <Metric label="Position Value" value={formatVnd(simulation.plannedPositionValueVnd)} />
-          <Metric label="Risk Added" value={formatVnd(simulation.plannedRiskAddedVnd)} />
+        <StateColumn title="Dự kiến" eyebrow="Thay đổi từ giỏ kế hoạch" tone="planned">
+          <Metric label="Số giao dịch dự kiến" value={plannedTrades.length.toLocaleString("vi-VN")} />
+          <Metric label="Giá trị vị thế" value={formatVnd(simulation.plannedPositionValueVnd)} />
+          <Metric label="Rủi ro tăng thêm" value={formatVnd(simulation.plannedRiskAddedVnd)} />
         </StateColumn>
 
-        <StateColumn title="After" eyebrow="Projected state" tone="after">
-          <Metric label="Projected Estimated Cash" value={formatVnd(simulation.projectedEstimatedCashVnd)} />
+        <StateColumn title="Sau" eyebrow="Trạng thái dự phóng" tone="after">
+          <Metric label="Tiền mặt ước tính sau kế hoạch" value={formatVnd(simulation.projectedEstimatedCashVnd)} />
           <Metric
-            label="Projected Active Risk"
+            label="Rủi ro đang hoạt động dự kiến"
             value={riskValue({ loadingRiskContext, riskContextAvailable, valueVnd: simulation.projectedKnownActiveRiskVnd })}
           />
           <Metric
-            label="Projected Risk %"
+            label="Tỷ lệ rủi ro dự kiến"
             value={loadingRiskContext
-              ? "Loading…"
+              ? "Đang tải…"
               : !riskContextAvailable
-                ? "Unavailable"
+                ? "Không khả dụng"
                 : formatPercent(simulation.projectedRiskPercent)}
           />
           <Metric
-            label="Remaining Risk Budget"
+            label="Ngân sách rủi ro còn lại"
             value={riskValue({ loadingRiskContext, riskContextAvailable, valueVnd: simulation.remainingRiskBudgetVnd, notConfiguredWhenNull: true })}
           />
-          <Metric label="Funding Gap" value={formatVnd(simulation.fundingGapVnd)} warning={simulation.fundingGapVnd > 0} />
+          <Metric label="Thiếu hụt nguồn tiền" value={formatVnd(simulation.fundingGapVnd)} warning={simulation.fundingGapVnd > 0} />
         </StateColumn>
       </div>
 
       <div className="mt-3 grid gap-2 lg:grid-cols-2">
         <AdvisorMessage
-          title="Portfolio Allocation Advisor"
+          title="Tư vấn phân bổ vốn"
           message={portfolioAdvisorMessage}
           warning={!loadingRiskContext && simulation.verdict !== "WITHIN PLAN"}
         />
-        <AdvisorMessage title="Trade Size Advisor" message={tradeAdvisorMessage} />
+        <AdvisorMessage title="Tư vấn khối lượng giao dịch" message={tradeAdvisorMessage} />
       </div>
 
       <div className={cn(
@@ -125,20 +126,19 @@ export function CombinedPortfolioSimulation({
         verdict === "WITHIN PLAN" && "border-emerald-500/20 bg-emerald-500/[0.07]",
         verdict === "EXCEEDS PLAN" && "border-rose-500/25 bg-rose-500/[0.07]",
         (verdict === "RISK UNKNOWN" || verdict === "REVIEW REQUIRED") && "border-amber-500/25 bg-amber-500/[0.07]",
-        (verdict === "UNAVAILABLE" || verdict === "Loading…") && "border-white/[0.08] bg-black/25",
+        (verdict === "UNAVAILABLE" || verdict == null) && "border-white/[0.08] bg-black/25",
       )}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">Combined Verdict</p>
+            <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">Kết luận tổng hợp</p>
             <p className={cn(
               "mt-1 text-xl font-black tracking-tight",
               verdict === "WITHIN PLAN" && "text-emerald-300",
               verdict === "EXCEEDS PLAN" && "text-rose-300",
               (verdict === "RISK UNKNOWN" || verdict === "REVIEW REQUIRED") && "text-amber-300",
-              verdict === "UNAVAILABLE" && "text-slate-300",
-              verdict === "Loading…" && "text-slate-300",
+              (verdict === "UNAVAILABLE" || verdict == null) && "text-slate-300",
             )}>
-              {verdict}
+              {verdict == null ? "Đang tải…" : verdictLabel(verdict)}
             </p>
           </div>
           {plannedTrades.length > 0 ? (
@@ -147,7 +147,7 @@ export function CombinedPortfolioSimulation({
               onClick={onClearPlannedTrades}
               className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400 transition hover:border-white/20 hover:text-white"
             >
-              Clear planned basket
+              Xóa giỏ kế hoạch
             </button>
           ) : null}
         </div>
@@ -204,6 +204,16 @@ function AdvisorMessage({ title, message, warning = false }: { title: string; me
   )
 }
 
+function verdictLabel(verdict: CombinedVerdict): string {
+  switch (verdict) {
+    case "WITHIN PLAN": return "Trong giới hạn kế hoạch"
+    case "EXCEEDS PLAN": return "Vượt giới hạn kế hoạch"
+    case "RISK UNKNOWN": return "Rủi ro chưa xác định"
+    case "REVIEW REQUIRED": return "Cần rà soát"
+    case "UNAVAILABLE": return "Không khả dụng"
+  }
+}
+
 function riskValue({
   loadingRiskContext,
   riskContextAvailable,
@@ -215,9 +225,9 @@ function riskValue({
   valueVnd: number | null
   notConfiguredWhenNull?: boolean
 }): string {
-  if (loadingRiskContext) return "Loading…"
-  if (!riskContextAvailable) return "Unavailable"
-  if (valueVnd == null) return notConfiguredWhenNull ? "Not configured" : "—"
+  if (loadingRiskContext) return "Đang tải…"
+  if (!riskContextAvailable) return "Không khả dụng"
+  if (valueVnd == null) return notConfiguredWhenNull ? "Chưa cấu hình" : "—"
   return formatVnd(valueVnd)
 }
 

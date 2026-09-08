@@ -36,11 +36,17 @@ type Overview = {
   evidence: RiskProfileEvidence
 }
 
+function profileBandLabel(value: ProfileAttemptSummary["score_band"]): string {
+  if (value === "low") return "thấp"
+  if (value === "middle") return "trung bình"
+  return "cao"
+}
+
 function ProfileBadge({ attempt }: { attempt: ProfileAttemptSummary | null }) {
-  if (!attempt) return <span className="text-xs font-semibold text-slate-500">Chưa có attempt</span>
+  if (!attempt) return <span className="text-xs font-semibold text-slate-500">Chưa có lần đánh giá</span>
   return (
     <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-xs font-bold text-purple-300">
-      {attempt.total_score} · {attempt.score_band}
+      {attempt.total_score} · {profileBandLabel(attempt.score_band)}
     </span>
   )
 }
@@ -65,11 +71,11 @@ export function PortfolioRiskPlan({ portfolioId }: { portfolioId: string }) {
       })
       const payload = await response.json().catch(() => null) as { ok?: boolean; overview?: Overview; error?: string } | null
       if (!response.ok || !payload?.ok || !payload.overview) {
-        throw new Error(payload?.error || "Không thể tải Risk Plan.")
+        throw new Error(payload?.error || "Không thể tải kế hoạch quản trị rủi ro.")
       }
       setOverview(payload.overview)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Không thể tải Risk Plan.")
+      setError(cause instanceof Error ? cause.message : "Không thể tải kế hoạch quản trị rủi ro.")
     } finally {
       setLoading(false)
     }
@@ -88,20 +94,20 @@ export function PortfolioRiskPlan({ portfolioId }: { portfolioId: string }) {
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-purple-400" />
             <h2 className="font-ticker text-base font-extrabold uppercase tracking-wide text-white">
-              Risk Profile · Discipline Profile · Money Management Plan
+              Hồ sơ rủi ro · Hồ sơ kỷ luật · Kế hoạch quản trị vốn
             </h2>
           </div>
           <p className="mt-1 max-w-4xl text-xs leading-relaxed text-slate-400">
-            Theo contract McDowell của QeoIndex: profile và plan được lưu theo từng portfolio; mỗi attempt/version là immutable history. Book facts, deterministic calculations và product extensions được tách biệt; không có AI inference ở QEO-138.
+            Theo khung McDowell của QeoIndex: hồ sơ và kế hoạch được lưu riêng theo từng danh mục; mỗi lần đánh giá và mỗi phiên bản đều là lịch sử bất biến. Dữ kiện từ sách, phép tính xác định và phần mở rộng của sản phẩm được tách biệt; QEO-138 không suy diễn bằng AI.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
           <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-3 py-2">
-            <span className="mr-2 text-slate-500">Risk Profile</span>
+            <span className="mr-2 text-slate-500">Hồ sơ rủi ro</span>
             <ProfileBadge attempt={overview?.latestRiskProfileAttempt ?? null} />
           </div>
           <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-3 py-2">
-            <span className="mr-2 text-slate-500">Discipline Profile</span>
+            <span className="mr-2 text-slate-500">Hồ sơ kỷ luật</span>
             <ProfileBadge attempt={overview?.latestDisciplineProfileAttempt ?? null} />
           </div>
         </div>

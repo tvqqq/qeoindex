@@ -38,19 +38,19 @@ export function PortfolioCurrentState({
     >
       <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
         <div>
-          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-400/70">Portfolio inventory</p>
+          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-400/70">Các khoản đang nắm giữ</p>
           <h3 className="mt-1 flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-100 sm:text-base">
-            <PieChart className="h-4 w-4 text-blue-400" /> 2. Current Portfolio State
+            <PieChart className="h-4 w-4 text-blue-400" /> 2. Trạng thái danh mục hiện tại
           </h3>
         </div>
         <span className="rounded-full border border-blue-500/20 bg-blue-500/[0.08] px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-blue-200">
-          {positions.length} holding{positions.length === 1 ? "" : "s"}
+          {positions.length} khoản nắm giữ
         </span>
       </div>
 
       {positions.length === 0 ? (
         <div className="mt-4 rounded-2xl border border-dashed border-white/[0.08] bg-black/15 p-6 text-center text-xs text-slate-500">
-          Portfolio hiện không có open holding.
+          Danh mục hiện không có khoản nắm giữ đang mở.
         </div>
       ) : (
         <div className="mt-4 space-y-3">
@@ -69,26 +69,26 @@ export function PortfolioCurrentState({
               .map((row) => row.latestStopKvnd as number)
 
             const evidence = loadingRiskContext
-              ? "Loading…"
+              ? "Đang tải…"
               : riskContextUnavailable
-                ? "Unavailable"
+                ? "Không khả dụng"
                 : holdingRisk?.riskStatus === "known"
                   ? knownStops.length > 0
-                    ? `${holdingRisk.linkedTradeCount} linked Trade${holdingRisk.linkedTradeCount === 1 ? "" : "s"} · stop ${knownStops.map(formatKvnd).join(", ")}`
-                    : `${holdingRisk.linkedTradeCount} linked Trade${holdingRisk.linkedTradeCount === 1 ? "" : "s"} · risk known`
+                    ? `${holdingRisk.linkedTradeCount} giao dịch đã liên kết · dừng lỗ ${knownStops.map(formatKvnd).join(", ")}`
+                    : `${holdingRisk.linkedTradeCount} giao dịch đã liên kết · rủi ro đã xác định`
                   : holdingRisk?.linkedTradeCount
-                    ? `Risk Unknown · ${holdingRisk.unknownTradeCount} linked Trade${holdingRisk.unknownTradeCount === 1 ? "" : "s"} missing evidence`
-                    : "Risk Unknown · unlinked holding"
+                    ? `Rủi ro chưa xác định · ${holdingRisk.unknownTradeCount} giao dịch liên kết thiếu bằng chứng`
+                    : "Rủi ro chưa xác định · khoản nắm giữ chưa liên kết giao dịch"
 
             const activeRisk = loadingRiskContext
-              ? "Loading…"
+              ? "Đang tải…"
               : riskContextUnavailable
-                ? "Unavailable"
+                ? "Không khả dụng"
                 : holdingRisk?.riskStatus === "known"
                   ? formatVnd(holdingRisk.activeRiskVnd)
-                  : "Risk Unknown"
+                  : "Rủi ro chưa xác định"
 
-            const riskNeedsReview = activeRisk === "Risk Unknown" || activeRisk === "Unavailable"
+            const riskNeedsReview = activeRisk === "Rủi ro chưa xác định" || activeRisk === "Không khả dụng"
 
             return (
               <article key={position.ticker} className="rounded-2xl border border-white/[0.07] bg-black/20 p-4 transition-colors hover:border-white/[0.11]">
@@ -99,7 +99,7 @@ export function PortfolioCurrentState({
                     </div>
                     <div>
                       <p className="text-base font-black tracking-wide text-white">{position.ticker}</p>
-                      <p className="mt-0.5 text-[10px] text-slate-500">{position.openQty.toLocaleString("vi-VN")} open shares · AVCO {formatKvnd(position.avgCost)}</p>
+                      <p className="mt-0.5 text-[10px] text-slate-500">{position.openQty.toLocaleString("vi-VN")} cổ phiếu đang mở · Giá vốn bình quân {formatKvnd(position.avgCost)}</p>
                     </div>
                   </div>
                   <span className={cn(
@@ -108,24 +108,24 @@ export function PortfolioCurrentState({
                       ? "border-amber-500/25 bg-amber-500/10 text-amber-200"
                       : "border-emerald-500/20 bg-emerald-500/[0.08] text-emerald-200",
                   )}>
-                    {loadingRiskContext ? "Loading" : riskNeedsReview ? activeRisk : "Risk known"}
+                    {loadingRiskContext ? "Đang tải" : riskNeedsReview ? activeRisk : "Rủi ro đã xác định"}
                   </span>
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <HoldingMetric label="Current Price" value={hasCurrentPrice ? formatKvnd(currentPrice) : "Missing"} warning={!hasCurrentPrice} />
-                  <HoldingMetric label="Market Value" value={formatVnd(marketValueVnd)} />
-                  <HoldingMetric label="Unrealized P&L" value={unrealizedPnlVnd == null ? "—" : formatSignedVnd(unrealizedPnlVnd)} valueClassName={pnlClass(unrealizedPnlVnd)} />
+                  <HoldingMetric label="Giá hiện tại" value={hasCurrentPrice ? formatKvnd(currentPrice) : "Thiếu dữ liệu"} warning={!hasCurrentPrice} />
+                  <HoldingMetric label="Giá trị thị trường" value={formatVnd(marketValueVnd)} />
+                  <HoldingMetric label="Lãi/lỗ chưa thực hiện" value={unrealizedPnlVnd == null ? "—" : formatSignedVnd(unrealizedPnlVnd)} valueClassName={pnlClass(unrealizedPnlVnd)} />
                   <HoldingMetric labelNode={<RiskMetricTooltip term="activeRisk" />} value={activeRisk} warning={riskNeedsReview} />
                 </div>
 
                 <div className={cn(
                   "mt-3 rounded-xl border px-3 py-2.5 text-[10px] leading-relaxed",
-                  evidence.includes("Unknown") || evidence === "Unavailable"
+                  evidence.includes("chưa xác định") || evidence === "Không khả dụng"
                     ? "border-amber-500/15 bg-amber-500/[0.06] text-amber-100"
                     : "border-white/[0.06] bg-black/20 text-slate-400",
                 )}>
-                  <span className="font-black uppercase tracking-wide text-slate-500">Stop / Risk Evidence · </span>
+                  <span className="font-black uppercase tracking-wide text-slate-500">Bằng chứng dừng lỗ / rủi ro · </span>
                   {evidence}
                 </div>
               </article>
@@ -135,17 +135,17 @@ export function PortfolioCurrentState({
       )}
 
       <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-        <SummaryCard label="Stock Market Value" value={formatVnd(allocationSnapshot.stockMarketValueVnd)} />
-        <SummaryCard label="Unrealized P&L" value={formatSignedVnd(allocationSnapshot.totalUnrealizedPnlVnd)} valueClassName={pnlClass(allocationSnapshot.totalUnrealizedPnlVnd)} />
-        <SummaryCard label="Realized P&L" value={formatSignedVnd(allocationSnapshot.totalRealizedPnlVnd)} valueClassName={pnlClass(allocationSnapshot.totalRealizedPnlVnd)} />
-        <SummaryCard label="Estimated Available Cash" value={formatVnd(allocationSnapshot.estimatedAvailableCashVnd)} valueClassName="text-emerald-300" />
+        <SummaryCard label="Giá trị thị trường cổ phiếu" value={formatVnd(allocationSnapshot.stockMarketValueVnd)} />
+        <SummaryCard label="Lãi/lỗ chưa thực hiện" value={formatSignedVnd(allocationSnapshot.totalUnrealizedPnlVnd)} valueClassName={pnlClass(allocationSnapshot.totalUnrealizedPnlVnd)} />
+        <SummaryCard label="Lãi/lỗ đã thực hiện" value={formatSignedVnd(allocationSnapshot.totalRealizedPnlVnd)} valueClassName={pnlClass(allocationSnapshot.totalRealizedPnlVnd)} />
+        <SummaryCard label="Tiền mặt khả dụng ước tính" value={formatVnd(allocationSnapshot.estimatedAvailableCashVnd)} valueClassName="text-emerald-300" />
         <SummaryCard
-          label="Known Active Risk"
-          value={loadingRiskContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : formatVnd(riskContext?.knownActiveRiskVnd ?? null)}
+          label="Rủi ro đang hoạt động đã biết"
+          value={loadingRiskContext ? "Đang tải…" : riskContextUnavailable ? "Không khả dụng" : formatVnd(riskContext?.knownActiveRiskVnd ?? null)}
         />
         <SummaryCard
-          label="Unknown Risk Items"
-          value={loadingRiskContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : riskCoverage.unknownRiskItemCount.toLocaleString("vi-VN")}
+          label="Mục rủi ro chưa xác định"
+          value={loadingRiskContext ? "Đang tải…" : riskContextUnavailable ? "Không khả dụng" : riskCoverage.unknownRiskItemCount.toLocaleString("vi-VN")}
           valueClassName={!loadingRiskContext && !riskContextUnavailable && riskCoverage.unknownRiskItemCount > 0 ? "text-amber-200" : undefined}
         />
       </div>
@@ -153,7 +153,7 @@ export function PortfolioCurrentState({
       {riskContextError ? (
         <div className="mt-4 flex gap-2 rounded-2xl border border-rose-500/25 bg-rose-500/10 p-3 text-[11px] leading-relaxed text-rose-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>Risk context unavailable: {riskContextError}. Không suy diễn empty breakdown thành zero Active Risk.</span>
+          <span>Không thể tải ngữ cảnh rủi ro: {riskContextError}. Không suy diễn phần phân rã trống thành rủi ro đang hoạt động bằng 0.</span>
         </div>
       ) : null}
     </section>

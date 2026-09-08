@@ -155,7 +155,8 @@ export type PortfolioPlanSimulation = {
 export type RiskTermSourceKind = "book" | "product" | "extension"
 
 export type RiskSizingTerm = {
-  label: string
+  labelVi: string
+  labelEn: string
   help: string
   sourceKind: RiskTermSourceKind
   formula?: string
