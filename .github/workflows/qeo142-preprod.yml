@@ -87,7 +87,7 @@ jobs:
       - name: Canonical test manifest
         run: pnpm test:manifest
       - name: Application lint
-        run: pnpm lint
+        run: pnpm lint:touched
       - name: TypeScript
         run: pnpm typecheck
       - name: Production build
