@@ -5,10 +5,10 @@ import type { RawTransaction, TransactionAction } from "../pnl.ts"
 import { getRiskPlanOverview } from "../risk-plan/server.ts"
 import {
   computeOpenTradeRiskContext,
-  type OpenTradeRiskBreakdown,
   type OpenTradeRiskRow,
   type StopRiskRow,
 } from "./active-risk.ts"
+import type { OpenTradeRiskBreakdown } from "./types.ts"
 
 export type RiskSizingServerContext = {
   defaultTradeRiskPercent: number
