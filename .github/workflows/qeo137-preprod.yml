@@ -40,7 +40,7 @@ jobs:
       - name: QEO-137 read-model contract
         run: node --test tests/portfolio/qeo137-trade-read-model.test.ts
       - name: QEO-137 server boundary contract
-        run: node --test tests/portfolio/qeo137-trade-api-contract.test.ts
+        run: node --test tests/portfolio/qeo137-trade-api-contract.test.ts tests/portfolio/qeo137-legacy-transactions-context.test.ts
       - name: Portfolio AVCO regression
         run: node --test tests/portfolio-pnl.test.ts
       - name: Application lint
