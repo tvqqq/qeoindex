@@ -3503,6 +3503,83 @@ export type Database = {
           },
         ]
       }
+      portfolio_trade_stop_exit_fills: {
+        Row: {
+          created_at: string
+          exit_action: string
+          id: string
+          portfolio_id: string
+          stop_event_id: string
+          ticker: string
+          trade_id: string
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          exit_action?: string
+          id?: string
+          portfolio_id: string
+          stop_event_id: string
+          ticker: string
+          trade_id: string
+          transaction_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          exit_action?: string
+          id?: string
+          portfolio_id?: string
+          stop_event_id?: string
+          ticker?: string
+          trade_id?: string
+          transaction_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_trade_stop_exit_fil_stop_event_id_trade_id_portf_fkey"
+            columns: [
+              "stop_event_id",
+              "trade_id",
+              "portfolio_id",
+              "user_id",
+              "ticker",
+            ]
+            isOneToOne: false
+            referencedRelation: "portfolio_trade_stop_events"
+            referencedColumns: [
+              "id",
+              "trade_id",
+              "portfolio_id",
+              "user_id",
+              "ticker",
+            ]
+          },
+          {
+            foreignKeyName: "portfolio_trade_stop_exit_fil_transaction_id_trade_id_port_fkey"
+            columns: [
+              "transaction_id",
+              "trade_id",
+              "portfolio_id",
+              "user_id",
+              "ticker",
+              "exit_action",
+            ]
+            isOneToOne: false
+            referencedRelation: "portfolio_transactions"
+            referencedColumns: [
+              "id",
+              "trade_id",
+              "portfolio_id",
+              "user_id",
+              "ticker",
+              "action",
+            ]
+          },
+        ]
+      }
       portfolio_trades: {
         Row: {
           closed_at: string | null

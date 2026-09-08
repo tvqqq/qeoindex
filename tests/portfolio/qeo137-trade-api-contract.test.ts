@@ -12,6 +12,7 @@ const routePaths = [
   "../../app/api/portfolio/[id]/trades/[tradeId]/route.ts",
   "../../app/api/portfolio/[id]/trades/[tradeId]/fills/route.ts",
   "../../app/api/portfolio/[id]/trades/[tradeId]/stops/route.ts",
+  "../../app/api/portfolio/[id]/trades/[tradeId]/stops/[stopEventId]/fills/route.ts",
   "../../app/api/portfolio/[id]/trades/[tradeId]/journal/route.ts",
 ] as const
 
@@ -50,6 +51,8 @@ test("Trade server exposes the narrow lifecycle and evidence contract", () => {
     "detachFillFromTrade",
     "addStopEvent",
     "listStopEvents",
+    "linkExitFillToStopEvent",
+    "listStopExitFillLinks",
     "addJournalEntry",
     "listJournalEntries",
     "readPortfolioTradeContext",
@@ -105,6 +108,25 @@ test("canonical portfolio Trade context uses deterministic read-model assembly",
   assert.match(source, /portfolio_trade_journal_entries/)
 })
 
+test("QEO-140 stop-to-exit-fill linking validates explicit sell evidence and stays append-only", () => {
+  const source = serverSource()
+
+  const block = source.match(
+    /export async function linkExitFillToStopEvent[\s\S]*?export async function listStopExitFillLinks/,
+  )?.[0] ?? ""
+  assert.ok(block, "stop-to-exit-fill server functions must exist")
+  assert.match(block, /transaction\.trade_id\s*!==\s*tradeId/)
+  assert.match(block, /transaction\.ticker\s*!==\s*trade\.ticker/)
+  assert.match(block, /transaction\.action\s*!==\s*"sell"/)
+  assert.match(block, /FILL_NOT_LINKED/)
+  assert.match(block, /INVALID_EXIT_FILL_ACTION/)
+  assert.match(block, /EXIT_FILL_ALREADY_LINKED/)
+  assert.match(block, /\.from\("portfolio_trade_stop_exit_fills"\)/)
+  assert.match(block, /\.insert\(\{/)
+  assert.doesNotMatch(block, /\.update\(/)
+  assert.doesNotMatch(block, /\.delete\(/)
+})
+
 test("Trade HTTP routes are thin authenticated adapters, not direct Supabase owners", () => {
   const routes = routeSources()
 
@@ -128,6 +150,8 @@ test("Trade routes delegate every lifecycle/evidence operation to the domain ser
     "detachFillFromTrade",
     "addStopEvent",
     "listStopEvents",
+    "linkExitFillToStopEvent",
+    "listStopExitFillLinks",
     "addJournalEntry",
     "listJournalEntries",
   ]) {
@@ -140,6 +164,7 @@ test("HTTP boundary maps validation/not-found/conflict errors explicitly", () =>
 
   assert.match(all, /TradeDomainError/)
   assert.match(all, /NOT_FOUND/)
+  assert.match(all, /EXIT_FILL_ALREADY_LINKED/)
   assert.match(all, /409/)
   assert.match(all, /400/)
   assert.match(all, /404/)

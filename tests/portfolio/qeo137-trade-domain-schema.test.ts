@@ -10,6 +10,10 @@ const hardeningMigrationUrl = new URL(
   "../../supabase/migrations/20260907112500_qeo137_trade_fk_indexes.sql",
   import.meta.url,
 )
+const stopExitFillMigrationUrl = new URL(
+  "../../supabase/migrations/20260908064000_qeo140_stop_exit_fill_links.sql",
+  import.meta.url,
+)
 
 function migrationSql() {
   assert.equal(
@@ -27,6 +31,15 @@ function hardeningMigrationSql() {
     "QEO-137 production hardening migration must ship with the Trade domain",
   )
   return readFileSync(hardeningMigrationUrl, "utf8")
+}
+
+function stopExitFillMigrationSql() {
+  assert.equal(
+    existsSync(stopExitFillMigrationUrl),
+    true,
+    "QEO-140 stop-to-exit-fill migration must exist before execution evidence can ship",
+  )
+  return readFileSync(stopExitFillMigrationUrl, "utf8")
 }
 
 test("QEO-137 migration exists", () => {
@@ -139,4 +152,34 @@ test("QEO-137 covers every new composite foreign key with its leading columns", 
     /portfolio_trade_journal_entries_trade_identity_fk_idx[\s\S]*portfolio_trade_journal_entries\s*\(trade_id,\s*portfolio_id,\s*user_id,\s*ticker\)/i,
   )
   assert.doesNotMatch(sql, /^\s*(update|delete\s+from|insert\s+into)\b/im)
+})
+
+test("QEO-140 stop-to-exit-fill evidence is append-only, sell-only and identity-safe", () => {
+  const sql = stopExitFillMigrationSql()
+
+  assert.match(sql, /create table public\.portfolio_trade_stop_exit_fills\s*\(/i)
+  assert.match(sql, /portfolio_trade_stop_events_identity_key/i)
+  assert.match(sql, /portfolio_transactions_stop_exit_identity_key/i)
+  assert.match(sql, /unique\s*\(stop_event_id,\s*transaction_id\)/i)
+  assert.match(sql, /unique\s*\(transaction_id\)/i)
+  assert.match(sql, /check\s*\(exit_action\s*=\s*'sell'\)/i)
+  assert.match(
+    sql,
+    /foreign key\s*\(stop_event_id,\s*trade_id,\s*portfolio_id,\s*user_id,\s*ticker\)[\s\S]*references public\.portfolio_trade_stop_events\s*\(id,\s*trade_id,\s*portfolio_id,\s*user_id,\s*ticker\)/i,
+  )
+  assert.match(
+    sql,
+    /foreign key\s*\(transaction_id,\s*trade_id,\s*portfolio_id,\s*user_id,\s*ticker,\s*exit_action\)[\s\S]*references public\.portfolio_transactions\s*\(id,\s*trade_id,\s*portfolio_id,\s*user_id,\s*ticker,\s*action\)/i,
+  )
+  assert.match(sql, /alter table public\.portfolio_trade_stop_exit_fills enable row level security/i)
+  assert.match(sql, /revoke all on public\.portfolio_trade_stop_exit_fills from anon, authenticated/i)
+  assert.match(sql, /grant select, insert on public\.portfolio_trade_stop_exit_fills to authenticated/i)
+  assert.doesNotMatch(sql, /grant[^;]*(update|delete)[^;]*portfolio_trade_stop_exit_fills[^;]*authenticated/i)
+  assert.match(sql, /create policy portfolio_trade_stop_exit_fills_select_own/i)
+  assert.match(sql, /create policy portfolio_trade_stop_exit_fills_insert_own/i)
+  assert.doesNotMatch(sql, /create policy portfolio_trade_stop_exit_fills_(update|delete)_own/i)
+  assert.match(sql, /portfolio_trade_stop_exit_fills_stop_fk_idx/i)
+  assert.match(sql, /portfolio_trade_stop_exit_fills_tx_fk_idx/i)
+  assert.match(sql, /portfolio_trade_stop_exit_fills_trade_read_idx/i)
+  assert.doesNotMatch(sql, /^\s*(update|delete\s+from|insert\s+into)\s+public\.portfolio_(transactions|trade_stop_events)\b/im)
 })

@@ -393,6 +393,14 @@
       "state": "MAPPED",
       "evidence": "qeo137-production-grant-hardening-and-fk-index-readback",
       "rationale": "QEO-137 follow-up hardens default authenticated grants and adds covering indexes for the new composite foreign keys after production advisor/readback exposed those gaps. Production readback verifies stop events are SELECT+INSERT only for authenticated users, the new ownership policies remain RLS-bound to auth.uid(), and all four composite FK indexes exist. Production timestamp differs from repository replay ordering."
+    },
+    {
+      "logicalName": "qeo140_stop_exit_fill_links",
+      "repositoryVersion": "20260908064000",
+      "productionVersion": "20260908071011",
+      "state": "MAPPED",
+      "evidence": "qeo140-production-ledger-schema-rls-grants-indexes-and-no-backfill-readback",
+      "rationale": "QEO-140 append-only stop-event to actual sell-fill evidence was promoted only after exact-head QEO-137/QEO-138/QEO-139/EOD gates plus zero-to-latest replay/generated types/TypeScript/build passed. Production readback verified RLS, own-row SELECT/INSERT policies, sell-only composite FKs, unique transaction linkage, covering indexes, zero link rows, and the legacy transaction remained trade_id NULL. Production timestamp differs from repository replay ordering."
     }
   ]
 }
