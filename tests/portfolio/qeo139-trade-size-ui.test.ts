@@ -106,6 +106,14 @@ test("projected risk panel fails closed when open Trade risk is unknown", () => 
   assert.doesNotMatch(calculator, /unknownRiskTradeCount[^\n]{0,80}within plan/i)
 })
 
+test("risk context failure never becomes fabricated zero risk or insufficient history", () => {
+  const calculator = read(calculatorPath)
+  assert.match(calculator, /const riskContextUnavailable = !loadingContext && riskContext == null/)
+  assert.match(calculator, /Risk context unavailable/)
+  assert.match(calculator, /riskContextUnavailable\s*\?\s*"Unavailable"/)
+  assert.match(calculator, /Evidence:\s*\{riskContextUnavailable\s*\?\s*"Unavailable"/)
+})
+
 test("Advanced evidence keeps Optimal f informational and unavailable without history", () => {
   const calculator = read(calculatorPath)
   const terminology = read(terminologyPath)
