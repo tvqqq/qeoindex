@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 const calculatorPath = "components/portfolio/risk-sizing/trade-size-calculator.tsx"
+const hookPath = "components/portfolio/risk-sizing/use-risk-sizing-context.ts"
 const tooltipPath = "components/portfolio/risk-sizing/risk-metric-tooltip.tsx"
 const allocationPath = "components/portfolio/portfolio-capital-allocation.tsx"
 const pagePath = "components/portfolio/portfolio-page.tsx"
@@ -43,13 +44,21 @@ test("stop-first Trade Size surface exposes canonical McDowell/QeoIndex terms th
   }
 })
 
-test("calculator is API-backed, deterministic, tooltip-driven and never Supabase-direct", () => {
-  const source = read(calculatorPath)
-  assert.match(source, /\/api\/portfolio\/\$\{portfolioId\}\/risk-sizing/)
-  assert.match(source, /calculateTradeSize/)
-  assert.match(source, /projectActiveRisk/)
-  assert.match(source, /RiskMetricTooltip/)
-  assert.doesNotMatch(source, /createClient|supabase\.|\.from\(/)
+test("allocation owns one authenticated risk-context fetch and calculator stays deterministic", () => {
+  const hook = read(hookPath)
+  const allocation = read(allocationPath)
+  const calculator = read(calculatorPath)
+
+  assert.match(hook, /fetch\(`\/api\/portfolio\/\$\{portfolioId\}\/risk-sizing`/)
+  assert.match(hook, /AbortController/)
+  assert.match(hook, /cache:\s*"no-store"/)
+  assert.match(hook, /credentials:\s*"same-origin"/)
+  assert.match(allocation, /useRiskSizingContext\(activePortfolioId\)/)
+  assert.doesNotMatch(calculator, /fetch\(`\/api\/portfolio\/\$\{portfolioId\}\/risk-sizing`/)
+  assert.match(calculator, /calculateTradeSize/)
+  assert.match(calculator, /projectActiveRisk/)
+  assert.match(calculator, /RiskMetricTooltip/)
+  assert.doesNotMatch(`${hook}\n${allocation}\n${calculator}`, /createClient|supabase\.|\.from\(/)
 })
 
 test("legacy fixed-stop assumptions and unsafe risk claims are removed from the allocation surface", () => {
