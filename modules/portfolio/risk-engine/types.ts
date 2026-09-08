@@ -65,3 +65,19 @@ export type PortfolioRiskStateResult = {
   configuredDefaultTradeRiskPercent: number
   effectiveDefaultTradeRiskPercent: number
 }
+
+export type PortfolioRiskReadModel = {
+  account: AccountEquitySnapshot
+  activeRisk: PortfolioActiveRiskResult & {
+    activeRiskPercent: number | null
+    maxActiveRiskVnd: number | null
+    remainingRiskBudgetVnd: number | null
+    coverage: "complete" | "partial"
+  }
+  drawdown: DrawdownSnapshot
+  riskState: PortfolioRiskStateResult
+  evidence: {
+    rawDailyCoverage: "complete" | "partial" | "insufficient"
+    currentPriceMissingTickers: string[]
+  }
+}
