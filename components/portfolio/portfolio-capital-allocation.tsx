@@ -93,33 +93,49 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
 
   if (!activePortfolioId || !activePortfolio) {
     return (
-      <div className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 font-ticker text-sm text-[var(--color-muted-2)]">
+      <div className="rounded-[28px] border border-white/[0.08] bg-[#0b0e15] p-6 font-ticker text-sm text-[var(--color-muted-2)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]">
         Chọn một portfolio để lập Trade Size plan.
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 font-ticker">
-      <section className="rounded-3xl border border-[#2a2e40] bg-gradient-to-br from-[#121522] via-[#0d1017] to-[#0d1017] p-6 shadow-md">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-purple-400">
-              <Layers3 className="h-4 w-4" /> Portfolio risk planning workspace
+    <div data-planner-workspace className="space-y-5 font-ticker">
+      <section className="relative overflow-hidden rounded-[30px] border border-purple-500/20 bg-gradient-to-br from-[#17142a] via-[#10131d] to-[#0a0d13] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.34)] ring-1 ring-white/[0.04] sm:p-6">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-purple-500/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-purple-400/20 bg-purple-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-purple-200">
+                <Layers3 className="h-3.5 w-3.5" /> Portfolio planner
+              </span>
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[10px] font-bold text-slate-300">
+                {activePortfolio.name}
+              </span>
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[10px] font-bold text-slate-400">
+                {positions.length} open holding{positions.length === 1 ? "" : "s"}
+              </span>
             </div>
-            <h2 className="text-xl font-extrabold tracking-tight text-white sm:text-2xl">Capital Allocation &amp; Trade Size</h2>
-            <p className="mt-2 max-w-3xl text-xs leading-relaxed text-[var(--color-muted-2)] sm:text-sm">
-              Portfolio capacity và per-Trade stop-first sizing được tách riêng nhưng dùng chung authenticated risk evidence. Position sizing giới hạn planned loss; gap, liquidity và slippage vẫn có thể làm actual loss vượt planned stop.
+            <h2 className="text-2xl font-black tracking-[-0.025em] text-white sm:text-3xl">Capital Allocation &amp; Trade Size</h2>
+            <p className="mt-2 max-w-2xl text-[11px] leading-relaxed text-slate-400 sm:text-xs">
+              Một workspace cho portfolio capacity, stop-first Trade Size và cumulative planning. Risk evidence được dùng chung; planned loss không phải guarantee cho actual execution loss.
             </p>
+            <div className="mt-4 flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-wide text-slate-400">
+              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">1 · Capacity</span>
+              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">2 · Holdings</span>
+              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">3 · Trade Size</span>
+              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">4 · Simulation</span>
+            </div>
           </div>
-          <div className="grid min-w-[250px] grid-cols-2 gap-2 text-right">
+
+          <div className="grid w-full gap-2 sm:grid-cols-2 xl:w-auto xl:min-w-[360px]">
             <HeaderMetric label="Account Equity" value={formatShortVnd(effectiveAccountEquityContext.valueVnd)} />
             <HeaderMetric label="Estimated Cash" value={formatShortVnd(allocationSnapshot.estimatedAvailableCashVnd)} emphasis />
           </div>
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <PortfolioAllocationAdvisor
           allocationSnapshot={allocationSnapshot}
           portfolioAccountEquityContext={portfolioAccountEquityContext}
@@ -142,12 +158,15 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
           riskContextError={riskSizing.error}
         />
 
-        <section className="min-w-0 rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-4 shadow-sm sm:p-5">
-          <div className="mb-4 flex items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3.5">
-            <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-amber-300 sm:text-base">
-              <Scale className="h-4 w-4" /> 3. Trade Size Advisor
-            </h3>
-            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-200">Per Trade</span>
+        <section className="min-w-0 overflow-hidden rounded-[28px] border border-amber-500/15 bg-gradient-to-b from-[#111018] to-[#0a0d13] p-4 shadow-[0_18px_55px_rgba(0,0,0,0.24)] ring-1 ring-white/[0.035] sm:p-5">
+          <div className="mb-4 flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-400/70">Position sizing</p>
+              <h3 className="mt-1 flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-amber-200 sm:text-base">
+                <Scale className="h-4 w-4" /> 3. Trade Size Advisor
+              </h3>
+            </div>
+            <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-amber-200">Per Trade</span>
           </div>
           <TradeSizeAdvisor
             accountEquityContext={effectiveAccountEquityContext}
@@ -181,11 +200,11 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
 function HeaderMetric({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
   return (
     <div className={emphasis
-      ? "rounded-2xl border border-purple-500/30 bg-purple-500/10 px-3 py-2"
-      : "rounded-2xl border border-white/[0.08] bg-black/30 px-3 py-2"}
+      ? "rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.08] px-4 py-3"
+      : "rounded-2xl border border-white/[0.08] bg-black/25 px-4 py-3"}
     >
-      <span className="block text-[9px] font-bold uppercase tracking-wide text-[var(--color-muted-2)]">{label}</span>
-      <span className={emphasis ? "text-sm font-black text-[var(--color-up)]" : "text-sm font-black text-white"}>{value}</span>
+      <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">{label}</span>
+      <span className={emphasis ? "mt-1 block text-lg font-black text-emerald-300" : "mt-1 block text-lg font-black text-white"}>{value}</span>
     </div>
   )
 }
