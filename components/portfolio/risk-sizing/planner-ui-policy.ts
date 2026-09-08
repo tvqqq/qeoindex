@@ -1,3 +1,6 @@
+// UI-first rollout policy: working controls keep their real handlers. Any future
+// intentionally unavailable planner action should call this helper instead of
+// failing silently or scattering direct window.alert() calls across components.
 export function showPlannerUnavailableAlert(featureName: string): void {
   if (typeof window === "undefined") return
 
