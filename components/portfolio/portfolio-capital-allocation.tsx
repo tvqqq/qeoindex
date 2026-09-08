@@ -6,14 +6,16 @@ import { Activity, Layers3, Scale } from "lucide-react"
 import type { PortfolioMeta } from "@/components/portfolio/portfolio-selector"
 import { PortfolioAllocationAdvisor } from "@/components/portfolio/risk-sizing/portfolio-allocation-advisor"
 import { PortfolioCurrentState } from "@/components/portfolio/risk-sizing/portfolio-current-state"
-import { TradeSizeCalculator } from "@/components/portfolio/risk-sizing/trade-size-calculator"
+import { TradeSizeAdvisor } from "@/components/portfolio/risk-sizing/trade-size-advisor"
 import { useRiskSizingContext } from "@/components/portfolio/risk-sizing/use-risk-sizing-context"
 import type { PortfolioPosition } from "@/modules/portfolio/pnl"
 import { buildAccountEquityContext } from "@/modules/portfolio/risk-sizing/calculator"
 import {
   buildPortfolioAllocationSnapshot,
+  removePlannedTrade,
   simulatePlannedTrades,
   summarizePortfolioRiskCoverage,
+  upsertPlannedTrade,
 } from "@/modules/portfolio/risk-sizing/planning"
 import type { AccountEquityContext, PlannedTrade } from "@/modules/portfolio/risk-sizing/types"
 
@@ -144,11 +146,14 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
             </h3>
             <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-200">Per Trade</span>
           </div>
-          <TradeSizeCalculator
+          <TradeSizeAdvisor
             accountEquityContext={effectiveAccountEquityContext}
             riskContext={riskSizing.context}
-            loadingContext={riskSizing.loading}
-            contextError={riskSizing.error}
+            loadingRiskContext={riskSizing.loading}
+            riskContextError={riskSizing.error}
+            plannedTrades={plannedTrades}
+            onUpsertPlannedTrade={(trade) => setPlannedTrades((rows) => upsertPlannedTrade(rows, trade))}
+            onRemovePlannedTrade={(ticker) => setPlannedTrades((rows) => removePlannedTrade(rows, ticker))}
           />
         </section>
 
@@ -171,13 +176,17 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
               label="Unknown Risk Items"
               value={riskSizing.loading ? "Loading…" : riskContextUnavailable ? "Unavailable" : riskCoverage.unknownRiskItemCount.toLocaleString("vi-VN")}
             />
+            <SimulationMetric label="Planned Trades" value={plannedTrades.length.toLocaleString("vi-VN")} />
+            <SimulationMetric label="Planned Position Value" value={formatVnd(combinedSimulation.plannedPositionValueVnd)} />
+            <SimulationMetric label="Planned Risk Added" value={formatVnd(combinedSimulation.plannedRiskAddedVnd)} />
+            <SimulationMetric label="Projected Estimated Cash" value={formatVnd(combinedSimulation.projectedEstimatedCashVnd)} />
           </div>
 
           <div className="mt-4 rounded-2xl border border-white/[0.07] bg-black/20 p-4 text-xs leading-relaxed text-slate-300">
             <p className="font-bold uppercase tracking-wide text-emerald-200">Combined Verdict</p>
             <p className="mt-1 font-black text-white">{riskSizing.loading ? "Loading…" : combinedSimulation.verdict}</p>
             <p className="mt-2 text-[11px] text-[var(--color-muted-2)]">
-              Planned basket hiện chưa được thêm từ Trade Size Advisor. Không tạo synthetic margin hoặc planned risk để lấp chỗ trống; Task kế tiếp sẽ nối per-ticker planned Trades vào cùng simulation domain.
+              Simulation dùng toàn bộ planned basket hiện tại. Same ticker được replace thay vì duplicate; không tạo synthetic margin hoặc persistence để lấp funding gap.
             </p>
           </div>
 
