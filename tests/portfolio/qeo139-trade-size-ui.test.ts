@@ -65,24 +65,38 @@ test("allocation owns one authenticated risk-context fetch and advisor stays det
   assert.doesNotMatch(`${hook}\n${allocation}\n${advisor}`, /createClient|supabase\.|\.from\(/)
 })
 
-test("four-panel portfolio workflow restores Panels 1 and 2 without per-Trade fields in Panel 1", () => {
+test("four-panel portfolio workflow is locked in 1→4 order and Panel 1 stays portfolio-scoped", () => {
   const allocation = read(allocationPath)
   const panel1 = read(panel1Path)
   const panel2 = read(panel2Path)
   const combined = read(combinedPath)
   const composed = `${allocation}\n${panel1}\n${panel2}\n${combined}`
-
-  for (const heading of [
+  const headings = [
     "1. Portfolio Allocation Advisor",
     "2. Current Portfolio State",
     "3. Trade Size Advisor",
     "4. Combined Portfolio Simulation",
-  ]) {
+  ]
+
+  for (const heading of headings) {
     assert.match(composed, new RegExp(escapeRegExp(heading)), `missing four-panel heading: ${heading}`)
   }
 
+  const panel1Index = panel1.indexOf(headings[0]!)
+  const panel2Index = panel2.indexOf(headings[1]!)
+  const panel3Index = allocation.indexOf(headings[2]!)
+  const panel4Index = combined.indexOf(headings[3]!)
+  assert.ok(panel1Index >= 0 && panel2Index >= 0 && panel3Index >= 0 && panel4Index >= 0)
+  assert.match(allocation, /<PortfolioAllocationAdvisor[\s\S]*<PortfolioCurrentState[\s\S]*3\. Trade Size Advisor[\s\S]*<CombinedPortfolioSimulation/)
   assert.match(allocation, /lg:grid-cols-2/)
   assert.doesNotMatch(panel1, /plannedEntry|initialStop/)
+})
+
+test("Panel 2 never promotes compatibility stopLoss fields into canonical risk evidence", () => {
+  const panel2 = read(panel2Path)
+  assert.match(panel2, /riskCoverage\.holdingRisks/)
+  assert.match(panel2, /openTradeRisks/)
+  assert.doesNotMatch(panel2, /position\.stopLoss|stopLoss1|stopLoss2|stopLoss3/)
 })
 
 test("ticker-first Trade Size Advisor owns ephemeral planned basket behavior", () => {
@@ -106,7 +120,8 @@ test("ticker-first Trade Size Advisor owns ephemeral planned basket behavior", (
 
   assert.match(advisor, /calculateTradeSize/)
   assert.match(advisor, /\.toUpperCase\(\)/)
-  assert.match(allocation, /<TradeSizeAdvisor/)
+  assert.match(allocation, /<TradeSizeAdvisor[\s\S]*plannedTrades=\{plannedTrades\}/)
+  assert.match(allocation, /<CombinedPortfolioSimulation[\s\S]*plannedTrades=\{plannedTrades\}/)
   assert.match(allocation, /upsertPlannedTrade/)
   assert.match(allocation, /removePlannedTrade/)
   assert.doesNotMatch(advisor, /method:\s*["'](?:POST|PUT|PATCH)["']/i)
