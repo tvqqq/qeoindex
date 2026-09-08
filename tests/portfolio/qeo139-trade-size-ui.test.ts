@@ -23,7 +23,7 @@ function escapeRegExp(value: string) {
 }
 
 test("stop-first Trade Size surface exposes canonical McDowell/QeoIndex terms through shared metadata", () => {
-  const calculator = read(calculatorPath)
+  const surface = `${read(advisorPath)}\n${read(panel1Path)}`
   const terminology = read(terminologyPath)
   const terms = [
     ["accountEquity", "Account Equity"],
@@ -43,25 +43,25 @@ test("stop-first Trade Size surface exposes canonical McDowell/QeoIndex terms th
 
   for (const [term, label] of terms) {
     assert.match(terminology, new RegExp(`label:\\s*"${escapeRegExp(label)}"`), `missing shared label ${label}`)
-    assert.match(calculator, new RegExp(`term="${term}"`), `calculator does not render ${term}`)
+    assert.match(surface, new RegExp(`term="${term}"`), `portfolio sizing surface does not render ${term}`)
   }
 })
 
-test("allocation owns one authenticated risk-context fetch and calculator stays deterministic", () => {
+test("allocation owns one authenticated risk-context fetch and advisor stays deterministic", () => {
   const hook = read(hookPath)
   const allocation = read(allocationPath)
-  const calculator = read(calculatorPath)
+  const advisor = read(advisorPath)
 
   assert.match(hook, /fetch\(`\/api\/portfolio\/\$\{portfolioId\}\/risk-sizing`/)
   assert.match(hook, /AbortController/)
   assert.match(hook, /cache:\s*"no-store"/)
   assert.match(hook, /credentials:\s*"same-origin"/)
   assert.match(allocation, /useRiskSizingContext\(activePortfolioId\)/)
-  assert.doesNotMatch(calculator, /fetch\(`\/api\/portfolio\/\$\{portfolioId\}\/risk-sizing`/)
-  assert.match(calculator, /calculateTradeSize/)
-  assert.match(calculator, /projectActiveRisk/)
-  assert.match(calculator, /RiskMetricTooltip/)
-  assert.doesNotMatch(`${hook}\n${allocation}\n${calculator}`, /createClient|supabase\.|\.from\(/)
+  assert.doesNotMatch(advisor, /fetch\(`\/api\/portfolio\/\$\{portfolioId\}\/risk-sizing`/)
+  assert.match(advisor, /calculateTradeSize/)
+  assert.match(allocation, /simulatePlannedTrades/)
+  assert.match(advisor, /RiskMetricTooltip/)
+  assert.doesNotMatch(`${hook}\n${allocation}\n${advisor}`, /createClient|supabase\.|\.from\(/)
 })
 
 test("four-panel portfolio workflow restores Panels 1 and 2 without per-Trade fields in Panel 1", () => {
@@ -111,8 +111,12 @@ test("ticker-first Trade Size Advisor owns ephemeral planned basket behavior", (
   assert.doesNotMatch(advisor, /localStorage|sessionStorage|indexedDB/i)
 })
 
+test("monolithic calculator is retired after ticker-first advisor migration", () => {
+  assert.equal(read(calculatorPath), "")
+})
+
 test("legacy fixed-stop assumptions and unsafe risk claims are removed from the allocation surface", () => {
-  const source = `${read(allocationPath)}\n${read(calculatorPath)}`
+  const source = `${read(allocationPath)}\n${read(advisorPath)}`
   assert.doesNotMatch(source, /triệt tiêu hoàn toàn nguy cơ/i)
   assert.doesNotMatch(source, /dealStopLossPct|7\.0.*Stoploss/i)
   assert.doesNotMatch(source, /% Cắt lỗ deal tiếp theo/i)
@@ -139,7 +143,7 @@ test("RiskMetricTooltip resolves shared terminology instead of duplicating formu
 })
 
 test("stop-first guidance states stop provenance and execution risks without guarantees", () => {
-  const source = read(calculatorPath)
+  const source = read(advisorPath)
   assert.match(source, /support|resistance/i)
   assert.match(source, /volatility|price activity/i)
   assert.match(source, /trading-system|system rule/i)
@@ -153,43 +157,41 @@ test("stop-first guidance states stop provenance and execution risks without gua
   assert.doesNotMatch(sourceWithoutExplicitNoGuaranteeDisclaimer, /guarantee|bảo đảm.*không.*thua|không thể cháy/i)
 })
 
-test("projected risk panel fails closed when open Trade risk is unknown", () => {
-  const calculator = read(calculatorPath)
-  const terminology = read(terminologyPath)
-  assert.match(calculator, /term="riskAddedByPlannedTrade"/)
-  assert.match(calculator, /term="projectedActiveRisk"/)
-  assert.match(terminology, /label:\s*"Risk Added by Planned Trade"/)
-  assert.match(terminology, /label:\s*"Projected Active Risk"/)
-  assert.match(calculator, /Risk Unknown/)
-  assert.match(calculator, /unknownRiskTradeCount/)
-  assert.doesNotMatch(calculator, /unknownRiskTradeCount[^\n]{0,80}within plan/i)
+test("planned basket simulation stays fail-closed for unknown current risk evidence", () => {
+  const allocation = read(allocationPath)
+  assert.match(allocation, /summarizePortfolioRiskCoverage/)
+  assert.match(allocation, /simulatePlannedTrades/)
+  assert.match(allocation, /unknownRiskItemCount:\s*riskCoverage\.unknownRiskItemCount/)
+  assert.match(allocation, /riskContextAvailable:\s*riskSizing\.context\s*!=\s*null/)
+  assert.match(allocation, /plannedTrades,/)
 })
 
-test("risk context failure never becomes fabricated zero risk or insufficient history", () => {
-  const calculator = read(calculatorPath)
-  assert.match(calculator, /const riskContextUnavailable = !loadingContext && riskContext == null/)
-  assert.match(calculator, /Risk context unavailable/)
-  assert.match(calculator, /riskContextUnavailable\s*\?\s*"Unavailable"/)
-  assert.match(calculator, /Evidence:\s*\{riskContextUnavailable\s*\?\s*"Unavailable"/)
+test("risk context failure remains explicit in advisor and combined simulation", () => {
+  const advisor = read(advisorPath)
+  const allocation = read(allocationPath)
+  assert.match(advisor, /const riskContextUnavailable = !loadingRiskContext && riskContext == null/)
+  assert.match(advisor, /Risk context unavailable/)
+  assert.match(allocation, /const riskContextUnavailable = !riskSizing\.loading && riskSizing\.context == null/)
+  assert.match(allocation, /riskContextUnavailable\s*\?\s*"Unavailable"/)
 })
 
 test("Advanced evidence keeps Optimal f informational and unavailable without history", () => {
-  const calculator = read(calculatorPath)
+  const advisor = read(advisorPath)
   const terminology = read(terminologyPath)
 
-  assert.match(calculator, /<details/)
-  assert.match(calculator, /term="winRatio"/)
-  assert.match(calculator, /term="payoffRatio"/)
-  assert.match(calculator, /term="optimalF"/)
+  assert.match(advisor, /<details/)
+  assert.match(advisor, /term="winRatio"/)
+  assert.match(advisor, /term="payoffRatio"/)
+  assert.match(advisor, /term="optimalF"/)
   assert.match(terminology, /label:\s*"Win Ratio"/)
   assert.match(terminology, /label:\s*"Payoff Ratio"/)
   assert.match(terminology, /label:\s*"Optimal f"/)
-  assert.match(calculator, /Insufficient History/)
-  assert.match(calculator, /informational/i)
-  assert.match(calculator, /more aggressive/i)
-  assert.match(calculator, /not auto-applied/i)
-  assert.match(calculator, /not a zero-ROR guarantee/i)
-  assert.match(calculator, /calculateOptimalF/)
-  assert.doesNotMatch(calculator, /Risk of Ruin probability|probability matrix|ROR probability table/i)
-  assert.doesNotMatch(calculator, /setRiskPercentInput\([^\n]*optimal/i)
+  assert.match(advisor, /Insufficient History/)
+  assert.match(advisor, /informational/i)
+  assert.match(advisor, /more aggressive/i)
+  assert.match(advisor, /not auto-applied/i)
+  assert.match(advisor, /not a zero-ROR guarantee/i)
+  assert.match(advisor, /calculateOptimalF/)
+  assert.doesNotMatch(advisor, /Risk of Ruin probability|probability matrix|ROR probability table/i)
+  assert.doesNotMatch(advisor, /setRiskPercentInput\([^\n]*optimal/i)
 })
