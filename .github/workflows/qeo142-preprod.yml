@@ -39,3 +39,5 @@ jobs:
         run: node --test tests/portfolio/qeo142-server-api.test.ts
       - name: QEO-142 Reconciliation
         run: node --test tests/portfolio/qeo142-reconciliation.test.ts
+      - name: QEO-142 Performance UI
+        run: node --test tests/portfolio/qeo142-performance-ui.test.ts
