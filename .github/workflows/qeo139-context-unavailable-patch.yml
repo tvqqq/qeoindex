@@ -1,0 +1,100 @@
+name: QEO-139 Context Unavailable Patch
+
+on:
+  push:
+    branches:
+      - "tvq9612/qeo-139-portfolio-riskp3-proper-trade-size-calculator-stop-first"
+    paths:
+      - ".github/workflows/qeo139-context-unavailable-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: "tvq9612/qeo-139-portfolio-riskp3-proper-trade-size-calculator-stop-first"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Fail closed when risk context is unavailable
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("components/portfolio/risk-sizing/trade-size-calculator.tsx")
+          source = path.read_text()
+
+          replacements = [
+              (
+                  '  const hasUnknownRisk = (riskContext?.unknownRiskTradeCount ?? 0) > 0\n  const ready = result.status === "ready"',
+                  '  const hasUnknownRisk = (riskContext?.unknownRiskTradeCount ?? 0) > 0\n  const riskContextUnavailable = !loadingContext && riskContext == null\n  const ready = result.status === "ready"',
+              ),
+              (
+                  '<div className="mt-4 rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">{contextError}</div>',
+                  '<div className="mt-4 rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">Risk context unavailable: {contextError}</div>',
+              ),
+              (
+                  '<RiskCard term="activeRisk" value={loadingContext ? "Loading…" : formatVnd(projectedRisk.knownActiveRiskVnd)} />',
+                  '<RiskCard term="activeRisk" value={loadingContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : formatVnd(projectedRisk.knownActiveRiskVnd)} />',
+              ),
+              (
+                  '<RiskCard term="maxActiveRisk" value={projectedRisk.maxActiveRiskVnd == null ? "Not configured" : formatVnd(projectedRisk.maxActiveRiskVnd)} />',
+                  '<RiskCard term="maxActiveRisk" value={loadingContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : projectedRisk.maxActiveRiskVnd == null ? "Not configured" : formatVnd(projectedRisk.maxActiveRiskVnd)} />',
+              ),
+              (
+                  '<RiskCard term="remainingRiskBudget" value={projectedRisk.remainingRiskBudgetVnd == null ? "Not configured" : formatVnd(projectedRisk.remainingRiskBudgetVnd)} />',
+                  '<RiskCard term="remainingRiskBudget" value={loadingContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : projectedRisk.remainingRiskBudgetVnd == null ? "Not configured" : formatVnd(projectedRisk.remainingRiskBudgetVnd)} />',
+              ),
+              (
+                  '<RiskCard term="projectedActiveRisk" value={ready ? formatVnd(projectedRisk.projectedKnownActiveRiskVnd) : "—"} />',
+                  '<RiskCard term="projectedActiveRisk" value={loadingContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : ready ? formatVnd(projectedRisk.projectedKnownActiveRiskVnd) : "—"} />',
+              ),
+              (
+                  '<Badge>Evidence: {riskContext?.evidenceCompleteness ?? "insufficient"}</Badge>',
+                  '<Badge>Evidence: {riskContextUnavailable ? "Unavailable" : riskContext?.evidenceCompleteness ?? "insufficient"}</Badge>',
+              ),
+              (
+                  'value={loadingContext\n              ? "Loading…"\n              : riskContext?.winRatioPercent == null',
+                  'value={loadingContext\n              ? "Loading…"\n              : riskContextUnavailable\n                ? "Unavailable"\n                : riskContext?.winRatioPercent == null',
+              ),
+              (
+                  'value={loadingContext\n              ? "Loading…"\n              : riskContext?.payoffRatio == null',
+                  'value={loadingContext\n              ? "Loading…"\n              : riskContextUnavailable\n                ? "Unavailable"\n                : riskContext?.payoffRatio == null',
+              ),
+              (
+                  'value={loadingContext\n              ? "Loading…"\n              : optimalF.status === "available" && optimalF.value != null',
+                  'value={loadingContext\n              ? "Loading…"\n              : riskContextUnavailable\n                ? "Unavailable"\n                : optimalF.status === "available" && optimalF.value != null',
+              ),
+          ]
+
+          for old, new in replacements:
+              if source.count(old) != 1:
+                  raise SystemExit(f"expected exactly one replacement target, found {source.count(old)}: {old[:80]}")
+              source = source.replace(old, new, 1)
+
+          path.write_text(source)
+          PY
+      - name: QEO-139 UI contract
+        run: node --test tests/portfolio/qeo139-trade-size-ui.test.ts
+      - name: TypeScript
+        run: pnpm typecheck
+      - name: Commit fail-closed context handling
+        shell: bash
+        run: |
+          git config user.name "qeoindex-ci"
+          git config user.email "qeoindex-ci@users.noreply.github.com"
+          git add components/portfolio/risk-sizing/trade-size-calculator.tsx
+          git diff --cached --check
+          git commit -m "fix(qeo-139): fail closed when risk context is unavailable"
+          git push origin HEAD:tvq9612/qeo-139-portfolio-riskp3-proper-trade-size-calculator-stop-first
