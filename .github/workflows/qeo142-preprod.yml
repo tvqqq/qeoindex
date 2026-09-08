@@ -37,3 +37,5 @@ jobs:
         run: node --test tests/portfolio/qeo142-benchmark.test.ts
       - name: QEO-142 Server API boundary
         run: node --test tests/portfolio/qeo142-server-api.test.ts
+      - name: QEO-142 Reconciliation
+        run: node --test tests/portfolio/qeo142-reconciliation.test.ts
