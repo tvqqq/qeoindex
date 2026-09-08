@@ -13,37 +13,22 @@ import { projectActiveRisk } from "@/modules/portfolio/risk-sizing/projection"
 import type { AccountEquityContext, TradeSizeStatus } from "@/modules/portfolio/risk-sizing/types"
 import { cn } from "@/modules/shared/ui/cn"
 import { RiskMetricTooltip } from "./risk-metric-tooltip"
-
-type RiskSizingApiContext = {
-  defaultTradeRiskPercent: number
-  riskSource: "money_management_plan" | "onboarding_default"
-  maxActiveRiskPercent: number | null
-  knownActiveRiskVnd: number
-  unknownRiskTradeCount: number
-  winRatioPercent: number | null
-  payoffRatio: number | null
-  evidenceCompleteness: "complete" | "partial" | "insufficient"
-}
-
-type RiskSizingResponse = {
-  ok: boolean
-  context?: RiskSizingApiContext
-  error?: string
-}
+import type { RiskSizingClientContext } from "./use-risk-sizing-context"
 
 type RiskProvenance = "Money Management Plan" | "Onboarding default" | "Manual override"
 type RiskTerm = Parameters<typeof RiskMetricTooltip>[0]["term"]
 
 export function TradeSizeCalculator({
-  portfolioId,
   accountEquityContext,
+  riskContext,
+  loadingContext,
+  contextError,
 }: {
-  portfolioId: string
   accountEquityContext: AccountEquityContext
+  riskContext: RiskSizingClientContext | null
+  loadingContext: boolean
+  contextError: string | null
 }) {
-  const [riskContext, setRiskContext] = useState<RiskSizingApiContext | null>(null)
-  const [contextError, setContextError] = useState<string | null>(null)
-  const [loadingContext, setLoadingContext] = useState(true)
   const [accountEquityInput, setAccountEquityInput] = useState(() => String(Math.round(accountEquityContext.valueVnd)))
   const [equitySource, setEquitySource] = useState<"portfolio" | "manual">("portfolio")
   const [riskPercentInput, setRiskPercentInput] = useState("2")
@@ -62,43 +47,14 @@ export function TradeSizeCalculator({
   }, [accountEquityContext.valueVnd, equitySource])
 
   useEffect(() => {
-    const controller = new AbortController()
-    setLoadingContext(true)
-    setContextError(null)
-
-    void fetch(`/api/portfolio/${portfolioId}/risk-sizing`, {
-      cache: "no-store",
-      credentials: "same-origin",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        const body = (await response.json()) as RiskSizingResponse
-        if (!response.ok || !body.ok || !body.context) {
-          throw new Error(body.error ?? "Không thể tải risk-sizing context.")
-        }
-        return body.context
-      })
-      .then((context) => {
-        setRiskContext(context)
-        if (!riskTouchedRef.current) {
-          setRiskPercentInput(String(context.defaultTradeRiskPercent))
-          setRiskProvenance(
-            context.riskSource === "money_management_plan"
-              ? "Money Management Plan"
-              : "Onboarding default",
-          )
-        }
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return
-        setContextError(error instanceof Error ? error.message : "Không thể tải risk-sizing context.")
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoadingContext(false)
-      })
-
-    return () => controller.abort()
-  }, [portfolioId])
+    if (!riskContext || riskTouchedRef.current) return
+    setRiskPercentInput(String(riskContext.defaultTradeRiskPercent))
+    setRiskProvenance(
+      riskContext.riskSource === "money_management_plan"
+        ? "Money Management Plan"
+        : "Onboarding default",
+    )
+  }, [riskContext])
 
   const accountEquityVnd = finiteNumber(accountEquityInput, 0)
   const riskPercent = finiteNumber(riskPercentInput, 0)
