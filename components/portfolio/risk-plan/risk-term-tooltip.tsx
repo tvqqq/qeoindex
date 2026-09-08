@@ -64,6 +64,10 @@ const RISK_PLAN_LABEL_VI: Record<string, string> = {
   "Pause Live Trading at Drawdown": "Tạm dừng giao dịch thật khi tài khoản sụt giảm",
 }
 
+export function riskPlanLabelVi(labelEn: string): string {
+  return RISK_PLAN_LABEL_VI[labelEn] ?? labelEn
+}
+
 export function RiskTermTooltip({
   label,
   help,
@@ -72,7 +76,7 @@ export function RiskTermTooltip({
   help: string
 }) {
   const labelEn = label
-  const labelVi = RISK_PLAN_LABEL_VI[labelEn] ?? labelEn
+  const labelVi = riskPlanLabelVi(labelEn)
 
   return (
     <TooltipProvider>
