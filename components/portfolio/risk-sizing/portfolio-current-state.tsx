@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { AlertTriangle, PieChart } from "lucide-react"
 
 import type { PortfolioPosition } from "@/modules/portfolio/pnl"
@@ -167,7 +168,7 @@ function HoldingMetric({
   valueClassName,
 }: {
   label?: string
-  labelNode?: React.ReactNode
+  labelNode?: ReactNode
   value: string
   warning?: boolean
   valueClassName?: string
