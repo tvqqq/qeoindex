@@ -2,6 +2,7 @@ import "server-only"
 
 import type { ServerAuthContext } from "@/modules/auth/server"
 import type { Json } from "@/modules/shared/supabase/database.types"
+import type { PerformanceTradeInput } from "../performance/types.ts"
 import type { RawTransaction, TransactionAction } from "../pnl.ts"
 import { buildRiskProfileEvidence } from "./evidence.ts"
 import { scoreDisciplineProfile, scoreRiskProfile } from "./scoring.ts"
@@ -227,13 +228,13 @@ async function loadRiskProfileEvidence(context: ServerAuthContext, portfolioId: 
   const [tradesResult, fillsResult] = await Promise.all([
     context.supabase
       .from("portfolio_trades")
-      .select("id,ticker,status,closed_at")
+      .select("id,ticker,mode,status,timeframe,system_tags,setup_tags,initial_risk_amount,closed_at")
       .eq("portfolio_id", portfolioId)
       .eq("user_id", context.user.id)
       .eq("status", "closed"),
     context.supabase
       .from("portfolio_transactions")
-      .select("id,trade_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,tags")
+      .select("id,trade_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,tags,setup_tags,mistake_tags")
       .eq("portfolio_id", portfolioId)
       .eq("user_id", context.user.id)
       .not("trade_id", "is", null),
@@ -241,14 +242,24 @@ async function loadRiskProfileEvidence(context: ServerAuthContext, portfolioId: 
   if (tradesResult.error) dbFailure("load-closed-trades-for-evidence", tradesResult.error)
   if (fillsResult.error) dbFailure("load-linked-fills-for-evidence", fillsResult.error)
 
+  const trades = (tradesResult.data ?? []).map((row) => ({
+    ...row,
+    mode: row.mode as "live" | "paper",
+    system_tags: row.system_tags ?? [],
+    setup_tags: row.setup_tags ?? [],
+    initial_risk_amount: row.initial_risk_amount == null ? null : Number(row.initial_risk_amount),
+  })) as PerformanceTradeInput[]
+
   const fills = (fillsResult.data ?? []).map((row) => ({
     ...row,
     action: row.action as TransactionAction,
     tags: row.tags ?? [],
+    setup_tags: row.setup_tags ?? [],
+    mistake_tags: row.mistake_tags ?? [],
   })) as RawTransaction[]
 
   return buildRiskProfileEvidence({
-    trades: tradesResult.data ?? [],
+    trades,
     fills,
     periodEnd: new Date().toISOString(),
   })

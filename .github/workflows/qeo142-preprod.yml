@@ -1,0 +1,94 @@
+name: QEO-142 Performance Preprod
+
+on:
+  pull_request:
+    paths:
+      - "modules/portfolio/performance/**"
+      - "modules/portfolio/risk-plan/**"
+      - "modules/portfolio/risk-engine/**"
+      - "modules/portfolio/risk-sizing/**"
+      - "modules/portfolio/trades/**"
+      - "modules/portfolio/pnl.ts"
+      - "app/api/portfolio/**"
+      - "components/portfolio/**"
+      - "tests/portfolio/qeo142-*.test.ts"
+      - "tests/portfolio/qeo138-*.test.ts"
+      - "tests/portfolio/qeo139-*.test.ts"
+      - "tests/portfolio/qeo141-*.test.ts"
+      - "tests/portfolio-pnl.test.ts"
+      - "tests/test-contracts.json"
+      - "docs/superpowers/specs/2026-09-08-qeo-142-performance-scorecard-design.md"
+      - "docs/superpowers/plans/2026-09-08-qeo-142-performance-scorecard.md"
+      - ".github/workflows/qeo142-preprod.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo142-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qeo142:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: QEO-142 Closed Trade normalization
+        run: node --test tests/portfolio/qeo142-closed-trades.test.ts
+      - name: QEO-142 Trading Scorecard
+        run: node --test tests/portfolio/qeo142-scorecard.test.ts
+      - name: QEO-142 Drawdown episodes
+        run: node --test tests/portfolio/qeo142-drawdown-episodes.test.ts
+      - name: QEO-142 Period ledgers
+        run: node --test tests/portfolio/qeo142-ledgers.test.ts
+      - name: QEO-142 Segmentation
+        run: node --test tests/portfolio/qeo142-segments.test.ts
+      - name: QEO-142 Benchmark normalization
+        run: node --test tests/portfolio/qeo142-benchmark.test.ts
+      - name: QEO-142 Server API boundary
+        run: node --test tests/portfolio/qeo142-server-api.test.ts
+      - name: QEO-142 Reconciliation
+        run: node --test tests/portfolio/qeo142-reconciliation.test.ts
+      - name: QEO-142 Performance UI
+        run: node --test tests/portfolio/qeo142-performance-ui.test.ts
+
+      - name: QEO-138 Risk Profile evidence regression
+        run: node --test tests/portfolio/qeo138-risk-profile-evidence.test.ts
+      - name: QEO-139 Risk Sizing regressions
+        run: >-
+          node --test
+          tests/portfolio/qeo139-risk-sizing.test.ts
+          tests/portfolio/qeo139-risk-projection.test.ts
+          tests/portfolio/qeo139-planned-trade-simulation.test.ts
+          tests/portfolio/qeo139-risk-sizing-server-api.test.ts
+          tests/portfolio/qeo139-trade-size-ui.test.ts
+      - name: QEO-141 Portfolio Risk Engine regressions
+        run: >-
+          node --test
+          tests/portfolio/qeo141-active-risk.test.ts
+          tests/portfolio/qeo141-equity-drawdown.test.ts
+          tests/portfolio/qeo141-guardrail-evidence.test.ts
+          tests/portfolio/qeo141-risk-state.test.ts
+          tests/portfolio/qeo141-risk-server-api.test.ts
+          tests/portfolio/qeo141-qeo139-reconciliation.test.ts
+          tests/portfolio/qeo141-risk-ui.test.ts
+      - name: Portfolio AVCO regression
+        run: node --test tests/portfolio-pnl.test.ts
+      - name: Canonical test manifest
+        run: pnpm test:manifest
+      - name: Application lint
+        run: pnpm lint:touched
+      - name: TypeScript
+        run: pnpm typecheck
+      - name: Production build
+        run: pnpm build
