@@ -190,11 +190,12 @@ test("planned basket simulation stays fail-closed for unknown current risk evide
 
 test("risk context failure remains explicit in advisor and combined simulation", () => {
   const advisor = read(advisorPath)
-  const allocation = read(allocationPath)
+  const combined = read(combinedPath)
   assert.match(advisor, /const riskContextUnavailable = !loadingRiskContext && riskContext == null/)
   assert.match(advisor, /Risk context unavailable/)
-  assert.match(allocation, /const riskContextUnavailable = !riskSizing\.loading && riskSizing\.context == null/)
-  assert.match(allocation, /riskContextUnavailable\s*\?\s*"Unavailable"/)
+  assert.match(combined, /riskContextAvailable/)
+  assert.match(combined, /Risk context unavailable/)
+  assert.match(combined, /!riskContextAvailable\) return "Unavailable"/)
 })
 
 test("Advanced evidence keeps Optimal f informational and unavailable without history", () => {
