@@ -32,9 +32,12 @@ test("Hiệu suất tab renders the canonical one-fetch performance dashboard", 
   for (const fileName of expectedUiFiles) readUi(fileName)
 
   const page = read(pagePath)
-  assert.match(page, /PortfolioPerformanceDashboard/)
+  const compatibilitySlot = read(legacyBenchmarkPath)
   assert.match(page, /activeTab\s*===\s*["']benchmark["']/)
-  assert.doesNotMatch(page, /<PortfolioBenchmarkChart\b/)
+  assert.match(page, /<PortfolioBenchmarkChart\b/)
+  assert.match(page, /portfolioId=\{activePortfolioId\}/)
+  assert.match(compatibilitySlot, /PortfolioPerformanceDashboard/)
+  assert.match(compatibilitySlot, /<PortfolioPerformanceDashboard\s+portfolioId=\{portfolioId\}\s*\/>/)
 
   const hook = readUi("use-performance.ts")
   assert.match(hook, /usePortfolioPerformance/)
@@ -44,7 +47,7 @@ test("Hiệu suất tab renders the canonical one-fetch performance dashboard", 
   const clientSources = [
     ...expectedUiFiles.map((name) => readUi(name)),
     page,
-    read(legacyBenchmarkPath),
+    compatibilitySlot,
   ]
   const performanceFetchOwners = clientSources.filter((source) => (
     source.includes("/performance") && source.includes("fetch(")
@@ -110,9 +113,11 @@ test("terminology preserves canonical English terms formulas and safety context"
   assert.match(terminology, /không tự động|never auto/i)
 })
 
-test("legacy benchmark component no longer owns network or return arithmetic", () => {
+test("legacy benchmark compatibility slot delegates without network or return arithmetic", () => {
   const legacy = read(legacyBenchmarkPath)
+  assert.match(legacy, /PortfolioPerformanceDashboard/)
   assert.doesNotMatch(legacy, /fetch\(/)
+  assert.doesNotMatch(legacy, /\/benchmark/)
   assert.doesNotMatch(legacy, /computePortfolioPositions/)
   assert.doesNotMatch(legacy, /portfolioReturnPct\s*:\s*0/)
   assert.doesNotMatch(legacy, /alphaPct\s*:\s*0/)
