@@ -1,24 +1,13 @@
-import {
-  computePortfolioPositions,
-  type RawTransaction,
-} from "../pnl.ts"
+import type { RawTransaction } from "../pnl.ts"
+import { deriveClosedTradeOutcomes } from "../performance/closed-trades.ts"
+import { buildTradingScorecard } from "../performance/scorecard.ts"
+import type { PerformanceTradeInput } from "../performance/types.ts"
 import type {
   ProfileMetricEvidence,
   RiskProfileMetricEvidenceMap,
 } from "./types.ts"
 
-type EvidenceTrade = {
-  id: string
-  ticker: string
-  status: string
-  closed_at: string | null
-}
-
-type ClosedTradeOutcome = {
-  tradeId: string
-  closedAt: string
-  pnl: number
-}
+type EvidenceTrade = PerformanceTradeInput
 
 function parseRequiredDate(value: string, label: string): Date {
   const date = new Date(value)
@@ -32,38 +21,6 @@ function oneYearBefore(value: Date): string {
   const start = new Date(value.getTime())
   start.setUTCFullYear(start.getUTCFullYear() - 1)
   return start.toISOString()
-}
-
-function arithmeticMean(values: readonly number[]): number {
-  return values.reduce((sum, value) => sum + value, 0) / values.length
-}
-
-function closedTradeOutcome(
-  trade: EvidenceTrade,
-  fills: readonly RawTransaction[],
-): ClosedTradeOutcome | null {
-  if (trade.status !== "closed" || !trade.closed_at) return null
-
-  const linked = fills.filter(
-    (fill) => fill.trade_id === trade.id && fill.ticker === trade.ticker,
-  )
-  if (linked.length === 0) return null
-
-  const hasEntry = linked.some(
-    (fill) => fill.action === "buy" || fill.action === "rights",
-  )
-  const hasExit = linked.some((fill) => fill.action === "sell")
-  if (!hasEntry || !hasExit) return null
-
-  const result = computePortfolioPositions([...linked])
-  if (result.positions.length > 0) return null
-  if (!Number.isFinite(result.totalRealizedPnl)) return null
-
-  return {
-    tradeId: trade.id,
-    closedAt: trade.closed_at,
-    pnl: result.totalRealizedPnl,
-  }
 }
 
 function metricEvidence({
@@ -117,74 +74,52 @@ export function buildRiskProfileEvidence({
     return !Number.isNaN(closedAt.getTime()) && closedAt.getTime() <= end.getTime()
   })
 
-  const outcomes: ClosedTradeOutcome[] = []
-  let excludedCount = 0
-  for (const trade of closedCandidates) {
-    const outcome = closedTradeOutcome(trade, fills)
-    if (outcome) outcomes.push(outcome)
-    else excludedCount += 1
-  }
-
-  outcomes.sort((a, b) => {
-    const timeDiff = new Date(a.closedAt).getTime() - new Date(b.closedAt).getTime()
-    if (timeDiff !== 0) return timeDiff
-    return a.tradeId.localeCompare(b.tradeId)
+  const normalized = deriveClosedTradeOutcomes({
+    trades: closedCandidates,
+    fills,
+  })
+  const outcomes = normalized.outcomes
+  const scorecard = buildTradingScorecard({
+    outcomes,
+    population: "combined",
+    initialCapitalVnd: null,
   })
 
-  const sampleSize = outcomes.length
+  const sampleSize = scorecard.eligibleTradeCount
+  const excludedCount = normalized.excludedClosedTradeCount
   const periodStart = outcomes[0]?.closedAt ?? null
-  const sampleCompleteness: ProfileMetricEvidence["completeness"] =
-    sampleSize === 0
-      ? "insufficient"
-      : excludedCount > 0
-        ? "partial"
-        : "complete"
-
-  const winners = outcomes.filter((outcome) => outcome.pnl > 0)
-  const losers = outcomes.filter((outcome) => outcome.pnl < 0)
+  const sampleCompleteness: ProfileMetricEvidence["completeness"] = sampleSize === 0
+    ? "insufficient"
+    : excludedCount > 0
+      ? "partial"
+      : "complete"
+  const exclusionNote = excludedCount > 0
+    ? `${excludedCount} closed Trade(s) were excluded because linked Fill history was incomplete.`
+    : undefined
 
   const winRatio = metricEvidence({
-    value: sampleSize > 0 ? (winners.length / sampleSize) * 100 : null,
+    value: scorecard.winRatioPercent.value,
     periodStart,
     periodEnd,
     sampleSize,
     excludedCount,
     completeness: sampleCompleteness,
     computedAt,
-    note: excludedCount > 0
-      ? `${excludedCount} closed Trade(s) were excluded because linked Fill history was incomplete.`
-      : undefined,
+    note: exclusionNote,
   })
 
-  let payoffValue: number | null = null
-  let payoffCompleteness = sampleCompleteness
-  let payoffNote = excludedCount > 0
-    ? `${excludedCount} closed Trade(s) were excluded because linked Fill history was incomplete.`
-    : undefined
-
-  if (sampleSize === 0) {
-    payoffCompleteness = "insufficient"
-    payoffNote = "No eligible closed Trade history is available for Payoff Ratio."
-  } else if (winners.length === 0) {
-    payoffCompleteness = "insufficient"
-    payoffNote = "Payoff Ratio requires at least one winning Trade and one losing Trade."
-  } else if (losers.length === 0) {
-    payoffCompleteness = "insufficient"
-    payoffNote = "Payoff Ratio requires at least one losing Trade; it is not represented as Infinity."
-  } else {
-    payoffValue = arithmeticMean(winners.map((outcome) => outcome.pnl))
-      / Math.abs(arithmeticMean(losers.map((outcome) => outcome.pnl)))
-  }
-
+  const payoffAvailable = scorecard.payoffRatio.status === "available"
   const payoffRatio = metricEvidence({
-    value: payoffValue,
+    value: scorecard.payoffRatio.value,
     periodStart,
     periodEnd,
     sampleSize,
     excludedCount,
-    completeness: payoffCompleteness,
+    completeness: payoffAvailable ? sampleCompleteness : "insufficient",
     computedAt,
-    note: payoffNote,
+    note: payoffAvailable
+      ? exclusionNote
+      : scorecard.payoffRatio.reason ?? "Payoff Ratio evidence is unavailable.",
   })
 
   const activeReturn12m: ProfileMetricEvidence = {
