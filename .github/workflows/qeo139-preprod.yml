@@ -37,6 +37,8 @@ jobs:
         run: node --test tests/portfolio/qeo139-risk-sizing.test.ts
       - name: QEO-139 projected Active Risk contract
         run: node --test tests/portfolio/qeo139-risk-projection.test.ts
+      - name: QEO-139 planned portfolio simulation contract
+        run: node --test tests/portfolio/qeo139-planned-trade-simulation.test.ts
       - name: QEO-139 server/API contract
         run: node --test tests/portfolio/qeo139-risk-sizing-server-api.test.ts
       - name: QEO-139 UI contract

@@ -3,8 +3,14 @@ import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 const calculatorPath = "components/portfolio/risk-sizing/trade-size-calculator.tsx"
+const advisorPath = "components/portfolio/risk-sizing/trade-size-advisor.tsx"
+const combinedPath = "components/portfolio/risk-sizing/combined-portfolio-simulation.tsx"
+const hookPath = "components/portfolio/risk-sizing/use-risk-sizing-context.ts"
 const tooltipPath = "components/portfolio/risk-sizing/risk-metric-tooltip.tsx"
 const allocationPath = "components/portfolio/portfolio-capital-allocation.tsx"
+const panel1Path = "components/portfolio/risk-sizing/portfolio-allocation-advisor.tsx"
+const panel2Path = "components/portfolio/risk-sizing/portfolio-current-state.tsx"
+const uiPolicyPath = "components/portfolio/risk-sizing/planner-ui-policy.ts"
 const pagePath = "components/portfolio/portfolio-page.tsx"
 const terminologyPath = "modules/portfolio/risk-sizing/terminology.ts"
 const pnlPath = "modules/portfolio/pnl.ts"
@@ -19,7 +25,7 @@ function escapeRegExp(value: string) {
 }
 
 test("stop-first Trade Size surface exposes canonical McDowell/QeoIndex terms through shared metadata", () => {
-  const calculator = read(calculatorPath)
+  const surface = `${read(advisorPath)}\n${read(panel1Path)}`
   const terminology = read(terminologyPath)
   const terms = [
     ["accountEquity", "Account Equity"],
@@ -39,21 +45,139 @@ test("stop-first Trade Size surface exposes canonical McDowell/QeoIndex terms th
 
   for (const [term, label] of terms) {
     assert.match(terminology, new RegExp(`label:\\s*"${escapeRegExp(label)}"`), `missing shared label ${label}`)
-    assert.match(calculator, new RegExp(`term="${term}"`), `calculator does not render ${term}`)
+    assert.match(surface, new RegExp(`term="${term}"`), `portfolio sizing surface does not render ${term}`)
   }
 })
 
-test("calculator is API-backed, deterministic, tooltip-driven and never Supabase-direct", () => {
-  const source = read(calculatorPath)
-  assert.match(source, /\/api\/portfolio\/\$\{portfolioId\}\/risk-sizing/)
-  assert.match(source, /calculateTradeSize/)
-  assert.match(source, /projectActiveRisk/)
-  assert.match(source, /RiskMetricTooltip/)
-  assert.doesNotMatch(source, /createClient|supabase\.|\.from\(/)
+test("allocation owns one authenticated risk-context fetch and advisor stays deterministic", () => {
+  const hook = read(hookPath)
+  const allocation = read(allocationPath)
+  const advisor = read(advisorPath)
+
+  assert.match(hook, /fetch\(`\/api\/portfolio\/\$\{portfolioId\}\/risk-sizing`/)
+  assert.match(hook, /AbortController/)
+  assert.match(hook, /cache:\s*"no-store"/)
+  assert.match(hook, /credentials:\s*"same-origin"/)
+  assert.match(allocation, /useRiskSizingContext\(activePortfolioId\)/)
+  assert.doesNotMatch(advisor, /fetch\(`\/api\/portfolio\/\$\{portfolioId\}\/risk-sizing`/)
+  assert.match(advisor, /calculateTradeSize/)
+  assert.match(allocation, /simulatePlannedTrades/)
+  assert.match(advisor, /RiskMetricTooltip/)
+  assert.doesNotMatch(`${hook}\n${allocation}\n${advisor}`, /createClient|supabase\.|\.from\(/)
+})
+
+test("four-panel portfolio workflow is locked in 1→4 order and Panel 1 stays portfolio-scoped", () => {
+  const allocation = read(allocationPath)
+  const panel1 = read(panel1Path)
+  const panel2 = read(panel2Path)
+  const combined = read(combinedPath)
+  const composed = `${allocation}\n${panel1}\n${panel2}\n${combined}`
+  const headings = [
+    "1. Portfolio Allocation Advisor",
+    "2. Current Portfolio State",
+    "3. Trade Size Advisor",
+    "4. Combined Portfolio Simulation",
+  ]
+
+  for (const heading of headings) {
+    assert.match(composed, new RegExp(escapeRegExp(heading)), `missing four-panel heading: ${heading}`)
+  }
+
+  const panel1Index = panel1.indexOf(headings[0]!)
+  const panel2Index = panel2.indexOf(headings[1]!)
+  const panel3Index = allocation.indexOf(headings[2]!)
+  const panel4Index = combined.indexOf(headings[3]!)
+  assert.ok(panel1Index >= 0 && panel2Index >= 0 && panel3Index >= 0 && panel4Index >= 0)
+  assert.match(allocation, /<PortfolioAllocationAdvisor[\s\S]*<PortfolioCurrentState[\s\S]*3\. Trade Size Advisor[\s\S]*<CombinedPortfolioSimulation/)
+  assert.match(allocation, /lg:grid-cols-2/)
+  assert.doesNotMatch(panel1, /plannedEntry|initialStop/)
+})
+
+test("Panel 2 never promotes compatibility stopLoss fields into canonical risk evidence", () => {
+  const panel2 = read(panel2Path)
+  assert.match(panel2, /riskCoverage\.holdingRisks/)
+  assert.match(panel2, /openTradeRisks/)
+  assert.doesNotMatch(panel2, /position\.stopLoss|stopLoss1|stopLoss2|stopLoss3/)
+})
+
+test("ui-first production pass exposes consistent planner hierarchy and one explicit unavailable-action policy", () => {
+  const allocation = read(allocationPath)
+  const panel1 = read(panel1Path)
+  const panel2 = read(panel2Path)
+  const advisor = read(advisorPath)
+  const combined = read(combinedPath)
+  const policy = read(uiPolicyPath)
+  const surface = `${allocation}\n${panel1}\n${panel2}\n${advisor}\n${combined}`
+
+  assert.match(allocation, /data-planner-workspace/)
+  assert.match(panel1, /data-planner-panel="allocation"/)
+  assert.match(panel2, /data-planner-panel="current-state"/)
+  assert.match(advisor, /data-planner-advisor="trade-size"/)
+  assert.match(combined, /data-planner-panel="simulation"/)
+  assert.match(combined, /Before[\s\S]*Planned[\s\S]*After/)
+
+  assert.match(policy, /export function showPlannerUnavailableAlert/)
+  assert.match(policy, /window\.alert/)
+  assert.match(policy, /đang được hoàn thiện/i)
+  assert.doesNotMatch(surface, /window\.alert/)
+})
+
+test("ticker-first Trade Size Advisor owns ephemeral planned basket behavior", () => {
+  const advisor = read(advisorPath)
+  const allocation = read(allocationPath)
+
+  for (const label of [
+    "Ticker",
+    "Risk per Trade",
+    "Planned Entry",
+    "Initial Stop",
+    "Estimated Commission",
+    "Slippage Allowance",
+    "Add Planned Trade",
+    "Planned Trades",
+    "Edit",
+    "Remove",
+  ]) {
+    assert.match(advisor, new RegExp(escapeRegExp(label)), `Trade Size Advisor missing ${label}`)
+  }
+
+  assert.match(advisor, /calculateTradeSize/)
+  assert.match(advisor, /\.toUpperCase\(\)/)
+  assert.match(allocation, /<TradeSizeAdvisor[\s\S]*plannedTrades=\{plannedTrades\}/)
+  assert.match(allocation, /<CombinedPortfolioSimulation[\s\S]*plannedTrades=\{plannedTrades\}/)
+  assert.match(allocation, /upsertPlannedTrade/)
+  assert.match(allocation, /removePlannedTrade/)
+  assert.doesNotMatch(advisor, /method:\s*["'](?:POST|PUT|PATCH)["']/i)
+  assert.doesNotMatch(advisor, /localStorage|sessionStorage|indexedDB/i)
+})
+
+test("combined simulation panel renders before planned after states and both deterministic advisors", () => {
+  const combined = read(combinedPath)
+  const allocation = read(allocationPath)
+
+  for (const label of [
+    "Before",
+    "Planned",
+    "After",
+    "Portfolio Allocation Advisor",
+    "Trade Size Advisor",
+    "Combined Verdict",
+    "Projected Active Risk",
+    "Funding Gap",
+  ]) {
+    assert.match(combined, new RegExp(escapeRegExp(label)), `Combined Portfolio Simulation missing ${label}`)
+  }
+
+  assert.match(allocation, /<CombinedPortfolioSimulation/)
+  assert.doesNotMatch(combined, /confidence score|will rise|expected target|probability/i)
+})
+
+test("monolithic calculator is retired after ticker-first advisor migration", () => {
+  assert.equal(read(calculatorPath), "")
 })
 
 test("legacy fixed-stop assumptions and unsafe risk claims are removed from the allocation surface", () => {
-  const source = `${read(allocationPath)}\n${read(calculatorPath)}`
+  const source = `${read(allocationPath)}\n${read(advisorPath)}`
   assert.doesNotMatch(source, /triệt tiêu hoàn toàn nguy cơ/i)
   assert.doesNotMatch(source, /dealStopLossPct|7\.0.*Stoploss/i)
   assert.doesNotMatch(source, /% Cắt lỗ deal tiếp theo/i)
@@ -80,7 +204,7 @@ test("RiskMetricTooltip resolves shared terminology instead of duplicating formu
 })
 
 test("stop-first guidance states stop provenance and execution risks without guarantees", () => {
-  const source = read(calculatorPath)
+  const source = read(advisorPath)
   assert.match(source, /support|resistance/i)
   assert.match(source, /volatility|price activity/i)
   assert.match(source, /trading-system|system rule/i)
@@ -94,43 +218,42 @@ test("stop-first guidance states stop provenance and execution risks without gua
   assert.doesNotMatch(sourceWithoutExplicitNoGuaranteeDisclaimer, /guarantee|bảo đảm.*không.*thua|không thể cháy/i)
 })
 
-test("projected risk panel fails closed when open Trade risk is unknown", () => {
-  const calculator = read(calculatorPath)
-  const terminology = read(terminologyPath)
-  assert.match(calculator, /term="riskAddedByPlannedTrade"/)
-  assert.match(calculator, /term="projectedActiveRisk"/)
-  assert.match(terminology, /label:\s*"Risk Added by Planned Trade"/)
-  assert.match(terminology, /label:\s*"Projected Active Risk"/)
-  assert.match(calculator, /Risk Unknown/)
-  assert.match(calculator, /unknownRiskTradeCount/)
-  assert.doesNotMatch(calculator, /unknownRiskTradeCount[^\n]{0,80}within plan/i)
+test("planned basket simulation stays fail-closed for unknown current risk evidence", () => {
+  const allocation = read(allocationPath)
+  assert.match(allocation, /summarizePortfolioRiskCoverage/)
+  assert.match(allocation, /simulatePlannedTrades/)
+  assert.match(allocation, /unknownRiskItemCount:\s*riskCoverage\.unknownRiskItemCount/)
+  assert.match(allocation, /riskContextAvailable:\s*riskSizing\.context\s*!=\s*null/)
+  assert.match(allocation, /plannedTrades,/)
 })
 
-test("risk context failure never becomes fabricated zero risk or insufficient history", () => {
-  const calculator = read(calculatorPath)
-  assert.match(calculator, /const riskContextUnavailable = !loadingContext && riskContext == null/)
-  assert.match(calculator, /Risk context unavailable/)
-  assert.match(calculator, /riskContextUnavailable\s*\?\s*"Unavailable"/)
-  assert.match(calculator, /Evidence:\s*\{riskContextUnavailable\s*\?\s*"Unavailable"/)
+test("risk context failure remains explicit in advisor and combined simulation", () => {
+  const advisor = read(advisorPath)
+  const combined = read(combinedPath)
+  assert.match(advisor, /const riskContextUnavailable = !loadingRiskContext && riskContext == null/)
+  assert.match(advisor, /Risk context unavailable/)
+  assert.match(combined, /riskContextAvailable/)
+  assert.match(combined, /Risk context unavailable/)
+  assert.match(combined, /!riskContextAvailable\) return "Unavailable"/)
 })
 
 test("Advanced evidence keeps Optimal f informational and unavailable without history", () => {
-  const calculator = read(calculatorPath)
+  const advisor = read(advisorPath)
   const terminology = read(terminologyPath)
 
-  assert.match(calculator, /<details/)
-  assert.match(calculator, /term="winRatio"/)
-  assert.match(calculator, /term="payoffRatio"/)
-  assert.match(calculator, /term="optimalF"/)
+  assert.match(advisor, /<details/)
+  assert.match(advisor, /term="winRatio"/)
+  assert.match(advisor, /term="payoffRatio"/)
+  assert.match(advisor, /term="optimalF"/)
   assert.match(terminology, /label:\s*"Win Ratio"/)
   assert.match(terminology, /label:\s*"Payoff Ratio"/)
   assert.match(terminology, /label:\s*"Optimal f"/)
-  assert.match(calculator, /Insufficient History/)
-  assert.match(calculator, /informational/i)
-  assert.match(calculator, /more aggressive/i)
-  assert.match(calculator, /not auto-applied/i)
-  assert.match(calculator, /not a zero-ROR guarantee/i)
-  assert.match(calculator, /calculateOptimalF/)
-  assert.doesNotMatch(calculator, /Risk of Ruin probability|probability matrix|ROR probability table/i)
-  assert.doesNotMatch(calculator, /setRiskPercentInput\([^\n]*optimal/i)
+  assert.match(advisor, /Insufficient History/)
+  assert.match(advisor, /informational/i)
+  assert.match(advisor, /more aggressive/i)
+  assert.match(advisor, /not auto-applied/i)
+  assert.match(advisor, /not a zero-ROR guarantee/i)
+  assert.match(advisor, /calculateOptimalF/)
+  assert.doesNotMatch(advisor, /Risk of Ruin probability|probability matrix|ROR probability table/i)
+  assert.doesNotMatch(advisor, /setRiskPercentInput\([^\n]*optimal/i)
 })

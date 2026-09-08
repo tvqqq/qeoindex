@@ -8,6 +8,7 @@ import {
   type OpenTradeRiskRow,
   type StopRiskRow,
 } from "./active-risk.ts"
+import type { OpenTradeRiskBreakdown } from "./types.ts"
 
 export type RiskSizingServerContext = {
   defaultTradeRiskPercent: number
@@ -15,6 +16,7 @@ export type RiskSizingServerContext = {
   maxActiveRiskPercent: number | null
   knownActiveRiskVnd: number
   unknownRiskTradeCount: number
+  openTradeRisks: OpenTradeRiskBreakdown[]
   winRatioPercent: number | null
   payoffRatio: number | null
   evidenceCompleteness: "complete" | "partial" | "insufficient"
@@ -90,6 +92,7 @@ export async function getRiskSizingContext(
     maxActiveRiskPercent: finiteOrNull(plan?.max_active_risk_percent),
     knownActiveRiskVnd: active.knownActiveRiskVnd,
     unknownRiskTradeCount: active.unknownRiskTradeCount,
+    openTradeRisks: active.breakdown,
     winRatioPercent: finiteOrNull(win.value),
     payoffRatio: finiteOrNull(payoff.value),
     evidenceCompleteness: combinedEvidenceCompleteness(win.completeness, payoff.completeness),

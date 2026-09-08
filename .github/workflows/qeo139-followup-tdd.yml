@@ -1,0 +1,28 @@
+name: QEO-139 Follow-up TDD
+
+on:
+  pull_request:
+    paths:
+      - "tests/portfolio/qeo139-planned-trade-simulation.test.ts"
+      - "modules/portfolio/risk-sizing/planning.ts"
+      - "modules/portfolio/risk-sizing/types.ts"
+      - ".github/workflows/qeo139-followup-tdd.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo139-followup-tdd-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  planned-simulation-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Planned portfolio simulation contract
+        run: node --test tests/portfolio/qeo139-planned-trade-simulation.test.ts
