@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { AlertTriangle, RotateCcw, ShieldCheck } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
@@ -66,85 +66,97 @@ export function PortfolioAllocationAdvisor({
             : `Known Active Risk hiện dùng ${formatPercentOf(riskContext.knownActiveRiskVnd, effectiveAccountEquityContext.valueVnd)} Account Equity; Remaining Risk Budget là ${formatVnd(remainingRiskBudgetVnd)}.`
 
   return (
-    <section className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 shadow-sm">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3.5">
-        <h3 className="flex items-center gap-2 font-ticker text-sm font-extrabold uppercase tracking-wide text-purple-300 sm:text-base">
-          <ShieldCheck className="h-4 w-4" /> 1. Portfolio Allocation Advisor
-        </h3>
-        <span className="rounded-full border border-purple-500/30 bg-purple-500/15 px-2.5 py-1 font-ticker text-[10px] font-bold uppercase tracking-wide text-purple-300">
+    <section
+      data-planner-panel="allocation"
+      className="overflow-hidden rounded-[28px] border border-purple-500/15 bg-gradient-to-b from-[#11101a] to-[#0a0d13] p-5 shadow-[0_18px_55px_rgba(0,0,0,0.24)] ring-1 ring-white/[0.035]"
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-purple-400/70">Portfolio capacity</p>
+          <h3 className="mt-1 flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-purple-200 sm:text-base">
+            <ShieldCheck className="h-4 w-4" /> 1. Portfolio Allocation Advisor
+          </h3>
+        </div>
+        <span className="rounded-full border border-purple-500/25 bg-purple-500/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-purple-200">
           Portfolio scope
         </span>
       </div>
 
-      <div className="mt-4 space-y-3 text-xs">
-        <div className="rounded-2xl border border-purple-500/25 bg-purple-500/10 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex items-center gap-1.5 font-bold text-purple-100">
-                <RiskMetricTooltip term="accountEquity" />
-                <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[9px] uppercase tracking-wide text-[var(--color-muted-2)]">{equitySourceLabel}</span>
-              </div>
-              <p className="mt-1 text-[10px] leading-relaxed text-[var(--color-muted-2)]">
-                Portfolio mark-to-market có thể được override thủ công khi bạn có Account Equity đã xác nhận từ broker.
-              </p>
+      <div className="mt-4 rounded-2xl border border-purple-500/20 bg-purple-500/[0.07] p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 font-bold text-purple-100">
+              <RiskMetricTooltip term="accountEquity" />
+              <span className="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-slate-400">{equitySourceLabel}</span>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                onManualAccountEquityChange(null)
-                setEquityInput(String(Math.round(portfolioAccountEquityContext.valueVnd)))
-              }}
-              className={cn(
-                "inline-flex items-center justify-center gap-1 rounded-xl border px-2.5 py-1.5 text-[10px] font-bold transition",
-                manualAccountEquityVnd == null
-                  ? "cursor-default border-white/5 text-[var(--color-muted-2)]"
-                  : "border-purple-500/30 text-purple-200 hover:bg-purple-500/10",
-              )}
-              disabled={manualAccountEquityVnd == null}
-            >
-              <RotateCcw className="h-3 w-3" /> Use Portfolio
-            </button>
+            <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+              Override thủ công khi Account Equity từ broker đáng tin cậy hơn mark-to-market hiện tại.
+            </p>
           </div>
-          <div className="mt-3 flex items-center gap-2">
-            <Input
-              type="number"
-              min="0"
-              step="1000000"
-              value={equityInput}
-              onChange={(event) => {
-                const next = event.target.value
-                setEquityInput(next)
-                const parsed = Number(next)
-                onManualAccountEquityChange(Number.isFinite(parsed) && parsed > 0 ? parsed : null)
-              }}
-              className="h-10 bg-black/35 font-ticker text-sm font-black text-white"
-            />
-            <span className="font-bold text-[var(--color-muted-2)]">VNĐ</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onManualAccountEquityChange(null)
+              setEquityInput(String(Math.round(portfolioAccountEquityContext.valueVnd)))
+            }}
+            className={cn(
+              "inline-flex items-center justify-center gap-1 rounded-xl border px-2.5 py-1.5 text-[10px] font-bold transition",
+              manualAccountEquityVnd == null
+                ? "cursor-default border-white/5 text-slate-600"
+                : "border-purple-500/30 text-purple-200 hover:bg-purple-500/10",
+            )}
+            disabled={manualAccountEquityVnd == null}
+          >
+            <RotateCcw className="h-3 w-3" /> Use Portfolio
+          </button>
         </div>
+        <div className="mt-3 flex items-center gap-2">
+          <Input
+            type="number"
+            min="0"
+            step="1000000"
+            value={equityInput}
+            onChange={(event) => {
+              const next = event.target.value
+              setEquityInput(next)
+              const parsed = Number(next)
+              onManualAccountEquityChange(Number.isFinite(parsed) && parsed > 0 ? parsed : null)
+            }}
+            className="h-11 border-purple-500/15 bg-black/30 font-ticker text-base font-black text-white"
+          />
+          <span className="font-bold text-slate-500">VNĐ</span>
+        </div>
+      </div>
 
-        <MetricRow label="Initial Capital" value={formatVnd(allocationSnapshot.initialCapitalVnd)} />
-        <MetricRow label="Realized P&L" value={formatSignedVnd(allocationSnapshot.totalRealizedPnlVnd)} valueClassName={pnlClass(allocationSnapshot.totalRealizedPnlVnd)} />
-        <MetricRow label="Unrealized P&L" value={formatSignedVnd(allocationSnapshot.totalUnrealizedPnlVnd)} valueClassName={pnlClass(allocationSnapshot.totalUnrealizedPnlVnd)} />
-        <MetricRow label="Stock Market Value" value={formatVnd(allocationSnapshot.stockMarketValueVnd)} />
-        <MetricRow label="Estimated Available Cash" value={formatVnd(allocationSnapshot.estimatedAvailableCashVnd)} valueClassName="text-[var(--color-up)]" />
-        <MetricRow
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        <MetricTile label="Initial Capital" value={formatVnd(allocationSnapshot.initialCapitalVnd)} />
+        <MetricTile label="Realized P&L" value={formatSignedVnd(allocationSnapshot.totalRealizedPnlVnd)} valueClassName={pnlClass(allocationSnapshot.totalRealizedPnlVnd)} />
+        <MetricTile label="Unrealized P&L" value={formatSignedVnd(allocationSnapshot.totalUnrealizedPnlVnd)} valueClassName={pnlClass(allocationSnapshot.totalUnrealizedPnlVnd)} />
+        <MetricTile label="Stock Market Value" value={formatVnd(allocationSnapshot.stockMarketValueVnd)} />
+        <MetricTile label="Estimated Available Cash" value={formatVnd(allocationSnapshot.estimatedAvailableCashVnd)} valueClassName="text-emerald-300" />
+        <MetricTile
           labelNode={<RiskMetricTooltip term="riskPerTrade" />}
           value={loadingRiskContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : riskContext ? `${riskContext.defaultTradeRiskPercent.toFixed(2)}%` : "Unavailable"}
         />
-        <MetricRow
-          labelNode={<RiskMetricTooltip term="activeRisk" />}
-          value={loadingRiskContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : formatVnd(riskContext?.knownActiveRiskVnd ?? null)}
-        />
-        <MetricRow
-          labelNode={<RiskMetricTooltip term="maxActiveRisk" />}
-          value={loadingRiskContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : maxActiveRiskVnd == null ? "Not configured" : formatVnd(maxActiveRiskVnd)}
-        />
-        <MetricRow
-          labelNode={<RiskMetricTooltip term="remainingRiskBudget" />}
-          value={loadingRiskContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : remainingRiskBudgetVnd == null ? "Not configured" : formatVnd(remainingRiskBudgetVnd)}
-          valueClassName={remainingRiskBudgetVnd != null && remainingRiskBudgetVnd < 0 ? "text-rose-300" : undefined}
-        />
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-white/[0.07] bg-black/20 p-4">
+        <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">Risk capacity</p>
+        <div className="mt-2 space-y-1">
+          <MetricRow
+            labelNode={<RiskMetricTooltip term="activeRisk" />}
+            value={loadingRiskContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : formatVnd(riskContext?.knownActiveRiskVnd ?? null)}
+          />
+          <MetricRow
+            labelNode={<RiskMetricTooltip term="maxActiveRisk" />}
+            value={loadingRiskContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : maxActiveRiskVnd == null ? "Not configured" : formatVnd(maxActiveRiskVnd)}
+          />
+          <MetricRow
+            labelNode={<RiskMetricTooltip term="remainingRiskBudget" />}
+            value={loadingRiskContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : remainingRiskBudgetVnd == null ? "Not configured" : formatVnd(remainingRiskBudgetVnd)}
+            valueClassName={remainingRiskBudgetVnd != null && remainingRiskBudgetVnd < 0 ? "text-rose-300" : "text-emerald-200"}
+          />
+        </div>
       </div>
 
       {effectiveAccountEquityContext.source === "portfolio_partial" ? (
@@ -160,29 +172,46 @@ export function PortfolioAllocationAdvisor({
         </div>
       ) : null}
 
-      <div className="mt-4 rounded-2xl border border-white/[0.07] bg-black/20 p-4 text-[11px] leading-relaxed text-slate-300">
-        <p className="font-bold uppercase tracking-wide text-purple-200">Portfolio Allocation Advisor</p>
-        <p className="mt-1">{advisorMessage}</p>
+      <div className="mt-4 rounded-2xl border border-purple-500/15 bg-purple-500/[0.05] p-4 text-[11px] leading-relaxed text-slate-300">
+        <p className="font-black uppercase tracking-wide text-purple-200">Portfolio Allocation Advisor</p>
+        <p className="mt-1.5">{advisorMessage}</p>
       </div>
     </section>
   )
 }
 
-function MetricRow({
+function MetricTile({
   label,
   labelNode,
   value,
   valueClassName,
 }: {
   label?: string
-  labelNode?: React.ReactNode
+  labelNode?: ReactNode
   value: string
   valueClassName?: string
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-white/5 py-1.5 last:border-b-0">
-      <span className="text-[var(--color-muted-2)]">{labelNode ?? label}</span>
-      <span className={cn("text-right font-ticker font-bold text-slate-100", valueClassName)}>{value}</span>
+    <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
+      <div className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{labelNode ?? label}</div>
+      <div className={cn("mt-1 text-xs font-black text-slate-100", valueClassName)}>{value}</div>
+    </div>
+  )
+}
+
+function MetricRow({
+  labelNode,
+  value,
+  valueClassName,
+}: {
+  labelNode: ReactNode
+  value: string
+  valueClassName?: string
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-white/5 py-2 last:border-b-0">
+      <span className="text-[11px] text-slate-400">{labelNode}</span>
+      <span className={cn("text-right text-[11px] font-black text-slate-100", valueClassName)}>{value}</span>
     </div>
   )
 }
