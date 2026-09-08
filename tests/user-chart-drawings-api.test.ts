@@ -21,9 +21,10 @@ test("User chart drawings API route enforces authentication and validates payloa
 
   // Reads and writes to user_preferences settings JSONB
   assert.match(code, /\.from\("user_preferences"\)/)
-  assert.match(code, /\.select\("settings"\)/)
-  assert.match(code, /\.upsert\(/)
-  assert.match(code, /onConflict: "user_id"/)
+  assert.match(code, /\.select\("settings,updated_at"\)/)
+  assert.match(code, /\.update\(\{ settings: newSettings \}\)/)
+  assert.match(code, /\.eq\("updated_at", existingPref\.updated_at\)/)
+  assert.match(code, /changed concurrently; retry/)
 
   // GET returns saved settings or fallback structure
   assert.match(code, /export async function GET/)

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { NextResponse } from "next/server"
 import { requireApiUser } from "@/modules/auth/server"
 import {
@@ -6,6 +7,10 @@ import {
   migrateDrawings,
   validateDrawingsCollectionV2,
 } from "@/components/stock-detail/chart/drawings"
+import {
+  normalizeChartViewSettings,
+  validateChartViewSettings,
+} from "@/components/stock-detail/chart/chart-view-settings"
 import type { ChartTimeframe } from "@/components/stock-detail/chart/stock-chart-types"
 
 export const runtime = "nodejs"
@@ -22,10 +27,15 @@ interface ChartDrawingPayload {
   drawingsSchemaVersion?: number
   drawings?: unknown[]
   unresolvedLegacyDrawings?: unknown[]
+  viewSettings?: unknown
 }
 
 function isPlainObject(val: unknown): val is Record<string, unknown> {
   return Boolean(val) && typeof val === "object" && !Array.isArray(val)
+}
+
+function viewSettingsScope(userId: string): string {
+  return createHash("sha256").update(`qeo-chart-view:${userId}`).digest("hex").slice(0, 32)
 }
 
 export async function GET(request: Request) {
@@ -53,6 +63,9 @@ export async function GET(request: Request) {
     const settings = isPlainObject(data?.settings) ? data.settings : {}
     const charts = isPlainObject(settings.charts) ? (settings.charts as Record<string, unknown>) : {}
     const tickerData = isPlainObject(charts[ticker]) ? charts[ticker] : null
+    const hasGlobalViewSettings = isPlainObject(settings.chartView)
+    const globalViewSettings = normalizeChartViewSettings(settings.chartView)
+    const scope = viewSettingsScope(userId)
 
     if (!tickerData) {
       return NextResponse.json(
@@ -65,7 +78,13 @@ export async function GET(request: Request) {
             indicators: {},
             drawingsSchemaVersion: 2,
             drawings: [],
+            viewSettings: globalViewSettings,
+            viewSettingsScope: scope,
+            viewSettingsConfigured: hasGlobalViewSettings,
           },
+          viewSettings: globalViewSettings,
+          viewSettingsScope: scope,
+          viewSettingsConfigured: hasGlobalViewSettings,
         },
         { headers: NO_STORE_HEADERS },
       )
@@ -76,7 +95,15 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         ok: true,
-        data: normalizedSettings,
+        data: {
+          ...normalizedSettings,
+          viewSettings: globalViewSettings,
+          viewSettingsScope: scope,
+          viewSettingsConfigured: hasGlobalViewSettings,
+        },
+        viewSettings: globalViewSettings,
+        viewSettingsScope: scope,
+        viewSettingsConfigured: hasGlobalViewSettings,
       },
       { headers: NO_STORE_HEADERS },
     )
@@ -95,6 +122,17 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as ChartDrawingPayload | null
   if (!isPlainObject(body) || !body.ticker || typeof body.ticker !== "string") {
     return NextResponse.json({ ok: false, error: "Invalid chart payload." }, { status: 400, headers: NO_STORE_HEADERS })
+  }
+
+  const hasViewSettings = Object.prototype.hasOwnProperty.call(body, "viewSettings")
+  if (hasViewSettings) {
+    const viewValidation = validateChartViewSettings(body.viewSettings)
+    if (!viewValidation.valid) {
+      return NextResponse.json(
+        { ok: false, error: `View settings validation failed: ${viewValidation.errors.join("; ")}` },
+        { status: 400, headers: NO_STORE_HEADERS },
+      )
+    }
   }
 
   const ticker = body.ticker.toUpperCase().trim()
@@ -137,49 +175,65 @@ export async function POST(request: Request) {
 
   try {
     const userId = auth.context.user.id
-    const { data: existingPref, error: fetchErr } = await auth.context.supabase
-      .from("user_preferences")
-      .select("settings")
-      .eq("user_id", userId)
-      .maybeSingle()
+    // Update the JSON envelope with a bounded optimistic compare-and-swap. A
+    // chart request must preserve unrelated preferences and a concurrent
+    // ticker generation must not overwrite a newer global view update.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const { data: existingPref, error: fetchErr } = await auth.context.supabase
+        .from("user_preferences")
+        .select("settings,updated_at")
+        .eq("user_id", userId)
+        .maybeSingle()
 
-    if (fetchErr) throw fetchErr
+      if (fetchErr) throw fetchErr
 
-    const currentSettings = isPlainObject(existingPref?.settings) ? existingPref.settings : {}
-    const currentCharts = isPlainObject(currentSettings.charts)
-      ? (currentSettings.charts as Record<string, unknown>)
-      : {}
+      const currentSettings = isPlainObject(existingPref?.settings) ? existingPref.settings : {}
+      const currentCharts = isPlainObject(currentSettings.charts)
+        ? (currentSettings.charts as Record<string, unknown>)
+        : {}
+      const updatedCharts = {
+        ...currentCharts,
+        [ticker]: {
+          ticker,
+          timeframe: body.timeframe || "1D",
+          chartStyle: body.chartStyle || "candles",
+          indicators: body.indicators || {},
+          drawingsSchemaVersion: 2,
+          drawings: finalDrawings,
+          ...(finalUnresolved.length > 0 ? { unresolvedLegacyDrawings: finalUnresolved } : {}),
+          updatedAt: new Date().toISOString(),
+        },
+      }
+      const newSettings = {
+        ...currentSettings,
+        charts: updatedCharts,
+        ...(hasViewSettings ? { chartView: normalizeChartViewSettings(body.viewSettings) } : {}),
+      }
 
-    const updatedCharts = {
-      ...currentCharts,
-      [ticker]: {
-        ticker,
-        timeframe: body.timeframe || "1D",
-        chartStyle: body.chartStyle || "candles",
-        indicators: body.indicators || {},
-        drawingsSchemaVersion: 2,
-        drawings: finalDrawings,
-        ...(finalUnresolved.length > 0 ? { unresolvedLegacyDrawings: finalUnresolved } : {}),
-        updatedAt: new Date().toISOString(),
-      },
+      if (!existingPref) {
+        const { error: insertErr } = await auth.context.supabase
+          .from("user_preferences")
+          .insert({ user_id: userId, settings: newSettings })
+        if (!insertErr) return NextResponse.json({ ok: true }, { headers: NO_STORE_HEADERS })
+        if (attempt === 1) throw insertErr
+        continue
+      }
+
+      let updateQuery = auth.context.supabase
+        .from("user_preferences")
+        .update({ settings: newSettings })
+        .eq("user_id", userId)
+      if (existingPref.updated_at) updateQuery = updateQuery.eq("updated_at", existingPref.updated_at)
+      const { data: updatedRows, error: updateErr } = await updateQuery.select("user_id")
+      if (updateErr) throw updateErr
+      if (updatedRows && updatedRows.length > 0) {
+        return NextResponse.json({ ok: true }, { headers: NO_STORE_HEADERS })
+      }
+      // A newer preference write won the CAS. Re-read and re-apply only this
+      // ticker/global field on the next bounded attempt.
     }
 
-    const newSettings = {
-      ...currentSettings,
-      charts: updatedCharts,
-    }
-
-    const { error: upsertErr } = await auth.context.supabase.from("user_preferences").upsert(
-      {
-        user_id: userId,
-        settings: newSettings,
-      },
-      { onConflict: "user_id" },
-    )
-
-    if (upsertErr) throw upsertErr
-
-    return NextResponse.json({ ok: true }, { headers: NO_STORE_HEADERS })
+    return NextResponse.json({ ok: false, error: "Chart settings changed concurrently; retry." }, { status: 409, headers: NO_STORE_HEADERS })
   } catch (err) {
     console.error("[Chart Drawings API] POST failed:", err)
     return NextResponse.json({ ok: false, error: "Failed to persist user chart settings." }, { status: 500, headers: NO_STORE_HEADERS })

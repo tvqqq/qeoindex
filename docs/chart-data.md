@@ -1,6 +1,6 @@
 # Canonical chart data
 
-Last reviewed: 2026-09-05.
+Last reviewed: 2026-09-08.
 
 This document owns the active user-facing chart-data persistence/read contract. It is intentionally separate from the Wyckoff EOD contract documented in `HANDOVER.md` and `wyckoff-chart-unified-data.md`.
 
@@ -150,6 +150,30 @@ can send an unowned drawing set, preventing a slow initial response from
 turning the remote collection into `[]`. Drawing controls stay disabled until
 the remote collection is known; a failed GET shows an offline/retry state and
 does not authorize destructive replacement.
+
+### Interactive view ownership
+
+`StockDetailWorkstation` owns fullscreen mode and guarded watchlist keyboard
+navigation. `StockTradingViewChartData` owns the history request boundary and
+bridges the active ticker's timeframe into that history path. The chart core
+remains the sole owner of the Lightweight Charts instance; ticker changes and
+fullscreen toggles must not remount it or reset the current mode.
+
+Arrow navigation carries a request shaped as
+`{ ticker: string, timeframe: ChartTimeframe }`. The chart core interface must
+accept that request as `navigationTimeframe?: ... | null` and pass the matching
+timeframe into the ticker-generation sync. While the request matches the active
+ticker, remote settings hydration must not replace that session timeframe. The
+request is navigation intent only; an ordinary timeframe selection remains the
+user's local edit and follows the normal persistence queue.
+
+User-wide presentation settings use the authenticated `viewSettingsScope`:
+indicator visibility and style plus RSI/MACD collapse state. Ticker payloads
+continue to own timeframe, chart style, and drawings. The renderer applies an
+initial 55/15/15/15 price/volume/RSI/MACD split and persists the two supported
+collapse states. Copying a view across symbols must never copy another symbol's
+drawings; drawing visibility metadata still applies within its ticker and
+source-timeframe rules.
 
 Renderer verification covers numeric coordinate round trips, bounded pointer
 conversion, exact eight-bar initial/reset offset, future whitespace ownership,

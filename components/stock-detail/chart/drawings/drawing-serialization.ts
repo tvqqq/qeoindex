@@ -1,9 +1,11 @@
 import type {
+  ChartViewSettings,
   ChartStyle,
   ChartTimeframe,
   DrawingObject,
   IndicatorConfig,
 } from "../stock-chart-types.ts"
+import { normalizeChartViewSettings } from "../chart-view-settings.ts"
 import {
   VALID_CHART_TIMEFRAMES,
 } from "./drawing-schema.ts"
@@ -28,6 +30,9 @@ export interface UserChartSettingsPayloadV2 {
   drawingsSchemaVersion: 2
   drawings: PersistedDrawingV2[]
   unresolvedLegacyDrawings?: LegacyDrawing[]
+  /** Global authenticated view preferences; drawings remain ticker-scoped. */
+  viewSettings?: ChartViewSettings
+  viewSettingsScope?: string
   updatedAt?: string
 }
 
@@ -135,6 +140,8 @@ export function deserializeUserChartSettings(
         drawingsSchemaVersion: 2,
         drawings: migrationResult.migrated,
         unresolvedLegacyDrawings: [...existingUnresolved, ...migrationResult.unresolved],
+        ...(obj.viewSettings !== undefined ? { viewSettings: normalizeChartViewSettings(obj.viewSettings) } : {}),
+        ...(typeof obj.viewSettingsScope === "string" ? { viewSettingsScope: obj.viewSettingsScope } : {}),
         updatedAt: typeof obj.updatedAt === "string" ? obj.updatedAt : undefined,
       },
       migrationResult,
@@ -155,6 +162,8 @@ export function deserializeUserChartSettings(
       drawingsSchemaVersion: 2,
       drawings: migrationResult.migrated,
       unresolvedLegacyDrawings: migrationResult.unresolved,
+      ...(obj.viewSettings !== undefined ? { viewSettings: normalizeChartViewSettings(obj.viewSettings) } : {}),
+      ...(typeof obj.viewSettingsScope === "string" ? { viewSettingsScope: obj.viewSettingsScope } : {}),
       updatedAt: typeof obj.updatedAt === "string" ? obj.updatedAt : undefined,
     },
     migrationResult,

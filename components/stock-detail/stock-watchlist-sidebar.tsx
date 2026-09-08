@@ -11,6 +11,7 @@ interface StockWatchlistSidebarProps {
   currentTicker: string
   items: StockWatchlistItem[]
   onSelectTicker?: (ticker: string) => void
+  onVisibleTickersChange?: (tickers: string[]) => void
   isTransitioning?: boolean
 }
 
@@ -20,6 +21,7 @@ export function StockWatchlistSidebar({
   currentTicker,
   items,
   onSelectTicker,
+  onVisibleTickersChange,
   isTransitioning = false,
 }: StockWatchlistSidebarProps) {
   const [query, setQuery] = useState("")
@@ -37,6 +39,10 @@ export function StockWatchlistSidebar({
       return true
     })
   }, [items, query, filterMode])
+
+  React.useEffect(() => {
+    onVisibleTickersChange?.(filteredItems.map((item) => item.ticker))
+  }, [filteredItems, onVisibleTickersChange])
 
   function handleItemClick(e: React.MouseEvent<HTMLAnchorElement>, ticker: string) {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return

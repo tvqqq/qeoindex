@@ -16,6 +16,7 @@ export interface LightweightSeriesApi {
 
 export interface LightweightPriceScaleApi {
   applyOptions(options: Record<string, unknown>): void
+  width?(): number
 }
 
 export interface LightweightSeriesMarkersApi {
@@ -47,6 +48,7 @@ export interface LightweightChartApi {
   resize?(width: number, height: number, forceRepaint?: boolean): void
   timeScale(): LightweightTimeScaleApi
   panes(): LightweightPaneApi[]
+  priceScale?(id: string): LightweightPriceScaleApi
   subscribeCrosshairMove?(handler: (param: unknown) => void): void
   unsubscribeCrosshairMove?(handler: (param: unknown) => void): void
   remove(): void
